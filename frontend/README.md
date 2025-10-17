@@ -1,0 +1,32 @@
+# 前端说明（Vue3 + Vite）
+
+本前端以 Vue3 + Vite 为基础，采用“按项目隔离”的目录结构：
+
+## 目录结构
+
+```
+frontend/
+├─ src/
+│  ├─ daily_report_25_26/           # 项目 daily_report_25_26 的隔离模块（仅保留常量与说明，业务由后续接入）
+│  │  ├─ constants/                 # 常量（含 PROJECT_KEY）
+│  │  └─ README.md                  # 模块说明
+│  ├─ router/index.js               # 全局路由入口（当前未接入业务路由）
+│  └─ App.vue                       # 根组件，渲染 <router-view />
+└─ vite.config.js
+```
+
+## 路由设计
+- 当前不包含任何业务路由。后续按项目模块接入时，再在 `src/router/index.js` 注册对应路由。
+
+## 与后端的约定
+- 统一使用 `project_key = 'daily_report_25_26'`（定义于 `src/daily_report_25_26/constants/index.js`）。
+- 业务 API 由后端实现后，再在前端对应模块内封装与接入。
+
+## 启动方式
+```
+cd frontend
+npm install
+npm run dev
+```
+
+启动后访问：`http://localhost:5173/`，将自动跳转到 `/daily_report_25_26`。
