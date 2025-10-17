@@ -1,8 +1,8 @@
 <template>
   <div class="login-wrap">
-    <div class="card">
-      <h1 class="title">凤凰计划 · 登录</h1>
-      <form @submit.prevent="onSubmit">
+    <div class="card elevated" style="width:380px;">
+      <h1 class="title" style="text-align:center;">凤凰计划 · 登录</h1>
+      <form @submit.prevent="onSubmit" style="display:flex;flex-direction:column;gap:12px;">
         <label class="field">
           <span>用户名</span>
           <input v-model="username" type="text" placeholder="输入用户名" required />
@@ -11,17 +11,17 @@
           <span>密码</span>
           <input v-model="password" type="password" placeholder="输入密码" required />
         </label>
-        <button class="primary" type="submit" :disabled="loading">
+        <button class="btn primary" type="submit" :disabled="loading">
           {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
     </div>
   </div>
   <footer class="footer">© 2025 供暖集团 · 凤凰计划</footer>
-  
 </template>
 
 <script setup>
+import '../styles/theme.css'
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -50,41 +50,17 @@ async function onSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f0f4ff 0%, #fefefe 100%);
-}
-.card {
-  width: 360px;
-  background: #fff;
-  padding: 24px 24px 16px;
-  border-radius: 12px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  background: radial-gradient(1200px 600px at 10% 10%, #e2eaff, transparent 60%),
+              radial-gradient(1000px 500px at 90% 10%, #dbeafe, transparent 60%),
+              linear-gradient(135deg, #eef2ff 0%, #fefefe 100%);
 }
 .title {
   font-size: 20px;
   margin: 0 0 16px 0;
   text-align: center;
 }
-form { display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field span { font-size: 13px; color: #333; }
-input {
-  height: 36px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0 10px;
-  outline: none;
-}
-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,.1); }
-.primary {
-  margin-top: 4px;
-  height: 38px;
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  background: #4f46e5;
-  cursor: pointer;
-}
-.primary:disabled { opacity: .6; cursor: not-allowed; }
 .footer {
   text-align: center;
   padding: 12px 0 20px;
@@ -92,4 +68,3 @@ input:focus { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,.1); }
   font-size: 12px;
 }
 </style>
-

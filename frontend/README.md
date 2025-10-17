@@ -60,6 +60,7 @@ docker compose up -d --build
     - `daily_report_25_26/`
       - `README.md`
       - `components/`
+        - `AppHeader.vue`  ← 新增统一头部（商务蓝）
       - `constants/`
         - `index.js`
         - `sheets.js`
@@ -71,5 +72,7 @@ docker compose up -d --build
       - `services/`
         - `api.js`
       - `store/`
+      - `styles/`
+        - `theme.css`  ← 商务蓝主题（按钮/卡片/表格/徽章/进度条/容器等）
 
 说明：以上为当前前端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。

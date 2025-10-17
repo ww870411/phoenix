@@ -1,22 +1,24 @@
 <template>
-  <div class="page">
+  <div>
+    <AppHeader />
+    <div class="container">
     <header class="topbar">
       <div>
         <h2>数据填报</h2>
         <div class="sub">项目：{{ projectKey }} ｜ 表：{{ sheetKey }}</div>
       </div>
-      <div class="right">
+      <div class="right" style="display:flex;align-items:center;gap:8px;">
         <label class="date">
           <span>业务日期</span>
           <input type="date" v-model="bizDate" @change="loadExisting" />
         </label>
-        <button class="ghost" @click="reloadTemplate">重载模板</button>
-        <button class="primary" @click="onSubmit">提交</button>
+        <button class="btn ghost" @click="reloadTemplate">重载模板</button>
+        <button class="btn primary" @click="onSubmit">提交</button>
       </div>
     </header>
 
-    <div class="table-wrap" v-if="columns.length">
-      <table>
+    <div class="table-wrap card" v-if="columns.length">
+      <table class="table">
         <thead>
           <tr>
             <th v-for="(c,i) in columns" :key="i">{{ c }}</th>
@@ -40,9 +42,12 @@
     </div>
     <div v-else class="placeholder">无模板数据</div>
   </div>
+  </div>
 </template>
 
 <script setup>
+import '../styles/theme.css'
+import AppHeader from '../components/AppHeader.vue'
 import { onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
@@ -129,17 +134,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page { padding: 20px; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.sub { color: #666; font-size: 13px; margin-top: 6px; }
+.topbar { gap: 12px; margin-bottom: 16px; }
 .date { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
-.ghost { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; margin-right: 8px; }
-.primary { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; cursor: pointer; }
-.table-wrap { overflow-x: auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border-bottom: 1px solid #f1f5f9; padding: 8px 10px; text-align: left; }
-thead th { background: #f8fafc; }
-input[type="text"] { width: 120px; height: 28px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0 8px; }
-.placeholder { padding: 40px; text-align: center; color: #777; }
 </style>
-
