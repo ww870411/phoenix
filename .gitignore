@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors/IDEs
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# Node/Vite (frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Env & local configs
+.env
+.env.local
+.env.*.local
+
+# Coverage & reports
+coverage/
+
