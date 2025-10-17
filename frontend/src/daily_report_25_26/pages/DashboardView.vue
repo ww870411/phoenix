@@ -14,6 +14,7 @@
         </label>
       </div>
     </header>
+    <Breadcrumbs />
 
     <div class="table-wrap card">
       <table class="table">

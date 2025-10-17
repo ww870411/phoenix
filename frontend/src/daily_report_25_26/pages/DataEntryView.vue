@@ -3,9 +3,12 @@
     <AppHeader />
     <div class="container">
     <header class="topbar">
-      <div>
-        <h2>数据填报</h2>
-        <div class="sub">项目：{{ projectKey }} ｜ 表：{{ sheetKey }}</div>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+        <button class="btn light" @click="goDashboard">← 返回仪表盘</button>
+        <div>
+          <h2>数据填报</h2>
+          <div class="sub">项目：{{ projectKey }} ｜ 表：{{ sheetKey }}</div>
+        </div>
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
         <label class="date">
@@ -16,29 +19,15 @@
         <button class="btn primary" @click="onSubmit">提交</button>
       </div>
     </header>
+    <Breadcrumbs />
 
     <div class="table-wrap card" v-if="columns.length">
-      <table class="table">
-        <thead>
-          <tr>
-            <th v-for="(c,i) in columns" :key="i">{{ c }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(r, ri) in rows" :key="ri">
-            <td v-for="(c, ci) in r" :key="ci">
-              <template v-if="ci < 2">{{ c }}</template>
-              <template v-else>
-                <input
-                  type="text"
-                  :placeholder="'填报'"
-                  v-model="values[`${ri}-${ci}`]"
-                />
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <revo-grid
+        ref="gridRef"
+        :columns="gridColumns"
+        :source="gridSource"
+        style="height: 60vh; width: 100%;"
+      ></revo-grid>
     </div>
     <div v-else class="placeholder">无模板数据</div>
   </div>
@@ -47,12 +36,18 @@
 
 <script setup>
 import '../styles/theme.css'
+import '@revolist/revogrid'
+// 注意：@revolist/revogrid 未在 exports 中暴露 css 入口，
+// 直接导入 css 会导致 Vite 依赖扫描报错（Missing specifier）。
+// 先不导入官方 css，使用自定义外层样式与组件内置样式。
 import AppHeader from '../components/AppHeader.vue'
+import { useRouter } from 'vue-router'
 import { onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 
 const route = useRoute();
+const router = useRouter();
 const projectKey = route.params.projectKey;
 const sheetKey = route.params.sheetKey;
 const initialDate = route.query.biz_date || new Date().toISOString().slice(0,10);
@@ -62,6 +57,9 @@ const columns = ref([]);
 const rows = ref([]);
 const bizDate = ref(String(initialDate));
 const values = reactive({});
+const gridColumns = ref([]);
+const gridSource = ref([]);
+const gridRef = ref(null);
 
 function toKey(ri, ci) { return `${ri}-${ci}`; }
 
@@ -72,6 +70,24 @@ async function loadTemplate() {
   rows.value = tpl.rows || [];
   // 清空当前值
   Object.keys(values).forEach(k => delete values[k]);
+
+  // 构造 RevoGrid 列配置：c0=项目(只读)、c1=计量单位(只读)、c2+ 可编辑
+  const colDefs = [];
+  colDefs.push({ prop: 'c0', name: columns.value[0] ?? '项目', size: 200, readonly: true });
+  colDefs.push({ prop: 'c1', name: columns.value[1] ?? '计量单位', size: 140, readonly: true });
+  const fillable = columns.value.map((_, i) => i).filter(i => i >= 2);
+  for (const ci of fillable) {
+    colDefs.push({ prop: `c${ci}`, name: String(columns.value[ci] ?? ''), size: 140 });
+  }
+  gridColumns.value = colDefs;
+
+  // 初始行数据
+  const src = rows.value.map(r => {
+    const rec = { c0: r[0], c1: r[1] ?? '' };
+    for (const ci of fillable) rec[`c${ci}`] = '';
+    return rec;
+  });
+  gridSource.value = src;
 }
 
 async function loadExisting() {
@@ -83,6 +99,10 @@ async function loadExisting() {
       const ri = rows.value.findIndex(r => r[0] === row_label);
       if (ri >= 0 && col_index >= 0) {
         values[toKey(ri, col_index)] = value_type === 'num' ? String(value_num ?? '') : String(value_text ?? '');
+        // 同步到 gridSource
+        if (gridSource.value[ri]) {
+          gridSource.value[ri][`c${col_index}`] = values[toKey(ri, col_index)];
+        }
       }
     }
   }
@@ -94,17 +114,15 @@ async function reloadTemplate() {
 }
 
 async function onSubmit() {
-  const cols = columns.value;
-  const fillableCols = cols.map((_, i) => i).filter(i => i >= 2);
   const cells = [];
+  const fillableCols = columns.value.map((_, i) => i).filter(i => i >= 2);
   for (let ri = 0; ri < rows.value.length; ri++) {
     const row = rows.value[ri];
     for (const ci of fillableCols) {
-      const key = toKey(ri, ci);
-      const raw = values[key];
-      if (raw === undefined || raw === '') continue;
+      const raw = gridSource.value?.[ri]?.[`c${ci}`];
+      if (raw === undefined || raw === null || raw === '') continue;
       const asNum = Number(raw);
-      const isNum = !Number.isNaN(asNum) && raw !== '' && /^-?\d+(\.\d+)?$/.test(String(raw));
+      const isNum = !Number.isNaN(asNum) && /^-?\d+(\.\d+)?$/.test(String(raw));
       cells.push({
         row_label: row[0],
         unit: row[1] ?? '',
@@ -130,7 +148,31 @@ async function onSubmit() {
 onMounted(async () => {
   await loadTemplate();
   await loadExisting();
+  // 监听 RevoGrid 编辑事件（兼容大小写）
+  const el = gridRef.value;
+  const handler = (e) => {
+    const detail = e?.detail;
+    const list = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
+    for (const ch of list) {
+      const { rowIndex, prop, val } = ch || {};
+      if (rowIndex == null || !prop) continue;
+      if (!gridSource.value[rowIndex]) continue;
+      gridSource.value[rowIndex][prop] = val;
+      const m = String(prop).match(/^c(\d+)$/);
+      if (m) {
+        const ci = Number(m[1]);
+        values[toKey(rowIndex, ci)] = val;
+      }
+    }
+  };
+  el?.addEventListener?.('afteredit', handler);
+  el?.addEventListener?.('afterEdit', handler);
 });
+
+function goDashboard() {
+  const q = bizDate.value ? `?biz_date=${encodeURIComponent(bizDate.value)}` : '';
+  router.push(`/projects/${encodeURIComponent(projectKey)}/dashboard${q}`);
+}
 </script>
 
 <style scoped>

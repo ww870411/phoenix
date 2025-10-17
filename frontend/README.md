@@ -61,6 +61,7 @@ docker compose up -d --build
       - `README.md`
       - `components/`
         - `AppHeader.vue`  ← 新增统一头部（商务蓝）
+        - `Breadcrumbs.vue`  ← 新增面包屑导航（可点击返回层级）
       - `constants/`
         - `index.js`
         - `sheets.js`
@@ -69,10 +70,18 @@ docker compose up -d --build
         - `ProjectSelectView.vue`
         - `DashboardView.vue`
         - `DataEntryView.vue`
+          - 顶部新增“← 返回仪表盘”按钮，快速回到仪表盘
+          - 使用 `<revo-grid>` 渲染可编辑表格，支持单元格内直接编辑
       - `services/`
         - `api.js`
       - `store/`
       - `styles/`
         - `theme.css`  ← 商务蓝主题（按钮/卡片/表格/徽章/进度条/容器等）
+
+## 依赖补充（前端）
+- 新增：`@revolist/revogrid`（Web Components 高性能表格）
+- 安装：在前端容器或本机运行 `npm install`/`pnpm install`（Compose 构建过程会自动安装依赖）
+- 说明：`DataEntryView.vue` 通过 `import '@revolist/revogrid'` 引入组件（注册自定义元素 `<revo-grid>`），并用 `columns`+`source` 绑定数据；编辑后通过 `afteredit/afterEdit` 事件收集变更。
+  - 注：该包未在 `exports` 暴露 css 入口，直接导入子路径 css 会触发 Vite 扫描错误；当前不导入官方 css，依赖组件内置样式与站点主题外观。
 
 说明：以上为当前前端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。

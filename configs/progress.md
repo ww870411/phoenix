@@ -158,5 +158,16 @@
   - 强化主题样式：`frontend/src/daily_report_25_26/styles/theme.css` 改为商务蓝配色，新增进度条、卡片标题、按钮风格等；表格头渐变、阴影与圆角调整。
   - 页面接入：项目选择、仪表盘、数据填报三页引入 `<AppHeader />`；四页均引入主题样式。
   - 仪表盘增强：新增进度条显示填报进度（已填/总数）。
+  - 新增面包屑导航：`frontend/src/daily_report_25_26/components/Breadcrumbs.vue`，并接入项目选择、仪表盘、数据填报页面；支持点击返回到对应层级。
+  - 数据填报页新增显眼返回：在 `DataEntryView.vue` 顶部加入“← 返回仪表盘”按钮，便于高频返回。
 - 影响范围：前端样式与模板结构（无业务逻辑变更）。
 - 回滚思路：移除 `<AppHeader />` 引用及 `theme.css` 的改动，恢复旧结构即可。
+### 2025-10-17 前端集成 RevoGrid（留痕）
+- 目标：使用 RevoGrid 渲染数据填报表格，支持就地编辑、性能更优。
+- 动作：
+  - 在 `frontend/package.json` 增加依赖：`revo-grid`。
+  - 在 `DataEntryView.vue` 引入 `revo-grid` 组件与样式，构造 `gridColumns`/`gridSource`，并监听 `afteredit/afterEdit` 事件同步数据。
+  - 提交时从 `gridSource` 汇总单元格，按接口规范构造 `cells`。
+- 影响范围：前端数据填报页的表格渲染方式；业务接口不变。
+- 回滚思路：删掉 `revo-grid` 相关导入与模板，恢复为原来的 `<table>` 渲染；或移除依赖并重新安装。
+- 追加修正：npm 安装失败是因包名错误（`revo-grid` 不存在）。已改为 `@revolist/revogrid` 并更新导入路径为 `@revolist/revogrid/dist/revogrid.js` 与 `@revolist/revogrid/dist/revogrid.css`。

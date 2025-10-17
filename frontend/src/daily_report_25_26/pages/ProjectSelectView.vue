@@ -8,6 +8,7 @@
         <div class="sub">选择需要进入的项目空间</div>
       </div>
     </header>
+    <Breadcrumbs />
     <div class="card-grid">
       <div class="card clickable elevated" @click="enter(projects[0])">
         <div class="card-header">Phoenix 项目</div>
@@ -22,6 +23,7 @@
 <script setup>
 import '../styles/theme.css'
 import AppHeader from '../components/AppHeader.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
