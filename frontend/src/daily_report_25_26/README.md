@@ -1,7 +1,7 @@
 daily_report_25_26 前端模块说明
 
 目标：
-- 为项目代号 `25-26daily_report` 提供隔离的前端实现；
+- 为项目代号 `daily_report_25_26` 提供隔离的前端实现；
 - 目录直接位于 `src/` 下，与未来其他项目并列，不使用 `projects/` 额外层级；
 - 通过本目录内的路由、状态、组件与服务实现代码与样式隔离。
 
@@ -13,6 +13,5 @@ daily_report_25_26 前端模块说明
 - `constants/`：常量（如 `project_key`、路由基路径等）。
 
 注意：
-- 后端 `project_key` 仍为 `25-26daily_report`，与目录名不同；请使用 `constants/` 中的常量保持一致性。
+- 后端 `project_key` 统一为 `daily_report_25_26`，与目录名一致；请使用 `constants/` 中的常量保持一致性。
 - 不在此阶段修改全局路由；后续可在 `router/index.js` 中按需懒加载本模块的路由。
-

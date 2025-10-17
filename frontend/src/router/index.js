@@ -24,7 +24,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/sheets/:sheetKey/fill',
+    path: '/projects/:projectKey/sheets/:sheetKey',
     name: 'data-entry',
     component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
     meta: { requiresAuth: true },
@@ -48,4 +48,3 @@ router.beforeEach((to, from, next) => {
 });
 
 export default router
-

@@ -29,3 +29,37 @@ codex resume 0199efec-4bae-7030-b3b5-7fb56ec9f7ad
 好了，刚才在你的帮助下，我们一同构建了应用框架。backcend是后端目录，frontend是前端目录，并使用docker组织，上面两个目录中的README.md是由你负责维护的  程序结构。D:\编程项目\phoenix\configs\progress.md是每次进行修改后你进行记录的地方。根目录下的AGENTS.md是我对你的要求
 
 codex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
+
+
+odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
+
+
+10.18
+  前端页面与路由                                                                                                                                      
+  - login: /login → frontend/src/daily_report_25_26/pages/LoginView.                                                                             
+  - projects: /projects → frontend/src/daily_report_25_26/pages/ProjectSelectView.vue
+  - dashboard: /projects/:projectKey/dashboard → frontend/src/daily_report_25_26/pages/DashboardView.                                      
+  - data-entry: /projects/:projectKey/sheets/:sheetKey → frontend/src/daily_report_25_26/pages/DataEntryView.                                  
+  - 证据文件：frontend/src/router/index.js  
+
+
+后端 API（统一前缀 /api/v1）
+  - 健康检查
+      - GET /healthz（应用生存探针） — backend/main.py                                                                                                  
+      - GET /ping（系统连通） — backend/api/v1/routes.py                                                                                                
+  - 项目级连通                                                                                                                                       
+      - GET /projects/daily_report_25_26/ping — backend/api/v1/daily_report_25_26.py                                                                    
+  - 表管理与数据填报（当前代码挂载在项目路径下）                                                                                                        
+      - 列出表清单：GET /projects/{project_key}/sheets        
+      - 获取模板：GET /projects/{project_key}/sheets/{sheet_key}/template                                                                          
+      - 提交数据：POST /projects/{project_key}/sheets/{sheet_key}/submit                                                                          
+      - 查询数据：POST /projects/{project_key}/sheets/{sheet_key}/query
+      - 证据文件：backend/api/v1/projects_daily_report_25_26.py，挂载于 backend/api/v1/routes.py
+
+  前端调用 API（对应 services）                                                                                                                         
+                                                                                                                                                        
+  - 列表表清单：GET /api/v1/projects/${projectKey}/sheets                                                                                               
+  - 获取模板：GET /api/v1/projects/${projectKey}/sheets/${sheetKey}/template                                                                            
+  - 提交数据：POST /api/v1/projects/${projectKey}/sheets/${sheetKey}/submit                                                                             
+  - 查询数据：POST /api/v1/projects/${projectKey}/sheets/${sheetKey}/query                                                                              
+  - 证据文件：frontend/src/daily_report_25_26/services/api.js            

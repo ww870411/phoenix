@@ -2,6 +2,7 @@
 整个程应用序在phoenix目录中,其中的backend目录为后端程序目录，frontend目录为前端程序目录，configs目录为一些基本的设定文件，还有一个待更新的logs.md日志文件。
 你在读取和修改文件时，禁止使用cmd或者powershell/pwsh命令，必须使用apply_patch这类原生的工具进行读写。
 每次对话后，都将对话内容及改动内容添加configs/progress.md中，并在backend与frontend各自目录下的README.md文件中更新程序的最新结构。
+另外，很重要的一点是，因为我正在你的帮助下写代码，你要把你做的工作，以及某项功能在实现时，究竟是什么结构/模块/函数在起作用，它具体的实现流程是什么，产生了什么结果向我报告。
 
 # 🦅 Phoenix Plan · 凤凰计划 概要说明书
 
@@ -50,7 +51,7 @@ phoenix/
 
 1. **后端单体、多项目共管**  
    - 仅一个后端服务；所有数据与接口均带 `project_key`。  
-   - 当前项目代号：`25-26daily_report`。
+   - 当前项目代号：`daily_report_25_26`。
 
 2. **表结构统一（Tall Table）**  
    - 所有日报行数据共用一张表 `entries`。  
@@ -104,7 +105,7 @@ phoenix/
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | SERIAL | 主键 |
-| project_key | TEXT | 项目代号（如“25-26daily_report”） |
+| project_key | TEXT | 项目代号（如“daily_report_25_26”） |
 | sheet_key | TEXT | 表键名（如“BeiHai_co_generation_sheet”） |
 | sheet_name | TEXT | 表名（中文） |
 | biz_date | DATE | 业务日期 |
@@ -145,7 +146,7 @@ POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit
 **请求体：**
 ```json
 {
-  "project_key": "25-26daily_report",
+  "project_key": "daily_report_25_26",
   "sheet_key": "BeiHai_co_generation_sheet",
   "sheet_name": "1.北海热电厂（热电联产）表",
   "biz_date": "2025-11-15",
@@ -168,7 +169,7 @@ POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query
 ```
 **请求体：**
 ```json
-{"project_key":"25-26daily_report","sheet_key":"BeiHai_co_generation_sheet","biz_date":"2025-11-15"}
+{"project_key":"daily_report_25_26","sheet_key":"BeiHai_co_generation_sheet","biz_date":"2025-11-15"}
 ```
 **响应：**
 ```json
@@ -229,7 +230,7 @@ POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query
    backend/app/models/
    backend/app/schemas/
    backend/app/services/
-   frontend/src/projects/25-26daily_report/
+   frontend/src/daily_report_25_26/
    ```
 
 3. **禁止修改的目录**
@@ -249,7 +250,7 @@ POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query
 
 | 类别 | 内容 |
 |------|------|
-| 项目代号 | 25-26daily_report |
+| 项目代号 | daily_report_25_26 |
 | 后端框架 | FastAPI + SQLAlchemy |
 | 前端框架 | Vue3 + RevoGrid |
 | 数据库 | PostgreSQL |

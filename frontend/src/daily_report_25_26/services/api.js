@@ -10,6 +10,13 @@ export async function getTemplate(projectKey, sheetKey) {
   return res.json();
 }
 
+export async function listSheets(projectKey) {
+  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/sheets`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) throw new Error(`获取表清单失败: ${res.status}`);
+  return res.json();
+}
+
 export async function submitData(payload) {
   const { project_key, sheet_key } = payload;
   const url = `/api/v1/projects/${encodeURIComponent(project_key)}/sheets/${encodeURIComponent(sheet_key)}/submit`;
@@ -33,4 +40,3 @@ export async function queryData(payload) {
   if (!res.ok) throw new Error(`查询失败: ${res.status}`);
   return res.json();
 }
-

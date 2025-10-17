@@ -12,7 +12,7 @@
     <div class="card-grid">
       <div class="card clickable elevated" @click="enter(projects[0])">
         <div class="card-header">Phoenix 项目</div>
-        <div class="name">25-26daily_report</div>
+        <div class="name">daily_report_25_26</div>
         <div class="desc">生产日报统一填报项目</div>
       </div>
     </div>
@@ -28,7 +28,8 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const projects = [
-  { key: '25-26daily_report', name: '25-26daily_report' },
+  // 按后端统一前缀：/api/v1/projects/daily_report_25_26
+  { key: 'daily_report_25_26', name: 'daily_report_25_26' },
 ];
 
 function enter(p) {

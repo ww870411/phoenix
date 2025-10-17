@@ -41,7 +41,6 @@ const items = computed(() => {
     ]
   }
   if (name === 'data-entry') {
-    const fillPath = `/projects/${encodeURIComponent(projectKey)}/sheets/${encodeURIComponent(sheetKey)}/fill${biz ? `?biz_date=${encodeURIComponent(biz)}` : ''}`
     return [
       { label: '项目', to: '/projects' },
       { label: String(projectKey || ''), to: `/projects/${encodeURIComponent(projectKey)}/dashboard` },

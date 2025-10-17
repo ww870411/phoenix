@@ -34,7 +34,7 @@
 - 说明：`services/api.js` 仅封装项目专属 API 调用，不修改禁改的 `frontend/src/api/`。
 
 6) 统一 project_key 与接入路由
-- 决策：后端与前端统一使用 `project_key = 'daily_report_25_26'`（偏离原文档中的 `25-26daily_report`，按用户最新要求执行）。
+- 决策：后端与前端统一使用 `project_key = 'daily_report_25_26'`（按用户最新要求执行）。
 - 前端改动：
   - `constants/index.js` 将 `PROJECT_KEY` 统一为 `daily_report_25_26`。
   - `router/index.js` 接入并启用该模块路由，根路径重定向至 `/daily_report_25_26`。
@@ -99,8 +99,8 @@
 - 访问：前端 `http://localhost:5173/`，后端 `http://localhost:8000/`，数据库端口 `5432` 保持不变。
 
 回滚思路
-- 前端目录层级：若需回滚为 `frontend/src/projects/25-26daily_report/`，可整体移动目录并在路由中调整导入路径与基路径。
-- project_key 命名：若需回退为 `25-26daily_report`，只需将 `frontend/src/daily_report_25_26/constants/index.js` 中的 `PROJECT_KEY` 改回，并同步前端 API 调用参数与后端常量。
+- 前端目录层级：当前目录为 `frontend/src/daily_report_25_26/`，与项目代号一致。
+- project_key 命名：统一为 `daily_report_25_26`，`frontend/src/daily_report_25_26/constants/index.js` 中 `PROJECT_KEY` 已为该值。
 - 路径级隔离：如需撤销项目级前缀，仅在 `backend/api/v1/routes.py` 移除 `include_router`，并从前端改回通用路径。
 
 验证清单
@@ -171,3 +171,73 @@
 - 影响范围：前端数据填报页的表格渲染方式；业务接口不变。
 - 回滚思路：删掉 `revo-grid` 相关导入与模板，恢复为原来的 `<table>` 渲染；或移除依赖并重新安装。
 - 追加修正：npm 安装失败是因包名错误（`revo-grid` 不存在）。已改为 `@revolist/revogrid` 并更新导入路径为 `@revolist/revogrid/dist/revogrid.js` 与 `@revolist/revogrid/dist/revogrid.css`。
+### 2025-10-17 路由精简（留痕）
+- 目标：简化数据填报页路由，去掉 `/fill` 与 `biz_date` 查询参数，采用更直观的层级。
+- 变更：
+  - 路由：`/projects/:projectKey/sheets/:sheetKey`（替代原 `/projects/:projectKey/sheets/:sheetKey/fill`）。
+  - 导航调整：
+    - Dashboard → DataEntry 链接移除查询参数。
+    - DataEntry 顶部返回仪表盘不再附带 `biz_date` 查询参数。
+    - 面包屑生成逻辑同步，无 `/fill`。 
+- 影响范围：前端路由与页面跳转；接口与业务逻辑不变。
+- 回滚思路：将上述改动恢复为带 `/fill` 的旧路径并恢复相关跳转参数。
+### 2025-10-17 后端路由统一（留痕）
+- 目标：按约定统一到 `/api/v1/projects/daily_report_25_26`，并先创建三大接口占位，待数据格式对齐后补齐实现。
+- 动作：
+  - 新增 `backend/api/v1/projects_daily_report_25_26.py`，提供占位路由：
+    - `GET /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/template`
+    - `POST /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/submit`
+    - `POST /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/query`
+  - 重写 `backend/api/v1/routes.py`，统一 include 到 `/projects/daily_report_25_26` 前缀。
+- 影响范围：仅新增/调整后端路由占位，不含业务逻辑；前端可先仅用于连通性验证。
+- 回滚思路：恢复旧版 `routes.py` 并移除新增项目路由文件即可。
+### 2025-10-17 仪表盘表清单联动（留痕）
+- 目标：前端仪表盘访问时向后端请求表清单，后端从挂载目录 `backend_data/数据结构_基本指标表.json` 读取并整理，返回 {sheet_key: {单位名, 表名}} 结构。
+- 后端：
+  - 新增 `GET /api/v1/projects/daily_report_25_26/sheets`（文件：`backend/api/v1/projects_daily_report_25_26.py`）。
+  - 仅聚焦 `backend_data/数据结构_基本指标表.json`（不再兜底其它 JSON）；字段名容错（单位名/表名）。
+  - 重要决策：不再改写源 `sheet_key`，严格按文件原键名返回（不进行 `_constant_sheet` → `_sheet` 的规范化）。
+  - 修复路径解析：从后端文件定位到项目根目录 `.../phoenix`（`parents[3]`），确保读取的是 `phoenix/backend_data` 而非 `phoenix/backend/backend_data`。
+- 前端：
+  - `services/api.js` 新增 `listSheets(projectKey)`。
+  - `DashboardView.vue` 改为在 `onMounted` 调用 `listSheets` 渲染单位名/表名，并保留“去填报”跳转；增加错误提示，当文件不存在时给出友好文案。
+- 影响范围：仪表盘数据来源与后端只读接口；业务写入不受影响。
+- 回滚思路：前端改回使用本地常量 `constants/sheets.js`；后端保留只读接口不影响其他功能。
+- 项目键统一对齐（补充）：
+  - 前端项目选择页使用 `project_key = daily_report_25_26`，与后端统一前缀 `/api/v1/projects/daily_report_25_26` 保持一致，避免 404。
+### 2025-10-17 前端路由与后端 API 映射（留痕）
+
+- 会话目标：梳理前端主要页面/路由，并给出与之对应的后端 API 列表与路径前缀，确保前后端命名与接口保持一致。
+- 证据来源：
+  - 前端：`frontend/src/router/index.js`、`frontend/src/daily_report_25_26/services/api.js`
+  - 后端：`backend/main.py`、`backend/api/v1/routes.py`、`backend/api/v1/projects_daily_report_25_26.py`
+- 关键发现：
+  - API 前缀：`/api/v1`
+  - 项目路径当前实现固定为：`/projects/daily_report_25_26`，与项目代号一致；前端以动态 `:projectKey` 传参已适配。
+
+前端主要路由（name → path → 组件）：
+- login → `/login` → `LoginView.vue`
+- projects → `/projects` → `ProjectSelectView.vue`
+- dashboard → `/projects/:projectKey/dashboard` → `DashboardView.vue`
+- data-entry → `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
+
+对应后端 API（完整路径均以 `/api/v1` 为前缀）：
+- 系统连通：`GET /api/v1/ping`
+- 项目连通：`GET /api/v1/projects/daily_report_25_26/ping`
+- 列表表清单：`GET /api/v1/projects/{project_key}/sheets`（当前实现为固定 `daily_report_25_26`）
+- 获取模板：`GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template`
+- 提交数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`
+- 查询数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`
+
+请求/响应（与规范一致，后端目前为占位实现）：
+- 模板响应字段：`sheet_key, sheet_name, columns, rows`
+- 提交请求字段：`project_key, sheet_key, sheet_name, biz_date, cells[]`
+- 查询请求字段：`project_key, sheet_key, biz_date`
+
+偏差与回滚预案：
+- 偏差：无（项目路径与代号统一为 `daily_report_25_26`）。
+- 影响：仅影响 URL 可读性，不影响前后端联调（前端以路由参数传入）。
+- 回滚/对齐思路：后端在路由汇总处支持参数化 `{project_key}` 或新增别名挂载；在变更前保留既有路径以平滑迁移。
+
+本次变更：
+- 未修改任何业务代码；仅更新文档（本记录、backend/frontend README 路由与结构段落）。

@@ -50,7 +50,7 @@ const route = useRoute();
 const router = useRouter();
 const projectKey = route.params.projectKey;
 const sheetKey = route.params.sheetKey;
-const initialDate = route.query.biz_date || new Date().toISOString().slice(0,10);
+const initialDate = new Date().toISOString().slice(0,10);
 
 const sheetName = ref('');
 const columns = ref([]);
@@ -170,8 +170,7 @@ onMounted(async () => {
 });
 
 function goDashboard() {
-  const q = bizDate.value ? `?biz_date=${encodeURIComponent(bizDate.value)}` : '';
-  router.push(`/projects/${encodeURIComponent(projectKey)}/dashboard${q}`);
+  router.push(`/projects/${encodeURIComponent(projectKey)}/dashboard`);
 }
 </script>
 

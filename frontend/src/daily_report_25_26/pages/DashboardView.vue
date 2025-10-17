@@ -17,35 +17,19 @@
     <Breadcrumbs />
 
     <div class="table-wrap card">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:40%">表名</th>
-            <th style="width:30%">sheet_key</th>
-            <th style="width:15%">状态</th>
-            <th style="width:15%">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in sheets" :key="s.sheet_key">
-            <td>{{ s.sheet_name }}</td>
-            <td>{{ s.sheet_key }}</td>
-            <td>
-              <span v-if="statusMap[s.sheet_key]" :class="['badge', badgeClass(s)]">
-                {{ statusMap[s.sheet_key].filled }} / {{ statusMap[s.sheet_key].total }}
-              </span>
-              <span v-else class="badge neutral">-</span>
-              <div v-if="statusMap[s.sheet_key]" class="progress" style="margin-top:6px;">
-                <div class="progress-bar" :style="{ width: progressPct(s) }"></div>
-              </div>
-            </td>
-            <td>
-              <button @click="refreshStatus(s)" class="btn ghost">刷新状态</button>
-              <button @click="openFill(s)" class="btn primary">去填报</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-if="loadError" class="placeholder">{{ loadError }}</div>
+      <div v-else class="card-grid">
+        <div class="card" v-for="g in grouped" :key="g.unit">
+          <div class="card-header">{{ g.unit || '未分组' }}</div>
+          <ul class="sheet-list">
+            <li v-for="s in g.items" :key="s.sheet_key">
+              <a href="#" @click.prevent="openFill(s)" class="sheet-link">{{ s.sheet_name }}</a>
+              <span class="sub" style="margin-left:8px;">{{ s.sheet_key }}</span>
+              <button class="btn ghost" style="margin-left:auto;" @click="refreshStatus(s)">刷新状态</button>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
   </div>
@@ -54,21 +38,21 @@
 <script setup>
 import '../styles/theme.css'
 import AppHeader from '../components/AppHeader.vue'
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { SHEETS } from '../constants/sheets';
-import { getTemplate, queryData } from '../services/api';
+import { listSheets, getTemplate, queryData } from '../services/api';
 
 const route = useRoute();
 const router = useRouter();
 const projectKey = route.params.projectKey;
-const sheets = SHEETS;
+const sheets = ref([]);
 const bizDate = ref(new Date().toISOString().slice(0, 10));
 
 const statusMap = reactive({});
+const loadError = ref('');
 
 function openFill(s) {
-  router.push(`/projects/${encodeURIComponent(projectKey)}/sheets/${encodeURIComponent(s.sheet_key)}/fill?biz_date=${bizDate.value}`);
+  router.push(`/projects/${encodeURIComponent(projectKey)}/sheets/${encodeURIComponent(s.sheet_key)}`);
 }
 
 async function refreshStatus(s) {
@@ -85,7 +69,28 @@ async function refreshStatus(s) {
 }
 
 onMounted(async () => {
-  // 可选：首屏尝试拉一次状态（避免并发压力，按需刷新）
+  try {
+    const data = await listSheets(projectKey);
+    const arr = Object.entries(data).map(([k, v]) => ({
+      sheet_key: k,
+      sheet_name: v?.['表名'] || k,
+      unit_name: v?.['单位名'] || '',
+    }));
+    sheets.value = arr;
+  } catch (e) {
+    loadError.value = '无法获取表清单，请确认后端已提供 数据结构_基本指标表.json';
+    console.error(e);
+  }
+});
+
+const grouped = computed(() => {
+  const map = new Map();
+  for (const s of sheets.value) {
+    const unit = s.unit_name || '';
+    if (!map.has(unit)) map.set(unit, []);
+    map.get(unit).push(s);
+  }
+  return Array.from(map.entries()).map(([unit, items]) => ({ unit, items }));
 });
 
 function badgeClass(s) {
@@ -107,4 +112,7 @@ function progressPct(s) {
 <style scoped>
 .topbar { margin-bottom: 16px; }
 .date { display: inline-flex; align-items: center; gap: 8px; }
+.sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sheet-link { color: var(--primary-700); text-decoration: none; }
+.sheet-link:hover { text-decoration: underline; }
 </style>

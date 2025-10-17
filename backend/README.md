@@ -62,8 +62,8 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `__init__.py`
     - `v1/`
       - `__init__.py`
-      - `routes.py`
-      - `daily_report_25_26.py`
+      - `routes.py`  ← 统一挂载 `/api/v1/projects/daily_report_25_26`
+      - `projects_daily_report_25_26.py`  ← 新增，占位接口（template/submit/query）
   - `models/`
     - `__init__.py`
   - `schemas/`
@@ -72,3 +72,15 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `__init__.py`
 
 说明：以上为当前后端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。
+## 路由一览（当前实现）
+
+- 统一前缀：`/api/v1`
+- 健康检查：`GET /api/v1/healthz`
+- 系统连通：`GET /api/v1/ping`（`backend/api/v1/routes.py`）
+- 项目连通：`GET /api/v1/projects/daily_report_25_26/ping`（`backend/api/v1/daily_report_25_26.py`）
+- 列出表清单：`GET /api/v1/projects/{project_key}/sheets`（当前实现固定为 `daily_report_25_26`，见 `backend/api/v1/projects_daily_report_25_26.py`）
+- 获取模板：`GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template`
+- 提交数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`
+- 查询数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`
+
+说明：项目路径与项目代号统一为 `daily_report_25_26`，前后端一致。

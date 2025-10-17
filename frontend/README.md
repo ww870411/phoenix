@@ -54,7 +54,7 @@ docker compose up -d --build
     - `App.vue`
     - `main.js`
     - `router/`
-      - `index.js`  ← 新增路由：/login、/projects、/projects/:projectKey/dashboard、/projects/:projectKey/sheets/:sheetKey/fill
+      - `index.js`  ← 新增路由：/login、/projects、/projects/:projectKey/dashboard、/projects/:projectKey/sheets/:sheetKey
     - `stores/`
       - `counter.js`
     - `daily_report_25_26/`
@@ -69,11 +69,13 @@ docker compose up -d --build
         - `LoginView.vue`
         - `ProjectSelectView.vue`
         - `DashboardView.vue`
+          - 访问时调用 `GET /api/v1/projects/{project_key}/sheets` 拉取表清单（单位/表名/键名），可点击进入填报
         - `DataEntryView.vue`
           - 顶部新增“← 返回仪表盘”按钮，快速回到仪表盘
           - 使用 `<revo-grid>` 渲染可编辑表格，支持单元格内直接编辑
       - `services/`
         - `api.js`
+          - `listSheets(projectKey)`：获取项目下所有表清单
       - `store/`
       - `styles/`
         - `theme.css`  ← 商务蓝主题（按钮/卡片/表格/徽章/进度条/容器等）
@@ -85,3 +87,19 @@ docker compose up -d --build
   - 注：该包未在 `exports` 暴露 css 入口，直接导入子路径 css 会触发 Vite 扫描错误；当前不导入官方 css，依赖组件内置样式与站点主题外观。
 
 说明：以上为当前前端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。
+## 路由一览（当前实现）
+
+- `/` → 重定向至 `/login`
+- `/login` → `LoginView.vue`
+- `/projects` → `ProjectSelectView.vue`
+- `/projects/:projectKey/dashboard` → `DashboardView.vue`
+- `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
+
+后端 API 对应（以 `/api/v1` 为前缀）：
+- `GET /api/v1/ping`（系统连通）
+- `GET /api/v1/projects/{project_key}/sheets`（表清单；当前实现固定为 `daily_report_25_26`）
+- `GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template`（获取模板）
+- `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`（提交数据）
+- `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`（查询数据）
+
+说明：项目路径与项目代号统一为 `daily_report_25_26`，前后端一致。
