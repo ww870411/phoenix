@@ -1,11 +1,51 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// 暂无业务路由占位，后续接入各项目模块路由
-const routes = []
+const routes = [
+  {
+    path: '/',
+    redirect: '/login',
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('../daily_report_25_26/pages/LoginView.vue'),
+    meta: { requiresAuth: false },
+  },
+  {
+    path: '/projects',
+    name: 'projects',
+    component: () => import('../daily_report_25_26/pages/ProjectSelectView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/projects/:projectKey/dashboard',
+    name: 'dashboard',
+    component: () => import('../daily_report_25_26/pages/DashboardView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/projects/:projectKey/sheets/:sheetKey/fill',
+    name: 'data-entry',
+    component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
+    meta: { requiresAuth: true },
+  },
+]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(),
   routes,
 })
 
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('phoenix_token');
+  if (to.meta.requiresAuth && !token) {
+    next({ name: 'login' });
+  } else if (to.name === 'login' && token) {
+    next({ name: 'projects' });
+  } else {
+    next();
+  }
+});
+
 export default router
+

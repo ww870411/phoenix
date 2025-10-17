@@ -38,3 +38,38 @@ docker compose up -d --build
 访问：
 - 前端（Vite）：`http://localhost:5173/`
 - 后端：`http://localhost:8000/healthz`
+## 结构快照（自动维护）
+更新时间：2025-10-17
+
+- 根目录
+  - `Dockerfile`
+  - `README.md`
+  - `index.html`
+  - `vite.config.js`
+  - `nginx.conf`
+  - `package.json`
+- 目录
+  - `public/`
+  - `src/`
+    - `App.vue`
+    - `main.js`
+    - `router/`
+      - `index.js`  ← 新增路由：/login、/projects、/projects/:projectKey/dashboard、/projects/:projectKey/sheets/:sheetKey/fill
+    - `stores/`
+      - `counter.js`
+    - `daily_report_25_26/`
+      - `README.md`
+      - `components/`
+      - `constants/`
+        - `index.js`
+        - `sheets.js`
+      - `pages/`
+        - `LoginView.vue`
+        - `ProjectSelectView.vue`
+        - `DashboardView.vue`
+        - `DataEntryView.vue`
+      - `services/`
+        - `api.js`
+      - `store/`
+
+说明：以上为当前前端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。

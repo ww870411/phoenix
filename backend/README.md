@@ -49,3 +49,26 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 - 目录约束：仅在允许目录（`backend/api|models|schemas|services`）内新增/修改代码。
 - 多项目扩展：按照 `api/v1/<project_name>.py` 增加项目级命名空间，或在通用路由内以参数化区分。
 - 数据与配置：容器内 `/app/data` 映射宿主 `./backend_data`（绑定挂载）。
+## 结构快照（自动维护）
+更新时间：2025-10-17
+
+- 根目录
+  - `Dockerfile`
+  - `main.py`
+  - `README.md`
+  - `__init__.py`
+- 目录
+  - `api/`
+    - `__init__.py`
+    - `v1/`
+      - `__init__.py`
+      - `routes.py`
+      - `daily_report_25_26.py`
+  - `models/`
+    - `__init__.py`
+  - `schemas/`
+    - `__init__.py`
+  - `services/`
+    - `__init__.py`
+
+说明：以上为当前后端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。

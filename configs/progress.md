@@ -112,3 +112,41 @@
 - 前端：
   - 启动：`cd frontend && npm install && npm run dev`。
   - 页面：访问 `/daily_report_25_26`、`/daily_report_25_26/sheets/demo` 可见占位页面。
+## 2025-10-17 会话记录
+
+- 背景：用户确认项目框架已就绪，约定由 AI 维护后端与前端 README 的结构说明，并在每次会话后更新 `configs/progress.md`。
+- 本次变更：
+  - 更新 `backend/README.md` 增加“结构快照（自动维护）”。
+  - 更新 `frontend/README.md` 增加“结构快照（自动维护）”。
+  - 未变更代码逻辑，仅同步文档快照。
+  - 新增前端页面与路由：
+    - 页面：`LoginView.vue`（登录）、`ProjectSelectView.vue`（项目选择）、`DashboardView.vue`（仪表盘/表选择+状态）、`DataEntryView.vue`（数据填报）。
+    - 路由：`/login`、`/projects`、`/projects/:projectKey/dashboard`、`/projects/:projectKey/sheets/:sheetKey/fill`。
+    - 服务封装：`src/daily_report_25_26/services/api.js` 实现 `/template`、`/submit`、`/query` 三接口调用。
+    - 常量：`src/daily_report_25_26/constants/sheets.js` 维护临时表清单（后续由后端枚举接口替换）。
+- 受限与偏差（留痕）：
+  - Serena 工具不可用，依据全局指南 3.9 触发条件降级到 Codex CLI：
+    - 使用安全读取（仅列出目录结构）与 `apply_patch` 写入文档；未进行任何破坏性操作。
+  - 影响范围：文档类文件，便于协作与可审计。
+  - 回滚思路：如需回退，恢复 README 与 progress 至上一版本文本即可。
+- 涉及文件：
+  - `backend/README.md`
+  - `frontend/README.md`
+  - `configs/progress.md`
+  - `frontend/src/daily_report_25_26/constants/sheets.js`
+  - `frontend/src/daily_report_25_26/services/api.js`
+  - `frontend/src/daily_report_25_26/pages/LoginView.vue`
+  - `frontend/src/daily_report_25_26/pages/ProjectSelectView.vue`
+  - `frontend/src/daily_report_25_26/pages/DashboardView.vue`
+  - `frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+  - `frontend/src/router/index.js`
+
+### 2025-10-17 20:02 环境事件（留痕）
+- 现象：执行 `docker compose up --build` 报错：`unable to get image 'postgres:15-alpine'`，并提示 `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`
+- 结论：Windows 环境下 Docker Desktop 未运行/未连接 Linux 引擎（或未安装/未启用 WSL2）。Compose 的 `version` 字段提示为过时警告，不影响本次错误本质。
+- 处置建议：
+  1) 启动 Docker Desktop，并确保“Use the WSL 2 based engine”已勾选；“Settings > Resources > WSL Integration”中为默认发行版开启集成；确保处于“Linux containers”模式。
+  2) 验证：`docker version`、`docker info` 正常返回；随后执行 `docker pull postgres:15-alpine` 预拉镜像；再执行 `docker compose up --build`。
+  3) 如 `wsl -l -v` 显示无 Linux 发行版，请安装并将默认版本设为 WSL2，重启 Docker Desktop 后重试。
+- 回滚/旁路：无代码改动，无需回滚；待 Docker Desktop 可用后再执行 Compose。
+- 后续事项：如需消除 `version` 过时警告，可在确认环境稳定后由我移除 `docker-compose.yml` 顶部 `version` 键；不影响功能。

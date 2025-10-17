@@ -21,3 +21,11 @@ uvicorn main:app --reload
 后端暂未隔离，未来通过api进行隔离，但前端设置严格隔离
 
 codex resume 0199efec-4bae-7030-b3b5-7fb56ec9f7ad
+
+删除冗余内容，确保目录干净。
+添加dockerfile及docker-compose.yml，设定为开发环境使用。
+
+codex resume 0199efec-4bae-7030-b3b5-7fb56ec9f7ad
+好了，刚才在你的帮助下，我们一同构建了应用框架。backcend是后端目录，frontend是前端目录，并使用docker组织，上面两个目录中的README.md是由你负责维护的  程序结构。D:\编程项目\phoenix\configs\progress.md是每次进行修改后你进行记录的地方。根目录下的AGENTS.md是我对你的要求
+
+codex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
