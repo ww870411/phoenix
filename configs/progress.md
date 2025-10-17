@@ -78,7 +78,12 @@
 - 前端：
   - 删除 `src/daily_report_25_26/pages/*`、`components/ProjectHeader.vue`、`services/api.js`、`store/index.js`、`routes.js`。
   - 更新 `src/router/index.js`，去除对示例路由的挂载，当前不注册业务路由。
-  - 更新 `frontend/README.md`，改为“待接入业务路由”的说明。
+- 更新 `frontend/README.md`，改为“待接入业务路由”的说明。
+
+12) 初始化 Git 仓库并完成首次提交
+- 新增：根目录 `.gitignore`（Python/Node/Vite/编辑器与系统文件忽略）。
+- 执行：`git init`、`git add -A`、`git branch -M main`、`git commit -m 'chore: initial commit'`。
+- 说明：远端推送未在本地直接执行，后续按 README 指引添加 remote 并 `git push -u origin main`。
 
 回滚思路
 - 前端目录层级：若需回滚为 `frontend/src/projects/25-26daily_report/`，可整体移动目录并在路由中调整导入路径与基路径。
