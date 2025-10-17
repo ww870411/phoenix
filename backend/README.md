@@ -5,7 +5,7 @@
 - `main.py`：FastAPI 应用入口（创建 `app`，挂载 `/api/v1` 前缀，提供 `GET /healthz`）。
 - `api/v1/`：v1 版本接口集合。
   - `routes.py`：v1 总路由（汇总与转发其他子路由）。
-  - `daily_report_25_26.py`：项目级命名空间（仅保留 `GET /api/v1/daily_report_25_26/ping`）。
+  - `daily_report_25_26.py`：项目接口集合（包含 `ping`、`sheets`、`template/submit/query` 占位接口）。
 - `models/`、`schemas/`、`services/`：预留用于 ORM、Pydantic 与业务服务分层。
 
 注意
@@ -63,7 +63,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `v1/`
       - `__init__.py`
       - `routes.py`  ← 统一挂载 `/api/v1/projects/daily_report_25_26`
-      - `projects_daily_report_25_26.py`  ← 新增，占位接口（template/submit/query）
+      -（已合并）相关占位接口现位于 `daily_report_25_26.py`
   - `models/`
     - `__init__.py`
   - `schemas/`
@@ -78,7 +78,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 - 健康检查：`GET /api/v1/healthz`
 - 系统连通：`GET /api/v1/ping`（`backend/api/v1/routes.py`）
 - 项目连通：`GET /api/v1/projects/daily_report_25_26/ping`（`backend/api/v1/daily_report_25_26.py`）
-- 列出表清单：`GET /api/v1/projects/{project_key}/sheets`（当前实现固定为 `daily_report_25_26`，见 `backend/api/v1/projects_daily_report_25_26.py`）
+- 列出表清单：`GET /api/v1/projects/{project_key}/sheets`（当前实现固定为 `daily_report_25_26`，见 `backend/api/v1/daily_report_25_26.py`）
 - 获取模板：`GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template`
 - 提交数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`
 - 查询数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`

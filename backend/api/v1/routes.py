@@ -8,7 +8,7 @@ v1 版本业务路由
 """
 
 from fastapi import APIRouter
-from .projects_daily_report_25_26 import router as project_router
+from .daily_report_25_26 import router as project_router
 
 
 router = APIRouter()
@@ -22,4 +22,3 @@ def ping():
 
 # 统一项目前缀：/api/v1/projects/daily_report_25_26
 router.include_router(project_router, prefix="/projects/daily_report_25_26")
-

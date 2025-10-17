@@ -184,7 +184,7 @@
 ### 2025-10-17 后端路由统一（留痕）
 - 目标：按约定统一到 `/api/v1/projects/daily_report_25_26`，并先创建三大接口占位，待数据格式对齐后补齐实现。
 - 动作：
-  - 新增 `backend/api/v1/projects_daily_report_25_26.py`，提供占位路由：
+  -（合并调整）占位路由现统一至 `backend/api/v1/daily_report_25_26.py`：
     - `GET /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/template`
     - `POST /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/submit`
     - `POST /api/v1/projects/daily_report_25_26/sheets/{sheet_key}/query`
@@ -194,7 +194,7 @@
 ### 2025-10-17 仪表盘表清单联动（留痕）
 - 目标：前端仪表盘访问时向后端请求表清单，后端从挂载目录 `backend_data/数据结构_基本指标表.json` 读取并整理，返回 {sheet_key: {单位名, 表名}} 结构。
 - 后端：
-  - 新增 `GET /api/v1/projects/daily_report_25_26/sheets`（文件：`backend/api/v1/projects_daily_report_25_26.py`）。
+  - `GET /api/v1/projects/daily_report_25_26/sheets`（文件：`backend/api/v1/daily_report_25_26.py`）。
   - 仅聚焦 `backend_data/数据结构_基本指标表.json`（不再兜底其它 JSON）；字段名容错（单位名/表名）。
   - 重要决策：不再改写源 `sheet_key`，严格按文件原键名返回（不进行 `_constant_sheet` → `_sheet` 的规范化）。
   - 修复路径解析：从后端文件定位到项目根目录 `.../phoenix`（`parents[3]`），确保读取的是 `phoenix/backend_data` 而非 `phoenix/backend/backend_data`。
@@ -210,7 +210,7 @@
 - 会话目标：梳理前端主要页面/路由，并给出与之对应的后端 API 列表与路径前缀，确保前后端命名与接口保持一致。
 - 证据来源：
   - 前端：`frontend/src/router/index.js`、`frontend/src/daily_report_25_26/services/api.js`
-  - 后端：`backend/main.py`、`backend/api/v1/routes.py`、`backend/api/v1/projects_daily_report_25_26.py`
+  - 后端：`backend/main.py`、`backend/api/v1/routes.py`、`backend/api/v1/daily_report_25_26.py`
 - 关键发现：
   - API 前缀：`/api/v1`
   - 项目路径当前实现固定为：`/projects/daily_report_25_26`，与项目代号一致；前端以动态 `:projectKey` 传参已适配。
@@ -241,3 +241,29 @@
 
 本次变更：
 - 未修改任何业务代码；仅更新文档（本记录、backend/frontend README 路由与结构段落）。
+### 2025-10-17 Dashboard 页面访问链路复盘（留痕）
+
+- 路由守卫：`frontend/src/router/index.js:39` 检查 `localStorage['phoenix_token']`；无 token 且目标页非 `login` 时重定向登录；有 token 且访问 `login` 时跳转项目页。
+- 进入页面：命中路由 `/projects/:projectKey/dashboard`（`frontend/src/router/index.js:21`），加载 `DashboardView.vue`。
+- 初始化拉取：`onMounted` 调用 `listSheets(projectKey)`（`frontend/src/daily_report_25_26/pages/DashboardView.vue:71,73`）→ 发起 `GET /api/v1/projects/{projectKey}/sheets`（`frontend/src/daily_report_25_26/services/api.js:14-17`）。
+- 后端响应：由 `backend/api/v1/routes.py:24` 挂载到 `daily_report_25_26.py:list_sheets_placeholder`，读取 `backend_data/数据结构_基本指标表.json` 构造 `{sheet_key: {单位名, 表名}}` 返回。
+- 前端分组渲染：将对象转数组并赋值 `sheets`（`:74,79`），按“单位名” `computed` 分组（`:86`），模板 `v-for` 渲染卡片与清单（`:22,25`）。
+- 进度计算：循环调用 `refreshStatus(s)`（`:58`）→ 先 `GET /template`（`:62`）计算总单元格数（列索引≥2 × 行数，`:63-64`），再 `POST /query`（`:66`）统计已填单元格（`:67-68`），用于展示状态/百分比。
+ - 现状提示：`/template` 与 `/query` 为占位实现（`backend/api/v1/daily_report_25_26.py`），可能导致进度为 0% 或运行时报错（`tpl.columns` 缺失）；表清单缺失则前端显示错误占位（`:81`）。
+
+### 2025-10-17 修复 list_sheets 读取结构（留痕）
+
+- 问题：后端 `list_sheets` 仅按“字典结构”解析 JSON；`backend_data/数据结构_基本指标表.json` 实际为“对象数组”，导致返回 500/404，前端提示“无法获取表清单…”。
+- 处理：
+  - 兼容两种结构：若为 `dict`，以键为 `sheet_key`；若为 `list`，以中文“表名”作为 `sheet_key`（前端通过 `encodeURIComponent` 已兼容中文路径）。
+  - 代码位置：`backend/api/v1/daily_report_25_26.py:list_sheets_placeholder`。
+- 影响：前端可正常拉取表清单并渲染分组；占位接口仍不影响后续 `template/query` 的替换实现。
+
+### 2025-10-17 API 文件合并（留痕）
+
+- 变更背景：按用户要求，去除多余文件命名差异，将 `projects_daily_report_25_26.py` 内容整合至 `daily_report_25_26.py`，统一作为本项目 API 文件。
+- 具体修改：
+  - 合并占位接口（sheets/template/submit/query）到 `backend/api/v1/daily_report_25_26.py`。
+  - 更新 `backend/api/v1/routes.py` 导入：改为 `from .daily_report_25_26 import router as project_router`。
+  - 删除 `backend/api/v1/projects_daily_report_25_26.py`。
+- 路由前缀：保持不变（`/api/v1/projects/daily_report_25_26`），前端无需改动。
