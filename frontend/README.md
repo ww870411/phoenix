@@ -23,10 +23,18 @@ frontend/
 - 业务 API 由后端实现后，再在前端对应模块内封装与接入。
 
 ## 启动方式
+开发模式：
 ```
 cd frontend
 npm install
 npm run dev
 ```
 
-启动后访问：`http://localhost:5173/`，将自动跳转到 `/daily_report_25_26`。
+Docker 模式（开发环境整套运行）：
+```
+docker compose up -d --build
+```
+
+访问：
+- 前端（Vite）：`http://localhost:5173/`
+- 后端：`http://localhost:8000/healthz`

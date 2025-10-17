@@ -77,13 +77,26 @@
   - 重写 `backend/README.md`，保留运行方式与连通性验证，去除示例接口描述。
 - 前端：
   - 删除 `src/daily_report_25_26/pages/*`、`components/ProjectHeader.vue`、`services/api.js`、`store/index.js`、`routes.js`。
-  - 更新 `src/router/index.js`，去除对示例路由的挂载，当前不注册业务路由。
+- 更新 `src/router/index.js`，去除对示例路由的挂载，当前不注册业务路由。
 - 更新 `frontend/README.md`，改为“待接入业务路由”的说明。
 
 12) 初始化 Git 仓库并完成首次提交
 - 新增：根目录 `.gitignore`（Python/Node/Vite/编辑器与系统文件忽略）。
 - 执行：`git init`、`git add -A`、`git branch -M main`、`git commit -m 'chore: initial commit'`。
 - 说明：远端推送未在本地直接执行，后续按 README 指引添加 remote 并 `git push -u origin main`。
+
+13) Docker 化与容器编排
+- 新增：`backend/Dockerfile`（uvicorn 运行 FastAPI）。
+- 新增：`frontend/Dockerfile`（Node 构建 + Nginx 运行，供未来生产使用）。
+- 新增：`frontend/nginx.conf`（静态与代理配置）。
+- 新增：`docker-compose.yml`（`db`/`backend`/`frontend`）。
+- 新增：`backend_data/README.md`（说明绑定挂载目录用途）。
+- 更新：`backend/README.md`、`frontend/README.md`（加入 Docker 启动说明）。
+
+14) 调整为开发环境标准（Compose）
+- backend：启用 `uvicorn --reload`，将项目根 `./` 挂载到容器 `/app`，`./backend_data` 挂载到 `/app/data`。
+- frontend：改为使用 `node:20-alpine` 容器运行 Vite 开发服务器，端口 `5173`；挂载 `./frontend:/app`，并使用命名卷 `frontend_node_modules` 存放依赖。
+- 访问：前端 `http://localhost:5173/`，后端 `http://localhost:8000/`，数据库端口 `5432` 保持不变。
 
 回滚思路
 - 前端目录层级：若需回滚为 `frontend/src/projects/25-26daily_report/`，可整体移动目录并在路由中调整导入路径与基路径。

@@ -1,4 +1,4 @@
-﻿# 后端说明（FastAPI + 版本化路由）
+# 后端说明（FastAPI + 版本化路由）
 
 本目录为 Phoenix 后端服务的当前骨架，采用“一个入口 + 多个路由模块”的结构：
 
@@ -14,27 +14,33 @@
 
 ---
 
-## 运行与验证
+## 使用 Docker（开发环境）
 
-安装依赖：
+在仓库根目录：
+```
+docker compose up -d --build
+```
+
+说明（dev 标准）：
+- 数据库：PostgreSQL 通过命名卷 `pg_data` 持久化数据。
+- 后端：使用 uvicorn `--reload` 热更新；容器 `/app` 绑定挂载项目根目录，`/app/data` 绑定 `./backend_data`。
+- 前端：使用 Node 容器跑 Vite 开发服务器（端口 5173），支持热更新。
+
+访问：
+- 后端健康检查：`http://127.0.0.1:8000/healthz`
+- 后端连通性：`http://127.0.0.1:8000/api/v1/ping`
+- 项目前缀连通性：`http://127.0.0.1:8000/api/v1/daily_report_25_26/ping`
+- 前端（Vite）：`http://127.0.0.1:5173/`
+
+---
+
+## 本地开发（可选）
+
+不使用 Docker 时：
 ```
 python -m pip install fastapi "uvicorn[standard]"
-```
-
-启动（在项目根目录执行）：
-```
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-或在 `backend/` 目录：
-```
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-验证：
-- `GET http://127.0.0.1:8000/healthz`
-- `GET http://127.0.0.1:8000/api/v1/ping`
-- `GET http://127.0.0.1:8000/api/v1/daily_report_25_26/ping`
 
 ---
 
@@ -42,4 +48,4 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - 命名统一：Python `snake_case`；路径字段与前端保持一致（如 `project_key`）。
 - 目录约束：仅在允许目录（`backend/api|models|schemas|services`）内新增/修改代码。
 - 多项目扩展：按照 `api/v1/<project_name>.py` 增加项目级命名空间，或在通用路由内以参数化区分。
-
+- 数据与配置：容器内 `/app/data` 映射宿主 `./backend_data`（绑定挂载）。
