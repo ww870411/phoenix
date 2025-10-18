@@ -23,6 +23,8 @@
 
     <div class="table-wrap card" v-if="columns.length">
       <RevoGrid
+        :row-headers="true"
+        :hide-attribution="true"
         :columns="gridColumns"
         :source="gridSource"
         style="height: 60vh; width: 100%;"

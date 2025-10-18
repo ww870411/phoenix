@@ -17,6 +17,7 @@ import json
 
 PROJECT_ROOT = SysPath(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "backend_data"
+CATALOG_FILE = PROJECT_ROOT / "configs" / "数据结构_基本指标表.json"
 DATA_FILE_CANDIDATES = (
     "数据结构_基本指标表.json",
     "数据结构_常量指标表.json",
@@ -29,6 +30,8 @@ ROW_KEYS = ("数据", "rows", "records", "lines")
 
 def _iter_data_files() -> Iterable[SysPath]:
     """按优先级返回存在的模板文件路径。"""
+    if CATALOG_FILE.exists():
+        yield CATALOG_FILE
     for filename in DATA_FILE_CANDIDATES:
         path = DATA_DIR / filename
         if path.exists():
@@ -112,31 +115,33 @@ def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
 
 
 def _collect_catalog() -> Dict[str, Dict[str, str]]:
-    catalog: Dict[str, Dict[str, str]] = {}
-    for data_path in _iter_data_files():
-        raw = _read_json(data_path)
-        if isinstance(raw, dict):
-            iterator = raw.items()
-        elif isinstance(raw, list):
-            iterator = ((payload.get("sheet_key") or "", payload) for payload in raw)
-        else:
-            iterator = []
+    catalog_path = CATALOG_FILE
+    if not catalog_path.exists():
+        return {}
+    raw = _read_json(catalog_path)
+    if isinstance(raw, dict):
+        iterator = raw.items()
+    elif isinstance(raw, list):
+        iterator = ((payload.get("sheet_key") or "", payload) for payload in raw)
+    else:
+        iterator = []
 
-        for sheet_key, payload in iterator:
-            if not isinstance(payload, dict):
-                continue
-            names = _extract_names(payload)
-            key = str(sheet_key or names["sheet_name"])
-            if not key or key in catalog:
-                continue
-            sheet_name = names["sheet_name"] or key
-            unit_name = names["unit_name"]
-            catalog[key] = {
-                "单位名": unit_name,
-                "表名": sheet_name,
-                "unit_name": unit_name,
-                "sheet_name": sheet_name,
-            }
+    catalog: Dict[str, Dict[str, str]] = {}
+    for sheet_key, payload in iterator:
+        if not isinstance(payload, dict):
+            continue
+        names = _extract_names(payload)
+        key = str(sheet_key or names["sheet_name"])
+        if not key or key in catalog:
+            continue
+        sheet_name = names["sheet_name"] or key
+        unit_name = names["unit_name"]
+        catalog[key] = {
+            "单位名": unit_name,
+            "表名": sheet_name,
+            "unit_name": unit_name,
+            "sheet_name": sheet_name,
+        }
     return catalog
 
 

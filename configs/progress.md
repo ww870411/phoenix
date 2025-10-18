@@ -341,3 +341,13 @@
 - 影响范围：仪表盘仅作为表格入口展示，不再发起 `/template` 与 `/query` 轮询，页面体验更直接。
 - 回滚方案：若需恢复进度展示，可从版本控制中还原 `Sheets.vue` 对应段落与样式。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/Sheets.vue`、`configs/progress.md`。
+
+### 2025-10-20 Catalog 数据源与填报列数调整（留痕）
+
+- 背景：用户要求 `/sheets` 接口仅使用 `configs/数据结构_基本指标表.json` 作为单位与表格列表来源，并指出填报页多出一列（行号列）。
+- 动作：
+- 修改 `backend/api/v1/daily_report_25_26.py`，`list_sheets` 仅读取 `configs/数据结构_基本指标表.json`，同时 `_iter_data_files` 先行遍历该文件，保证模板与清单来源一致；
+- `DataEntryView.vue` 的 `RevoGrid` 组件启用 `rowHeaders` 并隐藏版权列（`:hide-attribution="true"`），行号位于最左侧。
+- 影响范围：前端仪表盘列表与填报页列数与用户期望保持一致；模板获取逻辑保持兼容 `backend_data` 作为后备。
+- 回滚方案：如需恢复多文件合并行为，可撤销 `_collect_catalog` 与 `_iter_data_files` 调整；如需显示版权列，可移除 `hide-attribution` 设置。
+- 涉及文件：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
