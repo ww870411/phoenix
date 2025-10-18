@@ -49,7 +49,8 @@ docker compose up -d --build
   - 展示模板清单；按单位分组并以卡片呈现；点击表名进入填报页面；
   - `listSheets` 响应新增 `unit_name/sheet_name` 字段，以适配英文/中文双写。 
 - `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
-  - 获取模板后交由 RevoGrid 渲染；
+  - 使用 `@revolist/vue3-datagrid` 提供的 `RevoGrid` 组件渲染表格，自带自定义元素注册；
+  - 通过 `@afteredit` 事件回调同步 `gridSource`，提交阶段汇总单元格生成 `cells`；
   - 模板 `columns` 的后两列分别为“今日日期”“去年同日”，用于展示对比列。 
 
 ## API 交互要点
@@ -65,12 +66,12 @@ docker compose up -d --build
 
 前端 `services/api.js` 会读取 `.env` 中的 `VITE_API_BASE`，默认 `http://127.0.0.1:8000`，可按部署场景调整。
 
-## 与 RevoGrid 的配合
+## 与 @revolist/vue3-datagrid 的配合
 
-- `handle_sheet_template`（前端待实现）需将模板的 `columns/rows` 转换为 RevoGrid 所需的列配置与数据源；
-- 模板首行使用后端返回的四列表头（项目、计量单位、今日日期、去年同日）；
+- `DataEntryView.vue` 直接导入 `@revolist/vue3-datagrid` 默认导出的 `RevoGrid` 组件，无需手动调用 `defineCustomElements`；
+- 模板首行使用后端返回的四列表头（项目、计量单位、今日日期、去年同日）； 
 - 数据从第二行开始对应后端返回的 `rows`（二维数组），并根据列数动态渲染；
-- RevoGrid 编辑结果通过 `afterEdit` 事件收集，最终调用 `submitData` 接口完成提交。
+- 用户编辑后触发的 `afteredit/afterEdit` 事件统一由 `handleAfterEdit` 处理，同步更新 `gridSource` 与本地缓存，最终调用 `submitData` 接口提交。
 
 ## 接口演进记录（2025-10-19）
 

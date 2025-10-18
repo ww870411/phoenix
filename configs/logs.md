@@ -74,3 +74,8 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
   统一表格选择页面的路径为/sheets，/dashboard另有他用，对应的vue文件也改名
 
   列表清单的处理函数为_read_json
+
+  但是，填表页面无法渲染的问题依然存在，gemini的建议是：
+  DataEntryView.vue 的实现方式从原生 <revo-grid> 切换为使用 @revolist/vue3-datagrid Vue 组件。这不仅是更推荐的做法，而且很可能会一并解决 CSS 
+  样式不加载的问题。
+  我将让codex去看看

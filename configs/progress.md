@@ -319,3 +319,15 @@
 - 前端：`frontend/src/daily_report_25_26/pages/Sheets.vue` 精简卡片展示（去除 0/0 徽标、取消分隔线），保持单位卡片风格；`frontend/README.md` 说明模板列用法。
 - 文档：`backend/README.md` 与 `frontend/README.md` 更新接口说明；`configs/progress.md` 留痕当前变更。
 - 模板清单接口 `GET /api/v1/projects/{project_key}/sheets` 现同时包含中文键（`单位名`、`表名`）与英文键（`unit_name`、`sheet_name`）。
+
+### 2025-10-20 DataEntryView 迁移至官方 Vue 组件（留痕）
+
+- 背景：原生 `<revo-grid>` 未显式注册自定义元素，可能导致页面空白；同时缺乏官方样式入口，专家建议改用 `@revolist/vue3-datagrid`。
+- 动作：
+  - `frontend/src/daily_report_25_26/pages/DataEntryView.vue` 改为导入官方 `RevoGrid` 组件，移除手动事件监听，使用 `@afteredit` 钩子同步 `gridSource`；
+  - 增补 `handleAfterEdit` 方法以与组件事件模型对齐；
+  - `frontend/README.md` 更新路由说明与 RevoGrid 配合方式；
+  - `backend/README.md` 同步更新时间，说明本次后端结构未变动。
+- 影响范围：数据填报页面表格渲染流程改为由组件包装层托管，自定义元素注册与事件派发更加稳定，降低空白渲染风险；后端无代码变更。
+- 回滚方案：如需恢复旧实现，可将 `DataEntryView.vue` 改回原生 `<revo-grid>` 标签并重新挂载 DOM 事件，同时撤销 README 更新。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`、`backend/README.md`、`configs/progress.md`。

@@ -1,0 +1,5 @@
+- 时间：2025-10-20
+- 主题：DataEntryView 迁移至 @revolist/vue3-datagrid
+- 变更：`DataEntryView.vue` 改用官方 Vue 组件并新增 `handleAfterEdit`，同步更新 frontend/backend README 及 configs/progress.md
+- 触发原因：原生 <revo-grid> 未注册导致渲染异常风险，Serena 暂不支持 Vue SFC 编辑，降级使用 apply_patch
+- 验证：未运行自动化测试，后续需在前端启动后确认表格可呈现与编辑

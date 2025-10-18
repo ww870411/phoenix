@@ -22,12 +22,13 @@
     <Breadcrumbs />
 
     <div class="table-wrap card" v-if="columns.length">
-      <revo-grid
-        ref="gridRef"
+      <RevoGrid
         :columns="gridColumns"
         :source="gridSource"
         style="height: 60vh; width: 100%;"
-      ></revo-grid>
+        @afteredit="handleAfterEdit"
+        @afterEdit="handleAfterEdit"
+      />
     </div>
     <div v-else class="placeholder">无模板数据</div>
   </div>
@@ -36,10 +37,10 @@
 
 <script setup>
 import '../styles/theme.css'
-import '@revolist/revogrid'
+import RevoGrid from '@revolist/vue3-datagrid'
 // 注意：@revolist/revogrid 未在 exports 中暴露 css 入口，
 // 直接导入 css 会导致 Vite 依赖扫描报错（Missing specifier）。
-// 先不导入官方 css，使用自定义外层样式与组件内置样式。
+// 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
 import { useRouter } from 'vue-router'
 import { onMounted, reactive, ref } from 'vue';
@@ -59,8 +60,6 @@ const bizDate = ref(String(initialDate));
 const values = reactive({});
 const gridColumns = ref([]);
 const gridSource = ref([]);
-const gridRef = ref(null);
-
 function toKey(ri, ci) { return `${ri}-${ci}`; }
 
 async function loadTemplate() {
@@ -148,26 +147,23 @@ async function onSubmit() {
 onMounted(async () => {
   await loadTemplate();
   await loadExisting();
-  // 监听 RevoGrid 编辑事件（兼容大小写）
-  const el = gridRef.value;
-  const handler = (e) => {
-    const detail = e?.detail;
-    const list = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
-    for (const ch of list) {
-      const { rowIndex, prop, val } = ch || {};
-      if (rowIndex == null || !prop) continue;
-      if (!gridSource.value[rowIndex]) continue;
-      gridSource.value[rowIndex][prop] = val;
-      const m = String(prop).match(/^c(\d+)$/);
-      if (m) {
-        const ci = Number(m[1]);
-        values[toKey(rowIndex, ci)] = val;
-      }
-    }
-  };
-  el?.addEventListener?.('afteredit', handler);
-  el?.addEventListener?.('afterEdit', handler);
 });
+
+function handleAfterEdit(evt) {
+  const detail = evt?.detail ?? evt;
+  const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
+  for (const change of changes) {
+    const { rowIndex, prop, val } = change || {};
+    if (rowIndex == null || !prop) continue;
+    if (!gridSource.value[rowIndex]) continue;
+    gridSource.value[rowIndex][prop] = val;
+    const match = String(prop).match(/^c(\d+)$/);
+    if (match) {
+      const ci = Number(match[1]);
+      values[toKey(rowIndex, ci)] = val;
+    }
+  }
+}
 
 function goDashboard() {
   router.push(`/projects/${encodeURIComponent(projectKey)}/sheets`);
