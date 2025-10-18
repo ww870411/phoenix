@@ -12,6 +12,7 @@
           <span>业务日期</span>
           <input type="date" v-model="bizDate" />
         </label>
+        <button class="btn ghost" style="margin-left:auto;" @click="refreshAll">刷新状态</button>
       </div>
     </header>
     <Breadcrumbs />
@@ -25,7 +26,6 @@
             <li v-for="s in g.items" :key="s.sheet_key">
               <a href="#" @click.prevent="openFill(s)" class="sheet-link">{{ s.sheet_name }}</a>
               <span class="sub" style="margin-left:8px;">{{ s.sheet_key }}</span>
-              <button class="btn ghost" style="margin-left:auto;" @click="refreshStatus(s)">刷新状态</button>
             </li>
           </ul>
         </div>
@@ -59,13 +59,33 @@ async function refreshStatus(s) {
   // 思路：
   // 1) 获取模板计算可填单元格数（从列索引>=2开始统计）
   // 2) 查询该日期已填单元格数量
-  const tpl = await getTemplate(projectKey, s.sheet_key);
-  const fillableCols = tpl.columns.map((_, i) => i).filter(i => i >= 2);
-  const total = (tpl.rows?.length || 0) * fillableCols.length;
+  let tpl;
+  try {
+    tpl = await getTemplate(projectKey, s.sheet_key);
+  } catch (err) {
+    statusMap[s.sheet_key] = { filled: 0, total: 0 };
+    return;
+  }
+  const columns = Array.isArray(tpl?.columns) ? tpl.columns : [];
+  const rows = Array.isArray(tpl?.rows) ? tpl.rows : [];
+  const fillableCols = columns.map((_, i) => i).filter(i => i >= 2);
+  const total = rows.length * fillableCols.length;
 
-  const q = await queryData({ project_key: projectKey, sheet_key: s.sheet_key, biz_date: bizDate.value });
-  const filled = Array.isArray(q.cells) ? q.cells.length : 0;
+  let q;
+  try {
+    q = await queryData({ project_key: projectKey, sheet_key: s.sheet_key, biz_date: bizDate.value });
+  } catch (err) {
+    q = {};
+  }
+  const cells = Array.isArray(q?.cells) ? q.cells : [];
+  const filled = cells.length;
   statusMap[s.sheet_key] = { filled, total };
+}
+
+async function refreshAll() {
+  for (const s of sheets.value) {
+    await refreshStatus(s);
+  }
 }
 
 onMounted(async () => {
@@ -77,6 +97,7 @@ onMounted(async () => {
       unit_name: v?.['单位名'] || '',
     }));
     sheets.value = arr;
+    await refreshAll();
   } catch (e) {
     loadError.value = '无法获取表清单，请确认后端已提供 数据结构_基本指标表.json';
     console.error(e);
