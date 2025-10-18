@@ -313,3 +313,9 @@
   - `frontend/README.md`、`backend/README.md`：同步更新命名描述。
 - 影响范围：前端页面引用路径，后端无变动。
 - 回滚方案：如需恢复旧命名，重新创建 `DashboardView.vue` 并调整引用路径即可。
+### 2025-10-19 模板接口落地（留痕）
+
+- 后端：`backend/api/v1/daily_report_25_26.py` 读取 `backend_data` 模板文件，补齐当前日期与上一年度同日，并返回结构化字段 `sheet_key/sheet_name/unit_name/columns/rows`。
+- 前端：`frontend/src/daily_report_25_26/pages/Sheets.vue` 精简卡片展示（去除 0/0 徽标、取消分隔线），保持单位卡片风格；`frontend/README.md` 说明模板列用法。
+- 文档：`backend/README.md` 与 `frontend/README.md` 更新接口说明；`configs/progress.md` 留痕当前变更。
+- 模板清单接口 `GET /api/v1/projects/{project_key}/sheets` 现同时包含中文键（`单位名`、`表名`）与英文键（`unit_name`、`sheet_name`）。
