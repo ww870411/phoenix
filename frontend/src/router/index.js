@@ -20,7 +20,7 @@ const routes = [
   {
     path: '/projects/:projectKey/sheets',
     name: 'dashboard',
-    component: () => import('../daily_report_25_26/pages/DashboardView.vue'),
+    component: () => import('../daily_report_25_26/pages/Sheets.vue'),
     meta: { requiresAuth: true },
   },
   {

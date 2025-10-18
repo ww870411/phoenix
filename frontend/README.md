@@ -68,7 +68,7 @@ docker compose up -d --build
       - `pages/`
         - `LoginView.vue`
         - `ProjectSelectView.vue`
-        - `DashboardView.vue`
+    - `Sheets.vue`
           - 访问时调用 `GET /api/v1/projects/{project_key}/sheets` 拉取表清单（单位/表名/键名），可点击进入填报
         - `DataEntryView.vue`
           - 顶部新增“← 返回仪表盘”按钮，快速回到仪表盘
@@ -92,7 +92,7 @@ docker compose up -d --build
 - `/` → 重定向至 `/login`
 - `/login` → `LoginView.vue`
 - `/projects` → `ProjectSelectView.vue`
-- `/projects/:projectKey/sheets` → `DashboardView.vue`
+- `/projects/:projectKey/sheets` → `Sheets.vue`
 - `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
 
 后端 API 对应（以 `/api/v1` 为前缀）：

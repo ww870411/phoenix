@@ -302,4 +302,14 @@
   - `frontend/src/daily_report_25_26/services/debug.js` 复用 `resolveApiPath`，确保调试日志同源。
   - 新增 `frontend/.env.development`，默认将 `VITE_API_BASE` 指向 `http://127.0.0.1:8000`，本地 `npm run dev` 即可直连后端。
 - 后续：如需切换到 Docker Compose，可在环境变量中调整 `VITE_API_BASE`，保持统一配置。问题定位结束时记得清理临时调试日志与插桩。
-- 追加修复：为跨域访问配置 CORS（`backend/main.py`），默认允许 `localhost/127.0.0.1:5173`，并支持通过环境变量 `PHOENIX_CORS_ORIGINS` 自定义域名，解决浏览器直接访问后端时的跨域报错。
+ - 追加修复：为跨域访问配置 CORS（`backend/main.py`），默认允许 `localhost/127.0.0.1:5173`，并支持通过环境变量 `PHOENIX_CORS_ORIGINS` 自定义域名，解决浏览器直接访问后端时的跨域报错。
+
+### 2025-10-19 看板页面命名与路径同步（留痕）
+
+- 背景：前端路由使用 `/projects/:projectKey/sheets`，需保持组件命名一致。
+- 变更内容：
+  - `frontend/src/daily_report_25_26/pages/Sheets.vue`：以新文件取代 `DashboardView.vue`，结构与逻辑沿用原实现，并恢复单位卡片 + 状态进度的卡片式布局。
+  - `frontend/src/router/index.js`：懒加载路径更新为 `pages/Sheets.vue`。
+  - `frontend/README.md`、`backend/README.md`：同步更新命名描述。
+- 影响范围：前端页面引用路径，后端无变动。
+- 回滚方案：如需恢复旧命名，重新创建 `DashboardView.vue` 并调整引用路径即可。

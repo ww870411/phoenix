@@ -1,0 +1,1 @@
+Dashboard 路径已调整：由 `/projects/:projectKey/dashboard` 改为 `/projects/:projectKey/sheets`，相关跳转与面包屑已同步更新（ProjectSelectView、DataEntryView、Breadcrumbs、router/index.js）。

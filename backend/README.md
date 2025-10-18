@@ -74,6 +74,10 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 说明：以上为当前后端目录的真实结构快照，供前后端协作与定位参考；如有结构调整，将在后续会话中自动更新。
 ## 路由一览（当前实现）
 
+### 近期前端命名调整（2025-10-18）
+- 前端页面 `DashboardView.vue` 更名为 `Sheets.vue`，对应路由仍为 `/projects/:project_key/sheets`。
+- 后端接口规格保持一致，如有改动需同步更新本 README 与 API 文档。
+
 - 统一前缀：`/api/v1`
 - 健康检查：`GET /api/v1/healthz`
 - 系统连通：`GET /api/v1/ping`（`backend/api/v1/routes.py`）
