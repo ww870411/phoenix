@@ -331,3 +331,13 @@
 - 影响范围：数据填报页面表格渲染流程改为由组件包装层托管，自定义元素注册与事件派发更加稳定，降低空白渲染风险；后端无代码变更。
 - 回滚方案：如需恢复旧实现，可将 `DataEntryView.vue` 改回原生 `<revo-grid>` 标签并重新挂载 DOM 事件，同时撤销 README 更新。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`、`backend/README.md`、`configs/progress.md`。
+
+### 2025-10-20 Sheets 页面移除进度展示（留痕）
+
+- 背景：用户要求 /sheets 页面不再展示“进度条”及 “已填 / 应填” 数字，避免产生“可以缺项”的错误暗示。
+- 动作：
+  - 删除 `frontend/src/daily_report_25_26/pages/Sheets.vue` 中的进度徽标、进度条模板及关联逻辑，保留简洁的表格清单。
+  - 精简脚本：移除 `statusMap`、`refreshStatus/refreshAll`、模板刷新按钮及业务日期选择，头部标题调整为“表格选择”。
+- 影响范围：仪表盘仅作为表格入口展示，不再发起 `/template` 与 `/query` 轮询，页面体验更直接。
+- 回滚方案：若需恢复进度展示，可从版本控制中还原 `Sheets.vue` 对应段落与样式。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/Sheets.vue`、`configs/progress.md`。
