@@ -103,3 +103,8 @@ docker compose up -d --build
 - `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`（查询数据）
 
 说明：项目路径与项目代号统一为 `daily_report_25_26`，前后端一致。
+
+### 开发环境 API 基址
+
+- 本地 `npm run dev` 默认读取 `.env.development`，其中 `VITE_API_BASE=http://127.0.0.1:8000`，由浏览器直接访问后端容器映射端口，避免 Vite Dev Server 自身 404。
+- 如在 Docker Compose 内运行，可根据需要调整 `VITE_API_BASE` 指向对外暴露的后端地址；未设置时仍回退到相对路径，与 Nginx 反向代理行为一致。

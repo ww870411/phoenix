@@ -84,3 +84,8 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 - 查询数据：`POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`
 
 说明：项目路径与项目代号统一为 `daily_report_25_26`，前后端一致。
+
+### CORS 设置
+
+- 默认允许 `http://localhost:5173`、`http://127.0.0.1:5173` 等本地调试域名访问。
+- 可通过环境变量 `PHOENIX_CORS_ORIGINS`（逗号分隔）覆盖允许的来源，形如：`PHOENIX_CORS_ORIGINS=http://localhost:5173,http://my-host`。

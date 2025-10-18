@@ -267,3 +267,26 @@
   - 更新 `backend/api/v1/routes.py` 导入：改为 `from .daily_report_25_26 import router as project_router`。
   - 删除 `backend/api/v1/projects_daily_report_25_26.py`。
 - 路由前缀：保持不变（`/api/v1/projects/daily_report_25_26`），前端无需改动。
+- 前端/后端调试留痕（临时开关）
+  - （已于同日“调试代码回收”步骤清理）后端临时调试写入：`backend/api/v1/daily_report_25_26.py` 引入 `_dbg_write`，在 `/sheets`、`/template`、`/query`、`/debug/frontend` 中写入 `phoenix/error.md` 与 `poenix/error.md`。
+  - （已清理）前端上报：`frontend/src/daily_report_25_26/services/debug.js` 提供 `logDebug`；`DashboardView.vue` 中在 `onMounted`、`listSheets` 成功/失败、`refreshStatus` 阶段插桩。
+  - （已删除）临时日志文件：`error.md`（根目录）及 `poenix/error.md`（容错拼写）。
+  - 回收建议：问题定位完成后，可移除上述插桩与日志文件。← 已执行，详见下文。
+
+### 2025-10-17 调试代码回收（留痕）
+
+- 已完成占位调试的清理：
+  - 删除 `backend/api/v1/daily_report_25_26.py` 中 `_dbg_write`、调试路由与日志写入，恢复精简实现。
+  - 移除前端 `logDebug` 上报（删除 `services/debug.js` 和 Dashboard 内相关调用）。
+  - 删除临时日志文件 `error.md`、`poenix/error.md`。
+- 若后续需要排障，可通过版本控制手动恢复上述调试工具。
+
+### 2025-10-17 本地开发 API 基址统一（留痕）
+
+- 目标：解决 Vite 开发服务器访问 `/api/*` 落到自身导致 404 的问题，使本地与 Docker/Nginx 行为一致。
+- 变更：
+  - `frontend/src/daily_report_25_26/services/api.js` 引入 `resolveApiPath`，统一拼接 `VITE_API_BASE`，默认保留相对路径。
+  - `frontend/src/daily_report_25_26/services/debug.js` 复用 `resolveApiPath`，确保调试日志同源。
+  - 新增 `frontend/.env.development`，默认将 `VITE_API_BASE` 指向 `http://127.0.0.1:8000`，本地 `npm run dev` 即可直连后端。
+- 后续：如需切换到 Docker Compose，可在环境变量中调整 `VITE_API_BASE`，保持统一配置。问题定位结束时记得清理临时调试日志与插桩。
+- 追加修复：为跨域访问配置 CORS（`backend/main.py`），默认允许 `localhost/127.0.0.1:5173`，并支持通过环境变量 `PHOENIX_CORS_ORIGINS` 自定义域名，解决浏览器直接访问后端时的跨域报错。

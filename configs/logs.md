@@ -33,7 +33,7 @@ codex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
 
 odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
 
-
+————————————————————————————————————————————————————————————————————————————————————————
 10.18
   前端页面与路由                                                                                                                                      
   - login: /login → frontend/src/daily_report_25_26/pages/LoginView.                                                                             
@@ -54,7 +54,7 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
       - 获取模板：GET /projects/{project_key}/sheets/{sheet_key}/template                                                                          
       - 提交数据：POST /projects/{project_key}/sheets/{sheet_key}/submit                                                                          
       - 查询数据：POST /projects/{project_key}/sheets/{sheet_key}/query
-      - 证据文件：backend/api/v1/daily_report_25_26.py，挂载于 backend/api/v1/routes.py
+      - 证据文件：backend/api/v1/projects_daily_report_25_26.py，挂载于 backend/api/v1/routes.py
 
   前端调用 API（对应 services）                                                                                                                         
                                                                                                                                                         
@@ -63,3 +63,10 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
   - 提交数据：POST /api/v1/projects/${projectKey}/sheets/${sheetKey}/submit                                                                             
   - 查询数据：POST /api/v1/projects/${projectKey}/sheets/${sheetKey}/query                                                                              
   - 证据文件：frontend/src/daily_report_25_26/services/api.js            
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  发现一个频繁出现的问题，即前后端的项目代号不同，同时后端api文件夹中的项目路由文件也不止一个，需要统一
+  已统一
+
+  配置文件的sheet均改为大写的Sheet
+  解决前端访问不到后端正确地址的问题。

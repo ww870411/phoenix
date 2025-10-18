@@ -1,17 +1,30 @@
-// 前端项目内的最小 API 封装，仅依赖浏览器 fetch
-// 与接口规范保持一致：/template, /submit, /query
+const rawBase = typeof import.meta !== 'undefined' && import.meta.env
+  ? import.meta.env.VITE_API_BASE ?? ''
+  : '';
+const API_BASE = rawBase ? rawBase.replace(/\/$/, '') : '';
+
+export function resolveApiPath(path) {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${normalized}` : normalized;
+}
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+function projectPath(projectKey) {
+  return `/api/v1/projects/${encodeURIComponent(projectKey)}`;
+}
+
 export async function getTemplate(projectKey, sheetKey) {
-  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/sheets/${encodeURIComponent(sheetKey)}/template`;
+  const url = resolveApiPath(
+    `${projectPath(projectKey)}/sheets/${encodeURIComponent(sheetKey)}/template`,
+  );
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`获取模板失败: ${res.status}`);
   return res.json();
 }
 
 export async function listSheets(projectKey) {
-  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/sheets`;
+  const url = resolveApiPath(`${projectPath(projectKey)}/sheets`);
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`获取表清单失败: ${res.status}`);
   return res.json();
@@ -19,7 +32,9 @@ export async function listSheets(projectKey) {
 
 export async function submitData(payload) {
   const { project_key, sheet_key } = payload;
-  const url = `/api/v1/projects/${encodeURIComponent(project_key)}/sheets/${encodeURIComponent(sheet_key)}/submit`;
+  const url = resolveApiPath(
+    `${projectPath(project_key)}/sheets/${encodeURIComponent(sheet_key)}/submit`,
+  );
   const res = await fetch(url, {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -31,7 +46,9 @@ export async function submitData(payload) {
 
 export async function queryData(payload) {
   const { project_key, sheet_key } = payload;
-  const url = `/api/v1/projects/${encodeURIComponent(project_key)}/sheets/${encodeURIComponent(sheet_key)}/query`;
+  const url = resolveApiPath(
+    `${projectPath(project_key)}/sheets/${encodeURIComponent(sheet_key)}/query`,
+  );
   const res = await fetch(url, {
     method: 'POST',
     headers: JSON_HEADERS,
