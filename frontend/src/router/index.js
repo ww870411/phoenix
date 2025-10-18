@@ -18,7 +18,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/dashboard',
+    path: '/projects/:projectKey/sheets',
     name: 'dashboard',
     component: () => import('../daily_report_25_26/pages/DashboardView.vue'),
     meta: { requiresAuth: true },

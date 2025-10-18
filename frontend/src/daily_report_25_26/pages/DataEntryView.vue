@@ -170,7 +170,7 @@ onMounted(async () => {
 });
 
 function goDashboard() {
-  router.push(`/projects/${encodeURIComponent(projectKey)}/dashboard`);
+  router.push(`/projects/${encodeURIComponent(projectKey)}/sheets`);
 }
 </script>
 

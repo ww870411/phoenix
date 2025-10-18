@@ -38,7 +38,7 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
   前端页面与路由                                                                                                                                      
   - login: /login → frontend/src/daily_report_25_26/pages/LoginView.                                                                             
   - projects: /projects → frontend/src/daily_report_25_26/pages/ProjectSelectView.vue
-  - dashboard: /projects/:projectKey/dashboard → frontend/src/daily_report_25_26/pages/DashboardView.                                      
+      - dashboard: /projects/:projectKey/sheets → frontend/src/daily_report_25_26/pages/DashboardView.                                      
   - data-entry: /projects/:projectKey/sheets/:sheetKey → frontend/src/daily_report_25_26/pages/DataEntryView.                                  
   - 证据文件：frontend/src/router/index.js  
 
@@ -71,3 +71,4 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
   配置文件的sheet均改为大写的Sheet
   解决前端访问不到后端正确地址的问题。
   去掉每张表上的“刷新状态”按钮，统一在右上方
+  统一表格选择页面的路径为/sheets，/dashboard另有他用

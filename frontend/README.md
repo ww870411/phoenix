@@ -54,7 +54,7 @@ docker compose up -d --build
     - `App.vue`
     - `main.js`
     - `router/`
-      - `index.js`  ← 新增路由：/login、/projects、/projects/:projectKey/dashboard、/projects/:projectKey/sheets/:sheetKey
+      - `index.js`  ← 新增路由：/login、/projects、/projects/:projectKey/sheets、/projects/:projectKey/sheets/:sheetKey
     - `stores/`
       - `counter.js`
     - `daily_report_25_26/`
@@ -92,7 +92,7 @@ docker compose up -d --build
 - `/` → 重定向至 `/login`
 - `/login` → `LoginView.vue`
 - `/projects` → `ProjectSelectView.vue`
-- `/projects/:projectKey/dashboard` → `DashboardView.vue`
+- `/projects/:projectKey/sheets` → `DashboardView.vue`
 - `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
 
 后端 API 对应（以 `/api/v1` 为前缀）：

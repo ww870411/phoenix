@@ -33,7 +33,7 @@ const projects = [
 ];
 
 function enter(p) {
-  router.push(`/projects/${encodeURIComponent(p.key)}/dashboard`);
+  router.push(`/projects/${encodeURIComponent(p.key)}/sheets`);
 }
 </script>
 

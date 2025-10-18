@@ -121,7 +121,7 @@
   - 未变更代码逻辑，仅同步文档快照。
   - 新增前端页面与路由：
     - 页面：`LoginView.vue`（登录）、`ProjectSelectView.vue`（项目选择）、`DashboardView.vue`（仪表盘/表选择+状态）、`DataEntryView.vue`（数据填报）。
-    - 路由：`/login`、`/projects`、`/projects/:projectKey/dashboard`、`/projects/:projectKey/sheets/:sheetKey/fill`。
+    - 路由：`/login`、`/projects`、`/projects/:projectKey/sheets`、`/projects/:projectKey/sheets/:sheetKey/fill`。
     - 服务封装：`src/daily_report_25_26/services/api.js` 实现 `/template`、`/submit`、`/query` 三接口调用。
     - 常量：`src/daily_report_25_26/constants/sheets.js` 维护临时表清单（后续由后端枚举接口替换）。
 - 受限与偏差（留痕）：
@@ -218,7 +218,7 @@
 前端主要路由（name → path → 组件）：
 - login → `/login` → `LoginView.vue`
 - projects → `/projects` → `ProjectSelectView.vue`
-- dashboard → `/projects/:projectKey/dashboard` → `DashboardView.vue`
+- dashboard → `/projects/:projectKey/sheets` → `DashboardView.vue`
 - data-entry → `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
 
 对应后端 API（完整路径均以 `/api/v1` 为前缀）：
@@ -244,7 +244,7 @@
 ### 2025-10-17 Dashboard 页面访问链路复盘（留痕）
 
 - 路由守卫：`frontend/src/router/index.js:39` 检查 `localStorage['phoenix_token']`；无 token 且目标页非 `login` 时重定向登录；有 token 且访问 `login` 时跳转项目页。
-- 进入页面：命中路由 `/projects/:projectKey/dashboard`（`frontend/src/router/index.js:21`），加载 `DashboardView.vue`。
+- 进入页面：命中路由 `/projects/:projectKey/sheets`（`frontend/src/router/index.js:21`），加载 `DashboardView.vue`。
 - 初始化拉取：`onMounted` 调用 `listSheets(projectKey)`（`frontend/src/daily_report_25_26/pages/DashboardView.vue:71,73`）→ 发起 `GET /api/v1/projects/{projectKey}/sheets`（`frontend/src/daily_report_25_26/services/api.js:14-17`）。
 - 后端响应：由 `backend/api/v1/routes.py:24` 挂载到 `daily_report_25_26.py:list_sheets_placeholder`，读取 `backend_data/数据结构_基本指标表.json` 构造 `{sheet_key: {单位名, 表名}}` 返回。
 - 前端分组渲染：将对象转数组并赋值 `sheets`（`:74,79`），按“单位名” `computed` 分组（`:86`），模板 `v-for` 渲染卡片与清单（`:22,25`）。
@@ -286,6 +286,13 @@
 - UI：移除每行表项上的 “刷新状态” 按钮，改为顶部统一按钮，避免重复渲染控件。
 - 行为：新增 `refreshAll()`（`DashboardView.vue`），循环调用 `refreshStatus`；在 `onMounted` 后自动拉取并可通过顶部按钮手动刷新。
 - 影响：界面更简洁，刷新逻辑一致；若后续需要逐表刷新，可按需在 `refreshStatus` 基础上扩展。
+
+### 2025-10-17 项目路由重命名（留痕）
+
+- 需求：将 Dashboard 访问地址从 `/projects/:projectKey/dashboard` 调整为 `/projects/:projectKey/sheets`，避免与数据填报子路由混淆。
+- 代码：`frontend/src/router/index.js`、`ProjectSelectView.vue`、`DataEntryView.vue`、`components/Breadcrumbs.vue` 全部改用新路径；保持路由 name 不变（仍为 `dashboard`）。
+- 文档：`frontend/README.md`、`configs/logs.md`、`configs/progress.md` 已同步更新描述。
+- 影响：原路径将不再匹配，历史书签需更新；页面功能与组件装载逻辑保持不变。
 
 ### 2025-10-17 本地开发 API 基址统一（留痕）
 

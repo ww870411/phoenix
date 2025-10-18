@@ -43,7 +43,7 @@ const items = computed(() => {
   if (name === 'data-entry') {
     return [
       { label: '项目', to: '/projects' },
-      { label: String(projectKey || ''), to: `/projects/${encodeURIComponent(projectKey)}/dashboard` },
+      { label: String(projectKey || ''), to: `/projects/${encodeURIComponent(projectKey)}/sheets` },
       { label: `填报：${String(sheetKey || '')}`, to: null },
     ]
   }
