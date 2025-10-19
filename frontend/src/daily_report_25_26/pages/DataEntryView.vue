@@ -65,6 +65,7 @@ const projectName = computed(() => getProjectNameById(projectKey));
 
 const sheetName = ref('');
 const sheetDisplayName = computed(() => sheetName.value || sheetKey);
+const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
 const submitTime = ref('');
@@ -133,6 +134,7 @@ async function autoSizeFirstColumn() {
 async function loadTemplate() {
   const tpl = await getTemplate(projectKey, sheetKey);
   sheetName.value = tpl.sheet_name || '';
+  unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
   rows.value = tpl.rows || [];
   // 清空当前值
@@ -222,15 +224,15 @@ async function onSubmit() {
     return base;
   });
 
-  const shanghaiTime = new Date(new Date().toISOString())
-  shanghaiTime.setMinutes(shanghaiTime.getMinutes() + shanghaiTime.getTimezoneOffset() + 8 * 60)
+  const now = new Date();
   const pad = n => String(n).padStart(2, '0');
-  const currentSubmitTime = `${shanghaiTime.getFullYear()}-${pad(shanghaiTime.getMonth() + 1)}-${pad(shanghaiTime.getDate())} ${pad(shanghaiTime.getHours())}:${pad(shanghaiTime.getMinutes())}:${pad(shanghaiTime.getSeconds())}`;
+  const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   const payload = {
     project_key: projectKey,
     project_name: projectName.value || projectKey,
     sheet_key: sheetKey,
     sheet_name: sheetName.value || '',
+    unit_id: unitId.value,
     columns: templateColumns,
     rows: filledRows,
     submit_time: currentSubmitTime,

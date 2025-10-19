@@ -416,8 +416,20 @@
 - 动作：前端提交时附带 `project_name`、`columns`、`rows` 等模板结构（按表格顺序填充值），后端可直接拆解表格。
 - 影响范围：数据填报请求结构更完整，为后续落库提供基础。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
+
+### 2025-10-21 提交数据拆解函数（留痕）
+
+- 动作：在 `backend/api/v1/daily_report_25_26.py` 内新增 `_normalize_submission` 并在 `/submit` 路径输出调试日志至 `backend_data/data_handle.md`。
+- 影响范围：便于后续实现数据库落库前先验证拆解结果。
+- 涉及文件：`backend/api/v1/daily_report_25_26.py`、`backend_data/data_handle.md`、`configs/progress.md`。
 -### 2025-10-21 DataEntry 失焦策略调整（留痕）
 +
 - 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。
 - 影响范围：前端表格离开单元格时依赖 RevoGrid 原生提交流程，逻辑更精简。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`。
+
+### 2025-10-21 单位标识与提交时间精简（留痕）
+
+- 动作：模板接口返回 `unit_id`，前端在提交时附带单位标识并简单记录 `YYYY-MM-DD HH:MM:SS` 本地时间。
+- 影响范围：后续持久化可关联单位英文标识，提交时间与页面展示保持一致。
+- 涉及文件：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`configs/progress.md`。

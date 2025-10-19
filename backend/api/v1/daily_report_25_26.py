@@ -8,10 +8,11 @@ daily_report_25_26 项目 v1 路由
 """
 
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Path
-from fastapi.responses import JSONResponse
 from pathlib import Path as SysPath
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from fastapi import APIRouter, Path, Request
+from fastapi.responses import JSONResponse
 import json
 
 
@@ -22,8 +23,8 @@ DATA_FILE_CANDIDATES = (
     "数据结构_基本指标表.json",
     "数据结构_常量指标表.json",
 )
-UNIT_KEYS = ("单位名", "单位", "单位名称", "unit_name")
-SHEET_NAME_KEYS = ("表名", "名称", "表名称", "sheet_name")
+UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
+SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
 ROW_KEYS = ("数据", "rows", "records", "lines")
 
@@ -50,20 +51,31 @@ def _read_json(path: SysPath) -> Any:
 
 
 def _extract_names(payload: Dict[str, Any]) -> Dict[str, str]:
-    unit_name: Optional[str] = None
-    sheet_name: Optional[str] = None
-    for key in UNIT_KEYS:
+    unit_id = ""
+    unit_name = ""
+    sheet_name = ""
+
+    for key in ("unit_id", "单位标识"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            unit_id = value.strip()
+            break
+
+    for key in ("单位中文名", "单位名称", "单位名", "unit_name"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             unit_name = value.strip()
             break
-    for key in SHEET_NAME_KEYS:
+
+    for key in ("表名", "表中文名", "表类别", "sheet_name"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             sheet_name = value.strip()
             break
+
     return {
-        "unit_name": unit_name or "",
+        "unit_id": unit_id,
+        "unit_name": unit_name,
         "sheet_name": sheet_name or "",
     }
 
@@ -137,9 +149,8 @@ def _collect_catalog() -> Dict[str, Dict[str, str]]:
         sheet_name = names["sheet_name"] or key
         unit_name = names["unit_name"]
         catalog[key] = {
-            "单位名": unit_name,
-            "表名": sheet_name,
-            "unit_name": unit_name,
+            "unit_id": names.get("unit_id", ""),
+            "unit_name": names.get("unit_name", unit_name or ""),
             "sheet_name": sheet_name,
         }
     return catalog
@@ -190,6 +201,7 @@ def get_sheet_template(
             "ok": True,
             "sheet_key": sheet_key,
             "sheet_name": names["sheet_name"] or sheet_key,
+            "unit_id": names["unit_id"],
             "unit_name": names["unit_name"],
             "columns": columns,
             "rows": rows,
@@ -197,16 +209,29 @@ def get_sheet_template(
     )
 
 
-@router.post("/sheets/{sheet_key}/submit", summary="提交数据（占位）")
-def submit_placeholder(
+@router.post("/sheets/{sheet_key}/submit", summary="提交数据（调试）")
+async def submit_debug(
+    request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
 ):
+    payload = await request.json()
+    normalized = _normalize_submission(payload)
+
+    log_path = DATA_DIR / "data_handle.md"
+    with log_path.open("a", encoding="utf-8") as fh:
+        fh.write(f"# {datetime.now().isoformat()}\n")
+        fh.write("## 原始数据\n")
+        fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
+        fh.write("\n\n## 拆解结果\n")
+        fh.write(json.dumps(normalized, ensure_ascii=False, default=str, indent=2))
+        fh.write("\n\n---\n\n")
+
     return JSONResponse(
         status_code=200,
         content={
             "ok": True,
-            "message": "submit endpoint placeholder",
-            "sheet_key": sheet_key,
+            "message": f"payload received for {sheet_key}",
+            "records": len(normalized["records"]),
         },
     )
 
@@ -237,3 +262,54 @@ def list_sheets():
             },
         )
     return JSONResponse(status_code=200, content=catalog)
+
+
+def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
+    project_key = payload.get("project_key", "")
+    project_name = payload.get("project_name") or project_key
+    sheet_key = payload.get("sheet_key", "")
+    sheet_name = payload.get("sheet_name", sheet_key)
+    unit_id = payload.get("unit_id", "")
+    submit_time_raw = payload.get("submit_time")
+    submit_dt: Optional[datetime] = None
+    if isinstance(submit_time_raw, str):
+        try:
+            submit_dt = datetime.fromisoformat(submit_time_raw.replace("Z", "+00:00"))
+        except ValueError:
+            submit_dt = None
+
+    columns = payload.get("columns") or []
+    rows = payload.get("rows") or []
+
+    records: List[Dict[str, Any]] = []
+    for row_index, row in enumerate(rows):
+        if not isinstance(row, list):
+            continue
+        row_label = row[0] if len(row) > 0 else ""
+        unit = row[1] if len(row) > 1 else ""
+        for col_index in range(min(len(columns), len(row))):
+            records.append(
+                {
+                    "project_key": project_key,
+                    "project_name": project_name,
+                    "sheet_key": sheet_key,
+                    "sheet_name": sheet_name,
+                    "unit_id": unit_id,
+                    "row_index": row_index,
+                    "row_label": row_label,
+                    "unit": unit,
+                    "column_index": col_index,
+                    "column_name": columns[col_index],
+                    "value_raw": row[col_index],
+                }
+            )
+
+    return {
+        "project_key": project_key,
+        "project_name": project_name,
+        "sheet_key": sheet_key,
+        "sheet_name": sheet_name,
+        "unit_id": unit_id,
+        "submit_time": submit_dt,
+        "records": records,
+    }
