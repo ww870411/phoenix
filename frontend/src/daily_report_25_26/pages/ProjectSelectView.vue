@@ -8,7 +8,6 @@
           <div class="sub">请选择要进入的项目空间</div>
         </div>
       </header>
-      <Breadcrumbs />
 
       <div class="card-grid">
         <div v-if="loading" class="placeholder">项目列表加载中…</div>
@@ -34,7 +33,6 @@
 <script setup>
 import '../styles/theme.css'
 import AppHeader from '../components/AppHeader.vue'
-import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
