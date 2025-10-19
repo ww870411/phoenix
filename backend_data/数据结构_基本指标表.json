@@ -288,7 +288,7 @@
         ["突发情况说明","-", "", ""]
       ]
     },
-  "Coal_inventory_SheetYanJiuYuan_Sheet":
+  "Coal_inventory_Sheet":
     {
       "单位名":"售电公司",
       "表名":"12.煤炭库存表",

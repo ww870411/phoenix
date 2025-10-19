@@ -367,6 +367,19 @@
 - 影响范围：数据填报表格首列可完整展示任意单元格文本，其余列宽逻辑保持不变。
 - 回滚方案：移除 `autoSizeFirstColumn` 调用及 `RevoGrid` 的 `ref` 定义即可恢复旧行为。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`、`frontend/README.md`、`backend/README.md`。
+
+### 2025-10-21 DataEntry 失焦策略调整（留痕）
+
+- 动作：移除 `beforecellfocus`、`beforecellsave` 与编辑器失焦监听等自定义同步逻辑，仅保留 RevoGrid 原生的 `:apply-on-close="true"` 自动保存能力。
+- 影响范围：表格在失焦或切换焦点时依赖内置流程提交数据，代码逻辑更精简。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`。
+
+### 2025-10-21 数据库卷绑定挂载（留痕）
+
+- 动作：将 `docker-compose.yml` 中 `db` 服务数据卷改为绑定宿主机目录 `D:/编程项目/phoenix/db_data`，并额外挂载 `./backend/sql` 至 `/app/sql` 供数据库容器执行建表脚本。
+- 影响范围：PostgreSQL 数据与 SQL 脚本均可在宿主机直接管理，执行 `psql -f /app/sql/create_tables.sql` 时无需额外拷贝。
+- 回滚方案：恢复命名卷 `pg_data` 并移除 SQL 目录挂载即可。
+- 涉及文件：`docker-compose.yml`、`backend/README.md`、`configs/progress.md`。
 -### 2025-10-21 DataEntry 失焦策略调整（留痕）
 +
 - 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。

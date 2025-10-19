@@ -1,0 +1,5 @@
+- 时间：2025-10-21
+- 主题：PostgreSQL 数据卷绑定挂载
+- 变更：`docker-compose.yml` 中 db 服务改用绑定宿主机路径 `D:/编程项目/phoenix/db_data` 写入数据（long syntax bind mount），同时移除命名卷 `pg_data`。
+- 影响：数据库数据可直接在宿主机目录备份/迁移；需确保目标路径存在且具备写权限。
+- 回滚：恢复原命名卷配置即可。

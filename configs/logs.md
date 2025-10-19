@@ -100,3 +100,6 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
 
 
 增加“失焦保存”功能，避免必须enter才能保存数据的问题。
+
+codex编写了一份创建数据库表的脚本，待容器启动后执行docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
+
