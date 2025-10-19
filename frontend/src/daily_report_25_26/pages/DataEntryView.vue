@@ -68,8 +68,18 @@ const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
-const itemDict = ref({});
-const companyDict = ref({});
+const templateDicts = ref({});
+
+function cloneDictValue(value) {
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (err) {
+      return value;
+    }
+  }
+  return value;
+}
 const submitTime = ref('');
 const values = reactive({});
 const gridColumns = ref([]);
@@ -135,16 +145,25 @@ async function autoSizeFirstColumn() {
 
 async function loadTemplate() {
   const tpl = await getTemplate(projectKey, sheetKey);
-  const itemMappingRaw = tpl.item_dict ?? tpl.project_dict ?? tpl['项目字典'];
-  const companyMappingRaw = tpl.company_dict ?? tpl.unit_dict ?? tpl['单位字典'];
   sheetName.value = tpl.sheet_name || '';
   unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
   rows.value = tpl.rows || [];
-  itemDict.value =
-    itemMappingRaw && typeof itemMappingRaw === 'object' ? itemMappingRaw : {};
-  companyDict.value =
-    companyMappingRaw && typeof companyMappingRaw === 'object' ? companyMappingRaw : {};
+  const dictPairs = [
+    ['item_dict', tpl.item_dict],
+    ['company_dict', tpl.company_dict],
+    ['project_dict', tpl.project_dict],
+    ['unit_dict', tpl.unit_dict],
+    ['项目字典', tpl['项目字典']],
+    ['单位字典', tpl['单位字典']],
+  ];
+  const dictSnapshot = {};
+  for (const [key, value] of dictPairs) {
+    if (value !== undefined) {
+      dictSnapshot[key] = cloneDictValue(value);
+    }
+  }
+  templateDicts.value = dictSnapshot;
   // 清空当前值
   Object.keys(values).forEach(k => delete values[k]);
 
@@ -243,10 +262,12 @@ async function onSubmit() {
     unit_id: unitId.value,
     columns: templateColumns,
     rows: filledRows,
-    item_dict: itemDict.value,
-    company_dict: companyDict.value,
     submit_time: currentSubmitTime,
   };
+  const dictSnapshot = templateDicts.value || {};
+  for (const [dictKey, dictValue] of Object.entries(dictSnapshot)) {
+    payload[dictKey] = cloneDictValue(dictValue);
+  }
   await submitData(payload);
   submitTime.value = currentSubmitTime;
   // 简单提示
