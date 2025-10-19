@@ -367,3 +367,8 @@
 - 影响范围：数据填报表格首列可完整展示任意单元格文本，其余列宽逻辑保持不变。
 - 回滚方案：移除 `autoSizeFirstColumn` 调用及 `RevoGrid` 的 `ref` 定义即可恢复旧行为。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`、`frontend/README.md`、`backend/README.md`。
+-### 2025-10-21 DataEntry 失焦策略调整（留痕）
++
+- 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。
+- 影响范围：前端表格离开单元格时依赖 RevoGrid 原生提交流程，逻辑更精简。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`。
