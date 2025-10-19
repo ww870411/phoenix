@@ -103,3 +103,6 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
 
 codex编写了一份创建数据库表的脚本，待容器启动后执行docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 
+修复面包屑导航及前端名称的中文显示
+
+开始构建前端向后端发送的数据包，格式同前端从后端请求到的数据包，并添加提交时间

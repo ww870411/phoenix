@@ -9,10 +9,7 @@
         <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
-        <label class="date">
-          <span>业务日期</span>
-          <input type="date" v-model="bizDate" @change="loadExisting" />
-        </label>
+        <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
         <button class="btn ghost" @click="reloadTemplate">重载模板</button>
         <button class="btn primary" @click="onSubmit">提交</button>
       </div>
@@ -70,7 +67,7 @@ const sheetName = ref('');
 const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const columns = ref([]);
 const rows = ref([]);
-const bizDate = ref(String(initialDate));
+const submitTime = ref('');
 const values = reactive({});
 const gridColumns = ref([]);
 const gridSource = ref([]);
@@ -179,7 +176,7 @@ async function loadTemplate() {
 }
 
 async function loadExisting() {
-  const q = await queryData({ project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value });
+  const q = await queryData({ project_key: projectKey, sheet_key: sheetKey, submit_time: submitTime.value });
   // 将已填报的值映射到 values
   if (Array.isArray(q.cells)) {
     for (const cell of q.cells) {
@@ -203,33 +200,43 @@ async function reloadTemplate() {
 }
 
 async function onSubmit() {
-  const cells = [];
-  const fillableCols = columns.value.map((_, i) => i).filter(i => i >= 2);
-  for (let ri = 0; ri < rows.value.length; ri++) {
-    const row = rows.value[ri];
-    for (const ci of fillableCols) {
-      const raw = gridSource.value?.[ri]?.[`c${ci}`];
-      if (raw === undefined || raw === null || raw === '') continue;
-      const asNum = Number(raw);
-      const isNum = !Number.isNaN(asNum) && /^-?\d+(\.\d+)?$/.test(String(raw));
-      cells.push({
-        row_label: row[0],
-        unit: row[1] ?? '',
-        col_index: ci,
-        value_type: isNum ? 'num' : 'text',
-        value_num: isNum ? asNum : undefined,
-        value_text: isNum ? undefined : String(raw),
-      });
+  const templateColumns = Array.isArray(columns.value) ? [...columns.value] : [];
+  const templateRows = Array.isArray(rows.value) ? rows.value : [];
+  const filledRows = templateRows.map((row, ri) => {
+    const base = Array.from({ length: templateColumns.length }, (_, ci) => {
+      if (Array.isArray(row) && ci < row.length) return row[ci];
+      return '';
+    });
+    const record = gridSource.value?.[ri] ?? {};
+    // 保持首列/计量单位与模板一致
+    if (Array.isArray(row)) {
+      if (row[0] !== undefined) base[0] = row[0];
+      if (row[1] !== undefined && base.length > 1) base[1] = row[1];
     }
-  }
+    for (let ci = 2; ci < base.length; ci += 1) {
+      const key = `c${ci}`;
+      if (record[key] !== undefined) {
+        base[ci] = record[key];
+      }
+    }
+    return base;
+  });
+
+  const shanghaiTime = new Date(new Date().toISOString())
+  shanghaiTime.setMinutes(shanghaiTime.getMinutes() + shanghaiTime.getTimezoneOffset() + 8 * 60)
+  const pad = n => String(n).padStart(2, '0');
+  const currentSubmitTime = `${shanghaiTime.getFullYear()}-${pad(shanghaiTime.getMonth() + 1)}-${pad(shanghaiTime.getDate())} ${pad(shanghaiTime.getHours())}:${pad(shanghaiTime.getMinutes())}:${pad(shanghaiTime.getSeconds())}`;
   const payload = {
     project_key: projectKey,
+    project_name: projectName.value || projectKey,
     sheet_key: sheetKey,
     sheet_name: sheetName.value || '',
-    biz_date: bizDate.value,
-    cells,
+    columns: templateColumns,
+    rows: filledRows,
+    submit_time: currentSubmitTime,
   };
   await submitData(payload);
+  submitTime.value = currentSubmitTime;
   // 简单提示
   alert('提交成功');
 }
@@ -261,5 +268,5 @@ function handleAfterEdit(evt) {
 <style scoped>
 .topbar { gap: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
-.date { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
+.submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
 </style>

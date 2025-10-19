@@ -410,6 +410,12 @@
 - 动作：移除 `AppHeader` 右上角“项目”按钮，仅保留“退出”操作，避免与面包屑重复。
 - 影响范围：所有页面顶部导航更简洁。
 - 涉及文件：`frontend/src/daily_report_25_26/components/AppHeader.vue`、`configs/progress.md`。
+
+### 2025-10-21 数据填报提交载荷扩展（留痕）
+
+- 动作：前端提交时附带 `project_name`、`columns`、`rows` 等模板结构（按表格顺序填充值），后端可直接拆解表格。
+- 影响范围：数据填报请求结构更完整，为后续落库提供基础。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
 -### 2025-10-21 DataEntry 失焦策略调整（留痕）
 +
 - 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。
