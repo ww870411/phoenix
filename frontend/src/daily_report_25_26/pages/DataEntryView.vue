@@ -280,6 +280,7 @@ async function onSubmit() {
     columns: templateColumns,
     rows: filledRows,
     submit_time: currentSubmitTime,
+    status: 'submit',
   };
   const dictBundle = templateDicts.value || {};
   const entryMap = dictBundle.entries || {};
