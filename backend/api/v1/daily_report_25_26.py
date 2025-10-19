@@ -102,13 +102,13 @@ def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
         head.append("")
 
     tz = timezone(timedelta(hours=8))
-    today = datetime.now(tz).date()
-    current = today.isoformat()
+    yesterday = (datetime.now(tz) - timedelta(days=1)).date()
+    current = yesterday.isoformat()
     try:
-        last_year = today.replace(year=today.year - 1)
+        last_year = yesterday.replace(year=yesterday.year - 1)
     except ValueError:
         # 处理闰年的 2 月 29 日，向前回退到 2 月 28 日
-        last_year = today.replace(year=today.year - 1, month=2, day=28)
+        last_year = yesterday.replace(year=yesterday.year - 1, month=2, day=28)
     previous = last_year.isoformat()
 
     return head + [current, previous]
