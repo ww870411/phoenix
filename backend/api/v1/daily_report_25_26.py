@@ -51,7 +51,7 @@ else:
 
 # The only data file we need to read, as requested by the user.
 
-PRIMARY_DATA_FILE = DATA_ROOT / "数据结构_基本指标表.json"
+BASIC_DATA_FILE = DATA_ROOT / "数据结构_基本指标表.json"
 UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
 SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
@@ -62,8 +62,8 @@ COMPANY_DICT_KEYS = ("company_dict", "单位字典")
 
 def _iter_data_files() -> Iterable[SysPath]:
     """返回唯一的数据文件路径。"""
-    if PRIMARY_DATA_FILE.exists():
-        yield PRIMARY_DATA_FILE
+    if BASIC_DATA_FILE.exists():
+        yield BASIC_DATA_FILE
 
 
 def _read_json(path: SysPath) -> Any:
@@ -203,7 +203,7 @@ def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
 
 
 def _collect_catalog() -> Dict[str, Dict[str, str]]:
-    catalog_path = PRIMARY_DATA_FILE
+    catalog_path = BASIC_DATA_FILE
     if not catalog_path.exists():
         return {}
     raw = _read_json(catalog_path)
