@@ -595,18 +595,11 @@ async def submit_debug(
         inserted_rows = 0
         db_error = str(exc)
 
-    log_path = DATA_ROOT / "data_handle.md"
-    with log_path.open("a", encoding="utf-8") as fh:
-        fh.write(f"# {datetime.now().isoformat()}\n")
-        fh.write("## 原始数据\n")
-        fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
-        fh.write("\n\n## 拆解结果\n")
-        fh.write(json.dumps(normalized, ensure_ascii=False, default=str, indent=2))
-        fh.write("\n\n## 平铺化结果\n")
-        fh.write(json.dumps(flattened, ensure_ascii=False, indent=2))
-        fh.write("\n\n## 写库记录\n")
-        fh.write(f"插入条数：{inserted_rows}\n")
-        if db_error:
+    if db_error:
+            fh.write(f"写库错误：{db_error}\n")
+        fh.write("\n\n---\n\n")
+
+    if db_error:
             fh.write(f"写库错误：{db_error}\n")
         fh.write("\n\n---\n\n")
 
