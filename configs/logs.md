@@ -97,4 +97,6 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
       }),
   });
 
-  好的，请读一下D:\编程项目\phoenix\AGENTS.md，这是我构建的一个项目，我们刚刚一起完成了数据填报页面的表格渲染工作，现在请你关注一下该页面文件D:\编程项目  \phoenix\frontend\src\daily_report_25_26\pages\DataEntryView.vue
+
+
+增加“失焦保存”功能，避免必须enter才能保存数据的问题。

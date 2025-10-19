@@ -1,0 +1,4 @@
+- 时间：2025-10-21
+- 主题：DataEntry 编辑持久化补充
+- 变更：在 `DataEntryView.vue` 中新增 `beforecellsave` 事件处理，先写回 `gridSource` 与本地缓存后再提交编辑器，解决切换焦点但未按 Enter 时输入丢失的问题；README、progress 同步更新。
+- 验证：需手动在页面操作，确认鼠标或键盘切换单元格后输入仍存在。

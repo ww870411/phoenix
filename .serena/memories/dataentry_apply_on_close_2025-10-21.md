@@ -1,0 +1,5 @@
+- 时间：2025-10-21
+- 主题：DataEntry 失焦保存最终策略
+- 变更：在 `DataEntryView.vue` 的 `<RevoGrid>` 增加 `:apply-on-close="true"`，利用内置 `applyChangesOnClose`/autosave 逻辑配合既有 saveOnBlur、失焦监听，确保编辑器关闭时自动提交内容。
+- 影响：切换单元格或点击空白即保存输入，不再依赖手动 Enter。
+- 验证：仍需前端手动确认。

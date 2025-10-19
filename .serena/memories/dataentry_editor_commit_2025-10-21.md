@@ -1,0 +1,4 @@
+- 时间：2025-10-21
+- 主题：DataEntry 编辑提交补强
+- 变更：`DataEntryView.vue` 增加 `commitActiveEditor()`，在 RevoGrid 的 `beforecellfocus` 事件中调用以执行编辑插件的 `closeEditor(true)`/`saveChanges`，避免用户切换单元格且未按 Enter 时输入丢失；同步更新 README 与 progress 记录。
+- 验证：待前端页面手动操作确认鼠标点击或方向键切换单元格时，最新输入仍保留。

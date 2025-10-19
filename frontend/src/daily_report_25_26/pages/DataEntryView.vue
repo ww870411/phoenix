@@ -31,11 +31,17 @@
         :row-size="30"
         :resize="true"
         :range="true"
+        :editors="editors"
+        :apply-on-close="true"
         :columns="gridColumns"
         :source="gridSource"
         style="height: 70vh; width: 100%;"
         @afteredit="handleAfterEdit"
         @afterEdit="handleAfterEdit"
+        @beforecellfocus="handleBeforeCellFocus"
+        @beforeCellFocus="handleBeforeCellFocus"
+        @beforecellsave="handleBeforeCellSave"
+        @beforeCellSave="handleBeforeCellSave"
       />
     </div>
     <div v-else class="placeholder">无模板数据</div>
@@ -51,7 +57,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 // 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
 import { useRouter } from 'vue-router'
-import { nextTick, onMounted, reactive, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 
@@ -69,7 +75,15 @@ const values = reactive({});
 const gridColumns = ref([]);
 const gridSource = ref([]);
 const gridRef = ref(null);
+const editors = {
+  text: {
+    saveOnBlur: true,
+  },
+};
 let textMeasureCtx = null;
+let blurListenerBound = false;
+let blurListenerTarget = null;
+let activeEditCellCache = null;
 function toKey(ri, ci) { return `${ri}-${ci}`; }
 
 function getTextMeasureContext() {
@@ -125,6 +139,146 @@ async function autoSizeFirstColumn() {
       }
     }
   }
+}
+
+function getGridElement() {
+  const gridComponent = gridRef.value;
+  return gridComponent?.$el ?? gridComponent ?? null;
+}
+
+function extractPluginEditCell() {
+  const gridElement = getGridElement();
+  if (!gridElement) return null;
+  const plugins = gridElement.getPlugins?.();
+  const candidates = [
+    gridElement.editors?.editCell,
+    gridElement.editors?.cell,
+    gridElement.editors?.state?.editCell,
+    plugins?.get?.('edit')?.editCell,
+    plugins?.get?.('edit')?.state?.editCell,
+    plugins?.edit?.editCell,
+    plugins?.editPlugin?.editCell,
+  ];
+  for (const cell of candidates) {
+    if (!cell) continue;
+    const rowIndex = cell.row ?? cell.rowIndex ?? cell.rowOrder;
+    const prop = cell.prop ?? cell.column?.prop ?? cell.column?.name;
+    if (typeof rowIndex === 'number' && prop) {
+      return { rowIndex, prop: String(prop) };
+    }
+  }
+  return null;
+}
+
+function resolveActiveEditCell() {
+  const cell = extractPluginEditCell();
+  if (cell) {
+    activeEditCellCache = cell;
+    return cell;
+  }
+  return activeEditCellCache;
+}
+
+function writeCellValue(rowIndex, prop, newValue) {
+  if (rowIndex == null || !prop) return;
+  if (!gridSource.value[rowIndex]) return;
+  gridSource.value[rowIndex][prop] = newValue;
+  const match = String(prop).match(/^c(\d+)$/);
+  if (match) {
+    const ci = Number(match[1]);
+    values[toKey(rowIndex, ci)] = newValue;
+  }
+}
+
+function commitActiveEditor() {
+  const gridElement = getGridElement();
+  if (!gridElement) return;
+
+  const attemptClose = target => {
+    if (!target) return false;
+    if (typeof target.closeEditor === 'function') {
+      try {
+        target.closeEditor(true);
+        return true;
+      } catch (err) {
+        // 忽略失败，尝试其他接口
+      }
+    }
+    if (typeof target.saveChanges === 'function') {
+      try {
+        target.saveChanges();
+        return true;
+      } catch (err) {
+        // 忽略失败
+      }
+    }
+    return false;
+  };
+
+  if (attemptClose(gridElement.editors)) {
+    const cell = resolveActiveEditCell();
+    if (cell) {
+      const targetVal = gridElement.editors?.editors?.[0]?.element?.value;
+      if (targetVal !== undefined) writeCellValue(cell.rowIndex, cell.prop, targetVal);
+    }
+    return;
+  }
+
+  const plugins = gridElement.getPlugins?.();
+  if (!plugins) return;
+  if (typeof plugins.get === 'function') {
+    if (attemptClose(plugins.get('edit'))) return;
+    if (attemptClose(plugins.get('editPlugin'))) return;
+  }
+  attemptClose(plugins.edit ?? plugins.Edit ?? plugins.editor);
+}
+
+function handleBeforeCellFocus() {
+  commitActiveEditor();
+}
+
+function handleBeforeCellSave(evt) {
+  if (!evt) return;
+  const detail = evt.detail ?? evt;
+  const editCell = detail?.editCell;
+  const newValue = detail?.model?.val ?? detail?.val;
+  const rowIndex = editCell?.row;
+  const prop = editCell?.prop;
+  if (rowIndex == null || !prop) return;
+  activeEditCellCache = { rowIndex, prop };
+  writeCellValue(rowIndex, prop, newValue);
+}
+
+function handleEditorBlur(event) {
+  const cell = resolveActiveEditCell();
+  if (!cell) return;
+  const target = event?.target;
+  const raw = target?.value ?? target?.textContent ?? '';
+  if (raw === undefined) return;
+  writeCellValue(cell.rowIndex, cell.prop, raw);
+}
+
+function handleEditorFocusIn() {
+  const cell = extractPluginEditCell();
+  if (cell) {
+    activeEditCellCache = cell;
+  }
+}
+
+function setupEditorBlurBridge() {
+  const gridElement = getGridElement();
+  if (!gridElement) return;
+  if (blurListenerTarget && blurListenerTarget !== gridElement) {
+    blurListenerTarget.removeEventListener('blur', handleEditorBlur, true);
+    blurListenerTarget.removeEventListener('focusin', handleEditorFocusIn, true);
+    blurListenerBound = false;
+  }
+  if (blurListenerBound) return;
+  gridElement.addEventListener('blur', handleEditorBlur, true);
+  gridElement.addEventListener('focusin', handleEditorFocusIn, true);
+  blurListenerBound = true;
+  blurListenerTarget = gridElement;
+  activeEditCellCache = null;
 }
 
 async function loadTemplate() {
@@ -229,8 +383,31 @@ async function onSubmit() {
 }
 
 onMounted(async () => {
+  await nextTick();
+  setupEditorBlurBridge();
   await loadTemplate();
   await loadExisting();
+});
+
+onBeforeUnmount(() => {
+  if (blurListenerTarget) {
+    blurListenerTarget.removeEventListener('blur', handleEditorBlur, true);
+    blurListenerTarget.removeEventListener('focusin', handleEditorFocusIn, true);
+    blurListenerTarget = null;
+    blurListenerBound = false;
+    activeEditCellCache = null;
+  }
+});
+
+watch(gridRef, async () => {
+  await nextTick();
+  if (blurListenerTarget) {
+    blurListenerTarget.removeEventListener('blur', handleEditorBlur, true);
+    blurListenerTarget.removeEventListener('focusin', handleEditorFocusIn, true);
+    blurListenerTarget = null;
+    blurListenerBound = false;
+  }
+  setupEditorBlurBridge();
 });
 
 function handleAfterEdit(evt) {

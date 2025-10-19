@@ -1,0 +1,4 @@
+- 时间：2025-10-21
+- 主题：DataEntry 失焦自动保存
+- 变更：在 `DataEntryView.vue` 中新增 `editors = { text: { saveOnBlur: true } }` 并通过 `:editors` 传入 RevoGrid，使默认文本编辑器在失焦时自动提交；配合既有 beforecellfocus/beforecellsave 与失焦监听，确保未按 Enter 的输入不会丢失。
+- 验证：待前端实测切换焦点、点击空白、Tab/方向键导航时仍保留最新输入。

@@ -1,0 +1,3 @@
+- 时间：2025-10-21
+- 主题：DataEntry 编辑失焦保留
+- 变更：在 `DataEntryView.vue` 中为 RevoGrid 容器注册捕获阶段 `blur` 监听，结合 `beforecellfocus`/`beforecellsave` 将编辑器失焦时的值写回 `gridSource` 与本地缓存，避免未按 Enter 时输入丢失；同时处理组件卸载与 ref 变更时的事件解绑。

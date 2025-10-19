@@ -363,7 +363,7 @@
 ### 2025-10-21 DataEntry 首列自适应补强（留痕）
 
 - 背景：模板与历史数据通过异步请求加载，首列列宽仅依据初始行名测量，其他单元格的长文本仍会压缩至最小宽度。
-- 动作：为 `RevoGrid` 添加 `ref` 并在 `loadTemplate/loadExisting` 结束后调用封装的 `autoSizeFirstColumn()`；该函数汇总整列文本并使用 Canvas 量测宽度，随后更新列配置及调用 RevoGrid 的 `autoSizeColumn`，确保列宽覆盖所有单元格。
+- 动作：为 `RevoGrid` 添加 `ref` 并在 `loadTemplate/loadExisting` 结束后调用封装的 `autoSizeFirstColumn()`；该函数汇总整列文本并使用 Canvas 量测宽度，随后更新列配置及调用 RevoGrid 的 `autoSizeColumn`，确保列宽覆盖所有单元格；同时在 `beforecellfocus` 阶段调用 `commitActiveEditor()`，结合 `beforecellsave`、编辑器失焦事件、`editors = { text: { saveOnBlur: true } }` 配置，以及 `:apply-on-close=\"true\"`，避免用户未按 Enter 或切换焦点时输入丢失。
 - 影响范围：数据填报表格首列可完整展示任意单元格文本，其余列宽逻辑保持不变。
 - 回滚方案：移除 `autoSizeFirstColumn` 调用及 `RevoGrid` 的 `ref` 定义即可恢复旧行为。
 - 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`、`frontend/README.md`、`backend/README.md`。
