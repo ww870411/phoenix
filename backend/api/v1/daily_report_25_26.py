@@ -15,11 +15,16 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import os
 
-
+from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Path, Request
 
 from fastapi.responses import JSONResponse
+
+from sqlalchemy import delete
+
+from backend.db.database_daily_report_25_26 import DailyBasicData, SessionLocal
 
 import json
 
@@ -47,7 +52,7 @@ else:
 
     DATA_ROOT = PROJECT_ROOT / "backend_data"
 
-
+EAST_8_TZ = timezone(timedelta(hours=8))
 
 # The only data file we need to read, as requested by the user.
 
@@ -320,6 +325,155 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
     return flattened
 
 
+def _parse_decimal_value(raw: Any) -> Optional[Decimal]:
+    if raw is None:
+        return None
+    if isinstance(raw, Decimal):
+        return raw
+    if isinstance(raw, (int, float)):
+        return Decimal(str(raw))
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            return None
+        try:
+            return Decimal(value)
+        except InvalidOperation:
+            return None
+    return None
+
+
+def _parse_date_value(raw: Any) -> Optional["date"]:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    from datetime import date as date_type
+
+    if isinstance(raw, date_type):
+        return raw
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            return None
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def _parse_operation_time(raw: Any) -> datetime:
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=EAST_8_TZ)
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            return datetime.now(EAST_8_TZ)
+        try:
+            dt = datetime.fromisoformat(value)
+            return dt if dt.tzinfo else dt.replace(tzinfo=EAST_8_TZ)
+        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+                try:
+                    dt = datetime.strptime(value, fmt)
+                    return dt.replace(tzinfo=EAST_8_TZ)
+                except ValueError:
+                    continue
+    return datetime.now(EAST_8_TZ)
+
+
+def _persist_daily_basic(
+    payload: Dict[str, Any],
+    normalized: Dict[str, Any],
+    flattened: List[Dict[str, Any]],
+) -> int:
+    if not flattened:
+        return 0
+
+    default_operation_time = _parse_operation_time(
+        normalized.get("submit_time") or payload.get("submit_time")
+    )
+    default_status = (payload.get("status") or "submit").strip() or "submit"
+
+    session = SessionLocal()
+    try:
+        models: List[DailyBasicData] = []
+        delete_keys = set()
+
+        for record in flattened:
+            company = str(record.get("company") or payload.get("unit_id") or "").strip()
+            if not company:
+                continue
+
+            company_cn = (
+                str(record.get("company_cn") or normalized.get("unit_name") or payload.get("unit_name") or "")
+                .strip()
+                or None
+            )
+            sheet_name_key = str(
+                record.get("sheet_name")
+                or normalized.get("sheet_key")
+                or payload.get("sheet_key")
+                or ""
+            ).strip()
+            if not sheet_name_key:
+                continue
+
+            item_key = str(record.get("item") or "").strip()
+            if not item_key:
+                continue
+
+            row_date = _parse_date_value(record.get("date"))
+            if row_date is None:
+                continue
+
+            value_decimal = _parse_decimal_value(record.get("value"))
+            operation_time = _parse_operation_time(
+                record.get("operation_time") or default_operation_time
+            )
+            status_value = str(record.get("status") or default_status).strip() or default_status
+
+            model = DailyBasicData(
+                company=company,
+                company_cn=company_cn,
+                sheet_name=sheet_name_key,
+                item=item_key,
+                item_cn=str(record.get("item_cn") or "").strip() or None,
+                value=value_decimal,
+                unit=str(record.get("unit") or "").strip() or None,
+                note=str(record.get("note") or "").strip() or None,
+                date=row_date,
+                status=status_value,
+                operation_time=operation_time,
+            )
+            models.append(model)
+            delete_keys.add((company, sheet_name_key, item_key, row_date))
+
+        if not models:
+            return 0
+
+        for company, sheet_name_key, item_key, row_date in delete_keys:
+            session.execute(
+                delete(DailyBasicData).where(
+                    DailyBasicData.company == company,
+                    DailyBasicData.sheet_name == sheet_name_key,
+                    DailyBasicData.item == item_key,
+                    DailyBasicData.date == row_date,
+                )
+            )
+
+        session.bulk_save_objects(models)
+        session.commit()
+        return len(models)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
     base = list(columns) if isinstance(columns, list) else list(columns)
     head = base[:2]
@@ -434,6 +588,12 @@ async def submit_debug(
     payload = await request.json()
     normalized = _normalize_submission(payload)
     flattened = _flatten_records(payload, normalized)
+    try:
+        inserted_rows = _persist_daily_basic(payload, normalized, flattened)
+        db_error = ""
+    except Exception as exc:
+        inserted_rows = 0
+        db_error = str(exc)
 
     log_path = DATA_ROOT / "data_handle.md"
     with log_path.open("a", encoding="utf-8") as fh:
@@ -442,19 +602,33 @@ async def submit_debug(
         fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
         fh.write("\n\n## 拆解结果\n")
         fh.write(json.dumps(normalized, ensure_ascii=False, default=str, indent=2))
-        fh.write("\n\n## ƽ�ַ������\n")
+        fh.write("\n\n## 平铺化结果\n")
         fh.write(json.dumps(flattened, ensure_ascii=False, indent=2))
+        fh.write("\n\n## 写库记录\n")
+        fh.write(f"插入条数：{inserted_rows}\n")
+        if db_error:
+            fh.write(f"写库错误：{db_error}\n")
         fh.write("\n\n---\n\n")
+
+    if db_error:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "写入数据库失败", "error": db_error},
+        )
 
     return JSONResponse(
         status_code=200,
         content={
             "ok": True,
             "message": f"payload received for {sheet_key}",
-            "records": len(normalized["records"]),
+            "records": len(normalized.get("records", [])),
             "flattened_records": len(flattened),
+            "inserted": inserted_rows,
         },
     )
+
+
+
 
 
 @router.post("/sheets/{sheet_key}/query", summary="查询数据（占位）")

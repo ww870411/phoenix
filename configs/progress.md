@@ -449,3 +449,9 @@
 - 影响：`backend_data/data_handle.md` 追加“平铺化结果”段落，后端可直接复用该列表写入数据库。
 - 回滚：恢复 `backend/api/v1/daily_report_25_26.py` 中 `submit_debug` 与 `_flatten_records` 的改动即可。
 - 验证：前端提交后检查响应 `flattened_records` 数量，并核对日志中的平铺记录与非空单元格一致。
+
+### 2025-10-21 Daily_basic_data 写入落地（留痕）
+- 动作：在 `/submit` 调试接口中调用 `_persist_daily_basic`，将平铺后的单元格记录写入 `Daily_basic_data` 表，写入前按 `(company, sheet_name, item, date)` 去重后重新插入。
+- 影响：前端提交数据会同步落库，并在日志 `backend_data/data_handle.md` 中记录写库条数及异常；接口响应新增 `inserted` 字段反馈写入数量。
+- 回滚：撤销 `backend/api/v1/daily_report_25_26.py` 中 `_persist_daily_basic` 相关改动及 `backend/db/database_daily_report_25_26.py` 新增内容。
+- 验证：访问 `/submit` 调试接口，响应 `inserted` > 0 且数据库 `Daily_basic_data` 出现对应记录；如有异常，接口返回 500 并附错误信息。
