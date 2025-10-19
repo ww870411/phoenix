@@ -180,7 +180,144 @@ def _extract_mapping(payload: Dict[str, Any], keys: Iterable[str]) -> Dict[str, 
         value = payload.get(key)
         if isinstance(value, dict):
             return value
+        if isinstance(value, list):
+            converted: Dict[str, Any] = {}
+            for item in value:
+                if isinstance(item, dict):
+                    for item_key, item_value in item.items():
+                        converted[str(item_key)] = item_value
+                elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                    converted[str(item[0])] = item[1]
+            if converted:
+                return converted
     return {}
+
+
+def _resolve_company_name(unit_id: str, normalized: Dict[str, Any], payload: Dict[str, Any]) -> str:
+    def _lookup(mapping: Any) -> Optional[str]:
+        if isinstance(mapping, dict):
+            value = mapping.get(unit_id)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    candidates = [
+        normalized.get("company_dict"),
+        payload.get("company_dict"),
+        payload.get("unit_dict"),
+        payload.get("单位字典"),
+    ]
+    for mapping in candidates:
+        result = _lookup(mapping)
+        if result:
+            return result
+
+    fallback_candidates = [
+        payload.get("company_name"),
+        payload.get("unit_name"),
+        normalized.get("unit_name"),
+        payload.get("单位名称"),
+        normalized.get("sheet_name"),
+        payload.get("sheet_name"),
+    ]
+    for value in fallback_candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return unit_id
+
+
+def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> List[Dict[str, Any]]:
+    columns_raw = payload.get("columns")
+    if isinstance(columns_raw, list):
+        columns = [col.strip() if isinstance(col, str) else str(col) for col in columns_raw]
+    else:
+        columns = []
+
+    status_raw = payload.get("status")
+    if isinstance(status_raw, str):
+        status = status_raw.strip() or "submit"
+    else:
+        status = "submit"
+
+    submit_time_raw = payload.get("submit_time")
+    if isinstance(submit_time_raw, str):
+        operation_time = submit_time_raw.strip()
+    elif submit_time_raw is None:
+        operation_time = ""
+    else:
+        operation_time = str(submit_time_raw)
+
+    unit_id = normalized.get("unit_id") or payload.get("unit_id") or ""
+    company_cn = _resolve_company_name(unit_id, normalized, payload)
+    sheet_key = normalized.get("sheet_key") or payload.get("sheet_key") or ""
+    sheet_name_cn = normalized.get("sheet_name") or payload.get("sheet_name") or sheet_key
+
+    item_dict = normalized.get("item_dict")
+    if not isinstance(item_dict, dict):
+        item_dict = {}
+    reverse_item_map: Dict[str, str] = {}
+    for item_key, item_cn in item_dict.items():
+        if isinstance(item_cn, str):
+            reverse_item_map[item_cn.strip()] = item_key
+
+    records = normalized.get("records")
+    if not isinstance(records, list):
+        return []
+
+    flattened: List[Dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        col_index = record.get("column_index")
+        if not isinstance(col_index, int) or col_index < 2:
+            continue
+        if col_index >= len(columns):
+            continue
+
+        raw_value = record.get("value_raw")
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, str):
+            value = raw_value.strip()
+            if value == "":
+                continue
+        else:
+            value = str(raw_value)
+            if value == "":
+                continue
+
+        row_label = record.get("row_label") or ""
+        row_label_str = str(row_label).strip()
+        unit = record.get("unit") or ""
+        unit_str = str(unit).strip()
+        date_value = columns[col_index] if col_index < len(columns) else ""
+        date_value = date_value.strip() if isinstance(date_value, str) else str(date_value)
+
+        item_key = reverse_item_map.get(row_label_str)
+        if not item_key:
+            for candidate_key, candidate_cn in item_dict.items():
+                if isinstance(candidate_cn, str) and candidate_cn.strip() == row_label_str:
+                    item_key = candidate_key
+                    break
+
+        flattened.append(
+            {
+                "company": unit_id,
+                "company_cn": company_cn,
+                "sheet_name": sheet_key,
+                "sheet_name_cn": sheet_name_cn,
+                "item": item_key or "",
+                "item_cn": row_label_str,
+                "value": value,
+                "unit": unit_str,
+                "note": "",
+                "date": date_value,
+                "status": status,
+                "operation_time": operation_time,
+            }
+        )
+
+    return flattened
 
 
 def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
@@ -296,6 +433,7 @@ async def submit_debug(
 ):
     payload = await request.json()
     normalized = _normalize_submission(payload)
+    flattened = _flatten_records(payload, normalized)
 
     log_path = DATA_ROOT / "data_handle.md"
     with log_path.open("a", encoding="utf-8") as fh:
@@ -304,6 +442,8 @@ async def submit_debug(
         fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
         fh.write("\n\n## 拆解结果\n")
         fh.write(json.dumps(normalized, ensure_ascii=False, default=str, indent=2))
+        fh.write("\n\n## ƽ�ַ������\n")
+        fh.write(json.dumps(flattened, ensure_ascii=False, indent=2))
         fh.write("\n\n---\n\n")
 
     return JSONResponse(
@@ -312,6 +452,7 @@ async def submit_debug(
             "ok": True,
             "message": f"payload received for {sheet_key}",
             "records": len(normalized["records"]),
+            "flattened_records": len(flattened),
         },
     )
 
@@ -350,6 +491,12 @@ def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     sheet_key = payload.get("sheet_key", "")
     sheet_name = payload.get("sheet_name", sheet_key)
     unit_id = payload.get("unit_id", "")
+    unit_name_value = payload.get("unit_name")
+    if not isinstance(unit_name_value, str) or not unit_name_value.strip():
+        unit_name_value = payload.get("单位名称")
+    if not isinstance(unit_name_value, str):
+        unit_name_value = ""
+    unit_name_value = unit_name_value.strip()
     submit_time_raw = payload.get("submit_time")
     submit_dt: Optional[datetime] = None
     if isinstance(submit_time_raw, str):
@@ -395,6 +542,7 @@ def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         "sheet_key": sheet_key,
         "sheet_name": sheet_name,
         "unit_id": unit_id,
+        "unit_name": unit_name_value,
         "submit_time": submit_dt,
         "item_dict": item_dict,
         "company_dict": company_dict,

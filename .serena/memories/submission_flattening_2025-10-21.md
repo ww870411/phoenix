@@ -1,0 +1,1 @@
+2025-10-21 在 daily_report_25_26 项目中新增 `_flatten_records`，将提交 payload 拆解为公司/项目/日期的长表，并在 `/sheets/{sheet_key}/submit` 调试接口返回 `flattened_records` 计数及在 backend_data/data_handle.md 中输出“平铺化结果”段落，便于后续持久化。

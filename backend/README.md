@@ -58,7 +58,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - 自动追加两列日期，返回结构为 `sheet_key/sheet_name/unit_name/columns/rows`；
   - 附带模板内定义的字典字段（如“项目字典”“单位字典”等）；前端需保持字段名称与内容一致并在提交时原样回传；
   - `columns` 形如 `[项目, 计量单位, <今日（东八区）>, <去年同日>]`。
-- `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`：占位。
+- `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`：当前为调试出口，会打印原始 payload、拆解结果与扁平化列表，后续可平滑接入数据库写入。
 - `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`：占位。
 
 ## 模板处理规则

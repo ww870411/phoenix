@@ -444,3 +444,8 @@
 - 影响：业务方新增的“项目字典”“单位字典”可在前后端之间保持一致，后续持久化或校验可直接复用数据。
 - 回滚：撤销 `backend/api/v1/daily_report_25_26.py` 中关于 `_extract_mapping`、`get_sheet_template`、`_normalize_submission` 的改动，并移除前端对应字段。
 - 验证：本地调用模板接口检查响应新增字段，填表后提交查看 `backend_data/data_handle.md` 记录中保留字典信息。
+### 2025-10-21 提交数据平铺化转换（留痕）
+- 动作：新增 `_flatten_records` 将提交 payload 打平成“公司/项目/日期”长表；`/submit` 调试接口同步输出平铺化结果，便于后续落库。
+- 影响：`backend_data/data_handle.md` 追加“平铺化结果”段落，后端可直接复用该列表写入数据库。
+- 回滚：恢复 `backend/api/v1/daily_report_25_26.py` 中 `submit_debug` 与 `_flatten_records` 的改动即可。
+- 验证：前端提交后检查响应 `flattened_records` 数量，并核对日志中的平铺记录与非空单元格一致。

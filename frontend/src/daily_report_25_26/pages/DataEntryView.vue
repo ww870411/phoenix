@@ -58,12 +58,15 @@ const projectKey = String(route.params.projectKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
 const initialDate = new Date().toISOString().slice(0,10);
 
+const bizDate = ref(String(initialDate));
+
 if (!projectKey || !sheetKey) {
   router.replace({ name: 'projects' });
 }
 const projectName = computed(() => getProjectNameById(projectKey));
 
 const sheetName = ref('');
+const unitName = ref('');
 const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const unitId = ref('');
 const columns = ref([]);
@@ -150,6 +153,7 @@ async function autoSizeFirstColumn() {
 async function loadTemplate() {
   const tpl = await getTemplate(projectKey, sheetKey);
   sheetName.value = tpl.sheet_name || '';
+  unitName.value = tpl.unit_name || '';
   unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
   rows.value = tpl.rows || [];
@@ -276,6 +280,8 @@ async function onSubmit() {
     project_name: projectName.value || projectKey,
     sheet_key: sheetKey,
     sheet_name: sheetName.value || '',
+    unit_name: unitName.value || '',
+    biz_date: bizDate.value,
     unit_id: unitId.value,
     columns: templateColumns,
     rows: filledRows,
