@@ -1,0 +1,1 @@
+2025-10-21 模板新增项目/单位字典：后端 `get_sheet_template` 透出 `project_dict` 与 `unit_dict`，`_normalize_submission` 将其随 payload 记录；前端 DataEntryView.vue 缓存字典并在提交数据时原样回传，支持 `backend_data/数据结构_基本指标表.json` 中新增的“项目字典”“单位字典”字段。

@@ -64,7 +64,7 @@ docker compose up -d --build
 | --- | --- |
 | `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |
 | `GET /api/v1/projects/{project_key}/sheets` | 返回表格清单；单个条目同时包含 `单位名/表名` 以及 `unit_name/sheet_name` |
-| `GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组 |
+| `GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组；同时附带 `item_dict`（项目字典）与 `company_dict`（若存在） |
 | `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit` | 占位（待实现） |
 | `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query` | 占位（待实现） |
 

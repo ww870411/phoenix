@@ -56,6 +56,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - 从候选文件（默认 `数据结构_基本指标表.json`、`数据结构_常量指标表.json`）读取指定模板；
   - 支持 `sheet_key` 大小写归一化匹配，若 `backend_data/数据结构_基本指标表.json` 提供 “单位标识” 字段将优先返回该版本；
   - 自动追加两列日期，返回结构为 `sheet_key/sheet_name/unit_name/columns/rows`；
+  - 附带 `item_dict`（项目字典）与 `company_dict`（单位字典，若存在）便于前端提交时原样回传；
   - `columns` 形如 `[项目, 计量单位, <今日（东八区）>, <去年同日>]`。
 - `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit`：占位。
 - `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query`：占位。

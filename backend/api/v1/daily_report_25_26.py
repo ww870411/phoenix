@@ -17,26 +17,20 @@ import json
 
 
 PROJECT_ROOT = SysPath(__file__).resolve().parents[3]
-DATA_DIR = PROJECT_ROOT / "backend_data"
-CATALOG_FILE = PROJECT_ROOT / "configs" / "数据结构_基本指标表.json"
-DATA_FILE_CANDIDATES = (
-    "数据结构_基本指标表.json",
-    "数据结构_常量指标表.json",
-)
+# The only data file we need to read, as requested by the user.
+PRIMARY_DATA_FILE = PROJECT_ROOT / "backend_data" / "数据结构_基本指标表.json"
 UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
 SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
 ROW_KEYS = ("数据", "rows", "records", "lines")
+ITEM_DICT_KEYS = ("item_dict", "项目字典")
+COMPANY_DICT_KEYS = ("company_dict", "单位字典")
 
 
 def _iter_data_files() -> Iterable[SysPath]:
-    """按优先级返回存在的模板文件路径。"""
-    if CATALOG_FILE.exists():
-        yield CATALOG_FILE
-    for filename in DATA_FILE_CANDIDATES:
-        path = DATA_DIR / filename
-        if path.exists():
-            yield path
+    """返回唯一的数据文件路径。"""
+    if PRIMARY_DATA_FILE.exists():
+        yield PRIMARY_DATA_FILE
 
 
 def _read_json(path: SysPath) -> Any:
@@ -148,6 +142,13 @@ def _extract_list(payload: Dict[str, Any], keys: Iterable[str]) -> Optional[Iter
             return value
     return None
 
+def _extract_mapping(payload: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return {}
+
 
 def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
     base = list(columns) if isinstance(columns, list) else list(columns)
@@ -169,7 +170,7 @@ def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
 
 
 def _collect_catalog() -> Dict[str, Dict[str, str]]:
-    catalog_path = CATALOG_FILE
+    catalog_path = PRIMARY_DATA_FILE
     if not catalog_path.exists():
         return {}
     raw = _read_json(catalog_path)
@@ -236,6 +237,8 @@ def get_sheet_template(
 
     columns = _decorate_columns(columns_raw)
     rows = [list(row) for row in rows_raw if isinstance(row, list)]
+    item_dict = _extract_mapping(payload, ITEM_DICT_KEYS)
+    company_dict = _extract_mapping(payload, COMPANY_DICT_KEYS)
 
     return JSONResponse(
         status_code=200,
@@ -247,6 +250,8 @@ def get_sheet_template(
             "unit_name": names["unit_name"],
             "columns": columns,
             "rows": rows,
+            "item_dict": item_dict,
+            "company_dict": company_dict,
         },
     )
 
@@ -320,6 +325,11 @@ def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError:
             submit_dt = None
 
+    item_dict_raw = payload.get("item_dict")
+    item_dict = item_dict_raw if isinstance(item_dict_raw, dict) else {}
+    company_dict_raw = payload.get("company_dict")
+    company_dict = company_dict_raw if isinstance(company_dict_raw, dict) else {}
+
     columns = payload.get("columns") or []
     rows = payload.get("rows") or []
 
@@ -353,5 +363,7 @@ def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         "sheet_name": sheet_name,
         "unit_id": unit_id,
         "submit_time": submit_dt,
+        "item_dict": item_dict,
+        "company_dict": company_dict,
         "records": records,
     }

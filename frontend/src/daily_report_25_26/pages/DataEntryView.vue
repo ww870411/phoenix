@@ -68,6 +68,8 @@ const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
+const itemDict = ref({});
+const companyDict = ref({});
 const submitTime = ref('');
 const values = reactive({});
 const gridColumns = ref([]);
@@ -133,10 +135,16 @@ async function autoSizeFirstColumn() {
 
 async function loadTemplate() {
   const tpl = await getTemplate(projectKey, sheetKey);
+  const itemMappingRaw = tpl.item_dict ?? tpl.project_dict ?? tpl['项目字典'];
+  const companyMappingRaw = tpl.company_dict ?? tpl.unit_dict ?? tpl['单位字典'];
   sheetName.value = tpl.sheet_name || '';
   unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
   rows.value = tpl.rows || [];
+  itemDict.value =
+    itemMappingRaw && typeof itemMappingRaw === 'object' ? itemMappingRaw : {};
+  companyDict.value =
+    companyMappingRaw && typeof companyMappingRaw === 'object' ? companyMappingRaw : {};
   // 清空当前值
   Object.keys(values).forEach(k => delete values[k]);
 
@@ -235,6 +243,8 @@ async function onSubmit() {
     unit_id: unitId.value,
     columns: templateColumns,
     rows: filledRows,
+    item_dict: itemDict.value,
+    company_dict: companyDict.value,
     submit_time: currentSubmitTime,
   };
   await submitData(payload);

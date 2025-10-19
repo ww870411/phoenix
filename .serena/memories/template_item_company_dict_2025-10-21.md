@@ -1,0 +1,1 @@
+2025-10-21 模板字典字段重命名：后端 `get_sheet_template` 统一输出 `item_dict` / `company_dict`（兼容中文键并支持列表转映射），`_normalize_submission` 同步保留；前端 DataEntryView.vue 优先读取新字段、向后端提交同名字段，同时兼容历史 `project_dict` / `unit_dict`。

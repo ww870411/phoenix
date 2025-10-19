@@ -3,7 +3,7 @@
     <div class="app-header__inner">
       <div class="brand" @click="goHome">
         <span class="brand-mark"></span>
-        <span class="brand-name">Phoenix</span>
+        <span class="brand-name">大连洁净能源集团</span>
         <span class="brand-sub">数据填报平台</span>
       </div>
       <nav class="nav">
