@@ -440,7 +440,7 @@
 - 验证：调用 `GET /api/v1/projects/daily_report_25_26/sheets/BeiHai_co_generation_sheet/template`，响应 `unit_id` 为 `BeiHai`。
 
 ### 2025-10-21 项目字典透传（留痕）
-- 动作：后端返回的字典字段按原有键名保留，前端缓存模板中出现的全部字典（含中文键），提交数据时逐项附加，确保名称与内容与模板一致。
+- 动作：后端返回的字典字段按原有键名保留，前端缓存模板中出现的全部字典（含中文键），提交数据时逐项附加并在缺省时补齐 `item_dict`/`company_dict` 映射，确保名称与内容与模板保持一致且兼容后端现有字段。
 - 影响：业务方新增的“项目字典”“单位字典”可在前后端之间保持一致，后续持久化或校验可直接复用数据。
 - 回滚：撤销 `backend/api/v1/daily_report_25_26.py` 中关于 `_extract_mapping`、`get_sheet_template`、`_normalize_submission` 的改动，并移除前端对应字段。
 - 验证：本地调用模板接口检查响应新增字段，填表后提交查看 `backend_data/data_handle.md` 记录中保留字典信息。

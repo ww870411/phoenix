@@ -68,7 +68,11 @@ const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
-const templateDicts = ref({});
+const templateDicts = ref({
+  entries: {},
+  itemPrimary: null,
+  companyPrimary: null,
+});
 
 function cloneDictValue(value) {
   if (value && typeof value === 'object') {
@@ -149,21 +153,34 @@ async function loadTemplate() {
   unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
   rows.value = tpl.rows || [];
-  const dictPairs = [
-    ['item_dict', tpl.item_dict],
-    ['company_dict', tpl.company_dict],
-    ['project_dict', tpl.project_dict],
-    ['unit_dict', tpl.unit_dict],
-    ['项目字典', tpl['项目字典']],
-    ['单位字典', tpl['单位字典']],
+  const dictCandidates = [
+    ['item_dict', 'item', tpl.item_dict],
+    ['company_dict', 'company', tpl.company_dict],
+    ['project_dict', 'item', tpl.project_dict],
+    ['unit_dict', 'company', tpl.unit_dict],
+    ['项目字典', 'item', tpl['项目字典']],
+    ['单位字典', 'company', tpl['单位字典']],
   ];
   const dictSnapshot = {};
-  for (const [key, value] of dictPairs) {
-    if (value !== undefined) {
-      dictSnapshot[key] = cloneDictValue(value);
+  let itemPrimary = null;
+  let companyPrimary = null;
+  for (const [key, role, rawValue] of dictCandidates) {
+    if (rawValue !== undefined) {
+      const cloned = cloneDictValue(rawValue);
+      dictSnapshot[key] = cloned;
+      if (!itemPrimary && role === 'item') {
+        itemPrimary = cloned;
+      }
+      if (!companyPrimary && role === 'company') {
+        companyPrimary = cloned;
+      }
     }
   }
-  templateDicts.value = dictSnapshot;
+  templateDicts.value = {
+    entries: dictSnapshot,
+    itemPrimary,
+    companyPrimary,
+  };
   // 清空当前值
   Object.keys(values).forEach(k => delete values[k]);
 
@@ -264,9 +281,16 @@ async function onSubmit() {
     rows: filledRows,
     submit_time: currentSubmitTime,
   };
-  const dictSnapshot = templateDicts.value || {};
-  for (const [dictKey, dictValue] of Object.entries(dictSnapshot)) {
+  const dictBundle = templateDicts.value || {};
+  const entryMap = dictBundle.entries || {};
+  for (const [dictKey, dictValue] of Object.entries(entryMap)) {
     payload[dictKey] = cloneDictValue(dictValue);
+  }
+  if (!payload.item_dict && dictBundle.itemPrimary) {
+    payload.item_dict = cloneDictValue(dictBundle.itemPrimary);
+  }
+  if (!payload.company_dict && dictBundle.companyPrimary) {
+    payload.company_dict = cloneDictValue(dictBundle.companyPrimary);
   }
   await submitData(payload);
   submitTime.value = currentSubmitTime;

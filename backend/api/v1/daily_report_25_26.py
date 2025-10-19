@@ -8,17 +8,50 @@ daily_report_25_26 项目 v1 路由
 """
 
 from datetime import datetime, timedelta, timezone
+
 from pathlib import Path as SysPath
+
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import os
+
+
+
 from fastapi import APIRouter, Path, Request
+
 from fastapi.responses import JSONResponse
+
 import json
 
 
-PROJECT_ROOT = SysPath(__file__).resolve().parents[3]
+
+
+
+# Use DATA_DIRECTORY from env var if available (for Docker),
+
+# otherwise, fall back to a path relative to the project root (for local dev).
+
+DATA_PATH_STR = os.environ.get("DATA_DIRECTORY")
+
+if DATA_PATH_STR:
+
+    # Path inside container, e.g., /app/data
+
+    DATA_ROOT = SysPath(DATA_PATH_STR)
+
+else:
+
+    # Path for local development
+
+    PROJECT_ROOT = SysPath(__file__).resolve().parents[3]
+
+    DATA_ROOT = PROJECT_ROOT / "backend_data"
+
+
+
 # The only data file we need to read, as requested by the user.
-PRIMARY_DATA_FILE = PROJECT_ROOT / "backend_data" / "数据结构_基本指标表.json"
+
+PRIMARY_DATA_FILE = DATA_ROOT / "数据结构_基本指标表.json"
 UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
 SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
@@ -264,7 +297,7 @@ async def submit_debug(
     payload = await request.json()
     normalized = _normalize_submission(payload)
 
-    log_path = DATA_DIR / "data_handle.md"
+    log_path = DATA_ROOT / "data_handle.md"
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(f"# {datetime.now().isoformat()}\n")
         fh.write("## 原始数据\n")
