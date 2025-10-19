@@ -48,6 +48,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ## 接口路线图（2025-10-19）
 
 - `GET /api/v1/ping`：系统级心跳。
+- `GET /api/v1/projects`：读取 `backend_data/项目列表.json` 并返回项目（`project_id/project_name`）。
 - `GET /api/v1/projects/{project_key}/sheets`：读取 `backend_data` 中的模板清单。返回字段包含：
   - `单位名`、`表名`：兼容旧有前端；
   - `unit_name`、`sheet_name`：便于英文字段访问。

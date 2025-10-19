@@ -380,6 +380,12 @@
 - 影响范围：PostgreSQL 数据与 SQL 脚本均可在宿主机直接管理，执行 `psql -f /app/sql/create_tables.sql` 时无需额外拷贝。
 - 回滚方案：恢复命名卷 `pg_data` 并移除 SQL 目录挂载即可。
 - 涉及文件：`docker-compose.yml`、`backend/README.md`、`configs/progress.md`。
+
+### 2025-10-21 项目列表接口与前端展示（留痕）
+
+- 动作：后端新增 `GET /api/v1/projects`，读取 `backend_data/项目列表.json` 返回项目 `id/name`；前端新增 `useProjects` 共享项目缓存，项目选择/Sheets/数据填报/Breadcrumbs 均展示中文名称。
+- 影响范围：前端路由与面包屑展示内容改为项目中文名，项目选择页面从静态配置改为实时接口。
+- 涉及文件：`backend/api/v1/routes.py`、`backend/README.md`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/src/daily_report_25_26/composables/useProjects.js`、`frontend/src/daily_report_25_26/pages/ProjectSelectView.vue`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/src/daily_report_25_26/components/Breadcrumbs.vue`、`configs/progress.md`。
 -### 2025-10-21 DataEntry 失焦策略调整（留痕）
 +
 - 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。

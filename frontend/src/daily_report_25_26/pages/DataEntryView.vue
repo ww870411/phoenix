@@ -7,7 +7,7 @@
         <button class="btn light" @click="goDashboard">← 返回仪表盘</button>
         <div>
           <h2>数据填报</h2>
-          <div class="sub">项目：{{ projectKey }} ｜ 表：{{ sheetKey }}</div>
+          <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
         </div>
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
@@ -52,17 +52,24 @@ import RevoGrid from '@revolist/vue3-datagrid'
 // 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
 import { useRouter } from 'vue-router'
-import { nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
+import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects';
 
 const route = useRoute();
 const router = useRouter();
-const projectKey = route.params.projectKey;
-const sheetKey = route.params.sheetKey;
+const projectKey = String(route.params.projectKey ?? '');
+const sheetKey = String(route.params.sheetKey ?? '');
 const initialDate = new Date().toISOString().slice(0,10);
 
+if (!projectKey || !sheetKey) {
+  router.replace({ name: 'projects' });
+}
+const projectName = computed(() => getProjectNameById(projectKey));
+
 const sheetName = ref('');
+const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const columns = ref([]);
 const rows = ref([]);
 const bizDate = ref(String(initialDate));
@@ -231,6 +238,7 @@ async function onSubmit() {
 
 onMounted(async () => {
   await nextTick();
+  await ensureProjectsLoaded().catch(() => {});
   await loadTemplate();
   await loadExisting();
 });

@@ -15,9 +15,11 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
 const router = useRouter()
+ensureProjectsLoaded().catch(() => {})
 
 const items = computed(() => {
   const name = route.name
@@ -26,6 +28,7 @@ const items = computed(() => {
   const projectKey = p.projectKey
   const sheetKey = p.sheetKey
   const biz = q.biz_date
+  const projectLabel = getProjectNameById(projectKey)
 
   // 基于路由名与参数构造面包屑
   // login 页不显示面包屑
@@ -37,13 +40,16 @@ const items = computed(() => {
   if (name === 'dashboard') {
     return [
       { label: '项目', to: '/projects' },
-      { label: String(projectKey || ''), to: null },
+      { label: String(projectLabel || ''), to: null },
     ]
   }
   if (name === 'data-entry') {
     return [
       { label: '项目', to: '/projects' },
-      { label: String(projectKey || ''), to: `/projects/${encodeURIComponent(projectKey)}/sheets` },
+      {
+        label: String(projectLabel || ''),
+        to: projectKey ? `/projects/${encodeURIComponent(projectKey)}/sheets` : null,
+      },
       { label: `填报：${String(sheetKey || '')}`, to: null },
     ]
   }

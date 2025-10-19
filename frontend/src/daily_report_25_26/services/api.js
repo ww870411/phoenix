@@ -14,6 +14,25 @@ function projectPath(projectKey) {
   return `/api/v1/projects/${encodeURIComponent(projectKey)}`;
 }
 
+let cachedProjects = null;
+
+export async function listProjects(force = false) {
+  if (!force && Array.isArray(cachedProjects)) {
+    return cachedProjects;
+  }
+  const url = resolveApiPath('/api/v1/projects');
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) throw new Error(`获取项目列表失败: ${res.status}`);
+  const data = await res.json();
+  const list = Array.isArray(data?.projects) ? data.projects : Array.isArray(data) ? data : [];
+  cachedProjects = list;
+  return list;
+}
+
+export function clearProjectsCache() {
+  cachedProjects = null;
+}
+
 export async function getTemplate(projectKey, sheetKey) {
   const url = resolveApiPath(
     `${projectPath(projectKey)}/sheets/${encodeURIComponent(sheetKey)}/template`,

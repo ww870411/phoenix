@@ -45,6 +45,7 @@ docker compose up -d --build
 
 - `/login` → `LoginView.vue`
 - `/projects` → `ProjectSelectView.vue`
+  - 首次进入时请求 `GET /api/v1/projects`，显示项目中文名列表并根据所选项目跳转。
 - `/projects/:projectKey/sheets` → `Sheets.vue`
   - 展示模板清单；按单位分组并以卡片呈现；点击表名进入填报页面；
   - `listSheets` 响应新增 `unit_name/sheet_name` 字段，以适配英文/中文双写。 
@@ -61,6 +62,7 @@ docker compose up -d --build
 
 | 接口 | 说明 |
 | --- | --- |
+| `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |
 | `GET /api/v1/projects/{project_key}/sheets` | 返回表格清单；单个条目同时包含 `单位名/表名` 以及 `unit_name/sheet_name` |
 | `GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组 |
 | `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit` | 占位（待实现） |

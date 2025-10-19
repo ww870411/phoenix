@@ -2,14 +2,7 @@
   <div>
     <AppHeader />
     <div class="container">
-      <header class="topbar">
-        <div>
-          <h2>仪表盘（表格选择）</h2>
-          <div class="sub">项目：{{ projectKey }}</div>
-        </div>
-      </header>
-
-      <Breadcrumbs />
+      <Breadcrumbs class="breadcrumb-spacing" />
 
       <div class="table-wrap card">
         <div v-if="loadError" class="placeholder">{{ loadError }}</div>
@@ -43,10 +36,12 @@ import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listSheets } from '../services/api'
+import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
 const router = useRouter()
 const projectKey = String(route.params.projectKey ?? '')
+const projectName = computed(() => getProjectNameById(projectKey))
 
 if (!projectKey) {
   router.replace({ name: 'projects' })
@@ -82,12 +77,14 @@ const grouped = computed(() => {
 })
 
 onMounted(async () => {
+  await ensureProjectsLoaded().catch(() => {})
   await loadSheets()
 })
 </script>
 
 <style scoped>
 .table-wrap { margin-top: 16px; }
+.breadcrumb-spacing { margin-bottom: 16px; display: inline-block; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .sheet-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 8px 0; }
