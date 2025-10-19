@@ -1,0 +1,6 @@
+- 时间：2025-10-21
+- 主题：DataEntry 首列二次自适应
+- 触发原因：异步加载模板/历史数据后 RevoGrid 首列仍保留最小宽度，长项目名称被压缩。
+- 变更：在 `DataEntryView.vue` 中新增 `gridRef` 与 `autoSizeFirstColumn()`，于 `loadTemplate`、`loadExisting` 结束时等待 `nextTick` 后调用 `autoSizeColumn('c0')`；同步更新 progress 与前后端 README 说明。
+- 工具留痕：Serena 检索 + 受限于 SFC 编辑能力降级使用 `apply_patch`。
+- 验证：未运行自动化测试，后续需在前端启动环境确认首列宽度按行名重新适配。

@@ -351,3 +351,19 @@
 - 影响范围：前端仪表盘列表与填报页列数与用户期望保持一致；模板获取逻辑保持兼容 `backend_data` 作为后备。
 - 回滚方案：如需恢复多文件合并行为，可撤销 `_collect_catalog` 与 `_iter_data_files` 调整；如需显示版权列，可移除 `hide-attribution` 设置。
 - 涉及文件：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
+
+### 2025-10-20 DataEntry 表格自适应宽度（留痕）
+
+- 背景：RevoGrid 默认在内容不足时保留右侧占位区域；用户要求去除多余空白。
+- 动作：在 `DataEntryView.vue` 的 `<RevoGrid />` 上启用 `stretch`（布尔值）与 `autoSizeColumn`，并为各列设置 `autoSize`/`minSize` 属性，使列宽随窗口动态适配、填满容器。
+- 影响范围：填报页表格横向铺满卡片，不再出现右侧留白占位。
+- 回滚方案：删除 `:stretch="'all'"` 即可恢复默认布局。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
+
+### 2025-10-21 DataEntry 首列自适应补强（留痕）
+
+- 背景：模板与历史数据通过异步请求加载，首列列宽仅依据初始行名测量，其他单元格的长文本仍会压缩至最小宽度。
+- 动作：为 `RevoGrid` 添加 `ref` 并在 `loadTemplate/loadExisting` 结束后调用封装的 `autoSizeFirstColumn()`；该函数汇总整列文本并使用 Canvas 量测宽度，随后更新列配置及调用 RevoGrid 的 `autoSizeColumn`，确保列宽覆盖所有单元格。
+- 影响范围：数据填报表格首列可完整展示任意单元格文本，其余列宽逻辑保持不变。
+- 回滚方案：移除 `autoSizeFirstColumn` 调用及 `RevoGrid` 的 `ref` 定义即可恢复旧行为。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`、`frontend/README.md`、`backend/README.md`。

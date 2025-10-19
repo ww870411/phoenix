@@ -23,11 +23,17 @@
 
     <div class="table-wrap card" v-if="columns.length">
       <RevoGrid
+        ref="gridRef"
         :row-headers="true"
         :hide-attribution="true"
+        :stretch="true"
+        :auto-size-column="false"
+        :row-size="30"
+        :resize="true"
+        :range="true"
         :columns="gridColumns"
         :source="gridSource"
-        style="height: 60vh; width: 100%;"
+        style="height: 70vh; width: 100%;"
         @afteredit="handleAfterEdit"
         @afterEdit="handleAfterEdit"
       />
@@ -45,7 +51,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 // 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
 import { useRouter } from 'vue-router'
-import { onMounted, reactive, ref } from 'vue';
+import { nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 
@@ -62,7 +68,64 @@ const bizDate = ref(String(initialDate));
 const values = reactive({});
 const gridColumns = ref([]);
 const gridSource = ref([]);
+const gridRef = ref(null);
+let textMeasureCtx = null;
 function toKey(ri, ci) { return `${ri}-${ci}`; }
+
+function getTextMeasureContext() {
+  if (typeof document === 'undefined') return null;
+  if (textMeasureCtx) return textMeasureCtx;
+  const canvas = document.createElement('canvas');
+  textMeasureCtx = canvas.getContext('2d');
+  return textMeasureCtx;
+}
+
+function measureTextWidth(content, font) {
+  const ctx = getTextMeasureContext();
+  const text = String(content ?? '');
+  if (!ctx || !text) return text.length * 14;
+  ctx.font = font || '14px/1.4 "Segoe UI", Arial, sans-serif';
+  return ctx.measureText(text).width;
+}
+
+// 在数据流完成后调用 RevoGrid 的 autoSize，保证首列根据行名重新计算宽度
+async function autoSizeFirstColumn() {
+  await nextTick();
+  if (!gridColumns.value.length) return;
+  const gridComponent = gridRef.value;
+  const gridElement = gridComponent?.$el ?? gridComponent;
+  if (!gridElement) return;
+
+  const computed = typeof window !== 'undefined' ? window.getComputedStyle(gridElement) : null;
+  const font = computed?.font || '14px/1.4 "Segoe UI", Arial, sans-serif';
+  const candidates = [];
+  if (columns.value[0]) candidates.push(columns.value[0]);
+  for (const row of gridSource.value) {
+    if (row && row.c0 != null) candidates.push(row.c0);
+  }
+  const widest = candidates.reduce((max, content) => {
+    const width = measureTextWidth(content, font);
+    return width > max ? width : max;
+  }, 0);
+  const padding = 36; // 预留左右内边距与排序指示器空间
+  const target = Math.max(gridColumns.value[0]?.minSize ?? 160, Math.ceil(widest) + padding);
+  gridColumns.value = gridColumns.value.map((col, index) => {
+    if (index !== 0) return col;
+    return { ...col, size: target };
+  });
+
+  if (typeof gridElement.autoSizeColumn === 'function') {
+    try {
+      gridElement.autoSizeColumn('c0', true);
+    } catch (err) {
+      try {
+        gridElement.autoSizeColumn(0, true);
+      } catch (innerErr) {
+        // 保底静默失败，避免影响主流程
+      }
+    }
+  }
+}
 
 async function loadTemplate() {
   const tpl = await getTemplate(projectKey, sheetKey);
@@ -74,11 +137,28 @@ async function loadTemplate() {
 
   // 构造 RevoGrid 列配置：c0=项目(只读)、c1=计量单位(只读)、c2+ 可编辑
   const colDefs = [];
-  colDefs.push({ prop: 'c0', name: columns.value[0] ?? '项目', size: 200, readonly: true });
-  colDefs.push({ prop: 'c1', name: columns.value[1] ?? '计量单位', size: 140, readonly: true });
+  colDefs.push({
+    prop: 'c0',
+    name: columns.value[0] ?? '项目',
+    readonly: true,
+    autoSize: true,
+    minSize: 160,
+  });
+  colDefs.push({
+    prop: 'c1',
+    name: columns.value[1] ?? '计量单位',
+    readonly: true,
+    autoSize: true,
+    minSize: 120,
+  });
   const fillable = columns.value.map((_, i) => i).filter(i => i >= 2);
   for (const ci of fillable) {
-    colDefs.push({ prop: `c${ci}`, name: String(columns.value[ci] ?? ''), size: 140 });
+    colDefs.push({
+      prop: `c${ci}`,
+      name: String(columns.value[ci] ?? ''),
+      autoSize: true,
+      minSize: 120,
+    });
   }
   gridColumns.value = colDefs;
 
@@ -89,6 +169,7 @@ async function loadTemplate() {
     return rec;
   });
   gridSource.value = src;
+  await autoSizeFirstColumn();
 }
 
 async function loadExisting() {
@@ -107,6 +188,7 @@ async function loadExisting() {
       }
     }
   }
+  await autoSizeFirstColumn();
 }
 
 async function reloadTemplate() {

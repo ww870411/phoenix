@@ -1,0 +1,4 @@
+- 时间：2025-10-21
+- 主题：DataEntry 首列自适应优化补充
+- 变更：`autoSizeFirstColumn()` 现会聚合首列全部单元格文本，通过 Canvas 测量宽度后更新列配置并再调用 RevoGrid `autoSizeColumn`，确保宽度覆盖列中最长内容；同步更新 progress 与 README。
+- 验证：待前端手动预览确认各行文本在首列均不被裁切。

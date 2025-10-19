@@ -51,7 +51,8 @@ docker compose up -d --build
 - `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
   - 使用 `@revolist/vue3-datagrid` 提供的 `RevoGrid` 组件渲染表格，自带自定义元素注册；
   - 通过 `@afteredit` 事件回调同步 `gridSource`，提交阶段汇总单元格生成 `cells`；
-  - 模板 `columns` 的后两列分别为“今日日期”“去年同日”，用于展示对比列。 
+  - 模板 `columns` 的后两列分别为“今日日期”“去年同日”，用于展示对比列。
+  - 首列在模板与历史数据完成加载后触发 `autoSizeFirstColumn()`，基于整列文本宽度动态设定列宽并再次调用 RevoGrid 自适应，支持任意单元格内容完整显示。
 
 ## API 交互要点
 

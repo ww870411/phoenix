@@ -1,0 +1,5 @@
+- 时间：2025-10-20
+- 主题：DataEntry 表格拉伸
+- 变更：RevoGrid 启用 stretch 与 autoSizeColumn，并为列配置 autoSize/minSize 以填满容器、随窗口调整
+- 原因：用户反馈表格右侧出现占位空白
+- 验证：未运行自动化测试，需前端手动预览确认布局
