@@ -386,6 +386,30 @@
 - 动作：后端新增 `GET /api/v1/projects`，读取 `backend_data/项目列表.json` 返回项目 `id/name`；前端新增 `useProjects` 共享项目缓存，项目选择/Sheets/数据填报/Breadcrumbs 均展示中文名称。
 - 影响范围：前端路由与面包屑展示内容改为项目中文名，项目选择页面从静态配置改为实时接口。
 - 涉及文件：`backend/api/v1/routes.py`、`backend/README.md`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/src/daily_report_25_26/composables/useProjects.js`、`frontend/src/daily_report_25_26/pages/ProjectSelectView.vue`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/src/daily_report_25_26/components/Breadcrumbs.vue`、`configs/progress.md`。
+
+### 2025-10-21 面包屑导航样式优化（留痕）
+
+- 动作：调整 `Breadcrumbs` 样式，增加留白、圆角和 hover 效果，并在 Sheets 页面移除重复标题，仅保留面包屑作为导航提示。
+- 影响范围：所有使用 `Breadcrumbs` 的页面导航更显眼，Sheets 页面头部更简洁。
+- 涉及文件：`frontend/src/daily_report_25_26/components/Breadcrumbs.vue`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`configs/progress.md`。
+
+### 2025-10-21 面包屑分隔符增强（留痕）
+
+- 动作：将面包屑分隔符由单个 “›” 调整为双箭头 “»” 并增大字号，强化层级感。
+- 影响范围：面包屑导航的层级感更明显。
+- 涉及文件：`frontend/src/daily_report_25_26/components/Breadcrumbs.vue`、`configs/progress.md`。
+
+### 2025-10-21 数据填报页导航调整（留痕）
+
+- 动作：移除数据填报页“返回仪表盘”按钮，改用面包屑指引并整体对齐标题区。
+- 影响范围：数据填报页面顶部结构更统一，用户通过面包屑返回上一层。
+- 涉及文件：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`configs/progress.md`。
+
+### 2025-10-21 顶部导航按钮精简（留痕）
+
+- 动作：移除 `AppHeader` 右上角“项目”按钮，仅保留“退出”操作，避免与面包屑重复。
+- 影响范围：所有页面顶部导航更简洁。
+- 涉及文件：`frontend/src/daily_report_25_26/components/AppHeader.vue`、`configs/progress.md`。
 -### 2025-10-21 DataEntry 失焦策略调整（留痕）
 +
 - 动作：移除 `beforecellfocus`/`beforecellsave` 监听与自定义失焦同步函数，仅保留 `:apply-on-close="true"` 触发的内置自动保存机制。

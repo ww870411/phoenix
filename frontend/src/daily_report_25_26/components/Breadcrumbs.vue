@@ -4,10 +4,13 @@
       <a
         v-if="item.to && idx < items.length - 1"
         href="#"
+        class="crumb-link"
         @click.prevent="go(item.to)"
-      >{{ item.label }}</a>
+      >
+        {{ item.label }}
+      </a>
       <span v-else class="current">{{ item.label }}</span>
-      <span v-if="idx < items.length - 1" class="separator">›</span>
+      <span v-if="idx < items.length - 1" class="separator">»</span>
     </template>
   </nav>
 </template>
@@ -50,7 +53,7 @@ const items = computed(() => {
         label: String(projectLabel || ''),
         to: projectKey ? `/projects/${encodeURIComponent(projectKey)}/sheets` : null,
       },
-      { label: `填报：${String(sheetKey || '')}`, to: null },
+      { label: '数据填报', to: null },
     ]
   }
   // 其他兜底：不显示或仅显示当前
@@ -66,13 +69,37 @@ function go(path) {
 .breadcrumbs {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--muted);
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 6px 0 18px 0;
   font-size: 14px;
-  margin: 4px 0 12px 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: var(--muted);
 }
-.breadcrumbs a { color: var(--primary-700); text-decoration: none; }
-.breadcrumbs a:hover { text-decoration: underline; }
-.separator { color: #cbd5e1; user-select: none; }
-.current { color: var(--text); font-weight: 700; }
+.crumb-link {
+  color: var(--primary-700);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  transition: all 0.18s ease-in-out;
+}
+.crumb-link:hover {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-800);
+}
+.separator {
+  color: #cbd5e1;
+  font-size: 18px;
+  font-weight: 600;
+  user-select: none;
+}
+.current {
+  color: var(--text);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+}
 </style>

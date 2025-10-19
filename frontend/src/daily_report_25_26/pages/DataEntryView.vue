@@ -2,13 +2,11 @@
   <div>
     <AppHeader />
     <div class="container">
+    <Breadcrumbs class="breadcrumb-spacing" />
     <header class="topbar">
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
-        <button class="btn light" @click="goDashboard">← 返回仪表盘</button>
-        <div>
-          <h2>数据填报</h2>
-          <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
-        </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <h2>数据填报</h2>
+        <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
         <label class="date">
@@ -19,7 +17,6 @@
         <button class="btn primary" @click="onSubmit">提交</button>
       </div>
     </header>
-    <Breadcrumbs />
 
     <div class="table-wrap card" v-if="columns.length">
       <RevoGrid
@@ -51,6 +48,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 // 直接导入 css 会导致 Vite 依赖扫描报错（Missing specifier）。
 // 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter } from 'vue-router'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
@@ -258,13 +256,10 @@ function handleAfterEdit(evt) {
     }
   }
 }
-
-function goDashboard() {
-  router.push(`/projects/${encodeURIComponent(projectKey)}/sheets`);
-}
 </script>
 
 <style scoped>
-.topbar { gap: 12px; margin-bottom: 16px; }
+.topbar { gap: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .date { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
 </style>
