@@ -433,3 +433,8 @@
 - 动作：模板接口返回 `unit_id`，前端在提交时附带单位标识并简单记录 `YYYY-MM-DD HH:MM:SS` 本地时间。
 - 影响范围：后续持久化可关联单位英文标识，提交时间与页面展示保持一致。
 - 涉及文件：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`configs/progress.md`。
+### 2025-10-21 模板 unit_id 匹配修复（留痕）
+- 动作：`_locate_sheet_payload` 支持 `sheet_key` 大小写归一化匹配，优先返回挂载卷 `backend_data/数据结构_基本指标表.json` 中带 “单位标识” 的模板。
+- 影响：前端请求模板时 `unit_id` 恒不为空，填报页面可准确显示单位标识。
+- 回滚：复原 `backend/api/v1/daily_report_25_26.py` 中 `_locate_sheet_payload` 的增量逻辑即可。
+- 验证：调用 `GET /api/v1/projects/daily_report_25_26/sheets/BeiHai_co_generation_sheet/template`，响应 `unit_id` 为 `BeiHai`。

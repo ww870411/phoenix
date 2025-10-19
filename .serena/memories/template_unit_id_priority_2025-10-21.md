@@ -1,0 +1,1 @@
+2025-10-21 调整后端模板查找逻辑：`_locate_sheet_payload` 现在对 `sheet_key` 进行大小写归一化匹配，优先返回挂载卷 `backend_data/数据结构_基本指标表.json` 中含有“单位标识”的条目；若未匹配则回退到旧模板。更新后模板接口返回的 `unit_id` 不再为空。同步更新 backend/README.md 与 configs/progress.md。

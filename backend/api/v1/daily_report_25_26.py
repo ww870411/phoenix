@@ -82,21 +82,63 @@ def _extract_names(payload: Dict[str, Any]) -> Dict[str, str]:
 
 def _locate_sheet_payload(sheet_key: str) -> Tuple[Optional[Dict[str, Any]], Optional[SysPath]]:
     """在候选模板文件中按 sheet_key 查找配置。"""
+
+    def _consider(payload: Dict[str, Any], path: SysPath) -> Optional[Tuple[Dict[str, Any], SysPath]]:
+        if not isinstance(payload, dict):
+            return None
+        names = _extract_names(payload)
+        if names["unit_id"]:
+            return payload, path
+        return None
+
+    best_payload: Optional[Dict[str, Any]] = None
+    best_path: Optional[SysPath] = None
+    target_key_lower = sheet_key.lower()
+
     for data_path in _iter_data_files():
         raw = _read_json(data_path)
-        if isinstance(raw, dict) and sheet_key in raw:
-            payload = raw[sheet_key]
-            if isinstance(payload, dict):
-                return payload, data_path
-        if isinstance(raw, list):
+
+        if isinstance(raw, dict):
+            direct = raw.get(sheet_key)
+            if isinstance(direct, dict):
+                hit = _consider(direct, data_path)
+                if hit:
+                    return hit
+                if best_payload is None:
+                    best_payload, best_path = direct, data_path
+
+            for key, payload in raw.items():
+                if not isinstance(payload, dict):
+                    continue
+                if key.lower() == target_key_lower:
+                    hit = _consider(payload, data_path)
+                    if hit:
+                        return hit
+                    if best_payload is None:
+                        best_payload, best_path = payload, data_path
+                        continue
+                names = _extract_names(payload)
+                if names["sheet_name"] == sheet_key:
+                    hit = _consider(payload, data_path)
+                    if hit:
+                        return hit
+                    if best_payload is None:
+                        best_payload, best_path = payload, data_path
+
+        elif isinstance(raw, list):
             for payload in raw:
                 if not isinstance(payload, dict):
                     continue
                 candidate = payload.get("sheet_key")
                 names = _extract_names(payload)
                 if candidate == sheet_key or names["sheet_name"] == sheet_key:
-                    return payload, data_path
-    return None, None
+                    hit = _consider(payload, data_path)
+                    if hit:
+                        return hit
+                    if best_payload is None:
+                        best_payload, best_path = payload, data_path
+
+    return best_payload, best_path
 
 
 def _extract_list(payload: Dict[str, Any], keys: Iterable[str]) -> Optional[Iterable[Any]]:
