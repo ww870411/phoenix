@@ -596,11 +596,11 @@ async def submit_debug(
         db_error = str(exc)
 
     if db_error:
-            fh.write(f"写库错误：{db_error}\n")
-        fh.write("\n\n---\n\n")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "写入数据库失败", "error": db_error},
+        )
 
-    if db_error:
-            fh.write(f"写库错误：{db_error}\n")
         fh.write("\n\n---\n\n")
 
     if db_error:
