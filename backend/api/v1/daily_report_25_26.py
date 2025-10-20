@@ -34,7 +34,14 @@ import json
 
 # Use统一的数据目录常量，默认指向容器内 /app/data
 DATA_ROOT = SysPath(DATA_DIRECTORY)
-DATA_FILE_CANDIDATES = [str(DATA_ROOT / "数据结构_基本指标表.json")]
+COAL_INVENTORY_DEBUG_FILE = DATA_ROOT / "test.md"
+BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
+COAL_STORAGE_NAME_MAP = {
+    "在途煤炭": ("coal_in_transit", "在途煤炭"),
+    "港口存煤": ("coal_at_port", "港口存煤"),
+    "厂内存煤": ("coal_at_plant", "厂内存煤"),
+}
+DATA_FILE_CANDIDATES = [str(BASIC_TEMPLATE_PATH)]
 
 # otherwise, fall back to a path relative to the project root (for local dev).
 
@@ -51,7 +58,7 @@ EAST_8_TZ = timezone(timedelta(hours=8))
 
 # The only data file we need to read, as requested by the user.
 
-BASIC_DATA_FILE = DATA_ROOT / "数据结构_基本指标表.json"
+BASIC_DATA_FILE = BASIC_TEMPLATE_PATH
 UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
 SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
@@ -469,6 +476,130 @@ def _persist_daily_basic(
         session.close()
 
 
+def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    将煤炭库存表的宽表 payload 拆解为扁平化的数据库记录列表。
+    """
+    # 提取关键字典和日期
+    company_dict = payload.get("company_dict", {})
+    item_dict = payload.get("item_dict", {})  # 煤种字典
+    status_dict = payload.get("status_dict", {}) # 状态/库存类型字典
+    biz_date = payload.get("biz_date")
+    
+    # 创建反向查找字典，用于从中文名映射回 ID
+    rev_company_map = {v: k for k, v in company_dict.items()}
+    rev_item_map = {v: k for k, v in item_dict.items()}
+    rev_status_map = {v: k for k, v in status_dict.items()}
+
+    columns = payload.get("columns", [])
+    rows = payload.get("rows", [])
+    
+    # 定位数据列的索引和中文名
+    data_columns = []
+    for i, col_name in enumerate(columns):
+        # 数据列通常从第2列之后开始（第0列是单位，第1列是煤种）
+        if i > 1 and col_name in rev_status_map:
+            data_columns.append({"index": i, "name_cn": col_name})
+
+    flattened_records = []
+    operation_time = datetime.now(EAST_8_TZ)
+
+    # 遍历每一行数据
+    for row in rows:
+        if not isinstance(row, list) or len(row) < len(columns):
+            continue
+
+        company_cn = row[0]
+        item_cn = row[1] # 煤种中文名
+        unit = row[2] if len(row) > 2 else ""
+        
+        company_id = rev_company_map.get(company_cn)
+        item_id = rev_item_map.get(item_cn)
+
+        if not company_id or not item_id:
+            continue # 如果单位或煤种无法映射，则跳过此行
+
+        # 遍历该行中的每个数据列
+        for col_info in data_columns:
+            col_idx = col_info["index"]
+            storage_type_cn = col_info["name_cn"]
+            
+            raw_value = row[col_idx]
+            # 如果值为空或无效，则跳过
+            if raw_value is None or str(raw_value).strip() == "":
+                continue
+
+            value_decimal = _parse_decimal_value(raw_value)
+            storage_type_id = rev_status_map.get(storage_type_cn)
+
+            record = {
+                "company": company_id,
+                "company_cn": company_cn,
+                "coal_type": item_id,
+                "coal_type_cn": item_cn,
+                "storage_type": storage_type_id,
+                "storage_type_cn": storage_type_cn,
+                "value": value_decimal,
+                "unit": unit,
+                "note": "", # 备注字段暂时为空
+                "status": "submit",
+                "date": _parse_date_value(biz_date),
+                "operation_time": operation_time,
+            }
+            flattened_records.append(record)
+            
+    return flattened_records
+
+def _persist_coal_inventory(records: List[Dict[str, Any]]) -> int:
+    """
+    将拆解后的煤炭库存记录持久化到数据库。
+    """
+    if not records:
+        return 0
+
+    session = SessionLocal()
+    try:
+        # 幂等写入：删除当天所有数据
+        # 从第一条记录获取业务日期，并假设所有记录都是同一天
+        biz_date = records[0].get("date")
+        if biz_date:
+            session.execute(
+                delete(CoalInventoryData).where(CoalInventoryData.date == biz_date)
+            )
+
+        # 批量插入新数据
+        session.bulk_insert_mappings(CoalInventoryData, records)
+        session.commit()
+        return len(records)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONResponse:
+    """
+    处理煤炭库存表的专用提交逻辑。
+    """
+    try:
+        flattened_records = _flatten_records_for_coal(payload)
+        inserted_count = _persist_coal_inventory(flattened_records)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "message": "煤炭库存数据处理成功",
+                "flattened_records": len(flattened_records),
+                "inserted": inserted_count,
+            },
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "处理煤炭库存数据时发生错误", "error": str(exc)},
+        )
+
+
 def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
     base = list(columns) if isinstance(columns, list) else list(columns)
     head = base[:2]
@@ -554,32 +685,37 @@ def get_sheet_template(
             },
         )
 
-    # 根据 sheet_key 判断模板类型并选择不同的列处理方式
-    if sheet_key == "Coal_inventory_Sheet":
-        template_type = "crosstab"
-        columns = list(columns_raw)  # 直接使用原始列，不加注日期
-    else:
-        template_type = "standard"
-        columns = _decorate_columns(columns_raw)  # 对标准报表加注日期
-
     rows = [list(row) for row in rows_raw if isinstance(row, list)]
     item_dict = _extract_mapping(payload, ITEM_DICT_KEYS)
     company_dict = _extract_mapping(payload, COMPANY_DICT_KEYS)
+    
+    response_content = {
+        "ok": True,
+        "sheet_key": sheet_key,
+        "sheet_name": names["sheet_name"] or sheet_key,
+        "unit_id": names["unit_id"],
+        "unit_name": names["unit_name"],
+        "rows": rows,
+        "item_dict": item_dict,
+        "company_dict": company_dict,
+    }
+
+    # 根据 sheet_key 判断模板类型并选择不同的列处理方式
+    if sheet_key == "Coal_inventory_Sheet":
+        response_content["template_type"] = "crosstab"
+        response_content["columns"] = list(columns_raw)  # 直接使用原始列
+        
+        # 为交叉表单独生成业务日期
+        tz = timezone(timedelta(hours=8))
+        yesterday = (datetime.now(tz) - timedelta(days=1)).date()
+        response_content["biz_date"] = yesterday.isoformat()
+    else:
+        response_content["template_type"] = "standard"
+        response_content["columns"] = _decorate_columns(columns_raw)  # 对标准报表加注日期
 
     return JSONResponse(
         status_code=200,
-        content={
-            "ok": True,
-            "sheet_key": sheet_key,
-            "sheet_name": names["sheet_name"] or sheet_key,
-            "unit_id": names["unit_id"],
-            "unit_name": names["unit_name"],
-            "columns": columns,
-            "rows": rows,
-            "item_dict": item_dict,
-            "company_dict": company_dict,
-            "template_type": template_type,  # 增加模板类型字段
-        },
+        content=response_content,
     )
 
 
@@ -588,40 +724,37 @@ async def submit_debug(
     request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
 ):
+    """
+    数据提交总调度入口。
+    根据 sheet_key 将请求分发到不同的处理器。
+    """
     payload = await request.json()
-    normalized = _normalize_submission(payload)
-    flattened = _flatten_records(payload, normalized)
-    try:
-        inserted_rows = _persist_daily_basic(payload, normalized, flattened)
-        db_error = ""
-    except Exception as exc:
-        inserted_rows = 0
-        db_error = str(exc)
 
-    if db_error:
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "message": "写入数据库失败", "error": db_error},
-        )
-
-        fh.write("\n\n---\n\n")
-
-    if db_error:
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "message": "写入数据库失败", "error": db_error},
-        )
-
-    return JSONResponse(
-        status_code=200,
-        content={
-            "ok": True,
-            "message": f"payload received for {sheet_key}",
-            "records": len(normalized.get("records", [])),
-            "flattened_records": len(flattened),
-            "inserted": inserted_rows,
-        },
-    )
+    # 根据 sheet_key 进行路由分发
+    if sheet_key == "Coal_inventory_Sheet":
+        # 调用煤炭库存表的专用处理器
+        return await handle_coal_inventory_submission(payload)
+    else:
+        # 调用处理标准基础报表的旧逻辑
+        try:
+            normalized = _normalize_submission(payload)
+            flattened = _flatten_records(payload, normalized)
+            inserted_rows = _persist_daily_basic(payload, normalized, flattened)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "ok": True,
+                    "message": f"标准报表 '{sheet_key}' 数据处理成功",
+                    "records": len(normalized.get("records", [])),
+                    "flattened_records": len(flattened),
+                    "inserted": inserted_rows,
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "message": "处理标准报表时发生错误", "error": str(exc)},
+            )
 
 
 
@@ -718,3 +851,119 @@ def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         "company_dict": company_dict,
         "records": records,
     }
+
+
+def _invert_mapping(mapping: Dict[str, Any]) -> Dict[str, str]:
+    """将配置字典反转为中文 -> 英文 key 的映射。"""
+    inverted: Dict[str, str] = {}
+    if isinstance(mapping, dict):
+        for key, value in mapping.items():
+            if isinstance(value, str):
+                inverted[value.strip()] = str(key).strip()
+    return inverted
+
+
+def _parse_coal_inventory_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """将煤炭库存表 payload 拆解为结构化记录。"""
+    columns_raw = payload.get("columns") or []
+    column_index: Dict[str, int] = {}
+    for idx, col in enumerate(columns_raw):
+        if isinstance(col, str):
+            name = col.strip()
+            if name and name not in column_index:
+                column_index[name] = idx
+
+    unit_idx = column_index.get("计量单位")
+    note_idx = column_index.get("备注")
+    storage_columns: List[Tuple[int, str, str]] = []
+    for cn_name, (code, label_cn) in COAL_STORAGE_NAME_MAP.items():
+        storage_idx = column_index.get(cn_name)
+        if storage_idx is not None:
+            storage_columns.append((storage_idx, code, label_cn))
+
+    rows = payload.get("rows") or []
+    company_dict = payload.get("company_dict")
+    coal_dict = payload.get("item_dict")
+    company_lookup = _invert_mapping(company_dict if isinstance(company_dict, dict) else {})
+    coal_lookup = _invert_mapping(coal_dict if isinstance(coal_dict, dict) else {})
+
+    biz_date = payload.get("biz_date")
+    status_value = str(payload.get("status") or "submit").strip()
+    submit_time = payload.get("submit_time")
+
+    parsed: List[Dict[str, Any]] = []
+    for row_index, row in enumerate(rows):
+        if not isinstance(row, list) or len(row) < 2:
+            continue
+
+        company_cn = str(row[0]).strip() if row[0] is not None else ""
+        coal_type_cn = str(row[1]).strip() if row[1] is not None else ""
+        if not company_cn or not coal_type_cn:
+            continue
+
+        unit_value = ""
+        if unit_idx is not None and unit_idx < len(row):
+            unit_value = str(row[unit_idx] or "").strip()
+
+        note_value = ""
+        if note_idx is not None and note_idx < len(row):
+            note_value = str(row[note_idx] or "").strip()
+
+        company_code = company_lookup.get(company_cn, company_cn)
+        coal_type_code = coal_lookup.get(coal_type_cn, coal_type_cn)
+
+        for col_idx, storage_code, storage_cn in storage_columns:
+            if col_idx >= len(row):
+                value_str = "0"
+            else:
+                raw_value = row[col_idx]
+                value_raw = str(raw_value).strip() if raw_value is not None else ""
+                value_str = value_raw if value_raw != "" else "0"
+
+            parsed.append(
+                {
+                    "company": company_code,
+                    "company_cn": company_cn,
+                    "coal_type": coal_type_code,
+                    "coal_type_cn": coal_type_cn,
+                    "storage_type": storage_code,
+                    "storage_type_cn": storage_cn,
+                    "value": value_str,
+                    "unit": unit_value,
+                    "date": biz_date,
+                    "note": note_value,
+                    "status": status_value,
+                    "operation_time": submit_time,
+                }
+            )
+
+    return parsed
+
+
+def _write_coal_inventory_debug(payload: Dict[str, Any], records: List[Dict[str, Any]]) -> None:
+    """将调试信息写入 backend_data/test.md。"""
+    COAL_INVENTORY_DEBUG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(EAST_8_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    debug_payload = json.dumps(payload, ensure_ascii=False, indent=2)
+    debug_records = json.dumps(records, ensure_ascii=False, indent=2)
+    with COAL_INVENTORY_DEBUG_FILE.open("a", encoding="utf-8") as fh:
+        fh.write(f"## Coal Inventory Debug {timestamp}\n\n")
+        fh.write("### Raw Payload\n```json\n")
+        fh.write(debug_payload)
+        fh.write("\n```\n\n### Parsed Records\n```json\n")
+        fh.write(debug_records)
+        fh.write("\n```\n\n")
+
+
+async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONResponse:
+    """特殊处理煤炭库存表，仅输出调试数据。"""
+    records = _parse_coal_inventory_records(payload)
+    _write_coal_inventory_debug(payload, records)
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "message": "煤炭库存数据已记录至 backend_data/test.md",
+            "records": len(records),
+        },
+    )

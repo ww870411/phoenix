@@ -69,8 +69,12 @@ class CoalInventoryData(Base):
     company_cn = Column(Text)
     coal_type = Column(Text, nullable=False)
     coal_type_cn = Column(Text)
+    storage_type = Column(Text)
+    storage_type_cn = Column(Text)
     value = Column(Numeric(18, 4))
     unit = Column(Text)
+    note = Column(Text)
+    status = Column(Text)
     date = Column(Date, nullable=False)
     operation_time = Column(DateTime, nullable=False)
 

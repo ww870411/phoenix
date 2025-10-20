@@ -475,3 +475,8 @@
 - 动作：将 `db` 服务数据卷改为 `./db_data:/app/db_data` 并设置 `PGDATA=/app/db_data`，去除硬编码绝对路径；收窄 `backend` 服务为 `./backend:/app/backend` 与 `./backend_data:/app/data`，同时显式设置 `DATA_DIRECTORY=/app/data`。
 - 验证：docker-compose 配置静态检查通过；后续需在容器内确认 Postgres 能在新目录初始化、后端读取模板正常。
 - 备注：开发时如需额外挂载其它目录，可在 compose 覆盖文件中扩展，主配置保持最小权限原则。
+
+### 2025-10-22 煤炭库存调试输出（留痕）
+- 动作：`/submit` 接口新增 `Coal_inventory_Sheet` 专用处理，拆解 payload 生成结构化记录，并写入 `backend_data/test.md`，暂不触发数据库写入。
+- 验证：通过前端或调试脚本提交煤炭库存样例，请检查 `backend_data/test.md` 中的原始 payload 与 parsed records。
+- 备注：后续在确认转换逻辑后，再接入 `coal_inventory_data` 写库功能。

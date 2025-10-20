@@ -139,6 +139,11 @@ async function loadTemplate() {
   rows.value = tpl.rows || [];
   templateType.value = tpl.template_type || 'standard';
 
+  // 如果后端下发了权威的业务日期，则使用它
+  if (tpl.biz_date) {
+    bizDate.value = tpl.biz_date;
+  }
+
   // 存储字典
   const dictCandidates = [
     ['item_dict', 'item', tpl.item_dict],
