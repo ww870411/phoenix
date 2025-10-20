@@ -117,7 +117,8 @@ codex编写了一份创建数据库表的脚本，待容器启动后执行docker
 进行数据初次转换，待写入数据库。但“数据拆解”过程仍存在，需要去除
 
 在后端建立db文件夹，存放SQLALchemy相关文件，包括session，ORM模型。发现数据库中的表名都是小写，对应设定。
-程序会从记录中提取 (company, sheet_name_key, item_key, row_date) 这四个字段，全部符合则只更新不新增
+程序只有当 company（单位代号）、sheet_name（模板键）、item（项目键）和 date（列对应的业务日期）都取到了有效值时，才会把该记录加入待写入列表。
+
 
 *将数据采集的相关页面及API全部加入data_entry前缀：
 【前端页面清单】
@@ -131,4 +132,19 @@ GET /sheets                          改为GET /data_entry/sheets
 GET /sheets/{sheet_key}/template     改为GET /data_entry/sheets/{key}/template 
 POST /sheets/{sheet_key}/submit      改为POST /data_entry/sheets/{key}/submit  
 POST /sheets/{sheet_key}/query       改为POST /data_entry/sheets/{key}/query  
+
+修改完毕
+
+实现空值也写入数据库的可追溯业务逻辑。
+因为一些Bug，数据库表名全部都是小写
+
+修复使用后端绑定挂载路径时的写法混乱问题，有些位置使用了固定的绝对路径，而没有使用/app/data，未来是一个隐患。
+新增 backend/config.py:1-12 定义全局 DATA_DIRECTORY（默认 /app/data，可用环境变量覆盖），成为后端访问数据卷的唯一入口。
+取消使用《常量指标表》的兜底行为。
+
+
+
+
+天气数据的自动获取:
+根据查询资料：在FastAPI生态中，通常使用 apscheduler 这样的库，您可以设置一个定时任务（例如 add_job(run_daily_import, 'cron', hour=3, minute=0)），它就会在指定时间自动执行您的代码。
 

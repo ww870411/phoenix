@@ -4,7 +4,7 @@ daily_report_25_26 项目 v1 路由
 说明：
 - 所有接口挂载在 `/api/v1/daily_report_25_26` 前缀下。
 - 当前实现模板读取功能，提交与查询仍保留占位实现，后续可逐步替换。
-- 模板文件来源于项目根目录下 `backend_data` 目录内的 JSON 配置。
+- 模板文件来源于容器内数据目录（默认 `/app/data`）中的 JSON 配置。
 """
 
 from datetime import datetime, timedelta, timezone
@@ -13,7 +13,6 @@ from pathlib import Path as SysPath
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import os
 
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
@@ -24,6 +23,7 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import delete
 
+from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import DailyBasicData, SessionLocal
 
 import json
@@ -32,25 +32,20 @@ import json
 
 
 
-# Use DATA_DIRECTORY from env var if available (for Docker),
+# Use统一的数据目录常量，默认指向容器内 /app/data
+DATA_ROOT = SysPath(DATA_DIRECTORY)
+DATA_FILE_CANDIDATES = [str(DATA_ROOT / "数据结构_基本指标表.json")]
 
 # otherwise, fall back to a path relative to the project root (for local dev).
 
-DATA_PATH_STR = os.environ.get("DATA_DIRECTORY")
-
-if DATA_PATH_STR:
 
     # Path inside container, e.g., /app/data
 
-    DATA_ROOT = SysPath(DATA_PATH_STR)
 
-else:
 
     # Path for local development
 
-    PROJECT_ROOT = SysPath(__file__).resolve().parents[3]
 
-    DATA_ROOT = PROJECT_ROOT / "backend_data"
 
 EAST_8_TZ = timezone(timedelta(hours=8))
 
@@ -66,7 +61,7 @@ COMPANY_DICT_KEYS = ("company_dict", "单位字典")
 
 
 def _iter_data_files() -> Iterable[SysPath]:
-    """返回唯一的数据文件路径。"""
+    """返回所有存在的候选数据文件路径。"""
     if BASIC_DATA_FILE.exists():
         yield BASIC_DATA_FILE
 
@@ -280,16 +275,16 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
             continue
 
         raw_value = record.get("value_raw")
-        if raw_value is None:
-            continue
         if isinstance(raw_value, str):
             value = raw_value.strip()
             if value == "":
-                continue
+                value = "0"
+        elif raw_value is None:
+            value = "0"
         else:
-            value = str(raw_value)
+            value = str(raw_value).strip()
             if value == "":
-                continue
+                value = "0"
 
         row_label = record.get("row_label") or ""
         row_label_str = str(row_label).strip()
@@ -646,7 +641,7 @@ def list_sheets():
             status_code=404,
             content={
                 "ok": False,
-                "message": "未在 backend_data 目录中找到任何模板文件",
+                "message": f"未在 {DATA_ROOT} 目录中找到任何模板文件",
             },
         )
     return JSONResponse(status_code=200, content=catalog)

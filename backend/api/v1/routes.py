@@ -1,7 +1,7 @@
 """v1 版本业务路由."""
 
 import json
-from pathlib import Path
+from backend.config import DATA_DIRECTORY
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -9,7 +9,7 @@ from .daily_report_25_26 import router as project_router
 
 
 router = APIRouter()
-PROJECT_LIST_FILE = Path(__file__).resolve().parents[3] / "backend_data" / "项目列表.json"
+PROJECT_LIST_FILE = DATA_DIRECTORY / "项目列表.json"
 
 
 @router.get("/ping", summary="连通性测试", tags=["system"])
