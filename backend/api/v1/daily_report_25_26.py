@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import delete
 
 from backend.config import DATA_DIRECTORY
-from backend.db.database_daily_report_25_26 import DailyBasicData, SessionLocal
+from backend.db.database_daily_report_25_26 import CoalInventoryData, DailyBasicData, SessionLocal
 
 import json
 
@@ -955,15 +955,81 @@ def _write_coal_inventory_debug(payload: Dict[str, Any], records: List[Dict[str,
         fh.write("\n```\n\n")
 
 
+def _persist_coal_inventory(records: List[Dict[str, Any]]) -> int:
+    """将煤炭库存记录写入数据库，按 (company, coal_type, storage_type, date) 删除后插入。"""
+    if not records:
+        return 0
+
+    session = SessionLocal()
+    try:
+        models: List[CoalInventoryData] = []
+        delete_keys = set()
+
+        for record in records:
+            company = str(record.get("company") or "").strip()
+            coal_type = str(record.get("coal_type") or "").strip()
+            storage_type = str(record.get("storage_type") or "").strip()
+            if not company or not coal_type or not storage_type:
+                continue
+
+            row_date = _parse_date_value(record.get("date"))
+            if row_date is None:
+                continue
+
+            value_decimal = _parse_decimal_value(record.get("value"))
+            operation_time = _parse_operation_time(record.get("operation_time"))
+
+            models.append(
+                CoalInventoryData(
+                    company=company,
+                    company_cn=str(record.get("company_cn") or "").strip() or None,
+                    coal_type=coal_type,
+                    coal_type_cn=str(record.get("coal_type_cn") or "").strip() or None,
+                    storage_type=storage_type,
+                    storage_type_cn=str(record.get("storage_type_cn") or "").strip() or None,
+                    value=value_decimal,
+                    unit=str(record.get("unit") or "").strip() or None,
+                    note=str(record.get("note") or "").strip() or None,
+                    date=row_date,
+                    operation_time=operation_time or datetime.now(EAST_8_TZ),
+                )
+            )
+            delete_keys.add((company, coal_type, storage_type, row_date))
+
+        if not models:
+            return 0
+
+        for company, coal_type, storage_type, row_date in delete_keys:
+            session.execute(
+                delete(CoalInventoryData).where(
+                    CoalInventoryData.company == company,
+                    CoalInventoryData.coal_type == coal_type,
+                    CoalInventoryData.storage_type == storage_type,
+                    CoalInventoryData.date == row_date,
+                )
+            )
+
+        session.bulk_save_objects(models)
+        session.commit()
+        return len(models)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONResponse:
-    """特殊处理煤炭库存表，仅输出调试数据。"""
+    """处理煤炭库存表，输出调试并写入数据库。"""
     records = _parse_coal_inventory_records(payload)
     _write_coal_inventory_debug(payload, records)
+    inserted = _persist_coal_inventory(records)
     return JSONResponse(
         status_code=200,
         content={
             "ok": True,
-            "message": "煤炭库存数据已记录至 backend_data/test.md",
+            "message": "煤炭库存数据已写入 coal_inventory_data（同时记录于 backend_data/test.md）",
             "records": len(records),
+            "inserted": inserted,
         },
     )

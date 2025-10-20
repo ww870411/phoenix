@@ -62,5 +62,5 @@ CREATE TABLE IF NOT EXISTS coal_inventory_data (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_coal_inventory_unique
-    ON Coal_inventory_data (company, coal_type, date);
+    ON Coal_inventory_data (company, coal_type, date, storage_type);
 

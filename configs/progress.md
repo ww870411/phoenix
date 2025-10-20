@@ -477,6 +477,6 @@
 - 备注：开发时如需额外挂载其它目录，可在 compose 覆盖文件中扩展，主配置保持最小权限原则。
 
 ### 2025-10-22 煤炭库存调试输出（留痕）
-- 动作：`/submit` 接口新增 `Coal_inventory_Sheet` 专用处理，拆解 payload 生成结构化记录，并写入 `backend_data/test.md`，暂不触发数据库写入。
-- 验证：通过前端或调试脚本提交煤炭库存样例，请检查 `backend_data/test.md` 中的原始 payload 与 parsed records。
+- 动作：`/submit` 接口新增 `Coal_inventory_Sheet` 专用处理，拆解 payload 生成结构化记录，写入 `backend_data/test.md` 并同步写库至 `coal_inventory_data`（删除后插入，键为 `company+coal_type+storage_type+date`）。
+- 验证：通过前端或调试脚本提交煤炭库存样例，请检查 `backend_data/test.md` 中的原始 payload 与 parsed records`，以及数据库表写入结果。
 - 备注：后续在确认转换逻辑后，再接入 `coal_inventory_data` 写库功能。
