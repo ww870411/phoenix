@@ -30,20 +30,31 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 目录快照（自动维护）
 
-更新时间：2025-10-21
+更新时间：2025-10-22
 
 - 目录
   - `Dockerfile`
-  - `main.py`
   - `README.md`
+  - `__init__.py`
+  - `config.py`
+  - `main.py`
   - `api/`
     - `__init__.py`
     - `v1/`
       - `__init__.py`
       - `routes.py`（统一前缀 `/api/v1`）
-      - `daily_report_25_26.py`（项目路由）
-- `models/`、`schemas/`、`services/`（占位）
-- 本次会话复核目录，未调整后端代码结构，维持 2025-10-20 版本布局以与前端更新保持同步记录。
+      - `daily_report_25_26.py`（项目路由与模板/填报/查询逻辑）
+  - `db/`
+    - `__init__.py`
+    - `database_daily_report_25_26.py`
+  - `models/`
+    - `__init__.py`
+  - `schemas/`
+    - `__init__.py`
+  - `services/`
+    - `__init__.py`
+  - `sql/`
+    - `create_tables.sql`
 
 ## 接口路线图（2025-10-19）
 

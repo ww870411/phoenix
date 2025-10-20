@@ -480,3 +480,8 @@
 - 动作：`/submit` 接口新增 `Coal_inventory_Sheet` 专用处理，拆解 payload 生成结构化记录，写入 `backend_data/test.md` 并同步写库至 `coal_inventory_data`（删除后插入，键为 `company+coal_type+storage_type+date`）。
 - 验证：通过前端或调试脚本提交煤炭库存样例，请检查 `backend_data/test.md` 中的原始 payload 与 parsed records`，以及数据库表写入结果。
 - 备注：后续在确认转换逻辑后，再接入 `coal_inventory_data` 写库功能。
+
+### 2025-10-22 模板列扩展透传（留痕）
+- 动作：多次迭代 `backend/api/v1/daily_report_25_26.py` 中 `_decorate_columns`，最终固定在模板原始列的第三、第四位写入“当日/去年同期”日期，占用原有的两个空白占位列，同时保留其余自定义列（如“解释说明”）的顺序与内容。
+- 验证：手动审查返回列数组构造逻辑，确认在长度不足时补齐占位后写入日期；待前端重新请求模板后观察列顺序变化。
+- 备注：后续若需调整日期策略，可在同函数中继续扩展，不必修改模板文件。

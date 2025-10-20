@@ -1,0 +1,1 @@
+2025-10-22：调整 backend/api/v1/daily_report_25_26.py 中 _decorate_columns，保留模板 JSON 配置中的全部列并在末尾追加当前/去年日期列，以便新增加的“解释说明”等列能够透传至前端展示。

@@ -6,21 +6,25 @@
 
 ```
 frontend/
-├─ src/
-│  ├─ App.vue                 # 根组件
-│  ├─ main.js                 # 应用入口
-│  ├─ router/index.js         # 全局路由：/login、/projects、/projects/:projectKey/data_entry/sheets、/projects/:projectKey/data_entry/sheets/:sheetKey
-│  ├─ stores/                 # Pinia store（占位）
-│  └─ daily_report_25_26/
-│     ├─ components/          # AppHeader、Breadcrumbs 等公共组件
-│     ├─ constants/           # project_key、sheet 常量
-│     ├─ pages/               # LoginView、ProjectSelectView、Sheets、DataEntryView
-│     ├─ services/            # API 封装（api.js）
-│     ├─ store/               # 业务状态（预留）
-│     └─ styles/theme.css     # 统一视觉风格
-├─ public/
+├─ .env.development         # 本地调试环境变量（API 基础路径等）
+├─ Dockerfile               # 前端容器镜像定义
+├─ nginx.conf               # Nginx 转发配置
+├─ package.json
 ├─ vite.config.js
-└─ package.json
+├─ src/
+│  ├─ App.vue               # 根组件
+│  ├─ main.js               # 应用入口
+│  ├─ router/index.js       # 全局路由：/login、/projects、/projects/:projectKey/data_entry/sheets、/projects/:projectKey/data_entry/sheets/:sheetKey
+│  ├─ stores/               # Pinia store（占位）
+│  └─ daily_report_25_26/
+│     ├─ components/        # AppHeader、Breadcrumbs 等公共组件
+│     ├─ constants/         # project_key、sheet 常量
+│     ├─ pages/             # LoginView、ProjectSelectView、Sheets、DataEntryView（动态渲染模板列，含解释说明）
+│     ├─ services/          # API 封装（api.js）
+│     ├─ store/             # 业务状态（预留）
+│     └─ styles/theme.css   # 统一视觉风格
+├─ public/
+└─ README.md
 ```
 
 ## 启动方式
@@ -64,7 +68,7 @@ docker compose up -d --build
 | --- | --- |
 | `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |
 | `GET /api/v1/projects/{project_key}/data_entry/sheets` | 返回数据填报模板清单；单个条目同时包含 `单位名/表名` 以及 `unit_name/sheet_name` |
-| `GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组；同时附带模板定义的字典字段（如“项目字典”“单位字典”），提交时需保持字段名与内容不变 |
+| `GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` | 返回填报模板；`columns` 先保留模板配置中的全部列（含“解释说明”等自定义列），再自动追加当前日期与上一年度同日；`rows` 为二维数组；同时附带模板定义的字典字段（如“项目字典”“单位字典”），提交时需保持字段名与内容不变 |
 | `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit` | 占位（待实现） |
 | `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query` | 占位（待实现） |
 

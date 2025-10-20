@@ -600,11 +600,12 @@ async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONRespo
         )
 
 
-def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
-    base = list(columns) if isinstance(columns, list) else list(columns)
-    head = base[:2]
-    while len(head) < 2:
-        head.append("")
+def _decorate_columns(columns: Iterable[Any]) -> List[str]:
+    decorated = list(columns) if isinstance(columns, list) else list(columns)
+
+    # 保证存在前两列占位（项目、计量单位）
+    while len(decorated) < 2:
+        decorated.append("")
 
     tz = timezone(timedelta(hours=8))
     yesterday = (datetime.now(tz) - timedelta(days=1)).date()
@@ -616,7 +617,14 @@ def _decorate_columns(columns: Iterable[Any]) -> Iterable[str]:
         last_year = yesterday.replace(year=yesterday.year - 1, month=2, day=28)
     previous = last_year.isoformat()
 
-    return head + [current, previous]
+    # 确保有两个占位列用于写入日期
+    while len(decorated) < 4:
+        decorated.append("")
+
+    decorated[2] = current
+    decorated[3] = previous
+
+    return decorated
 
 
 def _collect_catalog() -> Dict[str, Dict[str, str]]:
