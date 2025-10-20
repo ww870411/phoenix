@@ -147,7 +147,7 @@ POST /sheets/{sheet_key}/query       改为POST /data_entry/sheets/{key}/query
       - ./:/app
 也要取消
 
-
+yml中的路径环境变量有什么用？
 
 
 

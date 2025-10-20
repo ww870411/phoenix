@@ -805,6 +805,11 @@
         "BeiFang": "北方热电",
         "JinPu": "金普热电",
         "ZhuangHe": "庄河环海"
+      },
+      "状态字典":{
+        "coal_in_transit": "在途煤炭",
+        "coal_at_port": "港口存煤",
+        "coal_at_plant": "厂内存煤"
       }
     }
 }
