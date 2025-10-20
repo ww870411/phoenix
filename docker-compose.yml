@@ -9,6 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: phoenix
+      PGDATA: /app/db_data
     ports:
       - "5432:5432"
     healthcheck:
@@ -17,12 +18,8 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - type: bind
-        source: "D:/编程项目/phoenix/db_data"
-        target: /var/lib/postgresql/data
-      - type: bind
-        source: ./backend/sql
-        target: /app/sql
+      - ./db_data:/app/db_data
+      - ./backend/sql:/app/sql
 
   backend:
     build:
@@ -33,6 +30,7 @@ services:
     environment:
       # 供后端使用的数据库连接字符串（后续在 settings 中读取）
       DATABASE_URL: postgresql://postgres:postgres@db:5432/phoenix
+      DATA_DIRECTORY: /app/data
       PYTHONUNBUFFERED: "1"
     depends_on:
       db:
@@ -43,8 +41,8 @@ services:
     volumes:
       # 绑定挂载：用于存放配置与用户数据（满足你的需求）
       - ./backend_data:/app/data
-      # 源码热更新：将整个项目挂载到容器 /app，便于开发时实时生效
-      - ./:/app
+      # 源码热更新：将 backend 代码挂载到容器 /app/backend，便于开发时实时生效
+      - ./backend:/app/backend
 
   frontend:
     image: node:20-alpine

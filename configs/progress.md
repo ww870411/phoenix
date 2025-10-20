@@ -470,3 +470,8 @@
 - 动作：新增 `backend/config.py` 统一暴露 `DATA_DIRECTORY`（默认 `/app/data`），`daily_report_25_26.py` 与 `routes.py` 改为引用该常量，移除对项目根 `backend_data` 的硬编码；取消模板兜底读取 `数据结构_常量指标表.json`，坚持以绑定挂载目录的基本指标表为唯一来源。
 - 验证：静态检查确认 `DATA_ROOT`、`PROJECT_LIST_FILE` 均指向新常量，错误提示动态输出目录路径；待容器环境验证挂载 `/app/data` 后模板加载与项目列表读取正常。
 - 备注：可通过环境变量 `DATA_DIRECTORY` 覆盖默认目录，Docker Compose 已将 `./backend_data` 绑定至 `/app/data`。
+
+### 2025-10-22 Docker 路径收敛（留痕）
+- 动作：将 `db` 服务数据卷改为 `./db_data:/app/db_data` 并设置 `PGDATA=/app/db_data`，去除硬编码绝对路径；收窄 `backend` 服务为 `./backend:/app/backend` 与 `./backend_data:/app/data`，同时显式设置 `DATA_DIRECTORY=/app/data`。
+- 验证：docker-compose 配置静态检查通过；后续需在容器内确认 Postgres 能在新目录初始化、后端读取模板正常。
+- 备注：开发时如需额外挂载其它目录，可在 compose 覆盖文件中扩展，主配置保持最小权限原则。

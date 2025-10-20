@@ -142,6 +142,13 @@ POST /sheets/{sheet_key}/query       改为POST /data_entry/sheets/{key}/query
 新增 backend/config.py:1-12 定义全局 DATA_DIRECTORY（默认 /app/data，可用环境变量覆盖），成为后端访问数据卷的唯一入口。
 取消使用《常量指标表》的兜底行为。
 
+数据库的数据路径也有问题，而且yml文件中写的各类挂载路径还都设置了一个似乎是冗余的全面路径：
+# 源码热更新：将整个项目挂载到容器 /app，便于开发时实时生效
+      - ./:/app
+也要取消
+
+
+
 
 
 
