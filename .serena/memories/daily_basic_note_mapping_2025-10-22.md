@@ -1,0 +1,1 @@
+2025-10-22：标准数据填报的 `_flatten_records` 识别模板中的“解释说明”等说明列，将其当作对应行“本日”记录的 note 字段，并随 delete+insert 写入 `daily_basic_data`，空 note 保持为空字符串。

@@ -267,9 +267,40 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
         if isinstance(item_cn, str):
             reverse_item_map[item_cn.strip()] = item_key
 
+    note_column_index: Optional[int] = None
+    note_labels = {"解释说明", "说明", "备注", "note", "Note"}
+    for idx, name in enumerate(columns):
+        if isinstance(name, str) and name.strip() in note_labels:
+            note_column_index = idx
+            break
+    if note_column_index is None and len(columns) >= 5:
+        note_column_index = len(columns) - 1
+
     records = normalized.get("records")
     if not isinstance(records, list):
         return []
+
+    notes_by_row: Dict[int, str] = {}
+    if note_column_index is not None:
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            col_index = record.get("column_index")
+            row_index = record.get("row_index")
+            if (
+                isinstance(col_index, int)
+                and col_index == note_column_index
+                and isinstance(row_index, int)
+            ):
+                raw_note = record.get("value_raw")
+                if isinstance(raw_note, str):
+                    notes_by_row[row_index] = raw_note.strip()
+                elif raw_note is None:
+                    notes_by_row[row_index] = ""
+                else:
+                    notes_by_row[row_index] = str(raw_note).strip()
+
+    current_column_index: Optional[int] = 2 if len(columns) > 2 else None
 
     flattened: List[Dict[str, Any]] = []
     for record in records:
@@ -279,6 +310,8 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
         if not isinstance(col_index, int) or col_index < 2:
             continue
         if col_index >= len(columns):
+            continue
+        if note_column_index is not None and col_index == note_column_index:
             continue
 
         raw_value = record.get("value_raw")
@@ -300,6 +333,14 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
         date_value = columns[col_index] if col_index < len(columns) else ""
         date_value = date_value.strip() if isinstance(date_value, str) else str(date_value)
 
+        note_value = ""
+        if (
+            current_column_index is not None
+            and col_index == current_column_index
+            and isinstance(record.get("row_index"), int)
+        ):
+            note_value = notes_by_row.get(record["row_index"], "")
+
         item_key = reverse_item_map.get(row_label_str)
         if not item_key:
             for candidate_key, candidate_cn in item_dict.items():
@@ -317,7 +358,7 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
                 "item_cn": row_label_str,
                 "value": value,
                 "unit": unit_str,
-                "note": "",
+                "note": note_value,
                 "date": date_value,
                 "status": status,
                 "operation_time": operation_time,
