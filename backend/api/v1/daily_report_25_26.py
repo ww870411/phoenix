@@ -554,7 +554,14 @@ def get_sheet_template(
             },
         )
 
-    columns = _decorate_columns(columns_raw)
+    # 根据 sheet_key 判断模板类型并选择不同的列处理方式
+    if sheet_key == "Coal_inventory_Sheet":
+        template_type = "crosstab"
+        columns = list(columns_raw)  # 直接使用原始列，不加注日期
+    else:
+        template_type = "standard"
+        columns = _decorate_columns(columns_raw)  # 对标准报表加注日期
+
     rows = [list(row) for row in rows_raw if isinstance(row, list)]
     item_dict = _extract_mapping(payload, ITEM_DICT_KEYS)
     company_dict = _extract_mapping(payload, COMPANY_DICT_KEYS)
@@ -571,6 +578,7 @@ def get_sheet_template(
             "rows": rows,
             "item_dict": item_dict,
             "company_dict": company_dict,
+            "template_type": template_type,  # 增加模板类型字段
         },
     )
 

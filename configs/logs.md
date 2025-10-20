@@ -149,6 +149,8 @@ POST /sheets/{sheet_key}/query       改为POST /data_entry/sheets/{key}/query
 
 yml中的路径环境变量有什么用？
 
+修正 煤炭库存表的渲染及数据库写表过程。
+
 
 
 

@@ -41,9 +41,6 @@
 <script setup>
 import '../styles/theme.css'
 import RevoGrid from '@revolist/vue3-datagrid'
-// 注意：@revolist/revogrid 未在 exports 中暴露 css 入口，
-// 直接导入 css 会导致 Vite 依赖扫描报错（Missing specifier）。
-// 使用官方 Vue 包装组件自动注册自定义元素，并结合自定义外层样式。
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter } from 'vue-router'
@@ -52,49 +49,257 @@ import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects';
 
+// --- 基本路由和状态 --- 
 const route = useRoute();
 const router = useRouter();
 const projectKey = String(route.params.projectKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
 const initialDate = new Date().toISOString().slice(0,10);
-
 const bizDate = ref(String(initialDate));
 
 if (!projectKey || !sheetKey) {
   router.replace({ name: 'projects' });
 }
-const projectName = computed(() => getProjectNameById(projectKey));
 
+// --- 模板和表格状态 ---
+const projectName = computed(() => getProjectNameById(projectKey));
 const sheetName = ref('');
 const unitName = ref('');
 const sheetDisplayName = computed(() => sheetName.value || sheetKey);
 const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
-const templateDicts = ref({
-  entries: {},
-  itemPrimary: null,
-  companyPrimary: null,
-});
-
-function cloneDictValue(value) {
-  if (value && typeof value === 'object') {
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch (err) {
-      return value;
-    }
-  }
-  return value;
-}
+const templateType = ref('standard'); // 新增：模板类型
+const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null });
 const submitTime = ref('');
-const values = reactive({});
+
+// --- RevoGrid 状态 ---
 const gridColumns = ref([]);
 const gridSource = ref([]);
 const gridRef = ref(null);
-let textMeasureCtx = null;
-function toKey(ri, ci) { return `${ri}-${ci}`; }
 
+// --- Helper --- 
+function cloneDictValue(value) {
+  if (value && typeof value === 'object') {
+    try { return JSON.parse(JSON.stringify(value)); } catch (err) { return value; }
+  }
+  return value;
+}
+
+// --- 渲染逻辑：标准模板 ---
+async function setupStandardGrid(tpl) {
+  const colDefs = [];
+  colDefs.push({ prop: 'c0', name: tpl.columns[0] ?? '项目', readonly: true, autoSize: true, minSize: 160 });
+  colDefs.push({ prop: 'c1', name: tpl.columns[1] ?? '计量单位', readonly: true, autoSize: true, minSize: 120 });
+  
+  const fillable = tpl.columns.map((_, i) => i).filter(i => i >= 2);
+  for (const ci of fillable) {
+    colDefs.push({ prop: `c${ci}`, name: String(tpl.columns[ci] ?? ''), autoSize: true, minSize: 120 });
+  }
+  gridColumns.value = colDefs;
+
+  const src = tpl.rows.map(r => {
+    const rec = { c0: r[0], c1: r[1] ?? '' };
+    for (const ci of fillable) rec[`c${ci}`] = '';
+    return rec;
+  });
+  gridSource.value = src;
+  await autoSizeFirstColumn();
+}
+
+// --- 渲染逻辑：交叉表模板 (煤炭库存) ---
+async function setupCrosstabGrid(tpl) {
+  const colDefs = tpl.columns.map((name, index) => ({
+    prop: `c${index}`,
+    name: String(name ?? ''),
+    readonly: index < 3, // 前三列（单位、煤种、计量单位）只读
+    autoSize: true,
+    minSize: 120,
+  }));
+  gridColumns.value = colDefs;
+
+  gridSource.value = tpl.rows.map(r => {
+    const record = {};
+    for (let i = 0; i < tpl.columns.length; i++) {
+      record[`c${i}`] = r[i] ?? '';
+    }
+    return record;
+  });
+}
+
+// --- 主数据加载逻辑 ---
+async function loadTemplate() {
+  const tpl = await getTemplate(projectKey, sheetKey);
+  
+  // 存储基础信息
+  sheetName.value = tpl.sheet_name || '';
+  unitName.value = tpl.unit_name || '';
+  unitId.value = tpl.unit_id || '';
+  columns.value = tpl.columns || [];
+  rows.value = tpl.rows || [];
+  templateType.value = tpl.template_type || 'standard';
+
+  // 存储字典
+  const dictCandidates = [
+    ['item_dict', 'item', tpl.item_dict],
+    ['company_dict', 'company', tpl.company_dict],
+  ];
+  const dictSnapshot = {};
+  let itemPrimary = null, companyPrimary = null;
+  for (const [key, role, rawValue] of dictCandidates) {
+    if (rawValue) {
+      const cloned = cloneDictValue(rawValue);
+      dictSnapshot[key] = cloned;
+      if (!itemPrimary && role === 'item') itemPrimary = cloned;
+      if (!companyPrimary && role === 'company') companyPrimary = cloned;
+    }
+  }
+  templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
+
+  // 根据模板类型选择渲染策略
+  if (templateType.value === 'crosstab') {
+    await setupCrosstabGrid(tpl);
+  } else {
+    await setupStandardGrid(tpl);
+  }
+}
+
+async function loadExisting() {
+  // 注意：当前查询和回填逻辑只适用于 standard 模板
+  if (templateType.value !== 'standard') return;
+
+  const q = await queryData({ project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value });
+  if (Array.isArray(q.cells)) {
+    for (const cell of q.cells) {
+      const { row_label, col_index, value_num, value_text } = cell;
+      const ri = rows.value.findIndex(r => r[0] === row_label);
+      if (ri >= 0 && col_index >= 0 && gridSource.value[ri]) {
+        gridSource.value[ri][`c${col_index}`] = value_num != null ? String(value_num) : String(value_text ?? '');
+      }
+    }
+  }
+  await autoSizeFirstColumn();
+}
+
+async function reloadTemplate() {
+  await loadTemplate();
+  await loadExisting();
+}
+
+// --- 提交逻辑 ---
+function handleSubmitStandard() {
+  const filledRows = rows.value.map((row, ri) => {
+    const newRow = [...row];
+    const record = gridSource.value?.[ri] ?? {};
+    for (let ci = 2; ci < columns.value.length; ci++) {
+      const key = `c${ci}`;
+      if (record[key] !== undefined) {
+        newRow[ci] = record[key];
+      }
+    }
+    return newRow;
+  });
+
+  return {
+    columns: columns.value,
+    rows: filledRows,
+  };
+}
+
+function handleSubmitCrosstab() {
+  // 对于交叉表，我们直接提交 gridSource，后端需要新的解析器
+  // 这里我们先按前端能做到的最清晰结构进行构建
+  return {
+    columns: columns.value,
+    rows: gridSource.value.map(record => columns.value.map((_, i) => record[`c${i}`] ?? '')),
+  };
+}
+
+async function onSubmit() {
+  let submissionData;
+  if (templateType.value === 'crosstab') {
+    submissionData = handleSubmitCrosstab();
+  } else {
+    submissionData = handleSubmitStandard();
+  }
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  
+  const payload = {
+    project_key: projectKey,
+    project_name: projectName.value || projectKey,
+    sheet_key: sheetKey,
+    sheet_name: sheetName.value || '',
+    unit_name: unitName.value || '',
+    biz_date: bizDate.value,
+    unit_id: unitId.value,
+    submit_time: currentSubmitTime,
+    status: 'submit',
+    ...submissionData,
+  };
+
+  // 添加字典
+  const dictBundle = templateDicts.value || {};
+  const entryMap = dictBundle.entries || {};
+  for (const [dictKey, dictValue] of Object.entries(entryMap)) {
+    payload[dictKey] = cloneDictValue(dictValue);
+  }
+  if (!payload.item_dict && dictBundle.itemPrimary) {
+    payload.item_dict = cloneDictValue(dictBundle.itemPrimary);
+  }
+  if (!payload.company_dict && dictBundle.companyPrimary) {
+    payload.company_dict = cloneDictValue(dictBundle.companyPrimary);
+  }
+
+  await submitData(payload);
+  submitTime.value = currentSubmitTime;
+  alert('提交成功');
+}
+
+// --- RevoGrid 事件处理 ---
+function handleAfterEdit(evt) {
+  const detail = evt?.detail ?? evt;
+  const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
+  for (const change of changes) {
+    const { rowIndex, prop, val } = change || {};
+    if (rowIndex == null || !prop) continue;
+    if (!gridSource.value[rowIndex]) continue;
+    gridSource.value[rowIndex][prop] = val;
+  }
+}
+
+// --- 生命周期 ---
+onMounted(async () => {
+  await nextTick();
+  await ensureProjectsLoaded().catch(() => {});
+  await loadTemplate();
+  await loadExisting();
+});
+
+// --- 遗留功能：仅用于标准模板 ---
+async function autoSizeFirstColumn() {
+  if (templateType.value !== 'standard' || !gridColumns.value.length) return;
+  await nextTick();
+  const gridComponent = gridRef.value;
+  const gridElement = gridComponent?.$el ?? gridComponent;
+  if (!gridElement) return;
+
+  const computed = typeof window !== 'undefined' ? window.getComputedStyle(gridElement) : null;
+  const font = computed?.font || '14px/1.4 "Segoe UI", Arial, sans-serif';
+  const candidates = [columns.value[0] ?? ''];
+  gridSource.value.forEach(row => candidates.push(row?.c0 ?? ''));
+  
+  const widest = Math.max(...candidates.map(c => measureTextWidth(c, font)));
+  const padding = 36;
+  const target = Math.max(gridColumns.value[0]?.minSize ?? 160, Math.ceil(widest) + padding);
+
+  gridColumns.value[0].size = target;
+  gridColumns.value = [...gridColumns.value];
+}
+
+let textMeasureCtx = null;
 function getTextMeasureContext() {
   if (typeof document === 'undefined') return null;
   if (textMeasureCtx) return textMeasureCtx;
@@ -109,223 +314,6 @@ function measureTextWidth(content, font) {
   if (!ctx || !text) return text.length * 14;
   ctx.font = font || '14px/1.4 "Segoe UI", Arial, sans-serif';
   return ctx.measureText(text).width;
-}
-
-// 在数据流完成后调用 RevoGrid 的 autoSize，保证首列根据行名重新计算宽度
-async function autoSizeFirstColumn() {
-  await nextTick();
-  if (!gridColumns.value.length) return;
-  const gridComponent = gridRef.value;
-  const gridElement = gridComponent?.$el ?? gridComponent;
-  if (!gridElement) return;
-
-  const computed = typeof window !== 'undefined' ? window.getComputedStyle(gridElement) : null;
-  const font = computed?.font || '14px/1.4 "Segoe UI", Arial, sans-serif';
-  const candidates = [];
-  if (columns.value[0]) candidates.push(columns.value[0]);
-  for (const row of gridSource.value) {
-    if (row && row.c0 != null) candidates.push(row.c0);
-  }
-  const widest = candidates.reduce((max, content) => {
-    const width = measureTextWidth(content, font);
-    return width > max ? width : max;
-  }, 0);
-  const padding = 36; // 预留左右内边距与排序指示器空间
-  const target = Math.max(gridColumns.value[0]?.minSize ?? 160, Math.ceil(widest) + padding);
-  gridColumns.value = gridColumns.value.map((col, index) => {
-    if (index !== 0) return col;
-    return { ...col, size: target };
-  });
-
-  if (typeof gridElement.autoSizeColumn === 'function') {
-    try {
-      gridElement.autoSizeColumn('c0', true);
-    } catch (err) {
-      try {
-        gridElement.autoSizeColumn(0, true);
-      } catch (innerErr) {
-        // 保底静默失败，避免影响主流程
-      }
-    }
-  }
-}
-
-async function loadTemplate() {
-  const tpl = await getTemplate(projectKey, sheetKey);
-  sheetName.value = tpl.sheet_name || '';
-  unitName.value = tpl.unit_name || '';
-  unitId.value = tpl.unit_id || '';
-  columns.value = tpl.columns || [];
-  rows.value = tpl.rows || [];
-  const dictCandidates = [
-    ['item_dict', 'item', tpl.item_dict],
-    ['company_dict', 'company', tpl.company_dict],
-    ['project_dict', 'item', tpl.project_dict],
-    ['unit_dict', 'company', tpl.unit_dict],
-    ['项目字典', 'item', tpl['项目字典']],
-    ['单位字典', 'company', tpl['单位字典']],
-  ];
-  const dictSnapshot = {};
-  let itemPrimary = null;
-  let companyPrimary = null;
-  for (const [key, role, rawValue] of dictCandidates) {
-    if (rawValue !== undefined) {
-      const cloned = cloneDictValue(rawValue);
-      dictSnapshot[key] = cloned;
-      if (!itemPrimary && role === 'item') {
-        itemPrimary = cloned;
-      }
-      if (!companyPrimary && role === 'company') {
-        companyPrimary = cloned;
-      }
-    }
-  }
-  templateDicts.value = {
-    entries: dictSnapshot,
-    itemPrimary,
-    companyPrimary,
-  };
-  // 清空当前值
-  Object.keys(values).forEach(k => delete values[k]);
-
-  // 构造 RevoGrid 列配置：c0=项目(只读)、c1=计量单位(只读)、c2+ 可编辑
-  const colDefs = [];
-  colDefs.push({
-    prop: 'c0',
-    name: columns.value[0] ?? '项目',
-    readonly: true,
-    autoSize: true,
-    minSize: 160,
-  });
-  colDefs.push({
-    prop: 'c1',
-    name: columns.value[1] ?? '计量单位',
-    readonly: true,
-    autoSize: true,
-    minSize: 120,
-  });
-  const fillable = columns.value.map((_, i) => i).filter(i => i >= 2);
-  for (const ci of fillable) {
-    colDefs.push({
-      prop: `c${ci}`,
-      name: String(columns.value[ci] ?? ''),
-      autoSize: true,
-      minSize: 120,
-    });
-  }
-  gridColumns.value = colDefs;
-
-  // 初始行数据
-  const src = rows.value.map(r => {
-    const rec = { c0: r[0], c1: r[1] ?? '' };
-    for (const ci of fillable) rec[`c${ci}`] = '';
-    return rec;
-  });
-  gridSource.value = src;
-  await autoSizeFirstColumn();
-}
-
-async function loadExisting() {
-  const q = await queryData({ project_key: projectKey, sheet_key: sheetKey, submit_time: submitTime.value });
-  // 将已填报的值映射到 values
-  if (Array.isArray(q.cells)) {
-    for (const cell of q.cells) {
-      const { row_label, col_index, value_type, value_num, value_text } = cell;
-      const ri = rows.value.findIndex(r => r[0] === row_label);
-      if (ri >= 0 && col_index >= 0) {
-        values[toKey(ri, col_index)] = value_type === 'num' ? String(value_num ?? '') : String(value_text ?? '');
-        // 同步到 gridSource
-        if (gridSource.value[ri]) {
-          gridSource.value[ri][`c${col_index}`] = values[toKey(ri, col_index)];
-        }
-      }
-    }
-  }
-  await autoSizeFirstColumn();
-}
-
-async function reloadTemplate() {
-  await loadTemplate();
-  await loadExisting();
-}
-
-async function onSubmit() {
-  const templateColumns = Array.isArray(columns.value) ? [...columns.value] : [];
-  const templateRows = Array.isArray(rows.value) ? rows.value : [];
-  const filledRows = templateRows.map((row, ri) => {
-    const base = Array.from({ length: templateColumns.length }, (_, ci) => {
-      if (Array.isArray(row) && ci < row.length) return row[ci];
-      return '';
-    });
-    const record = gridSource.value?.[ri] ?? {};
-    // 保持首列/计量单位与模板一致
-    if (Array.isArray(row)) {
-      if (row[0] !== undefined) base[0] = row[0];
-      if (row[1] !== undefined && base.length > 1) base[1] = row[1];
-    }
-    for (let ci = 2; ci < base.length; ci += 1) {
-      const key = `c${ci}`;
-      if (record[key] !== undefined) {
-        base[ci] = record[key];
-      }
-    }
-    return base;
-  });
-
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  const payload = {
-    project_key: projectKey,
-    project_name: projectName.value || projectKey,
-    sheet_key: sheetKey,
-    sheet_name: sheetName.value || '',
-    unit_name: unitName.value || '',
-    biz_date: bizDate.value,
-    unit_id: unitId.value,
-    columns: templateColumns,
-    rows: filledRows,
-    submit_time: currentSubmitTime,
-    status: 'submit',
-  };
-  const dictBundle = templateDicts.value || {};
-  const entryMap = dictBundle.entries || {};
-  for (const [dictKey, dictValue] of Object.entries(entryMap)) {
-    payload[dictKey] = cloneDictValue(dictValue);
-  }
-  if (!payload.item_dict && dictBundle.itemPrimary) {
-    payload.item_dict = cloneDictValue(dictBundle.itemPrimary);
-  }
-  if (!payload.company_dict && dictBundle.companyPrimary) {
-    payload.company_dict = cloneDictValue(dictBundle.companyPrimary);
-  }
-  await submitData(payload);
-  submitTime.value = currentSubmitTime;
-  // 简单提示
-  alert('提交成功');
-}
-
-onMounted(async () => {
-  await nextTick();
-  await ensureProjectsLoaded().catch(() => {});
-  await loadTemplate();
-  await loadExisting();
-});
-
-function handleAfterEdit(evt) {
-  const detail = evt?.detail ?? evt;
-  const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
-  for (const change of changes) {
-    const { rowIndex, prop, val } = change || {};
-    if (rowIndex == null || !prop) continue;
-    if (!gridSource.value[rowIndex]) continue;
-    gridSource.value[rowIndex][prop] = val;
-    const match = String(prop).match(/^c(\d+)$/);
-    if (match) {
-      const ci = Number(match[1]);
-      values[toKey(rowIndex, ci)] = val;
-    }
-  }
 }
 </script>
 
