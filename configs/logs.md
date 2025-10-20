@@ -38,8 +38,8 @@ odex resume 0199f1ca-fa0c-7023-847f-1b45cc2dfb9f
   前端页面与路由                                                                                                                                      
   - login: /login → frontend/src/daily_report_25_26/pages/LoginView.                                                                             
   - projects: /projects → frontend/src/daily_report_25_26/pages/ProjectSelectView.vue
-      - dashboard: /projects/:projectKey/sheets → frontend/src/daily_report_25_26/pages/DashboardView.                                      
-  - data-entry: /projects/:projectKey/sheets/:sheetKey → frontend/src/daily_report_25_26/pages/DataEntryView.                                  
+      - dashboard: /projects/:projectKey/data_entry/sheets → frontend/src/daily_report_25_26/pages/DashboardView.                                      
+  - data-entry: /projects/:projectKey/data_entry/sheets/:sheetKey → frontend/src/daily_report_25_26/pages/DataEntryView.                                  
   - 证据文件：frontend/src/router/index.js  
 
 
@@ -117,3 +117,18 @@ codex编写了一份创建数据库表的脚本，待容器启动后执行docker
 进行数据初次转换，待写入数据库。但“数据拆解”过程仍存在，需要去除
 
 在后端建立db文件夹，存放SQLALchemy相关文件，包括session，ORM模型。发现数据库中的表名都是小写，对应设定。
+程序会从记录中提取 (company, sheet_name_key, item_key, row_date) 这四个字段，全部符合则只更新不新增
+
+*将数据采集的相关页面及API全部加入data_entry前缀：
+【前端页面清单】
+/login                                              不变
+/projects                                           不变
+/projects/daily_report_25_26/sheets                 改为/projects/daily_report_25_26/data_entry/sheets 
+/projects/daily_report_25_26/sheets/{sheet_key}     改为/projects/daily_report_25_26/data_entry/sheets/{sheet_key} 
+
+【API清单】
+GET /sheets                          改为GET /data_entry/sheets                
+GET /sheets/{sheet_key}/template     改为GET /data_entry/sheets/{key}/template 
+POST /sheets/{sheet_key}/submit      改为POST /data_entry/sheets/{key}/submit  
+POST /sheets/{sheet_key}/query       改为POST /data_entry/sheets/{key}/query  
+

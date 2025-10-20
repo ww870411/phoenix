@@ -61,7 +61,7 @@ async function loadSheets() {
       unit_name: meta?.unit_name || meta?.['单位名'] || ''
     }))
   } catch (err) {
-    loadError.value = '无法获取表格清单，请确认后端接口 /api/v1/projects/{project_key}/sheets 已就绪。'
+    loadError.value = '无法获取表格清单，请确认后端接口 /api/v1/projects/{project_key}/data_entry/sheets 已就绪。'
     sheets.value = []
   }
 }

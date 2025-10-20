@@ -455,3 +455,8 @@
 - 影响：前端提交数据会同步落库，并在日志 `backend_data/data_handle.md` 中记录写库条数及异常；接口响应新增 `inserted` 字段反馈写入数量。
 - 回滚：撤销 `backend/api/v1/daily_report_25_26.py` 中 `_persist_daily_basic` 相关改动及 `backend/db/database_daily_report_25_26.py` 新增内容。
 - 验证：访问 `/submit` 调试接口，响应 `inserted` > 0 且数据库 `Daily_basic_data` 出现对应记录；如有异常，接口返回 500 并附错误信息。
+
+### 2025-10-21 数据填报路径统一（留痕）
+- 动作：后端与前端的 `/sheets` 路径统一调整为 `/data_entry/sheets`，同步更新导航跳转、API 服务调用与 README 说明。
+- 验证：逐项检索项目内路径引用，已清理旧路径并手动检查主要页面配置；待前后端联调确认接口请求。
+- 备注：后续新增展示、审核等业务域时可复用顶层分组策略，保持信息架构清晰。

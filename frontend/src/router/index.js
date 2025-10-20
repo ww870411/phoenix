@@ -18,13 +18,13 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/sheets',
+    path: '/projects/:projectKey/data_entry/sheets',
     name: 'dashboard',
     component: () => import('../daily_report_25_26/pages/Sheets.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/sheets/:sheetKey',
+    path: '/projects/:projectKey/data_entry/sheets/:sheetKey',
     name: 'data-entry',
     component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
     meta: { requiresAuth: true },

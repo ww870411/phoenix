@@ -125,7 +125,7 @@ phoenix/
 
 ### 1️⃣ 获取模板
 ```
-GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template
+GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template
 ```
 **响应：**
 ```json
@@ -141,7 +141,7 @@ GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template
 
 ### 2️⃣ 提交数据
 ```
-POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit
+POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit
 ```
 **请求体：**
 ```json
@@ -165,7 +165,7 @@ POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit
 
 ### 3️⃣ 查询数据
 ```
-POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query
+POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query
 ```
 **请求体：**
 ```json

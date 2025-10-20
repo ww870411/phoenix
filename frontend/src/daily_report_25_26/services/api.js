@@ -35,7 +35,7 @@ export function clearProjectsCache() {
 
 export async function getTemplate(projectKey, sheetKey) {
   const url = resolveApiPath(
-    `${projectPath(projectKey)}/sheets/${encodeURIComponent(sheetKey)}/template`,
+    `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/template`,
   );
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`获取模板失败: ${res.status}`);
@@ -43,7 +43,7 @@ export async function getTemplate(projectKey, sheetKey) {
 }
 
 export async function listSheets(projectKey) {
-  const url = resolveApiPath(`${projectPath(projectKey)}/sheets`);
+  const url = resolveApiPath(`${projectPath(projectKey)}/data_entry/sheets`);
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error(`获取表清单失败: ${res.status}`);
   return res.json();
@@ -52,7 +52,7 @@ export async function listSheets(projectKey) {
 export async function submitData(payload) {
   const { project_key, sheet_key } = payload;
   const url = resolveApiPath(
-    `${projectPath(project_key)}/sheets/${encodeURIComponent(sheet_key)}/submit`,
+    `${projectPath(project_key)}/data_entry/sheets/${encodeURIComponent(sheet_key)}/submit`,
   );
   const res = await fetch(url, {
     method: 'POST',
@@ -66,7 +66,7 @@ export async function submitData(payload) {
 export async function queryData(payload) {
   const { project_key, sheet_key } = payload;
   const url = resolveApiPath(
-    `${projectPath(project_key)}/sheets/${encodeURIComponent(sheet_key)}/query`,
+    `${projectPath(project_key)}/data_entry/sheets/${encodeURIComponent(sheet_key)}/query`,
   );
   const res = await fetch(url, {
     method: 'POST',

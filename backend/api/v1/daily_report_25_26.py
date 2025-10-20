@@ -531,7 +531,7 @@ def ping_daily_report():
     return {"ok": True, "project": "daily_report_25_26", "message": "pong"}
 
 
-@router.get("/sheets/{sheet_key}/template", summary="获取填报模板")
+@router.get("/data_entry/sheets/{sheet_key}/template", summary="获取数据填报模板")
 def get_sheet_template(
     sheet_key: str = Path(..., description="目标 sheet_key"),
 ):
@@ -580,7 +580,7 @@ def get_sheet_template(
     )
 
 
-@router.post("/sheets/{sheet_key}/submit", summary="提交数据（调试）")
+@router.post("/data_entry/sheets/{sheet_key}/submit", summary="提交数据填报（调试）")
 async def submit_debug(
     request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
@@ -624,7 +624,7 @@ async def submit_debug(
 
 
 
-@router.post("/sheets/{sheet_key}/query", summary="查询数据（占位）")
+@router.post("/data_entry/sheets/{sheet_key}/query", summary="查询数据填报（占位）")
 def query_placeholder(
     sheet_key: str = Path(..., description="目标 sheet_key"),
 ):
@@ -638,7 +638,7 @@ def query_placeholder(
     )
 
 
-@router.get("/sheets", summary="获取模板清单")
+@router.get("/data_entry/sheets", summary="获取数据填报模板清单")
 def list_sheets():
     catalog = _collect_catalog()
     if not catalog:

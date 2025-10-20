@@ -9,7 +9,7 @@ frontend/
 ├─ src/
 │  ├─ App.vue                 # 根组件
 │  ├─ main.js                 # 应用入口
-│  ├─ router/index.js         # 全局路由：/login、/projects、/projects/:projectKey/sheets、/projects/:projectKey/sheets/:sheetKey
+│  ├─ router/index.js         # 全局路由：/login、/projects、/projects/:projectKey/data_entry/sheets、/projects/:projectKey/data_entry/sheets/:sheetKey
 │  ├─ stores/                 # Pinia store（占位）
 │  └─ daily_report_25_26/
 │     ├─ components/          # AppHeader、Breadcrumbs 等公共组件
@@ -46,10 +46,10 @@ docker compose up -d --build
 - `/login` → `LoginView.vue`
 - `/projects` → `ProjectSelectView.vue`
   - 首次进入时请求 `GET /api/v1/projects`，显示项目中文名列表并根据所选项目跳转。
-- `/projects/:projectKey/sheets` → `Sheets.vue`
+- `/projects/:projectKey/data_entry/sheets` → `Sheets.vue`
   - 展示模板清单；按单位分组并以卡片呈现；点击表名进入填报页面；
   - `listSheets` 响应新增 `unit_name/sheet_name` 字段，以适配英文/中文双写。 
-- `/projects/:projectKey/sheets/:sheetKey` → `DataEntryView.vue`
+- `/projects/:projectKey/data_entry/sheets/:sheetKey` → `DataEntryView.vue`
   - 使用 `@revolist/vue3-datagrid` 提供的 `RevoGrid` 组件渲染表格，自带自定义元素注册；
   - 通过 `@afteredit` 事件回调同步 `gridSource`，提交阶段汇总单元格生成 `cells`；
   - 模板 `columns` 的后两列分别为“今日日期”“去年同日”，用于展示对比列。
@@ -63,10 +63,10 @@ docker compose up -d --build
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |
-| `GET /api/v1/projects/{project_key}/sheets` | 返回表格清单；单个条目同时包含 `单位名/表名` 以及 `unit_name/sheet_name` |
-| `GET /api/v1/projects/{project_key}/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组；同时附带模板定义的字典字段（如“项目字典”“单位字典”），提交时需保持字段名与内容不变 |
-| `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/submit` | 占位（待实现） |
-| `POST /api/v1/projects/{project_key}/sheets/{sheet_key}/query` | 占位（待实现） |
+| `GET /api/v1/projects/{project_key}/data_entry/sheets` | 返回数据填报模板清单；单个条目同时包含 `单位名/表名` 以及 `unit_name/sheet_name` |
+| `GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` | 返回填报模板；`columns` 自动补齐当前日期与上一年度同日；`rows` 为二维数组；同时附带模板定义的字典字段（如“项目字典”“单位字典”），提交时需保持字段名与内容不变 |
+| `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit` | 占位（待实现） |
+| `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query` | 占位（待实现） |
 
 前端 `services/api.js` 会读取 `.env` 中的 `VITE_API_BASE`，默认 `http://127.0.0.1:8000`，可按部署场景调整。
 

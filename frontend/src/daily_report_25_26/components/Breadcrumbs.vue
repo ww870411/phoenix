@@ -51,7 +51,7 @@ const items = computed(() => {
       { label: '项目', to: '/projects' },
       {
         label: String(projectLabel || ''),
-        to: projectKey ? `/projects/${encodeURIComponent(projectKey)}/sheets` : null,
+        to: projectKey ? `/projects/${encodeURIComponent(projectKey)}/data_entry/sheets` : null,
       },
       { label: '数据填报', to: null },
     ]
