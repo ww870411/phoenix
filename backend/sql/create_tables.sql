@@ -19,6 +19,26 @@ CREATE TABLE IF NOT EXISTS daily_basic_data (
 CREATE INDEX IF NOT EXISTS idx_daily_basic_date_company
     ON Daily_basic_data (date, company,sheet_name,item,item_cn);
 
+
+CREATE TABLE IF NOT EXISTS gongre_branches_detail_data (
+    id              BIGSERIAL PRIMARY KEY,
+    center          TEXT NOT NULL,
+    center_cn       TEXT,
+    sheet_name      TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    item_cn         TEXT,
+    value           NUMERIC(18,4),
+    unit            TEXT,
+    note            TEXT,
+    date            DATE NOT NULL,
+    status          VARCHAR(32) ,
+    operation_time  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS gongre_branches_detail_data_center_date_item
+    ON gongre_branches_detail_data (date, center,item);
+
+
 CREATE TABLE IF NOT EXISTS constant_data (
     id              BIGSERIAL PRIMARY KEY,
     company         TEXT NOT NULL,

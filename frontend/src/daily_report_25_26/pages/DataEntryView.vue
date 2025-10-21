@@ -88,22 +88,40 @@ function cloneDictValue(value) {
   return value;
 }
 
+function resolveReadonlyLimit(columnList) {
+  if (!Array.isArray(columnList)) {
+    return 1;
+  }
+  const targetIndex = columnList.findIndex(col => {
+    if (typeof col !== 'string') return false;
+    return col.trim().includes('计量单位');
+  });
+  return targetIndex >= 0 ? targetIndex : 1;
+}
+
 // --- 渲染逻辑：标准模板 ---
 async function setupStandardGrid(tpl) {
-  const colDefs = [];
-  colDefs.push({ prop: 'c0', name: tpl.columns[0] ?? '项目', readonly: true, autoSize: true, minSize: 160 });
-  colDefs.push({ prop: 'c1', name: tpl.columns[1] ?? '计量单位', readonly: true, autoSize: true, minSize: 120 });
-  
-  const fillable = tpl.columns.map((_, i) => i).filter(i => i >= 2);
-  for (const ci of fillable) {
-    colDefs.push({ prop: `c${ci}`, name: String(tpl.columns[ci] ?? ''), autoSize: true, minSize: 120 });
-  }
+  const readonlyLimit = resolveReadonlyLimit(tpl.columns);
+  const colDefs = tpl.columns.map((colName, index) => {
+    const base = {
+      prop: `c${index}`,
+      name: String(colName ?? ''),
+      autoSize: true,
+      minSize: index === 0 ? 160 : 120,
+    };
+    if (index <= readonlyLimit) {
+      base.readonly = true;
+    }
+    return base;
+  });
   gridColumns.value = colDefs;
 
-  const src = tpl.rows.map(r => {
-    const rec = { c0: r[0], c1: r[1] ?? '' };
-    for (const ci of fillable) rec[`c${ci}`] = '';
-    return rec;
+  const src = tpl.rows.map(row => {
+    const record = {};
+    for (let ci = 0; ci < tpl.columns.length; ci++) {
+      record[`c${ci}`] = row?.[ci] ?? '';
+    }
+    return record;
   });
   gridSource.value = src;
   await autoSizeFirstColumn();
@@ -111,13 +129,19 @@ async function setupStandardGrid(tpl) {
 
 // --- 渲染逻辑：交叉表模板 (煤炭库存) ---
 async function setupCrosstabGrid(tpl) {
-  const colDefs = tpl.columns.map((name, index) => ({
-    prop: `c${index}`,
-    name: String(name ?? ''),
-    readonly: index < 3, // 前三列（单位、煤种、计量单位）只读
-    autoSize: true,
-    minSize: 120,
-  }));
+  const readonlyLimit = resolveReadonlyLimit(tpl.columns);
+  const colDefs = tpl.columns.map((name, index) => {
+    const base = {
+      prop: `c${index}`,
+      name: String(name ?? ''),
+      autoSize: true,
+      minSize: index === 0 ? 160 : 120,
+    };
+    if (index <= readonlyLimit) {
+      base.readonly = true;
+    }
+    return base;
+  });
   gridColumns.value = colDefs;
 
   gridSource.value = tpl.rows.map(r => {
@@ -196,10 +220,11 @@ async function reloadTemplate() {
 
 // --- 提交逻辑 ---
 function handleSubmitStandard() {
+  const readonlyLimit = resolveReadonlyLimit(columns.value);
   const filledRows = rows.value.map((row, ri) => {
     const newRow = [...row];
     const record = gridSource.value?.[ri] ?? {};
-    for (let ci = 2; ci < columns.value.length; ci++) {
+    for (let ci = readonlyLimit + 1; ci < columns.value.length; ci++) {
       const key = `c${ci}`;
       if (record[key] !== undefined) {
         newRow[ci] = record[key];
