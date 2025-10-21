@@ -48,10 +48,12 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects';
+import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders';
 
 // --- 基本路由和状态 --- 
 const route = useRoute();
 const router = useRouter();
+const { applyTemplatePlaceholders } = useTemplatePlaceholders();
 const projectKey = String(route.params.projectKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
 const initialDate = new Date().toISOString().slice(0,10);
@@ -129,7 +131,8 @@ async function setupCrosstabGrid(tpl) {
 
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
-  const tpl = await getTemplate(projectKey, sheetKey);
+  const rawTemplate = await getTemplate(projectKey, sheetKey);
+  const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
   
   // 存储基础信息
   sheetName.value = tpl.sheet_name || '';

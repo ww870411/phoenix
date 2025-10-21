@@ -11,6 +11,7 @@ daily_report_25_26 前端模块说明
 - `store/`：Pinia 状态模块（仅在项目路由加载时使用）。
 - `services/`：后端 API 访问封装（不修改 `src/api/` 全局目录）。
 - `constants/`：常量（如 `project_key`、路由基路径等）。
+- `composables/`：组合式逻辑模块，`useTemplatePlaceholders` 负责模板占位符替换与日期/供暖期推算。
 
 注意：
 - 后端 `project_key` 统一为 `daily_report_25_26`，与目录名一致；请使用 `constants/` 中的常量保持一致性。

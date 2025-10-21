@@ -487,6 +487,18 @@
 - 备注：后续若需调整日期策略，可在同函数中继续扩展，不必修改模板文件。
 
 ### 2025-10-22 解释说明列写入 Note（留痕）
+
+### 2025-10-22 模板日期前移至前端（留痕）
+- 范围：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/composables/useTemplatePlaceholders.js`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+- 动作：后端仅透传模板占位符；前端组合式在加载模板后将 `(本期日)/(同期日)/(本期月)/(同期月)/(本供暖期)/(同供暖期)` 替换为昨日、去年同日及供暖期区间。
+- 验证：页面手动刷新标准表与 `Coal_inventory_Sheet`，确认列头日期正确且提交请求携带前端计算的 `biz_date`。
+- 回滚：恢复 `_decorate_columns` 的日期填充逻辑并移除新组合式调用。
+
+### 2025-10-22 数据填报空值统一 NULL（留痕）
+- 范围：`backend/api/v1/daily_report_25_26.py`
+- 动作：`_flatten_records`、`_flatten_records_for_coal` 将提交中的空字符串/`None` 映射为 `None`，并保持扁平化记录；`submit` 调试链路落库时自动写入数据库 `NULL`，区分未填与真实零值。
+- 验证：调试接口打印的 `flattened` 列表中空值字段显示为 `null`；后端模型 `_parse_decimal_value` 接收 `None` 并正确写入。
+- 回滚：恢复空值转 `"0"` 的逻辑并告知统计团队。
 - 动作：在 `_flatten_records` 中识别“解释说明”列，按行收集说明文本，并在生成“本日”记录时写入 `note` 字段；写库阶段保持 `note` 原样持久化，空值不再转换为 0。
 - 验证：手动检查 `notes_by_row` 构造逻辑与 `note` 赋值条件（仅对列索引 2 的“本日”记录生效）；后续需通过前端提交覆盖场景验证数据库行的 `note` 内容。
 - 备注：若后续解释说明列命名调整，可在 `note_labels` 集合中补充别名；默认回退为最后一列。

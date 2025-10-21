@@ -248,11 +248,11 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
 
     submit_time_raw = payload.get("submit_time")
     if isinstance(submit_time_raw, str):
-        operation_time = submit_time_raw.strip()
+        operation_time = submit_time_raw.strip() or None
     elif submit_time_raw is None:
-        operation_time = ""
+        operation_time = None
     else:
-        operation_time = str(submit_time_raw)
+        operation_time = str(submit_time_raw).strip() or None
 
     unit_id = normalized.get("unit_id") or payload.get("unit_id") or ""
     company_cn = _resolve_company_name(unit_id, normalized, payload)
@@ -294,11 +294,13 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
             ):
                 raw_note = record.get("value_raw")
                 if isinstance(raw_note, str):
-                    notes_by_row[row_index] = raw_note.strip()
+                    value_note = raw_note.strip()
+                    notes_by_row[row_index] = value_note or None
                 elif raw_note is None:
-                    notes_by_row[row_index] = ""
+                    notes_by_row[row_index] = None
                 else:
-                    notes_by_row[row_index] = str(raw_note).strip()
+                    value_note = str(raw_note).strip()
+                    notes_by_row[row_index] = value_note or None
 
     current_column_index: Optional[int] = 2 if len(columns) > 2 else None
 
@@ -318,28 +320,33 @@ def _flatten_records(payload: Dict[str, Any], normalized: Dict[str, Any]) -> Lis
         if isinstance(raw_value, str):
             value = raw_value.strip()
             if value == "":
-                value = "0"
+                value = None
         elif raw_value is None:
-            value = "0"
+            value = None
         else:
             value = str(raw_value).strip()
             if value == "":
-                value = "0"
+                value = None
 
         row_label = record.get("row_label") or ""
         row_label_str = str(row_label).strip()
         unit = record.get("unit") or ""
         unit_str = str(unit).strip()
-        date_value = columns[col_index] if col_index < len(columns) else ""
-        date_value = date_value.strip() if isinstance(date_value, str) else str(date_value)
+        date_value_raw = columns[col_index] if col_index < len(columns) else ""
+        if isinstance(date_value_raw, str):
+            date_value = date_value_raw.strip() or None
+        elif date_value_raw is None:
+            date_value = None
+        else:
+            date_value = str(date_value_raw).strip() or None
 
-        note_value = ""
+        note_value = None
         if (
             current_column_index is not None
             and col_index == current_column_index
             and isinstance(record.get("row_index"), int)
         ):
-            note_value = notes_by_row.get(record["row_index"], "")
+            note_value = notes_by_row.get(record["row_index"], None)
 
         item_key = reverse_item_map.get(row_label_str)
         if not item_key:
@@ -552,7 +559,8 @@ def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         company_cn = row[0]
         item_cn = row[1] # 煤种中文名
-        unit = row[2] if len(row) > 2 else ""
+        unit_raw = row[2] if len(row) > 2 else ""
+        unit = str(unit_raw).strip() or None
         
         company_id = rev_company_map.get(company_cn)
         item_id = rev_item_map.get(item_cn)
@@ -566,11 +574,9 @@ def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             storage_type_cn = col_info["name_cn"]
             
             raw_value = row[col_idx]
-            # 如果值为空或无效，则跳过
-            if raw_value is None or str(raw_value).strip() == "":
-                continue
-
-            value_decimal = _parse_decimal_value(raw_value)
+            value_decimal = None
+            if raw_value is not None and str(raw_value).strip() != "":
+                value_decimal = _parse_decimal_value(raw_value)
             storage_type_id = rev_status_map.get(storage_type_cn)
 
             record = {
@@ -582,7 +588,7 @@ def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "storage_type_cn": storage_type_cn,
                 "value": value_decimal,
                 "unit": unit,
-                "note": "", # 备注字段暂时为空
+                "note": None, # 备注字段暂时为空
                 "status": "submit",
                 "date": _parse_date_value(biz_date),
                 "operation_time": operation_time,
@@ -642,30 +648,8 @@ async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONRespo
 
 
 def _decorate_columns(columns: Iterable[Any]) -> List[str]:
-    decorated = list(columns) if isinstance(columns, list) else list(columns)
-
-    # 保证存在前两列占位（项目、计量单位）
-    while len(decorated) < 2:
-        decorated.append("")
-
-    tz = timezone(timedelta(hours=8))
-    yesterday = (datetime.now(tz) - timedelta(days=1)).date()
-    current = yesterday.isoformat()
-    try:
-        last_year = yesterday.replace(year=yesterday.year - 1)
-    except ValueError:
-        # 处理闰年的 2 月 29 日，向前回退到 2 月 28 日
-        last_year = yesterday.replace(year=yesterday.year - 1, month=2, day=28)
-    previous = last_year.isoformat()
-
-    # 确保有两个占位列用于写入日期
-    while len(decorated) < 4:
-        decorated.append("")
-
-    decorated[2] = current
-    decorated[3] = previous
-
-    return decorated
+    """将列定义转为列表，不再在服务端注入日期。"""
+    return list(columns) if isinstance(columns, list) else list(columns)
 
 
 def _collect_catalog() -> Dict[str, Dict[str, str]]:
@@ -737,7 +721,9 @@ def get_sheet_template(
     rows = [list(row) for row in rows_raw if isinstance(row, list)]
     item_dict = _extract_mapping(payload, ITEM_DICT_KEYS)
     company_dict = _extract_mapping(payload, COMPANY_DICT_KEYS)
-    
+
+    columns_standard = _decorate_columns(columns_raw)
+
     response_content = {
         "ok": True,
         "sheet_key": sheet_key,
@@ -747,20 +733,14 @@ def get_sheet_template(
         "rows": rows,
         "item_dict": item_dict,
         "company_dict": company_dict,
+        "columns": columns_standard,
     }
 
-    # 根据 sheet_key 判断模板类型并选择不同的列处理方式
     if sheet_key == "Coal_inventory_Sheet":
         response_content["template_type"] = "crosstab"
-        response_content["columns"] = list(columns_raw)  # 直接使用原始列
-        
-        # 为交叉表单独生成业务日期
-        tz = timezone(timedelta(hours=8))
-        yesterday = (datetime.now(tz) - timedelta(days=1)).date()
-        response_content["biz_date"] = yesterday.isoformat()
+        response_content["columns"] = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
     else:
         response_content["template_type"] = "standard"
-        response_content["columns"] = _decorate_columns(columns_raw)  # 对标准报表加注日期
 
     return JSONResponse(
         status_code=200,
@@ -950,24 +930,29 @@ def _parse_coal_inventory_records(payload: Dict[str, Any]) -> List[Dict[str, Any
         if not company_cn or not coal_type_cn:
             continue
 
-        unit_value = ""
+        unit_value = None
         if unit_idx is not None and unit_idx < len(row):
-            unit_value = str(row[unit_idx] or "").strip()
+            candidate = str(row[unit_idx]).strip() if row[unit_idx] is not None else ""
+            unit_value = candidate or None
 
-        note_value = ""
+        note_value = None
         if note_idx is not None and note_idx < len(row):
-            note_value = str(row[note_idx] or "").strip()
+            candidate = str(row[note_idx]).strip() if row[note_idx] is not None else ""
+            note_value = candidate or None
 
         company_code = company_lookup.get(company_cn, company_cn)
         coal_type_code = coal_lookup.get(coal_type_cn, coal_type_cn)
 
         for col_idx, storage_code, storage_cn in storage_columns:
             if col_idx >= len(row):
-                value_str = "0"
+                value_str = None
             else:
                 raw_value = row[col_idx]
-                value_raw = str(raw_value).strip() if raw_value is not None else ""
-                value_str = value_raw if value_raw != "" else "0"
+                if raw_value is None:
+                    value_str = None
+                else:
+                    value_raw = str(raw_value).strip()
+                    value_str = value_raw or None
 
             parsed.append(
                 {

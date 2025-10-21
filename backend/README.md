@@ -69,7 +69,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - 自动追加两列日期，返回结构为 `sheet_key/sheet_name/unit_name/columns/rows`；
   - 附带模板内定义的字典字段（如“项目字典”“单位字典”等）；前端需保持字段名称与内容一致并在提交时原样回传；
   - `columns` 形如 `[项目, 计量单位, <今日（东八区）>, <去年同日>]`。
-- `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit`：当前为调试出口，会打印原始 payload、拆解结果与扁平化列表，后续可平滑接入数据库写入；自 2025-10-22 起，空值单元格会按 0 落库以保留填报轨迹。
+- `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit`：当前为调试出口，会打印原始 payload、拆解结果与扁平化列表，后续可平滑接入数据库写入；自 2025-10-22 起，空值单元格在后端统一落库为 `NULL` 以区分未填与真实零值。
 - `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`：占位。
 
 ## 模板处理规则
@@ -77,7 +77,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 1. 读取 数据目录中的 `数据结构_基本指标表.json`。
 2. 查找到的模板字段会进行以下标准化：
    - 提取单位名、表名（支持多种键名）；
-   - `columns` 自动补齐日期列（今日、去年同日），并保留模板后续的“解释说明”等说明列；
+   - `columns` 保持模板内的占位符（如“(本期日)”“(同期日)”“(本期月)”），具体日期由前端渲染阶段替换；
    - `rows` 兼容任意长度的数组，逐行按列表返回。
 3. 当模板缺少 `列名` 或 `数据` 字段时，接口返回 422 以提示数据管理员处理。
 

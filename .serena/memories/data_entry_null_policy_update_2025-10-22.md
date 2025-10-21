@@ -1,0 +1,1 @@
+2025-10-22：数据填报空值策略改为写入 NULL。`backend/api/v1/daily_report_25_26.py` 的 `_flatten_records`、`_flatten_records_for_coal` 统一将空字符串/None 映射为 None，`_persist_daily_basic`、`_persist_coal_inventory` 随后写入数据库时存储 NULL。backend README 与 progress.md 已更新说明。

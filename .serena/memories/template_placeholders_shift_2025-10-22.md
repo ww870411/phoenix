@@ -1,0 +1,1 @@
+2025-10-22：模板日期处理职责改为前端。后端 `get_sheet_template` 仅透传列占位符；新增 `frontend/src/daily_report_25_26/composables/useTemplatePlaceholders.js` 在加载模板后替换 `(本期日)/(同期日)/(本期月)/(同期月)/(本供暖期)/(同供暖期)` 并回写 `biz_date`。`DataEntryView.vue` 使用新组合式。更新 backend/frontend README 及 configs/progress.md 记录。
