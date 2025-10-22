@@ -24,7 +24,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import delete
 
 from backend.config import DATA_DIRECTORY
-from backend.db.database_daily_report_25_26 import CoalInventoryData, DailyBasicData, SessionLocal
+from backend.db.database_daily_report_25_26 import (
+    CoalInventoryData,
+    DailyBasicData,
+    GongreBranchesDetailData,
+    SessionLocal,
+)
 
 import json
 
@@ -35,6 +40,8 @@ import json
 # Use统一的数据目录常量，默认指向容器内 /app/data
 DATA_ROOT = SysPath(DATA_DIRECTORY)
 COAL_INVENTORY_DEBUG_FILE = DATA_ROOT / "test.md"
+GONGRE_DEBUG_FILE = SysPath(__file__).resolve().parents[3] / "configs" / "111.md"
+GONGRE_SHEET_KEYS = {"gongre_branches_detail_sheet"}
 BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
@@ -64,7 +71,15 @@ SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
 COLUMN_KEYS = ("列名", "columns", "表头")
 ROW_KEYS = ("数据", "rows", "records", "lines")
 ITEM_DICT_KEYS = ("item_dict", "项目字典")
-COMPANY_DICT_KEYS = ("company_dict", "单位字典")
+COMPANY_DICT_KEYS = ("company_dict", "单位字典", "unit_dict")
+CENTER_DICT_KEYS = ("center_dict", "中心字典")
+STATUS_DICT_KEYS = ("status_dict", "状态字典")
+DICT_KEY_GROUPS = {
+    "item_dict": ITEM_DICT_KEYS,
+    "company_dict": COMPANY_DICT_KEYS,
+    "center_dict": CENTER_DICT_KEYS,
+    "status_dict": STATUS_DICT_KEYS,
+}
 
 
 def _iter_data_files() -> Iterable[SysPath]:
@@ -182,22 +197,229 @@ def _extract_list(payload: Dict[str, Any], keys: Iterable[str]) -> Optional[Iter
             return value
     return None
 
+def _coerce_mapping(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items()}
+    if isinstance(value, list):
+        converted: Dict[str, Any] = {}
+        for item in value:
+            if isinstance(item, dict):
+                for item_key, item_value in item.items():
+                    converted[str(item_key)] = item_value
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                converted[str(item[0])] = item[1]
+        if converted:
+            return converted
+    return {}
+
+
 def _extract_mapping(payload: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
     for key in keys:
-        value = payload.get(key)
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, list):
-            converted: Dict[str, Any] = {}
-            for item in value:
-                if isinstance(item, dict):
-                    for item_key, item_value in item.items():
-                        converted[str(item_key)] = item_value
-                elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                    converted[str(item[0])] = item[1]
-            if converted:
-                return converted
+        mapping = _coerce_mapping(payload.get(key))
+        if mapping:
+            return mapping
     return {}
+
+
+def _collect_all_dicts(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    result: Dict[str, Dict[str, Any]] = {}
+    for canonical_key, aliases in DICT_KEY_GROUPS.items():
+        for alias in aliases:
+            mapping = _coerce_mapping(payload.get(alias))
+            if mapping:
+                result[canonical_key] = mapping
+                break
+    return result
+
+
+def _is_gongre_sheet(name: Optional[str]) -> bool:
+    if not name:
+        return False
+    return name.strip().lower() in GONGRE_SHEET_KEYS
+
+
+def _write_gongre_branches_debug(payload: Dict[str, Any], records: List[Dict[str, Any]]) -> None:
+    """将供热分中心调试信息写入 configs/111.md。"""
+    GONGRE_DEBUG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(EAST_8_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    raw_payload = json.dumps(payload, ensure_ascii=False, indent=2)
+    parsed = json.dumps(records, ensure_ascii=False, indent=2)
+    with GONGRE_DEBUG_FILE.open("a", encoding="utf-8") as fh:
+        fh.write(f"## GongRe Branches Detail Debug {timestamp}\n\n")
+        fh.write("### Raw Payload\n```json\n")
+        fh.write(raw_payload)
+        fh.write("\n```\n\n### Parsed Records\n```json\n")
+        fh.write(parsed)
+        fh.write("\n```\n\n")
+
+
+def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """将供热分中心表的 payload 拆解为结构化记录。"""
+    columns = payload.get("columns") or []
+    rows = payload.get("rows") or []
+    if not columns or not rows:
+        return []
+
+    center_lookup = _invert_mapping(payload.get("center_dict") if isinstance(payload.get("center_dict"), dict) else {})
+    item_lookup = _invert_mapping(payload.get("item_dict") if isinstance(payload.get("item_dict"), dict) else {})
+
+    date_columns: List[Tuple[int, Any]] = []
+    note_column: Optional[int] = None
+    for idx, header in enumerate(columns):
+        if idx < 3:
+            continue
+        header_text = str(header).strip() if header is not None else ""
+        if not header_text:
+            continue
+        parsed_date = _parse_date_value(header_text)
+        if parsed_date:
+            date_columns.append((idx, parsed_date))
+            continue
+        if note_column is None and ("说明" in header_text or "备注" in header_text or "note" in header_text.lower()):
+            note_column = idx
+
+    if not date_columns:
+        return []
+
+    primary_measure_index = date_columns[0][0]
+    status_value = str(payload.get("status") or "submit").strip() or "submit"
+    submit_time = payload.get("submit_time")
+    sheet_identifier = str(payload.get("sheet_key") or payload.get("sheet_name") or "").strip()
+
+    parsed_records: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, list) or len(row) < 3:
+            continue
+
+        item_cn = str(row[0]).strip() if row[0] is not None else ""
+        center_cn = str(row[1]).strip() if row[1] is not None else ""
+        unit_value = str(row[2]).strip() if row[2] is not None else ""
+
+        if not item_cn or not center_cn:
+            continue
+
+        item_code = item_lookup.get(item_cn, item_cn)
+        center_code = center_lookup.get(center_cn, center_cn)
+        note_value = None
+        if note_column is not None and note_column < len(row):
+            candidate = str(row[note_column]).strip() if row[note_column] is not None else ""
+            note_value = candidate or None
+
+        for col_index, col_date in date_columns:
+            cell_value = None
+            if col_index < len(row):
+                raw_cell = row[col_index]
+                if raw_cell is not None:
+                    text = str(raw_cell).strip()
+                    if text:
+                        cell_value = text
+
+            if cell_value is None:
+                continue
+
+            parsed_records.append(
+                {
+                    "center": center_code,
+                    "center_cn": center_cn,
+                    "sheet_name": sheet_identifier,
+                    "item": item_code,
+                    "item_cn": item_cn,
+                    "unit": unit_value or None,
+                    "date": col_date.isoformat(),
+                    "value": cell_value,
+                    "note": note_value if col_index == primary_measure_index else None,
+                    "status": status_value,
+                    "operation_time": submit_time,
+                }
+            )
+
+    return parsed_records
+
+
+def _persist_gongre_branches_detail(payload: Dict[str, Any], records: List[Dict[str, Any]]) -> int:
+    if not records:
+        return 0
+
+    session = SessionLocal()
+    try:
+        models: List[GongreBranchesDetailData] = []
+        delete_keys = set()
+        fallback_status = str(payload.get("status") or "submit").strip() or "submit"
+        fallback_operation_time = payload.get("submit_time")
+
+        for record in records:
+            center = str(record.get("center") or "").strip()
+            center_cn = str(record.get("center_cn") or "").strip() or None
+            sheet_name = str(record.get("sheet_name") or payload.get("sheet_key") or "").strip()
+            item = str(record.get("item") or "").strip()
+            item_cn = str(record.get("item_cn") or "").strip() or None
+
+            if not center or not sheet_name or not item:
+                continue
+
+            row_date = _parse_date_value(record.get("date"))
+            if row_date is None:
+                continue
+
+            value_decimal = _parse_decimal_value(record.get("value"))
+            unit_value = str(record.get("unit") or "").strip() or None
+            note_value = str(record.get("note") or "").strip() or None
+            status_value = str(record.get("status") or fallback_status).strip() or fallback_status
+            operation_time = _parse_operation_time(record.get("operation_time") or fallback_operation_time)
+
+            models.append(
+                GongreBranchesDetailData(
+                    center=center,
+                    center_cn=center_cn,
+                    sheet_name=sheet_name,
+                    item=item,
+                    item_cn=item_cn,
+                    value=value_decimal,
+                    unit=unit_value,
+                    note=note_value,
+                    date=row_date,
+                    status=status_value,
+                    operation_time=operation_time,
+                )
+            )
+            delete_keys.add((center, sheet_name, item, row_date))
+
+        if not models:
+            return 0
+
+        for center, sheet_name, item, row_date in delete_keys:
+            session.execute(
+                delete(GongreBranchesDetailData).where(
+                    GongreBranchesDetailData.center == center,
+                    GongreBranchesDetailData.sheet_name == sheet_name,
+                    GongreBranchesDetailData.item == item,
+                    GongreBranchesDetailData.date == row_date,
+                )
+            )
+
+        session.bulk_save_objects(models)
+        session.commit()
+        return len(models)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+async def handle_gongre_branches_detail_submission(payload: Dict[str, Any]) -> JSONResponse:
+    records = _parse_gongre_branches_detail_records(payload)
+    _write_gongre_branches_debug(payload, records)
+    inserted = _persist_gongre_branches_detail(payload, records)
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "message": "供热分中心数据已处理",
+            "records": len(records),
+            "inserted": inserted,
+        },
+    )
 
 
 def _resolve_company_name(unit_id: str, normalized: Dict[str, Any], payload: Dict[str, Any]) -> str:
@@ -719,8 +941,9 @@ def get_sheet_template(
         )
 
     rows = [list(row) for row in rows_raw if isinstance(row, list)]
-    item_dict = _extract_mapping(payload, ITEM_DICT_KEYS)
-    company_dict = _extract_mapping(payload, COMPANY_DICT_KEYS)
+    dict_bundle = _collect_all_dicts(payload)
+    item_dict = dict_bundle.get("item_dict", {})
+    company_dict = dict_bundle.get("company_dict", {})
 
     columns_standard = _decorate_columns(columns_raw)
 
@@ -735,6 +958,9 @@ def get_sheet_template(
         "company_dict": company_dict,
         "columns": columns_standard,
     }
+
+    for dict_key, dict_value in dict_bundle.items():
+        response_content[dict_key] = dict_value
 
     if sheet_key == "Coal_inventory_Sheet":
         response_content["template_type"] = "crosstab"
@@ -760,6 +986,9 @@ async def submit_debug(
     payload = await request.json()
 
     # 根据 sheet_key 进行路由分发
+    if _is_gongre_sheet(sheet_key):
+        return await handle_gongre_branches_detail_submission(payload)
+
     if sheet_key == "Coal_inventory_Sheet":
         # 调用煤炭库存表的专用处理器
         return await handle_coal_inventory_submission(payload)

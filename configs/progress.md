@@ -8,6 +8,15 @@
   2. `setupStandardGrid`、`setupCrosstabGrid` 与 `handleSubmitStandard` 按动态只读上限构造列定义及提交数据，避免硬编码并保留模板默认值。
 - 验证：未运行自动化测试；需人工在前端页面确认 `GongRe_branches_detail_Sheet` 与标准模板只读列保留原值，可编辑列可正常录入。
 - 备注：Serena 暂不支持 Vue SFC 编辑，本次降级使用 `apply_patch`；回滚时删除新方法并恢复固定只读列循环即可。
+
+### 2025-10-23 模板字典透传扩展（AI辅助）
+- 范围：`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+- 原因：`GongRe_branches_detail_Sheet` 等模板存在“中心字典”“状态字典”，旧版接口仅返回项目/单位字典，前端无法携带完整映射回写。
+- 变更：
+  1. 后端新增 `_collect_all_dicts`，为模板中出现的 `*_dict` 字段建立别名映射（项目/单位/中心/状态），统一透传给前端。
+  2. 前端引入 `normalizeDictPayload`，遍历模板响应中的全部 `*_dict` 字段缓存到 `templateDicts.entries`，提交时逐项带回。
+- 验证：未运行自动化测试；需人工验证模板接口包含 `center_dict`/`status_dict` 等扩展字典，前端提交 payload 中同样包含这些字段。
+- 备注：Serena 不支持 Vue SFC 编辑，本次降级为 `apply_patch`；如需回滚，移除 `_collect_all_dicts` 并恢复旧的 `dictCandidates` 即可。
 说明：本记录用于跟踪本次会话内的重要决策、改动与偏差，便于审计与后续回溯。
 
 注意：受限于当前环境未接入 Serena 工具链，登记留痕暂以本文件替代；后续可将内容同步至知识库。
@@ -511,3 +520,19 @@
 - 验证：手动检查 `notes_by_row` 构造逻辑与 `note` 赋值条件（仅对列索引 2 的“本日”记录生效）；后续需通过前端提交覆盖场景验证数据库行的 `note` 内容。
 - 备注：若后续解释说明列命名调整，可在 `note_labels` 集合中补充别名；默认回退为最后一列。
 
+
+### 2025-10-23 Gongre 分中心模型补充（AI辅助）
+- 范围：`backend/db/database_daily_report_25_26.py`
+- 原因：新增表 `gongre_branches_detail_data` 需要对应的 SQLAlchemy ORM 类供持久化流程调用。
+- 变更：定义 `GongreBranchesDetailData` 模型，覆盖中心/项目/日期/状态等字段，字段类型与 `create_tables.sql` 中的定义保持一致。
+- 验证：未运行自动化测试；后续在实现专属写库逻辑时需确认 ORM 字段与实际写入数据匹配。
+- 备注：如需回滚，删除新模型类即可。
+
+### 2025-10-23 Gongre 分中心提交处理（AI辅助）
+- 范围：`backend/api/v1/daily_report_25_26.py`、`configs/111.md`
+- 原因：供热分中心表 `GongRe_branches_detail_Sheet` 需要独立的解析、调试记录与写库流程。
+- 变更：
+  1. 扩展 `submit_debug` 路由，新增 `_parse_gongre_branches_detail_records`、`_persist_gongre_branches_detail` 与 `handle_gongre_branches_detail_submission`，写入 `gongre_branches_detail_data`。
+  2. 新增 `_write_gongre_branches_debug`，把前端原始 payload 与解析结果追记到 `configs/111.md`。
+- 验证：未运行自动化测试；需通过前端或模拟请求确认 `configs/111.md` 生成调试记录、数据库表实际写入数据。
+- 备注：如需回滚，移除新分支及相关函数并清理调试文件即可。

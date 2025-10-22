@@ -88,6 +88,29 @@ function cloneDictValue(value) {
   return value;
 }
 
+function normalizeDictPayload(raw) {
+  const cloned = cloneDictValue(raw);
+  if (!cloned) return null;
+  if (Array.isArray(cloned)) {
+    const converted = {};
+    for (const entry of cloned) {
+      if (!entry) continue;
+      if (Array.isArray(entry) && entry.length >= 2) {
+        converted[String(entry[0])] = entry[1];
+      } else if (typeof entry === 'object') {
+        for (const [innerKey, innerValue] of Object.entries(entry)) {
+          converted[String(innerKey)] = innerValue;
+        }
+      }
+    }
+    return Object.keys(converted).length ? converted : null;
+  }
+  if (typeof cloned === 'object') {
+    return cloned;
+  }
+  return null;
+}
+
 function resolveReadonlyLimit(columnList) {
   if (!Array.isArray(columnList)) {
     return 1;
@@ -172,18 +195,29 @@ async function loadTemplate() {
   }
 
   // 存储字典
-  const dictCandidates = [
-    ['item_dict', 'item', tpl.item_dict],
-    ['company_dict', 'company', tpl.company_dict],
-  ];
   const dictSnapshot = {};
-  let itemPrimary = null, companyPrimary = null;
-  for (const [key, role, rawValue] of dictCandidates) {
-    if (rawValue) {
-      const cloned = cloneDictValue(rawValue);
-      dictSnapshot[key] = cloned;
-      if (!itemPrimary && role === 'item') itemPrimary = cloned;
-      if (!companyPrimary && role === 'company') companyPrimary = cloned;
+  let itemPrimary = null;
+  let companyPrimary = null;
+  Object.entries(tpl).forEach(([key, rawValue]) => {
+    if (typeof key !== 'string' || !key.endsWith('_dict')) return;
+    const normalizedDict = normalizeDictPayload(rawValue);
+    if (!normalizedDict) return;
+    dictSnapshot[key] = normalizedDict;
+    if (!itemPrimary && key === 'item_dict') itemPrimary = normalizedDict;
+    if (!companyPrimary && key === 'company_dict') companyPrimary = normalizedDict;
+  });
+  if (!dictSnapshot.item_dict) {
+    const normalized = normalizeDictPayload(tpl.item_dict);
+    if (normalized) {
+      dictSnapshot.item_dict = normalized;
+      if (!itemPrimary) itemPrimary = normalized;
+    }
+  }
+  if (!dictSnapshot.company_dict) {
+    const normalized = normalizeDictPayload(tpl.company_dict);
+    if (normalized) {
+      dictSnapshot.company_dict = normalized;
+      if (!companyPrimary) companyPrimary = normalized;
     }
   }
   templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };

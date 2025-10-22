@@ -79,6 +79,23 @@ class CoalInventoryData(Base):
     operation_time = Column(DateTime, nullable=False)
 
 
+class GongreBranchesDetailData(Base):
+    __tablename__ = "gongre_branches_detail_data"
+
+    id = Column(Integer, primary_key=True)
+    center = Column(Text, nullable=False)
+    center_cn = Column(Text)
+    sheet_name = Column(Text, nullable=False)
+    item = Column(Text, nullable=False)
+    item_cn = Column(Text)
+    value = Column(Numeric(18, 4))
+    unit = Column(Text)
+    note = Column(Text)
+    date = Column(Date, nullable=False)
+    status = Column(Text)
+    operation_time = Column(DateTime, nullable=False)
+
+
 def get_session() -> Generator:
     session = SessionLocal()
     try:

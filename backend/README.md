@@ -47,14 +47,15 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - `db/`
     - `__init__.py`
     - `database_daily_report_25_26.py`
-  - `models/`
+- `models/`
     - `__init__.py`
-  - `schemas/`
+- `schemas/`
     - `__init__.py`
-  - `services/`
+- `services/`
     - `__init__.py`
-  - `sql/`
+- `sql/`
     - `create_tables.sql`
+    - SQL 包含 `gongre_branches_detail_data`，对应 ORM 类 `GongreBranchesDetailData`（见 `db/database_daily_report_25_26.py`）。
 
 ## 接口路线图（2025-10-19）
 
@@ -70,6 +71,8 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - 附带模板内定义的字典字段（如“项目字典”“单位字典”等）；前端需保持字段名称与内容一致并在提交时原样回传；
   - `columns` 形如 `[项目, 计量单位, <今日（东八区）>, <去年同日>]`。
 - `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit`：当前为调试出口，会打印原始 payload、拆解结果与扁平化列表，后续可平滑接入数据库写入；自 2025-10-22 起，空值单元格在后端统一落库为 `NULL` 以区分未填与真实零值。
+  - `GongRe_branches_detail_Sheet`：专用分支解析中心/指标，写入 `gongre_branches_detail_data`，调试记录输出至 `configs/111.md`。
+  - `Coal_inventory_Sheet`：使用 `_parse_coal_inventory_records` 写入 `coal_inventory_data`，调试记录追加在 `backend_data/test.md`。
 - `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`：占位。
 
 ## 模板处理规则
@@ -79,6 +82,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
    - 提取单位名、表名（支持多种键名）；
    - `columns` 保持模板内的占位符（如“(本期日)”“(同期日)”“(本期月)”），具体日期由前端渲染阶段替换；
    - `rows` 兼容任意长度的数组，逐行按列表返回。
+   - 模板中出现的 `*_dict` 字段（如项目/单位/中心/状态字典）会在接口中全部透传给前端，便于提交时带回。
    - 前端渲染会按照列头中首次出现“计量单位”的位置，将此前列自动标记为只读，后端无需额外维护该规则。
 3. 当模板缺少 `列名` 或 `数据` 字段时，接口返回 422 以提示数据管理员处理。
 
