@@ -1,0 +1,20 @@
+
+{
+  "project_id": "daily_report_25_26",
+  "project_name": "2025-2026供暖期生产日报",
+  "project_list":[
+    {
+      "field_name":"数据展示区",
+      "source":"数据结构_数据展示表.json"
+    },
+    {
+      "field_name":"每日数据填报区",
+      "source":"数据结构_基本指标表.json"
+    },
+    {
+      "field_name":"常量数据存档区",
+      "source":"数据结构_常量指标表.json"
+    }
+  ]
+}
+

@@ -254,7 +254,10 @@ def _write_gongre_branches_debug(payload: Dict[str, Any], records: List[Dict[str
 
 
 def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """将供热分中心表的 payload 拆解为结构化记录。"""
+    """
+    将供热分中心表的 payload 拆解为结构化记录。
+    修改：无论单元格是否为空，都生成记录，以便写入 NULL 或覆盖旧值。
+    """
     columns = payload.get("columns") or []
     rows = payload.get("rows") or []
     if not columns or not rows:
@@ -306,17 +309,15 @@ def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[
             note_value = candidate or None
 
         for col_index, col_date in date_columns:
-            cell_value = None
+            cell_value = None  # 默认值为 None
             if col_index < len(row):
                 raw_cell = row[col_index]
                 if raw_cell is not None:
                     text = str(raw_cell).strip()
                     if text:
                         cell_value = text
-
-            if cell_value is None:
-                continue
-
+            
+            # 不再检查 cell_value is None 并 continue，而是始终生成记录
             parsed_records.append(
                 {
                     "center": center_code,
@@ -326,7 +327,7 @@ def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[
                     "item_cn": item_cn,
                     "unit": unit_value or None,
                     "date": col_date.isoformat(),
-                    "value": cell_value,
+                    "value": cell_value,  # 此处可能为 None
                     "note": note_value if col_index == primary_measure_index else None,
                     "status": status_value,
                     "operation_time": submit_time,
