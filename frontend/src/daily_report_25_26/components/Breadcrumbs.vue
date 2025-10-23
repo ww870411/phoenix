@@ -1,105 +1,45 @@
 <template>
-  <nav class="breadcrumbs" aria-label="Breadcrumb">
-    <template v-for="(item, idx) in items" :key="idx">
-      <a
-        v-if="item.to && idx < items.length - 1"
-        href="#"
-        class="crumb-link"
-        @click.prevent="go(item.to)"
-      >
-        {{ item.label }}
-      </a>
-      <span v-else class="current">{{ item.label }}</span>
-      <span v-if="idx < items.length - 1" class="separator">»</span>
-    </template>
+  <nav class="breadcrumbs">
+    <ol>
+      <li v-for="(it, idx) in normalized" :key="idx">
+        <span v-if="!it.to || idx === lastIndex" class="crumb current">{{ it.label }}</span>
+        <router-link v-else class="crumb" :to="it.to">{{ it.label }}</router-link>
+      </li>
+    </ol>
   </nav>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
+import { useRoute } from 'vue-router'
 
-const route = useRoute()
-const router = useRouter()
-ensureProjectsLoaded().catch(() => {})
-
-const items = computed(() => {
-  const name = route.name
-  const p = route.params || {}
-  const q = route.query || {}
-  const projectKey = p.projectKey
-  const sheetKey = p.sheetKey
-  const biz = q.biz_date
-  const projectLabel = getProjectNameById(projectKey)
-
-  // 基于路由名与参数构造面包屑
-  // login 页不显示面包屑
-  if (name === 'projects') {
-    return [
-      { label: '项目', to: null },
-    ]
-  }
-  if (name === 'dashboard') {
-    return [
-      { label: '项目', to: '/projects' },
-      { label: String(projectLabel || ''), to: null },
-    ]
-  }
-  if (name === 'data-entry') {
-    return [
-      { label: '项目', to: '/projects' },
-      {
-        label: String(projectLabel || ''),
-        to: projectKey ? `/projects/${encodeURIComponent(projectKey)}/data_entry/sheets` : null,
-      },
-      { label: '数据填报', to: null },
-    ]
-  }
-  // 其他兜底：不显示或仅显示当前
-  return [ { label: '导航', to: null } ]
+const props = defineProps({
+  items: { type: Array, default: () => [] },
 })
 
-function go(path) {
-  router.push(path)
-}
+const route = useRoute()
+const normalized = computed(() => {
+  if (Array.isArray(props.items) && props.items.length) return props.items
+  // 回退：基于路由路径提供一个最小面包屑
+  const segs = route.path.split('/').filter(Boolean)
+  const acc = []
+  let cur = ''
+  for (const s of segs) {
+    cur += `/${s}`
+    acc.push({ label: s, to: cur })
+  }
+  return acc
+})
+
+const lastIndex = computed(() => Math.max(0, normalized.value.length - 1))
 </script>
 
 <style scoped>
-.breadcrumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  margin: 6px 0 18px 0;
-  font-size: 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  color: var(--muted);
-}
-.crumb-link {
-  color: var(--primary-700);
-  text-decoration: none;
-  padding: 4px 8px;
-  border-radius: 999px;
-  transition: all 0.18s ease-in-out;
-}
-.crumb-link:hover {
-  background: rgba(59, 130, 246, 0.12);
-  color: var(--primary-800);
-}
-.separator {
-  color: #cbd5e1;
-  font-size: 18px;
-  font-weight: 600;
-  user-select: none;
-}
-.current {
-  color: var(--text);
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.05);
-}
+.breadcrumbs { margin: 8px 0 12px; color: var(--neutral-600); }
+ol { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0; }
+.crumb { color: var(--primary-700); text-decoration: none; }
+.crumb.current { color: var(--neutral-600); font-weight: 600; cursor: default; }
+li::after { content: '/'; margin: 0 6px; color: var(--neutral-400); }
+li:last-child::after { content: ''; margin: 0; }
 </style>
+

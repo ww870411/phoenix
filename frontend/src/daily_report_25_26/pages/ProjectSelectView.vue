@@ -2,6 +2,7 @@
   <div>
     <AppHeader />
     <div class="container">
+      <Breadcrumbs :items="breadcrumbItems" />
       <header class="topbar">
         <div>
           <h2>项目选择</h2>
@@ -33,6 +34,7 @@
 <script setup>
 import '../styles/theme.css'
 import AppHeader from '../components/AppHeader.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -51,6 +53,10 @@ const error = computed(() => (projectsError.value ? '无法加载项目列表，
 function enter(project) {
   router.push(`/projects/${encodeURIComponent(project.project_id)}/pages`)
 }
+
+const breadcrumbItems = computed(() => [
+  { label: '项目选择', to: null },
+])
 
 onMounted(() => {
   ensureProjectsLoaded().catch(() => {

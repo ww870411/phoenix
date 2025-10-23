@@ -10,17 +10,22 @@
         </header>
         <div v-if="loading" class="sheet-state">表格列表加载中，请稍候…</div>
         <div v-else-if="errorMessage" class="sheet-state error">{{ errorMessage }}</div>
-        <div v-else class="card-grid">
-          <button
-            v-for="sheet in sheets"
-            :key="sheet.sheet_key"
-            type="button"
-            class="card elevated sheet-card"
-            @click="openSheet(sheet)"
-          >
-            <div class="sheet-card-title">{{ sheet.sheet_name }}</div>
-            <div class="sheet-card-desc">填报单位：{{ sheet.unit_name || '未配置' }}</div>
-          </button>
+        <div v-else>
+          <div v-for="group in groupedSheets" :key="group.groupKey" class="sheet-group">
+            <h3 class="group-title">{{ group.groupName }}</h3>
+            <div class="card-grid">
+              <button
+                v-for="sheet in group.items"
+                :key="sheet.sheet_key"
+                type="button"
+                class="card elevated sheet-card"
+                @click="openSheet(sheet)"
+              >
+                <div class="sheet-card-title">{{ sheet.sheet_name }}</div>
+                <div class="sheet-card-desc">填报单位：{{ sheet.unit_name || '未配置' }}</div>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -53,13 +58,26 @@ const pageDisplayName = computed(() => {
 })
 
 const sheets = ref([])
+const groupedSheets = computed(() => {
+  const groups = new Map()
+  for (const s of sheets.value) {
+    const name = (s.unit_name && String(s.unit_name).trim()) || '未分组'
+    if (!groups.has(name)) groups.set(name, [])
+    groups.get(name).push(s)
+  }
+  const result = []
+  for (const [name, items] of groups.entries()) {
+    result.push({ groupKey: name, groupName: name, items })
+  }
+  // 严格保持配置文件（后端返回）的单位出现顺序，不再排序
+  return result
+})
 const loading = ref(false)
 const errorMessage = ref('')
 
 const projectName = computed(() => getProjectNameById(projectKey.value) ?? projectKey.value)
 
 const breadcrumbItems = computed(() => [
-  { label: '登录', to: '/login' },
   { label: '项目选择', to: '/projects' },
   { label: projectName.value, to: `/projects/${encodeURIComponent(projectKey.value)}/pages` },
   { label: pageDisplayName.value, to: null },

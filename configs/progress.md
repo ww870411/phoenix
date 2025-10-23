@@ -542,3 +542,9 @@
 - 前端加入页面选取页 `/projects/:projectKey/pages`，重新规划路由为 `/projects/:projectKey/pages/:pageKey/sheets(/:sheetKey)`，并在各 API 调用中携带 `config` 参数确保指向正确模板。
 - 更新 `services/api.js`、`Sheets.vue`、`DataEntryView.vue` 等模块，实现多页面模板之间的切换及填报流程；同步刷新 README 说明。
 - 适配新的项目配置为“对象结构”：顶层为项目ID → 项目信息，`pages` 为“URL → {页面名称, 数据源}”；`/projects` 与 `/projects/{id}/pages` 已按此解析。
+
+### 2025-10-23 展示页面占位与填报页分组回归（AI辅助）
+
+- 新增 `DisplayView.vue` 与路由 `/projects/:projectKey/pages/:pageKey/display`，在“数据展示页面”场景下展示仪表盘与三张固定展示表的占位卡片，预留后续根据“数据源”渲染只读网格/图表。
+- `PageSelectView.vue` 根据 `config_file` 包含“展示用”关键字自动跳转到上面的 display 路由；其他页面仍走 `sheets` 路由。
+- `Sheets.vue` 恢复“每日数据填报页面”的“按单位分组”卡片展示：按 `unit_name` 分组，组内为表格卡片，其他页面不受影响。

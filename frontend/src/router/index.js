@@ -25,6 +25,10 @@ const routes = [
     path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',
     component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
   },
+  {
+    path: '/projects/:projectKey/pages/:pageKey/display',
+    component: () => import('../daily_report_25_26/pages/DisplayView.vue'),
+  },
 ]
 
 const router = createRouter({

@@ -63,19 +63,24 @@ onMounted(async () => {
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
 
 const breadcrumbItems = computed(() => [
-  { label: '登录', to: '/login' },
   { label: '项目选择', to: '/projects' },
   { label: projectName.value, to: null },
 ])
 
 function openPage(page) {
-  router.push({
-    path: `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}/sheets`,
-    query: {
-      config: page.config_file,
-      pageName: page.page_name,
-    },
-  })
+  const isDisplay = typeof page?.config_file === 'string' && /展示用/.test(page.config_file)
+  const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`
+  if (isDisplay) {
+    router.push({
+      path: `${base}/display`,
+      query: { config: page.config_file, pageName: page.page_name },
+    })
+  } else {
+    router.push({
+      path: `${base}/sheets`,
+      query: { config: page.config_file, pageName: page.page_name },
+    })
+  }
 }
 </script>
 

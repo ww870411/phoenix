@@ -2,7 +2,7 @@
   <div>
     <AppHeader />
     <div class="container">
-    <Breadcrumbs class="breadcrumb-spacing" />
+    <Breadcrumbs :items="breadcrumbItems" class="breadcrumb-spacing" />
     <header class="topbar">
       <div style="display:flex;flex-direction:column;gap:6px;">
         <h2>数据填报</h2>
@@ -61,6 +61,13 @@ const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
 });
+const pageDisplayName = computed(() => {
+  const raw = route.query.pageName;
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  return pageKey || '页面';
+});
 const initialDate = new Date().toISOString().slice(0,10);
 const bizDate = ref(String(initialDate));
 
@@ -73,6 +80,22 @@ const projectName = computed(() => getProjectNameById(projectKey));
 const sheetName = ref('');
 const unitName = ref('');
 const sheetDisplayName = computed(() => sheetName.value || sheetKey);
+
+const pageListPath = computed(() => {
+  const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(pageKey)}/sheets`;
+  const q = new URLSearchParams();
+  if (pageConfig.value) q.set('config', pageConfig.value);
+  if (pageDisplayName.value) q.set('pageName', pageDisplayName.value);
+  const qs = q.toString();
+  return qs ? `${base}?${qs}` : base;
+});
+
+const breadcrumbItems = computed(() => [
+  { label: '项目选择', to: '/projects' },
+  { label: projectName.value || projectKey, to: `/projects/${encodeURIComponent(projectKey)}/pages` },
+  { label: pageDisplayName.value, to: pageListPath.value },
+  { label: sheetDisplayName.value, to: null },
+]);
 const unitId = ref('');
 const columns = ref([]);
 const rows = ref([]);
