@@ -50,6 +50,8 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
       - `__init__.py`
       - `routes.py`（统一前缀 `/api/v1`）
       - `daily_report_25_26.py`（项目路由与模板/填报/查询逻辑）
+        - 标准表提交流程：`_flatten_records` 从“列头日期文本”提取每列 `date`；前端应确保列头根据所选 `biz_date` 动态替换。
+        - 煤炭库存表（`Coal_inventory_Sheet`）特殊处理：解析顶层 `biz_date` 并持久化到 `coal_inventory_data`。
   - `db/`
     - `__init__.py`
     - `database_daily_report_25_26.py`

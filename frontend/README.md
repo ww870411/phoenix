@@ -65,6 +65,9 @@ docker compose up -d --build
 
 所有请求以 `/api/v1` 为前缀，`project_key` 统一为 `daily_report_25_26`。
 
+### 变更记录（2025-10-23）
+- 修复数据填报页日历联动：标准表在后端以“列头日期文本”决定每列的 `date`，现于 `pages/DataEntryView.vue` 中缓存原始列头 `baseColumns` 并在 `bizDate` 变更时重算列头与 `gridColumns` 名称，确保提交与展示使用最新日期。
+
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |

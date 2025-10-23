@@ -10,6 +10,10 @@
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
         <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
+        <label v-if="isDailyPage" class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;">
+          <span>业务日期：</span>
+          <input type="date" v-model="bizDate" />
+        </label>
         <button class="btn ghost" @click="reloadTemplate">重载模板</button>
         <button class="btn primary" @click="onSubmit">提交</button>
       </div>
@@ -44,7 +48,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter } from 'vue-router'
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getTemplate, queryData, submitData } from '../services/api';
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects';
@@ -68,6 +72,41 @@ const pageDisplayName = computed(() => {
   }
   return pageKey || '页面';
 });
+
+// 是否为“每日数据填报页面”
+const isDailyPage = computed(() => {
+  const name = pageDisplayName.value || ''
+  return name.includes('每日数据填报')
+});
+
+function formatDateYYYYMMDD(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return String(dateStr)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
+function peerDateYYYYMMDD(dateStr) {
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  d.setFullYear(d.getFullYear() - 1)
+  return formatDateYYYYMMDD(d.toISOString().slice(0, 10))
+}
+
+function replaceDatePlaceholdersInColumns(cols) {
+  if (!Array.isArray(cols)) return cols
+  const main = formatDateYYYYMMDD(bizDate.value)
+  const peer = peerDateYYYYMMDD(bizDate.value)
+  return cols.map((name) => {
+    const s = String(name ?? '')
+    return s
+      .replace(/\(本期日\)|本期日|\(本期\)|本期/g, main || '本期')
+      .replace(/\(同期日\)|同期日|\(同期\)|同期/g, peer || '同期')
+  })
+}
 const initialDate = new Date().toISOString().slice(0,10);
 const bizDate = ref(String(initialDate));
 
@@ -98,6 +137,8 @@ const breadcrumbItems = computed(() => [
 ]);
 const unitId = ref('');
 const columns = ref([]);
+// 基准列缓存：保存“未替换占位符”的原始列头，便于日历变更时重新计算
+const baseColumns = ref([]);
 const rows = ref([]);
 const templateType = ref('standard'); // 新增：模板类型
 const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null });
@@ -207,6 +248,12 @@ async function setupCrosstabGrid(tpl) {
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
+  // 应用日期占位到列头（仅每日数据填报页面）
+  if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
+    // 缓存原始列头以便后续根据日历重算
+    baseColumns.value = Array.isArray(rawTemplate.columns) ? [...rawTemplate.columns] : []
+    rawTemplate.columns = replaceDatePlaceholdersInColumns(baseColumns.value)
+  }
   const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
   
   // 存储基础信息
@@ -415,10 +462,34 @@ function measureTextWidth(content, font) {
   ctx.font = font || '14px/1.4 "Segoe UI", Arial, sans-serif';
   return ctx.measureText(text).width;
 }
+// 监听业务日期变更，标准表需用新日期重算列头与网格列定义
+const stop = watch(
+  () => bizDate.value,
+  () => {
+    if (templateType.value !== 'standard') return;
+    if (!Array.isArray(baseColumns.value) || !baseColumns.value.length) return;
+    const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
+    columns.value = recalculated;
+    if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
+      gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
+    }
+  }
+)
+
 </script>
 
 <style scoped>
 .topbar { gap: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.date-group input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
 </style>
+// 当业务日期变化时，自动重载模板以刷新列头（仅每日数据填报页面）
+onMounted(() => {
+  // 轻量延迟以确保初次加载完成
+  const stop = watch(() => bizDate.value, async () => {
+    if (isDailyPage.value) {
+      await loadTemplate();
+    }
+  });
+});

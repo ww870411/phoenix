@@ -548,3 +548,12 @@
 - 新增 `DisplayView.vue` 与路由 `/projects/:projectKey/pages/:pageKey/display`，在“数据展示页面”场景下展示仪表盘与三张固定展示表的占位卡片，预留后续根据“数据源”渲染只读网格/图表。
 - `PageSelectView.vue` 根据 `config_file` 包含“展示用”关键字自动跳转到上面的 display 路由；其他页面仍走 `sheets` 路由。
 - `Sheets.vue` 恢复“每日数据填报页面”的“按单位分组”卡片展示：按 `unit_name` 分组，组内为表格卡片，其他页面不受影响。
+- 2025-10-23 修复：数据填报页面日历修改未生效问题（标准表列头日期未随 biz_date 更新）
+  - 现象：前端小日历修改“本期日/同期日”后，提交到后端的数据仍使用初始日期；数据库中记录的 `date` 不随选择变化。
+  - 根因：标准表提交流程在后端通过“列头日期文本”解析每列的 `date`（参见 `_flatten_records`），而前端仅在模板初次加载时对列头占位符进行了一次替换，未在 `bizDate` 变更时重算列头。
+  - 方案：在前端 `DataEntryView.vue` 中新增 `baseColumns`（缓存未替换占位符的原始列头），并监听 `bizDate` 变更，基于 `baseColumns` 重新执行 `replaceDatePlaceholdersInColumns`，同步更新 `columns` 与 `gridColumns` 的 `name`，保证 UI 与提交 payload 一致。
+  - 影响范围：仅前端渲染与提交；后端接口与数据结构不变。
+  - 变更文件：
+    - `frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+  - 回滚思路：删除 `baseColumns` 与 `watch(bizDate)` 补丁，并恢复初次加载时的单次替换逻辑即可。
+  - Hotfix：补充 `watch` 导入，修复 `setup` 阶段未定义导致的页面白屏。
