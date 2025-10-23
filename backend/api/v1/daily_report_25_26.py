@@ -862,6 +862,34 @@ def _persist_constant_data(
         normalized.get("submit_time") or payload.get("submit_time")
     )
 
+    # 解析列信息与字典映射（供热分中心常量表需要 center 映射以及行内计量单位）
+    columns = payload.get("columns") or payload.get("列名") or []
+    if isinstance(columns, list):
+        col_names = [str(c).strip() if c is not None else "" for c in columns]
+    else:
+        col_names = []
+    try:
+        unit_col_index = col_names.index("计量单位") if "计量单位" in col_names else -1
+    except ValueError:
+        unit_col_index = -1
+
+    # 行映射：item_cn -> row 数组（用于取本行的计量单位）
+    row_map: Dict[str, List[Any]] = {}
+    for r in (payload.get("rows") or payload.get("数据") or []):
+        if isinstance(r, list) and r:
+            key = str(r[0]).strip() if r[0] is not None else ""
+            if key and key not in row_map:
+                row_map[key] = r
+
+    # 反转中心字典（存在则表示该常量表为“中心”维度）
+    center_dict = payload.get("center_dict") or payload.get("中心字典") or {}
+    center_lookup = {}
+    if isinstance(center_dict, dict):
+        for k, v in center_dict.items():
+            if isinstance(v, str):
+                center_lookup[v.strip()] = str(k)
+    has_center_dimension = isinstance(center_dict, dict) and len(center_dict) > 0
+
     session = SessionLocal()
     try:
         models: List[ConstantData] = []
@@ -897,39 +925,87 @@ def _persist_constant_data(
             period = str(period_value).strip()
             if not period:
                 continue
+            if period == "计量单位":
+                # 跳过“计量单位”列产生的伪记录
+                continue
 
             value_decimal = _parse_decimal_value(record.get("value"))
             operation_time = _parse_operation_time(
                 record.get("operation_time") or default_operation_time
             )
 
-            models.append(
-                ConstantData(
-                    company=company,
-                    company_cn=company_cn,
-                    sheet_name=sheet_name_key,
-                    item=item_key,
-                    item_cn=str(record.get("item_cn") or "").strip() or None,
-                    value=value_decimal,
-                    unit=str(record.get("unit") or "").strip() or None,
-                    period=period,
-                    operation_time=operation_time,
-                )
+            # 含中心维度的常量表的 center 与 unit 处理
+            is_center_sheet = has_center_dimension or (
+                sheet_name_key.strip().lower() == "gongre_branches_detail_constant_sheet"
             )
-            delete_keys.add((company, sheet_name_key, item_key, period))
+            center_code = None
+            center_cn = None
+            unit_value = (str(record.get("unit") or "").strip() or None)
+            if is_center_sheet:
+                # 若 record.unit 恰为中心中文名，则作为 center_cn
+                if isinstance(unit_value, str) and unit_value.strip():
+                    if unit_value.strip() in center_lookup:
+                        center_cn = unit_value.strip()
+                        center_code = center_lookup.get(center_cn)
+                    else:
+                        # 无 center_dict 时，以中文名作为编码回落
+                        center_cn = unit_value.strip()
+                        center_code = center_cn
+                # 真实计量单位来自本行的“计量单位”列
+                if unit_col_index >= 0:
+                    row = row_map.get(str(record.get("item_cn") or "").strip())
+                    if isinstance(row, list) and unit_col_index < len(row):
+                        unit_candidate = row[unit_col_index]
+                        unit_value = (str(unit_candidate).strip() or None) if unit_candidate is not None else None
+
+            obj_kwargs = dict(
+                company=company,
+                company_cn=company_cn,
+                sheet_name=sheet_name_key,
+                item=item_key,
+                item_cn=str(record.get("item_cn") or "").strip() or None,
+                value=value_decimal,
+                unit=unit_value,
+                period=period,
+                operation_time=operation_time,
+            )
+            if hasattr(ConstantData, "center"):
+                obj_kwargs["center"] = center_code
+            if hasattr(ConstantData, "center_cn"):
+                obj_kwargs["center_cn"] = center_cn
+
+            models.append(ConstantData(**obj_kwargs))
+            # 删除键：若模型包含 center 且有中心维度，则加入 center 提升幂等粒度
+            if hasattr(ConstantData, "center") and is_center_sheet:
+                delete_keys.add((company, sheet_name_key, item_key, period, center_code))
+            else:
+                delete_keys.add((company, sheet_name_key, item_key, period))
 
         if not models:
             return 0
 
-        for company, sheet_name_key, item_key, period in delete_keys:
-            session.execute(
-                delete(ConstantData).where(
-                    ConstantData.company == company,
-                    ConstantData.sheet_name == sheet_name_key,
-                    ConstantData.item == item_key,
-                    ConstantData.period == period,
+        for key in delete_keys:
+            if hasattr(ConstantData, "center") and (len(key) == 5):
+                company, sheet_name_key, item_key, period, center_code = key
+                session.execute(
+                    delete(ConstantData).where(
+                        ConstantData.company == company,
+                        ConstantData.sheet_name == sheet_name_key,
+                        ConstantData.item == item_key,
+                        ConstantData.period == period,
+                        ConstantData.center == center_code,
+                    )
                 )
-            )
+            else:
+                company, sheet_name_key, item_key, period = key
+                session.execute(
+                    delete(ConstantData).where(
+                        ConstantData.company == company,
+                        ConstantData.sheet_name == sheet_name_key,
+                        ConstantData.item == item_key,
+                        ConstantData.period == period,
+                    )
+                )
 
         session.bulk_save_objects(models)
         session.commit()
