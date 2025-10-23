@@ -27,6 +27,7 @@ from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import ConstantData
 from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
+    ConstantData,
     DailyBasicData,
     GongreBranchesDetailData,
     SessionLocal,
@@ -849,6 +850,65 @@ def _persist_daily_basic(
         session.close()
 
 
+def _persist_constant_data_from_flattened(
+    payload: Dict[str, Any],
+    normalized: Dict[str, Any],
+    flattened: List[Dict[str, Any]],
+) -> int:
+    """将扁平记录转换为 constant_data 所需结构并调用记录级持久化函数。
+
+    注意：跳过列头为“计量单位”的列；当 item 为空时回落为 item_cn；
+    period 使用列头文本；允许 value 为空（写入 NULL）。
+    """
+    if not flattened:
+        return 0
+
+    default_operation_time = _parse_operation_time(
+        normalized.get("submit_time") or payload.get("submit_time")
+    )
+    records: List[Dict[str, Any]] = []
+    for rec in flattened:
+        period_raw = rec.get("date")
+        period = (str(period_raw).strip() if period_raw is not None else "")
+        if not period:
+            continue
+        if period == "计量单位":
+            continue
+
+        item_key = (str(rec.get("item") or "").strip())
+        if not item_key:
+            item_key = (str(rec.get("item_cn") or "").strip())
+        if not item_key:
+            continue
+
+        company_value = str(rec.get("company") or payload.get("unit_id") or "").strip()
+        if not company_value:
+            continue
+
+        sheet_value = str(rec.get("sheet_name") or normalized.get("sheet_key") or payload.get("sheet_key") or "").strip()
+        if not sheet_value:
+            continue
+
+        records.append(
+            {
+                "company": company_value,
+                "company_cn": (str(rec.get("company_cn") or normalized.get("unit_name") or payload.get("unit_name") or "").strip() or None),
+                "sheet_name": sheet_value,
+                "item": item_key,
+                "item_cn": (str(rec.get("item_cn") or "").strip() or None),
+                "value": _parse_decimal_value(rec.get("value")),
+                "unit": (str(rec.get("unit") or "").strip() or None),
+                "period": period,
+                "operation_time": _parse_operation_time(rec.get("operation_time") or default_operation_time),
+            }
+        )
+
+    if not records:
+        return 0
+
+    return _persist_constant_data(records)
+
+
 def _persist_constant_data(
     payload: Dict[str, Any],
     normalized: Dict[str, Any],
@@ -1140,6 +1200,163 @@ async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONRespo
         )
 
 
+def _is_constant_sheet(name: Optional[str]) -> bool:
+    if not name:
+        return False
+    return name.strip().lower().endswith("_constant_sheet")
+
+
+def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    将常量表的宽表 payload 拆解为扁平化的数据库记录列表。
+
+    兼容两类结构：
+    1) 含中心维度（存在 center_dict）：列通常为 [项目, 中心, 计量单位, 期次1, 期次2, ...]
+       此时 company 采用 center_id（由 center_dict 反向映射），company_cn 为中心中文名。
+    2) 无中心维度：列通常为 [项目, 计量单位, 期次1, 期次2, ...]
+       此时 company 采用 unit_id（payload.unit_id），company_cn 为 unit_name。
+    """
+    columns = payload.get("columns", [])
+    rows = payload.get("rows", [])
+
+    # 字典与反向映射
+    item_dict = payload.get("item_dict", {})
+    center_dict = payload.get("center_dict", {})
+    rev_item_map = {v: k for k, v in item_dict.items()} if isinstance(item_dict, dict) else {}
+    rev_center_map = {v: k for k, v in center_dict.items()} if isinstance(center_dict, dict) else {}
+    has_center = isinstance(center_dict, dict) and len(center_dict) > 0
+
+    # 列头作为默认 period，若 payload 显式提供 periods 列表，则以其为准
+    # 对于含中心维度，数据列从第 4 列（索引 3）开始；无中心维度，从第 3 列（索引 2）开始
+    start_idx = 3 if has_center else 2
+    header_periods = [str(c).strip() if c is not None else "" for c in columns[start_idx:]]
+    periods_payload = payload.get("periods")
+    if isinstance(periods_payload, list) and len(periods_payload) == len(header_periods):
+        periods = [str(p).strip() for p in periods_payload]
+    else:
+        periods = header_periods
+
+    op_time = _parse_operation_time(payload.get("submit_time"))
+    sheet_key = payload.get("sheet_key", "")
+    unit_id = str(payload.get("unit_id") or "").strip()
+    unit_name = str(payload.get("unit_name") or "").strip() or None
+
+    result: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, list) or len(row) <= start_idx:
+            continue
+        item_cn = str(row[0]).strip() if row[0] is not None else ""
+        if not item_cn:
+            continue
+        item_id = rev_item_map.get(item_cn, item_cn)
+
+        if has_center:
+            center_cn = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
+            unit = str(row[2]).strip() or None if len(row) > 2 else None
+            company_id = rev_center_map.get(center_cn, center_cn) if center_cn else ""
+            company_cn = center_cn or None
+        else:
+            center_cn = None
+            unit = str(row[1]).strip() or None if len(row) > 1 else None
+            company_id = unit_id
+            company_cn = unit_name
+
+        if not company_id:
+            continue
+
+        # 遍历数据列
+        for idx, period in enumerate(periods):
+            if not period or period == "计量单位":
+                continue
+            col_index = start_idx + idx
+            if col_index >= len(row):
+                value = None
+            else:
+                value = _parse_decimal_value(row[col_index])
+
+            rec = {
+                "company": company_id,
+                "company_cn": company_cn,
+                "sheet_name": sheet_key,
+                "item": item_id or item_cn,
+                "item_cn": item_cn,
+                "value": value,
+                "unit": unit,
+                "period": period,
+                "operation_time": op_time,
+            }
+            # 如果模型包含 center 字段并且这是中心维度表，可在后续持久化中附加
+            if has_center:
+                rec["center_cn"] = center_cn or None
+            result.append(rec)
+
+    return result
+
+
+def _persist_constant_data(records: List[Dict[str, Any]]) -> int:
+    """将拆解后的常量记录持久化到数据库。"""
+    if not records:
+        return 0
+
+    session = SessionLocal()
+    try:
+        # Use a set to track unique keys for deletion
+        delete_keys = set()
+        for record in records:
+            key = (
+                record["company"],
+                record["sheet_name"],
+                record["item"],
+                record["period"],
+            )
+            delete_keys.add(key)
+        
+        # Idempotent write: delete existing records first
+        if delete_keys:
+            for company, sheet_name, item, period in delete_keys:
+                session.execute(
+                    delete(ConstantData).where(
+                        ConstantData.company == company,
+                        ConstantData.sheet_name == sheet_name,
+                        ConstantData.item == item,
+                        ConstantData.period == period,
+                    )
+                )
+
+        # Bulk insert new records
+        session.bulk_insert_mappings(ConstantData, records)
+        session.commit()
+        return len(records)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+async def handle_constant_submission(payload: Dict[str, Any]) -> JSONResponse:
+    """处理常量表的专用提交逻辑。"""
+    try:
+        records = _parse_constant_records(payload)
+        inserted_count = _persist_constant_data(records)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "message": "常量表数据处理成功",
+                "records_parsed": len(records),
+                "inserted": inserted_count,
+            },
+        )
+    except Exception as exc:
+        # Provide more detailed error logging if possible
+        print(f"Error processing constant submission: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "处理常量表数据时发生错误", "error": str(exc)},
+        )
+
+
 def _decorate_columns(columns: Iterable[Any]) -> List[str]:
     """将列定义转为列表，不再在服务端注入日期。"""
     return list(columns) if isinstance(columns, list) else list(columns)
@@ -1269,11 +1486,6 @@ def get_sheet_template(
 async def submit_debug(
     request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
-    config: Optional[str] = Query(
-        default=None,
-        alias="config",
-        description="页面数据源配置文件（用于常量/展示等页面分流）",
-    ),
 ):
     """
     数据提交总调度入口。
@@ -1285,6 +1497,9 @@ async def submit_debug(
     if _is_gongre_sheet(sheet_key):
         return await handle_gongre_branches_detail_submission(payload)
 
+    if _is_constant_sheet(sheet_key):
+        return await handle_constant_submission(payload)
+
     if sheet_key == "Coal_inventory_Sheet":
         # 调用煤炭库存表的专用处理器
         return await handle_coal_inventory_submission(payload)
@@ -1293,21 +1508,6 @@ async def submit_debug(
         try:
             normalized = _normalize_submission(payload)
             flattened = _flatten_records(payload, normalized)
-
-            # 常量指标页面：写入 constant_data
-            if config and ("常量" in config or "constant" in config.lower()):
-                inserted_rows = _persist_constant_data(payload, normalized, flattened)
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "ok": True,
-                        "message": f"常量指标表 '{sheet_key}' 数据处理成功",
-                        "records": len(normalized.get("records", [])),
-                        "flattened_records": len(flattened),
-                        "inserted": inserted_rows,
-                    },
-                )
-
             inserted_rows = _persist_daily_basic(payload, normalized, flattened)
             return JSONResponse(
                 status_code=200,
