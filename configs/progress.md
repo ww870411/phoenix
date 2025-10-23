@@ -568,6 +568,33 @@
   - 渐进式落地：先实现 1)（解锁 DataEntry 的单表回填），随后补 2)（供展示/常量页面批量获取）。
   - 兼容性：前端 `services/api.js::queryData` 保持不变；展示/常量页可选择采用项目级聚合查询以减少请求轮数。
   - 下一步：待确认后开发 Phase 1 后端逻辑（standard/crosstab/constant 三分支），随后补聚合路由。
+
+- 2025-10-23 实现：镜像查询（逆 submit）单表接口
+  - 路由：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
+  - 行为：
+    - 标准/每日表：按 `biz_date` 读取 `daily_basic_data`，返回 `{ template_type:'standard', cells:[...] }`；`cells[].unit` 为计量单位，`col_index=2`（本期首列）。
+    - 常量指标表：按 `period` 读取 `constant_data`，定位模板期别列索引并返回 `cells`（同 standard 回填方式）。
+    - 煤炭库存表：按 `biz_date` 读取 `coal_inventory_data`，返回 `{ template_type:'crosstab', columns, rows }` 宽表矩阵。
+  - 语义与约束：
+    - `unit` 一律为计量单位，组织维度过滤使用 `company`/`company_id` 可选参数。
+    - 日历联动：每日表使用 `biz_date`；常量表使用 `period`（如 24-25/25-26）。
+  - 变更文件：`backend/api/v1/daily_report_25_26.py`
+  - 回滚方案：恢复 `query_placeholder`，或仅保留 standard 分支以降级验证。
+
+- 2025-10-23 前端联动改进：日历变更触发查询 & 备注回填
+  - DataEntryView.vue：
+    - 在 `watch(bizDate)` 中新增调用 `queryData(...)`，变更日期后即时回填数据与备注（cells 文本型/数值型均支持）。
+    - 页面初次加载完成后执行一次镜像查询（standard/crosstab分别处理）。
+  - 后端查询增强：
+    - standard 分支：读取模板定位“备注”列索引，若记录存在 note 字段，追加文本型 cell（value_text）。
+  - crosstab 分支：若模板含“备注”等列，按 (公司, 煤种) 行汇总首个非空备注填入备注列。
+
+- 2025-10-23 Bugfix：煤炭库存页前端已收数据但未渲染
+  - 现象：网络层已收到 rows，但页面不显示。
+  - 根因：仅在初次加载时处理了 crosstab 的 rows，业务日期变更未触发 crosstab 的重新回填；且部分情况下列头未同步。
+  - 修复：
+    - 在 `DataEntryView.vue` 增加针对 `templateType==='crosstab'` 的 `watch(bizDate)`，变更时重新调用 `queryData` 并以 `q.rows` 重建 `gridSource`；若返回 `q.columns`，同步更新 `columns` 与 `gridColumns.name`。
+    - 初次加载时的 crosstab 查询保留；必要时在 watch 中补充列头同步逻辑。
 - 2025-10-23 术语澄清：镜像查询 = 逆 submit 查询
   - 结论：与前端提交写入同一数据库表，按同一键（project_key/sheet_key/biz_date[/unit]）反向读取回填的数据。
   - 标准/常量（Tall Table / DailyBasicData）：返回 cells 形式，默认回填到第一个数据列（col_index=2）。
@@ -582,3 +609,47 @@
     - 可选过滤参数使用 `company` 或 `company_id`，而非 `unit`。
     - 镜像查询返回中的 `unit` 依旧仅承载计量单位信息。
   - 技术债记录：后端个别函数尚有 `unit_id` 充当公司标识的历史命名（如 `_resolve_company_name`）；实现查询时不对外暴露该歧义参数，内部逐步收敛为 `company`/`company_id`。
+- 2025-10-23 Bugfix：煤炭库存变体表识别与查询空白
+  - 现象：`Coal_inventory_sheetYanJiuYuan_sheet` 页面查询无数据（而模板/提交已存在）。
+  - 根因：后端仅对 `sheet_key == 'Coal_inventory_Sheet'` 走 crosstab 分支，未识别其他变体 key，导致以 standard 路径查询 `daily_basic_data`，自然为空。
+  - 修复：新增 `_is_coal_inventory_sheet`（名称/列头双启发）并用于 `get_sheet_template`、`submit_debug`、`query_sheet` 三处判断；凡列头含“在途煤炭/港口存煤/厂内存煤”等任一中文名或名称包含 `coal_inventory` 的，一律按 crosstab 处理。
+  - 影响范围：仅模板类型判定与查询/提交分流逻辑；不改变现有数据表结构。
+- 2025-10-23 Bugfix：煤炭库存数据表列名不一致导致查询 500
+  - 现象：访问 `Coal_inventory_Sheet` 查询 500，数据库日志提示 `column coal_inventory_data.status does not exist`，建议列名为 `statues`。
+  - 根因：ORM 映射使用了 `status`，而实际数据库列名为 `statues`（历史拼写错误）。
+  - 修复（阶段一）：临时将 `CoalInventoryData.status` 映射为 `Column("statues", Text)` 以适配旧库。
+  - 修复（阶段二，最终）：数据库列名已更正为 `status`，现已将 ORM 改回 `Column(Text)` 与之对齐。
+  - 影响范围：仅 ORM 映射与自动生成的 SELECT/INSERT 列名，不影响接口字段与前端逻辑；需确保数据库已完成列名更正后再部署此版本。
+- 2025-10-23 Bugfix：查询时模板候选文件包含无效 JSON 导致 500
+  - 现象：POST `/.../query` 报 500，后端报错 `无法读取 JSON：/app/data/数据结构展示用表.json`。
+  - 根因：候选目录中存在非 JSON 或损坏 JSON 的文件；`_locate_sheet_payload` 读取时未捕获异常，直接抛错。
+  - 修复：在 `_locate_sheet_payload` 中对 `_read_json` 加 try/except，无法读取的候选文件自动跳过，不影响整体查询。
+
+### 2025-10-23 修复 Coal_inventory_Sheet 默认日期首屏空白（镜像 query 初始化顺序）
+
+- 现象：进入“每日数据填报页面”时，`Coal_inventory_Sheet` 在前端已发起默认日期的 query 且后端返回正确，但表格不显示；切换到其他日期后显示正常，再切回默认日期也能显示。
+- 根因：前端 `pages/DataEntryView.vue` 的 `loadTemplate()` 中，交叉表（crosstab）在“执行镜像查询”后又被后续的“模板渲染初始化（setupCrosstabGrid）/或其等价逻辑”覆盖了 `gridSource`，导致首屏回填被清空；而在用户手动切换日期时，watch(bizDate) 触发再次查询并回填，才显示数据。
+- 改动：
+  - 提前判定 `template_type`，若为 `crosstab`，先调用 `setupCrosstabGrid(tpl)` 初始化列与占位行，再执行一次镜像查询，用 `q.columns/q.rows` 更新 `columns/gridSource` 与 `gridColumns` 名称；
+  - 调整尾部渲染分支：`crosstab` 不再在末尾重复初始化，避免覆盖已回填的数据；`standard` 仍保持原有初始化与回填流程。
+- 影响范围：仅 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`；后端接口与数据结构未改动。
+- 文件：
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue
+  - frontend/README.md（追加说明）
+  - backend/README.md（记录无后端改动）
+- 回滚思路：
+  - 将 `loadTemplate()` 中新增的“提前判定 crosstab 并先初始化再查询”的逻辑移除，并恢复末尾对 `setupCrosstabGrid` 的调用，即可回退至变更前（但将再次出现首屏空白问题）。
+### 2025-10-23 前端渲染流程说明（模板 → 网格 → 镜像查询）
+
+- 背景：在引入“镜像 query”前，前端仅请求 `template` 并按模板渲染 RevoGrid；引入后，首屏与日期切换时会追加一次“镜像查询”用于回填既有数据，避免用户看不到历史已填记录。
+- 标准表（standard）流程：
+  1) `getTemplate` 取模板 → 占位符替换（含日期占位） → 设定 `columns/rows` → `setupStandardGrid` 生成 `gridColumns/gridSource`；
+  2) “镜像查询”`queryData` → 将返回的 `cells[]` 依据 `row_label/col_index` 回填 `gridSource`；
+  3) 监听 `bizDate` 变化：重算列头文字并再次 `queryData` 回填当前日期数据。
+- 交叉表（crosstab，煤炭库存）流程：
+  1) `getTemplate` 后立即确认 `template_type==='crosstab'`，先 `setupCrosstabGrid` 初始化列与占位行；
+  2) “镜像查询”`queryData` → 若返回 `columns` 则同步 `columns/gridColumns` 名称；用 `rows` 重建 `gridSource`；
+  3) 监听 `bizDate` 变化：再次 `queryData`，用返回的 `columns/rows` 直接替换 `columns/gridSource`，列头与数据与业务日期对齐。
+- 相关文件：
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue:249（`loadTemplate` 首屏流程）、:541（standard 的日期联动 watch）、:592（crosstab 的日期联动 watch）
+  - frontend/src/daily_report_25_26/services/api.js:85（`queryData` 实现）

@@ -74,6 +74,7 @@ class CoalInventoryData(Base):
     value = Column(Numeric(18, 4))
     unit = Column(Text)
     note = Column(Text)
+    # 数据库列名已更正为 'status'
     status = Column(Text)
     date = Column(Date, nullable=False)
     operation_time = Column(DateTime, nullable=False)

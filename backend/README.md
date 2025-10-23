@@ -74,6 +74,15 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `create_tables.sql`
     - SQL 包含 `gongre_branches_detail_data`，对应 ORM 类 `GongreBranchesDetailData`（见 `db/database_daily_report_25_26.py`）。
 
+## 查询接口（镜像查询）
+- 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
+  - standard（每日）：`{ template_type:'standard', biz_date, cells:[...] }`
+  - constants（常量）：`{ template_type:'standard', period, cells:[...] }`
+  - crosstab（煤炭库存）：`{ template_type:'crosstab', biz_date, columns:[...], rows:[...] }`
+- 聚合查询（规划中）：`POST /api/v1/projects/{project_key}/query`
+  - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（cells/records/matrix）。
+  - 出参：`{ results: { [sheet_key]: ... }, meta: {...} }`。
+
 ## 接口路线图（2025-10-19）
 
 - `GET /api/v1/ping`：系统级心跳。
@@ -124,3 +133,7 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 ```
 
 - PostgreSQL 数据卷已绑定宿主机目录 `D:/编程项目/phoenix/db_data`，请确保目录存在并拥有写权限后再启动容器。
+#
+# 变更记录（2025-10-23）
+
+- 前端修复：交叉表（`Coal_inventory_Sheet`）默认日期首次进入页面不显示数据的问题，属前端初始化顺序导致的镜像查询结果被覆盖；本次无后端接口与数据结构改动。

@@ -261,8 +261,73 @@ async function loadTemplate() {
   unitName.value = tpl.unit_name || '';
   unitId.value = tpl.unit_id || '';
   columns.value = tpl.columns || [];
+  // 提前确定模板类型与行数据，避免初始化顺序导致回填被覆盖
   rows.value = tpl.rows || [];
   templateType.value = tpl.template_type || 'standard';
+  // 交叉表需先搭好列与占位行，再执行镜像查询，避免后续初始化覆盖查询结果
+  if (templateType.value === 'crosstab') {
+    await setupCrosstabGrid(tpl);
+  }
+  // 初次加载后进行一次镜像查询（按当前 bizDate 或模板类型）；便于刷新后直接看到已填数据
+  try {
+    if (templateType.value === 'standard') {
+      const q = await queryData(
+        projectKey,
+        sheetKey,
+        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
+      );
+      if (q && Array.isArray(q.cells)) {
+        // 清空数据列，避免上一查询残留（从第2列起）
+        for (let r = 0; r < gridSource.value.length; r++) {
+          for (let c = 2; c < columns.value.length; c++) {
+            gridSource.value[r][`c${c}`] = '';
+          }
+        }
+        const rowIndex = new Map();
+        for (let i = 0; i < gridSource.value.length; i++) {
+          const label = String(gridSource.value[i]?.c0 ?? '').trim();
+          if (label && !rowIndex.has(label)) rowIndex.set(label, i);
+        }
+        for (const cell of q.cells) {
+          const rowLabel = String(cell.row_label ?? '').trim();
+          const ri = rowIndex.has(rowLabel) ? rowIndex.get(rowLabel) : -1;
+          const ci = Number(cell.col_index ?? -1);
+          if (ri >= 0 && ci >= 0 && gridSource.value[ri]) {
+            const v = cell.value_type === 'text' ? (cell.value_text ?? '') : (cell.value_num ?? '');
+            gridSource.value[ri][`c${ci}`] = v === null ? '' : String(v);
+          }
+        }
+        gridSource.value = [...gridSource.value];
+      }
+    } else if (templateType.value === 'crosstab') {
+      const q = await queryData(
+        projectKey,
+        sheetKey,
+        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
+      );
+      // 更新列头（若由后端基于日期生成），并对齐 gridColumns
+      if (q && Array.isArray(q.columns)) {
+        columns.value = q.columns;
+        if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
+          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+        } else {
+          const colDefs = q.columns.map((name, index) => ({
+            name: String(name ?? ''),
+            prop: `c${index}`,
+            size: index === 0 ? 180 : undefined,
+            minSize: index === 0 ? 160 : 100,
+            readonly: index < 2,
+          }));
+          gridColumns.value = colDefs;
+        }
+      }
+      if (q && Array.isArray(q.rows)) {
+        gridSource.value = q.rows.map(r => Array.isArray(r) ? r.reduce((acc, val, idx) => { acc[`c${idx}`] = val; return acc; }, {}) : r);
+      }
+    }
+  } catch (err) {
+    console.error('initial query failed:', err);
+  }
 
   // 如果后端下发了权威的业务日期，则使用它
   if (tpl.biz_date) {
@@ -297,10 +362,8 @@ async function loadTemplate() {
   }
   templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
 
-  // 根据模板类型选择渲染策略
-  if (templateType.value === 'crosstab') {
-    await setupCrosstabGrid(tpl);
-  } else {
+  // 根据模板类型选择渲染策略；crosstab 已提前初始化
+  if (templateType.value !== 'crosstab') {
     await setupStandardGrid(tpl);
   }
 }
@@ -465,13 +528,85 @@ function measureTextWidth(content, font) {
 // 监听业务日期变更，标准表需用新日期重算列头与网格列定义
 const stop = watch(
   () => bizDate.value,
-  () => {
-    if (templateType.value !== 'standard') return;
-    if (!Array.isArray(baseColumns.value) || !baseColumns.value.length) return;
-    const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
-    columns.value = recalculated;
-    if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
-      gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
+  async () => {
+    if (templateType.value === 'standard') {
+      if (!Array.isArray(baseColumns.value) || !baseColumns.value.length) return;
+      const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
+      columns.value = recalculated;
+      if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
+        gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
+      }
+    }
+    // 日历变更后，触发一次镜像查询，回填当日数据与备注
+    try {
+      await nextTick();
+      const q = await queryData(
+        projectKey,
+        sheetKey,
+        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
+      );
+      if (q && Array.isArray(q.cells) && Array.isArray(gridSource.value)) {
+        // 建立 行项目 → 行索引 映射（以首列“项目”文本为准）
+        // 清空数据列，避免初次加载后再次查询时残留
+        for (let r = 0; r < gridSource.value.length; r++) {
+          for (let c = 2; c < columns.value.length; c++) {
+            gridSource.value[r][`c${c}`] = '';
+          }
+        }
+        const rowIndex = new Map();
+        for (let i = 0; i < gridSource.value.length; i++) {
+          const label = String(gridSource.value[i]?.c0 ?? '').trim();
+          if (label && !rowIndex.has(label)) rowIndex.set(label, i);
+        }
+        for (const cell of q.cells) {
+          const rowLabel = String(cell.row_label ?? '').trim();
+          const ri = rowIndex.has(rowLabel) ? rowIndex.get(rowLabel) : -1;
+          const ci = Number(cell.col_index ?? -1);
+          if (ri >= 0 && ci >= 0 && gridSource.value[ri]) {
+            const v = cell.value_type === 'text' ? (cell.value_text ?? '') : (cell.value_num ?? '');
+            gridSource.value[ri][`c${ci}`] = v === null ? '' : String(v);
+          }
+        }
+        // 触发表格刷新
+        gridSource.value = [...gridSource.value];
+      }
+    } catch (err) {
+      console.error('query on bizDate change failed:', err);
+    }
+  }
+)
+
+// crosstab：业务日期变化时重新查询并渲染 rows
+watch(
+  () => bizDate.value,
+  async () => {
+    if (templateType.value !== 'crosstab') return;
+    try {
+      const q = await queryData(
+        projectKey,
+        sheetKey,
+        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
+      );
+      if (q && Array.isArray(q.columns)) {
+        columns.value = q.columns;
+        if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
+          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+        } else {
+          const colDefs = q.columns.map((name, index) => ({
+            name: String(name ?? ''),
+            prop: `c${index}`,
+            size: index === 0 ? 180 : undefined,
+            minSize: index === 0 ? 160 : 100,
+            readonly: index < 2,
+          }));
+          gridColumns.value = colDefs;
+        }
+      }
+      if (q && Array.isArray(q.rows)) {
+        gridSource.value = q.rows.map(r => Array.isArray(r) ? r.reduce((acc, val, idx) => { acc[`c${idx}`] = val; return acc; }, {}) : r);
+      }
+    } catch (err) {
+      console.error('crosstab query on bizDate change failed:', err);
     }
   }
 )

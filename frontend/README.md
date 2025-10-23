@@ -96,3 +96,20 @@ docker compose up -d --build
 
 - `VITE_API_BASE`：前端调用后端的基础地址，开发默认 `http://127.0.0.1:8000`；
 - 其余变量按需扩展。
+#
+# 追加变更记录（2025-10-23）
+
+- 修复交叉表（煤炭库存 Coal_inventory_Sheet）首屏空白：调整 `pages/DataEntryView.vue` 的 `loadTemplate()` 初始化顺序，先判定 `template_type==='crosstab'` 并调用 `setupCrosstabGrid` 初始化列与占位行，再执行镜像查询以回填 `columns/rows`，并避免后续渲染流程覆盖查询结果，确保打开页面即可显示默认日期数据。
+# 追加说明：渲染流程（模板 + 镜像查询）
+
+- 标准表（standard）
+  - 首屏：`getTemplate` → 占位符应用（含日期文字）→ `setupStandardGrid` 渲染 → 立刻调用 `queryData` 以 `cells[]` 回填网格；
+  - 日期切换：重算列头文字 → `queryData` 回填当前日期数据；
+  - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:541`（watch 处理）。
+
+- 交叉表（crosstab，Coal_inventory_Sheet）
+  - 首屏：`getTemplate` 后先确定 `template_type==='crosstab'`，调用 `setupCrosstabGrid` 初始化列与占位行 → 再 `queryData`，若返回 `columns` 则同步列头，并用 `rows` 重建 `gridSource`；
+  - 日期切换：`queryData` 返回的 `columns/rows` 直接替换 `columns/gridSource`；
+  - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:592`（watch 处理）。
+
+- 接口：`services/api.js:85` `queryData(projectKey, sheetKey, payload, { config })`。

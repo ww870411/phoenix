@@ -51,6 +51,25 @@ COAL_STORAGE_NAME_MAP = {
     "厂内存煤": ("coal_at_plant", "厂内存煤"),
 }
 
+def _is_coal_inventory_sheet(name: Optional[str], tpl_payload: Optional[Dict[str, Any]] = None) -> bool:
+    """
+    识别煤炭库存类报表：
+    - 名称启发：包含 "coal_inventory" 或 "Coal_inventory"（不区分大小写）。
+    - 结构启发：模板列头中包含 COAL_STORAGE_NAME_MAP 的任一中文列名（如“在途煤炭/港口存煤/厂内存煤”）。
+    """
+    if isinstance(name, str) and name:
+        lowered = name.lower()
+        if "coal_inventory" in lowered:
+            return True
+    if isinstance(tpl_payload, dict):
+        columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+        if isinstance(columns_raw, list):
+            col_set = {str(c).strip() for c in columns_raw if c is not None}
+            for cn in COAL_STORAGE_NAME_MAP.keys():
+                if cn in col_set:
+                    return True
+    return False
+
 
 def _resolve_data_file(path_expression: Optional[str]) -> Optional[SysPath]:
     """将相对路径解析为 DATA_ROOT 下的实际文件路径。"""
@@ -248,7 +267,11 @@ def _locate_sheet_payload(
         candidate_paths.append(resolved)
 
     for data_path in candidate_paths:
-        raw = _read_json(data_path)
+        try:
+            raw = _read_json(data_path)
+        except Exception:
+            # 跳过不可读取/非 JSON 的候选文件，避免整体查询失败
+            continue
 
         if isinstance(raw, dict):
             direct = raw.get(sheet_key)
@@ -1470,7 +1493,7 @@ def get_sheet_template(
     for dict_key, dict_value in dict_bundle.items():
         response_content[dict_key] = dict_value
 
-    if sheet_key == "Coal_inventory_Sheet":
+    if _is_coal_inventory_sheet(sheet_key, payload):
         response_content["template_type"] = "crosstab"
         response_content["columns"] = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
     else:
@@ -1500,7 +1523,7 @@ async def submit_debug(
     if _is_constant_sheet(sheet_key):
         return await handle_constant_submission(payload)
 
-    if sheet_key == "Coal_inventory_Sheet":
+    if _is_coal_inventory_sheet(sheet_key, payload):
         # 调用煤炭库存表的专用处理器
         return await handle_coal_inventory_submission(payload)
     else:
@@ -1529,18 +1552,296 @@ async def submit_debug(
 
 
 
-@router.post("/data_entry/sheets/{sheet_key}/query", summary="查询数据填报（占位）")
-def query_placeholder(
+@router.post("/data_entry/sheets/{sheet_key}/query", summary="镜像查询（逆 submit）：按表读取已入库数据")
+async def query_sheet(
+    request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件（用于常量/煤炭库存推断列头/期别）",
+    ),
 ):
-    return JSONResponse(
-        status_code=200,
-        content={
-            "ok": True,
-            "message": "query endpoint placeholder",
-            "sheet_key": sheet_key,
-        },
-    )
+    """
+    统一镜像查询：与 submit 落库“互逆”。
+    - 标准/每日：按 date=biz_date 查询 daily_basic_data，返回 cells（回填到第一个数据列 col_index=2）。
+    - 常量指标：按 period 查询 constant_data，返回 cells，col_index 为模板中对应期别的列索引。
+    - 煤炭库存：按 date=biz_date 查询 coal_inventory_data，返回 rows+columns 宽表矩阵。
+
+    说明：
+    - `unit` 字段一律表示“计量单位”（如 万kWh、GJ、吨），不是公司/组织。
+    - 组织维度过滤使用 `company` 或 `company_id`（可选）。
+    """
+
+    payload = await request.json()
+    # 解析公共参数
+    biz_date = payload.get("biz_date") if isinstance(payload, dict) else None
+    period = payload.get("period") if isinstance(payload, dict) else None
+    company = None
+    if isinstance(payload, dict):
+        company = (
+            payload.get("company")
+            or payload.get("company_id")
+            or payload.get("unit_id")  # 历史命名兼容：内部仍使用 company 语义
+        )
+        if company is not None:
+            company = str(company).strip() or None
+
+    # 如需读取模板（计算列/期别），解析首选配置文件路径 —— 必须在模板类型判定之前
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+
+    # 推断模板类型
+    template_type = "standard"
+    if _is_constant_sheet(sheet_key):
+        template_type = "constant"
+    else:
+        # 通过模板或名称启发式识别 crosstab
+        tpl_payload_detect, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+        if _is_coal_inventory_sheet(sheet_key, tpl_payload_detect):
+            template_type = "crosstab"
+
+    # 执行不同模板类型的镜像查询
+    try:
+        if template_type == "crosstab":
+            # 煤炭库存：返回 rows/columns 宽表
+            if not biz_date:
+                return JSONResponse(
+                    status_code=422,
+                    content={"ok": False, "message": "煤炭库存查询需提供 biz_date"},
+                )
+
+            # 读取模板列头，构建列名→索引映射
+            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            if tpl_payload is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+                )
+            columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+            # 确保前三列为 [单位, 煤种, 计量单位]（若模板中已有则保持原样）
+            columns: List[str] = [str(c) for c in (columns_raw or [])]
+
+            # 反查存量列中文名在模板中的索引
+            storage_index: Dict[str, int] = {}
+            if isinstance(columns, list):
+                for idx, name in enumerate(columns):
+                    if isinstance(name, str):
+                        storage_index[name.strip()] = idx
+
+            # DB 查询
+            session = SessionLocal()
+            try:
+                q = session.query(CoalInventoryData).filter(
+                    CoalInventoryData.date == _parse_date_value(biz_date)
+                )
+                if company:
+                    q = q.filter(CoalInventoryData.company == company)
+                rows_db: List[CoalInventoryData] = q.all()
+
+                # 组装 (公司, 煤种) → 行缓冲
+                row_map: Dict[Tuple[str, str], List[Any]] = {}
+                # 备注列索引（若模板中存在“备注”等列）
+                note_idx = None
+                if isinstance(columns, list):
+                    for i, n in enumerate(columns):
+                        if str(n).strip() in {"备注", "说明", "解释说明", "note", "Note"}:
+                            note_idx = i
+                            break
+
+                for rec in rows_db:
+                    key = (rec.company_cn or rec.company, rec.coal_type_cn or rec.coal_type)
+                    if key not in row_map:
+                        # 初始化为全空的行
+                        base = [""] * len(columns)
+                        if len(base) >= 1:
+                            base[0] = rec.company_cn or rec.company or ""
+                        if len(base) >= 2:
+                            base[1] = rec.coal_type_cn or rec.coal_type or ""
+                        if len(base) >= 3:
+                            base[2] = rec.unit or ""
+                        row_map[key] = base
+
+                    # 定位存量列索引：优先使用记录中的中文列名；否则用映射表匹配
+                    col_idx = None
+                    if isinstance(rec.storage_type_cn, str):
+                        cname = rec.storage_type_cn.strip()
+                        col_idx = storage_index.get(cname)
+                    if col_idx is None and isinstance(rec.storage_type, str):
+                        # 由 code 映射中文，再找索引
+                        for cn_name, (code, label_cn) in COAL_STORAGE_NAME_MAP.items():
+                            if code == rec.storage_type:
+                                col_idx = storage_index.get(cn_name) or storage_index.get(label_cn)
+                                if col_idx is None:
+                                    # 兜底查找：模板列名中出现 label_cn
+                                    col_idx = next(
+                                        (i for i, n in enumerate(columns) if str(n).strip() == label_cn),
+                                        None,
+                                    )
+                                break
+
+                    if isinstance(col_idx, int) and 0 <= col_idx < len(row_map[key]):
+                        val = rec.value
+                        row_map[key][col_idx] = float(val) if val is not None else None
+
+                    # 填充备注（若存在备注列）：采用首个非空备注
+                    if note_idx is not None and isinstance(rec.note, (str,)):
+                        if not row_map[key][note_idx]:
+                            nt = rec.note.strip()
+                            if nt:
+                                row_map[key][note_idx] = nt
+
+                result_rows = list(row_map.values())
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "ok": True,
+                        "template_type": "crosstab",
+                        "sheet_key": sheet_key,
+                        "biz_date": biz_date,
+                        "columns": columns,
+                        "rows": result_rows,
+                    },
+                )
+            finally:
+                session.close()
+
+        elif template_type == "constant":
+            # 常量指标：如提供 period 则定向查询该期；否则返回所有已入库期别对应的 cells
+            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            if tpl_payload is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+                )
+            columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+            dict_bundle = _collect_all_dicts(tpl_payload)
+            has_center = isinstance(dict_bundle.get("center_dict"), dict) and len(dict_bundle.get("center_dict")) > 0
+            start_idx = 3 if has_center else 2
+            periods = [str(c).strip() if c is not None else "" for c in columns_raw[start_idx:]]
+            session = SessionLocal()
+            try:
+                q = session.query(ConstantData).filter(ConstantData.sheet_name == sheet_key)
+                if period:
+                    q = q.filter(ConstantData.period == str(period).strip())
+                if company:
+                    q = q.filter(ConstantData.company == company)
+                rows_db: List[ConstantData] = q.all()
+
+                cells: List[Dict[str, Any]] = []
+                for rec in rows_db:
+                    value = float(rec.value) if rec.value is not None else None
+                    # 为每条记录计算其列索引（根据其 period 定位到模板列头）
+                    rec_period = str(rec.period or "").strip()
+                    try:
+                        p_offset = periods.index(rec_period) if rec_period else 0
+                    except ValueError:
+                        p_offset = 0
+                    col_index = start_idx + p_offset
+                    cells.append(
+                        {
+                            "row_label": rec.item_cn or rec.item,
+                            "unit": rec.unit,
+                            "col_index": col_index,
+                            "value_type": "num" if value is not None else "text",
+                            "value_num": value,
+                        }
+                    )
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "ok": True,
+                        "template_type": "standard",  # 常量沿用 standard 回填方式
+                        "mode": "constant",
+                        "sheet_key": sheet_key,
+                        "period": period,
+                        "cells": cells,
+                    },
+                )
+            finally:
+                session.close()
+
+        else:
+            # 标准/每日：按 biz_date 查询 daily_basic_data，返回 cells，默认回填第一个数据列（索引 2）
+            if not biz_date:
+                return JSONResponse(
+                    status_code=422,
+                    content={"ok": False, "message": "标准表查询需提供 biz_date"},
+                )
+            # 读取模板用于定位备注列索引
+            note_column_index: Optional[int] = None
+            try:
+                tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+                if tpl_payload is not None:
+                    columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+                    cols = [str(c).strip() if c is not None else "" for c in columns_raw]
+                    note_labels = {"解释说明", "说明", "备注", "note", "Note"}
+                    for idx, name in enumerate(cols):
+                        if name in note_labels:
+                            note_column_index = idx
+                            break
+                    if note_column_index is None and len(cols) >= 5:
+                        note_column_index = len(cols) - 1
+            except Exception:
+                note_column_index = None
+
+            session = SessionLocal()
+            try:
+                q = session.query(DailyBasicData).filter(
+                    DailyBasicData.sheet_name == sheet_key,
+                    DailyBasicData.date == _parse_date_value(biz_date),
+                )
+                if company:
+                    q = q.filter(DailyBasicData.company == company)
+                rows_db: List[DailyBasicData] = q.all()
+
+                cells: List[Dict[str, Any]] = []
+                for rec in rows_db:
+                    value = float(rec.value) if rec.value is not None else None
+                    cells.append(
+                        {
+                            "row_label": rec.item_cn or rec.item,
+                            "unit": rec.unit,
+                            "col_index": 2,  # 默认按第一个数据列（本期日）回填
+                            "value_type": "num" if value is not None else "text",
+                            "value_num": value,
+                        }
+                    )
+                    # 附加备注单元格（如果存在备注列且有备注值）
+                    if note_column_index is not None and isinstance(rec.note, (str,)):
+                        note_text = rec.note.strip()
+                        if note_text:
+                            cells.append(
+                                {
+                                    "row_label": rec.item_cn or rec.item,
+                                    "unit": rec.unit,
+                                    "col_index": note_column_index,
+                                    "value_type": "text",
+                                    "value_text": note_text,
+                                }
+                            )
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "ok": True,
+                        "template_type": "standard",
+                        "sheet_key": sheet_key,
+                        "biz_date": biz_date,
+                        "cells": cells,
+                    },
+                )
+            finally:
+                session.close()
+
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "查询处理发生错误", "error": str(exc)},
+        )
 
 
 @router.get("/data_entry/sheets", summary="获取数据填报模板清单")
