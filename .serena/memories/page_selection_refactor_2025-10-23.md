@@ -1,0 +1,1 @@
+2025-10-23：为支持多页面模板，新增项目页面接口与多模板解析，重写前端路由/服务（PageSelectView、Sheets、DataEntryView）并在 README、configs/progress.md 留痕；因 Serena 对 Markdown/Vue 多段修改支持有限，采用 apply_patch 批量重写相关文件。

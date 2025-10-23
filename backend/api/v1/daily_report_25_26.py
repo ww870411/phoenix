@@ -11,13 +11,13 @@ from datetime import datetime, timedelta, timezone
 
 from pathlib import Path as SysPath
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Path, Request
+from fastapi import APIRouter, Path, Query, Request
 
 from fastapi.responses import JSONResponse
 
@@ -48,7 +48,85 @@ COAL_STORAGE_NAME_MAP = {
     "港口存煤": ("coal_at_port", "港口存煤"),
     "厂内存煤": ("coal_at_plant", "厂内存煤"),
 }
-DATA_FILE_CANDIDATES = [str(BASIC_TEMPLATE_PATH)]
+
+
+def _resolve_data_file(path_expression: Optional[str]) -> Optional[SysPath]:
+    """将相对路径解析为 DATA_ROOT 下的实际文件路径。"""
+    if not path_expression:
+        return None
+    normalized = path_expression.strip()
+    if not normalized:
+        return None
+    candidate = SysPath(normalized)
+    if not candidate.is_absolute():
+        candidate = (DATA_ROOT / normalized).resolve()
+    else:
+        candidate = candidate.resolve()
+    try:
+        candidate.relative_to(DATA_ROOT.resolve())
+    except ValueError:
+        return None
+    if not candidate.exists():
+        return None
+    return candidate
+
+def _load_data_file_candidates() -> List[str]:
+    candidates: Set[SysPath] = {BASIC_TEMPLATE_PATH.resolve()}
+    project_config_path = DATA_ROOT / "项目列表.json"
+    if project_config_path.exists():
+        try:
+            raw = json.loads(project_config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            raw = None
+        if isinstance(raw, dict):
+            for _project_id, project in raw.items():
+                if not isinstance(project, dict):
+                    continue
+                pages = project.get("pages")
+                if isinstance(pages, dict):
+                    for _page_key, meta in pages.items():
+                        if not isinstance(meta, dict):
+                            continue
+                        ds = meta.get("数据源") or meta.get("data_source")
+                        if isinstance(ds, str) and ds.strip():
+                            candidate = _resolve_data_file(ds.strip())
+                            if candidate:
+                                candidates.add(candidate)
+                elif isinstance(pages, list):
+                    for entry in pages:
+                        if not isinstance(entry, dict):
+                            continue
+                        for _, relative_path in entry.items():
+                            if not isinstance(relative_path, str):
+                                continue
+                            normalized = relative_path.strip()
+                            if not normalized:
+                                continue
+                            candidate = _resolve_data_file(normalized)
+                            if candidate:
+                                candidates.add(candidate)
+        elif isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                pages = item.get("pages")
+                if isinstance(pages, list):
+                    for entry in pages:
+                        if not isinstance(entry, dict):
+                            continue
+                        for _, relative_path in entry.items():
+                            if not isinstance(relative_path, str):
+                                continue
+                            normalized = relative_path.strip()
+                            if not normalized:
+                                continue
+                            candidate = _resolve_data_file(normalized)
+                            if candidate:
+                                candidates.add(candidate)
+    return [str(path) for path in candidates]
+
+
+DATA_FILE_CANDIDATES = _load_data_file_candidates()
 
 # otherwise, fall back to a path relative to the project root (for local dev).
 
@@ -84,8 +162,16 @@ DICT_KEY_GROUPS = {
 
 def _iter_data_files() -> Iterable[SysPath]:
     """返回所有存在的候选数据文件路径。"""
-    if BASIC_DATA_FILE.exists():
-        yield BASIC_DATA_FILE
+    seen: Set[SysPath] = set()
+    for candidate in DATA_FILE_CANDIDATES:
+        path = SysPath(candidate)
+        if not path.exists():
+            continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        yield resolved
 
 
 def _read_json(path: SysPath) -> Any:
@@ -129,7 +215,10 @@ def _extract_names(payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def _locate_sheet_payload(sheet_key: str) -> Tuple[Optional[Dict[str, Any]], Optional[SysPath]]:
+def _locate_sheet_payload(
+    sheet_key: str,
+    preferred_path: Optional[SysPath] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[SysPath]]:
     """在候选模板文件中按 sheet_key 查找配置。"""
 
     def _consider(payload: Dict[str, Any], path: SysPath) -> Optional[Tuple[Dict[str, Any], SysPath]]:
@@ -144,7 +233,19 @@ def _locate_sheet_payload(sheet_key: str) -> Tuple[Optional[Dict[str, Any]], Opt
     best_path: Optional[SysPath] = None
     target_key_lower = sheet_key.lower()
 
+    candidate_paths: List[SysPath] = []
+    preferred_resolved: Optional[SysPath] = None
+    if preferred_path is not None and preferred_path.exists():
+        preferred_resolved = preferred_path.resolve()
+        candidate_paths.append(preferred_resolved)
+
     for data_path in _iter_data_files():
+        resolved = data_path.resolve()
+        if preferred_resolved is not None and resolved == preferred_resolved:
+            continue
+        candidate_paths.append(resolved)
+
+    for data_path in candidate_paths:
         raw = _read_json(data_path)
 
         if isinstance(raw, dict):
@@ -875,8 +976,8 @@ def _decorate_columns(columns: Iterable[Any]) -> List[str]:
     return list(columns) if isinstance(columns, list) else list(columns)
 
 
-def _collect_catalog() -> Dict[str, Dict[str, str]]:
-    catalog_path = BASIC_DATA_FILE
+def _collect_catalog(data_file: Optional[SysPath] = None) -> Dict[str, Dict[str, str]]:
+    catalog_path = data_file or BASIC_DATA_FILE
     if not catalog_path.exists():
         return {}
     raw = _read_json(catalog_path)
@@ -916,14 +1017,34 @@ def ping_daily_report():
 @router.get("/data_entry/sheets/{sheet_key}/template", summary="获取数据填报模板")
 def get_sheet_template(
     sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件",
+    ),
 ):
-    payload, data_path = _locate_sheet_payload(sheet_key)
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+        if preferred_path is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "message": f"未找到页面配置文件: {config}",
+                },
+            )
+
+    payload, data_path = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
     if payload is None:
+        message = f"sheet_key={sheet_key} 未在 {', '.join(DATA_FILE_CANDIDATES)} 中找到"
+        if preferred_path is not None:
+            message = f"sheet_key={sheet_key} 未在 {preferred_path} 中找到"
         return JSONResponse(
             status_code=404,
             content={
                 "ok": False,
-                "message": f"sheet_key={sheet_key} 未在 {', '.join(DATA_FILE_CANDIDATES)} 中找到",
+                "message": message,
             },
         )
 
@@ -1034,14 +1155,33 @@ def query_placeholder(
 
 
 @router.get("/data_entry/sheets", summary="获取数据填报模板清单")
-def list_sheets():
-    catalog = _collect_catalog()
+def list_sheets(
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="页面模板配置文件（相对 DATA_DIRECTORY 的路径）",
+    ),
+):
+    data_file: Optional[SysPath] = None
+    if config:
+        data_file = _resolve_data_file(config)
+        if data_file is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "message": f"未找到页面配置文件: {config}",
+                },
+            )
+
+    catalog = _collect_catalog(data_file)
     if not catalog:
+        location = data_file or DATA_ROOT
         return JSONResponse(
             status_code=404,
             content={
                 "ok": False,
-                "message": f"未在 {DATA_ROOT} 目录中找到任何模板文件",
+                "message": f"未在 {location} 中找到任何模板文件",
             },
         )
     return JSONResponse(status_code=200, content=catalog)

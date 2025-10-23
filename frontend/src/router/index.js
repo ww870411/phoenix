@@ -7,44 +7,29 @@ const routes = [
   },
   {
     path: '/login',
-    name: 'login',
     component: () => import('../daily_report_25_26/pages/LoginView.vue'),
-    meta: { requiresAuth: false },
   },
   {
     path: '/projects',
-    name: 'projects',
     component: () => import('../daily_report_25_26/pages/ProjectSelectView.vue'),
-    meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/data_entry/sheets',
-    name: 'dashboard',
+    path: '/projects/:projectKey/pages',
+    component: () => import('../daily_report_25_26/pages/PageSelectView.vue'),
+  },
+  {
+    path: '/projects/:projectKey/pages/:pageKey/sheets',
     component: () => import('../daily_report_25_26/pages/Sheets.vue'),
-    meta: { requiresAuth: true },
   },
   {
-    path: '/projects/:projectKey/data_entry/sheets/:sheetKey',
-    name: 'data-entry',
+    path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',
     component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
-    meta: { requiresAuth: true },
   },
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
-
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('phoenix_token');
-  if (to.meta.requiresAuth && !token) {
-    next({ name: 'login' });
-  } else if (to.name === 'login' && token) {
-    next({ name: 'projects' });
-  } else {
-    next();
-  }
-});
 
 export default router

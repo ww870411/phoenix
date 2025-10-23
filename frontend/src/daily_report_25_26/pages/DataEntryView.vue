@@ -55,11 +55,16 @@ const route = useRoute();
 const router = useRouter();
 const { applyTemplatePlaceholders } = useTemplatePlaceholders();
 const projectKey = String(route.params.projectKey ?? '');
+const pageKey = String(route.params.pageKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
+const pageConfig = computed(() => {
+  const raw = route.query.config;
+  return typeof raw === 'string' ? raw : '';
+});
 const initialDate = new Date().toISOString().slice(0,10);
 const bizDate = ref(String(initialDate));
 
-if (!projectKey || !sheetKey) {
+if (!projectKey || !pageKey || !sheetKey || !pageConfig.value) {
   router.replace({ name: 'projects' });
 }
 
@@ -178,7 +183,7 @@ async function setupCrosstabGrid(tpl) {
 
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
-  const rawTemplate = await getTemplate(projectKey, sheetKey);
+  const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
   const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
   
   // 存储基础信息
@@ -234,7 +239,12 @@ async function loadExisting() {
   // 注意：当前查询和回填逻辑只适用于 standard 模板
   if (templateType.value !== 'standard') return;
 
-  const q = await queryData({ project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value });
+  const q = await queryData(
+    projectKey,
+    sheetKey,
+    { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value },
+    { config: pageConfig.value },
+  );
   if (Array.isArray(q.cells)) {
     for (const cell of q.cells) {
       const { row_label, col_index, value_num, value_text } = cell;
@@ -320,7 +330,7 @@ async function onSubmit() {
     payload.company_dict = cloneDictValue(dictBundle.companyPrimary);
   }
 
-  await submitData(payload);
+  await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
   submitTime.value = currentSubmitTime;
   alert('提交成功');
 }

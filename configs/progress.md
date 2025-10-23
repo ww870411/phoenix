@@ -536,3 +536,9 @@
   2. 新增 `_write_gongre_branches_debug`，把前端原始 payload 与解析结果追记到 `configs/111.md`。
 - 验证：未运行自动化测试；需通过前端或模拟请求确认 `configs/111.md` 生成调试记录、数据库表实际写入数据。
 - 备注：如需回滚，移除新分支及相关函数并清理调试文件即可。
+### 2025-10-23 页面选取与模板多源支持（AI辅助）
+
+- 后端新增 `GET /api/v1/projects/{project_id}/pages` 接口，并扩展模板解析以识别 `项目列表.json` 中声明的多模板文件；所有模板与查询接口支援 `config` 查询参数。
+- 前端加入页面选取页 `/projects/:projectKey/pages`，重新规划路由为 `/projects/:projectKey/pages/:pageKey/sheets(/:sheetKey)`，并在各 API 调用中携带 `config` 参数确保指向正确模板。
+- 更新 `services/api.js`、`Sheets.vue`、`DataEntryView.vue` 等模块，实现多页面模板之间的切换及填报流程；同步刷新 README 说明。
+- 适配新的项目配置为“对象结构”：顶层为项目ID → 项目信息，`pages` 为“URL → {页面名称, 数据源}”；`/projects` 与 `/projects/{id}/pages` 已按此解析。

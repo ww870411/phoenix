@@ -49,7 +49,7 @@ const loading = computed(() => projectsLoading.value)
 const error = computed(() => (projectsError.value ? '无法加载项目列表，请稍后重试。' : ''))
 
 function enter(project) {
-  router.push(`/projects/${encodeURIComponent(project.project_id)}/data_entry/sheets`)
+  router.push(`/projects/${encodeURIComponent(project.project_id)}/pages`)
 }
 
 onMounted(() => {

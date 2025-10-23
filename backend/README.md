@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 新增能力（2025-10-23）
+
+- 新增接口 `GET /api/v1/projects/{project_id}/pages`，用于按项目返回页面与所属模板文件映射。
+- 所有 `/data_entry/sheets` 相关接口新增可选查询参数 `config`，允许前端显式指定模板 JSON 文件；默认仍回落至基础指标表。
+- 模板枚举逻辑会自动读取 `backend_data/项目列表.json` 中声明的所有模板文件，无需手工维护候选列表。
+
 该目录存放 Phoenix 项目的后端代码，采用「FastAPI + 版本化路由」的结构：
 
 - `main.py`：FastAPI 应用入口，挂载 `/api/v1` 前缀并提供 `/healthz`。 
