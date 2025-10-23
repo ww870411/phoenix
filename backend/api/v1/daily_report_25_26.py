@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import delete
 
 from backend.config import DATA_DIRECTORY
+from backend.db.database_daily_report_25_26 import ConstantData
 from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
     DailyBasicData,
@@ -848,6 +849,98 @@ def _persist_daily_basic(
         session.close()
 
 
+def _persist_constant_data(
+    payload: Dict[str, Any],
+    normalized: Dict[str, Any],
+    flattened: List[Dict[str, Any]],
+) -> int:
+    """将常量指标数据写入 constant_data 表，以 (company, sheet_name, item, period) 幂等覆盖。"""
+    if not flattened:
+        return 0
+
+    default_operation_time = _parse_operation_time(
+        normalized.get("submit_time") or payload.get("submit_time")
+    )
+
+    session = SessionLocal()
+    try:
+        models: List[ConstantData] = []
+        delete_keys = set()
+
+        for record in flattened:
+            company = str(record.get("company") or payload.get("unit_id") or "").strip()
+            if not company:
+                continue
+
+            company_cn = (
+                str(record.get("company_cn") or normalized.get("unit_name") or payload.get("unit_name") or "")
+                .strip()
+                or None
+            )
+            sheet_name_key = str(
+                record.get("sheet_name")
+                or normalized.get("sheet_key")
+                or payload.get("sheet_key")
+                or ""
+            ).strip()
+            if not sheet_name_key:
+                continue
+
+            item_key = str(record.get("item") or "").strip()
+            if not item_key:
+                continue
+
+            # 常量数据的 period 使用列名（原 record['date']）的原始文本
+            period_value = record.get("date")
+            if period_value is None:
+                continue
+            period = str(period_value).strip()
+            if not period:
+                continue
+
+            value_decimal = _parse_decimal_value(record.get("value"))
+            operation_time = _parse_operation_time(
+                record.get("operation_time") or default_operation_time
+            )
+
+            models.append(
+                ConstantData(
+                    company=company,
+                    company_cn=company_cn,
+                    sheet_name=sheet_name_key,
+                    item=item_key,
+                    item_cn=str(record.get("item_cn") or "").strip() or None,
+                    value=value_decimal,
+                    unit=str(record.get("unit") or "").strip() or None,
+                    period=period,
+                    operation_time=operation_time,
+                )
+            )
+            delete_keys.add((company, sheet_name_key, item_key, period))
+
+        if not models:
+            return 0
+
+        for company, sheet_name_key, item_key, period in delete_keys:
+            session.execute(
+                delete(ConstantData).where(
+                    ConstantData.company == company,
+                    ConstantData.sheet_name == sheet_name_key,
+                    ConstantData.item == item_key,
+                    ConstantData.period == period,
+                )
+            )
+
+        session.bulk_save_objects(models)
+        session.commit()
+        return len(models)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     将煤炭库存表的宽表 payload 拆解为扁平化的数据库记录列表。
@@ -1100,6 +1193,11 @@ def get_sheet_template(
 async def submit_debug(
     request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="页面数据源配置文件（用于常量/展示等页面分流）",
+    ),
 ):
     """
     数据提交总调度入口。
@@ -1119,6 +1217,21 @@ async def submit_debug(
         try:
             normalized = _normalize_submission(payload)
             flattened = _flatten_records(payload, normalized)
+
+            # 常量指标页面：写入 constant_data
+            if config and ("常量" in config or "constant" in config.lower()):
+                inserted_rows = _persist_constant_data(payload, normalized, flattened)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "ok": True,
+                        "message": f"常量指标表 '{sheet_key}' 数据处理成功",
+                        "records": len(normalized.get("records", [])),
+                        "flattened_records": len(flattened),
+                        "inserted": inserted_rows,
+                    },
+                )
+
             inserted_rows = _persist_daily_basic(payload, normalized, flattened)
             return JSONResponse(
                 status_code=200,

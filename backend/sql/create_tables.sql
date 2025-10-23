@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS constant_data (
     id              BIGSERIAL PRIMARY KEY,
     company         TEXT NOT NULL,
     company_cn      TEXT,
+    center          TEXT,
+    center_cn       TEXT,
     sheet_name      TEXT NOT NULL,
     item            TEXT NOT NULL,
     item_cn         TEXT,
@@ -53,7 +55,7 @@ CREATE TABLE IF NOT EXISTS constant_data (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_constant_unique
-    ON Constant_data (company, sheet_name, item, period);
+    ON Constant_data (company, center, sheet_name, item, period);
 
 CREATE TABLE IF NOT EXISTS temperature_data (
     id              BIGSERIAL PRIMARY KEY,
