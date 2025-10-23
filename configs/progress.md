@@ -557,3 +557,28 @@
     - `frontend/src/daily_report_25_26/pages/DataEntryView.vue`
   - 回滚思路：删除 `baseColumns` 与 `watch(bizDate)` 补丁，并恢复初次加载时的单次替换逻辑即可。
   - Hotfix：补充 `watch` 导入，修复 `setup` 阶段未定义导致的页面白屏。
+- 2025-10-23 统一查询接口设计提案
+  - 背景：三类页面（每日数据填报、数据展示、常量指标）均需查询能力；希望避免为每张表/每个页面单独新增路由。
+  - 设计：
+    1) 保留并实现通用的“按表查询”路由：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
+       - handler 内部按模板类型自适应（standard/crosstab/constant），无须为每张表单独写路由。
+    2) 新增“项目级聚合查询”路由：`POST /api/v1/projects/{project_key}/query`
+       - 入参支持 `sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date` 或 `date_range`、`mode`（cells/records/matrix）。
+       - 返回 `{ results: { [sheet_key]: { template_type, cells|rows+columns } }, meta: {...} }`，便于数据展示页/仪表盘批量回填。
+  - 渐进式落地：先实现 1)（解锁 DataEntry 的单表回填），随后补 2)（供展示/常量页面批量获取）。
+  - 兼容性：前端 `services/api.js::queryData` 保持不变；展示/常量页可选择采用项目级聚合查询以减少请求轮数。
+  - 下一步：待确认后开发 Phase 1 后端逻辑（standard/crosstab/constant 三分支），随后补聚合路由。
+- 2025-10-23 术语澄清：镜像查询 = 逆 submit 查询
+  - 结论：与前端提交写入同一数据库表，按同一键（project_key/sheet_key/biz_date[/unit]）反向读取回填的数据。
+  - 标准/常量（Tall Table / DailyBasicData）：返回 cells 形式，默认回填到第一个数据列（col_index=2）。
+  - 煤炭库存（CoalInventoryData）：按模板 columns + COAL_STORAGE_NAME_MAP 回填整表矩阵（rows/columns）。
+  - 与聚合查询区分：镜像查询只处理单张表的“逆提交”；聚合查询跨多表编排，供展示/仪表盘使用。
+
+- 2025-10-23 语义澄清：`unit` 表示“计量单位”，非公司/组织
+  - 约定更新：
+    - cells 中的 `unit` 字段仅表示“计量单位”（如 万kWh、GJ、吨）。
+    - 组织维度统一使用 `company`/`company_cn`（或 `company_id`）命名，不再混用 `unit_id` 指代公司。
+  - 查询接口提案修订：
+    - 可选过滤参数使用 `company` 或 `company_id`，而非 `unit`。
+    - 镜像查询返回中的 `unit` 依旧仅承载计量单位信息。
+  - 技术债记录：后端个别函数尚有 `unit_id` 充当公司标识的历史命名（如 `_resolve_company_name`）；实现查询时不对外暴露该歧义参数，内部逐步收敛为 `company`/`company_id`。
