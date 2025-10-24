@@ -653,3 +653,24 @@
 - 相关文件：
   - frontend/src/daily_report_25_26/pages/DataEntryView.vue:249（`loadTemplate` 首屏流程）、:541（standard 的日期联动 watch）、:592（crosstab 的日期联动 watch）
   - frontend/src/daily_report_25_26/services/api.js:85（`queryData` 实现）
+## 2025-10-24 镜像查询机制讲解（无代码变更）
+
+- 主题：解释“基本指标表/常量指标表”的镜像查询（query ⇄ submit 的逆向映射）。
+- 结论：
+  - 基本指标表（standard/daily）：按 `biz_date` 查询 `DailyBasicData`，将行项目映射回模板的第一个数据列（`col_index=2`），并在存在“备注/说明”列时回填该列的文本值。
+  - 常量指标表（constant）：解析模板列头，从第 3 列或第 4 列（若存在 `center_dict`）开始识别各“期别”列；按 `period` 查询 `ConstantData`，将每条记录定位到对应期别列的 `col_index`，以 `cells[]` 形式返回。
+- 关键实现（后端）：`backend/api/v1/daily_report_25_26.py:1554` 的 `query_sheet` 按模板类型分支处理：
+  - standard：`DailyBasicData` → `cells[{row_label, unit, col_index=2, value_*}]`
+  - constant：`ConstantData` → 依据模板期别列计算 `col_index`
+  - crosstab（煤炭库存，非本次重点）：返回 `rows+columns` 的宽表
+- 影响面：无结构/接口变更，仅文档补充说明。
+
+证据与参考：
+- 函数：`backend/api/v1/daily_report_25_26.py:1554` `query_sheet`
+- 常量表识别：`backend/api/v1/daily_report_25_26.py:1225` `_is_constant_sheet`
+- 模板列头收集：`backend/api/v1/daily_report_25_26.py` `_locate_sheet_payload`、`_collect_all_dicts`
+
+回滚与验证：
+- 无代码改动，无需回滚；如需验证，调用：
+  - 基本表：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`，携带 `{"biz_date": "YYYY-MM-DD"}`
+  - 常量表：同上，可选 `{"period": "2025年供热期"}` 指定期别

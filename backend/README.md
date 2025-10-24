@@ -137,3 +137,35 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 # 变更记录（2025-10-23）
 
 - 前端修复：交叉表（`Coal_inventory_Sheet`）默认日期首次进入页面不显示数据的问题，属前端初始化顺序导致的镜像查询结果被覆盖；本次无后端接口与数据结构改动。
+## 镜像查询（/query）实现要点（2025-10-24）
+
+本节说明“基本指标表/常量指标表”的镜像查询（将已入库长表数据逆映射回模板坐标）。
+
+- 入口函数：`backend/api/v1/daily_report_25_26.py:1554` `query_sheet`
+- 模板类型识别：
+  - 常量表：`_is_constant_sheet(name)`（`*_constant_sheet` 后缀）→ constant 分支
+  - 标准/每日表：默认 standard 分支
+  - 煤炭库存：通过 `_locate_sheet_payload` + `_is_coal_inventory_sheet` 识别 → crosstab 分支（非本节重点）
+
+### 基本指标表（standard/daily）
+- 入参：`biz_date`（必填），可选 `company`
+- 查询：`DailyBasicData.sheet_name == sheet_key AND date == biz_date`
+- 回填：对每条行记录，生成一个 `cells` 单元：
+  - `row_label = rec.item_cn or rec.item`
+  - `unit = rec.unit`
+  - `col_index = 2`（第一个数据列，对应“本期日”）
+  - `value_type = 'num'|'text'`，`value_num`/`value_text`
+- 备注列：若模板存在“备注/说明/解释说明”等列，则追加一条 `text` 类型的 `cells`，其 `col_index` 为模板中该列的实际索引。
+
+### 常量指标表（constant）
+- 入参：可选 `period`（如“2025年供热期”），可选 `company`
+- 模板解析：
+  - 通过 `_locate_sheet_payload` 读取模板；
+  - 收集 `columns` 与 `dicts`（`_collect_all_dicts`），若模板含 `center_dict`，期别从第 4 列开始，否则从第 3 列开始；
+  - 提取期别序列 `periods = columns[start_idx:]`。
+- 查询：`ConstantData.sheet_name == sheet_key`（若给定 `period`/`company` 则加筛选）
+- 回填：
+  - 对每条记录，使用其 `period` 在 `periods` 中定位偏移 `p_offset`，计算 `col_index = start_idx + p_offset`；
+  - 生成 `cells[{row_label, unit, col_index, value_num|value_text}]`。
+
+说明：镜像查询与提交持久化为“互逆”设计，即：`submit` 平铺入库的键（`sheet_name/item/unit/(date|period)/(company)`）在 `/query` 中用于重建模板坐标（`row_label/unit/col_index`）。

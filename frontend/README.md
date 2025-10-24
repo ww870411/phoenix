@@ -113,3 +113,13 @@ docker compose up -d --build
   - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:592`（watch 处理）。
 
 - 接口：`services/api.js:85` `queryData(projectKey, sheetKey, payload, { config })`。
+## 数据回填与镜像查询对接（2025-10-24）
+
+- 模板获取：`GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` 返回 `columns/rows`，前端据此渲染 RevoGrid。
+- 镜像查询：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
+  - standard（基本指标表）：返回 `cells[]`，默认把数据回填到模板第一个数据列（`col_index=2`）；若模板含“备注/说明”列，另有一条 `text` 单元回填到对应列索引。
+  - constant（常量指标表）：后台根据模板列头推导期别列的起始索引（含 `center_dict` 时从第 4 列开始，否自第 3 列），`cells[]` 中的 `col_index` 直接可用于回填到对应期别列。
+- 日期占位符刷新：`DataEntryView.vue` 监听 `bizDate`，基于 `baseColumns` 重新计算“本期日/同期日”列（见 2025-10-23 进度项：`date_calendar_effectiveness_fix_2025-10-23`）。
+
+回填策略（建议实现）：
+- 以模板渲染的网格为基底；收到 `/query` 的 `cells[]` 后，按 `row_label + unit + col_index` 键合并覆盖 UI 中的单元格值；未命中保持为空以提示“尚未填报”。
