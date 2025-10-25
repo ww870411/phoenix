@@ -55,11 +55,11 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - 查询接口设计（提案，待实现）：
       - 单表查询：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
         - 内部按模板类型自适应返回：
-          - standard：`{ template_type:'standard', cells:[...] }`
+          - standard：`{ template_type:'standard', columns:[...], rows:[...] }`
           - crosstab（煤炭库存）：`{ template_type:'crosstab', columns:[...], rows:[...] }`
-          - constants：同 standard，cells 形式回填第一个数据列。
+          - constants：同 standard，按 columns+rows 回填对应期别列。
       - 项目级聚合查询：`POST /api/v1/projects/{project_key}/query`
-        - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（cells/records/matrix）。
+        - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（records/matrix）。
         - 出参：`{ results: { [sheet_key]: ... }, meta: {...} }`，适用于数据展示/仪表盘批量读取。
   - `db/`
     - `__init__.py`
@@ -76,11 +76,16 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
-  - standard（每日）：`{ template_type:'standard', biz_date, cells:[...] }`
-  - constants（常量）：`{ template_type:'standard', period, cells:[...] }`
+  - standard（每日）：`{ template_type:'standard', biz_date, columns:[...], rows:[...], attatch_time, request_id, source }`
+  - constants（常量）：`{ template_type:'standard', period, columns:[...], rows:[...], attatch_time, request_id, source }`
   - crosstab（煤炭库存）：`{ template_type:'crosstab', biz_date, columns:[...], rows:[...] }`
 - 聚合查询（规划中）：`POST /api/v1/projects/{project_key}/query`
-  - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（cells/records/matrix）。
+  - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（records/matrix）。
+  - 附加：`attatch_time` 为东八区时间戳（毫秒），便于前端对照调试；`request_id` 回显前端请求ID，便于去重与仅消费最新响应。
+  - 附加：`source` 为调试信息，包含：
+    - `handler`：处理本次查询的函数名（如 `query_sheet`）
+    - `template_type`：`standard`/`constant`/`crosstab`
+    - `received`：请求来源摘要 `{ path, query, payload:{ biz_date, period, company } }`
   - 出参：`{ results: { [sheet_key]: ... }, meta: {...} }`。
 
 ## 接口路线图（2025-10-19）
@@ -139,15 +144,15 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 前端修复：交叉表（`Coal_inventory_Sheet`）默认日期首次进入页面不显示数据的问题，属前端初始化顺序导致的镜像查询结果被覆盖；本次无后端接口与数据结构改动。
 ## 变更：镜像查询返回模板结构（2025-10-25）
 
-- 动机：现有 `cells` 形式在标准/常量表上增加了前后端复杂度；改为完全复用模板渲染路径，降低分支逻辑与心智负担。
+- 动机：`cells` 形式在标准/常量表上增加了前后端复杂度；现已改为完全复用模板渲染路径（rows-only），降低分支逻辑与心智负担。
 - 新行为：
   - `/api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query` 现返回与 `/template` 一致的结构：`columns` + `rows`（另附 `sheet_name`、`unit_id`、`unit_name` 及各类 `*_dict`）。
-  - `cells` 字段仍随响应返回，但标记为“兼容字段（将弃用）”。
+  - 已移除 `cells` 字段，响应统一为 `columns` + `rows` 结构。
 - 分表说明：
   - standard/每日类：默认将数值回填到第一个数据列（索引 2）；若模板存在备注列则同步回填文本。
   - constant/常量类：按模板期别列定位列索引并回填。
   - coal_inventory/煤炭库存：保持宽表 `columns`+`rows` 行为，无需调整。
-- 迁移指引：前端优先改为消费 `columns`+`rows`；完成迁移后可在后端移除 `cells`。
+- 迁移指引：前端已改为消费 `columns`+`rows`；后端已移除 `cells`。
 
 ## 变更记录（2025-10-25）
 

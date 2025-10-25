@@ -1564,8 +1564,8 @@ async def query_sheet(
 ):
     """
     统一镜像查询：与 submit 落库“互逆”。
-    - 标准/每日：按 date=biz_date 查询 daily_basic_data，返回 cells（回填到第一个数据列 col_index=2）。
-    - 常量指标：按 period 查询 constant_data，返回 cells，col_index 为模板中对应期别的列索引。
+    - 标准/每日：按 date=biz_date 查询 daily_basic_data，返回与模板一致的 `columns` + `rows` 结构。
+    - 常量指标：按 period 查询 constant_data，返回与模板一致的 `columns` + `rows` 结构。
     - 煤炭库存：按 date=biz_date 查询 coal_inventory_data，返回 rows+columns 宽表矩阵。
 
     说明：
@@ -1700,6 +1700,56 @@ async def query_sheet(
                 else:
                     result_rows = [list(r) if isinstance(r, list) else [] for r in rows_raw]
 
+                # 生成东八区毫秒时间戳（attatch_time）
+                from datetime import datetime, timezone, timedelta
+                _ts = datetime.now(timezone(timedelta(hours=8)))
+                _attatch_time = _ts.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+
+                # 生成 source 记录：函数、模板类型、请求来源与载荷摘要
+                source = {
+                    "handler": "query_sheet",
+                    "template_type": "standard",
+                    "received": {
+                        "path": str(request.url.path),
+                        "query": str(request.url.query),
+                        "payload": {
+                            "biz_date": biz_date,
+                            "period": period,
+                            "company": company,
+                        },
+                    },
+                }
+
+                # 生成 source 记录：函数、模板类型、请求来源与载荷摘要
+                source = {
+                    "handler": "query_sheet",
+                    "template_type": "constant",
+                    "received": {
+                        "path": str(request.url.path),
+                        "query": str(request.url.query),
+                        "payload": {
+                            "biz_date": biz_date,
+                            "period": period,
+                            "company": company,
+                        },
+                    },
+                }
+
+                # 生成 source 记录：函数、模板类型、请求来源与载荷摘要
+                source = {
+                    "handler": "query_sheet",
+                    "template_type": "crosstab",
+                    "received": {
+                        "path": str(request.url.path),
+                        "query": str(request.url.query),
+                        "payload": {
+                            "biz_date": biz_date,
+                            "period": period,
+                            "company": company,
+                        },
+                    },
+                }
+
                 content = {
                     "ok": True,
                     "template_type": "crosstab",
@@ -1710,6 +1760,9 @@ async def query_sheet(
                     "unit_name": names["unit_name"],
                     "columns": columns,
                     "rows": result_rows,
+                    "attatch_time": _attatch_time,
+                    "request_id": (payload.get("request_id") if isinstance(payload, dict) else None),
+                    "source": source,
                 }
                 for dict_key, dict_value in dict_bundle.items():
                     content[dict_key] = dict_value
@@ -1719,7 +1772,7 @@ async def query_sheet(
                 session.close()
 
         elif template_type == "constant":
-            # 常量指标：按模板 columns/rows 结构回填（同时保留 cells 以便前端迁移）
+            # 常量指标：按模板 columns/rows 结构回填（不再返回 cells，完全 rows-only）
             tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
@@ -1735,7 +1788,7 @@ async def query_sheet(
             start_idx = 3 if has_center else 2
             periods = [str(c).strip() if c is not None else "" for c in columns_raw[start_idx:]]
 
-            # 初始化为模板行的深拷贝
+            # 初始化为模板行的深拷贝（按模板回填）
             rows: List[List[Any]] = [list(r) if isinstance(r, list) else [] for r in rows_raw]
             # 行索引映射：(项目, 单位) -> 行号
             row_index_map: Dict[Tuple[str, str], int] = {}
@@ -1754,9 +1807,6 @@ async def query_sheet(
                 if company:
                     q = q.filter(ConstantData.company == company)
                 rows_db: List[ConstantData] = q.all()
-
-                # 同时构造 cells 以兼容旧前端（将逐步弃用）
-                cells: List[Dict[str, Any]] = []
 
                 for rec in rows_db:
                     value = float(rec.value) if rec.value is not None else None
@@ -1783,16 +1833,11 @@ async def query_sheet(
                             rows[row_idx].extend([None] * (col_index - len(rows[row_idx]) + 1))
                         rows[row_idx][col_index] = value
 
-                    # 兼容旧 cells
-                    cells.append(
-                        {
-                            "row_label": rec.item_cn or rec.item,
-                            "unit": rec.unit,
-                            "col_index": col_index,
-                            "value_type": "num" if value is not None else "text",
-                            "value_num": value,
-                        }
-                    )
+
+                # 生成东八区毫秒时间戳（attatch_time）
+                from datetime import datetime, timezone, timedelta
+                _ts = datetime.now(timezone(timedelta(hours=8)))
+                _attatch_time = _ts.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
                 content = {
                     "ok": True,
@@ -1805,8 +1850,9 @@ async def query_sheet(
                     "unit_name": names["unit_name"],
                     "columns": columns_standard,
                     "rows": rows,
-                    # 兼容字段：后续将弃用
-                    "cells": cells,
+                    "attatch_time": _attatch_time,
+                    "request_id": (payload.get("request_id") if isinstance(payload, dict) else None),
+                    "source": source,
                 }
                 for dict_key, dict_value in dict_bundle.items():
                     content[dict_key] = dict_value
@@ -1816,7 +1862,7 @@ async def query_sheet(
                 session.close()
 
         else:
-            # 标准/每日：按 biz_date 查询 daily_basic_data，返回与模板一致的 columns+rows 结构（兼容携带 cells）
+            # 标准/每日：按 biz_date 查询 daily_basic_data，返回与模板一致的 columns+rows 结构（rows-only）
             if not biz_date:
                 return JSONResponse(
                     status_code=422,
@@ -1858,9 +1904,6 @@ async def query_sheet(
 
             session = SessionLocal()
             try:
-                # 兼容字段（计划废弃）：这里为所有数据列构造 cells，而非仅第一个数据列
-                cells: List[Dict[str, Any]] = []
-
                 # 遍历所有数据列（跳过前两列和备注列）
                 # 预解析 biz_date 对象，供关键字列头（如“同期日”）推算使用
                 biz_date_obj = _parse_date_value(biz_date)
@@ -1958,16 +2001,24 @@ async def query_sheet(
                         if not rows[row_idx][note_column_index]:
                             rows[row_idx][note_column_index] = note_text
 
-                        # 兼容 cells
-                        cells.append(
-                            {
-                                "row_label": rec.item_cn or rec.item,
-                                "unit": rec.unit,
-                                "col_index": col_idx,
-                                "value_type": "num" if value is not None else "text",
-                                "value_num": value,
-                            }
-                        )
+                # 生成东八区毫秒时间戳（attatch_time）
+                from datetime import datetime, timezone, timedelta
+                _ts = datetime.now(timezone(timedelta(hours=8)))
+                _attatch_time = _ts.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+
+                source = {
+                    "handler": "query_sheet",
+                    "template_type": "standard",
+                    "received": {
+                        "path": str(request.url.path),
+                        "query": str(request.url.query),
+                        "payload": {
+                            "biz_date": biz_date,
+                            "period": period,
+                            "company": company,
+                        },
+                    },
+                }
 
                 content = {
                     "ok": True,
@@ -1979,8 +2030,9 @@ async def query_sheet(
                     "unit_name": names["unit_name"],
                     "columns": columns_standard,
                     "rows": rows,
-                    # 兼容字段：后续将弃用
-                    "cells": cells,
+                    "attatch_time": _attatch_time,
+                    "request_id": (payload.get("request_id") if isinstance(payload, dict) else None),
+                    "source": source,
                 }
                 for dict_key, dict_value in dict_bundle.items():
                     content[dict_key] = dict_value

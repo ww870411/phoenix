@@ -745,3 +745,57 @@
   1) 打开浏览器控制台（保留 Info 级别）。
   2) 进入任意表单页后，按时间顺序观察：route-init → reloadTemplate → template logs（若有）→ queryData(request) → watch(gridSource/gridColumns) 的增长；
   3) 若 `gridSource.length > 0` 且 `gridColumns.length > 0` 但页面空白，重点排查 v-if 条件与 RevoGrid props 变化时机。
+## 2025-10-25 移除 query 响应中的 cells 字段（rows-only 一致化）
+
+## 2025-10-25 query 响应新增 attatch_time（东八区毫秒）并前端控制台显示
+
+## 2025-10-25 query 响应新增 source（来源追踪）
+
+- 背景：需要明确一次 query 的生成原因（后端收到什么、由哪个函数生成）。
+- 变更：
+  - backend/api/v1/daily_report_25_26.py：在 standard/constant/crosstab 三个分支的响应体新增 `source` 字段，结构：
+    - `handler`: 固定为 `query_sheet`
+    - `template_type`: 当前分支类型（standard/constant/crosstab）
+    - `received`: `{ path, query, payload: { biz_date, period, company } }`
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue：将 `q.source` 加入现有控制台日志对象，便于在控制台直接查看来源。
+- 验证：打开页面后，浏览器网络面板响应体含 `source`；控制台日志对象包含 `source` 字段。
+
+- 背景：为快速对照是哪条 query 回填在起作用，要求后端附带时间戳并在前端弹窗提示。
+- 变更：
+  - backend/api/v1/daily_report_25_26.py：在 standard/constant/crosstab 三个分支的响应体增加 `attatch_time`，格式为 `YYYY-MM-DD HH:MM:SS.mmm`，东八区时间。
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue：在应用 query 数据后（standard/crosstab 两条路径），检测到 `q.attatch_time` 则输出控制台日志 `[query/attatch_time]`，不再弹窗。
+  - backend/README.md、frontend/README.md：补充字段说明与调试行为。
+- 验证：打开任一表页面，网络面板可见 `attatch_time` 字段；UI 将弹出“query 回包时间: <时间>”提示框。
+
+- 背景：前端已完成 rows-only 渲染迁移，仍有后端在 `/api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query` 响应中附带 `cells` 字段，造成心智复杂度与潜在覆盖 `rows` 的风险；用户明确要求删除全部 cells 过程。
+- 变更：
+  - backend/api/v1/daily_report_25_26.py：移除标准/常量分支中对 `cells` 的构造与返回；保留 `columns`+`rows` 与备注（解释说明）回填逻辑；更新函数注释说明。
+  - backend/README.md：删除对 `cells` 的说明与示例，统一为 `columns`+`rows`。
+  - frontend/README.md：将提交与回填描述改为 rows-only，删除 cells 描述。
+- 兼容性：前端已不再消费 `cells`；移除不会影响现有页面。煤炭库存（crosstab）本就未返回 `cells`，保持不变。
+- 验证建议：
+  - 打开任一标准表（如 `BeiHai_co_generation_Sheet`），浏览器控制台应看到 [revogrid/template-loaded] 与 [revogrid/query-standard]；网格显示应与 query.rows 一致。
+  - 核查网络面板：query 响应体不再包含 `cells` 字段。
+- 留痕与回滚：如需临时恢复，可参考 git 历史在 `query_sheet` 的 constant/standard 分支重新添加（不建议）。
+- 同步：为防止多次 query 响应乱序覆盖，已在前端请求中附带 `request_id`，后端回显 `request_id`；前端仅渲染与本次请求ID一致的响应；并将默认业务日期改为“本地昨日”。
+
+## 2025-10-25 前端调试弹窗调整：显示 request_id
+
+- 背景：用户希望用更稳定的标识追踪一次响应是否被渲染，决定从 `attatch_time` 改为显示 `request_id`。
+- 变更：
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue：在 standard/crosstab 回填后弹出 `query request_id: <id>`；若环境禁止弹窗则降级 console 日志 `[query/request_id]`。
+  - frontend/README.md：更新说明为“弹出 request_id”。
+- 追加：为避免首次查询日期错误与多次响应覆盖问题：
+  - DataEntryView.vue：
+    - 默认业务日改为本地“昨日”；
+    - 在 loadTemplate 阶段，若模板下发 biz_date，先设置并等待一帧，再发起首次查询；
+    - 引入 isLoadingTemplate 守卫，watch(bizDate) 在模板加载期不触发查询；
+    - latestRequestId + request_id 比对，确保仅渲染最新响应。
+## 2025-10-25 统一标准表首发查询（去掉第二次）
+
+- 背景：standard 比 crosstab 多一次 query，来源于 onMounted 的 loadExisting 追加查询；用户期望两者行为一致。
+- 变更：
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue：
+    - 移除 onMounted 与 reloadTemplate 中对 `loadExisting()` 的调用，避免重复查询；
+    - 在标准表首发查询回填后，调用 `await autoSizeFirstColumn()`，保留列宽自适应原效果。
+- 结果：standard 与 crosstab 均在模板加载完成后进行一次首发查询；业务日期变更时各自各发一次查询。

@@ -55,7 +55,7 @@ docker compose up -d --build
   - `listSheets` 响应新增 `unit_name/sheet_name` 字段，以适配英文/中文双写。 
 - `/projects/:projectKey/data_entry/sheets/:sheetKey` → `DataEntryView.vue`
   - 使用 `@revolist/vue3-datagrid` 提供的 `RevoGrid` 组件渲染表格，自带自定义元素注册；
-  - 通过 `@afteredit` 事件回调同步 `gridSource`，提交阶段汇总单元格生成 `cells`；
+  - 通过 `@afteredit` 事件回调同步 `gridSource`，提交阶段直接基于 `gridSource` 生成提交数据（rows-only）；
   - 模板 `columns` 会扫描列头中首次出现“计量单位”的位置，将该列及之前列标记为只读，其余列渲染本期/同期/解释说明等可编辑数据。
   - 模板响应中的所有 `*_dict` 字段会缓存至 `templateDicts.entries`，提交时逐项带回，扩展字典（中心/状态等）无需额外适配。
   - 首列在模板与历史数据完成加载后触发 `autoSizeFirstColumn()`，基于整列文本宽度动态设定列宽并再次调用 RevoGrid 自适应，支持任意单元格内容完整显示。
@@ -109,7 +109,10 @@ docker compose up -d --build
 # 追加说明：渲染流程（模板 + 镜像查询）
 
 - 标准表（standard）
-  - 首屏：`getTemplate` → 占位符应用（含日期文字）→ `setupStandardGrid` 渲染 → 立刻调用 `queryData` 以 `cells[]` 回填网格；
+- 首屏：`getTemplate` → 占位符应用（含日期文字）→ `setupStandardGrid` 渲染 → 立刻调用 `queryData` 以 `rows` 回填网格；
+- 首屏：`getTemplate` → 占位符应用（含日期文字）→ `setupStandardGrid` 渲染 → 立刻调用 `queryData` 以 `rows` 回填网格；
+- 调试：在应用 query 数据时，会弹出提示框显示响应中的 `request_id`，便于你核对具体是哪一次响应被渲染（若弹窗不可用则降级为控制台 `[query/request_id]` 日志）。
+ - 统一行为：standard 与 crosstab 均只在模板加载完成后触发一次首发查询；不再执行二次 `loadExisting()` 查询。
   - 日期切换：重算列头文字 → `queryData` 回填当前日期数据；
   - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:541`（watch 处理）。
 

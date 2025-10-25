@@ -257,6 +257,7 @@ codex resume 019a196b-90fa-7a50-b5d3-99918ea4ae40
 
 
 
+
 天气数据的自动获取:
 根据查询资料：在FastAPI生态中，通常使用 apscheduler 这样的库，您可以设置一个定时任务（例如 add_job(run_daily_import, 'cron', hour=3, minute=0)），它就会在指定时间自动执行您的代码。
 

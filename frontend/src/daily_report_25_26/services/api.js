@@ -93,19 +93,25 @@ export async function submitData(projectKey, sheetKey, payload, options = {}) {
 export async function queryData(projectKey, sheetKey, payload, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  console.info('[api/queryData/request]', { projectKey, sheetKey, config, search, payload })
+  // 附加请求ID（若外部未提供）
+  const requestId = payload && payload.request_id
+    ? String(payload.request_id)
+    : `${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+  const enriched = { ...(payload || {}), request_id: requestId }
+  console.info('[api/queryData/request]', { projectKey, sheetKey, config, search, payload: enriched })
   const response = await fetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/query${search}`,
     {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(enriched),
     },
   )
   if (!response.ok) {
     throw new Error(`查询数据失败: ${response.status}`)
   }
-  return response.json()
+  const data = await response.json()
+  return { ...data, __request_id: requestId }
 }
 
 export function resetProjectCache() {
