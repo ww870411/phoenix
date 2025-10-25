@@ -653,43 +653,13 @@
 - 相关文件：
   - frontend/src/daily_report_25_26/pages/DataEntryView.vue:249（`loadTemplate` 首屏流程）、:541（standard 的日期联动 watch）、:592（crosstab 的日期联动 watch）
   - frontend/src/daily_report_25_26/services/api.js:85（`queryData` 实现）
-## 2025-10-24 镜像查询机制讲解（无代码变更）
+## 2025-10-25
 
-- 主题：解释“基本指标表/常量指标表”的镜像查询（query ⇄ submit 的逆向映射）。
-- 结论：
-  - 基本指标表（standard/daily）：按 `biz_date` 查询 `DailyBasicData`，将行项目映射回模板的第一个数据列（`col_index=2`），并在存在“备注/说明”列时回填该列的文本值。
-  - 常量指标表（constant）：解析模板列头，从第 3 列或第 4 列（若存在 `center_dict`）开始识别各“期别”列；按 `period` 查询 `ConstantData`，将每条记录定位到对应期别列的 `col_index`，以 `cells[]` 形式返回。
-- 关键实现（后端）：`backend/api/v1/daily_report_25_26.py:1554` 的 `query_sheet` 按模板类型分支处理：
-  - standard：`DailyBasicData` → `cells[{row_label, unit, col_index=2, value_*}]`
-  - constant：`ConstantData` → 依据模板期别列计算 `col_index`
-  - crosstab（煤炭库存，非本次重点）：返回 `rows+columns` 的宽表
-- 影响面：无结构/接口变更，仅文档补充说明。
-
-证据与参考：
-- 函数：`backend/api/v1/daily_report_25_26.py:1554` `query_sheet`
-- 常量表识别：`backend/api/v1/daily_report_25_26.py:1225` `_is_constant_sheet`
-- 模板列头收集：`backend/api/v1/daily_report_25_26.py` `_locate_sheet_payload`、`_collect_all_dicts`
-
-回滚与验证：
-- 无代码改动，无需回滚；如需验证，调用：
-  - 基本表：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`，携带 `{"biz_date": "YYYY-MM-DD"}`
-  - 常量表：同上，可选 `{"period": "2025年供热期"}` 指定期别
-## 2025-10-25 会话记录与改动摘要
-
-- 问题：`Coal_inventory_Sheet` 网格无法渲染，前端已拿到模板数据但页面空白。
-- 根因：后端在部分环境未返回该表 `template_type`，前端按 standard 分支初始化，导致列/行映射与交叉表实际结构不一致，渲染失败。
-- 处理：在 `frontend/src/daily_report_25_26/pages/DataEntryView.vue` 的模板加载后，增加回退逻辑——当 `sheetKey === 'Coal_inventory_Sheet'` 且未提供 `template_type` 时，强制设为 `'crosstab'`，从而走交叉表渲染与镜像查询回填流程。
-- 受影响文件：
-  - frontend/src/daily_report_25_26/pages/DataEntryView.vue
-  - frontend/README.md（追加变更说明）
-  - backend/README.md（记录无后端改动及前端回退策略）
-- 验证建议：
-  - 打开“每日数据填报页面”> 煤炭库存表，默认日期应直接显示数据；
-  - 切换日期后再切回，显示应保持一致；
-  - 控制台无 RevoGrid 列/行不匹配类报错。
-### 2025-10-25 镜像查询理念对齐（阅读 10.25给codex关于“镜像查询”的信息.md）
-- 摘要：镜像查询应当“如何落库就如何取回（按相同 biz_date/sheet_key）”，前端据此回填，尽量少做转换。
-- 与现实现一致点：后端 `query_sheet` 设计即为 `/submit` 的互逆；basic（standard）返回 `columns+cells`，crosstab 返回 `columns+rows`；统一使用字典做行标签归一。
-- 差异/问题：近期多次调整导致标准化逻辑在 submit/template/query 三处未完全一致，易引发列名（日期占位）或行标签不对齐，从而“查到但无法显示”。
-- 新发现：Coal 表未返回 `template_type` 时会误走 standard 分支，已在前端增加回退推断为 crosstab 以减少首屏空白；basic 组需进一步收敛“日期列生成/备注列检测/label 归一”的统一函数，供三处共用。
-- 建议：加入 query 诊断日志（匹配/丢弃统计），补一条 basic 端到端最小化单测，确保镜像属性。
+- 议题：镜像 query 结果按模板结构返回，移除“cells-only”的复杂度。
+- 结论：后端已在不破坏兼容的前提下改为返回与 `/template` 一致的结构（`columns` + `rows`），并临时保留 `cells` 字段用于前端平滑迁移。后续计划在前端切换完成后移除 `cells`。
+- 影响范围：`backend/api/v1/daily_report_25_26.py::query_sheet`
+  - standard/每日类：从 DB 读取 `daily_basic_data`，回填到模板 `rows`（默认第一个数据列索引为 2），备注列若存在则同时回填；同时返回兼容字段 `cells`（即将弃用）。
+  - constant/常量类：根据模板期别列定位列索引，回填到模板 `rows`；同时返回兼容字段 `cells`（即将弃用）。
+  - coal_inventory/煤炭库存：保持宽表 `columns`+`rows` 逻辑不变。
+- 前端改造建议：在 `/query` 结果优先使用 `columns` + `rows` 进行二次渲染；如仍在使用 `cells`，请尽快迁移（字段将废弃）。
+- 回滚方案：如需恢复旧行为，可将 `query_sheet` 中对 `rows` 的构建删除，仅保留 `cells` 返回；或通过接口网关在前端进行 cells->grid 的适配层。

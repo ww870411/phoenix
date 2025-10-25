@@ -113,19 +113,8 @@ docker compose up -d --build
   - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:592`（watch 处理）。
 
 - 接口：`services/api.js:85` `queryData(projectKey, sheetKey, payload, { config })`。
-## 数据回填与镜像查询对接（2025-10-24）
+## 数据获取与回填（2025-10-25 更新）
 
-### 变更记录（2025-10-25）
-- 修复 Coal_inventory_Sheet 首屏渲染异常（模板已获取但网格不显示）。
-- 原因：后端部分环境未返回该表 `template_type`，导致前端按 standard 分支初始化，列/行映射不一致。
-- 处理：在 `DataEntryView.vue` 的模板加载后，若检测到 `sheetKey === 'Coal_inventory_Sheet'` 且 `template_type` 为空，则回退设为 `'crosstab'`，保障走交叉表初始化与镜像查询回填流程。
-- 影响范围：前端渲染逻辑；接口契约未变更。
-
-- 模板获取：`GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` 返回 `columns/rows`，前端据此渲染 RevoGrid。
-- 镜像查询：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
-  - standard（基本指标表）：返回 `cells[]`，默认把数据回填到模板第一个数据列（`col_index=2`）；若模板含“备注/说明”列，另有一条 `text` 单元回填到对应列索引。
-  - constant（常量指标表）：后台根据模板列头推导期别列的起始索引（含 `center_dict` 时从第 4 列开始，否自第 3 列），`cells[]` 中的 `col_index` 直接可用于回填到对应期别列。
-- 日期占位符刷新：`DataEntryView.vue` 监听 `bizDate`，基于 `baseColumns` 重新计算“本期日/同期日”列（见 2025-10-23 进度项：`date_calendar_effectiveness_fix_2025-10-23`）。
-
-回填策略（建议实现）：
-- 以模板渲染的网格为基底；收到 `/query` 的 `cells[]` 后，按 `row_label + unit + col_index` 键合并覆盖 UI 中的单元格值；未命中保持为空以提示“尚未填报”。
+- `/template`：提供模板元信息（`columns`、`rows`、`*_dict` 等）。
+- `/query`：现已与模板结构对齐，直接返回 `columns` + `rows`，可复用与模板一致的渲染路径进行二次回填。
+- 兼容说明：响应中仍包含 `cells` 字段用于过渡；请尽快迁移到 `columns` + `rows`。

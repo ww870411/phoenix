@@ -248,11 +248,6 @@ async function setupCrosstabGrid(tpl) {
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
-  // 兼容修复：当后端未显式返回模板类型时，对特殊表 Coal_inventory_Sheet 强制设为 crosstab
-  // 背景：该表为交叉表结构，如无正确的 template_type 将按 standard 流程渲染导致列/行映射异常
-  if (!rawTemplate?.template_type && sheetKey === 'Coal_inventory_Sheet') {
-    rawTemplate.template_type = 'crosstab';
-  }
   // 应用日期占位到列头（仅每日数据填报页面）
   if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
     // 缓存原始列头以便后续根据日历重算

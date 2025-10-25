@@ -1709,18 +1709,33 @@ async def query_sheet(
                 session.close()
 
         elif template_type == "constant":
-            # 常量指标：如提供 period 则定向查询该期；否则返回所有已入库期别对应的 cells
+            # 常量指标：按模板 columns/rows 结构回填（同时保留 cells 以便前端迁移）
             tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
                     content={"ok": False, "message": f"未找到模板：{sheet_key}"},
                 )
+
+            names = _extract_names(tpl_payload)
             columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+            rows_raw = _extract_list(tpl_payload, ROW_KEYS) or []
             dict_bundle = _collect_all_dicts(tpl_payload)
             has_center = isinstance(dict_bundle.get("center_dict"), dict) and len(dict_bundle.get("center_dict")) > 0
             start_idx = 3 if has_center else 2
             periods = [str(c).strip() if c is not None else "" for c in columns_raw[start_idx:]]
+
+            # 初始化为模板行的深拷贝
+            rows: List[List[Any]] = [list(r) if isinstance(r, list) else [] for r in rows_raw]
+            # 行索引映射：(项目, 单位) -> 行号
+            row_index_map: Dict[Tuple[str, str], int] = {}
+            for i, r in enumerate(rows):
+                item_label = str(r[0]).strip() if len(r) > 0 and r[0] is not None else ""
+                unit_label = str(r[1]).strip() if len(r) > 1 and r[1] is not None else ""
+                row_index_map[(item_label, unit_label)] = i
+
+            columns_standard = _decorate_columns(columns_raw)
+
             session = SessionLocal()
             try:
                 q = session.query(ConstantData).filter(ConstantData.sheet_name == sheet_key)
@@ -1730,16 +1745,35 @@ async def query_sheet(
                     q = q.filter(ConstantData.company == company)
                 rows_db: List[ConstantData] = q.all()
 
+                # 同时构造 cells 以兼容旧前端（将逐步弃用）
                 cells: List[Dict[str, Any]] = []
+
                 for rec in rows_db:
                     value = float(rec.value) if rec.value is not None else None
-                    # 为每条记录计算其列索引（根据其 period 定位到模板列头）
                     rec_period = str(rec.period or "").strip()
                     try:
                         p_offset = periods.index(rec_period) if rec_period else 0
                     except ValueError:
                         p_offset = 0
                     col_index = start_idx + p_offset
+
+                    key_candidates = [
+                        (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
+                        (str(rec.item or "").strip(), str(rec.unit or "").strip()),
+                    ]
+                    row_idx: Optional[int] = None
+                    for k in key_candidates:
+                        row_idx = row_index_map.get(k)
+                        if row_idx is not None:
+                            break
+
+                    if row_idx is not None:
+                        # 确保行长度足够
+                        if col_index >= len(rows[row_idx]):
+                            rows[row_idx].extend([None] * (col_index - len(rows[row_idx]) + 1))
+                        rows[row_idx][col_index] = value
+
+                    # 兼容旧 cells
                     cells.append(
                         {
                             "row_label": rec.item_cn or rec.item,
@@ -1750,43 +1784,67 @@ async def query_sheet(
                         }
                     )
 
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "ok": True,
-                        "template_type": "standard",  # 常量沿用 standard 回填方式
-                        "mode": "constant",
-                        "sheet_key": sheet_key,
-                        "period": period,
-                        "cells": cells,
-                    },
-                )
+                content = {
+                    "ok": True,
+                    "template_type": "standard",
+                    "mode": "constant",
+                    "sheet_key": sheet_key,
+                    "period": period,
+                    "sheet_name": names["sheet_name"] or sheet_key,
+                    "unit_id": names["unit_id"],
+                    "unit_name": names["unit_name"],
+                    "columns": columns_standard,
+                    "rows": rows,
+                    # 兼容字段：后续将弃用
+                    "cells": cells,
+                }
+                for dict_key, dict_value in dict_bundle.items():
+                    content[dict_key] = dict_value
+
+                return JSONResponse(status_code=200, content=content)
             finally:
                 session.close()
 
         else:
-            # 标准/每日：按 biz_date 查询 daily_basic_data，返回 cells，默认回填第一个数据列（索引 2）
+            # 标准/每日：按 biz_date 查询 daily_basic_data，返回与模板一致的 columns+rows 结构（兼容携带 cells）
             if not biz_date:
                 return JSONResponse(
                     status_code=422,
                     content={"ok": False, "message": "标准表查询需提供 biz_date"},
                 )
-            # 读取模板用于定位备注列索引
+
+            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            if tpl_payload is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+                )
+
+            names = _extract_names(tpl_payload)
+            columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+            rows_raw = _extract_list(tpl_payload, ROW_KEYS) or []
+            dict_bundle = _collect_all_dicts(tpl_payload)
+
+            # 定位备注列索引（若存在）
+            cols_norm = [str(c).strip() if c is not None else "" for c in columns_raw]
+            note_labels = {"解释说明", "说明", "备注", "note", "Note"}
             note_column_index: Optional[int] = None
-            try:
-                tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
-                if tpl_payload is not None:
-                    columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
-                    cols = [str(c).strip() if c is not None else "" for c in columns_raw]
-                    note_labels = {"解释说明", "说明", "备注", "note", "Note"}
-                    for idx, name in enumerate(cols):
-                        if name in note_labels:
-                            note_column_index = idx
-                            break
-                    if note_column_index is None and len(cols) >= 5:
-                        note_column_index = len(cols) - 1
-            except Exception:
-                note_column_index = None
+            for idx, name in enumerate(cols_norm):
+                if name in note_labels:
+                    note_column_index = idx
+                    break
+            if note_column_index is None and len(cols_norm) >= 5:
+                note_column_index = len(cols_norm) - 1
+
+            # 深拷贝模板行 & 行映射
+            rows: List[List[Any]] = [list(r) if isinstance(r, list) else [] for r in rows_raw]
+            row_index_map: Dict[Tuple[str, str], int] = {}
+            for i, r in enumerate(rows):
+                item_label = str(r[0]).strip() if len(r) > 0 and r[0] is not None else ""
+                unit_label = str(r[1]).strip() if len(r) > 1 and r[1] is not None else ""
+                row_index_map[(item_label, unit_label)] = i
+
+            columns_standard = _decorate_columns(columns_raw)
 
             session = SessionLocal()
             try:
@@ -1798,19 +1856,47 @@ async def query_sheet(
                     q = q.filter(DailyBasicData.company == company)
                 rows_db: List[DailyBasicData] = q.all()
 
+                # 同步构造 cells 兼容旧前端
                 cells: List[Dict[str, Any]] = []
+
                 for rec in rows_db:
                     value = float(rec.value) if rec.value is not None else None
+
+                    key_candidates = [
+                        (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
+                        (str(rec.item or "").strip(), str(rec.unit or "").strip()),
+                    ]
+                    row_idx: Optional[int] = None
+                    for k in key_candidates:
+                        row_idx = row_index_map.get(k)
+                        if row_idx is not None:
+                            break
+
+                    # 默认回填第一个数据列（索引 2）
+                    target_col = 2
+                    if row_idx is not None:
+                        if target_col >= len(rows[row_idx]):
+                            rows[row_idx].extend([None] * (target_col - len(rows[row_idx]) + 1))
+                        rows[row_idx][target_col] = value
+
+                        # 备注回填（若存在备注列且有值）
+                        if note_column_index is not None and isinstance(rec.note, (str,)):
+                            note_text = rec.note.strip()
+                            if note_text:
+                                if note_column_index >= len(rows[row_idx]):
+                                    rows[row_idx].extend([None] * (note_column_index - len(rows[row_idx]) + 1))
+                                rows[row_idx][note_column_index] = note_text
+
+                    # 兼容旧 cells
                     cells.append(
                         {
                             "row_label": rec.item_cn or rec.item,
                             "unit": rec.unit,
-                            "col_index": 2,  # 默认按第一个数据列（本期日）回填
+                            "col_index": target_col,
                             "value_type": "num" if value is not None else "text",
                             "value_num": value,
                         }
                     )
-                    # 附加备注单元格（如果存在备注列且有备注值）
                     if note_column_index is not None and isinstance(rec.note, (str,)):
                         note_text = rec.note.strip()
                         if note_text:
@@ -1824,16 +1910,23 @@ async def query_sheet(
                                 }
                             )
 
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "ok": True,
-                        "template_type": "standard",
-                        "sheet_key": sheet_key,
-                        "biz_date": biz_date,
-                        "cells": cells,
-                    },
-                )
+                content = {
+                    "ok": True,
+                    "template_type": "standard",
+                    "sheet_key": sheet_key,
+                    "biz_date": biz_date,
+                    "sheet_name": names["sheet_name"] or sheet_key,
+                    "unit_id": names["unit_id"],
+                    "unit_name": names["unit_name"],
+                    "columns": columns_standard,
+                    "rows": rows,
+                    # 兼容字段：后续将弃用
+                    "cells": cells,
+                }
+                for dict_key, dict_value in dict_bundle.items():
+                    content[dict_key] = dict_value
+
+                return JSONResponse(status_code=200, content=content)
             finally:
                 session.close()
 
