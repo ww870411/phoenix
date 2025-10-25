@@ -305,6 +305,9 @@ async function loadTemplate() {
   // 交叉表需先搭好列与占位行，再执行镜像查询，避免后续初始化覆盖查询结果
   if (templateType.value === 'crosstab') {
     await setupCrosstabGrid(tpl);
+  } else {
+    // 标准模板也需要预先搭好骨架，再查询填充
+    await setupStandardGrid(tpl);
   }
   // 初次加载后进行一次镜像查询（按当前 bizDate 或模板类型）；便于刷新后直接看到已填数据
   try {
@@ -435,10 +438,6 @@ async function loadTemplate() {
   }
   templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
 
-  // 根据模板类型选择渲染策略；crosstab 已提前初始化
-  if (templateType.value !== 'crosstab') {
-    await setupStandardGrid(tpl);
-  }
   isLoadingTemplate.value = false;
 }
 
