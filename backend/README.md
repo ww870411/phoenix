@@ -139,6 +139,10 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 前端修复：交叉表（`Coal_inventory_Sheet`）默认日期首次进入页面不显示数据的问题，属前端初始化顺序导致的镜像查询结果被覆盖；本次无后端接口与数据结构改动。
 ## 镜像查询（/query）实现要点（2025-10-24）
 
+### 变更记录（2025-10-25）
+- 本次问题定位为前端渲染流程回退判定缺失，后端接口与返回结构保持不变（仍为 template/submit/query 三端点）。
+- 对于 `Coal_inventory_Sheet`，若模板未包含 `template_type`，前端将回退推断为 `'crosstab'` 以匹配交叉表渲染与镜像回填。
+
 本节说明“基本指标表/常量指标表”的镜像查询（将已入库长表数据逆映射回模板坐标）。
 
 - 入口函数：`backend/api/v1/daily_report_25_26.py:1554` `query_sheet`

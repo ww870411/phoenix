@@ -674,3 +674,22 @@
 - 无代码改动，无需回滚；如需验证，调用：
   - 基本表：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`，携带 `{"biz_date": "YYYY-MM-DD"}`
   - 常量表：同上，可选 `{"period": "2025年供热期"}` 指定期别
+## 2025-10-25 会话记录与改动摘要
+
+- 问题：`Coal_inventory_Sheet` 网格无法渲染，前端已拿到模板数据但页面空白。
+- 根因：后端在部分环境未返回该表 `template_type`，前端按 standard 分支初始化，导致列/行映射与交叉表实际结构不一致，渲染失败。
+- 处理：在 `frontend/src/daily_report_25_26/pages/DataEntryView.vue` 的模板加载后，增加回退逻辑——当 `sheetKey === 'Coal_inventory_Sheet'` 且未提供 `template_type` 时，强制设为 `'crosstab'`，从而走交叉表渲染与镜像查询回填流程。
+- 受影响文件：
+  - frontend/src/daily_report_25_26/pages/DataEntryView.vue
+  - frontend/README.md（追加变更说明）
+  - backend/README.md（记录无后端改动及前端回退策略）
+- 验证建议：
+  - 打开“每日数据填报页面”> 煤炭库存表，默认日期应直接显示数据；
+  - 切换日期后再切回，显示应保持一致；
+  - 控制台无 RevoGrid 列/行不匹配类报错。
+### 2025-10-25 镜像查询理念对齐（阅读 10.25给codex关于“镜像查询”的信息.md）
+- 摘要：镜像查询应当“如何落库就如何取回（按相同 biz_date/sheet_key）”，前端据此回填，尽量少做转换。
+- 与现实现一致点：后端 `query_sheet` 设计即为 `/submit` 的互逆；basic（standard）返回 `columns+cells`，crosstab 返回 `columns+rows`；统一使用字典做行标签归一。
+- 差异/问题：近期多次调整导致标准化逻辑在 submit/template/query 三处未完全一致，易引发列名（日期占位）或行标签不对齐，从而“查到但无法显示”。
+- 新发现：Coal 表未返回 `template_type` 时会误走 standard 分支，已在前端增加回退推断为 crosstab 以减少首屏空白；basic 组需进一步收敛“日期列生成/备注列检测/label 归一”的统一函数，供三处共用。
+- 建议：加入 query 诊断日志（匹配/丢弃统计），补一条 basic 端到端最小化单测，确保镜像属性。

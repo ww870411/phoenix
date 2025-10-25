@@ -115,6 +115,12 @@ docker compose up -d --build
 - 接口：`services/api.js:85` `queryData(projectKey, sheetKey, payload, { config })`。
 ## 数据回填与镜像查询对接（2025-10-24）
 
+### 变更记录（2025-10-25）
+- 修复 Coal_inventory_Sheet 首屏渲染异常（模板已获取但网格不显示）。
+- 原因：后端部分环境未返回该表 `template_type`，导致前端按 standard 分支初始化，列/行映射不一致。
+- 处理：在 `DataEntryView.vue` 的模板加载后，若检测到 `sheetKey === 'Coal_inventory_Sheet'` 且 `template_type` 为空，则回退设为 `'crosstab'`，保障走交叉表初始化与镜像查询回填流程。
+- 影响范围：前端渲染逻辑；接口契约未变更。
+
 - 模板获取：`GET /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/template` 返回 `columns/rows`，前端据此渲染 RevoGrid。
 - 镜像查询：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
   - standard（基本指标表）：返回 `cells[]`，默认把数据回填到模板第一个数据列（`col_index=2`）；若模板含“备注/说明”列，另有一条 `text` 单元回填到对应列索引。
