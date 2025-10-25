@@ -663,3 +663,9 @@
   - coal_inventory/煤炭库存：保持宽表 `columns`+`rows` 逻辑不变。
 - 前端改造建议：在 `/query` 结果优先使用 `columns` + `rows` 进行二次渲染；如仍在使用 `cells`，请尽快迁移（字段将废弃）。
 - 回滚方案：如需恢复旧行为，可将 `query_sheet` 中对 `rows` 的构建删除，仅保留 `cells` 返回；或通过接口网关在前端进行 cells->grid 的适配层。
+
+### 追加修复（2025-10-25）
+- 修复对象：煤炭库存 crosstab 查询响应字段不完整，导致前端以 query 覆盖 template 后缺失关键信息。
+- 变更：为 crosstab 分支补全 `sheet_name`、`unit_id`、`unit_name` 及各类 `*_dict`，与 `/template` 对齐。
+- 预期：即便无查询结果（rows=[]），也不会因响应字段不完整导致渲染异常或列头/字典丢失。
+- 补充：当 DB 查询无记录时，`/query` 将返回模板 `rows`（而非空数组），避免被覆盖为空数组导致的前端显示问题。

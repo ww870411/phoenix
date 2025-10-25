@@ -1605,22 +1605,23 @@ async def query_sheet(
     # 执行不同模板类型的镜像查询
     try:
         if template_type == "crosstab":
-            # 煤炭库存：返回 rows/columns 宽表
+            # 煤炭库存：返回与模板一致的结构（columns + rows），并补全模板元信息
             if not biz_date:
                 return JSONResponse(
                     status_code=422,
                     content={"ok": False, "message": "煤炭库存查询需提供 biz_date"},
                 )
 
-            # 读取模板列头，构建列名→索引映射
+            # 读取模板元信息与列头
             tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
                     content={"ok": False, "message": f"未找到模板：{sheet_key}"},
                 )
+            names = _extract_names(tpl_payload)
+            dict_bundle = _collect_all_dicts(tpl_payload)
             columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
-            # 确保前三列为 [单位, 煤种, 计量单位]（若模板中已有则保持原样）
             columns: List[str] = [str(c) for c in (columns_raw or [])]
 
             # 反查存量列中文名在模板中的索引
@@ -1692,19 +1693,28 @@ async def query_sheet(
                             if nt:
                                 row_map[key][note_idx] = nt
 
-                result_rows = list(row_map.values())
+                # 若无任何查询结果，则返回模板行而非空数组
+                rows_raw = _extract_list(tpl_payload, ROW_KEYS) or []
+                if row_map:
+                    result_rows = list(row_map.values())
+                else:
+                    result_rows = [list(r) if isinstance(r, list) else [] for r in rows_raw]
 
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "ok": True,
-                        "template_type": "crosstab",
-                        "sheet_key": sheet_key,
-                        "biz_date": biz_date,
-                        "columns": columns,
-                        "rows": result_rows,
-                    },
-                )
+                content = {
+                    "ok": True,
+                    "template_type": "crosstab",
+                    "sheet_key": sheet_key,
+                    "biz_date": biz_date,
+                    "sheet_name": names["sheet_name"] or sheet_key,
+                    "unit_id": names["unit_id"],
+                    "unit_name": names["unit_name"],
+                    "columns": columns,
+                    "rows": result_rows,
+                }
+                for dict_key, dict_value in dict_bundle.items():
+                    content[dict_key] = dict_value
+
+                return JSONResponse(status_code=200, content=content)
             finally:
                 session.close()
 

@@ -220,6 +220,9 @@ codex resume 019a0eca-0613-7113-8fa2-0f6b4ac5af62
 codex resume 019a1301-a322-7632-9caa-297eb92ede26
 
 
+10.25
+恢复到昨日早上的镜像查询版本，并将query改为template形式
+codex resume 019a196b-90fa-7a50-b5d3-99918ea4ae40
 
 
 
