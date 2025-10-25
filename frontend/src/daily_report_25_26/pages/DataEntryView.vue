@@ -248,6 +248,8 @@ async function setupCrosstabGrid(tpl) {
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
+  console.info('[revogrid/template-loaded]', { sheetKey: sheetKey, hasTemplate: !!rawTemplate, cols: Array.isArray(rawTemplate?.columns) ? rawTemplate.columns.length : 0, rows: Array.isArray(rawTemplate?.rows) ? rawTemplate.rows.length : 0 });
+  // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
   // 应用日期占位到列头（仅每日数据填报页面）
   if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
     // 缓存原始列头以便后续根据日历重算
@@ -276,28 +278,29 @@ async function loadTemplate() {
         sheetKey,
         { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
       );
-      if (q && Array.isArray(q.cells)) {
-        // 清空数据列，避免上一查询残留（从第2列起）
-        for (let r = 0; r < gridSource.value.length; r++) {
-          for (let c = 2; c < columns.value.length; c++) {
-            gridSource.value[r][`c${c}`] = '';
-          }
-        }
-        const rowIndex = new Map();
-        for (let i = 0; i < gridSource.value.length; i++) {
-          const label = String(gridSource.value[i]?.c0 ?? '').trim();
-          if (label && !rowIndex.has(label)) rowIndex.set(label, i);
-        }
-        for (const cell of q.cells) {
-          const rowLabel = String(cell.row_label ?? '').trim();
-          const ri = rowIndex.has(rowLabel) ? rowIndex.get(rowLabel) : -1;
-          const ci = Number(cell.col_index ?? -1);
-          if (ri >= 0 && ci >= 0 && gridSource.value[ri]) {
-            const v = cell.value_type === 'text' ? (cell.value_text ?? '') : (cell.value_num ?? '');
-            gridSource.value[ri][`c${ci}`] = v === null ? '' : String(v);
-          }
-        }
-        gridSource.value = [...gridSource.value];
+      if (q && Array.isArray(q.columns)) {
+        columns.value = q.columns;
+        const colDefs = q.columns.map((name, index) => ({
+          name: String(name ?? ''),
+          prop: `c${index}`,
+          size: index === 0 ? 220 : 120,
+        }));
+        gridColumns.value = colDefs;
+      }
+      if (q && Array.isArray(q.rows)) {
+        gridSource.value = q.rows.map(r => Array.isArray(r)
+          ? r.reduce((acc, val, idx) => {
+              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
+              return acc;
+            }, {})
+          : r
+        );
+        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
+        console.info('[revogrid/query-standard]', {
+          sheetKey: sheetKey,
+          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
+          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
+        });
       }
     } else if (templateType.value === 'crosstab') {
       const q = await queryData(
@@ -322,7 +325,19 @@ async function loadTemplate() {
         }
       }
       if (q && Array.isArray(q.rows)) {
-        gridSource.value = q.rows.map(r => Array.isArray(r) ? r.reduce((acc, val, idx) => { acc[`c${idx}`] = val; return acc; }, {}) : r);
+        gridSource.value = q.rows.map(r => Array.isArray(r)
+          ? r.reduce((acc, val, idx) => {
+              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
+              return acc;
+            }, {})
+          : r
+        );
+        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
+        console.info('[revogrid/query-crosstab]', {
+          sheetKey: sheetKey,
+          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
+          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
+        });
       }
     }
   } catch (err) {
@@ -378,8 +393,9 @@ async function loadExisting() {
     { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value },
     { config: pageConfig.value },
   );
-  if (Array.isArray(q.cells)) {
-    for (const cell of q.cells) {
+  // cells 路径已删除（rows-only 渲染）
+  if (false) {
+    for (const _ of []) {
       const { row_label, col_index, value_num, value_text } = cell;
       const ri = rows.value.findIndex(r => r[0] === row_label);
       if (ri >= 0 && col_index >= 0 && gridSource.value[ri]) {
@@ -545,7 +561,8 @@ const stop = watch(
         sheetKey,
         { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, config: pageConfig.value }
       );
-      if (q && Array.isArray(q.cells) && Array.isArray(gridSource.value)) {
+      // cells 路径已删除（rows-only 渲染）
+      if (false) {
         // 建立 行项目 → 行索引 映射（以首列“项目”文本为准）
         // 清空数据列，避免初次加载后再次查询时残留
         for (let r = 0; r < gridSource.value.length; r++) {
@@ -558,7 +575,7 @@ const stop = watch(
           const label = String(gridSource.value[i]?.c0 ?? '').trim();
           if (label && !rowIndex.has(label)) rowIndex.set(label, i);
         }
-        for (const cell of q.cells) {
+        for (const _ of []) {
           const rowLabel = String(cell.row_label ?? '').trim();
           const ri = rowIndex.has(rowLabel) ? rowIndex.get(rowLabel) : -1;
           const ci = Number(cell.col_index ?? -1);
@@ -603,7 +620,19 @@ watch(
         }
       }
       if (q && Array.isArray(q.rows)) {
-        gridSource.value = q.rows.map(r => Array.isArray(r) ? r.reduce((acc, val, idx) => { acc[`c${idx}`] = val; return acc; }, {}) : r);
+        gridSource.value = q.rows.map(r => Array.isArray(r)
+          ? r.reduce((acc, val, idx) => {
+              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
+              return acc;
+            }, {})
+          : r
+        );
+        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
+        console.info('[revogrid/query-crosstab]', {
+          sheetKey: sheetKey?.value,
+          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
+          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
+        });
       }
     } catch (err) {
       console.error('crosstab query on bizDate change failed:', err);

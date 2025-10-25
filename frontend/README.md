@@ -116,5 +116,11 @@ docker compose up -d --build
 ## 数据获取与回填（2025-10-25 更新）
 
 - `/template`：提供模板元信息（`columns`、`rows`、`*_dict` 等）。
-- `/query`：现已与模板结构对齐，直接返回 `columns` + `rows`，可复用与模板一致的渲染路径进行二次回填。
-- 兼容说明：响应中仍包含 `cells` 字段用于过渡；请尽快迁移到 `columns` + `rows`。
+- `/query`：现已与模板结构对齐，直接返回 `columns` + `rows`，前端仅消费 `rows` 与 `columns`。
+- 已移除 cells 路径：不再读取或合并 `cells`，避免覆盖 `rows`。
+
+### 前端回填要点（2025-10-25）
+- 回填顺序与要点：
+  - 若存在 `q.columns`，重建/对齐 `gridColumns`（`prop: c${i}`）。
+  - 将 `q.rows` 映射为 `gridSource`：`{ c0, c1, ... }`，单元格统一转字符串或空串。
+  - 同步设置内部 `rows` 为 `q.rows`，保持显示与提交一致。
