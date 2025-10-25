@@ -1604,7 +1604,129 @@ async def query_sheet(
 
     # 执行不同模板类型的镜像查询
     try:
-        if template_type == "crosstab":
+        if _is_gongre_sheet(sheet_key):
+            if not biz_date:
+                return JSONResponse(
+                    status_code=422,
+                    content={"ok": False, "message": "供热分中心查询需提供 biz_date"},
+                )
+
+            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            if tpl_payload is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+                )
+
+            names = _extract_names(tpl_payload)
+            columns_raw = _extract_list(tpl_payload, COLUMN_KEYS) or []
+            rows_raw = _extract_list(tpl_payload, ROW_KEYS) or []
+            dict_bundle = _collect_all_dicts(tpl_payload)
+
+            cols_norm = [str(c).strip() if c is not None else "" for c in columns_raw]
+            note_labels = {"解释说明", "说明", "备注", "note", "Note"}
+            note_column_index: Optional[int] = None
+            for idx, name in enumerate(cols_norm):
+                if name in note_labels:
+                    note_column_index = idx
+                    break
+            
+            rows: List[List[Any]] = [list(r) if isinstance(r, list) else [] for r in rows_raw]
+            row_index_map: Dict[Tuple[str, str], int] = {}
+            for i, r in enumerate(rows):
+                if len(r) > 1:
+                    item_label = str(r[0]).strip() if r[0] is not None else ""
+                    center_label = str(r[1]).strip() if r[1] is not None else ""
+                    if item_label and center_label:
+                        row_index_map[(item_label, center_label)] = i
+
+            columns_standard = _decorate_columns(columns_raw)
+
+            session = SessionLocal()
+            try:
+                biz_date_obj = _parse_date_value(biz_date)
+                for col_idx in range(len(columns_raw)):
+                    if col_idx < 3:
+                        continue
+                    if note_column_index is not None and col_idx == note_column_index:
+                        continue
+                    
+                    if col_idx == 3:
+                        date_obj = biz_date_obj
+                    else:
+                        label = columns_raw[col_idx]
+                        s = str(label).strip() if label is not None else ""
+                        if s and ("同期" in s):
+                            try:
+                                date_obj = biz_date_obj.replace(year=biz_date_obj.year - 1) if biz_date_obj else None
+                            except Exception:
+                                if biz_date_obj and biz_date_obj.month == 2 and biz_date_obj.day == 29:
+                                    date_obj = biz_date_obj.replace(year=biz_date_obj.year - 1, day=28)
+                                else:
+                                    date_obj = None
+                        elif s and ("本期" in s or "当日" in s or "本日" in s):
+                            date_obj = biz_date_obj
+                        else:
+                            date_obj = _parse_date_value(s)
+                    
+                    if date_obj is None:
+                        continue
+
+                    q = session.query(GongreBranchesDetailData).filter(
+                        GongreBranchesDetailData.sheet_name == sheet_key,
+                        GongreBranchesDetailData.date == date_obj,
+                    )
+                    rows_db: List[GongreBranchesDetailData] = q.all()
+
+                    for rec in rows_db:
+                        value = float(rec.value) if rec.value is not None else None
+                        key_candidates = [
+                            (str(rec.item_cn or "").strip(), str(rec.center_cn or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.center or "").strip()),
+                        ]
+                        row_idx: Optional[int] = None
+                        for k in key_candidates:
+                            row_idx = row_index_map.get(k)
+                            if row_idx is not None:
+                                break
+                        
+                        if row_idx is not None:
+                            if col_idx >= len(rows[row_idx]):
+                                rows[row_idx].extend([None] * (col_idx - len(rows[row_idx]) + 1))
+                            rows[row_idx][col_idx] = value
+
+                            if col_idx == 3 and note_column_index is not None and isinstance(rec.note, (str,)):
+                                note_text = rec.note.strip()
+                                if note_text:
+                                    if note_column_index >= len(rows[row_idx]):
+                                        rows[row_idx].extend([None] * (note_column_index - len(rows[row_idx]) + 1))
+                                    rows[row_idx][note_column_index] = note_text
+                
+                from datetime import datetime, timezone, timedelta
+                _ts = datetime.now(timezone(timedelta(hours=8)))
+                _attatch_time = _ts.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+
+                content = {
+                    "ok": True,
+                    "template_type": "standard",
+                    "mode": "gongre_detail",
+                    "sheet_key": sheet_key,
+                    "biz_date": biz_date,
+                    "sheet_name": names["sheet_name"] or sheet_key,
+                    "unit_id": names["unit_id"],
+                    "unit_name": names["unit_name"],
+                    "columns": columns_standard,
+                    "rows": rows,
+                    "attatch_time": _attatch_time,
+                    "request_id": (payload.get("request_id") if isinstance(payload, dict) else None),
+                }
+                for dict_key, dict_value in dict_bundle.items():
+                    content[dict_key] = dict_value
+
+                return JSONResponse(status_code=200, content=content)
+            finally:
+                session.close()
+        elif template_type == "crosstab":
             # 煤炭库存：返回与模板一致的结构（columns + rows），并补全模板元信息
             if not biz_date:
                 return JSONResponse(

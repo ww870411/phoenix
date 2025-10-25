@@ -308,7 +308,7 @@ async function loadTemplate() {
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
         return
       }
-      if (q && Array.isArray(q.columns)) {
+      if (q && Array.isArray(q.columns) && !isDailyPage.value) {
         columns.value = q.columns;
         const colDefs = q.columns.map((name, index) => ({
           name: String(name ?? ''),
@@ -679,12 +679,4 @@ watch(
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
 </style>
-// 当业务日期变化时，自动重载模板以刷新列头（仅每日数据填报页面）
-onMounted(() => {
-  // 轻量延迟以确保初次加载完成
-  const stop = watch(() => bizDate.value, async () => {
-    if (isDailyPage.value) {
-      await loadTemplate();
-    }
-  });
-});
+
