@@ -825,3 +825,7 @@
 - 留痕与合规：
   - 因 Serena 无法直接读取非符号文件全量内容，本次读取文件预览降级为只读 shell 输出；修复依然通过 apply_patch 进行。
   - 已在前端与后端 README 中同步结构与变更记录。
+## 2025-10-27 PostgreSQL 视图规划讨论（AI 辅助）
+- 摘要：与用户讨论如何基于现有 daily_basic_data、constant_data、temperature_data、coal_inventory_data、gongre_branches_detail_data 等表设计 PostgreSQL 视图。
+- 结论：建议以 SQL 脚本集中维护视图定义，梳理按日期/单位聚合与煤炭库存差异化处理的示例查询，暂未改动代码。
+- 待办：补充具体视图产出需求，确认口径后在 `backend/sql/create_views.sql` 中落地视图脚本并加入初始化流程。

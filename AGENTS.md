@@ -29,24 +29,10 @@
 
 ## 二、整体结构与分层
 
-```
-phoenix/
-├─ backend/      # FastAPI + SQLAlchemy
-├─ frontend/     # Vue3 + RevoGrid
-├─ configs/
-│  └─ seeds/base_sheets.json   # 基础表模板（最小化 JSON）
-├─ docs/
-│  ├─ PHOENIX_OVERVIEW.md
-│  ├─ API_SPEC.md
-│  ├─ NAMING_GUIDE.md
-│  └─ DATA_DICTIONARY.md
-└─ docker-compose.yml
-```
-
 | 层级 | 技术栈 | 说明 |
 |------|--------|------|
-| **前端** | Vue3 + RevoGrid | 渲染表格模板、数据填报与提交 |
-| **后端** | FastAPI + SQLAlchemy + PostgreSQL | 模板读取、数据接收、数据库写入与查询 |
+| **前端frontend** | Vue3 + RevoGrid | 渲染表格模板、数据填报与提交 |
+| **后端backend** | FastAPI + SQLAlchemy + PostgreSQL | 模板读取、数据接收、数据库写入与查询 |
 | **数据库** | PostgreSQL | 统一存储所有表数据（Tall Table） |
 | **容器化** | Docker + Compose | 启动 db / backend / frontend 三容器，数据库挂载持久化 |
 

@@ -1,0 +1,15 @@
+CREATE OR REPLACE VIEW vw_coal_inventory_latest AS                                                                                                                                                     
+    SELECT DISTINCT ON (company, coal_type, storage_type)                                                                                                                                                  
+        company,                                                                                                                                                                                           
+        company_cn,                                                                                                                                                                                        
+        coal_type,                                                                                                                                                                                         
+        coal_type_cn,                                                                                                                                                                                      
+        storage_type,                                                                                                                                                                                      
+        storage_type_cn,                                                                                                                                                                                   
+        value,                                                                                                                                                                                             
+        unit,                                                                                                                                                                                              
+        status,                                                                                                                                                                                            
+        date,                                                                                                                                                                                              
+        operation_time                                                                                                                                                                                     
+    FROM coal_inventory_data                                                                                                                                                                               
+    ORDER BY company, coal_type, storage_type, date DESC, operation_time DESC;  

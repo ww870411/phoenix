@@ -168,3 +168,7 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 
 - 前端已清理所有调试输出（`console.*` 与 `alert(...)`）。
 - 后端接口契约不变：`/template`、`/submit`、`/query` 返回 rows-only；附带 `request_id`、`attatch_time`（东八区毫秒）、`source` 元信息。
+### 2025-10-27 PostgreSQL 视图规划说明（AI 辅助）
+- 现有核心业务表：`daily_basic_data`、`constant_data`、`temperature_data`、`coal_inventory_data`、`gongre_branches_detail_data`。
+- 建议在 `backend/sql/create_views.sql` 中集中维护视图定义，覆盖日常汇总、常量维度对照以及煤炭库存的分支口径。
+- 后续生成视图后，可通过 Alembic/初始化脚本执行 `CREATE OR REPLACE VIEW`，供查询接口直接消费。
