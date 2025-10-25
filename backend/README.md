@@ -164,3 +164,7 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 现象：`phoenix_db` 报 `invalid magic number ...`、`could not locate a valid checkpoint record`，健康检查失败。
 - 原因：数据库数据目录（绑定 `./db_data`）WAL/检查点损坏。
 - 处理优先级：先尝试 `pg_resetwal -f "$PGDATA"` 修复 WAL；不行再备份并清空 `./db_data` 重新初始化。
+## 前端调试输出合规说明（2025-10-25）
+
+- 前端已清理所有调试输出（`console.*` 与 `alert(...)`）。
+- 后端接口契约不变：`/template`、`/submit`、`/query` 返回 rows-only；附带 `request_id`、`attatch_time`（东八区毫秒）、`source` 元信息。

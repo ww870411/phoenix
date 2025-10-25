@@ -55,7 +55,6 @@ export async function listSheets(projectKey, configFile) {
 export async function getTemplate(projectKey, sheetKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  console.info('[api/getTemplate]', { projectKey, sheetKey, config, search })
   const response = await fetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/template${search}`,
   )
@@ -68,13 +67,6 @@ export async function getTemplate(projectKey, sheetKey, options = {}) {
 export async function submitData(projectKey, sheetKey, payload, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  console.info('[api/submitData/request]', {
-    projectKey,
-    sheetKey,
-    config,
-    search,
-    payloadSize: typeof payload === 'object' && payload ? JSON.stringify(payload).length : 0
-  })
   const response = await fetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/submit${search}`,
     {
@@ -98,7 +90,6 @@ export async function queryData(projectKey, sheetKey, payload, options = {}) {
     ? String(payload.request_id)
     : `${Date.now()}_${Math.random().toString(36).slice(2,8)}`
   const enriched = { ...(payload || {}), request_id: requestId }
-  console.info('[api/queryData/request]', { projectKey, sheetKey, config, search, payload: enriched })
   const response = await fetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/query${search}`,
     {

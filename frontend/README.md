@@ -138,3 +138,8 @@ docker compose up -d --build
 - 现象：`phoenix_db` 在编排启动时变为 `unhealthy`，日志包含 `invalid magic number`/`could not locate a valid checkpoint record`。
 - 原因：数据库挂载目录 `./db_data` 的 WAL/检查点损坏。
 - 建议：先尝试 `pg_resetwal -f "$PGDATA"` 修复；若仍失败，备份并清空 `./db_data` 后重新初始化数据库，再启动前端服务。
+## 调试输出策略（2025-10-25）
+
+- 已移除所有前端调试输出：不再使用 `console.*` 与 `alert(...)`。
+- 不影响功能：模板加载与 rows-only 渲染流程保持一致。
+- 如需排障，建议临时在本地分支加入日志，避免进入主干。

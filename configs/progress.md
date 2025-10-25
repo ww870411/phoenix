@@ -799,3 +799,29 @@
     - 移除 onMounted 与 reloadTemplate 中对 `loadExisting()` 的调用，避免重复查询；
     - 在标准表首发查询回填后，调用 `await autoSizeFirstColumn()`，保留列宽自适应原效果。
 - 结果：standard 与 crosstab 均在模板加载完成后进行一次首发查询；业务日期变更时各自各发一次查询。
+## 2025-10-25 前端调试代码清理
+
+- 目标：按用户要求彻底移除前端调试输出，不破坏功能。
+- 变更范围：
+  - `frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+  - `frontend/src/daily_report_25_26/pages/PageSelectView.vue`
+  - `frontend/src/daily_report_25_26/pages/Sheets.vue`
+  - `frontend/src/daily_report_25_26/services/api.js`
+- 内容摘要：
+  - 删除所有 `console.*` 输出（log/info/debug/warn/error/group...）。
+  - 删除所有 `alert(...)` 与 `window.alert(...)` 调试弹窗（含 request_id/attatch_time 提示）。
+  - 保留业务逻辑与数据流，不改动渲染与接口调用顺序。
+- 风险与回滚：
+  - 如需临时排障，可在本次提交的同位置恢复少量 `console.error` 输出；当前删除不影响功能。
+- 证据：Serena 搜索 `console.|alert(` 返回空结果，确认清理完成。
+## 2025-10-25
+
+- 修复前端编译错误：[vue/compiler-sfc] Missing semicolon (DataEntryView.vue:23:8)。
+  - 根因：上次移除路由调试代码时遗留了不完整的对象属性片段（66–69 行 `fullPath/params/query`），导致 SFC 语法无法闭合并被解析为缺少分号。
+  - 变更：删除孤立片段，保留注释 `/* debug removed: route-init */` 以保留追溯线索。
+  - 影响范围：仅 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，不涉及接口或数据结构。
+  - 回滚思路：如需恢复调试，应用 `router.replace({...})` 或 `console.debug({...})` 的完整调用，不要只保留对象字面量属性。
+
+- 留痕与合规：
+  - 因 Serena 无法直接读取非符号文件全量内容，本次读取文件预览降级为只读 shell 输出；修复依然通过 apply_patch 进行。
+  - 已在前端与后端 README 中同步结构与变更记录。

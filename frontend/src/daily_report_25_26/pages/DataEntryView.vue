@@ -61,12 +61,6 @@ const { applyTemplatePlaceholders } = useTemplatePlaceholders();
 const projectKey = String(route.params.projectKey ?? '');
 const pageKey = String(route.params.pageKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
-// 调试：记录初始路由参数与查询串
-console.info('[data-entry/route-init]', {
-  fullPath: route.fullPath,
-  params: { projectKey, pageKey, sheetKey },
-  query: { ...route.query }
-});
 const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
@@ -170,13 +164,6 @@ const submitTime = ref('');
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
 const gridSource = ref([]);
-// 全链路调试：侦听关键状态变更
-watch(() => columns.value.length, (n, o) => console.info('[revogrid/watch] columns.length', { from: o, to: n }));
-watch(() => rows.value.length, (n, o) => console.info('[revogrid/watch] rows.length', { from: o, to: n }));
-watch(() => gridColumns.value.length, (n, o) => console.info('[revogrid/watch] gridColumns.length', { from: o, to: n }));
-watch(() => gridSource.value.length, (n, o) => console.info('[revogrid/watch] gridSource.length', { from: o, to: n }));
-watch(() => bizDate.value, (n, o) => console.info('[data-entry/watch] bizDate', { from: o, to: n }));
-watch(() => pageConfig.value, (n, o) => console.info('[data-entry/watch] pageConfig', { from: o, to: n }));
 const gridRef = ref(null);
 
 // --- Helper --- 
@@ -279,7 +266,6 @@ async function setupCrosstabGrid(tpl) {
 async function loadTemplate() {
   isLoadingTemplate.value = true;
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
-  console.info('[revogrid/template-loaded]', { sheetKey: sheetKey, hasTemplate: !!rawTemplate, cols: Array.isArray(rawTemplate?.columns) ? rawTemplate.columns.length : 0, rows: Array.isArray(rawTemplate?.rows) ? rawTemplate.rows.length : 0 });
   // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
   // 应用日期占位到列头（仅每日数据填报页面）
   if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
@@ -320,7 +306,6 @@ async function loadTemplate() {
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        console.info('[revogrid/query-standard/skip-stale]', { expected: __rid1, got: q.__request_id })
         return
       }
       if (q && Array.isArray(q.columns)) {
@@ -342,16 +327,6 @@ async function loadTemplate() {
         );
         rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
         await autoSizeFirstColumn();
-        console.info('[revogrid/query-standard]', {
-          sheetKey: sheetKey,
-          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
-          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
-          source: q?.source,
-        });
-        // 调试：显示本次回包的 request_id，便于对应到具体响应
-        if (q && q.request_id) {
-          try { window.alert(`query request_id: ${q.request_id}`) } catch (e) { console.info('[query/request_id]', q.request_id) }
-        }
       }
     } else if (templateType.value === 'crosstab') {
       const __rid2 = newRequestId(); latestRequestId.value = __rid2;
@@ -362,7 +337,6 @@ async function loadTemplate() {
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        console.info('[revogrid/query-crosstab/skip-stale]', { expected: __rid2, got: q.__request_id })
         return
       }
       // 更新列头（若由后端基于日期生成），并对齐 gridColumns
@@ -390,19 +364,10 @@ async function loadTemplate() {
           : r
         );
         rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
-        console.info('[revogrid/query-crosstab]', {
-          sheetKey: sheetKey,
-          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
-          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
-          source: q?.source,
-        });
-        if (q && q.request_id) {
-          try { window.alert(`query request_id: ${q.request_id}`) } catch (e) { console.info('[query/request_id]', q.request_id) }
-        }
       }
     }
   } catch (err) {
-    console.error('initial query failed:', err);
+    // console.error('initial query failed:', err);
   }
 
   // 如果后端下发了权威的业务日期，则使用它
@@ -453,7 +418,6 @@ async function loadExisting() {
     { config: pageConfig.value },
   );
   if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-    console.info('[revogrid/query-standard/skip-stale]', { expected: __rid3, got: q.__request_id })
     return
   }
   // cells 路径已删除（rows-only 渲染）
@@ -470,8 +434,6 @@ async function loadExisting() {
 }
 
 async function reloadTemplate() {
-  console.groupCollapsed('[data-entry/reloadTemplate]');
-  console.info('projectKey=', projectKey, 'sheetKey=', sheetKey, 'pageConfig=', pageConfig.value);
   await loadTemplate();
 }
 
@@ -506,11 +468,6 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
-  console.groupCollapsed('[data-entry/submit]');
-  console.info('projectKey=', projectKey, 'sheetKey=', sheetKey, 'bizDate=', bizDate.value);
-  console.info('gridColumns.length=', gridColumns.value.length, 'gridSource.length=', gridSource.value.length);
-  console.info('firstRecord=', gridSource.value?.[0]);
-  console.groupEnd();
   let submissionData;
   if (templateType.value === 'crosstab') {
     submissionData = handleSubmitCrosstab();
@@ -550,17 +507,10 @@ async function onSubmit() {
 
   await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
   submitTime.value = currentSubmitTime;
-  alert('提交成功');
 }
 
 // --- RevoGrid 事件处理 ---
 function handleAfterEdit(evt) {
-  try {
-    const { detail } = evt || {};
-    console.info('[revogrid/afterEdit]', detail);
-  } catch (e) {
-    console.warn('[revogrid/afterEdit] log failed', e);
-  }
   const detail = evt?.detail ?? evt;
   const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
   for (const change of changes) {
@@ -639,7 +589,6 @@ const stop = watch(
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        console.info('[revogrid/query-standard/skip-stale]', { expected: __rid4, got: q.__request_id })
         return
       }
       // cells 路径已删除（rows-only 渲染）
@@ -669,7 +618,7 @@ const stop = watch(
         gridSource.value = [...gridSource.value];
       }
     } catch (err) {
-      console.error('query on bizDate change failed:', err);
+      // console.error('query on bizDate change failed:', err);
     }
   }
 )
@@ -689,7 +638,6 @@ watch(
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        console.info('[revogrid/query-crosstab/skip-stale]', { expected: __rid5, got: q.__request_id })
         return
       }
       if (q && Array.isArray(q.columns)) {
@@ -716,18 +664,9 @@ watch(
           : r
         );
         rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
-        console.info('[revogrid/query-crosstab]', {
-          sheetKey: sheetKey?.value,
-          cols: Array.isArray(q.columns) ? q.columns.length : columns.value.length,
-          rows: Array.isArray(q.rows) ? q.rows.length : gridSource.value.length,
-          source: q?.source,
-        });
-        if (q && q.request_id) {
-          try { window.alert(`query request_id: ${q.request_id}`) } catch (e) { console.info('[query/request_id]', q.request_id) }
-        }
       }
     } catch (err) {
-      console.error('crosstab query on bizDate change failed:', err);
+      // console.error('crosstab query on bizDate change failed:', err);
     }
   }
 )
