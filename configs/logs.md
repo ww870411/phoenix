@@ -226,11 +226,34 @@ codex resume 019a196b-90fa-7a50-b5d3-99918ea4ae40
 
 修复煤炭库存表query中的rows=[]
 
+codex resume 019a196b-90fa-7a50-b5d3-99918ea4ae40
 
-
-
-
-
+数据库错误，无法启动容器，修复：
+重置数据库并按脚本建表                                                                                                                                                                                         
+                                                                                                                                                                                                                 
+  - 停止编排                                                                                                                                                                                                     
+      - docker compose down                                                                                                                                                                                      
+  - 删除数据目录（彻底清空数据库）                                                                                                                                                                               
+      - 备份可选：将项目根目录下的 db_data 重命名为如 db_data_backup_20251025_0728                                                                                                                               
+      - 删除目录：db_data（可用资源管理器删除，或 PowerShell：Remove-Item -Recurse -Force .\db_data）                                                                                                            
+  - 启动数据库容器（只启动 db，完成初始化）                                                                                                                                                                      
+      - docker compose up -d db                                                                                                                                                                                  
+      - 等待健康检查通过：docker compose ps（看到 phoenix_db 状态为 “healthy” 再继续）                                                                                                                           
+      - 如不 healthy：docker logs phoenix_db 查看原因                                                                                                                                                            
+  - 执行建表脚本（用宿主机把 SQL 输送到容器的 psql）                                                                                                                                                             
+      - PowerShell 推荐写法：                                                                                                                                                                                    
+          - Get-Content -Raw .\backend\sql\create_tables.sql | docker exec -i phoenix_db psql -U postgres -d phoenix                                                                                             
+      - 或尝试输入重定向（PowerShell 也支持）：                                                                                                                                                                  
+          - docker exec -i phoenix_db psql -U postgres -d phoenix < .\backend\sql\create_tables.sql                                                                                                              
+  - 验证表是否创建成功（任选其一）                                                                                                                                                                               
+      - 进入 psql：docker exec -it phoenix_db psql -U postgres -d phoenix                                                                                                                                        
+          - \dt                                                                                                                                                                                                  
+          - SELECT count(*) FROM daily_basic_data;（应能正常执行）                                                                                                                                               
+          - \q 退出                                                                                                                                                                                              
+  - 启动其余服务                                                                                                                                                                                                 
+      - docker compose up -d                                                                                                                                                                                     
+  - 页面验证                                                                                                                                                                                                     
+      - 打开你常用的填报页面；后端不应再出现 “could not read block …” 或 500
 
 
 

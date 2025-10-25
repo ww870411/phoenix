@@ -686,3 +686,62 @@
 ### 清理 cells 路径（2025-10-25）
 - 彻底删除前端所有 cells 代码路径（DataEntryView.vue 中将条件与循环改为 `if (false)` 与 `for (const _ of [])`，不再引用 `q.cells`）。
 - rows-only 渲染与提交：仅消费后端的 `columns` 与 `rows`，不再读取或合并 `cells`。
+## 2025-10-25 前端全链路调试日志加固（移除 cells 路径后继续排查）
+
+## 2025-10-25 Docker 启动失败排查（phoenix_db unhealthy）
+
+## 2025-10-25 校验建表脚本与ORM模型一致性
+
+- 目标：对比 `backend/sql/create_tables.sql` 与 `backend/db/database_daily_report_25_26.py` 的表结构是否一致。
+- 发现：
+  - `daily_basic_data`：列集一致（id, company, company_cn, sheet_name, item, item_cn, value, unit, note, date, status, operation_time）。
+  - `gongre_branches_detail_data`：列集一致（含 center/center_cn、date、status、operation_time）。
+  - `temperature_data`：列集一致（id, date_time, value, operation_time）。
+  - `coal_inventory_data`：列集一致（含 status TEXT）。
+  - `constant_data`：存在差异：
+    - SQL 脚本包含 `center TEXT, center_cn TEXT` 且唯一索引 `idx_constant_unique` 覆盖 `(company, center, sheet_name, item, period)`；
+    - ORM 模型 `ConstantData` 未定义 `center` 与 `center_cn` 两列。
+- 影响：
+  - 若按 SQL 初始化数据库，`constant_data` 将多出 `center/center_cn` 列；ORM 读写不受影响（非必填），但如需以 `center` 维度查询/唯一性约束，则建议在 ORM 中补充对应字段。
+- 建议：
+  - A. 以 SQL 为准：在 `ConstantData` 增加 `center`/`center_cn`（可为空），与索引保持一致；
+  - B. 以 ORM 为准：修改 `create_tables.sql` 移除 `center`/`center_cn` 及唯一索引中的 `center`，二者保持一致（不推荐，可能影响常量指标的“中心”维度）。
+- 现象：`docker compose up` 后，后端/前端依赖的数据库容器 `phoenix_db` 处于 `unhealthy`，导致编排失败。
+- 证据：
+  - `configs/docker错误.md:8` 显示 `invalid magic number ... in log segment ...`；
+  - `configs/docker错误.md:9` 显示 `invalid primary checkpoint record`；
+  - `configs/docker错误.md:10` 显示 `PANIC: could not locate a valid checkpoint record`；
+  - `configs/docker错误.md:11` 显示 `startup process ... terminated by signal 6: Aborted`；
+  - `configs/docker错误.md:13` 显示 `database system is shut down`；
+  - `configs/docker错误.md:15` 显示 `dependency failed to start: container phoenix_db is unhealthy`。
+- 结论：PostgreSQL 数据目录（挂载到 `./db_data`）的 WAL/检查点损坏，数据库无法启动。
+- 参考：`docker-compose.yml:12` `PGDATA: /app/db_data`，`docker-compose.yml:21` `- ./db_data:/app/db_data`（绑定宿主目录）。
+- 处置建议（两选一，先尝试 A）：
+  - A. 仅重建 WAL（保留数据，风险可控）
+    1) 停止编排：`docker compose down`；
+    2) 一次性修复：`docker compose run --rm db sh -lc 'pg_resetwal -f "$PGDATA"'`；
+    3) 重启数据库：`docker compose up -d db`，等待健康检查通过；
+    4) 再启动其它服务：`docker compose up -d`。
+  - B. 全新初始化数据库（会清空数据，需先备份）
+    1) `docker compose down`；
+    2) 备份 `./db_data` 到 `./db_data_backup_YYYYMMDD_HHMM`；
+    3) 删除 `./db_data`；
+    4) `docker compose up -d db` 完成初始化后，再 `docker compose up -d`；
+    5) 若需要，执行后端自动建表/迁移逻辑（参见 `backend/db`）。
+- 原因推测：上次异常关机/强制中止容器导致 WAL 未正确落盘；Windows/宿主文件系统突然断电也会触发此类错误。
+
+- 目的：定位“query 返回正确但 RevoGrid 不显示”的前端问题，覆盖路由解析 → 模板加载 → 查询回填 → 行映射 → RevoGrid 绑定与编辑 → 提交流程的关键节点，输出结构化 console 日志。
+- 变更文件：
+  - `frontend/src/daily_report_25_26/pages/DataEntryView.vue`
+    - 新增 route 初始化日志 `[data-entry/route-init]`。
+    - 新增状态侦听日志 `[revogrid/watch]`（columns/rows/gridColumns/gridSource）与 `[data-entry/watch]`（bizDate/pageConfig）。
+    - 新增 `reloadTemplate()` 入口日志 `[data-entry/reloadTemplate]`。
+    - 新增提交前快照日志 `[data-entry/submit]`，包含列数/行数与首行样例。
+    - 新增 RevoGrid 编辑事件日志 `[revogrid/afterEdit]`。
+  - `frontend/src/daily_report_25_26/services/api.js`
+    - `getTemplate/submitData/queryData` 均输出请求信息（projectKey、sheetKey、config、payload 摘要）。
+- 注意：严格遵循“rows-only”渲染，不新增任何 cells 相关逻辑；本次仅加日志与侦听，未变更数据通路。
+- 使用方法：
+  1) 打开浏览器控制台（保留 Info 级别）。
+  2) 进入任意表单页后，按时间顺序观察：route-init → reloadTemplate → template logs（若有）→ queryData(request) → watch(gridSource/gridColumns) 的增长；
+  3) 若 `gridSource.length > 0` 且 `gridColumns.length > 0` 但页面空白，重点排查 v-if 条件与 RevoGrid props 变化时机。

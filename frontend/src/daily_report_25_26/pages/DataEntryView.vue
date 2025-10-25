@@ -61,6 +61,12 @@ const { applyTemplatePlaceholders } = useTemplatePlaceholders();
 const projectKey = String(route.params.projectKey ?? '');
 const pageKey = String(route.params.pageKey ?? '');
 const sheetKey = String(route.params.sheetKey ?? '');
+// 调试：记录初始路由参数与查询串
+console.info('[data-entry/route-init]', {
+  fullPath: route.fullPath,
+  params: { projectKey, pageKey, sheetKey },
+  query: { ...route.query }
+});
 const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
@@ -147,6 +153,13 @@ const submitTime = ref('');
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
 const gridSource = ref([]);
+// 全链路调试：侦听关键状态变更
+watch(() => columns.value.length, (n, o) => console.info('[revogrid/watch] columns.length', { from: o, to: n }));
+watch(() => rows.value.length, (n, o) => console.info('[revogrid/watch] rows.length', { from: o, to: n }));
+watch(() => gridColumns.value.length, (n, o) => console.info('[revogrid/watch] gridColumns.length', { from: o, to: n }));
+watch(() => gridSource.value.length, (n, o) => console.info('[revogrid/watch] gridSource.length', { from: o, to: n }));
+watch(() => bizDate.value, (n, o) => console.info('[data-entry/watch] bizDate', { from: o, to: n }));
+watch(() => pageConfig.value, (n, o) => console.info('[data-entry/watch] pageConfig', { from: o, to: n }));
 const gridRef = ref(null);
 
 // --- Helper --- 
@@ -407,6 +420,8 @@ async function loadExisting() {
 }
 
 async function reloadTemplate() {
+  console.groupCollapsed('[data-entry/reloadTemplate]');
+  console.info('projectKey=', projectKey, 'sheetKey=', sheetKey, 'pageConfig=', pageConfig.value);
   await loadTemplate();
   await loadExisting();
 }
@@ -442,6 +457,11 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
+  console.groupCollapsed('[data-entry/submit]');
+  console.info('projectKey=', projectKey, 'sheetKey=', sheetKey, 'bizDate=', bizDate.value);
+  console.info('gridColumns.length=', gridColumns.value.length, 'gridSource.length=', gridSource.value.length);
+  console.info('firstRecord=', gridSource.value?.[0]);
+  console.groupEnd();
   let submissionData;
   if (templateType.value === 'crosstab') {
     submissionData = handleSubmitCrosstab();
@@ -486,6 +506,12 @@ async function onSubmit() {
 
 // --- RevoGrid 事件处理 ---
 function handleAfterEdit(evt) {
+  try {
+    const { detail } = evt || {};
+    console.info('[revogrid/afterEdit]', detail);
+  } catch (e) {
+    console.warn('[revogrid/afterEdit] log failed', e);
+  }
   const detail = evt?.detail ?? evt;
   const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
   for (const change of changes) {

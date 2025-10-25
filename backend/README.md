@@ -148,3 +148,14 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
   - constant/常量类：按模板期别列定位列索引并回填。
   - coal_inventory/煤炭库存：保持宽表 `columns`+`rows` 行为，无需调整。
 - 迁移指引：前端优先改为消费 `columns`+`rows`；完成迁移后可在后端移除 `cells`。
+
+## 变更记录（2025-10-25）
+
+- 本轮仅在前端添加全链路调试日志，后端接口与数据模型无改动。
+- 排查目标：确认前端在 rows-only 模式下收到正确的 `/template` 与 `/query` 数据并正确渲染。
+
+### 运维提示：Docker 启动失败（数据库 unhealthy）
+
+- 现象：`phoenix_db` 报 `invalid magic number ...`、`could not locate a valid checkpoint record`，健康检查失败。
+- 原因：数据库数据目录（绑定 `./db_data`）WAL/检查点损坏。
+- 处理优先级：先尝试 `pg_resetwal -f "$PGDATA"` 修复 WAL；不行再备份并清空 `./db_data` 重新初始化。

@@ -82,6 +82,12 @@ docker compose up -d --build
 ## 与 @revolist/vue3-datagrid 的配合
 
 - `DataEntryView.vue` 直接导入 `@revolist/vue3-datagrid` 默认导出的 `RevoGrid` 组件，无需手动调用 `defineCustomElements`；
+  - 调试日志：已在 `DataEntryView.vue` 和 `services/api.js` 加入 rows-only 渲染链路的调试输出，包括：
+    - `[data-entry/route-init]`、`[data-entry/reloadTemplate]`
+    - `[revogrid/watch]`（columns/rows/gridColumns/gridSource 长度）
+    - `[api/getTemplate]`、`[api/queryData/request]`、`[api/submitData/request]`
+    - `[revogrid/afterEdit]`、`[data-entry/submit]`
+  - 观察要点：当 `gridColumns.length > 0` 且 `gridSource.length > 0` 后，应能显示数据；若仍空白，检查模板容器的 `v-if="columns.length"` 是否及时更新。
 - 模板首行使用后端返回的四列表头（项目、计量单位、今日日期、去年同日）； 
 - 数据从第二行开始对应后端返回的 `rows`（二维数组），并根据列数动态渲染；
 - 用户编辑后触发的 `afteredit/afterEdit` 事件统一由 `handleAfterEdit` 处理，同步更新 `gridSource` 与本地缓存，最终调用 `submitData` 接口提交。
@@ -124,3 +130,8 @@ docker compose up -d --build
   - 若存在 `q.columns`，重建/对齐 `gridColumns`（`prop: c${i}`）。
   - 将 `q.rows` 映射为 `gridSource`：`{ c0, c1, ... }`，单元格统一转字符串或空串。
   - 同步设置内部 `rows` 为 `q.rows`，保持显示与提交一致。
+## 运维提示：Docker 启动失败（数据库 unhealthy）
+
+- 现象：`phoenix_db` 在编排启动时变为 `unhealthy`，日志包含 `invalid magic number`/`could not locate a valid checkpoint record`。
+- 原因：数据库挂载目录 `./db_data` 的 WAL/检查点损坏。
+- 建议：先尝试 `pg_resetwal -f "$PGDATA"` 修复；若仍失败，备份并清空 `./db_data` 后重新初始化数据库，再启动前端服务。
