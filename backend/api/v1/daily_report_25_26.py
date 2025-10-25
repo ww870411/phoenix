@@ -1858,67 +1858,116 @@ async def query_sheet(
 
             session = SessionLocal()
             try:
-                q = session.query(DailyBasicData).filter(
-                    DailyBasicData.sheet_name == sheet_key,
-                    DailyBasicData.date == _parse_date_value(biz_date),
-                )
-                if company:
-                    q = q.filter(DailyBasicData.company == company)
-                rows_db: List[DailyBasicData] = q.all()
-
-                # 同步构造 cells 兼容旧前端
+                # 兼容字段（计划废弃）：这里为所有数据列构造 cells，而非仅第一个数据列
                 cells: List[Dict[str, Any]] = []
 
-                for rec in rows_db:
-                    value = float(rec.value) if rec.value is not None else None
+                # 遍历所有数据列（跳过前两列和备注列）
+                # 预解析 biz_date 对象，供关键字列头（如“同期日”）推算使用
+                biz_date_obj = _parse_date_value(biz_date)
+                for col_idx in range(len(columns_raw)):
+                    if col_idx < 2:
+                        continue
+                    if note_column_index is not None and col_idx == note_column_index:
+                        continue
+                    # 列日期解析：第一个数据列强制采用 biz_date，其余尝试从列头解析
+                    if col_idx == 2:
+                        date_obj = biz_date_obj
+                    else:
+                        label = columns_raw[col_idx]
+                        s = str(label).strip() if label is not None else ""
+                        if s and ("同期" in s):
+                            # 同期日：按 biz_date 的去年同日推算（闰日回退到 2/28）
+                            try:
+                                date_obj = biz_date_obj.replace(year=biz_date_obj.year - 1) if biz_date_obj else None
+                            except Exception:
+                                if biz_date_obj and biz_date_obj.month == 2 and biz_date_obj.day == 29:
+                                    date_obj = biz_date_obj.replace(year=biz_date_obj.year - 1, day=28)
+                                else:
+                                    date_obj = None
+                        elif s and ("本期" in s or "当日" in s or "本日" in s):
+                            date_obj = biz_date_obj
+                        else:
+                            date_obj = _parse_date_value(s)
+                    if date_obj is None:
+                        continue
 
-                    key_candidates = [
-                        (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
-                        (str(rec.item or "").strip(), str(rec.unit or "").strip()),
-                    ]
-                    row_idx: Optional[int] = None
-                    for k in key_candidates:
-                        row_idx = row_index_map.get(k)
-                        if row_idx is not None:
-                            break
+                    q = session.query(DailyBasicData).filter(
+                        DailyBasicData.sheet_name == sheet_key,
+                        DailyBasicData.date == date_obj,
+                    )
+                    if company:
+                        q = q.filter(DailyBasicData.company == company)
+                    rows_db: List[DailyBasicData] = q.all()
 
-                    # 默认回填第一个数据列（索引 2）
-                    target_col = 2
-                    if row_idx is not None:
-                        if target_col >= len(rows[row_idx]):
-                            rows[row_idx].extend([None] * (target_col - len(rows[row_idx]) + 1))
-                        rows[row_idx][target_col] = value
+                    for rec in rows_db:
+                        value = float(rec.value) if rec.value is not None else None
+                        key_candidates = [
+                            (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.unit or "").strip()),
+                        ]
+                        row_idx: Optional[int] = None
+                        for k in key_candidates:
+                            row_idx = row_index_map.get(k)
+                            if row_idx is not None:
+                                break
+                        if row_idx is None:
+                            continue
 
-                        # 备注回填（若存在备注列且有值）
-                        if note_column_index is not None and isinstance(rec.note, (str,)):
+                        if col_idx >= len(rows[row_idx]):
+                            rows[row_idx].extend([None] * (col_idx - len(rows[row_idx]) + 1))
+                        rows[row_idx][col_idx] = value
+
+                        # 仅当当前列是第一个数据列时，填充备注列（与提交一致）。
+                        # 说明：某些模板“解释说明”列头在模板中为空或不稳定，为保证稳定性，这里额外做一次兜底填充：
+                        # 若遍历结束后仍无备注回填，将在循环外再次按 biz_date 做一次专门的备注回填。
+                        if col_idx == 2 and note_column_index is not None and isinstance(rec.note, (str,)):
                             note_text = rec.note.strip()
                             if note_text:
                                 if note_column_index >= len(rows[row_idx]):
                                     rows[row_idx].extend([None] * (note_column_index - len(rows[row_idx]) + 1))
                                 rows[row_idx][note_column_index] = note_text
 
-                    # 兼容旧 cells
-                    cells.append(
-                        {
-                            "row_label": rec.item_cn or rec.item,
-                            "unit": rec.unit,
-                            "col_index": target_col,
-                            "value_type": "num" if value is not None else "text",
-                            "value_num": value,
-                        }
+                # 兜底：如首列遍历没有带出备注，则按 biz_date 再做一次备注仅回填
+                if note_column_index is not None and biz_date_obj is not None:
+                    q_note = session.query(DailyBasicData).filter(
+                        DailyBasicData.sheet_name == sheet_key,
+                        DailyBasicData.date == biz_date_obj,
                     )
-                    if note_column_index is not None and isinstance(rec.note, (str,)):
+                    if company:
+                        q_note = q_note.filter(DailyBasicData.company == company)
+                    note_rows: List[DailyBasicData] = q_note.all()
+                    for rec in note_rows:
+                        if not isinstance(rec.note, (str,)):
+                            continue
                         note_text = rec.note.strip()
-                        if note_text:
-                            cells.append(
-                                {
-                                    "row_label": rec.item_cn or rec.item,
-                                    "unit": rec.unit,
-                                    "col_index": note_column_index,
-                                    "value_type": "text",
-                                    "value_text": note_text,
-                                }
-                            )
+                        if not note_text:
+                            continue
+                        key_candidates = [
+                            (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.unit or "").strip()),
+                        ]
+                        row_idx: Optional[int] = None
+                        for k in key_candidates:
+                            row_idx = row_index_map.get(k)
+                            if row_idx is not None:
+                                break
+                        if row_idx is None:
+                            continue
+                        if note_column_index >= len(rows[row_idx]):
+                            rows[row_idx].extend([None] * (note_column_index - len(rows[row_idx]) + 1))
+                        if not rows[row_idx][note_column_index]:
+                            rows[row_idx][note_column_index] = note_text
+
+                        # 兼容 cells
+                        cells.append(
+                            {
+                                "row_label": rec.item_cn or rec.item,
+                                "unit": rec.unit,
+                                "col_index": col_idx,
+                                "value_type": "num" if value is not None else "text",
+                                "value_num": value,
+                            }
+                        )
 
                 content = {
                     "ok": True,
