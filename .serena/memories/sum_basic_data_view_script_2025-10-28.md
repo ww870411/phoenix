@@ -1,0 +1,1 @@
+2025-10-28：新增 backend/sql/create_view.sql，定义 sum_basic_data 物化视图脚本（默认创建在当前 search_path schema）。视图按 company/item 维度计算 biz_date（当前日前一天）与同期日的 6 个累计口径，并附唯一索引支持 CONCURRENTLY 刷新。同步更新 backend/README.md 和 configs/progress.md 记录说明。

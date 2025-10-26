@@ -73,6 +73,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 - `sql/`
     - `create_tables.sql`
     - SQL 包含 `gongre_branches_detail_data`，对应 ORM 类 `GongreBranchesDetailData`（见 `db/database_daily_report_25_26.py`）。
+    - `create_view.sql`（集中维护物化视图/分析视图定义，示例：`sum_basic_data` 按公司/项目指标聚合多口径累计，可按需调整所属 schema）。
 
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`

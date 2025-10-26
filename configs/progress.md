@@ -10,6 +10,16 @@
 - 验证：未运行自动化测试；需在数据填报页面切换不同日期，确认表格数据与列头同步变化。
 - 备注：Serena 当前不支持直接编辑 Vue SFC，本次按降级矩阵使用 `apply_patch`；若需回滚，可删除新函数并恢复原有查询分支。
 
+### 2025-10-28 物化视图脚本新增（AI辅助）
+- 范围：`backend/sql/create_view.sql`、`backend/README.md`、`configs/progress.md`
+- 原因：规划 `sum_basic_data` 物化视图，按 company/item 维度输出六种时间口径累计指标。
+- 变更：
+  1. 新增 SQL 脚本：创建 `sum_basic_data` 物化视图（默认位于当前 `search_path` schema），定义 biz_date（当前日前一天）及 peer_date（一年前同日）的多窗口累计，并补充唯一索引以支持 CONCURRENTLY 刷新；如需独立 schema，可在执行前调整 `search_path`。
+  2. README 目录快照补录 `create_view.sql`，说明其用途。
+  3. 留痕当前物化视图建设方案，便于后续按层次扩展其它物化视图。
+- 验证：未在系统内执行；需在测试库手动运行脚本并核对聚合结果后再部署生产。
+- 备注：脚本默认依赖 `daily_basic_data` 字段命名；如生产表结构有差异，请同步调整列名。
+
 ### 2025-10-23 数据填报只读列规则调整（AI辅助）
 - 范围：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`
 - 原因：`GongRe_branches_detail_Sheet` 模板前三列包含“项目/中心/计量单位”，旧版写死“前两列只读”会清空“中心”“计量单位”展示。
