@@ -279,6 +279,7 @@ kules结论
 视图生成命令
 docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_view.sql
 刷新物化视图命令
+REFRESH MATERIALIZED VIEW sum_basic_data;
 
 
 

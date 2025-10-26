@@ -1,18 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-根据模板数据自动生成 daily_basic_data 示例数据。
+从模板自动生成 daily_basic_data 示例数据。
 
-生成内容：
-1. backend/sql/sample_daily_basic_data.csv
-2. backend/sql/sample_daily_basic_data.sql
+输出文件：
+- backend/sql/sample_daily_basic_data.csv
+- backend/sql/sample_daily_basic_data.sql
 
-日期范围：
-- 本期：2025-10-21 ～ 2025-10-25
-- 同期：对应上一年同日（2024-10-21 ～ 2024-10-25）
-
-用法：
-    python backend/scripts/generate_daily_basic_sample.py
+包含日期：
+- 本期：2025-10-21 至 2025-10-25
+- 同期：对应上一年度同日
 """
 
 from __future__ import annotations
@@ -27,33 +24,33 @@ from typing import Dict, Iterable, List, Optional
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / "backend"
-DATA_FILE = ROOT_DIR / "backend_data" / "数据结构_基本指标表.json"
+TEMPLATE_FILE = ROOT_DIR / "backend_data" / "数据结构_基本指标表.json"
 OUTPUT_CSV = BACKEND_DIR / "sql" / "sample_daily_basic_data.csv"
 OUTPUT_SQL = BACKEND_DIR / "sql" / "sample_daily_basic_data.sql"
+TABLE_NAME = "Daily_basic_data"
 
-TARGET_DATES = [date(2025, 10, 21) + timedelta(days=i) for i in range(5)]
+TARGET_DATES: List[date] = [date(2025, 10, 21) + timedelta(days=i) for i in range(5)]
 
 
 @dataclass
-class SheetRow:
+class TemplateRow:
     company: str
     company_cn: str
-    sheet_name: str
-    item: str
+    sheet_key: str
+    item_key: str
     item_cn: str
     unit: str
-    sequence: int  # 用于生成基准数值
+    sequence: int
 
 
 def load_templates() -> Dict[str, dict]:
-    raw = DATA_FILE.read_text(encoding="utf-8")
-    data = json.loads(raw)
-    return data
+    raw = TEMPLATE_FILE.read_text(encoding="utf-8")
+    return json.loads(raw)
 
 
 def slugify(text: str) -> str:
     cleaned = []
-    for ch in text:
+    for ch in text.strip():
         if ch.isalnum():
             cleaned.append(ch.lower())
         elif ch in ("-", "_"):
@@ -64,17 +61,23 @@ def slugify(text: str) -> str:
     return slug or "item"
 
 
-def iterate_sheet_rows(templates: Dict[str, dict]) -> Iterable[SheetRow]:
+def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
     sequence = 0
     for sheet_key, sheet in templates.items():
         if sheet.get("类型") == "crosstab":
-            continue  # 跳过煤炭库存等交叉表
+            continue
 
-        company = sheet.get("单位标识") or sheet.get("单位ID") or sheet_key
+        company = sheet.get("单位标识") or sheet_key
         company_cn = sheet.get("单位名") or sheet.get("单位名称") or company
-        sheet_name = sheet.get("表名") or sheet_key
+        sheet_name_en = sheet_key
         columns = sheet.get("列名") or []
         data_rows = sheet.get("数据") or []
+
+        item_dict_raw = sheet.get("项目字典") or {}
+        item_dict = {str(v).strip(): str(k).strip() for k, v in item_dict_raw.items()}
+
+        center_dict_raw = sheet.get("中心字典") or {}
+        center_dict = {str(v).strip(): str(k).strip() for k, v in center_dict_raw.items()}
 
         try:
             unit_idx = columns.index("计量单位")
@@ -88,31 +91,37 @@ def iterate_sheet_rows(templates: Dict[str, dict]) -> Iterable[SheetRow]:
         for row in data_rows:
             if not row:
                 continue
-            item_label = str(row[0]).strip() or "未命名项目"
-            unit_label = str(row[unit_idx]).strip() if unit_idx is not None and unit_idx < len(row) else ""
 
+            item_label = str(row[0]).strip() or "未命名项目"
+            unit_label = (
+                str(row[unit_idx]).strip() if unit_idx is not None and unit_idx < len(row) else ""
+            )
+
+            base_key = item_dict.get(item_label) or slugify(item_label)
+            item_key = base_key.lower()
             item_cn = item_label
-            item_key = slugify(item_label)
 
             if center_idx is not None and center_idx < len(row):
                 center_name = str(row[center_idx]).strip()
-                item_cn = f"{item_label}（{center_name}）"
-                item_key = slugify(f"{item_label}_{center_name}")
+                if center_name:
+                    center_key = center_dict.get(center_name) or slugify(center_name)
+                    item_key = f"{item_key}_{center_key.lower()}"
+                    item_cn = f"{item_label}（{center_name}）"
 
             sequence += 1
-            yield SheetRow(
+            yield TemplateRow(
                 company=company,
                 company_cn=company_cn,
-                sheet_name=sheet_name,
-                item=item_key,
+                sheet_key=sheet_name_en,
+                item_key=item_key,
                 item_cn=item_cn,
                 unit=unit_label,
                 sequence=sequence,
             )
 
 
-def generate_value(base_sequence: int, day_offset: int, scale: Decimal = Decimal("1.0")) -> Decimal:
-    base = Decimal(base_sequence * 10)
+def generate_value(sequence: int, day_offset: int, scale: Decimal) -> Decimal:
+    base = Decimal(sequence * 10)
     increment = Decimal(day_offset * 3)
     value = (base + increment) * scale
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -122,45 +131,45 @@ def peer_of(target: date) -> date:
     try:
         return target.replace(year=target.year - 1)
     except ValueError:
-        # 处理闰年 2 月 29 日
+        # handle leap year 2/29
         return target.replace(month=2, day=28, year=target.year - 1)
 
 
-def build_records(rows: Iterable[SheetRow]) -> List[Dict[str, object]]:
+def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
     records: List[Dict[str, object]] = []
 
     for row in rows:
-        for idx, biz_dt in enumerate(TARGET_DATES):
-            value = generate_value(row.sequence, idx, Decimal("1.00"))
+        for idx, biz_date in enumerate(TARGET_DATES):
+            value_current = generate_value(row.sequence, idx, Decimal("1.00"))
             records.append(
                 {
                     "company": row.company,
                     "company_cn": row.company_cn,
-                    "sheet_name": row.sheet_name,
-                    "item": row.item,
+                    "sheet_name": row.sheet_key,
+                    "item": row.item_key,
                     "item_cn": row.item_cn,
                     "unit": row.unit,
-                    "value": value,
+                    "value": value_current,
                     "note": "",
                     "status": "sample",
-                    "date": biz_dt.isoformat(),
+                    "date": biz_date.isoformat(),
                 }
             )
 
-            peer_dt = peer_of(biz_dt)
-            peer_value = generate_value(row.sequence, idx, Decimal("0.92"))
+            peer_date = peer_of(biz_date)
+            value_peer = generate_value(row.sequence, idx, Decimal("0.92"))
             records.append(
                 {
                     "company": row.company,
                     "company_cn": row.company_cn,
-                    "sheet_name": row.sheet_name,
-                    "item": f"{row.item}_peer",
-                    "item_cn": f"{row.item_cn}（同期）",
+                    "sheet_name": row.sheet_key,
+                    "item": row.item_key,
+                    "item_cn": row.item_cn,
                     "unit": row.unit,
-                    "value": peer_value,
+                    "value": value_peer,
                     "note": "",
                     "status": "sample_peer",
-                    "date": peer_dt.isoformat(),
+                    "date": peer_date.isoformat(),
                 }
             )
 
@@ -202,8 +211,9 @@ def write_sql(records: List[Dict[str, object]]) -> None:
     with OUTPUT_SQL.open("w", encoding="utf-8") as fp:
         fp.write(header)
         for record in records:
+            note_literal = "NULL" if not record["note"] else f"'{sql_literal(record['note'])}'"
             fp.write(
-                "INSERT INTO daily_basic_data "
+                f"INSERT INTO {TABLE_NAME} "
                 "(company, company_cn, sheet_name, item, item_cn, unit, value, note, status, date)\n"
                 f"VALUES ('{sql_literal(record['company'])}', "
                 f"'{sql_literal(record['company_cn'])}', "
@@ -212,7 +222,7 @@ def write_sql(records: List[Dict[str, object]]) -> None:
                 f"'{sql_literal(record['item_cn'])}', "
                 f"'{sql_literal(record['unit'])}', "
                 f"{record['value']}, "
-                f"{'NULL' if not record['note'] else "'" + sql_literal(record['note']) + "'"}, "
+                f"{note_literal}, "
                 f"'{sql_literal(record['status'])}', "
                 f"'{record['date']}');\n\n"
             )
@@ -220,7 +230,7 @@ def write_sql(records: List[Dict[str, object]]) -> None:
 
 def main() -> None:
     templates = load_templates()
-    rows = list(iterate_sheet_rows(templates))
+    rows = list(iterate_template_rows(templates))
     records = build_records(rows)
     write_csv(records)
     write_sql(records)

@@ -20,6 +20,24 @@
 - 验证：未在系统内执行；需在测试库手动运行脚本并核对聚合结果后再部署生产。
 - 备注：脚本默认依赖 `daily_basic_data` 字段命名；如生产表结构有差异，请同步调整列名。
 
+### 2025-10-28 GongRe 分中心累计视图（AI辅助）
+- 范围：`backend/sql/create_view.sql`、`backend/README.md`、`configs/progress.md`
+- 原因：为分中心明细表 `gongre_branches_detail_data` 提供与 `sum_basic_data` 一致的 6 种时间口径累计，便于后续聚合展示。
+- 变更：
+  1. 追加 `sum_gongre_branches_detail_data` 物化视图定义，按 `center/item` 维度输出近7日/同期7日/当月/同期月/当季累计指标，并建立唯一索引 `(center, item, biz_date)` 支撑并发刷新。
+  2. README 补充 `create_view.sql` 中现已包含 `sum_basic_data` 与 `sum_gongre_branches_detail_data` 两张物化视图说明。
+- 验证：未执行；需在测试库运行 `psql -U postgres -d phoenix -f backend/sql/create_view.sql` 并校验结果。
+- 备注：如需分 schema，可在执行前 `SET search_path`，或直接将视图名改写为 `<schema>.sum_gongre_branches_detail_data`。
+
+### 2025-10-28 daily_basic_data 示例数据脚本（AI辅助）
+- 范围：`backend/scripts/generate_daily_basic_sample.py`、`backend/sql/sample_daily_basic_data.csv`（脚本生成）、`backend/sql/sample_daily_basic_data.sql`（脚本生成）、`configs/progress.md`
+- 原因：需要批量生成 2025-10-21～2025-10-25 及同期日的示例数据，用于测试 `daily_basic_data` 聚合与物化视图。
+- 变更：
+  1. 新增生成脚本 `backend/scripts/generate_daily_basic_sample.py`，解析 `backend_data/数据结构_基本指标表.json`（排除交叉表），自动为各单位/项目生成本期与同期两组样例数据，并输出 CSV 与 SQL；生成时优先使用模板中的 `项目字典`、`中心字典` 作为 `item` 英文键与中文名，保持与业务标准一致。
+  2. 脚本采用可重复执行策略，如有需要可调整日期范围或倍数以生成更多样例。
+- 验证：尚未运行脚本；执行 `python backend/scripts/generate_daily_basic_sample.py` 后应在 `backend/sql/` 下得到 CSV 与 SQL 文件，再通过 `psql` 或 `\copy` 导入测试库。
+- 备注：生成数据仅用于联调示例，正式环境前需替换为真实业务数据。
+
 ### 2025-10-23 数据填报只读列规则调整（AI辅助）
 - 范围：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`
 - 原因：`GongRe_branches_detail_Sheet` 模板前三列包含“项目/中心/计量单位”，旧版写死“前两列只读”会清空“中心”“计量单位”展示。

@@ -59,3 +59,64 @@ GROUP BY
 -- 为支持 CONCURRENTLY 刷新，建立唯一索引，保持 company/item/biz_date 唯一
 CREATE UNIQUE INDEX IF NOT EXISTS ux_sum_basic_data_company_item_bizdate
   ON sum_basic_data (company, item, biz_date);
+
+-- sum_gongre_branches_detail_data 物化视图
+-- 口径：按 center / item 汇总分中心明细数据，同步计算 biz_date（当前日前一天）及同期日的 6 个累计指标
+-- 数据来源：gongre_branches_detail_data；如需独立 schema，请在执行前通过 SET search_path 调整
+
+DROP MATERIALIZED VIEW IF EXISTS sum_gongre_branches_detail_data;
+
+CREATE MATERIALIZED VIEW sum_gongre_branches_detail_data AS
+WITH anchor_dates AS (
+  SELECT
+    (current_date - INTERVAL '1 day')::date AS biz_date,
+    (current_date - INTERVAL '1 day' - INTERVAL '1 year')::date AS peer_date
+),
+window_defs AS (
+  SELECT
+    biz_date,
+    peer_date,
+    biz_date - INTERVAL '6 day' AS biz_7d_start,
+    peer_date - INTERVAL '6 day' AS peer_7d_start,
+    date_trunc('month', biz_date)::date AS biz_month_start,
+    date_trunc('month', peer_date)::date AS peer_month_start,
+    DATE '2025-10-01' AS biz_ytd_start,
+    DATE '2024-10-01' AS peer_ytd_start
+  FROM anchor_dates
+)
+SELECT
+  d.center,
+  d.center_cn,
+  d.sheet_name,
+  d.item,
+  d.item_cn,
+  d.unit,
+  w.biz_date,
+  w.peer_date,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.biz_7d_start AND w.biz_date
+  ), 0) AS sum_7d_biz,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.peer_7d_start AND w.peer_date
+  ), 0) AS sum_7d_peer,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.biz_month_start AND w.biz_date
+  ), 0) AS sum_month_biz,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.peer_month_start AND w.peer_date
+  ), 0) AS sum_month_peer,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.biz_ytd_start AND w.biz_date
+  ), 0) AS sum_ytd_biz,
+  COALESCE(SUM(d.value) FILTER (
+    WHERE d.date BETWEEN w.peer_ytd_start AND w.peer_date
+  ), 0) AS sum_ytd_peer
+FROM gongre_branches_detail_data d
+CROSS JOIN window_defs w
+WHERE d.date BETWEEN w.peer_ytd_start AND w.biz_date
+GROUP BY
+  d.center, d.center_cn, d.sheet_name, d.item, d.item_cn, d.unit,
+  w.biz_date, w.peer_date;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sum_gongre_branches_center_item_bizdate
+  ON sum_gongre_branches_detail_data (center, item, biz_date);
