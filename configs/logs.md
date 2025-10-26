@@ -255,6 +255,10 @@ codex resume 019a196b-90fa-7a50-b5d3-99918ea4ae40
   - 页面验证                                                                                                                                                                                                     
       - 打开你常用的填报页面；后端不应再出现 “could not read block …” 或 500
 
+
+重建数据库表：docker exec -i phoenix_db psql -U postgres -d phoenix -v ON_ERROR_STOP=1 -f /app/sql/create_tables.sql
+
+
 愚蠢的前端不显示数据问题（但煤炭库存表能够显示）
 kules结论
 您遇到的 bug，简单来说，是一个**“数据覆盖”**问题，它发生在前端的 DataEntryView.vue 组件中。
