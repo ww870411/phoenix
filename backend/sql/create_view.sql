@@ -31,6 +31,8 @@ SELECT
   d.unit,
   w.biz_date,
   w.peer_date,
+  COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0) AS value_biz_date,
+  COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date,
   COALESCE(SUM(d.value) FILTER (
     WHERE d.date BETWEEN w.biz_7d_start AND w.biz_date
   ), 0) AS sum_7d_biz,
@@ -93,6 +95,8 @@ SELECT
   d.unit,
   w.biz_date,
   w.peer_date,
+  COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0) AS value_biz_date,
+  COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date,
   COALESCE(SUM(d.value) FILTER (
     WHERE d.date BETWEEN w.biz_7d_start AND w.biz_date
   ), 0) AS sum_7d_biz,

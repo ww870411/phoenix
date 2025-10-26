@@ -1,1 +1,1 @@
-2025-10-28：在 backend/sql/create_view.sql 追加 sum_gongre_branches_detail_data 物化视图，按 gongre_branches_detail_data 的 center/item 维度计算 6 个时间口径累计，并建立唯一索引 (center, item, biz_date)。同步更新 backend/README.md 与 configs/progress.md 说明。
+2025-10-28：在 backend/sql/create_view.sql 追加 sum_gongre_branches_detail_data 物化视图，按 gongre_branches_detail_data 的 center/item 维度计算 6 个时间口径累计，并建立唯一索引 (center, item, biz_date)；并新增 value_biz_date/value_peer_date 列，两类视图均输出当日与同期值。同步更新 backend/README.md 与 configs/progress.md 说明。

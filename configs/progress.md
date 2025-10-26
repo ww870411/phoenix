@@ -14,7 +14,7 @@
 - 范围：`backend/sql/create_view.sql`、`backend/README.md`、`configs/progress.md`
 - 原因：规划 `sum_basic_data` 物化视图，按 company/item 维度输出六种时间口径累计指标。
 - 变更：
-  1. 新增 SQL 脚本：创建 `sum_basic_data` 物化视图（默认位于当前 `search_path` schema），定义 biz_date（当前日前一天）及 peer_date（一年前同日）的多窗口累计，并补充唯一索引以支持 CONCURRENTLY 刷新；如需独立 schema，可在执行前调整 `search_path`。
+  1. 新增 SQL 脚本：创建 `sum_basic_data` 物化视图（默认位于当前 `search_path` schema），定义 biz_date（当前日前一天）及 peer_date（一年前同日）的多窗口累计，并补充唯一索引以支持 CONCURRENTLY 刷新；同时补充 `value_biz_date`/`value_peer_date` 列，避免额外查询当日与同期值；如需独立 schema，可在执行前调整 `search_path`。
   2. README 目录快照补录 `create_view.sql`，说明其用途。
   3. 留痕当前物化视图建设方案，便于后续按层次扩展其它物化视图。
 - 验证：未在系统内执行；需在测试库手动运行脚本并核对聚合结果后再部署生产。
@@ -24,7 +24,7 @@
 - 范围：`backend/sql/create_view.sql`、`backend/README.md`、`configs/progress.md`
 - 原因：为分中心明细表 `gongre_branches_detail_data` 提供与 `sum_basic_data` 一致的 6 种时间口径累计，便于后续聚合展示。
 - 变更：
-  1. 追加 `sum_gongre_branches_detail_data` 物化视图定义，按 `center/item` 维度输出近7日/同期7日/当月/同期月/当季累计指标，并建立唯一索引 `(center, item, biz_date)` 支撑并发刷新。
+  1. 追加 `sum_gongre_branches_detail_data` 物化视图定义，按 `center/item` 维度输出当日/同期值及近7日/同期7日/当月/同期月/当季累计指标，并建立唯一索引 `(center, item, biz_date)` 支撑并发刷新。
   2. README 补充 `create_view.sql` 中现已包含 `sum_basic_data` 与 `sum_gongre_branches_detail_data` 两张物化视图说明。
 - 验证：未执行；需在测试库运行 `psql -U postgres -d phoenix -f backend/sql/create_view.sql` 并校验结果。
 - 备注：如需分 schema，可在执行前 `SET search_path`，或直接将视图名改写为 `<schema>.sum_gongre_branches_detail_data`。

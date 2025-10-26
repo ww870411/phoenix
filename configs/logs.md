@@ -281,8 +281,8 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_view.sql
 刷新物化视图命令
 REFRESH MATERIALIZED VIEW sum_basic_data;
 
-
-
+两张基本视图已经构建完毕，待整理量价关系
+sum_daily_basic_data和数据库表constant_data
 
 
 
