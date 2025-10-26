@@ -1,5 +1,15 @@
 ﻿# 项目推进记录（progress）
 
+### 2025-10-28 标准表日历切换回填修复（AI辅助）
+- 范围：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`、`configs/progress.md`
+- 原因：切换业务日期后标准表未重新渲染或列头被回包复写回占位符。
+- 变更：
+  1. 新增 `applyStandardQueryResult`，统一处理 `/query` 回包的列头与 `rows` 回填，保持首列自动宽度逻辑。
+  2. `loadTemplate` 首发查询与 `watch(bizDate)` 调用上述方法，移除无效的 `if (false)` 分支，确保日期切换即时刷新，并阻止回包列头覆盖前端按昨日/同期替换后的显示。
+  3. 更新前端 README 变更记录，记录新方法与回填策略。
+- 验证：未运行自动化测试；需在数据填报页面切换不同日期，确认表格数据与列头同步变化。
+- 备注：Serena 当前不支持直接编辑 Vue SFC，本次按降级矩阵使用 `apply_patch`；若需回滚，可删除新函数并恢复原有查询分支。
+
 ### 2025-10-23 数据填报只读列规则调整（AI辅助）
 - 范围：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`
 - 原因：`GongRe_branches_detail_Sheet` 模板前三列包含“项目/中心/计量单位”，旧版写死“前两列只读”会清空“中心”“计量单位”展示。

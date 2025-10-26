@@ -1,0 +1,1 @@
+2025-10-28：前端 DataEntryView 修复标准表切换业务日期不刷新的问题。新增 applyStandardQueryResult 统一处理 /query 回包，并在标准表场景下避免用回包列头覆盖前端按昨日/同期替换的显示；loadTemplate 首次查询与 watch(bizDate) 均调用该方法并保持 autoSizeFirstColumn。同步更新 frontend/README.md 与 configs/progress.md；本次因 Serena 不支持 Vue SFC 编辑，降级使用 apply_patch。

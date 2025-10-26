@@ -69,6 +69,9 @@ docker compose up -d --build
 - 修复数据填报页日历联动：标准表在后端以“列头日期文本”决定每列的 `date`，现于 `pages/DataEntryView.vue` 中缓存原始列头 `baseColumns` 并在 `bizDate` 变更时重算列头与 `gridColumns` 名称，确保提交与展示使用最新日期。
 - 通用查询接口（设计中）：保持现有 `services/api.js::queryData(projectKey, sheetKey, payload)` 用于“单表查询”；后续将新增“项目级聚合查询”接口，前端可在数据展示/常量页选择批量请求以减少 HTTP 次数。
 
+### 变更记录（2025-10-28）
+- 修复标准表日历切换后数据未刷新的问题：在 `DataEntryView.vue` 中新增 `applyStandardQueryResult`，统一处理 `/query` 回包的列头与 `rows` 回填；`loadTemplate` 首发查询与 `watch(bizDate)` 共同调用该方法，确保切换日期后即时刷新并保持首列自适应宽度，同时避免回包中的列头覆盖前端按昨日/同期替换后的显示。
+
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/v1/projects` | 返回项目列表（`project_id/project_name`），供前端展示中文名 |

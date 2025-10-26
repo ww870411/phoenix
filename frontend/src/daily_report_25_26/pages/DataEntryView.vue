@@ -308,26 +308,7 @@ async function loadTemplate() {
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
         return
       }
-      if (q && Array.isArray(q.columns) && !isDailyPage.value) {
-        columns.value = q.columns;
-        const colDefs = q.columns.map((name, index) => ({
-          name: String(name ?? ''),
-          prop: `c${index}`,
-          size: index === 0 ? 220 : 120,
-        }));
-        gridColumns.value = colDefs;
-      }
-      if (q && Array.isArray(q.rows)) {
-        gridSource.value = q.rows.map(r => Array.isArray(r)
-          ? r.reduce((acc, val, idx) => {
-              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
-              return acc;
-            }, {})
-          : r
-        );
-        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
-        await autoSizeFirstColumn();
-      }
+      await applyStandardQueryResult(q);
     } else if (templateType.value === 'crosstab') {
       const __rid2 = newRequestId(); latestRequestId.value = __rid2;
       const q = await queryData(
@@ -565,6 +546,33 @@ function measureTextWidth(content, font) {
   ctx.font = font || '14px/1.4 "Segoe UI", Arial, sans-serif';
   return ctx.measureText(text).width;
 }
+
+async function applyStandardQueryResult(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const q = payload;
+  if (Array.isArray(q.columns)) {
+    if (!isDailyPage.value) {
+      columns.value = q.columns;
+      const colDefs = q.columns.map((name, index) => ({
+        name: String(name ?? ''),
+        prop: `c${index}`,
+        size: index === 0 ? 220 : 120,
+      }));
+      gridColumns.value = colDefs;
+    }
+  }
+  if (Array.isArray(q.rows)) {
+    gridSource.value = q.rows.map(r => Array.isArray(r)
+      ? r.reduce((acc, val, idx) => {
+          acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
+          return acc;
+        }, {})
+      : r
+    );
+    rows.value = q.rows;
+    await autoSizeFirstColumn();
+  }
+}
 // 监听业务日期变更，标准表需用新日期重算列头与网格列定义
 const stop = watch(
   () => bizDate.value,
@@ -591,32 +599,7 @@ const stop = watch(
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
         return
       }
-      // cells 路径已删除（rows-only 渲染）
-      if (false) {
-        // 建立 行项目 → 行索引 映射（以首列“项目”文本为准）
-        // 清空数据列，避免初次加载后再次查询时残留
-        for (let r = 0; r < gridSource.value.length; r++) {
-          for (let c = 2; c < columns.value.length; c++) {
-            gridSource.value[r][`c${c}`] = '';
-          }
-        }
-        const rowIndex = new Map();
-        for (let i = 0; i < gridSource.value.length; i++) {
-          const label = String(gridSource.value[i]?.c0 ?? '').trim();
-          if (label && !rowIndex.has(label)) rowIndex.set(label, i);
-        }
-        for (const _ of []) {
-          const rowLabel = String(cell.row_label ?? '').trim();
-          const ri = rowIndex.has(rowLabel) ? rowIndex.get(rowLabel) : -1;
-          const ci = Number(cell.col_index ?? -1);
-          if (ri >= 0 && ci >= 0 && gridSource.value[ri]) {
-            const v = cell.value_type === 'text' ? (cell.value_text ?? '') : (cell.value_num ?? '');
-            gridSource.value[ri][`c${ci}`] = v === null ? '' : String(v);
-          }
-        }
-        // 触发表格刷新
-        gridSource.value = [...gridSource.value];
-      }
+      await applyStandardQueryResult(q);
     } catch (err) {
       // console.error('query on bizDate change failed:', err);
     }
@@ -679,4 +662,3 @@ watch(
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
 </style>
-
