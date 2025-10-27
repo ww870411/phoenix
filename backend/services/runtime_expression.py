@@ -133,8 +133,8 @@ def _fetch_metrics_dynamic_by_date(session: Session, company: str, biz_date: str
         """
         WITH anchor_dates AS (
           SELECT
-            (:biz_date::date) AS biz_date,
-            (:biz_date::date - INTERVAL '1 year')::date AS peer_date
+            CAST(:biz_date AS date) AS biz_date,
+            (CAST(:biz_date AS date) - INTERVAL '1 year')::date AS peer_date
         ),
         window_defs AS (
           SELECT
@@ -272,43 +272,75 @@ class Evaluator:
         return fields.get(field_name, Decimal(0))
 
     def _value_of_const(self, name_cn: str, frame: str, alias: Optional[str] = None) -> Decimal:
+        """
+        常量读取规则：
+        - 表中 key 为英文 item（如 price_power_sales），表达式里使用中文（如 售电单价）
+        - 先用项目字典反查中文→英文；若找不到，再用中文原值兜底
+        """
         period = FRAME_TO_PERIOD[frame]
-        if isinstance(self.consts, dict) and alias:
-            return ((self.consts.get(alias) or {}).get(name_cn) or {}).get(period, Decimal(0))
-        # 兼容旧结构：无别名时直接平铺
-        if isinstance(self.consts, dict) and not alias:
-            # 尝试平铺结构
-            flat = self.consts.get(name_cn)
-            if isinstance(flat, dict):
-                return flat.get(period, Decimal(0))
-        return Decimal(0)
+        target_alias = alias or "c"
+        # cn -> en
+        key_en = self.item_cn_to_item.get(name_cn, name_cn)
+        data_by_alias = self.consts.get(target_alias) if isinstance(self.consts, dict) else None
+        if not isinstance(data_by_alias, dict):
+            return Decimal(0)
+        # 优先英文 key
+        bucket = data_by_alias.get(key_en)
+        if not isinstance(bucket, dict):
+            # 兜底：尝试中文 key
+            bucket = data_by_alias.get(name_cn)
+            if not isinstance(bucket, dict):
+                return Decimal(0)
+        return bucket.get(period, Decimal(0))
 
     # ---- 表达式转换与计算 ----
     def _preprocess(self, expr: str) -> str:
+        """
+        预处理顺序：
+        1) 别名常量：a.常量名 → CA("a","常量名")
+        2) 项目名替换：仅在非引号区域替换 中文项目名 → I("中文项目名")
+           这样不会把 CA("a","售电单价") 误改为 CA("a","I("售电单价")")
+        """
         s = expr.strip()
-        # 先处理别名常量 c.名称
+        # 1) 先处理别名常量
         for pat, repl in self.alias_patterns:
             s = pat.sub(repl, s)
-        # 再处理项目名
-        for name, repl in self.item_pairs:
-            s = s.replace(name, repl)
-        return s
+        # 2) 仅在非引号区域替换项目名
+        #    按双引号切分，偶数索引为未被引号包裹的区域
+        parts = re.split(r'(".*?")', s)
+        for i in range(0, len(parts), 2):
+            seg = parts[i]
+            if not seg:
+                continue
+            for name, repl in self.item_pairs:
+                seg = seg.replace(name, repl)
+            parts[i] = seg
+        return "".join(parts)
 
-    def _safe_eval(self, safe_expr: str, frame: str, current_item_cn: Optional[str]) -> Optional[Decimal]:
+    def _safe_eval(self, safe_expr: str, frame: str, current_item_cn: Optional[str], trace_sink: Optional[Dict[str, Any]] = None) -> Optional[Decimal]:
         """
         简化求值：将 I/C 转为回调，再通过 Python 受限 eval 环境计算。
         - 禁止内建与 import
         - 仅暴露 I、C 与部分无参函数（针对当前行项目）
         """
         def I(name_cn: str) -> Decimal:
-            return self._value_of_item(name_cn, frame)
+            v = self._value_of_item(name_cn, frame)
+            if trace_sink is not None:
+                trace_sink.setdefault("used_items", []).append({"name": name_cn, "frame": frame, "value": str(v)})
+            return v
 
         def C(name_cn: str) -> Decimal:
             # 默认别名 c
-            return self._value_of_const(name_cn, frame, alias="c")
+            v = self._value_of_const(name_cn, frame, alias="c")
+            if trace_sink is not None:
+                trace_sink.setdefault("used_consts", []).append({"alias": "c", "name": name_cn, "frame": frame, "value": str(v)})
+            return v
 
         def CA(alias: str, name_cn: str) -> Decimal:
-            return self._value_of_const(name_cn, frame, alias=alias)
+            v = self._value_of_const(name_cn, frame, alias=alias)
+            if trace_sink is not None:
+                trace_sink.setdefault("used_consts", []).append({"alias": alias, "name": name_cn, "frame": frame, "value": str(v)})
+            return v
 
         def _cur(frame_key: str) -> Decimal:
             if not current_item_cn:
@@ -318,6 +350,7 @@ class Evaluator:
         env = {
             "I": I,
             "C": C,
+            "CA": CA,
             # 针对当前行项目的便捷函数
             "value_biz_date": lambda: _cur("biz_date"),
             "value_peer_date": lambda: _cur("peer_date"),
@@ -332,8 +365,9 @@ class Evaluator:
             return _to_decimal(val)
         except ZeroDivisionError:
             return None
-        except Exception:
-            return None
+        except Exception as e:
+            # 由外层记录错误详情
+            raise e
 
     # ---- 对外：按列表达式计算一个单元格 ----
     def eval_cell(self, expr: str, frame: Optional[str], current_item_cn: Optional[str]) -> Tuple[Optional[Decimal], Dict[str, Any]]:
@@ -349,8 +383,12 @@ class Evaluator:
         if frame is None:
             # 差异列由外部处理
             return None, trace
-        val = self._safe_eval(safe_expr, frame, current_item_cn)
-        trace["value"] = str(val) if val is not None else None
+        try:
+            val = self._safe_eval(safe_expr, frame, current_item_cn, trace_sink=trace)
+            trace["value"] = str(val) if val is not None else None
+        except Exception as e:
+            trace["error"] = str(e)
+            val = None
         return val, trace
 
 
@@ -445,8 +483,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 continue
             expr = str(cell or "").strip()
             frame = col_frames.get(ci)  # None 表示差异列
-            if expr in ("date_diff_rate()", "month_diff_rate()", "ytd_diff_rate()"):
+            expr_key = expr.replace(" ", "")
+            if expr_key.startswith("date_diff_rate"):
                 # 先占位，稍后统一计算
+                row_vals.append(None)
+                row_traces.append({"raw": expr, "deferred": True})
+                continue
+            if expr_key.startswith("month_diff_rate"):
+                row_vals.append(None)
+                row_traces.append({"raw": expr, "deferred": True})
+                continue
+            if expr_key.startswith("ytd_diff_rate"):
                 row_vals.append(None)
                 row_traces.append({"raw": expr, "deferred": True})
                 continue

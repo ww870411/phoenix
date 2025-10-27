@@ -21,6 +21,8 @@ from fastapi import APIRouter, Path, Query, Request
 
 from fastapi.responses import JSONResponse
 from backend.services.runtime_expression import render_spec
+from sqlalchemy import text
+from backend.db.database_daily_report_25_26 import SessionLocal
 
 from sqlalchemy import delete
 
@@ -2617,3 +2619,32 @@ async def runtime_eval(request: Request):
     if trace and "_trace" in result:
         content["debug"] = {"_trace": result["_trace"]}
     return JSONResponse(status_code=200, content=content)
+
+# 临时调试：查看指定 company 的指标与常量缓存（不依赖 render_spec）
+@router.get("/runtime/spec/debug-cache", summary="调试：查看 company 的指标与常量缓存")
+def debug_cache(company: str):
+    """
+    返回 sum_basic_data 中该 company 的 6 个口径指标，以及 constant_data 的 period 值，便于诊断为何计算为 0。
+    """
+    session = SessionLocal()
+    try:
+        m_rows = session.execute(text("""
+            SELECT item, item_cn, value_biz_date, value_peer_date,
+                   sum_month_biz, sum_month_peer, sum_ytd_biz, sum_ytd_peer
+            FROM sum_basic_data WHERE company = :company
+        """), {"company": company}).mappings().all()
+        c_rows = session.execute(text("""
+            SELECT item, item_cn, period, value
+            FROM constant_data WHERE company = :company
+            ORDER BY item, period
+        """), {"company": company}).mappings().all()
+        return JSONResponse(status_code=200, content={
+            "ok": True,
+            "company": company,
+            "metrics_count": len(m_rows),
+            "constants_count": len(c_rows),
+            "metrics_sample": [dict(r) for r in m_rows[:50]],
+            "constants_sample": [dict(r) for r in c_rows[:200]],
+        })
+    finally:
+        session.close()

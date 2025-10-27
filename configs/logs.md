@@ -302,7 +302,8 @@ codex resume 019a2311-eaf6-7b01-9a6e-0197b32a9cd8
 codex resume 019a2496-c808-7230-966a-ea69101b0fcf
 
 放弃二级物化视图的方案，改用python业务实现
-
+建立测试页面，暂时出现错误
+codex resume 019a2472-e779-7bc0-8837-3831718266b7
 
 
 
