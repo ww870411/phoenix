@@ -92,8 +92,8 @@ window_defs AS (
   FROM anchor_dates
 )
 SELECT
-  d.center,
-  d.center_cn,
+  d.company AS center,
+  d.company_cn AS center_cn,
   d.sheet_name,
   d.item,
   d.item_cn,
@@ -120,11 +120,12 @@ SELECT
   COALESCE(SUM(d.value) FILTER (
     WHERE d.date BETWEEN w.peer_ytd_start AND w.peer_date
   ), 0) AS sum_ytd_peer
-FROM gongre_branches_detail_data d
+FROM daily_basic_data d
 CROSS JOIN window_defs w
 WHERE d.date BETWEEN w.peer_ytd_start AND w.biz_date
+  AND d.sheet_name = 'GongRe_branches_detail_Sheet'
 GROUP BY
-  d.center, d.center_cn, d.sheet_name, d.item, d.item_cn, d.unit,
+  d.company, d.company_cn, d.sheet_name, d.item, d.item_cn, d.unit,
   w.biz_date, w.peer_date;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_sum_gongre_branches_center_item_bizdate

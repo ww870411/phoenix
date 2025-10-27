@@ -296,6 +296,12 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY calc_sum_gongre_branches_detail_data;
 codex resume 019a2311-eaf6-7b01-9a6e-0197b32a9cd8
 
 
+抛弃供热分中心明细表的单独数据库表，写库逻辑/query逻辑，完全消除其影响。
+改为统一在daily_basic_data中进行记录，center全部改为company逻辑。
+删除对应的物化视图sum_daily_basic_data
+codex resume 019a2496-c808-7230-966a-ea69101b0fcf
+
+放弃二级物化视图的方案，改用python业务实现
 
 
 

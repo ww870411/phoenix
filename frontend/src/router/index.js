@@ -29,6 +29,10 @@ const routes = [
     path: '/projects/:projectKey/pages/:pageKey/display',
     component: () => import('../daily_report_25_26/pages/DisplayView.vue'),
   },
+  {
+    path: '/debug/runtime-eval',
+    component: () => import('../daily_report_25_26/pages/RuntimeEvalDebug.vue'),
+  },
 ]
 
 const router = createRouter({

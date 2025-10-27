@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Path, Query, Request
 
 from fastapi.responses import JSONResponse
+from backend.services.runtime_expression import render_spec
 
 from sqlalchemy import delete
 
@@ -31,7 +32,6 @@ from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
     ConstantData,
     DailyBasicData,
-    GongreBranchesDetailData,
     SessionLocal,
 )
 
@@ -465,86 +465,48 @@ def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[
     return parsed_records
 
 
-def _persist_gongre_branches_detail(payload: Dict[str, Any], records: List[Dict[str, Any]]) -> int:
-    if not records:
-        return 0
-
-    session = SessionLocal()
-    try:
-        models: List[GongreBranchesDetailData] = []
-        delete_keys = set()
-        fallback_status = str(payload.get("status") or "submit").strip() or "submit"
-        fallback_operation_time = payload.get("submit_time")
-
-        for record in records:
-            center = str(record.get("center") or "").strip()
-            center_cn = str(record.get("center_cn") or "").strip() or None
-            sheet_name = str(record.get("sheet_name") or payload.get("sheet_key") or "").strip()
-            item = str(record.get("item") or "").strip()
-            item_cn = str(record.get("item_cn") or "").strip() or None
-
-            if not center or not sheet_name or not item:
-                continue
-
-            row_date = _parse_date_value(record.get("date"))
-            if row_date is None:
-                continue
-
-            value_decimal = _parse_decimal_value(record.get("value"))
-            unit_value = str(record.get("unit") or "").strip() or None
-            note_value = str(record.get("note") or "").strip() or None
-            status_value = str(record.get("status") or fallback_status).strip() or fallback_status
-            operation_time = _parse_operation_time(record.get("operation_time") or fallback_operation_time)
-
-            models.append(
-                GongreBranchesDetailData(
-                    center=center,
-                    center_cn=center_cn,
-                    sheet_name=sheet_name,
-                    item=item,
-                    item_cn=item_cn,
-                    value=value_decimal,
-                    unit=unit_value,
-                    note=note_value,
-                    date=row_date,
-                    status=status_value,
-                    operation_time=operation_time,
-                )
-            )
-            delete_keys.add((center, sheet_name, item, row_date))
-
-        if not models:
-            return 0
-
-        for center, sheet_name, item, row_date in delete_keys:
-            session.execute(
-                delete(GongreBranchesDetailData).where(
-                    GongreBranchesDetailData.center == center,
-                    GongreBranchesDetailData.sheet_name == sheet_name,
-                    GongreBranchesDetailData.item == item,
-                    GongreBranchesDetailData.date == row_date,
-                )
-            )
-
-        session.bulk_save_objects(models)
-        session.commit()
-        return len(models)
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
-
 async def handle_gongre_branches_detail_submission(payload: Dict[str, Any]) -> JSONResponse:
+    # 解析原始 payload → 分中心记录
     records = _parse_gongre_branches_detail_records(payload)
     _write_gongre_branches_debug(payload, records)
-    inserted = _persist_gongre_branches_detail(payload, records)
+
+    # 将 center/center_cn 映射为 company/company_cn，统一写 daily_basic_data
+    sheet_key = str(payload.get("sheet_key") or "GongRe_branches_detail_Sheet").strip() or "GongRe_branches_detail_Sheet"
+    default_operation_time = _parse_operation_time(payload.get("submit_time"))
+    default_status = (payload.get("status") or "submit").strip() or "submit"
+
+    flattened: List[Dict[str, Any]] = []
+    for r in records:
+        row_date = _parse_date_value(r.get("date"))
+        if row_date is None:
+            continue
+        flattened.append(
+            {
+                "company": str(r.get("center") or "").strip(),
+                "company_cn": (str(r.get("center_cn") or "").strip() or None),
+                "sheet_name": sheet_key,
+                "item": str(r.get("item") or "").strip(),
+                "item_cn": (str(r.get("item_cn") or "").strip() or None),
+                "value": r.get("value"),
+                "unit": (str(r.get("unit") or "").strip() or None),
+                "note": (str(r.get("note") or "").strip() or None),
+                "date": row_date.isoformat(),
+                "status": str(r.get("status") or default_status).strip() or default_status,
+                "operation_time": r.get("operation_time") or default_operation_time.isoformat(),
+            }
+        )
+
+    normalized_hint = {
+        "submit_time": payload.get("submit_time"),
+        "unit_name": payload.get("unit_name"),
+        "sheet_key": sheet_key,
+    }
+    inserted = _persist_daily_basic(payload, normalized_hint, flattened)
     return JSONResponse(
         status_code=200,
         content={
             "ok": True,
-            "message": "供热分中心数据已处理",
+            "message": "供热分中心数据已处理（统一写入 daily_basic_data）",
             "records": len(records),
             "inserted": inserted,
         },
@@ -1724,17 +1686,17 @@ async def query_sheet(
                     if date_obj is None:
                         continue
 
-                    q = session.query(GongreBranchesDetailData).filter(
-                        GongreBranchesDetailData.sheet_name == sheet_key,
-                        GongreBranchesDetailData.date == date_obj,
+                    q = session.query(DailyBasicData).filter(
+                        DailyBasicData.sheet_name == sheet_key,
+                        DailyBasicData.date == date_obj,
                     )
-                    rows_db: List[GongreBranchesDetailData] = q.all()
+                    rows_db: List[DailyBasicData] = q.all()
 
                     for rec in rows_db:
                         value = float(rec.value) if rec.value is not None else None
                         key_candidates = [
-                            (str(rec.item_cn or "").strip(), str(rec.center_cn or "").strip()),
-                            (str(rec.item or "").strip(), str(rec.center or "").strip()),
+                            (str(rec.item_cn or "").strip(), str(rec.company_cn or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.company or "").strip()),
                         ]
                         row_idx: Optional[int] = None
                         for k in key_candidates:
@@ -2540,3 +2502,118 @@ async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONRespo
             "inserted": inserted,
         },
     )
+
+# ============ 调试：运行时表达式求值 ============
+@router.post("/runtime/spec/eval", summary="运行时表达式求值（调试）", tags=["runtime"])
+async def runtime_eval(request: Request):
+    """
+    调试路由：根据模板（或内联 spec）与主键、可选 biz_date，对模板中的表达式进行求值替换，返回 rows-only 结构。
+    请求体示例：
+    {
+      "sheet_key": "BeiHai_co_generation_approval_Sheet",
+      "project_key": "daily_report_25_26",
+      "primary_key": {"company": "BeiHai"},
+      "config": "configs/字典样例.json",   // 可选，优先查找的模板文件（相对 data 目录）
+      "biz_date": "regular" | "2025-10-27", // 可选
+      "trace": false,                       // 可选
+      "spec": { ... }                       // 可选，若提供则直接使用此对象作为 spec
+    }
+    返回：
+    {
+      "ok": true,
+      "sheet_key": "...",
+      "sheet_name": "...",
+      "unit_id": "...",
+      "unit_name": "...",
+      "columns": [...],
+      "rows": [...],
+      "debug": {...}  // trace=true 时包含
+    }
+    """
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        return JSONResponse(status_code=400, content={"ok": False, "message": "请求体需为 JSON 对象"})
+
+    sheet_key = str(payload.get("sheet_key") or "").strip()
+    project_key = str(payload.get("project_key") or "daily_report_25_26").strip()
+    primary_key = payload.get("primary_key") or {}
+    if not isinstance(primary_key, dict):
+        return JSONResponse(status_code=422, content={"ok": False, "message": "primary_key 需为对象"})
+    if not primary_key.get("company"):
+        # 回落：若未提供，则尝试从模板 unit_id 填充
+        pass
+
+    trace = bool(payload.get("trace", False))
+    biz_date = payload.get("biz_date") or "regular"
+    config = payload.get("config")
+    spec_override = payload.get("spec")
+
+    # 准备 spec
+    if isinstance(spec_override, dict):
+        spec = dict(spec_override)
+        names = _extract_names(spec)
+        columns_raw = _extract_list(spec, COLUMN_KEYS)
+        rows_raw = _extract_list(spec, ROW_KEYS)
+    else:
+        preferred_path = _resolve_data_file(config) if isinstance(config, str) and config.strip() else None
+        spec, data_path = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+        if spec is None:
+            return JSONResponse(
+                status_code=404,
+                content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+            )
+        names = _extract_names(spec)
+        columns_raw = _extract_list(spec, COLUMN_KEYS)
+        rows_raw = _extract_list(spec, ROW_KEYS)
+
+    if columns_raw is None or rows_raw is None:
+        return JSONResponse(status_code=422, content={"ok": False, "message": "模板缺少列名或数据"})
+
+    # 兼容：若模板未提供“项目字典”，尝试从 item_dict 补齐
+    dict_bundle = _collect_all_dicts(spec)
+    if "项目字典" not in spec and dict_bundle.get("item_dict"):
+        spec = dict(spec)  # 浅拷贝
+        spec["项目字典"] = dict_bundle.get("item_dict")
+
+    # 兼容：若模板未提供“查询数据源”，填入默认值
+    if "查询数据源" not in spec or not isinstance(spec.get("查询数据源"), dict):
+        spec = dict(spec)
+        spec["查询数据源"] = {
+            "主键": {"company": names.get("unit_id") or primary_key.get("company")},
+            "主表": "sum_basic_data",
+            "缩写": {"c": "constant_data"},
+        }
+
+    # 若 primary_key 未提供 company，则由模板 unit_id 回填
+    if not primary_key.get("company"):
+        unit_id = names.get("unit_id")
+        if unit_id:
+            primary_key = dict(primary_key)
+            primary_key["company"] = unit_id
+
+    try:
+        result = render_spec(
+            spec=spec,
+            project_key=project_key,
+            primary_key=primary_key,
+            trace=trace,
+            context={"biz_date": biz_date},
+        )
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"ok": False, "message": "求值失败", "error": str(exc)})
+
+    # 输出 rows-only
+    columns = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
+    rows = result.get("数据") or []
+    content = {
+        "ok": True,
+        "sheet_key": sheet_key or names.get("sheet_name") or "",
+        "sheet_name": names.get("sheet_name") or sheet_key,
+        "unit_id": names.get("unit_id", ""),
+        "unit_name": names.get("unit_name", ""),
+        "columns": columns,
+        "rows": rows,
+    }
+    if trace and "_trace" in result:
+        content["debug"] = {"_trace": result["_trace"]}
+    return JSONResponse(status_code=200, content=content)

@@ -158,3 +158,8 @@ docker compose up -d --build
 - 后端将提供“运行时表达式求值”服务，返回已替换表达式的 `columns + rows`（rows-only）结构。
 - 前端保持 RevoGrid 渲染逻辑不变，仅消费后端返回的行数据；无需内置任何公式解析。
 - 如需差异颜色/箭头等展示效果，可在拿到 `*_diff_rate()` 结果后按阈值做样式扩展（后续再议）。
+### 2025-10-27 调试页新增（已实现）
+- 新增页面：`/debug/runtime-eval` → `src/daily_report_25_26/pages/RuntimeEvalDebug.vue`
+- 用途：调用后端 `POST /api/v1/projects/daily_report_25_26/runtime/spec/eval`，按模板运行时计算表达式并以表格展示结果。
+- 使用：在页面内输入 `sheet_key` 与 `company`，可选 `config`（相对 data 目录）与 `biz_date`（regular/日期），点击“请求”查看 `columns+rows`；勾选 `trace` 可查看 `_trace`。
+ - 项目入口：已在 `backend_data/项目列表.json` 增加 `\"/debug/runtime-eval\"` 页面项，在“选择页面”界面点击“运行时表达式求值（调试）”卡片即可跳转。

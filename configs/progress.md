@@ -1023,3 +1023,30 @@
   - “差异”列是否期望“差值”还是“环比/同比增长率”（当前假设为增长率）；除零策略；
   - 是否需要支持 `biz_date` 覆盖以脱离视图锚点（当前视图以 `current_date-1` 刷新）。
 — 本条仅留痕与计划，不包含代码改动；待产品确认后实施。
+## 2025-10-27 表达式求值实现（首版）与需求确认采纳
+- 采纳要点（来自 `configs/回复.md`）：
+  - 差异列均为增长率 `(biz - peer)/abs(peer)`，分母为 0 显示 `"-"`；所有 diff_rate 以百分比字符串返回。
+  - 常量 period 映射：biz 系 → `25-26`，peer 系 → `24-25`。
+  - “项目名”以 `项目字典` 反查得到英文 `item` 作为准确键；表达式内 `c.<常量名>` 通过缩写表解析为常量查询。
+  - 统一 company 维度，后续不再依赖 `sum_gongre_branches_detail_data`（兼容保留）；主表以 `sum_basic_data` 为准。
+  - 新增 `context.biz_date`：`"regular"` 使用物化视图；指定日期（如 `"2025-10-27"`）走基础表动态聚合，口径与视图一致。
+- 新增文件：
+  - `backend/services/runtime_expression.py`：提供 `render_spec(spec, project_key, primary_key, *, trace=False, context=None)`。
+    - 列→帧映射，指标/常量缓存；
+    - 受限表达式求值（仅 `+ - * / ()`，函数 `I()/C()/CA(alias,name)/value_*()/sum_*()`），多常量别名预留；
+    - 三类差异列与“全厂热效率”统一按百分比字符串输出（两位小数），除零显示 `"-"`。
+- 使用示例（伪代码）：
+  ```python
+  spec = json.load(open('configs/字典样例.json','r',encoding='utf-8'))['BeiHai_co_generation_approval_Sheet']
+  result = render_spec(spec, 'daily_report_25_26', {'company':'BeiHai'}, trace=True, context={'biz_date':'regular'})
+  ```
+- 新增调试路由：
+  - `POST /api/v1/projects/daily_report_25_26/runtime/spec/eval`
+  - 请求体字段：`sheet_key`、`project_key`、`primary_key`、`config`（可选）、`biz_date`（可选：`regular` 或日期）、`trace`（可选）
+  - 行为：读取模板或内联 `spec`，调用 `render_spec`，返回 rows-only 结果；`trace=true` 附带 `_trace`
+- 回滚方式：删除 `backend/services/runtime_expression.py` 与 README 对应段落；保留既有视图不受影响。
+## 2025-10-27 前端调试页新增（已实现）
+- 新增页面：`frontend/src/daily_report_25_26/pages/RuntimeEvalDebug.vue`，路由：`/debug/runtime-eval`。
+- 功能：输入 `sheet_key/company`，可选 `config/biz_date/trace`，调用后端调试路由并以表格显示 `columns+rows`；`trace` 时展示 `_trace`。
+- 安全：页面内部使用 `fetch` 调用后端，不修改现有 `src/api`；仅用于调试与验收，不影响现有页面流程。
+ - 入口：在 `backend_data/项目列表.json` 的 `daily_report_25_26.pages` 下新增键 `\"/debug/runtime-eval\"`，页面选择页点击后直接跳转到调试页；为此在 `PageSelectView.vue` 中支持当 `page_url` 以 `/` 开头时直接 `router.push(page_url)`。

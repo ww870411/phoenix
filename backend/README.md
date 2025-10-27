@@ -99,9 +99,9 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `__init__.py`
 - `sql/`
     - `create_tables.sql`
-    - SQL 包含 `gongre_branches_detail_data`，对应 ORM 类 `GongreBranchesDetailData`（见 `db/database_daily_report_25_26.py`）。
+    - SQL 不再包含 `gongre_branches_detail_data`；分中心数据已统一落库 `daily_basic_data`（以 sheet_name='GongRe_branches_detail_Sheet' 区分）。
     - `create_view.sql`（集中维护物化视图/分析视图定义；包含：
-      - 一级视图：`sum_basic_data`、`sum_gongre_branches_detail_data`。
+      - 一级视图：`sum_basic_data`、`sum_gongre_branches_detail_data`（来源基于 `daily_basic_data` 并按 `sheet_name='GongRe_branches_detail_Sheet'` 过滤，视图对外仍以 `center/center_cn` 别名输出）。
       - 二级视图：`calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data`；已添加唯一索引以支持并发刷新）。
       - 排障视图：`calc_sum_basic_trace`（仅用于查看中间输入与乘积，非物化）。
 
@@ -133,7 +133,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
   - 附带模板内定义的字典字段（如“项目字典”“单位字典”等）；前端需保持字段名称与内容一致并在提交时原样回传；
   - `columns` 形如 `[项目, 计量单位, <今日（东八区）>, <去年同日>]`。
 - `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/submit`：当前为调试出口，会打印原始 payload、拆解结果与扁平化列表，后续可平滑接入数据库写入；自 2025-10-22 起，空值单元格在后端统一落库为 `NULL` 以区分未填与真实零值。
-  - `GongRe_branches_detail_Sheet`：专用分支解析中心/指标，写入 `gongre_branches_detail_data`，调试记录输出至 `configs/111.md`。
+  - `GongRe_branches_detail_Sheet`：专用分支解析中心/指标，现已统一写入 `daily_basic_data`（company=中心英文名，company_cn=中心中文名，sheet_name='GongRe_branches_detail_Sheet'），调试记录输出至 `configs/111.md`。
   - `Coal_inventory_Sheet`：使用 `_parse_coal_inventory_records` 写入 `coal_inventory_data`，调试记录追加在 `backend_data/test.md`。
 - `POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`：占位。
 
@@ -200,7 +200,7 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 前端已清理所有调试输出（`console.*` 与 `alert(...)`）。
 - 后端接口契约不变：`/template`、`/submit`、`/query` 返回 rows-only；附带 `request_id`、`attatch_time`（东八区毫秒）、`source` 元信息。
 ### 2025-10-27 PostgreSQL 视图规划说明（AI 辅助）
-- 现有核心业务表：`daily_basic_data`、`constant_data`、`temperature_data`、`coal_inventory_data`、`gongre_branches_detail_data`。
+- 现有核心业务表：`daily_basic_data`、`constant_data`、`temperature_data`、`coal_inventory_data`。
 - 建议在 `backend/sql/create_views.sql` 中集中维护视图定义，覆盖日常汇总、常量维度对照以及煤炭库存的分支口径。
 - 后续生成视图后，可通过 Alembic/初始化脚本执行 `CREATE OR REPLACE VIEW`，供查询接口直接消费。
 ### 2025-10-27 运行时表达式求值服务（计划）
@@ -213,3 +213,43 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
   - 表达式使用受限求值器（白名单运算与函数），禁止任意 Python 代码执行；
   - 差异率定义为 `(biz-peer)/NULLIF(abs(peer),0)`，除零返回 `None`。
 - 后续：待产品确认常量口径与差异口径后实现，并补充单元测试与 `_trace` 调试输出。
+### 2025-10-27 运行时表达式求值服务（首版已实现）
+- 位置：`backend/services/runtime_expression.py`
+- 核心能力：
+  - 列名→帧映射（本期日/同期日/本期月/同期月/本供暖期/同供暖期）
+  - 物化视图/动态日期两条路径：
+    - `context.biz_date == "regular"`（默认）：从 `sum_basic_data` 读取缓存值；
+    - 指定日期（如 `"2025-10-27"`）：在 `daily_basic_data` 上参数化聚合，口径与视图一致；
+  - 常量 period 映射：`25-26`（biz系）/`24-25`（peer系），来自常量表 `period`
+  - 多常量别名预留：表达式 `a.常量名` → `CA("a","常量名")`，别名到表名在 `spec['查询数据源']['缩写']` 中声明；保留 `C("常量名")` 等价于 `CA("c", ...)`
+  - 受限表达式求值：仅允许 `+ - * / ()` 和 `I("项目名")/C("常量名")/CA("别名","常量名")/value_*()/sum_*()`；不执行任意代码
+  - 差异列与“全厂热效率”按百分比字符串返回，保留两位小数；除零显示 `"-"`
+- 调试路由：
+  - `POST /api/v1/projects/daily_report_25_26/runtime/spec/eval`
+  - 请求体：
+    ```json
+    {
+      "sheet_key": "BeiHai_co_generation_approval_Sheet",
+      "project_key": "daily_report_25_26",
+      "primary_key": {"company":"BeiHai"},
+      "config": "configs/字典样例.json",
+      "biz_date": "regular",
+      "trace": false
+    }
+    ```
+  - 返回 rows-only：`columns` + `rows`，`trace=true` 时附带 `debug._trace`
+- 使用示例：
+```python
+from backend.services.runtime_expression import render_spec
+import json
+
+spec = json.load(open('configs/字典样例.json','r',encoding='utf-8'))['BeiHai_co_generation_approval_Sheet']
+out = render_spec(
+    spec=spec,
+    project_key='daily_report_25_26',
+    primary_key={'company':'BeiHai'},
+    trace=True,
+    context={'biz_date':'regular'}  # 或 {'biz_date':'2025-10-27'}
+)
+# out['数据'] 可直接用于 rows-only 渲染；out['_trace'] 可用于抽查验证
+```

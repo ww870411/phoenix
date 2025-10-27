@@ -3,6 +3,7 @@
     "单位标识": "BeiHai",
     "单位名": "北海热电厂",
     "表名": "1.北海热电厂（热电联产）审批表",
+    "biz_date":"regular",
     "查询数据源":{
         "主键":{"company":"BeiHai"},
         "主表":"sum_basic_data",

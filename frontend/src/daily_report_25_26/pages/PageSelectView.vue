@@ -68,6 +68,10 @@ const breadcrumbItems = computed(() => [
 ])
 
 function openPage(page) {
+  // 支持“专用调试页面”：若后端 pages 的键是形如 "/debug/..."，则直接导航到该路径
+  if (typeof page?.page_url === 'string' && page.page_url.startsWith('/')) {
+    return router.push({ path: page.page_url })
+  }
   const isDisplay = typeof page?.config_file === 'string' && /展示用/.test(page.config_file)
   const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`
   if (isDisplay) {
