@@ -12,6 +12,26 @@
   - `calc_sum_basic_data` 增加唯一索引 `(company, item, scope)` → 允许 `REFRESH MATERIALIZED VIEW CONCURRENTLY`。
   - `calc_sum_gongre_branches_detail_data` 增加唯一索引 `(center, item, scope)` → 允许 `REFRESH MATERIALIZED VIEW CONCURRENTLY`。
   - 两处均以中文注释标明用途与行粒度假设，避免误删。
+  - 新增调试视图 `calc_sum_basic_trace`，用于排查二级视图计算过程（显示数量、单价、乘积与缺失标记）。
+
+## 运行时计算（替代二级物化视图，可选）
+
+- 新增服务模块：`backend/services/calc_fill.py`
+  - 函数：`fill_company_calc(payload: Dict[str, Any], db: Optional[Session]=None) -> Dict[str, Any]`
+  - 入参：`{ company | company_cn, scope, period? }`，`scope` 支持 `value_biz_date/value_peer_date/sum_7d_*/sum_month_*/sum_ytd_*`。
+  - 行为：直接聚合 `sum_basic_data` 指定口径列 + 读取 `constant_data`（带键名/期别规范化），在内存计算并返回一个“填满的对象”，字段与原二级物化视图一致。
+  - 单位换算与公式同 `calc_sum_basic_data`：售电收入为万元（万kWh×元/kWh），售热收入除以 10000。
+  - 适用场景：放弃/停用二级物化视图时，后端可用该函数按需计算，避免迁移成本。
+
+- 新增表达式求值模块：`backend/services/expression_eval.py`（本次新增）
+  - 函数：`fill_sheet_from_dict(sheet_obj: Dict[str, Any], db=None, trace: bool=False) -> Dict[str, Any]`
+  - 输入：与 `configs/字典样例.json` 单表对象相同结构（含“单位标识/单位名/列名/数据/项目字典”）；
+  - 行为：
+    - 解析并执行单元格表达式与函数：`value_biz_date()/value_peer_date()/sum_month_*/sum_ytd_*`、`date|month|ytd_diff_rate()`；
+    - 支持 `c.售电单价/售热单价/...` 的常量引用（来源 `constant_data`，自动 period 规范化）；
+    - 支持同列行间引用（如“直接收入-煤成本-...”优先使用同列已算值）；
+    - 单位换算与 `calc_fill.py` 保持一致：除 `售电单价` 外，数量×单价默认 `/10000` → 万元；
+  - 输出：返回“数据已填满”的同结构对象；`trace=True` 时附带 `_trace.cells[]` 展示每个单元格的求值明细（便于排障）。
 
 该目录存放 Phoenix 项目的后端代码，采用「FastAPI + 版本化路由」的结构：
 
@@ -83,6 +103,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `create_view.sql`（集中维护物化视图/分析视图定义；包含：
       - 一级视图：`sum_basic_data`、`sum_gongre_branches_detail_data`。
       - 二级视图：`calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data`；已添加唯一索引以支持并发刷新）。
+      - 排障视图：`calc_sum_basic_trace`（仅用于查看中间输入与乘积，非物化）。
 
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
@@ -182,3 +203,13 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 现有核心业务表：`daily_basic_data`、`constant_data`、`temperature_data`、`coal_inventory_data`、`gongre_branches_detail_data`。
 - 建议在 `backend/sql/create_views.sql` 中集中维护视图定义，覆盖日常汇总、常量维度对照以及煤炭库存的分支口径。
 - 后续生成视图后，可通过 Alembic/初始化脚本执行 `CREATE OR REPLACE VIEW`，供查询接口直接消费。
+### 2025-10-27 运行时表达式求值服务（计划）
+- 目标：以 `sum_basic_data` / `sum_gongre_branches_detail_data` 与现有基础表为数据源，按“字典样例.json”的表达式规则运行时计算审批表/展示表单元格，避免扩张二级视图。
+- 建议位置：`backend/app/services/runtime_expression.py`
+- 拟定函数（待确认）：
+  - `render_spec(spec: dict, project_key: str, primary_key: dict, *, trace: bool=False) -> dict`
+  - 功能：预取主表与常量表，构建指标缓存与常量缓存；按列口径（本期日/同期日/月/供暖期）求值，支持 `value_*()`、`sum_*()`、`*_diff_rate()` 以及项目名与 `c.<常量>` 引用。
+- 安全与一致性：
+  - 表达式使用受限求值器（白名单运算与函数），禁止任意 Python 代码执行；
+  - 差异率定义为 `(biz-peer)/NULLIF(abs(peer),0)`，除零返回 `None`。
+- 后续：待产品确认常量口径与差异口径后实现，并补充单元测试与 `_trace` 调试输出。

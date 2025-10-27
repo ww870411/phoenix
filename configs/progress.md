@@ -26,6 +26,63 @@
 - 验证建议：刷新视图后，查询 `calc_sum_basic_data` 中 `company='BeiHai' 或 company_cn='北海热电厂'` 且 `scope='sum_7d_biz'` 的 `eco_power_supply_income` 应大于 0；同时在 `v_constants_center_first` 验证 `key1/period/value` 命中情况。
 - 回滚思路：如不需兼容中文名，可将 OR 条件收紧回仅 `b.company`；period 取值应保持与 `constant_data` 一致。
 
+### 2025-10-28 售电收入单位换算修复（AI辅助）
+- 范围：`backend/sql/create_view.sql`
+- 现象：`calc_sum_basic_data` 中 BeiHai/北海热电厂 在 `scope='sum_7d_biz'` 下 `eco_power_supply_income` 为 0，而 `v_sum_basic_long` 与 `v_constants_center_first` 显示均非零。
+- 原因：售电数量单位为“万kWh”，单价为“元/kWh”，相乘结果即为“万元”；原公式额外 `/10000` 导致值过小被四舍五入为 0。
+- 变更：
+  1) `eco_power_supply_income` 去除 `/10000`；
+  2) `eco_heat_supply_income` 保持 `/10000`（GJ×元/GJ→元后换算为万元）；
+  3) `eco_direct_income` 改为“售电收入（万元）+ 售热收入（万元）”，不再统一 `/10000`。
+- 验证建议：刷新视图后查询 BeiHai/北海热电厂 在 `scope='sum_7d_biz'` 下的两项，值应大于 0，并与手工计算一致。
+- 回滚思路：如后续确认 `amount_power_sales` 实际单位非“万kWh”，可调整换算或引入按单位动态换算逻辑。
+
+### 2025-10-28 调试视图：calc_sum_basic_trace（AI辅助）
+- 范围：`backend/sql/create_view.sql`、`backend/README.md`
+- 目的：在 DBeaver 直接查看二级物化视图的中间输入与关键乘除过程，快速定位“值为 0”的原因（特别是价格未命中、单位换算）。
+- 新增：`CREATE OR REPLACE VIEW calc_sum_basic_trace AS ...`
+  - 暴露字段：company/company_cn/scope/period、amount_power_sales、price_power_sales、power_income_calc、amount_heat_supply、price_heat_sales、heat_income_calc、direct_income_calc、is_price_power_null、is_price_heat_null。
+  - 用法示例：`SELECT * FROM calc_sum_basic_trace WHERE company='BeiHai' AND scope='sum_7d_biz';`
+- 验证：刷新后查询上述视图，确认乘积列与最终 `calc_sum_basic_data` 中的 `eco_*_income` 对得上；当价格未命中时，对应 `is_price_*_null` 为 true。
+- 回滚：如无需长期保留，可 `DROP VIEW calc_sum_basic_trace;`，不影响生产视图。
+
+### 2025-10-28 常量项名规范化与容错（AI辅助）
+- 范围：`backend/sql/create_view.sql`
+- 背景：常量项名在库中存在大小写/空格/连字符/轻微拼写差异，造成价格匹配失败（is_price_power_null=true）。
+- 新增：`v_constants_center_first_norm` 视图，对 `item` 做标准化为 `item_key`（trim→lower→空白/连字符改为下划线→合并多下划线）。
+- 改动：
+  1) `calc_sum_basic_data` 的常量连接与 CASE 判断改用 `item_key`；
+  2) 常见差异容错：`price_alkali`/`price_clkali`、`price_ammonia_water`/`price_n_ammonia_water`、`eco_season_heating_income`/`season_heating_income`；
+  3) `calc_sum_gongre_branches_detail_data` 的常量连接亦改为规范化视图。
+- 验证：在 DBeaver 中查询 `calc_sum_basic_trace` 与 `calc_sum_basic_data`，确认价格项已命中、乘积大于 0；`is_price_*_null` 仅在常量确实缺失时为 true。
+- 回滚：将 join/CASE 改回 `v_constants_center_first` 即可；保留规范化视图不影响其他逻辑。
+
+### 2025-10-28 公司优先常量视图 + period 规范化（AI辅助）
+- 范围：`backend/sql/create_view.sql`
+- 问题：公司维度计算使用了“center 优先”的常量 key 视图，导致当常量存在 center 值时 key1=中心名，按 company 连接 miss；同时常量 period 存在 '25-26period'/空白差异。
+- 变更：
+  1) 新增 `v_constants_company_first_norm`：`key1=COALESCE(company,center)`，并输出规范化 `item_key` 与 `period_key`；
+  2) `calc_sum_basic_data` 与 `calc_sum_basic_trace` 改为连接该视图，并以 `v.period_key = sp2.period` 匹配；
+  3) `calc_sum_gongre_branches_detail_data` 仍连接 `v_constants_center_first_norm`，period 改用 `period_key`；
+  4) 保留 `v_constants_center_first_norm` 作为中心维度常量源。
+- 验证：trace 中 `price_power_sales` 应非空、`power_income_calc>0`；calc 二级视图相应项大于 0。
+- 回滚：将公司维度 join 切回 `v_constants_center_first_norm`，period 改回原列。保留新视图不影响其他逻辑。
+
+### 2025-10-28 运行时计算函数（放弃二级物化视图方案）（AI辅助）
+- 范围：`backend/services/calc_fill.py`、`backend/README.md`
+- 动机：用户决定放弃二级物化视图，改为在运行时按需计算二级指标，并返回一个“填满数据的对象”。
+- 新增：`fill_company_calc(payload, db=None)` 函数：
+  - 输入：`{ company|company_cn, scope, period? }`；`scope` 支持 `value_biz_date/value_peer_date/sum_7d_*/sum_month_*/sum_ytd_*`。
+  - 实现：
+    1) 直接从 `sum_basic_data` 聚合对应口径列（不依赖 v_sum_*_long）；
+    2) 从 `constant_data` 读取常量（键名/期别规范化，别名容错）；
+    3) 按原 `calc_sum_basic_data` 公式计算收入/成本/边际与单耗，返回 `{ values, missing_constants }`。
+  - 单位：售电收入为万元（万kWh×元/kWh，不再 /10000）；售热收入除以 10000。
+- 使用：
+  - 代码中 `from backend.services.calc_fill import fill_company_calc`；
+  - 传入 `{"company":"BeiHai","scope":"sum_7d_biz"}` 即可获取对象；也可传中文名 `company_cn`。
+- 回滚：如需恢复二级物化视图方案，可继续使用 `calc_sum_basic_data` 并删除本服务模块。
+
 ### 2025-10-28 常量指标期别映射修正（AI辅助）
 - 范围：`backend/api/v1/daily_report_25_26.py`
 - 原因：常量指标查询时数据库 period 列存储为供暖期编码（如“25-26”、“24-25”），而模板/请求仍使用“(本供暖期)/(同供暖期)”占位符，导致查询匹配不到数据也无法渲染实际季节名称。
@@ -913,3 +970,56 @@
 - 摘要：与用户讨论如何基于现有 daily_basic_data、constant_data、temperature_data、coal_inventory_data、gongre_branches_detail_data 等表设计 PostgreSQL 视图。
 - 结论：建议以 SQL 脚本集中维护视图定义，梳理按日期/单位聚合与煤炭库存差异化处理的示例查询，暂未改动代码。
 - 待办：补充具体视图产出需求，确认口径后在 `backend/sql/create_views.sql` 中落地视图脚本并加入初始化流程。
+
+## 2025-10-28 运行时表达式求值（替代二级 MV 的可选方案）
+
+- 触发背景：用户希望“将字典样例对象中的表达式一键替换为正确数值”，并计划放弃二级物化视图的复杂刷新顺序与索引要求。
+- 变更概览：
+  - 新增 `backend/services/expression_eval.py`
+    - 提供 `fill_sheet_from_dict(sheet_obj, db=None, trace=False)`：
+      - 函数/口径：`value_biz_date/value_peer_date/sum_month_*/sum_ytd_*`；
+      - 差异率：`date_diff_rate/month_diff_rate/ytd_diff_rate`（分母为 0 返回 None）；
+      - 常量：`c.<中文常量名>`（来自 constant_data，期别自动规范化到 `25-26` 等）；
+      - 行间引用：支持“直接收入-煤成本-...”等同列行名引用；
+      - 单位换算：除 `售电单价` 外，数量×单价统一 `/10000` → 万元；与 `calc_fill.py` 一致。
+    - 预取策略：
+      - 批量预取本表涉及到的所有“项目中文名”在各口径下的值（一次 SQL/口径），减少往返；
+      - 常量一次性按公司+period 读取。
+    - 调试：`trace=True` 时输出 `_trace.cells[]`，包含 `r/c/expr/value/detail` 便于排障。
+  - 文档：
+    - `backend/README.md`：新增“表达式求值模块”说明与用法；
+    - `frontend/README.md`：说明后端新增内部计算能力，对前端无影响。
+- 验证建议：
+  - 以 `configs/字典样例.json` 的 `BeiHai_co_generation_approval_Sheet` 为样例，调用：
+    ```python
+    from backend.services.expression_eval import fill_sheet_from_dict
+    import json
+    obj = json.load(open('configs/字典样例.json', 'r', encoding='utf-8'))
+    sheet = obj['BeiHai_co_generation_approval_Sheet']
+    result = fill_sheet_from_dict(sheet, trace=True)
+    ```
+    - 检查 `result['数据']` 是否均为数值；
+    - 随机 spot-check “售电量*c.售电单价/供热量*c.售热单价/直接收入-…” 等行是否符合口径与单位换算；
+    - `_trace.cells` 中应包含每个计算单元格的 `safe_expr/used_prices/used_items` 以便核对。
+- 留痕与回滚：
+  - 本次为新增模块，不影响既有 API；如需回退，删除 `backend/services/expression_eval.py` 并移除 README 中对应段落即可。
+  - Serena：记录条目 `runtime_expression_eval_2025-10-28`（新增运行时计算路径、单位换算与公式一致性）。
+## 2025-10-27 视图与表达式统一查询函数—需求澄清（AI 辅助）
+- 输入与背景：
+  - 已读取 `backend/sql/create_view.sql`，存在两张物化视图：`sum_basic_data`、`sum_gongre_branches_detail_data`，均提供 `value_biz_date/value_peer_date/sum_month_* / sum_ytd_*` 字段口径。
+  - 已读取 `configs/字典样例.json`，表达式形态包括：
+    - 行内函数：`value_biz_date()/value_peer_date()/sum_month_biz()/sum_month_peer()/sum_ytd_biz()/...` 与差异函数 `*_diff_rate()`；
+    - 项目名引用：如 `售电量`、`供热量`，按所在列（本期日/同期日/本期月/同期月/供暖期）映射到对应窗口值；
+    - 常量表引用：`c.<常量名>`，由 `查询数据源.缩写` 映射到表 `constant_data`（别名 `c`）。
+- 目标：封装一个运行时查询与求值函数，按“主键 + 主表 + 缩写/字典”拉取所需数据，替换表达式得到可渲染数据对象，避免继续扩张二级视图体系。
+- 拟定接口（待确认）：
+  - `render_spec(spec: dict, project_key: str, primary_key: dict, *, trace: bool=False) -> dict`
+  - `spec` 为“字典样例.json”中某一张表对象；`primary_key` 来自 `spec['查询数据源']['主键']`（如 `{company: 'BeiHai'}` 或 `{center: 'xxx'}`）。
+  - 行为：批量预取主表（`sum_basic_data`/`sum_gongre_branches_detail_data`）与常量表数据，构建 `metrics_cache` 与 `const_cache`；逐单元格按列口径求值；`*_diff_rate()` 定义为 `(biz-peer)/NULLIF(abs(peer),0)`。
+- 输出：
+  - 返回与 `spec` 同结构对象，其中 `数据` 的表达式单元格被替换为数值/文本；可选 `_trace` 附带每格的依赖与中间值。
+- 风险与待澄清：
+  - 常量表 `constant_data` 的键结构与时间生效策略（是否同样日/月/供暖期口径？）；
+  - “差异”列是否期望“差值”还是“环比/同比增长率”（当前假设为增长率）；除零策略；
+  - 是否需要支持 `biz_date` 覆盖以脱离视图锚点（当前视图以 `current_date-1` 刷新）。
+— 本条仅留痕与计划，不包含代码改动；待产品确认后实施。

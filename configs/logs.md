@@ -286,14 +286,14 @@ sum_daily_basic_data和数据库表constant_data
 
 codex resume 019a2088-7554-7ca2-959b-22cd57765f52
 
-一键刷新物化视图（按顺序）
+一键刷新物化视图（按顺序逐个执行）
 REFRESH MATERIALIZED VIEW CONCURRENTLY sum_basic_data;
 REFRESH MATERIALIZED VIEW CONCURRENTLY sum_gongre_branches_detail_data;
 
 REFRESH MATERIALIZED VIEW CONCURRENTLY calc_sum_basic_data;
 REFRESH MATERIALIZED VIEW CONCURRENTLY calc_sum_gongre_branches_detail_data;
 
-
+codex resume 019a2311-eaf6-7b01-9a6e-0197b32a9cd8
 
 
 
