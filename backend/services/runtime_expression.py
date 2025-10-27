@@ -250,11 +250,12 @@ class Evaluator:
     """
 
     def __init__(self, ctx: EvalContext, metrics_cache: Dict[str, Dict[str, Decimal]], const_cache: Dict[str, Dict[str, Decimal]],
-                 column_frame_map: Dict[int, str]):
+                 column_frame_map: Dict[int, str], row_cache: Optional[Dict[str, Dict[str, Decimal]]] = None):
         self.ctx = ctx
         self.metrics = metrics_cache
         self.consts = const_cache
         self.column_frames = column_frame_map
+        self.row_cache: Dict[str, Dict[str, Decimal]] = row_cache if isinstance(row_cache, dict) else {}
 
         self.item_cn_to_item = ctx.item_cn_to_item  # CN → en
 
@@ -264,6 +265,10 @@ class Evaluator:
 
     # ---- 值提取 ----
     def _value_of_item(self, item_cn: str, frame: str) -> Decimal:
+        # 先看是否已有行内（或前序行）计算缓存
+        cached = (self.row_cache.get(item_cn) or {}).get(frame)
+        if isinstance(cached, Decimal):
+            return cached
         item_en = self.item_cn_to_item.get(item_cn)
         if not item_en:
             return Decimal(0)
@@ -300,6 +305,7 @@ class Evaluator:
         1) 别名常量：a.常量名 → CA("a","常量名")
         2) 项目名替换：仅在非引号区域替换 中文项目名 → I("中文项目名")
            这样不会把 CA("a","售电单价") 误改为 CA("a","I("售电单价")")
+        3) 数字字面量统一转 Decimal：未被引号包裹的 123 / 123.45 → D("123.45")
         """
         s = expr.strip()
         # 1) 先处理别名常量
@@ -314,6 +320,9 @@ class Evaluator:
                 continue
             for name, repl in self.item_pairs:
                 seg = seg.replace(name, repl)
+            # 3) 将数字字面量包装为 Decimal 字面量（仅在引号外）
+            #    避免 float 与 Decimal 混算导致的类型错误
+            seg = re.sub(r'(?<![\w"])\b\d+(?:\.\d+)?\b', lambda m: f'D("{m.group(0)}")', seg)
             parts[i] = seg
         return "".join(parts)
 
@@ -324,9 +333,13 @@ class Evaluator:
         - 仅暴露 I、C 与部分无参函数（针对当前行项目）
         """
         def I(name_cn: str) -> Decimal:
+            # 判定来源（行缓存优先）
+            src = "metrics"
+            if (self.row_cache.get(name_cn) or {}).get(frame) is not None:
+                src = "row_cache"
             v = self._value_of_item(name_cn, frame)
             if trace_sink is not None:
-                trace_sink.setdefault("used_items", []).append({"name": name_cn, "frame": frame, "value": str(v)})
+                trace_sink.setdefault("used_items", []).append({"name": name_cn, "frame": frame, "value": str(v), "source": src})
             return v
 
         def C(name_cn: str) -> Decimal:
@@ -351,6 +364,7 @@ class Evaluator:
             "I": I,
             "C": C,
             "CA": CA,
+            "D": Decimal,
             # 针对当前行项目的便捷函数
             "value_biz_date": lambda: _cur("biz_date"),
             "value_peer_date": lambda: _cur("peer_date"),
@@ -446,7 +460,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     rows: List[List[Any]] = spec.get("数据") or []
     col_frames = map_columns_to_frames(columns)
 
-    evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames)
+    # 允许多轮求值以解决行间/前后顺序依赖（默认 2 轮，可通过 context.passes 覆盖）
+    max_passes = 2
+    if context and isinstance(context.get("passes"), int) and context["passes"] >= 1:
+        max_passes = int(context["passes"])
 
     # 用于 diff_rate 计算：按（日、月、供暖期）分组，先算出 biz/peer 值
     def _pair_for_group(group: str) -> Tuple[str, str]:
@@ -458,133 +475,171 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             return "sum_ytd_biz", "sum_ytd_peer"
         raise ValueError("unknown group")
 
-    # 返回对象
+    # 返回对象（在最后一轮填充）
     out = dict(spec)  # 浅拷贝基础字段
-    out_rows: List[List[Any]] = []
-    all_traces: List[List[Dict[str, Any]]] = []
+    final_rows: List[List[Any]] = []
+    final_traces: List[List[Dict[str, Any]]] = []
+    # 跨轮共享的行缓存（用于前后顺序依赖）
+    shared_row_cache: Dict[str, Dict[str, Decimal]] = {}
 
-    for r in rows:
-        if not isinstance(r, list) or len(r) < 2:
-            out_rows.append(r)
-            all_traces.append([])
-            continue
-        row_label = r[0]  # 项目中文名
-        unit_label = r[1]
-        # 当前行项目是否可映射为基础指标
-        current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
+    for pass_idx in range(max_passes):
+        last_pass = (pass_idx == max_passes - 1)
+        # 构造 evaluator（持有共享 row_cache）
+        evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=shared_row_cache)
+        # 每一轮的临时输出
+        out_rows: List[List[Any]] = []
+        all_traces: List[List[Dict[str, Any]]] = []
 
-        # 先逐列计算普通值，临时保存以便 diff_rate 使用
-        row_vals: List[Optional[Decimal]] = []
-        row_traces: List[Dict[str, Any]] = []
-        for ci, cell in enumerate(r):
-            if ci < 2:
-                row_vals.append(None)
-                row_traces.append({"raw": cell})
+        for r in rows:
+            if not isinstance(r, list) or len(r) < 2:
+                if last_pass:
+                    out_rows.append(r)
+                    all_traces.append([])
+                # 非最后一轮无需记录显示
                 continue
-            expr = str(cell or "").strip()
-            frame = col_frames.get(ci)  # None 表示差异列
-            expr_key = expr.replace(" ", "")
-            if expr_key.startswith("date_diff_rate"):
-                # 先占位，稍后统一计算
-                row_vals.append(None)
-                row_traces.append({"raw": expr, "deferred": True})
-                continue
-            if expr_key.startswith("month_diff_rate"):
-                row_vals.append(None)
-                row_traces.append({"raw": expr, "deferred": True})
-                continue
-            if expr_key.startswith("ytd_diff_rate"):
-                row_vals.append(None)
-                row_traces.append({"raw": expr, "deferred": True})
-                continue
-            val, t = evaluator.eval_cell(expr, frame, current_item_cn)
-            row_vals.append(val)
-            row_traces.append(t)
+            row_label = r[0]  # 项目中文名
+            unit_label = r[1]
+            # 当前行项目是否可映射为基础指标
+            current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
 
-        # 计算三类差异列：按列名判断所在组
-        def _find_indices_by_group(group: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-            # 返回 (biz_idx, peer_idx, diff_idx)
-            biz_frame, peer_frame = _pair_for_group(group)
-            biz_idx = peer_idx = diff_idx = None
-            for ci in range(len(r)):
-                f = col_frames.get(ci)
-                if f == biz_frame:
-                    biz_idx = ci
-                elif f == peer_frame:
-                    peer_idx = ci
-                else:
-                    label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
-                    if group == "day" and "日差异" in label:
-                        diff_idx = ci
-                    elif group == "month" and "月差异" in label:
-                        diff_idx = ci
-                    elif group == "ytd" and ("供暖期差异" in label or "供暖期差" in label):
-                        diff_idx = ci
-            return biz_idx, peer_idx, diff_idx
+            # 先逐列计算普通值，临时保存以便 diff_rate 使用
+            row_vals: List[Optional[Decimal]] = []
+            row_traces: List[Dict[str, Any]] = []
+            for ci, cell in enumerate(r):
+                if ci < 2:
+                    row_vals.append(None)
+                    if last_pass:
+                        row_traces.append({"raw": cell})
+                    continue
+                expr = str(cell or "").strip()
+                frame = col_frames.get(ci)  # None 表示差异列
+                expr_key = expr.replace(" ", "")
+                if expr_key.startswith("date_diff_rate"):
+                    row_vals.append(None)
+                    if last_pass:
+                        row_traces.append({"raw": expr, "deferred": True})
+                    continue
+                if expr_key.startswith("month_diff_rate"):
+                    row_vals.append(None)
+                    if last_pass:
+                        row_traces.append({"raw": expr, "deferred": True})
+                    continue
+                if expr_key.startswith("ytd_diff_rate"):
+                    row_vals.append(None)
+                    if last_pass:
+                        row_traces.append({"raw": expr, "deferred": True})
+                    continue
+                val, t = evaluator.eval_cell(expr, frame, current_item_cn)
+                row_vals.append(val)
+                if last_pass:
+                    row_traces.append(t)
 
-        for grp in ("day", "month", "ytd"):
-            biz_idx, peer_idx, diff_idx = _find_indices_by_group(grp)
-            if diff_idx is None:
-                continue
-            # 差异列原始表达式应为 *_diff_rate()
-            diff_expr = str(r[diff_idx] or "")
-            # 若对应 biz/peer 列表达式为空，则跳过
-            if biz_idx is None or peer_idx is None:
-                out_val = None
-                out_fmt = "-"
-            else:
-                biz_val = row_vals[biz_idx]
-                peer_val = row_vals[peer_idx]
-                if biz_val is None or peer_val is None:
+            # 计算三类差异列：按列名判断所在组
+            def _find_indices_by_group(group: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+                # 返回 (biz_idx, peer_idx, diff_idx)
+                biz_frame, peer_frame = _pair_for_group(group)
+                biz_idx = peer_idx = diff_idx = None
+                for ci in range(len(r)):
+                    f = col_frames.get(ci)
+                    if f == biz_frame:
+                        biz_idx = ci
+                    elif f == peer_frame:
+                        peer_idx = ci
+                    else:
+                        label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
+                        if group == "day" and "日差异" in label:
+                            diff_idx = ci
+                        elif group == "month" and "月差异" in label:
+                            diff_idx = ci
+                        elif group == "ytd" and ("供暖期差异" in label or "供暖期差" in label):
+                            diff_idx = ci
+                return biz_idx, peer_idx, diff_idx
+
+            for grp in ("day", "month", "ytd"):
+                biz_idx, peer_idx, diff_idx = _find_indices_by_group(grp)
+                if diff_idx is None:
+                    continue
+                diff_expr = str(r[diff_idx] or "")
+                if biz_idx is None or peer_idx is None:
                     out_val = None
                     out_fmt = "-"
                 else:
-                    try:
-                        denom = abs(peer_val)
-                        if denom == 0:
-                            out_val = None
-                            out_fmt = "-"
-                        else:
-                            rate = (biz_val - peer_val) / denom
-                            out_val = rate
-                            out_fmt = _percent(rate)
-                    except Exception:
-                        out_val, out_fmt = None, "-"
-            # 写回
-            row_vals[diff_idx] = out_val
-            row_traces[diff_idx] = {**row_traces[diff_idx], "raw": diff_expr, "formatted": out_fmt}
-
-        # 组装最终显示行：将差异列格式化为百分比，其余为原始数值（Decimal→float）
-        display_row: List[Any] = []
-        # 判断是否“全厂热效率”行
-        item_en = evaluator.item_cn_to_item.get(row_label) if current_item_cn else None
-        is_efficiency_row = (row_label == "全厂热效率") or (item_en == "rate_overall_efficiency")
-
-        for ci, cell in enumerate(r):
-            if ci < 2:
-                display_row.append(cell)
-                continue
-            label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
-            is_diff = any(k in label for k in ("日差异", "月差异", "供暖期差异", "供暖期差"))
-            v = row_vals[ci]
-            if is_diff:
-                # 已在 trace 中给出 formatted
-                fmt = row_traces[ci].get("formatted")
-                display_row.append(fmt if fmt is not None else "-")
-            else:
-                # 其他列返回数值（保留四位小数）
-                if v is None:
-                    display_row.append("-" if is_efficiency_row else "")
-                else:
-                    if is_efficiency_row:
-                        # 效率指标也按百分比字符串输出，保留两位
-                        display_row.append(_percent(v))
+                    biz_val = row_vals[biz_idx]
+                    peer_val = row_vals[peer_idx]
+                    if biz_val is None or peer_val is None:
+                        out_val = None
+                        out_fmt = "-"
                     else:
-                        display_row.append(float(v.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)))
-        out_rows.append(display_row)
-        all_traces.append(row_traces)
+                        try:
+                            denom = abs(peer_val)
+                            if denom == 0:
+                                out_val = None
+                                out_fmt = "-"
+                            else:
+                                rate = (biz_val - peer_val) / denom
+                                out_val = rate
+                                out_fmt = _percent(rate)
+                        except Exception:
+                            out_val, out_fmt = None, "-"
+                row_vals[diff_idx] = out_val
+                if last_pass:
+                    # 合并 trace
+                    base = {"raw": diff_expr, "formatted": out_fmt}
+                    if len(row_traces) > diff_idx and isinstance(row_traces[diff_idx], dict):
+                        row_traces[diff_idx] = {**row_traces[diff_idx], **base}
+                    else:
+                        # 罕见：若之前未写入 trace，占位
+                        if diff_idx >= len(row_traces):
+                            row_traces.extend([{}] * (diff_idx - len(row_traces) + 1))
+                        row_traces[diff_idx] = base
 
-    out["数据"] = out_rows
+            # 将本行可用数值写入共享行缓存
+            row_frames: Dict[str, Decimal] = {}
+            for ci, v in enumerate(row_vals):
+                if ci < 2:
+                    continue
+                f = col_frames.get(ci)
+                if f is None or v is None:
+                    continue
+                row_frames[f] = v
+            if row_frames:
+                existing = shared_row_cache.get(row_label) or {}
+                existing.update(row_frames)
+                shared_row_cache[row_label] = existing
+
+            if last_pass:
+                # 组装显示行
+                display_row: List[Any] = []
+                item_en = evaluator.item_cn_to_item.get(row_label) if current_item_cn else None
+                is_efficiency_row = (row_label == "全厂热效率") or (item_en == "rate_overall_efficiency")
+
+                for ci, cell in enumerate(r):
+                    if ci < 2:
+                        display_row.append(cell)
+                        continue
+                    label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
+                    is_diff = any(k in label for k in ("日差异", "月差异", "供暖期差异", "供暖期差"))
+                    v = row_vals[ci]
+                    if is_diff:
+                        fmt = row_traces[ci].get("formatted") if ci < len(row_traces) else None
+                        display_row.append(fmt if fmt is not None else "-")
+                    else:
+                        if v is None:
+                            display_row.append("-" if is_efficiency_row else "")
+                        else:
+                            if is_efficiency_row:
+                                display_row.append(_percent(v))
+                            else:
+                                display_row.append(float(v.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)))
+                out_rows.append(display_row)
+                all_traces.append(row_traces)
+
+        if last_pass:
+            final_rows = out_rows
+            final_traces = all_traces
+        # 下一轮继续，使用已累积的 shared_row_cache
+
+    out["数据"] = final_rows
     if trace:
-        out["_trace"] = all_traces
+        out["_trace"] = final_traces
     return out

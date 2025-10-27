@@ -2550,7 +2550,7 @@ async def runtime_eval(request: Request):
     config = payload.get("config")
     spec_override = payload.get("spec")
 
-    # 准备 spec
+    # 准备 spec（支持三种来源优先级：spec 覆盖 > sheet_key+config 定位 > 仅 config 自动推断）
     if isinstance(spec_override, dict):
         spec = dict(spec_override)
         names = _extract_names(spec)
@@ -2558,11 +2558,19 @@ async def runtime_eval(request: Request):
         rows_raw = _extract_list(spec, ROW_KEYS)
     else:
         preferred_path = _resolve_data_file(config) if isinstance(config, str) and config.strip() else None
+        # 若未提供 sheet_key，且提供了 config，则尝试从文件自动推断唯一的表
+        if not sheet_key and preferred_path is not None and preferred_path.exists():
+            try:
+                raw = _read_json(preferred_path)
+                if isinstance(raw, dict) and len(raw) == 1:
+                    sheet_key = next(iter(raw.keys()))
+            except Exception:
+                pass
         spec, data_path = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
         if spec is None:
             return JSONResponse(
                 status_code=404,
-                content={"ok": False, "message": f"未找到模板：{sheet_key}"},
+                content={"ok": False, "message": f"未找到模板：{sheet_key or '(未提供)'}"},
             )
         names = _extract_names(spec)
         columns_raw = _extract_list(spec, COLUMN_KEYS)

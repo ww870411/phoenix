@@ -1049,4 +1049,13 @@
 - 新增页面：`frontend/src/daily_report_25_26/pages/RuntimeEvalDebug.vue`，路由：`/debug/runtime-eval`。
 - 功能：输入 `sheet_key/company`，可选 `config/biz_date/trace`，调用后端调试路由并以表格显示 `columns+rows`；`trace` 时展示 `_trace`。
 - 安全：页面内部使用 `fetch` 调用后端，不修改现有 `src/api`；仅用于调试与验收，不影响现有页面流程。
- - 入口：在 `backend_data/项目列表.json` 的 `daily_report_25_26.pages` 下新增键 `\"/debug/runtime-eval\"`，页面选择页点击后直接跳转到调试页；为此在 `PageSelectView.vue` 中支持当 `page_url` 以 `/` 开头时直接 `router.push(page_url)`。
+- 入口：在 `backend_data/项目列表.json` 的 `daily_report_25_26.pages` 下新增键 `\"/debug/runtime-eval\"`，页面选择页点击后直接跳转到调试页；为此在 `PageSelectView.vue` 中支持当 `page_url` 以 `/` 开头时直接 `router.push(page_url)`。
+## 2025-10-27 运行时表达式求值：多轮迭代与行间依赖修复
+- 变更文件：`backend/services/runtime_expression.py`
+- 改动要点：
+  - 新增多轮求值（默认 2 轮，可通过 `context.passes` 覆盖），第二轮可使用第一轮累积的 `row_cache` 解决“后续行被前序行引用”的顺序依赖。
+  - `row_cache`：逐行计算后把各帧数值缓存为 `{ 行中文名: { frame: Decimal } }`，表达式中的 `I(\"行中文名\")` 优先命中该缓存，否则回落到视图指标。
+  - 常量键映射：`CA(alias,\"中文常量名\")` 通过 `项目字典` 反查英文 item（如 `price_power_sales`），再按帧取 `period` 值（biz→`25-26`，peer→`24-25`）。
+  - 预处理健壮性：只在引号外做“项目名→I(\"…\")”替换，避免污染 `CA(\"a\",\"……\")`；差异函数宽松识别（支持尾随字符）。
+  - trace 增强：记录 `used_items/used_consts` 及来源（`metrics` / `row_cache`）。
+- 验证建议：在 `/debug/runtime-eval` 勾选 `trace`，观察“直接收入”应使用 `row_cache` 的“其中：售电收入/售热收入”结果。

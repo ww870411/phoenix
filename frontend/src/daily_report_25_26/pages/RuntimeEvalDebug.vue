@@ -69,8 +69,8 @@
 <script setup>
 import { ref } from 'vue'
 
-const sheetKey = ref('BeiHai_co_generation_approval_Sheet')
-const company = ref('BeiHai')
+const sheetKey = ref('')
+const company = ref('')
 const configPath = ref('configs/字典样例.json')
 const bizDateMode = ref('regular') // 'regular' | 'custom'
 const bizDate = ref('')
@@ -87,16 +87,12 @@ function pretty(obj) {
 async function runEval() {
   error.value = ''
   resp.value = null
-  if (!sheetKey.value || !company.value) {
-    error.value = 'sheet_key 与 company 为必填'
-    return
-  }
   loading.value = true
   try {
     const body = {
-      sheet_key: sheetKey.value,
+      sheet_key: sheetKey.value || undefined,
       project_key: 'daily_report_25_26',
-      primary_key: { company: company.value },
+      primary_key: company.value ? { company: company.value } : undefined,
       config: configPath.value || undefined,
       biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || undefined),
       trace: !!trace.value,

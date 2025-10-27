@@ -161,5 +161,6 @@ docker compose up -d --build
 ### 2025-10-27 调试页新增（已实现）
 - 新增页面：`/debug/runtime-eval` → `src/daily_report_25_26/pages/RuntimeEvalDebug.vue`
 - 用途：调用后端 `POST /api/v1/projects/daily_report_25_26/runtime/spec/eval`，按模板运行时计算表达式并以表格展示结果。
-- 使用：在页面内输入 `sheet_key` 与 `company`，可选 `config`（相对 data 目录）与 `biz_date`（regular/日期），点击“请求”查看 `columns+rows`；勾选 `trace` 可查看 `_trace`。
+- 使用：支持“零参数”请求，程序会从 `config` 指定的模板自动读取 `sheet_key` 与 `unit_id(company)`；也可手动输入覆盖。
+  - 建议：`config` 使用 `configs/字典样例.json`（相对 `/app/data`）；`biz_date` 可选 `regular` 或指定日期。
  - 项目入口：已在 `backend_data/项目列表.json` 增加 `\"/debug/runtime-eval\"` 页面项，在“选择页面”界面点击“运行时表达式求值（调试）”卡片即可跳转。
