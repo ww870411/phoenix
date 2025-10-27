@@ -176,7 +176,7 @@
       ],
       "项目字典":{
         "amount_heating_fee_area":"供暖收费面积",
-        "rate_sharing Ratio":"分摊比",
+        "rate_sharing_ratio":"分摊比",
         "amount_whole_heating_area":"挂网面积",
         "eco_season_heating_income":"采暖期供暖收入",
         "price_purchased_heat":"购热单价",
@@ -184,16 +184,16 @@
         "price_purchased_power":"外购电单价"
       },
       "中心字典":{
-        "HuaLe_center":"华乐中心",
-        "DongGang_center":"东港中心",
-        "ChunHai_center":"春海中心",
-        "ZhongShan_center":"中山中心",
-        "BeiGang_center":"北岗中心",
-        "ShuangXing_center":"双兴中心",
-        "XiangLuJiao_center":"香炉礁中心",
-        "XingGong_center":"兴工中心",
-        "DaFang_center":"大纺中心",
-        "GuanWang_center":"管网中心"
+        "HuaLe_Center":"华乐中心",
+        "DongGang_Center":"东港中心",
+        "ChunHai_Center":"春海中心",
+        "ZhongShan_Center":"中山中心",
+        "BeiGang_Center":"北岗中心",
+        "ShuangXing_Center":"双兴中心",
+        "XiangLuJiao_Center":"香炉礁中心",
+        "XingGong_Center":"兴工中心",
+        "DaFang_Center":"大纺中心",
+        "GuanWang_Center":"管网中心"
       }
     },
   "JinZhou_constant_sheet":

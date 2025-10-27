@@ -1,7 +1,7 @@
 <template>
   <div class="login-wrap">
     <div class="card elevated" style="width:380px;">
-      <h1 class="title" style="text-align:center;">凤凰计划 · 登录</h1>
+      <h1 class="title" style="text-align:center;">登录</h1>
       <form @submit.prevent="onSubmit" style="display:flex;flex-direction:column;gap:12px;">
         <label class="field">
           <span>用户名</span>

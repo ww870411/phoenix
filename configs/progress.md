@@ -1,5 +1,19 @@
 ﻿# 项目推进记录（progress）
 
+### 2025-10-28 常量指标期别映射修正（AI辅助）
+- 范围：`backend/api/v1/daily_report_25_26.py`
+- 原因：常量指标查询时数据库 period 列存储为供暖期编码（如“25-26”、“24-25”），而模板/请求仍使用“(本供暖期)/(同供暖期)”占位符，导致查询匹配不到数据也无法渲染实际季节名称。
+- 变更：新增 period 归一化工具 `_strip_period_wrappers`、`_normalize_constant_period_key`、`_resolve_period_index`，在提交阶段统一写入供暖期编码，在查询阶段用编码匹配并把返回列头替换为“25-26”“24-25”；若请求携带 period 参数，则并行匹配占位符与编码，保证兼容旧数据。
+- 验证：`python -m py_compile backend/api/v1/daily_report_25_26.py`；需在常量页面复查“25-26”“24-25”两列均能回填。
+- 备注：本次仍按用户要求停用 Serena，全程使用 Desktop Commander 操作；如需回滚，可移除新工具函数并恢复原有索引计算逻辑。
+
+### 2025-10-28 常量指标查询 500 修复（AI辅助）
+- 范围：`backend/api/v1/daily_report_25_26.py`
+- 原因：常量指标页面请求 `/query` 时返回 500，后端在构造响应包时引用了未定义的 `source` 变量。
+- 变更：新增常量模板分支的 `source` 描述并将 `template_type` 修正为 `constant`，确保响应元数据完整且无未定义变量。
+- 验证：执行 `python -m py_compile backend/api/v1/daily_report_25_26.py` 通过语法检查；需在前端常量页面实际加载确认 200 响应。
+- 备注：本次按用户指令禁用 Serena，使用 Desktop Commander 读取与写入文件；如需回滚，删除新增 `source` 字段并恢复原 `template_type` 设置即可。
+
 ### 2025-10-28 二级物化视图可行性评估（AI辅助）
 - 范围：`configs/建立二级物化视图.md`、`backend/sql/create_view.sql`、`backend/sql/create_tables.sql`、`backend_data/数据结构_基本指标表.json`、`backend_data/数据结构_常量指标表.json`
 - 动作：审阅现有一级物化视图结构及常量/基础数据模板，梳理用户提出的二级物化视图计算公式与依赖项，识别可直接落地的公式、需要补充的数据字段及潜在命名冲突（如 `rate_coal_per_10k_m2` 重复定义、`rate_sharing Ratio` 拼写包含空格、不同公司公式中单位换算不一致）。

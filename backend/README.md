@@ -83,7 +83,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
   - standard（每日）：`{ template_type:'standard', biz_date, columns:[...], rows:[...], attatch_time, request_id, source }`
-  - constants（常量）：`{ template_type:'standard', period, columns:[...], rows:[...], attatch_time, request_id, source }`
+  - constants（常量）：`{ template_type:'constant', period, columns:[...], rows:[...], attatch_time, request_id, source }`（返回列头已替换为供暖期编码，如 `25-26`、`24-25`，便于前端直接展示与回填）
   - crosstab（煤炭库存）：`{ template_type:'crosstab', biz_date, columns:[...], rows:[...] }`
 - 聚合查询（规划中）：`POST /api/v1/projects/{project_key}/query`
   - 入参：`sheet_keys[]`、`scope`（data_entry/display/constants）、`biz_date|date_range`、`mode`（records/matrix）。

@@ -23,6 +23,8 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import delete
 
+import re
+
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import ConstantData
 from backend.db.database_daily_report_25_26 import (
@@ -1229,6 +1231,52 @@ def _is_constant_sheet(name: Optional[str]) -> bool:
     return name.strip().lower().endswith("_constant_sheet")
 
 
+HEATING_SEASON_ALIASES = {
+    "本供暖期": "25-26",
+    "同供暖期": "24-25",
+    "25-26": "25-26",
+    "24-25": "24-25",
+}
+
+
+def _strip_period_wrappers(label: str) -> str:
+    if not label:
+        return ""
+    return re.sub(r"[()（）\s]", "", label)
+
+
+def _normalize_constant_period_key(label: str) -> str:
+    raw = (label or "").strip()
+    if not raw:
+        return ""
+    simplified = _strip_period_wrappers(raw)
+    if simplified:
+        simplified_key = HEATING_SEASON_ALIASES.get(simplified, simplified)
+    else:
+        simplified_key = ""
+    return HEATING_SEASON_ALIASES.get(raw, simplified_key or raw)
+
+
+def _display_constant_period_label(label: str) -> str:
+    normalized = _normalize_constant_period_key(label)
+    if normalized:
+        return normalized
+    return (label or "").strip()
+
+
+def _resolve_period_index(period_keys: List[str], period_label: str) -> Optional[int]:
+    if not period_keys:
+        return None
+    normalized = _normalize_constant_period_key(period_label)
+    if normalized:
+        for idx, candidate in enumerate(period_keys):
+            if normalized == candidate:
+                return idx
+    if not normalized:
+        return 0
+    return None
+
+
 def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     将常量表的宽表 payload 拆解为扁平化的数据库记录列表。
@@ -1297,6 +1345,10 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             else:
                 value = _parse_decimal_value(row[col_index])
 
+            period_key = _normalize_constant_period_key(period)
+            if not period_key:
+                continue
+
             rec = {
                 "company": company_id,
                 "company_cn": company_cn,
@@ -1305,7 +1357,7 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "item_cn": item_cn,
                 "value": value,
                 "unit": unit,
-                "period": period,
+                "period": period_key,
                 "operation_time": op_time,
             }
             # 如果模型包含 center 字段并且这是中心维度表，可在后续持久化中附加
@@ -1909,6 +1961,14 @@ async def query_sheet(
             has_center = isinstance(dict_bundle.get("center_dict"), dict) and len(dict_bundle.get("center_dict")) > 0
             start_idx = 3 if has_center else 2
             periods = [str(c).strip() if c is not None else "" for c in columns_raw[start_idx:]]
+            period_keys = [_normalize_constant_period_key(label) for label in periods]
+            period_display = [_display_constant_period_label(label) for label in periods]
+
+            columns_standard = _decorate_columns(columns_raw)
+            for idx, label in enumerate(period_display):
+                target_index = start_idx + idx
+                if target_index < len(columns_standard):
+                    columns_standard[target_index] = label
 
             # 初始化为模板行的深拷贝（按模板回填）
             rows: List[List[Any]] = [list(r) if isinstance(r, list) else [] for r in rows_raw]
@@ -1919,13 +1979,21 @@ async def query_sheet(
                 unit_label = str(r[1]).strip() if len(r) > 1 and r[1] is not None else ""
                 row_index_map[(item_label, unit_label)] = i
 
-            columns_standard = _decorate_columns(columns_raw)
-
             session = SessionLocal()
             try:
                 q = session.query(ConstantData).filter(ConstantData.sheet_name == sheet_key)
                 if period:
-                    q = q.filter(ConstantData.period == str(period).strip())
+                    normalized_period = str(period).strip()
+                    period_candidates = {normalized_period}
+                    simplified = _strip_period_wrappers(normalized_period)
+                    if simplified and simplified != normalized_period:
+                        period_candidates.add(simplified)
+                    normalized_key = _normalize_constant_period_key(normalized_period)
+                    if normalized_key:
+                        period_candidates.add(normalized_key)
+                    period_candidates = {candidate for candidate in period_candidates if candidate}
+                    if period_candidates:
+                        q = q.filter(ConstantData.period.in_(period_candidates))
                 if company:
                     q = q.filter(ConstantData.company == company)
                 rows_db: List[ConstantData] = q.all()
@@ -1933,16 +2001,21 @@ async def query_sheet(
                 for rec in rows_db:
                     value = float(rec.value) if rec.value is not None else None
                     rec_period = str(rec.period or "").strip()
-                    try:
-                        p_offset = periods.index(rec_period) if rec_period else 0
-                    except ValueError:
-                        p_offset = 0
-                    col_index = start_idx + p_offset
+                    period_index = _resolve_period_index(period_keys, rec_period)
+                    if period_index is None:
+                        continue
+                    col_index = start_idx + period_index
 
-                    key_candidates = [
-                        (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
-                        (str(rec.item or "").strip(), str(rec.unit or "").strip()),
-                    ]
+                    if has_center:
+                        key_candidates = [
+                            (str(rec.item_cn or "").strip(), str(rec.company_cn or rec.company or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.company or rec.company_cn or "").strip()),
+                        ]
+                    else:
+                        key_candidates = [
+                            (str(rec.item_cn or "").strip(), str(rec.unit or "").strip()),
+                            (str(rec.item or "").strip(), str(rec.unit or "").strip()),
+                        ]
                     row_idx: Optional[int] = None
                     for k in key_candidates:
                         row_idx = row_index_map.get(k)
@@ -1961,9 +2034,23 @@ async def query_sheet(
                 _ts = datetime.now(timezone(timedelta(hours=8)))
                 _attatch_time = _ts.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
+                source = {
+                    "handler": "query_sheet",
+                    "template_type": "constant",
+                    "received": {
+                        "path": str(request.url.path),
+                        "query": str(request.url.query),
+                        "payload": {
+                            "biz_date": biz_date,
+                            "period": period,
+                            "company": company,
+                        },
+                    },
+                }
+
                 content = {
                     "ok": True,
-                    "template_type": "standard",
+                    "template_type": "constant",
                     "mode": "constant",
                     "sheet_key": sheet_key,
                     "period": period,
