@@ -131,15 +131,16 @@ CREATE TABLE IF NOT EXISTS period_map (
   scope  TEXT PRIMARY KEY,
   period TEXT NOT NULL
 );
+-- 与 constant_data.period 对齐：统一使用供暖期编码，如 '25-26'、'24-25'
 INSERT INTO period_map(scope, period) VALUES
-('value_biz_date','25-26period'),
-('sum_7d_biz','25-26period'),
-('sum_month_biz','25-26period'),
-('sum_ytd_biz','25-26period'),
-('value_peer_date','24-25period'),
-('sum_7d_peer','24-25period'),
-('sum_month_peer','24-25period'),
-('sum_ytd_peer','24-25period')
+('value_biz_date','25-26'),
+('sum_7d_biz','25-26'),
+('sum_month_biz','25-26'),
+('sum_ytd_biz','25-26'),
+('value_peer_date','24-25'),
+('sum_7d_peer','24-25'),
+('sum_month_peer','24-25'),
+('sum_ytd_peer','24-25')
 ON CONFLICT (scope) DO NOTHING;
 
 --行化视图
@@ -233,10 +234,12 @@ c AS (
     MAX(CASE WHEN v.item='price_hot_water'           THEN v.value END) AS price_hot_water,
     MAX(CASE WHEN v.item='eco_season_heating_income' THEN v.value END) AS season_heating_income
   FROM b
-  JOIN v_scope_period sp ON TRUE
+  -- 仅保留按 scope 映射到具体 period 的连接
   JOIN v_scope_period sp2 ON sp2.scope = b.scope
+  -- 常量表兼容公司英文/中文键名：key1 可能与 company 或 company_cn 对齐
   LEFT JOIN v_constants_center_first v
-         ON v.key1 = b.company AND v.period = sp2.period
+         ON (v.key1 = b.company OR v.key1 = b.company_cn)
+        AND v.period = sp2.period
   GROUP BY
     b.company, b.company_cn, b.scope,
     b.amount_power_sales, b.amount_heat_supply, b.coal, b.std_coal, b.gas, b.plant_power, b.plant_water,
@@ -412,5 +415,4 @@ UNION ALL SELECT center, center_cn, scope, 'amount_daily_net_complaints_per_10k_
 -- calc_sum_gongre_branches_detail_data 行粒度：center + item + scope 唯一
 CREATE UNIQUE INDEX IF NOT EXISTS ux_calc_sum_gongre_center_item_scope
   ON calc_sum_gongre_branches_detail_data (center, item, scope);
-
 

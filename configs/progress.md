@@ -13,6 +13,19 @@
 - 回滚思路：如无需并发刷新，可改回普通索引或删除唯一索引创建语句。
 - 留痕：Serena 记忆条目 `matview_concurrent_refresh_fix_2025-10-28` 已记录变更摘要与验证指引。
 
+### 2025-10-28 calc_sum_basic period 与键名对齐修复（AI辅助）
+- 范围：`backend/sql/create_view.sql`
+- 现象：`sum_basic_data` 中某公司（如“北海热电厂”）`amount_power_sales` 的 `sum_7d_biz` 非零，`constant_data` 中 `price_power_sales` 也非零，但 `calc_sum_basic_data` 的计算项为 0。
+- 初步原因：
+  1) `period_map` 使用了 `'25-26period'/'24-25period'` 等值，与 `constant_data.period` 实际存储（`'25-26'/'24-25'`）不一致，导致常量 LEFT JOIN 未命中；
+  2) 组织键名可能存在“英文公司键名 vs 中文公司名”的差异，常量表 `key1` 与基础数据 `b.company` 未对齐。
+- 变更：
+  1) 将 `period_map` 的 period 值改为 `'25-26'/'24-25'`；
+  2) 移除无意义的 `JOIN v_scope_period sp ON TRUE`；
+  3) 常量连接条件放宽为 `(v.key1 = b.company OR v.key1 = b.company_cn) AND v.period = sp2.period`，兼容英文/中文键名。
+- 验证建议：刷新视图后，查询 `calc_sum_basic_data` 中 `company='BeiHai' 或 company_cn='北海热电厂'` 且 `scope='sum_7d_biz'` 的 `eco_power_supply_income` 应大于 0；同时在 `v_constants_center_first` 验证 `key1/period/value` 命中情况。
+- 回滚思路：如不需兼容中文名，可将 OR 条件收紧回仅 `b.company`；period 取值应保持与 `constant_data` 一致。
+
 ### 2025-10-28 常量指标期别映射修正（AI辅助）
 - 范围：`backend/api/v1/daily_report_25_26.py`
 - 原因：常量指标查询时数据库 period 列存储为供暖期编码（如“25-26”、“24-25”），而模板/请求仍使用“(本供暖期)/(同供暖期)”占位符，导致查询匹配不到数据也无法渲染实际季节名称。
