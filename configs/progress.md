@@ -1,5 +1,11 @@
 ﻿# 项目推进记录（progress）
 
+### 2025-10-28 二级物化视图可行性评估（AI辅助）
+- 范围：`configs/建立二级物化视图.md`、`backend/sql/create_view.sql`、`backend/sql/create_tables.sql`、`backend_data/数据结构_基本指标表.json`、`backend_data/数据结构_常量指标表.json`
+- 动作：审阅现有一级物化视图结构及常量/基础数据模板，梳理用户提出的二级物化视图计算公式与依赖项，识别可直接落地的公式、需要补充的数据字段及潜在命名冲突（如 `rate_coal_per_10k_m2` 重复定义、`rate_sharing Ratio` 拼写包含空格、不同公司公式中单位换算不一致）。
+- 结论：总体可实现，需在 SQL 中按时间口径对八组数值循环派生计算列，并引入按 `company`/`center` 与 `period` 匹配的常量表；部分公式需澄清（是否统一除以 10000、命名重复/错误、跨视图引用的口径对齐）。尚未修改代码与视图脚本。
+- 后续建议：根据评估结论细化 SQL 实现顺序（基础指标 → 依赖型指标 → 汇总项），在落地前补充命名修正与 period 取值策略，并制定刷新/索引方案确保二级视图可并发刷新。
+
 ### 2025-10-28 标准表日历切换回填修复（AI辅助）
 - 范围：`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`、`configs/progress.md`
 - 原因：切换业务日期后标准表未重新渲染或列头被回包复写回占位符。

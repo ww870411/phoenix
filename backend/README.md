@@ -6,6 +6,11 @@
 - 所有 `/data_entry/sheets` 相关接口新增可选查询参数 `config`，允许前端显式指定模板 JSON 文件；默认仍回落至基础指标表。
 - 模板枚举逻辑会自动读取 `backend_data/项目列表.json` 中声明的所有模板文件，无需手工维护候选列表。
 
+## 结构快照更新（2025-10-28）
+
+- 本次会话仅评估 `calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data` 二级物化视图的落地方案，未新增或调整后端文件结构。
+- 预计落地位置：`backend/sql/create_view.sql`（在现有一级物化视图定义之后追加二级视图），若实现将同步更新唯一索引与刷新策略说明。
+
 该目录存放 Phoenix 项目的后端代码，采用「FastAPI + 版本化路由」的结构：
 
 - `main.py`：FastAPI 应用入口，挂载 `/api/v1` 前缀并提供 `/healthz`。 

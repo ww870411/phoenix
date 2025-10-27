@@ -284,7 +284,7 @@ REFRESH MATERIALIZED VIEW sum_basic_data;
 两张基本视图已经构建完毕，待整理量价关系
 sum_daily_basic_data和数据库表constant_data
 
-
+codex resume 019a2088-7554-7ca2-959b-22cd57765f52
 
 
 
