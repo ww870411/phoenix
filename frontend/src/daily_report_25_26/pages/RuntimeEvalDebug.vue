@@ -78,6 +78,7 @@ const trace = ref(false)
 const loading = ref(false)
 const error = ref('')
 const resp = ref(null)
+const API_BASE = import.meta.env?.VITE_API_BASE || ''
 
 function pretty(obj) {
   try { return JSON.stringify(obj, null, 2) } catch { return String(obj) }
@@ -100,16 +101,24 @@ async function runEval() {
       biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || undefined),
       trace: !!trace.value,
     }
-    const res = await fetch('/api/v1/projects/daily_report_25_26/runtime/spec/eval', {
+    const url = `${API_BASE}/api/v1/projects/daily_report_25_26/runtime/spec/eval`
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const json = await res.json()
-    if (!res.ok || json.ok === false) {
-      throw new Error(json.message || `HTTP ${res.status}`)
+    const ct = res.headers.get('content-type') || ''
+    let payload
+    if (ct.includes('application/json')) {
+      payload = await res.json()
+    } else {
+      const text = await res.text()
+      throw new Error(text || `HTTP ${res.status}`)
     }
-    resp.value = json
+    if (!res.ok || payload.ok === false) {
+      throw new Error(payload.message || `HTTP ${res.status}`)
+    }
+    resp.value = payload
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
@@ -133,4 +142,3 @@ th, td { border: 1px solid #eee; padding: 6px 8px; white-space: nowrap; }
 th { background: #f9f9f9; position: sticky; top: 0; }
 .debug pre { background: #f6f8fa; padding: 8px; border-radius: 6px; overflow: auto; }
 </style>
-
