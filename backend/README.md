@@ -8,8 +8,10 @@
 
 ## 结构快照更新（2025-10-28）
 
-- 本次会话仅评估 `calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data` 二级物化视图的落地方案，未新增或调整后端文件结构。
-- 预计落地位置：`backend/sql/create_view.sql`（在现有一级物化视图定义之后追加二级视图），若实现将同步更新唯一索引与刷新策略说明。
+- 已在 `backend/sql/create_view.sql` 中完善二级物化视图并发刷新支持：
+  - `calc_sum_basic_data` 增加唯一索引 `(company, item, scope)` → 允许 `REFRESH MATERIALIZED VIEW CONCURRENTLY`。
+  - `calc_sum_gongre_branches_detail_data` 增加唯一索引 `(center, item, scope)` → 允许 `REFRESH MATERIALIZED VIEW CONCURRENTLY`。
+  - 两处均以中文注释标明用途与行粒度假设，避免误删。
 
 该目录存放 Phoenix 项目的后端代码，采用「FastAPI + 版本化路由」的结构：
 
@@ -78,7 +80,9 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 - `sql/`
     - `create_tables.sql`
     - SQL 包含 `gongre_branches_detail_data`，对应 ORM 类 `GongreBranchesDetailData`（见 `db/database_daily_report_25_26.py`）。
-    - `create_view.sql`（集中维护物化视图/分析视图定义，例如 `sum_basic_data`、`sum_gongre_branches_detail_data` 按多口径累计输出，可按需调整所属 schema）。
+    - `create_view.sql`（集中维护物化视图/分析视图定义；包含：
+      - 一级视图：`sum_basic_data`、`sum_gongre_branches_detail_data`。
+      - 二级视图：`calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data`；已添加唯一索引以支持并发刷新）。
 
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`

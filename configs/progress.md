@@ -1,5 +1,18 @@
 ﻿# 项目推进记录（progress）
 
+### 2025-10-28 二级物化视图并发刷新修复（AI辅助）
+- 范围：`backend/sql/create_view.sql`
+- 现象：执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY calc_sum_gongre_branches_detail_data` 报错：`ERROR: cannot refresh materialized view ... concurrently`，提示需创建“无 WHERE 子句”的唯一索引。
+- 原因：`calc_sum_gongre_branches_detail_data` 与 `calc_sum_basic_data` 仅存在普通索引，缺少并发刷新所需的唯一索引。
+- 变更：
+  1) 将二级物化视图尾部索引改为唯一索引：
+     - `calc_sum_basic_data` → `CREATE UNIQUE INDEX IF NOT EXISTS ux_calc_sum_basic_company_item_scope ON calc_sum_basic_data(company, item, scope);`
+     - `calc_sum_gongre_branches_detail_data` → `CREATE UNIQUE INDEX IF NOT EXISTS ux_calc_sum_gongre_center_item_scope ON calc_sum_gongre_branches_detail_data(center, item, scope);`
+  2) 在 SQL 中补充中文注释，明确唯一索引用于 CONCURRENTLY 刷新。
+- 验证建议：执行脚本后在 psql 中 `\\d+ calc_sum_*` 查看索引；随后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY` 两张二级视图，应不再出现 55000 错误。
+- 回滚思路：如无需并发刷新，可改回普通索引或删除唯一索引创建语句。
+- 留痕：Serena 记忆条目 `matview_concurrent_refresh_fix_2025-10-28` 已记录变更摘要与验证指引。
+
 ### 2025-10-28 常量指标期别映射修正（AI辅助）
 - 范围：`backend/api/v1/daily_report_25_26.py`
 - 原因：常量指标查询时数据库 period 列存储为供暖期编码（如“25-26”、“24-25”），而模板/请求仍使用“(本供暖期)/(同供暖期)”占位符，导致查询匹配不到数据也无法渲染实际季节名称。

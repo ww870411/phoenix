@@ -343,7 +343,10 @@ UNION ALL SELECT company, company_cn, scope, 'rate_coal_per_10k_m2','供暖热�
 UNION ALL SELECT company, company_cn, scope, 'rate_power_per_10k_m2','供暖电单耗','万kWh/万㎡', rate_power_per_10k_m2, missing_constants FROM calc
 UNION ALL SELECT company, company_cn, scope, 'rate_water_per_10k_m2','供暖水单耗','吨/万㎡', rate_water_per_10k_m2, missing_constants FROM calc
 ;
-CREATE INDEX IF NOT EXISTS ix_calc_sum_basic_data ON calc_sum_basic_data(company, item, scope);
+-- 为支持 REFRESH MATERIALIZED VIEW CONCURRENTLY，要求存在“无 WHERE 子句”的唯一索引
+-- calc_sum_basic_data 行粒度：company + item + scope 唯一
+CREATE UNIQUE INDEX IF NOT EXISTS ux_calc_sum_basic_company_item_scope
+  ON calc_sum_basic_data (company, item, scope);
 
 
 --二级物化视图：center
@@ -405,7 +408,9 @@ UNION ALL SELECT center, center_cn, scope, 'eco_marginal_profit','边际利润',
   (eco_direct_income - eco_station_purchased_heat_cost - eco_heat_lose - eco_purchased_water_cost - eco_purchased_power_cost) FROM calc
 UNION ALL SELECT center, center_cn, scope, 'amount_daily_net_complaints_per_10k_m2','万㎡净投诉','次/万㎡', amount_daily_net_complaints_per_10k_m2 FROM calc
 ;
-CREATE INDEX IF NOT EXISTS ix_calc_sum_gongre_branches ON calc_sum_gongre_branches_detail_data(center, item, scope);
-
+-- 为支持 REFRESH MATERIALIZED VIEW CONCURRENTLY，要求存在“无 WHERE 子句”的唯一索引
+-- calc_sum_gongre_branches_detail_data 行粒度：center + item + scope 唯一
+CREATE UNIQUE INDEX IF NOT EXISTS ux_calc_sum_gongre_center_item_scope
+  ON calc_sum_gongre_branches_detail_data (center, item, scope);
 
 
