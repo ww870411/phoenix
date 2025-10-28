@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Set
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import date as _date, timedelta as _timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -526,6 +527,16 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     consts_by_company[comp][alias] = {}
 
     col_frames = map_columns_to_frames(columns)
+    # 动态确定回填起点：以首个“本期日”所在列为准（data_start_idx）
+    # 在此之前（ci < data_start_idx）的列原样保留（如 项目/中心/计量单位 等）
+    data_start_idx = 2  # 兜底：标准两列表头时从第3列开始
+    try:
+        biz_cols = [idx for idx, frame in col_frames.items() if frame == "biz_date"]
+        if biz_cols:
+            data_start_idx = min(biz_cols)
+    except Exception:
+        pass
+    readonly_limit = max(0, data_start_idx - 1)
 
     # 允许多轮求值以解决行间/前后顺序依赖（默认 2 轮，可通过 context.passes 覆盖）
     max_passes = 2
@@ -563,7 +574,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 # 非最后一轮无需记录显示
                 continue
             row_label = r[0]  # 项目中文名
-            unit_label = r[1]
+            unit_label = r[1] if len(r) > 1 else ""
             # 决定本行使用的 company：优先行内 discriminator，其次 primary_key.company
             row_company = str(company)
             if isinstance(discriminator_index, int) and discriminator_index >= 0 and len(r) > discriminator_index:
@@ -582,7 +593,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             row_vals: List[Optional[Decimal]] = []
             row_traces: List[Dict[str, Any]] = []
             for ci, cell in enumerate(r):
-                if ci < 2:
+                if ci <= readonly_limit:
                     row_vals.append(None)
                     if last_pass:
                         row_traces.append({"raw": cell})
@@ -672,7 +683,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             # 将本行可用数值写入共享行缓存
             row_frames: Dict[str, Decimal] = {}
             for ci, v in enumerate(row_vals):
-                if ci < 2:
+                if ci <= readonly_limit:
                     continue
                 f = col_frames.get(ci)
                 if f is None or v is None:
@@ -690,7 +701,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 is_efficiency_row = (row_label == "全厂热效率") or (item_en == "rate_overall_efficiency")
 
                 for ci, cell in enumerate(r):
-                    if ci < 2:
+                    if ci <= readonly_limit:
                         display_row.append(cell)
                         continue
                     label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
@@ -718,4 +729,55 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     out["数据"] = final_rows
     if trace:
         out["_trace"] = final_traces
+
+    # --- 4. 列头占位替换（便于前端直观显示） ---
+    # 规则：
+    # (本期日) → biz_date（YYYY-MM-DD）
+    # (同期日) → peer_date（YYYY-MM-DD）
+    # (本期月) → month_biz（YYYY-MM）
+    # (同期月) → month_peer（YYYY-MM）
+    # (本供暖期) → ytd_biz（如 25-26）
+    # (同供暖期) → ytd_peer（如 24-25）
+    try:
+        # 1) 解析锚点日期：优先 context.biz_date（YYYY-MM-DD），否则使用“今日-1”
+        anchor: Optional[_date] = None
+        if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
+            try:
+                anchor = _date.fromisoformat(context["biz_date"])
+            except Exception:
+                anchor = None
+        if anchor is None:
+            anchor = _date.today() - _timedelta(days=1)
+        # 2) 同期为去年同日（闰日回退到 2/28）
+        try:
+            peer = anchor.replace(year=anchor.year - 1)
+        except ValueError:
+            # 2/29 → 2/28
+            peer = anchor.replace(year=anchor.year - 1, day=28)
+        # 3) 月份标签
+        month_biz = f"{anchor.year:04d}-{anchor.month:02d}"
+        month_peer = f"{peer.year:04d}-{peer.month:02d}"
+        # 4) 供暖期标签采用帧到 period 的映射（已在常量读取中统一归一化）
+        ytd_biz = FRAME_TO_PERIOD["sum_ytd_biz"]
+        ytd_peer = FRAME_TO_PERIOD["sum_ytd_peer"]
+        # 5) 执行替换
+        cols_in = list(columns) if isinstance(columns, list) else []
+        cols_out: List[str] = []
+        for c in cols_in:
+            s = str(c) if c is not None else ""
+            s = s.replace("(本期日)", anchor.isoformat())
+            s = s.replace("(同期日)", peer.isoformat())
+            s = s.replace("(本期月)", month_biz)
+            s = s.replace("(同期月)", month_peer)
+            s = s.replace("(本供暖期)", ytd_biz)
+            s = s.replace("(同供暖期)", ytd_peer)
+            cols_out.append(s)
+        if cols_out:
+            out["列名"] = cols_out
+            # 兼容：若调用方直接读取 columns 字段
+            out["columns"] = cols_out
+    except Exception:
+        # 列头替换失败不影响主体数据返回
+        pass
+
     return out

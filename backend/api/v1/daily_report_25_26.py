@@ -2612,8 +2612,12 @@ async def runtime_eval(request: Request):
     except Exception as exc:
         return JSONResponse(status_code=500, content={"ok": False, "message": "求值失败", "error": str(exc)})
 
-    # 输出 rows-only
-    columns = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
+    # 输出 rows-only（优先使用 render_spec 返回的列头，已做占位替换；否则回落模板原列头）
+    columns_from_result = result.get("columns") or result.get("列名")
+    if isinstance(columns_from_result, list) and columns_from_result:
+        columns = [str(c) for c in columns_from_result]
+    else:
+        columns = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
     rows = result.get("数据") or []
     content = {
         "ok": True,
