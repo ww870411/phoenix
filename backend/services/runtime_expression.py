@@ -182,13 +182,23 @@ def _fetch_constants_for_table(session: Session, table_name: str, company: str) 
     通用常量表取值缓存（表结构需包含 item, period, value, company）
     返回：{ const_name: {period: Decimal}, ...}
     """
-    sql = text(f"SELECT item AS name, period, value FROM {table_name} WHERE company = :company")
+    # 为提高命中率，同时索引 item 与 item_cn 两个名字（中文/英文都可用）
+    sql = text(f"SELECT item, item_cn, period, value FROM {table_name} WHERE company = :company")
     rows = session.execute(sql, {"company": company}).mappings().all()
     out: Dict[str, Dict[str, Decimal]] = {}
     for r in rows:
-        name = r["name"]
-        period = r["period"]
-        out.setdefault(name, {})[period] = _to_decimal(r["value"])
+        keys = []
+        if r.get("item"):
+            keys.append(str(r["item"]).strip())
+        if r.get("item_cn"):
+            keys.append(str(r["item_cn"]).strip())
+        period_raw = str(r["period"]).strip() if r.get("period") is not None else ""
+        period = _normalize_period_key(period_raw)
+        val = _to_decimal(r.get("value"))
+        for k in keys:
+            if not k:
+                continue
+            out.setdefault(k, {})[period] = val
     return out
 
 
@@ -201,6 +211,20 @@ def _to_decimal(v: Any) -> Decimal:
         return Decimal(str(v))
     except (InvalidOperation, ValueError):
         return Decimal(0)
+
+def _normalize_period_key(label: Optional[str]) -> str:
+    """
+    归一化常量 period 标签：
+    - 去除空白/括号
+    - 去除结尾的 'period'/'供暖期' 等词
+    - 主要用于将 '25-26period'、'（25-26）'、'25-26供暖期' → '25-26'
+    """
+    s = (label or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"[()（）\s]", "", s)
+    s = re.sub(r"(供暖期|本供暖期|同供暖期|period)$", "", s, flags=re.IGNORECASE)
+    return s
 
 
 # ------------------------
@@ -282,7 +306,7 @@ class Evaluator:
         - 表中 key 为英文 item（如 price_power_sales），表达式里使用中文（如 售电单价）
         - 先用项目字典反查中文→英文；若找不到，再用中文原值兜底
         """
-        period = FRAME_TO_PERIOD[frame]
+        period = _normalize_period_key(FRAME_TO_PERIOD[frame])
         target_alias = alias or "c"
         # cn -> en
         key_en = self.item_cn_to_item.get(name_cn, name_cn)
@@ -296,6 +320,7 @@ class Evaluator:
             bucket = data_by_alias.get(name_cn)
             if not isinstance(bucket, dict):
                 return Decimal(0)
+        # period 精确匹配；如无，尝试原始 period 显式值
         return bucket.get(period, Decimal(0))
 
     # ---- 表达式转换与计算 ----
