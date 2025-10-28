@@ -1082,3 +1082,60 @@
   - 预处理健壮性：只在引号外做“项目名→I(\"…\")”替换，避免污染 `CA(\"a\",\"……\")`；差异函数宽松识别（支持尾随字符）。
   - trace 增强：记录 `used_items/used_consts` 及来源（`metrics` / `row_cache`）。
 - 验证建议：在 `/debug/runtime-eval` 勾选 `trace`，观察“直接收入”应使用 `row_cache` 的“其中：售电收入/售热收入”结果。
+
+### 2025-10-28 示例数据脚本适配最新模板与表（AI辅助）
+- 触发条件：数据库已重建，示例数据缺失；需依据“最新填表页面模板（configs/数据结构_基本指标表.json）”与当前表结构（daily_basic_data 等）重新生成 2025-10-20～2025-10-27 的样例数据。
+- 操作范围：`backend/scripts/generate_daily_basic_sample.py`；文档：`backend/README.md`、`frontend/README.md`。
+- 主要变更：
+  1) 模板路径切换为 `configs/数据结构_基本指标表.json`；
+  2) 交叉表 `GongRe_branches_detail_sheet` 扁平化为按中心写入的 company/company_cn 记录；
+  3) 文本型项目（单位为 `-` 或“主设备启停情况/突发情况说明”）写入 note，value 设为 NULL；
+  4) 插入表名修正为小写 `daily_basic_data`；
+  5) 生成日期范围固定为 2025-10-20～2025-10-27（含首尾）。
+- 生成物：`backend/sql/sample_daily_basic_data.csv` 与 `backend/sql/sample_daily_basic_data.sql`（执行方式见 backend/README.md）。
+- 验证建议：
+  - 打开 SQL 文件抽查 `INSERT INTO daily_basic_data` 的 `sheet_name/item/company` 是否符合模板；
+  - 导入后在数据库中 `SELECT COUNT(*) FROM daily_basic_data WHERE date BETWEEN '2025-10-20' AND '2025-10-27';` 应有非 0 记录；
+  - 对 `GongRe_branches_detail_sheet` 检查 company 是否为中心英文标识（若字典缺失则为 slug）。
+- 回滚思路：如需恢复旧逻辑（含同期数据与旧模板路径），可还原至上次脚本版本或将 `TARGET_DATES` 与 `TABLE_NAME/TEMPLATE_FILE` 回改；CSV/SQL 为派生物，可直接删除重新生成。
+- 证据与依据：
+  - 表结构：`backend/sql/create_tables.sql`（daily_basic_data 小写表名）；
+  - 模板：`configs/数据结构_基本指标表.json`、中心映射参考 `configs/供热中心字典样例.json`；
+  - 设计对齐：backend/README.md 对“分中心统一落库 daily_basic_data”的说明。
+
+### 2025-10-28 同期数据与“其中”分组约束（AI辅助）
+- 需求：
+  - 1) 生成同期数据：2024-10-20 至 2024-10-27 与本期逐日一一对应；
+  - 2) 对“其中：xxx”连续分组，使其和严格等于最近的不带“其中”的父项（按日期逐日平衡）。
+- 实施：
+  - 更新 `backend/scripts/generate_daily_basic_sample.py`：
+    - `TemplateRow` 新增 `is_child/group_id` 字段；遍历模板时根据行首是否以“其中”开头建立分组。
+    - 生成阶段按桶 `(company, company_cn, sheet_key)` 保序扫描；每个日期构造父值，再按确定性权重将父值分配至子项，并用最后一个子项兜底修正四舍五入误差（确保和相等）。
+    - 同步生成同期（状态 `sample_peer`/`sample_text_peer`），值按本期的 92% 比例生成并同样做分配。
+- 验证建议：
+  - SQL 导入后抽查：
+    ```sql
+    -- 以供热公司为例：检查某日“耗水量”与其两个“其中”子项之和
+    SELECT a.date,
+           SUM(CASE WHEN a.item='consumption_water' THEN a.value END) AS parent,
+           SUM(CASE WHEN a.item IN ('consumption_plant_water','consumption_heatnet_water') THEN a.value END) AS children_sum
+    FROM daily_basic_data a
+    WHERE a.sheet_name='GongRe_sheet' AND a.date BETWEEN '2025-10-20' AND '2025-10-27'
+    GROUP BY a.date
+    ORDER BY a.date;
+    ```
+  - 对同期将 `a.date` 改为 2024-10-20～27，预期 parent 与 children_sum 每日相等。
+- 回滚：删除分组分配逻辑并恢复逐行独立值生成；或仅关闭“同期”分支（移除 peer_dates）。
+
+### 2025-10-28 单位字典对齐（AI辅助）
+- 需求：示例 SQL 中 company/company_cn 映射不符合预期；需以 `configs/单位字典.json` 为权威来源：
+  - 标准表：company=英文公司码（如 BeiHai），company_cn=中文公司名（如 北海热电厂）。
+  - 分中心交叉表：company=英文中心码统一 `_center` 结尾（如 DongGang_center），company_cn=中文中心名（如 东港中心）。
+- 实施：
+  - 新增 `load_units_dict()` 读取 `单位字典.json`，区分公司与中心并建立中英双向映射。
+  - 标准表：优先用 `单位名` 中文反查英文公司码；失败时回退 `sheet_key` 前缀。
+  - 交叉表：按列头中文中心名反查英文中心码，统一 `*_center` 尾缀（小写）。
+- 影响：仅生成脚本；不会影响接口与表结构。
+- 验证：运行脚本后抽查 `INSERT`：
+  - `WHERE sheet_name LIKE 'BeiHai_%'` → `company='BeiHai' AND company_cn='北海热电厂'`
+  - `WHERE sheet_name='GongRe_branches_detail_sheet' AND company_cn='东港中心'` → `company='DongGang_center'`

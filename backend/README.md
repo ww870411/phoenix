@@ -199,6 +199,22 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 ```
 
 - PostgreSQL 数据卷已绑定宿主机目录 `D:/编程项目/phoenix/db_data`，请确保目录存在并拥有写权限后再启动容器。
+# 示例数据脚本更新（2025-10-28）
+
+- 位置：`backend/scripts/generate_daily_basic_sample.py`
+- 变更：
+  - 模板来源切换为 `configs/数据结构_基本指标表.json`（不再读取 `backend_data`）。
+  - 新增对 `GongRe_branches_detail_sheet` 的交叉表扁平化：按列头中心拆分为 `company/company_cn` 后统一写入 `daily_basic_data`。
+  - 文本型单元（单位为 `-` 或项目为“主设备启停情况/突发情况说明”）写入 `note`，`value` 置 `NULL`。
+  - 插入目标表名修正为小写 `daily_basic_data`，与建表脚本一致。
+  - 日期范围固定生成 2025-10-20 ～ 2025-10-27（含首尾）的样例数据。
+- 输出：
+  - `backend/sql/sample_daily_basic_data.csv`
+  - `backend/sql/sample_daily_basic_data.sql`
+- 导入（容器内示例）：
+  ```bash
+  docker compose exec db psql -U postgres -d phoenix -f /app/sql/sample_daily_basic_data.sql
+  ```
 #
 # 变更记录（2025-10-23）
 
