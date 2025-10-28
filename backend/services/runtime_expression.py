@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
@@ -320,6 +320,12 @@ class Evaluator:
                 continue
             for name, repl in self.item_pairs:
                 seg = seg.replace(name, repl)
+            # 将 value_* / sum_* 带 I(\"中文名\") 的参数还原为字符串字面量参数
+            seg = re.sub(
+                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*I\("([^"]+)"\)\s*\)',
+                lambda m: f'{m.group(1)}("{m.group(2)}")',
+                seg
+            )
             # 3) 将数字字面量包装为 Decimal 字面量（仅在引号外）
             #    避免 float 与 Decimal 混算导致的类型错误
             seg = re.sub(r'(?<![\w"])\b\d+(?:\.\d+)?\b', lambda m: f'D("{m.group(0)}")', seg)
@@ -355,23 +361,24 @@ class Evaluator:
                 trace_sink.setdefault("used_consts", []).append({"alias": alias, "name": name_cn, "frame": frame, "value": str(v)})
             return v
 
-        def _cur(frame_key: str) -> Decimal:
-            if not current_item_cn:
+        def _cur(frame_key: str, name_cn: Optional[str] = None) -> Decimal:
+            target_cn = (name_cn.strip() if isinstance(name_cn, str) else None) or current_item_cn
+            if not target_cn:
                 return Decimal(0)
-            return self._value_of_item(current_item_cn, frame_key)
+            return self._value_of_item(target_cn, frame_key)
 
         env = {
             "I": I,
             "C": C,
             "CA": CA,
             "D": Decimal,
-            # 针对当前行项目的便捷函数
-            "value_biz_date": lambda: _cur("biz_date"),
-            "value_peer_date": lambda: _cur("peer_date"),
-            "sum_month_biz": lambda: _cur("sum_month_biz"),
-            "sum_month_peer": lambda: _cur("sum_month_peer"),
-            "sum_ytd_biz": lambda: _cur("sum_ytd_biz"),
-            "sum_ytd_peer": lambda: _cur("sum_ytd_peer"),
+            # 帧函数：支持可选中文项目名参数
+            "value_biz_date": lambda name=None: _cur("biz_date", name),
+            "value_peer_date": lambda name=None: _cur("peer_date", name),
+            "sum_month_biz": lambda name=None: _cur("sum_month_biz", name),
+            "sum_month_peer": lambda name=None: _cur("sum_month_peer", name),
+            "sum_ytd_biz": lambda name=None: _cur("sum_ytd_biz", name),
+            "sum_ytd_peer": lambda name=None: _cur("sum_ytd_peer", name),
         }
         try:
             # eval 安全限制：不提供 __builtins__
@@ -422,6 +429,11 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     qsrc = spec.get("查询数据源") or {}
     main_table = qsrc.get("主表", "sum_basic_data")
     alias_map = qsrc.get("缩写") or {"c": "constant_data"}
+    # 行级 company 解析：通过主键中的 column_index 指定用于区分 company 的列（如“中心”或其它）
+    try:
+        discriminator_index = int((qsrc.get("主键") or {}).get("column_index", -1))
+    except Exception:
+        discriminator_index = -1
     company = (primary_key or {}).get("company")
     if not company:
         raise ValueError("primary_key 需包含 company 键")
@@ -440,24 +452,54 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         context=context,
     )
 
-    # --- 2. 预取缓存 ---
-    with next(get_session()) as session:  # type: ignore
-        # 指标
-        metrics: Dict[str, Dict[str, Decimal]]
-        if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
-            metrics = _fetch_metrics_dynamic_by_date(session, company, context["biz_date"])
-        else:
-            metrics = _fetch_metrics_from_matview(session, company)
-        # 常量（多别名预留）
-        consts_by_alias: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
-        for alias, table_name in (alias_map or {}).items():
-            try:
-                consts_by_alias[alias] = _fetch_constants_for_table(session, table_name, company)
-            except Exception:
-                consts_by_alias[alias] = {}
+    # 单位字典（仅使用当前 spec 下发的字典，优先中文→英文反查）
+    unit_dict = spec.get("单位字典") or {}
+    unit_en_to_cn: Dict[str, str] = {}
+    unit_cn_to_en: Dict[str, str] = {}
+    if isinstance(unit_dict, dict):
+        for en, cn in unit_dict.items():
+            if isinstance(en, str) and isinstance(cn, str):
+                unit_en_to_cn[en.strip()] = cn.strip()
+                unit_cn_to_en[cn.strip()] = en.strip()
 
+    # --- 2. 预取缓存（支持多 company） ---
     columns: List[str] = spec.get("列名") or []
     rows: List[List[Any]] = spec.get("数据") or []
+    companies_needed: Set[str] = set()
+    companies_needed.add(str(company))
+    def _normalize_company(raw: Any) -> Optional[str]:
+        if raw is None:
+            return None
+        s = str(raw).strip()
+        if not s:
+            return None
+        # 中文优先反查英文；否则按原样使用
+        return unit_cn_to_en.get(s, s)
+    if isinstance(discriminator_index, int) and discriminator_index >= 0:
+        for r in rows:
+            if isinstance(r, list) and len(r) > discriminator_index:
+                c = _normalize_company(r[discriminator_index])
+                if c:
+                    companies_needed.add(c)
+
+    with next(get_session()) as session:  # type: ignore
+        metrics_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
+        consts_by_company: Dict[str, Dict[str, Dict[str, Dict[str, Decimal]]]] = {}
+        for comp in companies_needed:
+            try:
+                if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
+                    metrics_by_company[comp] = _fetch_metrics_dynamic_by_date(session, comp, context["biz_date"])
+                else:
+                    metrics_by_company[comp] = _fetch_metrics_from_matview(session, comp)
+            except Exception:
+                metrics_by_company[comp] = {}
+            consts_by_company[comp] = {}
+            for alias, table_name in (alias_map or {}).items():
+                try:
+                    consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
+                except Exception:
+                    consts_by_company[comp][alias] = {}
+
     col_frames = map_columns_to_frames(columns)
 
     # 允许多轮求值以解决行间/前后顺序依赖（默认 2 轮，可通过 context.passes 覆盖）
@@ -479,13 +521,11 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     out = dict(spec)  # 浅拷贝基础字段
     final_rows: List[List[Any]] = []
     final_traces: List[List[Dict[str, Any]]] = []
-    # 跨轮共享的行缓存（用于前后顺序依赖）
-    shared_row_cache: Dict[str, Dict[str, Decimal]] = {}
+    # 跨轮共享的行缓存（用于前后顺序依赖）——按 company 分片，避免串扰
+    shared_row_cache_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
 
     for pass_idx in range(max_passes):
         last_pass = (pass_idx == max_passes - 1)
-        # 构造 evaluator（持有共享 row_cache）
-        evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=shared_row_cache)
         # 每一轮的临时输出
         out_rows: List[List[Any]] = []
         all_traces: List[List[Dict[str, Any]]] = []
@@ -499,6 +539,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 continue
             row_label = r[0]  # 项目中文名
             unit_label = r[1]
+            # 决定本行使用的 company：优先行内 discriminator，其次 primary_key.company
+            row_company = str(company)
+            if isinstance(discriminator_index, int) and discriminator_index >= 0 and len(r) > discriminator_index:
+                rc = _normalize_company(r[discriminator_index])
+                if rc:
+                    row_company = rc
+            # 为该 company 构造（或复用） evaluator
+            metrics = metrics_by_company.get(row_company, {})
+            consts_by_alias = consts_by_company.get(row_company, {})
+            row_cache = shared_row_cache_by_company.setdefault(row_company, {})
+            evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=row_cache)
             # 当前行项目是否可映射为基础指标
             current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
 
@@ -603,9 +654,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     continue
                 row_frames[f] = v
             if row_frames:
-                existing = shared_row_cache.get(row_label) or {}
+                existing = row_cache.get(row_label) or {}
                 existing.update(row_frames)
-                shared_row_cache[row_label] = existing
+                row_cache[row_label] = existing
 
             if last_pass:
                 # 组装显示行

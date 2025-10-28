@@ -3,16 +3,18 @@
     <h2>运行时表达式求值 · 调试页</h2>
     <section class="form">
       <div class="row">
-        <label>sheet_key</label>
-        <input v-model="sheetKey" placeholder="如：BeiHai_co_generation_approval_Sheet" />
+        <label>选择字典</label>
+        <select v-model="sheetKey">
+          <option v-for="opt in sheetOptions" :key="opt.key" :value="opt.key">
+            {{ opt.label }}
+          </option>
+        </select>
+        <button class="btn" @click="loadSheets" :disabled="loading">刷新</button>
+        <span class="hint">来源：{{ defaultConfigPath }}</span>
       </div>
       <div class="row">
         <label>company</label>
         <input v-model="company" placeholder="如：BeiHai" />
-      </div>
-      <div class="row">
-        <label>config（可选）</label>
-        <input v-model="configPath" placeholder="如：configs/字典样例.json（相对 data 目录）" />
       </div>
       <div class="row">
         <label>biz_date</label>
@@ -67,11 +69,11 @@
   </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 
 const sheetKey = ref('')
 const company = ref('')
-const configPath = ref('configs/字典样例.json')
+const defaultConfigPath = 'configs/字典样例.json'
 const bizDateMode = ref('regular') // 'regular' | 'custom'
 const bizDate = ref('')
 const trace = ref(false)
@@ -79,9 +81,34 @@ const loading = ref(false)
 const error = ref('')
 const resp = ref(null)
 const API_BASE = import.meta.env?.VITE_API_BASE || ''
+const sheetOptions = ref([])
 
 function pretty(obj) {
   try { return JSON.stringify(obj, null, 2) } catch { return String(obj) }
+}
+
+async function loadSheets() {
+  error.value = ''
+  try {
+    const url = `${API_BASE}/api/v1/projects/daily_report_25_26/data_entry/sheets?config=${encodeURIComponent(defaultConfigPath)}`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`加载字典列表失败: ${res.status}`)
+    const data = await res.json()
+    // data 是 { [sheet_key]: { unit_id, unit_name, sheet_name } }
+    const entries = []
+    for (const [key, meta] of Object.entries(data || {})) {
+      const label = `${meta?.sheet_name || key} (${key})`
+      entries.push({ key, label })
+    }
+    // 保持稳定顺序
+    entries.sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN'))
+    sheetOptions.value = entries
+    if (!sheetKey.value && entries.length > 0) {
+      sheetKey.value = entries[0].key
+    }
+  } catch (e) {
+    error.value = e?.message || String(e)
+  }
 }
 
 async function runEval() {
@@ -93,7 +120,7 @@ async function runEval() {
       sheet_key: sheetKey.value || undefined,
       project_key: 'daily_report_25_26',
       primary_key: company.value ? { company: company.value } : undefined,
-      config: configPath.value || undefined,
+      config: defaultConfigPath,
       biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || undefined),
       trace: !!trace.value,
     }
@@ -121,6 +148,10 @@ async function runEval() {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  loadSheets()
+})
 </script>
 
 <style scoped>
@@ -137,4 +168,5 @@ table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { border: 1px solid #eee; padding: 6px 8px; white-space: nowrap; }
 th { background: #f9f9f9; position: sticky; top: 0; }
 .debug pre { background: #f6f8fa; padding: 8px; border-radius: 6px; overflow: auto; }
+.hint { color: #888; font-size: 12px; }
 </style>

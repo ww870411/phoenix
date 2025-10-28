@@ -1139,3 +1139,18 @@
 - 验证：运行脚本后抽查 `INSERT`：
   - `WHERE sheet_name LIKE 'BeiHai_%'` → `company='BeiHai' AND company_cn='北海热电厂'`
   - `WHERE sheet_name='GongRe_branches_detail_sheet' AND company_cn='东港中心'` → `company='DongGang_center'`
+
+### 2025-10-28 运行时求值：多 company 与带参数取值（AI辅助）
+- 目标：支持审批字典2（分中心版）与新语法；按查询数据源的 `column_index` 从行内列（如“中心”）解析 company，并允许 `value_biz_date(项目中文名)` 等带参数取值。
+- 后端变更：`backend/services/runtime_expression.py`
+  1) 新增行级 company 解析：读取 `spec.查询数据源.主键.column_index`，按该列值+`spec.单位字典` 将中文中心反查为英文 company；为本次请求涉及的多个 company 预拉取 metrics/consts 缓存，并在逐行求值时切换缓存。
+  2) 带参数取值：`value_biz_date(name?) / value_peer_date(name?) / sum_month_* / sum_ytd_*` 支持中文项目名参数；预处理阶段对 `value_biz_date(I("中文"))` 还原为 `value_biz_date("中文")`，求值时按中文→英文 item 反查后取值；无参保持“当前行项目”语义。
+- 前端调试页：`frontend/src/daily_report_25_26/pages/RuntimeEvalDebug.vue`
+  - 默认固定配置文件 `configs/字典样例.json`；不再让用户输入路径；通过 `GET /api/v1/projects/daily_report_25_26/data_entry/sheets?config=...` 读取该文件内可用 sheet 列表，提供下拉框选择；保留 company/biz_date/trace 控件。
+- 验证建议：
+  1) 打开 `/debug/runtime-eval`，在下拉中选择 `GongRe_branches_detail_approval_Sheet`，company 先留空（行内按“中心”列解析）；biz_date=regular；运行后应返回 columns+rows。
+  2) 修改 `primary_key.company`（company 输入框）为某中心码，验证在缺失/越界行时回退到主 company 行为是否符合预期。
+  3) 在“万平方米省市净投诉量/供暖*单耗”等含 `value_biz_date(本月累计净投诉量)` 的行检查结果正常（trace 打开可见安全表达式）。
+- 回滚思路：
+  - 禁用多 company：将 `discriminator_index` 设为 -1；或恢复到按单一 primary_key.company 的原逻辑。
+  - 移除带参数取值：恢复帧函数为无参版本即可。
