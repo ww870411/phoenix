@@ -118,6 +118,29 @@
 - 原因：规划 `sum_basic_data` 物化视图，按 company/item 维度输出六种时间口径累计指标。
 - 变更：
   1. 新增 SQL 脚本：创建 `sum_basic_data` 物化视图（默认位于当前 `search_path` schema），定义 biz_date（当前日前一天）及 peer_date（一年前同日）的多窗口累计，并补充唯一索引以支持 CONCURRENTLY 刷新；同时补充 `value_biz_date`/`value_peer_date` 列，避免额外查询当日与同期值；如需独立 schema，可在执行前调整 `search_path`。
+
+### 2025-10-28 一级物化视图→普通视图 可行性评估（AI辅助）
+- 结论：可以。`sum_basic_data` 与 `sum_gongre_branches_detail_data` 不依赖物化视图专属能力（如增量刷新、物化日志等），可改为普通视图（`CREATE OR REPLACE VIEW`）。改为普通视图后将实时计算，省去刷新流程，但会失去对视图本体建索引的能力（需依赖底表索引）。
+- 范围：`backend/sql/create_tables.sql`、`backend/sql/create_view.sql`
+- 依据与证据：
+  - 脚本显示两张“一级物化视图”定义位于 `create_view.sql`（第 14 行与第 76 行起），均为对 `daily_basic_data` 进行窗口期内聚合计算，并使用 `current_date - 1 day` 作为锚点；末尾对各物化视图创建唯一索引以便并发刷新（用于 `REFRESH ... CONCURRENTLY`）。本次评估通过 Serena 检索与读取完成。
+  - 代码库未发现运行时代码调用 `REFRESH MATERIALIZED VIEW`；仅在 `configs/logs.md`、`configs/progress.md` 与脚本注释中提及运维操作，因此移除物化视图不影响后端服务运行时逻辑（参考：`backend/README.md` 中仅记录过“并发刷新支持”）。
+- 行为差异评估：
+  - 一致性：物化视图=“快照”，需人工/任务刷新；普通视图=“实时”，随底表变动而变。由于 SQL 内部 `biz_date = current_date - 1`，改为普通视图后“昨日/同期”口径将随查询当天自动滚动，通常符合业务预期。
+  - 性能：普通视图无法在视图上建索引；但 Postgres 会内联视图，仍可利用底表索引。现有底表索引为 `(date, company, sheet_name, item, item_cn)`，能覆盖主要过滤（date between ...）与部分分组场景。若数据量继续增长，建议补充如下索引（可选）：
+    1) `CREATE INDEX IF NOT EXISTS idx_daily_basic_company_item_date ON daily_basic_data(company, item, date);`
+    2) 针对分中心明细：`CREATE INDEX IF NOT EXISTS idx_daily_basic_branches ON daily_basic_data(sheet_name, date, company, item) WHERE sheet_name='GongRe_branches_detail_Sheet';`
+  - 维护：无需再维护“并发刷新所需的唯一索引”；运维计划中涉及 `REFRESH` 的任务可取消。
+- 影响面自查：
+  - 未发现后端 Python 代码直接引用“物化视图刷新”操作；二级物化视图（`calc_*`）已在先前记录中提出“可由运行时计算替代”，因此对上游是否为物化/普通视图不敏感。
+  - 如存在依赖“唯一索引”的外部 SQL/报表，请改为依赖底表索引或以查询改写替代。
+- 建议的迁移步骤（零停机）：
+  1) 旁路创建同名普通视图草稿：先以新名 `v_sum_basic_data_draft`/`v_sum_gongre_branches_detail_data_draft` 定义 `CREATE OR REPLACE VIEW ... AS <相同 SELECT>`；
+  2) 抽样比对：对若干公司/中心在多个 `scope` 下，比较 `SELECT` 结果与当前物化视图一致性（行数、求和校验）；
+  3) 切换：业务低峰期执行：`DROP MATERIALIZED VIEW ...;` → `CREATE OR REPLACE VIEW 原名 AS <SELECT>`；移除“视图唯一索引”语句（普通视图不允许建索引）；
+  4) 收尾：删除草稿视图；下线任何 `REFRESH MATERIALIZED VIEW` 的运维任务；保留/新增底表索引以保障性能。
+- 回滚方案：若切换后查询性能不达标，可在业务低峰时恢复为物化视图定义，并重新创建唯一索引以支持并发刷新；或保留普通视图同时构建物化视图供重负载报表使用。
+- 留痕：本次仅评估，无改动 SQL；后续如执行切换，将按照“变更前置说明+验证+回滚”流程提交。
   2. README 目录快照补录 `create_view.sql`，说明其用途。
   3. 留痕当前物化视图建设方案，便于后续按层次扩展其它物化视图。
 - 验证：未在系统内执行；需在测试库手动运行脚本并核对聚合结果后再部署生产。

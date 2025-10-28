@@ -105,6 +105,36 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
       - 二级视图：`calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data`；已添加唯一索引以支持并发刷新）。
       - 排障视图：`calc_sum_basic_trace`（仅用于查看中间输入与乘积，非物化）。
 
+## 评估：一级物化视图→普通视图（2025-10-28）
+
+- 结论：`sum_basic_data` 与 `sum_gongre_branches_detail_data` 可改为普通视图（`CREATE OR REPLACE VIEW`）。两者仅做基于 `current_date-1` 的窗口聚合，不依赖物化视图特性。
+- 行为差异：
+  - 物化视图：需刷新（可并发刷新），结果是刷新时刻的“快照”；
+  - 普通视图：实时计算，自动随底表变更与“昨日/同期”口径滚动。
+- 性能要点：普通视图无法在视图本体建索引，但会内联到底表。建议保留/补充底表索引以支撑常见筛选与分组：
+  - `CREATE INDEX IF NOT EXISTS idx_daily_basic_company_item_date ON daily_basic_data(company, item, date);`
+  - `CREATE INDEX IF NOT EXISTS idx_daily_basic_branches ON daily_basic_data(sheet_name, date, company, item) WHERE sheet_name='GongRe_branches_detail_Sheet';`
+- DDL 替换示例（示意）：
+  - 将
+    ```
+    DROP MATERIALIZED VIEW IF EXISTS sum_basic_data;
+    CREATE MATERIALIZED VIEW sum_basic_data AS
+    <SELECT ...>;
+    CREATE UNIQUE INDEX ... ON sum_basic_data(...);
+    ```
+    替换为
+    ```
+    CREATE OR REPLACE VIEW sum_basic_data AS
+    <相同 SELECT ...>;
+    -- 注意：普通视图不可创建索引；请改为在 daily_basic_data 上维护索引
+    ```
+  - `sum_gongre_branches_detail_data` 同理。
+- 迁移步骤（建议）：
+  1) 以 `v_*_draft` 名旁路创建普通视图并抽样对比；
+  2) 业务低峰切换同名视图，删除 `REFRESH` 相关任务；
+  3) 观察性能，必要时增加/调整底表索引。
+- 回滚：若性能不达标，可恢复为物化视图并重新创建唯一索引（用于并发刷新）。
+
 ## 查询接口（镜像查询）
 - 单表查询（已实现）：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
   - standard（每日）：`{ template_type:'standard', biz_date, columns:[...], rows:[...], attatch_time, request_id, source }`
