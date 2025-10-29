@@ -24,7 +24,7 @@
         ref="gridRef"
         :row-headers="true"
         :hide-attribution="true"
-        :stretch="true"
+        :stretch="gridStretch"
         :auto-size-column="false"
         :row-size="30"
         :resize="true"
@@ -165,6 +165,11 @@ const submitTime = ref('');
 const gridColumns = ref([]);
 const gridSource = ref([]);
 const gridRef = ref(null);
+
+// 根据模板类型控制列拉伸行为：常量指标页不拉伸，避免最后一列占满剩余空间
+const gridStretch = computed(() => {
+  return templateType.value !== 'constant'
+});
 
 // --- Helper --- 
 function cloneDictValue(value) {
