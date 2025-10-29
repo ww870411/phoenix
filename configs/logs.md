@@ -331,6 +331,8 @@ codex resume 019a2472-e779-7bc0-8837-3831718266b7
 
 codex resume 019a2937-0f99-7de0-bb15-a97e27832639
 
+重新整理并创建数据库视图，分为sum_basic_data和groups两个视图。
+codex resume 019a2d6d-082b-7511-a655-86d8a66170c0
 
 
 
