@@ -6,6 +6,18 @@
 - 动作：完成 Serena 项目激活与入职检查；按 AGENTS 3.9 对 Markdown 文档使用 `apply_patch` 安全降级记录进度。
 - 下一步：待你指令后进入 `/template`、`/submit`、`/query` 的最小闭环实现与联调。
 
+### 增补（2025-10-29 晚）
+- runtime 表达式求值服务适配 `groups` 视图：`backend/services/runtime_expression.py` 新增 `_fetch_metrics_from_view()` 并基于模板“查询数据源.主表”在 `sum_basic_data/groups` 间切换，修复 `ZhuChengQu_approval_Sheet` 选择 `主表=groups` 时无数据显示的问题（原逻辑固定读取 `sum_basic_data`）。
+
+### 增补（2025-10-29 夜）
+- SQL 指标修正（groups 主城区）：按 `configs/10.29计算指标修正.md`，`groups` 视图中 `company='ZhuChengQu'` 的 `eco_direct_income` 由“售电+暖+售高温水+售汽”四项相加重算（不含“内售热”），实现方式为：
+  - 从主城区直汇清单中排除 `eco_direct_income`；
+  - 新增一段 `UNION ALL` 对四项收入进行加总后产出 `eco_direct_income` 行。
+  - 其它公司与其它指标保持不变；`sum_basic_data` 中“边际利润/可比煤价边际利润”已包含外购热/内购热成本，无需修改。
+
+### 增补（2025-10-29 夜-2）
+- 常量模板识别：模板接口 `get_sheet_template` 现在识别 `_constant_sheet`，返回 `template_type: 'constant'`；查询接口早已支持按 `constant` 回填 period 列。配合前端新增的常量分支，可正确显示 `constant_data` 的已入库数据。
+
 ## 结构快照更新（2025-10-29）
 
 - 视图职责拆分（与 `configs/10.29提示词.md` 一致）：

@@ -342,10 +342,11 @@ codex resume 019a2e7a-1b9c-7f93-aa64-9d5b8eb0bf91
 codex resume 019a2f22-698b-7b72-85e3-6c00c0e8c7c5
 
 
+      ["主设备启停情况", "-", "value_biz_date()", "value_peer_date()","-","-","-","-","-","-","-"],
+      ["突发情况说明", "-", "value_biz_date()", "value_peer_date()","-","-","-","-","-","-","-"]
+是数字的问题，待修复
 
-
-
-
+北方热电的单耗
 
 
 

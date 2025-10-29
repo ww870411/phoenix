@@ -8,6 +8,9 @@
 - 动作：完成 Serena 项目激活与入职检查；按 AGENTS 3.9 使用 `apply_patch` 对仓库文档进行留痕。
 - 下一步：待后端最小闭环接口到位后，在 `daily_report_25_26/pages/DataEntryView.vue` 路径接入行数据渲染与提交链路联调。
 
+### 增补（2025-10-29 夜）
+- 常量页查询修复：`DataEntryView.vue` 在 `templateType==='constant'` 时增加一次 `/query` 调用（无需 `biz_date`），并使用通用回填函数 `applyStandardQueryResult` 将常量 period 列与行数据写入网格，解决“constant_data 有数据但前端不显示”的问题。
+
 ## 结构快照更新（2025-10-29）
 
 - 本次仅对后端 SQL 视图进行了职责拆分与计算指标扩展：`sum_basic_data`（仅公司明细 + 计算指标）与视图 `groups`（主城区/集团再聚合，比例/单耗类按“组内分子/常量”重算）。前端接口与页面结构不变。

@@ -1512,6 +1512,8 @@ def get_sheet_template(
     if _is_coal_inventory_sheet(sheet_key, payload):
         response_content["template_type"] = "crosstab"
         response_content["columns"] = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
+    elif _is_constant_sheet(sheet_key):
+        response_content["template_type"] = "constant"
     else:
         response_content["template_type"] = "standard"
 

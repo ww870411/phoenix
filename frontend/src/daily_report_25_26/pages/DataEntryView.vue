@@ -309,6 +309,19 @@ async function loadTemplate() {
         return
       }
       await applyStandardQueryResult(q);
+    } else if (templateType.value === 'constant') {
+      // 常量指标：无需 biz_date；按模板 columns 的 period 标签由后端映射回填
+      const __ridc = newRequestId(); latestRequestId.value = __ridc;
+      const q = await queryData(
+        projectKey,
+        sheetKey,
+        { project_key: projectKey, sheet_key: sheetKey, request_id: __ridc },
+        { config: pageConfig.value }
+      );
+      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
+        return
+      }
+      await applyStandardQueryResult(q);
     } else if (templateType.value === 'crosstab') {
       const __rid2 = newRequestId(); latestRequestId.value = __rid2;
       const q = await queryData(

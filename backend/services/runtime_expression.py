@@ -96,18 +96,21 @@ def map_columns_to_frames(columns: List[str]) -> Dict[int, str]:
 # ------------------------
 # 数据预取：指标与常量
 # ------------------------
-def _fetch_metrics_from_matview(session: Session, company: str) -> Dict[str, Dict[str, Decimal]]:
+def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict[str, Dict[str, Decimal]]:
     """
-    从物化视图按 company 维度一次性拉取所有 item 的 6 个窗口值。
+    从视图按 company 维度一次性拉取所有 item 的 6 个窗口值。
+    允许表名为白名单：sum_basic_data | groups
     返回结构：{ item: {field_name: Decimal, ...}, ... }
     """
+    table_whitelist = {"sum_basic_data", "groups"}
+    target = table if table in table_whitelist else "sum_basic_data"
     sql = text(
-        """
+        f"""
         SELECT item, item_cn, unit,
                value_biz_date, value_peer_date,
                sum_month_biz, sum_month_peer,
                sum_ytd_biz, sum_ytd_peer
-          FROM sum_basic_data
+          FROM {target}
          WHERE company = :company
         """
     )
@@ -116,12 +119,12 @@ def _fetch_metrics_from_matview(session: Session, company: str) -> Dict[str, Dic
     for r in rows:
         item = r["item"]
         out[item] = {
-            "value_biz_date": _to_decimal(r["value_biz_date"]),
-            "value_peer_date": _to_decimal(r["value_peer_date"]),
-            "sum_month_biz": _to_decimal(r["sum_month_biz"]),
-            "sum_month_peer": _to_decimal(r["sum_month_peer"]),
-            "sum_ytd_biz": _to_decimal(r["sum_ytd_biz"]),
-            "sum_ytd_peer": _to_decimal(r["sum_ytd_peer"]),
+            "value_biz_date": _to_decimal(r.get("value_biz_date")),
+            "value_peer_date": _to_decimal(r.get("value_peer_date")),
+            "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
+            "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
+            "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
+            "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
         }
     return out
 
@@ -516,7 +519,8 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
                     metrics_by_company[comp] = _fetch_metrics_dynamic_by_date(session, comp, context["biz_date"])
                 else:
-                    metrics_by_company[comp] = _fetch_metrics_from_matview(session, comp)
+                    # 尊重模板“查询数据源.主表”，支持 groups 视图
+                    metrics_by_company[comp] = _fetch_metrics_from_view(session, main_table, comp)
             except Exception:
                 metrics_by_company[comp] = {}
             consts_by_company[comp] = {}
@@ -699,6 +703,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 display_row: List[Any] = []
                 item_en = evaluator.item_cn_to_item.get(row_label) if current_item_cn else None
                 is_efficiency_row = (row_label == "全厂热效率") or (item_en == "rate_overall_efficiency")
+                # 占位符策略：仅将单字符 '-' 识别为占位符
+                def _is_placeholder(s: str) -> bool:
+                    return (s or "").strip() == "-"
 
                 for ci, cell in enumerate(r):
                     if ci <= readonly_limit:
@@ -707,12 +714,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
                     is_diff = any(k in label for k in ("日差异", "月差异", "供暖期差异", "供暖期差"))
                     v = row_vals[ci]
+                    raw_cell = str(cell) if cell is not None else ""
                     if is_diff:
                         fmt = row_traces[ci].get("formatted") if ci < len(row_traces) else None
                         display_row.append(fmt if fmt is not None else "-")
                     else:
                         if v is None:
-                            display_row.append("-" if is_efficiency_row else "")
+                            # 仅对标准占位符 '-' 进行占位显示；其余文本保持原规则
+                            if _is_placeholder(raw_cell):
+                                display_row.append("-")
+                            else:
+                                display_row.append("-" if is_efficiency_row else "")
                         else:
                             if is_efficiency_row:
                                 display_row.append(_percent(v))
