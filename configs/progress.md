@@ -1,5 +1,31 @@
 # 进度记录
 
+## 2025-10-29（示例数据与命名修正）
+
+前置说明：
+- 按 AGENTS 全局指南，已使用 Serena 激活项目并完成上手检查；后续文件读写均通过 `apply_patch` 执行（不使用 cmd/pwsh）。本次修正覆盖“示例数据生成逻辑 + 命名规范统一”，并在此留痕，稍后会将摘要补录至 Serena 记忆。
+
+本次改动：
+- 修复命名：中心英文码统一为 `*_Center`；`sheet_name` 统一为 `*_Sheet`（S 大写）。
+- 更新 `backend/scripts/generate_daily_basic_sample.py`：
+  - 由“仅本期”改为“本期+同期”，且满足关系“本期=同期×1.25（提高25%）”；
+  - 生成时同步应用 `*_Center` 与 `*_Sheet` 规范。
+- 新增 `backend/scripts/generate_constant_sample.py`：
+  - 读取 `backend_data/数据结构_常量指标表.json`；
+  - 生成 period=`24-25`（同期）与 `25-26`（本期）两期数据，满足“本期=同期×0.8（下降20%）”；
+  - 统一 `*_Center` 与 `*_Sheet` 命名；输出到 `backend/sql/sample_constant_data.(csv|sql)`。
+
+涉及文件：
+- 更新：`backend/scripts/generate_daily_basic_sample.py`
+- 新增：`backend/scripts/generate_constant_sample.py`
+- 文档：`backend/README.md`、`frontend/README.md`
+
+影响范围与回滚：
+- 若需要恢复旧命名（`*_center`/`*_sheet`）或旧同比关系，可回退对应脚本至本条之前的版本；已在 README 标注输出文件路径，便于对比与替换。
+
+下一步建议：
+- 如需我直接把 CSV/SQL 成品也落盘（体量较大），请确认后我将以 `apply_patch` 方式一次性写入 `backend/sql/` 目录，便于直接导入数据库。
+
 ## 2025-10-29
 
 前置说明：

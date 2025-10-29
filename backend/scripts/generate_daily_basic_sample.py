@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-从「最新模板」自动生成 daily_basic_data 示例数据（仅本期）。
+从「最新模板」自动生成 daily_basic_data 示例数据（本期+同期）。
 
 输出文件：
 - backend/sql/sample_daily_basic_data.csv
@@ -15,6 +15,8 @@
 - 扁平化分中心交叉表（GongRe_branches_detail_sheet）：按“中心列”展开为 company/company_cn
 - 文本型单元（单位为 '-' 或特定项目）写入到 note，value 置为 NULL
 - 插入表名修正：daily_basic_data（小写）
+- 命名修正：中心英文码统一 *_Center；sheet 名统一 *_Sheet（S 大写）
+- 数值关系：本期值 = 同期值 × 1.25（较同期提高 25%）
 """
 
 from __future__ import annotations
@@ -131,23 +133,22 @@ def slugify(text: str) -> str:
 
 def _normalize_center_code(code: str) -> str:
     """
-    规范化中心英文标识为 *_center（末尾 center 小写）：
-    - DongGang_Center -> DongGang_center
-    - DongGang_center -> DongGang_center
-    - 若不含下划线 center，则追加 _center
+    规范化中心英文标识为 *_Center（末尾 Center 大写；修复历史 *_center 大小写问题）：
+    - DongGang_Center -> DongGang_Center
+    - DongGang_center -> DongGang_Center
+    - 若不含下划线 center/Center，则追加 _Center
     """
     if not code:
         return code
     if code.endswith("_Center"):
-        return code[:-7] + "_center"
+        return code
     if code.endswith("_center"):
-        return code
-    # 其他情况：若已包含 'Center'/'center' 但无下划线，尽量统一
+        return code[:-7] + "_Center"
     if code.endswith("Center"):
-        return code[:-6] + "center"
-    if code.endswith("center"):
         return code
-    return code + "_center"
+    if code.endswith("center"):
+        return code[:-6] + "Center"
+    return code + "_Center"
 
 
 def _derive_company_code_from_sheet(sheet_key: str) -> str:
@@ -164,6 +165,17 @@ def _derive_company_code_from_sheet(sheet_key: str) -> str:
         return "company"
     prefix = sheet_key.split("_", 1)[0]
     return prefix if prefix else slugify(sheet_key)
+
+
+def _normalize_sheet_name(name: str) -> str:
+    """将 xxx_sheet 统一为 xxx_Sheet（仅尾缀大小写修正）。"""
+    if not isinstance(name, str):
+        return name
+    if name.endswith("_Sheet"):
+        return name
+    if name.endswith("_sheet"):
+        return name[:-6] + "_Sheet"
+    return name
 
 
 def _is_text_cell(item_cn: str, unit: str) -> bool:
@@ -311,17 +323,18 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
             peer_date = peer_dates[idx]
 
             # 先为所有行准备“基础值”（父项值或非分组值）
-            base_values_biz: Dict[int, Optional[Decimal]] = {}
             base_values_peer: Dict[int, Optional[Decimal]] = {}
+            base_values_biz: Dict[int, Optional[Decimal]] = {}
 
             for i, row in enumerate(row_list):
                 if _is_text_cell(row.item_cn, row.unit):
-                    base_values_biz[i] = None
                     base_values_peer[i] = None
+                    base_values_biz[i] = None
                 else:
-                    base_values_biz[i] = _gen_numeric_value(row.sequence, idx)
-                    base_values_peer[i] = (base_values_biz[i] * Decimal("0.92")).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    peer_val = _gen_numeric_value(row.sequence, idx)
+                    base_values_peer[i] = peer_val
+                    base_values_biz[i] = (peer_val * Decimal(\"1.25\")).quantize(
+                        Decimal(\"0.01\"), rounding=ROUND_HALF_UP
                     )
 
             # 对“其中”分组进行约束调整：孩子求和 = 父项
@@ -374,13 +387,14 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
 
             # 写出本期 + 同期记录
             for i, row in enumerate(row_list):
+                sheet_name_norm = _normalize_sheet_name(sheet_key)
                 # 本期
                 if base_values_biz[i] is None:
                     records.append(
                         {
                             "company": company,
                             "company_cn": company_cn,
-                            "sheet_name": sheet_key,
+                            "sheet_name": sheet_name_norm,
                             "item": row.item_key,
                             "item_cn": row.item_cn,
                             "unit": row.unit,
@@ -395,7 +409,7 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
                         {
                             "company": company,
                             "company_cn": company_cn,
-                            "sheet_name": sheet_key,
+                            "sheet_name": sheet_name_norm,
                             "item": row.item_key,
                             "item_cn": row.item_cn,
                             "unit": row.unit,
@@ -412,7 +426,7 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
                         {
                             "company": company,
                             "company_cn": company_cn,
-                            "sheet_name": sheet_key,
+                            "sheet_name": sheet_name_norm,
                             "item": row.item_key,
                             "item_cn": row.item_cn,
                             "unit": row.unit,
@@ -427,7 +441,7 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
                         {
                             "company": company,
                             "company_cn": company_cn,
-                            "sheet_name": sheet_key,
+                            "sheet_name": sheet_name_norm,
                             "item": row.item_key,
                             "item_cn": row.item_cn,
                             "unit": row.unit,
@@ -470,7 +484,7 @@ def sql_literal(text: str) -> str:
 def write_sql(records: List[Dict[str, object]]) -> None:
     """输出 SQL 插入脚本（可重复执行）。"""
     OUTPUT_SQL.parent.mkdir(parents=True, exist_ok=True)
-    header = """-- 自动生成的示例数据（仅本期 2025-10-20 ~ 2025-10-27）
+    header = """-- 自动生成的示例数据（本期+同期 2025-10-20 ~ 2025-10-27，规则：本期=同期×1.25）
 -- 导入方式（容器内）：
 --   psql -U postgres -d phoenix -f /app/sql/sample_daily_basic_data.sql
 
