@@ -37,6 +37,19 @@ TABLE_NAME = "constant_data"
 PERIOD_BIZ = "25-26"
 PERIOD_PEER = "24-25"
 
+def ascii_slugify(text: str) -> str:
+    s = []
+    for ch in text.strip():
+        o = ord(ch)
+        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:
+            s.append(ch.lower())
+        elif ch in ("-", "_", " "):
+            s.append("_")
+        else:
+            s.append("_")
+    slug = "_".join(filter(bool, "".join(s).split("_")))
+    return slug or "item"
+
 
 def sql_literal(text: str) -> str:
     return text.replace("'", "''")
@@ -150,9 +163,16 @@ def iterate_rows() -> Iterable[ConstRow]:
         for row in data_rows:
             if not row:
                 continue
-            item_cn = str(row[0]).strip()
+            raw_cn = str(row[0]).strip()
+            item_cn = raw_cn
             unit_label = str(row[unit_idx]).strip() if (unit_idx is not None and unit_idx < len(row)) else ""
-            item_key = (item_en_by_cn.get(item_cn) or item_cn).strip()
+            # 严格按项目字典：必须存在中文→英文映射，否则报错（不猜测）
+            if raw_cn not in item_en_by_cn:
+                available = ", ".join(list(item_en_by_cn.keys())[:30])
+                raise ValueError(
+                    f"常量项目字典缺少中文项: sheet={sheet_key}, label={raw_cn}; 可用中文项前30个: [{available}]"
+                )
+            item_key = item_en_by_cn[raw_cn].strip()
 
             center_en = None
             center_cn = None
@@ -167,12 +187,24 @@ def iterate_rows() -> Iterable[ConstRow]:
                 )
                 center_en = _normalize_center_code(mapped or center_cn.replace(" ", "_"))
 
+            # 分支：分中心明细常量表 → “中心”作为 company/company_cn；center/center_cn 置空
+            if is_branch_detail and center_en:
+                eff_company = center_en
+                eff_company_cn = center_cn or company_cn
+                out_center = None
+                out_center_cn = None
+            else:
+                eff_company = company_en or "company"
+                eff_company_cn = company_cn
+                out_center = None
+                out_center_cn = None
+
             seq += 1
             yield ConstRow(
-                company=company_en or "company",
-                company_cn=company_cn,
-                center=center_en,
-                center_cn=center_cn,
+                company=eff_company,
+                company_cn=eff_company_cn,
+                center=out_center,
+                center_cn=out_center_cn,
                 sheet_key=sheet_key,
                 item_key=item_key,
                 item_cn=item_cn,
@@ -291,4 +323,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

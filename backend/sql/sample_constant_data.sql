@@ -1,0 +1,922 @@
+-- 自动生成的常量示例数据（period: 24-25 同期、25-26 本期；规则：本期=同期×0.8）
+-- 导入方式（容器内）：
+--   psql -U postgres -d phoenix -f /app/sql/sample_constant_data.sql
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 22.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 17.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_inner_heat_sales', '内售热单价', '元/GJ', 31.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_inner_heat_sales', '内售热单价', '元/GJ', 24.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 40.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 32.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 49.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 39.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 58.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 46.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 67.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 53.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_natural_gas', '购天然气单价', '元/m³', 76.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_natural_gas', '购天然气单价', '元/m³', 60.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_acid', '酸单价', '元/吨', 85.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_acid', '酸单价', '元/吨', 68.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 94.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 75.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_oil', '油单价', '元/吨', 103.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_oil', '油单价', '元/吨', 82.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 112.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 89.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 121.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiHai', '北海热电厂', NULL, NULL, 'BeiHai_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 96.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 130.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 104.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_inner_heat_sales', '内售热单价', '元/GJ', 139.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_inner_heat_sales', '内售热单价', '元/GJ', 111.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 148.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 118.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 157.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 125.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 166.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 132.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 175.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 140.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_acid', '酸单价', '元/吨', 184.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_acid', '酸单价', '元/吨', 147.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 193.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 154.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_oil', '油单价', '元/吨', 202.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_oil', '油单价', '元/吨', 161.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 211.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 168.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 220.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangHai', '香海热电厂', NULL, NULL, 'XiangHai_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 176.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 229.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 183.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 238.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 190.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 247.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 197.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 256.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 204.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 265.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 212.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 274.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GongRe', '供热公司', NULL, NULL, 'GongRe_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 219.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 283.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 226.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 292.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 233.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 301.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 240.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 310.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 248.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 319.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 255.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 328.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 262.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 337.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 269.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 346.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 276.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 355.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 284.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 364.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 291.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 373.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 298.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 382.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 305.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 391.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 312.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 400.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 320.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 409.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 327.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 418.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 334.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 427.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 341.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 436.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 348.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 445.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 356.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 454.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 363.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 463.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 370.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 472.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 377.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 481.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 384.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 490.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 392.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 499.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 399.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 508.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 406.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 517.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 413.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 526.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 420.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 535.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 428.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 544.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 435.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 553.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 442.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 562.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 449.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 571.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 456.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 580.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 464.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 589.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 471.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 598.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 478.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 607.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 485.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 616.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 492.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 625.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 500.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 634.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'rate_sharing_ratio', '分摊比', '%', 507.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 643.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 514.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 652.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 521.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 661.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 528.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 670.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 536.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 679.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 543.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 688.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 550.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 697.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 557.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 706.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 564.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 715.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 572.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 724.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_inner_purchased_heat', '内购热单价', '元/GJ', 579.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 733.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 586.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 742.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 593.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 751.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 600.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 760.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 608.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 769.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 615.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 778.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 622.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 787.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 629.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 796.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 636.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 805.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 644.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 814.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 651.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 823.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('HuaLe_Center', '华乐中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 658.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 832.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DongGang_Center', '东港中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 665.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 841.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ChunHai_Center', '春海中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 672.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 850.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhongShan_Center', '中山中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 680.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 859.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiGang_Center', '北岗中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 687.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 868.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ShuangXing_Center', '双兴中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 694.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 877.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XiangLuJiao_Center', '香炉礁中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 701.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 886.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('XingGong_Center', '兴工中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 708.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 895.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('DaFang_Center', '大纺中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 716.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 904.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('GuanWang_Center', '管网中心', NULL, NULL, 'GongRe_branches_detail_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 723.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 913.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 730.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 922.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 737.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 931.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 744.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 940.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 752.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 949.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 759.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 958.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 766.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 967.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 773.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 976.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 780.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 985.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 788.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_acid', '酸单价', '元/吨', 994.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_acid', '酸单价', '元/吨', 795.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 1003.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 802.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_oil', '油单价', '元/吨', 1012.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_oil', '油单价', '元/吨', 809.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 1021.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 816.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 1030.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinZhou', '金州热电', NULL, NULL, 'JinZhou_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 824.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1039.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 831.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1048.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 838.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1057.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 845.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 1066.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_power_sales', '售电单价', '元/kWh', 852.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 1075.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 860.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 1084.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 867.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 1093.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 874.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1102.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 881.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1111.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 888.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_acid', '酸单价', '元/吨', 1120.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_acid', '酸单价', '元/吨', 896.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 1129.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_alkali', '碱单价', '元/吨', 903.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_oil', '油单价', '元/吨', 1138.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_oil', '油单价', '元/吨', 910.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 1147.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_n_ammonia_water', '氨水单价', '元/吨', 917.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_limestone', '石灰石单价', '元/吨', 1156.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_limestone', '石灰石单价', '元/吨', 924.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 1165.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('BeiFang', '北方热电', NULL, NULL, 'BeiFang_constant_Sheet', 'price_limestone_powder', '石灰石粉单价', '元/吨', 932.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1174.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 939.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1183.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 946.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1192.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 953.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 1201.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_hot_water_sales', '售高温水单价', '元/GJ', 960.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 1210.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 968.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 1219.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 975.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1228.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 982.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1237.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 989.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_magnesium_oxide', '氧化镁单价', '元/吨', 1246.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_magnesium_oxide', '氧化镁单价', '元/吨', 996.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_denitration_agent', '脱硝剂单价', '元/吨', 1255.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('JinPu', '金普热电', NULL, NULL, 'JinPu_constant_Sheet', 'price_denitration_agent', '脱硝剂单价', '元/吨', 1004.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1264.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1011.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1273.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1018.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1282.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1025.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 1291.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_raw_coal', '原煤单价', '元/吨', 1032.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 1300.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_std_coal_comparable', '可比标煤单价', '元/吨', 1040.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1309.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1047.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1318.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1054.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_outer_purchased_heat', '外购热单价', '元/GJ', 1327.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_outer_purchased_heat', '外购热单价', '元/GJ', 1061.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_magnesium_oxide', '氧化镁单价', '元/吨', 1336.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_magnesium_oxide', '氧化镁单价', '元/吨', 1068.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_denitration_agent', '脱硝剂单价', '元/吨', 1345.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('ZhuangHe', '庄河环海', NULL, NULL, 'ZhuangHe_constant_Sheet', 'price_denitration_agent', '脱硝剂单价', '元/吨', 1076.00, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1354.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'amount_whole_heating_area', '挂网面积', '万㎡', 1083.20, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1363.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'amount_heating_fee_area', '供暖收费面积', '万㎡', 1090.40, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1372.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'eco_season_heating_income', '采暖期供暖收入', '万元', 1097.60, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1381.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'price_purchased_power', '外购电单价', '元/吨', 1104.80, '25-26');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1390.00, '24-25');
+
+INSERT INTO constant_data (company, company_cn, center, center_cn, sheet_name, item, item_cn, unit, value, period)
+VALUES ('YanJiuYuan', '研究院', NULL, NULL, 'YanJiuYuan_constant_Sheet', 'price_purchased_water', '购水单价', '元/吨', 1112.00, '25-26');
+

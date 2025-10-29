@@ -10,10 +10,13 @@
 - 更新 `backend/scripts/generate_daily_basic_sample.py`：
   - 由“仅本期”改为“本期+同期”，且满足关系“本期=同期×1.25（提高25%）”；
   - 生成时同步应用 `*_Center` 与 `*_Sheet` 规范。
+  - 修复 item 键来源：严格按 backend_data/数据结构_基本指标表.json 的“项目字典”（权威）生成 item 与 item_cn；若字典缺失即抛错（不做任何猜测与回退）。
 - 新增 `backend/scripts/generate_constant_sample.py`：
   - 读取 `backend_data/数据结构_常量指标表.json`；
   - 生成 period=`24-25`（同期）与 `25-26`（本期）两期数据，满足“本期=同期×0.8（下降20%）”；
   - 统一 `*_Center` 与 `*_Sheet` 命名；输出到 `backend/sql/sample_constant_data.(csv|sql)`。
+  - 修正分中心常量表“公司/中心”字段语义：将中心作为 `company/company_cn` 输出，`center/center_cn` 置空（与 daily_basic_data 对齐）。
+  - 同步修复 item 键来源：严格按常量模板“项目字典”生成键名，若缺失则抛错（不猜测）。
 
 涉及文件：
 - 更新：`backend/scripts/generate_daily_basic_sample.py`
@@ -25,6 +28,10 @@
 
 下一步建议：
 - 如需我直接把 CSV/SQL 成品也落盘（体量较大），请确认后我将以 `apply_patch` 方式一次性写入 `backend/sql/` 目录，便于直接导入数据库。
+
+补充（2025-10-29 晚）：
+- daily 示例脚本：模板来源固定为 `backend_data/数据结构_基本指标表.json`；跳过 `Coal_inventory_Sheet`（交叉表归属 `coal_inventory_data`）；严格用同表“项目字典”反查 item，不命中直接报错，并在报错中列出前 30 个可用中文项。
+- constant 示例脚本：模板来源固定为 `backend_data/数据结构_常量指标表.json`；分中心常量表将“中心”作为 `company/company_cn`；严格用“项目字典”反查 item，不命中直接报错，并在报错中列出前 30 个可用中文项。
 
 ## 2025-10-29
 

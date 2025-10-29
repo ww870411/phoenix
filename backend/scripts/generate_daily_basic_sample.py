@@ -33,11 +33,12 @@ from collections import defaultdict
 # 路径与常量
 ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / "backend"
-TEMPLATE_FILE = ROOT_DIR / "configs" / "数据结构_基本指标表.json"
+# 唯一权威模板来源：backend_data/数据结构_基本指标表.json
+TEMPLATE_FILE = ROOT_DIR / "backend_data" / "数据结构_基本指标表.json"
 # 单位字典（权威来源）：英文码→中文名（含公司与中心）
 UNITS_DICT_FILE = ROOT_DIR / "configs" / "单位字典.json"
-# 项目字典（权威来源，用于 item 英文键）：按 sheet 维度定义
-BACKEND_DATA_TEMPLATE_FILE = ROOT_DIR / "backend_data" / "数据结构_基本指标表.json"
+# 项目字典（权威来源，用于 item 英文键）：按 sheet 维度定义（与 TEMPLATE_FILE 同源）
+BACKEND_DATA_TEMPLATE_FILE = TEMPLATE_FILE
 OUTPUT_CSV = BACKEND_DIR / "sql" / "sample_daily_basic_data.csv"
 OUTPUT_SQL = BACKEND_DIR / "sql" / "sample_daily_basic_data.sql"
 TABLE_NAME = "daily_basic_data"
@@ -99,22 +100,28 @@ def load_units_dict() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str], D
     return company_en_to_cn, center_en_to_cn, company_cn_to_en, center_cn_to_en
 
 
-def load_item_dict_index() -> Dict[str, Dict[str, str]]:
+def load_item_dict_index() -> Tuple[Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]]:
     """
     从 backend_data/数据结构_基本指标表.json 读取每个表的“项目字典”，
-    返回映射：sheet_key_lower -> { 项目中文 -> 项目英文key }。
+    返回两个映射：
+      - cn2en_index：sheet_key_lower -> { 项目中文 -> 项目英文key }
+      - en2cn_index：sheet_key_lower -> { 项目英文key -> 项目中文 }
     """
-    index: Dict[str, Dict[str, str]] = {}
+    cn2en_index: Dict[str, Dict[str, str]] = {}
+    en2cn_index: Dict[str, Dict[str, str]] = {}
     if not BACKEND_DATA_TEMPLATE_FILE.exists():
-        return index
+        return cn2en_index, en2cn_index
     data = json.loads(BACKEND_DATA_TEMPLATE_FILE.read_text(encoding="utf-8"))
     for sheet_key, sheet in data.items():
         item_dict = sheet.get("项目字典") or {}
         if isinstance(item_dict, dict):
-            # 反转为 中文 -> 英文
-            cn_to_en = {str(v).strip(): str(k).strip() for k, v in item_dict.items()}
-            index[str(sheet_key).lower()] = cn_to_en
-    return index
+            # en->cn 原字典，反转出 中文->英文
+            en_to_cn = {str(k).strip(): str(v).strip() for k, v in item_dict.items()}
+            cn_to_en = {v: k for k, v in en_to_cn.items()}
+            key = str(sheet_key).lower()
+            cn2en_index[key] = cn_to_en
+            en2cn_index[key] = en_to_cn
+    return cn2en_index, en2cn_index
 
 
 def slugify(text: str) -> str:
@@ -185,21 +192,24 @@ def _is_text_cell(item_cn: str, unit: str) -> bool:
     return item_cn in {"主设备启停情况", "突发情况说明"}
 
 
-def _resolve_item_key(sheet_key: str, item_label: str, item_dict_raw: dict, item_index: Dict[str, Dict[str, str]]) -> Tuple[str, str]:
+def _resolve_item_key(sheet_key: str, item_label: str, cn2en_index: Dict[str, Dict[str, str]], en2cn_index: Dict[str, Dict[str, str]]) -> Tuple[str, str]:
     """
-    根据权威 backend_data 的“项目字典”优先生成 item_key；其后使用当前模板自带“项目字典”，再退化 slug。
-    返回：item_key, item_cn
+    严格按照 backend_data 的“项目字典”生成 item_key 与 item_cn（权威，不做猜测）。
+    返回：item_key(英文小写), item_cn(权威中文)
     """
-    item_cn = str(item_label).strip() or "未命名项目"
+    raw_cn = str(item_label).strip() or "未命名项目"
     sheet_lower = str(sheet_key).lower()
-    # 1) 后端数据（权威）
-    if item_index.get(sheet_lower) and item_index[sheet_lower].get(item_cn):
-        base_key = item_index[sheet_lower][item_cn]
-    else:
-        # 2) 本地模板（备用）
-        item_dict = {str(v).strip(): str(k).strip() for k, v in (item_dict_raw or {}).items()}
-        base_key = item_dict.get(item_cn) or slugify(item_cn)
-    return base_key.lower(), str(item_label).strip() or "未命名项目"
+    dict_cn_map = cn2en_index.get(sheet_lower) or {}
+    dict_en_map = en2cn_index.get(sheet_lower) or {}
+    # 严格匹配：只允许“完全相等”的中文在项目字典中找到英文键
+    if raw_cn not in dict_cn_map:
+        available = ", ".join(list(dict_cn_map.keys())[:30])
+        raise ValueError(
+            f"项目字典缺少中文项: sheet={sheet_key}, label={raw_cn}; 可用中文项前30个: [{available}]"
+        )
+    base_key = dict_cn_map[raw_cn]
+    official_cn = dict_en_map.get(base_key, raw_cn)
+    return base_key.lower(), official_cn or raw_cn
 
 
 def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
@@ -210,7 +220,7 @@ def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
     """
     sequence = 0
     company_en_to_cn, center_en_to_cn, company_cn_to_en, center_cn_to_en = load_units_dict()
-    item_index = load_item_dict_index()
+    cn2en_index, en2cn_index = load_item_dict_index()
 
     for sheet_key, sheet in templates.items():
         # 统一字段提取
@@ -218,6 +228,10 @@ def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
         company_en = sheet.get("单位标识") or sheet_key
         columns = list(sheet.get("列名") or [])
         data_rows = list(sheet.get("数据") or [])
+
+        # 跳过“煤炭库存”交叉表（该表属于 coal_inventory_data，不在 daily_basic_data 范畴）
+        if str(sheet_key) == "Coal_inventory_Sheet" or str(sheet.get("类型") or "").lower() == "crosstab":
+            continue
 
         # 取计量单位列索引
         try:
@@ -235,7 +249,7 @@ def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
                     continue
                 item_label = str(row[0]).strip() or "未命名项目"
                 unit_label = str(row[1]).strip() if unit_idx is not None and unit_idx < len(row) else ""
-                item_key, item_cn = _resolve_item_key(sheet_key, item_label, sheet.get("项目字典") or {}, item_index)
+                item_key, item_cn = _resolve_item_key(sheet_key, item_label, cn2en_index, en2cn_index)
                 is_child = item_label.startswith("其中")
                 if not is_child:
                     current_group += 1
@@ -268,7 +282,7 @@ def iterate_template_rows(templates: Dict[str, dict]) -> Iterable[TemplateRow]:
                 continue
             item_label = str(row[0]).strip() or "未命名项目"
             unit_label = str(row[unit_idx]).strip() if unit_idx is not None and unit_idx < len(row) else ""
-            item_key, item_cn = _resolve_item_key(sheet_key, item_label, sheet.get("项目字典") or {}, item_index)
+            item_key, item_cn = _resolve_item_key(sheet_key, item_label, cn2en_index, en2cn_index)
             is_child = item_label.startswith("其中")
             if not is_child:
                 current_group += 1
@@ -333,8 +347,8 @@ def build_records(rows: Iterable[TemplateRow]) -> List[Dict[str, object]]:
                 else:
                     peer_val = _gen_numeric_value(row.sequence, idx)
                     base_values_peer[i] = peer_val
-                    base_values_biz[i] = (peer_val * Decimal(\"1.25\")).quantize(
-                        Decimal(\"0.01\"), rounding=ROUND_HALF_UP
+                    base_values_biz[i] = (peer_val * Decimal("1.25")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
                     )
 
             # 对“其中”分组进行约束调整：孩子求和 = 父项
