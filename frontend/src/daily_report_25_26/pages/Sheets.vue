@@ -124,13 +124,12 @@ async function loadSheets() {
 }
 
 function openSheet(sheet) {
-  router.push({
-    path: `/projects/${encodeURIComponent(projectKey.value)}/pages/${encodeURIComponent(pageKey.value)}/sheets/${encodeURIComponent(sheet.sheet_key)}`,
-    query: {
-      config: pageConfig.value,
-      pageName: pageDisplayName.value,
-    },
-  })
+  const isApproval = typeof pageDisplayName.value === 'string' && pageDisplayName.value.includes('审批')
+  const base = `/projects/${encodeURIComponent(projectKey.value)}/pages/${encodeURIComponent(pageKey.value)}`
+  const path = isApproval
+    ? `${base}/approval/${encodeURIComponent(sheet.sheet_key)}`
+    : `${base}/sheets/${encodeURIComponent(sheet.sheet_key)}`
+  router.push({ path, query: { config: pageConfig.value, pageName: pageDisplayName.value } })
 }
 
 onMounted(loadSheets)

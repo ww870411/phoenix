@@ -108,3 +108,18 @@ export async function queryData(projectKey, sheetKey, payload, options = {}) {
 export function resetProjectCache() {
   cachedProjects = null
 }
+
+// 运行时表达式求值（审批渲染）
+export async function evalSpec(projectKey, body) {
+  const url = normalized('/projects/daily_report_25_26/runtime/spec/eval')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `runtime eval 失败: ${response.status}`)
+  }
+  return response.json()
+}

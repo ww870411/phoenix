@@ -1154,3 +1154,15 @@
 - 回滚思路：
   - 禁用多 company：将 `discriminator_index` 设为 -1；或恢复到按单一 primary_key.company 的原逻辑。
   - 移除带参数取值：恢复帧函数为无参版本即可。
+
+### 2025-10-28 审批页面集成 runtime 求值（前端）（AI辅助）
+- 目标：在“数据审批页面”点击表卡后，自动调用后端 `/runtime/spec/eval` 对审批字典进行运行时计算，直接返回 columns+rows 给前端以 RevoGrid 只读渲染。
+- 变更：
+  1) 新增页面 `frontend/src/daily_report_25_26/pages/ApprovalView.vue`：
+     - 读取路由 `projectKey/pageKey/sheetKey?config=...`，调用 `evalSpec`（默认 trace=false）。
+     - 支持 `biz_date` 切换（regular 或自定义日期），自动刷新；grid 全只读。
+  2) 路由 `frontend/src/router/index.js`：新增 `/projects/:projectKey/pages/:pageKey/approval/:sheetKey`。
+  3) 列表页 `frontend/src/daily_report_25_26/pages/Sheets.vue`：根据 `pageName` 是否包含“审批”，决定跳转到 `/approval/:sheetKey` 或 `/sheets/:sheetKey`。
+  4) API `frontend/src/daily_report_25_26/services/api.js`：新增 `evalSpec(projectKey, body)`，封装 `/runtime/spec/eval` 调用。
+- 后端配合：`runtime_eval` 已优先返回 `render_spec` 生成的列头（实际日期/月/季节编码），无需额外改动。
+- 验证：在后端 `backend_data/项目列表.json` 配置“数据审批页面”后，前端页面列表可见卡片并点击进入只读审批渲染；切换 `biz_date` 验证列头和数据回填是否正确更新。
