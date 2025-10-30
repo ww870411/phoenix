@@ -34,6 +34,10 @@ const routes = [
     component: () => import('../daily_report_25_26/pages/DisplayView.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/:pageKey/display/:sheetKey',
+    component: () => import('../daily_report_25_26/pages/DisplayRuntimeView.vue'),
+  },
+  {
     path: '/debug/runtime-eval',
     component: () => import('../daily_report_25_26/pages/RuntimeEvalDebug.vue'),
   },

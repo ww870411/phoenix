@@ -124,11 +124,18 @@ async function loadSheets() {
 }
 
 function openSheet(sheet) {
-  const isApproval = typeof pageDisplayName.value === 'string' && pageDisplayName.value.includes('审批')
+  const name = typeof pageDisplayName.value === 'string' ? pageDisplayName.value : ''
+  const isApproval = name.includes('审批')
+  const isDisplay = name.includes('展示') || (typeof pageConfig.value === 'string' && pageConfig.value.includes('数据结构_全口径展示表.json'))
   const base = `/projects/${encodeURIComponent(projectKey.value)}/pages/${encodeURIComponent(pageKey.value)}`
-  const path = isApproval
-    ? `${base}/approval/${encodeURIComponent(sheet.sheet_key)}`
-    : `${base}/sheets/${encodeURIComponent(sheet.sheet_key)}`
+  let path
+  if (isApproval) {
+    path = `${base}/approval/${encodeURIComponent(sheet.sheet_key)}`
+  } else if (isDisplay) {
+    path = `${base}/display/${encodeURIComponent(sheet.sheet_key)}`
+  } else {
+    path = `${base}/sheets/${encodeURIComponent(sheet.sheet_key)}`
+  }
   router.push({ path, query: { config: pageConfig.value, pageName: pageDisplayName.value } })
 }
 

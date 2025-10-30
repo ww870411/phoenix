@@ -6,7 +6,7 @@
       "data_show":
       {
         "页面名称":"数据展示页面",
-        "数据源":"/app/data/数据结构_展示用表.json"
+        "数据源":"/app/data/数据结构_全口径展示表.json"
       },
       "data_approval":
       {

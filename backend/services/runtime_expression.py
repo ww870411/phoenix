@@ -118,7 +118,7 @@ def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict
     out: Dict[str, Dict[str, Decimal]] = {}
     for r in rows:
         item = r["item"]
-        out[item] = {
+        bucket = {
             "value_biz_date": _to_decimal(r.get("value_biz_date")),
             "value_peer_date": _to_decimal(r.get("value_peer_date")),
             "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
@@ -126,6 +126,12 @@ def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict
             "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
             "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
         }
+        out[item] = bucket
+        # 兼容：允许用中文项目名直接取值（当模板或字典未提供映射时）
+        if r.get("item_cn"):
+            cn_key = str(r.get("item_cn")).strip()
+            if cn_key and cn_key not in out:
+                out[cn_key] = bucket
     return out
 
 
@@ -298,9 +304,12 @@ class Evaluator:
         if isinstance(cached, Decimal):
             return cached
         item_en = self.item_cn_to_item.get(item_cn)
-        if not item_en:
-            return Decimal(0)
-        fields = self.metrics.get(item_en) or {}
+        # 优先英文键，若缺失则尝试中文键（视图缓存已注入中文键）
+        fields = {}
+        if item_en:
+            fields = self.metrics.get(item_en) or {}
+        if not fields:
+            fields = self.metrics.get(item_cn) or {}
         field_name = FRAME_FIELDS[frame]
         return fields.get(field_name, Decimal(0))
 
@@ -349,10 +358,50 @@ class Evaluator:
                 continue
             for name, repl in self.item_pairs:
                 seg = seg.replace(name, repl)
+            # 在函数参数中为“未知项目名”自动加 I("...") 包裹，保证后续能被识别
+            def _wrap_unknown_args(m: re.Match) -> str:
+                func = m.group(1)
+                inner = (m.group(2) or '').strip()
+                if not inner:
+                    return m.group(0)
+                # 拆分 + 连接的多个 token，仅对未被 I("...") 包裹的中文/文本加包装
+                tokens = [t.strip() for t in re.split(r'\+', inner)]
+                wrapped = []
+                for t in tokens:
+                    if not t:
+                        continue
+                    if t.startswith('I("') and t.endswith('")'):
+                        wrapped.append(t)
+                    elif t.startswith('"') and t.endswith('"'):
+                        # 已是字符串字面量
+                        wrapped.append(f'I({t})')
+                    else:
+                        wrapped.append(f'I("{t}")')
+                if not wrapped:
+                    return m.group(0)
+                return f"{func}(" + ' + '.join(wrapped) + ")"
+            seg = re.sub(
+                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*([^)]*?)\s*\)',
+                _wrap_unknown_args,
+                seg
+            )
             # 将 value_* / sum_* 带 I(\"中文名\") 的参数还原为字符串字面量参数
             seg = re.sub(
                 r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*I\("([^"]+)"\)\s*\)',
                 lambda m: f'{m.group(1)}("{m.group(2)}")',
+                seg
+            )
+            # 将 value_*/sum_* 接受多个 I(\"...\") 累加的场景拆分为多个函数相加
+            def _split_multi_args(m: re.Match) -> str:
+                func = m.group(1)
+                inner = m.group(2)
+                names = re.findall(r'I\("([^"]+)"\)', inner)
+                if not names:
+                    return m.group(0)
+                return ' + '.join([f'{func}("{n}")' for n in names])
+            seg = re.sub(
+                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*(I\("[^"]+"\)\s*(?:\+\s*I\("[^"]+"\)\s*)+)\)',
+                _split_multi_args,
                 seg
             )
             # 3) 将数字字面量包装为 Decimal 字面量（仅在引号外）
@@ -514,13 +563,28 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     with next(get_session()) as session:  # type: ignore
         metrics_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
         consts_by_company: Dict[str, Dict[str, Dict[str, Dict[str, Decimal]]]] = {}
+        # 解析主表路由（支持两种写法：顶层“主表路由”，或 qsrc['主表'] 为对象）
+        route_cfg = spec.get("主表路由") if isinstance(spec, dict) else None
+        if (not isinstance(route_cfg, dict)) and isinstance(qsrc, dict):
+            _mb = qsrc.get("主表")
+            if isinstance(_mb, dict) and ("groups" in _mb or "default" in _mb):
+                route_cfg = _mb
+        _groups_set: Set[str] = set()
+        _default_table = str(main_table)
+        if isinstance(route_cfg, dict):
+            try:
+                _groups_set = set(route_cfg.get("groups") or [])
+                _default_table = route_cfg.get("default") or _default_table
+            except Exception:
+                pass
         for comp in companies_needed:
             try:
                 if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
                     metrics_by_company[comp] = _fetch_metrics_dynamic_by_date(session, comp, context["biz_date"])
                 else:
-                    # 尊重模板“查询数据源.主表”，支持 groups 视图
-                    metrics_by_company[comp] = _fetch_metrics_from_view(session, main_table, comp)
+                    # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
+                    _per_table = "groups" if comp in _groups_set else _default_table
+                    metrics_by_company[comp] = _fetch_metrics_from_view(session, _per_table, comp)
             except Exception:
                 metrics_by_company[comp] = {}
             consts_by_company[comp] = {}
@@ -542,6 +606,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         pass
     readonly_limit = max(0, data_start_idx - 1)
 
+    # 识别“项目”列索引（若存在），以便当前行默认项目从该列取值
+    item_col_index: int = -1
+    try:
+        for idx, cname in enumerate(columns or []):
+            label = _normalize_col_label(str(cname) if cname is not None else "")
+            if label in ("项目", "项目名称", "项目名"):
+                item_col_index = idx
+                break
+    except Exception:
+        item_col_index = -1
+
     # 允许多轮求值以解决行间/前后顺序依赖（默认 2 轮，可通过 context.passes 覆盖）
     max_passes = 2
     if context and isinstance(context.get("passes"), int) and context["passes"] >= 1:
@@ -556,6 +631,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         if group == "ytd":
             return "sum_ytd_biz", "sum_ytd_peer"
         raise ValueError("unknown group")
+
+    # 精度（accuracy）：除差异列外，按模板设置的小数位进行格式化
+    try:
+        acc_raw = spec.get("accuracy") if isinstance(spec, dict) else None
+        accuracy = int(acc_raw) if acc_raw is not None else 4
+        if accuracy < 0:
+            accuracy = 0
+        if accuracy > 8:
+            accuracy = 8
+    except Exception:
+        accuracy = 4
 
     # 返回对象（在最后一轮填充）
     out = dict(spec)  # 浅拷贝基础字段
@@ -577,7 +663,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     all_traces.append([])
                 # 非最后一轮无需记录显示
                 continue
-            row_label = r[0]  # 项目中文名
+            row_label = r[0]  # 传统模板：项目中文名；本模板可能为“经营单位”
             unit_label = r[1] if len(r) > 1 else ""
             # 决定本行使用的 company：优先行内 discriminator，其次 primary_key.company
             row_company = str(company)
@@ -591,7 +677,18 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             row_cache = shared_row_cache_by_company.setdefault(row_company, {})
             evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=row_cache)
             # 当前行项目是否可映射为基础指标
-            current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
+            # 优先使用“项目”列（若存在），否则回退到首列
+            current_item_cn = None
+            try:
+                if item_col_index >= 0 and len(r) > item_col_index:
+                    item_cell = r[item_col_index]
+                    item_cn_candidate = str(item_cell).strip() if item_cell is not None else ""
+                    if item_cn_candidate and item_cn_candidate in evaluator.item_cn_to_item:
+                        current_item_cn = item_cn_candidate
+                if current_item_cn is None and row_label in evaluator.item_cn_to_item:
+                    current_item_cn = row_label
+            except Exception:
+                current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
 
             # 先逐列计算普通值，临时保存以便 diff_rate 使用
             row_vals: List[Optional[Decimal]] = []
@@ -729,7 +826,12 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                             if is_efficiency_row:
                                 display_row.append(_percent(v))
                             else:
-                                display_row.append(float(v.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)))
+                                # 按 accuracy 控制小数位
+                                if accuracy == 0:
+                                    q = Decimal("1")
+                                else:
+                                    q = Decimal("1").scaleb(-accuracy)  # 等价于 10**(-accuracy)
+                                display_row.append(float(v.quantize(q, rounding=ROUND_HALF_UP)))
                 out_rows.append(display_row)
                 all_traces.append(row_traces)
 

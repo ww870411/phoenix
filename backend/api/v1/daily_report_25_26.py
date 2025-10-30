@@ -2607,6 +2607,40 @@ async def runtime_eval(request: Request):
             "缩写": {"c": "constant_data"},
         }
 
+    # 路由主表：支持按公司动态选择 sum_basic_data / groups
+    # 支持两种写法：
+    # A) 顶层："主表路由": {"groups": ["Group","ZhuChengQu"], "default": "sum_basic_data"}
+    # B) 查询数据源内："查询数据源": {"主表": {"groups": [...], "default": "sum_basic_data"}, ...}
+    try:
+        qds_in = spec.get("查询数据源") if isinstance(spec, dict) else None
+        route_cfg = spec.get("主表路由") if isinstance(spec, dict) else None
+        if not isinstance(route_cfg, dict) and isinstance(qds_in, dict):
+            mb = qds_in.get("主表")
+            if isinstance(mb, dict) and ("groups" in mb or "default" in mb):
+                route_cfg = mb
+        if isinstance(route_cfg, dict):
+            groups_list = route_cfg.get("groups") or []
+            default_table = route_cfg.get("default") or "sum_basic_data"
+            # 确定 company：primary_key 覆盖模板 unit_id
+            company_value = (primary_key.get("company") if isinstance(primary_key, dict) else None) or names.get("unit_id")
+            company_value = str(company_value or '').strip()
+            # 对于复合 unit_id（如 A/B/C），由行内 discriminator 覆盖；此处仅用于选默认主表
+            # 选择默认表：若 company 正好在 groups 列表，则用 groups；否则 default
+            target_table = "groups" if company_value in set(groups_list) else default_table
+            qds = spec.get("查询数据源")
+            if isinstance(qds, dict):
+                # 仅当“主表”不是路由对象时才覆盖，避免破坏按公司路由
+                is_route_obj = isinstance(qds.get("主表"), dict)
+                if not is_route_obj:
+                    qds = dict(qds)
+                    qds["主表"] = target_table
+                    # 回写覆盖
+                    spec = dict(spec)
+                    spec["查询数据源"] = qds
+    except Exception:
+        # 路由失败不应影响主流程
+        pass
+
     # 若 primary_key 未提供 company，则由模板 unit_id 回填
     if not primary_key.get("company"):
         unit_id = names.get("unit_id")
