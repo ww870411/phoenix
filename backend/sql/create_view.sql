@@ -1259,3 +1259,71 @@ FROM (
   FROM base_grp
   GROUP BY biz_date, peer_date
 ) a, denom_grp d;
+
+-- ========= 煤炭库存聚合视图 =========
+-- sum_coal_inventory_data：根据最新日期的煤炭库存数据，按公司与存储方式汇总，并追加公司级与集团汇总行
+DROP VIEW IF EXISTS sum_coal_inventory_data;
+
+CREATE VIEW sum_coal_inventory_data AS
+WITH latest_date AS (
+  SELECT MAX(date) AS max_date
+  FROM coal_inventory_data
+),
+filtered AS (
+  SELECT
+    c.company,
+    c.company_cn,
+    c.storage_type,
+    c.storage_type_cn,
+    c.unit,
+    COALESCE(c.value, 0) AS value,
+    c.date
+  FROM coal_inventory_data c
+  CROSS JOIN latest_date l
+  WHERE l.max_date IS NOT NULL
+    AND c.date = l.max_date
+),
+base AS (
+  SELECT
+    f.company,
+    MAX(f.company_cn) AS company_cn,
+    f.storage_type,
+    MAX(f.storage_type_cn) AS storage_type_cn,
+    MAX(f.unit) AS unit,
+    MAX(f.date) AS date,
+    SUM(f.value) AS value
+  FROM filtered f
+  GROUP BY f.company, f.storage_type
+),
+company_rollup AS (
+  SELECT
+    b.company,
+    MAX(b.company_cn) AS company_cn,
+    'all_sites'::text AS storage_type,
+    '全部地点'::text AS storage_type_cn,
+    MAX(b.unit) AS unit,
+    MAX(b.date) AS date,
+    SUM(b.value) AS value
+  FROM base b
+  GROUP BY b.company
+),
+grand_rollup AS (
+  SELECT
+    'sum_company'::text AS company,
+    '集团合计'::text AS company_cn,
+    'all_sites'::text AS storage_type,
+    '全部地点'::text AS storage_type_cn,
+    MAX(b.unit) AS unit,
+    MAX(b.date) AS date,
+    SUM(b.value) AS value
+  FROM base b
+  GROUP BY 1, 2, 3, 4
+)
+SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
+FROM base
+UNION ALL
+SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
+FROM company_rollup
+UNION ALL
+SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
+FROM grand_rollup;

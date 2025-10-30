@@ -7,7 +7,7 @@
     "查询数据源":{
         "主键":{"company":"Group/ZhuChengQu/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan","column_index":0},
         "主表":{"groups":["Group","ZhuChengQu"],"default":"sum_basic_data"},
-        "缩写":{"c":"constant_data"}
+        "缩写":{"c":"constant_data","cid":"coal_inventory_data"}
     },
     "类型":"regular",
     "列名": ["经营单位", "项目", "计量单位", "(本期日)", "(同期日)", "日差异","(本期月)","(同期月)","月差异","(本供暖期)","(同供暖期)","供暖期差异"],

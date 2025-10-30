@@ -1,0 +1,4 @@
+## 2025-10-31 煤炭库存汇总视图
+- 前置：按规程先调用 `serena__activate_project`/`check_onboarding_performed`，但 Serena 对 `backend/sql/create_view.sql` 仅能给出匹配行号，无法直接读取上下文；根据 AGENTS 3.9 降级矩阵，改用 Desktop Commander 的 `read_file`/`apply_patch` 查看并修改 SQL，同时在 `configs/progress.md` 留痕。
+- 变更：在 `backend/sql/create_view.sql` 增加 `sum_coal_inventory_data` 视图，CTE `latest_date` 锁定最大 `date` 后分别构建 `base`（company+storage_type 汇总）、`company_rollup`（追加 `storage_type='all_sites'`）与 `grand_rollup`（`company='sum_company'`），最终 `UNION ALL` 输出。
+- 结果：视图仅返回最新日期的库存汇总，并保留单位/中文名；空表时返回空集。已同步更新 `backend/README.md`、`frontend/README.md`、`configs/progress.md` 说明。
