@@ -1,0 +1,1 @@
+2025-11-01：runtime_expression 支持在 value_*/sum_* 函数中传入公司参数。render_spec 会预解析模板中出现的 company/组合（如 BeiHai+XiangHai），预取对应 company 的 sum_basic_data 指标；Evaluator 根据参数优先视为公司名，自动切换 company 后再读取当前行项目，若未识别才退回 item/item_cn。constant 别名写法（c.GongRe.常量名）保持兼容。

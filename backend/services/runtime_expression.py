@@ -59,6 +59,7 @@ class EvalContext:
     const_alias_map: Dict[str, str]  # 如 {"c": "constant_data"}
     item_cn_to_item: Dict[str, str]  # 由 "项目字典" 反查得到：CN → en
     unit_cn_to_en: Optional[Dict[str, str]] = None
+    unit_en_to_cn: Optional[Dict[str, str]] = None
     # 可选覆盖：{"biz_date": "regular" | "YYYY-MM-DD"}
     context: Optional[Dict[str, Any]] = None
 
@@ -344,35 +345,112 @@ class Evaluator:
 
     def __init__(self, ctx: EvalContext, metrics_cache: Dict[str, Dict[str, Decimal]], const_cache: Dict[str, Dict[str, Decimal]],
                  column_frame_map: Dict[int, str], row_cache: Optional[Dict[str, Dict[str, Decimal]]] = None,
-                 all_const_cache: Optional[Dict[str, Dict[str, Dict[str, Decimal]]]] = None):
+                 all_const_cache: Optional[Dict[str, Dict[str, Dict[str, Decimal]]]] = None,
+                 all_metrics_cache: Optional[Dict[str, Dict[str, Dict[str, Decimal]]]] = None,
+                 company_code: Optional[str] = None):
         self.ctx = ctx
         self.metrics = metrics_cache
         self.consts = const_cache
-        self.consts_all = all_const_cache
+        self.consts_all = all_const_cache if isinstance(all_const_cache, dict) else {}
+        self.metrics_all = all_metrics_cache if isinstance(all_metrics_cache, dict) else {}
+        self.company_code = company_code or str(ctx.primary_key.get("company", ""))
         self.column_frames = column_frame_map
         self.row_cache: Dict[str, Dict[str, Decimal]] = row_cache if isinstance(row_cache, dict) else {}
 
         self.item_cn_to_item = ctx.item_cn_to_item  # CN → en
+        self.unit_cn_to_en = ctx.unit_cn_to_en or {}
+        self.unit_en_to_cn = ctx.unit_en_to_cn or {}
+        self.company_codes: Set[str] = set()
+        if self.unit_en_to_cn:
+            self.company_codes.update(k for k in self.unit_en_to_cn.keys() if isinstance(k, str))
+        if self.unit_cn_to_en:
+            self.company_codes.update(v for v in self.unit_cn_to_en.values() if isinstance(v, str))
+        if self.company_code:
+            self.company_codes.add(self.company_code)
+        if self.metrics_all:
+            self.company_codes.update(k for k in self.metrics_all.keys() if isinstance(k, str))
 
         # 构建替换器
         const_aliases = list(ctx.const_alias_map.keys()) if ctx.const_alias_map else ["c"]
+        self.const_aliases = set(const_aliases)
         self.alias_patterns, self.item_pairs = _build_replacers(list(self.item_cn_to_item.keys()), const_aliases)
 
     # ---- 值提取 ----
-    def _value_of_item(self, item_cn: str, frame: str) -> Decimal:
-        # 先看是否已有行内（或前序行）计算缓存
-        cached = (self.row_cache.get(item_cn) or {}).get(frame)
-        if isinstance(cached, Decimal):
-            return cached
+    def _value_of_item(self, item_cn: str, frame: str, company_hint: Optional[str] = None) -> Decimal:
+        target_company = company_hint or self.company_code
+        use_cache = (not company_hint) or target_company == self.company_code
+        if use_cache:
+            cached = (self.row_cache.get(item_cn) or {}).get(frame)
+            if isinstance(cached, Decimal):
+                return cached
+
+        metrics_bucket: Dict[str, Dict[str, Decimal]] = {}
+        if target_company == self.company_code or not target_company:
+            metrics_bucket = self.metrics or {}
+        if (not metrics_bucket) and target_company and self.metrics_all:
+            metrics_bucket = self.metrics_all.get(target_company, {}) or {}
+
         item_en = self.item_cn_to_item.get(item_cn)
-        # 优先英文键，若缺失则尝试中文键（视图缓存已注入中文键）
-        fields = {}
-        if item_en:
-            fields = self.metrics.get(item_en) or {}
-        if not fields:
-            fields = self.metrics.get(item_cn) or {}
+        fields: Dict[str, Decimal] = {}
+        if item_en and isinstance(metrics_bucket.get(item_en), dict):
+            fields = metrics_bucket.get(item_en) or {}
+        if not fields and isinstance(metrics_bucket.get(item_cn), dict):
+            fields = metrics_bucket.get(item_cn) or {}
+
         field_name = FRAME_FIELDS[frame]
         return fields.get(field_name, Decimal(0))
+
+    def _normalize_company_code(self, raw: Any) -> Optional[str]:
+        if raw is None:
+            return None
+        try:
+            token = str(raw).strip()
+        except Exception:
+            return None
+        if not token:
+            return None
+        if token in self.company_codes:
+            return token
+        if token in self.unit_cn_to_en:
+            mapped = self.unit_cn_to_en[token]
+            if mapped:
+                self.company_codes.add(mapped)
+                return mapped
+        if self.metrics_all and token in self.metrics_all:
+            self.company_codes.add(token)
+            return token
+        return None
+
+    def _resolve_company_item(
+        self,
+        name_input: Optional[str],
+        fallback_item_cn: Optional[str],
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        if name_input is None:
+            return self.company_code, fallback_item_cn, None
+        token = str(name_input) if not isinstance(name_input, str) else name_input
+        token = token.strip()
+        if not token:
+            return self.company_code, fallback_item_cn, None
+
+        alias_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\.(.+)$", token)
+        if alias_match:
+            alias_candidate, remainder = alias_match.groups()
+            if alias_candidate in self.const_aliases:
+                return self.company_code, remainder.strip(), alias_candidate
+
+        if "." in token:
+            prefix, suffix = token.split(".", 1)
+            company_code = self._normalize_company_code(prefix)
+            if company_code:
+                suffix = suffix.strip()
+                return company_code, (suffix if suffix else fallback_item_cn), None
+
+        company_code = self._normalize_company_code(token)
+        if company_code:
+            return company_code, fallback_item_cn, None
+
+        return self.company_code, token, None
 
     def _value_of_const(self, name_cn: str, frame: str, alias: Optional[str] = None) -> Decimal:
         """
@@ -546,10 +624,14 @@ class Evaluator:
             return v
 
         def _cur(frame_key: str, name_cn: Optional[str] = None) -> Decimal:
-            target_cn = (name_cn.strip() if isinstance(name_cn, str) else None) or current_item_cn
+            company_hint, item_hint, const_alias = self._resolve_company_item(name_cn, current_item_cn)
+            if const_alias:
+                target_name = item_hint or ""
+                return self._value_of_const(target_name, frame_key, alias=const_alias)
+            target_cn = item_hint or current_item_cn
             if not target_cn:
                 return Decimal(0)
-            return self._value_of_item(target_cn, frame_key)
+            return self._value_of_item(target_cn, frame_key, company_hint)
 
         def _call(frame_key: str, name: Optional[str]):
             if trace_sink is not None:
@@ -656,6 +738,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         const_alias_map=alias_map,
         item_cn_to_item=item_cn_to_item,
         unit_cn_to_en=unit_cn_to_en if unit_cn_to_en else None,
+        unit_en_to_cn=unit_en_to_cn if unit_en_to_cn else None,
         context=context,
     )
 
@@ -666,6 +749,32 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     header_levels: List[List[str]] = []
     column_companies: Dict[int, Optional[str]] = {}
     column_groups_meta: List[Dict[str, Any]] = []
+
+    known_company_codes: Set[str] = set()
+    if company:
+        known_company_codes.add(str(company))
+    if unit_en_to_cn:
+        known_company_codes.update(k for k in unit_en_to_cn.keys() if isinstance(k, str))
+    if unit_cn_to_en:
+        known_company_codes.update(v for v in unit_cn_to_en.values() if isinstance(v, str))
+
+    def _normalize_company(raw: Any) -> Optional[str]:
+        if raw is None:
+            return None
+        try:
+            token = str(raw).strip()
+        except Exception:
+            return None
+        if not token:
+            return None
+        if unit_cn_to_en and token in unit_cn_to_en:
+            mapped = unit_cn_to_en[token]
+            if mapped:
+                known_company_codes.add(mapped)
+                return mapped
+        if token in known_company_codes:
+            return token
+        return None
 
     if is_crosstab:
         header_level1 = spec.get("列名1") or []
@@ -721,18 +830,28 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         columns = raw_columns
 
     companies_needed: Set[str] = set()
-    companies_needed.add(str(company))
+    primary_company = _normalize_company(company) or (str(company) if company else "")
+    if primary_company:
+        known_company_codes.add(primary_company)
+        companies_needed.add(primary_company)
     unit_identifiers = spec.get("单位标识")
     if isinstance(unit_identifiers, str):
         for token in re.split(r"[\\/|,;]", unit_identifiers):
             token = token.strip()
             if token:
-                companies_needed.add(token)
+                normalized = _normalize_company(token)
+                if normalized:
+                    companies_needed.add(normalized)
     if column_companies:
         for comp_hint in column_companies.values():
             if comp_hint:
-                companies_needed.add(comp_hint)
+                normalized = _normalize_company(comp_hint)
+                if normalized:
+                    companies_needed.add(normalized)
     const_company_pattern = re.compile(r"c\.([^.]+)\.")
+    frame_company_pattern = re.compile(
+        r"\b(?:value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\s*\(\s*((?:[^)(]+|\([^)(]*\))*)\s*\)"
+    )
     for r in rows:
         if not isinstance(r, list):
             continue
@@ -742,18 +861,26 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     cell = str(cell)
                 except Exception:
                     continue
+            for match in frame_company_pattern.finditer(cell):
+                inner = (match.group(1) or "").strip()
+                if not inner:
+                    continue
+                for token in re.split(r"[+\uff0b]", inner):
+                    candidate = token.strip().strip('"').strip("'")
+                    if not candidate:
+                        continue
+                    if candidate.startswith("c."):
+                        continue
+                    company_part = candidate.split(".", 1)[0]
+                    normalized = _normalize_company(company_part)
+                    if normalized:
+                        companies_needed.add(normalized)
             for comp_hint in const_company_pattern.findall(cell):
                 comp_hint = comp_hint.strip()
                 if comp_hint:
-                    companies_needed.add(comp_hint)
-    def _normalize_company(raw: Any) -> Optional[str]:
-        if raw is None:
-            return None
-        s = str(raw).strip()
-        if not s:
-            return None
-        # 中文优先反查英文；否则按原样使用
-        return unit_cn_to_en.get(s, s)
+                    normalized = _normalize_company(comp_hint)
+                    if normalized:
+                        companies_needed.add(normalized)
     if isinstance(discriminator_index, int) and discriminator_index >= 0:
         for r in rows:
             if isinstance(r, list) and len(r) > discriminator_index:
@@ -922,7 +1049,16 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     metrics = metrics_by_company.get(target, {})
                     consts_alias = consts_by_company.get(target, {})
                     row_cache_local = row_cache_map.setdefault(target, {})
-                    evaluator_cache[target] = Evaluator(ctx, metrics, consts_alias, col_frames, row_cache=row_cache_local, all_const_cache=consts_by_company)
+                    evaluator_cache[target] = Evaluator(
+                        ctx,
+                        metrics,
+                        consts_alias,
+                        col_frames,
+                        row_cache=row_cache_local,
+                        all_const_cache=consts_by_company,
+                        all_metrics_cache=metrics_by_company,
+                        company_code=target,
+                    )
                 return target, evaluator_cache[target]
 
             # 当前行项目是否可映射为基础指标（仅依赖项目字典即可）
