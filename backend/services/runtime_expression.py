@@ -1191,6 +1191,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                                 diff_idx = ci
                             elif group == "ytd" and ("供暖期差异" in label or "供暖期差" in label):
                                 diff_idx = ci
+                    if diff_idx is not None:
+                        raw_expr = str(r[diff_idx] or "").strip()
+                        if not raw_expr or "diff_rate" not in raw_expr:
+                            diff_idx = None
                     return biz_idx, peer_idx, diff_idx
 
                 for grp in ("day", "month", "ytd"):
@@ -1263,8 +1267,15 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                     v = row_vals[ci]
                     raw_cell = str(cell) if cell is not None else ""
                     if is_diff:
-                        fmt = row_traces[ci].get("formatted") if ci < len(row_traces) else None
-                        display_row.append(fmt if fmt is not None else "-")
+                        raw_trim = raw_cell.strip()
+                        if raw_trim:
+                            fmt = row_traces[ci].get("formatted") if ci < len(row_traces) and isinstance(row_traces[ci], dict) else None
+                            display_row.append(fmt if fmt is not None else "-")
+                        else:
+                            if v is None:
+                                display_row.append("")
+                            else:
+                                display_row.append(v)
                     else:
                         if v is None:
                             # 仅对标准占位符 '-' 进行占位显示；其余文本保持原规则
