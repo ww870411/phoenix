@@ -1,0 +1,1 @@
+2025-11-01：调研 Group_sum_show_Sheet 与 Group_analysis_brief_report_Sheet 的精度控制逻辑。runtime_expression.render_spec 只解析 accuracy.default 并将其作为整表统一小数位，差异列输出百分比，未实现按项目定制精度。处理过程中因 Serena 对 JSON 片段缺少上下文，降级使用 read_file 查看 backend_data/数据结构_全口径展示表.json 与 backend/services/runtime_expression.py，对代码无改动。

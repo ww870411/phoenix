@@ -58,7 +58,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec } from '../services/api'
+import { evalSpec, getTemplate } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -85,11 +85,13 @@ const rows = ref([])
 const gridColumns = ref([])
 const gridSource = ref([])
 const accuracy = ref(2)
+const accuracyOverrides = ref({})
 const numberFormat = ref({ grouping: false, locale: 'zh-CN' })
 const traceEnabled = ref(false)
 const traceData = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
+const itemColumnIndex = ref(-1)
 
 const bizDateMode = ref('regular')
 const bizDate = ref('')
@@ -109,6 +111,62 @@ function ensureValidRoute() {
   return true
 }
 
+const normalizeLabel = (value) => {
+  if (typeof value === 'string') return value.trim()
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+function detectItemColumnIndex(cols) {
+  if (!Array.isArray(cols)) return -1
+  for (let i = 0; i < cols.length; i += 1) {
+    const label = normalizeLabel(cols[i])
+    if (!label) continue
+    if (label.includes('项目') || label.includes('指标') || label.includes('内容')) {
+      return i
+    }
+  }
+  if (cols.length > 1) return 1
+  return cols.length ? 0 : -1
+}
+
+const clampAccuracy = (val) => {
+  const n = Number(val)
+  if (!Number.isInteger(n)) return null
+  if (n < 0) return 0
+  if (n > 8) return 8
+  return n
+}
+
+async function loadAccuracyOverrides() {
+  accuracyOverrides.value = {}
+  try {
+    const tpl = await getTemplate(projectKey.value, sheetKey.value, { config: pageConfig.value })
+    const spec = tpl?.accuracy
+    const overrides = {}
+    if (typeof spec === 'number') {
+      const c = clampAccuracy(spec)
+      if (c !== null) accuracy.value = c
+    } else if (spec && typeof spec === 'object') {
+      if ('default' in spec) {
+        const base = clampAccuracy(spec.default)
+        if (base !== null) accuracy.value = base
+      }
+      for (const [key, rawVal] of Object.entries(spec)) {
+        if (key === 'default') continue
+        const c = clampAccuracy(rawVal)
+        if (c !== null) {
+          overrides[normalizeLabel(key)] = c
+        }
+      }
+    }
+    accuracyOverrides.value = overrides
+  } catch (err) {
+    console.warn('加载 accuracy 配置失败（保持默认精度）', err)
+    accuracyOverrides.value = {}
+  }
+}
+
 function buildReadOnlyColumns(cols) {
   const defs = (cols || []).map((name, index) => {
     const base = {
@@ -125,28 +183,50 @@ function buildReadOnlyColumns(cols) {
 
 function buildSource(cols, rs) {
   const accFromNF = (nf) => (nf && Number.isInteger(nf.default) ? nf.default : null)
-  const acc = accFromNF(numberFormat.value) ?? (Number.isInteger(accuracy.value) ? accuracy.value : 2)
+  const baseAcc = accFromNF(numberFormat.value) ?? (Number.isInteger(accuracy.value) ? accuracy.value : 2)
   const useGrouping = !!(numberFormat.value && numberFormat.value.grouping)
   const locale = (numberFormat.value && numberFormat.value.locale) || 'zh-CN'
-  let nf
-  try { nf = new Intl.NumberFormat(locale, { useGrouping: useGrouping, minimumFractionDigits: acc, maximumFractionDigits: acc }) } catch { nf = null }
-  const formatVal = (v) => {
+  const overrides = accuracyOverrides.value || {}
+  const nfCache = new Map()
+  const getFormatter = (digits) => {
+    const key = Number.isInteger(digits) ? digits : baseAcc
+    if (!nfCache.has(key)) {
+      let fmt = null
+      try {
+        fmt = new Intl.NumberFormat(locale, {
+          useGrouping,
+          minimumFractionDigits: key,
+          maximumFractionDigits: key,
+        })
+      } catch {
+        fmt = null
+      }
+      nfCache.set(key, fmt)
+    }
+    return nfCache.get(key)
+  }
+  const formatVal = (v, digits) => {
     if (v === null || v === undefined) return ''
     const s = String(v)
     if (s.includes('%')) return s // 差异列百分比
     if (s.trim() === '' || s === '-') return s
     const n = Number(s)
     if (!Number.isFinite(n)) return s
-    if (nf) {
-      try { return nf.format(n) } catch { /* fallthrough */ }
+    const fmt = getFormatter(digits)
+    if (fmt) {
+      try { return fmt.format(n) } catch { /* fallthrough */ }
     }
-    try { return n.toFixed(acc) } catch { return s }
+    try { return n.toFixed(digits) } catch { return s }
   }
+  const labelIndex = itemColumnIndex.value >= 0 ? itemColumnIndex.value : 0
   const src = (rs || []).map(row => {
     const rec = {}
+    const labelRaw = Array.isArray(row) ? row[labelIndex] : ''
+    const label = normalizeLabel(labelRaw)
+    const rowAcc = Number.isInteger(overrides[label]) ? overrides[label] : baseAcc
     for (let i = 0; i < (cols?.length || 0); i++) {
       const v = Array.isArray(row) ? row[i] : ''
-      rec[`c${i}`] = formatVal(v)
+      rec[`c${i}`] = formatVal(v, rowAcc)
     }
     return rec
   })
@@ -157,6 +237,8 @@ async function runEval() {
   if (!ensureValidRoute()) return
   loading.value = true
   errorMessage.value = ''
+  accuracyOverrides.value = {}
+  itemColumnIndex.value = -1
   try {
     await ensureProjectsLoaded()
     const body = {
@@ -177,6 +259,24 @@ async function runEval() {
     if (Number.isInteger(res.accuracy)) accuracy.value = res.accuracy
     if (res.number_format && typeof res.number_format === 'object') numberFormat.value = res.number_format
     traceData.value = res.debug && res.debug._trace ? res.debug._trace : null
+
+    let overridesApplied = false
+    if (res.accuracy_overrides && typeof res.accuracy_overrides === 'object') {
+      const overrides = {}
+      for (const [key, rawVal] of Object.entries(res.accuracy_overrides)) {
+        const normKey = normalizeLabel(key)
+        const accVal = clampAccuracy(rawVal)
+        if (normKey && accVal !== null) {
+          overrides[normKey] = accVal
+        }
+      }
+      accuracyOverrides.value = overrides
+      overridesApplied = Object.keys(overrides).length > 0
+    }
+    if (!overridesApplied) {
+      await loadAccuracyOverrides()
+    }
+    itemColumnIndex.value = detectItemColumnIndex(columns.value)
     buildReadOnlyColumns(columns.value)
     buildSource(columns.value, rows.value)
   } catch (err) {

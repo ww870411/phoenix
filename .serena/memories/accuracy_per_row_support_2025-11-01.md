@@ -1,0 +1,1 @@
+2025-11-01：实现分项精度支持。runtime_expression.render_spec 现在解析 accuracy 字典生成 accuracy_map，按行标签应用不同小数位并随结果返回；/runtime/spec/eval API 透传 accuracy_overrides。前端审批/展示页优先使用响应中的 accuracy_overrides，模板读取降级兜底。

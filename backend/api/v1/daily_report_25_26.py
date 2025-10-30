@@ -2686,6 +2686,27 @@ async def runtime_eval(request: Request):
     if acc is None:
         acc = 2
 
+    accuracy_map = {}
+    try:
+        raw_map = result.get("accuracy_map") if isinstance(result, dict) else None
+        if isinstance(raw_map, dict):
+            for key, val in raw_map.items():
+                if key is None:
+                    continue
+                parsed = _resolve_acc(val)
+                if parsed is None:
+                    try:
+                        parsed = int(val)
+                    except Exception:
+                        continue
+                if parsed < 0:
+                    parsed = 0
+                if parsed > 8:
+                    parsed = 8
+                accuracy_map[str(key)] = parsed
+    except Exception:
+        accuracy_map = {}
+
     content = {
         "ok": True,
         "sheet_key": sheet_key or names.get("sheet_name") or "",
@@ -2698,6 +2719,8 @@ async def runtime_eval(request: Request):
         # 透传前端格式化用的 number_format（如 grouping/locale/default/percent）
         "number_format": (nf_spec if isinstance(nf_spec, dict) else None),
     }
+    if accuracy_map:
+        content["accuracy_overrides"] = accuracy_map
     column_headers = result.get("column_headers")
     if isinstance(column_headers, list) and column_headers:
         content["column_headers"] = column_headers

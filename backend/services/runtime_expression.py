@@ -836,25 +836,53 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             return "sum_ytd_biz", "sum_ytd_peer"
         raise ValueError("unknown group")
 
-    # 精度（accuracy）：除差异列外，按模板设置的小数位进行格式化
+    def _normalize_accuracy_key(val: Any) -> str:
+        try:
+            return str(val).strip()
+        except Exception:
+            return ""
+
+    def _clamp_accuracy(val: Any) -> Optional[int]:
+        try:
+            n = int(val)
+        except Exception:
+            return None
+        if n < 0:
+            return 0
+        if n > 8:
+            return 8
+        return n
+
+    # 精度（accuracy）：除差异列外，按模板设置的小数位进行格式化；支持默认值与分项覆盖
+    accuracy_default: int = 2
+    accuracy_overrides: Dict[str, int] = {}
     try:
         acc_raw = spec.get("accuracy") if isinstance(spec, dict) else None
-        # 支持两种写法：accuracy: 2 或 accuracy: { default: 2 }
         if isinstance(acc_raw, dict):
-            acc_val = acc_raw.get("default")
+            default_val = _clamp_accuracy(acc_raw.get("default"))
+            if default_val is not None:
+                accuracy_default = default_val
+            for key, raw_val in acc_raw.items():
+                if key == "default":
+                    continue
+                clamp_val = _clamp_accuracy(raw_val)
+                if clamp_val is not None:
+                    norm_key = _normalize_accuracy_key(key)
+                    if norm_key:
+                        accuracy_overrides[norm_key] = clamp_val
         else:
-            acc_val = acc_raw
-        accuracy = int(acc_val) if acc_val is not None else 2
-        if accuracy < 0:
-            accuracy = 0
-        if accuracy > 8:
-            accuracy = 8
+            clamp_val = _clamp_accuracy(acc_raw)
+            if clamp_val is not None:
+                accuracy_default = clamp_val
     except Exception:
-        accuracy = 2
+        accuracy_default = 2
+        accuracy_overrides = {}
 
     # 返回对象（在最后一轮填充）
     out = dict(spec)  # 浅拷贝基础字段
-    out["accuracy"] = accuracy
+    out["accuracy"] = accuracy_default
+    if accuracy_overrides:
+        out["accuracy_map"] = dict(accuracy_overrides)
     # 透传 number_format，便于前端做分组/本地化格式化
     if isinstance(spec, dict) and isinstance(spec.get("number_format"), dict):
         out["number_format"] = dict(spec.get("number_format"))
@@ -1081,6 +1109,11 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 display_row: List[Any] = []
                 item_en = evaluator.item_cn_to_item.get(row_label) if current_item_cn else None
                 is_efficiency_row = (row_label == "全厂热效率") or (item_en == "rate_overall_efficiency")
+                # 行级精度：优先使用 accuracy_map 中的覆盖
+                row_accuracy_key = _normalize_accuracy_key(row_label)
+                row_accuracy = accuracy_overrides.get(row_accuracy_key, accuracy_default)
+                if row_accuracy is None or not isinstance(row_accuracy, int):
+                    row_accuracy = accuracy_default
                 # 占位符策略：仅将单字符 '-' 识别为占位符
                 def _is_placeholder(s: str) -> bool:
                     return (s or "").strip() == "-"
@@ -1108,10 +1141,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                                 display_row.append(_percent(v))
                             else:
                                 # 按 accuracy 控制小数位
-                                if accuracy == 0:
+                                if row_accuracy == 0:
                                     q = Decimal("1")
                                 else:
-                                    q = Decimal("1").scaleb(-accuracy)  # 等价于 10**(-accuracy)
+                                    q = Decimal("1").scaleb(-row_accuracy)  # 等价于 10**(-accuracy)
                                 display_row.append(float(v.quantize(q, rounding=ROUND_HALF_UP)))
                 out_rows.append(display_row)
                 all_traces.append(row_traces)
