@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS daily_basic_data (
 CREATE INDEX IF NOT EXISTS idx_daily_basic_date_company
     ON Daily_basic_data (date, company,sheet_name,item,item_cn);
 
+-- 为幂等与并发写入安全增加唯一约束：同一 (company, sheet_name, item, date) 仅保留一条记录
+-- 注意：如库中已存在重复数据，请先按 operation_time 保留最新一条并清理旧数据，再执行本索引创建
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_basic_unique
+    ON daily_basic_data (company, sheet_name, item, date);
+
 
 CREATE TABLE IF NOT EXISTS constant_data (
     id              BIGSERIAL PRIMARY KEY,

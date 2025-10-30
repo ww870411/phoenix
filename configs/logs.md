@@ -344,9 +344,37 @@ codex resume 019a2f22-698b-7b72-85e3-6c00c0e8c7c5
 
       ["主设备启停情况", "-", "value_biz_date()", "value_peer_date()","-","-","-","-","-","-","-"],
       ["突发情况说明", "-", "value_biz_date()", "value_peer_date()","-","-","-","-","-","-","-"]
-是数字的问题，待修复
+是数字的问题，待修复？
 
-北方热电的单耗
+北方热电的单耗？
+
+
+
+【数据库表缺失唯一约束】
+数据修复建议（先清理后加索引）                                                                                                                                                                                                                                                                                                                                                        
+  - 在数据库中先清理重复（保留最新 operation_time）：                                                                                                                                          
+      - 推荐 SQL：
+          - WITH ranked AS (                                                                                                                                                                   
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY company, sheet_name, item, date ORDER BY operation_time DESC, id DESC) AS rn                                                            
+            FROM daily_basic_data                                                                                                                                                              
+            )                                                                                                                                                                                  
+            DELETE FROM daily_basic_data d USING ranked r                                                                                                                                      
+            WHERE d.id = r.id AND r.rn > 1;                                                                                                                                                    
+  - 然后执行唯一索引创建（如果尚未存在）：                                                                                                                                                     
+      - CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_basic_unique ON daily_basic_data (company, sheet_name, item, date);     
+
+
+codex resume 019a31e6-34e9-7972-8820-0fc695a52f82
+
+
+docker compose up --build时间过长的问题
+
+
+
+
+
+
+
 
 
 

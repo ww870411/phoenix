@@ -1,0 +1,25 @@
+{
+    "单位字典": {
+      "Group":"集团全口径",
+      "ZhuChengQu":"主城区",
+      "BeiHai":"北海热电厂",
+      "XiangHai":"香海热电厂",
+      "GongRe":"供热公司",
+      "JinZhou":"金州热电",
+      "BeiFang":"北方热电",
+      "JinPu":"金普热电",
+      "ZhuangHe":"庄河环海",
+      "YanJiuYuan":"研究院",
+      "ShouDian":"售电公司",
+      "HuaLe_Center": "华乐中心",
+      "DongGang_Center": "东港中心",
+      "ChunHai_Center": "春海中心",
+      "ZhongShan_Center": "中山中心",
+      "BeiGang_Center": "北岗中心",
+      "ShuangXing_Center": "双兴中心",
+      "XiangLuJiao_Center": "香炉礁中心",
+      "XingGong_Center": "兴工中心",
+      "DaFang_Center": "大纺中心",
+      "GuanWang_Center": "管网中心"
+    }
+}

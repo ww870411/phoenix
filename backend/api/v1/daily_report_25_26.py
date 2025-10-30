@@ -754,8 +754,16 @@ def _persist_daily_basic(
     normalized: Dict[str, Any],
     flattened: List[Dict[str, Any]],
 ) -> int:
+    """
+    将标准/每日数据写入 daily_basic_data，幂等键为 (company, sheet_name, item, date)。
+
+    旧实现为“先删后插”，在高并发下可能出现删除在前、两次插入都成功，导致同键重复的情况。
+    现改为 PostgreSQL ON CONFLICT UPSERT，保证并发安全与幂等。
+    """
     if not flattened:
         return 0
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     default_operation_time = _parse_operation_time(
         normalized.get("submit_time") or payload.get("submit_time")
@@ -764,8 +772,7 @@ def _persist_daily_basic(
 
     session = SessionLocal()
     try:
-        models: List[DailyBasicData] = []
-        delete_keys = set()
+        upserts: List[Dict[str, Any]] = []
 
         for record in flattened:
             company = str(record.get("company") or payload.get("unit_id") or "").strip()
@@ -800,38 +807,42 @@ def _persist_daily_basic(
             )
             status_value = str(record.get("status") or default_status).strip() or default_status
 
-            model = DailyBasicData(
-                company=company,
-                company_cn=company_cn,
-                sheet_name=sheet_name_key,
-                item=item_key,
-                item_cn=str(record.get("item_cn") or "").strip() or None,
-                value=value_decimal,
-                unit=str(record.get("unit") or "").strip() or None,
-                note=str(record.get("note") or "").strip() or None,
-                date=row_date,
-                status=status_value,
-                operation_time=operation_time,
-            )
-            models.append(model)
-            delete_keys.add((company, sheet_name_key, item_key, row_date))
-
-        if not models:
-            return 0
-
-        for company, sheet_name_key, item_key, row_date in delete_keys:
-            session.execute(
-                delete(DailyBasicData).where(
-                    DailyBasicData.company == company,
-                    DailyBasicData.sheet_name == sheet_name_key,
-                    DailyBasicData.item == item_key,
-                    DailyBasicData.date == row_date,
+            upserts.append(
+                dict(
+                    company=company,
+                    company_cn=company_cn,
+                    sheet_name=sheet_name_key,
+                    item=item_key,
+                    item_cn=str(record.get("item_cn") or "").strip() or None,
+                    value=value_decimal,
+                    unit=str(record.get("unit") or "").strip() or None,
+                    note=str(record.get("note") or "").strip() or None,
+                    date=row_date,
+                    status=status_value,
+                    operation_time=operation_time,
                 )
             )
 
-        session.bulk_save_objects(models)
+        if not upserts:
+            return 0
+
+        stmt = pg_insert(DailyBasicData.__table__).values(upserts)
+        # 冲突时覆盖可变字段，并以最新提交的 operation_time 为准
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["company", "sheet_name", "item", "date"],
+            set_={
+                "company_cn": stmt.excluded.company_cn,
+                "item_cn": stmt.excluded.item_cn,
+                "value": stmt.excluded.value,
+                "unit": stmt.excluded.unit,
+                "note": stmt.excluded.note,
+                "status": stmt.excluded.status,
+                "operation_time": stmt.excluded.operation_time,
+            },
+        )
+        session.execute(stmt)
         session.commit()
-        return len(models)
+        return len(upserts)
     except Exception:
         session.rollback()
         raise
