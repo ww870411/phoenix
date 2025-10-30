@@ -184,3 +184,8 @@ docker compose up -d --build
 ### 2025-10-30 数据展示页后台修复提示
 - 影响说明：后端运行时表达式 `_preprocess` 已修复嵌套 `I(...)` 参数解析，`value_*` 不再返回空值；数据展示页（含“省市平台净投诉量”）将直接收到数值，无需前端改动。
 - 验证建议：若单元格仍为空，可在调试页开启 `trace=true`，核对 `safe_expr` 是否为 `value_*(\"指标\")`，并结合 `configs/10.30trace.md` 对比排查。
+
+### 2025-10-30 展示表二（交叉表）支持
+- 新增 `column_headers`/`column_groups` 元数据透传，RevoGrid 通过 `column-grouping` 渲染两行表头。
+- 首两列继续显示“项目/计量单位”，其余列按“公司 × (本期日/同期日/日差异)” 分组，支持多公司比较。
+- Trace 模式下可对比 `_trace` 中 `func_calls`、`used_consts`，快速定位某公司缺数据的原因。

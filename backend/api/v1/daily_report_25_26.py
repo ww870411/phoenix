@@ -171,7 +171,7 @@ EAST_8_TZ = timezone(timedelta(hours=8))
 BASIC_DATA_FILE = BASIC_TEMPLATE_PATH
 UNIT_KEYS = ("unit_id", "单位标识", "单位中文名", "单位名", "unit_name")
 SHEET_NAME_KEYS = ("表名", "表中文名", "表类别", "sheet_name")
-COLUMN_KEYS = ("列名", "columns", "表头")
+COLUMN_KEYS = ("列名", "columns", "表头", "列名1", "列名2")
 ROW_KEYS = ("数据", "rows", "records", "lines")
 ITEM_DICT_KEYS = ("item_dict", "项目字典")
 COMPANY_DICT_KEYS = ("company_dict", "单位字典", "unit_dict")
@@ -2698,6 +2698,12 @@ async def runtime_eval(request: Request):
         # 透传前端格式化用的 number_format（如 grouping/locale/default/percent）
         "number_format": (nf_spec if isinstance(nf_spec, dict) else None),
     }
+    column_headers = result.get("column_headers")
+    if isinstance(column_headers, list) and column_headers:
+        content["column_headers"] = column_headers
+    column_groups = result.get("column_groups")
+    if isinstance(column_groups, list) and column_groups:
+        content["column_groups"] = column_groups
     if trace and "_trace" in result:
         content["debug"] = {"_trace": result["_trace"]}
     return JSONResponse(status_code=200, content=content)

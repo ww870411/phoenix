@@ -34,6 +34,7 @@
           :row-size="30"
           :resize="true"
           :range="true"
+          :column-grouping="columnGrouping"
           :columns="gridColumns"
           :source="gridSource"
           style="height: 70vh; width: 100%;"
@@ -81,9 +82,12 @@ const sheetName = ref('')
 const sheetDisplayName = computed(() => sheetName.value || sheetKey.value)
 const columns = ref([])
 const rows = ref([])
+const columnHeaders = ref([])
+const columnGroups = ref([])
 
 const gridColumns = ref([])
 const gridSource = ref([])
+const columnGrouping = ref(false)
 const accuracy = ref(2)
 const numberFormat = ref({ grouping: false, locale: 'zh-CN' })
 const traceEnabled = ref(false)
@@ -110,14 +114,61 @@ function ensureValidRoute() {
 }
 
 function buildReadOnlyColumns(cols) {
-  const defs = (cols || []).map((name, index) => ({
+  const colList = Array.isArray(cols) ? cols : []
+  const leafDefs = colList.map((name, index) => ({
     prop: `c${index}`,
     name: String(name ?? ''),
     autoSize: true,
     minSize: index === 0 ? 160 : 120,
     readonly: true,
   }))
-  gridColumns.value = defs
+
+  const headers = columnHeaders.value
+  const hasMulti = Array.isArray(headers) && headers.length >= 2 && headers[0]?.length === colList.length && headers[1]?.length === colList.length
+
+  if (hasMulti) {
+    const top = headers[0]
+    const second = headers[1]
+    const grouped = []
+    for (let i = 0; i < leafDefs.length; i += 1) {
+      const base = leafDefs[i]
+      const topName = top[i] ? String(top[i]) : ''
+      const secondName = second[i] ? String(second[i]) : ''
+      if (secondName) {
+        base.name = secondName
+      } else if (topName) {
+        base.name = topName
+      }
+      if (i < 2 || !topName || topName === '' || topName === base.name) {
+        grouped.push(base)
+        continue
+      }
+      const children = []
+      let span = 0
+      while (i + span < leafDefs.length) {
+        const childTop = top[i + span] ? String(top[i + span]) : ''
+        if (childTop !== topName) break
+        const child = leafDefs[i + span]
+        const childSecond = second[i + span] ? String(second[i + span]) : ''
+        if (childSecond) {
+          child.name = childSecond
+        }
+        children.push(child)
+        span += 1
+      }
+      if (children.length) {
+        grouped.push({ name: topName, children })
+        i += span - 1
+      } else {
+        grouped.push(base)
+      }
+    }
+    gridColumns.value = grouped
+    columnGrouping.value = true
+  } else {
+    gridColumns.value = leafDefs
+    columnGrouping.value = false
+  }
 }
 
 function buildSource(cols, rs) {
@@ -170,6 +221,8 @@ async function runEval() {
     sheetName.value = res.sheet_name || sheetKey.value
     columns.value = Array.isArray(res.columns) ? res.columns : []
     rows.value = Array.isArray(res.rows) ? res.rows : []
+    columnHeaders.value = Array.isArray(res.column_headers) ? res.column_headers : []
+    columnGroups.value = Array.isArray(res.column_groups) ? res.column_groups : []
     if (Number.isInteger(res.accuracy)) accuracy.value = res.accuracy
     if (res.number_format && typeof res.number_format === 'object') numberFormat.value = res.number_format
     traceData.value = res.debug && res.debug._trace ? res.debug._trace : null
@@ -198,4 +251,5 @@ const formattedTrace = computed(() => {
 .placeholder { color:#888; padding: 20px 0; text-align:center; }
 .error { color: #c00; margin-top: 10px; }
 .trace-pre { max-height: 360px; overflow: auto; background: #0b0b0b; color: #d6d6d6; padding: 12px; border-radius: 6px; }
+:deep(revo-grid .rg-header-cell) { white-space: pre-line; line-height: 1.3; }
 </style>

@@ -210,13 +210,13 @@
     "单位标识": "Group/ZhuChengQu/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan",
     "单位名": "",
     "表名": "2.分析简报",
-    "biz_date":"crosstab",
+    "biz_date":"regular",
     "查询数据源":{
         "主键":{"company":"Group/ZhuChengQu/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan","row_index":0},
         "主表":{"groups":["Group","ZhuChengQu"],"default":"sum_basic_data"},
         "缩写":{"c":"constant_data"}
     },
-    "类型":"regular",
+    "类型":"crosstab",
     "列名1": ["项目", "计量单位", "集团全口径", "集团全口径", "集团全口径","主城区","主城区","主城区","金州热电","金州热电","金州热电","北方热电","北方热电","北方热电","金普热电","金普热电","金普热电","庄河环海","庄河环海","庄河环海","研究院","研究院","研究院"],
     "列名2": ["","","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异","(本期日)", "(同期日)", "日差异"],
     "数据": [
@@ -244,7 +244,7 @@
       ["其中：2.市平台净投诉量", "件", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
       ["万平方米省市净投诉量", "件/万㎡", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
       ["库存煤量（含港口、在途）","吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
-      ["供热标煤单耗（燃煤锅炉房）","吨/万㎡", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
+      ["供热标煤单耗（燃煤锅炉房）","吨/万㎡", "-", "-", "date_diff_rate()", "-", "-", "date_diff_rate()", "-", "-", "date_diff_rate()", "-", "-", "date_diff_rate()", "value_biz_date(供热标煤单耗)", "value_peer_date(供热标煤单耗)", "date_diff_rate()", "value_biz_date(供热标煤单耗)", "value_peer_date(供热标煤单耗)", "date_diff_rate()", "-", "-", "date_diff_rate()"],
       ["供暖热单耗","GJ/万㎡", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
       ["供暖电单耗", "kWh/万㎡", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],
       ["供暖水单耗", "吨/万㎡", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()", "value_biz_date()", "value_peer_date()", "date_diff_rate()"],

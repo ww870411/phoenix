@@ -602,8 +602,66 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     )
 
     # --- 2. 预取缓存（支持多 company） ---
-    columns: List[str] = spec.get("列名") or []
+    raw_columns: List[str] = spec.get("列名") or []
     rows: List[List[Any]] = spec.get("数据") or []
+    is_crosstab = spec.get("类型") == "crosstab"
+    header_levels: List[List[str]] = []
+    column_companies: Dict[int, Optional[str]] = {}
+    column_groups_meta: List[Dict[str, Any]] = []
+
+    if is_crosstab:
+        header_level1 = spec.get("列名1") or []
+        header_level2 = spec.get("列名2") or []
+        max_len = max(len(header_level1), len(header_level2))
+
+        def _ensure_len(src, length):
+            if not isinstance(src, list):
+                return [""] * length
+            result = []
+            for idx in range(length):
+                val = src[idx] if idx < len(src) else ""
+                result.append("" if val is None else str(val))
+            return result
+
+        header_level1 = _ensure_len(header_level1, max_len)
+        header_level2 = _ensure_len(header_level2, max_len)
+        header_levels = [header_level1, header_level2]
+        columns: List[str] = []
+        for idx in range(max_len):
+            top = header_level1[idx] or ""
+            bottom = header_level2[idx] or ""
+            top = str(top)
+            bottom = str(bottom)
+            if bottom:
+                columns.append(f"{top}\n{bottom}" if top else bottom)
+            else:
+                columns.append(top)
+            if idx >= 2 and top:
+                normalized_top = top.strip()
+                column_companies[idx] = unit_cn_to_en.get(normalized_top, normalized_top)
+            else:
+                column_companies[idx] = None
+
+        if max_len:
+            idx = 0
+            while idx < max_len:
+                top_clean = str(header_level1[idx] or "").strip()
+                if idx < 2 or not top_clean:
+                    title = top_clean or str(header_level2[idx] or "") or str(columns[idx] or "")
+                    column_groups_meta.append({"start": idx, "span": 1, "title": title})
+                    idx += 1
+                    continue
+                span = 0
+                while idx + span < max_len:
+                    cur = str(header_level1[idx + span] or "").strip()
+                    if cur != top_clean:
+                        break
+                    span += 1
+                column_groups_meta.append({"start": idx, "span": span or 1, "title": top_clean})
+                idx += span or 1
+    else:
+        columns = raw_columns
+
     companies_needed: Set[str] = set()
     companies_needed.add(str(company))
     unit_identifiers = spec.get("单位标识")
@@ -612,6 +670,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             token = token.strip()
             if token:
                 companies_needed.add(token)
+    if column_companies:
+        for comp_hint in column_companies.values():
+            if comp_hint:
+                companies_needed.add(comp_hint)
     const_company_pattern = re.compile(r"c\.([^.]+)\.")
     for r in rows:
         if not isinstance(r, list):
@@ -623,6 +685,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 except Exception:
                     continue
             for comp_hint in const_company_pattern.findall(cell):
+                comp_hint = comp_hint.strip()
                 if comp_hint:
                     companies_needed.add(comp_hint)
     def _normalize_company(raw: Any) -> Optional[str]:
@@ -754,34 +817,52 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 continue
             row_label = r[0]  # 传统模板：项目中文名；本模板可能为“经营单位”
             unit_label = r[1] if len(r) > 1 else ""
-            # 决定本行使用的 company：优先行内 discriminator，其次 primary_key.company
-            row_company = str(company)
+            # 默认 company：优先行内 discriminator，其次 primary_key.company
+            row_company_default = str(company)
             if isinstance(discriminator_index, int) and discriminator_index >= 0 and len(r) > discriminator_index:
                 rc = _normalize_company(r[discriminator_index])
                 if rc:
-                    row_company = rc
-            # 为该 company 构造（或复用） evaluator
-            metrics = metrics_by_company.get(row_company, {})
-            consts_by_alias = consts_by_company.get(row_company, {})
-            row_cache = shared_row_cache_by_company.setdefault(row_company, {})
-            evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=row_cache, all_const_cache=consts_by_company)
-            # 当前行项目是否可映射为基础指标
-            # 优先使用“项目”列（若存在），否则回退到首列
+                    row_company_default = rc
+
+            evaluator_cache: Dict[str, Evaluator] = {}
+            row_cache_map: Dict[str, Dict[str, Dict[str, Decimal]]] = shared_row_cache_by_company
+
+            def _get_evaluator(comp_hint: Optional[str]) -> Tuple[str, Evaluator]:
+                target = str(comp_hint or row_company_default)
+                if target not in evaluator_cache:
+                    metrics = metrics_by_company.get(target, {})
+                    consts_alias = consts_by_company.get(target, {})
+                    row_cache_local = row_cache_map.setdefault(target, {})
+                    evaluator_cache[target] = Evaluator(ctx, metrics, consts_alias, col_frames, row_cache=row_cache_local, all_const_cache=consts_by_company)
+                return target, evaluator_cache[target]
+
+            # 当前行项目是否可映射为基础指标（仅依赖项目字典即可）
             current_item_cn = None
             try:
                 if item_col_index >= 0 and len(r) > item_col_index:
                     item_cell = r[item_col_index]
                     item_cn_candidate = str(item_cell).strip() if item_cell is not None else ""
-                    if item_cn_candidate and item_cn_candidate in evaluator.item_cn_to_item:
+                    if item_cn_candidate and item_cn_candidate in ctx.item_cn_to_item:
                         current_item_cn = item_cn_candidate
-                if current_item_cn is None and row_label in evaluator.item_cn_to_item:
+                if current_item_cn is None and row_label in ctx.item_cn_to_item:
                     current_item_cn = row_label
             except Exception:
-                current_item_cn = row_label if row_label in evaluator.item_cn_to_item else None
+                current_item_cn = row_label if row_label in ctx.item_cn_to_item else None
 
-            # 先逐列计算普通值，临时保存以便 diff_rate 使用
+            FRAME_TO_GROUP = {
+                "biz_date": "day",
+                "peer_date": "day",
+                "sum_month_biz": "month",
+                "sum_month_peer": "month",
+                "sum_ytd_biz": "ytd",
+                "sum_ytd_peer": "ytd",
+            }
+
             row_vals: List[Optional[Decimal]] = []
             row_traces: List[Dict[str, Any]] = []
+            per_company_group_indices: Dict[str, Dict[str, Dict[str, Optional[int]]]] = {}
+            per_company_frames: Dict[str, Dict[str, Decimal]] = {}
+
             for ci, cell in enumerate(r):
                 if ci <= readonly_limit:
                     row_vals.append(None)
@@ -789,100 +870,150 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                         row_traces.append({"raw": cell})
                     continue
                 expr = str(cell or "").strip()
-                frame = col_frames.get(ci)  # None 表示差异列
+                frame = col_frames.get(ci)
                 expr_key = expr.replace(" ", "")
+                comp_hint = column_companies.get(ci) if column_companies else None
+                comp_code, evaluator = _get_evaluator(comp_hint)
+                group_name = FRAME_TO_GROUP.get(frame) if frame else None
+
                 if expr_key.startswith("date_diff_rate"):
+                    per_company_group_indices.setdefault(comp_code, {}).setdefault("day", {})["diff"] = ci
                     row_vals.append(None)
                     if last_pass:
                         row_traces.append({"raw": expr, "deferred": True})
                     continue
                 if expr_key.startswith("month_diff_rate"):
+                    per_company_group_indices.setdefault(comp_code, {}).setdefault("month", {})["diff"] = ci
                     row_vals.append(None)
                     if last_pass:
                         row_traces.append({"raw": expr, "deferred": True})
                     continue
                 if expr_key.startswith("ytd_diff_rate"):
+                    per_company_group_indices.setdefault(comp_code, {}).setdefault("ytd", {})["diff"] = ci
                     row_vals.append(None)
                     if last_pass:
                         row_traces.append({"raw": expr, "deferred": True})
                     continue
+
                 val, t = evaluator.eval_cell(expr, frame, current_item_cn)
                 row_vals.append(val)
                 if last_pass:
                     row_traces.append(t)
 
-            # 计算三类差异列：按列名判断所在组
-            def _find_indices_by_group(group: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-                # 返回 (biz_idx, peer_idx, diff_idx)
-                biz_frame, peer_frame = _pair_for_group(group)
-                biz_idx = peer_idx = diff_idx = None
-                for ci in range(len(r)):
-                    f = col_frames.get(ci)
-                    if f == biz_frame:
-                        biz_idx = ci
-                    elif f == peer_frame:
-                        peer_idx = ci
-                    else:
-                        label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
-                        if group == "day" and "日差异" in label:
-                            diff_idx = ci
-                        elif group == "month" and "月差异" in label:
-                            diff_idx = ci
-                        elif group == "ytd" and ("供暖期差异" in label or "供暖期差" in label):
-                            diff_idx = ci
-                return biz_idx, peer_idx, diff_idx
+                if frame and isinstance(val, Decimal):
+                    per_company_frames.setdefault(comp_code, {})[frame] = val
+                    if group_name:
+                        if frame in ("biz_date", "sum_month_biz", "sum_ytd_biz"):
+                            key = "biz"
+                        elif frame in ("peer_date", "sum_month_peer", "sum_ytd_peer"):
+                            key = "peer"
+                        else:
+                            key = None
+                        if key:
+                            per_company_group_indices.setdefault(comp_code, {}).setdefault(group_name, {})[key] = ci
 
-            for grp in ("day", "month", "ytd"):
-                biz_idx, peer_idx, diff_idx = _find_indices_by_group(grp)
-                if diff_idx is None:
-                    continue
-                diff_expr = str(r[diff_idx] or "")
-                if biz_idx is None or peer_idx is None:
-                    out_val = None
-                    out_fmt = "-"
-                else:
-                    biz_val = row_vals[biz_idx]
-                    peer_val = row_vals[peer_idx]
-                    if biz_val is None or peer_val is None:
+            if is_crosstab and per_company_group_indices:
+                for comp_code, groups in per_company_group_indices.items():
+                    for grp_name, idxs in groups.items():
+                        diff_idx = idxs.get("diff")
+                        if diff_idx is None:
+                            continue
+                        diff_expr = str(r[diff_idx] or "")
+                        biz_idx = idxs.get("biz")
+                        peer_idx = idxs.get("peer")
+                        if biz_idx is None or peer_idx is None:
+                            out_val = None
+                            out_fmt = "-"
+                        else:
+                            biz_val = row_vals[biz_idx]
+                            peer_val = row_vals[peer_idx]
+                            if biz_val is None or peer_val is None:
+                                out_val, out_fmt = None, "-"
+                            else:
+                                try:
+                                    denom = abs(peer_val)
+                                    if denom == 0:
+                                        out_val, out_fmt = None, "-"
+                                    else:
+                                        rate = (biz_val - peer_val) / denom
+                                        out_val, out_fmt = rate, _percent(rate)
+                                except Exception:
+                                    out_val, out_fmt = None, "-"
+                        row_vals[diff_idx] = out_val
+                        if last_pass:
+                            base = {"raw": diff_expr, "formatted": out_fmt}
+                            if len(row_traces) > diff_idx and isinstance(row_traces[diff_idx], dict):
+                                row_traces[diff_idx] = {**row_traces[diff_idx], **base}
+                            else:
+                                if diff_idx >= len(row_traces):
+                                    row_traces.extend([{}] * (diff_idx - len(row_traces) + 1))
+                                row_traces[diff_idx] = base
+            else:
+                def _find_indices_by_group(group: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+                    biz_frame, peer_frame = _pair_for_group(group)
+                    biz_idx = peer_idx = diff_idx = None
+                    for ci in range(len(r)):
+                        f = col_frames.get(ci)
+                        if f == biz_frame:
+                            biz_idx = ci
+                        elif f == peer_frame:
+                            peer_idx = ci
+                        else:
+                            label = _normalize_col_label(columns[ci]) if ci < len(columns) else ""
+                            if group == "day" and "日差异" in label:
+                                diff_idx = ci
+                            elif group == "month" and "月差异" in label:
+                                diff_idx = ci
+                            elif group == "ytd" and ("供暖期差异" in label or "供暖期差" in label):
+                                diff_idx = ci
+                    return biz_idx, peer_idx, diff_idx
+
+                for grp in ("day", "month", "ytd"):
+                    biz_idx, peer_idx, diff_idx = _find_indices_by_group(grp)
+                    if diff_idx is None:
+                        continue
+                    diff_expr = str(r[diff_idx] or "")
+                    if biz_idx is None or peer_idx is None:
                         out_val = None
                         out_fmt = "-"
                     else:
-                        try:
-                            denom = abs(peer_val)
-                            if denom == 0:
-                                out_val = None
-                                out_fmt = "-"
-                            else:
-                                rate = (biz_val - peer_val) / denom
-                                out_val = rate
-                                out_fmt = _percent(rate)
-                        except Exception:
-                            out_val, out_fmt = None, "-"
-                row_vals[diff_idx] = out_val
-                if last_pass:
-                    # 合并 trace
-                    base = {"raw": diff_expr, "formatted": out_fmt}
-                    if len(row_traces) > diff_idx and isinstance(row_traces[diff_idx], dict):
-                        row_traces[diff_idx] = {**row_traces[diff_idx], **base}
-                    else:
-                        # 罕见：若之前未写入 trace，占位
-                        if diff_idx >= len(row_traces):
-                            row_traces.extend([{}] * (diff_idx - len(row_traces) + 1))
-                        row_traces[diff_idx] = base
+                        biz_val = row_vals[biz_idx]
+                        peer_val = row_vals[peer_idx]
+                        if biz_val is None or peer_val is None:
+                            out_val = None
+                            out_fmt = "-"
+                        else:
+                            try:
+                                denom = abs(peer_val)
+                                if denom == 0:
+                                    out_val = None
+                                    out_fmt = "-"
+                                else:
+                                    rate = (biz_val - peer_val) / denom
+                                    out_val = rate
+                                    out_fmt = _percent(rate)
+                            except Exception:
+                                out_val, out_fmt = None, "-"
+                    row_vals[diff_idx] = out_val
+                    if last_pass:
+                        base = {"raw": diff_expr, "formatted": out_fmt}
+                        if len(row_traces) > diff_idx and isinstance(row_traces[diff_idx], dict):
+                            row_traces[diff_idx] = {**row_traces[diff_idx], **base}
+                        else:
+                            if diff_idx >= len(row_traces):
+                                row_traces.extend([{}] * (diff_idx - len(row_traces) + 1))
+                            row_traces[diff_idx] = base
 
             # 将本行可用数值写入共享行缓存
-            row_frames: Dict[str, Decimal] = {}
-            for ci, v in enumerate(row_vals):
-                if ci <= readonly_limit:
+            for comp_code, frame_map in per_company_frames.items():
+                if not frame_map:
                     continue
-                f = col_frames.get(ci)
-                if f is None or v is None:
-                    continue
-                row_frames[f] = v
-            if row_frames:
-                existing = row_cache.get(row_label) or {}
-                existing.update(row_frames)
-                row_cache[row_label] = existing
+                row_store = row_cache_map.setdefault(comp_code, {})
+                existing = row_store.get(row_label) or {}
+                for frame_key, value in frame_map.items():
+                    if isinstance(value, Decimal):
+                        existing[frame_key] = value
+                row_store[row_label] = existing
 
             if last_pass:
                 # 组装显示行
@@ -979,8 +1110,29 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             out["列名"] = cols_out
             # 兼容：若调用方直接读取 columns 字段
             out["columns"] = cols_out
+            if header_levels:
+                level0 = list(header_levels[0]) if len(header_levels) > 0 else [""] * len(cols_out)
+                level1 = list(header_levels[1]) if len(header_levels) > 1 else [""] * len(cols_out)
+                if len(level0) < len(cols_out):
+                    level0.extend([""] * (len(cols_out) - len(level0)))
+                if len(level1) < len(cols_out):
+                    level1.extend([""] * (len(cols_out) - len(level1)))
+                for idx, col_name in enumerate(cols_out):
+                    parts = str(col_name or "").split("\n", 1)
+                    if parts:
+                        if idx < len(level0):
+                            level0[idx] = parts[0]
+                        if len(parts) > 1 and idx < len(level1):
+                            level1[idx] = parts[1]
+                header_levels_out = [level0, level1]
+                out["column_headers"] = header_levels_out
     except Exception:
         # 列头替换失败不影响主体数据返回
         pass
+
+    if header_levels and "column_headers" not in out:
+        out["column_headers"] = header_levels
+    if column_groups_meta:
+        out["column_groups"] = column_groups_meta
 
     return out
