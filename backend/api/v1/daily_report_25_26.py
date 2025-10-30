@@ -2666,6 +2666,26 @@ async def runtime_eval(request: Request):
     else:
         columns = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
     rows = result.get("数据") or []
+    # 统一解析 accuracy：支持数字或对象 {default: N}，默认 2；允许 number_format.default 覆盖
+    def _resolve_acc(v):
+        try:
+            if isinstance(v, dict):
+                v = v.get("default")
+            return int(v)
+        except Exception:
+            return None
+    acc = _resolve_acc(result.get("accuracy") if isinstance(result, dict) else None)
+    if acc is None:
+        acc = _resolve_acc(spec.get("accuracy") if isinstance(spec, dict) else None)
+    # number_format.default 优先于 accuracy
+    nf_spec = spec.get("number_format") if isinstance(spec, dict) else None
+    if isinstance(nf_spec, dict):
+        nf_acc = _resolve_acc(nf_spec.get("default"))
+        if nf_acc is not None:
+            acc = nf_acc
+    if acc is None:
+        acc = 2
+
     content = {
         "ok": True,
         "sheet_key": sheet_key or names.get("sheet_name") or "",
@@ -2674,6 +2694,9 @@ async def runtime_eval(request: Request):
         "unit_name": names.get("unit_name", ""),
         "columns": columns,
         "rows": rows,
+        "accuracy": acc,
+        # 透传前端格式化用的 number_format（如 grouping/locale/default/percent）
+        "number_format": (nf_spec if isinstance(nf_spec, dict) else None),
     }
     if trace and "_trace" in result:
         content["debug"] = {"_trace": result["_trace"]}

@@ -17,7 +17,7 @@
       ["集团全口径", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["集团全口径","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["集团全口径","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["集团全口径","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["集团全口径","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["集团全口径", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["集团全口径", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["集团全口径", "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -27,7 +27,7 @@
       ["主城区", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["主城区","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["主城区","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["主城区","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["主城区","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["主城区", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["主城区", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["主城区", "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -37,7 +37,7 @@
       ["金州热电", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金州热电","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金州热电","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["金州热电","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["金州热电","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["金州热电", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金州热电", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金州热电", "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -47,7 +47,7 @@
       ["北方热电", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["北方热电","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["北方热电","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["北方热电","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["北方热电","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["北方热电", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["北方热电", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["北方热电",  "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -57,7 +57,7 @@
       ["金普热电", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金普热电","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金普热电","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["金普热电","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["金普热电","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["金普热电", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金普热电", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["金普热电",  "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -67,7 +67,7 @@
       ["庄河环海", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["庄河环海","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["庄河环海","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["庄河环海","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["庄河环海","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["庄河环海", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["庄河环海", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["庄河环海", "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -77,7 +77,7 @@
       ["研究院", "标煤耗量", "吨", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["研究院","煤成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["研究院","外购热成本", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
-      ["研究院","水、电及辅材成本", "万元", "value_biz_date(购水成本+外购电成本+可计量辅材成本)", "value_peer_date(购水成本+外购电成本+可计量辅材成本)", "date_diff_rate()","sum_month_biz(购水成本+外购电成本+可计量辅材成本)","sum_month_peer(购水成本+外购电成本+可计量辅材成本)","sum_month_diff_rate()","sum_ytd_biz(购水成本+外购电成本+可计量辅材成本)","sum_ytd_peer(购水成本+外购电成本+可计量辅材成本)","sum_ytd_diff_rate()"],
+      ["研究院","水、电及辅材成本", "万元", "购水成本+外购电成本+可计量辅材成本", "购水成本+外购电成本+可计量辅材成本", "date_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_month_diff_rate()","购水成本+外购电成本+可计量辅材成本","购水成本+外购电成本+可计量辅材成本","sum_ytd_diff_rate()"],
       ["研究院", "边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["研究院", "可比煤价边际利润", "万元", "value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["研究院", "省市平台净投诉量", "件", "value_biz_date(当日撤件后净投诉量)", "value_peer_date(当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(本月累计净投诉量)","value_peer_date(本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)","value_peer_date(本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
@@ -201,6 +201,9 @@
       "accuracy": {
         "default": 0,
         "万平方米省市净投诉量":2
+      },
+      "number_format": { 
+        "grouping": true 
       }
   }
 }

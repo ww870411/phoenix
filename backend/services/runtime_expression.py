@@ -346,6 +346,14 @@ class Evaluator:
         3) 数字字面量统一转 Decimal：未被引号包裹的 123 / 123.45 → D("123.45")
         """
         s = expr.strip()
+        # 标准化全角符号与不可见字符，避免解析失败
+        def _normalize_expr_text(s0: str) -> str:
+            table = {"（": "(", "）": ")", "＋": "+"}
+            for k, v in table.items():
+                s0 = s0.replace(k, v)
+            s0 = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", s0)
+            return s0
+        s = _normalize_expr_text(s)
         # 1) 先处理别名常量
         for pat, repl in self.alias_patterns:
             s = pat.sub(repl, s)
@@ -365,18 +373,26 @@ class Evaluator:
                 if not inner:
                     return m.group(0)
                 # 拆分 + 连接的多个 token，仅对未被 I("...") 包裹的中文/文本加包装
-                tokens = [t.strip() for t in re.split(r'\+', inner)]
+                tokens = [t.strip() for t in re.split(r'[\+＋]', inner)]
                 wrapped = []
                 for t in tokens:
                     if not t:
                         continue
-                    if t.startswith('I("') and t.endswith('")'):
-                        wrapped.append(t)
-                    elif t.startswith('"') and t.endswith('"'):
-                        # 已是字符串字面量
-                        wrapped.append(f'I({t})')
+                    ts = t.strip()
+                    m_direct = re.match(r'^I\("([^"]+)"\)$', ts)
+                    if m_direct:
+                        # I("...") → "..."
+                        wrapped.append(f'"{m_direct.group(1)}"')
+                        continue
+                    m_qwrapped = re.match(r'^"I\("([^"]+)"\)"$', ts)
+                    if m_qwrapped:
+                        # "I("...")" → "..."
+                        wrapped.append(f'"{m_qwrapped.group(1)}"')
+                        continue
+                    if ts.startswith('"') and ts.endswith('"'):
+                        wrapped.append(ts)
                     else:
-                        wrapped.append(f'I("{t}")')
+                        wrapped.append(f'"{ts}"')
                 if not wrapped:
                     return m.group(0)
                 return f"{func}(" + ' + '.join(wrapped) + ")"
@@ -445,18 +461,30 @@ class Evaluator:
                 return Decimal(0)
             return self._value_of_item(target_cn, frame_key)
 
+        def _call(frame_key: str, name: Optional[str]):
+            if trace_sink is not None:
+                trace_sink.setdefault("func_calls", []).append({"func": frame_key, "arg": name})
+            return _cur(frame_key, name)
+
+        def value_biz_date(name=None): return _call("biz_date", name)
+        def value_peer_date(name=None): return _call("peer_date", name)
+        def sum_month_biz(name=None): return _call("sum_month_biz", name)
+        def sum_month_peer(name=None): return _call("sum_month_peer", name)
+        def sum_ytd_biz(name=None): return _call("sum_ytd_biz", name)
+        def sum_ytd_peer(name=None): return _call("sum_ytd_peer", name)
+
         env = {
             "I": I,
             "C": C,
             "CA": CA,
             "D": Decimal,
             # 帧函数：支持可选中文项目名参数
-            "value_biz_date": lambda name=None: _cur("biz_date", name),
-            "value_peer_date": lambda name=None: _cur("peer_date", name),
-            "sum_month_biz": lambda name=None: _cur("sum_month_biz", name),
-            "sum_month_peer": lambda name=None: _cur("sum_month_peer", name),
-            "sum_ytd_biz": lambda name=None: _cur("sum_ytd_biz", name),
-            "sum_ytd_peer": lambda name=None: _cur("sum_ytd_peer", name),
+            "value_biz_date": value_biz_date,
+            "value_peer_date": value_peer_date,
+            "sum_month_biz": sum_month_biz,
+            "sum_month_peer": sum_month_peer,
+            "sum_ytd_biz": sum_ytd_biz,
+            "sum_ytd_peer": sum_ytd_peer,
         }
         try:
             # eval 安全限制：不提供 __builtins__
@@ -635,16 +663,25 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     # 精度（accuracy）：除差异列外，按模板设置的小数位进行格式化
     try:
         acc_raw = spec.get("accuracy") if isinstance(spec, dict) else None
-        accuracy = int(acc_raw) if acc_raw is not None else 4
+        # 支持两种写法：accuracy: 2 或 accuracy: { default: 2 }
+        if isinstance(acc_raw, dict):
+            acc_val = acc_raw.get("default")
+        else:
+            acc_val = acc_raw
+        accuracy = int(acc_val) if acc_val is not None else 2
         if accuracy < 0:
             accuracy = 0
         if accuracy > 8:
             accuracy = 8
     except Exception:
-        accuracy = 4
+        accuracy = 2
 
     # 返回对象（在最后一轮填充）
     out = dict(spec)  # 浅拷贝基础字段
+    out["accuracy"] = accuracy
+    # 透传 number_format，便于前端做分组/本地化格式化
+    if isinstance(spec, dict) and isinstance(spec.get("number_format"), dict):
+        out["number_format"] = dict(spec.get("number_format"))
     final_rows: List[List[Any]] = []
     final_traces: List[List[Dict[str, Any]]] = []
     # 跨轮共享的行缓存（用于前后顺序依赖）——按 company 分片，避免串扰

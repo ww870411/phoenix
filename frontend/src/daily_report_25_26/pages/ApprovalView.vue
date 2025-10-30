@@ -9,6 +9,10 @@
           <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
         </div>
         <div class="right" style="display:flex;align-items:center;gap:8px;">
+          <label title="开启后返回详细求值轨迹" style="display:inline-flex;align-items:center;gap:6px;">
+            <input type="checkbox" v-model="traceEnabled" />
+            <span>Trace</span>
+          </label>
           <label class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;">
             <span>业务日期：</span>
             <select v-model="bizDateMode">
@@ -36,6 +40,12 @@
         />
       </div>
       <div v-else class="placeholder">无审批数据</div>
+      <div v-if="traceEnabled && traceData" class="trace-panel card" style="margin-top:12px;">
+        <details open>
+          <summary style="cursor:pointer;">Trace 调试输出（仅本次响应）</summary>
+          <pre class="trace-pre">{{ formattedTrace }}</pre>
+        </details>
+      </div>
       <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
     </div>
   </div>
@@ -74,6 +84,10 @@ const rows = ref([])
 
 const gridColumns = ref([])
 const gridSource = ref([])
+const accuracy = ref(2)
+const numberFormat = ref({ grouping: false, locale: 'zh-CN' })
+const traceEnabled = ref(false)
+const traceData = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -110,11 +124,29 @@ function buildReadOnlyColumns(cols) {
 }
 
 function buildSource(cols, rs) {
+  const accFromNF = (nf) => (nf && Number.isInteger(nf.default) ? nf.default : null)
+  const acc = accFromNF(numberFormat.value) ?? (Number.isInteger(accuracy.value) ? accuracy.value : 2)
+  const useGrouping = !!(numberFormat.value && numberFormat.value.grouping)
+  const locale = (numberFormat.value && numberFormat.value.locale) || 'zh-CN'
+  let nf
+  try { nf = new Intl.NumberFormat(locale, { useGrouping: useGrouping, minimumFractionDigits: acc, maximumFractionDigits: acc }) } catch { nf = null }
+  const formatVal = (v) => {
+    if (v === null || v === undefined) return ''
+    const s = String(v)
+    if (s.includes('%')) return s // 差异列百分比
+    if (s.trim() === '' || s === '-') return s
+    const n = Number(s)
+    if (!Number.isFinite(n)) return s
+    if (nf) {
+      try { return nf.format(n) } catch { /* fallthrough */ }
+    }
+    try { return n.toFixed(acc) } catch { return s }
+  }
   const src = (rs || []).map(row => {
     const rec = {}
     for (let i = 0; i < (cols?.length || 0); i++) {
       const v = Array.isArray(row) ? row[i] : ''
-      rec[`c${i}`] = (v === null || v === undefined) ? '' : String(v)
+      rec[`c${i}`] = formatVal(v)
     }
     return rec
   })
@@ -133,7 +165,7 @@ async function runEval() {
       // primary_key 可留空，后端会用模板 unit_id 补齐；如需按中心筛选可以加入 {company:'Xxx_Center'}
       config: pageConfig.value,
       biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || 'regular'),
-      trace: false,
+      trace: !!traceEnabled.value,
     }
     const res = await evalSpec(projectKey.value, body)
     if (!res || res.ok === false) {
@@ -142,6 +174,9 @@ async function runEval() {
     sheetName.value = res.sheet_name || sheetKey.value
     columns.value = Array.isArray(res.columns) ? res.columns : []
     rows.value = Array.isArray(res.rows) ? res.rows : []
+    if (Number.isInteger(res.accuracy)) accuracy.value = res.accuracy
+    if (res.number_format && typeof res.number_format === 'object') numberFormat.value = res.number_format
+    traceData.value = res.debug && res.debug._trace ? res.debug._trace : null
     buildReadOnlyColumns(columns.value)
     buildSource(columns.value, rows.value)
   } catch (err) {
@@ -153,7 +188,11 @@ async function runEval() {
 }
 
 onMounted(runEval)
-watch([bizDateMode, bizDate], runEval)
+watch([bizDateMode, bizDate, traceEnabled], runEval)
+
+const formattedTrace = computed(() => {
+  try { return JSON.stringify(traceData.value, null, 2) } catch { return '' }
+})
 </script>
 
 <style scoped>
@@ -162,5 +201,5 @@ watch([bizDateMode, bizDate], runEval)
 .sub { color: #666; font-size: 13px; }
 .placeholder { color:#888; padding: 20px 0; text-align:center; }
 .error { color: #c00; margin-top: 10px; }
+.trace-pre { max-height: 360px; overflow: auto; background: #0b0b0b; color: #d6d6d6; padding: 12px; border-radius: 6px; }
 </style>
-
