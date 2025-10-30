@@ -346,85 +346,85 @@ class Evaluator:
         3) 数字字面量统一转 Decimal：未被引号包裹的 123 / 123.45 → D("123.45")
         """
         s = expr.strip()
-        # 标准化全角符号与不可见字符，避免解析失败
+
         def _normalize_expr_text(s0: str) -> str:
             table = {"（": "(", "）": ")", "＋": "+"}
             for k, v in table.items():
                 s0 = s0.replace(k, v)
             s0 = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", s0)
             return s0
+
         s = _normalize_expr_text(s)
-        # 1) 先处理别名常量
+
         for pat, repl in self.alias_patterns:
             s = pat.sub(repl, s)
-        # 2) 仅在非引号区域替换项目名
-        #    按双引号切分，偶数索引为未被引号包裹的区域
-        parts = re.split(r'(".*?")', s)
+
+        parts = re.split(r"(\".*?\")", s)
         for i in range(0, len(parts), 2):
             seg = parts[i]
             if not seg:
                 continue
             for name, repl in self.item_pairs:
                 seg = seg.replace(name, repl)
-            # 在函数参数中为“未知项目名”自动加 I("...") 包裹，保证后续能被识别
-            def _wrap_unknown_args(m: re.Match) -> str:
-                func = m.group(1)
-                inner = (m.group(2) or '').strip()
-                if not inner:
-                    return m.group(0)
-                # 拆分 + 连接的多个 token，仅对未被 I("...") 包裹的中文/文本加包装
-                tokens = [t.strip() for t in re.split(r'[\+＋]', inner)]
-                wrapped = []
-                for t in tokens:
-                    if not t:
-                        continue
-                    ts = t.strip()
-                    m_direct = re.match(r'^I\("([^"]+)"\)$', ts)
-                    if m_direct:
-                        # I("...") → "..."
-                        wrapped.append(f'"{m_direct.group(1)}"')
-                        continue
-                    m_qwrapped = re.match(r'^"I\("([^"]+)"\)"$', ts)
-                    if m_qwrapped:
-                        # "I("...")" → "..."
-                        wrapped.append(f'"{m_qwrapped.group(1)}"')
-                        continue
-                    if ts.startswith('"') and ts.endswith('"'):
-                        wrapped.append(ts)
-                    else:
-                        wrapped.append(f'"{ts}"')
-                if not wrapped:
-                    return m.group(0)
-                return f"{func}(" + ' + '.join(wrapped) + ")"
-            seg = re.sub(
-                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*([^)]*?)\s*\)',
-                _wrap_unknown_args,
-                seg
-            )
-            # 将 value_* / sum_* 带 I(\"中文名\") 的参数还原为字符串字面量参数
-            seg = re.sub(
-                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*I\("([^"]+)"\)\s*\)',
-                lambda m: f'{m.group(1)}("{m.group(2)}")',
-                seg
-            )
-            # 将 value_*/sum_* 接受多个 I(\"...\") 累加的场景拆分为多个函数相加
-            def _split_multi_args(m: re.Match) -> str:
-                func = m.group(1)
-                inner = m.group(2)
-                names = re.findall(r'I\("([^"]+)"\)', inner)
-                if not names:
-                    return m.group(0)
-                return ' + '.join([f'{func}("{n}")' for n in names])
-            seg = re.sub(
-                r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*(I\("[^"]+"\)\s*(?:\+\s*I\("[^"]+"\)\s*)+)\)',
-                _split_multi_args,
-                seg
-            )
-            # 3) 将数字字面量包装为 Decimal 字面量（仅在引号外）
-            #    避免 float 与 Decimal 混算导致的类型错误
-            seg = re.sub(r'(?<![\w"])\b\d+(?:\.\d+)?\b', lambda m: f'D("{m.group(0)}")', seg)
+            seg = re.sub(r'(?<![\w\"])\b\d+(?:\.\d+)?\b', lambda m: f'D("{m.group(0)}")', seg)
             parts[i] = seg
-        return "".join(parts)
+
+        s = "".join(parts)
+
+        frame_func_pattern = re.compile(
+            r'\b(value_biz_date|value_peer_date|sum_month_biz|sum_month_peer|sum_ytd_biz|sum_ytd_peer)\(\s*((?:[^)(]+|\([^)(]*\))*)\s*\)'
+        )
+
+        def _wrap_unknown_args(m: re.Match) -> str:
+            func = m.group(1)
+            inner = (m.group(2) or '').strip()
+            if not inner:
+                return m.group(0)
+            tokens = [t.strip() for t in re.split(r'[+＋]', inner)]
+            wrapped: List[str] = []
+            for token in tokens:
+                if not token:
+                    continue
+                ts = token.strip()
+                m_direct = re.match(r'^I\("([^\"]+)"\)$', ts)
+                if m_direct:
+                    wrapped.append(f'"{m_direct.group(1)}"')
+                    continue
+                m_qwrapped = re.match(r'^"I\("([^\"]+)"\)"$', ts)
+                if m_qwrapped:
+                    wrapped.append(f'"{m_qwrapped.group(1)}"')
+                    continue
+                if ts.startswith('"') and ts.endswith('"'):
+                    wrapped.append(ts)
+                else:
+                    wrapped.append(f'"{ts}"')
+            if not wrapped:
+                return m.group(0)
+            return f"{func}(" + ' + '.join(wrapped) + ")"
+
+        s = frame_func_pattern.sub(_wrap_unknown_args, s)
+
+        def _split_multi_args(m: re.Match) -> str:
+            func = m.group(1)
+            inner = (m.group(2) or '').strip()
+            if '+' not in inner and '＋' not in inner:
+                return m.group(0)
+            tokens = [t.strip() for t in re.split(r'[+＋]', inner)]
+            names: List[str] = []
+            for token in tokens:
+                if not token:
+                    continue
+                if token.startswith('"') and token.endswith('"'):
+                    names.append(token[1:-1])
+                else:
+                    return m.group(0)
+            if len(names) <= 1:
+                return m.group(0)
+            return ' + '.join(f'{func}("{name}")' for name in names)
+
+        s = frame_func_pattern.sub(_split_multi_args, s)
+
+        return s
 
     def _safe_eval(self, safe_expr: str, frame: str, current_item_cn: Optional[str], trace_sink: Optional[Dict[str, Any]] = None) -> Optional[Decimal]:
         """

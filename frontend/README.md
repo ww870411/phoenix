@@ -180,3 +180,7 @@ docker compose up -d --build
 - 使用：支持“零参数”请求，程序会从 `config` 指定的模板自动读取 `sheet_key` 与 `unit_id(company)`；也可手动输入覆盖。
   - 建议：`config` 使用 `configs/字典样例.json`（相对 `/app/data`）；`biz_date` 可选 `regular` 或指定日期。
  - 项目入口：已在 `backend_data/项目列表.json` 增加 `\"/debug/runtime-eval\"` 页面项，在“选择页面”界面点击“运行时表达式求值（调试）”卡片即可跳转。
+
+### 2025-10-30 数据展示页后台修复提示
+- 影响说明：后端运行时表达式 `_preprocess` 已修复嵌套 `I(...)` 参数解析，`value_*` 不再返回空值；数据展示页（含“省市平台净投诉量”）将直接收到数值，无需前端改动。
+- 验证建议：若单元格仍为空，可在调试页开启 `trace=true`，核对 `safe_expr` 是否为 `value_*(\"指标\")`，并结合 `configs/10.30trace.md` 对比排查。
