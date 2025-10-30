@@ -213,6 +213,8 @@ sum_basic_data 相关：
 - `backend/services/runtime_expression.py`：扩展 `value_*` 系列函数参数解析，优先将括号内内容视作公司编码（支持中文/英文与 `A+B` 组合），并在预取阶段按需加载多 company 指标；运行时根据参数动态切换公司或降级为项目/常量读取。
 - `backend/services/runtime_expression.py`：`date/sum_month/sum_ytd_diff_rate` 仅在单元格显式填写时才计算；空表达式的“日/月/供暖期差异”列保持空白，避免模板中用于分隔的行被强制填入 `-`。
 - `backend/services/runtime_expression.py`：新增 `company.item` 解析（如 `value_biz_date(GongRe.本月累计净投诉量)`），优先按英文 item 反查中文名称再取值，默认表仍遵循模板 `default` 路由逻辑。
+- `backend/services/runtime_expression.py`：锚点日期改用 Asia/Shanghai 时区的当日日期（`_project_today()`），默认仍回退“今日-1”，避免部署在 UTC 环境下导致 (本期日) 滞后两天。
+- `backend/services/runtime_expression.py`：当 `item_en` 以 `sum_month_`/`sum_season_` 等前缀开头时，`value_*` 自动映射到 `sum_month_*` / `sum_ytd_*` 字段，保障累计类指标在日列/比率列中返回非零值。
 
 验证：
 - 通过手动审查 `render_spec` 行级量化与前端 `buildSource` 输出逻辑，确认含 `%` 的差异列仍返回字符，不受小数位影响；建议在前端运行环境下分别加载 `Group_sum_show_Sheet` 与 `Group_analysis_brief_report_Sheet`，观察“万平方米省市净投诉量”等配置项是否以 2 位小数展示，其余保持模板默认精度。

@@ -427,7 +427,7 @@
       ["供暖热单耗", "GJ/万㎡", "value_biz_date(GongRe)", "value_peer_date(GongRe)", "date_diff_rate()","sum_month_biz(GongRe)","sum_month_peer(GongRe)","sum_month_diff_rate()","sum_ytd_biz(GongRe)","sum_ytd_peer(GongRe)","sum_ytd_diff_rate()"],
       ["供暖电单耗", "kWh/万㎡", "value_biz_date(GongRe)", "value_peer_date(GongRe)", "date_diff_rate()","sum_month_biz(GongRe)","sum_month_peer(GongRe)","sum_month_diff_rate()","sum_ytd_biz(GongRe)","sum_ytd_peer(GongRe)","sum_ytd_diff_rate()"],
       ["供暖水单耗", "吨/万㎡", "value_biz_date(GongRe)", "value_peer_date(GongRe)", "date_diff_rate()","sum_month_biz(GongRe)","sum_month_peer(GongRe)","sum_month_diff_rate()","sum_ytd_biz(GongRe)","sum_ytd_peer(GongRe)","sum_ytd_diff_rate()"],
-      ["省市平台净投诉量", "吨/万㎡", "value_biz_date(GongRe)", "value_peer_date(GongRe)", "date_diff_rate()","value_biz_date(GongRe.本月累计净投诉量)","value_peer_date(GongRe.本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(GongRe.本供暖期累计净投诉量)","value_peer_date(GongRe.本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
+      ["省市平台净投诉量", "吨/万㎡", "value_biz_date(GongRe.当日撤件后净投诉量)", "value_peer_date(GongRe.当日撤件后净投诉量)", "date_diff_rate()","value_biz_date(GongRe.本月累计净投诉量)","value_peer_date(GongRe.本月累计净投诉量)","sum_month_diff_rate()","value_biz_date(GongRe.本供暖期累计净投诉量)","value_peer_date(GongRe.本供暖期累计净投诉量)","sum_ytd_diff_rate()"],
       ["万平方米省市净投诉量", "件/万㎡", "value_biz_date(GongRe)", "value_peer_date(GongRe)", "date_diff_rate()","value_biz_date(GongRe.本月累计净投诉量)/(c.GongRe.挂网面积)","value_peer_date(GongRe.本月累计净投诉量)/(c.GongRe.挂网面积)","sum_month_diff_rate()","value_biz_date(GongRe.本供暖期累计净投诉量)/(c.GongRe.挂网面积)","value_peer_date(GongRe.本供暖期累计净投诉量)/(c.GongRe.挂网面积)","sum_ytd_diff_rate()"]
     ],
       "项目字典": {

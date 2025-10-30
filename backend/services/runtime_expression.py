@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Set
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from datetime import date as _date, timedelta as _timedelta
+from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -400,6 +400,17 @@ class Evaluator:
             fields = metrics_bucket.get(item_cn) or {}
 
         field_name = FRAME_FIELDS[frame]
+        if item_en:
+            if item_en.startswith("sum_month_"):
+                if frame in ("biz_date", "sum_month_biz"):
+                    field_name = "sum_month_biz"
+                elif frame in ("peer_date", "sum_month_peer"):
+                    field_name = "sum_month_peer"
+            elif item_en.startswith(("sum_season_", "sum_heating_", "sum_ytd_", "sum_period_", "sum_winter_")):
+                if frame in ("biz_date", "sum_ytd_biz"):
+                    field_name = "sum_ytd_biz"
+                elif frame in ("peer_date", "sum_ytd_peer"):
+                    field_name = "sum_ytd_peer"
         return fields.get(field_name, Decimal(0))
 
     def _normalize_company_code(self, raw: Any) -> Optional[str]:
@@ -791,6 +802,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 known_company_codes.add(mapped)
                 return mapped
         if token in known_company_codes:
+            return token
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", token):
+            known_company_codes.add(token)
             return token
         return None
 
@@ -1340,7 +1354,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             except Exception:
                 anchor = None
         if anchor is None:
-            anchor = _date.today() - _timedelta(days=1)
+            anchor = _project_today() - _timedelta(days=1)
         # 2) 同期为去年同日（闰日回退到 2/28）
         try:
             peer = anchor.replace(year=anchor.year - 1)
@@ -1395,3 +1409,22 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         out["column_groups"] = column_groups_meta
 
     return out
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+except ImportError:  # pragma: no cover - fallback for older Python
+    _ZoneInfo = None
+
+# ------------------------
+# 时间工具
+# ------------------------
+def _project_today() -> _date:
+    """
+    返回项目默认时区（Asia/Shanghai）的“今天”日期。
+    若运行环境不支持 zoneinfo，则回退到本地日期。
+    """
+    if _ZoneInfo is not None:
+        try:
+            return _datetime.now(_ZoneInfo("Asia/Shanghai")).date()
+        except Exception:
+            pass
+    return _date.today()

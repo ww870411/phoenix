@@ -1,0 +1,1 @@
+2025-11-01：value_* 支持累计类指标。对于 item_en 以 sum_month_/sum_season_/sum_ytd_ 等前缀开头的项目，运行时求值会自动改用 sum_month_* 或 sum_ytd_* 字段；例如 value_biz_date(GongRe.本月累计净投诉量) 返回 sum_month_biz 的值，解决累计投诉量始终为 0 的问题。
