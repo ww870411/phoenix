@@ -1,0 +1,1 @@
+2025-11-01：运行时表达式支持 company.item 取值。value_biz_date(GongRe.本月累计净投诉量) 解析为 company='GongRe'、item='本月累计净投诉量'，默认按模板 default 指定的 sum_basic_data 读取；若使用英文 item 名称会回查项目字典映射为中文确保命中。组合写法、常量 c.GongRe.* 逻辑保持不变。

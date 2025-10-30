@@ -5,6 +5,7 @@
 - 状态：本次会话未改动后端代码与接口，运行时表达式仍沿用现有 `accuracy` 默认值输出。
 - 说明：运行时表达式 `render_spec` 已输出 `accuracy_map`（行级精度覆盖），接口 `/runtime/spec/eval` 透传为 `accuracy_overrides`；前端优先使用该字段，模板读取为兜底。
 - 新增：`value_*`/`sum_*` 系列函数允许通过 `value_biz_date(ZhuChengQu)`、`value_biz_date(BeiHai+XiangHai)` 等写法跨 company 取值，解析顺序为“优先视作公司名 → 否则视作项目/常量”。
+- 同时支持 `value_biz_date(GongRe.本月累计净投诉量)` 这种 `company.item` 写法：优先按 company 取数，再将 item 按项目字典逆查中文名称取值（默认主表遵循模板 `default` 配置）。
 - 下一步：等待你确认是否需要在后端补充 `accuracy_map` 字段或其它元数据，以减少前端额外的模板请求。
 
 ## 会话小结（2025-10-29）

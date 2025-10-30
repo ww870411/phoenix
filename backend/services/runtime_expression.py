@@ -58,6 +58,7 @@ class EvalContext:
     main_table: str              # 期望为 "sum_basic_data"
     const_alias_map: Dict[str, str]  # 如 {"c": "constant_data"}
     item_cn_to_item: Dict[str, str]  # 由 "项目字典" 反查得到：CN → en
+    item_en_to_cn: Optional[Dict[str, str]] = None
     unit_cn_to_en: Optional[Dict[str, str]] = None
     unit_en_to_cn: Optional[Dict[str, str]] = None
     # 可选覆盖：{"biz_date": "regular" | "YYYY-MM-DD"}
@@ -358,6 +359,7 @@ class Evaluator:
         self.row_cache: Dict[str, Dict[str, Decimal]] = row_cache if isinstance(row_cache, dict) else {}
 
         self.item_cn_to_item = ctx.item_cn_to_item  # CN → en
+        self.item_en_to_cn = ctx.item_en_to_cn or {}
         self.unit_cn_to_en = ctx.unit_cn_to_en or {}
         self.unit_en_to_cn = ctx.unit_en_to_cn or {}
         self.company_codes: Set[str] = set()
@@ -449,6 +451,17 @@ class Evaluator:
         company_code = self._normalize_company_code(token)
         if company_code:
             return company_code, fallback_item_cn, None
+
+        # 尝试按“英文.项目英文”拆分，用于支持 company.item_en 写法
+        dotted_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$", token)
+        if dotted_match:
+            company_candidate, item_en = dotted_match.groups()
+            company_code = self._normalize_company_code(company_candidate)
+            if company_code:
+                item_cn = self.item_en_to_cn.get(item_en) if isinstance(self.item_en_to_cn, dict) else None
+                if item_cn:
+                    return company_code, item_cn, None
+                return company_code, item_en, None
 
         return self.company_code, token, None
 
@@ -561,6 +574,10 @@ class Evaluator:
                 m_qwrapped = re.match(r'^"I\("([^\"]+)"\)"$', ts)
                 if m_qwrapped:
                     wrapped.append(f'"{m_qwrapped.group(1)}"')
+                    continue
+                m_company_item = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\.I\("([^\"]+)"\)$', ts)
+                if m_company_item:
+                    wrapped.append(f'"{m_company_item.group(1)}.{m_company_item.group(2)}"')
                     continue
                 if ts.startswith('"') and ts.endswith('"'):
                     wrapped.append(ts)
@@ -737,6 +754,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         main_table=main_table,
         const_alias_map=alias_map,
         item_cn_to_item=item_cn_to_item,
+        item_en_to_cn=item_dict if item_dict else None,
         unit_cn_to_en=unit_cn_to_en if unit_cn_to_en else None,
         unit_en_to_cn=unit_en_to_cn if unit_en_to_cn else None,
         context=context,
