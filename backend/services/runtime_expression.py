@@ -58,6 +58,7 @@ class EvalContext:
     main_table: str              # 期望为 "sum_basic_data"
     const_alias_map: Dict[str, str]  # 如 {"c": "constant_data"}
     item_cn_to_item: Dict[str, str]  # 由 "项目字典" 反查得到：CN → en
+    unit_cn_to_en: Optional[Dict[str, str]] = None
     # 可选覆盖：{"biz_date": "regular" | "YYYY-MM-DD"}
     context: Optional[Dict[str, Any]] = None
 
@@ -284,10 +285,12 @@ class Evaluator:
     """
 
     def __init__(self, ctx: EvalContext, metrics_cache: Dict[str, Dict[str, Decimal]], const_cache: Dict[str, Dict[str, Decimal]],
-                 column_frame_map: Dict[int, str], row_cache: Optional[Dict[str, Dict[str, Decimal]]] = None):
+                 column_frame_map: Dict[int, str], row_cache: Optional[Dict[str, Dict[str, Decimal]]] = None,
+                 all_const_cache: Optional[Dict[str, Dict[str, Dict[str, Decimal]]]] = None):
         self.ctx = ctx
         self.metrics = metrics_cache
         self.consts = const_cache
+        self.consts_all = all_const_cache
         self.column_frames = column_frame_map
         self.row_cache: Dict[str, Dict[str, Decimal]] = row_cache if isinstance(row_cache, dict) else {}
 
@@ -324,16 +327,45 @@ class Evaluator:
         # cn -> en
         key_en = self.item_cn_to_item.get(name_cn, name_cn)
         data_by_alias = self.consts.get(target_alias) if isinstance(self.consts, dict) else None
-        if not isinstance(data_by_alias, dict):
-            return Decimal(0)
-        # 优先英文 key
-        bucket = data_by_alias.get(key_en)
+
+        def _locate_bucket(source: Optional[Dict[str, Dict[str, Decimal]]], keys: List[str]) -> Optional[Dict[str, Decimal]]:
+            if not isinstance(source, dict):
+                return None
+            for k in keys:
+                candidate = source.get(k)
+                if isinstance(candidate, dict):
+                    return candidate
+            return None
+
+        bucket = _locate_bucket(data_by_alias, [key_en, name_cn])
+
+        # 支持 c.<company>.<常量名> 写法，跨公司读取常量
+        if not isinstance(bucket, dict) and "." in name_cn and isinstance(self.consts_all, dict):
+            company_hint, inner = name_cn.split(".", 1)
+            company_candidates: List[str] = []
+            if company_hint:
+                company_hint = company_hint.strip()
+                if company_hint:
+                    company_candidates.append(company_hint)
+                    if self.ctx.unit_cn_to_en and company_hint in self.ctx.unit_cn_to_en:
+                        mapped = self.ctx.unit_cn_to_en[company_hint]
+                        if mapped and mapped not in company_candidates:
+                            company_candidates.insert(0, mapped)
+            inner = inner.strip()
+            key_inner_en = self.item_cn_to_item.get(inner, inner)
+            for comp_code in company_candidates:
+                alias_maps = self.consts_all.get(comp_code)
+                if not isinstance(alias_maps, dict):
+                    continue
+                cross_alias = alias_maps.get(target_alias)
+                bucket = _locate_bucket(cross_alias, [key_inner_en, inner])
+                if isinstance(bucket, dict):
+                    break
+            # 若找到跨公司常量，后续 period 直接使用
+
         if not isinstance(bucket, dict):
-            # 兜底：尝试中文 key
-            bucket = data_by_alias.get(name_cn)
-            if not isinstance(bucket, dict):
-                return Decimal(0)
-        # period 精确匹配；如无，尝试原始 period 显式值
+            return Decimal(0)
+
         return bucket.get(period, Decimal(0))
 
     # ---- 表达式转换与计算 ----
@@ -549,15 +581,6 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     # item_dict: {en: cn}
     item_cn_to_item = {cn: en for (en, cn) in item_dict.items()}
 
-    ctx = EvalContext(
-        project_key=project_key,
-        primary_key=primary_key,
-        main_table=main_table,
-        const_alias_map=alias_map,
-        item_cn_to_item=item_cn_to_item,
-        context=context,
-    )
-
     # 单位字典（仅使用当前 spec 下发的字典，优先中文→英文反查）
     unit_dict = spec.get("单位字典") or {}
     unit_en_to_cn: Dict[str, str] = {}
@@ -568,11 +591,40 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 unit_en_to_cn[en.strip()] = cn.strip()
                 unit_cn_to_en[cn.strip()] = en.strip()
 
+    ctx = EvalContext(
+        project_key=project_key,
+        primary_key=primary_key,
+        main_table=main_table,
+        const_alias_map=alias_map,
+        item_cn_to_item=item_cn_to_item,
+        unit_cn_to_en=unit_cn_to_en if unit_cn_to_en else None,
+        context=context,
+    )
+
     # --- 2. 预取缓存（支持多 company） ---
     columns: List[str] = spec.get("列名") or []
     rows: List[List[Any]] = spec.get("数据") or []
     companies_needed: Set[str] = set()
     companies_needed.add(str(company))
+    unit_identifiers = spec.get("单位标识")
+    if isinstance(unit_identifiers, str):
+        for token in re.split(r"[\\/|,;]", unit_identifiers):
+            token = token.strip()
+            if token:
+                companies_needed.add(token)
+    const_company_pattern = re.compile(r"c\.([^.]+)\.")
+    for r in rows:
+        if not isinstance(r, list):
+            continue
+        for cell in r:
+            if not isinstance(cell, str):
+                try:
+                    cell = str(cell)
+                except Exception:
+                    continue
+            for comp_hint in const_company_pattern.findall(cell):
+                if comp_hint:
+                    companies_needed.add(comp_hint)
     def _normalize_company(raw: Any) -> Optional[str]:
         if raw is None:
             return None
@@ -712,7 +764,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             metrics = metrics_by_company.get(row_company, {})
             consts_by_alias = consts_by_company.get(row_company, {})
             row_cache = shared_row_cache_by_company.setdefault(row_company, {})
-            evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=row_cache)
+            evaluator = Evaluator(ctx, metrics, consts_by_alias, col_frames, row_cache=row_cache, all_const_cache=consts_by_company)
             # 当前行项目是否可映射为基础指标
             # 优先使用“项目”列（若存在），否则回退到首列
             current_item_cn = None

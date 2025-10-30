@@ -369,7 +369,7 @@ codex resume 019a31e6-34e9-7972-8820-0fc695a52f82
 
 docker compose up --build时间过长的问题
 
-
+完成数据展示页面第一张表的语法更新。
 
 
 

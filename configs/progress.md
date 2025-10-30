@@ -159,13 +159,15 @@ sum_basic_data 相关：
 本次改动：
 - 修复 `runtime_expression.Evaluator._preprocess` 对帧函数参数的解析，支持 `I(...)` 含括号一次捕获，避免生成 `value_biz_date("I("...` 导致语法错误。
 - 对多指标累加的 `value_*` 调用在二次遍历阶段拆分为多个 `value_*("名称")` 相加，确保“不可加指标”仅返回单值。
+- 新增 `c.<公司>.<常量>` 跨单位常量读取：解析表达式中的公司码并预取对应常量，解决“万平方米省市净投诉量”分母为 0 的问题。
 - README 补充运行时表达式调试提示，提醒通过 `_trace` 检查帧函数入参展开情况。
 
 验证：
 - 运行临时脚本直接调用 `_preprocess`，确认 `value_biz_date(当日撤件后净投诉量)` 输出 `value_biz_date("当日撤件后净投诉量")`，`value_biz_date(当日撤件后净投诉量+本月累计净投诉量)` 拆分为两个 `value_biz_date("…")` 相加。
+- 执行 `render_spec(..., trace=True)` 重产 `configs/10.30trace.md`，确认 `used_consts` 中 `c.GongRe.挂网面积` 等返回实际数值，分母不再为 0。
 
 涉及文件：
-- 更新：`backend/services/runtime_expression.py`、`configs/progress.md`、`backend/README.md`、`frontend/README.md`
+- 更新：`backend/services/runtime_expression.py`、`configs/progress.md`、`backend/README.md`、`frontend/README.md`、`configs/10.30trace.md`
 
 影响范围与回滚：
 - 如需回滚，可恢复 `_preprocess` 至 2025-10-27 版本并撤销本条文档说明；届时“省市平台净投诉量”会再次返回空值并在 `10.30trace.md` 重现 `unmatched ')'` 错误。
