@@ -284,7 +284,8 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_tables.sql
 - 后续生成视图后，可通过 Alembic/初始化脚本执行 `CREATE OR REPLACE VIEW`，供查询接口直接消费。
 ### 2025-10-31 煤炭库存汇总视图（新增）
 - 新增 `sum_coal_inventory_data`，仅抓取 `coal_inventory_data` 最新日期的记录；首先按 `company + storage_type` 汇总 `value` 并保留 `unit`/中文名称。
-- 为每个公司追加 `storage_type='all_sites'`（中文名“全部地点”）的合计行，并补充 `company='sum_company'` 的集团汇总，便于数据展示页直接读取总量。
+- 为每个公司追加 `storage_type='all_sites'`（中文名“全部地点”）的合计行，并额外写出 `company='ZhuChengQu_sum'`、`company='Group_sum'` 等聚合键，便于与模板中的 `scid.*` 表达式一致。
+- 运行时求值在加载常量别名时识别 `sum_coal_inventory_data`，按公司注入 `*_sum` 聚合值（所有时间帧返回同一数值），数据展示页“库存煤量（含港口、在途）”因此可直接取到最新库存。
 - CTE 结构保证空表返回空集，不会生成包含 `NULL` 的汇总；如需回滚只需移除相应 SQL 段落并重新执行脚本。
 ### 2025-10-27 运行时表达式求值服务（计划）
 - 目标：以 `sum_basic_data` / `sum_gongre_branches_detail_data` 与现有基础表为数据源，按“字典样例.json”的表达式规则运行时计算审批表/展示表单元格，避免扩张二级视图。

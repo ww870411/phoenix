@@ -213,6 +213,64 @@ def _fetch_constants_for_table(session: Session, table_name: str, company: str) 
     return out
 
 
+def _fetch_sum_coal_inventory_constants(session: Session, company: str) -> Dict[str, Dict[str, Decimal]]:
+    """
+    针对 sum_coal_inventory_data 视图的取值逻辑：
+    - 仅关注最新日期、storage_type='all_sites' 的汇总行
+    - 支持两种 company 取值：原始 company（如 JinZhou）及附加后缀 _sum（如 JinZhou_sum）
+    - 返回形如 { 'JinZhou_sum': {'25-26': value, '24-25': value} }
+    """
+    sql = text(
+        """
+        SELECT company, storage_type, value
+        FROM sum_coal_inventory_data
+        WHERE company = :company
+        """
+    )
+    candidates: List[str] = []
+    if company:
+        candidates.append(company)
+        if not company.endswith("_sum"):
+            candidates.append(f"{company}_sum")
+        else:
+            base = company[:-4]
+            if base:
+                candidates.append(base)
+    seen: Set[str] = set()
+    rows: List[Dict[str, Any]] = []
+    for cand in candidates:
+        key = cand.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        part = session.execute(sql, {"company": key}).mappings().all()
+        if part:
+            rows.extend(part)
+    if not rows:
+        return {}
+    out: Dict[str, Dict[str, Decimal]] = {}
+    for r in rows:
+        comp_raw = str(r.get("company") or "").strip()
+        storage_type = str(r.get("storage_type") or "").strip()
+        val = _to_decimal(r.get("value"))
+        if not comp_raw:
+            continue
+        if storage_type == "all_sites":
+            if comp_raw.endswith("_sum"):
+                key = comp_raw
+            else:
+                key = f"{comp_raw}_sum"
+        elif storage_type:
+            key = f"{comp_raw}_{storage_type}"
+        else:
+            key = comp_raw
+        out[key] = {
+            FRAME_TO_PERIOD["biz_date"]: val,
+            FRAME_TO_PERIOD["peer_date"]: val,
+        }
+    return out
+
+
 def _to_decimal(v: Any) -> Decimal:
     if v is None:
         return Decimal(0)
@@ -733,7 +791,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             consts_by_company[comp] = {}
             for alias, table_name in (alias_map or {}).items():
                 try:
-                    consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
+                    if isinstance(table_name, str) and table_name == "sum_coal_inventory_data":
+                        consts_by_company[comp][alias] = _fetch_sum_coal_inventory_constants(session, comp)
+                    else:
+                        consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
                 except Exception:
                     consts_by_company[comp][alias] = {}
 
