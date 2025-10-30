@@ -1269,6 +1269,8 @@ WITH latest_date AS (
   SELECT MAX(date) AS max_date
   FROM coal_inventory_data
 ),
+
+-- 1️⃣ 最新日期数据
 filtered AS (
   SELECT
     c.company,
@@ -1280,9 +1282,10 @@ filtered AS (
     c.date
   FROM coal_inventory_data c
   CROSS JOIN latest_date l
-  WHERE l.max_date IS NOT NULL
-    AND c.date = l.max_date
+  WHERE c.date = l.max_date
 ),
+
+-- 2️⃣ 基础层：公司 × 存储方式
 base AS (
   SELECT
     f.company,
@@ -1295,10 +1298,12 @@ base AS (
   FROM filtered f
   GROUP BY f.company, f.storage_type
 ),
+
+-- 3️⃣ 每个公司自身汇总（改名为 *_sum）
 company_rollup AS (
   SELECT
-    b.company,
-    MAX(b.company_cn) AS company_cn,
+    b.company || '_sum' AS company,
+    MAX(b.company_cn) || '合计' AS company_cn,
     'all_sites'::text AS storage_type,
     '全部地点'::text AS storage_type_cn,
     MAX(b.unit) AS unit,
@@ -1307,9 +1312,25 @@ company_rollup AS (
   FROM base b
   GROUP BY b.company
 ),
+
+-- 4️⃣ 主城区汇总（BeiHai + XiangHai）
+zhuchengqu_rollup AS (
+  SELECT
+    'ZhuChengQu_sum'::text AS company,
+    '主城区'::text AS company_cn,
+    'all_sites'::text AS storage_type,
+    '全部地点'::text AS storage_type_cn,
+    MAX(b.unit) AS unit,
+    MAX(b.date) AS date,
+    SUM(b.value) AS value
+  FROM base b
+  WHERE b.company IN ('BeiHai', 'XiangHai')
+),
+
+-- 5️⃣ 集团合计
 grand_rollup AS (
   SELECT
-    'sum_company'::text AS company,
+    'Group_sum'::text AS company,
     '集团合计'::text AS company_cn,
     'all_sites'::text AS storage_type,
     '全部地点'::text AS storage_type_cn,
@@ -1317,13 +1338,13 @@ grand_rollup AS (
     MAX(b.date) AS date,
     SUM(b.value) AS value
   FROM base b
-  GROUP BY 1, 2, 3, 4
 )
-SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
-FROM base
+-- 最终输出
+SELECT * FROM base
 UNION ALL
-SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
-FROM company_rollup
+SELECT * FROM company_rollup
 UNION ALL
-SELECT company, company_cn, storage_type, storage_type_cn, unit, date, value
-FROM grand_rollup;
+SELECT * FROM zhuchengqu_rollup
+UNION ALL
+SELECT * FROM grand_rollup;
+
