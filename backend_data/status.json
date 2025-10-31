@@ -51,12 +51,17 @@
           "status": "pending",
           "approved_by": null,
           "approved_at": null
+        },
+        "系统管理员": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
         }
       },
       "publish": {
         "status": "pending",
-        "approved_by": null,
-        "approved_at": null
+        "published_by": null,
+        "published_at": null
       }
     }
   }

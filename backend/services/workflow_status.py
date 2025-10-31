@@ -60,6 +60,7 @@ class WorkflowStatusManager:
         self._storage: Dict[Tuple[str, datetime], WorkflowSnapshot] = {}
         self._data_path: Path = (DATA_DIRECTORY / "status.json").resolve()
         self._loaded = False
+        self._data_mtime: Optional[float] = None
 
     def get_snapshot(
         self,
@@ -136,7 +137,12 @@ class WorkflowStatusManager:
     # 内部工具
     # ------------------------------------------------------------------ #
     def _ensure_loaded_locked(self) -> None:
-        if self._loaded:
+        try:
+            current_mtime = self._data_path.stat().st_mtime
+        except FileNotFoundError:
+            current_mtime = None
+
+        if self._loaded and current_mtime == self._data_mtime:
             return
 
         self._storage.clear()
@@ -198,6 +204,7 @@ class WorkflowStatusManager:
                     self._storage[(project_key, biz_datetime)] = snapshot
 
         self._loaded = True
+        self._data_mtime = current_mtime
 
     def _persist_locked(self) -> None:
         payload: Dict[str, Dict[str, Dict[str, object]]] = {}
@@ -226,6 +233,10 @@ class WorkflowStatusManager:
 
         self._data_path.parent.mkdir(parents=True, exist_ok=True)
         self._data_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            self._data_mtime = self._data_path.stat().st_mtime
+        except FileNotFoundError:
+            self._data_mtime = None
 
 
 workflow_status_manager = WorkflowStatusManager()
