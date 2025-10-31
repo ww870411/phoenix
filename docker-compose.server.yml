@@ -55,6 +55,24 @@ services:
     networks:
       - phoenix_net
 
+  web-http:
+    container_name: phoenix-web-http
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+        HTTP_ONLY: "true"
+    ports:
+      - "80:80"
+    volumes:
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+
   certbot:
     image: certbot/certbot
     container_name: phoenix-certbot

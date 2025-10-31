@@ -16,12 +16,17 @@ ENV VITE_API_BASE=${VITE_API_BASE}
 
 RUN npm run build
 
-# Stage 2: Nginx runtime with HTTPS support
+# Stage 2: Nginx runtime
 FROM nginx:1.27-alpine
+
+ARG HTTP_ONLY="false"
+ENV HTTP_ONLY=${HTTP_ONLY}
 
 WORKDIR /etc/nginx
 
 COPY deploy/nginx.prod.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx.http-only.conf /tmp/nginx.http-only.conf
+RUN if [ "$HTTP_ONLY" = "true" ]; then mv /tmp/nginx.http-only.conf /etc/nginx/conf.d/default.conf; else rm /tmp/nginx.http-only.conf; fi
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Webroot for Certbot HTTP-01 challenge
