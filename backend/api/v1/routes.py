@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from backend.config import DATA_DIRECTORY
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from backend.services.auth_manager import AuthSession, get_current_session
+from .auth import router as auth_router
 from .daily_report_25_26 import router as project_router
 
 
@@ -141,7 +143,10 @@ def list_projects():
 
 
 @router.get("/projects/{project_id}/pages", summary="获取项目页面列表")
-def list_project_pages(project_id: str):
+def list_project_pages(
+    project_id: str,
+    session: AuthSession = Depends(get_current_session),
+):
     entries, error = _load_project_entries()
     if error:
         return error
@@ -160,6 +165,10 @@ def list_project_pages(project_id: str):
             content={"ok": False, "message": f"项目 {project_id} 未配置页面"},
         )
 
+    allowed_pages = session.permissions.page_access
+    if allowed_pages:
+        pages = [page for page in pages if page.get("page_key") in allowed_pages]
+
     project_name = (
         target.get("project_name")
         or target.get("项目名称")
@@ -172,6 +181,9 @@ def list_project_pages(project_id: str):
         "pages": pages,
     }
 
+
+# 认证路由
+router.include_router(auth_router, prefix="/auth")
 
 # 统一项目前缀：/api/v1/projects/daily_report_25_26
 router.include_router(project_router, prefix="/projects/daily_report_25_26")

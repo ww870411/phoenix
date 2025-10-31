@@ -50,6 +50,12 @@ FRAME_TO_PERIOD = {
     "sum_ytd_peer": "24-25",
 }
 
+# 已经按日累计的指标需要保持使用 value_biz_date/value_peer_date
+_PREAGG_VALUE_ITEMS = {
+    "sum_month_total_net_complaints",
+    "sum_season_total_net_complaints",
+}
+
 
 @dataclass
 class EvalContext:
@@ -401,6 +407,8 @@ class Evaluator:
 
         field_name = FRAME_FIELDS[frame]
         if item_en:
+            if item_en in _PREAGG_VALUE_ITEMS:
+                return fields.get(field_name, Decimal(0))
             if item_en.startswith("sum_month_"):
                 if frame in ("biz_date", "sum_month_biz"):
                     field_name = "sum_month_biz"

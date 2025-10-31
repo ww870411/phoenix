@@ -1,5 +1,19 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-02）
+
+- 状态：已修正运行时表达式在投诉类累计指标上的取值方式，避免再次被窗口累计逻辑覆盖。
+- 改动：`runtime_expression.Evaluator._value_of_item` 引入 `_PREAGG_VALUE_ITEMS` 白名单，将 `sum_month_total_net_complaints`、`sum_season_total_net_complaints` 等预聚合投诉指标固定返回 `value_biz_date/value_peer_date`；新增集合位于模块顶部，便于后续补充同类条目。
+- 影响：数据展示页/审批页中“省市平台净投诉量”及其万㎡折算项在 `(本期月)/(本供暖期)` 列将与视图 `sum_basic_data/groups` 的单日累计值保持一致，不再出现额外求和。
+- 下一步：如需扩展到其它“不可加”指标，可追加英文键至 `_PREAGG_VALUE_ITEMS` 并验证对应模板配置。
+
+### 增补（2025-11-02 晚 - 登录与权限）
+
+- 新增 `services/auth_manager.py`、`services/workflow_status.py`、`api/v1/auth.py`、`schemas/auth.py`，负责账号认证、权限解析、审批状态缓存，数据源分别为 `backend_data/账户信息.json` 与新建 `backend_data/auth/permissions.json`。
+- `api/v1/routes.py` 的项目页面接口会根据 `permissions.page_access` 过滤可见页面；`api/v1/daily_report_25_26.py` 默认要求 Bearer Token，新增 `/workflow/status|approve|publish` 内存态接口（Biz 日=东八区昨日）。
+- 默认登录有效期 30 分钟（滑动），配置文件热更新自动清理会话；`/auth/login|logout|me` 提供登录、退出、会话自查。
+- 回滚方式：删除上述新增模块并恢复 `routes.py`、`daily_report_25_26.py` 相关改动即可退回原“无鉴权”状态。
+
 ## 会话小结（2025-11-01）
 
 - 状态：本次会话未改动后端代码与接口，运行时表达式仍沿用现有 `accuracy` 默认值输出。

@@ -17,10 +17,19 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from fastapi.responses import JSONResponse
+from backend.schemas.auth import (
+    WorkflowApproveRequest,
+    WorkflowPublishRequest,
+    WorkflowPublishStatus,
+    WorkflowStatusResponse,
+    WorkflowUnitStatus,
+)
+from backend.services.auth_manager import AuthSession, auth_manager, get_current_session
 from backend.services.runtime_expression import render_spec
+from backend.services.workflow_status import workflow_status_manager
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 
@@ -1442,7 +1451,111 @@ def _collect_catalog(data_file: Optional[SysPath] = None) -> Dict[str, Dict[str,
     return catalog
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_session)])
+
+
+def _collect_seed_units() -> List[str]:
+    known = auth_manager.list_known_units()
+    ordered: List[str] = list(known)
+    if "Group" not in ordered:
+        ordered.append("Group")
+    return ordered
+
+
+def _current_biz_datetime() -> datetime:
+    biz_date = auth_manager.current_biz_date()
+    naive = datetime.combine(biz_date, datetime.min.time())
+    return naive.replace(tzinfo=EAST_8)
+
+
+def _build_workflow_response(session: AuthSession) -> WorkflowStatusResponse:
+    project_key = "daily_report_25_26"
+    biz_date = auth_manager.current_biz_date()
+    biz_datetime = _current_biz_datetime()
+    seed_units = _collect_seed_units()
+    visible_units = session.allowed_units or set(seed_units)
+    snapshot = workflow_status_manager.get_snapshot(
+        project_key=project_key,
+        biz_date=biz_datetime,
+        visible_units=visible_units,
+        seed_units=seed_units,
+    )
+    units_payload = [
+        WorkflowUnitStatus(
+            unit=state.unit,
+            status=state.status,
+            approved_by=state.approved_by,
+            approved_at=state.approved_at,
+        )
+        for state in sorted(snapshot.units.values(), key=lambda item: item.unit)
+    ]
+    publish_payload = WorkflowPublishStatus(
+        status=snapshot.publish.status,
+        published_by=snapshot.publish.published_by,
+        published_at=snapshot.publish.published_at,
+    )
+    return WorkflowStatusResponse(
+        project_key=project_key,
+        biz_date=biz_date,
+        units=units_payload,
+        publish=publish_payload,
+    )
+
+
+@router.get(
+    "/workflow/status",
+    response_model=WorkflowStatusResponse,
+    summary="获取审批与发布状态",
+)
+def get_workflow_status_endpoint(
+    session: AuthSession = Depends(get_current_session),
+) -> WorkflowStatusResponse:
+    return _build_workflow_response(session)
+
+
+@router.post(
+    "/workflow/approve",
+    response_model=WorkflowStatusResponse,
+    summary="标记单位审批完成",
+)
+def approve_unit_workflow(
+    payload: WorkflowApproveRequest,
+    session: AuthSession = Depends(get_current_session),
+) -> WorkflowStatusResponse:
+    if not session.permissions.actions.can_approve:
+        raise HTTPException(status_code=403, detail="当前账号无审批权限")
+    target_unit = payload.unit
+    allowed_units = session.allowed_units or set(_collect_seed_units())
+    if target_unit not in allowed_units:
+        raise HTTPException(status_code=403, detail="无权审批该单位")
+    workflow_status_manager.mark_approved(
+        "daily_report_25_26",
+        _current_biz_datetime(),
+        target_unit,
+        session,
+    )
+    return _build_workflow_response(session)
+
+
+@router.post(
+    "/workflow/publish",
+    response_model=WorkflowStatusResponse,
+    summary="发布当日数据",
+)
+def publish_daily_report(
+    payload: WorkflowPublishRequest,
+    session: AuthSession = Depends(get_current_session),
+) -> WorkflowStatusResponse:
+    if not session.permissions.actions.can_publish:
+        raise HTTPException(status_code=403, detail="当前账号无发布权限")
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail="请确认后再发布")
+    workflow_status_manager.mark_published(
+        "daily_report_25_26",
+        _current_biz_datetime(),
+        session,
+    )
+    return _build_workflow_response(session)
 
 
 @router.get("/ping", summary="daily_report_25_26 心跳", tags=["daily_report_25_26"])

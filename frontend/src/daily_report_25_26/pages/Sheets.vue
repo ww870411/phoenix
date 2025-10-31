@@ -39,9 +39,11 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { listSheets } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
+import { useAuthStore } from '../store/auth'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const projectKey = computed(() => String(route.params.projectKey ?? ''))
 const pageKey = computed(() => String(route.params.pageKey ?? ''))
@@ -57,6 +59,7 @@ const pageDisplayName = computed(() => {
   return pageKey.value || '页面'
 })
 
+const rawSheets = ref([])
 const sheets = ref([])
 const groupedSheets = computed(() => {
   const groups = new Map()
@@ -106,12 +109,13 @@ async function loadSheets() {
     const response = await listSheets(projectKey.value, pageConfig.value)
     const catalog = response?.content || response // 兼容旧结构
     const entries = catalog && typeof catalog === 'object' ? Object.entries(catalog) : []
-    sheets.value = entries.map(([sheetKey, meta]) => ({
+    rawSheets.value = entries.map(([sheetKey, meta]) => ({
       sheet_key: sheetKey,
       sheet_name: meta?.sheet_name ?? sheetKey,
       unit_name: meta?.unit_name ?? '',
     }))
-    if (!sheets.value.length) {
+    applySheetFilter()
+    if (!rawSheets.value.length) {
       errorMessage.value = '该页面暂未配置任何表格。'
     }
   } catch (err) {
@@ -140,6 +144,21 @@ function openSheet(sheet) {
 }
 
 onMounted(loadSheets)
+function applySheetFilter() {
+  sheets.value = auth.filterSheetsByRule(pageKey.value, rawSheets.value)
+  if (!sheets.value.length && rawSheets.value.length) {
+    errorMessage.value = '当前账号无权访问该页面下的表格，请联系管理员调整权限。'
+  }
+}
+
+watch(
+  () => auth.permissions,
+  () => {
+    applySheetFilter()
+  },
+  { deep: true },
+)
+
 watch([projectKey, pageKey, pageConfig], loadSheets)
 </script>
 

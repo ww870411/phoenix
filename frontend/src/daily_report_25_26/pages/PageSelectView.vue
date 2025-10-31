@@ -23,34 +23,115 @@
           </button>
         </div>
       </section>
+      <section v-if="showWorkflowCard" class="card elevated status-block">
+        <header class="card-header status-header">
+          <div class="status-heading">
+            <h3>审批进度 · {{ workflowBizDate }}</h3>
+            <p class="status-subtitle">以东八区昨日为业务日</p>
+          </div>
+          <button
+            v-if="publishButtonVisible"
+            class="btn primary"
+            type="button"
+            :disabled="actionPending || publishDisabled"
+            @click="publishDaily"
+          >
+            {{ publishStatus?.status === 'published' ? '已发布' : actionPending ? '发布中…' : '发布日报' }}
+          </button>
+        </header>
+        <div v-if="workflowLoading" class="page-state">审批进度加载中，请稍候…</div>
+        <div v-else-if="workflowError" class="page-state error">{{ workflowError }}</div>
+        <div v-else class="status-content">
+          <table class="status-table">
+            <thead>
+              <tr>
+                <th>单位</th>
+                <th>状态</th>
+                <th>审批人</th>
+                <th>审批时间</th>
+                <th v-if="actionsColumnVisible">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="unit in workflowUnits" :key="unit.unit">
+                <td>{{ unit.unit }}</td>
+                <td>
+                  <span :class="['status-badge', unit.status]">{{ statusLabel(unit.status) }}</span>
+                </td>
+                <td>{{ unit.approved_by || '待审批' }}</td>
+                <td>{{ formatDateTime(unit.approved_at) || '—' }}</td>
+                <td v-if="actionsColumnVisible">
+                  <button
+                    v-if="unit.status !== 'approved' && canApproveUnit(unit.unit)"
+                    class="btn ghost"
+                    type="button"
+                    :disabled="actionPending"
+                    @click="approveUnit(unit.unit)"
+                  >
+                    批准
+                  </button>
+                  <span v-else>—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="publish-state">
+            <span>发布状态：</span>
+            <span :class="['status-badge', publishStatus?.status || 'pending']">
+              {{ statusLabel(publishStatus?.status) }}
+            </span>
+            <span v-if="publishStatus?.published_by">
+              ｜ 发布人：{{ publishStatus.published_by }}
+            </span>
+            <span v-if="publishStatus?.published_at">
+              ｜ 时间：{{ formatDateTime(publishStatus.published_at) }}
+            </span>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { listPages } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
+import { useAuthStore } from '../store/auth'
 
 const route = useRoute()
 const router = useRouter()
 const projectKey = String(route.params.projectKey ?? '')
 
+const auth = useAuthStore()
+const canApproveUnit = auth.canApproveUnit
+const rawPages = ref([])
 const pages = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
+const workflow = ref(null)
+const workflowLoading = ref(false)
+const workflowError = ref('')
+const actionPending = ref(false)
 
 onMounted(async () => {
+  await loadPages()
+  await refreshWorkflow()
+})
+
+async function loadPages() {
   loading.value = true
+  errorMessage.value = ''
   try {
     await ensureProjectsLoaded()
     const response = await listPages(projectKey)
-    pages.value = Array.isArray(response?.pages) ? response.pages : []
+    rawPages.value = Array.isArray(response?.pages) ? response.pages : []
+    pages.value = auth.filterPages(rawPages.value)
     if (!pages.value.length) {
-      errorMessage.value = '未找到可选页面，请检查后端配置。'
+      errorMessage.value = '暂无可访问的页面，请联系管理员确认权限。'
     }
   } catch (err) {
     console.error(err)
@@ -58,7 +139,34 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+async function refreshWorkflow() {
+  workflowLoading.value = true
+  workflowError.value = ''
+  try {
+    const response = await auth.loadWorkflowStatus(projectKey)
+    workflow.value = response || null
+  } catch (err) {
+    console.error(err)
+    workflowError.value = err instanceof Error ? err.message : '获取审批进度失败'
+  } finally {
+    workflowLoading.value = false
+  }
+}
+
+watch(
+  () => auth.permissions,
+  () => {
+    pages.value = auth.filterPages(rawPages.value)
+    if (!pages.value.length && rawPages.value.length) {
+      errorMessage.value = '当前账号无可访问页面，请联系管理员。'
+    } else if (pages.value.length) {
+      errorMessage.value = ''
+    }
+  },
+  { deep: true },
+)
 
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
 
@@ -66,6 +174,77 @@ const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: projectName.value, to: null },
 ])
+
+const workflowUnits = computed(() => {
+  const units = workflow.value?.units
+  return Array.isArray(units) ? units : []
+})
+
+const publishStatus = computed(() => workflow.value?.publish || null)
+const workflowBizDate = computed(() => workflow.value?.biz_date || '')
+const actionsColumnVisible = computed(() => auth.canApprove)
+const publishButtonVisible = computed(() => auth.canPublish)
+const publishDisabled = computed(
+  () => publishStatus.value?.status === 'published' || workflowLoading.value,
+)
+
+const showWorkflowCard = computed(() => {
+  return (
+    workflowLoading.value ||
+    Boolean(workflowError.value) ||
+    workflowUnits.value.length > 0 ||
+    auth.canApprove ||
+    auth.canPublish
+  )
+})
+
+function statusLabel(status) {
+  if (status === 'approved') return '已审批'
+  if (status === 'published') return '已发布'
+  return '待处理'
+}
+
+function formatDateTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d} ${hh}:${mm}`
+}
+
+async function approveUnit(unit) {
+  if (actionPending.value) return
+  actionPending.value = true
+  workflowError.value = ''
+  try {
+    const response = await auth.approveUnit(projectKey, unit)
+    workflow.value = response || workflow.value
+  } catch (err) {
+    console.error(err)
+    workflowError.value = err instanceof Error ? err.message : '审批失败'
+  } finally {
+    actionPending.value = false
+  }
+}
+
+async function publishDaily() {
+  if (actionPending.value || publishDisabled.value) return
+  actionPending.value = true
+  workflowError.value = ''
+  try {
+    const response = await auth.publish(projectKey)
+    workflow.value = response || workflow.value
+  } catch (err) {
+    console.error(err)
+    workflowError.value = err instanceof Error ? err.message : '发布失败'
+  } finally {
+    actionPending.value = false
+  }
+}
 
 function openPage(page) {
   // 支持“专用调试页面”：若后端 pages 的键是形如 "/debug/..."，则直接导航到该路径
@@ -142,5 +321,94 @@ function openPage(page) {
 .page-card-desc {
   font-size: 14px;
   color: var(--neutral-500);
+}
+
+.status-block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-heading h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.status-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.status-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.status-table th,
+.status-table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.status-table th {
+  color: var(--neutral-500);
+  font-weight: 600;
+  background: #f9fafb;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.status-badge.approved,
+.status-badge.published {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.status-badge.pending {
+  background: rgba(251, 191, 36, 0.15);
+  color: #b45309;
+}
+
+.publish-state {
+  font-size: 13px;
+  color: var(--neutral-600);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn.ghost {
+  border: 1px solid var(--primary-200);
+  background: transparent;
+  color: var(--primary-600);
+}
+
+.btn.ghost:hover {
+  background: rgba(59, 130, 246, 0.1);
 }
 </style>

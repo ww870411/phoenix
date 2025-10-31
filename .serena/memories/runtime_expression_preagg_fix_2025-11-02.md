@@ -1,0 +1,1 @@
+2025-11-02：runtime_expression.Evaluator 增加 _PREAGG_VALUE_ITEMS 白名单，sum_month_total_net_complaints、sum_season_total_net_complaints 在 value_biz_date/value_peer_date 调用时不再被映射到 sum_month_/sum_ytd_ 字段，保障不可加投诉指标直接返回视图已有的日累计值。本次在模块顶部插入常量时 Serena 无法精准删除冗余行，已按规范降级使用 apply_patch。

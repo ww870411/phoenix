@@ -1,0 +1,117 @@
+{
+  "metadata": {
+    "description": "Phoenix 开发环境账号权限矩阵，来源于 configs/10.31用户权限设定.md",
+    "updated_at": "2025-11-02T00:00:00+08:00",
+    "biz_date_offset_days": -1
+  },
+  "groups": {
+    "Global_admin": {
+      "hierarchy": 100,
+      "page_access": ["data_show", "data_approval", "data_entry", "constant_data"],
+      "sheet_rules": {
+        "data_show": { "mode": "all" },
+        "data_approval": { "mode": "all" },
+        "data_entry": { "mode": "all" },
+        "constant_data": { "mode": "all" }
+      },
+      "units_access": ["*"],
+      "actions": {
+        "can_submit": true,
+        "can_approve": true,
+        "can_publish": true
+      }
+    },
+    "Group_admin": {
+      "hierarchy": 90,
+      "page_access": ["data_show", "data_approval", "data_entry", "constant_data"],
+      "sheet_rules": {
+        "data_show": { "mode": "all" },
+        "data_approval": { "mode": "all" },
+        "data_entry": { "mode": "all" },
+        "constant_data": { "mode": "all" }
+      },
+      "units_access": ["*"],
+      "actions": {
+        "can_submit": true,
+        "can_approve": true,
+        "can_publish": true
+      }
+    },
+    "ZhuChengQu_admin": {
+      "hierarchy": 80,
+      "page_access": ["data_show", "data_approval", "data_entry"],
+      "sheet_rules": {
+        "data_show": {
+          "mode": "explicit",
+          "sheets": ["ZhuChengQu_sum_show_Sheet"]
+        },
+        "data_approval": {
+          "mode": "explicit",
+          "sheets": [
+            "ZhuChengQu_approval_Sheet",
+            "BeiHai_approval_Sheet",
+            "XiangHai_approval_Sheet",
+            "GongRe_approval_Sheet"
+          ]
+        },
+        "data_entry": {
+          "mode": "explicit",
+          "sheets": [
+            "BeiHai_co_generation_Sheet",
+            "BeiHai_water_boiler_Sheet",
+            "BeiHai_gas_boiler_Sheet",
+            "XiangHai_Sheet",
+            "GongRe_Sheet",
+            "GongRe_branches_detail_Sheet"
+          ]
+        }
+      },
+      "units_access": ["ZhuChengQu", "BeiHai", "XiangHai", "GongRe"],
+      "actions": {
+        "can_submit": true,
+        "can_approve": true,
+        "can_publish": false
+      }
+    },
+    "Unit_admin": {
+      "hierarchy": 70,
+      "page_access": ["data_approval", "data_entry"],
+      "sheet_rules": {
+        "data_approval": { "mode": "by_unit" },
+        "data_entry": { "mode": "by_unit" }
+      },
+      "units_access": ["{user_unit}"],
+      "actions": {
+        "can_submit": true,
+        "can_approve": true,
+        "can_publish": false
+      }
+    },
+    "unit_filler": {
+      "hierarchy": 60,
+      "page_access": ["data_entry"],
+      "sheet_rules": {
+        "data_entry": { "mode": "by_unit" }
+      },
+      "units_access": ["{user_unit}"],
+      "actions": {
+        "can_submit": true,
+        "can_approve": false,
+        "can_publish": false
+      }
+    },
+    "Group_viewer": {
+      "hierarchy": 50,
+      "page_access": ["data_show"],
+      "sheet_rules": {
+        "data_show": { "mode": "all" }
+      },
+      "units_access": ["Group"],
+      "actions": {
+        "can_submit": false,
+        "can_approve": false,
+        "can_publish": false
+      }
+    }
+  }
+}

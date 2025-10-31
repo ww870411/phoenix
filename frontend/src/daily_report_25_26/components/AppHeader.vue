@@ -7,6 +7,7 @@
         <span class="brand-sub">数据填报平台</span>
       </div>
       <nav class="nav">
+        <span v-if="userLabel" class="user-info">{{ userLabel }}</span>
         <button class="btn" @click="logout">退出</button>
       </nav>
     </div>
@@ -14,12 +15,25 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
 
 const router = useRouter()
-function goHome() { router.push('/projects') }
-function logout() {
-  localStorage.removeItem('phoenix_token')
+const auth = useAuthStore()
+
+function goHome() {
+  router.push('/projects')
+}
+
+const userLabel = computed(() => {
+  if (!auth?.user) return ''
+  const unit = auth.user.unit ? `｜${auth.user.unit}` : ''
+  return `${auth.user.username}${unit}`
+})
+
+async function logout() {
+  await auth.logout()
   router.replace('/login')
 }
 </script>
@@ -46,6 +60,11 @@ function logout() {
 .brand-name { font-weight: 800; letter-spacing: .5px; }
 .brand-sub { opacity: .9; font-size: 12px; }
 .nav { display: flex; gap: 8px; }
+.user-info {
+  font-size: 13px;
+  opacity: .9;
+  align-self: center;
+}
 .btn {
   height: 30px;
   padding: 0 12px;

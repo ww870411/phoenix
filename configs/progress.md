@@ -1,5 +1,25 @@
 # 进度记录
 
+## 2025-11-02（登录与审批进度打通）
+
+前置说明（降级留痕）：
+- Serena 对 `backend_data/账户信息.json` 返回空结果，改用 `read_file` 获取原始配置；后续所有代码编辑均使用 `apply_patch` 小步提交。
+- 新增权限矩阵、后端模块与前端状态管理涉及多个新文件，均按 3.9 矩阵要求记录，并可通过删除新增文件与恢复引用完成回滚。
+
+本次动作：
+- 配置：新增 `backend_data/auth/permissions.json`，整理用户组→页面/操作/单位映射及审批 Biz 日偏移（默认东八区“昨日”）。
+- 后端：新增 `backend/services/auth_manager.py`、`backend/services/workflow_status.py` 与 `backend/api/v1/auth.py`、`backend/schemas/auth.py`；`routes.py`、`daily_report_25_26.py` 接入登录校验、审批/发布接口；所有项目路由默认要求 Bearer Token。
+- 前端：新增 Pinia `auth` store、统一请求头注入与 `/auth/*` 调用；登录页改为真实认证流程；路由守卫自动判定跳转；页面选择页增加审批进度卡片（含批准/发布操作与权限过滤）；模板/表格列表按用户权限过滤。
+
+影响范围与回滚：
+- 认证与权限逻辑集中在 `backend/services/auth_manager.py` 与 `frontend/src/daily_report_25_26/store/auth.js`；删除新文件并还原调用点即可回滚至旧版“摆设登录”。
+- 审批进度使用内存态，可随时替换为数据库实现；移除 `/workflow` 路由及前端卡片即可恢复原界面。
+
+下一步建议：
+1. 后端提交/审批接口接入细粒度权限校验（当前仅验证登录态）。
+2. 账户明文密码与配置热加载策略需在上线前引入哈希与缓存失效通知。
+3. 审批/发布状态落地数据库或 Redis，补充多节点场景下的一致性策略。
+
 ## 2025-10-29（会话开始：问候/初始化）
 
 前置说明（降级留痕）：
@@ -224,3 +244,17 @@ sum_basic_data 相关：
 影响范围与回滚：
 - 变更主要影响审批页(`ApprovalView`)、展示页(`DisplayRuntimeView`)的渲染逻辑以及运行时表达式的行级精度；若需回滚，可还原上述文件至本次改动前版本，或删除后端 `accuracy_map` 相关逻辑并恢复统一小数位行为。
 - 若需恢复旧的单 company 求值，可还原 `runtime_expression.py` 中 `_resolve_company_item/_value_of_item` 调整，并将 `companies_needed` 解析段落改回仅按行默认 company 读取。
+
+## 2025-11-02
+
+前置说明：
+- 运行时表达式模块需补充白名单逻辑，Serena 无法在模块顶部对常量行做精确删除，按 3.9 降级矩阵使用 `apply_patch` 调整字面文本，已在本条记录留痕；其余修改通过 Serena 完成。
+
+本次改动：
+- `backend/services/runtime_expression.py`：新增 `_PREAGG_VALUE_ITEMS` 集合，并在 `_value_of_item` 中针对 `sum_month_total_net_complaints`、`sum_season_total_net_complaints` 等预聚合投诉指标直接返回 `value_biz_date/value_peer_date` 字段，避免被累计窗口逻辑强制改写为 `sum_month_*`/`sum_ytd_*`。
+
+验证：
+- 暂未执行自动化用例；建议在 `ZhuChengQu_sum_show_Sheet` 页面检查“省市平台净投诉量”行 `(本期月)/(本供暖期)` 列是否与视图 `sum_basic_data` 的 `value_biz_date` 保持一致（与前一版本对比应无再次累加现象）。
+
+影响范围与回滚：
+- 影响展示页及审批页涉及“本月累计净投诉量”“本供暖期累计净投诉量”的表达式求值；若需回退，可移除 `_PREAGG_VALUE_ITEMS` 并恢复 `_value_of_item` 中的累计字段映射逻辑，或整文件回滚至本次提交前版本。

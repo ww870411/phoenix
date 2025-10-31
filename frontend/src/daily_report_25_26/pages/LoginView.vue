@@ -11,9 +11,10 @@
           <span>密码</span>
           <input v-model="password" type="password" placeholder="输入密码" required />
         </label>
-        <button class="btn primary" type="submit" :disabled="loading">
-          {{ loading ? '登录中...' : '登录' }}
+        <button class="btn primary" type="submit" :disabled="isLoading">
+          {{ isLoading ? '登录中...' : '登录' }}
         </button>
+        <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       </form>
     </div>
   </div>
@@ -22,24 +23,27 @@
 
 <script setup>
 import '../styles/theme.css'
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
 
-const username = ref('');
-const password = ref('');
-const loading = ref(false);
-const router = useRouter();
+const auth = useAuthStore()
+const router = useRouter()
+const username = ref('')
+const password = ref('')
+const errorMessage = ref('')
+const isLoading = computed(() => auth.loading)
 
 async function onSubmit() {
-  if (loading.value) return;
-  loading.value = true;
+  if (isLoading.value) return
+  errorMessage.value = ''
   try {
-    // 简化：前端本地模拟登录态
-    // 真实项目应调用后端认证并获取令牌
-    localStorage.setItem('phoenix_token', `mock-${Date.now()}`);
-    await router.replace('/projects');
-  } finally {
-    loading.value = false;
+    await auth.login(username.value, password.value)
+    await router.replace('/projects')
+  } catch (err) {
+    console.error(err)
+    const message = err instanceof Error ? err.message : '登录失败，请稍后再试'
+    errorMessage.value = message
   }
 }
 </script>
@@ -61,6 +65,12 @@ async function onSubmit() {
 }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field span { font-size: 13px; color: #333; }
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: #d14343;
+  text-align: center;
+}
 .footer {
   text-align: center;
   padding: 12px 0 20px;
