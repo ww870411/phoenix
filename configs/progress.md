@@ -7,7 +7,7 @@
 - 回滚思路：将 `frontend/src/daily_report_25_26/pages/LoginView.vue` 恢复至 11-02 版本即可撤销本次视觉调整；文档条目可按需删除。
 
 本次动作：
-- 前端：重构 `LoginView.vue`，引入视觉面板与装饰图形，保持登录逻辑不变并增加响应式样式；追加视觉面板文本居中以贴合参考页面效果。
+- 前端：重构 `LoginView.vue`，引入视觉面板与装饰图形，保持登录逻辑不变并增加响应式样式；追加视觉面板文本居中并下调蓝色渐变亮度以贴合参考页面效果。
 - 文档：更新 `frontend/README.md` 与 `configs/progress.md` 记录登录页视觉同步成果。
 
 影响范围与回滚：
@@ -29,6 +29,7 @@
 - 日期管理：创建 `backend_data/date.json`，`auth_manager` 统一计算实际业务日（东八区昨日）并维护“数据展示日期”；发布动作会将展示日期同步至当前业务日，未发布时保持上一批数据，前端在审批卡片中提示“当前业务日期 | 当前数据展示日期”。
 - 部署：新增 `backend/requirements.txt`、`backend/Dockerfile.prod`、`frontend/Dockerfile.prod`、`deploy/nginx.conf`、`docker-compose.prod.yml` 与 `deploy/server_setup.bat`，形成可直接在服务器构建的生产版容器栈；批处理脚本负责创建数据目录、载入 `.env.prod` 并执行 `docker compose build/up`。
 - UI：`DataEntryView` 为 `Unit_admin` / `unit_filler` 引入历史日期只读模式（非当期业务日仅可查看、不能编辑提交），并在 `main.js` 全局引入主题样式修复子路由刷新样式丢失问题。
+- 编排：`docker-compose.prod.yml` 中数据库使用命名卷 `db_data`，后端数据仍通过宿主挂载 `./backend_data:/app/data` 保持可读写配置。
 
 - 影响范围与回滚：
   - 认证与权限逻辑集中在 `backend/services/auth_manager.py` 与 `frontend/src/daily_report_25_26/store/auth.js`；删除新文件并还原调用点即可回滚至旧版“摆设登录”。

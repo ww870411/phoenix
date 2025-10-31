@@ -68,7 +68,7 @@ async function onSubmit() {
 .login-page {
   min-height: 100vh;
   display: flex;
-  background: linear-gradient(135deg, #3876da 0%, #4b89df 45%, #9ed6ff 100%);
+  background: linear-gradient(135deg, #2f63c7 0%, #3f72d4 45%, #82b8f0 100%);
   color: #fff;
 }
 
@@ -306,7 +306,7 @@ async function onSubmit() {
 @media (max-width: 1024px) {
   .login-page {
     flex-direction: column;
-    background: linear-gradient(135deg, #3c7ade 0%, #7ab9ff 100%);
+    background: linear-gradient(135deg, #325fbf 0%, #6aa6e9 100%);
   }
 
   .visual-panel {
