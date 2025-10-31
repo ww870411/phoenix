@@ -24,6 +24,7 @@
 - Windows 服务器可运行 `deploy/server_setup.bat` 自动构建并上线；Linux 主机可参考该脚本的步骤（创建数据目录 → docker compose build/up → 清理悬挂镜像）。
 - 若需加入额外依赖，请更新 `backend/requirements.txt` 并重新构建 `backend/Dockerfile.prod`，无需修改开发环境 Dockerfile。
 - 提供 `docker-compose.server.yml`：沿用旧项目的 nginx + certbot 布局，`web` 服务使用 `deploy/Dockerfile.web`（内置 `deploy/nginx.prod.conf`），默认监听 80/443 并反向代理至 `backend`，证书文件存放在命名卷 `certbot_etc`/`certbot_www`。
+- 新增 `init-certbot.sh`：在服务器根目录执行 `bash init-certbot.sh` 即可自动申请证书并重启整套服务（内部调用 `docker compose -f docker-compose.server.yml run --rm --entrypoint /bin/sh certbot -c "certbot certonly ..."`）。
 
 ## 会话小结（2025-11-01）
 
