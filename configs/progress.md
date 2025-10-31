@@ -30,6 +30,7 @@
 - 部署：新增 `backend/requirements.txt`、`backend/Dockerfile.prod`、`frontend/Dockerfile.prod`、`deploy/nginx.conf`、`docker-compose.prod.yml` 与 `deploy/server_setup.bat`，形成可直接在服务器构建的生产版容器栈；批处理脚本负责创建数据目录、载入 `.env.prod` 并执行 `docker compose build/up`。
 - UI：`DataEntryView` 为 `Unit_admin` / `unit_filler` 引入历史日期只读模式（非当期业务日仅可查看、不能编辑提交），并在 `main.js` 全局引入主题样式修复子路由刷新样式丢失问题。
 - 编排：`docker-compose.prod.yml` 中数据库使用命名卷 `db_data`，后端数据仍通过宿主挂载 `./backend_data:/app/data` 保持可读写配置。
+- 新增 `docker-compose.server.yml` / `deploy/Dockerfile.web` / `deploy/nginx.prod.conf`，复刻旧项目的 Nginx+Certbot 方案（80/443 暴露、域名 `platform.smartview.top`），方便在 VPS 上直接替换运行。
 
 - 影响范围与回滚：
   - 认证与权限逻辑集中在 `backend/services/auth_manager.py` 与 `frontend/src/daily_report_25_26/store/auth.js`；删除新文件并还原调用点即可回滚至旧版“摆设登录”。

@@ -139,6 +139,14 @@ docker compose up -d --build
 
 - `VITE_API_BASE`：前端调用后端的基础地址，开发默认 `http://127.0.0.1:8000`；
 - 其余变量按需扩展。
+
+## 生产部署（Nginx + Certbot）
+
+- 使用 `docker-compose.server.yml` 启动生产栈：包含 `web`（Nginx + 前端静态资源 + 反向代理）、`certbot`、`backend`、`db` 四个服务。
+- `deploy/Dockerfile.web` 会构建 Vue 静态文件并复制到 Nginx（基础镜像 `nginx:1.27-alpine`），同时加载 `deploy/nginx.prod.conf`。
+- 默认域名沿用旧项目 `platform.smartview.top`，`/api/` 反向代理到 `backend:8000`。若域名不同，请同步修改 `nginx.prod.conf` 与证书路径。
+- HTTPS 证书存放于卷 `certbot_etc`、`certbot_www`；首次部署需在服务器上执行 `docker compose -f docker-compose.server.yml run --rm certbot certonly --webroot -w /var/www/certbot -d <你的域名>` 获取证书，之后常驻的 `certbot` 服务会每 12 小时自动尝试续期。
+- 启动命令示例：`docker compose -f docker-compose.server.yml up -d --build`。
 #
 # 追加变更记录（2025-10-23）
 

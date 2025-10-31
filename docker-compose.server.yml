@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  backend:
+    container_name: phoenix-backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-phoenix}@db:5432/${POSTGRES_DB:-phoenix}}
+      DATA_DIRECTORY: /app/data
+    volumes:
+      - ./backend_data:/app/data
+    depends_on:
+      - db
+    networks:
+      - phoenix_net
+
+  db:
+    image: postgres:15-alpine
+    container_name: phoenix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-phoenix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phoenix}
+      POSTGRES_DB: ${POSTGRES_DB:-phoenix}
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phoenix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - phoenix_net
+
+  web:
+    container_name: phoenix-web
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+
+  certbot:
+    image: certbot/certbot
+    container_name: phoenix-certbot
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh
+    command: "-c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h; done'"
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+
+networks:
+  phoenix_net:
+    driver: bridge
+
+volumes:
+  db_data:
+  certbot_etc:
+  certbot_www:
