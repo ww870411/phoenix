@@ -72,6 +72,7 @@ services:
     restart: unless-stopped
     networks:
       - phoenix_net
+    profiles: ["certbot"]
 
   certbot:
     image: certbot/certbot
