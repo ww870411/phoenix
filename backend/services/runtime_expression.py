@@ -105,7 +105,7 @@ def map_columns_to_frames(columns: List[str]) -> Dict[int, str]:
 # ------------------------
 # 数据预取：指标与常量
 # ------------------------
-def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict[str, Dict[str, Decimal]]:
+def _fetch_metrics_from_view(session: Session, table: str, company: str, biz_date: Optional[str] = None) -> Dict[str, Dict[str, Decimal]]:
     """
     从视图按 company 维度一次性拉取所有 item 的 6 个窗口值。
     允许表名为白名单：sum_basic_data | groups
@@ -113,6 +113,10 @@ def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict
     """
     table_whitelist = {"sum_basic_data", "groups"}
     target = table if table in table_whitelist else "sum_basic_data"
+    if biz_date and biz_date.lower() != "regular":
+        session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
+    else:
+        session.execute(text("SET LOCAL phoenix.biz_date = DEFAULT"))
     sql = text(
         f"""
         SELECT item, item_cn, unit,
@@ -141,58 +145,6 @@ def _fetch_metrics_from_view(session: Session, table: str, company: str) -> Dict
             cn_key = str(r.get("item_cn")).strip()
             if cn_key and cn_key not in out:
                 out[cn_key] = bucket
-    return out
-
-
-def _fetch_metrics_dynamic_by_date(session: Session, company: str, biz_date: str) -> Dict[str, Dict[str, Decimal]]:
-    """
-    动态日期路径：按传入 biz_date 复用视图定义的窗口口径，在基础表 daily_basic_data 上计算聚合。
-    """
-    sql = text(
-        """
-        WITH anchor_dates AS (
-          SELECT
-            CAST(:biz_date AS date) AS biz_date,
-            (CAST(:biz_date AS date) - INTERVAL '1 year')::date AS peer_date
-        ),
-        window_defs AS (
-          SELECT
-            biz_date, peer_date,
-            biz_date - INTERVAL '6 day' AS biz_7d_start,
-            peer_date - INTERVAL '6 day' AS peer_7d_start,
-            date_trunc('month', biz_date)::date AS biz_month_start,
-            date_trunc('month', peer_date)::date AS peer_month_start,
-            DATE '2025-10-01' AS biz_ytd_start,
-            DATE '2024-10-01' AS peer_ytd_start
-          FROM anchor_dates
-        )
-        SELECT
-          d.item,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0) AS value_biz_date,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.biz_month_start AND w.biz_date), 0) AS sum_month_biz,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.peer_month_start AND w.peer_date), 0) AS sum_month_peer,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.biz_ytd_start AND w.biz_date), 0) AS sum_ytd_biz,
-          COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.peer_ytd_start AND w.peer_date), 0) AS sum_ytd_peer
-        FROM daily_basic_data d
-        CROSS JOIN window_defs w
-        WHERE d.company = :company
-          AND d.date BETWEEN w.peer_ytd_start AND w.biz_date
-        GROUP BY d.item;
-        """
-    )
-    rows = session.execute(sql, {"company": company, "biz_date": biz_date}).mappings().all()
-    out: Dict[str, Dict[str, Decimal]] = {}
-    for r in rows:
-        item = r["item"]
-        out[item] = {
-            "value_biz_date": _to_decimal(r["value_biz_date"]),
-            "value_peer_date": _to_decimal(r["value_peer_date"]),
-            "sum_month_biz": _to_decimal(r["sum_month_biz"]),
-            "sum_month_peer": _to_decimal(r["sum_month_peer"]),
-            "sum_ytd_biz": _to_decimal(r["sum_ytd_biz"]),
-            "sum_ytd_peer": _to_decimal(r["sum_ytd_peer"]),
-        }
     return out
 
 
@@ -945,14 +897,16 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 _default_table = route_cfg.get("default") or _default_table
             except Exception:
                 pass
+        context_biz_date = None
+        if context and isinstance(context.get("biz_date"), str):
+            context_biz_date = context["biz_date"]
         for comp in companies_needed:
             try:
-                if context and isinstance(context.get("biz_date"), str) and context["biz_date"] != "regular":
-                    metrics_by_company[comp] = _fetch_metrics_dynamic_by_date(session, comp, context["biz_date"])
-                else:
-                    # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
-                    _per_table = "groups" if comp in _groups_set else _default_table
-                    metrics_by_company[comp] = _fetch_metrics_from_view(session, _per_table, comp)
+                # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
+                _per_table = "groups" if comp in _groups_set else _default_table
+                metrics_by_company[comp] = _fetch_metrics_from_view(
+                    session, _per_table, comp, context_biz_date
+                )
             except Exception:
                 metrics_by_company[comp] = {}
             consts_by_company[comp] = {}

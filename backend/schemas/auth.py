@@ -79,5 +79,6 @@ class WorkflowPublishStatus(BaseModel):
 class WorkflowStatusResponse(BaseModel):
     project_key: str
     biz_date: date
+    display_date: date
     units: List[WorkflowUnitStatus] = Field(default_factory=list)
     publish: WorkflowPublishStatus

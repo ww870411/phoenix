@@ -1,0 +1,1 @@
+2025-11-02：/runtime/spec/eval 默认从 auth_manager.current_display_date() 读取展示日期（DATA_DIRECTORY/date.json 内 set_biz_date），当请求未显式指定或传入 'regular' 时使用该日期调用 render_spec，并在响应返回 biz_date/biz_date_mode/requested_biz_date，方便展示页在固定口径下切历史数据。

@@ -11,14 +11,14 @@ DROP VIEW IF EXISTS sum_basic_data;
 
 CREATE VIEW sum_basic_data AS
 
-WITH anchor_dates AS (
-
+WITH params AS (
+  SELECT COALESCE(current_setting('phoenix.biz_date', true)::date, (current_date - INTERVAL '1 day')::date) AS biz_date
+),
+anchor_dates AS (
   SELECT
-
-    (current_date - INTERVAL '1 day')::date AS biz_date,
-
-    (current_date - INTERVAL '1 day' - INTERVAL '1 year')::date AS peer_date
-
+    p.biz_date,
+    (p.biz_date - INTERVAL '1 year')::date AS peer_date
+  FROM params p
 ),
 
 window_defs AS (
@@ -958,10 +958,14 @@ SELECT * FROM calc;
 DROP VIEW IF EXISTS groups;
 
 CREATE VIEW groups AS
-WITH anchor_dates AS (
+WITH params AS (
+  SELECT COALESCE(current_setting('phoenix.biz_date', true)::date, (current_date - INTERVAL '1 day')::date) AS biz_date
+),
+anchor_dates AS (
   SELECT
-    (current_date - INTERVAL '1 day')::date AS biz_date,
-    (current_date - INTERVAL '1 day' - INTERVAL '1 year')::date AS peer_date
+    p.biz_date,
+    (p.biz_date - INTERVAL '1 year')::date AS peer_date
+  FROM params p
 ),
 w AS (
   SELECT
@@ -1347,4 +1351,3 @@ UNION ALL
 SELECT * FROM zhuchengqu_rollup
 UNION ALL
 SELECT * FROM grand_rollup;
-

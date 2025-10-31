@@ -1,0 +1,68 @@
+{
+  "daily_report_25_26": {
+    "2025-10-30T00:00:00+08:00": {
+      "units": {
+        "BeiFang": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "BeiHai": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "GongRe": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "Group": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "JinPu": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "JinZhou": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "XiangHai": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "YanJiuYuan": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "ZhuChengQu": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "ZhuangHe": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "系统管理员": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      "publish": {
+        "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+      }
+    }
+  }
+}

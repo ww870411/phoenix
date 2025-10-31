@@ -5,14 +5,24 @@
 - 状态：已修正运行时表达式在投诉类累计指标上的取值方式，避免再次被窗口累计逻辑覆盖。
 - 改动：`runtime_expression.Evaluator._value_of_item` 引入 `_PREAGG_VALUE_ITEMS` 白名单，将 `sum_month_total_net_complaints`、`sum_season_total_net_complaints` 等预聚合投诉指标固定返回 `value_biz_date/value_peer_date`；新增集合位于模块顶部，便于后续补充同类条目。
 - 影响：数据展示页/审批页中“省市平台净投诉量”及其万㎡折算项在 `(本期月)/(本供暖期)` 列将与视图 `sum_basic_data/groups` 的单日累计值保持一致，不再出现额外求和。
+- 新增：`/runtime/spec/eval` 在未显式指定 `biz_date` 或传入 `regular` 时，会读取 `auth_manager.current_display_date()`（映射 `backend_data/date.json` 的 `set_biz_date`），以该日期执行 `render_spec` 并在响应中回显 `biz_date`/`biz_date_mode`/`requested_biz_date`，方便展示页在同一口径下切换历史数据。
+- 视图支持业务日期参数：`sum_basic_data`、`groups` 通过数据库会话变量 `phoenix.biz_date` 读取日期；运行时在查询前执行 `SET LOCAL phoenix.biz_date = :biz_date`，既保留原 SQL 中的派生计算，又允许展示页自由指定日期。
 - 下一步：如需扩展到其它“不可加”指标，可追加英文键至 `_PREAGG_VALUE_ITEMS` 并验证对应模板配置。
 
 ### 增补（2025-11-02 晚 - 登录与权限）
 
 - 新增 `services/auth_manager.py`、`services/workflow_status.py`、`api/v1/auth.py`、`schemas/auth.py`，负责账号认证、权限解析、审批状态缓存，数据源分别为 `backend_data/账户信息.json` 与新建 `backend_data/auth/permissions.json`。
-- `api/v1/routes.py` 的项目页面接口会根据 `permissions.page_access` 过滤可见页面；`api/v1/daily_report_25_26.py` 默认要求 Bearer Token，新增 `/workflow/status|approve|publish` 内存态接口（Biz 日=东八区昨日）。
+- `api/v1/routes.py` 的项目页面接口会根据 `permissions.page_access` 过滤可见页面；`api/v1/daily_report_25_26.py` 默认要求 Bearer Token，新增 `/workflow/status|approve|publish` 持久化接口（Biz 日=东八区昨日），状态文件位于 `backend_data/status.json`。
+- 新建 `backend_data/date.json` 统一维护“数据展示日期”，`auth_manager.current_display_date()` 若未发布当日数据则回落至上一期；发布成功后调用 `set_display_date()` 同步配置，确保展示端在审批完成前仍读取上一批数据。
 - 默认登录有效期 30 分钟（滑动），配置文件热更新自动清理会话；`/auth/login|logout|me` 提供登录、退出、会话自查。
 - 回滚方式：删除上述新增模块并恢复 `routes.py`、`daily_report_25_26.py` 相关改动即可退回原“无鉴权”状态。
+
+### 部署说明补充（2025-11-02 深夜）
+
+- 新增 `backend/requirements.txt`、`backend/Dockerfile.prod` 作为生产镜像专用依赖与构建脚本，构建阶段安装至 `/install`，运行阶段仅包含必要库与代码；默认执行 `uvicorn ... --workers 4`。
+- 推荐配合仓库根目录的 `docker-compose.prod.yml` 统一启动数据库 / 后端 / 前端镜像，后端仍通过卷 `./backend_data:/app/data` 读取配置与上传文件。
+- Windows 服务器可运行 `deploy/server_setup.bat` 自动构建并上线；Linux 主机可参考该脚本的步骤（创建数据目录 → docker compose build/up → 清理悬挂镜像）。
+- 若需加入额外依赖，请更新 `backend/requirements.txt` 并重新构建 `backend/Dockerfile.prod`，无需修改开发环境 Dockerfile。
 
 ## 会话小结（2025-11-01）
 

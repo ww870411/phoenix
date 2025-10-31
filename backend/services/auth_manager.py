@@ -120,6 +120,10 @@ class AuthManager:
         self._accounts_mtime: Optional[float] = None
         self._permissions_mtime: Optional[float] = None
 
+        self._date_config_path = (DATA_DIRECTORY / "date.json").resolve()
+        self._date_config_mtime: Optional[float] = None
+        self._display_date_cache: Optional[date] = None
+
         self._sessions: Dict[str, AuthSession] = {}
         self._user_tokens: Dict[str, Set[str]] = {}
 
@@ -386,6 +390,62 @@ class AuthManager:
         base = self._now().date()
         offset = self._biz_date_offset_days
         return base + timedelta(days=offset)
+
+    def _refresh_display_date_locked(self) -> None:
+        if not self._date_config_path.exists():
+            self._date_config_mtime = None
+            self._display_date_cache = None
+            return
+        try:
+            raw = json.loads(self._date_config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            self._display_date_cache = None
+        else:
+            display_value = raw.get("set_biz_date")
+            parsed: Optional[date] = None
+            if isinstance(display_value, str) and display_value:
+                try:
+                    parsed = date.fromisoformat(display_value)
+                except ValueError:
+                    parsed = None
+            self._display_date_cache = parsed
+        finally:
+            try:
+                self._date_config_mtime = self._date_config_path.stat().st_mtime
+            except FileNotFoundError:
+                self._date_config_mtime = None
+                self._display_date_cache = None
+
+    def current_display_date(self) -> date:
+        biz_date = self.current_biz_date()
+        with self._lock:
+            try:
+                current_mtime = self._date_config_path.stat().st_mtime
+            except FileNotFoundError:
+                current_mtime = None
+            if current_mtime != self._date_config_mtime:
+                self._refresh_display_date_locked()
+            return self._display_date_cache or biz_date
+
+    def set_display_date(self, target_date: date) -> None:
+        try:
+            raw_text = self._date_config_path.read_text(encoding="utf-8")
+            payload = json.loads(raw_text)
+            if not isinstance(payload, dict):
+                payload = {}
+        except FileNotFoundError:
+            payload = {}
+        except json.JSONDecodeError:
+            payload = {}
+        payload["set_biz_date"] = target_date.isoformat()
+        with self._lock:
+            self._date_config_path.parent.mkdir(parents=True, exist_ok=True)
+            self._date_config_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            self._date_config_mtime = self._date_config_path.stat().st_mtime
+            self._display_date_cache = target_date
 
 
 auth_manager = AuthManager()

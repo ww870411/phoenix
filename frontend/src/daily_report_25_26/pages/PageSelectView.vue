@@ -26,8 +26,10 @@
       <section v-if="showWorkflowCard" class="card elevated status-block">
         <header class="card-header status-header">
           <div class="status-heading">
-            <h3>审批进度 · {{ workflowBizDate }}</h3>
-            <p class="status-subtitle">以东八区昨日为业务日</p>
+            <h3>审批进度</h3>
+            <p class="status-subtitle">
+              当前业务日期：{{ workflowBizDateText }} ｜ 当前数据展示日期：{{ workflowDisplayDateText }}
+            </p>
           </div>
           <button
             v-if="publishButtonVisible"
@@ -177,11 +179,15 @@ const breadcrumbItems = computed(() => [
 
 const workflowUnits = computed(() => {
   const units = workflow.value?.units
-  return Array.isArray(units) ? units : []
+  if (!Array.isArray(units)) return []
+  return units.filter((item) => item?.unit && item.unit !== '系统管理员')
 })
 
 const publishStatus = computed(() => workflow.value?.publish || null)
 const workflowBizDate = computed(() => workflow.value?.biz_date || '')
+const workflowDisplayDate = computed(() => workflow.value?.display_date || '')
+const workflowBizDateText = computed(() => formatDate(workflowBizDate.value))
+const workflowDisplayDateText = computed(() => formatDate(workflowDisplayDate.value))
 const actionsColumnVisible = computed(() => auth.canApprove)
 const publishButtonVisible = computed(() => auth.canPublish)
 const publishDisabled = computed(
@@ -202,6 +208,23 @@ function statusLabel(status) {
   if (status === 'approved') return '已审批'
   if (status === 'published') return '已发布'
   return '待处理'
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function formatDate(value) {
+  if (!value) return '—'
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return '—'
+    if (DATE_RE.test(trimmed)) return trimmed
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function formatDateTime(value) {

@@ -7,7 +7,7 @@ daily_report_25_26 项目 v1 路由
 - 模板文件来源于容器内数据目录（默认 `/app/data`）中的 JSON 配置。
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 
 from pathlib import Path as SysPath
 
@@ -15,7 +15,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 from decimal import Decimal, InvalidOperation
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
@@ -27,7 +27,7 @@ from backend.schemas.auth import (
     WorkflowStatusResponse,
     WorkflowUnitStatus,
 )
-from backend.services.auth_manager import AuthSession, auth_manager, get_current_session
+from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
 from sqlalchemy import text
@@ -1472,6 +1472,7 @@ def _build_workflow_response(session: AuthSession) -> WorkflowStatusResponse:
     project_key = "daily_report_25_26"
     biz_date = auth_manager.current_biz_date()
     biz_datetime = _current_biz_datetime()
+    display_date = auth_manager.current_display_date()
     seed_units = _collect_seed_units()
     visible_units = session.allowed_units or set(seed_units)
     snapshot = workflow_status_manager.get_snapshot(
@@ -1497,6 +1498,7 @@ def _build_workflow_response(session: AuthSession) -> WorkflowStatusResponse:
     return WorkflowStatusResponse(
         project_key=project_key,
         biz_date=biz_date,
+        display_date=display_date,
         units=units_payload,
         publish=publish_payload,
     )
@@ -1550,11 +1552,14 @@ def publish_daily_report(
         raise HTTPException(status_code=403, detail="当前账号无发布权限")
     if not payload.confirm:
         raise HTTPException(status_code=400, detail="请确认后再发布")
+    biz_date = auth_manager.current_biz_date()
+    biz_datetime = datetime.combine(biz_date, datetime.min.time()).replace(tzinfo=EAST_8)
     workflow_status_manager.mark_published(
         "daily_report_25_26",
-        _current_biz_datetime(),
+        biz_datetime,
         session,
     )
+    auth_manager.set_display_date(biz_date)
     return _build_workflow_response(session)
 
 
@@ -2672,7 +2677,21 @@ async def runtime_eval(request: Request):
         pass
 
     trace = bool(payload.get("trace", False))
-    biz_date = payload.get("biz_date") or "regular"
+    biz_date_raw = str(payload.get("biz_date") or "regular").strip()
+    resolved_biz_date: Optional[str]
+    biz_date_mode = "regular"
+    if not biz_date_raw or biz_date_raw.lower() == "regular":
+        display_date = auth_manager.current_display_date()
+        resolved_biz_date = display_date.isoformat()
+    else:
+        try:
+            resolved_biz_date = date.fromisoformat(biz_date_raw).isoformat()
+            biz_date_mode = "custom"
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "message": "biz_date 需为空、'regular' 或符合 YYYY-MM-DD"},
+            )
     config = payload.get("config")
     spec_override = payload.get("spec")
 
@@ -2767,7 +2786,7 @@ async def runtime_eval(request: Request):
             project_key=project_key,
             primary_key=primary_key,
             trace=trace,
-            context={"biz_date": biz_date},
+            context={"biz_date": resolved_biz_date},
         )
     except Exception as exc:
         return JSONResponse(status_code=500, content={"ok": False, "message": "求值失败", "error": str(exc)})
@@ -2831,6 +2850,9 @@ async def runtime_eval(request: Request):
         "accuracy": acc,
         # 透传前端格式化用的 number_format（如 grouping/locale/default/percent）
         "number_format": (nf_spec if isinstance(nf_spec, dict) else None),
+        "biz_date": resolved_biz_date,
+        "biz_date_mode": biz_date_mode,
+        "requested_biz_date": biz_date_raw,
     }
     if accuracy_map:
         content["accuracy_overrides"] = accuracy_map

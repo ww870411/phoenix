@@ -5,7 +5,9 @@
 - 新增 Pinia `auth` 仓库：统一管理 `/auth/login|me|logout` 调用、Token 持久化（sessionStorage）、页面/表格过滤与审批/发布操作。
 - `router` 全局守卫在进入非 `/login` 路由前确保已登录；登录成功后自动跳转 `/projects`，退出后清空缓存并返回登录页。
 - `services/api.js` 注入 Authorization 头并封装 `getWorkflowStatus/approveWorkflow/publishWorkflow`；`PageSelectView` 显示审批进度卡片并在具备权限时提供批准/发布按钮。
+- 审批进度卡片额外展示“当前业务日期｜当前数据展示日期”：业务日取东八区昨日，展示日期来自 `backend_data/date.json`，在新业务日未发布前保持上一期数据。
 - `LoginView`、`AppHeader`、`Sheets` 等组件按角色隐藏或禁用按钮；页面/表格列表在前端再次过滤，避免越权访问。
+- 新增 `frontend/Dockerfile.prod`（Node → Nginx 多阶段构建）与 `deploy/nginx.conf`，供生产镜像使用；默认监听 80 端口并通过 `location /api/` 反向代理至后端服务 `backend:8000`。
 
 ## 页面结构更新（2025-11-01）
 
