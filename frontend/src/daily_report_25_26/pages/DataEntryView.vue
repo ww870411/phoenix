@@ -14,8 +14,8 @@
           <span>业务日期：</span>
           <input type="date" v-model="bizDate" />
         </label>
-        <button class="btn ghost" @click="reloadTemplate">重载模板</button>
-        <button class="btn primary" @click="onSubmit">提交</button>
+        <button class="btn ghost" type="button" @click="reloadTemplate">重载模板</button>
+        <button class="btn primary" type="button" :disabled="submitDisabled" @click="onSubmit">提交</button>
       </div>
     </header>
 
@@ -47,20 +47,21 @@ import '../styles/theme.css'
 import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { useRouter } from 'vue-router'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import { getTemplate, queryData, submitData } from '../services/api';
-import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects';
-import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders';
+import { useRouter, useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { getTemplate, queryData, submitData } from '../services/api'
+import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
+import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
+import { useAuthStore } from '../store/auth'
 
 // --- 基本路由和状态 --- 
-const route = useRoute();
-const router = useRouter();
-const { applyTemplatePlaceholders } = useTemplatePlaceholders();
-const projectKey = String(route.params.projectKey ?? '');
-const pageKey = String(route.params.pageKey ?? '');
-const sheetKey = String(route.params.sheetKey ?? '');
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const { applyTemplatePlaceholders } = useTemplatePlaceholders()
+const projectKey = String(route.params.projectKey ?? '')
+const pageKey = String(route.params.pageKey ?? '')
+const sheetKey = String(route.params.sheetKey ?? '')
 const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
@@ -78,6 +79,10 @@ const isDailyPage = computed(() => {
   const name = pageDisplayName.value || ''
   return name.includes('每日数据填报')
 });
+
+const userGroup = computed(() => auth.user?.group ?? '')
+const normalizedGroup = computed(() => userGroup.value.toLowerCase())
+const isUnitScopedEditor = computed(() => normalizedGroup.value === 'unit_admin' || normalizedGroup.value === 'unit_filler')
 
 function formatDateYYYYMMDD(dateStr) {
   if (!dateStr) return ''
@@ -121,6 +126,7 @@ function computeDefaultBizDate() {
   return formatLocalYYYYMMDD(d);
 }
 const initialDate = computeDefaultBizDate();
+const canonicalBizDate = ref(String(initialDate));
 const bizDate = ref(String(initialDate));
 const latestRequestId = ref('');
 function newRequestId() { return `${Date.now()}_${Math.random().toString(36).slice(2,8)}` }
@@ -165,6 +171,15 @@ const submitTime = ref('');
 const gridColumns = ref([]);
 const gridSource = ref([]);
 const gridRef = ref(null);
+const readOnlyThreshold = ref(1);
+
+const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
+const submitDisabled = computed(() => isReadOnlyForDate.value);
+
+watch(
+  () => isReadOnlyForDate.value,
+  () => applyReadonlyToColumns()
+);
 
 // 根据模板类型控制列拉伸行为：常量指标页不拉伸，避免最后一列占满剩余空间
 const gridStretch = computed(() => {
@@ -213,9 +228,23 @@ function resolveReadonlyLimit(columnList) {
   return targetIndex >= 0 ? targetIndex : 1;
 }
 
+function applyReadonlyToColumns() {
+  if (!Array.isArray(gridColumns.value)) return;
+  const shouldLockAll = isReadOnlyForDate.value;
+  gridColumns.value = gridColumns.value.map((def, index) => {
+    const locked = Boolean(def.__locked) || (shouldLockAll && (templateType.value === 'standard' || templateType.value === 'crosstab'));
+    const currentReadonly = def.readonly === undefined ? false : def.readonly;
+    if (currentReadonly === locked) {
+      return def;
+    }
+    return { ...def, readonly: locked };
+  });
+}
+
 // --- 渲染逻辑：标准模板 ---
 async function setupStandardGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
+  readOnlyThreshold.value = readonlyLimit;
   const colDefs = tpl.columns.map((colName, index) => {
     const base = {
       prop: `c${index}`,
@@ -223,12 +252,12 @@ async function setupStandardGrid(tpl) {
       autoSize: true,
       minSize: index === 0 ? 160 : 120,
     };
-    if (index <= readonlyLimit) {
-      base.readonly = true;
-    }
+    base.__locked = index <= readonlyLimit;
+    base.readonly = base.__locked || isReadOnlyForDate.value;
     return base;
   });
   gridColumns.value = colDefs;
+  applyReadonlyToColumns();
 
   const src = tpl.rows.map(row => {
     const record = {};
@@ -244,6 +273,7 @@ async function setupStandardGrid(tpl) {
 // --- 渲染逻辑：交叉表模板 (煤炭库存) ---
 async function setupCrosstabGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
+  readOnlyThreshold.value = readonlyLimit;
   const colDefs = tpl.columns.map((name, index) => {
     const base = {
       prop: `c${index}`,
@@ -251,12 +281,12 @@ async function setupCrosstabGrid(tpl) {
       autoSize: true,
       minSize: index === 0 ? 160 : 120,
     };
-    if (index <= readonlyLimit) {
-      base.readonly = true;
-    }
+    base.__locked = index <= readonlyLimit;
+    base.readonly = base.__locked || isReadOnlyForDate.value;
     return base;
   });
   gridColumns.value = colDefs;
+  applyReadonlyToColumns();
 
   gridSource.value = tpl.rows.map(r => {
     const record = {};
@@ -281,6 +311,7 @@ async function loadTemplate() {
   const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
   // 若模板给出权威业务日期，优先设置并等待一帧，确保首次查询使用正确日期
   if (tpl.biz_date) {
+    canonicalBizDate.value = tpl.biz_date;
     bizDate.value = tpl.biz_date;
     await nextTick();
   }
@@ -343,15 +374,18 @@ async function loadTemplate() {
         columns.value = q.columns;
         if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
           gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+          applyReadonlyToColumns();
         } else {
           const colDefs = q.columns.map((name, index) => ({
             name: String(name ?? ''),
             prop: `c${index}`,
             size: index === 0 ? 180 : undefined,
             minSize: index === 0 ? 160 : 100,
-            readonly: index < 2,
+            __locked: index <= readOnlyThreshold.value,
+            readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
           }));
           gridColumns.value = colDefs;
+          applyReadonlyToColumns();
         }
       }
       if (q && Array.isArray(q.rows)) {
@@ -371,6 +405,7 @@ async function loadTemplate() {
 
   // 如果后端下发了权威的业务日期，则使用它
   if (tpl.biz_date) {
+    canonicalBizDate.value = tpl.biz_date;
     bizDate.value = tpl.biz_date;
   }
 
@@ -467,6 +502,10 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
+  if (submitDisabled.value) {
+    window.alert('所选日期仅支持查看，不能提交修改。');
+    return;
+  }
   let submissionData;
   if (templateType.value === 'crosstab') {
     submissionData = handleSubmitCrosstab();
@@ -510,6 +549,9 @@ async function onSubmit() {
 
 // --- RevoGrid 事件处理 ---
 function handleAfterEdit(evt) {
+  if (isReadOnlyForDate.value) {
+    return;
+  }
   const detail = evt?.detail ?? evt;
   const changes = Array.isArray(detail?.changes) ? detail.changes : (detail ? [detail] : []);
   for (const change of changes) {
@@ -575,8 +617,11 @@ async function applyStandardQueryResult(payload) {
         name: String(name ?? ''),
         prop: `c${index}`,
         size: index === 0 ? 220 : 120,
+        __locked: index <= readOnlyThreshold.value,
+        readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
       }));
       gridColumns.value = colDefs;
+      applyReadonlyToColumns();
     }
   }
   if (Array.isArray(q.rows)) {
@@ -589,6 +634,7 @@ async function applyStandardQueryResult(payload) {
     );
     rows.value = q.rows;
     await autoSizeFirstColumn();
+    applyReadonlyToColumns();
   }
 }
 // 监听业务日期变更，标准表需用新日期重算列头与网格列定义
@@ -602,6 +648,7 @@ const stop = watch(
       columns.value = recalculated;
       if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
         gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
+        applyReadonlyToColumns();
       }
     }
     // 日历变更后，触发一次镜像查询，回填当日数据与备注
@@ -645,15 +692,18 @@ watch(
         columns.value = q.columns;
         if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
           gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+          applyReadonlyToColumns();
         } else {
           const colDefs = q.columns.map((name, index) => ({
             name: String(name ?? ''),
             prop: `c${index}`,
             size: index === 0 ? 180 : undefined,
             minSize: index === 0 ? 160 : 100,
-            readonly: index < 2,
+            __locked: index <= readOnlyThreshold.value,
+            readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
           }));
           gridColumns.value = colDefs;
+          applyReadonlyToColumns();
         }
       }
       if (q && Array.isArray(q.rows)) {

@@ -15,11 +15,9 @@
           </label>
           <label class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;">
             <span>业务日期：</span>
-            <select v-model="bizDateMode">
-              <option value="regular">regular（视图口径）</option>
-              <option value="custom">自定义</option>
-            </select>
-            <input v-if="bizDateMode==='custom'" type="date" v-model="bizDate" />
+            <input type="date" v-model="bizDate" />
+            <span class="hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
+            <span class="hint" v-else>当前：regular</span>
           </label>
           <button class="btn ghost" @click="runEval" :disabled="loading">刷新</button>
         </div>
@@ -59,7 +57,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec, getTemplate } from '../services/api'
+import { evalSpec, getTemplate, getWorkflowStatus } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -97,8 +95,9 @@ const loading = ref(false)
 const errorMessage = ref('')
 const itemColumnIndex = ref(-1)
 
-const bizDateMode = ref('regular')
 const bizDate = ref('')
+const effectiveBizDate = ref('')
+const initialized = ref(false)
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -289,11 +288,14 @@ async function runEval() {
   itemColumnIndex.value = -1
   try {
     await ensureProjectsLoaded()
+    if (!initialized.value && !bizDate.value) {
+      await loadDefaultBizDate()
+    }
     const body = {
       sheet_key: sheetKey.value,
       project_key: 'daily_report_25_26',
       config: pageConfig.value,
-      biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || 'regular'),
+      biz_date: bizDate.value ? bizDate.value : 'regular',
       trace: !!traceEnabled.value,
     }
     const res = await evalSpec(projectKey.value, body)
@@ -301,6 +303,7 @@ async function runEval() {
       throw new Error(res?.message || 'runtime eval 失败')
     }
     sheetName.value = res.sheet_name || sheetKey.value
+    effectiveBizDate.value = res.biz_date || ''
     columns.value = Array.isArray(res.columns) ? res.columns : []
     rows.value = Array.isArray(res.rows) ? res.rows : []
     columnHeaders.value = Array.isArray(res.column_headers) ? res.column_headers : []
@@ -334,11 +337,30 @@ async function runEval() {
     errorMessage.value = err?.message || String(err)
   } finally {
     loading.value = false
+    initialized.value = true
   }
 }
 
-onMounted(runEval)
-watch([bizDateMode, bizDate, traceEnabled], runEval)
+async function loadDefaultBizDate() {
+  try {
+    const status = await getWorkflowStatus(projectKey.value)
+    const displayDate = status?.display_date
+    if (displayDate) {
+      bizDate.value = displayDate
+    }
+  } catch (err) {
+    console.warn('加载默认业务日期失败，回落 regular', err)
+  }
+}
+
+onMounted(() => {
+  runEval()
+})
+watch([bizDate, traceEnabled], () => {
+  if (initialized.value) {
+    runEval()
+  }
+})
 
 const formattedTrace = computed(() => {
   try { return JSON.stringify(traceData.value, null, 2) } catch { return '' }
@@ -353,4 +375,5 @@ const formattedTrace = computed(() => {
 .error { color: #c00; margin-top: 10px; }
 .trace-pre { max-height: 360px; overflow: auto; background: #0b0b0b; color: #d6d6d6; padding: 12px; border-radius: 6px; }
 :deep(revo-grid .rg-header-cell) { white-space: pre-line; line-height: 1.3; }
+.hint { font-size: 12px; color: #666; }
 </style>

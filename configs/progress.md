@@ -12,6 +12,7 @@
 - 前端：新增 Pinia `auth` store、统一请求头注入与 `/auth/*` 调用；登录页改为真实认证流程；路由守卫自动判定跳转；页面选择页增加审批进度卡片（含批准/发布操作与权限过滤）；模板/表格列表按用户权限过滤。
 - 日期管理：创建 `backend_data/date.json`，`auth_manager` 统一计算实际业务日（东八区昨日）并维护“数据展示日期”；发布动作会将展示日期同步至当前业务日，未发布时保持上一批数据，前端在审批卡片中提示“当前业务日期 | 当前数据展示日期”。
 - 部署：新增 `backend/requirements.txt`、`backend/Dockerfile.prod`、`frontend/Dockerfile.prod`、`deploy/nginx.conf`、`docker-compose.prod.yml` 与 `deploy/server_setup.bat`，形成可直接在服务器构建的生产版容器栈；批处理脚本负责创建数据目录、载入 `.env.prod` 并执行 `docker compose build/up`。
+- UI：`DataEntryView` 为 `Unit_admin` / `unit_filler` 引入历史日期只读模式（非当期业务日仅可查看、不能编辑提交），并在 `main.js` 全局引入主题样式修复子路由刷新样式丢失问题。
 
 - 影响范围与回滚：
   - 认证与权限逻辑集中在 `backend/services/auth_manager.py` 与 `frontend/src/daily_report_25_26/store/auth.js`；删除新文件并还原调用点即可回滚至旧版“摆设登录”。
@@ -266,4 +267,5 @@ sum_basic_data 相关：
 
 - `create_view.sql` 中的 `sum_basic_data`、`groups` 视图改为读取数据库会话级参数 `phoenix.biz_date`（缺省回落至 `current_date-1`）。运行时通过 `SET LOCAL phoenix.biz_date = :biz_date` 在查询阶段切换业务日期，沿用原 SQL 中的全部派生计算逻辑。
 - `runtime_expression.py` 删除手写聚合逻辑，统一走视图查询：当 `context.biz_date` 提供具体日期时设置 GUC，未指定则重置为 `DEFAULT`，保证回退到旧口径。
+- `frontend/src/daily_report_25_26/pages/DisplayRuntimeView.vue`：展示页的日期选择器默认读取 `date.json`（display_date），用户修改后直接把选定日期作为 `biz_date` 发送给 `/runtime/spec/eval`，日历旁显示当前生效口径。
 - 建议在 `Group_sum_show_Sheet`、`ZhuChengQu_sum_show_Sheet` 开启 Trace 验证 `biz_date` 是否与 `date.json` 一致，并核对直接收入、供暖单耗、投诉 per 万㎡ 等关键指标已恢复正确值。
