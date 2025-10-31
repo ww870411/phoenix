@@ -15,9 +15,11 @@ RUN pip install --upgrade pip \
 
 FROM python:3.12-slim AS runtime
 
+ARG BUILD_TIMESTAMP="unknown"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DATA_DIRECTORY=/app/data
+    DATA_DIRECTORY=/app/data \
+    BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 WORKDIR /app
 

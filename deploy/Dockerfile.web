@@ -20,7 +20,9 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 ARG HTTP_ONLY="false"
-ENV HTTP_ONLY=${HTTP_ONLY}
+ARG BUILD_TIMESTAMP="unknown"
+ENV HTTP_ONLY=${HTTP_ONLY} \
+    BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 WORKDIR /etc/nginx
 

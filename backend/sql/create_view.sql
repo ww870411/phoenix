@@ -458,7 +458,7 @@ calc_steam AS (
   GROUP BY b.company, b.company_cn, cb_ss.value, cp_ss.value
 ),
 calc_coal_cost AS (
-  -- 煤成本（万元）= 原煤耗量 × 原煤单价 / 10000
+  -- 煤成本（万元）= 标煤耗量 × 标煤单价 / 10000
   SELECT
     b.company,
     b.company_cn,
@@ -467,18 +467,18 @@ calc_coal_cost AS (
     '万元'::text          AS unit,
     MAX(b.biz_date) AS biz_date,
     MAX(b.peer_date) AS peer_date,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_rc.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_rc.value,0))/10000.0 AS value_peer_date,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_rc.value,0))/10000.0 AS sum_7d_biz,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_rc.value,0))/10000.0 AS sum_7d_peer,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_rc.value,0))/10000.0 AS sum_month_biz,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_rc.value,0))/10000.0 AS sum_month_peer,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_rc.value,0))/10000.0 AS sum_ytd_biz,
-    (SUM(CASE WHEN b.item='consumption_amount_raw_coal' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_rc.value,0))/10000.0 AS sum_ytd_peer
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS value_biz_date,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS value_peer_date,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_7d_biz,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_7d_peer,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_month_biz,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_month_peer,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_ytd_biz,
+    (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_ytd_peer
   FROM base b
-  LEFT JOIN const_biz  cb_rc ON cb_rc.company=b.company AND cb_rc.item='price_raw_coal'
-  LEFT JOIN const_peer cp_rc ON cp_rc.company=b.company AND cp_rc.item='price_raw_coal'
-  GROUP BY b.company, b.company_cn, cb_rc.value, cp_rc.value
+  LEFT JOIN const_biz  cb_sc ON cb_sc.company=b.company AND cb_sc.item='price_std_coal'
+  LEFT JOIN const_peer cp_sc ON cp_sc.company=b.company AND cp_sc.item='price_std_coal'
+  GROUP BY b.company, b.company_cn, cb_sc.value, cp_sc.value
 ),
 calc_natural_gas_cost AS (
   -- 天然气成本（万元）= 耗天然气量 × 购天然气单价 / 10000

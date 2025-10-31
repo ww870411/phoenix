@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-03）
+
+- 状态：根据最新业务要求，`sum_basic_data` 视图中“煤成本”改为按“标煤耗量 × 标煤单价 / 10000”计算，并在所有时间窗口产出公司级指标。
+- 改动：`create_view.sql` 的 `calc_coal_cost` CTE 使用 `consumption_std_coal` 叠加 `price_std_coal` 常量，替换原先的原煤耗量/单价组合；注释同步更新以便检索。
+- 影响：`groups` 视图沿用 `sum_basic_data` 聚合结果，因此主城区与集团口径自动适配。后续若需回滚，可恢复 `calc_coal_cost` 中的原煤字段与常量键。
+- 下一步：若还需要单独保留“原煤成本”指标，可新增独立 CTE 并在视图中以新 item 输出，避免覆盖现有字段。
+
 ## 会话小结（2025-11-02）
 
 - 状态：已修正运行时表达式在投诉类累计指标上的取值方式，避免再次被窗口累计逻辑覆盖。
@@ -24,6 +31,23 @@
 - Windows 服务器可运行 `deploy/server_setup.bat` 自动构建并上线；Linux 主机可参考该脚本的步骤（创建数据目录 → docker compose build/up → 清理悬挂镜像）。
 - 若需加入额外依赖，请更新 `backend/requirements.txt` 并重新构建 `backend/Dockerfile.prod`，无需修改开发环境 Dockerfile。
 - 提供 `docker-compose.server.yml`：沿用旧项目的 nginx + certbot 布局，`web` 服务使用 `deploy/Dockerfile.web`（内置 `deploy/nginx.prod.conf`），默认监听 80/443 并反向代理至 `backend`，证书文件存放在命名卷 `certbot_etc`/`certbot_www`。运行 `bash init-certbot.sh` 会暂时启用 HTTP-only 容器、申请证书，并在成功后恢复 HTTPS 全栈。
+
+### 单镜像打包（可选）
+
+- 根目录新增 `Dockerfile.full` 与 `build-single-image.sh`，用于将后端 + 前端 + nginx 打包为单个镜像。
+- 构建命令示例：
+  ```bash
+  ./build-single-image.sh           # 生成 phoenix-all:latest
+  REGISTRY=registry.example.com TAG=2025-10-31 ./build-single-image.sh
+  ```
+- 运行示例：
+  ```bash
+  docker run -p 80:80 \
+    -e DATABASE_URL="postgresql://user:pass@host:5432/phoenix" \
+    -v $(pwd)/backend_data:/app/data \
+    phoenix-all:latest
+  ```
+  该镜像由 supervisord 同时拉起 `uvicorn`（端口 8000）与 `nginx`（端口 80，代理 `/api/`）。
 
 ## 会话小结（2025-11-01）
 

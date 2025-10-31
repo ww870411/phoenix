@@ -8,13 +8,16 @@
 
 本次动作：
 - 前端：重构 `LoginView.vue`，引入视觉面板与装饰图形，保持登录逻辑不变并增加响应式样式；追加视觉面板文本居中并下调蓝色渐变亮度以贴合参考页面效果。
-- 文档：更新 `frontend/README.md` 与 `configs/progress.md` 记录登录页视觉同步成果。
+- 后端：调整 `backend/sql/create_view.sql` 中 `calc_coal_cost`，使“煤成本”按“标煤耗量 × 标煤单价 / 10000”计算，替换原煤耗量逻辑。
+- 文档：更新 `frontend/README.md`、`backend/README.md` 与 `configs/progress.md` 记录登录页与煤成本公式的同步情况。
 
 影响范围与回滚：
-- 影响范围仅限登录页面的外观展示；若需回滚，覆盖旧版组件即可恢复原样式。
+- 前端：影响范围仅限登录页面的外观展示；若需回滚，覆盖旧版组件即可恢复原样式。
+- 后端：如需回退，可将 `calc_coal_cost` 中的字段与常量键恢复为 `consumption_amount_raw_coal` / `price_raw_coal`。
 
 下一步建议：
 1. 如需对接验证码或企业公告，可在当前表单面板内扩展，不会破坏已实现的左右分栏布局。
+2. 若仍需保留“原煤成本”口径，可新增独立 item 避免覆盖现有指标。
 
 ## 2025-11-02（登录与审批进度打通）
 
@@ -32,6 +35,7 @@
 - 编排：`docker-compose.prod.yml` 中数据库使用命名卷 `db_data`，后端数据仍通过宿主挂载 `./backend_data:/app/data` 保持可读写配置。
 - 新增 `docker-compose.server.yml` / `deploy/Dockerfile.web` / `deploy/nginx.prod.conf`，复刻旧项目的 Nginx+Certbot 方案（80/443 暴露、域名 `platform.smartview.top`），方便在 VPS 上直接替换运行。
 - 新增 `init-certbot.sh`：一键执行“停 web → 构建/启动临时 HTTP-only → certbot 签发 → 恢复 web”流程，便于首次申请或更新 HTTPS 证书。
+- 单镜像支持：新增 `Dockerfile.full`、`deploy/nginx.full.conf`、`deploy/supervisord.conf` 与 `build-single-image.sh`，可一次构建前后端合并镜像（`phoenix-all`），用于资源受限或“单容器”部署场景。
 
 - 影响范围与回滚：
   - 认证与权限逻辑集中在 `backend/services/auth_manager.py` 与 `frontend/src/daily_report_25_26/store/auth.js`；删除新文件并还原调用点即可回滚至旧版“摆设登录”。
