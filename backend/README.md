@@ -1,5 +1,13 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-04）
+
+- 状态：新增 `ww.bash` / `ww.ps1` 两套脚本，本地运行后会以仓库根目录为构建上下文，使用 `backend/Dockerfile.prod` 生成带时间戳标签的 phoenix-backend 镜像并推送至 Docker Hub。
+- 改动：脚本统一写入 `BUILD_TIMESTAMP` 构建参数，便于追溯镜像来源，并在完成后打印 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 供 `ww.yml` 或服务器 `.env` 引用。PowerShell 版本默认在纯 Windows 环境执行，仍可通过传参或环境变量覆盖镜像名称。
+- 部署：补充 `ww.yml`，将原本在服务器执行的构建阶段替换为直接拉取镜像，保留数据库、数据卷和 Certbot 服务，后端仍通过 `./backend_data:/app/data` 读取配置。
+- 下一步：建议在运行脚本前后追加最小健康检查（如临时 `docker run --rm` 调用），确保镜像可用后再推送至远端仓库。
+- 视图：`backend/sql/create_view.sql` 新增 `average_temperature_data` 普通视图，按 `temperature_data` 的日期（日粒度）聚合 `value` 并输出平均值，为天气数据统计提供聚合入口。
+
 ## 会话小结（2025-11-03）
 
 - 状态：根据最新业务要求，`sum_basic_data` 视图中“煤成本”改为按“标煤耗量 × 标煤单价 / 10000”计算，并在所有时间窗口产出公司级指标。

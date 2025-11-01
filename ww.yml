@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  backend:
+    image: "${BACKEND_IMAGE:-ww870411/phoenix-backend:latest}"
+    container_name: phoenix-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-phoenix}@db:5432/${POSTGRES_DB:-phoenix}}
+      DATA_DIRECTORY: /app/data
+    volumes:
+      - ./backend_data:/app/data
+    depends_on:
+      - db
+    networks:
+      - phoenix_net
+
+  db:
+    image: postgres:15-alpine
+    container_name: phoenix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-phoenix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phoenix}
+      POSTGRES_DB: ${POSTGRES_DB:-phoenix}
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phoenix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - phoenix_net
+
+  web:
+    image: "${WEB_IMAGE:-ww870411/phoenix-web:latest}"
+    container_name: phoenix-web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+
+  web-http:
+    image: "${WEB_HTTP_IMAGE:-ww870411/phoenix-web-http:latest}"
+    container_name: phoenix-web-http
+    ports:
+      - "80:80"
+    volumes:
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+    profiles: ["certbot"]
+
+  certbot:
+    image: certbot/certbot
+    container_name: phoenix-certbot
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh
+    command: "-c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h; done'"
+    restart: unless-stopped
+    networks:
+      - phoenix_net
+
+networks:
+  phoenix_net:
+    driver: bridge
+
+volumes:
+  db_data:
+  certbot_etc:
+  certbot_www:

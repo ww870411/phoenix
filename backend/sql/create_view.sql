@@ -1351,3 +1351,12 @@ UNION ALL
 SELECT * FROM zhuchengqu_rollup
 UNION ALL
 SELECT * FROM grand_rollup;
+
+-- 平均气温视图：按天聚合 temperature_data 并计算 value 平均值
+CREATE OR REPLACE VIEW average_temperature_data AS
+SELECT
+    DATE_TRUNC('day', date_time)::date AS date,
+    AVG(value) AS average_value
+FROM temperature_data
+GROUP BY DATE_TRUNC('day', date_time)::date
+ORDER BY date;

@@ -1,0 +1,1 @@
+更新：average_temperature_data 视图现按 DATE_TRUNC('day', date_time)::date 聚合 temperature_data，输出日均值列 `average_value`。相关文档描述已同步修正为“日粒度”。

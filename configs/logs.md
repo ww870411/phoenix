@@ -390,3 +390,6 @@ codex resume 019a351c-bc44-7ea1-b502-326a2a8ec47a
 codex resume 019a379d-92db-7f80-a652-e360a0913e9e
 
 set_biz_date的修改:codex resume 019a379d-92db-7f80-a652-e360a0913e9e
+
+
+docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_temperature_view.sql

@@ -1,5 +1,24 @@
 # 进度记录
 
+## 2025-11-04（镜像构建与部署拆分）
+
+前置说明（降级留痕）：
+- Serena 当前不支持在仓库根目录新建脚本/Compose 文件，依据 3.9 矩阵降级使用 `apply_patch` 创建 `ww.bash`、`ww.ps1` 与 `ww.yml`。
+- 回滚思路：删除新增脚本/配置或恢复 `docker-compose.server.yml` 的本地构建流程即可撤销本次调整。
+
+本次动作：
+- 新增 `ww.bash` / `ww.ps1`，分别面向 Bash 与 PowerShell 环境封装后端、前端 HTTPS 与 HTTP-only 三个镜像的构建与推送步骤，统一写入时间戳标签并在完成后提示镜像名称，便于服务器部署引用。
+- 新增 `ww.yml`，以预构建镜像替换原 build 阶段，保留 PostgreSQL、Certbot 服务与后端数据目录挂载，方便服务器直接拉取镜像运行。
+- 文档同步：更新 `backend/README.md`、`frontend/README.md` 与 `configs/progress.md`，补充镜像分发链路与部署指引。
+
+影响范围与回滚：
+- 如需恢复服务器本地构建，可继续使用 `docker-compose.server.yml` 或删除 `ww.bash`、`ww.ps1`、`ww.yml` 并回退本次文档变更。
+- 新 compose 依赖 Docker Hub 镜像，部署前需确认服务器 `.env` 中 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 与实际推送版本一致，避免拉取失败。
+
+下一步建议：
+1. 将 `ww.bash`/`ww.ps1` 输出的镜像标签自动写入共享 `.env` 或脚本内更新 `ww.yml`，减少人为同步成本。
+2. 为构建脚本增加基础 smoke test，如通过 `docker run --rm` 检查健康端口，再执行推送，降低线上运行风险。
+
 ## 2025-11-03（登录页面视觉同步）
 
 前置说明（降级留痕）：
@@ -292,3 +311,17 @@ sum_basic_data 相关：
 - `runtime_expression.py` 删除手写聚合逻辑，统一走视图查询：当 `context.biz_date` 提供具体日期时设置 GUC，未指定则重置为 `DEFAULT`，保证回退到旧口径。
 - `frontend/src/daily_report_25_26/pages/DisplayRuntimeView.vue`：展示页的日期选择器默认读取 `date.json`（display_date），用户修改后直接把选定日期作为 `biz_date` 发送给 `/runtime/spec/eval`，日历旁显示当前生效口径。
 - 建议在 `Group_sum_show_Sheet`、`ZhuChengQu_sum_show_Sheet` 开启 Trace 验证 `biz_date` 是否与 `date.json` 一致，并核对直接收入、供暖单耗、投诉 per 万㎡ 等关键指标已恢复正确值。
+
+## 2025-11-04
+
+前置说明：
+- Serena 无法直接在 SQL 文件末尾追加内容，依据 3.9 降级矩阵使用 `apply_patch` 编辑 `backend/sql/create_view.sql`；回滚时删除新增视图定义并重新执行脚本。
+
+本次改动：
+- `backend/sql/create_view.sql`：新增普通视图 `average_temperature_data`，按 `temperature_data` 的业务日期（24 小时）分组计算 `value` 日均值，为后续天气数据统计提供聚合入口。
+
+验证：
+- 暂未执行数据库验证；建议在数据库运行 `SELECT * FROM average_temperature_data LIMIT 5;`，确认视图创建成功并返回按日聚合的期望结构。
+
+影响范围与回滚：
+- 仅新增视图，不影响现有 `sum_basic_data` 等视图逻辑；如需回滚，删除该视图定义并重新加载脚本即可。

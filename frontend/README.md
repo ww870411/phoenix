@@ -2,6 +2,14 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-04）
+
+- 状态：`ww.bash` / `ww.ps1` 新增前端镜像构建链路，同步生成 `phoenix-web`（HTTPS 版）与 `phoenix-web-http`（HTTP-only 版）镜像并推送到 Docker Hub，可配合 `ww.yml` 直接部署。
+- 改动：脚本允许通过 `VITE_API_BASE` 环境变量覆写打包时的接口前缀，同时记录构建时间戳，方便定位发布批次；PowerShell 版本便于在纯 Windows 环境执行。
+- 部署：`ww.yml` 继续使用 `deploy/Dockerfile.web` 生成的静态资源镜像，运行时只需从远端仓库拉取镜像即可，无需在服务器执行 `npm build`。
+- 下一步：如需缩短镜像体积，可在后续迭代中将 `npm ci` 缓存目录挂载到宿主或改用多阶段缓存策略。
+- 数据接口：后端新增 `average_temperature_data` 视图（按 `temperature_data` 的日期聚合 `value` 日平均值），后续若开放 REST 接口，可在天气数据填报或展示页面接入该聚合结果。
+
 ## 会话小结（2025-11-03）
 
 - 状态：登录页已按“雏鸟计划”参考风格重构，采用左右分栏视觉面板 + 表单布局，沿用现有 Pinia 登录流程。
