@@ -27,7 +27,9 @@ from backend.schemas.auth import (
     WorkflowStatusResponse,
     WorkflowUnitStatus,
 )
+from backend.schemas.dashboard import DashboardResponse
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
+from backend.services.dashboard import build_dashboard_summary
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
 from sqlalchemy import text
@@ -2865,6 +2867,21 @@ async def runtime_eval(request: Request):
     if trace and "_trace" in result:
         content["debug"] = {"_trace": result["_trace"]}
     return JSONResponse(status_code=200, content=content)
+
+
+@router.get(
+    "/dashboard/summary",
+    response_model=DashboardResponse,
+    summary="获取仪表盘聚合数据",
+)
+def get_dashboard_summary_endpoint(
+    biz_date: Optional[date] = Query(None, description="覆盖业务日期，格式 YYYY-MM-DD"),
+    session: AuthSession = Depends(get_current_session),
+) -> DashboardResponse:
+    """返回仪表盘七大板块的聚合数据。"""
+    allowed_units = session.allowed_units if session and session.allowed_units else None
+    return build_dashboard_summary(biz_date=biz_date, allowed_units=allowed_units)
+
 
 # 临时调试：查看指定 company 的指标与常量缓存（不依赖 render_spec）
 @router.get("/runtime/spec/debug-cache", summary="调试：查看 company 的指标与常量缓存")
