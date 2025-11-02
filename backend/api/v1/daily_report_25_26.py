@@ -1353,39 +1353,45 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _persist_constant_data(records: List[Dict[str, Any]]) -> int:
-    """将拆解后的常量记录持久化到数据库。"""
+    """将拆解后的常量记录持久化到数据库，使用 ON CONFLICT DO UPDATE 保证幂等。"""
     if not records:
         return 0
 
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     session = SessionLocal()
     try:
-        # Use a set to track unique keys for deletion
-        delete_keys = set()
-        for record in records:
-            key = (
-                record["company"],
-                record["sheet_name"],
-                record["item"],
-                record["period"],
-            )
-            delete_keys.add(key)
-        
-        # Idempotent write: delete existing records first
-        if delete_keys:
-            for company, sheet_name, item, period in delete_keys:
-                session.execute(
-                    delete(ConstantData).where(
-                        ConstantData.company == company,
-                        ConstantData.sheet_name == sheet_name,
-                        ConstantData.item == item,
-                        ConstantData.period == period,
-                    )
-                )
+        # 准备要插入或更新的数据，确保不包含 id
+        upsert_values = []
+        for r in records:
+            # 从记录中移除 id 字段（如果存在），因为 id 是自增的
+            r.pop('id', None)
+            upsert_values.append(r)
 
-        # Bulk insert new records
-        session.bulk_insert_mappings(ConstantData, records)
+        if not upsert_values:
+            return 0
+
+        # 构建 ON CONFLICT DO UPDATE 语句
+        stmt = pg_insert(ConstantData.__table__).values(upsert_values)
+        
+        # 定义冲突时的更新策略
+        # 唯一索引是 (company, center, sheet_name, item, period)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["company", "center", "sheet_name", "item", "period"],
+            # 当冲突发生时，更新以下字段为新提交的值
+            set_={
+                "company_cn": stmt.excluded.company_cn,
+                "center_cn": stmt.excluded.center_cn,
+                "item_cn": stmt.excluded.item_cn,
+                "value": stmt.excluded.value,
+                "unit": stmt.excluded.unit,
+                "operation_time": stmt.excluded.operation_time,
+            }
+        )
+
+        session.execute(stmt)
         session.commit()
-        return len(records)
+        return len(upsert_values)
     except Exception:
         session.rollback()
         raise
