@@ -255,3 +255,9 @@ docker compose up -d --build
   - Node: `docker.m.daocloud.io/library/node:20-alpine`
   - Nginx: `docker.m.daocloud.io/library/nginx:1.27-alpine`
 - 仅影响拉取来源，前端功能与打包结果不变；需要回退时把 Dockerfile 恢复原 FROM 即可。
+## 会话小结（2025-11-02 常量提交键位调整）
+
+- 状态：后端常量写库不再使用 `center/center_cn`；幂等键改为 `(company, sheet_name, item, period)`。
+- 前端影响：
+  - 提交 `constant` 模板时，继续发送 `columns/rows` 与字典字段；无需包含中心字段；
+  - 若模板包含“中心”列，其值仅用于后端解析 `company/company_cn`，前端无需特殊处理。

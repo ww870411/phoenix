@@ -428,3 +428,23 @@ sum_basic_data 相关：
   - deploy/Dockerfile.web:1 `FROM docker.m.daocloud.io/library/node:20-alpine`
   - deploy/Dockerfile.web:20 `FROM docker.m.daocloud.io/library/nginx:1.27-alpine`
 - 影响：不改变业务产物，只更换镜像拉取来源；如需回退，改回 `python:3.12-slim` / `node:20-alpine` / `nginx:1.27-alpine` 即可。
+### 2025-11-02（常量提交 500：移除 center/center_cn 依赖）
+- 现象：在 `ZhuangHe_constant_Sheet` 提交数据时，前端 500；控制台报错 `{"ok":false,"message":"处理常量表数据时发生错误","error":"center_cn"}`（见 `configs/11.2常量提交错误.md:1,18`）。
+- 根因：后端常量写库函数在构造 upsert 时引用了 `center/center_cn` 字段与唯一键 `(company, center, sheet_name, item, period)`；但数据库表与 ORM 模型均不再使用/不存在 `center/center_cn`，导致引用 `stmt.excluded.center_cn` 抛错。
+- 变更：
+  - `backend/api/v1/daily_report_25_26.py`
+    - `_parse_constant_records`：取消向记录附加 `center_cn`；仅将中心中文名用于解析 `company/company_cn`，不再持久化中心字段。
+    - `_persist_constant_data(records)`：
+      - 写入前清理 `center/center_cn` 残留键；
+      - `ON CONFLICT` 唯一键改为 `(company, item, period)`；
+      - 更新字段集合移除 `center_cn`。
+    - `_parse_decimal_value`：支持自动剔除字符串中的 `,`/`，`/空格，并过滤 `--`、`N/A` 等占位符，避免“采暖期供暖收入”等金额类单元格因存在千位分隔符而被解析为 `NULL`。
+- 影响：
+  - 常量数据幂等粒度以 `(company, item, period)` 为准；
+  - 前端常量表 payload 无需也不应包含 `center/center_cn`；含中心维结构的表也仅用于解析 company/company_cn，不再单独存储 center 维度。
+- 需要的数据库侧配合：为 `constant_data` 创建唯一约束/索引 `(company, item, period)`，并确保不存在 `center/center_cn` 列；否则 `ON CONFLICT` 将无法命中唯一键。
+- 回滚思路：若需恢复 center 维度，需同步恢复表列 `center/center_cn`、唯一键 `(company, center, sheet_name, item, period)`，并回退服务端 upsert 的 `index_elements` 与 `set_`。
+- 证据：
+  - 服务端引用位置：`backend/api/v1/daily_report_25_26.py:1346`（变更后）
+  - 模型定义：`backend/db/database_daily_report_25_26.py:40`（ConstantData 无 center/center_cn）
+  - 示例 SQL（历史意图，仅供参考）：`backend/sql/sample_constant_data.sql:820` 起含 center/center_cn 列

@@ -710,8 +710,13 @@ def _parse_decimal_value(raw: Any) -> Optional[Decimal]:
         value = raw.strip()
         if not value:
             return None
+        # 兼容常见的千位分隔符与空格
+        sanitized = value.replace(",", "").replace("，", "").replace(" ", "")
+        # 过滤掉常见的“无数据”占位符
+        if sanitized in {"--", "-", "N/A", "n/a", "NA", "na", "None"}:
+            return None
         try:
-            return Decimal(value)
+            return Decimal(sanitized)
         except InvalidOperation:
             return None
     return None
@@ -1308,6 +1313,7 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         if has_center:
             center_cn = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
             unit = str(row[2]).strip() or None if len(row) > 2 else None
+            # 不再持久化 center/center_cn 字段，仅用于解析 company/company_cn
             company_id = rev_center_map.get(center_cn, center_cn) if center_cn else ""
             company_cn = center_cn or None
         else:
@@ -1344,9 +1350,6 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "period": period_key,
                 "operation_time": op_time,
             }
-            # 如果模型包含 center 字段并且这是中心维度表，可在后续持久化中附加
-            if has_center:
-                rec["center_cn"] = center_cn or None
             result.append(rec)
 
     return result
@@ -1361,11 +1364,13 @@ def _persist_constant_data(records: List[Dict[str, Any]]) -> int:
 
     session = SessionLocal()
     try:
-        # 准备要插入或更新的数据，确保不包含 id
+        # 准备要插入或更新的数据（移除对 center/center_cn 的依赖）
         upsert_values = []
         for r in records:
-            # 从记录中移除 id 字段（如果存在），因为 id 是自增的
-            r.pop('id', None)
+            r.pop('id', None)  # 移除 id，让数据库自增
+            # 不再使用 center/center_cn 字段，确保不存在残留键
+            r.pop('center', None)
+            r.pop('center_cn', None)
             upsert_values.append(r)
 
         if not upsert_values:
@@ -1375,13 +1380,12 @@ def _persist_constant_data(records: List[Dict[str, Any]]) -> int:
         stmt = pg_insert(ConstantData.__table__).values(upsert_values)
         
         # 定义冲突时的更新策略
-        # 唯一索引是 (company, center, sheet_name, item, period)
+        # 唯一索引调整为 (company, item, period)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["company", "center", "sheet_name", "item", "period"],
+            index_elements=["company", "item", "period"],
             # 当冲突发生时，更新以下字段为新提交的值
             set_={
                 "company_cn": stmt.excluded.company_cn,
-                "center_cn": stmt.excluded.center_cn,
                 "item_cn": stmt.excluded.item_cn,
                 "value": stmt.excluded.value,
                 "unit": stmt.excluded.unit,

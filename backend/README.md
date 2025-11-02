@@ -219,6 +219,19 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
       - 二级视图：`calc_sum_basic_data`、`calc_sum_gongre_branches_detail_data`；已添加唯一索引以支持并发刷新）。
       - 排障视图：`calc_sum_basic_trace`（仅用于查看中间输入与乘积，非物化）。
 
+## 常量数据写库（2025-11-02 更新）
+
+- 目标：移除 center/center_cn 维度依赖，常量数据幂等键调整为 `(company, item, period)`（按公司-指标-期次唯一）。
+- 生效范围：所有 `*_constant_Sheet` 的提交接口。
+- 关键模块/流程：
+  - 解析：`_parse_constant_records(payload)`
+    - 读取 `columns/rows` 与 `item_dict/center_dict`；如模板含“中心”列，仅用其解析 `company/company_cn`，不再持久化 `center/center_cn` 字段。
+  - 写库：`_persist_constant_data(records)`
+    - `ON CONFLICT (company, item, period) DO UPDATE`，更新 `company_cn/item_cn/value/unit/operation_time`；
+    - 清理残留 `center/center_cn` 键，避免写入不存在的列。
+- 数据库要求：`constant_data` 需具备唯一约束/索引 `(company, item, period)`；表结构不应包含 `center/center_cn` 列。
+- 影响：同一公司-指标-期次的重复提交将覆盖旧值；前端提交 payload 无需包含中心字段。
+
 ## 评估：一级物化视图→普通视图（2025-10-28）
 
 - 结论：`sum_basic_data` 与 `sum_gongre_branches_detail_data` 可改为普通视图（`CREATE OR REPLACE VIEW`）。两者仅做基于 `current_date-1` 的窗口聚合，不依赖物化视图特性。
