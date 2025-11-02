@@ -1,5 +1,44 @@
 # 进度记录
 
+## 2025-11-06（HTTP-only API 路由修复）
+
+前置说明（降级留痕）：
+- Serena 对 Bash 与 Nginx 配置文件暂不提供符号级编辑，依据 3.9 矩阵降级使用 `apply_patch` 更新 `ww.bash` 与 `deploy/nginx.http-only.conf`。
+- Serena 暂不支持在仓库根目录新增 Compose 文件，因此使用 `apply_patch` 创建 `ww-certbot.yml`。
+- 回滚思路：恢复上述两个文件的旧版本即可撤销本次调整。
+
+本次动作：
+- `deploy/nginx.http-only.conf` 新增 `/api/` 反向代理，HTTP-only 镜像在同域下即可透传请求到 `backend:8000`，无需依赖构建期写入完整域名。
+- `ww.bash` 补充 `VITE_API_BASE` 二次校验，仅允许 `http(s)://` 或 `/` 开头的值，在构建日志中输出最终取值，并在推送后自动同步 `latest` 标签，防止继续生成指向本地磁盘的前端静态资源且确保服务器默认拉取即可获得最新镜像。
+- 新增 `ww-certbot.yml`，包含 HTTP-only 前端和 Certbot 组合，通过 `/bin/sh -c` 执行申请脚本；目前命令内固定邮箱 `locookies123@gmail.com` 与域名 `platform.smartview.top`，如需使用其它参数可直接编辑该命令。
+
+影响范围与回滚：
+- 重新构建前端镜像后，默认执行 `./ww.bash` 即可生成指向 `/api/v1` 的资产；如需跨域 API，可显式设置合法 URL 并从日志确认。
+- 回滚时恢复两个文件即可返回旧行为，但需注意旧版 HTTP-only 配置访问 `/api` 会返回前端资源。
+
+下一步建议：
+1. 将脚本打印的 `VITE_API_BASE` 同步写入构建产物的元数据或 Markdown 记录，方便部署后回溯。
+2. 评估在 `ww.bash` 内加入最小 smoke test（如 `curl` `/api/health`），确保镜像在推送前即可发现 API 代理异常。
+
+## 2025-11-05（仪表盘聚合与前端联动）
+
+前置说明（降级留痕）：
+- Serena 目前无法对全新 schema/service 文件及 `.vue` 组件执行符号级编辑，依据 3.9 矩阵降级使用 `apply_patch` 创建 `backend/schemas/dashboard.py`、`backend/services/dashboard.py` 与 `components/dashboard/*` 等文件。
+- 回滚思路：删除新增后端模块并还原 `backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DisplayView.vue`、`services/api.js` 及文档改动，即可恢复到原有占位仪表盘状态。
+
+本次动作：
+- 后端：实现 `GET /api/v1/projects/daily_report_25_26/dashboard/summary`，按业务日聚合气温、边际利润、收入分类、单耗、煤耗、投诉量与煤炭库存数据，新增 `dashboard` schema/service 并在路由层返回结构化 JSON。
+- 前端：重写 `DisplayView.vue`，引入业务日筛选、加载提示及 7 个仪表盘卡片；新增基于 SVG 的折线图、分组柱状图、堆积柱状图组件，并在各卡片中配套表格展示本期/同期差异。
+- 文档：更新 `backend/README.md`、`frontend/README.md` 描述仪表盘接口与页面结构；在本文件登记改动与降级原因。
+
+影响范围与回滚：
+- 新增接口默认受登录权限控制，并按 `allowed_units` 过滤可见单位；若需回滚，可移除 dashboard 相关模块与路由注册，前端恢复旧版展示页即可。
+- 前端 SVG 图表未引入第三方依赖，渲染失败时仍可通过返回的表格信息查看关键指标；如需临时停用，可在页面中隐藏对应卡片。
+
+下一步建议：
+1. 视图聚合会触发多次查询，可评估 Postgres 物化视图/缓存策略或在服务层增加简单缓存。
+2. 根据业务反馈补充更多异常提示（如缺报单位/指标高亮）及导出能力，完善仪表盘配套交互。
+
 ## 2025-11-04（镜像构建与部署拆分）
 
 前置说明（降级留痕）：
@@ -7,13 +46,14 @@
 - 回滚思路：删除新增脚本/配置或恢复 `docker-compose.server.yml` 的本地构建流程即可撤销本次调整。
 
 本次动作：
-- 新增 `ww.bash` / `ww.ps1`，分别面向 Bash 与 PowerShell 环境封装后端、前端 HTTPS 与 HTTP-only 三个镜像的构建与推送步骤，统一写入时间戳标签并在完成后提示镜像名称，便于服务器部署引用。
+- 新增 `ww.bash` / `ww.ps1`，分别面向 Bash 与 PowerShell 环境封装后端、前端 HTTPS 与 HTTP-only 三个镜像的构建与推送步骤，统一写入时间戳标签并在完成后提示镜像名称，便于服务器部署引用；脚本增加 `VITE_API_BASE` 校验，自动过滤 `file://` 或 Windows 本地路径，避免构建产物引用本地磁盘。
 - 新增 `ww.yml`，以预构建镜像替换原 build 阶段，保留 PostgreSQL、Certbot 服务与后端数据目录挂载，方便服务器直接拉取镜像运行。
+- 新增 `ww-http-only.yml`，在无需证书的场景仅启动 HTTP 版前端、后端与数据库，去除 Certbot 与证书卷，适用于暂不启用 HTTPS 或交给 Cloudflare 托管的部署。
 - 文档同步：更新 `backend/README.md`、`frontend/README.md` 与 `configs/progress.md`，补充镜像分发链路与部署指引。
 
 影响范围与回滚：
-- 如需恢复服务器本地构建，可继续使用 `docker-compose.server.yml` 或删除 `ww.bash`、`ww.ps1`、`ww.yml` 并回退本次文档变更。
-- 新 compose 依赖 Docker Hub 镜像，部署前需确认服务器 `.env` 中 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 与实际推送版本一致，避免拉取失败。
+- 如需恢复服务器本地构建，可继续使用 `docker-compose.server.yml` 或删除 `ww.bash`、`ww.ps1`、`ww.yml`、`ww-http-only.yml` 并回退本次文档变更。
+- `ww.yml` 依赖 Docker Hub 镜像与证书卷，部署前需确认 `.env` 内的 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 与实际推送版本一致；`ww-http-only.yml` 默认暴露 `80:80`，需确认云端/防火墙已放行 HTTP 访问。
 
 下一步建议：
 1. 将 `ww.bash`/`ww.ps1` 输出的镜像标签自动写入共享 `.env` 或脚本内更新 `ww.yml`，减少人为同步成本。
@@ -325,3 +365,66 @@ sum_basic_data 相关：
 
 影响范围与回滚：
 - 仅新增视图，不影响现有 `sum_basic_data` 等视图逻辑；如需回滚，删除该视图定义并重新加载脚本即可。
+
+## 2025-11-06（HTTPS 切换与部署文件调整）
+
+前置说明（留痕与合规）：
+- 环境为沙箱只读，已按“3.9 编辑与文件操作降级矩阵”使用 Desktop Commander 工具进行小步安全修改；不涉及破坏性命令。
+- 本次仅变更仓库内脚本/编排文件，不触及受限目录或远端 CI/CD。
+
+本次动作：
+- 更新 `ww.ps1:1`：新增 `BUILD_HTTP_ONLY` 开关（默认关闭），将 HTTP-only 前端镜像的构建与推送改为“可选”；启用 HTTPS 时默认跳过，避免不必要的镜像产出。
+- 更新 `ww-http-only.yml:1`：升级为支持 HTTPS 的部署（开放 `80/443`，挂载 `certbot_etc` 与 `certbot_www` 卷，并内置 `certbot` 更新服务），`web` 服务改用 `WEB_IMAGE`（HTTPS 版）。
+
+实现要点与流程：
+- PowerShell 脚本：`Divider` 与 `Tag-And-PushLatest` 两个函数保持不变；通过新增布尔变量 `$BuildHttpOnly`（读取 `BUILD_HTTP_ONLY`）在构建阶段做分支，默认只构建/推送 HTTPS 版 `WEB_IMAGE`。
+- Compose 部署：沿用 `deploy/nginx.prod.conf` 的证书路径与重定向策略，`web` 容器暴露 `80/443`（80 做 301 跳转，443 提供 TLS 服务）；`certbot` 容器以 `renew` 循环任务维持证书更新。
+
+影响范围与回滚：
+- 现有服务器可直接切换到本次调整后的 `ww-http-only.yml` 运行 HTTPS（需已有证书卷或先按 `ww.yml`/`ww-certbot.yml` 完成一次申请）。
+- 若需回退到纯 HTTP-only，设置 `BUILD_HTTP_ONLY=1` 并改回 `WEB_HTTP_IMAGE` 的 compose 文件即可。
+
+证据与文件清单：
+- 修改：`ww.ps1:1`, `ww-http-only.yml:1`
+- 参考：`deploy/nginx.prod.conf:1`, `ww.yml:1`
+
+### 2025-11-06（域名与证书路径具体化）
+- 域名：`platform.smartview.top`
+- 邮箱：`locookies12@gmail.com`
+- 证书（宿主机）：`/home/ww870411/25-26/certbot/letsencrypt/live/platform.smartview.top/`
+- 变更：
+  - `ww.yml:1` 与 `ww-http-only.yml:1` 的 `web`/`certbot` 服务将证书与 ACME webroot 改为宿主机绑定挂载：
+    - `/home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt`
+    - `/home/ww870411/25-26/certbot/www:/var/www/certbot`
+  - 移除两份 compose 中不再使用的命名卷 `certbot_etc`/`certbot_www`。
+  - `ww-certbot.yml:1` 更新邮箱为 `locookies12@gmail.com`，并同步改为宿主机路径绑定挂载，便于一次性签发或重签直接落盘到上述目录。
+- Nginx 配置确认：`deploy/nginx.prod.conf:1` 中 `server_name` 已是 `platform.smartview.top`；证书路径继续使用容器内 `/etc/letsencrypt/live/platform.smartview.top/`，与 compose 的宿主机路径绑定保持一致。
+- 上线前自检：DNS 指向、80/443 放行、宿主目录存在并具备读写、已有证书文件可被 web 容器读取。
+
+### 2025-11-06（禁用 latest 推送）
+- 依据用户要求“绝对禁止 latest”，已移除 `ww.ps1` 中所有 `latest` 标记与推送逻辑：删除 `Tag-And-PushLatest` 函数，并去除后端/前端/HTTP-only 的调用。
+- 影响：后续仅按时间戳 tag 推送，不再产生 `:latest`。
+- 备注：本次构建失败的前端镜像为拉取 `nginx:1.27-alpine` 时网络 EOF；建议重试或预先 `docker pull nginx:1.27-alpine node:20-alpine` 后再运行脚本。
+
+### 2025-11-06（ww.ps1 精简为“必要最小”）
+- 目标：仅保留必要步骤，避免“为考虑而加”的非必要逻辑。
+- 变更：
+  - 移除 HTTP-only 分支与相关变量；脚本只构建/推送后端与 HTTPS 前端两张镜像。
+  - 移除复杂的 `VITE_API_BASE` 过滤逻辑；仅当设置该环境变量时才作为 build-arg 传入，否则使用前端源码默认值。
+  - 保留 `NO_CACHE` 支持与 `BUILD_TIMESTAMP`；日志仅输出关键信息。
+- 影响：脚本总行数由 ~115 行降至 ~66 行，更易读、易控。
+
+### 2025-11-06（构建稳定性增强：重试与预拉）
+- ww.ps1 增强：
+  - 新增 `Invoke-Retry`（最多 3 次，间隔 6 秒），用于 docker pull/build/push 的瞬时失败自动重试。
+  - 在构建前预拉基础镜像：`python:3.12-slim`、`node:20-alpine`、`nginx:1.27-alpine`。
+  - 对后端/前端 build/push 全部包裹重试，降低 EOF 失败概率。
+- 说明：不改变输出镜像或版本，仅增强稳定性；无 latest 相关操作。
+
+### 2025-11-06（构建加速镜像源——避免 auth.docker.io EOF）
+- 现象：`failed to fetch oauth token: https://auth.docker.io/token EOF`，公共 Hub 取元数据不稳定。
+- 变更：将基础镜像切换为 DaoCloud Hub 镜像源（可在国内稳定访问）：
+  - backend/Dockerfile.prod:1 `FROM docker.m.daocloud.io/library/python:3.12-slim`（builder 与 runtime 两处）
+  - deploy/Dockerfile.web:1 `FROM docker.m.daocloud.io/library/node:20-alpine`
+  - deploy/Dockerfile.web:20 `FROM docker.m.daocloud.io/library/nginx:1.27-alpine`
+- 影响：不改变业务产物，只更换镜像拉取来源；如需回退，改回 `python:3.12-slim` / `node:20-alpine` / `nginx:1.27-alpine` 即可。

@@ -1,0 +1,72 @@
+# Phoenix 项目服务器部署文件
+#
+# 使用方法:
+# 1. 确保服务器上已安装 Docker 和 Docker Compose。
+# 2. 在本文件所在目录下创建一个名为 .env 的文件，内容如下:
+#    POSTGRES_USER=your_db_user
+#    POSTGRES_PASSWORD=your_db_password
+#    POSTGRES_DB=phoenix
+#    # API基础路径，应与前端构建时用的 VITE_API_BASE 一致
+#    VITE_API_BASE=/api/v1
+# 3. 将您已有的 SSL 证书文件放在服务器的指定目录中，例如:
+#    - /path/to/your/certs/live/platform.smartview.top/fullchain.pem
+#    - /path/to/your/certs/live/platform.smartview.top/privkey.pem
+#    然后修改下面 web 服务中 volumes 的路径，使其指向您的证书目录。
+# 4. 执行命令: docker-compose -f lo1.yml up -d
+
+version: "3.9"
+
+services:
+  backend:
+    image: ww870411/phoenix-backend:__TIMESTAMP__ # 从 Docker Hub 拉取镜像
+    container_name: phoenix-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-phoenix}@db:5432/${POSTGRES_DB:-phoenix}
+      DATA_DIRECTORY: /app/data
+    volumes:
+      - /home/ww870411/25-26/backend_data:/app/data
+    depends_on:
+      - db
+    networks:
+      - phoenix_net
+
+  db:
+    image: postgres:15-alpine
+    container_name: phoenix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-phoenix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phoenix}
+      POSTGRES_DB: ${POSTGRES_DB:-phoenix}
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phoenix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - phoenix_net
+
+  web:
+    image: ww870411/phoenix-web:__TIMESTAMP__ # 从 Docker Hub 拉取镜像
+    container_name: phoenix-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt
+    depends_on:
+      - backend
+    networks:
+      - phoenix_net
+
+networks:
+  phoenix_net:
+    driver: bridge
+
+volumes:
+  db_data:

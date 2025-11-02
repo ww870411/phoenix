@@ -2,11 +2,27 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-06 HTTP-only 访问修复）
+
+- 状态：为避免构建后的前端请求落入 `D://.../api`，补齐 `deploy/nginx.http-only.conf` 的 `/api/` 代理，在 `ww.bash` 中加入 `VITE_API_BASE` 二次校验、日志输出与 `latest` 标签同步，并新增 `ww-certbot.yml`（固定 `locookies123@gmail.com` 与 `platform.smartview.top` 的参数）供服务器按需单独拉起 HTTP-only + Certbot 组合；需要其它邮箱或域名时，直接修改该文件的 `certbot` 命令参数即可。
+- 影响：HTTP-only 部署现在可以继续沿用 `/api/v1` 相对路径；如需自定义外部域名，可显式设置 `VITE_API_BASE`（脚本会打印最终值以便确认）。
+- 回滚：还原 `deploy/nginx.http-only.conf` 与 `ww.bash` 到上一个版本即可恢复既有行为。
+
+## 会话小结（2025-11-05 仪表盘页面）
+
+- 状态：展示页 `DisplayView.vue` 从占位按钮升级为真实仪表盘，联动后端新接口展示 7 个板块。
+- 改动：
+  - `services/api.js` 新增 `getDashboardSummary`，统一调用 `GET /api/v1/projects/daily_report_25_26/dashboard/summary` 并支持 `biz_date` 参数。
+  - `pages/DisplayView.vue` 集成交互：业务日选择、加载状态提示，以及气温折线、指标对比、煤库存堆积柱等卡片布局。
+  - 新增 `components/dashboard/LineChart.vue`、`GroupedBarChart.vue`、`StackedBarChart.vue`、`TemperaturePanel.vue`、`MetricComparisonPanel.vue`、`CoalInventoryPanel.vue` 等基础组件，使用 SVG 手绘满足图形化展示要求。
+- 交互特点：可按业务日刷新、指标下拉切换（边际利润/单耗/投诉等），表格同步展示本期/同期值、差值与差率，煤炭库存卡片以堆积柱并列三段。
+- 回滚方式：删除新增组件并恢复 `DisplayView.vue` 至原占位版本即可回退到旧展示状态；同时移除 `api.js#getDashboardSummary`。
+
 ## 会话小结（2025-11-04）
 
-- 状态：`ww.bash` / `ww.ps1` 新增前端镜像构建链路，同步生成 `phoenix-web`（HTTPS 版）与 `phoenix-web-http`（HTTP-only 版）镜像并推送到 Docker Hub，可配合 `ww.yml` 直接部署。
-- 改动：脚本允许通过 `VITE_API_BASE` 环境变量覆写打包时的接口前缀，同时记录构建时间戳，方便定位发布批次；PowerShell 版本便于在纯 Windows 环境执行。
-- 部署：`ww.yml` 继续使用 `deploy/Dockerfile.web` 生成的静态资源镜像，运行时只需从远端仓库拉取镜像即可，无需在服务器执行 `npm build`。
+- 状态：`ww.bash` / `ww.ps1` 新增前端镜像构建链路，同步生成 `phoenix-web`（HTTPS 版）与 `phoenix-web-http`（HTTP-only 版）镜像并推送到 Docker Hub，可配合 `ww.yml` 或 `ww-http-only.yml` 直接部署。
+- 改动：脚本允许通过 `VITE_API_BASE` 环境变量覆写打包时的接口前缀，同时记录构建时间戳；新增校验自动过滤 `file://` / Windows 本地路径，避免前端构建后指向本地磁盘。PowerShell 版本便于在纯 Windows 环境执行。
+- 部署：`ww.yml` 继续使用 `deploy/Dockerfile.web` 生成的静态资源镜像，运行时只需从远端仓库拉取镜像即可；`ww-http-only.yml` 仅暴露 `80:80`，适合纯 HTTP 或将 TLS 托管给 Cloudflare 的场景。
 - 下一步：如需缩短镜像体积，可在后续迭代中将 `npm ci` 缓存目录挂载到宿主或改用多阶段缓存策略。
 - 数据接口：后端新增 `average_temperature_data` 视图（按 `temperature_data` 的日期聚合 `value` 日平均值），后续若开放 REST 接口，可在天气数据填报或展示页面接入该聚合结果。
 
@@ -51,9 +67,9 @@ frontend/
 │  ├─ router/index.js       # 全局路由：/login、/projects、/projects/:projectKey/data_entry/sheets、/projects/:projectKey/data_entry/sheets/:sheetKey
 │  ├─ stores/               # Pinia store（占位）
 │  └─ daily_report_25_26/
-│     ├─ components/        # AppHeader、Breadcrumbs 等公共组件
+│     ├─ components/        # AppHeader、Breadcrumbs、dashboard 下的可视化组件
 │     ├─ constants/         # project_key、sheet 常量
-│     ├─ pages/             # LoginView、ProjectSelectView、Sheets、DataEntryView（动态渲染模板列，含解释说明）
+│     ├─ pages/             # LoginView、ProjectSelectView、DisplayView（仪表盘）、Sheets、DataEntryView 等
 │     ├─ services/          # API 封装（api.js）
 │     ├─ store/             # 业务状态（预留）
 │     └─ styles/theme.css   # 统一视觉风格
@@ -220,3 +236,22 @@ docker compose up -d --build
 - 新增 `column_headers`/`column_groups` 元数据透传，RevoGrid 通过 `column-grouping` 渲染两行表头。
 - 首两列继续显示“项目/计量单位”，其余列按“公司 × (本期日/同期日/日差异)” 分组，支持多公司比较。
 - Trace 模式下可对比 `_trace` 中 `func_calls`、`used_consts`，快速定位某公司缺数据的原因。
+
+## 会话小结（2025-11-06 HTTPS 切换）
+- 变更：`ww-http-only.yml:1` 已升级为 HTTPS 部署方案，`web` 改用 `WEB_IMAGE` 并开放 `80/443`；证书卷与 `certbot` 容器保证续期。
+- 影响：前端打包无需指定完整域名，默认 `/api/v1` 即可；Nginx 在容器内负责将 `/api/` 代理到 `backend:8000`。
+- 构建：如需临时纯 HTTP-only，可设置环境变量 `BUILD_HTTP_ONLY=1` 并在 compose 中改回 `WEB_HTTP_IMAGE`。
+
+### 域名/证书具体化（2025-11-06）
+- 前端部署域名：platform.smartview.top；HTTPS 由 Nginx 终止，证书路径通过 compose 绑定到容器内 `/etc/letsencrypt`。
+- 生产构建：维持 `VITE_API_BASE=/api/v1`（相对路径），由 Nginx `/api/` 反代后端，无需在前端写死域名。
+
+### 会话小结（2025-11-06 ww.ps1 精简）
+- 生产构建：脚本只产出 `phoenix-web:<ts>`，不再涉及 HTTP-only 或 latest。
+- API 前缀：默认 `/api/v1`；如需更改，构建时设置 `VITE_API_BASE` 即可。
+
+### 构建镜像源调整（2025-11-06）
+- 前端构建所用基础镜像切换为 DaoCloud 镜像源：
+  - Node: `docker.m.daocloud.io/library/node:20-alpine`
+  - Nginx: `docker.m.daocloud.io/library/nginx:1.27-alpine`
+- 仅影响拉取来源，前端功能与打包结果不变；需要回退时把 Dockerfile 恢复原 FROM 即可。

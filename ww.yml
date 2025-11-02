@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   backend:
-    image: "${BACKEND_IMAGE:-ww870411/phoenix-backend:latest}"
+    image: "${BACKEND_IMAGE:-ww870411/phoenix-backend:20251102083759}"
     container_name: phoenix-backend
     restart: unless-stopped
     environment:
@@ -35,14 +35,14 @@ services:
       - phoenix_net
 
   web:
-    image: "${WEB_IMAGE:-ww870411/phoenix-web:latest}"
+    image: "${WEB_IMAGE:-ww870411/phoenix-web:20251102083759}"
     container_name: phoenix-web
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - certbot_etc:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
+      - /home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt
+      - /home/ww870411/25-26/certbot/www:/var/www/certbot
     depends_on:
       - backend
     restart: unless-stopped
@@ -50,7 +50,7 @@ services:
       - phoenix_net
 
   web-http:
-    image: "${WEB_HTTP_IMAGE:-ww870411/phoenix-web-http:latest}"
+    image: "${WEB_HTTP_IMAGE:-ww870411/phoenix-web-http:20251102083759}"
     container_name: phoenix-web-http
     ports:
       - "80:80"
@@ -67,8 +67,8 @@ services:
     image: certbot/certbot
     container_name: phoenix-certbot
     volumes:
-      - certbot_etc:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
+      - /home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt
+      - /home/ww870411/25-26/certbot/www:/var/www/certbot
     entrypoint: /bin/sh
     command: "-c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h; done'"
     restart: unless-stopped
@@ -81,5 +81,3 @@ networks:
 
 volumes:
   db_data:
-  certbot_etc:
-  certbot_www:

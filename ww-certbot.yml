@@ -1,0 +1,28 @@
+services:
+  web-http:
+    image: "${WEB_HTTP_IMAGE:-ww870411/phoenix-web-http:latest}"
+    container_name: phoenix-web-http-cert
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - /home/ww870411/25-26/certbot/www:/var/www/certbot
+
+  certbot:
+    image: certbot/certbot
+    container_name: phoenix-certbot-once
+    depends_on:
+      - web-http
+    volumes:
+      - /home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt
+      - /home/ww870411/25-26/certbot/www:/var/www/certbot
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: >
+      certbot certonly --webroot \
+        --webroot-path=/var/www/certbot \
+        --non-interactive --agree-tos \
+        --email locookies12@gmail.com \
+        -d platform.smartview.top
+    restart: "no"
+
+volumes:

@@ -1,0 +1,4 @@
+## 2025-11-05 仪表盘联动记录
+- 后端新增 `backend/schemas/dashboard.py` 与 `backend/services/dashboard.py`，实现基于 average_temperature_data、sum_basic_data、groups、sum_coal_inventory_data 的聚合逻辑，并在 `daily_report_25_26.py` 暴露 `GET /api/v1/projects/daily_report_25_26/dashboard/summary` 接口；支持 `biz_date` 查询并按会话 `allowed_units` 过滤可见单位。
+- 前端 `DisplayView.vue` 接入上述接口，新增业务日选择、加载态提示以及 7 个板块（气温折线、边际利润/单耗/煤耗/投诉对比、收入分类、煤炭库存堆积柱）；配套创建 `components/dashboard/*` SVG 图表与卡片组件，`api.js` 新增 `getDashboardSummary`。
+- 文档同步更新 `backend/README.md`、`frontend/README.md` 与 `configs/progress.md` 说明仪表盘功能；所有新文件因 Serena 对非符号文件暂不支持编辑，按 AGENTS 3.9 要求使用 `apply_patch` 小步创建并记录降级原因。

@@ -1,10 +1,26 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-06 HTTP-only 访问修复）
+
+- 状态：补全 `deploy/nginx.http-only.conf` 的 `/api/` 反向代理，在 `ww.bash` 中加入 `VITE_API_BASE` 二次校验、构建日志以及自动同步 `latest` 标签，并新增 `ww-certbot.yml`（固定 `locookies123@gmail.com` 与 `platform.smartview.top`）便于单独拉起 HTTP-only + Certbot 的申请流程；如需调整邮箱或域名，直接在 `ww-certbot.yml` 的 `command` 中替换对应参数后再执行即可。
+- 影响：HTTP-only 镜像使用默认 `/api/v1` 相对路径即可透传到后端，如需指向其它域名，可继续通过环境变量设置 `VITE_API_BASE`，脚本会输出最终取值供验证。
+- 回滚：恢复 `deploy/nginx.http-only.conf` 与 `ww.bash` 的旧版本即可撤销本次部署修复。
+
+## 会话小结（2025-11-05 仪表盘聚合服务）
+
+- 状态：面向“数据展示-仪表盘”页面提供统一聚合接口，首版覆盖气温、边际利润、收入分类、单耗、标煤消耗、投诉量与煤炭库存七个板块。
+- 改动：
+  - 新增 `backend/schemas/dashboard.py` 定义仪表盘响应模型（时间序列、分组指标、煤炭库存等结构化字段）。
+  - 新增 `backend/services/dashboard.py`，从 `average_temperature_data`、`sum_basic_data`、`groups`、`sum_coal_inventory_data` 视图聚合数据，按登录用户的 `allowed_units` 过滤可见单位。
+  - `backend/api/v1/daily_report_25_26.py` 暴露 `GET /api/v1/projects/daily_report_25_26/dashboard/summary` 接口，支持 `biz_date` 查询参数并返回生成时间、业务日/同期日期。
+- 数据口径：温度按业务日前后三天 + 同期七日折线；各类业务指标返回本期/同期值、差值和差率；煤炭库存输出厂内/港口/在途堆积数据与合计。
+- 回滚：删除上述 schema/service，移除路由注册即可恢复到无仪表盘接口的状态。
+
 ## 会话小结（2025-11-04）
 
-- 状态：新增 `ww.bash` / `ww.ps1` 两套脚本，本地运行后会以仓库根目录为构建上下文，使用 `backend/Dockerfile.prod` 生成带时间戳标签的 phoenix-backend 镜像并推送至 Docker Hub。
-- 改动：脚本统一写入 `BUILD_TIMESTAMP` 构建参数，便于追溯镜像来源，并在完成后打印 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 供 `ww.yml` 或服务器 `.env` 引用。PowerShell 版本默认在纯 Windows 环境执行，仍可通过传参或环境变量覆盖镜像名称。
-- 部署：补充 `ww.yml`，将原本在服务器执行的构建阶段替换为直接拉取镜像，保留数据库、数据卷和 Certbot 服务，后端仍通过 `./backend_data:/app/data` 读取配置。
+- 状态：新增 `ww.bash` / `ww.ps1` 两套脚本，本地运行后会以仓库根目录为构建上下文，使用 `backend/Dockerfile.prod` 生成带时间戳标签的 phoenix-backend 镜像并推送至 Docker Hub；另补充 `ww-http-only.yml`，在无需证书时仅启动 HTTP 版前端配合后端/数据库部署。
+- 改动：脚本统一写入 `BUILD_TIMESTAMP` 构建参数，便于追溯镜像来源，并在完成后打印 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 供 `ww.yml` 或服务器 `.env` 引用。PowerShell 版本默认在纯 Windows 环境执行；两版脚本新增 `VITE_API_BASE` 校验，防止误将 `file://` 或 `C:\` 等本地路径写入构建产物。
+- 部署：补充 `ww.yml`，将原本在服务器执行的构建阶段替换为直接拉取镜像，保留数据库、数据卷和 Certbot 服务；`ww-http-only.yml` 去除证书依赖，仅暴露 `80:80`，适合临时 HTTP 或使用 Cloudflare Flexible 模式的场景。后端仍通过 `./backend_data:/app/data` 读取配置。
 - 下一步：建议在运行脚本前后追加最小健康检查（如临时 `docker run --rm` 调用），确保镜像可用后再推送至远端仓库。
 - 视图：`backend/sql/create_view.sql` 新增 `average_temperature_data` 普通视图，按 `temperature_data` 的日期（日粒度）聚合 `value` 并输出平均值，为天气数据统计提供聚合入口。
 
@@ -413,3 +429,25 @@ out = render_spec(
 - 新增 `列名1/列名2` 两行表头解析，输出 `column_headers`+`column_groups` 元数据供前端排版。
 - 列级 company 映射：根据头部 company 文本选择 metrics/constant 缓存，支持 `date_diff_rate()` 按公司计算。
 - `render_spec` 同步透传 `column_groups`，API `/runtime/spec/eval` 返回结构与 rows-only 保持兼容。
+
+## 会话小结（2025-11-06 HTTPS 切换）
+- 变更：
+  - `ww.ps1:1` 新增 `BUILD_HTTP_ONLY` 开关，默认仅构建/推送 HTTPS 版前端镜像（`WEB_IMAGE`），HTTP-only 版本改为按需构建。
+  - `ww-http-only.yml:1` 从纯 HTTP 升级为 HTTPS（`80/443` 端口、证书卷、`certbot` 自动续期），`web` 服务改为 `WEB_IMAGE`。
+- 后端参与点：Nginx 在 443 端口反代 `/api/` 到 `backend:8000`，无需改动 FastAPI 入口与路由；数据库与数据卷保持不变。
+- 回滚：将 compose 的 `web` 服务切回 `WEB_HTTP_IMAGE` 并设置 `BUILD_HTTP_ONLY=1` 重新构建，即可回到 HTTP-only。
+
+### 域名/证书具体化（2025-11-06）
+- 域名：platform.smartview.top；Nginx `server_name` 已匹配。
+- 证书：容器内读取 `/etc/letsencrypt/live/platform.smartview.top/*`，由 compose 将宿主机目录 `/home/ww870411/25-26/certbot/letsencrypt` 绑定到该路径；ACME webroot 宿主机目录 `/home/ww870411/25-26/certbot/www` 绑定到 `/var/www/certbot`。
+- 影响：后端无需改动；Nginx 以 `/api/` 代理 FastAPI，TLS 交由 web 容器处理。
+
+### 会话小结（2025-11-06 ww.ps1 精简）
+- 构建/发布：脚本现仅构建并推送两张镜像：`phoenix-backend:<ts>`、`phoenix-web:<ts>`。
+- 参数：`VITE_API_BASE` 仅在配置时传入；`NO_CACHE=1` 可禁用缓存；均非必填。
+- 禁止 latest：脚本不再生成/推送 `:latest`。
+
+### 构建镜像源调整（2025-11-06）
+- 基础镜像改为 DaoCloud 镜像源，以规避 `auth.docker.io` EOF：
+  - `docker.m.daocloud.io/library/python:3.12-slim`
+- 不影响应用逻辑；如需回退到官方 Hub，只需把 Dockerfile 的 FROM 改回官方镜像名即可。
