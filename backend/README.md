@@ -11,7 +11,7 @@
 - 状态：面向“数据展示-仪表盘”页面提供统一聚合接口，首版覆盖气温、边际利润、收入分类、单耗、标煤消耗、投诉量与煤炭库存七个板块。
 - 改动：
   - 新增 `backend/schemas/dashboard.py` 定义仪表盘响应模型（时间序列、分组指标、煤炭库存等结构化字段）。
-  - 新增 `backend/services/dashboard.py`，从 `average_temperature_data`、`sum_basic_data`、`groups`、`sum_coal_inventory_data` 视图聚合数据，按登录用户的 `allowed_units` 过滤可见单位。
+  - 新增 `backend/services/dashboard.py`，从 `calc_temperature_data`、`sum_basic_data`、`groups`、`sum_coal_inventory_data` 视图聚合数据，按登录用户的 `allowed_units` 过滤可见单位。
   - `backend/api/v1/daily_report_25_26.py` 暴露 `GET /api/v1/projects/daily_report_25_26/dashboard/summary` 接口，支持 `biz_date` 查询参数并返回生成时间、业务日/同期日期。
 - 数据口径：温度按业务日前后三天 + 同期七日折线；各类业务指标返回本期/同期值、差值和差率；煤炭库存输出厂内/港口/在途堆积数据与合计。
 - 回滚：删除上述 schema/service，移除路由注册即可恢复到无仪表盘接口的状态。
@@ -22,7 +22,7 @@
 - 改动：脚本统一写入 `BUILD_TIMESTAMP` 构建参数，便于追溯镜像来源，并在完成后打印 `BACKEND_IMAGE`、`WEB_IMAGE`、`WEB_HTTP_IMAGE` 供 `ww.yml` 或服务器 `.env` 引用。PowerShell 版本默认在纯 Windows 环境执行；两版脚本新增 `VITE_API_BASE` 校验，防止误将 `file://` 或 `C:\` 等本地路径写入构建产物。
 - 部署：补充 `ww.yml`，将原本在服务器执行的构建阶段替换为直接拉取镜像，保留数据库、数据卷和 Certbot 服务；`ww-http-only.yml` 去除证书依赖，仅暴露 `80:80`，适合临时 HTTP 或使用 Cloudflare Flexible 模式的场景。后端仍通过 `./backend_data:/app/data` 读取配置。
 - 下一步：建议在运行脚本前后追加最小健康检查（如临时 `docker run --rm` 调用），确保镜像可用后再推送至远端仓库。
-- 视图：`backend/sql/create_view.sql` 新增 `average_temperature_data` 普通视图，按 `temperature_data` 的日期（日粒度）聚合 `value` 并输出平均值，为天气数据统计提供聚合入口。
+- 视图：`backend/sql/create_view.sql` 新增 `calc_temperature_data` 普通视图，按 `temperature_data` 的日期（日粒度）聚合 `value`，输出当日最高/最低/平均温度，为天气数据统计提供聚合入口。
 
 ## 会话小结（2025-11-03）
 

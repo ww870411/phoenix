@@ -358,10 +358,10 @@ sum_basic_data 相关：
 - Serena 无法直接在 SQL 文件末尾追加内容，依据 3.9 降级矩阵使用 `apply_patch` 编辑 `backend/sql/create_view.sql`；回滚时删除新增视图定义并重新执行脚本。
 
 本次改动：
-- `backend/sql/create_view.sql`：新增普通视图 `average_temperature_data`，按 `temperature_data` 的业务日期（24 小时）分组计算 `value` 日均值，为后续天气数据统计提供聚合入口。
+- `backend/sql/create_view.sql`：新增普通视图 `calc_temperature_data`，按 `temperature_data` 的业务日期（24 小时）分组计算日最高/最低/平均温度，为后续天气数据统计提供聚合入口。
 
 验证：
-- 暂未执行数据库验证；建议在数据库运行 `SELECT * FROM average_temperature_data LIMIT 5;`，确认视图创建成功并返回按日聚合的期望结构。
+- 暂未执行数据库验证；建议在数据库运行 `SELECT * FROM calc_temperature_data LIMIT 5;`，确认视图创建成功并返回按日聚合的期望结构。
 
 影响范围与回滚：
 - 仅新增视图，不影响现有 `sum_basic_data` 等视图逻辑；如需回滚，删除该视图定义并重新加载脚本即可。
@@ -448,3 +448,18 @@ sum_basic_data 相关：
   - 服务端引用位置：`backend/api/v1/daily_report_25_26.py:1346`（变更后）
   - 模型定义：`backend/db/database_daily_report_25_26.py:40`（ConstantData 无 center/center_cn）
   - 示例 SQL（历史意图，仅供参考）：`backend/sql/sample_constant_data.sql:820` 起含 center/center_cn 列
+
+### 2025-11-02（运行时温度极值接入 Group 分析简报）
+- 场景：`Group_analysis_brief_report_Sheet` 中“日最高气温/日最低气温”需要取 `temperature_data` 当日极值，默认 `value_biz_date()` 仍接 sum_basic_data 导致返回 0。
+- 变更：
+  - `backend/sql/create_view.sql`、`backend/sql/create_temperature_view.sql`：视图更名为 `calc_temperature_data`，按日输出 `max_temp`/`min_temp`/`aver_temp`。
+  - `backend/services/runtime_expression.py`
+    - `_fetch_temperature_extremes`：新增从 `calc_temperature_data` 读取当日与同期日温度极值，统一映射到 `amount_temp_highest`、`amount_temp_lowest` 六个帧字段。
+    - `render_spec` 在预取指标阶段将上述极值合并到 `metrics_by_company['Group']`，保持其它单位不受影响。
+- 效果：模板仍使用 `value_biz_date()`/`value_peer_date()`，集团列可直接显示真实温度极值；差异列 `date_diff_rate()` 自动生效。
+- 验证建议：
+  1) 调用 `/runtime/spec/eval` 加 `trace=true`，确认 `_trace.used_items` 出现 `amount_temp_highest`/`amount_temp_lowest` 并返回新值；
+  2) SQL：`SELECT * FROM calc_temperature_data WHERE date='2025-11-02';`；如需同期日，检查同一天减一年数据。
+- 回滚思路：
+  - 视图恢复为原 `average_temperature_data`；
+  - 删除 `_fetch_temperature_extremes` 调用，并在 `Group_analysis_brief_report_Sheet` 中改回常量或默认值。

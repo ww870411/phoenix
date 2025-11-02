@@ -173,6 +173,59 @@ def _fetch_constants_for_table(session: Session, table_name: str, company: str) 
     return out
 
 
+def _compute_peer_date(anchor: _date) -> _date:
+    try:
+        return anchor.replace(year=anchor.year - 1)
+    except ValueError:
+        # 处理 2 月 29 日 → 2 月 28 日
+        return anchor.replace(year=anchor.year - 1, day=28)
+
+
+def _fetch_temperature_extremes(session: Session, biz_date: Optional[str]) -> Dict[str, Dict[str, Decimal]]:
+    """从 calc_temperature_data 视图按日提取极值，返回可并入 metrics 的字典。"""
+    if not biz_date:
+        return {}
+    try:
+        anchor = _date.fromisoformat(biz_date)
+    except ValueError:
+        return {}
+
+    peer = _compute_peer_date(anchor)
+
+    def _get_row(target_date: _date) -> Optional[Dict[str, Any]]:
+        sql = text(
+            """
+            SELECT max_temp, min_temp, aver_temp
+              FROM calc_temperature_data
+             WHERE date = :date
+            """
+        )
+        return session.execute(sql, {"date": target_date}).mappings().first()
+
+    anchor_row = _get_row(anchor)
+    peer_row = _get_row(peer)
+
+    def _metric(biz_val: Optional[Any], peer_val: Optional[Any]) -> Dict[str, Decimal]:
+        biz_decimal = _to_decimal(biz_val)
+        peer_decimal = _to_decimal(peer_val)
+        return {
+            "value_biz_date": biz_decimal,
+            "sum_month_biz": biz_decimal,
+            "sum_ytd_biz": biz_decimal,
+            "value_peer_date": peer_decimal,
+            "sum_month_peer": peer_decimal,
+            "sum_ytd_peer": peer_decimal,
+        }
+
+    if not anchor_row:
+        return {}
+
+    return {
+        "amount_temp_highest": _metric(anchor_row.get("max_temp"), peer_row.get("max_temp") if peer_row else None),
+        "amount_temp_lowest": _metric(anchor_row.get("min_temp"), peer_row.get("min_temp") if peer_row else None),
+    }
+
+
 def _fetch_sum_coal_inventory_constants(session: Session, company: str) -> Dict[str, Dict[str, Decimal]]:
     """
     针对 sum_coal_inventory_data 视图的取值逻辑：
@@ -900,6 +953,8 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         context_biz_date = None
         if context and isinstance(context.get("biz_date"), str):
             context_biz_date = context["biz_date"]
+        temperature_metrics_cache = _fetch_temperature_extremes(session, context_biz_date)
+
         for comp in companies_needed:
             try:
                 # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
@@ -918,6 +973,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                         consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
                 except Exception:
                     consts_by_company[comp][alias] = {}
+
+            if comp == "Group" and temperature_metrics_cache:
+                metrics_by_company.setdefault(comp, {}).update(temperature_metrics_cache)
 
     col_frames = map_columns_to_frames(columns)
     # 动态确定回填起点：以首个“本期日”所在列为准（data_start_idx）

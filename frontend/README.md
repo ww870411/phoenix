@@ -24,7 +24,7 @@
 - 改动：脚本允许通过 `VITE_API_BASE` 环境变量覆写打包时的接口前缀，同时记录构建时间戳；新增校验自动过滤 `file://` / Windows 本地路径，避免前端构建后指向本地磁盘。PowerShell 版本便于在纯 Windows 环境执行。
 - 部署：`ww.yml` 继续使用 `deploy/Dockerfile.web` 生成的静态资源镜像，运行时只需从远端仓库拉取镜像即可；`ww-http-only.yml` 仅暴露 `80:80`，适合纯 HTTP 或将 TLS 托管给 Cloudflare 的场景。
 - 下一步：如需缩短镜像体积，可在后续迭代中将 `npm ci` 缓存目录挂载到宿主或改用多阶段缓存策略。
-- 数据接口：后端新增 `average_temperature_data` 视图（按 `temperature_data` 的日期聚合 `value` 日平均值），后续若开放 REST 接口，可在天气数据填报或展示页面接入该聚合结果。
+- 数据接口：后端新增 `calc_temperature_data` 视图（按 `temperature_data` 的日期聚合日最高/最低/平均温度），后续若开放 REST 接口，可在天气数据填报或展示页面接入该聚合结果。
 
 ## 会话小结（2025-11-03）
 

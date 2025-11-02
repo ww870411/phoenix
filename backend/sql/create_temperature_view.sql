@@ -86,11 +86,13 @@ SELECT * FROM zhuchengqu_rollup
 UNION ALL
 SELECT * FROM grand_rollup;
 
--- 平均气温视图：按天聚合 temperature_data 并计算 value 平均值
-CREATE OR REPLACE VIEW average_temperature_data AS
+-- 温度聚合视图：按天聚合 temperature_data 输出最高/最低/平均温度
+CREATE OR REPLACE VIEW calc_temperature_data AS
 SELECT
     DATE_TRUNC('day', date_time)::date AS date,
-    AVG(value) AS average_value
+    MAX(value) AS max_temp,
+    MIN(value) AS min_temp,
+    AVG(value) AS aver_temp
 FROM temperature_data
 GROUP BY DATE_TRUNC('day', date_time)::date
 ORDER BY date;
