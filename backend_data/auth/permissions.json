@@ -7,7 +7,7 @@
   "groups": {
     "Global_admin": {
       "hierarchy": 100,
-      "page_access": ["data_show", "data_approval", "data_entry", "constant_data"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" },
         "data_approval": { "mode": "all" },
@@ -23,7 +23,7 @@
     },
     "Group_admin": {
       "hierarchy": 90,
-      "page_access": ["data_show", "data_approval", "data_entry", "constant_data"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" },
         "data_approval": { "mode": "all" },
@@ -102,7 +102,7 @@
     },
     "Group_viewer": {
       "hierarchy": 50,
-      "page_access": ["data_show"],
+      "page_access": ["dashboard", "data_show", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" }
       },
