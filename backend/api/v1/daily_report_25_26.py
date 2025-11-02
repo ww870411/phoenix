@@ -402,8 +402,14 @@ def _parse_gongre_branches_detail_records(payload: Dict[str, Any]) -> List[Dict[
     if not columns or not rows:
         return []
 
-    center_lookup = _invert_mapping(payload.get("center_dict") if isinstance(payload.get("center_dict"), dict) else {})
-    item_lookup = _invert_mapping(payload.get("item_dict") if isinstance(payload.get("item_dict"), dict) else {})
+    center_mapping = _extract_mapping(payload, CENTER_DICT_KEYS)
+    if not center_mapping:
+        # 兼容模板仅提供“单位字典”的场景
+        center_mapping = _extract_mapping(payload, COMPANY_DICT_KEYS)
+    center_lookup = _invert_mapping(center_mapping)
+
+    item_mapping = _extract_mapping(payload, ITEM_DICT_KEYS)
+    item_lookup = _invert_mapping(item_mapping)
 
     date_columns: List[Tuple[int, Any]] = []
     note_column: Optional[int] = None

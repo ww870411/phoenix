@@ -463,3 +463,14 @@ sum_basic_data 相关：
 - 回滚思路：
   - 视图恢复为原 `average_temperature_data`；
   - 删除 `_fetch_temperature_extremes` 调用，并在 `Group_analysis_brief_report_Sheet` 中改回常量或默认值。
+
+### 2025-11-06（供热分中心提交：center/center_cn 映射修复）
+- 现象：在 `GongRe_branches_detail_Sheet` 提交数据时，`daily_basic_data` 中 `company`、`company_cn` 均写成“XX中心”（中文），未使用模板里的英文代号。
+- 原因：`_parse_gongre_branches_detail_records` 仅从 payload 的 `center_dict` 键读取字典，但模板和前端传值使用的是“单位字典”，导致反向映射缺失。
+- 变更：`backend/api/v1/daily_report_25_26.py`
+  - `_parse_gongre_branches_detail_records` 使用 `_extract_mapping`，先查 `CENTER_DICT_KEYS`，若不存在再回落到 `COMPANY_DICT_KEYS`，并统一对项目字典走同样的转换，保证 `center_lookup` 能找到英文代号。
+- 效果：分中心提交会将 `company` 写入 `HuaLe_Center` 等英文编码，`company_cn` 写入中文名称，满足数据库 Tall Table 设计。
+- 验证建议：
+  1) 在页面填写分中心数据并提交；
+  2) 查询 `SELECT DISTINCT company, company_cn FROM daily_basic_data WHERE sheet_name='GongRe_branches_detail_Sheet' ORDER BY company;` 应显示英文编码 + 中文名称配对。
+- 回滚：如需恢复旧行为，仅需将 `_extract_mapping` 调用还原为直接 `payload.get("center_dict")`。
