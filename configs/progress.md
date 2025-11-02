@@ -474,3 +474,20 @@ sum_basic_data 相关：
   1) 在页面填写分中心数据并提交；
   2) 查询 `SELECT DISTINCT company, company_cn FROM daily_basic_data WHERE sheet_name='GongRe_branches_detail_Sheet' ORDER BY company;` 应显示英文编码 + 中文名称配对。
 - 回滚：如需恢复旧行为，仅需将 `_extract_mapping` 调用还原为直接 `payload.get("center_dict")`。
+
+### 2025-11-06（集团直接收入去除内售热）
+- 现象：`groups` 视图中 `company='Group'`、`item_cn='直接收入'` 的重算块会把 `eco_direct_income` 连同 sum_basic_data 中的“内售热收入”一起求和。
+- 变更：`backend/sql/groups.sql`
+  - 在集团汇总基表 `base_grp` 中排除 `eco_direct_income` 基础行，避免重复；
+  - 新增集团口径的自定义重算块，仅汇总 `售电/暖/售高温水/售汽` 四项收入。
+- 效果：集团“直接收入”不再包含“内售热收入”，与主城区计算口径一致。
+- 验证：执行 `SELECT item, value_biz_date FROM groups WHERE company='Group' AND item='eco_direct_income' LIMIT 1;` 并确认数值与四项收入之和一致。
+- 回滚：删除新增 UNION 块，并将 `eco_direct_income` 从 `WHERE item NOT IN (...)` 的排除列表中移除即可。
+
+### 2025-11-06（scid.* 省级汇总常量兼容）
+- 现象：`ZhuChengQu_sum_show_Sheet` 行内使用 `scid.ZhuChengQu_sum` 时返回 0，原因是 `_value_of_const` 仅在当前 company 的常量缓存中查找，未回退到全局常量集合。
+- 变更：`backend/services/runtime_expression.py`
+  - `_value_of_const` 在本地别名查找不到时，会在 `self.consts_all` 中循环各公司别名，优先命中同名键，再进入 period 取值，兼容 `scid.Group_sum`、`scid.ZhuChengQu_sum` 等写法。
+- 效果：`scid.*` 无需指定 `公司.常量` 形式即可返回合计库存值，历史模板写法保持有效。
+- 验证：运行 `/runtime/spec/eval` 并检查 `_trace.used_consts` 是否出现 `scid.ZhuChengQu_sum` 等记录；或直接在前端页面观察库存列是否正常展示。
+- 回滚：若要恢复旧行为，只需移除新增循环，让 `_value_of_const` 只在当前 company 常量缓存中查找即可。

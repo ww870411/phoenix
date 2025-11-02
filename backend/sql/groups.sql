@@ -214,7 +214,23 @@ SELECT
   sum_month_biz, sum_month_peer,
   sum_ytd_biz, sum_ytd_peer
 FROM base_grp
-WHERE item NOT IN ('amount_daily_net_complaints_per_10k_m2','rate_std_coal_per_heat','rate_heat_per_10k_m2','rate_power_per_10k_m2','rate_water_per_10k_m2','amount_heat_lose')
+WHERE item NOT IN ('amount_daily_net_complaints_per_10k_m2','rate_std_coal_per_heat','rate_heat_per_10k_m2','rate_power_per_10k_m2','rate_water_per_10k_m2','amount_heat_lose','eco_direct_income')
+UNION ALL
+-- 集团：直接收入（仅售电/暖/售高温水/售汽，不含“内售热收入”）
+SELECT
+  'Group','集团全口径',
+  'eco_direct_income','直接收入','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_7d_biz ELSE 0 END)     AS sum_7d_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_7d_peer ELSE 0 END)    AS sum_7d_peer,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_month_biz ELSE 0 END)  AS sum_month_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_month_peer ELSE 0 END) AS sum_month_peer,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_ytd_biz ELSE 0 END)    AS sum_ytd_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_ytd_peer ELSE 0 END)   AS sum_ytd_peer
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
 UNION ALL
 -- 集团：万㎡净投诉量
 SELECT

@@ -512,6 +512,15 @@ class Evaluator:
 
         bucket = _locate_bucket(data_by_alias, [key_en, name_cn])
 
+        if not isinstance(bucket, dict) and isinstance(self.consts_all, dict):
+            for alias_maps in self.consts_all.values():
+                if not isinstance(alias_maps, dict):
+                    continue
+                cross_alias = alias_maps.get(target_alias)
+                bucket = _locate_bucket(cross_alias, [key_en, name_cn])
+                if isinstance(bucket, dict):
+                    break
+
         # 支持 c.<company>.<常量名> 写法，跨公司读取常量
         if not isinstance(bucket, dict) and "." in name_cn and isinstance(self.consts_all, dict):
             company_hint, inner = name_cn.split(".", 1)
