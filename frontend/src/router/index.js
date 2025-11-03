@@ -23,6 +23,10 @@ const routes = [
     component: () => import('../daily_report_25_26/pages/Sheets.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/:pageKey/dashboard',
+    component: () => import('../daily_report_25_26/pages/DashBoard.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',
     component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
   },

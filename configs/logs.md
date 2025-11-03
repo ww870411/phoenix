@@ -393,3 +393,6 @@ set_biz_date的修改:codex resume 019a379d-92db-7f80-a652-e360a0913e9e
 
 
 docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_temperature_view.sql
+
+
+AuthManager（backend/services/auth_manager.py:30中的SESSION_TTL_SECONDS用于设置登录会话过期时间

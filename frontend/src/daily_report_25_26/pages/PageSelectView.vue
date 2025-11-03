@@ -274,8 +274,17 @@ function openPage(page) {
   if (typeof page?.page_url === 'string' && page.page_url.startsWith('/')) {
     return router.push({ path: page.page_url })
   }
-  const isDisplay = typeof page?.config_file === 'string' && /展示用/.test(page.config_file)
   const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`
+  const normalizedKey = String(page?.page_key ?? page?.page_url ?? '').toLowerCase()
+  const isDashboard = normalizedKey === 'dashboard'
+  if (isDashboard) {
+    router.push({
+      path: `${base}/dashboard`,
+      query: { pageName: page.page_name },
+    })
+    return
+  }
+  const isDisplay = typeof page?.config_file === 'string' && /展示用/.test(page.config_file)
   if (isDisplay) {
     router.push({
       path: `${base}/display`,

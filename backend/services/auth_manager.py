@@ -27,7 +27,7 @@ from backend.config import DATA_DIRECTORY
 
 
 EAST_8 = timezone(timedelta(hours=8))
-SESSION_TTL_SECONDS = 30 * 60  # 30 分钟
+SESSION_TTL_SECONDS = 1440 * 60  # 24小时
 
 
 @dataclass(frozen=True)

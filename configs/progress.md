@@ -1,5 +1,44 @@
 # 进度记录
 
+## 2025-11-06（移除占位页面配置）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对 JSON 非符号文件执行删除操作，依据 3.9 矩阵降级使用 `apply_patch` 修改 `backend_data/项目列表.json`。
+- 回滚思路：恢复该文件旧版本即可重新出现占位页面。
+
+本次动作：
+- 从 `backend_data/项目列表.json` 删除 `placeholder` 页面配置，确保项目页不再渲染“用于占位”链接；其他页面配置保持不变。
+- 文档同步：本记录、`backend/README.md`、`frontend/README.md` 更新项目结构描述。
+
+影响范围与回滚：
+- 前端项目页列表将不再出现 placeholder 卡片；如需恢复，可在 JSON 中重新加入同名节点。
+- 既有页面（dashboard/data_show/data_approval/data_entry/constant_data/debug）不受影响。
+
+下一步建议：
+1. 若未来新增实际页面，可直接在 `项目列表.json` 登记，或为无需配置文件的页面补充专用元数据。
+2. 建议前端渲染层增加空数据校验，避免因配置缺失产生占位链接。
+
+## 2025-11-06（仪表盘 DashBoard.vue Vue 化）
+
+前置说明（降级留痕）：
+- Serena 当前无法对 `.vue` 单文件组件执行符号级编辑，依据 3.9 矩阵降级使用 `apply_patch` 重写 `frontend/src/daily_report_25_26/pages/DashBoard.vue`。
+- 回滚思路：恢复上述文件至本次改动前的版本即可撤销页面重构。
+
+本次动作：
+- 将 `configs/仪表盘参考.vue` 中的 React + Tailwind 示例转译为 Vue3 `<script setup>` 组件，定义局部 `Card` / `Table` 组件与静态演示数据，复刻 7 块 ECharts 图表及顶部指标摘要。
+- 页面通过 `v-chart` 组件加载静态配置并同步渲染表格明细，为后续对接 `dashboard/summary` 后端接口预留数据结构。
+- 文档同步：`frontend/README.md`、`backend/README.md` 新增会话小结，记录前端重构与后端接口现状。
+- `router/index.js` 新增 `/dashboard` 路由匹配；`PageSelectView.vue` 调整 `openPage` 逻辑，点击“数据看板”卡片即进入新版仪表盘页面。
+- `index.html` 注入 CDN 版 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 包装组件以 `window.echarts` 驱动图表，避免额外 npm 依赖；页面样式重构保持参考稿视觉。
+
+影响范围与回滚：
+- 仪表盘页面现可在纯前端环境展示设计稿效果，暂未切换到真实 API；如需回滚，恢复 `DashBoard.vue` 旧版本即可退回原占位实现。
+- 现有后端聚合接口不受影响，后续联调时仅需替换页面数据来源。
+
+下一步建议：
+1. 接入 `GET /api/v1/projects/daily_report_25_26/dashboard/summary`，用真实业务日/同期数据替换静态示例。
+2. 结合后端聚合成本评估是否需要引入缓存或按日预计算，避免频繁刷新触发重量级查询。
+
 ## 2025-11-06（售电煤炭库存填报权限）
 
 前置说明（降级留痕）：

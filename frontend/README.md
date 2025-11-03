@@ -2,6 +2,23 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-06 项目页移除占位入口）
+
+- 状态：项目页列表不再显示 `placeholder` 占位卡片，确保只展示可访问的实际页面或调试入口。
+- 改动：后端调整 `backend_data/项目列表.json`，前端读取 `/projects/daily_report_25_26/pages` 时已不包含该节点，页面枚举逻辑无需修改。
+- 影响：`/projects/daily_report_25_26/pages` 页面与卡片列表将消失“用于占位（稍后开始构建）”项；如需恢复，可让后端重新添加对应配置。
+- 下一步：若需要支持跳转至非配置文件驱动的页面，可在页面清单中增加 `type`/`route` 等字段，与当前卡片渲染逻辑配合扩展。
+
+## 会话小结（2025-11-06 仪表盘 Vue 组件重构）
+
+- 状态：依据 `configs/仪表盘参考.vue` 的设计稿，`pages/DashBoard.vue` 已改写为 Vue3 `<script setup>` 单文件组件，保留示例数据与栅格布局，直接在前端渲染 7 个仪表盘卡片与顶部指标摘要。
+- 改动：
+  - 重写 `pages/DashBoard.vue`，定义局部 `Card` / `Table` 组件并通过 `v-chart` 渲染 ECharts 配置，复刻气温、边际利润、收入分类、单耗、煤耗、投诉量、煤炭库存等模块。
+  - 统一整理静态演示数据、表格列定义与关键指标展示值，后续可替换为后端 `dashboard/summary` 接口的真实返回；内联 CSS 重现原设计的配色、阴影与栅格布局，无需依赖 Tailwind。
+  - `router/index.js` 与 `PageSelectView.vue` 新增 `dashboard` 路径处理，“数据看板”卡片现可直接跳转到新版仪表盘页面。
+  - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖。
+- 影响：仪表盘页面可在 Vue 环境完整呈现设计稿，后端接口联调时仅需替换数据载入逻辑；如需回滚，恢复旧版 `DashBoard.vue` 与路由改动即可退回 React 风格占位实现。
+
 ## 会话小结（2025-11-06 售电煤炭库存权限）
 
 - 状态：为售电公司账号开放煤炭库存表访问权限，`filterSheetsByRule` 支持在 `by_unit` 模式下读取权限文件中的显式授权白名单。
