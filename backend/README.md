@@ -7,6 +7,13 @@
 - 影响：`/api/v1/projects/daily_report_25_26/pages` 返回值不再包含占位页面，前端项目页不会再渲染该链接；如需回滚，可恢复该 JSON 节点。
 - 下一步：如需支持“纯页面”而非配置驱动的入口，可在后续迭代中扩展 JSON 结构（例如增加 `type` 标记或跳转路由字段）。
 
+## 会话小结（2025-11-06 审批页面默认业务日调整）
+
+- 状态：审批视图默认业务日改为使用 workflow status 返回的 `biz_date`（东八区昨日），`set_biz_date` 仅影响展示页与项目页提示。
+- 改动：前端 `ApprovalView.vue` 调用 `getWorkflowStatus` 获取 `biz_date`，在 `biz_date` 模式为 `regular` 时将该日期传递给 `/runtime/spec/eval`；后端无需调整。
+- 影响：审批页面刷新或切换 Trace 不再读取 `set_biz_date`，仍可通过“自定义”模式手动指定日期；展示页继续受 `set_biz_date` 控制。
+- 下一步：若需在审批页面显示“当前展示日期”提示，可结合 `workflow/status` 中的 `display_date` 做友好提示。
+
 ## 会话小结（2025-11-06 仪表盘前端重构同步说明）
 
 - 状态：本次改动仅重写前端 `DashBoard.vue` 为 Vue3 组件，后端 `dashboard/summary` 接口及其它 API 未作调整。

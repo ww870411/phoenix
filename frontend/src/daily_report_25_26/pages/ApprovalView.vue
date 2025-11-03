@@ -58,7 +58,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec, getTemplate } from '../services/api'
+import { evalSpec, getTemplate, getWorkflowStatus } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -95,6 +95,7 @@ const itemColumnIndex = ref(-1)
 
 const bizDateMode = ref('regular')
 const bizDate = ref('')
+const regularBizDate = ref('')
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -241,12 +242,19 @@ async function runEval() {
   itemColumnIndex.value = -1
   try {
     await ensureProjectsLoaded()
+    if (bizDateMode.value === 'regular') {
+      await ensureRegularBizDate()
+    }
+    const resolvedBizDate =
+      bizDateMode.value === 'regular'
+        ? regularBizDate.value || 'regular'
+        : bizDate.value || 'regular'
     const body = {
       sheet_key: sheetKey.value,
       project_key: 'daily_report_25_26',
       // primary_key 可留空，后端会用模板 unit_id 补齐；如需按中心筛选可以加入 {company:'Xxx_Center'}
       config: pageConfig.value,
-      biz_date: bizDateMode.value === 'regular' ? 'regular' : (bizDate.value || 'regular'),
+      biz_date: resolvedBizDate,
       trace: !!traceEnabled.value,
     }
     const res = await evalSpec(projectKey.value, body)
@@ -293,6 +301,19 @@ watch([bizDateMode, bizDate, traceEnabled], runEval)
 const formattedTrace = computed(() => {
   try { return JSON.stringify(traceData.value, null, 2) } catch { return '' }
 })
+
+async function ensureRegularBizDate() {
+  if (regularBizDate.value) return
+  try {
+    const status = await getWorkflowStatus(projectKey.value)
+    const biz = status?.biz_date
+    if (biz) {
+      regularBizDate.value = biz
+    }
+  } catch (err) {
+    console.warn('加载默认业务日期失败，将继续使用 regular', err)
+  }
+}
 </script>
 
 <style scoped>

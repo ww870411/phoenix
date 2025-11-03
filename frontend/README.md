@@ -9,6 +9,13 @@
 - 影响：`/projects/daily_report_25_26/pages` 页面与卡片列表将消失“用于占位（稍后开始构建）”项；如需恢复，可让后端重新添加对应配置。
 - 下一步：若需要支持跳转至非配置文件驱动的页面，可在页面清单中增加 `type`/`route` 等字段，与当前卡片渲染逻辑配合扩展。
 
+## 会话小结（2025-11-06 审批页面默认业务日）
+
+- 状态：审批页 `ApprovalView.vue` 中 `regular` 模式默认读取 workflow status 的 `biz_date`（昨天），不再随 `set_biz_date` 变化。
+- 改动：组件在刷新前调用 `getWorkflowStatus`，将返回的 `biz_date` 作为请求体传递给 `/runtime/spec/eval`；“自定义”模式仍沿用既有输入框。
+- 影响：审批页面只受业务日驱动，展示页仍使用 `set_biz_date` 控制；如需恢复旧逻辑，可回滚该组件改动。
+- 下一步：可视需要在顶部提示“当前展示日期”并引用 workflow status 的 `display_date`，帮助审批员了解展示口径。
+
 ## 会话小结（2025-11-06 仪表盘 Vue 组件重构）
 
 - 状态：依据 `configs/仪表盘参考.vue` 的设计稿，`pages/DashBoard.vue` 已改写为 Vue3 `<script setup>` 单文件组件，保留示例数据与栅格布局，直接在前端渲染 7 个仪表盘卡片与顶部指标摘要。
@@ -16,7 +23,7 @@
   - 重写 `pages/DashBoard.vue`，定义局部 `Card` / `Table` 组件并通过 `v-chart` 渲染 ECharts 配置，复刻气温、边际利润、收入分类、单耗、煤耗、投诉量、煤炭库存等模块。
   - 统一整理静态演示数据、表格列定义与关键指标展示值，后续可替换为后端 `dashboard/summary` 接口的真实返回；内联 CSS 重现原设计的配色、阴影与栅格布局，无需依赖 Tailwind。
   - `router/index.js` 与 `PageSelectView.vue` 新增 `dashboard` 路径处理，“数据看板”卡片现可直接跳转到新版仪表盘页面。
-  - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖。
+  - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖；摘要卡片与表格样式升级为渐变配色与栅格阴影风格。
 - 影响：仪表盘页面可在 Vue 环境完整呈现设计稿，后端接口联调时仅需替换数据载入逻辑；如需回滚，恢复旧版 `DashBoard.vue` 与路由改动即可退回 React 风格占位实现。
 
 ## 会话小结（2025-11-06 售电煤炭库存权限）

@@ -18,6 +18,25 @@
 1. 若未来新增实际页面，可直接在 `项目列表.json` 登记，或为无需配置文件的页面补充专用元数据。
 2. 建议前端渲染层增加空数据校验，避免因配置缺失产生占位链接。
 
+## 2025-11-06（审批页面默认业务日调整）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 文件暂无符号级编辑能力，依据 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/ApprovalView.vue`。
+- 回滚思路：恢复该文件旧版本即可恢复审批页默认读取 `set_biz_date` 的行为。
+
+本次动作：
+- `ApprovalView.vue` 在 `biz_date` 选择为 regular 时，新增 `getWorkflowStatus` 调用获取服务端 `biz_date`，并将该日期随请求发送至 `/runtime/spec/eval`，避免 `set_biz_date` 影响审批视图。
+- 保留“自定义”模式逻辑不变，审批员仍可手动切换日期。
+- 文档同步：本记录、`backend/README.md`、`frontend/README.md` 更新审批页面默认日期说明。
+
+影响范围与回滚：
+- 审批页面刷新、切换 trace 或回到页面时默认显示业务日（东八区昨日），不再随 `set_biz_date` 变化；如需恢复旧逻辑，回滚该组件即可。
+- 数据展示页仍沿用 `set_biz_date` 控制展示日期，功能未受影响。
+
+下一步建议：
+1. 若未来还需在审批页展示“当前展示日期”提示，可考虑复用 workflow status 返回的 `display_date` 信息作辅助说明。
+2. 当业务日计算逻辑变更时，请同步更新 workflow status 的 `biz_date` 以保持审批页默认值一致。
+
 ## 2025-11-06（仪表盘 DashBoard.vue Vue 化）
 
 前置说明（降级留痕）：
@@ -29,7 +48,7 @@
 - 页面通过 `v-chart` 组件加载静态配置并同步渲染表格明细，为后续对接 `dashboard/summary` 后端接口预留数据结构。
 - 文档同步：`frontend/README.md`、`backend/README.md` 新增会话小结，记录前端重构与后端接口现状。
 - `router/index.js` 新增 `/dashboard` 路由匹配；`PageSelectView.vue` 调整 `openPage` 逻辑，点击“数据看板”卡片即进入新版仪表盘页面。
-- `index.html` 注入 CDN 版 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 包装组件以 `window.echarts` 驱动图表，避免额外 npm 依赖；页面样式重构保持参考稿视觉。
+- `index.html` 注入 CDN 版 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 包装组件以 `window.echarts` 驱动图表，避免额外 npm 依赖；摘要卡与表格样式升级为渐变/阴影风格，整体视觉更聚合。
 
 影响范围与回滚：
 - 仪表盘页面现可在纯前端环境展示设计稿效果，暂未切换到真实 API；如需回滚，恢复 `DashBoard.vue` 旧版本即可退回原占位实现。

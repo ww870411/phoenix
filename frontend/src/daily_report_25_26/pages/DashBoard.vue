@@ -12,21 +12,33 @@
     </header>
 
     <section class="dashboard-summary">
-      <div class="summary-card summary-card--gradient">
-        <div class="summary-card__label">平均气温（7日当期）</div>
-        <div class="summary-card__value">{{ averageTemp }}℃</div>
+      <div class="summary-card summary-card--primary">
+        <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
+        <div class="summary-card__meta">
+          <div class="summary-card__label">平均气温（7日当期）</div>
+          <div class="summary-card__value">{{ averageTemp }}℃</div>
+        </div>
       </div>
-      <div class="summary-card">
-        <div class="summary-card__label">集团当日边际利润（演示）</div>
-        <div class="summary-card__value">{{ marginHeadline }} 万元</div>
+      <div class="summary-card summary-card--success">
+        <div class="summary-card__icon summary-card__icon--profit" aria-hidden="true"></div>
+        <div class="summary-card__meta">
+          <div class="summary-card__label">集团当日边际利润（演示）</div>
+          <div class="summary-card__value">{{ marginHeadline }} 万元</div>
+        </div>
       </div>
-      <div class="summary-card">
-        <div class="summary-card__label">集团标煤消耗（当期）</div>
-        <div class="summary-card__value">{{ coalStdHeadline }} 吨标煤</div>
+      <div class="summary-card summary-card--warning">
+        <div class="summary-card__icon summary-card__icon--coal" aria-hidden="true"></div>
+        <div class="summary-card__meta">
+          <div class="summary-card__label">集团标煤消耗（当期）</div>
+          <div class="summary-card__value">{{ coalStdHeadline }} 吨标煤</div>
+        </div>
       </div>
-      <div class="summary-card">
-        <div class="summary-card__label">集团当日投诉量</div>
-        <div class="summary-card__value">{{ complaintsHeadline }} 件</div>
+      <div class="summary-card summary-card--danger">
+        <div class="summary-card__icon summary-card__icon--complaint" aria-hidden="true"></div>
+        <div class="summary-card__meta">
+          <div class="summary-card__label">集团当日投诉量</div>
+          <div class="summary-card__value">{{ complaintsHeadline }} 件</div>
+        </div>
       </div>
     </section>
 
@@ -131,33 +143,51 @@ const Table = defineComponent({
     },
   },
   setup(props) {
+    const hasColumns = computed(() => Array.isArray(props.columns) && props.columns.length > 0)
+    const hasData = computed(() => Array.isArray(props.data) && props.data.length > 0)
+
     return () =>
       h('div', { class: 'dashboard-table' }, [
         h('table', null, [
-          h(
-            'thead',
-            null,
-            h(
-              'tr',
-              null,
-              props.columns.map((column) =>
-                h('th', { key: column }, column),
-              ),
-            ),
-          ),
-          h(
-            'tbody',
-            null,
-            props.data.map((row, rowIndex) =>
-              h(
-                'tr',
-                { key: rowIndex },
-                row.map((cell, cellIndex) =>
-                  h('td', { key: `${rowIndex}-${cellIndex}` }, cell ?? ''),
+          hasColumns.value
+            ? h(
+                'thead',
+                null,
+                h(
+                  'tr',
+                  null,
+                  props.columns.map((column) =>
+                    h('th', { key: column }, column),
+                  ),
                 ),
-              ),
-            ),
-          ),
+              )
+            : null,
+          hasData.value
+            ? h(
+                'tbody',
+                null,
+                props.data.map((row, rowIndex) =>
+                  h(
+                    'tr',
+                    { key: rowIndex },
+                    row.map((cell, cellIndex) =>
+                      h('td', { key: `${rowIndex}-${cellIndex}` }, cell ?? '—'),
+                    ),
+                  ),
+                ),
+              )
+            : h('tbody', null, [
+                h('tr', null, [
+                  h(
+                    'td',
+                    {
+                      class: 'dashboard-table__empty',
+                      colspan: hasColumns.value ? props.columns.length : 1,
+                    },
+                    '暂无数据',
+                  ),
+                ]),
+              ]),
         ]),
       ])
   },
@@ -181,9 +211,9 @@ const EChart = defineComponent({
   },
   setup(props) {
     const container = ref(null)
-    const styleHeight = computed(() =>
-      typeof props.height === 'number' ? `${props.height}px` : props.height || '260px',
-    )
+  const styleHeight = computed(() =>
+    typeof props.height === 'number' ? `${props.height}px` : props.height || '260px',
+  )
     let chart = null
 
     const dispose = () => {
@@ -510,8 +540,8 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 .dashboard-summary {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
-  margin-bottom: 28px;
+  gap: 18px;
+  margin-bottom: 32px;
 }
 
 @media (min-width: 640px) {
@@ -527,44 +557,99 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 }
 
 .summary-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
   padding: 24px;
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #ffffff;
+  box-shadow: 0 28px 40px rgba(15, 23, 42, 0.18);
+}
+
+.summary-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  background: radial-gradient(circle at 20% 20%, #ffffff, transparent 60%);
+}
+
+.summary-card__icon {
+  z-index: 1;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+}
+
+.summary-card__icon::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 32px;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  background-color: currentColor;
+}
+
+.summary-card__icon--sunrise::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11 8V2h2v6Zm6.36 1.64L20.5 6.5l1.41 1.41l-3.13 3.15ZM4 13h16v2H4Zm-.91-4.09L4.5 6.5l3.15 3.14L6.24 10.5ZM12 18a5 5 0 0 1-5-5h10a5 5 0 0 1-5 5Zm-6 3h12v2H6Z"/></svg>');
+}
+
+.summary-card__icon--profit::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5 3h14v2H5Zm0 4h10v2H5Zm0 4h7v2H5Zm0 4h4v2H5Zm0 4h7v2H5Zm10.5-5q-1.4 0-2.7.75t-1.9 2.1l1.85.75q.35-1.05 1.23-1.65T15.5 15q1.75 0 2.88 1.1Q19.5 17.25 19.5 19q0 1.75-1.12 2.88Q17.25 23 15.5 23q-1.35 0-2.27-.65T11.35 20h-2q.35 1.95 1.82 3.225Q12.65 24.5 15.5 24.5q2.3 0 3.9-1.6t1.6-3.9q0-2.3-1.6-3.9t-3.9-1.6Z"/></svg>');
+}
+
+.summary-card__icon--coal::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m13 22-10-2l2-4l-2-4l10-2l10 2l-2 4l2 4l-10 2Zm0-2.15L18.15 18L19 16l-1.85-1.85L13 13.15l-4.15 1L7 16l1.85 1.85Z"/></svg>');
+}
+
+.summary-card__icon--complaint::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12q-.825 0-1.412-.587T10 10t.588-1.413T12 8t1.413.587T14 10t-.587 1.413T12 12Zm0 8.5q1.35 0 2.612-.387t2.301-1.088l2.087.538l-.55-2.05q.9-1.05 1.4-2.35T20.85 12q0-3.2-2.3-5.5T13.05 4.3L12 2l-1.05 2.3q-3.2.2-5.5 2.5T3.15 12q0 1.625.5 2.937T5.05 17l-.55 2.05l2.087-.538q1.05.7 2.312 1.088T12 20.5Z"/></svg>');
+}
+
+.summary-card__meta {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 120px;
-  justify-content: space-between;
+  gap: 4px;
 }
 
 .summary-card__label {
-  font-size: 12px;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #64748b;
+  opacity: 0.78;
 }
 
 .summary-card__value {
-  font-size: 26px;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 28px;
+  font-weight: 700;
 }
 
-.summary-card--gradient {
-  background: linear-gradient(135deg, #1f2937, #475569);
-  border: none;
-  color: #ffffff;
-  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.18);
+.summary-card--primary {
+  background: linear-gradient(135deg, #2563eb, #60a5fa);
 }
 
-.summary-card--gradient .summary-card__label {
-  color: rgba(248, 250, 252, 0.8);
+.summary-card--success {
+  background: linear-gradient(135deg, #10b981, #34d399);
 }
 
-.summary-card--gradient .summary-card__value {
-  color: #ffffff;
+.summary-card--warning {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+.summary-card--danger {
+  background: linear-gradient(135deg, #ef4444, #fb7185);
 }
 
 .dashboard-grid {
@@ -683,28 +768,47 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 
 .dashboard-table table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
-  color: #1f2937;
+  color: #0f172a;
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.dashboard-table thead {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
 }
 
 .dashboard-table th {
-  background: #eef2f6;
-  color: #475569;
+  color: #1d4ed8;
   font-weight: 600;
-  padding: 10px 12px;
+  padding: 12px 16px;
   text-align: left;
   white-space: nowrap;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.4);
 }
 
 .dashboard-table td {
-  padding: 10px 12px;
+  padding: 12px 16px;
   white-space: nowrap;
-  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dashboard-table tr:last-child td {
+  border-bottom: none;
 }
 
 .dashboard-table tr:hover td {
-  background: #f8fafc;
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.dashboard-table__empty {
+  text-align: center;
+  color: #64748b;
+  padding: 24px 16px;
 }
 
 .dashboard-footer {
