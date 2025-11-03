@@ -1,5 +1,24 @@
 # 进度记录
 
+## 2025-11-07（数据填报指标联动保持一致）
+
+前置说明（降级留痕）：
+- Serena `search_for_pattern` 对 `.vue`、`.py` 文件仅返回行号，无法读取完整上下文，按 3.9 矩阵降级使用 `desktop-commander::read_file` 配合 `apply_patch` 修改 `backend/api/v1/daily_report_25_26.py` 与 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，若需回滚可恢复上述文件旧版本。
+- Serena 暂不支持对 Markdown 进行写入，降级使用 `apply_patch` 更新 `configs/progress.md`、`backend/README.md`、`frontend/README.md`，回滚方式为还原对应文档。
+
+本次动作：
+- 后端补充 `LINKAGE_DICT_KEYS` 并实现 `_apply_linkage_constraints`，在模板/查询响应透传 `linkage_dict`，标准报表提交前按配置同步联动行值，避免写库后出现主子项不一致。
+- 前端 `DataEntryView.vue` 构建 `linkageMap`，在模板加载与镜像查询阶段重建联动映射，并在 `handleAfterEdit` 中将用户输入同步至所有关联行；提交 payload 同步携带 `linkage_dict`，便于后端二次校验。
+- README 系列文件同步记录联动规则与回滚方式，确保交付说明与实现一致。
+
+影响范围与回滚：
+- 在 `backend_data/数据结构_基本指标表.json` 中声明 `"指标联动"` 的基础指标表会在加载/提交阶段保持各联动项列值一致，历史差异数据加载后也会按主项值展示；如需恢复自由编辑，可移除新增常量与 `_apply_linkage_constraints`，并回滚前端联动逻辑。
+- 常量指标、煤炭库存等其它模板未改动；回滚上述文件即可恢复原有行为。
+
+下一步建议：
+1. 在数据填报 UI 中增加联动提示（如行高亮或说明气泡），降低填报人员误解。
+2. 结合审计需求输出联动差异告警或历史日志，便于排查过往数据是否存在不一致。
+
 ## 2025-11-07（审批取消批准功能）
 
 前置说明（降级留痕）：

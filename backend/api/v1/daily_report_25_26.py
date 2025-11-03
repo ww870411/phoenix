@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone, date
 
 from pathlib import Path as SysPath
 
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
 from decimal import Decimal, InvalidOperation
@@ -187,11 +187,13 @@ ITEM_DICT_KEYS = ("item_dict", "项目字典")
 COMPANY_DICT_KEYS = ("company_dict", "单位字典", "unit_dict")
 CENTER_DICT_KEYS = ("center_dict", "中心字典")
 STATUS_DICT_KEYS = ("status_dict", "状态字典")
+LINKAGE_DICT_KEYS = ("linkage_dict", "指标联动")
 DICT_KEY_GROUPS = {
     "item_dict": ITEM_DICT_KEYS,
     "company_dict": COMPANY_DICT_KEYS,
     "center_dict": CENTER_DICT_KEYS,
     "status_dict": STATUS_DICT_KEYS,
+    "linkage_dict": LINKAGE_DICT_KEYS,
 }
 
 
@@ -1717,9 +1719,10 @@ async def submit_debug(
     else:
         # 调用处理标准基础报表的旧逻辑
         try:
-            normalized = _normalize_submission(payload)
-            flattened = _flatten_records(payload, normalized)
-            inserted_rows = _persist_daily_basic(payload, normalized, flattened)
+            payload_aligned = _apply_linkage_constraints(payload)
+            normalized = _normalize_submission(payload_aligned)
+            flattened = _flatten_records(payload_aligned, normalized)
+            inserted_rows = _persist_daily_basic(payload_aligned, normalized, flattened)
             return JSONResponse(
                 status_code=200,
                 content={
@@ -2424,6 +2427,120 @@ def list_sheets(
             },
         )
     return JSONResponse(status_code=200, content=catalog)
+
+
+def _detect_readonly_limit_backend(columns: Sequence[Any]) -> int:
+    if not isinstance(columns, Sequence):
+        return 1
+    for idx, col in enumerate(columns):
+        if isinstance(col, str) and "计量单位" in col:
+            return idx
+    return 1
+
+
+def _ensure_row_length(row: List[Any], target_length: int) -> None:
+    if len(row) < target_length:
+        row.extend([None] * (target_length - len(row)))
+
+
+def _apply_linkage_constraints(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+
+    rows_raw = payload.get("rows")
+    columns = payload.get("columns")
+    if not isinstance(rows_raw, list) or not isinstance(columns, list) or not columns:
+        return payload
+
+    linkage_raw = payload.get("linkage_dict")
+    if not isinstance(linkage_raw, dict) or not linkage_raw:
+        alias_raw = payload.get("指标联动")
+        if isinstance(alias_raw, dict) and alias_raw:
+            linkage_raw = alias_raw
+        else:
+            return payload
+
+    normalized_rows: List[List[Any]] = []
+    for row in rows_raw:
+        if isinstance(row, list):
+            normalized_rows.append(row)
+        elif isinstance(row, tuple):
+            normalized_rows.append(list(row))
+        else:
+            normalized_rows.append([row])
+
+    payload["rows"] = normalized_rows
+
+    label_to_index: Dict[str, int] = {}
+    for idx, row in enumerate(normalized_rows):
+        label_value = row[0] if row else ""
+        if isinstance(label_value, str):
+            label = label_value.strip()
+        elif label_value is None:
+            label = ""
+        else:
+            label = str(label_value).strip()
+        if label:
+            label_to_index[label] = idx
+
+    if not label_to_index:
+        return payload
+
+    adjacency: Dict[int, Set[int]] = {}
+
+    def _register_link(src_idx: int, dst_idx: int) -> None:
+        if src_idx == dst_idx:
+            return
+        adjacency.setdefault(src_idx, set()).add(dst_idx)
+
+    for src_label_raw, targets_raw in linkage_raw.items():
+        src_label = "" if src_label_raw is None else str(src_label_raw).strip()
+        if not src_label:
+            continue
+        src_idx = label_to_index.get(src_label)
+        if src_idx is None:
+            continue
+
+        if isinstance(targets_raw, (list, tuple, set)):
+            targets_iter = targets_raw
+        else:
+            targets_iter = [targets_raw]
+
+        for target_label_raw in targets_iter:
+            target_label = "" if target_label_raw is None else str(target_label_raw).strip()
+            if not target_label:
+                continue
+            dst_idx = label_to_index.get(target_label)
+            if dst_idx is None:
+                continue
+            _register_link(src_idx, dst_idx)
+            _register_link(dst_idx, src_idx)
+
+    if not adjacency:
+        return payload
+
+    readonly_limit = _detect_readonly_limit_backend(columns)
+    value_start_col = max(readonly_limit + 1, 2)
+    total_columns = len(columns)
+
+    for row in normalized_rows:
+        if isinstance(row, list):
+            _ensure_row_length(row, total_columns)
+
+    for src_idx, neighbors in adjacency.items():
+        if src_idx >= len(normalized_rows):
+            continue
+        source_row = normalized_rows[src_idx]
+        _ensure_row_length(source_row, total_columns)
+        for dst_idx in neighbors:
+            if dst_idx >= len(normalized_rows):
+                continue
+            target_row = normalized_rows[dst_idx]
+            _ensure_row_length(target_row, total_columns)
+            for col_idx in range(value_start_col, total_columns):
+                target_row[col_idx] = source_row[col_idx]
+
+    return payload
 
 
 def _normalize_submission(payload: Dict[str, Any]) -> Dict[str, Any]:

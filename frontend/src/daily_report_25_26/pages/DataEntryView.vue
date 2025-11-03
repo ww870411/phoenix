@@ -166,6 +166,8 @@ const rows = ref([]);
 const templateType = ref('standard'); // 新增：模板类型
 const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null });
 const submitTime = ref('');
+const linkageMap = ref(new Map());
+let isApplyingLinkage = false;
 
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
@@ -215,6 +217,104 @@ function normalizeDictPayload(raw) {
     return cloned;
   }
   return null;
+}
+
+function pickLinkageDict(source) {
+  if (!source || typeof source !== 'object') return null;
+  if (source.linkage_dict && typeof source.linkage_dict === 'object') {
+    return source.linkage_dict;
+  }
+  if (source.entries && typeof source.entries === 'object') {
+    const nested = source.entries.linkage_dict;
+    if (nested && typeof nested === 'object') {
+      return nested;
+    }
+  }
+  if (source['指标联动'] && typeof source['指标联动'] === 'object') {
+    return source['指标联动'];
+  }
+  return null;
+}
+
+function ensureLinkedRowsAligned() {
+  const map = linkageMap.value;
+  if (!(map instanceof Map) || map.size === 0) return;
+  if (!Array.isArray(gridSource.value) || !Array.isArray(columns.value)) return;
+  const readonlyLimit = resolveReadonlyLimit(columns.value);
+  const startCol = Math.max(readonlyLimit + 1, 2);
+  const totalColumns = columns.value.length;
+  if (startCol >= totalColumns) return;
+  const updatedRows = new Set();
+  const processedPairs = new Set();
+  map.forEach((neighbors, srcIdx) => {
+    const sourceRow = gridSource.value?.[srcIdx];
+    if (!sourceRow) return;
+    neighbors.forEach((dstIdx) => {
+      const targetRow = gridSource.value?.[dstIdx];
+      if (!targetRow) return;
+      const pairKey = srcIdx < dstIdx ? `${srcIdx}-${dstIdx}` : `${dstIdx}-${srcIdx}`;
+      if (processedPairs.has(pairKey)) return;
+      processedPairs.add(pairKey);
+      for (let col = startCol; col < totalColumns; col += 1) {
+        const propKey = `c${col}`;
+        targetRow[propKey] = sourceRow[propKey];
+      }
+      updatedRows.add(srcIdx);
+      updatedRows.add(dstIdx);
+    });
+  });
+  if (updatedRows.size > 0) {
+    gridSource.value = gridSource.value.map((row, idx) => {
+      if (!updatedRows.has(idx)) return row;
+      if (row && typeof row === 'object') {
+        return { ...row };
+      }
+      return row ?? {};
+    });
+  }
+}
+
+function rebuildLinkageMapFromPayload(rowsCandidate, dictSource, options = {}) {
+  const { syncGrid = false } = options;
+  const map = new Map();
+  const linkage = pickLinkageDict(dictSource);
+  const rowsArray = Array.isArray(rowsCandidate) ? rowsCandidate : [];
+  if (linkage && rowsArray.length) {
+    const labelIndex = new Map();
+    rowsArray.forEach((row, idx) => {
+      if (!Array.isArray(row)) return;
+      const rawLabel = row[0];
+      const label = typeof rawLabel === 'string'
+        ? rawLabel.trim()
+        : rawLabel != null
+          ? String(rawLabel).trim()
+          : '';
+      if (label) {
+        labelIndex.set(label, idx);
+      }
+    });
+    Object.entries(linkage).forEach(([srcLabelRaw, targetsRaw]) => {
+      const srcLabel = (srcLabelRaw ?? '').toString().trim();
+      if (!srcLabel) return;
+      const srcIdx = labelIndex.get(srcLabel);
+      if (srcIdx == null) return;
+      const targets = Array.isArray(targetsRaw) ? targetsRaw : [targetsRaw];
+      targets.forEach((targetLabelRaw) => {
+        const targetLabel = (targetLabelRaw ?? '').toString().trim();
+        if (!targetLabel) return;
+        const targetIdx = labelIndex.get(targetLabel);
+        if (targetIdx == null) return;
+        if (!map.has(srcIdx)) map.set(srcIdx, new Set());
+        map.get(srcIdx).add(targetIdx);
+        if (!map.has(targetIdx)) map.set(targetIdx, new Set());
+        map.get(targetIdx).add(srcIdx);
+      });
+    });
+  }
+  linkageMap.value = map;
+  if (syncGrid) {
+    ensureLinkedRowsAligned();
+  }
 }
 
 function resolveReadonlyLimit(columnList) {
@@ -300,6 +400,7 @@ async function setupCrosstabGrid(tpl) {
 // --- 主数据加载逻辑 ---
 async function loadTemplate() {
   isLoadingTemplate.value = true;
+  linkageMap.value = new Map();
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
   // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
   // 应用日期占位到列头（仅每日数据填报页面）
@@ -436,6 +537,12 @@ async function loadTemplate() {
     }
   }
   templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
+  const linkagePayload = {
+    entries: dictSnapshot,
+    linkage_dict: tpl.linkage_dict,
+    ['指标联动']: tpl['指标联动'],
+  };
+  rebuildLinkageMapFromPayload(rows.value, linkagePayload);
 
   isLoadingTemplate.value = false;
 }
@@ -559,6 +666,21 @@ function handleAfterEdit(evt) {
     if (rowIndex == null || !prop) continue;
     if (!gridSource.value[rowIndex]) continue;
     gridSource.value[rowIndex][prop] = val;
+    if (templateType.value !== 'standard') continue;
+    const map = linkageMap.value;
+    if (!(map instanceof Map) || map.size === 0) continue;
+    const related = map.get(rowIndex);
+    if (!related || related.size === 0) continue;
+    if (isApplyingLinkage) continue;
+    isApplyingLinkage = true;
+    try {
+      related.forEach((linkedIdx) => {
+        if (!gridSource.value[linkedIdx]) return;
+        gridSource.value[linkedIdx][prop] = val;
+      });
+    } finally {
+      isApplyingLinkage = false;
+    }
   }
 }
 
@@ -636,6 +758,12 @@ async function applyStandardQueryResult(payload) {
     await autoSizeFirstColumn();
     applyReadonlyToColumns();
   }
+  const linkagePayload = {
+    entries: (templateDicts.value && templateDicts.value.entries) ? templateDicts.value.entries : {},
+    linkage_dict: q && typeof q === 'object' ? q.linkage_dict : undefined,
+    ['指标联动']: q && typeof q === 'object' ? q['指标联动'] : undefined,
+  };
+  rebuildLinkageMapFromPayload(rows.value, linkagePayload, { syncGrid: true });
 }
 // 监听业务日期变更，标准表需用新日期重算列头与网格列定义
 const stop = watch(

@@ -396,3 +396,8 @@ docker compose exec db psql -U postgres -d phoenix -f /app/sql/create_temperatur
 
 
 AuthManager（backend/services/auth_manager.py:30中的SESSION_TTL_SECONDS用于设置登录会话过期时间
+
+"linkage_dict": [                                                                                                                                                                            
+      ["耗水量", "其中：电厂耗水量"],                                                                                                                                                            
+      {"外购电量": "其中：电厂外购电量"}                                                                                                                                                         
+    ]      

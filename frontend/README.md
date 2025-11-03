@@ -2,6 +2,13 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-07 数据填报指标联动）
+
+- 状态：数据填报页面读取模板中的 `linkage_dict`/“指标联动”配置后，会在 RevoGrid 中保持主子指标的输入一致，用户编辑任一联动单元格，其余联动行会即时同步。
+- 改动：`pages/DataEntryView.vue` 新增 `linkageMap`、`pickLinkageDict`、`rebuildLinkageMapFromPayload` 与 `ensureLinkedRowsAligned`，在模板加载与镜像查询后重建联动映射；`handleAfterEdit` 将最新值广播到映射内的所有行，并随提交 payload 回传 `linkage_dict`。
+- 影响：声明 `"指标联动"` 的表格初始展示与后续提交会自动保持各联动项的列值一致，旧数据加载后也会被前端同步为主行取值；若需回滚，可移除上述辅助函数并恢复原有 `handleAfterEdit` 逻辑。
+- 下一步：可在表格 UI 中增加联动提示（如行高亮、气泡说明）并关联后端差异告警，帮助填报人员理解同步规则。
+
 ## 会话小结（2025-11-07 审批取消批准按钮）
 
 - 状态：项目页审批进度卡片依据新增 `can_revoke` 权限显示“取消批准”按钮，允许在前端撤回已完成审批的单位。

@@ -60,7 +60,12 @@
       "amount_turbine_running": "运行汽轮机数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：电厂耗水量"],
+      "外购电量":["其中：电厂外购电量"]
     }
+      
   },
   "BeiHai_water_boiler_Sheet": {
     "单位标识": "BeiHai",
@@ -119,6 +124,10 @@
       "amount_turbine_running": "运行汽轮机数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：电厂耗水量"],
+      "外购电量":["其中：电厂外购电量"]
     }
   },
   "BeiHai_gas_boiler_Sheet": {
@@ -173,6 +182,10 @@
       "amount_turbine_running": "运行汽轮机数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：电厂耗水量"],
+      "外购电量":["其中：电厂外购电量"]
     }
   },
   "XiangHai_Sheet": {
@@ -236,6 +249,10 @@
       "amount_turbine_running": "运行汽轮机数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：电厂耗水量"],
+      "外购电量":["其中：电厂外购电量"]
     }
   },
   "GongRe_Sheet": {
@@ -299,6 +316,9 @@
       "amount_temp_highest": "日最高气温",
       "amount_temp_lowest": "日最低气温",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "外购电量":["其中：换热站外购电量"]
     }
   },
   "GongRe_branches_detail_Sheet": {
@@ -719,6 +739,10 @@
       "amount_heat_pump_running": "运行热泵数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：热网补水量"],
+      "外购电量":["其中：换热站外购电量"]
     }
   },
   "ZhuangHe_Sheet": {
@@ -810,6 +834,10 @@
       "amount_heat_pump_running": "运行热泵数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：热网补水量"],
+      "外购电量":["其中：换热站外购电量"]
     }
   },
   "YanJiuYuan_Sheet": {
@@ -893,6 +921,10 @@
       "amount_heat_pump_running": "运行热泵数",
       "equipment_on_off_status": "主设备启停情况",
       "additional_information": "突发情况说明"
+    },
+    "指标联动":{
+      "耗水量":["其中：热网补水量"],
+      "外购电量":["其中：换热站外购电量"]
     }
   },
   "Coal_inventory_Sheet": {

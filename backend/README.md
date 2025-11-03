@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-07 数据填报指标联动）
+
+- 状态：数据填报模板与标准报表提交流程现支持 `linkage_dict`（配置别名“指标联动”）字段，后端会在入库前同步联动指标的数值，避免出现同列不同值。
+- 改动：`daily_report_25_26.py` 新增 `LINKAGE_DICT_KEYS` 与 `_apply_linkage_constraints`，在模板/查询响应透传 `linkage_dict`，并在标准报表 `submit` 前按模板映射同步行值；同时引入 `_detect_readonly_limit_backend`、`Sequence` 类型以匹配前端的“计量单位”锁列逻辑。
+- 影响：在 `backend_data/数据结构_基本指标表.json` 中声明 `"指标联动"` 的表格会在加载及提交时自动保持主子项数值一致，联动字段会随模板一并返回；如需回滚，可移除上述常量与辅助函数，恢复旧的自由填报行为。
+- 下一步：可考虑结合审计需求，对历史存在差异的联动项输出告警列表，或扩展 `_apply_linkage_constraints` 至煤炭库存等特殊模板分支。
+
 ## 会话小结（2025-11-07 审批撤销能力）
 
 - 状态：审批流程新增 `/workflow/revoke` 接口与 `can_revoke` 权限，可撤回已批准的单位并恢复 `pending` 状态。
