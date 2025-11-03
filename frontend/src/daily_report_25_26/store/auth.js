@@ -164,7 +164,11 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     }
     if (rule.mode === 'by_unit') {
       const userUnit = user.value?.unit || ''
-      return sheets.filter((sheet) => sheetMatchesUnit(sheet, userUnit))
+      const extraSheets = new Set((rule.sheets || []).map((key) => String(key)))
+      // 允许显式授权表单与单位前缀匹配共同生效
+      return sheets.filter(
+        (sheet) => extraSheets.has(sheet.sheet_key) || sheetMatchesUnit(sheet, userUnit)
+      )
     }
     return sheets
   }

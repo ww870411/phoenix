@@ -103,6 +103,11 @@
       "username": "yanjiuyuan_filler",
       "password": "yanjiuyuan_filler1",
       "unit": "YanJiuYuan"
+      },
+      {
+      "username": "shoudian_filler",
+      "password": "shoudian_filler3",
+      "unit": "ShouDian"
       }
     ],
     "Group_viewer":[

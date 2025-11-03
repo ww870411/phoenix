@@ -1,5 +1,13 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-06 售电煤炭库存权限）
+
+- 状态：售电公司填报账号 `shoudian_filler` 已在权限矩阵中显式放行 `Coal_inventory_Sheet`，补齐煤炭库存专项表的访问链路。
+- 改动：
+  - `backend_data/auth/permissions.json` 将 `unit_filler` 组的 `data_entry` 规则改为 `by_unit + sheets` 组合，写入 `Coal_inventory_Sheet` 白名单并刷新 `updated_at`。
+  - 对应前端逻辑允许读取该显式白名单（详见前端 README），无需调整后端接口。
+- 影响：售电公司账号沿用数据填报接口即可访问煤炭库存表，其余单位仍按原先的单位前缀匹配策略过滤；如需回滚，恢复权限文件旧版本即可。
+
 ## 会话小结（2025-11-06 HTTP-only 访问修复）
 
 - 状态：补全 `deploy/nginx.http-only.conf` 的 `/api/` 反向代理，在 `ww.bash` 中加入 `VITE_API_BASE` 二次校验、构建日志以及自动同步 `latest` 标签，并新增 `ww-certbot.yml`（固定 `locookies123@gmail.com` 与 `platform.smartview.top`）便于单独拉起 HTTP-only + Certbot 的申请流程；如需调整邮箱或域名，直接在 `ww-certbot.yml` 的 `command` 中替换对应参数后再执行即可。

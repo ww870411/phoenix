@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Phoenix 开发环境账号权限矩阵，来源于 configs/10.31用户权限设定.md",
-    "updated_at": "2025-11-02T00:00:00+08:00",
+    "updated_at": "2025-11-06T12:00:00+08:00",
     "biz_date_offset_days": -1
   },
   "groups": {
@@ -91,7 +91,10 @@
       "hierarchy": 60,
       "page_access": ["data_entry"],
       "sheet_rules": {
-        "data_entry": { "mode": "by_unit" }
+        "data_entry": {
+          "mode": "by_unit",
+          "sheets": ["Coal_inventory_Sheet"]
+        }
       },
       "units_access": ["{user_unit}"],
       "actions": {

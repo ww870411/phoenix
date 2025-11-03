@@ -1,0 +1,314 @@
+import React, { useMemo } from "react";
+import ReactECharts from "echarts-for-react";
+
+// --- 轻量 UI 组件（Tailwind + 简易 Card） ---
+const Card = ({ title, subtitle, extra, children }) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col gap-3">
+    <div className="flex items-start justify-between">
+      <div>
+        <div className="text-sm text-slate-500">{subtitle}</div>
+        <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
+      </div>
+      {extra ? <div className="text-xs text-slate-500">{extra}</div> : null}
+    </div>
+    <div className="min-h-[220px]">{children}</div>
+  </div>
+);
+
+const Table = ({ columns, data }) => (
+  <div className="overflow-auto rounded-xl border border-slate-100">
+    <table className="min-w-full text-sm">
+      <thead className="bg-slate-50 text-slate-600">
+        <tr>
+          {columns.map((c) => (
+            <th key={c} className="px-3 py-2 text-left whitespace-nowrap">{c}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {data.map((row, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            {row.map((cell, j) => (
+              <td key={j} className="px-3 py-2 whitespace-nowrap">{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+// --- 模拟数据（可替换为真实 API / 视图） ---
+const bizDate = new Date();
+bizDate.setDate(bizDate.getDate() - 1); // 业务日期：昨日
+const fmt = (d) => d.toISOString().slice(0, 10);
+
+// 1. 气温（7日窗口 + 同期）
+const tempDates = Array.from({ length: 7 }, (_, i) => {
+  const d = new Date(bizDate);
+  d.setDate(d.getDate() - 3 + i);
+  return fmt(d);
+});
+const tempNow = [14.2, 14.1, 14.4, 14.6, 15.6, 16.3, 16.9];
+const tempPeer = [12.9, 12.5, 12.2, 12.8, 13.4, 13.9, 14.1];
+
+// 2. 边际利润（单位：万元）
+const orgs7 = [
+  "集团全口径",
+  "主城区",
+  "金州热电",
+  "北方热电",
+  "金普热电",
+  "庄河环海",
+  "研究院",
+];
+const marginData = orgs7.map((o, i) => ({
+  org: o,
+  direct: 1000 - i * 60,
+  coal: 520 - i * 30,
+  materials: 80 - i * 5, // 可计量辅材成本
+  margin: 400 - i * 20,
+  margin_cmp_coal: 430 - i * 18, // 可比煤价边际利润
+}));
+
+// 3. 收入分类（集团）
+const incomeCat = ["暖收入", "售电收入", "售高温水收入", "售汽收入"];
+const incomeNow = [600, 240, 120, 80];
+const incomePeer = [560, 260, 110, 70];
+
+// 4. 单耗对比（单位：kWh/GJ/吨 每单位供暖量，仅演示）
+const orgs6 = ["主城区", "金州热电", "北方热电", "金普热电", "庄河环海", "研究院"];
+const unitHeat = orgs6.map((o, i) => ({ org: o, heat: 0.95 + i * 0.03, elec: 0.42 + i * 0.02, water: 0.21 + i * 0.015 }));
+const unitHeatPeer = orgs6.map((o, i) => ({ org: o, heat: 0.98 + i * 0.02, elec: 0.45 + i * 0.018, water: 0.23 + i * 0.012 }));
+
+// 5. 标煤消耗量（单位：吨标煤）
+const coalStdOrgs = ["集团全口径", "主城区", "金州热电", "北方热电", "金普热电", "庄河环海"];
+const coalStdNow = [980, 420, 160, 180, 120, 100];
+const coalStdPeer = [1020, 440, 150, 190, 130, 90];
+
+// 6. 投诉量（当日件数）
+const complaintsNow = orgs7.map((o, i) => ({ org: o, count: 30 - i * 3 }));
+
+// 7. 煤炭库存（单位：吨）
+const stockOrgs = ["北海热电厂", "香海热电厂", "金州热电", "北方热电", "金普热电", "庄河环海"];
+const stockData = stockOrgs.map((o, i) => ({
+  org: o,
+  inPlant: 30_000 - i * 2_000, // 厂内
+  inPort: 10_000 - i * 800, // 港口
+  inTransit: 6_000 - i * 500, // 在途
+}));
+
+// --- 图表 option 构造 ---
+const useTempOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['当期', '同期'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 40 },
+  xAxis: { type: 'category', data: tempDates },
+  yAxis: { type: 'value', name: '℃' },
+  series: [
+    { name: '当期', type: 'line', smooth: true, data: tempNow },
+    { name: '同期', type: 'line', smooth: true, data: tempPeer },
+  ],
+});
+
+const useMarginOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['直接收入', '煤成本', '可计量辅材成本', '边际利润', '可比煤价边际利润'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 60 },
+  xAxis: { type: 'category', data: orgs7 },
+  yAxis: { type: 'value', name: '万元' },
+  series: [
+    { name: '直接收入', type: 'bar', stack: 'base', data: marginData.map(d => d.direct) },
+    { name: '煤成本', type: 'bar', stack: 'base', data: marginData.map(d => -d.coal) },
+    { name: '可计量辅材成本', type: 'bar', stack: 'base', data: marginData.map(d => -d.materials) },
+    { name: '边际利润', type: 'line', data: marginData.map(d => d.margin) },
+    { name: '可比煤价边际利润', type: 'line', data: marginData.map(d => d.margin_cmp_coal) },
+  ],
+});
+
+const useIncomeCompareOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['当期', '同期'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 40 },
+  xAxis: { type: 'category', data: incomeCat },
+  yAxis: { type: 'value', name: '万元' },
+  series: [
+    { name: '当期', type: 'bar', data: incomeNow },
+    { name: '同期', type: 'bar', data: incomePeer },
+  ],
+});
+
+const useUnitConsumptionOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['热单耗', '电单耗', '水单耗'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 60 },
+  xAxis: { type: 'category', data: orgs6 },
+  yAxis: { type: 'value', name: '单位/供暖量' },
+  series: [
+    { name: '热单耗', type: 'bar', data: unitHeat.map(d => d.heat) },
+    { name: '电单耗', type: 'bar', data: unitHeat.map(d => d.elec) },
+    { name: '水单耗', type: 'bar', data: unitHeat.map(d => d.water) },
+  ],
+});
+
+const useCoalStdOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['当期', '同期'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 40 },
+  xAxis: { type: 'category', data: coalStdOrgs },
+  yAxis: { type: 'value', name: '吨标煤' },
+  series: [
+    { name: '当期', type: 'bar', data: coalStdNow },
+    { name: '同期', type: 'bar', data: coalStdPeer },
+  ],
+});
+
+const useComplaintsOption = () => ({
+  tooltip: { trigger: 'axis' },
+  grid: { left: 40, right: 20, top: 20, bottom: 40 },
+  xAxis: { type: 'category', data: orgs7 },
+  yAxis: { type: 'value', name: '件' },
+  series: [
+    { name: '当日投诉量', type: 'bar', data: complaintsNow.map(d => d.count), label: { show: true, position: 'top' } },
+  ],
+});
+
+const useCoalStockOption = () => ({
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['厂内存煤', '港口存煤', '在途煤炭'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 40 },
+  xAxis: { type: 'category', data: stockOrgs },
+  yAxis: { type: 'value', name: '吨' },
+  series: [
+    { name: '厂内存煤', type: 'bar', stack: 'total', data: stockData.map(d => d.inPlant) },
+    { name: '港口存煤', type: 'bar', stack: 'total', data: stockData.map(d => d.inPort) },
+    { name: '在途煤炭', type: 'bar', stack: 'total', data: stockData.map(d => d.inTransit) },
+  ],
+});
+
+export default function DashboardDemo() {
+  const tempOpt = useMemo(useTempOption, []);
+  const marginOpt = useMemo(useMarginOption, []);
+  const incomeOpt = useMemo(useIncomeCompareOption, []);
+  const unitOpt = useMemo(useUnitConsumptionOption, []);
+  const coalStdOpt = useMemo(useCoalStdOption, []);
+  const complaintOpt = useMemo(useComplaintsOption, []);
+  const coalStockOpt = useMemo(useCoalStockOption, []);
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-5 md:p-8">
+      {/* 头部 */}
+      <header className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+        <div>
+          <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-800">大连洁净能源集团生产日报</div>
+          <div className="text-slate-500">Daily Production Report & Dashboard</div>
+        </div>
+        <div className="text-right text-sm text-slate-500">
+          <div>今日：{fmt(new Date())}</div>
+          <div>业务日期（昨日）：{fmt(bizDate)}</div>
+        </div>
+      </header>
+
+      {/* 顶部摘要：关键卡片 */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-slate-800 to-slate-600 text-white rounded-2xl p-5 shadow">
+          <div className="text-xs opacity-80">平均气温（7日当期）</div>
+          <div className="text-2xl font-bold">{(tempNow.reduce((a,b)=>a+b,0)/tempNow.length).toFixed(1)}℃</div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow border border-slate-100">
+          <div className="text-xs text-slate-500">集团当日边际利润（演示）</div>
+          <div className="text-2xl font-bold text-slate-800">{marginData[0].margin} 万元</div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow border border-slate-100">
+          <div className="text-xs text-slate-500">集团标煤消耗（当期）</div>
+          <div className="text-2xl font-bold text-slate-800">{coalStdNow[0]} 吨标煤</div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow border border-slate-100">
+          <div className="text-xs text-slate-500">集团当日投诉量</div>
+          <div className="text-2xl font-bold text-slate-800">{complaintsNow[0].count} 件</div>
+        </div>
+      </section>
+
+      {/* 主体网格布局（两列 / 三列自适应） */}
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* 1. 气温变化：折线 + 表格 */}
+        <div className="lg:col-span-6 xl:col-span-5">
+          <Card title="气温变化情况（7日窗口，含同期）" subtitle="平均气温" extra="单位：℃">
+            <ReactECharts option={tempOpt} style={{ height: 260 }} notMerge={true} lazyUpdate={true} />
+            <div className="mt-3">
+              <Table
+                columns={["日期", "当期(℃)", "同期(℃)"]}
+                data={tempDates.map((d, i) => [d, tempNow[i], tempPeer[i]])}
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* 2. 边际利润简报：表格 + 组合图 */}
+        <div className="lg:col-span-6 xl:col-span-7">
+          <Card title="边际利润简报" subtitle="集团/各单位" extra="单位：万元">
+            <ReactECharts option={marginOpt} style={{ height: 260 }} />
+            <div className="mt-3">
+              <Table
+                columns={["单位", "直接收入", "煤成本", "可计量辅材", "边际利润", "可比煤价边际"]}
+                data={marginData.map((d) => [d.org, d.direct, d.coal, d.materials, d.margin, d.margin_cmp_coal])}
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* 3. 收入分类对比（集团） */}
+        <div className="lg:col-span-6 xl:col-span-4">
+          <Card title="收入分类对比（集团）" subtitle="当期 vs 同期" extra="单位：万元">
+            <ReactECharts option={incomeOpt} style={{ height: 260 }} />
+          </Card>
+        </div>
+
+        {/* 4. 单耗对比（6家单位） */}
+        <div className="lg:col-span-6 xl:col-span-8">
+          <Card title="单耗对比" subtitle="热/电/水单耗" extra="单位：每单位供暖量">
+            <ReactECharts option={unitOpt} style={{ height: 260 }} />
+          </Card>
+        </div>
+
+        {/* 5. 标煤消耗量对比：表格 + 图 */}
+        <div className="lg:col-span-6">
+          <Card title="标煤消耗量对比" subtitle="当期 vs 同期" extra="单位：吨标煤">
+            <ReactECharts option={coalStdOpt} style={{ height: 260 }} />
+            <div className="mt-3">
+              <Table
+                columns={["单位", "当期", "同期", "差值"]}
+                data={coalStdOrgs.map((o, i) => [o, coalStdNow[i], coalStdPeer[i], coalStdNow[i] - coalStdPeer[i]])}
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* 6. 投诉量：表格 + 图 */}
+        <div className="lg:col-span-6">
+          <Card title="投诉量" subtitle="当日省市平台服务投诉量" extra="单位：件">
+            <ReactECharts option={complaintOpt} style={{ height: 260 }} />
+            <div className="mt-3">
+              <Table
+                columns={["单位", "当日投诉量"]}
+                data={complaintsNow.map((d) => [d.org, d.count])}
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* 7. 煤炭库存：堆积柱状图 */}
+        <div className="lg:col-span-12">
+          <Card title="煤炭库存" subtitle="厂内/港口/在途（堆积）" extra="单位：吨">
+            <ReactECharts option={coalStockOpt} style={{ height: 300 }} />
+          </Card>
+        </div>
+      </main>
+
+      {/* 页脚 */}
+      <footer className="text-center text-xs text-slate-400 mt-8">
+        本页面为 ECharts 演示框架：可无缝替换为后端 API / 视图数据（如 average_temperature_data、sum_coal_inventory_data 等）。
+      </footer>
+    </div>
+  );
+}

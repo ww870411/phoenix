@@ -2,6 +2,12 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-06 售电煤炭库存权限）
+
+- 状态：为售电公司账号开放煤炭库存表访问权限，`filterSheetsByRule` 支持在 `by_unit` 模式下读取权限文件中的显式授权白名单。
+- 改动：`src/daily_report_25_26/store/auth.js` 在 `by_unit` 分支新增 `extraSheets` 集合，允许 `permissions.json` 提供的 `sheets` 列表直接放行无单位前缀的表单，并保留原有单位名称匹配。
+- 影响：账号 `shoudian_filler` 登录后可在数据填报页看到 `Coal_inventory_Sheet` 卡片；其他单位仍受单位名前缀限制。如需回滚，删除白名单逻辑即可恢复单纯的单位匹配。
+
 ## 会话小结（2025-11-06 HTTP-only 访问修复）
 
 - 状态：为避免构建后的前端请求落入 `D://.../api`，补齐 `deploy/nginx.http-only.conf` 的 `/api/` 代理，在 `ww.bash` 中加入 `VITE_API_BASE` 二次校验、日志输出与 `latest` 标签同步，并新增 `ww-certbot.yml`（固定 `locookies123@gmail.com` 与 `platform.smartview.top` 的参数）供服务器按需单独拉起 HTTP-only + Certbot 组合；需要其它邮箱或域名时，直接修改该文件的 `certbot` 命令参数即可。

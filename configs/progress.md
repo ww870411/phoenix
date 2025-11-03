@@ -1,5 +1,24 @@
 # 进度记录
 
+## 2025-11-06（售电煤炭库存填报权限）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对 JSON / JS 非符号文件执行插入更新，依据 3.9 矩阵降级使用 `apply_patch` 修改 `backend_data/auth/permissions.json` 与 `frontend/src/daily_report_25_26/store/auth.js`。
+- 回滚思路：恢复上述两个文件的旧版本即可撤销额外授权及前端筛选逻辑。
+
+本次动作：
+- `backend_data/auth/permissions.json` 在 `unit_filler` 组的 `data_entry` 规则下追加 `Coal_inventory_Sheet` 显式授权，并更新 `updated_at` 标记此次权限变更。
+- `frontend/src/daily_report_25_26/store/auth.js` 在 `by_unit` 模式下引入 `extraSheets` 白名单，允许通过权限文件显式授权的表单绕过单位前缀匹配，从而展示售电公司煤炭库存表。
+- 文档同步：本记录、`backend/README.md`、`frontend/README.md` 补充售电煤炭库存权限开通说明。
+
+影响范围与回滚：
+- 新账号 `shoudian_filler` 登录后可在数据填报页面访问 `Coal_inventory_Sheet`；回滚时删除授权或恢复文件快照即可恢复旧行为。
+- 其他单位仍沿用原 `by_unit` 筛选逻辑，未列入授权清单的表单行为不受影响。
+
+下一步建议：
+1. 如售电公司后续新增独立表单，可继续在权限文件 `sheets` 中登记并复用本次逻辑。
+2. 后端可考虑在模板元数据中补充 `unit_code` 字段，减少前端依赖命名约定进行匹配。
+
 ## 2025-11-06（HTTP-only API 路由修复）
 
 前置说明（降级留痕）：
