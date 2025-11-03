@@ -396,8 +396,8 @@
     "类型":"regular",
     "列名": ["项目", "计量单位", "(本期日)", "(同期日)", "日差异","(本期月)","(同期月)","月差异","(本供暖期)","(同供暖期)","供暖期差异"],
     "数据": [
-      ["日最高气温", "℃", "value_biz_date()", "value_peer_date()", "date_diff_rate()","-","-","sum_month_diff_rate()","-","-","sum_ytd_diff_rate()"],
-      ["日最低气温", "℃", "value_biz_date()", "value_peer_date()", "date_diff_rate()","-","-","sum_month_diff_rate()","-","-","sum_ytd_diff_rate()"],
+      ["日最高气温", "℃", "value_biz_date(ZhuChengQu)", "value_peer_date(ZhuChengQu)", "date_diff_rate()","-","-","sum_month_diff_rate()","-","-","sum_ytd_diff_rate()"],
+      ["日最低气温", "℃", "value_biz_date(ZhuChengQu)", "value_peer_date(ZhuChengQu)", "date_diff_rate()","-","-","sum_month_diff_rate()","-","-","sum_ytd_diff_rate()"],
       ["一、主城区汇总", "", "", "", "","","","","","",""],
       ["直接收入", "万元", "value_biz_date(ZhuChengQu)", "value_peer_date(ZhuChengQu)", "date_diff_rate()","sum_month_biz(ZhuChengQu)","sum_month_peer(ZhuChengQu)","sum_month_diff_rate()","sum_ytd_biz(ZhuChengQu)","sum_ytd_peer(ZhuChengQu)","sum_ytd_diff_rate()"],
       ["煤成本", "万元", "value_biz_date(ZhuChengQu)", "value_peer_date(ZhuChengQu)", "date_diff_rate()","sum_month_biz(ZhuChengQu)","sum_month_peer(ZhuChengQu)","sum_month_diff_rate()","sum_ytd_biz(ZhuChengQu)","sum_ytd_peer(ZhuChengQu)","sum_ytd_diff_rate()"],

@@ -38,7 +38,7 @@
           style="height: 70vh; width: 100%;"
         />
       </div>
-      <div v-else class="placeholder">无展示数据</div>
+      <div v-else class="placeholder">{{ loading ? '数据载入中...' : '无展示数据' }}</div>
       <div v-if="traceEnabled && traceData" class="trace-panel card" style="margin-top:12px;">
         <details open>
           <summary style="cursor:pointer;">Trace 调试输出（仅本次响应）</summary>

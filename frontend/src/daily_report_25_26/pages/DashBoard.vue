@@ -376,7 +376,7 @@ const useTempOption = () => ({
 
 const useMarginOption = () => ({
   tooltip: { trigger: 'axis' },
-  legend: { data: ['直接收入', '煤成本', '可计量辅材成本', '边际利润', '可比煤价边际利润'] },
+  legend: { data: ['直接收入', '煤成本', '可计量辅材成本', '可比煤价边际利润'] },
   grid: { left: 40, right: 20, top: 40, bottom: 60 },
   xAxis: { type: 'category', data: orgs7 },
   yAxis: { type: 'value', name: '万元' },
@@ -384,7 +384,6 @@ const useMarginOption = () => ({
     { name: '直接收入', type: 'bar', stack: 'base', data: marginData.map((item) => item.direct) },
     { name: '煤成本', type: 'bar', stack: 'base', data: marginData.map((item) => -item.coal) },
     { name: '可计量辅材成本', type: 'bar', stack: 'base', data: marginData.map((item) => -item.materials) },
-    { name: '边际利润', type: 'line', data: marginData.map((item) => item.margin) },
     { name: '可比煤价边际利润', type: 'line', data: marginData.map((item) => item.margin_cmp_coal) },
   ],
 })
@@ -467,13 +466,12 @@ const coalStockOpt = useCoalStockOption()
 const temperatureColumns = ['日期', '当期(℃)', '同期(℃)']
 const temperatureTableData = tempDates.map((date, index) => [date, tempNow[index], tempPeer[index]])
 
-const marginColumns = ['单位', '直接收入', '煤成本', '可计量辅材', '边际利润', '可比煤价边际']
+const marginColumns = ['单位', '直接收入', '煤成本', '可计量辅材', '可比煤价边际']
 const marginTableData = marginData.map((item) => [
   item.org,
   item.direct,
   item.coal,
   item.materials,
-  item.margin,
   item.margin_cmp_coal,
 ])
 

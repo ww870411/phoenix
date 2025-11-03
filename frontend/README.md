@@ -2,6 +2,13 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-07 数据展示页加载提示）
+
+- 状态：`DisplayRuntimeView.vue` 在等待数据库视图数据回填时，展示“数据载入中...”占位文案，加载完成但仍无列数据时继续提示“无展示数据”。
+- 改动：占位块绑定现有 `loading` 状态，使用三元表达式区分加载阶段与真实空数据，避免首屏短暂闪现“无展示数据”导致误解。
+- 影响：仅影响 `projects/daily_report_25_26/pages/data_show/sheets` 页面；其它页面抢占逻辑、接口与样式保持不变，如需回滚文案可恢复该 Vue 文件的旧版本。
+- 下一步：可按需求评估骨架屏或进度条组件，进一步优化长耗时查询的用户体验。
+
 ## 会话小结（2025-11-03 仪表盘 DashBoard.vue 文件审查）
 
 - 状态：本次操作为审查 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 文件内容，无代码改动。
@@ -27,7 +34,7 @@
 
 - 状态：依据 `configs/仪表盘参考.vue` 的设计稿，`pages/DashBoard.vue` 已改写为 Vue3 `<script setup>` 单文件组件，保留示例数据与栅格布局，直接在前端渲染 7 个仪表盘卡片与顶部指标摘要。
 - 改动：
-  - 重写 `pages/DashBoard.vue`，定义局部 `Card` / `Table` 组件并通过 `v-chart` 渲染 ECharts 配置，复刻气温、边际利润、收入分类、单耗、煤耗、投诉量、煤炭库存等模块。
+  - 重写 `pages/DashBoard.vue`，定义局部 `Card` / `Table` 组件并通过 `EChart` 渲染 ECharts 配置，复刻气温、收入分类、单耗、煤耗、投诉量、煤炭库存等模块。
   - 统一整理静态演示数据、表格列定义与关键指标展示值，后续可替换为后端 `dashboard/summary` 接口的真实返回；内联 CSS 重现原设计的配色、阴影与栅格布局，无需依赖 Tailwind。
   - `router/index.js` 与 `PageSelectView.vue` 新增 `dashboard` 路径处理，“数据看板”卡片现可直接跳转到新版仪表盘页面。
   - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖；摘要卡片与表格样式升级为渐变配色与栅格阴影风格，并自动读取 ECharts 调色板为表格边框/悬停色提供渐变。
@@ -52,7 +59,7 @@
   - `services/api.js` 新增 `getDashboardSummary`，统一调用 `GET /api/v1/projects/daily_report_25_26/dashboard/summary` 并支持 `biz_date` 参数。
   - `pages/DisplayView.vue` 集成交互：业务日选择、加载状态提示，以及气温折线、指标对比、煤库存堆积柱等卡片布局。
   - 新增 `components/dashboard/LineChart.vue`、`GroupedBarChart.vue`、`StackedBarChart.vue`、`TemperaturePanel.vue`、`MetricComparisonPanel.vue`、`CoalInventoryPanel.vue` 等基础组件，使用 SVG 手绘满足图形化展示要求。
-- 交互特点：可按业务日刷新、指标下拉切换（边际利润/单耗/投诉等），表格同步展示本期/同期值、差值与差率，煤炭库存卡片以堆积柱并列三段。
+  - 交互特点：可按业务日刷新、指标下拉切换（单耗/投诉等），表格同步展示本期/同期值、差值与差率，煤炭库存卡片以堆积柱并列三段。
 - 回滚方式：删除新增组件并恢复 `DisplayView.vue` 至原占位版本即可回退到旧展示状态；同时移除 `api.js#getDashboardSummary`。
 
 ## 会话小结（2025-11-04）
