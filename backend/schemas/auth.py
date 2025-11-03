@@ -16,6 +16,7 @@ class SheetRuleModel(BaseModel):
 class ActionFlagsModel(BaseModel):
     can_submit: bool = False
     can_approve: bool = False
+    can_revoke: bool = False
     can_publish: bool = False
 
 
@@ -56,6 +57,10 @@ class LogoutResponse(BaseModel):
 
 
 class WorkflowApproveRequest(BaseModel):
+    unit: constr(min_length=1, strip_whitespace=True)
+
+
+class WorkflowRevokeRequest(BaseModel):
     unit: constr(min_length=1, strip_whitespace=True)
 
 

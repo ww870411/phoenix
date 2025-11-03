@@ -2,6 +2,13 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-07 审批取消批准按钮）
+
+- 状态：项目页审批进度卡片依据新增 `can_revoke` 权限显示“取消批准”按钮，允许在前端撤回已完成审批的单位。
+- 改动：扩展 Pinia `auth` 仓库（`store/auth.js`）与 API 客户端（`services/api.js`）以支持 `revokeWorkflow`、`canRevokeUnit`，并在 `PageSelectView.vue` 的审批列表中根据状态/权限切换“批准”与“取消批准”按钮。
+- 影响：Global_admin / Group_admin / ZhuChengQu_admin 登录时，若单位处于 `approved` 状态且在可见范围内，可直接将其恢复为待审批；其它角色界面不受影响。
+- 下一步：如需追踪撤销记录，可在 UI 中补充撤销人和时间字段，并与后端潜在审计字段对齐。
+
 ## 会话小结（2025-11-07 数据展示页加载提示）
 
 - 状态：`DisplayRuntimeView.vue` 在等待数据库视图数据回填时，展示“数据载入中...”占位文案，加载完成但仍无列数据时继续提示“无展示数据”。

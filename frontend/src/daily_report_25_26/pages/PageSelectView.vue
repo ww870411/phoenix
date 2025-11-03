@@ -72,6 +72,15 @@
                   >
                     批准
                   </button>
+                  <button
+                    v-else-if="unit.status === 'approved' && canRevokeUnit(unit.unit)"
+                    class="btn ghost"
+                    type="button"
+                    :disabled="actionPending"
+                    @click="revokeUnit(unit.unit)"
+                  >
+                    取消批准
+                  </button>
                   <span v-else>—</span>
                 </td>
               </tr>
@@ -110,6 +119,7 @@ const projectKey = String(route.params.projectKey ?? '')
 
 const auth = useAuthStore()
 const canApproveUnit = auth.canApproveUnit
+const canRevokeUnit = auth.canRevokeUnit
 const rawPages = ref([])
 const pages = ref([])
 const loading = ref(false)
@@ -188,7 +198,7 @@ const workflowBizDate = computed(() => workflow.value?.biz_date || '')
 const workflowDisplayDate = computed(() => workflow.value?.display_date || '')
 const workflowBizDateText = computed(() => formatDate(workflowBizDate.value))
 const workflowDisplayDateText = computed(() => formatDate(workflowDisplayDate.value))
-const actionsColumnVisible = computed(() => auth.canApprove)
+const actionsColumnVisible = computed(() => auth.canApprove || auth.canRevoke)
 const publishButtonVisible = computed(() => auth.canPublish)
 const publishDisabled = computed(
   () => publishStatus.value?.status === 'published' || workflowLoading.value,
@@ -200,6 +210,7 @@ const showWorkflowCard = computed(() => {
     Boolean(workflowError.value) ||
     workflowUnits.value.length > 0 ||
     auth.canApprove ||
+    auth.canRevoke ||
     auth.canPublish
   )
 })
@@ -249,6 +260,21 @@ async function approveUnit(unit) {
   } catch (err) {
     console.error(err)
     workflowError.value = err instanceof Error ? err.message : '审批失败'
+  } finally {
+    actionPending.value = false
+  }
+}
+
+async function revokeUnit(unit) {
+  if (actionPending.value) return
+  actionPending.value = true
+  workflowError.value = ''
+  try {
+    const response = await auth.revokeUnit(projectKey, unit)
+    workflow.value = response || workflow.value
+  } catch (err) {
+    console.error(err)
+    workflowError.value = err instanceof Error ? err.message : '取消批准失败'
   } finally {
     actionPending.value = false
   }

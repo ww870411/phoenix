@@ -7,6 +7,7 @@ import {
   getWorkflowStatus,
   login as apiLogin,
   logout as apiLogout,
+  revokeWorkflow,
   publishWorkflow,
   setAuthToken,
 } from '../services/api'
@@ -175,10 +176,17 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
 
   const canSubmit = computed(() => Boolean(actionFlags.value.can_submit))
   const canApprove = computed(() => Boolean(actionFlags.value.can_approve))
+  const canRevoke = computed(() => Boolean(actionFlags.value.can_revoke))
   const canPublish = computed(() => Boolean(actionFlags.value.can_publish))
 
   function canApproveUnit(unit) {
     if (!canApprove.value) return false
+    if (!allowedUnits.value.size) return true
+    return allowedUnits.value.has(unit)
+  }
+
+  function canRevokeUnit(unit) {
+    if (!canRevoke.value) return false
     if (!allowedUnits.value.size) return true
     return allowedUnits.value.has(unit)
   }
@@ -192,6 +200,13 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
       throw new Error('当前账号无权审批该单位')
     }
     return approveWorkflow(projectKey, { unit })
+  }
+
+  async function revokeUnit(projectKey, unit) {
+    if (!canRevokeUnit(unit)) {
+      throw new Error('当前账号无权取消该单位审批')
+    }
+    return revokeWorkflow(projectKey, { unit })
   }
 
   async function publish(projectKey) {
@@ -211,6 +226,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     isAuthenticated,
     canSubmit,
     canApprove,
+    canRevoke,
     canPublish,
     allowedUnits,
     bootstrap,
@@ -220,8 +236,10 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     filterSheetsByRule,
     hasPageAccess,
     canApproveUnit,
+    canRevokeUnit,
     loadWorkflowStatus,
     approveUnit,
+    revokeUnit,
     publish,
   }
 })

@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-07 审批撤销能力）
+
+- 状态：审批流程新增 `/workflow/revoke` 接口与 `can_revoke` 权限，可撤回已批准的单位并恢复 `pending` 状态。
+- 改动：`schemas/auth.py` 引入 `WorkflowRevokeRequest` / `can_revoke` 字段，`services/auth_manager.py` 扩展 `ActionFlags` 解析与权限输出，`workflow_status.py` 新增 `mark_pending` 重置逻辑，`daily_report_25_26.py` 注册撤销路由并校验权限；权限矩阵为 Global_admin / Group_admin / ZhuChengQu_admin 打开 `can_revoke`。
+- 影响：具备撤销权限的账号可在可见单位范围内将审批状态回写为 `pending`（`status.json` 恢复 `pending/null/null`），其它接口行为不变；如需回滚，移除 `can_revoke` 字段并恢复上述文件即可。
+- 下一步：如需追踪撤销记录，可在 `status.json` 扩展撤销人/时间字段并于前端提示。
+
 ## 会话小结（2025-11-07 数据展示页加载提示同步）
 
 - 状态：数据展示页仅调整前端占位文案，后端视图查询与接口返回结构保持不变。

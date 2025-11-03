@@ -1,5 +1,25 @@
 # 进度记录
 
+## 2025-11-07（审批取消批准功能）
+
+前置说明（降级留痕）：
+- Serena 无法对 `.vue`、`.js` 非符号文件执行结构化编辑，依据 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/PageSelectView.vue`、`frontend/src/daily_report_25_26/store/auth.js`、`frontend/src/daily_report_25_26/services/api.js`。
+- Serena 对导入语句及 JSON 文件缺乏符号编辑能力，降级使用 `apply_patch` 调整 `backend/api/v1/daily_report_25_26.py` 导入与 `backend_data/auth/permissions.json` 权限矩阵；回滚可恢复上述文件旧版本。
+
+本次动作：
+- 后端新增 `can_revoke` 权限标识、`WorkflowRevokeRequest` 模型、`/workflow/revoke` 接口及 `WorkflowStatusManager.mark_pending`，允许将已批准单位恢复为 `pending` 状态。
+- 更新权限矩阵，向 Global_admin / Group_admin / ZhuChengQu_admin 授予 `can_revoke`，其它用户组默认 `false`。
+- 前端扩展 Pinia `auth` 仓库与 API 客户端，新增 `revokeWorkflow`、`canRevokeUnit`，并在审批卡片中提供“取消批准”按钮，成功后自动刷新进度。
+- 同步文档与权限输出结构，确保新增字段在前后端一致展示。
+
+影响范围与回滚：
+- 具备撤销权限的账号可在可见单位范围内将审批状态从 `approved` 复位为 `pending`，`status.json` 对应字段恢复 `pending/null/null`。
+- 若需撤销该能力，可回滚上述文件改动并移除 `can_revoke` 字段，前端按钮将随之消失。
+
+下一步建议：
+1. 如需保留审计信息，可在 `status.json` 扩展撤销人/时间字段并在前端展示。
+2. 建议补充批准→取消批准→再次批准的端到端测试，验证接口幂等与权限校验。
+
 ## 2025-11-07（数据展示页加载提示优化）
 
 前置说明（降级留痕）：

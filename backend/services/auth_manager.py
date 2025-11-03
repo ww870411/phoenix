@@ -34,6 +34,7 @@ SESSION_TTL_SECONDS = 1440 * 60  # 24小时
 class ActionFlags:
     can_submit: bool = False
     can_approve: bool = False
+    can_revoke: bool = False
     can_publish: bool = False
 
 
@@ -98,6 +99,7 @@ class AuthSession:
             "actions": {
                 "can_submit": self.permissions.actions.can_submit,
                 "can_approve": self.permissions.actions.can_approve,
+                "can_revoke": self.permissions.actions.can_revoke,
                 "can_publish": self.permissions.actions.can_publish,
             },
         }
@@ -240,6 +242,7 @@ class AuthManager:
             actions = ActionFlags(
                 can_submit=bool(actions_cfg.get("can_submit")),
                 can_approve=bool(actions_cfg.get("can_approve")),
+                can_revoke=bool(actions_cfg.get("can_revoke")),
                 can_publish=bool(actions_cfg.get("can_publish")),
             )
 

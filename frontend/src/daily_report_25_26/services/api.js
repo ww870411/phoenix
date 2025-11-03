@@ -216,6 +216,19 @@ export async function approveWorkflow(projectKey, payload) {
   return response.json()
 }
 
+export async function revokeWorkflow(projectKey, payload) {
+  const response = await fetch(`${projectPath(projectKey)}/workflow/revoke`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || '取消批准失败')
+  }
+  return response.json()
+}
+
 export async function publishWorkflow(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/workflow/publish`, {
     method: 'POST',

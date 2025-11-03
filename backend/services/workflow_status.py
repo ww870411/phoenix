@@ -117,6 +117,24 @@ class WorkflowStatusManager:
             self._persist_locked()
             return UnitApprovalState(**vars(state))
 
+    def mark_pending(
+        self,
+        project_key: str,
+        biz_date: datetime,
+        unit: str,
+        _actor: AuthSession,
+    ) -> UnitApprovalState:
+        key = (project_key, biz_date)
+        with self._lock:
+            self._ensure_loaded_locked()
+            snapshot = self._storage.setdefault(key, WorkflowSnapshot())
+            state = snapshot.units.setdefault(unit, UnitApprovalState(unit=unit))
+            state.status = "pending"
+            state.approved_by = None
+            state.approved_at = None
+            self._persist_locked()
+            return UnitApprovalState(**vars(state))
+
     def mark_published(
         self,
         project_key: str,

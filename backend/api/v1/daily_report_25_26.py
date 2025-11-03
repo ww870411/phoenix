@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from backend.schemas.auth import (
     WorkflowApproveRequest,
+    WorkflowRevokeRequest,
     WorkflowPublishRequest,
     WorkflowPublishStatus,
     WorkflowStatusResponse,
@@ -1547,6 +1548,30 @@ def approve_unit_workflow(
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权审批该单位")
     workflow_status_manager.mark_approved(
+        "daily_report_25_26",
+        _current_biz_datetime(),
+        target_unit,
+        session,
+    )
+    return _build_workflow_response(session)
+
+
+@router.post(
+    "/workflow/revoke",
+    response_model=WorkflowStatusResponse,
+    summary="撤销单位审批",
+)
+def revoke_unit_workflow(
+    payload: WorkflowRevokeRequest,
+    session: AuthSession = Depends(get_current_session),
+) -> WorkflowStatusResponse:
+    if not session.permissions.actions.can_revoke:
+        raise HTTPException(status_code=403, detail="当前账号无取消批准权限")
+    target_unit = payload.unit
+    allowed_units = session.allowed_units or set(_collect_seed_units())
+    if target_unit not in allowed_units:
+        raise HTTPException(status_code=403, detail="无权取消该单位审批")
+    workflow_status_manager.mark_pending(
         "daily_report_25_26",
         _current_biz_datetime(),
         target_unit,
