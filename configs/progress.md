@@ -48,7 +48,7 @@
 - 页面通过 `v-chart` 组件加载静态配置并同步渲染表格明细，为后续对接 `dashboard/summary` 后端接口预留数据结构。
 - 文档同步：`frontend/README.md`、`backend/README.md` 新增会话小结，记录前端重构与后端接口现状。
 - `router/index.js` 新增 `/dashboard` 路由匹配；`PageSelectView.vue` 调整 `openPage` 逻辑，点击“数据看板”卡片即进入新版仪表盘页面。
-- `index.html` 注入 CDN 版 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 包装组件以 `window.echarts` 驱动图表，避免额外 npm 依赖；摘要卡与表格样式升级为渐变/阴影风格，整体视觉更聚合。
+- `index.html` 注入 CDN 版 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 包装组件以 `window.echarts` 驱动图表，避免额外 npm 依赖；摘要卡与表格样式升级为渐变/阴影风格，并根据 ECharts 调色板动态生成边框与悬停配色，整体视觉更聚合。
 
 影响范围与回滚：
 - 仪表盘页面现可在纯前端环境展示设计稿效果，暂未切换到真实 API；如需回滚，恢复 `DashBoard.vue` 旧版本即可退回原占位实现。
@@ -566,5 +566,23 @@ sum_basic_data 相关：
 - 变更：`backend/services/runtime_expression.py`
   - `_value_of_const` 在本地别名查找不到时，会在 `self.consts_all` 中循环各公司别名，优先命中同名键，再进入 period 取值，兼容 `scid.Group_sum`、`scid.ZhuChengQu_sum` 等写法。
 - 效果：`scid.*` 无需指定 `公司.常量` 形式即可返回合计库存值，历史模板写法保持有效。
-- 验证：运行 `/runtime/spec/eval` 并检查 `_trace.used_consts` 是否出现 `scid.ZhuChengQu_sum` 等记录；或直接在前端页面观察库存列是否正常展示。
+- 验证：运行 `/runtime/spec/eval` 并检查 `_trace.used_consts` 是否出现 `scid.Group_sum` 等记录；或直接在前端页面观察库存列是否正常展示。
 - 回滚：若要恢复旧行为，只需移除新增循环，让 `_value_of_const` 只在当前 company 常量缓存中查找即可。
+
+## 2025-11-03（仪表盘 DashBoard.vue 文件审查）
+
+前置说明：
+- 本次操作为审查 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 文件内容，无代码改动。
+- 该文件是一个 Vue3 组件，用于展示仪表盘，包含本地 `Card`、`Table` 和 `EChart` 组件，以及模拟数据和样式。
+
+本次动作：
+- 审查了 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 文件，了解其结构、组件定义、数据流和样式。
+- 确认该文件是一个功能完整的仪表盘组件，使用 Vue3 的 `<script setup>` 语法，并集成了 ECharts 进行数据可视化。
+- 发现该组件使用了模拟数据，并预留了与后端 `dashboard/summary` 接口联调的接口。
+
+影响范围与回滚：
+- 本次操作仅为文件审查，无任何代码改动，因此无影响范围和回滚操作。
+
+下一步建议：
+- 根据项目计划，可以开始将仪表盘组件与后端 `dashboard/summary` 接口进行联调，替换模拟数据为真实数据。
+

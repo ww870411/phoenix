@@ -2,6 +2,13 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-03 仪表盘 DashBoard.vue 文件审查）
+
+- 状态：本次操作为审查 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 文件内容，无代码改动。
+- 说明：该文件是一个 Vue3 组件，用于展示仪表盘，包含本地 `Card`、`Table` 和 `EChart` 组件，以及模拟数据和样式。仪表盘展示了与“生产日报”相关的各项指标和图表。
+- 影响：本次操作仅为文件审查，无任何代码改动，因此无影响范围。
+- 下一步：根据项目计划，可以开始将仪表盘组件与后端 `dashboard/summary` 接口进行联调，替换模拟数据为真实数据。
+
 ## 会话小结（2025-11-06 项目页移除占位入口）
 
 - 状态：项目页列表不再显示 `placeholder` 占位卡片，确保只展示可访问的实际页面或调试入口。
@@ -23,7 +30,7 @@
   - 重写 `pages/DashBoard.vue`，定义局部 `Card` / `Table` 组件并通过 `v-chart` 渲染 ECharts 配置，复刻气温、边际利润、收入分类、单耗、煤耗、投诉量、煤炭库存等模块。
   - 统一整理静态演示数据、表格列定义与关键指标展示值，后续可替换为后端 `dashboard/summary` 接口的真实返回；内联 CSS 重现原设计的配色、阴影与栅格布局，无需依赖 Tailwind。
   - `router/index.js` 与 `PageSelectView.vue` 新增 `dashboard` 路径处理，“数据看板”卡片现可直接跳转到新版仪表盘页面。
-  - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖；摘要卡片与表格样式升级为渐变配色与栅格阴影风格。
+  - `index.html` 通过 CDN 注入 `echarts.min.js`，`DashBoard.vue` 内置 `EChart` 轻量包装组件管理实例，避免额外 npm 依赖；摘要卡片与表格样式升级为渐变配色与栅格阴影风格，并自动读取 ECharts 调色板为表格边框/悬停色提供渐变。
 - 影响：仪表盘页面可在 Vue 环境完整呈现设计稿，后端接口联调时仅需替换数据载入逻辑；如需回滚，恢复旧版 `DashBoard.vue` 与路由改动即可退回 React 风格占位实现。
 
 ## 会话小结（2025-11-06 售电煤炭库存权限）

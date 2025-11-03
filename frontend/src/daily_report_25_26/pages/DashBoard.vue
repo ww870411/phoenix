@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-page">
+  <div class="dashboard-page" :style="pageStyles">
     <header class="dashboard-header">
       <div class="dashboard-header__titles">
         <div class="dashboard-header__title">大连洁净能源集团生产日报</div>
@@ -146,6 +146,19 @@ const Table = defineComponent({
     const hasColumns = computed(() => Array.isArray(props.columns) && props.columns.length > 0)
     const hasData = computed(() => Array.isArray(props.data) && props.data.length > 0)
 
+    const isNumericValue = (value) => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value)
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) return false
+        const parsed = Number(trimmed.replace(/,/g, ''))
+        return Number.isFinite(parsed)
+      }
+      return false
+    }
+
     return () =>
       h('div', { class: 'dashboard-table' }, [
         h('table', null, [
@@ -170,9 +183,24 @@ const Table = defineComponent({
                   h(
                     'tr',
                     { key: rowIndex },
-                    row.map((cell, cellIndex) =>
-                      h('td', { key: `${rowIndex}-${cellIndex}` }, cell ?? '—'),
-                    ),
+                    row.map((cell, cellIndex) => {
+                      const numeric = isNumericValue(cell) && cell !== ''
+                      const display =
+                        numeric && typeof cell === 'number'
+                          ? cell.toLocaleString('zh-CN')
+                          : cell ?? '—'
+                      return h(
+                        'td',
+                        {
+                          key: `${rowIndex}-${cellIndex}`,
+                          class: {
+                            'dashboard-table__numeric': numeric,
+                            'dashboard-table__first': cellIndex === 0,
+                          },
+                        },
+                        display,
+                      )
+                    }),
                   ),
                 ),
               )
@@ -465,6 +493,28 @@ const averageTemp = (tempNow.reduce((sum, value) => sum + value, 0) / tempNow.le
 const marginHeadline = marginData[0] ? marginData[0].margin : 0
 const coalStdHeadline = coalStdNow[0] ?? 0
 const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
+
+const chartPalette = ref(['#2563eb', '#38bdf8', '#10b981', '#f97316', '#facc15', '#ec4899'])
+
+const pageStyles = computed(() => {
+  const colors = chartPalette.value
+  const primary = colors[0] || '#2563eb'
+  const secondary = colors[1] || '#38bdf8'
+  const accent = colors[3] || '#f97316'
+  return {
+    '--dashboard-table-border': `linear-gradient(90deg, ${primary}, ${accent})`,
+    '--dashboard-table-header': `linear-gradient(135deg, ${primary}1A, ${secondary}0F)`,
+    '--dashboard-table-hover': `${primary}12`,
+    '--dashboard-border-color': `${primary}30`,
+  }
+})
+
+onMounted(() => {
+  const candidate = window.echarts?.config?.color
+  if (Array.isArray(candidate) && candidate.length) {
+    chartPalette.value = candidate
+  }
+})
 </script>
 
 <style scoped>
@@ -542,6 +592,8 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
   grid-template-columns: 1fr;
   gap: 18px;
   margin-bottom: 32px;
+  position: relative;
+  z-index: 1;
 }
 
 @media (min-width: 640px) {
@@ -565,7 +617,7 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
   align-items: center;
   gap: 18px;
   color: #ffffff;
-  box-shadow: 0 28px 40px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
 }
 
 .summary-card::after {
@@ -655,11 +707,13 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 20px;
+  gap: 24px;
 }
 
 .dashboard-grid__item {
   min-width: 0;
+  position: relative;
+  z-index: 0;
 }
 
 @media (min-width: 1024px) {
@@ -699,8 +753,8 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 .dashboard-card {
   background: #ffffff;
   border-radius: 20px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 22px 36px rgba(15, 23, 42, 0.12);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -762,47 +816,83 @@ const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 
 .dashboard-table {
   overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: #ffffff;
+  border-image: var(
+      --dashboard-table-border,
+      linear-gradient(90deg, #2563eb, #f97316)
+    )
+    1;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
 }
 
 .dashboard-table table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: fixed;
   font-size: 13px;
   color: #0f172a;
   background: #ffffff;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
 }
 
 .dashboard-table thead {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+  background: var(
+    --dashboard-table-header,
+    linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(56, 189, 248, 0.05))
+  );
 }
 
 .dashboard-table th {
   color: #1d4ed8;
   font-weight: 600;
-  padding: 12px 16px;
-  text-align: left;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 14px 18px;
+  text-align: center;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  border-right: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .dashboard-table td {
-  padding: 12px 16px;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  padding: 14px 18px;
+  text-align: center;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-right: 1px solid rgba(226, 232, 240, 0.6);
+  background: #ffffff;
+}
+
+.dashboard-table__numeric {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-table__first {
+  text-align: center;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.dashboard-table tbody td:not(.dashboard-table__first) {
+  color: #0f172a;
+}
+
+.dashboard-table tbody tr:nth-child(even) td {
+  background: rgba(248, 250, 252, 0.7);
 }
 
 .dashboard-table tr:last-child td {
   border-bottom: none;
 }
 
+.dashboard-table tr td:last-child,
+.dashboard-table tr th:last-child {
+  border-right: none;
+}
+
 .dashboard-table tr:hover td {
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--dashboard-table-hover, rgba(37, 99, 235, 0.08));
 }
 
 .dashboard-table__empty {
