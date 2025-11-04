@@ -29,8 +29,8 @@ window_defs AS (
     peer_date - INTERVAL '6 day' AS peer_7d_start,
     date_trunc('month', biz_date)::date AS biz_month_start,
     date_trunc('month', peer_date)::date AS peer_month_start,
-    DATE '2025-10-01' AS biz_ytd_start,
-    DATE '2024-10-01' AS peer_ytd_start,
+    DATE '2025-11-01' AS biz_ytd_start,
+    DATE '2024-11-01' AS peer_ytd_start,
     -- heating-season period encoding, e.g. 25-26 / 24-25
     EXTRACT(YEAR FROM biz_date)::int AS biz_year,
     EXTRACT(YEAR FROM peer_date)::int AS peer_year,
@@ -55,8 +55,8 @@ window_defs AS (
     7::int AS days_7_peer,
     (biz_date - date_trunc('month', biz_date)::date + 1)::int AS days_month_biz,
     (peer_date - date_trunc('month', peer_date)::date + 1)::int AS days_month_peer,
-    (biz_date - DATE '2025-10-01' + 1)::int AS days_ytd_biz,
-    (peer_date - DATE '2024-10-01' + 1)::int AS days_ytd_peer
+    (biz_date - DATE '2025-11-01' + 1)::int AS days_ytd_biz,
+    (peer_date - DATE '2024-11-01' + 1)::int AS days_ytd_peer
   FROM anchor_dates
 ),
 -- base：原公司粒度的每日/同期值与各窗口累计（保持与原视图一致的输出列顺序）
@@ -178,6 +178,12 @@ calc_station_heat AS (
     ),0) AS sum_ytd_peer
   FROM base b
   GROUP BY b.company, b.company_cn
+),
+calc_station_heat_selected AS (
+  -- 仅向最终视图输出指定热电厂的计算结果，避免与底表重复
+  SELECT *
+  FROM calc_station_heat
+  WHERE company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
 ),
 calc_amount_daily_net_complaints_per_10k_m2 AS (
   -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.挂网面积（单位：件/万㎡）
@@ -432,6 +438,7 @@ calc_hot_water AS (
   FROM base b
   LEFT JOIN const_biz  cb_hw ON cb_hw.company=b.company AND cb_hw.item='price_hot_water_sales'
   LEFT JOIN const_peer cp_hw ON cp_hw.company=b.company AND cp_hw.item='price_hot_water_sales'
+  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_hw.value, cp_hw.value
 ),
 calc_steam AS (
@@ -455,6 +462,7 @@ calc_steam AS (
   FROM base b
   LEFT JOIN const_biz  cb_ss ON cb_ss.company=b.company AND cb_ss.item='price_steam_sales'
   LEFT JOIN const_peer cp_ss ON cp_ss.company=b.company AND cp_ss.item='price_steam_sales'
+  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_ss.value, cp_ss.value
 ),
 calc_coal_cost AS (
@@ -792,40 +800,43 @@ calc_comparable_marginal_profit AS (
     '万元'::text                            AS unit,
     MAX(b.biz_date)  AS biz_date,
     MAX(b.peer_date) AS peer_date,
-    COALESCE(di.value_biz_date,0)
-      - COALESCE(SUM(cnc.value_biz_date),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS value_biz_date,
-    COALESCE(di.value_peer_date,0)
-      - COALESCE(SUM(cnc.value_peer_date),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS value_peer_date,
-    COALESCE(di.sum_7d_biz,0)
-      - COALESCE(SUM(cnc.sum_7d_biz),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_7d_biz,
-    COALESCE(di.sum_7d_peer,0)
-      - COALESCE(SUM(cnc.sum_7d_peer),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_7d_peer,
-    COALESCE(di.sum_month_biz,0)
-      - COALESCE(SUM(cnc.sum_month_biz),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_month_biz,
-    COALESCE(di.sum_month_peer,0)
-      - COALESCE(SUM(cnc.sum_month_peer),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_month_peer,
-    COALESCE(di.sum_ytd_biz,0)
-      - COALESCE(SUM(cnc.sum_ytd_biz),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_sc.value,0))/10000.0 AS sum_ytd_biz,
-    COALESCE(di.sum_ytd_peer,0)
-      - COALESCE(SUM(cnc.sum_ytd_peer),0)
-      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_sc.value,0))/10000.0 AS sum_ytd_peer
+    -- 【修正】使用 MAX() 避免重复计算收入和非煤成本，确保只计算一次
+    (COALESCE(MAX(di.value_biz_date),0)
+      - COALESCE(MAX(cnc.value_biz_date),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END) * COALESCE(MAX(cb_sc.value),0))/10000.0) AS value_biz_date,
+    (COALESCE(MAX(di.value_peer_date),0)
+      - COALESCE(MAX(cnc.value_peer_date),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END) * COALESCE(MAX(cp_sc.value),0))/10000.0) AS value_peer_date,
+    (COALESCE(MAX(di.sum_7d_biz),0)
+      - COALESCE(MAX(cnc.sum_7d_biz),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(MAX(cb_sc.value),0))/10000.0) AS sum_7d_biz,
+    (COALESCE(MAX(di.sum_7d_peer),0)
+      - COALESCE(MAX(cnc.sum_7d_peer),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(MAX(cp_sc.value),0))/10000.0) AS sum_7d_peer,
+    (COALESCE(MAX(di.sum_month_biz),0)
+      - COALESCE(MAX(cnc.sum_month_biz),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_biz ELSE 0 END) * COALESCE(MAX(cb_sc.value),0))/10000.0) AS sum_month_biz,
+    (COALESCE(MAX(di.sum_month_peer),0)
+      - COALESCE(MAX(cnc.sum_month_peer),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_peer ELSE 0 END) * COALESCE(MAX(cp_sc.value),0))/10000.0) AS sum_month_peer,
+    (COALESCE(MAX(di.sum_ytd_biz),0)
+      - COALESCE(MAX(cnc.sum_ytd_biz),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(MAX(cb_sc.value),0))/10000.0) AS sum_ytd_biz,
+    (COALESCE(MAX(di.sum_ytd_peer),0)
+      - COALESCE(MAX(cnc.sum_ytd_peer),0)
+      - (SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(MAX(cp_sc.value),0))/10000.0) AS sum_ytd_peer
   FROM base b
   LEFT JOIN const_biz  cb_sc ON cb_sc.company=b.company AND cb_sc.item='price_std_coal_comparable'
   LEFT JOIN const_peer cp_sc ON cp_sc.company=b.company AND cp_sc.item='price_std_coal_comparable'
   LEFT JOIN calc_direct_income di ON di.company=b.company
   LEFT JOIN cost_non_coal cnc      ON cnc.company=b.company
-  GROUP BY b.company, b.company_cn, di.value_biz_date, di.value_peer_date, di.sum_7d_biz, di.sum_7d_peer, di.sum_month_biz, di.sum_month_peer, di.sum_ytd_biz, di.sum_ytd_peer,
-           cb_sc.value, cp_sc.value
+  -- 【修正】GROUP BY 子句只按公司聚合
+  GROUP BY b.company, b.company_cn
 ),
+
+
 calc_overall_efficiency AS (
-  -- 全厂热效率（%，两位小数）
+  -- 全厂热效率（小数，四位小数）
   SELECT
     b.company,
     b.company_cn,
@@ -834,67 +845,67 @@ calc_overall_efficiency AS (
     '%'::text                       AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    ROUND(100.0 * COALESCE(
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_biz_date ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_biz_date ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_peer_date ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_7d_biz ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_7d_biz ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_7d_biz ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_biz ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_7d_peer ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_7d_peer ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_7d_peer ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_7d_peer ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_month_biz ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_month_biz ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_month_biz ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_biz ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_month_peer ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_month_peer ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_month_peer ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_month_peer ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_ytd_biz ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_ytd_biz ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_ytd_biz ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_biz ELSE 0 END),0)
-      ),0), 2),
-    ROUND(100.0 * COALESCE(
+      ),0), 4),
+    ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.sum_ytd_peer ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.sum_ytd_peer ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.sum_ytd_peer ELSE 0 END)
         )
         / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.sum_ytd_peer ELSE 0 END),0)
-      ),0), 2)
+      ),0), 4)
   FROM base b
   GROUP BY b.company, b.company_cn
 ),
 calc AS (
-  SELECT * FROM calc_station_heat
+  SELECT * FROM calc_station_heat_selected
   UNION ALL
   SELECT * FROM calc_amount_daily_net_complaints_per_10k_m2
   UNION ALL
@@ -940,9 +951,12 @@ calc AS (
   UNION ALL
   SELECT * FROM calc_overall_efficiency
 )
-SELECT * FROM base
+SELECT *
+FROM base
+WHERE NOT (item='consumption_station_heat' AND company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan'))
 UNION ALL
 SELECT * FROM calc;
+
 
 -- 注意：普通视图不可创建索引；如需性能优化，请在底表 daily_basic_data 上创建（或调整）索引。
 
@@ -1049,6 +1063,7 @@ WHERE item NOT IN (
   'rate_heat_per_10k_m2',
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
+  'rate_overall_efficiency',
   'amount_heat_lose',
   'eco_direct_income' -- 主城区直接收入在下方以“售电+暖+售高温水+售汽”重算
 )
@@ -1084,6 +1099,78 @@ SELECT
   z.sum_ytd_peer / NULLIF(d.area_peer,0)
 FROM base_zc z, denom_zc d
 WHERE z.item='amount_daily_net_complaints'
+UNION ALL
+-- 主城区：全厂热效率（小数四位）
+SELECT
+  'ZhuChengQu','主城区',
+  'rate_overall_efficiency','全厂热效率','%',
+  z.biz_date, z.peer_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_biz_date ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END), 0)
+    ), 0
+  ), 4) AS value_biz_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END), 0)
+    ), 0
+  ), 4) AS value_peer_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_7d_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_7d_peer,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_month_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_month_peer,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_ytd_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_ytd_peer
+FROM base_zc z
+GROUP BY z.biz_date, z.peer_date
 UNION ALL
 -- 主城区：供热标煤单耗
 SELECT
@@ -1171,7 +1258,95 @@ SELECT
   sum_month_biz, sum_month_peer,
   sum_ytd_biz, sum_ytd_peer
 FROM base_grp
-WHERE item NOT IN ('amount_daily_net_complaints_per_10k_m2','rate_std_coal_per_heat','rate_heat_per_10k_m2','rate_power_per_10k_m2','rate_water_per_10k_m2','amount_heat_lose')
+WHERE item NOT IN ('amount_daily_net_complaints_per_10k_m2','rate_std_coal_per_heat','rate_heat_per_10k_m2','rate_power_per_10k_m2','rate_water_per_10k_m2','rate_overall_efficiency','amount_heat_lose','eco_direct_income')
+UNION ALL
+-- 集团：全厂热效率（小数四位）
+SELECT
+  'Group','集团全口径',
+  'rate_overall_efficiency','全厂热效率','%',
+  z.biz_date, z.peer_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_biz_date ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END), 0)
+    ), 0
+  ), 4) AS value_biz_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END), 0)
+    ), 0
+  ), 4) AS value_peer_date,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_7d_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_7d_peer,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_month_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_month_peer,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_biz ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_biz ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_biz ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_biz ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_ytd_biz,
+  ROUND(COALESCE(
+    (
+      (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_peer ELSE 0 END)
+       + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_peer ELSE 0 END)
+       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_peer ELSE 0 END))
+      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_peer ELSE 0 END), 0)
+    ), 0
+  ), 4) AS sum_ytd_peer
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 集团：直接收入（仅售电/暖/售高温水/售汽，不含“内售热收入”）
+SELECT
+  'Group','集团全口径',
+  'eco_direct_income','直接收入','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_7d_biz ELSE 0 END)     AS sum_7d_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_7d_peer ELSE 0 END)    AS sum_7d_peer,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_month_biz ELSE 0 END)  AS sum_month_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_month_peer ELSE 0 END) AS sum_month_peer,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_ytd_biz ELSE 0 END)    AS sum_ytd_biz,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.sum_ytd_peer ELSE 0 END)   AS sum_ytd_peer
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
 UNION ALL
 -- 集团：万㎡净投诉量
 SELECT
@@ -1264,6 +1439,7 @@ FROM (
   GROUP BY biz_date, peer_date
 ) a, denom_grp d;
 
+
 -- ========= 煤炭库存聚合视图 =========
 -- sum_coal_inventory_data：根据最新日期的煤炭库存数据，按公司与存储方式汇总，并追加公司级与集团汇总行
 DROP VIEW IF EXISTS sum_coal_inventory_data;
@@ -1353,6 +1529,20 @@ UNION ALL
 SELECT * FROM grand_rollup;
 
 -- 平均气温视图：按天聚合 temperature_data 并计算 value 平均值
+CREATE OR REPLACE VIEW calc_temperature_data AS
+SELECT
+    DATE_TRUNC('day', date_time)::date AS date,
+    MAX(value) AS max_temp,
+    MIN(value) AS min_temp,
+    AVG(value) AS aver_temp
+FROM temperature_data
+GROUP BY DATE_TRUNC('day', date_time)::date
+ORDER BY date;
+
+
+
+--++++++++++气温视图
+
 CREATE OR REPLACE VIEW calc_temperature_data AS
 SELECT
     DATE_TRUNC('day', date_time)::date AS date,

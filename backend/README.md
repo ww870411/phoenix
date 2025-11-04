@@ -10,7 +10,7 @@
 ## 会话小结（2025-11-08 数据看板 API 初版）
 
 - 状态：新增 `GET /api/v1/projects/daily_report_25_26/dashboard` 接口，支持 `show_date` 查询参数（默认空字符串）。
-- 改动：后端读取 `backend_data/数据结构_数据看板.json` 与 `backend_data/date.json`，返回 `data`、`project_key`、`show_date`、`push_date`、`generated_at`、`source` 等信息；非法日期将返回 400。
+- 改动：创建 `services/dashboard_expression.py` 渲染引擎，统一读取 `backend_data/date.json` 与 `backend_data/数据结构_数据看板.json`，并输出 `DashboardResult`；API 调用该引擎返回 `data`、`project_key`、`show_date`、`push_date`、`generated_at`、`source`。
 - 影响：目前仍返回静态 JSON，占位字段 `展示日期` 会根据传入的 `show_date` 写回；后续可替换为实时数据库聚合结果。
 - 下一步：在数据库设计完成后接入真实查询逻辑，并按照需要补充 trace/调试字段或缓存策略。
 

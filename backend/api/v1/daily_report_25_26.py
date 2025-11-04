@@ -29,6 +29,7 @@ from backend.schemas.auth import (
     WorkflowUnitStatus,
 )
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
+from backend.services.dashboard_expression import evaluate_dashboard
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
 from sqlalchemy import text
@@ -59,8 +60,6 @@ COAL_INVENTORY_DEBUG_FILE = DATA_ROOT / "test.md"
 GONGRE_DEBUG_FILE = SysPath(__file__).resolve().parents[3] / "configs" / "111.md"
 GONGRE_SHEET_KEYS = {"gongre_branches_detail_sheet"}
 BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
-DASHBOARD_DATA_PATH = DATA_ROOT / "数据结构_数据看板.json"
-DATE_CONFIG_PATH = DATA_ROOT / "date.json"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -222,58 +221,6 @@ def _read_json(path: SysPath) -> Any:
         except Exception:
             continue
     raise FileNotFoundError(f"无法读取 JSON：{path}")
-
-
-def _normalize_show_date_param(value: Optional[str]) -> str:
-    """将 show_date 查询参数标准化为 YYYY-MM-DD，允许空字符串。"""
-    if value is None:
-        return ""
-    normalized = value.strip()
-    if not normalized:
-        return ""
-    try:
-        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="show_date 需为 YYYY-MM-DD 格式") from exc
-    return parsed.isoformat()
-
-
-def _load_dashboard_payload() -> Dict[str, Any]:
-    """读取数据看板配置文件。"""
-    if not DASHBOARD_DATA_PATH.exists():
-        raise HTTPException(status_code=404, detail="数据看板配置文件不存在")
-    try:
-        payload = _read_json(DASHBOARD_DATA_PATH)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - 防御性分支
-        raise HTTPException(status_code=500, detail=f"读取数据看板配置失败: {exc}") from exc
-
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=500, detail="数据看板配置需为对象类型")
-    return payload
-
-
-def _load_default_push_date() -> str:
-    """从 date.json 读取默认的展示日期。"""
-    if not DATE_CONFIG_PATH.exists():
-        raise HTTPException(status_code=500, detail="日期配置文件不存在")
-    try:
-        payload = _read_json(DATE_CONFIG_PATH)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - 防御性分支
-        raise HTTPException(status_code=500, detail=f"读取日期配置失败: {exc}") from exc
-
-    value = payload.get("set_biz_date")
-    if not isinstance(value, str) or not value.strip():
-        raise HTTPException(status_code=500, detail="日期配置缺少 set_biz_date 或格式不正确")
-    normalized = value.strip()
-    try:
-        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail="日期配置 set_biz_date 需为 YYYY-MM-DD 格式") from exc
-    return parsed.isoformat()
 
 
 def _extract_names(payload: Dict[str, Any]) -> Dict[str, str]:
@@ -1665,6 +1612,9 @@ def ping_daily_report():
     return {"ok": True, "project": "daily_report_25_26", "message": "pong"}
 
 
+from backend.services.dashboard_expression import evaluate_dashboard
+
+
 @router.get(
     "/dashboard",
     summary="获取数据看板配置数据",
@@ -1676,29 +1626,8 @@ def get_dashboard_data(
         description="展示日期，格式为 YYYY-MM-DD；留空时返回默认配置",
     ),
 ):
-    normalized_show_date = _normalize_show_date_param(show_date)
-    push_date = normalized_show_date or _load_default_push_date()
-    payload = _load_dashboard_payload()
-    # 复制一份，避免污染原始配置
-    response_payload: Dict[str, Any] = dict(payload)
-    response_payload["展示日期"] = push_date
-
-    generated_at = datetime.now(EAST_8).isoformat()
-    source_relative = (
-        str(DASHBOARD_DATA_PATH.relative_to(DATA_ROOT))
-        if DASHBOARD_DATA_PATH.exists()
-        else str(DASHBOARD_DATA_PATH)
-    )
-
-    return {
-        "ok": True,
-        "project_key": "daily_report_25_26",
-        "show_date": normalized_show_date,
-        "push_date": push_date,
-        "generated_at": generated_at,
-        "source": source_relative,
-        "data": response_payload,
-    }
+    result = evaluate_dashboard("daily_report_25_26", show_date=show_date)
+    return {"ok": True, **result.to_dict()}
 
 
 @router.get("/data_entry/sheets/{sheet_key}/template", summary="获取数据填报模板")

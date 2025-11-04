@@ -6,9 +6,8 @@
 - Serena 当前无法对 `.py`、`.js`、`.vue` 文件执行结构化插入，依据 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/src/daily_report_25_26/pages/DashBoard.vue`，如需回滚可恢复这些文件。
 
 本次动作：
-- 在 `daily_report_25_26` 项目路由下新增 `GET /api/v1/projects/daily_report_25_26/dashboard`，接受 `show_date` 查询参数（默认为空字符串）。
-- 读取 `backend_data/数据结构_数据看板.json` 并返回 `data` 节点，同时附带 `project_key`、`show_date`、`push_date`、`generated_at`、`source` 等元信息；若 `show_date` 无效则返回 400。
-- 封装 `_normalize_show_date_param`、`_load_dashboard_payload`、`_load_default_push_date` 三个辅助函数，其中 `push_date` 默认读取 `backend_data/date.json` 的 `set_biz_date` 字段（若前端传入非空 `show_date` 则覆盖）。
+- 新建 `backend/services/dashboard_expression.py` 渲染引擎，负责解析 `show_date`、读取 `backend_data/date.json` 与 `backend_data/数据结构_数据看板.json`，输出标准化 `DashboardResult`。
+- `GET /api/v1/projects/daily_report_25_26/dashboard` 调整为调用上述引擎，返回 `project_key`、`show_date`、`push_date`、`generated_at`、`source` 及 `data` 节点，`show_date` 校验失败返回 400。
 - 前端新增 `getDashboardData` 封装，请求该 API 并在仪表盘头部默认展示 `push_date`；日历选取新日期时会重新调用接口。
 
 影响范围与回滚：
