@@ -13,13 +13,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
 
 from backend.config import DATA_DIRECTORY
+from backend.db.database_daily_report_25_26 import SessionLocal, TemperatureData
+from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
+from sqlalchemy import select
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 DASHBOARD_CONFIG_PATH = DATA_ROOT / "数据结构_数据看板.json"
@@ -117,15 +120,298 @@ def load_dashboard_config() -> Dict[str, Any]:
     return payload
 
 
+def _reverse_mapping(mapping: Dict[str, str]) -> Dict[str, str]:
+    """构造 value -> key 的反向映射，忽略空值。"""
+    reversed_map: Dict[str, str] = {}
+    for key, value in mapping.items():
+        if not value:
+            continue
+        reversed_map[str(value).strip()] = str(key).strip()
+    return reversed_map
+
+
+def _decimal_to_float(number) -> float:
+    """辅助：将 Decimal/字符串 转换为 float，避免 JSON 序列化问题。"""
+    if number is None:
+        return 0.0
+    try:
+        return float(number)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fetch_temperature_series(
+    session,
+    start: datetime,
+    end: datetime,
+) -> List[float]:
+    """查询指定时间区间内的逐小时气温。"""
+    stmt = (
+        select(TemperatureData.date_time, TemperatureData.value)
+        .where(TemperatureData.date_time >= start, TemperatureData.date_time < end)
+        .order_by(TemperatureData.date_time.asc())
+    )
+    rows = session.execute(stmt).all()
+
+    # 24 小时数组，缺失用 0.0 填充
+    values: List[float] = [0.0] * 24
+    for row in rows:
+        dt = row[0]
+        value = row[1]
+        try:
+            hour_index = dt.hour
+            values[hour_index] = _decimal_to_float(value)
+        except Exception:
+            continue
+    return values
+
+
+def _fill_temperature_block(
+    session,
+    section: Dict[str, Any],
+    phase_key: str,
+) -> None:
+    """填充温度模块的“本期”或“同期”数据。"""
+    bucket = section.get(phase_key)
+    if not isinstance(bucket, dict):
+        return
+    for day_str in list(bucket.keys()):
+        try:
+            current_date = date.fromisoformat(day_str)
+        except ValueError:
+            continue
+        start_dt = datetime.combine(current_date, time.min)
+        end_dt = start_dt + timedelta(days=1)
+        bucket[day_str] = _fetch_temperature_series(session, start_dt, end_dt)
+
+
+def _resolve_company_codes(
+    source_config: Dict[str, Iterable[str]],
+    company_cn_to_code: Dict[str, str],
+) -> Dict[str, List[str]]:
+    """解析数据来源中的公司列表，映射为英文编码。"""
+    resolved: Dict[str, List[str]] = {}
+    for table_name, companies in source_config.items():
+        codes: List[str] = []
+        for company_cn in companies:
+            code = company_cn_to_code.get(str(company_cn).strip())
+            if code:
+                codes.append(code)
+        resolved[table_name] = codes
+    return resolved
+
+
+def _evaluate_expression(
+    metrics: Dict[str, Any],
+    item_expression: str,
+    item_cn_to_code: Dict[str, str],
+    frame_key: str,
+) -> float:
+    """支持简单的加号表达式，将中文指标组合求和。"""
+    if not item_expression:
+        return 0.0
+    total = _to_decimal(0)
+    parts = [part.strip() for part in item_expression.split("+")]
+    for part in parts:
+        if not part:
+            continue
+        item_code = item_cn_to_code.get(part, part)
+        bucket = metrics.get(item_code, {})
+        total += _to_decimal(bucket.get(frame_key))
+    return _decimal_to_float(total)
+
+
+def _fill_metric_panel(
+    session,
+    section: Dict[str, Any],
+    project_key: str,
+    push_date: str,
+    phase_key: str,
+    company_cn_to_code: Dict[str, str],
+    item_cn_to_code: Dict[str, str],
+    frame_key: str,
+) -> None:
+    """通用填充逻辑：处理按单位/指标展开的面板（边际利润、单耗等）。"""
+    source_config = section.get("数据来源")
+    data_bucket = section.get(phase_key)
+    if not isinstance(source_config, dict) or not isinstance(data_bucket, dict):
+        return
+
+    resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
+    for table_name, company_codes in resolved_sources.items():
+        for company_code in company_codes:
+            metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+            company_cn = next(
+                (cn for cn, code in company_cn_to_code.items() if code == company_code),
+                company_code,
+            )
+            company_bucket = data_bucket.get(company_cn)
+            if not isinstance(company_bucket, dict):
+                continue
+            for label, expr in list(company_bucket.items()):
+                value = _evaluate_expression(metrics, expr or label, item_cn_to_code, frame_key)
+                company_bucket[label] = value
+
+
+def _fill_simple_metric(
+    session,
+    section: Dict[str, Any],
+    phase_key: str,
+    company_cn_to_code: Dict[str, str],
+    item_cn_to_code: Dict[str, str],
+    frame_key: str,
+    push_date: str,
+) -> None:
+    """填充只有单个根指标的面板（标煤耗量、投诉量等）。"""
+    root_item_cn = section.get("根指标")
+    if not root_item_cn:
+        return
+    item_code = item_cn_to_code.get(root_item_cn, root_item_cn)
+
+    source_config = section.get("数据来源")
+    data_bucket = section.get(phase_key)
+    if not isinstance(source_config, dict) or not isinstance(data_bucket, dict):
+        return
+
+    resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
+    for table_name, company_codes in resolved_sources.items():
+        for company_code in company_codes:
+            metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+            company_cn = next(
+                (cn for cn, code in company_cn_to_code.items() if code == company_code),
+                company_code,
+            )
+            if company_cn not in data_bucket:
+                continue
+            bucket = metrics.get(item_code, {})
+            data_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
+
+
 def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
     push_date = normalized_show_date or load_default_push_date()
     payload = load_dashboard_config()
 
-    # 当前阶段：仅替换配置中的展示日期字段
     data = dict(payload)
-    data["展示日期"] = push_date
+    data["push_date"] = push_date
+
+    project_items = data.get("项目字典", {})
+    project_units = data.get("单位字典", {})
+    item_cn_to_code = _reverse_mapping(project_items)
+    company_cn_to_code = _reverse_mapping(project_units)
+
+    with SessionLocal() as session:
+        # 1. 逐小时气温
+        temp_section = data.get("1.逐小时气温")
+        if isinstance(temp_section, dict):
+            # 本期：根据 push_date 推导日期区间；配置中已有键，直接查询
+            _fill_temperature_block(session, temp_section, "本期")
+            # 同期：使用配置提供的日期集合
+            _fill_temperature_block(session, temp_section, "同期")
+
+        # 2. 边际利润
+        margin_section = data.get("2.边际利润")
+        if isinstance(margin_section, dict):
+            _fill_metric_panel(
+                session,
+                margin_section,
+                project_key,
+                push_date,
+                "本期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_biz_date",
+            )
+            _fill_metric_panel(
+                session,
+                margin_section,
+                project_key,
+                push_date,
+                "同期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_peer_date",
+            )
+
+        # 3. 集团全口径收入明细
+        income_section = data.get("3.集团全口径收入明细")
+        if isinstance(income_section, dict):
+            income_items = list(income_section.get("本期", {}).keys())
+            metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+            for label in income_items:
+                item_code = item_cn_to_code.get(label, label)
+                bucket = metrics.get(item_code, {})
+                income_section["本期"][label] = _decimal_to_float(bucket.get("value_biz_date"))
+                income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
+
+        # 4. 供暖单耗
+        heating_section = data.get("4.供暖单耗")
+        if isinstance(heating_section, dict):
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
+                "本期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_biz_date",
+            )
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
+                "同期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_peer_date",
+            )
+
+        # 5. 标煤耗量
+        coal_section = data.get("5.标煤耗量")
+        if isinstance(coal_section, dict):
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "本期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_biz_date",
+                push_date,
+            )
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "同期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_peer_date",
+                push_date,
+            )
+
+        # 6. 省市平台服务投诉量
+        complaint_section = data.get("6.省市平台服务投诉量")
+        if isinstance(complaint_section, dict):
+            _fill_simple_metric(
+                session,
+                complaint_section,
+                "本期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_biz_date",
+                push_date,
+            )
+            _fill_simple_metric(
+                session,
+                complaint_section,
+                "同期",
+                company_cn_to_code,
+                item_cn_to_code,
+                "value_peer_date",
+                push_date,
+            )
 
     generated_at = datetime.now().astimezone().isoformat()
     source = (
