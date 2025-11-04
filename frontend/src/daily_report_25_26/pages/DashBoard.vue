@@ -6,10 +6,6 @@
           <div class="dashboard-header__title">大连洁净能源集团生产日报</div>
           <div class="dashboard-header__subtitle">Daily Production Report &amp; Dashboard</div>
         </div>
-        <div class="dashboard-header__meta">
-          <div>今日：{{ todayText }}</div>
-          <div>业务日期（昨日）：{{ bizDateText }}</div>
-        </div>
       </div>
       <div class="dashboard-header__actions">
         <label class="dashboard-header__checkbox" title="开启后返回详细求值轨迹">
@@ -22,7 +18,6 @@
           <span class="dashboard-header__date-hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
           <span class="dashboard-header__date-hint" v-else>当前：regular</span>
         </label>
-        <button type="button" class="dashboard-header__button" @click="refreshDashboard">刷新</button>
       </div>
     </header>
 
@@ -121,6 +116,7 @@
 
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { getDashboardData } from '../services/api'
 
 // --- 仪表盘局部组件 ---
 const Card = defineComponent({
@@ -322,30 +318,60 @@ const fmt = (date) => date.toISOString().slice(0, 10)
 
 // --- 日期与摘要指标 ---
 const today = new Date()
-const todayText = fmt(today)
-
-const bizDate = new Date(today)
-bizDate.setDate(bizDate.getDate() - 1)
-const bizDateText = fmt(bizDate)
+const defaultBizDate = (() => {
+  const bizDate = new Date(today)
+  bizDate.setDate(bizDate.getDate() - 1)
+  return fmt(bizDate)
+})()
 
 // --- 数据看板顶部交互占位 ---
 const traceEnabled = ref(false)
-const bizDateInput = ref(bizDateText)
+const bizDateInput = ref('')
 const effectiveBizDate = computed(() => {
   const value = bizDateInput.value
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 })
 
-const refreshDashboard = () => {
-  console.info('[dashboard] refresh requested', {
-    trace: traceEnabled.value,
-    bizDate: bizDateInput.value || null,
-  })
+const projectKey = 'daily_report_25_26'
+let suppressDashboardWatch = false
+
+async function loadDashboardData(showDate = '') {
+  suppressDashboardWatch = true
+  try {
+    const payload = await getDashboardData(projectKey, { showDate })
+    if (payload?.push_date) {
+      bizDateInput.value = payload.push_date
+    } else if (!bizDateInput.value) {
+      bizDateInput.value = defaultBizDate
+    }
+    // TODO: 数据映射逻辑将在接入真实数据时实现
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[dashboard] 数据加载失败', message)
+    if (!bizDateInput.value) {
+      bizDateInput.value = defaultBizDate
+    }
+  } finally {
+    suppressDashboardWatch = false
+  }
 }
+
+onMounted(() => {
+  loadDashboardData()
+})
+
+watch(
+  () => bizDateInput.value,
+  (value, oldValue) => {
+    if (suppressDashboardWatch) return
+    if (value === oldValue) return
+    loadDashboardData(value || '')
+  },
+)
 
 // --- 模拟数据（后续可替换为后端数据源） ---
 const tempDates = Array.from({ length: 7 }, (_, index) => {
-  const point = new Date(bizDate)
+  const point = new Date(defaultBizDate)
   point.setDate(point.getDate() - 3 + index)
   return fmt(point)
 })
@@ -614,21 +640,6 @@ onMounted(() => {
   color: #64748b;
 }
 
-.dashboard-header__meta {
-  font-size: 14px;
-  color: #64748b;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-}
-
-@media (min-width: 768px) {
-  .dashboard-header__meta {
-    text-align: right;
-  }
-}
-
 .dashboard-header__actions {
   display: flex;
   flex-wrap: wrap;
@@ -674,27 +685,6 @@ onMounted(() => {
 .dashboard-header__date-hint {
   font-size: 12px;
   color: #64748b;
-}
-
-.dashboard-header__button {
-  border: none;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: #fff;
-  padding: 8px 18px;
-  border-radius: 999px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.dashboard-header__button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.dashboard-header__button:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
 }
 
 .dashboard-summary {

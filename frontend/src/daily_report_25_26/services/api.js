@@ -241,3 +241,17 @@ export async function publishWorkflow(projectKey) {
   }
   return response.json()
 }
+
+export async function getDashboardData(projectKey, params = {}) {
+  const showDate =
+    typeof params.showDate === 'string' ? params.showDate : ''
+  const search = `?show_date=${encodeURIComponent(showDate)}`
+  const response = await fetch(`${projectPath(projectKey)}/dashboard${search}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取数据看板失败: ${response.status}`)
+  }
+  return response.json()
+}

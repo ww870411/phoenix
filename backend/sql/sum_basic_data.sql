@@ -170,6 +170,12 @@ calc_station_heat AS (
   FROM base b
   GROUP BY b.company, b.company_cn
 ),
+calc_station_heat_selected AS (
+  -- 仅向最终视图输出指定热电厂的计算结果，避免与底表重复
+  SELECT *
+  FROM calc_station_heat
+  WHERE company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
+),
 calc_amount_daily_net_complaints_per_10k_m2 AS (
   -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.挂网面积（单位：件/万㎡）
   SELECT
@@ -423,6 +429,7 @@ calc_hot_water AS (
   FROM base b
   LEFT JOIN const_biz  cb_hw ON cb_hw.company=b.company AND cb_hw.item='price_hot_water_sales'
   LEFT JOIN const_peer cp_hw ON cp_hw.company=b.company AND cp_hw.item='price_hot_water_sales'
+  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_hw.value, cp_hw.value
 ),
 calc_steam AS (
@@ -446,6 +453,7 @@ calc_steam AS (
   FROM base b
   LEFT JOIN const_biz  cb_ss ON cb_ss.company=b.company AND cb_ss.item='price_steam_sales'
   LEFT JOIN const_peer cp_ss ON cp_ss.company=b.company AND cp_ss.item='price_steam_sales'
+  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_ss.value, cp_ss.value
 ),
 calc_coal_cost AS (
@@ -888,7 +896,7 @@ calc_overall_efficiency AS (
   GROUP BY b.company, b.company_cn
 ),
 calc AS (
-  SELECT * FROM calc_station_heat
+  SELECT * FROM calc_station_heat_selected
   UNION ALL
   SELECT * FROM calc_amount_daily_net_complaints_per_10k_m2
   UNION ALL
@@ -934,6 +942,8 @@ calc AS (
   UNION ALL
   SELECT * FROM calc_overall_efficiency
 )
-SELECT * FROM base
+SELECT *
+FROM base
+WHERE NOT (item='consumption_station_heat' AND company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan'))
 UNION ALL
 SELECT * FROM calc;

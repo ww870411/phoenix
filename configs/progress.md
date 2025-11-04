@@ -1,5 +1,42 @@
 # 进度记录
 
+## 2025-11-08（数据看板 API 初版）
+
+前置说明（降级留痕）：
+- Serena 当前无法对 `.py`、`.js`、`.vue` 文件执行结构化插入，依据 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/src/daily_report_25_26/pages/DashBoard.vue`，如需回滚可恢复这些文件。
+
+本次动作：
+- 在 `daily_report_25_26` 项目路由下新增 `GET /api/v1/projects/daily_report_25_26/dashboard`，接受 `show_date` 查询参数（默认为空字符串）。
+- 读取 `backend_data/数据结构_数据看板.json` 并返回 `data` 节点，同时附带 `project_key`、`show_date`、`push_date`、`generated_at`、`source` 等元信息；若 `show_date` 无效则返回 400。
+- 封装 `_normalize_show_date_param`、`_load_dashboard_payload`、`_load_default_push_date` 三个辅助函数，其中 `push_date` 默认读取 `backend_data/date.json` 的 `set_biz_date` 字段（若前端传入非空 `show_date` 则覆盖）。
+- 前端新增 `getDashboardData` 封装，请求该 API 并在仪表盘头部默认展示 `push_date`；日历选取新日期时会重新调用接口。
+
+影响范围与回滚：
+- 仅新增接口，不改动既有模板/填报/审批能力；若需回滚，可删除新增路由与辅助函数。
+- 前端现已根据 API 返回结构渲染仪表盘日期；文件读取依赖 `backend_data/数据结构_数据看板.json` 与 `backend_data/date.json`，若需更换数据源可替换或扩展加载逻辑。
+
+下一步建议：
+1. 完成数据库查询逻辑后，将当前 JSON 占位返回替换为实时数据聚合结果。
+2. 在前端 `DashBoard.vue` 中完善数据映射与错误提示，后续可补充加载状态与图表数据还原。
+
+## 2025-11-08（数据看板头部刷新按钮移除）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 单文件组件暂未开放结构化写入能力，依 3.9 矩阵降级使用 `desktop-commander::read_file` 与 `apply_patch` 在 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 内定位并移除刷新按钮；如需回滚，可恢复该文件至修改前版本。
+
+本次动作：
+- 数据看板头部仅保留 Trace 开关与业务日期选择器，彻底移除临时“刷新”按钮。
+- 删除顶部“今日/业务日期”静态文字，保持仪表盘标题区域简洁。
+- 清理脚本中的 `refreshDashboard` 占位函数以及对应按钮/文字样式，避免无效依赖。
+
+影响范围与回滚：
+- 仅影响仪表盘页面头部交互；回滚 `DashBoard.vue` 即可恢复按钮。
+- Trace 开关与日期选择绑定仍为前端本地状态，尚未触发后端接口。
+
+下一步建议：
+1. 待 `/dashboard` API 就绪后，可在日期选择变化时触发数据刷新逻辑。
+2. 如需补充提示信息，可在 Trace/日期组件上增加帮助文案，便于非技术人员理解。
+
 ## 2025-11-07（数据填报指标联动保持一致）
 
 前置说明（降级留痕）：

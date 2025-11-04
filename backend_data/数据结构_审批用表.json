@@ -53,9 +53,9 @@
       ["万平方米省市净投诉量","件/万㎡","value_biz_date()", "value_peer_date()","date_diff_rate()","value_biz_date(本月累计净投诉量)/c.供暖收费面积","value_peer_date(本月累计净投诉量)/c.供暖收费面积","sum_month_diff_rate()","value_biz_date(本供暖期累计净投诉量)/c.供暖收费面积","value_peer_date(本供暖期累计净投诉量)/c.供暖收费面积","sum_ytd_diff_rate()"],
       ["本月累计净投诉量", "件", "value_biz_date()", "value_peer_date()", "-","-","-","-","-","-","-"],
       ["本供暖期累计净投诉量", "件", "value_biz_date()", "value_peer_date()", "-","-","-","-","-","-","-"],
-      ["供暖热单耗","GJ/万㎡","站内耗热量/c.GongRe.供暖收费面积","站内耗热量/c.GongRe.供暖收费面积","date_diff_rate()","站内耗热量/c.GongRe.供暖收费面积","站内耗热量/c.GongRe.供暖收费面积","month_diff_rate()","站内耗热量/c.GongRe.供暖收费面积","站内耗热量/c.GongRe.供暖收费面积","ytd_diff_rate()"],
-      ["供暖电单耗","kWh/万㎡","外购电量*10000/c.GongRe.供暖收费面积","外购电量*10000/c.GongRe.供暖收费面积","date_diff_rate()","外购电量*10000/c.GongRe.供暖收费面积","外购电量*10000/c.GongRe.供暖收费面积","month_diff_rate()","外购电量*10000/c.GongRe.供暖收费面积","外购电量*10000/c.GongRe.供暖收费面积","ytd_diff_rate()"],
-      ["供暖水单耗","吨/万㎡","耗水量/c.GongRe.供暖收费面积","耗水量/c.GongRe.供暖收费面积","date_diff_rate()","耗水量/c.GongRe.供暖收费面积","耗水量/c.GongRe.供暖收费面积","month_diff_rate()","耗水量/c.GongRe.供暖收费面积","耗水量/c.GongRe.供暖收费面积","ytd_diff_rate()"],
+      ["供暖热单耗","GJ/万㎡","value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
+      ["供暖电单耗","kWh/万㎡","value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
+      ["供暖水单耗","吨/万㎡","value_biz_date()", "value_peer_date()", "date_diff_rate()","sum_month_biz()","sum_month_peer()","sum_month_diff_rate()","sum_ytd_biz()","sum_ytd_peer()","sum_ytd_diff_rate()"],
       ["日最高气温", "℃", "value_biz_date()", "value_peer_date()", "-","-","-","-","-","-","-"],
       ["日最低气温", "℃", "value_biz_date()", "value_peer_date()", "-","-","-","-","-","-","-"],
       ["突发情况说明", "-", "value_biz_date()", "value_peer_date()", "-","-","-","-","-","-","-"]
