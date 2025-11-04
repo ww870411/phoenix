@@ -1,0 +1,1 @@
+2025-11-08 发现研究院填报页提交 500，后端返回 daily_basic_data 主键冲突（id=25851）。推断为 daily_basic_data_id_seq 序列未同步，需在数据库执行 SELECT setval('daily_basic_data_id_seq', (SELECT max(id) FROM daily_basic_data)); 以恢复提交。

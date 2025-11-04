@@ -401,3 +401,31 @@ AuthManager（backend/services/auth_manager.py:30中的SESSION_TTL_SECONDS用于
       ["耗水量", "其中：电厂耗水量"],                                                                                                                                                            
       {"外购电量": "其中：电厂外购电量"}                                                                                                                                                         
     ]      
+
+——————————————————————————————
+操作步骤（请按顺序执行）
+                                                                                                                                                                                                 
+  - 登录数据库容器                                                                                                                                                                               
+      - docker exec -it phoenix-db psql -U postgres -d phoenix                                                                                                                                   
+  - 校验并矫正自增序列                                                                                                                                                                           
+                                                                                                                                                                                                 
+    -- 查看当前序列值与最大 id                                                                                                                                                                   
+    SELECT last_value FROM daily_basic_data_id_seq;                                                                                                                                              
+    SELECT MAX(id) FROM daily_basic_data;                                                                                                                                                        
+                                                                                                                                                                                                 
+    -- 将序列追平到现有最大 id                                                                                                                                                                   
+    SELECT setval('daily_basic_data_id_seq', COALESCE((SELECT MAX(id) FROM daily_basic_data), 0));                                                                                               
+      - 如数据库 schema 不是 public，可改用 SELECT setval(pg_get_serial_sequence('daily_basic_data','id'), ...)。                                                                                
+  - 退出 psql 并复测                                                                                                                                                                             
+      - 在前端重新提交一次 YanJiuYuan_Sheet 或 BeiFang_Sheet。                                                                                                                                   
+      - 若仍 500，立即查 phoenix-backend 日志：docker logs phoenix-backend --tail 200，把报错贴上来。                                                                                            
+  - 后续防范                                                                                                                                                                                     
+      1. 带有 INSERT ... id = ... 的导入脚本末尾加同样的 setval 语句。                                                                                                                           
+      2. 如果希望减少 *.php 探测噪声，可在 phoenix-web 的 Nginx 配置加：                                                                                                                         
+                                                                                                                                                                                                 
+         location ~ \.php$ { return 444; }                                                                                                                                                       
+         location = /owa/ { return 444; }                                                                                                                                                        
+         然后 docker restart phoenix-web。                                                                                                                                                       
+                                                                                                                                                                                                 
+  按上述操作后告诉我结果，尤其是 setval 执行是否成功以及提交是否恢复正常。
+  codex resume 019a4dea-0647-7dc0-89e7-fdf92ad3b61b
