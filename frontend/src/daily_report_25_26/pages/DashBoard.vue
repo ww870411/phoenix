@@ -1,13 +1,28 @@
 <template>
   <div class="dashboard-page" :style="pageStyles">
     <header class="dashboard-header">
-      <div class="dashboard-header__titles">
-        <div class="dashboard-header__title">大连洁净能源集团生产日报</div>
-        <div class="dashboard-header__subtitle">Daily Production Report &amp; Dashboard</div>
+      <div class="dashboard-header__info">
+        <div class="dashboard-header__titles">
+          <div class="dashboard-header__title">大连洁净能源集团生产日报</div>
+          <div class="dashboard-header__subtitle">Daily Production Report &amp; Dashboard</div>
+        </div>
+        <div class="dashboard-header__meta">
+          <div>今日：{{ todayText }}</div>
+          <div>业务日期（昨日）：{{ bizDateText }}</div>
+        </div>
       </div>
-      <div class="dashboard-header__meta">
-        <div>今日：{{ todayText }}</div>
-        <div>业务日期（昨日）：{{ bizDateText }}</div>
+      <div class="dashboard-header__actions">
+        <label class="dashboard-header__checkbox" title="开启后返回详细求值轨迹">
+          <input type="checkbox" v-model="traceEnabled" />
+          <span>Trace</span>
+        </label>
+        <label class="dashboard-header__date-group" title="业务日期">
+          <span>业务日期：</span>
+          <input type="date" v-model="bizDateInput" />
+          <span class="dashboard-header__date-hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
+          <span class="dashboard-header__date-hint" v-else>当前：regular</span>
+        </label>
+        <button type="button" class="dashboard-header__button" @click="refreshDashboard">刷新</button>
       </div>
     </header>
 
@@ -313,6 +328,21 @@ const bizDate = new Date(today)
 bizDate.setDate(bizDate.getDate() - 1)
 const bizDateText = fmt(bizDate)
 
+// --- 数据看板顶部交互占位 ---
+const traceEnabled = ref(false)
+const bizDateInput = ref(bizDateText)
+const effectiveBizDate = computed(() => {
+  const value = bizDateInput.value
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+})
+
+const refreshDashboard = () => {
+  console.info('[dashboard] refresh requested', {
+    trace: traceEnabled.value,
+    bizDate: bizDateInput.value || null,
+  })
+}
+
 // --- 模拟数据（后续可替换为后端数据源） ---
 const tempDates = Array.from({ length: 7 }, (_, index) => {
   const point = new Date(bizDate)
@@ -545,6 +575,20 @@ onMounted(() => {
   }
 }
 
+.dashboard-header__info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .dashboard-header__info {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 24px;
+  }
+}
+
 .dashboard-header__titles {
   display: flex;
   flex-direction: column;
@@ -583,6 +627,74 @@ onMounted(() => {
   .dashboard-header__meta {
     text-align: right;
   }
+}
+
+.dashboard-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-header__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.dashboard-header__date-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.dashboard-header__date-group input[type='date'] {
+  border: 1px solid #cbd5f5;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.dashboard-header__date-group input[type='date']:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.dashboard-header__date-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dashboard-header__button {
+  border: none;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-header__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard-header__button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
 }
 
 .dashboard-summary {
