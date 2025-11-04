@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 import re
@@ -21,13 +21,18 @@ import re
 from fastapi import HTTPException
 
 from backend.config import DATA_DIRECTORY
-from backend.db.database_daily_report_25_26 import SessionLocal, TemperatureData
+from backend.db.database_daily_report_25_26 import (
+    SessionLocal,
+    TemperatureData,
+    CoalInventoryData,
+)
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
 from sqlalchemy import select
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 DASHBOARD_CONFIG_PATH = DATA_ROOT / "数据结构_数据看板.json"
 DATE_CONFIG_PATH = DATA_ROOT / "date.json"
+EAST_8 = timezone(timedelta(hours=8))
 
 
 @dataclass
@@ -174,9 +179,11 @@ def _fetch_temperature_series(
     end: datetime,
 ) -> List[float]:
     """查询指定时间区间内的逐小时气温。"""
+    start_utc = start - timedelta(hours=8)
+    end_utc = end - timedelta(hours=8)
     stmt = (
         select(TemperatureData.date_time, TemperatureData.value)
-        .where(TemperatureData.date_time >= start, TemperatureData.date_time < end)
+        .where(TemperatureData.date_time >= start_utc, TemperatureData.date_time < end_utc)
         .order_by(TemperatureData.date_time.asc())
     )
     rows = session.execute(stmt).all()
@@ -187,7 +194,7 @@ def _fetch_temperature_series(
         dt = row[0]
         value = row[1]
         try:
-            hour_index = dt.hour
+            hour_index = (dt + timedelta(hours=8)).hour
             values[hour_index] = _decimal_to_float(value)
         except Exception:
             continue
@@ -196,21 +203,15 @@ def _fetch_temperature_series(
 
 def _fill_temperature_block(
     session,
-    section: Dict[str, Any],
-    phase_key: str,
+    bucket: Dict[str, Any],
+    dates: List[date],
 ) -> None:
-    """填充温度模块的“本期”或“同期”数据。"""
-    bucket = section.get(phase_key)
-    if not isinstance(bucket, dict):
-        return
-    for day_str in list(bucket.keys()):
-        try:
-            current_date = date.fromisoformat(day_str)
-        except ValueError:
-            continue
-        start_dt = datetime.combine(current_date, time.min)
+    """按照指定日期列表填充逐小时气温数据。"""
+    for dt in dates:
+        key = dt.isoformat()
+        start_dt = datetime.combine(dt, time.min)
         end_dt = start_dt + timedelta(days=1)
-        bucket[day_str] = _fetch_temperature_series(session, start_dt, end_dt)
+        bucket[key] = _fetch_temperature_series(session, start_dt.replace(tzinfo=EAST_8), end_dt.replace(tzinfo=EAST_8))
 
 
 def _resolve_company_codes(
@@ -331,10 +332,32 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
         # 1. 逐小时气温
         temp_section = data.get("1.逐小时气温")
         if isinstance(temp_section, dict):
-            # 本期：根据 push_date 推导日期区间；配置中已有键，直接查询
-            _fill_temperature_block(session, temp_section, "本期")
-            # 同期：使用配置提供的日期集合
-            _fill_temperature_block(session, temp_section, "同期")
+            forecast_days = max(int(temp_section.get("预测天数", 0)), 0)
+            main_bucket = temp_section.get("本期")
+            peer_bucket = temp_section.get("同期")
+            if isinstance(main_bucket, dict) and isinstance(peer_bucket, dict):
+                try:
+                    push_dt = date.fromisoformat(push_date)
+                except ValueError:
+                    push_dt = date.today()
+                try:
+                    start_main = min(date.fromisoformat(k) for k in main_bucket.keys())
+                except ValueError:
+                    start_main = push_dt
+                    main_bucket[start_main.isoformat()] = []
+                if start_main > push_dt:
+                    start_main = push_dt
+                total_days = (push_dt - start_main).days + forecast_days + 1
+                if total_days < 1:
+                    total_days = 1
+                main_dates = [start_main + timedelta(days=i) for i in range(total_days)]
+                for dt in main_dates:
+                    main_bucket.setdefault(dt.isoformat(), [])
+                peer_dates = [dt - timedelta(days=365) for dt in main_dates]
+                for dt in peer_dates:
+                    peer_bucket.setdefault(dt.isoformat(), [])
+                _fill_temperature_block(session, main_bucket, main_dates)
+                _fill_temperature_block(session, peer_bucket, peer_dates)
 
         # 2. 边际利润
         margin_section = data.get("2.边际利润")
@@ -424,7 +447,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
             )
 
         # 6. 省市平台服务投诉量
-        complaint_section = data.get("6.省市平台服务投诉量")
+        complaint_section = data.get("6.当日省市平台服务投诉量")
         if isinstance(complaint_section, dict):
             _fill_simple_metric(
                 session,
@@ -447,7 +470,16 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
             )
 
-    generated_at = datetime.now().astimezone().isoformat()
+        # 7. 煤炭库存明细
+        coal_detail_section = data.get("7.煤炭库存明细")
+        if isinstance(coal_detail_section, dict):
+            try:
+                inventory_date = date.fromisoformat(push_date)
+            except ValueError:
+                inventory_date = date.today()
+            _fill_coal_inventory(session, coal_detail_section, inventory_date)
+
+    generated_at = datetime.now(EAST_8).isoformat()
     source = (
         str(DASHBOARD_CONFIG_PATH.relative_to(DATA_ROOT))
         if DASHBOARD_CONFIG_PATH.exists()
@@ -462,3 +494,62 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
         source=source,
         data=data,
     )
+
+def _fill_coal_inventory(
+    session,
+    section: Dict[str, Any],
+    target_date: date,
+) -> None:
+    """填充煤炭库存明细模块."""
+    if not isinstance(section, dict):
+        return
+
+    source = str(section.get("数据来源") or "").strip()
+    if source != "coal_inventory_data":
+        return
+
+    root_label = section.get("根指标", "")
+    if root_label != "煤炭库存明细":
+        return
+
+    stmt = (
+        select(
+            CoalInventoryData.company_cn,
+            CoalInventoryData.storage_type_cn,
+            CoalInventoryData.value,
+        )
+        .where(CoalInventoryData.date == target_date)
+    )
+    rows = session.execute(stmt).all()
+
+    inventory: Dict[str, Dict[str, float]] = {}
+    for company_cn, storage_type_cn, value in rows:
+        company_key = str(company_cn or "").strip()
+        storage_key = str(storage_type_cn or "").strip()
+        if not company_key or not storage_key:
+            continue
+        inventory.setdefault(company_key, {})[storage_key] = _decimal_to_float(value)
+
+    def resolve_value(company_cn: str, storage_type: str) -> float:
+        return inventory.get(company_cn, {}).get(storage_type, 0.0)
+
+    for company_cn, storage_map in section.items():
+        if not isinstance(storage_map, dict):
+            continue
+        if company_cn in {"数据来源", "查询结构", "根指标", "计量单位"}:
+            continue
+
+        for storage_type, expr in list(storage_map.items()):
+            expression = str(expr or "").strip()
+            if not expression:
+                storage_map[storage_type] = resolve_value(company_cn, storage_type)
+                continue
+
+            total = 0.0
+            for part in expression.split("+"):
+                company_name = part.strip()
+                if not company_name:
+                    continue
+                total += resolve_value(company_name, storage_type)
+            storage_map[storage_type] = total
+
