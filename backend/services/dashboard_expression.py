@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+import re
 
 from fastapi import HTTPException
 
@@ -120,13 +121,40 @@ def load_dashboard_config() -> Dict[str, Any]:
     return payload
 
 
+def _generate_label_variants(label: str) -> List[str]:
+    """生成多种同义写法，便于匹配“其中：暖收入”等标签。"""
+    variants = set()
+    text = str(label or "").strip()
+    if not text:
+        return []
+    variants.add(text)
+
+    # 去除常见前缀
+    for prefix in ("其中：", "其中:", "其中", "当日", "当期", "本期", "同期"):
+        if text.startswith(prefix):
+            variants.add(text[len(prefix):].strip())
+
+    # 替换全角括号
+    normalized = text.replace("（", "(").replace("）", ")")
+    variants.add(normalized)
+
+    # 去除括号及其内容
+    no_paren = re.sub(r"[（(].*?[）)]", "", normalized).strip()
+    if no_paren:
+        variants.add(no_paren)
+
+    return [v for v in variants if v]
+
+
 def _reverse_mapping(mapping: Dict[str, str]) -> Dict[str, str]:
-    """构造 value -> key 的反向映射，忽略空值。"""
+    """构造 value -> key 的反向映射，包含常见同义写法。"""
     reversed_map: Dict[str, str] = {}
     for key, value in mapping.items():
         if not value:
             continue
-        reversed_map[str(value).strip()] = str(key).strip()
+        code = str(key).strip()
+        for variant in _generate_label_variants(value):
+            reversed_map.setdefault(variant, code)
     return reversed_map
 
 
@@ -228,6 +256,7 @@ def _fill_metric_panel(
     push_date: str,
     phase_key: str,
     company_cn_to_code: Dict[str, str],
+    company_code_to_cn: Dict[str, str],
     item_cn_to_code: Dict[str, str],
     frame_key: str,
 ) -> None:
@@ -241,10 +270,7 @@ def _fill_metric_panel(
     for table_name, company_codes in resolved_sources.items():
         for company_code in company_codes:
             metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
-            company_cn = next(
-                (cn for cn, code in company_cn_to_code.items() if code == company_code),
-                company_code,
-            )
+            company_cn = company_code_to_cn.get(company_code, company_code)
             company_bucket = data_bucket.get(company_cn)
             if not isinstance(company_bucket, dict):
                 continue
@@ -258,6 +284,7 @@ def _fill_simple_metric(
     section: Dict[str, Any],
     phase_key: str,
     company_cn_to_code: Dict[str, str],
+    company_code_to_cn: Dict[str, str],
     item_cn_to_code: Dict[str, str],
     frame_key: str,
     push_date: str,
@@ -277,10 +304,7 @@ def _fill_simple_metric(
     for table_name, company_codes in resolved_sources.items():
         for company_code in company_codes:
             metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
-            company_cn = next(
-                (cn for cn, code in company_cn_to_code.items() if code == company_code),
-                company_code,
-            )
+            company_cn = company_code_to_cn.get(company_code, company_code)
             if company_cn not in data_bucket:
                 continue
             bucket = metrics.get(item_code, {})
@@ -295,11 +319,13 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
 
     data = dict(payload)
     data["push_date"] = push_date
+    data["展示日期"] = push_date
 
     project_items = data.get("项目字典", {})
     project_units = data.get("单位字典", {})
     item_cn_to_code = _reverse_mapping(project_items)
     company_cn_to_code = _reverse_mapping(project_units)
+    company_code_to_cn = {code: cn for cn, code in company_cn_to_code.items()}
 
     with SessionLocal() as session:
         # 1. 逐小时气温
@@ -320,6 +346,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
                 "本期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_biz_date",
             )
@@ -330,20 +357,21 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
                 "同期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_peer_date",
             )
 
         # 3. 集团全口径收入明细
         income_section = data.get("3.集团全口径收入明细")
-        if isinstance(income_section, dict):
-            income_items = list(income_section.get("本期", {}).keys())
-            metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
-            for label in income_items:
-                item_code = item_cn_to_code.get(label, label)
-                bucket = metrics.get(item_code, {})
-                income_section["本期"][label] = _decimal_to_float(bucket.get("value_biz_date"))
-                income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
+    if isinstance(income_section, dict):
+        income_items = list(income_section.get("本期", {}).keys())
+        metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+        for label in income_items:
+            item_code = item_cn_to_code.get(label, label)
+            bucket = metrics.get(item_code, {})
+            income_section["本期"][label] = _decimal_to_float(bucket.get("value_biz_date"))
+            income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
 
         # 4. 供暖单耗
         heating_section = data.get("4.供暖单耗")
@@ -355,6 +383,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
                 "本期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_biz_date",
             )
@@ -365,6 +394,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
                 "同期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_peer_date",
             )
@@ -377,6 +407,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 coal_section,
                 "本期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_biz_date",
                 push_date,
@@ -386,6 +417,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 coal_section,
                 "同期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_peer_date",
                 push_date,
@@ -399,6 +431,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 complaint_section,
                 "本期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_biz_date",
                 push_date,
@@ -408,6 +441,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 complaint_section,
                 "同期",
                 company_cn_to_code,
+                company_code_to_cn,
                 item_cn_to_code,
                 "value_peer_date",
                 push_date,
