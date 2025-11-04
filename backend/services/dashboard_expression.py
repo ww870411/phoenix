@@ -512,23 +512,22 @@ def _fill_coal_inventory(
     if root_label != "煤炭库存明细":
         return
 
-    stmt = (
-        select(
-            CoalInventoryData.company_cn,
-            CoalInventoryData.storage_type_cn,
-            CoalInventoryData.value,
-        )
-        .where(CoalInventoryData.date == target_date)
-    )
+    stmt = select(
+        CoalInventoryData.company_cn,
+        CoalInventoryData.storage_type_cn,
+        CoalInventoryData.value,
+    ).where(CoalInventoryData.date == target_date)
     rows = session.execute(stmt).all()
 
     inventory: Dict[str, Dict[str, float]] = {}
     for company_cn, storage_type_cn, value in rows:
         company_key = str(company_cn or "").strip()
         storage_key = str(storage_type_cn or "").strip()
-        if not company_key or not storage_key:
+        if not company_key or not storage_key or value is None:
             continue
-        inventory.setdefault(company_key, {})[storage_key] = _decimal_to_float(value)
+        value_float = _decimal_to_float(value)
+        storage_map = inventory.setdefault(company_key, {})
+        storage_map[storage_key] = storage_map.get(storage_key, 0.0) + value_float
 
     def resolve_value(company_cn: str, storage_type: str) -> float:
         return inventory.get(company_cn, {}).get(storage_type, 0.0)
@@ -552,4 +551,3 @@ def _fill_coal_inventory(
                     continue
                 total += resolve_value(company_name, storage_type)
             storage_map[storage_type] = total
-

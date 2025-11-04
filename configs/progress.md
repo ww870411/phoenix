@@ -1,5 +1,22 @@
 # 进度记录
 
+## 2025-11-08（数据看板煤炭库存聚合修正）
+
+前置说明（降级留痕）：
+- Serena 当前无法对 `.py` 文件执行结构化写入，按照 3.9 矩阵要求降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend/services/dashboard_expression.py`，如需回滚可恢复该文件。
+
+本次动作：
+- 将 `_fill_coal_inventory` 中的库存装载逻辑由覆盖写入调整为按 `company_cn + storage_type_cn` 累加，确保同一仓储类型下的不同煤种数值会聚合求和。
+- 对空值与缺失字段保持跳过，避免写入 `None` 导致的异常；表达式求和依旧按模板定义的公司列表执行。
+
+影响范围与回滚：
+- 仅影响 `/api/v1/projects/daily_report_25_26/dashboard` 返回的“7.煤炭库存明细”模块；若需恢复旧行为，将上述函数回滚即可。
+- 集团全口径等汇总表达式现会基于累加后的公司库存再求和，模板语法无需调整。
+
+验证建议：
+1. 访问 `/api/v1/projects/daily_report_25_26/dashboard?show_date=YYYY-MM-DD`，确认各单位/仓储类型返回的 `value` 与数据库按煤种求和后的结果一致。
+2. 检查“集团全口径”各指标是否等于下方单位数值之和，与 `coal_inventory_data` 中同日数据比对。
+
 ## 2025-11-08（数据看板 API 初版）
 
 前置说明（降级留痕）：
