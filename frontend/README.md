@@ -12,7 +12,7 @@
 ## 会话小结（2025-11-09 气温/边际利润卡片面积调整）
 
 - 状态：气温曲线与边际利润图表在宽屏模式下平均分配一行，图例下沉后不再遮挡坐标轴文字。
-- 改动：`pages/DashBoard.vue` 将气温 ECharts 高度调为 240px，并为两张卡片补充 `min-height: 320px`、移除气温卡片的满宽修饰，同时统一各图表 `legend.bottom` 与 `grid.bottom` 设置，并为 `.dashboard-table` 增加 `box-sizing: border-box`；“投诉量”卡片在宽屏下改为 span 6、移除 `dashboard-grid__item--table` 标记，三个“供暖单耗”卡片统一为 span 4 实现三列排布，“标煤消耗量对比”“煤炭库存”统一为 span 6 并移除 `dashboard-grid__item--table` 限制以确实并行展示；栅格行间距同步缩小至一半（14px）。
+- 改动：`pages/DashBoard.vue` 将气温 ECharts 高度调为 240px，并为两张卡片补充 `min-height: 320px`、移除气温卡片的满宽修饰，同时统一各图表 `legend.bottom` 与 `grid.bottom` 设置，并为 `.dashboard-table` 增加 `box-sizing: border-box`；“投诉量”卡片在宽屏下改为 span 6、移除 `dashboard-grid__item--table` 标记，三个“供暖单耗”卡片统一为 span 4，“标煤消耗量对比”“煤炭库存”统一为 span 6 且移除全幅标记；栅格行间距减半（14px），并为柱状图启用 `labelLayout.moveOverlap='shiftY'`、统一 `distance`，并开启 `axisLabel.hideOverlap=true` 以配合智能避让保持标签清晰。
 - 影响：上排两张卡片更紧凑整齐，所有图例脱离坐标轴刻度；若需恢复旧高度或位置，可回滚该文件。
 - 下一步：如需继续压缩排版，可评估引入图例折叠或分页方式，避免 legend 占用过多纵向空间。
 

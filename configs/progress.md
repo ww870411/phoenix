@@ -17,6 +17,7 @@
   - 三个“供暖单耗”卡片在宽屏布局下统一改为 `span 4`，三列排布保持等宽整齐。
   - 缩小 `.dashboard-grid` 的行间距至 14px，以减半卡片间的垂直空隙。
   - “标煤消耗量对比”“煤炭库存”两张卡片在宽屏下均改为 `span 6` 并移除 `dashboard-grid__item--table` 标记，确保并行展示。
+  - 为所有柱状图（收入、单耗、标煤等）统一设置 `distance=6`、启用 `labelLayout.moveOverlap='shiftY'`，并在有分类轴的图表上开启 `axisLabel.hideOverlap=true`，通过纵向错位与智能避让避免标签互相遮挡。
 
 影响范围与回滚：
 - 仅影响 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 样式与图表高度；如需恢复旧尺寸，回滚该文件即可。

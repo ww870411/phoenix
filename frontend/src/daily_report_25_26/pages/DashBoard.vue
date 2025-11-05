@@ -980,11 +980,12 @@ const useIncomeCompareOption = (seriesData) => {
     },
     legend: { data: ['本期', '同期'], bottom: 0 },
     grid: { left: 40, right: 20, top: 40, bottom: 60 },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisTick: { alignWithLabel: true },
-    },
+  xAxis: {
+    type: 'category',
+    data: categories,
+    axisTick: { alignWithLabel: true },
+    axisLabel: { hideOverlap: true },
+  },
     yAxis: {
       type: 'value',
       axisLabel: {
@@ -1001,12 +1002,14 @@ const useIncomeCompareOption = (seriesData) => {
         label: {
           show: true,
           position: 'top',
+          distance: 6,
           formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
+        labelLayout: { moveOverlap: 'shiftY' },
       },
       {
         name: '同期',
@@ -1016,12 +1019,14 @@ const useIncomeCompareOption = (seriesData) => {
         label: {
           show: true,
           position: 'top',
+          distance: 6,
           formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
+        labelLayout: { moveOverlap: 'shiftY' },
       },
     ],
   }
@@ -1093,10 +1098,10 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
 
   const metricsToRender = targetIndex >= 0 ? [metricLabel] : [metricLabel]
 
-  metricsToRender.forEach((metric) => {
-    const currentLabel = `${metric}（本期）`
-    const peerLabel = `${metric}（同期）`
-    legendData.push(currentLabel, peerLabel)
+metricsToRender.forEach((metric) => {
+  const currentLabel = `${metric}（本期）`
+  const peerLabel = `${metric}（同期）`
+  legendData.push(currentLabel, peerLabel)
 
     chartSeries.push({
       name: currentLabel,
@@ -1109,14 +1114,15 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       label: {
         show: true,
         position: 'top',
+        distance: 6,
         formatter: formatLabelValue,
         color: '#0f172a',
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         borderRadius: 6,
         padding: [4, 6],
-        offset: [-10, 0],
-        align: 'right',
+        offset: [0, -16],
       },
+      labelLayout: { moveOverlap: 'shiftY' },
       emphasis: { focus: 'series' },
     })
     chartSeries.push({
@@ -1130,14 +1136,15 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       label: {
         show: true,
         position: 'top',
+        distance: 6,
         formatter: formatLabelValue,
         color: '#475569',
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         borderRadius: 6,
         padding: [4, 6],
-        offset: [10, 0],
-        align: 'left',
+        offset: [0, -48],
       },
+      labelLayout: { moveOverlap: 'shiftY' },
       emphasis: { focus: 'series' },
     })
   })
@@ -1157,12 +1164,12 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       icon: 'roundRect',
     },
     grid: { left: 40, right: 30, top: 70, bottom: 80 },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisTick: { alignWithLabel: true },
-      axisLabel: { interval: 0 },
-    },
+  xAxis: {
+    type: 'category',
+    data: categories,
+    axisTick: { alignWithLabel: true },
+    axisLabel: { interval: 0, hideOverlap: true },
+  },
     yAxis: {
       type: 'value',
       splitLine: { lineStyle: { type: 'dashed' } },
@@ -1204,9 +1211,9 @@ const useCoalStdOption = (seriesData) => {
     xAxis: {
       type: 'category',
       data: categories,
-      axisTick: { alignWithLabel: true },
-      axisLabel: { interval: 0 },
-    },
+    axisTick: { alignWithLabel: true },
+    axisLabel: { interval: 0, hideOverlap: true },
+  },
     yAxis: {
       type: 'value',
       name: '吨标煤',
@@ -1225,14 +1232,14 @@ const useCoalStdOption = (seriesData) => {
         label: {
           show: true,
           position: 'top',
+          distance: 6,
           formatter: ({ value }) => formatValue(value),
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
-          offset: [-10, 0],
-          align: 'right',
         },
+        labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
       },
       {
@@ -1244,14 +1251,14 @@ const useCoalStdOption = (seriesData) => {
         label: {
           show: true,
           position: 'top',
+          distance: 6,
           formatter: ({ value }) => formatValue(value),
           color: '#475569',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
-          offset: [10, 0],
-          align: 'left',
         },
+        labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
       },
     ],
@@ -1261,7 +1268,7 @@ const useCoalStdOption = (seriesData) => {
 const useComplaintsOption = () => ({
   tooltip: { trigger: 'axis' },
   grid: { left: 40, right: 20, top: 20, bottom: 40 },
-  xAxis: { type: 'category', data: orgs7 },
+  xAxis: { type: 'category', data: orgs7, axisLabel: { hideOverlap: true } },
   yAxis: { type: 'value', name: '件' },
   series: [
     {
