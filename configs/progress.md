@@ -72,6 +72,23 @@
 1. 访问 `/projects/daily_report_25_26/pages/dashboard/...`，观察气温折线图与表格是否随 `show_date` 切换而变化。
 2. 检查顶部“平均气温（7日当期）”卡片取值是否与表格展示一致；若返回空数组，应显示“—”并保持图表为 0 基线。
 
+## 2025-11-08（数据看板 Revogrid 表格统一）
+
+前置说明（降级留痕）：
+- Serena 无法对 `.vue` 文件进行符号级写入，按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 新增组件并改写 `frontend/src/daily_report_25_26/pages/DashBoard.vue`，如需回滚可恢复上述文件。
+
+本次动作：
+- 新建 `frontend/src/daily_report_25_26/components/DashboardRevoGrid.vue`，封装 Revogrid 默认主题、列模板与只读配置，并统一引入 `@revolist/vue3-datagrid` 样式。
+- `DashBoard.vue` 删除自定义 Table 组件，改以 `DashboardRevoGrid` 展示气温、边际利润、标煤耗量、投诉等表格，同时将数据结构统一为列定义 + 对象行，便于后续接入真实接口。
+
+影响范围与回滚：
+- 数据看板所有表格外观与交互保持一致，可复制滚动；如需回滚，移除新组件并恢复 `DashBoard.vue` 即可。
+- 其他页面未引用该组件，行为不受影响。
+
+验证建议：
+1. 打开仪表盘确认四个表格均渲染为 Revogrid，列宽自适应且支持复制。
+2. 若需扩展排序、锁列等能力，可在 `DashboardRevoGrid` 中追加 Revogrid 对应配置。
+
 ## 2025-11-08（数据看板 API 初版）
 
 前置说明（降级留痕）：
@@ -733,6 +750,23 @@ sum_basic_data 相关：
 - 效果：`scid.*` 无需指定 `公司.常量` 形式即可返回合计库存值，历史模板写法保持有效。
 - 验证：运行 `/runtime/spec/eval` 并检查 `_trace.used_consts` 是否出现 `scid.Group_sum` 等记录；或直接在前端页面观察库存列是否正常展示。
 - 回滚：若要恢复旧行为，只需移除新增循环，让 `_value_of_const` 只在当前 company 常量缓存中查找即可。
+
+## 2025-11-08（数据看板 Revogrid 表格统一）
+
+前置说明（降级留痕）：
+- Serena 无法对 `.vue` 文件进行符号级写入，按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 新增组件并改写 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚可恢复上述文件。
+
+本次动作：
+- 新建 `frontend/src/daily_report_25_26/components/DashboardRevoGrid.vue`，封装 Revogrid 默认主题、列模板与只读配置，并统一引入 `@revolist/vue3-datagrid` 依赖。
+- 在 `DashBoard.vue` 中将原自定义表格替换为 `<DashboardRevoGrid>`，覆盖气温、边际利润、标煤耗量、投诉 4 处表格；数据结构统一为列定义（prop/name/size）+ 行对象，便于后续接入真实接口。
+
+影响范围与回滚：
+- 数据看板表格外观与交互统一；如需回滚，移除新组件并恢复 `DashBoard.vue` 即可。
+- 其他页面未引用该组件，行为不受影响。
+
+验证建议：
+1. 打开仪表盘，确认 4 个表格均渲染为 Revogrid，可滚动/复制且行高样式一致。
+2. 若需扩展排序、锁列、导出等能力，可在 `DashboardRevoGrid` 增加对应配置或插件。
 
 ## 2025-11-03（仪表盘 DashBoard.vue 文件审查）
 

@@ -32,7 +32,7 @@
       <div class="summary-card summary-card--success">
         <div class="summary-card__icon summary-card__icon--profit" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团当日边际利润（演示）</div>
+          <div class="summary-card__label">集团全口径可比煤价边际利润</div>
           <div class="summary-card__value">{{ marginHeadline }} 万元</div>
         </div>
       </div>
@@ -170,18 +170,56 @@ const Table = defineComponent({
       return false
     }
 
+    const tableInlineStyle = {
+      width: '100%',
+      borderCollapse: 'collapse',
+      borderSpacing: '0',
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'rgba(148, 163, 184, 0.35)',
+    }
+    const headerCellInlineStyle = {
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'rgba(148, 163, 184, 0.35)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+    }
+    const emptyCellInlineStyle = {
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'rgba(226, 232, 240, 0.9)',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+    }
+
     return () =>
-      h('div', { class: 'dashboard-table' }, [
-        h('table', null, [
-          hasColumns.value
-            ? h(
+      h(
+        'div',
+        {
+          class: 'dashboard-table',
+          style: {
+            width: '100%',
+          },
+        },
+        [
+          h('table', { style: tableInlineStyle }, [
+            hasColumns.value
+              ? h(
                 'thead',
                 null,
                 h(
                   'tr',
                   null,
                   props.columns.map((column) =>
-                    h('th', { key: column }, column),
+                    h(
+                      'th',
+                      {
+                        key: column,
+                        style: headerCellInlineStyle,
+                      },
+                      column,
+                    ),
                   ),
                 ),
               )
@@ -208,6 +246,16 @@ const Table = defineComponent({
                             'dashboard-table__numeric': numeric,
                             'dashboard-table__first': cellIndex === 0,
                           },
+                          style: {
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
+                            borderColor:
+                              cellIndex === 0
+                                ? 'rgba(148, 163, 184, 0.35)'
+                                : 'rgba(226, 232, 240, 0.9)',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                          },
                         },
                         display,
                       )
@@ -222,6 +270,7 @@ const Table = defineComponent({
                     {
                       class: 'dashboard-table__empty',
                       colspan: hasColumns.value ? props.columns.length : 1,
+                      style: emptyCellInlineStyle,
                     },
                     '暂无数据',
                   ),
@@ -1020,9 +1069,12 @@ onMounted(() => {
 
 .dashboard-table-wrapper {
   margin-top: 8px;
+  width: 100%;
 }
 
 .dashboard-table {
+  width: 100%;
+  display: block;
   overflow-x: auto;
   border-radius: 16px;
   border: 1px solid transparent;
@@ -1037,7 +1089,7 @@ onMounted(() => {
 
 .dashboard-table table {
   width: 100%;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
   table-layout: fixed;
   font-size: 13px;
@@ -1045,6 +1097,8 @@ onMounted(() => {
   background: #ffffff;
   border-radius: 14px;
   overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  margin: 0;
 }
 
 .dashboard-table thead {
@@ -1059,15 +1113,15 @@ onMounted(() => {
   font-weight: 600;
   padding: 14px 18px;
   text-align: center;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
-  border-right: 1px solid rgba(148, 163, 184, 0.25);
+  vertical-align: middle;
+  border: 1px solid rgba(148, 163, 184, 0.35);
 }
 
 .dashboard-table td {
   padding: 14px 18px;
   text-align: center;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-  border-right: 1px solid rgba(226, 232, 240, 0.6);
+  vertical-align: middle;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   background: #ffffff;
 }
 
@@ -1088,15 +1142,6 @@ onMounted(() => {
 
 .dashboard-table tbody tr:nth-child(even) td {
   background: rgba(248, 250, 252, 0.7);
-}
-
-.dashboard-table tr:last-child td {
-  border-bottom: none;
-}
-
-.dashboard-table tr td:last-child,
-.dashboard-table tr th:last-child {
-  border-right: none;
 }
 
 .dashboard-table tr:hover td {
