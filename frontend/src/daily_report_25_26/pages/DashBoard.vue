@@ -78,8 +78,20 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
-        <Card title="单耗对比" subtitle="热/电/水单耗（本期 vs 同期）" extra="单位：见图例">
-          <EChart :option="unitOpt" height="260px" />
+        <Card title="供暖热单耗对比" :extra="`单位：${unitSeries.units['供暖热单耗'] || '—'}`">
+          <EChart :option="unitHeatOpt" height="260px" />
+        </Card>
+      </section>
+
+      <section class="dashboard-grid__item dashboard-grid__item--unit">
+        <Card title="供暖电单耗对比" :extra="`单位：${unitSeries.units['供暖电单耗'] || '—'}`">
+          <EChart :option="unitElecOpt" height="260px" />
+        </Card>
+      </section>
+
+      <section class="dashboard-grid__item dashboard-grid__item--unit">
+        <Card title="供暖水单耗对比" :extra="`单位：${unitSeries.units['供暖水单耗'] || '—'}`">
+          <EChart :option="unitWaterOpt" height="260px" />
         </Card>
       </section>
 
@@ -573,6 +585,11 @@ const unitFallbackUnits = {
   '供暖电单耗': 'kWh/万㎡',
   '供暖水单耗': '吨/万㎡',
 }
+const unitFallbackMatrix = {
+  '供暖热单耗': unitFallbackSeries.map((item) => item.heat),
+  '供暖电单耗': unitFallbackSeries.map((item) => item.elec),
+  '供暖水单耗': unitFallbackSeries.map((item) => item.water),
+}
 
 const marginSection = computed(() => {
   const section = dashboardData.sections?.['2.边际利润']
@@ -783,7 +800,7 @@ const useTempOption = (series, highlightDate) => {
     yAxis: { type: 'value', name: '℃' },
     series: [
       {
-        name: '当期',
+        name: '本期',
         type: 'line',
         smooth: true,
         data: series.mainChart,
@@ -966,12 +983,22 @@ const useIncomeCompareOption = (seriesData) => {
   }
 }
 
-const useUnitConsumptionOption = (seriesData) => {
+const useUnitConsumptionOption = (seriesData, metricName) => {
   const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
   const metrics = Array.isArray(seriesData?.metrics) ? seriesData.metrics : []
   const currentMatrix = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peerMatrix = Array.isArray(seriesData?.peer) ? seriesData.peer : []
   const units = seriesData && typeof seriesData.units === 'object' ? seriesData.units : unitFallbackUnits
+  const targetIndex = metrics.indexOf(metricName)
+  const metricLabel = targetIndex >= 0 ? metricName : metricName
+  const currentData =
+    targetIndex >= 0 && Array.isArray(currentMatrix[targetIndex]) && currentMatrix[targetIndex].length
+      ? currentMatrix[targetIndex].map((value) => (Number.isFinite(value) ? value : null))
+      : unitFallbackMatrix[metricLabel] || categories.map(() => null)
+  const peerData =
+    targetIndex >= 0 && Array.isArray(peerMatrix[targetIndex]) && peerMatrix[targetIndex].length
+      ? peerMatrix[targetIndex].map((value) => (Number.isFinite(value) ? value : null))
+      : categories.map(() => null)
 
   const legendData = []
   const chartSeries = []
@@ -1020,26 +1047,19 @@ const useUnitConsumptionOption = (seriesData) => {
     return lines.join('<br/>')
   }
 
-  metrics.forEach((metric, index) => {
+  const metricsToRender = targetIndex >= 0 ? [metricLabel] : [metricLabel]
+
+  metricsToRender.forEach((metric) => {
     const currentLabel = `${metric}（本期）`
     const peerLabel = `${metric}（同期）`
     legendData.push(currentLabel, peerLabel)
 
-    const currentData =
-      Array.isArray(currentMatrix[index]) && currentMatrix[index].length
-        ? currentMatrix[index].map((value) => (Number.isFinite(value) ? value : null))
-        : categories.map(() => null)
-    const peerData =
-      Array.isArray(peerMatrix[index]) && peerMatrix[index].length
-        ? peerMatrix[index].map((value) => (Number.isFinite(value) ? value : null))
-        : categories.map(() => null)
-
     chartSeries.push({
       name: currentLabel,
       type: 'bar',
-      barWidth: 14,
-      barCategoryGap: '45%',
-      barGap: '10%',
+      barWidth: 18,
+      barCategoryGap: '40%',
+      barGap: '20%',
       itemStyle: { color: currentColorMap[metric] || '#2563eb' },
       data: currentData,
       label: {
@@ -1050,15 +1070,17 @@ const useUnitConsumptionOption = (seriesData) => {
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         borderRadius: 6,
         padding: [4, 6],
+        offset: [-10, 0],
+        align: 'right',
       },
       emphasis: { focus: 'series' },
     })
     chartSeries.push({
       name: peerLabel,
       type: 'bar',
-      barWidth: 14,
-      barCategoryGap: '45%',
-      barGap: '10%',
+      barWidth: 18,
+      barCategoryGap: '40%',
+      barGap: '20%',
       itemStyle: { color: peerColorMap[metric] || '#94a3b8' },
       data: peerData,
       label: {
@@ -1069,6 +1091,8 @@ const useUnitConsumptionOption = (seriesData) => {
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         borderRadius: 6,
         padding: [4, 6],
+        offset: [10, 0],
+        align: 'left',
       },
       emphasis: { focus: 'series' },
     })
@@ -1147,7 +1171,9 @@ const useCoalStockOption = () => ({
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = computed(() => useMarginOption(marginSeries.value))
 const incomeOpt = computed(() => useIncomeCompareOption(incomeSeries.value))
-const unitOpt = computed(() => useUnitConsumptionOption(unitSeries.value))
+const unitHeatOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖热单耗'))
+const unitElecOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖电单耗'))
+const unitWaterOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖水单耗'))
 const coalStdOpt = useCoalStdOption()
 const complaintOpt = useComplaintsOption()
 const coalStockOpt = useCoalStockOption()
