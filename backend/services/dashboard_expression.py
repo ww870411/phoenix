@@ -313,11 +313,17 @@ def _fill_simple_metric(
     if not isinstance(source_config, dict) or not isinstance(data_bucket, dict):
         return
 
+    # “研究院”不参与标煤耗量统计，确保配置与响应保持一致
+    if root_item_cn == "标煤耗量" and "研究院" in data_bucket:
+        data_bucket.pop("研究院", None)
+
     resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
     for table_name, company_codes in resolved_sources.items():
         for company_code in company_codes:
             metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
             company_cn = company_code_to_cn.get(company_code, company_code)
+            if root_item_cn == "标煤耗量" and company_cn == "研究院":
+                continue
             if company_cn not in data_bucket:
                 continue
             bucket = metrics.get(item_code, {})

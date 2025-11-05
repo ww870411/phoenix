@@ -72,7 +72,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--income">
-        <Card title="收入分类对比（集团）" subtitle="本期 vs 同期" extra="单位：万元">
+        <Card title="收入分类对比（集团）" extra="单位：万元">
           <EChart :option="incomeOpt" height="260px" />
         </Card>
       </section>
@@ -96,7 +96,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--coal">
-        <Card title="标煤消耗量对比" subtitle="本期 vs 同期" extra="单位：吨标煤">
+        <Card title="标煤消耗量对比" extra="单位：吨标煤">
           <EChart :option="coalStdOpt" height="260px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
@@ -590,6 +590,9 @@ const unitFallbackMatrix = {
   '供暖电单耗': unitFallbackSeries.map((item) => item.elec),
   '供暖水单耗': unitFallbackSeries.map((item) => item.water),
 }
+const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
+const coalStdFallbackCurrent = [980, 420, 160, 180, 120, 100]
+const coalStdFallbackPeer = [1020, 440, 150, 190, 130, 90]
 
 const marginSection = computed(() => {
   const section = dashboardData.sections?.['2.边际利润']
@@ -744,13 +747,57 @@ const unitSeries = computed(() => {
   }
 })
 
+const coalStdSection = computed(() => {
+  const section = dashboardData.sections?.['5.标煤耗量']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const coalStdCurrent = computed(() => {
+  const bucket = coalStdSection.value?.['本期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const coalStdPeer = computed(() => {
+  const bucket = coalStdSection.value?.['同期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const coalStdSeries = computed(() => {
+  const categories = []
+  const seen = new Set()
+  const currentEntries = coalStdCurrent.value
+  const peerEntries = coalStdPeer.value
+  if (currentEntries && typeof currentEntries === 'object') {
+    for (const key of Object.keys(currentEntries)) {
+      if (!seen.has(key)) {
+        seen.add(key)
+        categories.push(key)
+      }
+    }
+  }
+  if (peerEntries && typeof peerEntries === 'object') {
+    for (const key of Object.keys(peerEntries)) {
+      if (!seen.has(key)) {
+        seen.add(key)
+        categories.push(key)
+      }
+    }
+  }
+  if (!categories.length) {
+    return {
+      categories: coalStdFallbackCategories,
+      current: coalStdFallbackCurrent,
+      peer: coalStdFallbackPeer,
+    }
+  }
+  const current = categories.map((org) => roundOrNull(currentEntries?.[org], 2) ?? 0)
+  const peer = categories.map((org) => roundOrNull(peerEntries?.[org], 2) ?? 0)
+  return { categories, current, peer }
+})
+
 // --- 模拟数据（后续可替换为后端数据源） ---
 
 const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-
-const coalStdOrgs = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
-const coalStdNow = [980, 420, 160, 180, 120, 100]
-const coalStdPeer = [1020, 440, 150, 190, 130, 90]
 
 const complaintsNow = orgs7.map((org, index) => ({
   org,
@@ -1127,17 +1174,92 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
   }
 }
 
-const useCoalStdOption = () => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['本期', '同期'] },
-  grid: { left: 40, right: 20, top: 40, bottom: 40 },
-  xAxis: { type: 'category', data: coalStdOrgs },
-  yAxis: { type: 'value', name: '吨标煤' },
-  series: [
-    { name: '本期', type: 'bar', data: coalStdNow },
-    { name: '同期', type: 'bar', data: coalStdPeer },
-  ],
-})
+const useCoalStdOption = (seriesData) => {
+  const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : coalStdFallbackCategories
+  const current = Array.isArray(seriesData?.current) ? seriesData.current : coalStdFallbackCurrent
+  const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : coalStdFallbackPeer
+
+  const formatValue = (value) => {
+    if (!Number.isFinite(value)) return '—'
+    return Number(value).toFixed(1)
+  }
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        if (!Array.isArray(params) || !params.length) return ''
+        const axisLabel = params[0]?.axisValue ?? params[0]?.name ?? ''
+        const lines = [`<strong>${axisLabel}</strong>`]
+        params.forEach((item) => {
+          const color = item.color || '#475569'
+          const resolved = Number.isFinite(item.value) ? Number(item.value) : Number.NaN
+          lines.push(
+            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${Number.isFinite(resolved) ? resolved.toFixed(1) : '—'} 吨标煤`,
+          )
+        })
+        return lines.join('<br/>')
+      },
+    },
+    legend: { data: ['本期', '同期'] },
+    grid: { left: 40, right: 30, top: 50, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLabel: { interval: 0 },
+    },
+    yAxis: {
+      type: 'value',
+      name: '吨标煤',
+      splitLine: { lineStyle: { type: 'dashed' } },
+      axisLabel: {
+        formatter: (val) => (Number.isFinite(val) ? Number(val).toFixed(0) : val),
+      },
+    },
+    series: [
+      {
+        name: '本期',
+        type: 'bar',
+        barWidth: 18,
+        data: current.map((value) => (Number.isFinite(value) ? value : null)),
+        itemStyle: { color: '#2563eb' },
+        label: {
+          show: true,
+          position: 'top',
+          formatter: ({ value }) => formatValue(value),
+          color: '#0f172a',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+          offset: [-10, 0],
+          align: 'right',
+        },
+        emphasis: { focus: 'series' },
+      },
+      {
+        name: '同期',
+        type: 'bar',
+        barWidth: 18,
+        data: peer.map((value) => (Number.isFinite(value) ? value : null)),
+        itemStyle: { color: '#94a3b8' },
+        label: {
+          show: true,
+          position: 'top',
+          formatter: ({ value }) => formatValue(value),
+          color: '#475569',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+          offset: [10, 0],
+          align: 'left',
+        },
+        emphasis: { focus: 'series' },
+      },
+    ],
+  }
+}
 
 const useComplaintsOption = () => ({
   tooltip: { trigger: 'axis' },
@@ -1174,7 +1296,7 @@ const incomeOpt = computed(() => useIncomeCompareOption(incomeSeries.value))
 const unitHeatOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖热单耗'))
 const unitElecOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖电单耗'))
 const unitWaterOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖水单耗'))
-const coalStdOpt = useCoalStdOption()
+const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
 const complaintOpt = useComplaintsOption()
 const coalStockOpt = useCoalStockOption()
 
@@ -1204,12 +1326,25 @@ const marginTableData = computed(() =>
 )
 
 const coalStdColumns = ['单位', '本期', '同期', '差值']
-const coalStdTableData = coalStdOrgs.map((org, index) => [
-  org,
-  coalStdNow[index],
-  coalStdPeer[index],
-  coalStdNow[index] - coalStdPeer[index],
-])
+const coalStdTableData = computed(() => {
+  const categories = coalStdSeries.value.categories
+  const current = coalStdSeries.value.current
+  const peer = coalStdSeries.value.peer
+  return categories.map((org, index) => {
+    const currentVal = current[index]
+    const peerVal = peer[index]
+    const diff =
+      Number.isFinite(currentVal) && Number.isFinite(peerVal)
+        ? Number((currentVal - peerVal).toFixed(1))
+        : null
+    return [
+      org,
+      Number.isFinite(currentVal) ? Number(currentVal.toFixed(1)) : null,
+      Number.isFinite(peerVal) ? Number(peerVal.toFixed(1)) : null,
+      diff,
+    ]
+  })
+})
 
 const complaintColumns = ['单位', '当日投诉量']
 const complaintTableData = complaintsNow.map((item) => [item.org, item.count])
@@ -1236,7 +1371,11 @@ const marginHeadline = computed(() => {
   const value = groupEntry?.marginCmpCoal
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 })
-const coalStdHeadline = coalStdNow[0] ?? 0
+const coalStdHeadline = computed(() => {
+  const current = coalStdSeries.value.current
+  const value = Array.isArray(current) ? current[0] : null
+  return Number.isFinite(value) ? Number(value.toFixed(1)) : 0
+})
 const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 
 const chartPalette = ref(['#2563eb', '#38bdf8', '#10b981', '#f97316', '#facc15', '#ec4899'])
@@ -1402,13 +1541,13 @@ onMounted(() => {
 .summary-card {
   position: relative;
   overflow: hidden;
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 18px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   color: #ffffff;
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
 }
 
 .summary-card::after {
@@ -1421,14 +1560,14 @@ onMounted(() => {
 
 .summary-card__icon {
   z-index: 1;
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 20px;
   color: inherit;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
 }
@@ -1475,7 +1614,7 @@ onMounted(() => {
 }
 
 .summary-card__value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
 }
 
@@ -1499,12 +1638,19 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr;
   gap: 24px;
+  grid-auto-rows: minmax(340px, auto);
+  align-items: stretch;
 }
 
 .dashboard-grid__item {
   min-width: 0;
   position: relative;
-  z-index: 0;
+  z-index: auto;
+  display: flex;
+}
+
+.dashboard-grid__item > .dashboard-card {
+  flex: 1 1 auto;
 }
 
 @media (min-width: 1024px) {
@@ -1543,14 +1689,15 @@ onMounted(() => {
 
 .dashboard-card {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.28);
-  box-shadow: 0 22px 36px rgba(15, 23, 42, 0.12);
-  padding: 24px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
   height: 100%;
+  min-height: 100%;
 }
 
 .dashboard-card__header {
@@ -1595,6 +1742,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
 }
 
 .dashboard-chart {
