@@ -78,7 +78,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
-        <Card title="单耗对比" subtitle="热/电/水单耗" extra="单位：每单位供暖量">
+        <Card title="单耗对比" subtitle="热/电/水单耗（本期 vs 同期）" extra="单位：见图例">
           <EChart :option="unitOpt" height="260px" />
         </Card>
       </section>
@@ -550,9 +550,28 @@ const roundOrZero = (value) => {
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 }
 
+const roundOrNull = (value, digits = 2) => {
+  const normalized = normalizeMetricValue(value)
+  return Number.isFinite(normalized) ? Number(normalized.toFixed(digits)) : null
+}
+
 const formatIncomeValue = (value) => {
   if (!Number.isFinite(value)) return '—'
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const unitMetrics = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
+const unitFallbackOrgs = ['主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+const unitFallbackSeries = unitFallbackOrgs.map((org, index) => ({
+  org,
+  heat: 0.95 + index * 0.03,
+  elec: 0.42 + index * 0.02,
+  water: 0.21 + index * 0.015,
+}))
+const unitFallbackUnits = {
+  '供暖热单耗': 'GJ/万㎡',
+  '供暖电单耗': 'kWh/万㎡',
+  '供暖水单耗': '吨/万㎡',
 }
 
 const marginSection = computed(() => {
@@ -641,16 +660,76 @@ const incomeSeries = computed(() => {
   }
 })
 
+const unitSection = computed(() => {
+  const section = dashboardData.sections?.['4.供暖单耗']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const unitCurrent = computed(() => {
+  const bucket = unitSection.value?.['本期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const unitPeer = computed(() => {
+  const bucket = unitSection.value?.['同期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const unitOrganizations = computed(() => {
+  const categories = []
+  const seen = new Set()
+  const appendFromBucket = (bucket) => {
+    if (!bucket || typeof bucket !== 'object') return
+    for (const key of Object.keys(bucket)) {
+      if (key === '计量单位') continue
+      if (!seen.has(key)) {
+        seen.add(key)
+        categories.push(key)
+      }
+    }
+  }
+  appendFromBucket(unitCurrent.value)
+  appendFromBucket(unitPeer.value)
+  return categories
+})
+
+const unitSeries = computed(() => {
+  const categories = unitOrganizations.value
+  const metrics = unitMetrics
+  const currentEntries = unitCurrent.value
+  const peerEntries = unitPeer.value
+  const units = unitSection.value?.['计量单位']
+  if (!categories.length) {
+    return {
+      categories: unitFallbackOrgs,
+      metrics,
+      current: [
+        unitFallbackSeries.map((item) => roundOrNull(item.heat)),
+        unitFallbackSeries.map((item) => roundOrNull(item.elec)),
+        unitFallbackSeries.map((item) => roundOrNull(item.water)),
+      ],
+      peer: metrics.map(() => unitFallbackOrgs.map(() => null)),
+      units: unitFallbackUnits,
+    }
+  }
+  const current = metrics.map((metric) =>
+    categories.map((org) => roundOrNull(currentEntries?.[org]?.[metric])),
+  )
+  const peer = metrics.map((metric) =>
+    categories.map((org) => roundOrNull(peerEntries?.[org]?.[metric])),
+  )
+  return {
+    categories,
+    metrics,
+    current,
+    peer,
+    units: units && typeof units === 'object' ? units : unitFallbackUnits,
+  }
+})
+
 // --- 模拟数据（后续可替换为后端数据源） ---
 
 const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-const orgs6 = ['主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-const unitHeat = orgs6.map((org, index) => ({
-  org,
-  heat: 0.95 + index * 0.03,
-  elec: 0.42 + index * 0.02,
-  water: 0.21 + index * 0.015,
-}))
 
 const coalStdOrgs = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdNow = [980, 420, 160, 180, 120, 100]
@@ -887,18 +966,142 @@ const useIncomeCompareOption = (seriesData) => {
   }
 }
 
-const useUnitConsumptionOption = () => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['热单耗', '电单耗', '水单耗'] },
-  grid: { left: 40, right: 20, top: 40, bottom: 60 },
-  xAxis: { type: 'category', data: orgs6 },
-  yAxis: { type: 'value', name: '单位/供暖量' },
-  series: [
-    { name: '热单耗', type: 'bar', data: unitHeat.map((item) => item.heat) },
-    { name: '电单耗', type: 'bar', data: unitHeat.map((item) => item.elec) },
-    { name: '水单耗', type: 'bar', data: unitHeat.map((item) => item.water) },
-  ],
-})
+const useUnitConsumptionOption = (seriesData) => {
+  const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
+  const metrics = Array.isArray(seriesData?.metrics) ? seriesData.metrics : []
+  const currentMatrix = Array.isArray(seriesData?.current) ? seriesData.current : []
+  const peerMatrix = Array.isArray(seriesData?.peer) ? seriesData.peer : []
+  const units = seriesData && typeof seriesData.units === 'object' ? seriesData.units : unitFallbackUnits
+
+  const legendData = []
+  const chartSeries = []
+  const currentColorMap = {
+    '供暖热单耗': '#2563eb',
+    '供暖电单耗': '#38bdf8',
+    '供暖水单耗': '#10b981',
+  }
+  const peerColorMap = {
+    '供暖热单耗': '#93c5fd',
+    '供暖电单耗': '#bae6fd',
+    '供暖水单耗': '#6ee7b7',
+  }
+
+  const resolveItemValue = (item) => {
+    if (!item) return Number.NaN
+    if (typeof item.value === 'number') return item.value
+    if (Array.isArray(item.value)) {
+      const candidate = item.value[item.value.length - 1]
+      return typeof candidate === 'number' ? candidate : Number.NaN
+    }
+    if (typeof item.data === 'number') return item.data
+    return Number.NaN
+  }
+
+  const formatLabelValue = (params) => {
+    const value = resolveItemValue(params)
+    return Number.isFinite(value) ? value.toFixed(2) : '—'
+  }
+
+  const tooltipFormatter = (params) => {
+    if (!Array.isArray(params) || !params.length) return ''
+    const axisLabel = params[0]?.axisValue ?? params[0]?.name ?? ''
+    const lines = [`<strong>${axisLabel}</strong>`]
+    params.forEach((item) => {
+      const rawName = typeof item.seriesName === 'string' ? item.seriesName : ''
+      const metricName = rawName.replace(/（本期）|（同期）/g, '')
+      const unitText = units?.[metricName] ? ` ${units[metricName]}` : ''
+      const resolved = resolveItemValue(item)
+      const numericValue = Number.isFinite(resolved) ? Number(resolved).toFixed(2) : '—'
+      const color = item.color || '#475569'
+      lines.push(
+        `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${rawName}：${numericValue}${unitText}`,
+      )
+    })
+    return lines.join('<br/>')
+  }
+
+  metrics.forEach((metric, index) => {
+    const currentLabel = `${metric}（本期）`
+    const peerLabel = `${metric}（同期）`
+    legendData.push(currentLabel, peerLabel)
+
+    const currentData =
+      Array.isArray(currentMatrix[index]) && currentMatrix[index].length
+        ? currentMatrix[index].map((value) => (Number.isFinite(value) ? value : null))
+        : categories.map(() => null)
+    const peerData =
+      Array.isArray(peerMatrix[index]) && peerMatrix[index].length
+        ? peerMatrix[index].map((value) => (Number.isFinite(value) ? value : null))
+        : categories.map(() => null)
+
+    chartSeries.push({
+      name: currentLabel,
+      type: 'bar',
+      barWidth: 14,
+      barCategoryGap: '45%',
+      barGap: '10%',
+      itemStyle: { color: currentColorMap[metric] || '#2563eb' },
+      data: currentData,
+      label: {
+        show: true,
+        position: 'top',
+        formatter: formatLabelValue,
+        color: '#0f172a',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        borderRadius: 6,
+        padding: [4, 6],
+      },
+      emphasis: { focus: 'series' },
+    })
+    chartSeries.push({
+      name: peerLabel,
+      type: 'bar',
+      barWidth: 14,
+      barCategoryGap: '45%',
+      barGap: '10%',
+      itemStyle: { color: peerColorMap[metric] || '#94a3b8' },
+      data: peerData,
+      label: {
+        show: true,
+        position: 'top',
+        formatter: formatLabelValue,
+        color: '#475569',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        borderRadius: 6,
+        padding: [4, 6],
+      },
+      emphasis: { focus: 'series' },
+    })
+  })
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: tooltipFormatter,
+    },
+    legend: {
+      data: legendData,
+      type: 'scroll',
+      top: 10,
+      itemWidth: 16,
+      itemHeight: 10,
+      icon: 'roundRect',
+    },
+    grid: { left: 40, right: 30, top: 70, bottom: 60 },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLabel: { interval: 0 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
+    series: chartSeries,
+  }
+}
 
 const useCoalStdOption = () => ({
   tooltip: { trigger: 'axis' },
@@ -944,7 +1147,7 @@ const useCoalStockOption = () => ({
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = computed(() => useMarginOption(marginSeries.value))
 const incomeOpt = computed(() => useIncomeCompareOption(incomeSeries.value))
-const unitOpt = useUnitConsumptionOption()
+const unitOpt = computed(() => useUnitConsumptionOption(unitSeries.value))
 const coalStdOpt = useCoalStdOption()
 const complaintOpt = useComplaintsOption()
 const coalStockOpt = useCoalStockOption()
