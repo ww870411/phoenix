@@ -864,18 +864,23 @@ const coalStockSeries = computed(() => {
 
   const stacksToUse = stacks.length ? stacks : coalStockFallbackStacks
   const companiesToUse = companies.length ? companies : coalStockFallbackCompanies
-  const matrix = stacksToUse.map((stack, stackIndex) =>
-    companiesToUse.map((company, companyIndex) => {
+  const matrix = stacksToUse.map((stack, stackIndex) => {
+    const fallbackRow =
+      coalStockFallbackMatrix[stackIndex] ?? companiesToUse.map(() => 0)
+    return companiesToUse.map((company, companyIndex) => {
       if (!companies.length) {
-        const fallbackRow = coalStockFallbackMatrix[stackIndex]
         const fallbackValue = Array.isArray(fallbackRow) ? fallbackRow[companyIndex] : 0
         return Number(fallbackValue) || 0
       }
       const raw = section?.[company]?.[stack]
       const numeric = normalizeMetricValue(raw)
-      return Number.isFinite(numeric) ? Number(numeric) : 0
-    }),
-  )
+      if (Number.isFinite(numeric)) {
+        return Number(numeric)
+      }
+      const fallbackValue = Array.isArray(fallbackRow) ? fallbackRow[companyIndex] : 0
+      return Number(fallbackValue) || 0
+    })
+  })
   const totals = companiesToUse.map((_, companyIndex) =>
     matrix.reduce((sum, stackRow) => {
       const value = stackRow?.[companyIndex]
@@ -1626,7 +1631,7 @@ const useCoalStockOption = (seriesPayload) => {
       {
         name: '合计',
         type: 'line',
-        data: totals.map((value) => (Number.isFinite(value) ? Number(value) : 0)),
+        data: (payload.totals || []).map((value) => (Number.isFinite(value) ? Number(value) : 0)),
         label: {
           show: true,
           position: 'top',

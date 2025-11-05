@@ -45,7 +45,7 @@
 
 本次动作：
 - 新增 `coalStockSection/coalStockSeries` 计算属性，从 `/dashboard` 第七段解析各公司“厂内存煤/港口存煤/在途煤炭”数值，空数据时回退至演示数据。
-- `useCoalStockOption` 支持动态数据并使用蓝/橙/绿等高对比调色盘，按返回公司与仓储类型组装堆叠柱图；`coalStockOpt` 改为 computed，使煤炭库存卡片随 `push_date` 自动刷新。
+- `useCoalStockOption` 支持动态数据并使用蓝/橙/绿等高对比调色盘，按返回公司与仓储类型组装堆叠柱图，同时叠加“合计”折线显示每根柱子的总量标签；`coalStockOpt` 改为 computed，使卡片随 `push_date` 自动刷新。
 - 卡片新增底部表格 `coalStockColumns/coalStockTableData`，在“单位 × 存储方式 + 合计”维度展示吨数，与柱状图保持一致。
 
 影响范围与回滚：
