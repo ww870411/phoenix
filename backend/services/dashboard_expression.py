@@ -479,6 +479,17 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 inventory_date = date.today()
             _fill_coal_inventory(session, coal_detail_section, inventory_date)
 
+        # 8. 供热分中心单耗明细（仅需本期）
+        branch_consumption_section = data.get("8.供热分中心单耗明细")
+        if isinstance(branch_consumption_section, dict):
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
         str(DASHBOARD_CONFIG_PATH.relative_to(DATA_ROOT))
@@ -551,3 +562,34 @@ def _fill_coal_inventory(
                     continue
                 total += resolve_value(company_name, storage_type)
             storage_map[storage_type] = total
+
+
+def _fill_heating_branch_consumption(
+    session,
+    section: Dict[str, Any],
+    push_date: str,
+    company_cn_to_code: Dict[str, str],
+    item_cn_to_code: Dict[str, str],
+) -> None:
+    """填充供热分中心单耗明细，按中心直接取 sum_basic_data 的本期数。"""
+    if not isinstance(section, dict):
+        return
+
+    source_table = str(section.get("数据来源") or "").strip()
+    if not source_table:
+        return
+
+    for center_name, metrics_map in section.items():
+        if center_name in {"数据来源", "查询结构", "计量单位"}:
+            continue
+        if not isinstance(metrics_map, dict):
+            continue
+        company_code = company_cn_to_code.get(str(center_name).strip(), str(center_name).strip())
+        if not company_code:
+            continue
+        metrics = _fetch_metrics_from_view(session, source_table, company_code, push_date)
+        for label, expr in list(metrics_map.items()):
+            expression = str(expr).strip() if isinstance(expr, str) else ""
+            target = expression or label
+            value = _evaluate_expression(metrics, target, item_cn_to_code, "value_biz_date")
+            metrics_map[label] = value

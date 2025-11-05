@@ -17,6 +17,23 @@
 1. 访问 `/api/v1/projects/daily_report_25_26/dashboard?show_date=YYYY-MM-DD`，确认各单位/仓储类型返回的 `value` 与数据库按煤种求和后的结果一致。
 2. 检查“集团全口径”各指标是否等于下方单位数值之和，与 `coal_inventory_data` 中同日数据比对。
 
+## 2025-11-08（供热分中心单耗明细接入）
+
+前置说明（降级留痕）：
+- 受 Serena 限制继续使用 `desktop-commander::read_file` + `apply_patch` 编辑 `backend/services/dashboard_expression.py`，若需回滚请恢复该文件。
+
+本次动作：
+- 新增 `_fill_heating_branch_consumption`，读取 `sum_basic_data` 视图中各供热中心的 `value_biz_date`，并按模板字典映射填充“8.供热分中心单耗明细”下的热、电、水三项单耗。
+- 在 `evaluate_dashboard` 中调用该函数，仅针对本期数据填充，保持“计量单位”配置原样传递。
+
+影响范围与回滚：
+- `/api/v1/projects/daily_report_25_26/dashboard` 现会返回供热中心单耗的实际数值；如需恢复旧行为，移除新增函数及调用即可。
+- 仅涉及数据呈现，不改动其他板块或数据库结构。
+
+验证建议：
+1. 调用上述接口并检查“8.供热分中心单耗明细”中各中心三项指标与 `sum_basic_data` 当日 `value_biz_date` 一致。
+2. 若某中心无数据，确认视图是否存在对应记录；必要时在模板中补充表达式或回退为 0。
+
 ## 2025-11-08（数据看板 API 初版）
 
 前置说明（降级留痕）：
