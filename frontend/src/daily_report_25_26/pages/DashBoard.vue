@@ -77,8 +77,23 @@
       </section>
       
       <section class="dashboard-grid__item dashboard-grid__item--complaint">
-        <Card title="投诉量" subtitle="当日省市平台服务投诉量" extra="单位：件">
-          <EChart :option="complaintOpt" height="300px" />
+        <Card
+          title="投诉量分项"
+          subtitle="本期与同期对比"
+          :extra="`单位：${complaintUnit || '件'}`"
+        >
+          <div class="complaint-charts">
+            <div
+              v-for="chart in complaintChartConfigs"
+              :key="chart.key"
+              class="complaint-charts__item"
+            >
+              <div class="complaint-charts__title">{{ chart.title }}</div>
+              <div class="complaint-charts__chart">
+                <EChart :option="chart.option" height="260px" />
+              </div>
+            </div>
+          </div>
           <div class="dashboard-table-wrapper dashboard-table-wrapper--small">
             <Table :columns="complaintColumns" :data="complaintTableData" />
           </div>
@@ -616,6 +631,10 @@ const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电
 const coalStdFallbackCurrent = Array(coalStdFallbackCategories.length).fill(0)
 const coalStdFallbackPeer = Array(coalStdFallbackCategories.length).fill(0)
 const complaintMetricOrder = ['当日省市平台服务投诉量', '当日净投诉量']
+const complaintMetricTitleMap = {
+  当日省市平台服务投诉量: '省市平台服务投诉量',
+  当日净投诉量: '净投诉量',
+}
 const complaintFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 
 const normalizeComplaintValue = (value) => {
@@ -771,43 +790,6 @@ const complaintCompanies = computed(() => {
     })
   })
   return list.length ? list : complaintFallbackCompanies
-})
-
-const complaintSeries = computed(() => {
-  const companies = complaintCompanies.value
-  const buckets = complaintBuckets.value
-  const phases = ['本期', '同期']
-  const colors = ['#2563eb', '#94a3b8', '#f97316', '#fb7185', '#0ea5e9', '#10b981']
-  const series = []
-  complaintMetricKeys.value.forEach((metric, metricIndex) => {
-    phases.forEach((phase, phaseIndex) => {
-      const values = companies.map((company) => normalizeComplaintValue(buckets[metric]?.[phase]?.[company]))
-      series.push({
-        name: `${metric}（${phase}）`,
-        metric,
-        phase,
-        data: values,
-        color: colors[(metricIndex * phases.length + phaseIndex) % colors.length],
-      })
-    })
-  })
-  if (!series.length) {
-    return {
-      companies: complaintFallbackCompanies,
-      series: complaintMetricOrder.flatMap((metric, metricIndex) =>
-        phases.map((phase, phaseIndex) => ({
-          name: `${metric}（${phase}）`,
-          metric,
-          phase,
-          data: complaintFallbackCompanies.map(() => 0),
-          color: ['#cbd5f5', '#ddeafe', '#fed7aa', '#fecdd3'][
-            (metricIndex * phases.length + phaseIndex) % 4
-          ],
-        })),
-      ),
-    }
-  }
-  return { companies, series }
 })
 
 const complaintColumns = computed(() => {
@@ -1545,47 +1527,43 @@ const useCoalStdOption = (seriesData) => {
   }
 }
 
-const useComplaintsOption = (seriesPayload, unitLabel) => {
-  const phaseGap = '15%'
-  const metricGap = '55%'
-  const payload = seriesPayload || {}
-  const categories = Array.isArray(payload.companies) && payload.companies.length
-    ? payload.companies
-    : complaintFallbackCompanies
-  const resolvedSeries = Array.isArray(payload.series) ? payload.series : []
-  const palette = ['#2563eb', '#16a34a', '#f97316', '#fb7185', '#0ea5e9', '#10b981', '#facc15']
-  const finalSeries = resolvedSeries.length
-    ? resolvedSeries
-    : complaintMetricOrder.flatMap((metric, metricIndex) =>
-        ['本期', '同期'].map((phase, phaseIndex) => ({
-          name: `${metric}（${phase}）`,
-          metric,
-          phase,
-          data: categories.map(() => 0),
-          color: palette[(metricIndex * 2 + phaseIndex) % palette.length],
-        })),
+const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) => {
+  const categories =
+    Array.isArray(companies) && companies.length ? companies : complaintFallbackCompanies
+
+  const resolveSeriesData = (phase) =>
+    categories.map((company) => {
+      const raw = buckets?.[metricKey]?.[phase]?.[company]
+      const value = normalizeComplaintValue(raw)
+      return Number.isFinite(value) ? value : 0
+    })
+
+  const currentData = resolveSeriesData('本期')
+  const peerData = resolveSeriesData('同期')
+
+  const tooltipFormatter = (params) => {
+    if (!Array.isArray(params) || !params.length) return ''
+    const axisLabel = params[0]?.axisValue ?? params[0]?.name ?? ''
+    const suffix = unitLabel ? unitLabel : ''
+    const lines = [`<strong>${axisLabel}</strong>`]
+    params.forEach((item) => {
+      const color = item.color || '#475569'
+      const resolved = Number.isFinite(item.value) ? item.value : '—'
+      lines.push(
+        `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${resolved}${suffix}`,
       )
+    })
+    return lines.join('<br/>')
+  }
 
   return {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params) => {
-        if (!Array.isArray(params) || !params.length) return ''
-        const axisLabel = params[0]?.axisValue ?? params[0]?.name ?? ''
-        const lines = [`<strong>${axisLabel}</strong>`]
-        params.forEach((item) => {
-          const color = item.color || '#475569'
-          const resolved = Number.isFinite(item.value) ? item.value : '—'
-          lines.push(
-            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${resolved}`,
-          )
-        })
-        return lines.join('<br/>')
-      },
+      formatter: tooltipFormatter,
     },
-    legend: { data: finalSeries.map((item) => item.name), bottom: 0 },
-    grid: { left: 40, right: 24, top: 40, bottom: 70 },
+    legend: { data: ['本期', '同期'], bottom: 0 },
+    grid: { left: 40, right: 24, top: 50, bottom: 60 },
     xAxis: {
       type: 'category',
       data: categories,
@@ -1599,49 +1577,49 @@ const useComplaintsOption = (seriesPayload, unitLabel) => {
       splitLine: { lineStyle: { type: 'dashed' } },
       axisLabel: { hideOverlap: true },
     },
-    series: (() => {
-  const seriesOptions = []
-  let previousMetric = null
-  finalSeries.forEach((item, index) => {
-    const isSameMetric = previousMetric === item.metric
-    const option = {
-      name: item.name,
-      type: 'bar',
-      barWidth: 16,
-      data: Array.isArray(item.data)
-        ? item.data.map((value) => (Number.isFinite(value) ? value : null))
-        : [],
-      itemStyle: {
-        color: item.phase === '同期' ? '#0ea5e9' : item.color || palette[index % palette.length],
-        ...(item.phase === '同期'
-          ? {
-              decal: {
-                symbol: 'rect',
-                dashArrayX: [1, 0],
-                dashArrayY: [4, 4],
-                rotation: Math.PI / 4,
-                color: 'rgba(14, 165, 233, 0.45)',
-              },
-            }
-          : {}),
+    series: [
+      {
+        name: '本期',
+        type: 'bar',
+        barWidth: 20,
+        data: currentData,
+        itemStyle: { color: '#2563eb' },
+        label: {
+          show: true,
+          position: 'top',
+          distance: 6,
+          color: '#0f172a',
+          formatter: ({ value }) => formatLabelNumber(value),
+        },
+        labelLayout: { moveOverlap: 'shiftY' },
+        emphasis: { focus: 'series' },
       },
-      label: {
-        show: true,
-        position: 'top',
-        distance: 6,
-        color: '#0f172a',
-        formatter: ({ value }) => formatLabelNumber(value),
+      {
+        name: '同期',
+        type: 'bar',
+        barWidth: 20,
+        data: peerData,
+        itemStyle: {
+          color: '#0ea5e9',
+          decal: {
+            symbol: 'rect',
+            dashArrayX: [1, 0],
+            dashArrayY: [4, 4],
+            rotation: Math.PI / 4,
+            color: 'rgba(14, 165, 233, 0.45)',
+          },
+        },
+        label: {
+          show: true,
+          position: 'top',
+          distance: 6,
+          color: '#0f172a',
+          formatter: ({ value }) => formatLabelNumber(value),
+        },
+        labelLayout: { moveOverlap: 'shiftY' },
+        emphasis: { focus: 'series' },
       },
-      labelLayout: { moveOverlap: 'shiftY' },
-      emphasis: { focus: 'series' },
-      barGap: isSameMetric ? phaseGap : metricGap,
-      ...(isSameMetric ? {} : { barCategoryGap: metricGap }),
-    }
-    seriesOptions.push(option)
-    previousMetric = item.metric
-  })
-      return seriesOptions
-    })(),
+    ],
   }
 }
 
@@ -1719,7 +1697,31 @@ const unitHeatOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '�
 const unitElecOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖电单耗'))
 const unitWaterOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖水单耗'))
 const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
-const complaintOpt = computed(() => useComplaintsOption(complaintSeries.value, complaintUnit.value))
+const complaintChartConfigs = computed(() => {
+  const companies = complaintCompanies.value
+  const buckets = complaintBuckets.value
+  const unitLabel = complaintUnit.value
+  const baseMetrics = complaintMetricKeys.value.length
+    ? [...complaintMetricKeys.value]
+    : [...complaintMetricOrder]
+  const selected = baseMetrics.slice(0, 2)
+  if (selected.length < 2) {
+    complaintMetricOrder.forEach((metric) => {
+      if (!selected.includes(metric)) {
+        selected.push(metric)
+      }
+      if (selected.length === 2) return
+    })
+  }
+  if (!selected.length) {
+    selected.push(complaintMetricOrder[0])
+  }
+  return selected.slice(0, 2).map((metric) => ({
+    key: metric,
+    title: complaintMetricTitleMap[metric] || metric,
+    option: useComplaintSingleOption(metric, { companies, buckets, unitLabel }),
+  }))
+})
 const coalStockOpt = computed(() => useCoalStockOption(coalStockSeries.value))
 
 // --- 表格列与数据 ---
@@ -2132,7 +2134,7 @@ onMounted(() => {
   }
 
   .dashboard-grid__item--income {
-    grid-column: span 6;
+    grid-column: span 4;
   }
 
   .dashboard-grid__item--unit {
@@ -2144,8 +2146,8 @@ onMounted(() => {
   }
 
   .dashboard-grid__item--complaint {
-    grid-column: span 6;
-    min-height: 320px;
+    grid-column: span 8;
+    min-height: 360px;
   }
 
   .dashboard-grid__item--stock {
@@ -2232,6 +2234,34 @@ onMounted(() => {
 
 .dashboard-table-wrapper--small .dashboard-table table {
   font-size: 11px;
+}
+
+.complaint-charts {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .complaint-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.complaint-charts__item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.complaint-charts__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.complaint-charts__chart {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .dashboard-table-wrapper--small .dashboard-table th,
