@@ -591,13 +591,52 @@ const marginSeries = computed(() => {
   })
 })
 
+const incomeSection = computed(() => {
+  const section = dashboardData.sections?.['3.集团全口径收入明细']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const incomeCurrent = computed(() => {
+  const bucket = incomeSection.value?.['本期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const incomePeer = computed(() => {
+  const bucket = incomeSection.value?.['同期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const incomeSeries = computed(() => {
+  const categories = []
+  const seen = new Set()
+  const currentEntries = incomeCurrent.value
+  const peerEntries = incomePeer.value
+  if (currentEntries && typeof currentEntries === 'object') {
+    for (const key of Object.keys(currentEntries)) {
+      if (!seen.has(key)) {
+        seen.add(key)
+        categories.push(key)
+      }
+    }
+  }
+  if (peerEntries && typeof peerEntries === 'object') {
+    for (const key of Object.keys(peerEntries)) {
+      if (!seen.has(key)) {
+        seen.add(key)
+        categories.push(key)
+      }
+    }
+  }
+  return {
+    categories,
+    current: categories.map((label) => normalizeMetricValue(currentEntries?.[label])),
+    peer: categories.map((label) => normalizeMetricValue(peerEntries?.[label])),
+  }
+})
+
 // --- 模拟数据（后续可替换为后端数据源） ---
 
 const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-const incomeCat = ['暖收入', '售电收入', '售高温水收入', '售汽收入']
-const incomeNow = [600, 240, 120, 80]
-const incomePeer = [560, 260, 110, 70]
-
 const orgs6 = ['主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 const unitHeat = orgs6.map((org, index) => ({
   org,
@@ -678,17 +717,22 @@ const useMarginOption = (seriesData) => {
   }
 }
 
-const useIncomeCompareOption = () => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['当期', '同期'] },
-  grid: { left: 40, right: 20, top: 40, bottom: 40 },
-  xAxis: { type: 'category', data: incomeCat },
-  yAxis: { type: 'value', name: '万元' },
-  series: [
-    { name: '当期', type: 'bar', data: incomeNow },
-    { name: '同期', type: 'bar', data: incomePeer },
-  ],
-})
+const useIncomeCompareOption = (seriesData) => {
+  const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
+  const current = Array.isArray(seriesData?.current) ? seriesData.current : []
+  const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : []
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['当期', '同期'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 40 },
+    xAxis: { type: 'category', data: categories },
+    yAxis: { type: 'value', name: '万元' },
+    series: [
+      { name: '当期', type: 'bar', data: current.map((value) => roundOrZero(value)) },
+      { name: '同期', type: 'bar', data: peer.map((value) => roundOrZero(value)) },
+    ],
+  }
+}
 
 const useUnitConsumptionOption = () => ({
   tooltip: { trigger: 'axis' },
@@ -746,7 +790,7 @@ const useCoalStockOption = () => ({
 // --- 图表 option 实例 ---
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = computed(() => useMarginOption(marginSeries.value))
-const incomeOpt = useIncomeCompareOption()
+const incomeOpt = computed(() => useIncomeCompareOption(incomeSeries.value))
 const unitOpt = useUnitConsumptionOption()
 const coalStdOpt = useCoalStdOption()
 const complaintOpt = useComplaintsOption()
