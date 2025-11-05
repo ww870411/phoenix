@@ -25,6 +25,7 @@ const routes = [
   {
     path: '/projects/:projectKey/pages/:pageKey/dashboard',
     component: () => import('../daily_report_25_26/pages/DashBoard.vue'),
+    alias: '/dashboard'
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',
@@ -56,7 +57,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.bootstrap()
-  if (to.path !== '/login' && !auth.isAuthenticated) {
+  if (to.path !== '/login' && to.path !== '/dashboard' && !auth.isAuthenticated) {
     return '/login'
   }
   if (to.path === '/login' && auth.isAuthenticated) {

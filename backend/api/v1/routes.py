@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from backend.services.auth_manager import AuthSession, get_current_session
 from .auth import router as auth_router
-from .daily_report_25_26 import router as project_router
+from .daily_report_25_26 import router as project_router, public_router as public_project_router
 
 
 router = APIRouter()
@@ -192,3 +192,4 @@ router.include_router(auth_router, prefix="/auth")
 
 # 统一项目前缀：/api/v1/projects/daily_report_25_26
 router.include_router(project_router, prefix="/projects/daily_report_25_26")
+router.include_router(public_project_router, prefix="/projects/daily_report_25_26")

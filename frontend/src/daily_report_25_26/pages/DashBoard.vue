@@ -14,6 +14,7 @@
           <span class="dashboard-header__date-hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
           <span class="dashboard-header__date-hint" v-else>当前：regular</span>
         </label>
+        <button class="pdf-download-btn" @click="downloadPDF">下载PDF</button>
       </div>
     </header>
 
@@ -21,7 +22,7 @@
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">平均气温（过去3天+当日+3天预报）</div>
+          <div class="summary-card__label">平均气温（本日）</div>
           <div class="summary-card__value">{{ averageTemp }}℃</div>
         </div>
       </div>
@@ -51,7 +52,7 @@
     <main class="dashboard-grid">
       <section class="dashboard-grid__item dashboard-grid__item--temp">
         <Card title="气温变化情况（前后3日窗口，含同期）" subtitle="平均气温" extra="单位：℃">
-          <EChart :option="tempOpt" height="300px" />
+          <EChart :option="tempOpt" height="280px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="temperatureColumns" :data="temperatureTableData" />
           </div>
@@ -76,7 +77,7 @@
       <section class="dashboard-grid__item dashboard-grid__item--complaint">
         <Card title="投诉量" subtitle="当日省市平台服务投诉量" extra="单位：件">
           <EChart :option="complaintOpt" height="300px" />
-          <div class="dashboard-table-wrapper">
+          <div class="dashboard-table-wrapper dashboard-table-wrapper--small">
             <Table :columns="complaintColumns" :data="complaintTableData" />
           </div>
         </Card>
@@ -122,7 +123,7 @@
     </main>
 
     <footer class="dashboard-footer">
-      本页面为 ECharts 演示框架：可无缝替换为后端 API / 视图数据（如 average_temperature_data、sum_coal_inventory_data 等）。
+      大连洁净能源集团有限公司 生产日报系统
     </footer>
   </div>
 </template>
@@ -584,11 +585,11 @@ const formatIncomeValue = (value) => {
 
 const unitMetrics = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
 const unitFallbackOrgs = ['主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-const unitFallbackSeries = unitFallbackOrgs.map((org, index) => ({
+const unitFallbackSeries = unitFallbackOrgs.map((org) => ({
   org,
-  heat: 0.95 + index * 0.03,
-  elec: 0.42 + index * 0.02,
-  water: 0.21 + index * 0.015,
+  heat: 0,
+  elec: 0,
+  water: 0,
 }))
 const unitFallbackUnits = {
   '供暖热单耗': 'GJ/万㎡',
@@ -601,8 +602,8 @@ const unitFallbackMatrix = {
   '供暖水单耗': unitFallbackSeries.map((item) => item.water),
 }
 const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
-const coalStdFallbackCurrent = [980, 420, 160, 180, 120, 100]
-const coalStdFallbackPeer = [1020, 440, 150, 190, 130, 90]
+const coalStdFallbackCurrent = Array(coalStdFallbackCategories.length).fill(0)
+const coalStdFallbackPeer = Array(coalStdFallbackCategories.length).fill(0)
 const complaintMetricOrder = ['当日省市平台服务投诉量', '当日净投诉量']
 const complaintFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 
@@ -1040,22 +1041,10 @@ const coalStdSeries = computed(() => {
 
 // --- 模拟数据（后续可替换为后端数据源） ---
 
-const stockOrgs = ['北海热电厂', '香海热电厂', '金州热电', '北方热电', '金普热电', '庄河环海']
-const stockData = stockOrgs.map((org, index) => ({
-  org,
-  inPlant: 30000 - index * 2000,
-  inPort: 10000 - index * 800,
-  inTransit: 6000 - index * 500,
-}))
 const coalStockFallbackStacks = ['厂内存煤', '港口存煤', '在途煤炭']
-const coalStockFallbackCompanies = stockOrgs
-const coalStockFallbackMatrix = coalStockFallbackStacks.map((stack) =>
-  stockData.map((item) => {
-    if (stack === '厂内存煤') return item.inPlant
-    if (stack === '港口存煤') return item.inPort
-    if (stack === '在途煤炭') return item.inTransit
-    return 0
-  }),
+const coalStockFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
+const coalStockFallbackMatrix = coalStockFallbackStacks.map(() =>
+  coalStockFallbackCompanies.map(() => 0),
 )
 
 // --- 图表配置构造 ---
@@ -1437,6 +1426,9 @@ const useCoalStdOption = (seriesData) => {
     return Number(value).toFixed(1)
   }
 
+  const phaseGap = '15%'
+  const metricGap = '55%'
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1514,12 +1506,14 @@ const useCoalStdOption = (seriesData) => {
 }
 
 const useComplaintsOption = (seriesPayload, unitLabel) => {
+  const phaseGap = '15%'
+  const metricGap = '55%'
   const payload = seriesPayload || {}
   const categories = Array.isArray(payload.companies) && payload.companies.length
     ? payload.companies
     : complaintFallbackCompanies
   const resolvedSeries = Array.isArray(payload.series) ? payload.series : []
-  const palette = ['#2563eb', '#94a3b8', '#f97316', '#fb7185', '#0ea5e9', '#10b981', '#facc15']
+  const palette = ['#2563eb', '#16a34a', '#f97316', '#fb7185', '#0ea5e9', '#10b981', '#facc15']
   const finalSeries = resolvedSeries.length
     ? resolvedSeries
     : complaintMetricOrder.flatMap((metric, metricIndex) =>
@@ -1565,14 +1559,32 @@ const useComplaintsOption = (seriesPayload, unitLabel) => {
       splitLine: { lineStyle: { type: 'dashed' } },
       axisLabel: { hideOverlap: true },
     },
-    series: finalSeries.map((item, index) => ({
+    series: (() => {
+  const seriesOptions = []
+  let previousMetric = null
+  finalSeries.forEach((item, index) => {
+    const isSameMetric = previousMetric === item.metric
+    const option = {
       name: item.name,
       type: 'bar',
-      barWidth: 18,
+      barWidth: 16,
       data: Array.isArray(item.data)
         ? item.data.map((value) => (Number.isFinite(value) ? value : null))
         : [],
-      itemStyle: { color: item.color || palette[index % palette.length] },
+      itemStyle: {
+        color: item.phase === '同期' ? '#0ea5e9' : item.color || palette[index % palette.length],
+        ...(item.phase === '同期'
+          ? {
+              decal: {
+                symbol: 'rect',
+                dashArrayX: [1, 0],
+                dashArrayY: [4, 4],
+                rotation: Math.PI / 4,
+                color: 'rgba(14, 165, 233, 0.45)',
+              },
+            }
+          : {}),
+      },
       label: {
         show: true,
         position: 'top',
@@ -1582,7 +1594,14 @@ const useComplaintsOption = (seriesPayload, unitLabel) => {
       },
       labelLayout: { moveOverlap: 'shiftY' },
       emphasis: { focus: 'series' },
-    })),
+      barGap: isSameMetric ? phaseGap : metricGap,
+      ...(isSameMetric ? {} : { barCategoryGap: metricGap }),
+    }
+    seriesOptions.push(option)
+    previousMetric = item.metric
+  })
+      return seriesOptions
+    })(),
   }
 }
 
@@ -1709,6 +1728,34 @@ const coalStdTableData = computed(() => {
   })
 })
 
+
+const downloadPDF = () => {
+  const { jsPDF } = window.jspdf;
+  const dashboard = document.querySelector('.dashboard-page');
+  html2canvas(dashboard, {
+    useCORS: true,
+    scale: 2,
+    onclone: (document) => {
+      // Hide the download button in the cloned document
+      const btn = document.querySelector('.pdf-download-btn');
+      if (btn) {
+        btn.style.display = 'none';
+      }
+    }
+  }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+    const imgX = (pdfWidth - imgWidth * ratio) / 2;
+    const imgY = 0;
+    pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio, undefined, 'FAST');
+    pdf.save(`生产日报-看板-${effectiveBizDate.value || bizDateInput.value}.pdf`);
+  });
+};
 
 // --- 顶部指标展示 ---
 const averageTemp = computed(() => {
@@ -2130,6 +2177,15 @@ onMounted(() => {
   overflow: auto;
 }
 
+.dashboard-table-wrapper--small .dashboard-table table {
+  font-size: 12px;
+}
+
+.dashboard-table-wrapper--small .dashboard-table th,
+.dashboard-table-wrapper--small .dashboard-table td {
+  padding: 10px 14px;
+}
+
 .dashboard-table {
   width: 100%;
   display: block;
@@ -2256,5 +2312,20 @@ onMounted(() => {
   .dashboard-grid__item--table { grid-column: 1 / -1; }
 }
 /* === end patch === */
+
+.pdf-download-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.pdf-download-btn:hover {
+  background-color: #1d4ed8;
+}
 
 </style>

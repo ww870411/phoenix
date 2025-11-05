@@ -1472,6 +1472,7 @@ def _collect_catalog(data_file: Optional[SysPath] = None) -> Dict[str, Dict[str,
 
 
 router = APIRouter(dependencies=[Depends(get_current_session)])
+public_router = APIRouter()
 
 
 def _collect_seed_units() -> List[str]:
@@ -1615,7 +1616,7 @@ def ping_daily_report():
 from backend.services.dashboard_expression import evaluate_dashboard
 
 
-@router.get(
+@public_router.get(
     "/dashboard",
     summary="获取数据看板配置数据",
     tags=["daily_report_25_26"],
