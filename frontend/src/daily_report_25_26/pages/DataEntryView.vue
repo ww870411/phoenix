@@ -3,6 +3,16 @@
     <AppHeader />
     <div class="container">
     <Breadcrumbs :items="breadcrumbItems" class="breadcrumb-spacing" />
+    <transition name="submit-feedback-fade">
+      <div
+        v-if="submitFeedback.visible"
+        :class="['submit-feedback', `submit-feedback--${submitFeedback.type}`]"
+        role="status"
+        aria-live="polite"
+      >
+        {{ submitFeedback.message }}
+      </div>
+    </transition>
     <header class="topbar">
       <div style="display:flex;flex-direction:column;gap:6px;">
         <h2>数据填报</h2>
@@ -15,7 +25,7 @@
           <input type="date" v-model="bizDate" />
         </label>
         <button class="btn ghost" type="button" @click="reloadTemplate">重载模板</button>
-        <button class="btn primary" type="button" :disabled="submitDisabled" @click="onSubmit">提交</button>
+        <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">提交</button>
       </div>
     </header>
 
@@ -48,7 +58,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter, useRoute } from 'vue-router'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getTemplate, queryData, submitData } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -168,6 +178,13 @@ const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null
 const submitTime = ref('');
 const linkageMap = ref(new Map());
 let isApplyingLinkage = false;
+const isSubmitting = ref(false);
+const submitFeedback = reactive({
+  visible: false,
+  type: 'success',
+  message: '',
+});
+let submitFeedbackTimer = null;
 
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
@@ -177,6 +194,7 @@ const readOnlyThreshold = ref(1);
 
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
 const submitDisabled = computed(() => isReadOnlyForDate.value);
+const submitButtonDisabled = computed(() => submitDisabled.value || isSubmitting.value);
 
 watch(
   () => isReadOnlyForDate.value,
@@ -194,6 +212,20 @@ function cloneDictValue(value) {
     try { return JSON.parse(JSON.stringify(value)); } catch (err) { return value; }
   }
   return value;
+}
+
+function showSubmitFeedback(type, message) {
+  if (submitFeedbackTimer !== null) {
+    clearTimeout(submitFeedbackTimer);
+    submitFeedbackTimer = null;
+  }
+  submitFeedback.type = type;
+  submitFeedback.message = message;
+  submitFeedback.visible = true;
+  submitFeedbackTimer = window.setTimeout(() => {
+    submitFeedback.visible = false;
+    submitFeedbackTimer = null;
+  }, 3200);
 }
 
 function normalizeDictPayload(raw) {
@@ -613,6 +645,9 @@ async function onSubmit() {
     window.alert('所选日期仅支持查看，不能提交修改。');
     return;
   }
+  if (isSubmitting.value) {
+    return;
+  }
   let submissionData;
   if (templateType.value === 'crosstab') {
     submissionData = handleSubmitCrosstab();
@@ -650,8 +685,18 @@ async function onSubmit() {
     payload.company_dict = cloneDictValue(dictBundle.companyPrimary);
   }
 
-  await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
-  submitTime.value = currentSubmitTime;
+  isSubmitting.value = true;
+  try {
+    await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
+    submitTime.value = currentSubmitTime;
+    showSubmitFeedback('success', '提交成功，数据已入库。');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[data-entry] 提交失败', message);
+    showSubmitFeedback('error', `提交失败：${message || '请稍后重试'}`);
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 
 // --- RevoGrid 事件处理 ---
@@ -850,6 +895,12 @@ watch(
   }
 )
 
+onBeforeUnmount(() => {
+  if (submitFeedbackTimer !== null) {
+    clearTimeout(submitFeedbackTimer);
+    submitFeedbackTimer = null;
+  }
+});
 </script>
 
 <style scoped>
@@ -857,4 +908,11 @@ watch(
 .date-group input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
+.submit-feedback { margin: 0 auto 20px; padding: 14px 24px; border-radius: 16px; font-weight: 600; font-size: 14px; line-height: 1.55; display: flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid rgba(148, 163, 184, 0.28); box-shadow: none; width: min(100%, 620px); }
+.submit-feedback--success { background: rgba(187, 247, 208, 0.9); color: #0f5132; border-color: rgba(34, 197, 94, 0.45); }
+.submit-feedback--error { background: rgba(254, 226, 226, 0.92); color: #7f1d1d; border-color: rgba(248, 113, 113, 0.45); }
+.submit-feedback-fade-enter-active,
+.submit-feedback-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.submit-feedback-fade-enter-from,
+.submit-feedback-fade-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

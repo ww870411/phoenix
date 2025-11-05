@@ -18,6 +18,8 @@
       </div>
     </header>
 
+    <div v-if="isLoading" class="dashboard-loading-hint">数据载入中，请稍候…</div>
+
     <section class="dashboard-summary">
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
@@ -417,6 +419,8 @@ const effectiveBizDate = computed(() => {
 
 const projectKey = 'daily_report_25_26'
 let suppressDashboardWatch = false
+let activeDashboardRequests = 0
+const isLoading = ref(false)
 
 const dashboardData = reactive({
   meta: {
@@ -429,6 +433,9 @@ const dashboardData = reactive({
 })
 
 async function loadDashboardData(showDate = '') {
+  suppressDashboardWatch = true
+  activeDashboardRequests += 1
+  isLoading.value = true
   suppressDashboardWatch = true
   try {
     const payload = await getDashboardData(projectKey, { showDate })
@@ -462,7 +469,11 @@ async function loadDashboardData(showDate = '') {
       bizDateInput.value = defaultBizDate
     }
   } finally {
-    suppressDashboardWatch = false
+    activeDashboardRequests = Math.max(activeDashboardRequests - 1, 0)
+    suppressDashboardWatch = activeDashboardRequests > 0
+    if (activeDashboardRequests === 0) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -1960,6 +1971,19 @@ onMounted(() => {
   margin-bottom: 32px;
   position: relative;
   z-index: 1;
+}
+
+.dashboard-loading-hint {
+  margin: 16px 0 32px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.55);
+  background: rgba(248, 250, 252, 0.95);
+  color: #0f172a;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 @media (min-width: 640px) {
