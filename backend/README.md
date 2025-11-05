@@ -7,6 +7,13 @@
 - 影响：后端 `/template`、`/submit`、`/query` 等既有接口无变动；待 `/dashboard` API 实现后再结合日期参数返回数据。
 - 下一步：规划 `/dashboard` 接口时，可考虑支持 `biz_date` 与可选 `trace` 参数，以便前端直接调用。
 
+## 会话小结（2025-11-08 数据看板煤炭库存聚合修正）
+
+- 状态：`services/dashboard_expression.py` 的 `_fill_coal_inventory` 现按 `company_cn + storage_type_cn` 聚合当日 `coal_type` 明细，避免多条记录互相覆盖导致返回 0。
+- 改动：构建库存缓存时对同一仓储类型累计求和，并对空值判空处理；模板中的集团合计表达式继续基于聚合结果执行逐公司累加。
+- 影响：`GET /api/v1/projects/daily_report_25_26/dashboard` 的“7.煤炭库存明细”模块开始返回实际库存合计数值；如需回滚，请恢复该函数旧版赋值方式。
+- 下一步：可在后续版本补充单元测试，确保不同煤种/仓储组合的聚合逻辑长期稳定；如需增加同期或同比展示，可在模板扩展对应字段并沿用现有求和策略。
+
 ## 会话小结（2025-11-08 数据看板 API 初版）
 
 - 状态：新增 `GET /api/v1/projects/daily_report_25_26/dashboard` 接口，支持 `show_date` 查询参数（默认空字符串）。
