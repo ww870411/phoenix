@@ -28,6 +28,7 @@
 - 投诉量柱图对“同期”系列附加斜线 `decal` 样式并调成蓝绿色，同时通过 `barGap`/`barCategoryGap` 拆分每个指标组，使本期/同期成对展示且不同指标间有明显留白。
 - 删除页面残留的演示数值（煤耗、单耗、库存等 fallback 仅保留结构，默认填 0），确保外观不再显示 980 吨等示例数据。
 - 投诉量表格字体缩小至 11px，并将所有柱状图的“同期”系列统一使用亮蓝斜线空心样式，便于快速区分。
+- 权限调整：`backend_data/auth/permissions.json` 中 `ZhuChengQu_admin` 的 `page_access` 新增 `dashboard`，允许主城区管理员访问数据看板。
 
 影响范围与回滚：
 - `/api/v1/projects/daily_report_25_26/dashboard` 返回的投诉板块现包含两个指标、每指标下的公司字典；如需回退，移除 `_fill_complaint_section` 并把 `evaluate_dashboard` 恢复为 `_fill_simple_metric` 版本即可。

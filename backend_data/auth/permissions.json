@@ -41,7 +41,7 @@
     },
     "ZhuChengQu_admin": {
       "hierarchy": 80,
-      "page_access": ["data_show", "data_approval", "data_entry"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry"],
       "sheet_rules": {
         "data_show": {
           "mode": "explicit",
