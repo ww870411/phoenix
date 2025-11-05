@@ -488,17 +488,40 @@ const stockData = stockOrgs.map((org, index) => ({
 }))
 
 // --- 图表配置构造 ---
-const useTempOption = (series) => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['当期', '同期'] },
-  grid: { left: 40, right: 20, top: 40, bottom: 40 },
-  xAxis: { type: 'category', data: series.labels },
-  yAxis: { type: 'value', name: '℃' },
-  series: [
-    { name: '当期', type: 'line', smooth: true, data: series.mainChart },
-    { name: '同期', type: 'line', smooth: true, data: series.peerChart },
-  ],
-})
+const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
+
+const useTempOption = (series, highlightDate) => {
+  const highlightExists = highlightDate && series.labels.includes(highlightDate)
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['当期', '同期'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 40 },
+    xAxis: { type: 'category', data: series.labels },
+    yAxis: { type: 'value', name: '℃' },
+    series: [
+      {
+        name: '当期',
+        type: 'line',
+        smooth: true,
+        data: series.mainChart,
+        markLine: highlightExists
+          ? {
+              symbol: 'none',
+              lineStyle: { type: 'dashed', color: '#f59e0b' },
+              label: {
+                show: true,
+                position: 'end',
+                formatter: '业务日期',
+                color: '#f59e0b',
+              },
+              data: [{ xAxis: highlightDate }],
+            }
+          : undefined,
+      },
+      { name: '同期', type: 'line', smooth: true, data: series.peerChart },
+    ],
+  }
+}
 
 const useMarginOption = () => ({
   tooltip: { trigger: 'axis' },
@@ -580,7 +603,7 @@ const useCoalStockOption = () => ({
 })
 
 // --- 图表 option 实例 ---
-const tempOpt = computed(() => useTempOption(temperatureSeries.value))
+const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = useMarginOption()
 const incomeOpt = useIncomeCompareOption()
 const unitOpt = useUnitConsumptionOption()
