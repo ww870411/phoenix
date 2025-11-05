@@ -1237,6 +1237,7 @@ const useIncomeCompareOption = (seriesData) => {
         type: 'bar',
         barWidth: 26,
         data: current.map((value) => (Number.isFinite(value) ? value : 0)),
+        itemStyle: { color: '#2563eb' },
         label: {
           show: true,
           position: 'top',
@@ -1254,6 +1255,16 @@ const useIncomeCompareOption = (seriesData) => {
         type: 'bar',
         barWidth: 26,
         data: peer.map((value) => (Number.isFinite(value) ? value : 0)),
+        itemStyle: {
+          color: '#0ea5e9',
+          decal: {
+            symbol: 'rect',
+            dashArrayX: [1, 0],
+            dashArrayY: [4, 4],
+            rotation: Math.PI / 4,
+            color: 'rgba(14, 165, 233, 0.45)',
+          },
+        },
         label: {
           show: true,
           position: 'top',
@@ -1369,7 +1380,16 @@ metricsToRender.forEach((metric) => {
       barWidth: 18,
       barCategoryGap: '40%',
       barGap: '20%',
-      itemStyle: { color: peerColorMap[metric] || '#94a3b8' },
+      itemStyle: {
+        color: '#0ea5e9',
+        decal: {
+          symbol: 'rect',
+          dashArrayX: [1, 0],
+          dashArrayY: [4, 4],
+          rotation: Math.PI / 4,
+          color: 'rgba(14, 165, 233, 0.45)',
+        },
+      },
       data: peerData,
       label: {
         show: true,
@@ -1487,7 +1507,16 @@ const useCoalStdOption = (seriesData) => {
         type: 'bar',
         barWidth: 18,
         data: peer.map((value) => (Number.isFinite(value) ? value : null)),
-        itemStyle: { color: '#94a3b8' },
+        itemStyle: {
+          color: '#0ea5e9',
+          decal: {
+            symbol: 'rect',
+            dashArrayX: [1, 0],
+            dashArrayY: [4, 4],
+            rotation: Math.PI / 4,
+            color: 'rgba(14, 165, 233, 0.45)',
+          },
+        },
         label: {
           show: true,
           position: 'top',
@@ -2178,12 +2207,12 @@ onMounted(() => {
 }
 
 .dashboard-table-wrapper--small .dashboard-table table {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .dashboard-table-wrapper--small .dashboard-table th,
 .dashboard-table-wrapper--small .dashboard-table td {
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .dashboard-table {
