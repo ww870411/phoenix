@@ -192,6 +192,21 @@ const Table = defineComponent({
       textAlign: 'center',
       verticalAlign: 'middle',
     }
+    const normalizeRow = (row, index) => {
+      if (Array.isArray(row)) {
+        return { key: index, cells: row, meta: {} }
+      }
+      if (row && typeof row === 'object') {
+        const cells = Array.isArray(row.value) ? row.value : []
+        const meta =
+          row.meta && typeof row.meta === 'object'
+            ? row.meta
+            : {}
+        const key = row.key ?? meta.key ?? index
+        return { key, cells, meta }
+      }
+      return { key: index, cells: [], meta: {} }
+    }
 
     return () =>
       h(
@@ -228,11 +243,17 @@ const Table = defineComponent({
             ? h(
                 'tbody',
                 null,
-                props.data.map((row, rowIndex) =>
-                  h(
+                props.data.map((row, rowIndex) => {
+                  const normalized = normalizeRow(row, rowIndex)
+                  return h(
                     'tr',
-                    { key: rowIndex },
-                    row.map((cell, cellIndex) => {
+                    {
+                      key: normalized.key,
+                      class: {
+                        'dashboard-table__row--highlight': Boolean(normalized.meta.highlight),
+                      },
+                    },
+                    normalized.cells.map((cell, cellIndex) => {
                       const numeric = isNumericValue(cell) && cell !== ''
                       const display =
                         numeric && typeof cell === 'number'
@@ -260,8 +281,8 @@ const Table = defineComponent({
                         display,
                       )
                     }),
-                  ),
-                ),
+                  )
+                }),
               )
             : h('tbody', null, [
                 h('tr', null, [
@@ -458,6 +479,18 @@ const calcAverageFromList = (values) => {
   return Number((sum / numbers.length).toFixed(2))
 }
 
+const normalizeDateKey = (value) => {
+  if (!value) return ''
+  const str = String(value)
+  if (str.includes('T')) {
+    return str.split('T')[0]
+  }
+  if (str.includes(' ')) {
+    return str.split(' ')[0]
+  }
+  return str
+}
+
 const temperatureSeries = computed(() => {
   const section = temperatureSection.value
   const mainBucket =
@@ -479,11 +512,20 @@ const temperatureSeries = computed(() => {
     return calcAverageFromList(peerBucket[peerKey])
   })
 
-  const tableRows = labels.map((label, index) => [
-    label,
-    Number.isFinite(mainAverages[index]) ? mainAverages[index] : '—',
-    Number.isFinite(peerAverages[index]) ? peerAverages[index] : '—',
-  ])
+  const highlightKey = normalizeDateKey(pushDateValue.value)
+  const tableRows = labels.map((label, index) => ({
+    value: [
+      label,
+      Number.isFinite(mainAverages[index]) ? mainAverages[index] : '—',
+      Number.isFinite(peerAverages[index]) ? peerAverages[index] : '—',
+    ],
+    meta: {
+      highlight: Boolean(
+        highlightKey && normalizeDateKey(label) === highlightKey,
+      ),
+    },
+    key: label,
+  }))
 
   return {
     labels,
@@ -495,18 +537,63 @@ const temperatureSeries = computed(() => {
   }
 })
 
+// --- 边际利润数据映射 ---
+const normalizeMetricValue = (value) => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const roundOrZero = (value) => {
+  if (value === null || value === undefined) return 0
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
+}
+
+const marginSection = computed(() => {
+  const section = dashboardData.sections?.['2.边际利润']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const marginCurrent = computed(() => {
+  const bucket = marginSection.value?.['本期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const marginPeer = computed(() => {
+  const bucket = marginSection.value?.['同期']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const marginOrganizations = computed(() => {
+  const currentKeys = Object.keys(marginCurrent.value || {})
+  if (currentKeys.length) {
+    return currentKeys
+  }
+  return Object.keys(marginPeer.value || {})
+})
+
+const marginSeries = computed(() => {
+  const orgs = marginOrganizations.value
+  return orgs.map((org) => {
+    const current = marginCurrent.value?.[org] || {}
+    const peer = marginPeer.value?.[org] || {}
+    return {
+      org,
+      direct: normalizeMetricValue(current['直接收入']),
+      coal: normalizeMetricValue(current['煤成本']),
+      purchaseHeat: normalizeMetricValue(current['外购热成本']),
+      utilities: normalizeMetricValue(current['水、电及辅材成本']),
+      margin: normalizeMetricValue(current['边际利润']),
+      marginCmpCoal: normalizeMetricValue(current['可比煤价边际利润']),
+      peerMarginCmpCoal: normalizeMetricValue(peer['可比煤价边际利润']),
+    }
+  })
+})
+
 // --- 模拟数据（后续可替换为后端数据源） ---
 
 const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-const marginData = orgs7.map((org, index) => ({
-  org,
-  direct: 1000 - index * 60,
-  coal: 520 - index * 30,
-  materials: 80 - index * 5,
-  margin: 400 - index * 20,
-  margin_cmp_coal: 430 - index * 18,
-}))
-
 const incomeCat = ['暖收入', '售电收入', '售高温水收入', '售汽收入']
 const incomeNow = [600, 240, 120, 80]
 const incomePeer = [560, 260, 110, 70]
@@ -572,19 +659,24 @@ const useTempOption = (series, highlightDate) => {
   }
 }
 
-const useMarginOption = () => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['直接收入', '煤成本', '可计量辅材成本', '可比煤价边际利润'] },
-  grid: { left: 40, right: 20, top: 40, bottom: 60 },
-  xAxis: { type: 'category', data: orgs7 },
-  yAxis: { type: 'value', name: '万元' },
-  series: [
-    { name: '直接收入', type: 'bar', stack: 'base', data: marginData.map((item) => item.direct) },
-    { name: '煤成本', type: 'bar', stack: 'base', data: marginData.map((item) => -item.coal) },
-    { name: '可计量辅材成本', type: 'bar', stack: 'base', data: marginData.map((item) => -item.materials) },
-    { name: '可比煤价边际利润', type: 'line', data: marginData.map((item) => item.margin_cmp_coal) },
-  ],
-})
+const useMarginOption = (seriesData) => {
+  const series = Array.isArray(seriesData) ? seriesData : []
+  const categories = series.map((item) => item.org)
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['直接收入', '煤成本', '外购热成本', '水电辅材成本', '可比煤价边际利润'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 60 },
+    xAxis: { type: 'category', data: categories },
+    yAxis: { type: 'value', name: '万元' },
+    series: [
+      { name: '直接收入', type: 'bar', stack: 'base', data: series.map((item) => roundOrZero(item.direct)) },
+      { name: '煤成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.coal)) },
+      { name: '外购热成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.purchaseHeat)) },
+      { name: '水电辅材成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.utilities)) },
+      { name: '可比煤价边际利润', type: 'line', data: series.map((item) => roundOrZero(item.marginCmpCoal)) },
+    ],
+  }
+}
 
 const useIncomeCompareOption = () => ({
   tooltip: { trigger: 'axis' },
@@ -653,7 +745,7 @@ const useCoalStockOption = () => ({
 
 // --- 图表 option 实例 ---
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
-const marginOpt = useMarginOption()
+const marginOpt = computed(() => useMarginOption(marginSeries.value))
 const incomeOpt = useIncomeCompareOption()
 const unitOpt = useUnitConsumptionOption()
 const coalStdOpt = useCoalStdOption()
@@ -664,14 +756,26 @@ const coalStockOpt = useCoalStockOption()
 const temperatureColumns = ['日期', '当期(℃)', '同期(℃)']
 const temperatureTableData = computed(() => temperatureSeries.value.tableRows)
 
-const marginColumns = ['单位', '直接收入', '煤成本', '可计量辅材', '可比煤价边际']
-const marginTableData = marginData.map((item) => [
-  item.org,
-  item.direct,
-  item.coal,
-  item.materials,
-  item.margin_cmp_coal,
-])
+const marginColumns = [
+  '单位',
+  '直接收入',
+  '煤成本',
+  '外购热成本',
+  '水电辅材成本',
+  '边际利润',
+  '可比煤价边际利润',
+]
+const marginTableData = computed(() =>
+  marginSeries.value.map((item) => [
+    item.org,
+    Number.isFinite(item.direct) ? Number(item.direct.toFixed(2)) : null,
+    Number.isFinite(item.coal) ? Number(item.coal.toFixed(2)) : null,
+    Number.isFinite(item.purchaseHeat) ? Number(item.purchaseHeat.toFixed(2)) : null,
+    Number.isFinite(item.utilities) ? Number(item.utilities.toFixed(2)) : null,
+    Number.isFinite(item.margin) ? Number(item.margin.toFixed(2)) : null,
+    Number.isFinite(item.marginCmpCoal) ? Number(item.marginCmpCoal.toFixed(2)) : null,
+  ]),
+)
 
 const coalStdColumns = ['单位', '当期', '同期', '差值']
 const coalStdTableData = coalStdOrgs.map((org, index) => [
@@ -701,7 +805,11 @@ const averageTemp = computed(() => {
   }
   return avg.toFixed(2)
 })
-const marginHeadline = marginData[0] ? marginData[0].margin : 0
+const marginHeadline = computed(() => {
+  const groupEntry = marginSeries.value.find((item) => item.org === '集团全口径')
+  const value = groupEntry?.marginCmpCoal
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
+})
 const coalStdHeadline = coalStdNow[0] ?? 0
 const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 
@@ -1142,6 +1250,11 @@ onMounted(() => {
 
 .dashboard-table tbody tr:nth-child(even) td {
   background: rgba(248, 250, 252, 0.7);
+}
+
+.dashboard-table__row--highlight td {
+  background: rgba(37, 99, 235, 0.12);
+  font-weight: 600;
 }
 
 .dashboard-table tr:hover td {
