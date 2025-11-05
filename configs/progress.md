@@ -12,6 +12,7 @@
 - 新增 `_fill_complaint_section`，支持同时拉取“当日省市平台服务投诉量”“当日净投诉量”两个指标的本期/同期数据，并基于 `groups` / `sum_basic_data` 配置与 `push_date` 查询数据库视图；`evaluate_dashboard` 第六段改为调用新助手填充投诉板块。
 - 仪表盘投诉卡片改为消费后端真实数据：自动解析指标 → 生成公司列表、列标题与四条系列（两指标 × 本期/同期），并保留“件”单位回退逻辑。
 - 图表采用分组柱状呈现并启用 `labelLayout.moveOverlap='shiftY'`，表格列扩展为“本期/同期”+“本期净/同期净”四列，摘要数值聚焦“集团全口径”本期投诉量、缺失时逐项回退。
+- 全部图表内部标签与 tooltip 移除单位文本，保留卡片 `extra` 提示，避免重复显示计量单位。
 
 影响范围与回滚：
 - `/api/v1/projects/daily_report_25_26/dashboard` 返回的投诉板块现包含两个指标、每指标下的公司字典；如需回退，移除 `_fill_complaint_section` 并把 `evaluate_dashboard` 恢复为 `_fill_simple_metric` 版本即可。

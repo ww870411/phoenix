@@ -862,24 +862,28 @@ const coalStockSeries = computed(() => {
     })
   })
 
-  if (!companies.length) {
-    return {
-      companies: coalStockFallbackCompanies,
-      stacks: coalStockFallbackStacks,
-      matrix: coalStockFallbackMatrix,
-    }
-  }
-
   const stacksToUse = stacks.length ? stacks : coalStockFallbackStacks
-  const matrix = stacksToUse.map((stack) =>
-    companies.map((company) => {
+  const companiesToUse = companies.length ? companies : coalStockFallbackCompanies
+  const matrix = stacksToUse.map((stack, stackIndex) =>
+    companiesToUse.map((company, companyIndex) => {
+      if (!companies.length) {
+        const fallbackRow = coalStockFallbackMatrix[stackIndex]
+        const fallbackValue = Array.isArray(fallbackRow) ? fallbackRow[companyIndex] : 0
+        return Number(fallbackValue) || 0
+      }
       const raw = section?.[company]?.[stack]
       const numeric = normalizeMetricValue(raw)
       return Number.isFinite(numeric) ? Number(numeric) : 0
     }),
   )
+  const totals = companiesToUse.map((_, companyIndex) =>
+    matrix.reduce((sum, stackRow) => {
+      const value = stackRow?.[companyIndex]
+      return sum + (Number.isFinite(value) ? Number(value) : 0)
+    }, 0),
+  )
 
-  return { companies, stacks: stacksToUse, matrix }
+  return { companies: companiesToUse, stacks: stacksToUse, matrix, totals }
 })
 
 const coalStockColumns = computed(() => {
@@ -888,7 +892,7 @@ const coalStockColumns = computed(() => {
 })
 
 const coalStockTableData = computed(() => {
-  const { companies, stacks, matrix } = coalStockSeries.value
+  const { companies, stacks, matrix, totals } = coalStockSeries.value
   return companies.map((company, rowIndex) => {
     let total = 0
     const stackValues = stacks.map((_, stackIndex) => {
@@ -905,7 +909,11 @@ const coalStockTableData = computed(() => {
     const formattedStacks = stackValues.map((value) =>
       value === null ? '' : Number(value).toFixed(0),
     )
-    const totalFormatted = Number.isFinite(total) ? Number(total).toFixed(0) : ''
+    const totalFormatted = Number.isFinite(totals?.[rowIndex])
+      ? Number(totals[rowIndex]).toFixed(0)
+      : Number.isFinite(total)
+        ? Number(total).toFixed(0)
+        : ''
     return [company, ...formattedStacks, totalFormatted]
   })
 })
@@ -1069,7 +1077,7 @@ const useTempOption = (series, highlightDate) => {
 
   const formatTempDisplay = (value) => {
     if (!Number.isFinite(value)) return '—'
-    return `${Number(value.toFixed(1))}℃`
+    return Number(value.toFixed(1)).toString()
   }
 
   return {
@@ -1077,7 +1085,7 @@ const useTempOption = (series, highlightDate) => {
     legend: { data: ['本期', '同期'], bottom: 0 },
     grid: { left: 40, right: 20, top: 40, bottom: 60 },
     xAxis: { type: 'category', data: series.labels },
-    yAxis: { type: 'value', name: '℃' },
+    yAxis: { type: 'value' },
     series: [
       {
         name: '本期',
@@ -1164,7 +1172,7 @@ const useMarginOption = (seriesData) => {
     legend: { data: ['直接收入', '煤成本', '外购热成本', '水电辅材成本', '可比煤价边际利润'], bottom: 0 },
     grid: { left: 40, right: 20, top: 40, bottom: 80 },
     xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value', name: '万元' },
+    yAxis: { type: 'value' },
     series: [
       { name: '直接收入', type: 'bar', stack: 'base', data: series.map((item) => roundOrZero(item.direct)) },
       { name: '煤成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.coal)) },
@@ -1203,8 +1211,8 @@ const useIncomeCompareOption = (seriesData) => {
     const currentVal = current[index]
     const peerVal = peer[index]
     const lines = [`<strong>${axisValue}</strong>`]
-    lines.push(`本期：${formatIncomeValue(currentVal)} 万元`)
-    lines.push(`同期：${formatIncomeValue(peerVal)} 万元`)
+    lines.push(`本期：${formatIncomeValue(currentVal)}`)
+    lines.push(`同期：${formatIncomeValue(peerVal)}`)
     return lines.join('<br/>')
   }
 
@@ -1322,12 +1330,11 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     params.forEach((item) => {
       const rawName = typeof item.seriesName === 'string' ? item.seriesName : ''
       const metricName = rawName.replace(/（本期）|（同期）/g, '')
-      const unitText = units?.[metricName] ? ` ${units[metricName]}` : ''
       const resolved = resolveItemValue(item)
       const numericValue = Number.isFinite(resolved) ? Number(resolved).toFixed(2) : '—'
       const color = item.color || '#475569'
       lines.push(
-        `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${rawName}：${numericValue}${unitText}`,
+        `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${rawName}：${numericValue}`,
       )
     })
     return lines.join('<br/>')
@@ -1437,7 +1444,7 @@ const useCoalStdOption = (seriesData) => {
           const color = item.color || '#475569'
           const resolved = Number.isFinite(item.value) ? Number(item.value) : Number.NaN
           lines.push(
-            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${Number.isFinite(resolved) ? resolved.toFixed(1) : '—'} 吨标煤`,
+            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${Number.isFinite(resolved) ? resolved.toFixed(1) : '—'}`,
           )
         })
         return lines.join('<br/>')
@@ -1453,7 +1460,6 @@ const useCoalStdOption = (seriesData) => {
   },
     yAxis: {
       type: 'value',
-      name: '吨标煤',
       splitLine: { lineStyle: { type: 'dashed' } },
       axisLabel: {
         formatter: (val) => (Number.isFinite(val) ? Number(val).toFixed(0) : val),
@@ -1533,7 +1539,7 @@ const useComplaintsOption = (seriesPayload, unitLabel) => {
           const color = item.color || '#475569'
           const resolved = Number.isFinite(item.value) ? item.value : '—'
           lines.push(
-            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${resolved} ${unitLabel}`,
+            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${resolved}`,
           )
         })
         return lines.join('<br/>')
@@ -1549,7 +1555,6 @@ const useComplaintsOption = (seriesPayload, unitLabel) => {
     },
     yAxis: {
       type: 'value',
-      name: unitLabel || '件',
       min: 0,
       minInterval: 1,
       splitLine: { lineStyle: { type: 'dashed' } },
@@ -1598,7 +1603,7 @@ const useCoalStockOption = (seriesPayload) => {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: stacks, bottom: 0 },
+    legend: { data: [...stacks, '合计'], bottom: 0 },
     grid: { left: 40, right: 20, top: 40, bottom: 60 },
     xAxis: {
       type: 'category',
@@ -1606,17 +1611,39 @@ const useCoalStockOption = (seriesPayload) => {
       axisLabel: { hideOverlap: true },
       axisTick: { alignWithLabel: true },
     },
-    yAxis: { type: 'value', name: '吨', splitLine: { lineStyle: { type: 'dashed' } } },
-    series: stacks.map((stack, index) => {
-      const values = Array.isArray(matrix[index]) ? matrix[index] : companies.map(() => 0)
-      return {
-        name: stack,
-        type: 'bar',
-        stack: 'total',
-        data: values.map((value) => (Number.isFinite(value) ? Number(value) : 0)),
-        itemStyle: { color: colorMap[stack] || palette[index % palette.length] },
-      }
-    }),
+    yAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed' } } },
+    series: [
+      ...stacks.map((stack, index) => {
+        const values = Array.isArray(matrix[index]) ? matrix[index] : companies.map(() => 0)
+        return {
+          name: stack,
+          type: 'bar',
+          stack: 'total',
+          data: values.map((value) => (Number.isFinite(value) ? Number(value) : 0)),
+          itemStyle: { color: colorMap[stack] || palette[index % palette.length] },
+        }
+      }),
+      {
+        name: '合计',
+        type: 'line',
+        data: totals.map((value) => (Number.isFinite(value) ? Number(value) : 0)),
+        label: {
+          show: true,
+          position: 'top',
+          formatter: ({ value }) => (Number.isFinite(value) ? Number(value).toFixed(0) : ''),
+          color: '#0f172a',
+          backgroundColor: 'rgba(255,255,255,0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+          distance: 8,
+        },
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { color: '#1f2937', width: 1, type: 'dashed' },
+        itemStyle: { color: '#1f2937' },
+        emphasis: { focus: 'series' },
+      },
+    ],
   }
 }
 
