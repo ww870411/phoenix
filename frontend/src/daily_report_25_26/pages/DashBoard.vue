@@ -102,7 +102,7 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--coal">
         <Card title="标煤消耗量对比" extra="单位：吨标煤">
-          <EChart :option="coalStdOpt" height="300px" />
+          <EChart :option="coalStdOpt" height="340px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
           </div>
@@ -114,6 +114,9 @@
       <section class="dashboard-grid__item dashboard-grid__item--stock">
         <Card title="煤炭库存" subtitle="厂内/港口/在途（堆积）" extra="单位：吨">
           <EChart :option="coalStockOpt" height="300px" />
+          <div class="dashboard-table-wrapper">
+            <Table :columns="coalStockColumns" :data="coalStockTableData" />
+          </div>
         </Card>
       </section>
     </main>
@@ -559,6 +562,16 @@ const roundOrZero = (value) => {
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 }
 
+const LABEL_EPSILON = 1e-9
+const shouldDisplayLabel = (value) => Number.isFinite(value) && Math.abs(value) >= LABEL_EPSILON
+const formatLabelNumber = (value, digits) => {
+  if (!shouldDisplayLabel(value)) return ''
+  if (typeof digits === 'number') {
+    return Number(value).toFixed(digits)
+  }
+  return value
+}
+
 const roundOrNull = (value, digits = 2) => {
   const normalized = normalizeMetricValue(value)
   return Number.isFinite(normalized) ? Number(normalized.toFixed(digits)) : null
@@ -590,6 +603,14 @@ const unitFallbackMatrix = {
 const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdFallbackCurrent = [980, 420, 160, 180, 120, 100]
 const coalStdFallbackPeer = [1020, 440, 150, 190, 130, 90]
+const complaintMetricOrder = ['当日省市平台服务投诉量', '当日净投诉量']
+const complaintFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+
+const normalizeComplaintValue = (value) => {
+  const normalized = normalizeMetricValue(value)
+  if (!Number.isFinite(normalized)) return null
+  return Math.round(normalized)
+}
 
 const marginSection = computed(() => {
   const section = dashboardData.sections?.['2.边际利润']
@@ -675,6 +696,218 @@ const incomeSeries = computed(() => {
     current: currentValues,
     peer: peerValues,
   }
+})
+
+const complaintSection = computed(() => {
+  const section = dashboardData.sections?.['6.当日省市平台服务投诉量']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const complaintUnit = computed(() => {
+  const unit = complaintSection.value?.['计量单位']
+  if (typeof unit === 'string' && unit.trim()) {
+    return unit.trim()
+  }
+  return '件'
+})
+
+const complaintMetricKeys = computed(() => {
+  const section = complaintSection.value || {}
+  const metaKeys = new Set(['数据来源', '查询结构', '计量单位'])
+  const ordered = []
+  complaintMetricOrder.forEach((metric) => {
+    if (Object.prototype.hasOwnProperty.call(section, metric)) {
+      ordered.push(metric)
+    }
+  })
+  for (const key of Object.keys(section)) {
+    if (metaKeys.has(key) || ordered.includes(key)) continue
+    ordered.push(key)
+  }
+  return ordered.length ? ordered : complaintMetricOrder
+})
+
+const complaintBuckets = computed(() => {
+  const section = complaintSection.value || {}
+  const buckets = {}
+  complaintMetricKeys.value.forEach((metric) => {
+    const bucket = section[metric]
+    if (bucket && typeof bucket === 'object') {
+      buckets[metric] = bucket
+    }
+  })
+  return buckets
+})
+
+const complaintCompanies = computed(() => {
+  const list = []
+  const seen = new Set()
+  const buckets = complaintBuckets.value
+  const phases = ['本期', '同期']
+  complaintMetricKeys.value.forEach((metric) => {
+    const container = buckets[metric]
+    if (!container || typeof container !== 'object') return
+    phases.forEach((phase) => {
+      const companyBucket = container[phase]
+      if (!companyBucket || typeof companyBucket !== 'object') return
+      Object.keys(companyBucket).forEach((company) => {
+        if (!seen.has(company)) {
+          seen.add(company)
+          list.push(company)
+        }
+      })
+    })
+  })
+  return list.length ? list : complaintFallbackCompanies
+})
+
+const complaintSeries = computed(() => {
+  const companies = complaintCompanies.value
+  const buckets = complaintBuckets.value
+  const phases = ['本期', '同期']
+  const colors = ['#2563eb', '#94a3b8', '#f97316', '#fb7185', '#0ea5e9', '#10b981']
+  const series = []
+  complaintMetricKeys.value.forEach((metric, metricIndex) => {
+    phases.forEach((phase, phaseIndex) => {
+      const values = companies.map((company) => normalizeComplaintValue(buckets[metric]?.[phase]?.[company]))
+      series.push({
+        name: `${metric}（${phase}）`,
+        metric,
+        phase,
+        data: values,
+        color: colors[(metricIndex * phases.length + phaseIndex) % colors.length],
+      })
+    })
+  })
+  if (!series.length) {
+    return {
+      companies: complaintFallbackCompanies,
+      series: complaintMetricOrder.flatMap((metric, metricIndex) =>
+        phases.map((phase, phaseIndex) => ({
+          name: `${metric}（${phase}）`,
+          metric,
+          phase,
+          data: complaintFallbackCompanies.map(() => 0),
+          color: ['#cbd5f5', '#ddeafe', '#fed7aa', '#fecdd3'][
+            (metricIndex * phases.length + phaseIndex) % 4
+          ],
+        })),
+      ),
+    }
+  }
+  return { companies, series }
+})
+
+const complaintColumns = computed(() => {
+  const columns = ['单位']
+  complaintMetricKeys.value.forEach((metric) => {
+    columns.push(`${metric}（本期）`)
+    columns.push(`${metric}（同期）`)
+  })
+  return columns
+})
+
+const complaintTableData = computed(() => {
+  const buckets = complaintBuckets.value
+  const phases = ['本期', '同期']
+  return complaintCompanies.value.map((company) => {
+    const row = [company]
+    complaintMetricKeys.value.forEach((metric) => {
+      phases.forEach((phase) => {
+        const value = normalizeComplaintValue(buckets[metric]?.[phase]?.[company])
+        row.push(Number.isFinite(value) ? value : '')
+      })
+    })
+    return row
+  })
+})
+
+const complaintsHeadline = computed(() => {
+  const buckets = complaintBuckets.value
+  const preferredMetric = complaintMetricOrder[0]
+  const mainBucket = buckets[preferredMetric]?.['本期']
+  if (mainBucket && typeof mainBucket === 'object') {
+    const preferredCompanies = ['集团全口径', '主城区', ...complaintCompanies.value]
+    for (const company of preferredCompanies) {
+      const value = normalizeComplaintValue(mainBucket[company])
+      if (Number.isFinite(value)) {
+        return value
+      }
+    }
+  }
+  return 0
+})
+
+const coalStockSection = computed(() => {
+  const section = dashboardData.sections?.['7.煤炭库存明细']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const coalStockSeries = computed(() => {
+  const section = coalStockSection.value
+  const metaKeys = new Set(['数据来源', '查询结构', '根指标', '计量单位'])
+  const companies = []
+  const stacks = []
+  const seenStacks = new Set()
+
+  Object.entries(section).forEach(([company, storageMap]) => {
+    if (metaKeys.has(company)) return
+    if (!storageMap || typeof storageMap !== 'object') return
+    companies.push(company)
+    Object.keys(storageMap).forEach((storage) => {
+      const storageName = String(storage || '').trim()
+      if (!storageName || seenStacks.has(storageName)) return
+      seenStacks.add(storageName)
+      stacks.push(storageName)
+    })
+  })
+
+  if (!companies.length) {
+    return {
+      companies: coalStockFallbackCompanies,
+      stacks: coalStockFallbackStacks,
+      matrix: coalStockFallbackMatrix,
+    }
+  }
+
+  const stacksToUse = stacks.length ? stacks : coalStockFallbackStacks
+  const matrix = stacksToUse.map((stack) =>
+    companies.map((company) => {
+      const raw = section?.[company]?.[stack]
+      const numeric = normalizeMetricValue(raw)
+      return Number.isFinite(numeric) ? Number(numeric) : 0
+    }),
+  )
+
+  return { companies, stacks: stacksToUse, matrix }
+})
+
+const coalStockColumns = computed(() => {
+  const stacks = coalStockSeries.value.stacks || coalStockFallbackStacks
+  return ['单位', ...stacks, '合计']
+})
+
+const coalStockTableData = computed(() => {
+  const { companies, stacks, matrix } = coalStockSeries.value
+  return companies.map((company, rowIndex) => {
+    let total = 0
+    const stackValues = stacks.map((_, stackIndex) => {
+      const raw =
+        Array.isArray(matrix?.[stackIndex]) && Number.isFinite(matrix[stackIndex][rowIndex])
+          ? Number(matrix[stackIndex][rowIndex])
+          : Number.NaN
+      if (Number.isFinite(raw)) {
+        total += raw
+        return raw
+      }
+      return null
+    })
+    const formattedStacks = stackValues.map((value) =>
+      value === null ? '' : Number(value).toFixed(0),
+    )
+    const totalFormatted = Number.isFinite(total) ? Number(total).toFixed(0) : ''
+    return [company, ...formattedStacks, totalFormatted]
+  })
 })
 
 const unitSection = computed(() => {
@@ -794,13 +1027,6 @@ const coalStdSeries = computed(() => {
 
 // --- 模拟数据（后续可替换为后端数据源） ---
 
-const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-
-const complaintsNow = orgs7.map((org, index) => ({
-  org,
-  count: 30 - index * 3,
-}))
-
 const stockOrgs = ['北海热电厂', '香海热电厂', '金州热电', '北方热电', '金普热电', '庄河环海']
 const stockData = stockOrgs.map((org, index) => ({
   org,
@@ -808,6 +1034,16 @@ const stockData = stockOrgs.map((org, index) => ({
   inPort: 10000 - index * 800,
   inTransit: 6000 - index * 500,
 }))
+const coalStockFallbackStacks = ['厂内存煤', '港口存煤', '在途煤炭']
+const coalStockFallbackCompanies = stockOrgs
+const coalStockFallbackMatrix = coalStockFallbackStacks.map((stack) =>
+  stockData.map((item) => {
+    if (stack === '厂内存煤') return item.inPlant
+    if (stack === '港口存煤') return item.inPort
+    if (stack === '在途煤炭') return item.inTransit
+    return 0
+  }),
+)
 
 // --- 图表配置构造 ---
 const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
@@ -862,7 +1098,7 @@ const useTempOption = (series, highlightDate) => {
             }
           : undefined,
         markPoint:
-          highlightExists && Number.isFinite(mainRawValue) && Number.isFinite(mainChartValue)
+          highlightExists && shouldDisplayLabel(mainRawValue) && shouldDisplayLabel(mainChartValue)
             ? {
                 symbol: 'circle',
                 symbolSize: 10,
@@ -892,7 +1128,7 @@ const useTempOption = (series, highlightDate) => {
         smooth: true,
         data: series.peerChart,
         markPoint:
-          highlightExists && Number.isFinite(peerRawValue) && Number.isFinite(peerChartValue)
+          highlightExists && shouldDisplayLabel(peerRawValue) && shouldDisplayLabel(peerChartValue)
             ? {
                 symbol: 'diamond',
                 symbolSize: 12,
@@ -940,7 +1176,7 @@ const useMarginOption = (seriesData) => {
         data: series.map((item) => roundOrZero(item.marginCmpCoal)),
         label: {
           show: true,
-          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          formatter: ({ value }) => formatLabelNumber(value, 1),
           position: 'top',
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
@@ -1003,7 +1239,7 @@ const useIncomeCompareOption = (seriesData) => {
           show: true,
           position: 'top',
           distance: 6,
-          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          formatter: ({ value }) => formatLabelNumber(value, 1),
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
@@ -1020,7 +1256,7 @@ const useIncomeCompareOption = (seriesData) => {
           show: true,
           position: 'top',
           distance: 6,
-          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          formatter: ({ value }) => formatLabelNumber(value, 1),
           color: '#0f172a',
           backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
@@ -1075,7 +1311,8 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
 
   const formatLabelValue = (params) => {
     const value = resolveItemValue(params)
-    return Number.isFinite(value) ? value.toFixed(2) : '—'
+    if (!shouldDisplayLabel(value)) return ''
+    return Number(value).toFixed(2)
   }
 
   const tooltipFormatter = (params) => {
@@ -1184,7 +1421,7 @@ const useCoalStdOption = (seriesData) => {
   const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : coalStdFallbackPeer
 
   const formatValue = (value) => {
-    if (!Number.isFinite(value)) return '—'
+    if (!shouldDisplayLabel(value)) return ''
     return Number(value).toFixed(1)
   }
 
@@ -1265,33 +1502,123 @@ const useCoalStdOption = (seriesData) => {
   }
 }
 
-const useComplaintsOption = () => ({
-  tooltip: { trigger: 'axis' },
-  grid: { left: 40, right: 20, top: 20, bottom: 40 },
-  xAxis: { type: 'category', data: orgs7, axisLabel: { hideOverlap: true } },
-  yAxis: { type: 'value', name: '件' },
-  series: [
-    {
-      name: '当日投诉量',
-      type: 'bar',
-      data: complaintsNow.map((item) => item.count),
-      label: { show: true, position: 'top' },
-    },
-  ],
-})
+const useComplaintsOption = (seriesPayload, unitLabel) => {
+  const payload = seriesPayload || {}
+  const categories = Array.isArray(payload.companies) && payload.companies.length
+    ? payload.companies
+    : complaintFallbackCompanies
+  const resolvedSeries = Array.isArray(payload.series) ? payload.series : []
+  const palette = ['#2563eb', '#94a3b8', '#f97316', '#fb7185', '#0ea5e9', '#10b981', '#facc15']
+  const finalSeries = resolvedSeries.length
+    ? resolvedSeries
+    : complaintMetricOrder.flatMap((metric, metricIndex) =>
+        ['本期', '同期'].map((phase, phaseIndex) => ({
+          name: `${metric}（${phase}）`,
+          metric,
+          phase,
+          data: categories.map(() => 0),
+          color: palette[(metricIndex * 2 + phaseIndex) % palette.length],
+        })),
+      )
 
-const useCoalStockOption = () => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['厂内存煤', '港口存煤', '在途煤炭'], bottom: 0 },
-  grid: { left: 40, right: 20, top: 40, bottom: 60 },
-  xAxis: { type: 'category', data: stockOrgs },
-  yAxis: { type: 'value', name: '吨' },
-  series: [
-    { name: '厂内存煤', type: 'bar', stack: 'total', data: stockData.map((item) => item.inPlant) },
-    { name: '港口存煤', type: 'bar', stack: 'total', data: stockData.map((item) => item.inPort) },
-    { name: '在途煤炭', type: 'bar', stack: 'total', data: stockData.map((item) => item.inTransit) },
-  ],
-})
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        if (!Array.isArray(params) || !params.length) return ''
+        const axisLabel = params[0]?.axisValue ?? params[0]?.name ?? ''
+        const lines = [`<strong>${axisLabel}</strong>`]
+        params.forEach((item) => {
+          const color = item.color || '#475569'
+          const resolved = Number.isFinite(item.value) ? item.value : '—'
+          lines.push(
+            `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;"></span>${item.seriesName}：${resolved} ${unitLabel}`,
+          )
+        })
+        return lines.join('<br/>')
+      },
+    },
+    legend: { data: finalSeries.map((item) => item.name), bottom: 0 },
+    grid: { left: 40, right: 24, top: 40, bottom: 70 },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisLabel: { hideOverlap: true, interval: 0 },
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: {
+      type: 'value',
+      name: unitLabel || '件',
+      min: 0,
+      minInterval: 1,
+      splitLine: { lineStyle: { type: 'dashed' } },
+      axisLabel: { hideOverlap: true },
+    },
+    series: finalSeries.map((item, index) => ({
+      name: item.name,
+      type: 'bar',
+      barWidth: 18,
+      data: Array.isArray(item.data)
+        ? item.data.map((value) => (Number.isFinite(value) ? value : null))
+        : [],
+      itemStyle: { color: item.color || palette[index % palette.length] },
+      label: {
+        show: true,
+        position: 'top',
+        distance: 6,
+        color: '#0f172a',
+        formatter: ({ value }) => formatLabelNumber(value),
+      },
+      labelLayout: { moveOverlap: 'shiftY' },
+      emphasis: { focus: 'series' },
+    })),
+  }
+}
+
+const useCoalStockOption = (seriesPayload) => {
+  const payload = seriesPayload || {}
+  const companies =
+    Array.isArray(payload.companies) && payload.companies.length
+      ? payload.companies
+      : coalStockFallbackCompanies
+  const stacks =
+    Array.isArray(payload.stacks) && payload.stacks.length ? payload.stacks : coalStockFallbackStacks
+  const matrix =
+    Array.isArray(payload.matrix) && payload.matrix.length === stacks.length
+      ? payload.matrix
+      : coalStockFallbackMatrix
+
+  const colorMap = {
+    厂内存煤: '#2563eb',
+    港口存煤: '#f97316',
+    在途煤炭: '#22c55e',
+  }
+  const palette = ['#2563eb', '#f97316', '#22c55e', '#d946ef', '#facc15', '#0ea5e9', '#ef4444']
+
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: stacks, bottom: 0 },
+    grid: { left: 40, right: 20, top: 40, bottom: 60 },
+    xAxis: {
+      type: 'category',
+      data: companies,
+      axisLabel: { hideOverlap: true },
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: { type: 'value', name: '吨', splitLine: { lineStyle: { type: 'dashed' } } },
+    series: stacks.map((stack, index) => {
+      const values = Array.isArray(matrix[index]) ? matrix[index] : companies.map(() => 0)
+      return {
+        name: stack,
+        type: 'bar',
+        stack: 'total',
+        data: values.map((value) => (Number.isFinite(value) ? Number(value) : 0)),
+        itemStyle: { color: colorMap[stack] || palette[index % palette.length] },
+      }
+    }),
+  }
+}
 
 // --- 图表 option 实例 ---
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
@@ -1301,8 +1628,8 @@ const unitHeatOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '�
 const unitElecOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖电单耗'))
 const unitWaterOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖水单耗'))
 const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
-const complaintOpt = useComplaintsOption()
-const coalStockOpt = useCoalStockOption()
+const complaintOpt = computed(() => useComplaintsOption(complaintSeries.value, complaintUnit.value))
+const coalStockOpt = computed(() => useCoalStockOption(coalStockSeries.value))
 
 // --- 表格列与数据 ---
 const temperatureColumns = ['日期', '本期(℃)', '同期(℃)']
@@ -1350,8 +1677,6 @@ const coalStdTableData = computed(() => {
   })
 })
 
-const complaintColumns = ['单位', '当日投诉量']
-const complaintTableData = complaintsNow.map((item) => [item.org, item.count])
 
 // --- 顶部指标展示 ---
 const averageTemp = computed(() => {
@@ -1380,7 +1705,6 @@ const coalStdHeadline = computed(() => {
   const value = Array.isArray(current) ? current[0] : null
   return Number.isFinite(value) ? Number(value.toFixed(1)) : 0
 })
-const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0
 
 const chartPalette = ref(['#2563eb', '#38bdf8', '#10b981', '#f97316', '#facc15', '#ec4899'])
 

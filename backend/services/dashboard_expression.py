@@ -330,6 +330,51 @@ def _fill_simple_metric(
             data_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
 
 
+def _fill_complaint_section(
+    session,
+    section: Dict[str, Any],
+    company_cn_to_code: Dict[str, str],
+    company_code_to_cn: Dict[str, str],
+    item_cn_to_code: Dict[str, str],
+    push_date: str,
+) -> None:
+    """填充投诉量板块，支持多个指标并区分本期/同期。"""
+
+    if not isinstance(section, dict):
+        return
+
+    source_config = section.get("数据来源")
+    if not isinstance(source_config, dict):
+        return
+
+    resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
+    metric_keys = [
+        key
+        for key in section.keys()
+        if key not in {"数据来源", "查询结构", "计量单位"}
+    ]
+
+    for metric_name in metric_keys:
+        metric_bucket = section.get(metric_name)
+        if not isinstance(metric_bucket, dict):
+            continue
+
+        item_code = item_cn_to_code.get(metric_name, metric_name)
+        for phase_key, frame_key in (("本期", "value_biz_date"), ("同期", "value_peer_date")):
+            company_bucket = metric_bucket.get(phase_key)
+            if not isinstance(company_bucket, dict):
+                continue
+
+            for table_name, company_codes in resolved_sources.items():
+                for company_code in company_codes:
+                    metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+                    company_cn = company_code_to_cn.get(company_code, company_code)
+                    if company_cn not in company_bucket:
+                        continue
+                    bucket = metrics.get(item_code, {})
+                    company_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
+
+
 def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
@@ -467,24 +512,12 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
         # 6. 省市平台服务投诉量
         complaint_section = data.get("6.当日省市平台服务投诉量")
         if isinstance(complaint_section, dict):
-            _fill_simple_metric(
+            _fill_complaint_section(
                 session,
                 complaint_section,
-                "本期",
                 company_cn_to_code,
                 company_code_to_cn,
                 item_cn_to_code,
-                "value_biz_date",
-                push_date,
-            )
-            _fill_simple_metric(
-                session,
-                complaint_section,
-                "同期",
-                company_cn_to_code,
-                company_code_to_cn,
-                item_cn_to_code,
-                "value_peer_date",
                 push_date,
             )
 

@@ -19,7 +19,7 @@
             @click="openPage(page)"
           >
             <div class="page-card-title">{{ page.page_name }}</div>
-            <div class="page-card-desc">模板文件：{{ page.config_file }}</div>
+            <div class="page-card-desc">{{ pageDescription(page) }}</div>
           </button>
         </div>
       </section>
@@ -118,6 +118,14 @@ const router = useRouter()
 const projectKey = String(route.params.projectKey ?? '')
 
 const auth = useAuthStore()
+const PAGE_DESCRIPTION_MAP = Object.freeze({
+  dashboard: '查看整体数据仪表盘',
+  data_show: '浏览固定数据展示表',
+  data_approval: '处理审批流程进度',
+  data_entry: '填写并提交日报数据',
+  constant_data: '维护常量指标数据',
+  debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
+})
 const canApproveUnit = auth.canApproveUnit
 const canRevokeUnit = auth.canRevokeUnit
 const rawPages = ref([])
@@ -293,6 +301,24 @@ async function publishDaily() {
   } finally {
     actionPending.value = false
   }
+}
+
+function pageDescription(page) {
+  if (!page) return '点击进入功能页面'
+  const desc =
+    page?.page_description ||
+    page?.description ||
+    page?.pageDesc ||
+    page?.page_desc ||
+    ''
+  if (typeof desc === 'string' && desc.trim()) {
+    return desc.trim()
+  }
+  const key = String(page?.page_key || page?.page_url || '').toLowerCase()
+  if (key && PAGE_DESCRIPTION_MAP[key]) {
+    return PAGE_DESCRIPTION_MAP[key]
+  }
+  return '点击进入功能页面'
 }
 
 function openPage(page) {

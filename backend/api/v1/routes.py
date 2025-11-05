@@ -65,6 +65,7 @@ def _normalize_pages(project_entry: Dict[str, Any]) -> List[Dict[str, str]]:
                 continue
             name = meta.get("页面名称") or meta.get("page_name") or page_url
             data_source = meta.get("数据源") or meta.get("data_source") or ""
+            description = meta.get("页面描述") or meta.get("page_description") or ""
             slug_source = page_url
             slug_candidate = _slugify(slug_source) or _slugify(name) or "page"
             pages.append(
@@ -74,6 +75,8 @@ def _normalize_pages(project_entry: Dict[str, Any]) -> List[Dict[str, str]]:
                     "config_file": data_source,
                     "page_url": page_url,
                     "data_source": data_source,
+                    "page_description": description,
+                    "description": description,
                 }
             )
     elif isinstance(pages_raw, list):
@@ -103,6 +106,8 @@ def _normalize_pages(project_entry: Dict[str, Any]) -> List[Dict[str, str]]:
                         "config_file": config_file,
                         "page_url": slug,
                         "data_source": config_file,
+                        "page_description": "",
+                        "description": "",
                     }
                 )
     return pages

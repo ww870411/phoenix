@@ -1,7 +1,7 @@
 {
   "Group_sum_show_Sheet": {
     "单位标识": "Group/ZhuChengQu/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan",
-    "单位名": "",
+    "单位名": "经济运行部",
     "表名": "1.集团全口径汇总表",
     "biz_date":"regular",
     "查询数据源":{
@@ -209,7 +209,7 @@
   },
   "Group_analysis_brief_report_Sheet": {
     "单位标识": "Group/ZhuChengQu/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan",
-    "单位名": "",
+    "单位名": "经济运行部",
     "表名": "2.分析简报",
     "biz_date":"regular",
     "查询数据源":{
@@ -388,7 +388,7 @@
   },
   "ZhuChengQu_sum_show_Sheet": {
     "单位标识": "ZhuChengQu/BeiHai/XiangHai/GongRe",
-    "单位名": "",
+    "单位名": "经济运行部",
     "表名": "3.主城区汇总表",
     "biz_date":"regular",
     "查询数据源":{

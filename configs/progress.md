@@ -2,6 +2,58 @@
 
 # 进度记录
 
+## 2025-11-10（投诉板块真实数据接入）
+
+前置说明（降级留痕）：
+- Serena 对 `evaluate_dashboard` 局部删除/替换仍缺乏粒度控制，本次按 3.9 矩阵降级使用 `apply_patch` 调整投诉段调用逻辑；回滚时恢复 `backend/services/dashboard_expression.py` 中 `_fill_complaint_section` 定义及 `evaluate_dashboard` 对应片段。
+- Serena 无法对 `.vue` 文件执行符号级写入，继续按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 新增 `_fill_complaint_section`，支持同时拉取“当日省市平台服务投诉量”“当日净投诉量”两个指标的本期/同期数据，并基于 `groups` / `sum_basic_data` 配置与 `push_date` 查询数据库视图；`evaluate_dashboard` 第六段改为调用新助手填充投诉板块。
+- 仪表盘投诉卡片改为消费后端真实数据：自动解析指标 → 生成公司列表、列标题与四条系列（两指标 × 本期/同期），并保留“件”单位回退逻辑。
+- 图表采用分组柱状呈现并启用 `labelLayout.moveOverlap='shiftY'`，表格列扩展为“本期/同期”+“本期净/同期净”四列，摘要数值聚焦“集团全口径”本期投诉量、缺失时逐项回退。
+
+影响范围与回滚：
+- `/api/v1/projects/daily_report_25_26/dashboard` 返回的投诉板块现包含两个指标、每指标下的公司字典；如需回退，移除 `_fill_complaint_section` 并把 `evaluate_dashboard` 恢复为 `_fill_simple_metric` 版本即可。
+- 前端投诉卡片依赖上述结构渲染图表与表格；若需回退，将 `DashBoard.vue` 恢复至接入前的静态数据实现即可。
+
+验证建议：
+1. 启动后端访问 `/dashboard?show_date=YYYY-MM-DD`，确认响应中 “6.当日省市平台服务投诉量” 段包含两个指标及本期/同期→公司维度的数值。
+2. 前端仪表盘加载后，检查投诉卡片展示 4 条系列、图例与柱体颜色一致，顶部标签无重叠；表格出现四列数值并与图表一致。
+3. 切换 `show_date`，验证摘要卡片、图表与表格随 `push_date` 更新；若后端缺数据，则图表/表格展示 0 占位而不报错。
+
+## 2025-11-10（数据标签零值统一隐藏）
+
+前置说明（降级留痕）：
+- Serena 仍无法对 `.vue` 模板区块精确写入，继续按 3.9 矩阵使用 `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 在 `DashBoard.vue` 内统一封装 `shouldDisplayLabel/formatLabelNumber`，对边际利润折线、收入对比、三张单耗、标煤消耗量、投诉量等图表的标签 formatter 加入零值判定；投诉量、供热单耗、标煤等柱状图标签在值为 `null/NaN/0` 时返回空字符串，温度曲线的高亮 markPoint 也需为非零才渲染。
+
+影响范围与回滚：
+- 影响所有仪表盘卡片的图表标签显示；如需恢复显示零值，可撤销 `shouldDisplayLabel/formatLabelNumber` 辅助函数及各图表中的调用即可。
+
+验证建议：
+1. 加载仪表盘，确认边际利润折线、收入对比、单耗、标煤、投诉等图表在数值为 0 时不再显示顶部标签。
+2. 切换日期确保非零值标签仍显示且 tooltip 数据保持完整。
+
+## 2025-11-10（煤炭库存卡片接入真实数据）
+
+前置说明（降级留痕）：
+- Serena 无法对 `.vue` 文件进行结构化插入，本次继续按 3.9 矩阵使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 新增 `coalStockSection/coalStockSeries` 计算属性，从 `/dashboard` 第七段解析各公司“厂内存煤/港口存煤/在途煤炭”数值，空数据时回退至演示数据。
+- `useCoalStockOption` 支持动态数据并使用蓝/橙/绿等高对比调色盘，按返回公司与仓储类型组装堆叠柱图；`coalStockOpt` 改为 computed，使煤炭库存卡片随 `push_date` 自动刷新。
+- 卡片新增底部表格 `coalStockColumns/coalStockTableData`，在“单位 × 存储方式 + 合计”维度展示吨数，与柱状图保持一致。
+
+影响范围与回滚：
+- 仅影响煤炭库存卡片的数据来源与配置；如需回退，移除新增计算属性并将 `useCoalStockOption` 恢复为静态模拟即可。
+
+验证建议：
+1. 调用 `/dashboard?show_date=YYYY-MM-DD` 检查 “7.煤炭库存明细” 节点存在公司与三类库存数据。
+2. 打开仪表盘，确认煤炭库存柱图按公司与堆栈展示真实数据、底部表格同步列出各仓储吨数；切换展示日期后数据同步刷新。
+
 ## 2025-11-09（气温/边际利润卡片面积调整）
 
 前置说明（降级留痕）：
@@ -938,4 +990,41 @@ sum_basic_data 相关：
 
 下一步建议：
 - 根据项目计划，可以开始将仪表盘组件与后端 `dashboard/summary` 接口进行联调，替换模拟数据为真实数据。
+
+## 2025-11-10（页面入口信息脱敏）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 组件仍不支持符号级编辑，本次按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/PageSelectView.vue`；回滚时恢复该文件即可。
+
+本次动作：
+- 页面选择视图的卡片副标题改为通过 `pageDescription` 辅助函数生成的业务描述，移除了模板文件路径展示。
+- 新增 `PAGE_DESCRIPTION_MAP` 描述表覆盖“数据看板/数据展示/审批/填报/常量/调试”等入口，默认回退文案为“点击进入功能页面”。
+
+影响范围与回滚：
+- `/projects/daily_report_25_26/pages` 页面卡片不再泄露 `/app/data/*.json`、`configs/*.json` 路径，改为直观的功能简介；如需回滚，删除 `pageDescription` 函数并恢复模板中原文本即可。
+- 路由跳转逻辑未改动，`openPage` 仍按 `page.config_file` 控制 query 参数，对后端 API 与权限判定无影响。
+
+验证建议：
+1. 登录平台进入页面选择视图，确认所有卡片副标题都为中文功能说明且无文件路径。
+2. 分别点击“数据填报”“数据审批”“数据展示”等卡片，验证跳转路径与历史行为一致。
+3. 检查“运行时表达式求值（调试）”卡片描述是否为“运行时表达式调试工具，仅限技术人员”，确保内部入口仍可区分。
+
+## 2025-11-10（项目列表补充页面描述）
+
+前置说明（降级留痕）：
+- Serena 暂未支持 JSON/脚本文件细粒度写入，继续按 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend_data/项目列表.json`、`backend/api/v1/routes.py` 与 `frontend/src/daily_report_25_26/pages/PageSelectView.vue`，回滚时恢复上述文件即可。
+
+本次动作：
+- `backend_data/项目列表.json` 中为 `dashboard/data_show/data_approval/data_entry/constant_data//debug/runtime-eval` 写入 `页面描述` 字段，内容与前端映射保持一致。
+- `backend/api/v1/routes.py` 的 `_normalize_pages` 透传 `页面描述`（同时兼容 `page_description`）到 `page_description/description` 字段，便于前端直接消费。
+- `frontend/src/daily_report_25_26/pages/PageSelectView.vue` 更新 `pageDescription`：优先使用接口返回的 `page_description`/`description`/`page_desc` 等字段，映射表仅在缺省时兜底。
+
+影响范围与回滚：
+- `/projects/:projectId/pages` 接口附带 `page_description`，前端、其他客户端可直接读取业务文案；若需回滚描述，可删除新增字段并恢复前后端文件。
+- 映射表仍存在以防遗留项目未配置描述，确保兼容性。
+
+验证建议：
+1. 调用 `/api/v1/projects/daily_report_25_26/pages`，确认 `pages[]` 结果包含 `page_description` 且文本与配置一致。
+2. 刷新页面选择视图，确保卡片副标题仍显示相同文案；临时删除某条 `页面描述` 可验证回退逻辑。
+3. 检查调试入口描述是否同步来自配置文件（可通过修改 JSON 验证）。
 
