@@ -72,7 +72,10 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--income">
         <Card title="收入分类对比（集团）" extra="单位：万元">
-          <EChart :option="incomeOpt" height="300px" />
+          <EChart :option="incomeOpt" height="380px" />
+          <div class="dashboard-table-wrapper dashboard-table-wrapper--compact">
+            <Table :columns="incomeColumns" :data="incomeTableData" />
+          </div>
         </Card>
       </section>
       
@@ -1600,14 +1603,7 @@ const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) 
         barWidth: 20,
         data: peerData,
         itemStyle: {
-          color: '#0ea5e9',
-          decal: {
-            symbol: 'rect',
-            dashArrayX: [1, 0],
-            dashArrayY: [4, 4],
-            rotation: Math.PI / 4,
-            color: 'rgba(14, 165, 233, 0.45)',
-          },
+          color: '#f97316',
         },
         label: {
           show: true,
@@ -1725,8 +1721,24 @@ const complaintChartConfigs = computed(() => {
 const coalStockOpt = computed(() => useCoalStockOption(coalStockSeries.value))
 
 // --- 表格列与数据 ---
+const incomeColumns = ['分类', '本期', '同期']
 const temperatureColumns = ['日期', '本期(℃)', '同期(℃)']
 const temperatureTableData = computed(() => temperatureSeries.value.tableRows)
+
+const incomeTableData = computed(() => {
+  const categories = incomeSeries.value.categories
+  const current = incomeSeries.value.current
+  const peer = incomeSeries.value.peer
+  return categories.map((label, index) => {
+    const currentVal = current[index]
+    const peerVal = peer[index]
+    return [
+      label,
+      Number.isFinite(currentVal) ? formatIncomeValue(currentVal) : '—',
+      Number.isFinite(peerVal) ? formatIncomeValue(peerVal) : '—',
+    ]
+  })
+})
 
 const marginColumns = [
   '单位',
