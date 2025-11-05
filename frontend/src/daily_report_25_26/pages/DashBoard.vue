@@ -115,7 +115,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getDashboardData } from '../services/api'
 
 // --- 仪表盘局部组件 ---
@@ -335,6 +335,16 @@ const effectiveBizDate = computed(() => {
 const projectKey = 'daily_report_25_26'
 let suppressDashboardWatch = false
 
+const dashboardData = reactive({
+  meta: {
+    projectKey,
+    showDate: '',
+    pushDate: '',
+    generatedAt: '',
+  },
+  sections: {},
+})
+
 async function loadDashboardData(showDate = '') {
   suppressDashboardWatch = true
   try {
@@ -343,6 +353,23 @@ async function loadDashboardData(showDate = '') {
       bizDateInput.value = payload.push_date
     } else if (!bizDateInput.value) {
       bizDateInput.value = defaultBizDate
+    }
+    if (payload && typeof payload === 'object') {
+      dashboardData.meta.showDate = typeof payload.show_date === 'string' ? payload.show_date : ''
+      dashboardData.meta.pushDate = typeof payload.push_date === 'string' ? payload.push_date : ''
+      dashboardData.meta.generatedAt =
+        typeof payload.generated_at === 'string' ? payload.generated_at : ''
+
+      const rawSections =
+        payload.data && typeof payload.data === 'object' ? { ...payload.data } : {}
+      if (typeof rawSections.push_date === 'string' && !dashboardData.meta.pushDate) {
+        dashboardData.meta.pushDate = rawSections.push_date
+      }
+      delete rawSections.push_date
+      if (Object.prototype.hasOwnProperty.call(rawSections, '展示日期')) {
+        delete rawSections['展示日期']
+      }
+      dashboardData.sections = rawSections
     }
     // TODO: 数据映射逻辑将在接入真实数据时实现
   } catch (err) {
@@ -369,14 +396,57 @@ watch(
   },
 )
 
-// --- 模拟数据（后续可替换为后端数据源） ---
-const tempDates = Array.from({ length: 7 }, (_, index) => {
-  const point = new Date(defaultBizDate)
-  point.setDate(point.getDate() - 3 + index)
-  return fmt(point)
+const temperatureSection = computed(() => {
+  const section = dashboardData.sections?.['1.逐小时气温']
+  return section && typeof section === 'object' ? section : {}
 })
-const tempNow = [14.2, 14.1, 14.4, 14.6, 15.6, 16.3, 16.9]
-const tempPeer = [12.9, 12.5, 12.2, 12.8, 13.4, 13.9, 14.1]
+
+const calcAverageFromList = (values) => {
+  if (!Array.isArray(values) || !values.length) return null
+  const numbers = values.filter((item) => typeof item === 'number' && Number.isFinite(item))
+  if (!numbers.length) return null
+  const sum = numbers.reduce((acc, item) => acc + item, 0)
+  return Number((sum / numbers.length).toFixed(2))
+}
+
+const temperatureSeries = computed(() => {
+  const section = temperatureSection.value
+  const mainBucket =
+    section && typeof section === 'object' && typeof section['本期'] === 'object'
+      ? section['本期']
+      : {}
+  const peerBucket =
+    section && typeof section === 'object' && typeof section['同期'] === 'object'
+      ? section['同期']
+      : {}
+
+  const mainLabels = Object.keys(mainBucket || {}).sort()
+  const peerLabels = Object.keys(peerBucket || {}).sort()
+  const labels = mainLabels.length ? mainLabels : peerLabels
+
+  const mainAverages = labels.map((label) => calcAverageFromList(mainBucket[label]))
+  const peerAverages = labels.map((_, index) => {
+    const peerKey = peerLabels[index]
+    return calcAverageFromList(peerBucket[peerKey])
+  })
+
+  const tableRows = labels.map((label, index) => [
+    label,
+    Number.isFinite(mainAverages[index]) ? mainAverages[index] : '—',
+    Number.isFinite(peerAverages[index]) ? peerAverages[index] : '—',
+  ])
+
+  return {
+    labels,
+    mainAverages,
+    peerAverages,
+    mainChart: mainAverages.map((value) => (Number.isFinite(value) ? value : 0)),
+    peerChart: peerAverages.map((value) => (Number.isFinite(value) ? value : 0)),
+    tableRows,
+  }
+})
+
+// --- 模拟数据（后续可替换为后端数据源） ---
 
 const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 const marginData = orgs7.map((org, index) => ({
@@ -418,15 +488,15 @@ const stockData = stockOrgs.map((org, index) => ({
 }))
 
 // --- 图表配置构造 ---
-const useTempOption = () => ({
+const useTempOption = (series) => ({
   tooltip: { trigger: 'axis' },
   legend: { data: ['当期', '同期'] },
   grid: { left: 40, right: 20, top: 40, bottom: 40 },
-  xAxis: { type: 'category', data: tempDates },
+  xAxis: { type: 'category', data: series.labels },
   yAxis: { type: 'value', name: '℃' },
   series: [
-    { name: '当期', type: 'line', smooth: true, data: tempNow },
-    { name: '同期', type: 'line', smooth: true, data: tempPeer },
+    { name: '当期', type: 'line', smooth: true, data: series.mainChart },
+    { name: '同期', type: 'line', smooth: true, data: series.peerChart },
   ],
 })
 
@@ -510,7 +580,7 @@ const useCoalStockOption = () => ({
 })
 
 // --- 图表 option 实例 ---
-const tempOpt = useTempOption()
+const tempOpt = computed(() => useTempOption(temperatureSeries.value))
 const marginOpt = useMarginOption()
 const incomeOpt = useIncomeCompareOption()
 const unitOpt = useUnitConsumptionOption()
@@ -520,7 +590,7 @@ const coalStockOpt = useCoalStockOption()
 
 // --- 表格列与数据 ---
 const temperatureColumns = ['日期', '当期(℃)', '同期(℃)']
-const temperatureTableData = tempDates.map((date, index) => [date, tempNow[index], tempPeer[index]])
+const temperatureTableData = computed(() => temperatureSeries.value.tableRows)
 
 const marginColumns = ['单位', '直接收入', '煤成本', '可计量辅材', '可比煤价边际']
 const marginTableData = marginData.map((item) => [
@@ -543,7 +613,22 @@ const complaintColumns = ['单位', '当日投诉量']
 const complaintTableData = complaintsNow.map((item) => [item.org, item.count])
 
 // --- 顶部指标展示 ---
-const averageTemp = (tempNow.reduce((sum, value) => sum + value, 0) / tempNow.length).toFixed(1)
+const averageTemp = computed(() => {
+  const pushDate = dashboardData.meta.pushDate || dashboardData.meta.showDate || ''
+  const mainBucket =
+    temperatureSection.value && typeof temperatureSection.value === 'object'
+      ? temperatureSection.value['本期']
+      : null
+  if (!pushDate || !mainBucket || typeof mainBucket !== 'object') {
+    return '—'
+  }
+  const values = mainBucket[pushDate]
+  const avg = calcAverageFromList(values)
+  if (avg === null || Number.isNaN(avg)) {
+    return '—'
+  }
+  return avg.toFixed(2)
+})
 const marginHeadline = marginData[0] ? marginData[0].margin : 0
 const coalStdHeadline = coalStdNow[0] ?? 0
 const complaintsHeadline = complaintsNow[0] ? complaintsNow[0].count : 0

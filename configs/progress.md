@@ -34,6 +34,43 @@
 1. 调用上述接口并检查“8.供热分中心单耗明细”中各中心三项指标与 `sum_basic_data` 当日 `value_biz_date` 一致。
 2. 若某中心无数据，确认视图是否存在对应记录；必要时在模板中补充表达式或回退为 0。
 
+## 2025-11-08（仪表盘统一数据容器搭建）
+
+前置说明（降级留痕）：
+- Serena 仍无法直接修改 `.vue` 文件，按照 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`。
+
+本次动作：
+- 引入 `reactive` 并创建 `dashboardData` 容器，用于集中存放 `/dashboard` 响应的元信息（`show_date`、`push_date`、`generated_at`）及各板块原始数据。
+- `loadDashboardData` 在请求成功后写入上述字段，并将 `payload.data` 去除 `push_date`、`展示日期` 后整体挂载到 `dashboardData.sections`，为后续逐模块替换静态演示数据做准备。
+
+影响范围与回滚：
+- 当前页面仍显示历史假数据，暂无直接视觉变化；如需回滚，可恢复该文件并移除容器赋值逻辑。
+- 后续各图表/表格只需引用 `dashboardData`，即可逐步迁移到真实接口数据。
+
+验证建议：
+1. 打开仪表盘页面，借助 Vue DevTools 或控制台打印 `dashboardData`，确认 `meta` 与 `sections` 会随 `/dashboard` 响应更新。
+2. 检查 `sections` 中是否已经包含“1.逐小时气温”“2.边际利润”等节点，为下一步数据映射提供依据。
+
+## 2025-11-08（仪表盘气温模块接入）
+
+前置说明（降级留痕）：
+- 继续按 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 调整 `frontend/src/daily_report_25_26/pages/DashBoard.vue`。
+
+本次动作：
+- 新增 `temperatureSection`、`temperatureSeries` 计算属性，将 `/dashboard` 响应中的“1.逐小时气温”数据转换为图表与表格所需结构，支持日期排序、均值计算及缺失值兜底。
+- `tempOpt`、`temperatureTableData`、`averageTemp` 改为依赖上述计算结果，实时反映后端数据；保持原有图表/表格组件不变。
+- 顶部“平均气温（7日当期）”卡片直接读取 `push_date` 对应的 24 小时列表求算术平均（保留两位小数）；若无该日期则显示“—”。
+- 表格与折线图同样使用两位小数的日均结果，确保与后端算法一致。
+- 后端 `_fetch_temperature_series` 缺失小时不再填 0，而返回 `null`，前端均值计算会自动忽略缺测点，避免平均值被拉低。
+
+影响范围与回滚：
+- 仪表盘气温图与表格现基于真实接口数据；若需回滚，可将相关计算属性与 `useTempOption` 回退为原静态数组。
+- 其他模块仍使用演示数据，未受影响。
+
+验证建议：
+1. 访问 `/projects/daily_report_25_26/pages/dashboard/...`，观察气温折线图与表格是否随 `show_date` 切换而变化。
+2. 检查顶部“平均气温（7日当期）”卡片取值是否与表格展示一致；若返回空数组，应显示“—”并保持图表为 0 基线。
+
 ## 2025-11-08（数据看板 API 初版）
 
 前置说明（降级留痕）：

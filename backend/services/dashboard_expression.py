@@ -177,24 +177,36 @@ def _fetch_temperature_series(
     session,
     start: datetime,
     end: datetime,
-) -> List[float]:
+) -> List[Optional[float]]:
     """查询指定时间区间内的逐小时气温。"""
-    start_utc = start - timedelta(hours=8)
-    end_utc = end - timedelta(hours=8)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=EAST_8)
+    else:
+        start = start.astimezone(EAST_8)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=EAST_8)
+    else:
+        end = end.astimezone(EAST_8)
     stmt = (
         select(TemperatureData.date_time, TemperatureData.value)
-        .where(TemperatureData.date_time >= start_utc, TemperatureData.date_time < end_utc)
+        .where(TemperatureData.date_time >= start, TemperatureData.date_time < end)
         .order_by(TemperatureData.date_time.asc())
     )
     rows = session.execute(stmt).all()
 
-    # 24 小时数组，缺失用 0.0 填充
-    values: List[float] = [0.0] * 24
+    # 24 小时数组，缺失保持为 None 以便前端区分
+    values: List[Optional[float]] = [None] * 24
     for row in rows:
         dt = row[0]
         value = row[1]
         try:
-            hour_index = (dt + timedelta(hours=8)).hour
+            if dt.tzinfo is not None:
+                local_dt = dt.astimezone(EAST_8)
+            else:
+                local_dt = dt
+            hour_index = local_dt.hour
+            if value is None or hour_index < 0 or hour_index > 23:
+                continue
             values[hour_index] = _decimal_to_float(value)
         except Exception:
             continue
