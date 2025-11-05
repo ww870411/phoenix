@@ -666,7 +666,29 @@ const stockData = stockOrgs.map((org, index) => ({
 const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
 
 const useTempOption = (series, highlightDate) => {
-  const highlightExists = highlightDate && series.labels.includes(highlightDate)
+  const highlightKey = normalizeDateKey(highlightDate)
+  const highlightIndex =
+    highlightKey && Array.isArray(series.labels)
+      ? series.labels.findIndex((label) => normalizeDateKey(label) === highlightKey)
+      : -1
+  const highlightExists = highlightIndex !== -1
+  const highlightLabel = highlightExists ? series.labels[highlightIndex] : ''
+  const mainChartValue = highlightExists ? series.mainChart?.[highlightIndex] : null
+  const peerChartValue = highlightExists ? series.peerChart?.[highlightIndex] : null
+  const mainRawValue =
+    highlightExists && Array.isArray(series.mainAverages)
+      ? series.mainAverages[highlightIndex]
+      : null
+  const peerRawValue =
+    highlightExists && Array.isArray(series.peerAverages)
+      ? series.peerAverages[highlightIndex]
+      : null
+
+  const formatTempDisplay = (value) => {
+    if (!Number.isFinite(value)) return '—'
+    return `${Number(value.toFixed(1))}℃`
+  }
+
   return {
     tooltip: { trigger: 'axis' },
     legend: { data: ['当期', '同期'] },
@@ -686,14 +708,67 @@ const useTempOption = (series, highlightDate) => {
               label: {
                 show: true,
                 position: 'end',
-                formatter: '业务日期',
+                formatter: () => `业务日期 ${highlightLabel}`,
                 color: '#f59e0b',
               },
-              data: [{ xAxis: highlightDate }],
+              data: [{ xAxis: highlightLabel }],
             }
           : undefined,
+        markPoint:
+          highlightExists && Number.isFinite(mainRawValue) && Number.isFinite(mainChartValue)
+            ? {
+                symbol: 'circle',
+                symbolSize: 10,
+                itemStyle: { color: '#1d4ed8', borderColor: '#fff', borderWidth: 1 },
+                label: {
+                  show: true,
+                  formatter: () => `当期 ${formatTempDisplay(mainRawValue)}`,
+                  position: 'top',
+                  color: '#1d4ed8',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(226, 232, 240, 0.9)',
+                  borderRadius: 6,
+                  padding: [4, 6],
+                },
+                data: [
+                  {
+                    coord: [highlightLabel, mainChartValue],
+                    value: mainChartValue,
+                  },
+                ],
+              }
+            : undefined,
       },
-      { name: '同期', type: 'line', smooth: true, data: series.peerChart },
+      {
+        name: '同期',
+        type: 'line',
+        smooth: true,
+        data: series.peerChart,
+        markPoint:
+          highlightExists && Number.isFinite(peerRawValue) && Number.isFinite(peerChartValue)
+            ? {
+                symbol: 'diamond',
+                symbolSize: 12,
+                itemStyle: { color: '#f97316', borderColor: '#fff', borderWidth: 1 },
+                label: {
+                  show: true,
+                  formatter: () => `同期 ${formatTempDisplay(peerRawValue)}`,
+                  position: 'bottom',
+                  color: '#f97316',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(255, 244, 230, 0.95)',
+                  borderRadius: 6,
+                  padding: [4, 6],
+                },
+                data: [
+                  {
+                    coord: [highlightLabel, peerChartValue],
+                    value: peerChartValue,
+                  },
+                ],
+              }
+            : undefined,
+      },
     ],
   }
 }
