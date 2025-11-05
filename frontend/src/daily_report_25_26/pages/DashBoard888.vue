@@ -8,6 +8,10 @@
         </div>
       </div>
       <div class="dashboard-header__actions">
+        <label class="dashboard-header__checkbox" title="开启后返回详细求值轨迹">
+          <input type="checkbox" v-model="traceEnabled" />
+          <span>Trace</span>
+        </label>
         <label class="dashboard-header__date-group" title="业务日期">
           <span>业务日期：</span>
           <input type="date" v-model="bizDateInput" />
@@ -21,7 +25,7 @@
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">平均气温（过去3天+当日+3天预报）</div>
+          <div class="summary-card__label">平均气温（7日本期）</div>
           <div class="summary-card__value">{{ averageTemp }}℃</div>
         </div>
       </div>
@@ -50,8 +54,8 @@
 
     <main class="dashboard-grid">
       <section class="dashboard-grid__item dashboard-grid__item--temp">
-        <Card title="气温变化情况（前后3日窗口，含同期）" subtitle="平均气温" extra="单位：℃">
-          <EChart :option="tempOpt" height="300px" />
+        <Card title="气温变化情况（7日窗口，含同期）" subtitle="平均气温" extra="单位：℃">
+          <EChart :option="tempOpt" height="260px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="temperatureColumns" :data="temperatureTableData" />
           </div>
@@ -61,7 +65,7 @@
       <section class="dashboard-grid__item dashboard-grid__item--margin">
         <Card title="边际利润简报" extra="单位：万元">
           <EChart :option="marginOpt" height="300px" />
-          <div class="dashboard-table-wrapper dashboard-table-wrapper--compact">
+          <div class="dashboard-table-wrapper">
             <Table :columns="marginColumns" :data="marginTableData" />
           </div>
         </Card>
@@ -69,47 +73,45 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--income">
         <Card title="收入分类对比（集团）" extra="单位：万元">
-          <EChart :option="incomeOpt" height="300px" />
-        </Card>
-      </section>
-      
-      <section class="dashboard-grid__item dashboard-grid__item--complaint">
-        <Card title="投诉量" subtitle="当日省市平台服务投诉量" extra="单位：件">
-          <EChart :option="complaintOpt" height="300px" />
-          <div class="dashboard-table-wrapper">
-            <Table :columns="complaintColumns" :data="complaintTableData" />
-          </div>
+          <EChart :option="incomeOpt" height="260px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖热单耗对比" :extra="`单位：${unitSeries.units['供暖热单耗'] || '—'}`">
-          <EChart :option="unitHeatOpt" height="300px" />
+          <EChart :option="unitHeatOpt" height="260px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖电单耗对比" :extra="`单位：${unitSeries.units['供暖电单耗'] || '—'}`">
-          <EChart :option="unitElecOpt" height="300px" />
+          <EChart :option="unitElecOpt" height="260px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖水单耗对比" :extra="`单位：${unitSeries.units['供暖水单耗'] || '—'}`">
-          <EChart :option="unitWaterOpt" height="300px" />
+          <EChart :option="unitWaterOpt" height="260px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--coal">
         <Card title="标煤消耗量对比" extra="单位：吨标煤">
-          <EChart :option="coalStdOpt" height="300px" />
+          <EChart :option="coalStdOpt" height="260px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
           </div>
         </Card>
       </section>
 
-      
+      <section class="dashboard-grid__item dashboard-grid__item--complaint">
+        <Card title="投诉量" subtitle="当日省市平台服务投诉量" extra="单位：件">
+          <EChart :option="complaintOpt" height="260px" />
+          <div class="dashboard-table-wrapper">
+            <Table :columns="complaintColumns" :data="complaintTableData" />
+          </div>
+        </Card>
+      </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--stock">
         <Card title="煤炭库存" subtitle="厂内/港口/在途（堆积）" extra="单位：吨">
@@ -405,6 +407,7 @@ const defaultBizDate = (() => {
 })()
 
 // --- 数据看板顶部交互占位 ---
+const traceEnabled = ref(false)
 const bizDateInput = ref('')
 const effectiveBizDate = computed(() => {
   const value = bizDateInput.value
@@ -838,8 +841,8 @@ const useTempOption = (series, highlightDate) => {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['本期', '同期'], bottom: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 60 },
+    legend: { data: ['本期', '同期'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 40 },
     xAxis: { type: 'category', data: series.labels },
     yAxis: { type: 'value', name: '℃' },
     series: [
@@ -925,8 +928,8 @@ const useMarginOption = (seriesData) => {
   const categories = series.map((item) => item.org)
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['直接收入', '煤成本', '外购热成本', '水电辅材成本', '可比煤价边际利润'], bottom: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 80 },
+    legend: { data: ['直接收入', '煤成本', '外购热成本', '水电辅材成本', '可比煤价边际利润'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 60 },
     xAxis: { type: 'category', data: categories },
     yAxis: { type: 'value', name: '万元' },
     series: [
@@ -978,8 +981,8 @@ const useIncomeCompareOption = (seriesData) => {
       axisPointer: { type: 'shadow' },
       formatter: tooltipFormatter,
     },
-    legend: { data: ['本期', '同期'], bottom: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 60 },
+    legend: { data: ['本期', '同期'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 40 },
     xAxis: {
       type: 'category',
       data: categories,
@@ -1151,12 +1154,12 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     legend: {
       data: legendData,
       type: 'scroll',
-      bottom: 0,
+      top: 10,
       itemWidth: 16,
       itemHeight: 10,
       icon: 'roundRect',
     },
-    grid: { left: 40, right: 30, top: 70, bottom: 80 },
+    grid: { left: 40, right: 30, top: 70, bottom: 60 },
     xAxis: {
       type: 'category',
       data: categories,
@@ -1199,8 +1202,8 @@ const useCoalStdOption = (seriesData) => {
         return lines.join('<br/>')
       },
     },
-    legend: { data: ['本期', '同期'], bottom: 0 },
-    grid: { left: 40, right: 30, top: 50, bottom: 60 },
+    legend: { data: ['本期', '同期'] },
+    grid: { left: 40, right: 30, top: 50, bottom: 40 },
     xAxis: {
       type: 'category',
       data: categories,
@@ -1275,8 +1278,8 @@ const useComplaintsOption = () => ({
 
 const useCoalStockOption = () => ({
   tooltip: { trigger: 'axis' },
-  legend: { data: ['厂内存煤', '港口存煤', '在途煤炭'], bottom: 0 },
-  grid: { left: 40, right: 20, top: 40, bottom: 60 },
+  legend: { data: ['厂内存煤', '港口存煤', '在途煤炭'] },
+  grid: { left: 40, right: 20, top: 40, bottom: 40 },
   xAxis: { type: 'category', data: stockOrgs },
   yAxis: { type: 'value', name: '吨' },
   series: [
@@ -1438,7 +1441,7 @@ onMounted(() => {
   .dashboard-header__info {
     flex-direction: row;
     align-items: flex-end;
-    gap: 28px;
+    gap: 24px;
   }
 }
 
@@ -1631,24 +1634,24 @@ onMounted(() => {
   background: linear-gradient(135deg, #ef4444, #fb7185);
 }
 
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    grid-auto-rows: minmax(300px, auto);
-    align-items: stretch;
-  }
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  grid-auto-rows: minmax(340px, auto);
+  align-items: stretch;
+}
 
-  .dashboard-grid__item {
-    min-width: 0;
-    position: relative;
-    z-index: auto;
-    display: flex;
-  }
+.dashboard-grid__item {
+  min-width: 0;
+  position: relative;
+  z-index: auto;
+  display: flex;
+}
 
-  .dashboard-grid__item > .dashboard-card {
-    flex: 1 1 auto;
-  }
+.dashboard-grid__item > .dashboard-card {
+  flex: 1 1 auto;
+}
 
 @media (min-width: 1024px) {
   .dashboard-grid {
@@ -1656,24 +1659,19 @@ onMounted(() => {
   }
 
   .dashboard-grid__item--temp {
-    grid-column: span 6;
+    grid-column: span 5;
   }
 
   .dashboard-grid__item--margin {
-    grid-column: span 6;
-  }
-
-  .dashboard-grid__item--temp .dashboard-card,
-  .dashboard-grid__item--margin .dashboard-card {
-    min-height: 320px;
+    grid-column: span 7;
   }
 
   .dashboard-grid__item--income {
-    grid-column: span 6;
+    grid-column: span 4;
   }
 
   .dashboard-grid__item--unit {
-    grid-column: span 4;
+    grid-column: span 8;
   }
 
   .dashboard-grid__item--coal {
@@ -1682,11 +1680,10 @@ onMounted(() => {
 
   .dashboard-grid__item--complaint {
     grid-column: span 6;
-    min-height: 320px;
   }
 
   .dashboard-grid__item--stock {
-    grid-column: span 6;
+    grid-column: span 12;
   }
 }
 
@@ -1694,7 +1691,7 @@ onMounted(() => {
   background: #ffffff;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.28);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -1757,16 +1754,6 @@ onMounted(() => {
   width: 100%;
 }
 
-.dashboard-table-wrapper--compact {
-  flex: 1 1 auto;
-  display: flex;
-}
-
-.dashboard-table-wrapper--compact > .dashboard-table {
-  flex: 1 1 auto;
-  overflow: auto;
-}
-
 .dashboard-table {
   width: 100%;
   display: block;
@@ -1780,7 +1767,6 @@ onMounted(() => {
     )
     1;
   box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
-  box-sizing: border-box;
 }
 
 .dashboard-table table {
@@ -1861,37 +1847,4 @@ onMounted(() => {
   font-size: 12px;
   color: #94a3b8;
 }
-
-/* === layout polish patch (added) === */
-
-/* Table cards: vertical scroll + sticky headers */
-@media (min-width: 1024px) {
-  .dashboard-card .dashboard-table-wrapper {
-    max-height: 320px;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-.dashboard-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--card-bg, #fff);
-}
-
-/* Keep table cells tidy on wide rows */
-.dashboard-table th,
-.dashboard-table td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 0;
-}
-
-/* Optional: make table-heavy cards take a full row on desktop */
-@media (min-width: 1024px) {
-  .dashboard-grid__item--table { grid-column: 1 / -1; }
-}
-/* === end patch === */
-
 </style>
