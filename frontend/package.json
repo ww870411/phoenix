@@ -15,6 +15,7 @@
   "dependencies": {
     "@revolist/revogrid": "^4.11.0",
     "@revolist/vue3-datagrid": "^4.17.3",
+    "echarts": "^6.0.0",
     "pinia": "^3.0.3",
     "vue": "^3.5.22",
     "vue-router": "^4.5.1"

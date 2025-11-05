@@ -63,8 +63,8 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--margin">
-        <Card title="边际利润简报" subtitle="集团/各单位" extra="单位：万元">
-          <EChart :option="marginOpt" height="260px" />
+        <Card title="边际利润简报" extra="单位：万元">
+          <EChart :option="marginOpt" height="300px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="marginColumns" :data="marginTableData" />
           </div>
@@ -550,28 +550,6 @@ const roundOrZero = (value) => {
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 }
 
-const computeIncomeBreakThreshold = (values) => {
-  const finiteValues = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
-  if (finiteValues.length < 2) return null
-  const maxValue = finiteValues[finiteValues.length - 1]
-  const secondValue = finiteValues[finiteValues.length - 2]
-  if (!Number.isFinite(maxValue) || !Number.isFinite(secondValue) || maxValue <= 0) {
-    return null
-  }
-  let threshold = secondValue * 1.15
-  const upperBound = maxValue * 0.7
-  if (threshold >= maxValue) {
-    threshold = maxValue * 0.6
-  }
-  if (upperBound > 0) {
-    threshold = Math.min(threshold, upperBound)
-  }
-  if (threshold <= 0 || threshold >= maxValue) {
-    return null
-  }
-  return threshold
-}
-
 const formatIncomeValue = (value) => {
   if (!Number.isFinite(value)) return '—'
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -656,16 +634,10 @@ const incomeSeries = computed(() => {
   }
   const currentValues = categories.map((label) => normalizeMetricValue(currentEntries?.[label]))
   const peerValues = categories.map((label) => normalizeMetricValue(peerEntries?.[label]))
-  const mergedValues = currentValues
-    .concat(peerValues)
-    .filter((value) => Number.isFinite(value))
-  const maxValue = mergedValues.length ? Math.max(...mergedValues) : null
   return {
     categories,
     current: currentValues,
     peer: peerValues,
-    max: maxValue,
-    breakThreshold: computeIncomeBreakThreshold(mergedValues),
   }
 })
 
@@ -822,7 +794,22 @@ const useMarginOption = (seriesData) => {
       { name: '煤成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.coal)) },
       { name: '外购热成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.purchaseHeat)) },
       { name: '水电辅材成本', type: 'bar', stack: 'base', data: series.map((item) => -roundOrZero(item.utilities)) },
-      { name: '可比煤价边际利润', type: 'line', data: series.map((item) => roundOrZero(item.marginCmpCoal)) },
+      {
+        name: '可比煤价边际利润',
+        type: 'line',
+        data: series.map((item) => roundOrZero(item.marginCmpCoal)),
+        label: {
+          show: true,
+          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          position: 'top',
+          color: '#0f172a',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+        },
+        itemStyle: { color: '#2563eb' },
+        emphasis: { focus: 'series' },
+      },
     ],
   }
 }
@@ -831,13 +818,6 @@ const useIncomeCompareOption = (seriesData) => {
   const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
   const current = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : []
-  const breakThreshold = Number.isFinite(seriesData?.breakThreshold)
-    ? seriesData.breakThreshold
-    : null
-  const maxValue = Number.isFinite(seriesData?.max) ? seriesData.max : null
-  const palette = Array.isArray(chartPalette.value) ? chartPalette.value : []
-  const currentColor = palette[0] || '#2563eb'
-  const peerColor = palette[1] || '#16a34a'
 
   const tooltipFormatter = (params) => {
     if (!params || !params.length) return ''
@@ -852,151 +832,56 @@ const useIncomeCompareOption = (seriesData) => {
     return lines.join('<br/>')
   }
 
-  if (
-    !categories.length ||
-    !Number.isFinite(maxValue) ||
-    !Number.isFinite(breakThreshold) ||
-    maxValue <= breakThreshold * 1.05
-  ) {
-    return {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        formatter: tooltipFormatter,
-      },
-      legend: { data: ['本期', '同期'] },
-      grid: { left: 40, right: 20, top: 40, bottom: 40 },
-      xAxis: {
-        type: 'category',
-        data: categories,
-        axisTick: { alignWithLabel: true },
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: {
-          formatter: (value) => formatIncomeValue(value),
-        },
-        splitLine: { lineStyle: { type: 'dashed' } },
-      },
-      series: [
-        {
-          name: '本期',
-          type: 'bar',
-          barWidth: 26,
-          data: current.map((value) => (Number.isFinite(value) ? value : 0)),
-          itemStyle: { color: currentColor },
-        },
-        {
-          name: '同期',
-          type: 'bar',
-          barWidth: 26,
-          data: peer.map((value) => (Number.isFinite(value) ? value : 0)),
-          itemStyle: { color: peerColor },
-        },
-      ],
-    }
-  }
-
-  const bottomCurrent = current.map((value) =>
-    Number.isFinite(value) ? Math.min(value, breakThreshold) : 0,
-  )
-  const bottomPeer = peer.map((value) =>
-    Number.isFinite(value) ? Math.min(value, breakThreshold) : 0,
-  )
-  const topCurrent = current.map((value) =>
-    Number.isFinite(value) && value > breakThreshold ? value : null,
-  )
-  const topPeer = peer.map((value) =>
-    Number.isFinite(value) && value > breakThreshold ? value : null,
-  )
-
   return {
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'shadow', link: [{ xAxisIndex: [0, 1] }] },
+      axisPointer: { type: 'shadow' },
       formatter: tooltipFormatter,
     },
-    legend: { data: ['当期', '同期'] },
-    grid: [
-      { left: 40, right: 20, top: 40, height: '44%' },
-      { left: 40, right: 20, top: '62%', height: '28%' },
-    ],
-    xAxis: [
-      {
-        type: 'category',
-        data: categories,
-        axisTick: { alignWithLabel: true },
-        axisLine: { show: false },
-        axisLabel: { show: false },
+    legend: { data: ['本期', '同期'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: (value) => formatIncomeValue(value),
       },
-      {
-        type: 'category',
-        gridIndex: 1,
-        data: categories,
-        axisTick: { alignWithLabel: true },
-        axisLine: { lineStyle: { color: '#cbd5f5' } },
-        axisLabel: { color: '#475569' },
-      },
-    ],
-    yAxis: [
-      {
-        type: 'value',
-        min: breakThreshold,
-        max: maxValue * 1.05,
-        axisLabel: {
-          formatter: (value) => formatIncomeValue(value),
-        },
-        splitLine: { show: false },
-      },
-      {
-        type: 'value',
-        gridIndex: 1,
-        min: 0,
-        max: breakThreshold,
-        axisLabel: {
-          formatter: (value) => formatIncomeValue(value),
-        },
-        splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } },
-      },
-    ],
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
     series: [
       {
         name: '本期',
         type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
         barWidth: 26,
-        data: bottomCurrent,
-        itemStyle: { color: currentColor, opacity: 0.7 },
+        data: current.map((value) => (Number.isFinite(value) ? value : 0)),
+        label: {
+          show: true,
+          position: 'top',
+          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          color: '#0f172a',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+        },
       },
       {
         name: '同期',
         type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
         barWidth: 26,
-        data: bottomPeer,
-        itemStyle: { color: peerColor, opacity: 0.7 },
-      },
-      {
-        name: '本期',
-        type: 'bar',
-        xAxisIndex: 0,
-        yAxisIndex: 0,
-        barWidth: 26,
-        data: topCurrent,
-        itemStyle: { color: currentColor },
-        emphasis: { focus: 'self' },
-      },
-      {
-        name: '同期',
-        type: 'bar',
-        xAxisIndex: 0,
-        yAxisIndex: 0,
-        barWidth: 26,
-        data: topPeer,
-        itemStyle: { color: peerColor },
-        emphasis: { focus: 'self' },
+        data: peer.map((value) => (Number.isFinite(value) ? value : 0)),
+        label: {
+          show: true,
+          position: 'top',
+          formatter: ({ value }) => (Number.isFinite(value) ? value.toFixed(1) : '—'),
+          color: '#0f172a',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          borderRadius: 6,
+          padding: [4, 6],
+        },
       },
     ],
   }
