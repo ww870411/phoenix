@@ -427,18 +427,49 @@ calc_hot_water AS (
     '万元'::text                        AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.value_biz_date ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.value_peer_date ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_7d_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_7d_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_month_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_month_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_ytd_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_hw.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.sum_ytd_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_hot_water_sales' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_hw.value,0))/10000.0
+    END
   FROM base b
   LEFT JOIN const_biz  cb_hw ON cb_hw.company=b.company AND cb_hw.item='price_hot_water_sales'
   LEFT JOIN const_peer cp_hw ON cp_hw.company=b.company AND cp_hw.item='price_hot_water_sales'
-  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_hw.value, cp_hw.value
 ),
 calc_steam AS (
@@ -451,18 +482,49 @@ calc_steam AS (
     '万元'::text                    AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0,
-    (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.value_biz_date ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.value_peer_date ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_7d_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_7d_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_7d_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_7d_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_month_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_month_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_month_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_month_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_ytd_biz ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_ytd_biz ELSE 0 END) * COALESCE(cb_ss.value,0))/10000.0
+    END,
+    CASE
+      WHEN b.company='GongRe'
+        THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.sum_ytd_peer ELSE 0 END),0)
+      ELSE (SUM(CASE WHEN b.item='amount_steam_sales' THEN b.sum_ytd_peer ELSE 0 END) * COALESCE(cp_ss.value,0))/10000.0
+    END
   FROM base b
   LEFT JOIN const_biz  cb_ss ON cb_ss.company=b.company AND cb_ss.item='price_steam_sales'
   LEFT JOIN const_peer cp_ss ON cp_ss.company=b.company AND cp_ss.item='price_steam_sales'
-  WHERE b.company <> 'GongRe'
   GROUP BY b.company, b.company_cn, cb_ss.value, cp_ss.value
 ),
 calc_coal_cost AS (
@@ -954,8 +1016,10 @@ calc AS (
 SELECT *
 FROM base
 WHERE NOT (item='consumption_station_heat' AND company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan'))
+  AND NOT (company='GongRe' AND item IN ('eco_hot_water_supply_income','eco_steam_supply_income'))
 UNION ALL
 SELECT * FROM calc;
+
 
 
 -- 注意：普通视图不可创建索引；如需性能优化，请在底表 daily_basic_data 上创建（或调整）索引。

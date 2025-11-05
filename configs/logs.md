@@ -364,6 +364,12 @@ codex resume 019a2f22-698b-7b72-85e3-6c00c0e8c7c5
       - CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_basic_unique ON daily_basic_data (company, sheet_name, item, date);     
 
 
+自增序列越界
+      1. SELECT last_value FROM daily_basic_data_id_seq;                                                                                                                                         
+      2. SELECT MAX(id) FROM daily_basic_data;                                                                                                                                                   
+      3. SELECT setval('daily_basic_data_id_seq', COALESCE((SELECT MAX(id) FROM daily_basic_data), 0));  
+
+
 codex resume 019a31e6-34e9-7972-8820-0fc695a52f82
 
 
