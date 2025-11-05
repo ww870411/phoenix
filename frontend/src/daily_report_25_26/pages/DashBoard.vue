@@ -25,7 +25,7 @@
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">平均气温（7日当期）</div>
+          <div class="summary-card__label">平均气温（7日本期）</div>
           <div class="summary-card__value">{{ averageTemp }}℃</div>
         </div>
       </div>
@@ -39,7 +39,7 @@
       <div class="summary-card summary-card--warning">
         <div class="summary-card__icon summary-card__icon--coal" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团标煤消耗（当期）</div>
+          <div class="summary-card__label">集团标煤消耗（本期）</div>
           <div class="summary-card__value">{{ coalStdHeadline }} 吨标煤</div>
         </div>
       </div>
@@ -72,7 +72,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--income">
-        <Card title="收入分类对比（集团）" subtitle="当期 vs 同期" extra="单位：万元">
+        <Card title="收入分类对比（集团）" subtitle="本期 vs 同期" extra="单位：万元">
           <EChart :option="incomeOpt" height="260px" />
         </Card>
       </section>
@@ -84,7 +84,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--coal">
-        <Card title="标煤消耗量对比" subtitle="当期 vs 同期" extra="单位：吨标煤">
+        <Card title="标煤消耗量对比" subtitle="本期 vs 同期" extra="单位：吨标煤">
           <EChart :option="coalStdOpt" height="260px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
@@ -550,6 +550,33 @@ const roundOrZero = (value) => {
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 }
 
+const computeIncomeBreakThreshold = (values) => {
+  const finiteValues = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
+  if (finiteValues.length < 2) return null
+  const maxValue = finiteValues[finiteValues.length - 1]
+  const secondValue = finiteValues[finiteValues.length - 2]
+  if (!Number.isFinite(maxValue) || !Number.isFinite(secondValue) || maxValue <= 0) {
+    return null
+  }
+  let threshold = secondValue * 1.15
+  const upperBound = maxValue * 0.7
+  if (threshold >= maxValue) {
+    threshold = maxValue * 0.6
+  }
+  if (upperBound > 0) {
+    threshold = Math.min(threshold, upperBound)
+  }
+  if (threshold <= 0 || threshold >= maxValue) {
+    return null
+  }
+  return threshold
+}
+
+const formatIncomeValue = (value) => {
+  if (!Number.isFinite(value)) return '—'
+  return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 const marginSection = computed(() => {
   const section = dashboardData.sections?.['2.边际利润']
   return section && typeof section === 'object' ? section : {}
@@ -627,10 +654,18 @@ const incomeSeries = computed(() => {
       }
     }
   }
+  const currentValues = categories.map((label) => normalizeMetricValue(currentEntries?.[label]))
+  const peerValues = categories.map((label) => normalizeMetricValue(peerEntries?.[label]))
+  const mergedValues = currentValues
+    .concat(peerValues)
+    .filter((value) => Number.isFinite(value))
+  const maxValue = mergedValues.length ? Math.max(...mergedValues) : null
   return {
     categories,
-    current: categories.map((label) => normalizeMetricValue(currentEntries?.[label])),
-    peer: categories.map((label) => normalizeMetricValue(peerEntries?.[label])),
+    current: currentValues,
+    peer: peerValues,
+    max: maxValue,
+    breakThreshold: computeIncomeBreakThreshold(mergedValues),
   }
 })
 
@@ -691,7 +726,7 @@ const useTempOption = (series, highlightDate) => {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['当期', '同期'] },
+    legend: { data: ['本期', '同期'] },
     grid: { left: 40, right: 20, top: 40, bottom: 40 },
     xAxis: { type: 'category', data: series.labels },
     yAxis: { type: 'value', name: '℃' },
@@ -722,7 +757,7 @@ const useTempOption = (series, highlightDate) => {
                 itemStyle: { color: '#1d4ed8', borderColor: '#fff', borderWidth: 1 },
                 label: {
                   show: true,
-                  formatter: () => `当期 ${formatTempDisplay(mainRawValue)}`,
+                  formatter: () => `本期 ${formatTempDisplay(mainRawValue)}`,
                   position: 'top',
                   color: '#1d4ed8',
                   fontWeight: 600,
@@ -796,15 +831,173 @@ const useIncomeCompareOption = (seriesData) => {
   const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
   const current = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : []
+  const breakThreshold = Number.isFinite(seriesData?.breakThreshold)
+    ? seriesData.breakThreshold
+    : null
+  const maxValue = Number.isFinite(seriesData?.max) ? seriesData.max : null
+  const palette = Array.isArray(chartPalette.value) ? chartPalette.value : []
+  const currentColor = palette[0] || '#2563eb'
+  const peerColor = palette[1] || '#16a34a'
+
+  const tooltipFormatter = (params) => {
+    if (!params || !params.length) return ''
+    const axisValue = params[0]?.axisValue || params[0]?.name
+    const index = categories.indexOf(axisValue)
+    if (index === -1) return ''
+    const currentVal = current[index]
+    const peerVal = peer[index]
+    const lines = [`<strong>${axisValue}</strong>`]
+    lines.push(`本期：${formatIncomeValue(currentVal)} 万元`)
+    lines.push(`同期：${formatIncomeValue(peerVal)} 万元`)
+    return lines.join('<br/>')
+  }
+
+  if (
+    !categories.length ||
+    !Number.isFinite(maxValue) ||
+    !Number.isFinite(breakThreshold) ||
+    maxValue <= breakThreshold * 1.05
+  ) {
+    return {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: tooltipFormatter,
+      },
+      legend: { data: ['本期', '同期'] },
+      grid: { left: 40, right: 20, top: 40, bottom: 40 },
+      xAxis: {
+        type: 'category',
+        data: categories,
+        axisTick: { alignWithLabel: true },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: (value) => formatIncomeValue(value),
+        },
+        splitLine: { lineStyle: { type: 'dashed' } },
+      },
+      series: [
+        {
+          name: '本期',
+          type: 'bar',
+          barWidth: 26,
+          data: current.map((value) => (Number.isFinite(value) ? value : 0)),
+          itemStyle: { color: currentColor },
+        },
+        {
+          name: '同期',
+          type: 'bar',
+          barWidth: 26,
+          data: peer.map((value) => (Number.isFinite(value) ? value : 0)),
+          itemStyle: { color: peerColor },
+        },
+      ],
+    }
+  }
+
+  const bottomCurrent = current.map((value) =>
+    Number.isFinite(value) ? Math.min(value, breakThreshold) : 0,
+  )
+  const bottomPeer = peer.map((value) =>
+    Number.isFinite(value) ? Math.min(value, breakThreshold) : 0,
+  )
+  const topCurrent = current.map((value) =>
+    Number.isFinite(value) && value > breakThreshold ? value : null,
+  )
+  const topPeer = peer.map((value) =>
+    Number.isFinite(value) && value > breakThreshold ? value : null,
+  )
+
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', link: [{ xAxisIndex: [0, 1] }] },
+      formatter: tooltipFormatter,
+    },
     legend: { data: ['当期', '同期'] },
-    grid: { left: 40, right: 20, top: 40, bottom: 40 },
-    xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value', name: '万元' },
+    grid: [
+      { left: 40, right: 20, top: 40, height: '44%' },
+      { left: 40, right: 20, top: '62%', height: '28%' },
+    ],
+    xAxis: [
+      {
+        type: 'category',
+        data: categories,
+        axisTick: { alignWithLabel: true },
+        axisLine: { show: false },
+        axisLabel: { show: false },
+      },
+      {
+        type: 'category',
+        gridIndex: 1,
+        data: categories,
+        axisTick: { alignWithLabel: true },
+        axisLine: { lineStyle: { color: '#cbd5f5' } },
+        axisLabel: { color: '#475569' },
+      },
+    ],
+    yAxis: [
+      {
+        type: 'value',
+        min: breakThreshold,
+        max: maxValue * 1.05,
+        axisLabel: {
+          formatter: (value) => formatIncomeValue(value),
+        },
+        splitLine: { show: false },
+      },
+      {
+        type: 'value',
+        gridIndex: 1,
+        min: 0,
+        max: breakThreshold,
+        axisLabel: {
+          formatter: (value) => formatIncomeValue(value),
+        },
+        splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } },
+      },
+    ],
     series: [
-      { name: '当期', type: 'bar', data: current.map((value) => roundOrZero(value)) },
-      { name: '同期', type: 'bar', data: peer.map((value) => roundOrZero(value)) },
+      {
+        name: '本期',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        barWidth: 26,
+        data: bottomCurrent,
+        itemStyle: { color: currentColor, opacity: 0.7 },
+      },
+      {
+        name: '同期',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        barWidth: 26,
+        data: bottomPeer,
+        itemStyle: { color: peerColor, opacity: 0.7 },
+      },
+      {
+        name: '本期',
+        type: 'bar',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        barWidth: 26,
+        data: topCurrent,
+        itemStyle: { color: currentColor },
+        emphasis: { focus: 'self' },
+      },
+      {
+        name: '同期',
+        type: 'bar',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        barWidth: 26,
+        data: topPeer,
+        itemStyle: { color: peerColor },
+        emphasis: { focus: 'self' },
+      },
     ],
   }
 }
@@ -824,12 +1017,12 @@ const useUnitConsumptionOption = () => ({
 
 const useCoalStdOption = () => ({
   tooltip: { trigger: 'axis' },
-  legend: { data: ['当期', '同期'] },
+  legend: { data: ['本期', '同期'] },
   grid: { left: 40, right: 20, top: 40, bottom: 40 },
   xAxis: { type: 'category', data: coalStdOrgs },
   yAxis: { type: 'value', name: '吨标煤' },
   series: [
-    { name: '当期', type: 'bar', data: coalStdNow },
+    { name: '本期', type: 'bar', data: coalStdNow },
     { name: '同期', type: 'bar', data: coalStdPeer },
   ],
 })
@@ -872,7 +1065,7 @@ const complaintOpt = useComplaintsOption()
 const coalStockOpt = useCoalStockOption()
 
 // --- 表格列与数据 ---
-const temperatureColumns = ['日期', '当期(℃)', '同期(℃)']
+const temperatureColumns = ['日期', '本期(℃)', '同期(℃)']
 const temperatureTableData = computed(() => temperatureSeries.value.tableRows)
 
 const marginColumns = [
@@ -896,7 +1089,7 @@ const marginTableData = computed(() =>
   ]),
 )
 
-const coalStdColumns = ['单位', '当期', '同期', '差值']
+const coalStdColumns = ['单位', '本期', '同期', '差值']
 const coalStdTableData = coalStdOrgs.map((org, index) => [
   org,
   coalStdNow[index],

@@ -24,7 +24,7 @@
 
 本次动作：
 - 新增 `incomeSection`/`incomeSeries` 计算属性，解析 `/dashboard` 的“3.集团全口径收入明细”节点，将本期/同期收入转化为分类数组及数值列表。
-- `useIncomeCompareOption` 改为根据上述计算结果绘制柱状图，替换原本的 `incomeCat/incomeNow/incomePeer` 演示常量，图例保持“当期/同期”对比。
+- `useIncomeCompareOption` 改为根据上述计算结果绘制柱状图，替换原本的 `incomeCat/incomeNow/incomePeer` 演示常量，图例保持“本期/同期”对比；当最大值远超其它科目时，自动启用双 grid 模拟断轴展示，高区显示超过阈值的“暖收入”等大额数据，并在断层处绘制撕纸效果。
 
 影响范围与回滚：
 - 仅调整 `DashBoard.vue`；如需恢复演示数据，可回退至修改前版本重新启用静态数组。
