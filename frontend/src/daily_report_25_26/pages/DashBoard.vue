@@ -98,7 +98,7 @@
             </div>
           </div>
           <div class="dashboard-table-wrapper dashboard-table-wrapper--small">
-            <Table :columns="complaintColumns" :data="complaintTableData" />
+            <Table :columns="complaintColumns" :data="complaintTableData" font-size="9px" />
           </div>
         </Card>
       </section>
@@ -143,7 +143,7 @@
     </main>
 
     <footer class="dashboard-footer">
-      大连洁净能源集团有限公司 生产日报系统
+      大连洁净能源集团有限公司  生产日报系统
     </footer>
   </div>
 </template>
@@ -180,14 +180,32 @@ const Table = defineComponent({
   props: {
     columns: {
       type: Array,
-      default: () => [],
+      required: true
     },
     data: {
       type: Array,
-      default: () => [],
+      required: true
     },
+    fontSize: {
+      type: String,
+      default: '13px'
+    }
   },
   setup(props) {
+    const thStyle = {
+      padding: '8px 12px',
+      fontWeight: '600',
+      textAlign: 'left',
+      backgroundColor: '#fafafa',
+      borderBottom: '1px solid #f0f0f0',
+      fontSize: props.fontSize,
+    };
+    const tdStyle = {
+      padding: '8px 12px',
+      borderBottom: '1px solid #f0f0f0',
+      fontSize: props.fontSize,
+    };
+
     const hasColumns = computed(() => Array.isArray(props.columns) && props.columns.length > 0)
     const hasData = computed(() => Array.isArray(props.data) && props.data.length > 0)
 
@@ -893,6 +911,14 @@ const coalStockColumns = computed(() => {
   return ['单位', ...stacks, '合计']
 })
 
+const formatWithThousands = (value, fractionDigits = 0) => {
+  if (!Number.isFinite(value)) return ''
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })
+}
+
 const coalStockTableData = computed(() => {
   const { companies, stacks, matrix, totals } = coalStockSeries.value
   return companies.map((company, rowIndex) => {
@@ -909,12 +935,12 @@ const coalStockTableData = computed(() => {
       return null
     })
     const formattedStacks = stackValues.map((value) =>
-      value === null ? '' : Number(value).toFixed(0),
+      value === null ? '' : formatWithThousands(value, 0),
     )
     const totalFormatted = Number.isFinite(totals?.[rowIndex])
-      ? Number(totals[rowIndex]).toFixed(0)
+      ? formatWithThousands(totals[rowIndex], 0)
       : Number.isFinite(total)
-        ? Number(total).toFixed(0)
+        ? formatWithThousands(total, 0)
         : ''
     return [company, ...formattedStacks, totalFormatted]
   })
@@ -1177,6 +1203,7 @@ const useMarginOption = (seriesData) => {
           color: '#0f172a',
           borderRadius: 6,
           padding: [4, 6],
+          backgroundColor: 'rgba(255, 255, 255, 0.75)',
         },
         itemStyle: { color: '#2563eb' },
         emphasis: { focus: 'series' },
@@ -1338,10 +1365,24 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
 
   const metricsToRender = targetIndex >= 0 ? [metricLabel] : [metricLabel]
 
-metricsToRender.forEach((metric) => {
-  const currentLabel = `${metric}（本期）`
-  const peerLabel = `${metric}（同期）`
-  legendData.push(currentLabel, peerLabel)
+  metricsToRender.forEach((metric) => {
+    const currentLabel = `${metric}（本期）`
+    const peerLabel = `${metric}（同期）`
+    legendData.push(currentLabel, peerLabel)
+    const formatCombinedLabel = ({ value, dataIndex }) => {
+      const currentText = formatLabelValue({ value })
+      const peerValue =
+        Array.isArray(peerData) && typeof dataIndex === 'number' ? peerData[dataIndex] : null
+      const peerText = formatLabelValue({ value: peerValue })
+      const parts = []
+      if (currentText) {
+        parts.push(`本期 ${currentText}`)
+      }
+      if (peerText) {
+        parts.push(`同期 ${peerText}`)
+      }
+      return parts.join('\n') || ''
+    }
 
     chartSeries.push({
       name: currentLabel,
@@ -1355,11 +1396,12 @@ metricsToRender.forEach((metric) => {
         show: true,
         position: 'top',
         distance: 6,
-        formatter: formatLabelValue,
+        formatter: formatCombinedLabel,
         color: '#0f172a',
+        lineHeight: 16,
         borderRadius: 6,
         padding: [4, 6],
-        offset: [0, -16],
+        offset: [0, -12],
       },
       labelLayout: { moveOverlap: 'shiftY' },
       emphasis: { focus: 'series' },
@@ -1422,11 +1464,23 @@ const useCoalStdOption = (seriesData) => {
 
   const formatValue = (value) => {
     if (!shouldDisplayLabel(value)) return ''
-    return Number(value).toFixed(1)
+    return formatWithThousands(value, 1)
   }
 
   const phaseGap = '15%'
   const metricGap = '55%'
+
+  const formatCombinedLabel = ({ value, dataIndex }) => {
+    const currentValue = Number.isFinite(value) ? Number(value) : null
+    const currentText = formatValue(currentValue)
+    const peerValue =
+      Array.isArray(peer) && typeof dataIndex === 'number' ? peer[dataIndex] : null
+    const peerText = formatValue(peerValue)
+    const parts = []
+    if (currentText) parts.push(`本期 ${currentText}`)
+    if (peerText) parts.push(`同期 ${peerText}`)
+    return parts.join('\n') || ''
+  }
 
   return {
     tooltip: {
@@ -1458,7 +1512,7 @@ const useCoalStdOption = (seriesData) => {
       type: 'value',
       splitLine: { lineStyle: { type: 'dashed' } },
       axisLabel: {
-        formatter: (val) => (Number.isFinite(val) ? Number(val).toFixed(0) : val),
+        formatter: (val) => (Number.isFinite(val) ? formatWithThousands(val, 0) : val),
       },
     },
     series: [
@@ -1472,10 +1526,12 @@ const useCoalStdOption = (seriesData) => {
           show: true,
           position: 'top',
           distance: 6,
-          formatter: ({ value }) => formatValue(value),
+          formatter: formatCombinedLabel,
           color: '#0f172a',
+          lineHeight: 16,
           borderRadius: 6,
           padding: [4, 6],
+          offset: [0, -12],
         },
         labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
@@ -1495,15 +1551,7 @@ const useCoalStdOption = (seriesData) => {
             color: 'rgba(14, 165, 233, 0.45)',
           },
         },
-        label: {
-          show: true,
-          position: 'top',
-          distance: 6,
-          formatter: ({ value }) => formatValue(value),
-          color: '#475569',
-          borderRadius: 6,
-          padding: [4, 6],
-        },
+        label: { show: false },
         labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
       },
@@ -1524,6 +1572,13 @@ const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) 
 
   const currentData = resolveSeriesData('本期')
   const peerData = resolveSeriesData('同期')
+  const formatComplaintLabel = ({ value }) => {
+    if (!Number.isFinite(value)) return '—'
+    return Number(value).toLocaleString('zh-CN', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+  }
 
   const tooltipFormatter = (params) => {
     if (!Array.isArray(params) || !params.length) return ''
@@ -1573,7 +1628,7 @@ const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) 
           position: 'top',
           distance: 6,
           color: '#0f172a',
-          formatter: ({ value }) => formatLabelNumber(value),
+          formatter: formatComplaintLabel,
         },
         labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
@@ -1591,7 +1646,7 @@ const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) 
           position: 'top',
           distance: 6,
           color: '#0f172a',
-          formatter: ({ value }) => formatLabelNumber(value),
+          formatter: formatComplaintLabel,
         },
         labelLayout: { moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
@@ -1622,7 +1677,7 @@ const useCoalStockOption = (seriesPayload) => {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: [...stacks, '合计'], bottom: 0 },
+    legend: { data: [...stacks], bottom: 0 },
     grid: { left: 40, right: 20, top: 40, bottom: 60 },
     xAxis: {
       type: 'category',
@@ -1644,21 +1699,22 @@ const useCoalStockOption = (seriesPayload) => {
       }),
       {
         name: '合计',
-        type: 'line',
+        type: 'scatter',
+        symbol: 'circle',
+        symbolSize: 0,
         data: (payload.totals || []).map((value) => (Number.isFinite(value) ? Number(value) : 0)),
         label: {
           show: true,
           position: 'top',
-          formatter: ({ value }) => (Number.isFinite(value) ? Number(value).toFixed(0) : ''),
+        formatter: ({ value }) =>
+          Number.isFinite(value) ? formatWithThousands(value, 0) : '',
           color: '#0f172a',
           borderRadius: 6,
           padding: [4, 6],
-          distance: 8,
+          distance: 6,
         },
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { color: '#1f2937', width: 1, type: 'dashed' },
-        itemStyle: { color: '#1f2937' },
+        itemStyle: { color: 'transparent' },
+        z: 5,
         emphasis: { focus: 'series' },
       },
     ],
