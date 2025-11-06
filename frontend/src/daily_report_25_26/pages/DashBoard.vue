@@ -65,7 +65,7 @@
         <Card title="边际利润简报" extra="单位：万元">
           <EChart :option="marginOpt" height="300px" />
           <div class="dashboard-table-wrapper dashboard-table-wrapper--compact">
-            <Table :columns="marginColumns" :data="marginTableData" />
+            <Table :columns="marginColumns" :data="marginTableData" font-size="11px" />
           </div>
         </Card>
       </section>
@@ -118,6 +118,34 @@
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖水单耗对比" :extra="`单位：${unitSeries.units['供暖水单耗'] || '—'}`">
           <EChart :option="unitWaterOpt" height="300px" />
+        </Card>
+      </section>
+
+      <section class="dashboard-grid__item dashboard-grid__item--center">
+        <Card title="供热分中心单耗明细" :extra="heatingCenterExtraLabel">
+          <div class="center-card__controls" role="group" aria-label="供热分中心单耗排序">
+            <span class="center-card__controls-label">排序指标：</span>
+            <button
+              v-for="option in heatingCenterMetricOptions"
+              :key="option.key"
+              type="button"
+              class="center-card__metric-btn"
+              :class="{ 'is-active': option.key === heatingCenterMetric }"
+              @click="selectHeatingCenterMetric(option.key)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <div class="center-card__content">
+            <EChart :option="heatingCenterOpt" height="340px" />
+            <div class="center-card__table">
+              <Table
+                :columns="heatingCenterTableColumns"
+                :data="heatingCenterTableData"
+                font-size="8px"
+              />
+            </div>
+          </div>
         </Card>
       </section>
 
@@ -1013,6 +1041,162 @@ const unitSeries = computed(() => {
   }
 })
 
+const heatingCenterMetricKeys = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
+const heatingCenterMetaKeys = new Set(['数据来源', '查询结构', '计量单位'])
+
+const heatingCenterSection = computed(() => {
+  const section = dashboardData.sections?.['8.供热分中心单耗明细']
+  return section && typeof section === 'object' ? section : {}
+})
+
+const heatingCenterUnits = computed(() => {
+  const rawUnits = heatingCenterSection.value?.['计量单位']
+  if (rawUnits && typeof rawUnits === 'object') {
+    return rawUnits
+  }
+  return {
+    '供暖热单耗': 'GJ/万㎡',
+    '供暖电单耗': 'kWh/万㎡',
+    '供暖水单耗': '吨/万㎡',
+  }
+})
+
+const heatingCenterCenters = computed(() => {
+  const section = heatingCenterSection.value
+  const centers = []
+  for (const [name, payload] of Object.entries(section)) {
+    if (heatingCenterMetaKeys.has(name)) continue
+    if (!payload || typeof payload !== 'object') continue
+    const metrics = {}
+    let hasValue = false
+    heatingCenterMetricKeys.forEach((metric) => {
+      const normalized = normalizeMetricValue(payload?.[metric])
+      if (Number.isFinite(normalized)) {
+        metrics[metric] = Number(normalized)
+        hasValue = true
+      } else {
+        metrics[metric] = null
+      }
+    })
+    if (hasValue) {
+      centers.push({ name, metrics })
+    }
+  }
+  return centers
+})
+
+const heatingCenterMetricOptions = computed(() => {
+  const units = heatingCenterUnits.value || {}
+  return heatingCenterMetricKeys.map((metric) => ({
+    key: metric,
+    label: metric,
+    unit: units?.[metric] || '',
+  }))
+})
+
+const heatingCenterMetric = ref(heatingCenterMetricKeys[0])
+
+watch(
+  heatingCenterMetricOptions,
+  (options) => {
+    if (!options.length) {
+      heatingCenterMetric.value = ''
+      return
+    }
+    if (!options.some((option) => option.key === heatingCenterMetric.value)) {
+      heatingCenterMetric.value = options[0].key
+    }
+  },
+  { immediate: true },
+)
+
+const heatingCenterData = computed(() => {
+  const centers = heatingCenterCenters.value
+  const metric = heatingCenterMetric.value
+  const units = heatingCenterUnits.value || {}
+  if (!metric || !centers.length) {
+    return { metric, unit: units?.[metric] || '', list: [], average: null }
+  }
+  const sorted = [...centers].sort((a, b) => {
+    const av = a.metrics?.[metric]
+    const bv = b.metrics?.[metric]
+    if (!Number.isFinite(av) && !Number.isFinite(bv)) return 0
+    if (!Number.isFinite(av)) return 1
+    if (!Number.isFinite(bv)) return -1
+    return av - bv
+  })
+  const enriched = sorted.map((item, index) => ({
+    name: item.name,
+    rank: index + 1,
+    metrics: item.metrics,
+    metricValue: item.metrics?.[metric],
+  }))
+  const validValues = enriched
+    .map((item) => item.metricValue)
+    .filter((value) => Number.isFinite(value))
+  const average =
+    validValues.length > 0
+      ? validValues.reduce((sum, value) => sum + Number(value), 0) / validValues.length
+      : null
+  return {
+    metric,
+    unit: units?.[metric] || '',
+    list: enriched,
+    average,
+    units,
+  }
+})
+
+const heatingCenterOpt = computed(() => useHeatingCenterOption(heatingCenterData.value))
+
+const heatingCenterTableColumns = computed(() => {
+  const units = heatingCenterUnits.value || {}
+  const withUnit = (metric) => {
+    const unit = units?.[metric]
+    return unit ? `${metric}（${unit}）` : metric
+  }
+  return ['排名', '中心', withUnit('供暖热单耗'), withUnit('供暖电单耗'), withUnit('供暖水单耗')]
+})
+
+const formatMetricDisplay = (value, digits = 2) => {
+  if (!Number.isFinite(value)) return '—'
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+}
+
+const heatingCenterTableData = computed(() => {
+  const list = heatingCenterData.value.list || []
+  return list.map((item) => {
+    const row = [
+      String(item.rank),
+      item.name,
+      formatMetricDisplay(item.metrics?.['供暖热单耗']),
+      formatMetricDisplay(item.metrics?.['供暖电单耗']),
+      formatMetricDisplay(item.metrics?.['供暖水单耗']),
+    ]
+    return {
+      key: `${item.rank}-${item.name}`,
+      value: row,
+      meta: {
+        highlight: item.rank === 1,
+      },
+    }
+  })
+})
+
+const heatingCenterExtraLabel = computed(() => {
+  const unit = heatingCenterData.value.unit
+  return unit ? `单位：${unit}` : ''
+})
+
+const selectHeatingCenterMetric = (metric) => {
+  if (metric && heatingCenterMetric.value !== metric) {
+    heatingCenterMetric.value = metric
+  }
+}
+
 const coalStdSection = computed(() => {
   const section = dashboardData.sections?.['5.标煤耗量']
   return section && typeof section === 'object' ? section : {}
@@ -1454,6 +1638,110 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       splitLine: { lineStyle: { type: 'dashed' } },
     },
     series: chartSeries,
+  }
+}
+
+const useHeatingCenterOption = (payload) => {
+  const list = Array.isArray(payload?.list) ? payload.list : []
+  const metric = payload?.metric || ''
+  const units = payload?.units || {}
+  const unitLabel = units?.[metric] || ''
+
+  const categories = list.map((item) => `${item.rank}. ${item.name}`)
+  const dataSource = list.map((item, index) => ({
+    value: Number.isFinite(item.metricValue) ? Number(item.metricValue) : 0,
+    realValue: item.metricValue,
+    name: item.name,
+    metrics: item.metrics,
+    rank: item.rank,
+    index,
+  }))
+
+  const formatValue = (value, digits = 2) =>
+    Number.isFinite(value)
+      ? Number(value).toLocaleString('zh-CN', {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
+        })
+      : '—'
+
+  const tooltipFormatter = (params) => {
+    if (!Array.isArray(params) || !params.length) return ''
+    const param = params[0]
+    const data = param?.data
+    if (!data || typeof data !== 'object') return ''
+    const centerName = data.name || categories[param.dataIndex] || ''
+    const lines = [`<strong>${centerName}</strong>`]
+    heatingCenterMetricKeys.forEach((metricKey) => {
+      const unit = units?.[metricKey] || ''
+      const raw = data.metrics?.[metricKey]
+      lines.push(
+        `${metricKey}：${formatValue(raw)}${unit ? ` ${unit}` : ''}`,
+      )
+    })
+    return lines.join('<br/>')
+  }
+
+  const average = Number.isFinite(payload?.average) ? Number(payload.average) : null
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: tooltipFormatter,
+    },
+    grid: { left: 120, right: 40, top: 50, bottom: 40 },
+    xAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: (value) => formatValue(value),
+      },
+      splitLine: { lineStyle: { type: 'dashed' } },
+      name: unitLabel ? `单位：${unitLabel}` : '',
+      nameLocation: 'end',
+      nameGap: 20,
+    },
+    yAxis: {
+      type: 'category',
+      data: categories,
+      axisLabel: { interval: 0, hideOverlap: true },
+      axisTick: { alignWithLabel: true },
+    },
+    series: [
+      {
+        name: metric,
+        type: 'bar',
+        barWidth: 16,
+        data: dataSource,
+        itemStyle: { color: '#2563eb' },
+        label: {
+          show: true,
+          position: 'right',
+          color: '#0f172a',
+          fontWeight: 500,
+          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          borderRadius: 6,
+          padding: [4, 6],
+          formatter: ({ data }) => formatValue(data?.realValue),
+        },
+        emphasis: { focus: 'series' },
+        markLine: average
+          ? {
+              symbol: 'none',
+              lineStyle: { type: 'dashed', color: '#94a3b8' },
+              label: {
+                show: true,
+                formatter: () => `平均 ${formatValue(average)}`,
+                color: '#475569',
+                padding: [4, 6],
+                backgroundColor: 'rgba(241, 245, 249, 0.9)',
+                borderRadius: 6,
+              },
+              data: [{ xAxis: average }],
+            }
+          : undefined,
+      },
+    ],
   }
 }
 
@@ -2199,6 +2487,10 @@ onMounted(() => {
     grid-column: span 6;
   }
 
+  .dashboard-grid__item--center {
+    grid-column: 1 / -1;
+  }
+
   .dashboard-grid__item--complaint {
     grid-column: span 8;
     min-height: 360px;
@@ -2316,6 +2608,88 @@ onMounted(() => {
 .complaint-charts__chart {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.center-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.center-card__controls-label {
+  font-size: 13px;
+  color: #475569;
+}
+
+.center-card__metric-btn {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: #475569;
+  background: rgba(248, 250, 252, 0.7);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.center-card__metric-btn.is-active {
+  color: #0f172a;
+  background: rgba(37, 99, 235, 0.12);
+  border-color: #2563eb;
+  font-weight: 600;
+}
+
+.center-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .center-card__content {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 24px;
+  }
+}
+
+.center-card__content .dashboard-chart {
+  flex: 0 0 50%;
+  min-width: 0;
+}
+
+.center-card__table {
+  flex: 0 0 50%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8px 0 0;
+  height: 100%;
+}
+
+.center-card__table .dashboard-table {
+  box-shadow: none;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 1023px) {
+  .center-card__content .dashboard-chart,
+  .center-card__table {
+    flex: 1 1 auto;
+    padding: 0;
+  }
+
+  .center-card__table {
+    max-height: none;
+  }
+}
+
+.center-card__table .dashboard-table th,
+.center-card__table .dashboard-table td {
+  padding: 12px 18px;
 }
 
 .dashboard-table-wrapper--small .dashboard-table th,
@@ -2466,3 +2840,4 @@ onMounted(() => {
 }
 
 </style>
+  padding: 0;

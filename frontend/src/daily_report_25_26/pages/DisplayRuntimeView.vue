@@ -20,6 +20,7 @@
             <span class="hint" v-else>当前：regular</span>
           </label>
           <button class="btn ghost" @click="runEval" :disabled="loading">刷新</button>
+          <button class="btn" @click="exportToExcel" :disabled="isExporting || loading">{{ isExporting ? '正在导出...' : '导出Excel' }}</button>
         </div>
       </header>
 
@@ -353,17 +354,81 @@ async function loadDefaultBizDate() {
   }
 }
 
-onMounted(() => {
-  runEval()
-})
-watch([bizDate, traceEnabled], () => {
-  if (initialized.value) {
-    runEval()
-  }
-})
-
 const formattedTrace = computed(() => {
   try { return JSON.stringify(traceData.value, null, 2) } catch { return '' }
+})
+
+const isExporting = ref(false)
+
+async function exportToExcel() {
+  isExporting.value = true
+  errorMessage.value = ''
+  try {
+    // 1. Define configs
+    const sheetKeys = ['Group_sum_show_Sheet', 'Group_analysis_brief_report_Sheet', 'ZhuChengQu_sum_show_Sheet']
+    const configPath = '/app/data/数据结构_全口径展示表.json'
+    const templatePath = '/25-26生产日报标准模板.xlsx'
+    const origins = ['D3', 'C4', 'C3']
+    const slicePoints = [3, 2, 2]
+
+    // 2. Fetch all data in parallel
+    const dataPromises = sheetKeys.map(key => evalSpec(projectKey.value, {
+      sheet_key: key,
+      project_key: 'daily_report_25_26',
+      config: configPath,
+      biz_date: bizDate.value ? bizDate.value : 'regular',
+      trace: false,
+    }));
+
+    const templatePromise = fetch(templatePath).then(res => {
+      if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`);
+      return res.arrayBuffer();
+    });
+
+    const [templateData, ...results] = await Promise.all([templatePromise, ...dataPromises]);
+
+    // 3. Process and fill the workbook
+    const workbook = XLSX.read(templateData, { type: 'array', cellStyles: true });
+    const templateSheetNames = workbook.SheetNames;
+
+    if (templateSheetNames.length < results.length) {
+      throw new Error(`模板中的Sheet数量 (${templateSheetNames.length}) 少于需要导出的数据表数量 (${results.length})`);
+    }
+
+    results.forEach((res, index) => {
+      if (!res || res.ok === false) {
+        throw new Error(`获取第 ${index + 1} 个工作表的数据失败: ${res?.message || '未知错误'}`);
+      }
+
+      const targetSheetName = templateSheetNames[index];
+      const worksheet = workbook.Sheets[targetSheetName];
+      if (!worksheet) {
+        throw new Error(`在模板中找不到名为 "${targetSheetName}" 的Sheet`);
+      }
+
+      const slicePoint = slicePoints[index];
+      const dataOnly = res.rows.map(row => row.slice(slicePoint));
+      
+      XLSX.utils.sheet_add_aoa(worksheet, dataOnly, { origin: origins[index] });
+    });
+
+    // 4. Generate and download the file
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
+    const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+    
+    const finalFileName = `生产日报-数据展示-${effectiveBizDate.value || 'export'}.xlsx`;
+    saveAs(dataBlob, finalFileName);
+
+  } catch (err) {
+    console.error('导出Excel失败:', err);
+    errorMessage.value = `导出失败: ${err.message}`;
+  } finally {
+    isExporting.value = false;
+  }
+}
+
+onMounted(() => {
+  runEval()
 })
 </script>
 
