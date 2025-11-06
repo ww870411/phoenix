@@ -32,7 +32,7 @@
       <div class="summary-card summary-card--success">
         <div class="summary-card__icon summary-card__icon--profit" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团全口径可比煤价边际利润</div>
+          <div class="summary-card__label">集团汇总可比煤价边际利润</div>
           <div class="summary-card__value">{{ marginHeadline }} 万元</div>
         </div>
       </div>
@@ -590,7 +590,7 @@ const unitFallbackMatrix = {
   '供暖电单耗': unitFallbackSeries.map((item) => item.elec),
   '供暖水单耗': unitFallbackSeries.map((item) => item.water),
 }
-const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
+const coalStdFallbackCategories = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdFallbackCurrent = [980, 420, 160, 180, 120, 100]
 const coalStdFallbackPeer = [1020, 440, 150, 190, 130, 90]
 
@@ -636,7 +636,7 @@ const marginSeries = computed(() => {
 })
 
 const incomeSection = computed(() => {
-  const section = dashboardData.sections?.['3.集团全口径收入明细']
+  const section = dashboardData.sections?.['3.集团汇总收入明细'] || dashboardData.sections?.['3.集团全口径收入明细']
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -797,7 +797,7 @@ const coalStdSeries = computed(() => {
 
 // --- 模拟数据（后续可替换为后端数据源） ---
 
-const orgs7 = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+const orgs7 = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 
 const complaintsNow = orgs7.map((org, index) => ({
   org,
@@ -1367,7 +1367,7 @@ const averageTemp = computed(() => {
   return avg.toFixed(2)
 })
 const marginHeadline = computed(() => {
-  const groupEntry = marginSeries.value.find((item) => item.org === '集团全口径')
+  const groupEntry = marginSeries.value.find((item) => item.org === '集团汇总')
   const value = groupEntry?.marginCmpCoal
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 })

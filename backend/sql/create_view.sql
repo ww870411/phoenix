@@ -186,7 +186,7 @@ calc_station_heat_selected AS (
   WHERE company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
 ),
 calc_amount_daily_net_complaints_per_10k_m2 AS (
-  -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.挂网面积（单位：件/万㎡）
+  -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.供暖收费面积（单位：件/万㎡）
   SELECT
     b.company,
     b.company_cn,
@@ -204,8 +204,8 @@ calc_amount_daily_net_complaints_per_10k_m2 AS (
     COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.sum_ytd_biz ELSE 0 END),0) / NULLIF(COALESCE(cb_area.value,0),0),
     COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.sum_ytd_peer ELSE 0 END),0) / NULLIF(COALESCE(cp_area.value,0),0)
   FROM base b
-  LEFT JOIN const_biz  cb_area ON cb_area.company=b.company AND cb_area.item='amount_whole_heating_area'
-  LEFT JOIN const_peer cp_area ON cp_area.company=b.company AND cp_area.item='amount_whole_heating_area'
+  LEFT JOIN const_biz  cb_area ON cb_area.company=b.company AND cb_area.item='amount_heating_fee_area'
+  LEFT JOIN const_peer cp_area ON cp_area.company=b.company AND cp_area.item='amount_heating_fee_area'
   GROUP BY b.company, b.company_cn, cb_area.value, cp_area.value
 ),
 calc_rate_std_coal_per_heat AS (
@@ -1022,6 +1022,7 @@ SELECT * FROM calc;
 
 
 
+
 -- 注意：普通视图不可创建索引；如需性能优化，请在底表 daily_basic_data 上创建（或调整）索引。
 
 -- ========= 分组再聚合视图（依赖 sum_basic_data） =========
@@ -1098,15 +1099,15 @@ base_grp AS (
 ),
 denom_zc AS (
   SELECT
-    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_whole_heating_area' AND c.company IN ('BeiHai','XiangHai','GongRe')) AS area_biz,
-    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_whole_heating_area' AND c.company IN ('BeiHai','XiangHai','GongRe')) AS area_peer,
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe')) AS area_biz,
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe')) AS area_peer,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe')) AS fee_biz,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe')) AS fee_peer
 ),
 denom_grp AS (
   SELECT
-    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_whole_heating_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_biz,
-    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_whole_heating_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_peer,
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_biz,
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_peer,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_biz,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_peer
 )
@@ -1603,16 +1604,3 @@ FROM temperature_data
 GROUP BY DATE_TRUNC('day', date_time)::date
 ORDER BY date;
 
-
-
---++++++++++气温视图
-
-CREATE OR REPLACE VIEW calc_temperature_data AS
-SELECT
-    DATE_TRUNC('day', date_time)::date AS date,
-    MAX(value) AS max_temp,
-    MIN(value) AS min_temp,
-    AVG(value) AS aver_temp
-FROM temperature_data
-GROUP BY DATE_TRUNC('day', date_time)::date
-ORDER BY date;

@@ -177,7 +177,7 @@ calc_station_heat_selected AS (
   WHERE company IN ('JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
 ),
 calc_amount_daily_net_complaints_per_10k_m2 AS (
-  -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.挂网面积（单位：件/万㎡）
+  -- 万平方米省市净投诉量 = 当日撤件后净投诉量 / c.供暖收费面积（单位：件/万㎡）
   SELECT
     b.company,
     b.company_cn,
@@ -195,8 +195,8 @@ calc_amount_daily_net_complaints_per_10k_m2 AS (
     COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.sum_ytd_biz ELSE 0 END),0) / NULLIF(COALESCE(cb_area.value,0),0),
     COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.sum_ytd_peer ELSE 0 END),0) / NULLIF(COALESCE(cp_area.value,0),0)
   FROM base b
-  LEFT JOIN const_biz  cb_area ON cb_area.company=b.company AND cb_area.item='amount_whole_heating_area'
-  LEFT JOIN const_peer cp_area ON cp_area.company=b.company AND cp_area.item='amount_whole_heating_area'
+  LEFT JOIN const_biz  cb_area ON cb_area.company=b.company AND cb_area.item='amount_heating_fee_area'
+  LEFT JOIN const_peer cp_area ON cp_area.company=b.company AND cp_area.item='amount_heating_fee_area'
   GROUP BY b.company, b.company_cn, cb_area.value, cp_area.value
 ),
 calc_rate_std_coal_per_heat AS (

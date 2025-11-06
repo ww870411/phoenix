@@ -33,6 +33,7 @@ DATA_ROOT = Path(DATA_DIRECTORY)
 DASHBOARD_CONFIG_PATH = DATA_ROOT / "数据结构_数据看板.json"
 DATE_CONFIG_PATH = DATA_ROOT / "date.json"
 EAST_8 = timezone(timedelta(hours=8))
+SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
 
 
 @dataclass
@@ -242,6 +243,21 @@ def _resolve_company_codes(
     return resolved
 
 
+def _build_section_index_map(payload: Dict[str, Any]) -> Dict[str, str]:
+    """根据配置键的序号前缀构建映射，支持名称调整。"""
+    index_map: Dict[str, str] = {}
+    if not isinstance(payload, dict):
+        return index_map
+    for key in payload.keys():
+        if not isinstance(key, str):
+            continue
+        match = SECTION_PREFIX_PATTERN.match(key)
+        if match:
+            index = match.group(1)
+            index_map.setdefault(index, key)
+    return index_map
+
+
 def _evaluate_expression(
     metrics: Dict[str, Any],
     item_expression: str,
@@ -391,9 +407,23 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
     company_cn_to_code = _reverse_mapping(project_units)
     company_code_to_cn = {code: cn for cn, code in company_cn_to_code.items()}
 
+    section_index_map = _build_section_index_map(data)
+
+    def get_section_by_index(index: str, *aliases: str) -> Optional[Dict[str, Any]]:
+        key = section_index_map.get(index)
+        if key:
+            section = data.get(key)
+            if isinstance(section, dict):
+                return section
+        for alias in aliases:
+            section = data.get(alias)
+            if isinstance(section, dict):
+                return section
+        return None
+
     with SessionLocal() as session:
         # 1. 逐小时气温
-        temp_section = data.get("1.逐小时气温")
+        temp_section = get_section_by_index("1", "1.逐小时气温")
         if isinstance(temp_section, dict):
             forecast_days = max(int(temp_section.get("预测天数", 0)), 0)
             main_bucket = temp_section.get("本期")
@@ -423,7 +453,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 _fill_temperature_block(session, peer_bucket, peer_dates)
 
         # 2. 边际利润
-        margin_section = data.get("2.边际利润")
+        margin_section = get_section_by_index("2", "2.边际利润")
         if isinstance(margin_section, dict):
             _fill_metric_panel(
                 session,
@@ -448,19 +478,19 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 "value_peer_date",
             )
 
-        # 3. 集团全口径收入明细
-        income_section = data.get("3.集团全口径收入明细")
-    if isinstance(income_section, dict):
-        income_items = list(income_section.get("本期", {}).keys())
-        metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
-        for label in income_items:
-            item_code = item_cn_to_code.get(label, label)
-            bucket = metrics.get(item_code, {})
-            income_section["本期"][label] = _decimal_to_float(bucket.get("value_biz_date"))
-            income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
+        # 3. 集团汇总收入明细
+        income_section = get_section_by_index("3", "3.集团汇总收入明细", "3.集团全口径收入明细")
+        if isinstance(income_section, dict):
+            income_items = list(income_section.get("本期", {}).keys())
+            metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+            for label in income_items:
+                item_code = item_cn_to_code.get(label, label)
+                bucket = metrics.get(item_code, {})
+                income_section["本期"][label] = _decimal_to_float(bucket.get("value_biz_date"))
+                income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
 
         # 4. 供暖单耗
-        heating_section = data.get("4.供暖单耗")
+        heating_section = get_section_by_index("4", "4.供暖单耗")
         if isinstance(heating_section, dict):
             _fill_metric_panel(
                 session,
@@ -486,7 +516,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
             )
 
         # 5. 标煤耗量
-        coal_section = data.get("5.标煤耗量")
+        coal_section = get_section_by_index("5", "5.标煤耗量")
         if isinstance(coal_section, dict):
             _fill_simple_metric(
                 session,
@@ -509,8 +539,8 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 push_date,
             )
 
-        # 6. 省市平台服务投诉量
-        complaint_section = data.get("6.当日省市平台服务投诉量")
+        # 6. 省市平台投诉量
+        complaint_section = get_section_by_index("6", "6.当日省市平台服务投诉量")
         if isinstance(complaint_section, dict):
             _fill_complaint_section(
                 session,
@@ -522,7 +552,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
             )
 
         # 7. 煤炭库存明细
-        coal_detail_section = data.get("7.煤炭库存明细")
+        coal_detail_section = get_section_by_index("7", "7.煤炭库存明细")
         if isinstance(coal_detail_section, dict):
             try:
                 inventory_date = date.fromisoformat(push_date)
@@ -531,7 +561,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
             _fill_coal_inventory(session, coal_detail_section, inventory_date)
 
         # 8. 供热分中心单耗明细（仅需本期）
-        branch_consumption_section = data.get("8.供热分中心单耗明细")
+        branch_consumption_section = get_section_by_index("8", "8.供热分中心单耗明细")
         if isinstance(branch_consumption_section, dict):
             _fill_heating_branch_consumption(
                 session,

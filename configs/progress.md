@@ -7,6 +7,7 @@
 
 本次动作：
 - 针对 `/dashboard` 高频访问导致的 `sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached` 报错，将数据库 engine 的 `pool_size` 提升至 20、`max_overflow` 至 40，并补充 `pool_timeout=60`、`pool_recycle=1800`，同时保留 `pool_pre_ping`，缓解连接占满问题。
+- 新增后端依赖 `psycopg2-binary`（记录需求文件），确保容器部署时 SQLAlchemy 能连接 PostgreSQL，避免 “No module named 'psycopg2'” 导致 v1 路由未挂载。
 
 影响范围与回滚：
 - 仅影响 `daily_report_25_26` 专用 engine 的连接池设置；若需回滚，可恢复旧配置（不带额外参数）。
@@ -14,6 +15,7 @@
 验证建议：
 1. 重启后端服务或热加载代码，访问仪表盘页面多次触发 `/dashboard` 请求，确认日志不再出现 QueuePool 超时。
 2. 在高并发或并行加载时观察数据库连接数，确认连接池容量能支撑峰值访问。
+3. 重新构建后端镜像并部署，确认 `docker logs phoenix-backend` 不再出现 `No module named 'psycopg2'`，`/api/v1` 接口恢复 200/401 等正常响应。
 
 ## 2025-11-10（供暖单耗柱距优化）
 
@@ -1120,4 +1122,110 @@ sum_basic_data 相关：
 1. 调用 `/api/v1/projects/daily_report_25_26/pages`，确认 `pages[]` 结果包含 `page_description` 且文本与配置一致。
 2. 刷新页面选择视图，确保卡片副标题仍显示相同文案；临时删除某条 `页面描述` 可验证回退逻辑。
 3. 检查调试入口描述是否同步来自配置文件（可通过修改 JSON 验证）。
+
+## 2025-11-10（净投诉面积口径切换）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对大体量 SQL/Markdown 文件的符号级写入，本次按照 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/sql/create_view.sql`、`backend/README.md` 与 `frontend/README.md`；回滚时恢复上述文件即可。
+
+本次动作：
+- 将 `calc_amount_daily_net_complaints_per_10k_m2` 及主城区/集团视图中引用的常量项从 `amount_whole_heating_area` 全部替换为 `amount_heating_fee_area`，并修正相关注释，确保“万平方米净投诉量”基于供暖收费面积计算。
+- 后端、前端 README 新增同步说明，提示当前视图口径变更且前端暂无需改动。
+
+影响范围与回滚：
+- 影响统计口径：相关指标将按收费面积生成结果，若需恢复旧口径，可将 SQL 中的常量项恢复为 `amount_whole_heating_area` 并撤销 README 更新。
+- 视图结构、接口字段及前端渲染代码未改动，联调时仅需确认数值是否符合预期。
+
+验证建议：
+1. 在数据库中刷新 `sum_basic_data` 及 `groups` 视图后，检查 `amount_daily_net_complaints_per_10k_m2` 的值是否与收费面积口径一致。
+2. 对比切换前的历史报表，确认主营单位指标变化符合面积基数调整的预期趋势。
+3. 若前端需展示口径说明，可在仪表盘投诉卡片补充“按供暖收费面积计算”备注。
+
+## 2025-11-11（净投诉面积口径迁移修订）
+
+前置说明（降级留痕）：
+- Serena 仍无法对大型 SQL/Markdown 文件做符号级写入，本次继续按 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/sql/sum_basic_data.sql`、`backend/sql/groups.sql`、`backend/README.md`、`frontend/README.md`；如需回滚请恢复上述文件。
+- 同时将 `backend/sql/create_view.sql` 恢复为原挂网面积配置，避免示例脚本与正式视图脚本口径混用。
+
+本次动作：
+- 将 `sum_basic_data` 与 `groups` 视图中“万平方米省市净投诉量”的分母统一替换为 `amount_heating_fee_area`，确保公司明细、主城区与集团聚合均以供暖收费面积为基准。
+- README 分别记录后端、前端侧的口径调整及联调提示；在 `configs/progress.md` 留痕修订过程。
+
+影响范围与回滚：
+- 数据口径：相关指标将基于收费面积统计；若需恢复挂网面积，只需将上述 SQL 内常量项改回 `amount_whole_heating_area` 并重新刷新视图。
+- 示例脚本 `create_view.sql` 已恢复旧逻辑，不影响生产；如需再次验证收费面积，可复制正式脚本内容进行演示。
+
+验证建议：
+1. 重新执行两份视图脚本，确认 `amount_daily_net_complaints_per_10k_m2` 数值随收费面积调整。
+2. 对比主城区与集团的投诉量指标，确认分母与单体公司保持一致。
+3. 前端仪表盘若需提示，可在投诉量卡片增加“按供暖收费面积计算”说明，确保业务侧知悉变更。
+
+## 2025-11-11（数据看板段名序号化解析）
+
+前置说明（降级留痕）：
+- Serena 对 `.py`/`.vue` 文件的符号级编辑仍有限制，本次依照 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/services/dashboard_expression.py` 与 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；需要回滚时直接恢复两文件即可。
+
+本次动作：
+- 后端 `evaluate_dashboard` 通过 `_build_section_index_map` 按编号前缀定位各板块，投诉分项等段落不再依赖完整中文标题，配置改名后仍能正确回填数据。
+- 前端仪表盘增加 `resolveSection` 辅助，所有 `sections['N.xxx']` 访问切换为序号解析；投诉卡片的指标排序与标题映射同时兼容“省市平台投诉量”的新命名。
+
+影响范围与回滚：
+- 数据看板所有分区（气温、边际利润、投诉、煤炭库存等）读取逻辑统一按编号解析；若需回滚，撤销上述文件到改动前版本即可恢复原硬编码行为。
+- JSON 配置如继续变更标题文本，无需再同步改代码；但若删除编号前缀（如 `6.`），需补充新的匹配策略或恢复编号。
+
+验证建议：
+1. 调整 `backend_data/数据结构_数据看板.json` 中 `6.` 段标题，刷新前端仪表盘确认“投诉量分项”仍能显示本期/同期数据。
+2. 在同一配置中新增或重命名其它段落标题，验证边际利润、标煤耗量等模块仍可正常回填。
+3. 运行 `/api/v1/projects/daily_report_25_26/dashboard` 接口，确认返回 `data` 中的原始键保持配置名称，同时新增代码逻辑不会插入额外字段。
+
+## 2025-11-11（数据看板单耗卡片视觉调优）
+
+前置说明（降级留痕）：
+- Serena 暂无法对 `.vue` 样式与脚本混合片段进行符号级写入，本次沿用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚时请恢复该文件。
+
+本次动作：
+- 调整“供暖热/电/水单耗对比”三张卡片的 ECharts 高度至 `360px`，配合 12 栅格布局提升可视空间。
+- 统一本期柱色为蓝色（#2563eb），同期柱色改为高对比橙色（#f97316），并保留条纹以强调差异。
+- 优化柱宽与图表内边距，使单个对比更醒目。
+
+影响范围与回滚：
+- 仅影响前端渲染与配色，后端 `/dashboard` 返回结构未变；若需恢复旧视觉，撤销上述文件改动即可。
+
+验证建议：
+1. 在桌面端刷新仪表盘，确认三张单耗卡片高度扩大且蓝/橙颜色区分明显。
+2. 切换至移动端视口，确保自适应布局仍正常。
+3. 对比历史截图，确认本期/同期图例颜色一致更新。
+
+## 2025-11-11（数据看板单耗卡片栅格调整）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对 `.vue` 样式块进行符号级编辑，本次按 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；如需回滚恢复该文件即可。
+
+本次动作：
+- 将供暖热/电/水单耗对比卡片的栅格跨度由 `span 4` 调整为 `span 12`，三张图表在宽屏下独占一行，提升阅读空间。
+
+影响范围与回滚：
+- 仅影响仪表盘前端排版，后端 `/dashboard` 输出结构未变。如需回滚，将样式中的 `grid-column: span 12;` 恢复为 `span 4;`。
+
+验证建议：
+1. 打开数据看板页面，确认三张单耗对比卡片在 ≥1024px 宽度下各占一行。
+2. 缩小至平板或手机宽度，检查卡片仍保持单列自适应展示。
+
+## 2025-11-11（数据看板“集团汇总”文案统一）
+
+前置说明（降级留痕）：
+- Serena 对 JSON/Vue 大文件的写入仍有限制，本次沿用 `desktop-commander::read_file` + `apply_patch` 调整 `backend_data/数据结构_数据看板.json`、`backend/services/dashboard_expression.py`、`frontend/src/daily_report_25_26/pages/DashBoard.vue`、`frontend/src/daily_report_25_26/pages/DashBoard888.vue`；回滚时分别恢复这些文件即可。
+
+本次动作：
+- 将数据看板配置、单位字典以及所有占位数据中的“集团全口径”统一改为“集团汇总”，并把板块标题改名为“3.集团汇总收入明细”。
+- 后端 `get_section_by_index` 新增别名以兼容新旧标题，前端 `resolveSection`、各类 fallback 数组和 complaint/煤耗/边际利润组件同步替换，确保 API 与 UI 一致展示。
+
+影响范围与回滚：
+- `/api/v1/projects/daily_report_25_26/dashboard` 中公司中文名现在输出“集团汇总”；若需恢复旧称谓，只需将上述文件的文案改回“集团全口径”。
+- 由于仍按编号前缀解析，旧配置若暂未更新标题也可被别名捕获，但建议一次性完成改名避免混写。
+
+验证建议：
+1. 调用 `/api/v1/projects/daily_report_25_26/dashboard`，确认 `data`、`unitSeries` 等字段中的公司名称均已替换为“集团汇总”。
+2. 刷新仪表盘页面，检查卡片、图例、表格以及 fallback 标签均显示新文案。
+3. 若存在导出或打印流程，验证在新称谓下仍可正常命中“集团汇总”数据。
 

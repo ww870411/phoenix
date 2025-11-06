@@ -113,19 +113,19 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖热单耗对比" :extra="`单位：${unitSeries.units['供暖热单耗'] || '—'}`">
-          <EChart :option="unitHeatOpt" height="300px" />
+          <EChart :option="unitHeatOpt" height="360px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖电单耗对比" :extra="`单位：${unitSeries.units['供暖电单耗'] || '—'}`">
-          <EChart :option="unitElecOpt" height="300px" />
+          <EChart :option="unitElecOpt" height="360px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖水单耗对比" :extra="`单位：${unitSeries.units['供暖水单耗'] || '—'}`">
-          <EChart :option="unitWaterOpt" height="300px" />
+          <EChart :option="unitWaterOpt" height="360px" />
         </Card>
       </section>
 
@@ -576,8 +576,33 @@ watch(
   },
 )
 
+const sectionIndexMap = computed(() => {
+  const sections = dashboardData.sections || {}
+  const map = {}
+  Object.keys(sections).forEach((key) => {
+    if (typeof key !== 'string') return
+    const match = key.match(/^(\d+)\./)
+    if (match && !map[match[1]]) {
+      map[match[1]] = key
+    }
+  })
+  return map
+})
+
+function resolveSection(index, legacyKey) {
+  const sections = dashboardData.sections || {}
+  const key = sectionIndexMap.value[index]
+  if (key && sections[key] && typeof sections[key] === 'object') {
+    return sections[key]
+  }
+  if (legacyKey && sections[legacyKey] && typeof sections[legacyKey] === 'object') {
+    return sections[legacyKey]
+  }
+  return undefined
+}
+
 const temperatureSection = computed(() => {
-  const section = dashboardData.sections?.['1.逐小时气温']
+  const section = resolveSection('1', '1.逐小时气温')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -714,15 +739,16 @@ const unitFallbackMatrix = {
   '供暖电单耗': unitFallbackSeries.map((item) => item.elec),
   '供暖水单耗': unitFallbackSeries.map((item) => item.water),
 }
-const coalStdFallbackCategories = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
+const coalStdFallbackCategories = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdFallbackCurrent = Array(coalStdFallbackCategories.length).fill(0)
 const coalStdFallbackPeer = Array(coalStdFallbackCategories.length).fill(0)
-const complaintMetricOrder = ['当日省市平台服务投诉量', '当日净投诉量']
+const complaintMetricOrder = ['当日省市平台投诉量', '当日省市平台服务投诉量', '当日净投诉量']
 const complaintMetricTitleMap = {
+  当日省市平台投诉量: '省市平台投诉量',
   当日省市平台服务投诉量: '省市平台服务投诉量',
   当日净投诉量: '净投诉量',
 }
-const complaintFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+const complaintFallbackCompanies = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 
 const normalizeComplaintValue = (value) => {
   const normalized = normalizeMetricValue(value)
@@ -731,7 +757,7 @@ const normalizeComplaintValue = (value) => {
 }
 
 const marginSection = computed(() => {
-  const section = dashboardData.sections?.['2.边际利润']
+  const section = resolveSection('2', '2.边际利润')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -772,7 +798,7 @@ const marginSeries = computed(() => {
 })
 
 const incomeSection = computed(() => {
-  const section = dashboardData.sections?.['3.集团全口径收入明细']
+  const section = resolveSection('3', '3.集团汇总收入明细', '3.集团全口径收入明细')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -817,7 +843,7 @@ const incomeSeries = computed(() => {
 })
 
 const complaintSection = computed(() => {
-  const section = dashboardData.sections?.['6.当日省市平台服务投诉量']
+  const section = resolveSection('6', '6.当日省市平台服务投诉量')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -923,7 +949,7 @@ const complaintsHeadline = computed(() => {
   const preferredMetric = complaintMetricOrder[0]
   const mainBucket = buckets[preferredMetric]?.['本期']
   if (mainBucket && typeof mainBucket === 'object') {
-    const preferredCompanies = ['集团全口径', '主城区', ...complaintCompanies.value]
+  const preferredCompanies = ['集团汇总', '主城区', ...complaintCompanies.value]
     for (const company of preferredCompanies) {
       const value = normalizeComplaintValue(mainBucket[company])
       if (Number.isFinite(value)) {
@@ -935,7 +961,7 @@ const complaintsHeadline = computed(() => {
 })
 
 const coalStockSection = computed(() => {
-  const section = dashboardData.sections?.['7.煤炭库存明细']
+  const section = resolveSection('7', '7.煤炭库存明细')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -1028,7 +1054,7 @@ const coalStockTableData = computed(() => {
 })
 
 const unitSection = computed(() => {
-  const section = dashboardData.sections?.['4.供暖单耗']
+  const section = resolveSection('4', '4.供暖单耗')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -1098,7 +1124,7 @@ const heatingCenterMetricKeys = ['供暖热单耗', '供暖电单耗', '供暖�
 const heatingCenterMetaKeys = new Set(['数据来源', '查询结构', '计量单位'])
 
 const heatingCenterSection = computed(() => {
-  const section = dashboardData.sections?.['8.供热分中心单耗明细']
+  const section = resolveSection('8', '8.供热分中心单耗明细')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -1251,7 +1277,7 @@ const selectHeatingCenterMetric = (metric) => {
 }
 
 const coalStdSection = computed(() => {
-  const section = dashboardData.sections?.['5.标煤耗量']
+  const section = resolveSection('5', '5.标煤耗量')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -1301,7 +1327,7 @@ const coalStdSeries = computed(() => {
 // --- 模拟数据（后续可替换为后端数据源） ---
 
 const coalStockFallbackStacks = ['厂内存煤', '港口存煤', '在途煤炭']
-const coalStockFallbackCompanies = ['集团全口径', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
+const coalStockFallbackCompanies = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStockFallbackMatrix = coalStockFallbackStacks.map(() =>
   coalStockFallbackCompanies.map(() => 0),
 )
@@ -1555,16 +1581,9 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
 
   const legendData = []
   const chartSeries = []
-  const currentColorMap = {
-    '供暖热单耗': '#2563eb',
-    '供暖电单耗': '#38bdf8',
-    '供暖水单耗': '#10b981',
-  }
-  const peerColorMap = {
-    '供暖热单耗': '#93c5fd',
-    '供暖电单耗': '#bae6fd',
-    '供暖水单耗': '#6ee7b7',
-  }
+  const currentBarColor = '#2563eb'
+  const peerBarColor = '#f97316'
+  const peerDecalColor = 'rgba(249, 115, 22, 0.35)'
 
   const resolveItemValue = (item) => {
     if (!item) return Number.NaN
@@ -1645,10 +1664,10 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     chartSeries.push({
       name: currentLabel,
       type: 'bar',
-      barWidth: 18,
-      barCategoryGap: '65%',
-      barGap: '0%',
-      itemStyle: { color: currentColorMap[metric] || '#2563eb' },
+      barWidth: 24,
+      barCategoryGap: '45%',
+      barGap: '10%',
+      itemStyle: { color: currentBarColor },
       data: plotCurrent,
       label: {
         show: true,
@@ -1667,17 +1686,18 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     chartSeries.push({
       name: peerLabel,
       type: 'bar',
-      barWidth: 18,
-      barCategoryGap: '65%',
-      barGap: '0%',
+      barWidth: 24,
+      barCategoryGap: '45%',
+      barGap: '10%',
       itemStyle: {
-        color: '#0ea5e9',
+        color: peerBarColor,
+        opacity: 0.9,
         decal: {
           symbol: 'rect',
           dashArrayX: [1, 0],
           dashArrayY: [4, 4],
           rotation: Math.PI / 4,
-          color: 'rgba(14, 165, 233, 0.45)',
+          color: peerDecalColor,
         },
       },
       data: plotPeer,
@@ -1700,7 +1720,7 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       itemHeight: 10,
       icon: 'roundRect',
     },
-    grid: { left: 40, right: 30, top: 70, bottom: 80 },
+    grid: { left: 50, right: 50, top: 70, bottom: 90 },
   xAxis: {
     type: 'category',
     data: chartCategories,
@@ -2275,7 +2295,7 @@ const averageTemp = computed(() => {
   return `${avg.toFixed(2)}（${sign}${delta}）`
 })
 const marginHeadline = computed(() => {
-  const groupEntry = marginSeries.value.find((item) => item.org === '集团全口径')
+  const groupEntry = marginSeries.value.find((item) => item.org === '集团汇总')
   const value = groupEntry?.marginCmpCoal
   return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
 })
@@ -2596,7 +2616,7 @@ onMounted(() => {
   }
 
   .dashboard-grid__item--unit {
-    grid-column: span 4;
+    grid-column: span 12;
   }
 
   .dashboard-grid__item--coal {

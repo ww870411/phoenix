@@ -1,6 +1,29 @@
 # 后端说明（FastAPI）
 
-# 后端说明（FastAPI）
+## 会话小结（2025-11-11 单耗卡片布局与视觉调整）
+
+- 近期连续两次更新集中在前端（`frontend/src/daily_report_25_26/pages/DashBoard.vue`），包括栅格跨度改为 12、柱状图高度提升至 360px、以及本期/同期配色统一为蓝与橙；后端 `/api/v1/projects/daily_report_25_26/dashboard` 的 `unitSeries` 返回结构与字段命名均保持不变。
+- `evaluate_dashboard` 仍按编号解析 `data['4.供暖单耗']`，未引入新字段或排序调整，因此后端无需协同改动。
+- 若前端需回滚旧布局或颜色，只需恢复上述 `.vue` 文件，无需对后端进行任何修改或部署。
+
+## 会话小结（2025-11-11 “集团汇总”文案同步）
+
+- 配置 `backend_data/数据结构_数据看板.json` 及 `单位字典` 中的“集团全口径”统一改名为“集团汇总”，以保持 UI 命名一致；`evaluate_dashboard` 在 `get_section_by_index` 中追加新标题别名，兼容旧配置。
+- `/api/v1/projects/daily_report_25_26/dashboard` 现返回“集团汇总”作为公司中文名，业务含义不变；若需恢复旧称谓，仅需还原上述配置与别名即可。
+- 其他接口、SQL 视图及聚合逻辑未改动，联调时关注前端是否同步更新 fallback 数组即可。
+
+## 会话小结（2025-11-11 数据看板段名序号化）
+
+- 状态：`/dashboard` 渲染流程现根据段落编号前缀（例如 `1.`、`6.`）定位配置节点，允许自由调整中文标题。
+- 改动：`services/dashboard_expression.py` 引入 `_build_section_index_map` 与 `get_section_by_index`，`evaluate_dashboard` 统一使用序号解析；投诉板块仍沿用 `_fill_complaint_section`，但不再依赖“当日省市平台服务投诉量”字面值。
+- 影响：只要在 `backend_data/数据结构_数据看板.json` 中保留数字编号，前后端即可随配置改名同步展示；若需回滚，恢复旧版 `evaluate_dashboard` 并同步撤销前端 `resolveSection` 即可。
+- 下一步：若后续希望完全去掉编号，可在配置中增加 `type` 字段并扩展匹配策略；当前方案已满足标题改名与排序需求。
+
+## 会话小结（2025-11-11 净投诉面积口径迁移）
+
+- 将正式使用的视图脚本 `backend/sql/sum_basic_data.sql` 与 `backend/sql/groups.sql` 中“万平方米省市净投诉量”分母从 `amount_whole_heating_area`（挂网面积）调整为 `amount_heating_fee_area`（供暖收费面积），保持集团/主城区聚合与公司明细口径一致。
+- `create_view.sql` 仅作为备份样例，已恢复原挂网面积配置；回滚时只需把上述两个文件内的常量项改回并刷新数据库视图。
+- 接口字段与单位保持不变，建议在刷新视图后对比历史报表确认数值变化符合收费面积口径预期。
 
 ## 会话小结（2025-11-10 仪表盘加载提示 & 填报反馈）
 
@@ -11,6 +34,7 @@
 
 - `backend/db/database_daily_report_25_26.py` 的 `create_engine` 现指定 `pool_size=20, max_overflow=40, pool_timeout=60, pool_recycle=1800`，缓解 `/dashboard` 高频调用触发的 QueuePool timeout。
 - 接口签名与查询逻辑未改动；如需恢复旧设置，将上述参数移除即可。
+- requirements.txt 新增 `psycopg2-binary`，修复容器环境缺乏 PostgreSQL 驱动导致 v1 路由未挂载、/api/v1 全部 404 的问题。
 
 ## 会话小结（2025-11-10 供暖单耗柱距优化）
 

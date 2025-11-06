@@ -1,5 +1,23 @@
 # daily_report_25_26 前端说明
 
+## 仪表盘单耗卡片布局与视觉调整（2025-11-11）
+
+- `.dashboard-grid__item--unit` 栅格跨度改为 `span 12`，三张“供暖热/电/水单耗对比”卡片在 ≥1024px 视口下各自独占一行，并将对应图表高度提升至 `360px`。
+- 本期柱统一为蓝色（#2563eb），同期柱改为高对比橙色（#f97316，含条纹），同时放宽柱宽及图表内边距以突出差异。
+- 其余卡片布局与响应式行为保持不变，窄屏仍按单列堆叠；若需恢复旧视觉，将 `.dashboard-grid__item--unit` 栅格跨度与 `useUnitConsumptionOption` 中的颜色/柱宽改回即可。
+
+## 仪表盘“集团汇总”文案统一（2025-11-11）
+
+- `backend_data/数据结构_数据看板.json` 与 `单位字典` 中的“集团全口径”全部替换为“集团汇总”，并把“3.”段标题更新为“集团汇总收入明细”。
+- `DashBoard.vue`/`DashBoard888.vue` 的 fallback 列表、`resolveSection` 调用以及边际利润/投诉/煤耗等模块同步替换文本，避免前端本地数据残留旧称谓；新的 `resolveSection` 仍兼容旧标题以便回滚。
+- 若需恢复旧名称，只需撤销上述文件并重新部署，接口结构未发生变化。
+
+## 仪表盘段名序号化（2025-11-11）
+
+- 新增 `resolveSection` 辅助，所有 `dashboardData.sections['N.xxx']` 访问切换为按编号前缀解析；模板改名后无需同步代码即可生效。
+- 投诉分项卡片同时兼容“当日省市平台投诉量”“当日省市平台服务投诉量”等命名，`complaintMetricOrder/complaintMetricTitleMap` 已补充多语义映射。
+- 若需恢复旧逻辑，可删除 `sectionIndexMap/resolveSection` 并将 `DashBoard.vue` 中的序号访问改回原始键名。
+
 ## 登录与权限更新（2025-11-02）
 
 - 新增 Pinia `auth` 仓库：统一管理 `/auth/login|me|logout` 调用、Token 持久化（sessionStorage）、页面/表格过滤与审批/发布操作。

@@ -463,9 +463,9 @@
         }
       },
       "publish": {
-        "status": "pending",
-        "published_by": null,
-        "published_at": null
+        "status": "published",
+        "published_by": "ww870411",
+        "published_at": "2025-11-06T18:00:59.406589+08:00"
       }
     }
   }
