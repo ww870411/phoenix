@@ -56,7 +56,7 @@ import '../styles/theme.css'
 import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { evalSpec, getTemplate, getWorkflowStatus } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
@@ -99,6 +99,10 @@ const itemColumnIndex = ref(-1)
 const bizDate = ref('')
 const effectiveBizDate = ref('')
 const initialized = ref(false)
+const pendingAutoRefresh = ref(false)
+const AUTO_REFRESH_DELAY_MS = 400
+let bizDateAutoRefreshTimer = null
+let suppressNextBizDateReaction = false
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -347,6 +351,7 @@ async function loadDefaultBizDate() {
     const status = await getWorkflowStatus(projectKey.value)
     const displayDate = status?.display_date
     if (displayDate) {
+      suppressNextBizDateReaction = true
       bizDate.value = displayDate
     }
   } catch (err) {
@@ -427,8 +432,52 @@ async function exportToExcel() {
   }
 }
 
+function scheduleAutoRefresh() {
+  if (!initialized.value || loading.value) {
+    pendingAutoRefresh.value = true
+    return
+  }
+  pendingAutoRefresh.value = false
+  runEval()
+}
+
+watch(
+  bizDate,
+  (newVal, oldVal) => {
+    if (suppressNextBizDateReaction) {
+      suppressNextBizDateReaction = false
+      return
+    }
+    if (newVal === oldVal) return
+    if (bizDateAutoRefreshTimer) {
+      clearTimeout(bizDateAutoRefreshTimer)
+      bizDateAutoRefreshTimer = null
+    }
+    bizDateAutoRefreshTimer = setTimeout(() => {
+      bizDateAutoRefreshTimer = null
+      scheduleAutoRefresh()
+    }, AUTO_REFRESH_DELAY_MS)
+  },
+)
+
+watch(
+  () => [initialized.value, loading.value],
+  ([isReady, isLoading]) => {
+    if (pendingAutoRefresh.value && isReady && !isLoading) {
+      scheduleAutoRefresh()
+    }
+  },
+)
+
 onMounted(() => {
   runEval()
+})
+
+onBeforeUnmount(() => {
+  if (bizDateAutoRefreshTimer) {
+    clearTimeout(bizDateAutoRefreshTimer)
+    bizDateAutoRefreshTimer = null
+  }
 })
 </script>
 

@@ -1817,10 +1817,10 @@ const useIncomeCompareOption = (seriesData) => {
   const current = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : []
 
-  const wrapAxisLabel = (label) => {
+  const axisLabelFormatter = (label) => {
     if (typeof label !== 'string') return label
-    if (label.length <= 4) return label
-    return label.replace(/(.{4})/g, '$1\n')
+    if (label.length <= 6) return label
+    return label.replace(/(.{6})/g, '$1\n')
   }
 
   const tooltipFormatter = (params) => {
@@ -1843,7 +1843,7 @@ const useIncomeCompareOption = (seriesData) => {
       formatter: tooltipFormatter,
     },
     legend: { data: ['本期', '同期'], bottom: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 80 },
+    grid: { left: 40, right: 20, top: 40, bottom: 90 },
     xAxis: {
       type: 'category',
       data: categories,
@@ -1851,9 +1851,10 @@ const useIncomeCompareOption = (seriesData) => {
       axisLabel: {
         interval: 0,
         hideOverlap: false,
-        formatter: wrapAxisLabel,
-        fontSize: 11,
-        lineHeight: 16,
+        formatter: axisLabelFormatter,
+        fontSize: 13,
+        lineHeight: 18,
+        rotate: 30,
       },
     },
     yAxis: {
@@ -1880,6 +1881,12 @@ const useIncomeCompareOption = (seriesData) => {
           padding: [4, 6],
         },
         labelLayout: { moveOverlap: 'shiftY' },
+        emphasis: {
+          label: {
+            show: true,
+            distance: 8,
+          },
+        },
       },
       {
         name: '同期',
@@ -1906,6 +1913,12 @@ const useIncomeCompareOption = (seriesData) => {
           padding: [4, 6],
         },
         labelLayout: { moveOverlap: 'shiftY' },
+        emphasis: {
+          label: {
+            show: true,
+            distance: 8,
+          },
+        },
       },
     ],
   }
