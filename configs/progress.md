@@ -1,6 +1,37 @@
 # 进度记录
 
-# 进度记录
+## 2025-11-10（数据库连接池扩容）
+
+前置说明（降级留痕）：
+- Serena 暂未支持对 Python 源文件进行符号级写入，本次根据 AGENTS.md 3.9 要求，降级使用 `desktop-commander::read_file` + `apply_patch` 调整 `backend/db/database_daily_report_25_26.py`；回滚时恢复该文件的 `create_engine` 配置即可。
+
+本次动作：
+- 针对 `/dashboard` 高频访问导致的 `sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached` 报错，将数据库 engine 的 `pool_size` 提升至 20、`max_overflow` 至 40，并补充 `pool_timeout=60`、`pool_recycle=1800`，同时保留 `pool_pre_ping`，缓解连接占满问题。
+
+影响范围与回滚：
+- 仅影响 `daily_report_25_26` 专用 engine 的连接池设置；若需回滚，可恢复旧配置（不带额外参数）。
+
+验证建议：
+1. 重启后端服务或热加载代码，访问仪表盘页面多次触发 `/dashboard` 请求，确认日志不再出现 QueuePool 超时。
+2. 在高并发或并行加载时观察数据库连接数，确认连接池容量能支撑峰值访问。
+
+## 2025-11-10（供暖单耗柱距优化）
+
+前置说明（降级留痕）：
+- Serena 当前仍无法对 `.vue` 组件执行符号级写入，本次按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚时恢复该文件对应段落即可。
+
+本次动作：
+- 调整仪表盘“供暖单耗”三张卡片所用的 `useUnitConsumptionOption` 图表配置，将同一单位下“本期/同期”柱形的 `barGap` 调整为 `0%` 以贴紧成组显示，同时把 `barCategoryGap` 提升至 `65%` 拉开不同单位分组的间距，避免视觉重叠。
+- 同期柱状图标签取消显示（`label.show=false`），并清理全局所有标签的背景色配置，保持图面整洁。
+
+影响范围与回滚：
+- 仅影响“供暖单耗”卡片内的三张柱状图；若需回滚，可把 `barGap` 恢复为 `20%`、`barCategoryGap` 恢复为 `40%`。
+
+验证建议：
+1. 打开数据看板页面并定位到“供暖单耗”卡片，确认每个单位下的“本期”与“同期”柱形紧邻且不再重叠。
+2. 对比相邻两个单位，确认组与组之间留白增大、读数标签未被遮挡。
+3. 切换业务日期或重新加载，确认样式设置对不同数据集保持一致。
+4. 确认“同期”柱体不再显示顶部数值标签，仅保留“本期”标签用于提示；同时检查所有卡片的数值标签已移除白色背景。
 
 ## 2025-11-10（仪表盘加载提示与填报反馈）
 

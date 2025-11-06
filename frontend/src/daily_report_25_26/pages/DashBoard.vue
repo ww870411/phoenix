@@ -1107,7 +1107,6 @@ const useTempOption = (series, highlightDate) => {
                   position: 'top',
                   color: '#1d4ed8',
                   fontWeight: 600,
-                  backgroundColor: 'rgba(226, 232, 240, 0.9)',
                   borderRadius: 6,
                   padding: [4, 6],
                 },
@@ -1137,7 +1136,6 @@ const useTempOption = (series, highlightDate) => {
                   position: 'bottom',
                   color: '#f97316',
                   fontWeight: 600,
-                  backgroundColor: 'rgba(255, 244, 230, 0.95)',
                   borderRadius: 6,
                   padding: [4, 6],
                 },
@@ -1177,7 +1175,6 @@ const useMarginOption = (seriesData) => {
           formatter: ({ value }) => formatLabelNumber(value, 1),
           position: 'top',
           color: '#0f172a',
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
@@ -1240,7 +1237,6 @@ const useIncomeCompareOption = (seriesData) => {
           distance: 6,
           formatter: ({ value }) => formatLabelNumber(value, 1),
           color: '#0f172a',
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
@@ -1267,7 +1263,6 @@ const useIncomeCompareOption = (seriesData) => {
           distance: 6,
           formatter: ({ value }) => formatLabelNumber(value, 1),
           color: '#0f172a',
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
@@ -1352,8 +1347,8 @@ metricsToRender.forEach((metric) => {
       name: currentLabel,
       type: 'bar',
       barWidth: 18,
-      barCategoryGap: '40%',
-      barGap: '20%',
+      barCategoryGap: '65%',
+      barGap: '0%',
       itemStyle: { color: currentColorMap[metric] || '#2563eb' },
       data: currentData,
       label: {
@@ -1362,7 +1357,6 @@ metricsToRender.forEach((metric) => {
         distance: 6,
         formatter: formatLabelValue,
         color: '#0f172a',
-        backgroundColor: 'rgba(255, 255, 255, 0.85)',
         borderRadius: 6,
         padding: [4, 6],
         offset: [0, -16],
@@ -1374,8 +1368,8 @@ metricsToRender.forEach((metric) => {
       name: peerLabel,
       type: 'bar',
       barWidth: 18,
-      barCategoryGap: '40%',
-      barGap: '20%',
+      barCategoryGap: '65%',
+      barGap: '0%',
       itemStyle: {
         color: '#0ea5e9',
         decal: {
@@ -1387,18 +1381,7 @@ metricsToRender.forEach((metric) => {
         },
       },
       data: peerData,
-      label: {
-        show: true,
-        position: 'top',
-        distance: 6,
-        formatter: formatLabelValue,
-        color: '#475569',
-        backgroundColor: 'rgba(255, 255, 255, 0.85)',
-        borderRadius: 6,
-        padding: [4, 6],
-        offset: [0, -48],
-      },
-      labelLayout: { moveOverlap: 'shiftY' },
+      label: { show: false },
       emphasis: { focus: 'series' },
     })
   })
@@ -1491,7 +1474,6 @@ const useCoalStdOption = (seriesData) => {
           distance: 6,
           formatter: ({ value }) => formatValue(value),
           color: '#0f172a',
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
@@ -1519,7 +1501,6 @@ const useCoalStdOption = (seriesData) => {
           distance: 6,
           formatter: ({ value }) => formatValue(value),
           color: '#475569',
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
           borderRadius: 6,
           padding: [4, 6],
         },
@@ -1670,7 +1651,6 @@ const useCoalStockOption = (seriesPayload) => {
           position: 'top',
           formatter: ({ value }) => (Number.isFinite(value) ? Number(value).toFixed(0) : ''),
           color: '#0f172a',
-          backgroundColor: 'rgba(255,255,255,0.85)',
           borderRadius: 6,
           padding: [4, 6],
           distance: 8,
@@ -1786,27 +1766,33 @@ const coalStdTableData = computed(() => {
 const downloadPDF = () => {
   const { jsPDF } = window.jspdf;
   const dashboard = document.querySelector('.dashboard-page');
+
   html2canvas(dashboard, {
     useCORS: true,
     scale: 2,
     onclone: (document) => {
-      // Hide the download button in the cloned document
       const btn = document.querySelector('.pdf-download-btn');
       if (btn) {
         btn.style.display = 'none';
       }
-    }
+    },
   }).then(canvas => {
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
-    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-    const imgX = (pdfWidth - imgWidth * ratio) / 2;
-    const imgY = 0;
-    pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio, undefined, 'FAST');
+
+    // A4 width in mm is 210. Use this as a standard width.
+    const pdfWidth = 210;
+    // Calculate the height based on the image's aspect ratio to create a long page.
+    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: [pdfWidth, pdfHeight]
+    });
+
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
     pdf.save(`生产日报-看板-${effectiveBizDate.value || bizDateInput.value}.pdf`);
   });
 };
