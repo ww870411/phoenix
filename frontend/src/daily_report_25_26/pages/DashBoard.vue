@@ -1549,21 +1549,42 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
 
   const metricsToRender = targetIndex >= 0 ? [metricLabel] : [metricLabel]
 
+  let chartCategories = categories
+
   metricsToRender.forEach((metric) => {
     const currentLabel = `${metric}（本期）`
     const peerLabel = `${metric}（同期）`
     legendData.push(currentLabel, peerLabel)
+
+    const zipped = categories.map((org, index) => ({
+      org,
+      current: currentData[index],
+      peer: peerData[index],
+    }))
+    const filtered = zipped.filter(
+      (item) => Number.isFinite(item.current) || Number.isFinite(item.peer),
+    )
+    const plotItems = filtered.length ? filtered : zipped
+    chartCategories = plotItems.map((item) => item.org)
+    const plotCurrent = plotItems.map((item) =>
+      Number.isFinite(item.current) ? Number(item.current) : null,
+    )
+    const plotPeer = plotItems.map((item) =>
+      Number.isFinite(item.peer) ? Number(item.peer) : null,
+    )
+
     const formatCombinedLabel = ({ value, dataIndex }) => {
-      const currentText = formatLabelValue({ value })
+      const currentValue = Number.isFinite(value) ? Number(value) : null
       const peerValue =
-        Array.isArray(peerData) && typeof dataIndex === 'number' ? peerData[dataIndex] : null
-      const peerText = formatLabelValue({ value: peerValue })
+        typeof dataIndex === 'number' && Number.isFinite(plotPeer[dataIndex])
+          ? Number(plotPeer[dataIndex])
+          : null
       const parts = []
-      if (currentText) {
-        parts.push(`本期 ${currentText}`)
+      if (Number.isFinite(currentValue)) {
+        parts.push(`本期 ${currentValue.toFixed(2)}`)
       }
-      if (peerText) {
-        parts.push(`同期 ${peerText}`)
+      if (Number.isFinite(peerValue)) {
+        parts.push(`同期 ${peerValue.toFixed(2)}`)
       }
       return parts.join('\n') || ''
     }
@@ -1575,7 +1596,7 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       barCategoryGap: '65%',
       barGap: '0%',
       itemStyle: { color: currentColorMap[metric] || '#2563eb' },
-      data: currentData,
+      data: plotCurrent,
       label: {
         show: true,
         position: 'top',
@@ -1606,7 +1627,7 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
           color: 'rgba(14, 165, 233, 0.45)',
         },
       },
-      data: peerData,
+      data: plotPeer,
       label: { show: false },
       emphasis: { focus: 'series' },
     })
@@ -1629,9 +1650,14 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     grid: { left: 40, right: 30, top: 70, bottom: 80 },
   xAxis: {
     type: 'category',
-    data: categories,
+    data: chartCategories,
     axisTick: { alignWithLabel: true },
-    axisLabel: { interval: 0, hideOverlap: true },
+    axisLabel: {
+      interval: 0,
+      hideOverlap: false,
+      rotate: 30,
+      fontSize: 11,
+    },
   },
     yAxis: {
       type: 'value',
@@ -1794,7 +1820,12 @@ const useCoalStdOption = (seriesData) => {
       type: 'category',
       data: categories,
     axisTick: { alignWithLabel: true },
-    axisLabel: { interval: 0, hideOverlap: true },
+    axisLabel: {
+      interval: 0,
+      hideOverlap: false,
+      rotate: 30,
+      fontSize: 11,
+    },
   },
     yAxis: {
       type: 'value',
@@ -1894,7 +1925,12 @@ const useComplaintSingleOption = (metricKey, { companies, buckets, unitLabel }) 
     xAxis: {
       type: 'category',
       data: categories,
-      axisLabel: { hideOverlap: true, interval: 0 },
+      axisLabel: {
+        hideOverlap: false,
+        interval: 0,
+        rotate: 30,
+        fontSize: 10,
+      },
       axisTick: { alignWithLabel: true },
     },
     yAxis: {
@@ -2156,7 +2192,19 @@ const averageTemp = computed(() => {
   if (avg === null || Number.isNaN(avg)) {
     return '—'
   }
-  return avg.toFixed(2)
+  const peerBucket =
+    temperatureSection.value && typeof temperatureSection.value === 'object'
+      ? temperatureSection.value['同期']
+      : null
+  const peerValues =
+    peerBucket && typeof peerBucket === 'object' ? peerBucket[pushDate] : undefined
+  const peerAvg = calcAverageFromList(peerValues)
+  if (peerAvg === null || Number.isNaN(peerAvg)) {
+    return avg.toFixed(2)
+  }
+  const delta = Number((avg - peerAvg).toFixed(2))
+  const sign = delta > 0 ? '+' : delta < 0 ? '' : ''
+  return `${avg.toFixed(2)}（${sign}${delta}）`
 })
 const marginHeadline = computed(() => {
   const groupEntry = marginSeries.value.find((item) => item.org === '集团全口径')

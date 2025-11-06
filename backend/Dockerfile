@@ -12,7 +12,7 @@ WORKDIR /app
 COPY . /app
 
 # 安装依赖（若未来添加 requirements.txt/pyproject.toml，可改为更严谨的安装方式）
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" pydantic "sqlalchemy>=2.0" psycopg2-binary
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" pydantic "sqlalchemy>=2.0" psycopg2-binary openpyxl
 
 EXPOSE 8000
 
