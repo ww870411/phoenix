@@ -113,19 +113,19 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖热单耗对比" :extra="`单位：${unitSeries.units['供暖热单耗'] || '—'}`">
-          <EChart :option="unitHeatOpt" height="360px" />
+          <EChart :option="unitHeatOpt" height="450px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖电单耗对比" :extra="`单位：${unitSeries.units['供暖电单耗'] || '—'}`">
-          <EChart :option="unitElecOpt" height="360px" />
+          <EChart :option="unitElecOpt" height="450px" />
         </Card>
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖水单耗对比" :extra="`单位：${unitSeries.units['供暖水单耗'] || '—'}`">
-          <EChart :option="unitWaterOpt" height="360px" />
+          <EChart :option="unitWaterOpt" height="450px" />
         </Card>
       </section>
 
@@ -721,8 +721,9 @@ const formatIncomeValue = (value) => {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const UNIT_COMPANY_ORDER = ['研究院', '庄河环海', '金普热电', '北方热电', '金州热电', '主城区', '集团汇总']
 const unitMetrics = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
-const unitFallbackOrgs = ['主城区', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+const unitFallbackOrgs = [...UNIT_COMPANY_ORDER]
 const unitFallbackSeries = unitFallbackOrgs.map((org) => ({
   org,
   heat: 0,
@@ -738,6 +739,23 @@ const unitFallbackMatrix = {
   '供暖热单耗': unitFallbackSeries.map((item) => item.heat),
   '供暖电单耗': unitFallbackSeries.map((item) => item.elec),
   '供暖水单耗': unitFallbackSeries.map((item) => item.water),
+}
+const orderUnitCompanies = (items) => {
+  const seen = new Set()
+  const result = []
+  UNIT_COMPANY_ORDER.forEach((org) => {
+    const found = items.find((item) => item.org === org)
+    if (found) {
+      result.push(found)
+      seen.add(found)
+    }
+  })
+  items.forEach((item) => {
+    if (!seen.has(item)) {
+      result.push(item)
+    }
+  })
+  return result
 }
 const coalStdFallbackCategories = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdFallbackCurrent = Array(coalStdFallbackCategories.length).fill(0)
@@ -1562,8 +1580,11 @@ const useIncomeCompareOption = (seriesData) => {
   }
 }
 
-const useUnitConsumptionOption = (seriesData, metricName) => {
-  const categories = Array.isArray(seriesData?.categories) ? seriesData.categories : []
+const useUnitConsumptionOption = (seriesData, metricName, orientation = 'vertical') => {
+  const categories =
+    Array.isArray(seriesData?.categories) && seriesData.categories.length
+      ? [...seriesData.categories]
+      : [...UNIT_COMPANY_ORDER]
   const metrics = Array.isArray(seriesData?.metrics) ? seriesData.metrics : []
   const currentMatrix = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peerMatrix = Array.isArray(seriesData?.peer) ? seriesData.peer : []
@@ -1633,10 +1654,16 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       current: currentData[index],
       peer: peerData[index],
     }))
-    const filtered = zipped.filter(
+    const ordered = orderUnitCompanies(zipped)
+    const filtered = ordered.filter(
       (item) => Number.isFinite(item.current) || Number.isFinite(item.peer),
     )
-    const plotItems = filtered.length ? filtered : zipped
+    const plotItems =
+      filtered.length > 0
+        ? filtered
+        : ordered.length > 0
+          ? ordered
+          : zipped
     chartCategories = plotItems.map((item) => item.org)
     const plotCurrent = plotItems.map((item) =>
       Number.isFinite(item.current) ? Number(item.current) : null,
@@ -1644,22 +1671,6 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
     const plotPeer = plotItems.map((item) =>
       Number.isFinite(item.peer) ? Number(item.peer) : null,
     )
-
-    const formatCombinedLabel = ({ value, dataIndex }) => {
-      const currentValue = Number.isFinite(value) ? Number(value) : null
-      const peerValue =
-        typeof dataIndex === 'number' && Number.isFinite(plotPeer[dataIndex])
-          ? Number(plotPeer[dataIndex])
-          : null
-      const parts = []
-      if (Number.isFinite(currentValue)) {
-        parts.push(`本期 ${currentValue.toFixed(2)}`)
-      }
-      if (Number.isFinite(peerValue)) {
-        parts.push(`同期 ${peerValue.toFixed(2)}`)
-      }
-      return parts.join('\n') || ''
-    }
 
     chartSeries.push({
       name: currentLabel,
@@ -1673,12 +1684,12 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
         show: true,
         position: 'top',
         distance: 6,
-        formatter: formatCombinedLabel,
+        formatter: formatLabelValue,
         color: '#0f172a',
         lineHeight: 16,
         borderRadius: 6,
         padding: [4, 6],
-        offset: [0, -12],
+        offset: [0, -8],
       },
       labelLayout: { moveOverlap: 'shiftY' },
       emphasis: { focus: 'series' },
@@ -1701,15 +1712,26 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
         },
       },
       data: plotPeer,
-      label: { show: false },
+      label: {
+        show: true,
+        position: 'top',
+        distance: 6,
+        formatter: formatLabelValue,
+        color: '#7c2d12',
+        lineHeight: 16,
+        borderRadius: 6,
+        padding: [4, 6],
+        offset: [0, -8],
+      },
       emphasis: { focus: 'series' },
     })
   })
 
+  const isHorizontal = orientation === 'horizontal'
   return {
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'shadow' },
+      axisPointer: { type: isHorizontal ? 'shadow' : 'shadow' },
       formatter: tooltipFormatter,
     },
     legend: {
@@ -1720,23 +1742,51 @@ const useUnitConsumptionOption = (seriesData, metricName) => {
       itemHeight: 10,
       icon: 'roundRect',
     },
-    grid: { left: 50, right: 50, top: 70, bottom: 90 },
-  xAxis: {
-    type: 'category',
-    data: chartCategories,
-    axisTick: { alignWithLabel: true },
-    axisLabel: {
-      interval: 0,
-      hideOverlap: false,
-      rotate: 30,
-      fontSize: 11,
-    },
-  },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { type: 'dashed' } },
-    },
-    series: chartSeries,
+    grid: isHorizontal
+      ? { left: 120, right: 50, top: 50, bottom: 90 }
+      : { left: 50, right: 50, top: 70, bottom: 90 },
+    xAxis: isHorizontal
+      ? {
+          type: 'value',
+          splitLine: { lineStyle: { type: 'dashed' } },
+        }
+      : {
+          type: 'category',
+          data: chartCategories,
+          axisTick: { alignWithLabel: true },
+          axisLabel: {
+            interval: 0,
+            hideOverlap: false,
+            rotate: 30,
+            fontSize: 11,
+          },
+        },
+    yAxis: isHorizontal
+      ? {
+          type: 'category',
+          data: chartCategories,
+          axisTick: { alignWithLabel: true },
+          axisLabel: { interval: 0, hideOverlap: false },
+        }
+      : {
+          type: 'value',
+          splitLine: { lineStyle: { type: 'dashed' } },
+        },
+    series: chartSeries.map((series) =>
+      isHorizontal
+        ? {
+            ...series,
+            barWidth: 16,
+            label: series.label
+              ? {
+                  ...series.label,
+                  position: 'right',
+                  offset: [6, 0],
+                }
+              : series.label,
+          }
+        : series,
+    ),
   }
 }
 
@@ -2122,9 +2172,15 @@ const useCoalStockOption = (seriesPayload) => {
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = computed(() => useMarginOption(marginSeries.value))
 const incomeOpt = computed(() => useIncomeCompareOption(incomeSeries.value))
-const unitHeatOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖热单耗'))
-const unitElecOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖电单耗'))
-const unitWaterOpt = computed(() => useUnitConsumptionOption(unitSeries.value, '供暖水单耗'))
+const unitHeatOpt = computed(() =>
+  useUnitConsumptionOption(unitSeries.value, '供暖热单耗', 'horizontal'),
+)
+const unitElecOpt = computed(() =>
+  useUnitConsumptionOption(unitSeries.value, '供暖电单耗', 'horizontal'),
+)
+const unitWaterOpt = computed(() =>
+  useUnitConsumptionOption(unitSeries.value, '供暖水单耗', 'horizontal'),
+)
 const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
 const complaintChartConfigs = computed(() => {
   const companies = complaintCompanies.value
@@ -2616,7 +2672,7 @@ onMounted(() => {
   }
 
   .dashboard-grid__item--unit {
-    grid-column: span 12;
+    grid-column: span 4;
   }
 
   .dashboard-grid__item--coal {

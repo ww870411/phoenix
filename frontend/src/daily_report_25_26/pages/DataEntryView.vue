@@ -10,7 +10,8 @@
         role="status"
         aria-live="polite"
       >
-        {{ submitFeedback.message }}
+        <span>{{ submitFeedback.message }}</span>
+        <span v-if="refreshCountdown > 0" class="submit-countdown">（{{ refreshCountdown }} 秒后自动刷新）</span>
       </div>
     </transition>
     <header class="topbar">
@@ -176,6 +177,7 @@ const rows = ref([]);
 const templateType = ref('standard'); // 新增：模板类型
 const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null });
 const submitTime = ref('');
+const refreshCountdown = ref(0);
 const linkageMap = ref(new Map());
 let isApplyingLinkage = false;
 const isSubmitting = ref(false);
@@ -185,6 +187,7 @@ const submitFeedback = reactive({
   message: '',
 });
 let submitFeedbackTimer = null;
+let refreshCountdownTimer = null;
 
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
@@ -207,6 +210,14 @@ const gridStretch = computed(() => {
 });
 
 // --- Helper --- 
+function clearRefreshCountdown() {
+  if (refreshCountdownTimer !== null) {
+    clearInterval(refreshCountdownTimer);
+    refreshCountdownTimer = null;
+  }
+  refreshCountdown.value = 0;
+}
+
 function cloneDictValue(value) {
   if (value && typeof value === 'object') {
     try { return JSON.parse(JSON.stringify(value)); } catch (err) { return value; }
@@ -214,18 +225,39 @@ function cloneDictValue(value) {
   return value;
 }
 
-function showSubmitFeedback(type, message) {
+function showSubmitFeedback(type, message, options = {}) {
+  const { autoHide = true, duration = 3200 } = options;
   if (submitFeedbackTimer !== null) {
     clearTimeout(submitFeedbackTimer);
     submitFeedbackTimer = null;
   }
+  if (autoHide) {
+    clearRefreshCountdown();
+  }
   submitFeedback.type = type;
   submitFeedback.message = message;
   submitFeedback.visible = true;
-  submitFeedbackTimer = window.setTimeout(() => {
+  if (autoHide) {
+    submitFeedbackTimer = window.setTimeout(() => {
     submitFeedback.visible = false;
     submitFeedbackTimer = null;
-  }, 3200);
+  }, duration);
+  }
+}
+
+function startRefreshCountdown(seconds) {
+  clearRefreshCountdown();
+  showSubmitFeedback('success', '提交成功，数据已入库。', { autoHide: false });
+  refreshCountdown.value = seconds;
+  refreshCountdownTimer = window.setInterval(() => {
+    if (refreshCountdown.value > 0) {
+      refreshCountdown.value -= 1;
+    }
+    if (refreshCountdown.value <= 0) {
+      clearRefreshCountdown();
+      window.location.reload();
+    }
+  }, 1000);
 }
 
 function normalizeDictPayload(raw) {
@@ -689,10 +721,11 @@ async function onSubmit() {
   try {
     await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
     submitTime.value = currentSubmitTime;
-    showSubmitFeedback('success', '提交成功，数据已入库。');
+    startRefreshCountdown(3);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[data-entry] 提交失败', message);
+    clearRefreshCountdown();
     showSubmitFeedback('error', `提交失败：${message || '请稍后重试'}`);
   } finally {
     isSubmitting.value = false;
@@ -900,6 +933,7 @@ onBeforeUnmount(() => {
     clearTimeout(submitFeedbackTimer);
     submitFeedbackTimer = null;
   }
+  clearRefreshCountdown();
 });
 </script>
 
@@ -911,6 +945,7 @@ onBeforeUnmount(() => {
 .submit-feedback { margin: 0 auto 20px; padding: 14px 24px; border-radius: 16px; font-weight: 600; font-size: 14px; line-height: 1.55; display: flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid rgba(148, 163, 184, 0.28); box-shadow: none; width: min(100%, 620px); }
 .submit-feedback--success { background: rgba(187, 247, 208, 0.9); color: #0f5132; border-color: rgba(34, 197, 94, 0.45); }
 .submit-feedback--error { background: rgba(254, 226, 226, 0.92); color: #7f1d1d; border-color: rgba(248, 113, 113, 0.45); }
+.submit-countdown { font-weight: 500; }
 .submit-feedback-fade-enter-active,
 .submit-feedback-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .submit-feedback-fade-enter-from,

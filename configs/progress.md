@@ -1160,6 +1160,25 @@ sum_basic_data 相关：
 2. 对比主城区与集团的投诉量指标，确认分母与单体公司保持一致。
 3. 前端仪表盘若需提示，可在投诉量卡片增加“按供暖收费面积计算”说明，确保业务侧知悉变更。
 
+## 2025-11-11（数据填报提交倒计时刷新）
+
+前置说明（降级留痕）：
+- Serena 仍无法对 `.vue` 组件进行符号级写入，本次按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，并同步更新 `frontend/README.md`、`backend/README.md`；回滚时恢复上述文件即可。
+
+本次动作：
+- 提交成功后触发 3 秒倒计时，`submitFeedback` 提示条展示剩余秒数，倒计时结束调用 `window.location.reload()` 重新加载页面，便于立即核对写库结果。
+- 新增 `refreshCountdown`/`refreshCountdownTimer` 状态与清理函数，确保倒计时在失败、重复提交或组件卸载时能安全终止。
+- 样式新增 `.submit-countdown`，与原提示外观一致；README 记录交互变更及回滚方式。
+
+影响范围与回滚：
+- 行为仅发生在数据填报页面前端层，后端 `/submit` 接口与数据库逻辑未改动；若不需要自动刷新，可恢复 `DataEntryView.vue` 原实现。
+- 旧版不会显示倒计时提示，也不会自动刷新，需要手动重新加载页面。
+
+验证建议：
+1. 在本地填报页面成功提交一次，确认提示条显示“提交成功”并开始 3、2、1 倒计时，3 秒后自动刷新页面。
+2. 提交失败或取消页面时，倒计时应立即停止且不再自动刷新。
+3. 刷新后的页面若配置 `最近提交` 时间应更新为最新时间戳，验证写库数据已回填。
+
 ## 2025-11-11（数据看板段名序号化解析）
 
 前置说明（降级留痕）：
@@ -1228,4 +1247,36 @@ sum_basic_data 相关：
 1. 调用 `/api/v1/projects/daily_report_25_26/dashboard`，确认 `data`、`unitSeries` 等字段中的公司名称均已替换为“集团汇总”。
 2. 刷新仪表盘页面，检查卡片、图例、表格以及 fallback 标签均显示新文案。
 3. 若存在导出或打印流程，验证在新称谓下仍可正常命中“集团汇总”数据。
+
+## 2025-11-11（单耗卡片标签分离）
+
+前置说明（降级留痕）：
+- Serena 暂无法对 `.vue` 组件混合片段做符号级写入，本次继续使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚只需恢复该文件。
+
+本次动作：
+- `useUnitConsumptionOption` 取消“本期/同期”组合标签，改为分别在两根柱体上独立显示数值，并启用同期柱的标签，便于在 12 栅格宽度下直接对比。
+
+影响范围与回滚：
+- 仅影响前端 ECharts 标签展示，后端 `/dashboard` 返回结构不变；若需回滚，将标签 formatter 改回 `formatCombinedLabel` 并关闭同期标签即可。
+
+验证建议：
+1. 刷新仪表盘单耗卡片，确认本期与同期柱体分别显示各自标签且不再堆叠。
+2. 检查标签在移动端与缩放后的布局下不会互相遮挡，必要时可调整偏移或字体。
+
+## 2025-11-11（单耗卡片水平布局试验）
+
+前置说明（降级留痕）：
+- Serena 仍无法对 `.vue` 组件混合片段做符号级写入，本次继续使用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚请恢复该文件。
+
+- 本次动作：
+- 将三张单耗柱状图改为水平展示（ECharts horizontal orientation），卡片高度提升至 450px（原 300px 的 1.5 倍），同时保持 `.dashboard-grid__item--unit` 为 `span 4` 以便三图并排展示。
+  - 强制单耗卡片的公司顺序为“研究院→庄河环海→金普热电→北方热电→金州热电→主城区→集团汇总”，若某指标缺少数据（如电耗无研究院）则自动跳过。
+
+影响范围与回滚：
+- 仅影响前端展示方向与布局，后端 `/dashboard` 数据结构、单位等均未变；若需恢复竖向排列，可将 orientation 改回 `vertical` 并把 `.dashboard-grid__item--unit` 栅格设为 `span 12`。
+
+验证建议：
+1. 刷新仪表盘确认三张卡片呈水平条形图，并在同一行内按热/电/水顺序展示。
+2. 检查 tooltip/标签显示是否适配水平布局；必要时调整 `grid.left` 与标签偏移。
+3. 核对公司排序是否按照“研究院→庄河环海→金普热电→北方热电→金州热电→主城区→集团汇总”，电耗缺失单位时应自动省略。
 
