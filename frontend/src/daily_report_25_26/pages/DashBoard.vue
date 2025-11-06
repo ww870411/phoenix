@@ -24,7 +24,7 @@
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">平均气温（本日及同比增量）</div>
+          <div class="summary-card__label">当日平均气温（及同比增量）</div>
           <div class="summary-card__value">
             <template v-if="Number.isFinite(averageTempToday.main)">
               {{ averageTempToday.main.toFixed(1) }}℃
@@ -39,29 +39,161 @@
       <div class="summary-card summary-card--success">
         <div class="summary-card__icon summary-card__icon--profit" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团可比煤价边际利润（本期）</div>
-          <div class="summary-card__value">{{ marginHeadline }} 万元</div>
+          <div class="summary-card__label">当日集团可比煤价边际利润</div>
+          <div class="summary-card__value">
+            <template v-if="primaryMarginHeadline.value !== null">
+              {{ formatHeadlineNumber(primaryMarginHeadline.value, primaryMarginHeadline.digits) }} 万元
+              <span
+                v-if="primaryMarginHeadline.diff !== null"
+                class="summary-card__delta"
+              >
+                （{{ formatHeadlineDelta(
+                  primaryMarginHeadline.diff,
+                  primaryMarginHeadline.deltaDigits,
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
         </div>
       </div>
       <div class="summary-card summary-card--warning">
         <div class="summary-card__icon summary-card__icon--coal" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团标煤消耗（本期）</div>
-          <div class="summary-card__value">{{ coalStdHeadline }} 吨标煤</div>
+          <div class="summary-card__label">当日集团标煤消耗</div>
+          <div class="summary-card__value">
+            <template v-if="primaryCoalHeadline.value !== null">
+              {{ formatHeadlineNumber(
+                primaryCoalHeadline.value,
+                primaryCoalHeadline.digits,
+                { useThousands: true },
+              ) }} 吨标煤
+              <span
+                v-if="primaryCoalHeadline.diff !== null"
+                class="summary-card__delta"
+              >
+                （{{ formatHeadlineDelta(
+                  primaryCoalHeadline.diff,
+                  primaryCoalHeadline.deltaDigits,
+                  { useThousands: true },
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
         </div>
       </div>
       <div class="summary-card summary-card--danger">
         <div class="summary-card__icon summary-card__icon--complaint" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团当日投诉量</div>
-          <div class="summary-card__value">{{ complaintsHeadline }} 件</div>
+          <div class="summary-card__label">当日集团投诉量</div>
+          <div class="summary-card__value">
+            <template v-if="primaryComplaintHeadline.value !== null">
+              {{ primaryComplaintHeadline.value }} 件
+              <span
+                v-if="primaryComplaintHeadline.diff !== null"
+                class="summary-card__delta"
+              >
+                （{{ formatHeadlineDelta(primaryComplaintHeadline.diff, 0) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
+        </div>
+      </div>
+      <div class="summary-card summary-card--outline summary-card--compact">
+        <div class="summary-card__meta summary-card__meta--centered">
+          <div class="summary-card__label">供暖期平均气温</div>
+          <div class="summary-card__value">
+            <template v-if="cumulativeSeasonAverageHeadline.value !== null">
+              {{ formatHeadlineNumber(
+                cumulativeSeasonAverageHeadline.value,
+                cumulativeSeasonAverageHeadline.digits,
+                { useThousands: cumulativeSeasonAverageHeadline.useThousands },
+              ) }}{{ cumulativeSeasonAverageHeadline.unit }}
+              <span class="summary-card__delta">
+                （{{ formatHeadlineDelta(
+                  cumulativeSeasonAverageHeadline.diff,
+                  cumulativeSeasonAverageHeadline.deltaDigits,
+                  { useThousands: cumulativeSeasonAverageHeadline.useThousands },
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
+        </div>
+      </div>
+      <div class="summary-card summary-card--outline summary-card--compact">
+        <div class="summary-card__meta summary-card__meta--centered">
+          <div class="summary-card__label">供暖期可比煤价边际利润</div>
+          <div class="summary-card__value">
+            <template v-if="cumulativeMarginHeadline.value !== null">
+              {{ formatHeadlineNumber(
+                cumulativeMarginHeadline.value,
+                cumulativeMarginHeadline.digits,
+                { useThousands: cumulativeMarginHeadline.useThousands },
+              ) }} {{ cumulativeMarginHeadline.unit }}
+              <span class="summary-card__delta">
+                （{{ formatHeadlineDelta(
+                  cumulativeMarginHeadline.diff,
+                  cumulativeMarginHeadline.deltaDigits,
+                  { useThousands: cumulativeMarginHeadline.useThousands },
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
+        </div>
+      </div>
+      <div class="summary-card summary-card--outline summary-card--compact">
+        <div class="summary-card__meta summary-card__meta--centered">
+          <div class="summary-card__label">供暖期标煤耗量</div>
+          <div class="summary-card__value">
+            <template v-if="cumulativeCoalHeadline.value !== null">
+              {{ formatHeadlineNumber(
+                cumulativeCoalHeadline.value,
+                cumulativeCoalHeadline.digits,
+                { useThousands: cumulativeCoalHeadline.useThousands },
+              ) }} {{ cumulativeCoalHeadline.unit }}
+              <span class="summary-card__delta">
+                （{{ formatHeadlineDelta(
+                  cumulativeCoalHeadline.diff,
+                  cumulativeCoalHeadline.deltaDigits,
+                  { useThousands: cumulativeCoalHeadline.useThousands },
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
+        </div>
+      </div>
+      <div class="summary-card summary-card--outline summary-card--compact">
+        <div class="summary-card__meta summary-card__meta--centered">
+          <div class="summary-card__label">供暖期投诉量</div>
+          <div class="summary-card__value">
+            <template v-if="cumulativeComplaintHeadline.value !== null">
+              {{ formatHeadlineNumber(
+                cumulativeComplaintHeadline.value,
+                cumulativeComplaintHeadline.digits,
+                { useThousands: cumulativeComplaintHeadline.useThousands },
+              ) }} {{ cumulativeComplaintHeadline.unit }}
+              <span class="summary-card__delta">
+                （{{ formatHeadlineDelta(
+                  cumulativeComplaintHeadline.diff,
+                  cumulativeComplaintHeadline.deltaDigits,
+                  { useThousands: cumulativeComplaintHeadline.useThousands },
+                ) }}）
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
         </div>
       </div>
     </section>
 
     <main class="dashboard-grid">
       <section class="dashboard-grid__item dashboard-grid__item--temp">
-        <Card title="气温变化情况（前后3日窗口，含同期）" subtitle="平均气温" extra="单位：℃">
+        <Card title="气温变化情况（向后预测3日，含同期）" subtitle="平均气温" extra="单位：℃">
           <EChart :option="tempOpt" height="280px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="temperatureColumns" :data="temperatureTableData" />
@@ -721,7 +853,144 @@ const formatIncomeValue = (value) => {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const formatHeadlineNumber = (value, digits = 2, { useThousands = false } = {}) => {
+  if (!Number.isFinite(value)) return '—'
+  return useThousands
+    ? formatWithThousands(value, digits)
+    : Number(value).toFixed(digits)
+}
+
+const formatHeadlineDelta = (value, digits = 2, { useThousands = false } = {}) => {
+  if (!Number.isFinite(value)) return '—'
+  const formatted = useThousands
+    ? formatWithThousands(Math.abs(value), digits)
+    : Math.abs(value).toFixed(digits)
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '+'
+  return `${sign}${formatted}`
+}
+
+const buildCumulativeHeadline = (main, peer, options = {}) => {
+  const {
+    digits = 2,
+    deltaDigits = digits,
+    unit = '',
+    useThousands = false,
+  } = options
+
+  if (!Number.isFinite(main)) {
+    return {
+      value: null,
+      diff: null,
+      unit,
+      digits,
+      deltaDigits,
+      useThousands,
+    }
+  }
+
+  const diff = Number.isFinite(peer) ? main - peer : null
+  return {
+    value: main,
+    diff,
+    unit,
+    digits,
+    deltaDigits,
+    useThousands,
+  }
+}
+
+const computeAverageFromEntries = (entries) => {
+  if (!Array.isArray(entries) || !entries.length) return null
+  const values = entries
+    .map((entry) => normalizeMetricValue(entry?.value))
+    .filter((value) => Number.isFinite(value))
+  if (!values.length) return null
+  const sum = values.reduce((acc, value) => acc + value, 0)
+  return sum / values.length
+}
+
+const cumulativeSection = computed(() => {
+  const section = resolveSection('9', '9.累计卡片')
+  return section && typeof section === 'object' ? section : {}
+})
+
+const cumulativeUnits = computed(() => {
+  const bucket = cumulativeSection.value['计量单位']
+  return {
+    temperature: bucket?.['平均气温'] || '℃',
+    margin: bucket?.['可比煤价边际利润'] || '万元',
+    coal: bucket?.['标煤耗量'] || '吨',
+    complaints: bucket?.['省市平台投诉量'] || '件',
+  }
+})
+
+const cumulativeSeasonAverageHeadline = computed(() => {
+  const averageBucket = cumulativeSection.value['供暖期平均气温']
+  if (!averageBucket || typeof averageBucket !== 'object') {
+    return buildCumulativeHeadline(null, null, { unit: cumulativeUnits.value.temperature })
+  }
+  const main = computeAverageFromEntries(averageBucket['本期'])
+  const peer = computeAverageFromEntries(averageBucket['同期'])
+  return buildCumulativeHeadline(main, peer, {
+    digits: 2,
+    unit: cumulativeUnits.value.temperature,
+  })
+})
+
+const getCumulativeMetric = (label) => {
+  const bucket = cumulativeSection.value[label]
+  if (!bucket || typeof bucket !== 'object') {
+    return { main: null, peer: null }
+  }
+  return {
+    main: normalizeMetricValue(bucket['本期']),
+    peer: normalizeMetricValue(bucket['同期']),
+  }
+}
+
+const cumulativeMarginHeadline = computed(() => {
+  const { main, peer } = getCumulativeMetric('集团汇总供暖期可比煤价边际利润')
+  return buildCumulativeHeadline(main, peer, {
+    digits: 2,
+    unit: cumulativeUnits.value.margin,
+    useThousands: true,
+  })
+})
+
+const cumulativeCoalHeadline = computed(() => {
+  const { main, peer } = getCumulativeMetric('集团汇总供暖期标煤耗量')
+  return buildCumulativeHeadline(main, peer, {
+    digits: 0,
+    deltaDigits: 0,
+    unit: cumulativeUnits.value.coal,
+    useThousands: true,
+  })
+})
+
+const cumulativeComplaintHeadline = computed(() => {
+  const { main, peer } = getCumulativeMetric('集团汇总供暖期省市平台投诉量')
+  return buildCumulativeHeadline(main, peer, {
+    digits: 0,
+    deltaDigits: 0,
+    unit: cumulativeUnits.value.complaints,
+    useThousands: true,
+  })
+})
+
 const UNIT_COMPANY_ORDER = ['研究院', '庄河环海', '金普热电', '北方热电', '金州热电', '主城区', '集团汇总']
+const PREFERRED_GROUP_NAMES = ['集团汇总', '集团全口径', 'Group']
+
+const findPreferredIndex = (candidates = []) => {
+  if (!Array.isArray(candidates) || !candidates.length) return -1
+  for (const name of PREFERRED_GROUP_NAMES) {
+    const idx = candidates.indexOf(name)
+    if (idx !== -1) {
+      return idx
+    }
+  }
+  return candidates.length ? 0 : -1
+}
+
 const unitMetrics = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
 const unitFallbackOrgs = [...UNIT_COMPANY_ORDER]
 const unitFallbackSeries = unitFallbackOrgs.map((org) => ({
@@ -960,22 +1229,6 @@ const complaintTableData = computed(() => {
     })
     return row
   })
-})
-
-const complaintsHeadline = computed(() => {
-  const buckets = complaintBuckets.value
-  const preferredMetric = complaintMetricOrder[0]
-  const mainBucket = buckets[preferredMetric]?.['本期']
-  if (mainBucket && typeof mainBucket === 'object') {
-  const preferredCompanies = ['集团汇总', '主城区', ...complaintCompanies.value]
-    for (const company of preferredCompanies) {
-      const value = normalizeComplaintValue(mainBucket[company])
-      if (Number.isFinite(value)) {
-        return value
-      }
-    }
-  }
-  return 0
 })
 
 const coalStockSection = computed(() => {
@@ -2350,15 +2603,63 @@ const averageTemp = computed(() => {
   const sign = delta > 0 ? '+' : delta < 0 ? '' : ''
   return `${avg.toFixed(2)}（${sign}${delta}）`
 })
-const marginHeadline = computed(() => {
+const primaryMarginHeadline = computed(() => {
   const groupEntry = marginSeries.value.find((item) => item.org === '集团汇总')
-  const value = groupEntry?.marginCmpCoal
-  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0
+  const current = normalizeMetricValue(groupEntry?.marginCmpCoal)
+  const peer = normalizeMetricValue(groupEntry?.peerMarginCmpCoal)
+  return buildCumulativeHeadline(current, peer, {
+    digits: 2,
+    deltaDigits: 2,
+    unit: '万元',
+  })
 })
-const coalStdHeadline = computed(() => {
-  const current = coalStdSeries.value.current
-  const value = Array.isArray(current) ? current[0] : null
-  return Number.isFinite(value) ? Number(value.toFixed(1)) : 0
+
+const primaryCoalHeadline = computed(() => {
+  const series = coalStdSeries.value || {}
+  const categories = Array.isArray(series.categories) ? series.categories : []
+  const current = Array.isArray(series.current) ? series.current : []
+  const peer = Array.isArray(series.peer) ? series.peer : []
+  const index = findPreferredIndex(categories)
+  const currentValue = index !== -1 ? normalizeMetricValue(current[index]) : null
+  const peerValue = index !== -1 ? normalizeMetricValue(peer[index]) : null
+  return buildCumulativeHeadline(currentValue, peerValue, {
+    digits: 1,
+    deltaDigits: 1,
+    unit: '吨标煤',
+    useThousands: true,
+  })
+})
+
+const primaryComplaintHeadline = computed(() => {
+  const buckets = complaintBuckets.value
+  const metricKey = complaintMetricOrder[0]
+  const preferredCompanies = ['集团汇总', '主城区', ...complaintCompanies.value]
+
+  const pickValue = (bucket) => {
+    if (!bucket || typeof bucket !== 'object') return null
+    for (const company of preferredCompanies) {
+      const value = normalizeComplaintValue(bucket[company])
+      if (Number.isFinite(value)) {
+        return value
+      }
+    }
+    for (const key of Object.keys(bucket)) {
+      const value = normalizeComplaintValue(bucket[key])
+      if (Number.isFinite(value)) {
+        return value
+      }
+    }
+    return null
+  }
+
+  const main = pickValue(buckets[metricKey]?.['本期'])
+  const peer = pickValue(buckets[metricKey]?.['同期'])
+
+  return buildCumulativeHeadline(main, peer, {
+    digits: 0,
+    deltaDigits: 0,
+    unit: '件',
+  })
 })
 
 const chartPalette = ref(['#2563eb', '#38bdf8', '#10b981', '#f97316', '#facc15', '#ec4899'])
@@ -2609,9 +2910,81 @@ onMounted(() => {
   opacity: 0.78;
 }
 
+.summary-card__meta--centered {
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
 .summary-card__value {
   font-size: 24px;
   font-weight: 700;
+}
+
+.summary-card__delta {
+  margin-left: 6px;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.summary-card--compact {
+  padding: 14px;
+  gap: 10px;
+}
+
+.summary-card--compact .summary-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+.summary-card--compact .summary-card__icon::before {
+  width: 26px;
+  height: 26px;
+}
+
+.summary-card--compact .summary-card__label {
+  font-size: 11px;
+}
+
+.summary-card--compact .summary-card__value {
+  font-size: 19px;
+}
+
+.summary-card--outline {
+  background: transparent;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  box-shadow: none;
+  justify-content: center;
+}
+
+.summary-card--outline::after {
+  display: none;
+}
+
+.summary-card--outline .summary-card__label {
+  color: #475569;
+  opacity: 1;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font-size: 14px;
+}
+
+.summary-card--outline .summary-card__value {
+  color: #0f172a;
+  font-size: 20px;
+  text-align: center;
+}
+
+.summary-card--outline .summary-card__delta {
+  color: #2563eb;
+}
+
+.summary-card--outline.summary-card--compact {
+  padding: 12px;
+  gap: 8px;
 }
 
 .summary-card--primary {
@@ -2628,6 +3001,38 @@ onMounted(() => {
 
 .summary-card--danger {
   background: linear-gradient(135deg, #ef4444, #fb7185);
+}
+
+.summary-card--stock {
+  background: linear-gradient(135deg, #1f2937, #4b5563);
+}
+
+.summary-card--heat {
+  background: linear-gradient(135deg, #f97316, #fb923c);
+}
+
+.summary-card--electric {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+}
+
+.summary-card--water {
+  background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+}
+
+.summary-card__icon--storage::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M3 20V8l9-5l9 5v12H3Zm9-7l7-3.89l-7-3.89l-7 3.89Zm0 2.1l-7-3.89V18l7 3.89l7-3.89v-6.79Z"/></svg>');
+}
+
+.summary-card__icon--heat::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11.5 22q-2.3 0-3.9-1.6T6 16.5q0-1.05.413-2.1T7.5 12q1.05-1.2 1.775-2.563T10 6q0-1.2-.4-2.275T8.5 1q2.2 1.05 3.35 2.938T13 8.5q0 1.5-.363 2.938T11.5 13.5q-1.2 1.45-1.85 2.738T9 19q0 1.2.8 2.1t1.7.9q1.05 0 1.775-.787T14 19.5q0-.95-.4-1.9t-1.1-2q2.2 1.25 3.35 2.887T17 19.5q0 2.1-1.45 3.8T11.5 22Z"/></svg>');
+}
+
+.summary-card__icon--electric::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M9 22v-7H5l8-13v7h4Z"/></svg>');
+}
+
+.summary-card__icon--water::before {
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22q-3.225 0-5.612-2.188T4 14.5q0-1.05.363-2.138T5.5 10Q7.6 7.45 8.8 5.075T10 1q1.45 1.75 2.725 3.4T15.5 10q1.1 1.35 1.55 2.437T17 14.5q0 3.125-2.388 5.313T12 22Z"/></svg>');
 }
 
   .dashboard-grid {

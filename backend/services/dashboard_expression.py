@@ -27,13 +27,14 @@ from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
 )
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 DASHBOARD_CONFIG_PATH = DATA_ROOT / "数据结构_数据看板.json"
 DATE_CONFIG_PATH = DATA_ROOT / "date.json"
 EAST_8 = timezone(timedelta(hours=8))
 SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
+HEATING_SEASON_START = date(2025, 11, 1)
 
 
 @dataclass
@@ -571,6 +572,11 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 item_cn_to_code,
             )
 
+        # 9. 累计卡片
+        cumulative_section = get_section_by_index("9", "9.累计卡片")
+        if isinstance(cumulative_section, dict):
+            _fill_cumulative_cards(session, cumulative_section, push_date)
+
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
         str(DASHBOARD_CONFIG_PATH.relative_to(DATA_ROOT))
@@ -674,3 +680,149 @@ def _fill_heating_branch_consumption(
             target = expression or label
             value = _evaluate_expression(metrics, target, item_cn_to_code, "value_biz_date")
             metrics_map[label] = value
+
+
+def _add_years(origin: date, years: int) -> date:
+    """安全地为日期加减年份，处理闰年场景。"""
+    try:
+        return origin.replace(year=origin.year + years)
+    except ValueError:
+        # 对于闰年 2 月 29 日，退回至当年最后一天
+        interim = origin.replace(day=1, month=3, year=origin.year + years)
+        return interim - timedelta(days=1)
+
+
+def _fetch_daily_average_temperature_map(
+    session,
+    start_date: date,
+    end_date: date,
+) -> Dict[date, Optional[float]]:
+    """按东八区日期聚合 temperature_data，缺失日期以 None 填充。"""
+    if start_date > end_date:
+        return {}
+
+    start_local = datetime.combine(start_date, time.min, tzinfo=EAST_8)
+    end_local = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=EAST_8)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    stmt = text(
+        """
+        SELECT (date_time AT TIME ZONE 'Asia/Shanghai')::date AS local_date,
+               AVG(value) AS avg_temp
+        FROM temperature_data
+        WHERE date_time >= :start_utc AND date_time < :end_utc
+        GROUP BY local_date
+        ORDER BY local_date
+        """,
+    )
+    rows = session.execute(
+        stmt,
+        {"start_utc": start_utc, "end_utc": end_utc},
+    ).all()
+
+    daily_map: Dict[date, Optional[float]] = {}
+    for row_date, avg_temp in rows:
+        if row_date is None:
+            continue
+        if isinstance(row_date, datetime):
+            cast_date = row_date.date()
+        elif isinstance(row_date, date):
+            cast_date = row_date
+        else:
+            try:
+                cast_date = date.fromisoformat(str(row_date))
+            except ValueError:
+                continue
+
+        if avg_temp is None:
+            daily_map[cast_date] = None
+            continue
+        try:
+            daily_map[cast_date] = float(avg_temp)
+        except (TypeError, ValueError):
+            daily_map[cast_date] = None
+
+    total_days = (end_date - start_date).days + 1
+    if total_days <= 0:
+        return {}
+
+    ordered: Dict[date, Optional[float]] = {}
+    for idx in range(total_days):
+        current = start_date + timedelta(days=idx)
+        ordered[current] = daily_map.get(current)
+
+    return ordered
+
+
+def _fetch_average_temperature_between(
+    session,
+    start_date: date,
+    end_date: date,
+) -> Optional[float]:
+    """从 calc_temperature_data 视图求指定日期区间的平均气温。"""
+    daily_map = _fetch_daily_average_temperature_map(session, start_date, end_date)
+    if not daily_map:
+        return None
+
+    values = [value for value in daily_map.values() if value is not None]
+    if not values:
+        return None
+
+    return sum(values) / len(values)
+
+
+def _fill_cumulative_cards(
+    session,
+    section: Dict[str, Any],
+    push_date: str,
+) -> None:
+    """填充“累计卡片”板块（平均气温 + 供暖期累计指标）。"""
+    if not isinstance(section, dict):
+        return
+
+    try:
+        push_dt = date.fromisoformat(push_date)
+    except ValueError:
+        push_dt = HEATING_SEASON_START
+
+    # 计算供暖期平均气温（本期/同期），返回逐日列表
+    temp_bucket = section.get("供暖期平均气温")
+    if isinstance(temp_bucket, dict):
+        season_start = HEATING_SEASON_START if HEATING_SEASON_START <= push_dt else push_dt
+        main_series = _fetch_daily_average_temperature_map(session, season_start, push_dt)
+
+        peer_start = _add_years(season_start, -1)
+        peer_end = _add_years(push_dt, -1)
+        peer_series = _fetch_daily_average_temperature_map(session, peer_start, peer_end)
+
+        temp_bucket["本期"] = [
+            {
+                "date": day.isoformat(),
+                "value": None if value is None else round(value, 2),
+            }
+            for day, value in main_series.items()
+        ]
+        temp_bucket["同期"] = [
+            {
+                "date": day.isoformat(),
+                "value": None if value is None else round(value, 2),
+            }
+            for day, value in peer_series.items()
+        ]
+
+    # 其余累计指标直接读取 groups 视图的 sum_ytd_* 字段
+    metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+    mapping = {
+        "集团汇总供暖期标煤耗量": "consumption_std_coal",
+        "集团汇总供暖期可比煤价边际利润": "eco_comparable_marginal_profit",
+        "集团汇总供暖期省市平台投诉量": "amount_daily_service_complaints",
+    }
+
+    for label, item_code in mapping.items():
+        bucket = section.get(label)
+        if not isinstance(bucket, dict):
+            continue
+        metric_payload = metrics.get(item_code, {})
+        bucket["本期"] = _decimal_to_float(metric_payload.get("sum_ytd_biz"))
+        bucket["同期"] = _decimal_to_float(metric_payload.get("sum_ytd_peer"))

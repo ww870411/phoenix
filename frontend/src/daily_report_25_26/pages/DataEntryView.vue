@@ -25,7 +25,7 @@
           <span>业务日期：</span>
           <input type="date" v-model="bizDate" />
         </label>
-        <button class="btn ghost" type="button" @click="reloadTemplate">重载模板</button>
+        <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
         <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">提交</button>
       </div>
     </header>
@@ -59,7 +59,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter, useRoute } from 'vue-router'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getTemplate, queryData, submitData } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -178,6 +178,8 @@ const templateType = ref('standard'); // 新增：模板类型
 const templateDicts = ref({ entries: {}, itemPrimary: null, companyPrimary: null });
 const submitTime = ref('');
 const refreshCountdown = ref(0);
+const highlightCells = ref(new Set());
+const modifiedCells = new Set();
 const linkageMap = ref(new Map());
 let isApplyingLinkage = false;
 const isSubmitting = ref(false);
@@ -188,6 +190,8 @@ const submitFeedback = reactive({
 });
 let submitFeedbackTimer = null;
 let refreshCountdownTimer = null;
+let highlightCleanupTimer = null;
+let pendingHighlightCells = [];
 
 // --- RevoGrid 状态 ---
 const gridColumns = ref([]);
@@ -216,6 +220,63 @@ function clearRefreshCountdown() {
     refreshCountdownTimer = null;
   }
   refreshCountdown.value = 0;
+}
+
+function forceGridRefresh() {
+  const gridComponent = gridRef.value;
+  if (!gridComponent) return;
+  if (typeof gridComponent.refresh === 'function') {
+    gridComponent.refresh();
+    return;
+  }
+  const gridElement = gridComponent.$el;
+  if (gridElement && typeof gridElement.refresh === 'function') {
+    gridElement.refresh();
+    return;
+  }
+  gridSource.value = [...gridSource.value];
+}
+
+async function highlightRecentlyModifiedCells(cellKeys) {
+  if (!Array.isArray(cellKeys) || !cellKeys.length) return;
+  if (highlightCleanupTimer !== null) {
+    clearTimeout(highlightCleanupTimer);
+    highlightCleanupTimer = null;
+  }
+  highlightCells.value = new Set(cellKeys);
+  await nextTick();
+  await nextTick();
+  forceGridRefresh();
+  highlightCleanupTimer = window.setTimeout(() => {
+    highlightCells.value = new Set();
+    forceGridRefresh();
+    highlightCleanupTimer = null;
+  }, 2000);
+}
+
+const cellHighlightTemplate = (createElement, props) => {
+  const elementFactory = typeof createElement === 'function' ? createElement : h;
+  const value = props.model?.[props.prop];
+  const displayValue = value === null || value === undefined ? '' : String(value);
+  const key = `${props.rowIndex}:${props.prop}`;
+  const classes = ['cell-content'];
+  if (highlightCells.value.has(key)) {
+    classes.push('cell-highlight-flash');
+  }
+  return elementFactory('span', { class: classes.join(' ') }, displayValue);
+};
+
+function withCellTemplate(def) {
+  if (!def) return def;
+  if (def.cellTemplate === cellHighlightTemplate) {
+    return def;
+  }
+  return { ...def, cellTemplate: cellHighlightTemplate };
+}
+
+function trackModifiedCell(rowIndex, prop) {
+  if (rowIndex == null || !prop) return;
+  modifiedCells.add(`${rowIndex}:${prop}`);
 }
 
 function cloneDictValue(value) {
@@ -247,16 +308,32 @@ function showSubmitFeedback(type, message, options = {}) {
 
 function startRefreshCountdown(seconds) {
   clearRefreshCountdown();
-  showSubmitFeedback('success', '提交成功，数据已入库。', { autoHide: false });
+  const cellsToHighlight = Array.from(modifiedCells);
+  modifiedCells.clear();
+  pendingHighlightCells = cellsToHighlight;
   refreshCountdown.value = seconds;
+  showSubmitFeedback('success', '提交成功，数据已入库。', { autoHide: false });
   refreshCountdownTimer = window.setInterval(() => {
-    if (refreshCountdown.value > 0) {
+    if (refreshCountdown.value > 1) {
       refreshCountdown.value -= 1;
+      return;
     }
-    if (refreshCountdown.value <= 0) {
-      clearRefreshCountdown();
-      window.location.reload();
-    }
+    clearRefreshCountdown();
+    showSubmitFeedback('success', '正在刷新数据，请稍候…', { autoHide: false });
+    reloadTemplate({ preservePendingHighlights: true })
+      .then(() => {
+        if (pendingHighlightCells.length) {
+          highlightRecentlyModifiedCells(pendingHighlightCells);
+          pendingHighlightCells = [];
+        }
+        showSubmitFeedback('success', `数据已刷新（业务日期：${bizDate.value}）。`, { autoHide: true, duration: 2600 });
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        pendingHighlightCells.forEach((key) => modifiedCells.add(key));
+        pendingHighlightCells = [];
+        showSubmitFeedback('error', `刷新失败：${message || '请手动刷新页面'}`);
+      });
   }, 1000);
 }
 
@@ -399,9 +476,9 @@ function applyReadonlyToColumns() {
     const locked = Boolean(def.__locked) || (shouldLockAll && (templateType.value === 'standard' || templateType.value === 'crosstab'));
     const currentReadonly = def.readonly === undefined ? false : def.readonly;
     if (currentReadonly === locked) {
-      return def;
+      return withCellTemplate(def);
     }
-    return { ...def, readonly: locked };
+    return withCellTemplate({ ...def, readonly: locked });
   });
 }
 
@@ -409,18 +486,17 @@ function applyReadonlyToColumns() {
 async function setupStandardGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
   readOnlyThreshold.value = readonlyLimit;
-  const colDefs = tpl.columns.map((colName, index) => {
+  gridColumns.value = tpl.columns.map((colName, index) => {
     const base = {
       prop: `c${index}`,
       name: String(colName ?? ''),
       autoSize: true,
       minSize: index === 0 ? 160 : 120,
+      __locked: index <= readonlyLimit,
+      readonly: index <= readonlyLimit || isReadOnlyForDate.value,
     };
-    base.__locked = index <= readonlyLimit;
-    base.readonly = base.__locked || isReadOnlyForDate.value;
-    return base;
+    return withCellTemplate(base);
   });
-  gridColumns.value = colDefs;
   applyReadonlyToColumns();
 
   const src = tpl.rows.map(row => {
@@ -438,18 +514,17 @@ async function setupStandardGrid(tpl) {
 async function setupCrosstabGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
   readOnlyThreshold.value = readonlyLimit;
-  const colDefs = tpl.columns.map((name, index) => {
+  gridColumns.value = tpl.columns.map((name, index) => {
     const base = {
       prop: `c${index}`,
       name: String(name ?? ''),
       autoSize: true,
       minSize: index === 0 ? 160 : 120,
+      __locked: index <= readonlyLimit,
+      readonly: index <= readonlyLimit || isReadOnlyForDate.value,
     };
-    base.__locked = index <= readonlyLimit;
-    base.readonly = base.__locked || isReadOnlyForDate.value;
-    return base;
+    return withCellTemplate(base);
   });
-  gridColumns.value = colDefs;
   applyReadonlyToColumns();
 
   gridSource.value = tpl.rows.map(r => {
@@ -462,7 +537,13 @@ async function setupCrosstabGrid(tpl) {
 }
 
 // --- 主数据加载逻辑 ---
-async function loadTemplate() {
+async function loadTemplate(options = {}) {
+  const { preservePendingHighlights = false } = options;
+  highlightCells.value = new Set();
+  if (!preservePendingHighlights) {
+    modifiedCells.clear();
+    pendingHighlightCells = [];
+  }
   isLoadingTemplate.value = true;
   linkageMap.value = new Map();
   const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
@@ -538,10 +619,10 @@ async function loadTemplate() {
       if (q && Array.isArray(q.columns)) {
         columns.value = q.columns;
         if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
-          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+          gridColumns.value = gridColumns.value.map((def, i) => withCellTemplate({ ...def, name: q.columns[i] }));
           applyReadonlyToColumns();
         } else {
-          const colDefs = q.columns.map((name, index) => ({
+          const colDefs = q.columns.map((name, index) => withCellTemplate({
             name: String(name ?? ''),
             prop: `c${index}`,
             size: index === 0 ? 180 : undefined,
@@ -638,8 +719,8 @@ async function loadExisting() {
   await autoSizeFirstColumn();
 }
 
-async function reloadTemplate() {
-  await loadTemplate();
+async function reloadTemplate(options = {}) {
+  await loadTemplate(options);
 }
 
 // --- 提交逻辑 ---
@@ -744,6 +825,7 @@ function handleAfterEdit(evt) {
     if (rowIndex == null || !prop) continue;
     if (!gridSource.value[rowIndex]) continue;
     gridSource.value[rowIndex][prop] = val;
+    trackModifiedCell(rowIndex, prop);
     if (templateType.value !== 'standard') continue;
     const map = linkageMap.value;
     if (!(map instanceof Map) || map.size === 0) continue;
@@ -755,6 +837,7 @@ function handleAfterEdit(evt) {
       related.forEach((linkedIdx) => {
         if (!gridSource.value[linkedIdx]) return;
         gridSource.value[linkedIdx][prop] = val;
+        trackModifiedCell(linkedIdx, prop);
       });
     } finally {
       isApplyingLinkage = false;
@@ -787,7 +870,7 @@ async function autoSizeFirstColumn() {
   const target = Math.max(gridColumns.value[0]?.minSize ?? 160, Math.ceil(widest) + padding);
 
   gridColumns.value[0].size = target;
-  gridColumns.value = [...gridColumns.value];
+  gridColumns.value = gridColumns.value.map(withCellTemplate);
 }
 
 let textMeasureCtx = null;
@@ -813,7 +896,7 @@ async function applyStandardQueryResult(payload) {
   if (Array.isArray(q.columns)) {
     if (!isDailyPage.value) {
       columns.value = q.columns;
-      const colDefs = q.columns.map((name, index) => ({
+      const colDefs = q.columns.map((name, index) => withCellTemplate({
         name: String(name ?? ''),
         prop: `c${index}`,
         size: index === 0 ? 220 : 120,
@@ -853,7 +936,7 @@ const stop = watch(
       const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
       columns.value = recalculated;
       if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
-        gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
+        gridColumns.value = gridColumns.value.map((def, i) => withCellTemplate({ ...def, name: recalculated[i] }));
         applyReadonlyToColumns();
       }
     }
@@ -897,10 +980,10 @@ watch(
       if (q && Array.isArray(q.columns)) {
         columns.value = q.columns;
         if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
-          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+          gridColumns.value = gridColumns.value.map((def, i) => withCellTemplate({ ...def, name: q.columns[i] }));
           applyReadonlyToColumns();
         } else {
-          const colDefs = q.columns.map((name, index) => ({
+          const colDefs = q.columns.map((name, index) => withCellTemplate({
             name: String(name ?? ''),
             prop: `c${index}`,
             size: index === 0 ? 180 : undefined,
@@ -934,6 +1017,13 @@ onBeforeUnmount(() => {
     submitFeedbackTimer = null;
   }
   clearRefreshCountdown();
+  if (highlightCleanupTimer !== null) {
+    clearTimeout(highlightCleanupTimer);
+    highlightCleanupTimer = null;
+  }
+  highlightCells.value = new Set();
+  modifiedCells.clear();
+  pendingHighlightCells = [];
 });
 </script>
 
@@ -950,4 +1040,33 @@ onBeforeUnmount(() => {
 .submit-feedback-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .submit-feedback-fade-enter-from,
 .submit-feedback-fade-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.cell-content {
+  display: inline-block;
+  width: 100%;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+
+.cell-highlight-flash {
+  background-color: rgba(34, 197, 94, 0.18);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  animation: cellHighlightFlash 1.5s ease forwards;
+}
+
+@keyframes cellHighlightFlash {
+  0% {
+    background-color: rgba(34, 197, 94, 0.32);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+  }
+  60% {
+    background-color: rgba(34, 197, 94, 0.18);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
 </style>

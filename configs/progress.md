@@ -1166,18 +1166,19 @@ sum_basic_data 相关：
 - Serena 仍无法对 `.vue` 组件进行符号级写入，本次按 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，并同步更新 `frontend/README.md`、`backend/README.md`；回滚时恢复上述文件即可。
 
 本次动作：
-- 提交成功后触发 3 秒倒计时，`submitFeedback` 提示条展示剩余秒数，倒计时结束调用 `window.location.reload()` 重新加载页面，便于立即核对写库结果。
+- 提交成功后触发 3 秒倒计时，`submitFeedback` 提示条展示剩余秒数，倒计时结束调用 `reloadTemplate()` 重新拉取当前业务日期数据，避免整页刷新且保持用户选中的日历日期。
+- 新增“本次提交修改的单元格”记录与高亮逻辑：提交成功后缓存 row/column，刷新完成后以绿色闪动 2 秒提示，便于核查写库结果。
 - 新增 `refreshCountdown`/`refreshCountdownTimer` 状态与清理函数，确保倒计时在失败、重复提交或组件卸载时能安全终止。
-- 样式新增 `.submit-countdown`，与原提示外观一致；README 记录交互变更及回滚方式。
+- 样式新增 `.submit-countdown` 与 `.cell-highlight-flash`，与原提示外观一致；README 记录交互变更及回滚方式。
 
 影响范围与回滚：
-- 行为仅发生在数据填报页面前端层，后端 `/submit` 接口与数据库逻辑未改动；若不需要自动刷新，可恢复 `DataEntryView.vue` 原实现。
+- 行为仅发生在数据填报页面前端层，后端 `/submit` 接口与数据库逻辑未改动；若不需要倒计时刷新，可恢复 `DataEntryView.vue` 原实现。
 - 旧版不会显示倒计时提示，也不会自动刷新，需要手动重新加载页面。
 
 验证建议：
-1. 在本地填报页面成功提交一次，确认提示条显示“提交成功”并开始 3、2、1 倒计时，3 秒后自动刷新页面。
+1. 在本地填报页面成功提交一次，确认提示条显示“提交成功”并开始 3、2、1 倒计时，3 秒后自动刷新当前业务日期表格，并高亮最近修改的单元格约 2 秒。
 2. 提交失败或取消页面时，倒计时应立即停止且不再自动刷新。
-3. 刷新后的页面若配置 `最近提交` 时间应更新为最新时间戳，验证写库数据已回填。
+3. 刷新后“最近提交”时间应更新为最新时间戳，验证写库数据已回填；高亮结束后单元格恢复正常。
 
 ## 2025-11-11（数据看板段名序号化解析）
 
@@ -1270,7 +1271,8 @@ sum_basic_data 相关：
 
 - 本次动作：
 - 将三张单耗柱状图改为水平展示（ECharts horizontal orientation），卡片高度提升至 450px（原 300px 的 1.5 倍），同时保持 `.dashboard-grid__item--unit` 为 `span 4` 以便三图并排展示。
-  - 强制单耗卡片的公司顺序为“研究院→庄河环海→金普热电→北方热电→金州热电→主城区→集团汇总”，若某指标缺少数据（如电耗无研究院）则自动跳过。
+- 强制单耗卡片的公司顺序为“研究院→庄河环海→金普热电→北方热电→金州热电→主城区→集团汇总”，若某指标缺少数据（如电耗无研究院）则自动跳过。
+- 在 summary 区域新增 4 张紧凑卡片（煤炭库存、集团热/电/水单耗），使用 `summary-card--compact` 将高度压缩至原卡片的约 80%，并各自配套渐变与图标。
 
 影响范围与回滚：
 - 仅影响前端展示方向与布局，后端 `/dashboard` 数据结构、单位等均未变；若需恢复竖向排列，可将 orientation 改回 `vertical` 并把 `.dashboard-grid__item--unit` 栅格设为 `span 12`。
@@ -1279,4 +1281,41 @@ sum_basic_data 相关：
 1. 刷新仪表盘确认三张卡片呈水平条形图，并在同一行内按热/电/水顺序展示。
 2. 检查 tooltip/标签显示是否适配水平布局；必要时调整 `grid.left` 与标签偏移。
 3. 核对公司排序是否按照“研究院→庄河环海→金普热电→北方热电→金州热电→主城区→集团汇总”，电耗缺失单位时应自动省略。
+4. 查看新增 summary 卡片的展示数值与单位是否与图表数据一致（煤炭库存合计、集团热/电/水单耗）。
+
+## 2025-11-12（累计卡片气温逐日输出）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对 Markdown 文档追加段落，本次使用 `apply_patch` 追加 `configs/progress.md`；回滚时删除本节即可。
+
+本次动作：
+- `backend/services/dashboard_expression.py` 新增 `_fetch_daily_average_temperature_map`，并改造 `_fill_cumulative_cards`，将“供暖期平均气温”字段改为返回推送日期范围内逐日平均气温列表（含同期对照）。
+- 日均值缺失日期以 `None` 补位，其他供暖期累计指标仍读取 `groups` 视图的 `sum_ytd_*` 字段。
+
+影响范围与回滚：
+- `/api/v1/projects/daily_report_25_26/dashboard` 的 `data["9.累计卡片"]["供暖期平均气温"]` 现为数组结构；如需恢复旧版单值响应，请还原上述函数改动。
+- 当前前端尚未消费该字段，可在接入前先验证数据质量。
+
+验证建议：
+1. 调用 `/api/v1/projects/daily_report_25_26/dashboard` 并指定 `show_date`，确认本期/同期数组长度与供暖期天数一致。
+2. 以 `push_date=2025-11-03` 为例，核对数组首三项是否分别对应 11-01 至 11-03 的 `aver_temp` 日均值。
+
+## 2025-11-12（仪表盘累计摘要卡片接入）
+
+前置说明（降级留痕）：
+- Serena 暂无法对 `.vue` 单文件组件做符号级追加，本次使用 `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；回滚时恢复该文件即可。
+
+本次动作：
+- 新增 `cumulativeSection`、`cumulativeSeasonAverageHeadline` 等计算属性，读取 `/dashboard` 返回的 “9.累计卡片” 数据并形成本期/同期差值。
+- 后四张 summary card 改为展示供暖期平均气温、可比煤价边际利润、标煤耗量、投诉量及其与同期的增量（括号内显示 `±`）。
+- 抽象 `formatHeadlineNumber/formatHeadlineDelta`，支持千分位与差值统一格式；原煤炭库存与单耗临时卡片逻辑已移除。
+- 新增 `summary-card--outline` 样式，后四张卡片改为仅保留边框、不再显示图标与背景填充，主/差值颜色调整为暗蓝系以增强对比，并在最新迭代中将卡片高度下调约 10%（padding=12px）。
+- 首页前四张 summary card（当日可比煤价边际利润/标煤消耗/投诉量）现同步显示与同期对比的括号增量；对应脚本新增 `primary*Headline` 计算属性以便复用格式化逻辑。
+
+影响范围与回滚：
+- 仅影响前端仪表盘摘要区的显示文案和数据来源，后端接口结构未改。如需恢复旧版，可撤销 `DashBoard.vue` 的相关修改。
+
+验证建议：
+1. 刷新数据看板页面，确认后四张紧凑卡片按要求显示本期值与括号内的同期增量。
+2. 切换 `push_date`（或 `show_date`）检查差值会随日期变化；确保单位与 `backend_data/数据结构_数据看板.json` 中一致。
 
