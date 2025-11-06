@@ -758,6 +758,36 @@ const normalizeDateKey = (value) => {
   return str
 }
 
+const toDate = (value) => {
+  const key = normalizeDateKey(value)
+  if (!key) return null
+  const timestamp = Date.parse(key)
+  return Number.isNaN(timestamp) ? null : new Date(timestamp)
+}
+
+const formatDateKey = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
+    return ''
+  }
+  return date.toISOString().slice(0, 10)
+}
+
+const shiftDate = (date, offsetDays) => {
+  const result = new Date(date)
+  result.setDate(result.getDate() + offsetDays)
+  return result
+}
+
+const shiftYears = (date, offsetYears) => {
+  const result = new Date(date)
+  const originalMonth = result.getMonth()
+  result.setFullYear(result.getFullYear() + offsetYears)
+  if (result.getMonth() !== originalMonth) {
+    result.setDate(0)
+  }
+  return result
+}
+
 const temperatureSeries = computed(() => {
   const section = temperatureSection.value
   const mainBucket =
@@ -771,15 +801,37 @@ const temperatureSeries = computed(() => {
 
   const mainLabels = Object.keys(mainBucket || {}).sort()
   const peerLabels = Object.keys(peerBucket || {}).sort()
-  const labels = mainLabels.length ? mainLabels : peerLabels
-
-  const mainAverages = labels.map((label) => calcAverageFromList(mainBucket[label]))
-  const peerAverages = labels.map((_, index) => {
-    const peerKey = peerLabels[index]
-    return calcAverageFromList(peerBucket[peerKey])
-  })
+  let labels = mainLabels.length ? mainLabels : peerLabels
 
   const highlightKey = normalizeDateKey(pushDateValue.value)
+  let windowStart = null
+  if (highlightKey) {
+    const highlightDate = toDate(highlightKey)
+    if (highlightDate instanceof Date && !Number.isNaN(highlightDate.valueOf())) {
+      windowStart = shiftDate(highlightDate, -3)
+      labels = labels.filter((label) => {
+        const date = toDate(label)
+        if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
+          return true
+        }
+        return date >= windowStart
+      })
+    }
+  }
+
+  const mapPeerValue = (label) => {
+    const date = toDate(label)
+    if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
+      return calcAverageFromList(peerBucket[label])
+    }
+    const peerDate = shiftYears(date, -1)
+    const peerKey = formatDateKey(peerDate)
+    return calcAverageFromList(peerBucket[peerKey])
+  }
+
+  const mainAverages = labels.map((label) => calcAverageFromList(mainBucket[label]))
+  const peerAverages = labels.map((label) => mapPeerValue(label))
+
   const tableRows = labels.map((label, index) => ({
     value: [
       label,
@@ -989,6 +1041,20 @@ const findPreferredIndex = (candidates = []) => {
     }
   }
   return candidates.length ? 0 : -1
+}
+
+const pickPreferredOrgValue = (bucket, extractor) => {
+  if (!bucket || typeof bucket !== 'object') return null
+  const names = [...PREFERRED_GROUP_NAMES, ...Object.keys(bucket)]
+  for (const name of names) {
+    const record = bucket[name]
+    if (!record || typeof record !== 'object') continue
+    const value = extractor(record)
+    if (Number.isFinite(value)) {
+      return value
+    }
+  }
+  return null
 }
 
 const unitMetrics = ['供暖热单耗', '供暖电单耗', '供暖水单耗']
@@ -1751,6 +1817,12 @@ const useIncomeCompareOption = (seriesData) => {
   const current = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peer = Array.isArray(seriesData?.peer) ? seriesData.peer : []
 
+  const wrapAxisLabel = (label) => {
+    if (typeof label !== 'string') return label
+    if (label.length <= 4) return label
+    return label.replace(/(.{4})/g, '$1\n')
+  }
+
   const tooltipFormatter = (params) => {
     if (!params || !params.length) return ''
     const axisValue = params[0]?.axisValue || params[0]?.name
@@ -1771,13 +1843,19 @@ const useIncomeCompareOption = (seriesData) => {
       formatter: tooltipFormatter,
     },
     legend: { data: ['本期', '同期'], bottom: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 60 },
-  xAxis: {
-    type: 'category',
-    data: categories,
-    axisTick: { alignWithLabel: true },
-    axisLabel: { hideOverlap: true },
-  },
+    grid: { left: 40, right: 20, top: 40, bottom: 80 },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLabel: {
+        interval: 0,
+        hideOverlap: false,
+        formatter: wrapAxisLabel,
+        fontSize: 11,
+        lineHeight: 16,
+      },
+    },
     yAxis: {
       type: 'value',
       axisLabel: {
@@ -2092,16 +2170,18 @@ const useHeatingCenterOption = (payload) => {
       axisPointer: { type: 'shadow' },
       formatter: tooltipFormatter,
     },
-    grid: { left: 120, right: 40, top: 50, bottom: 40 },
+    grid: { left: 120, right: 40, top: 50, bottom: 30 },
     xAxis: {
       type: 'value',
       axisLabel: {
-        formatter: (value) => formatValue(value),
+        show: false,
+      },
+      axisTick: { show: false },
+      axisLine: {
+        lineStyle: { color: 'rgba(148, 163, 184, 0.4)' },
       },
       splitLine: { lineStyle: { type: 'dashed' } },
-      name: unitLabel ? `单位：${unitLabel}` : '',
-      nameLocation: 'end',
-      nameGap: 20,
+      name: '',
     },
     yAxis: {
       type: 'category',
@@ -2603,10 +2683,24 @@ const averageTemp = computed(() => {
   const sign = delta > 0 ? '+' : delta < 0 ? '' : ''
   return `${avg.toFixed(2)}（${sign}${delta}）`
 })
+const resolvePreferredMarginEntry = () => {
+  const entries = Array.isArray(marginSeries.value) ? marginSeries.value : []
+  if (!entries.length) {
+    return undefined
+  }
+  for (const name of PREFERRED_GROUP_NAMES) {
+    const entry = entries.find((item) => item.org === name)
+    if (entry) {
+      return entry
+    }
+  }
+  return entries[0]
+}
+
 const primaryMarginHeadline = computed(() => {
-  const groupEntry = marginSeries.value.find((item) => item.org === '集团汇总')
-  const current = normalizeMetricValue(groupEntry?.marginCmpCoal)
-  const peer = normalizeMetricValue(groupEntry?.peerMarginCmpCoal)
+  const entry = resolvePreferredMarginEntry()
+  const current = normalizeMetricValue(entry?.marginCmpCoal)
+  const peer = normalizeMetricValue(entry?.peerMarginCmpCoal)
   return buildCumulativeHeadline(current, peer, {
     digits: 2,
     deltaDigits: 2,
