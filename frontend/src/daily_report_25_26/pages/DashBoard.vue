@@ -24,14 +24,22 @@
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">平均气温（本日）</div>
-          <div class="summary-card__value">{{ averageTemp }}℃</div>
+          <div class="summary-card__label">平均气温（本日及同比增量）</div>
+          <div class="summary-card__value">
+            <template v-if="Number.isFinite(averageTempToday.main)">
+              {{ averageTempToday.main.toFixed(1) }}℃
+              <span v-if="Number.isFinite(averageTempToday.diff)" class="summary-card__delta">
+                ({{ averageTempToday.diff >= 0 ? '+' : '' }}{{ averageTempToday.diff.toFixed(1) }})
+              </span>
+            </template>
+            <template v-else>—</template>
+          </div>
         </div>
       </div>
       <div class="summary-card summary-card--success">
         <div class="summary-card__icon summary-card__icon--profit" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">集团全口径可比煤价边际利润</div>
+          <div class="summary-card__label">集团可比煤价边际利润（本期）</div>
           <div class="summary-card__value">{{ marginHeadline }} 万元</div>
         </div>
       </div>
@@ -142,7 +150,8 @@
               <Table
                 :columns="heatingCenterTableColumns"
                 :data="heatingCenterTableData"
-                font-size="8px"
+                font-size="7px"
+                rowHeight="31px"
               />
             </div>
           </div>
@@ -217,6 +226,10 @@ const Table = defineComponent({
     fontSize: {
       type: String,
       default: '13px'
+    },
+    rowHeight: {
+      type: String,
+      default: ''
     }
   },
   setup(props) {
@@ -227,11 +240,13 @@ const Table = defineComponent({
       backgroundColor: '#fafafa',
       borderBottom: '1px solid #f0f0f0',
       fontSize: props.fontSize,
+      height: props.rowHeight || undefined,
     };
     const tdStyle = {
       padding: '8px 12px',
       borderBottom: '1px solid #f0f0f0',
       fontSize: props.fontSize,
+      height: props.rowHeight || undefined,
     };
 
     const hasColumns = computed(() => Array.isArray(props.columns) && props.columns.length > 0)
@@ -306,16 +321,22 @@ const Table = defineComponent({
                 h(
                   'tr',
                   null,
-                  props.columns.map((column) =>
-                    h(
+                  props.columns.map((column) => {
+                    const content = Array.isArray(column)
+                      ? h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center' } }, [
+                          h('div', null, column[0]),
+                          h('div', { style: { fontSize: '0.8em', opacity: 0.8 } }, column[1]),
+                        ])
+                      : column
+                    return h(
                       'th',
                       {
-                        key: column,
-                        style: headerCellInlineStyle,
+                        key: Array.isArray(column) ? column.join('-') : column,
+                        style: { ...headerCellInlineStyle, height: props.rowHeight || undefined },
                       },
-                      column,
-                    ),
-                  ),
+                      content,
+                    )
+                  }),
                 ),
               )
             : null,
@@ -356,6 +377,7 @@ const Table = defineComponent({
                                 : 'rgba(226, 232, 240, 0.9)',
                             textAlign: 'center',
                             verticalAlign: 'middle',
+                            height: props.rowHeight || undefined,
                           },
                         },
                         display,
@@ -625,6 +647,22 @@ const temperatureSeries = computed(() => {
   }
 })
 
+const averageTempToday = computed(() => {
+  const series = temperatureSeries.value
+  const highlightKey = normalizeDateKey(pushDateValue.value)
+  if (!highlightKey || !series?.labels?.length) {
+    return { main: null, peer: null, diff: null }
+  }
+  const index = series.labels.findIndex(label => normalizeDateKey(label) === highlightKey)
+  if (index === -1) {
+    return { main: null, peer: null, diff: null }
+  }
+  const main = series.mainAverages?.[index]
+  const peer = series.peerAverages?.[index]
+  const diff = (Number.isFinite(main) && Number.isFinite(peer)) ? main - peer : null
+  return { main, peer, diff }
+})
+
 // --- 边际利润数据映射 ---
 const normalizeMetricValue = (value) => {
   if (value === null || value === undefined) return null
@@ -843,9 +881,24 @@ const complaintCompanies = computed(() => {
 
 const complaintColumns = computed(() => {
   const columns = ['单位']
+  const regex = /(.+)(（.+）)/ // Splits "Metric（unit）" into ["Metric", "（unit）"]
   complaintMetricKeys.value.forEach((metric) => {
-    columns.push(`${metric}（本期）`)
-    columns.push(`${metric}（同期）`)
+    const currentHeader = `${metric}（本期）`
+    const peerHeader = `${metric}（同期）`
+    const currentMatch = currentHeader.match(regex)
+    const peerMatch = peerHeader.match(regex)
+
+    if (currentMatch) {
+      columns.push([currentMatch[1], currentMatch[2]])
+    } else {
+      columns.push(currentHeader)
+    }
+
+    if (peerMatch) {
+      columns.push([peerMatch[1], peerMatch[2]])
+    } else {
+      columns.push(peerHeader)
+    }
   })
   return columns
 })
@@ -1153,7 +1206,7 @@ const heatingCenterTableColumns = computed(() => {
   const units = heatingCenterUnits.value || {}
   const withUnit = (metric) => {
     const unit = units?.[metric]
-    return unit ? `${metric}（${unit}）` : metric
+    return unit ? [metric, `（${unit}）`] : metric
   }
   return ['排名', '中心', withUnit('供暖热单耗'), withUnit('供暖电单耗'), withUnit('供暖水单耗')]
 })
@@ -2173,11 +2226,23 @@ const downloadPDF = () => {
     });
 
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`生产日报-看板-${effectiveBizDate.value || bizDateInput.value}.pdf`);
+    const formattedDate = (effectiveBizDate.value || bizDateInput.value || '').replace(/-/g, '.');
+    pdf.save(`${formattedDate} 洁净能源集团生产日报数据看板.pdf`);
   });
 };
 
 // --- 顶部指标展示 ---
+const resolveDailyValues = (bucket, targetDate) => {
+  if (!bucket || typeof bucket !== 'object' || !targetDate) return undefined
+  if (Object.prototype.hasOwnProperty.call(bucket, targetDate)) {
+    return bucket[targetDate]
+  }
+  const normalizedTarget = normalizeDateKey(targetDate)
+  return Object.entries(bucket).find(
+    ([key]) => normalizeDateKey(key) === normalizedTarget,
+  )?.[1]
+}
+
 const averageTemp = computed(() => {
   const pushDate = dashboardData.meta.pushDate || dashboardData.meta.showDate || ''
   const mainBucket =
@@ -2187,7 +2252,7 @@ const averageTemp = computed(() => {
   if (!pushDate || !mainBucket || typeof mainBucket !== 'object') {
     return '—'
   }
-  const values = mainBucket[pushDate]
+  const values = resolveDailyValues(mainBucket, pushDate)
   const avg = calcAverageFromList(values)
   if (avg === null || Number.isNaN(avg)) {
     return '—'
@@ -2197,7 +2262,10 @@ const averageTemp = computed(() => {
       ? temperatureSection.value['同期']
       : null
   const peerValues =
-    peerBucket && typeof peerBucket === 'object' ? peerBucket[pushDate] : undefined
+    peerBucket && typeof peerBucket === 'object'
+      ? resolveDailyValues(peerBucket, pushDate) ??
+        resolveDailyValues(peerBucket, dashboardData.meta.showDate || '')
+      : undefined
   const peerAvg = calcAverageFromList(peerValues)
   if (peerAvg === null || Number.isNaN(peerAvg)) {
     return avg.toFixed(2)
@@ -2709,8 +2777,8 @@ onMounted(() => {
 }
 
 .center-card__table {
-  flex: 0 0 50%;
-  min-width: 320px;
+  flex: 1 1 50%;
+  min-width: 0; /* Allow shrinking */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2886,6 +2954,8 @@ onMounted(() => {
 .pdf-download-btn:hover {
   background-color: #1d4ed8;
 }
+
+
 
 </style>
   padding: 0;
