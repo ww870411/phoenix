@@ -20,12 +20,17 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/login", response_model=LoginResponse, summary="登录并获取访问令牌")
 def login(payload: LoginRequest) -> LoginResponse:
-    session = auth_manager.login(payload.username, payload.password)
+    session = auth_manager.login(payload.username, payload.password, remember=payload.remember_me)
     permissions = session.to_permissions_payload()
     user_payload = session.to_user_payload()
+    expires_in = (
+        int((session.expires_at - session.issued_at).total_seconds())
+        if session.expires_at
+        else -1
+    )
     return LoginResponse(
         access_token=session.token,
-        expires_in=int((session.expires_at - session.issued_at).total_seconds()),
+        expires_in=expires_in,
         user=user_payload,
         permissions=permissions,
     )

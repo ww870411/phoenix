@@ -6,7 +6,7 @@
 
 提供：
 1. 账号认证（明文密码，仅用于当前开发环境）
-2. 会话令牌（内存缓存 + 30 分钟有效期）
+2. 会话令牌（内存缓存，可选“记住登录”写入数据库持久化）
 3. 权限解析（页面访问、可见单位、操作权限、表单过滤规则）
 4. FastAPI 依赖：获取当前登录会话
 """
@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import threading
 from dataclasses import dataclass, field
@@ -23,11 +24,17 @@ from typing import Dict, Iterable, List, Optional, Set
 
 from fastapi import Header, HTTPException, status
 
+from sqlalchemy import text
+
 from backend.config import DATA_DIRECTORY
+from backend.db.database_daily_report_25_26 import SessionLocal
 
 
 EAST_8 = timezone(timedelta(hours=8))
-SESSION_TTL_SECONDS = 1440 * 60  # 24小时
+# 会话策略：默认不限制有效期，并允许并发登录，避免频繁掉线
+SESSION_TTL_SECONDS: Optional[int] = None  # None 表示后台不再主动过期
+ALLOW_CONCURRENT_SESSIONS = True
+PERSISTENT_SESSION_TTL_SECONDS = 90 * 24 * 60 * 60  # 记住登录默认 90 天
 
 
 @dataclass(frozen=True)
@@ -78,7 +85,8 @@ class AuthSession:
     allowed_units: Set[str]
     token: str
     issued_at: datetime
-    expires_at: datetime
+    expires_at: Optional[datetime] = None
+    persistent: bool = False
 
     def to_user_payload(self) -> Dict[str, object]:
         return {
@@ -128,6 +136,7 @@ class AuthManager:
 
         self._sessions: Dict[str, AuthSession] = {}
         self._user_tokens: Dict[str, Set[str]] = {}
+        self._persistent_ready = False
 
     # ------------------------------------------------------------------ #
     # 配置加载
@@ -270,7 +279,7 @@ class AuthManager:
     # ------------------------------------------------------------------ #
     # 登录 / 会话
     # ------------------------------------------------------------------ #
-    def login(self, username: str, password: str) -> AuthSession:
+    def login(self, username: str, password: str, remember: bool = False) -> AuthSession:
         self._ensure_loaded()
 
         normalized = username.strip()
@@ -283,7 +292,8 @@ class AuthManager:
             raise HTTPException(status_code=500, detail=f"用户组 {record.group} 未配置权限")
 
         issued_at = self._now()
-        expires_at = issued_at + timedelta(seconds=SESSION_TTL_SECONDS)
+        persistent = bool(remember)
+        expires_at = self._compute_expiry(issued_at, persistent)
         token = secrets.token_urlsafe(32)
         allowed_units = self._resolve_units(group_permissions.units_access, record.unit)
 
@@ -297,15 +307,28 @@ class AuthManager:
             token=token,
             issued_at=issued_at,
             expires_at=expires_at,
+            persistent=persistent,
         )
 
         with self._session_lock:
-            self._invalidate_user_sessions(record.username)
+            if not ALLOW_CONCURRENT_SESSIONS:
+                self._invalidate_user_sessions(record.username)
             self._sessions[token] = session
             bucket = self._user_tokens.setdefault(record.username, set())
             bucket.add(token)
 
+        if persistent:
+            self._persist_session(session)
+
         return session
+
+    @staticmethod
+    def _compute_expiry(issued_at: datetime, persistent: bool) -> Optional[datetime]:
+        if persistent:
+            return issued_at + timedelta(seconds=PERSISTENT_SESSION_TTL_SECONDS)
+        if SESSION_TTL_SECONDS is not None:
+            return issued_at + timedelta(seconds=SESSION_TTL_SECONDS)
+        return None
 
     def logout(self, token: str) -> None:
         with self._session_lock:
@@ -316,6 +339,7 @@ class AuthManager:
                     bucket.remove(token)
                 if bucket and not bucket:
                     self._user_tokens.pop(session.username, None)
+        self._delete_persistent_session(token)
 
     def require_session_from_header(self, authorization: Optional[str]) -> AuthSession:
         if not authorization:
@@ -333,16 +357,27 @@ class AuthManager:
             self._cleanup_expired_locked()
             session = self._sessions.get(token)
             if not session:
+                session = self._load_persistent_session(token)
+                if session:
+                    self._sessions[token] = session
+                    bucket = self._user_tokens.setdefault(session.username, set())
+                    bucket.add(token)
+            if not session:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录状态已失效")
             now = self._now()
-            if session.expires_at <= now:
+            if session.expires_at and session.expires_at <= now:
                 self._sessions.pop(token, None)
                 bucket = self._user_tokens.get(session.username)
                 if bucket and token in bucket:
                     bucket.remove(token)
+                if session.persistent:
+                    self._delete_persistent_session(token)
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录状态已过期")
-            # 滚动延长有效期
-            session.expires_at = now + timedelta(seconds=SESSION_TTL_SECONDS)
+            # 滚动延长有效期（仅当开启过期控制时）
+            if session.persistent:
+                session.expires_at = self._touch_persistent_session(token)
+            elif SESSION_TTL_SECONDS is not None:
+                session.expires_at = now + timedelta(seconds=SESSION_TTL_SECONDS)
             return session
 
     def _invalidate_user_sessions(self, username: str) -> None:
@@ -351,11 +386,16 @@ class AuthManager:
             return
         for token in list(tokens):
             self._sessions.pop(token, None)
+            self._delete_persistent_session(token)
         self._user_tokens.pop(username, None)
 
     def _cleanup_expired_locked(self) -> None:
         now = self._now()
-        expired_tokens = [token for token, sess in self._sessions.items() if sess.expires_at <= now]
+        expired_tokens = [
+            token
+            for token, sess in self._sessions.items()
+            if sess.expires_at and sess.expires_at <= now
+        ]
         for token in expired_tokens:
             session = self._sessions.pop(token, None)
             if session:
@@ -364,6 +404,173 @@ class AuthManager:
                     bucket.remove(token)
                 if bucket and not bucket:
                     self._user_tokens.pop(session.username, None)
+                if session.persistent:
+                    self._delete_persistent_session(token)
+
+    def _persist_session(self, session: AuthSession) -> None:
+        if not session.expires_at:
+            raise HTTPException(status_code=500, detail="记住登录缺少过期时间")
+        self._ensure_persistent_store()
+        permissions_payload = session.to_permissions_payload()
+        allowed_units_payload = sorted(session.allowed_units)
+        params = {
+            "token": session.token,
+            "username": session.username,
+            "user_group": session.group,
+            "unit": session.unit,
+            "hierarchy": session.hierarchy,
+            "permissions": json.dumps(permissions_payload, ensure_ascii=False),
+            "allowed_units": json.dumps(allowed_units_payload, ensure_ascii=False),
+            "issued_at": session.issued_at,
+            "expires_at": session.expires_at,
+        }
+        try:
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO auth_sessions (
+                            token, username, user_group, unit, hierarchy,
+                            permissions, allowed_units, issued_at, expires_at, last_accessed
+                        ) VALUES (
+                            :token, :username, :user_group, :unit, :hierarchy,
+                            CAST(:permissions AS JSONB), CAST(:allowed_units AS JSONB), :issued_at, :expires_at, :issued_at
+                        )
+                        ON CONFLICT (token) DO UPDATE
+                        SET
+                            username = EXCLUDED.username,
+                            user_group = EXCLUDED.user_group,
+                            unit = EXCLUDED.unit,
+                            hierarchy = EXCLUDED.hierarchy,
+                            permissions = EXCLUDED.permissions,
+                            allowed_units = EXCLUDED.allowed_units,
+                            expires_at = EXCLUDED.expires_at,
+                            last_accessed = EXCLUDED.last_accessed
+                        """
+                    ),
+                    params,
+                )
+                db.commit()
+        except Exception as exc:  # pragma: no cover - 仅记录
+            logging.exception("保存登录状态失败")
+            raise HTTPException(status_code=500, detail="保存登录状态失败") from exc
+
+    def _load_persistent_session(self, token: str) -> Optional[AuthSession]:
+        if not token:
+            return None
+        try:
+            self._ensure_persistent_store()
+            with SessionLocal() as db:
+                row = (
+                    db.execute(
+                        text(
+                            """
+                            SELECT token, username, user_group, unit, hierarchy,
+                                   permissions, allowed_units, issued_at, expires_at
+                            FROM auth_sessions
+                            WHERE token = :token
+                            """
+                        ),
+                        {"token": token},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except Exception:
+            return None
+        if not row:
+            return None
+        expires_at = row["expires_at"]
+        now = self._now()
+        if expires_at and expires_at <= now:
+            self._delete_persistent_session(token)
+            return None
+        record = self._users_by_name.get(row["username"])
+        group_permissions = self._groups.get(row["user_group"])
+        if not record or not group_permissions:
+            self._delete_persistent_session(token)
+            return None
+        allowed_units_raw = row["allowed_units"]
+        try:
+            allowed_units_list = json.loads(allowed_units_raw) if isinstance(allowed_units_raw, str) else allowed_units_raw
+        except json.JSONDecodeError:
+            allowed_units_list = []
+        allowed_units = {str(unit) for unit in (allowed_units_list or [])}
+        session = AuthSession(
+            username=row["username"],
+            group=row["user_group"],
+            unit=row["unit"],
+            hierarchy=row["hierarchy"],
+            permissions=group_permissions,
+            allowed_units=allowed_units or self._resolve_units(group_permissions.units_access, record.unit),
+            token=row["token"],
+            issued_at=row["issued_at"],
+            expires_at=expires_at,
+            persistent=True,
+        )
+        return session
+
+    def _delete_persistent_session(self, token: str) -> None:
+        if not token:
+            return
+        try:
+            self._ensure_persistent_store()
+            with SessionLocal() as db:
+                db.execute(text("DELETE FROM auth_sessions WHERE token = :token"), {"token": token})
+                db.commit()
+        except Exception:
+            return
+
+    def _touch_persistent_session(self, token: str) -> datetime:
+        self._ensure_persistent_store()
+        new_expiry = self._now() + timedelta(seconds=PERSISTENT_SESSION_TTL_SECONDS)
+        try:
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        UPDATE auth_sessions
+                        SET last_accessed = NOW(), expires_at = :expires_at
+                        WHERE token = :token
+                        """
+                    ),
+                    {"token": token, "expires_at": new_expiry},
+                )
+                db.commit()
+        except Exception:
+            pass
+        return new_expiry
+
+    def _ensure_persistent_store(self) -> None:
+        if self._persistent_ready:
+            return
+        ddl_statements = [
+            """
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                token         TEXT PRIMARY KEY,
+                username      TEXT        NOT NULL,
+                user_group    TEXT        NOT NULL,
+                unit          TEXT,
+                hierarchy     INTEGER     NOT NULL,
+                permissions   JSONB       NOT NULL,
+                allowed_units JSONB       NOT NULL,
+                issued_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at    TIMESTAMPTZ NOT NULL,
+                last_accessed TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_auth_sessions_username ON auth_sessions (username)",
+            "CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions (expires_at)",
+        ]
+        try:
+            with SessionLocal() as db:
+                for statement in ddl_statements:
+                    db.execute(text(statement))
+                db.commit()
+            self._persistent_ready = True
+        except Exception as exc:
+            logging.exception("初始化 auth_sessions 表失败")
+            raise HTTPException(status_code=500, detail="会话持久化表初始化失败") from exc
 
     # ------------------------------------------------------------------ #
     # 工具方法

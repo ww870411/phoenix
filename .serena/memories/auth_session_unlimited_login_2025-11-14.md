@@ -1,0 +1,1 @@
+时间：2025-11-14 变更：AuthManager 去除会话 TTL，允许同账号并发登录，`/auth/login` 返回 `expires_in=-1` 表示长期有效；前端 auth store 改为 localStorage 优先持久化。影响：后端不再自动清理会话，退出需显式调用；前端刷新/重开页面可自动恢复登录状态。

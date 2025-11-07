@@ -14,26 +14,73 @@ import {
 
 const STORAGE_KEY = 'phoenix_auth'
 
-function readStorage() {
+function detectStorage(type) {
+  if (typeof window === 'undefined') return null
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    return JSON.parse(raw)
+    if (type === 'local') return window.localStorage
+    if (type === 'session') return window.sessionStorage
   } catch (err) {
-    console.warn('读取登录缓存失败', err)
+    console.warn(`${type}Storage 不可用`, err)
     return null
   }
+  return null
 }
 
-function writeStorage(payload) {
-  try {
-    if (!payload) {
-      sessionStorage.removeItem(STORAGE_KEY)
-      return
+const storageBuckets = {
+  local: detectStorage('local'),
+  session: detectStorage('session'),
+}
+
+function clearAllStorage() {
+  Object.values(storageBuckets).forEach((bucket) => {
+    if (bucket) {
+      try {
+        bucket.removeItem(STORAGE_KEY)
+      } catch (err) {
+        console.warn('清理缓存失败', err)
+      }
     }
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-  } catch (err) {
-    console.warn('写入登录缓存失败', err)
+  })
+}
+
+function readStorage() {
+  for (const key of ['local', 'session']) {
+    const bucket = storageBuckets[key]
+    if (!bucket) continue
+    try {
+      const raw = bucket.getItem(STORAGE_KEY)
+      if (!raw) continue
+      const parsed = JSON.parse(raw)
+      return { ...parsed, __source: key }
+    } catch (err) {
+      console.warn('读取登录缓存失败', err)
+    }
+  }
+  return null
+}
+
+function writeStorage(payload, remember) {
+  if (!payload) {
+    clearAllStorage()
+    return
+  }
+  const targetKey = remember ? 'local' : 'session'
+  const target = storageBuckets[targetKey]
+  const backup = storageBuckets[remember ? 'session' : 'local']
+  const serialized = JSON.stringify({ ...payload, remember })
+  if (target) {
+    try {
+      target.setItem(STORAGE_KEY, serialized)
+    } catch (err) {
+      console.warn('写入登录缓存失败', err)
+    }
+  }
+  if (backup) {
+    try {
+      backup.removeItem(STORAGE_KEY)
+    } catch (err) {
+      console.warn('清理旧缓存失败', err)
+    }
   }
 }
 
@@ -42,21 +89,26 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   const user = ref(null)
   const permissions = ref(null)
   const expiresIn = ref(0)
+  const rememberLogin = ref(false)
   const initialized = ref(false)
   const loading = ref(false)
   const lastError = ref('')
 
-  function persist() {
+  function persist(remember = rememberLogin.value) {
     if (!token.value || !user.value) {
-      writeStorage(null)
+      clearAllStorage()
       return
     }
-    writeStorage({
-      token: token.value,
-      user: user.value,
-      permissions: permissions.value,
-      expiresIn: expiresIn.value,
-    })
+    writeStorage(
+      {
+        token: token.value,
+        user: user.value,
+        permissions: permissions.value,
+        expiresIn: expiresIn.value,
+        remember,
+      },
+      remember,
+    )
   }
 
   function restoreFromStorage() {
@@ -69,6 +121,9 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     user.value = cached.user || null
     permissions.value = cached.permissions || null
     expiresIn.value = cached.expiresIn || 0
+    rememberLogin.value = Boolean(
+      cached.remember != null ? cached.remember : cached.__source === 'local',
+    )
     setAuthToken(cached.token)
   }
 
@@ -77,8 +132,9 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     user.value = null
     permissions.value = null
     expiresIn.value = 0
+    rememberLogin.value = false
     clearAuthToken()
-    persist()
+    clearAllStorage()
   }
 
   async function bootstrap() {
@@ -89,7 +145,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
         const session = await fetchSession()
         user.value = session?.user ?? null
         permissions.value = session?.permissions ?? null
-        persist()
+        persist(rememberLogin.value)
       } catch (err) {
         console.warn('刷新登录状态失败', err)
         clearSession()
@@ -98,11 +154,11 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     initialized.value = true
   }
 
-  async function login(username, password) {
+  async function login(username, password, remember = false) {
     loading.value = true
     lastError.value = ''
     try {
-      const response = await apiLogin({ username, password })
+      const response = await apiLogin({ username, password, remember_me: remember })
       token.value = response?.access_token ?? null
       user.value = response?.user ?? null
       permissions.value = response?.permissions ?? null
@@ -110,8 +166,9 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
       if (!token.value) {
         throw new Error('登录响应缺少令牌')
       }
+      rememberLogin.value = remember
       setAuthToken(token.value)
-      persist()
+      persist(remember)
     } catch (err) {
       clearSession()
       lastError.value = err instanceof Error ? err.message : String(err)
@@ -168,7 +225,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
       const extraSheets = new Set((rule.sheets || []).map((key) => String(key)))
       // 允许显式授权表单与单位前缀匹配共同生效
       return sheets.filter(
-        (sheet) => extraSheets.has(sheet.sheet_key) || sheetMatchesUnit(sheet, userUnit)
+        (sheet) => extraSheets.has(sheet.sheet_key) || sheetMatchesUnit(sheet, userUnit),
       )
     }
     return sheets
@@ -223,6 +280,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     initialized,
     loading,
     lastError,
+    rememberLogin,
     isAuthenticated,
     canSubmit,
     canApprove,

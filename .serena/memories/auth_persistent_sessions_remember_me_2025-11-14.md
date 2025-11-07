@@ -1,0 +1,1 @@
+时间：2025-11-14 变更：实现“记住我的登录状态”选项。后端 AuthManager 新增数据库持久化会话（auth_sessions 表，90 天滚动有效），/auth/login 接收 remember_me，/auth/me 可在服务重启后恢复 token；未勾选仍在内存中维护。前端 LoginView 加复选框，Pinia auth store 按 localStorage/ sessionStorage 区分缓存。

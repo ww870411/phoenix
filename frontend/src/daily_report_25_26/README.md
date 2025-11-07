@@ -49,7 +49,9 @@
 
 ## 登录与权限更新（2025-11-02）
 
-- 新增 Pinia `auth` 仓库：统一管理 `/auth/login|me|logout` 调用、Token 持久化（sessionStorage）、页面/表格过滤与审批/发布操作。
+- 新增 Pinia `auth` 仓库：统一管理 `/auth/login|me|logout` 调用、Token 持久化（localStorage 优先，sessionStorage 兜底）、页面/表格过滤与审批/发布操作。
+- 登录缓存会在刷新、重新打开浏览器时自动恢复；若 localStorage 不可用则回退 sessionStorage，确保跨端操作不再频繁掉线。
+- 登录页新增“记住我的登录状态”复选框：勾选后调用 `/auth/login` 的 `remember_me=true` 写入 `auth_sessions` 表并把令牌加密缓存到 localStorage；未勾选则仅保存在 sessionStorage，关闭浏览器即失效。
 - `router` 全局守卫在进入非 `/login` 路由前确保已登录；登录成功后自动跳转 `/projects`，退出后清空缓存并返回登录页。
 - `services/api.js` 注入 Authorization 头并封装 `getWorkflowStatus/approveWorkflow/publishWorkflow`；`PageSelectView` 显示审批进度卡片并在具备权限时提供批准/发布按钮。
 - 审批进度卡片额外展示“当前业务日期｜当前数据展示日期”：业务日取东八区昨日，展示日期来自 `backend_data/date.json`，在新业务日未发布前保持上一期数据。

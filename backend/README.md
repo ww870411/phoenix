@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-15 会话持久化筹备）
+
+- 在 `backend/sql` 新增 `create_auth_sessions_table.sql`，定义 `auth_sessions` 表结构：包含 token、username、user_group、unit、hierarchy、权限/可审批单位 JSONB、签发/过期/最近访问时间等字段，并创建 `username`、`expires_at` 索引。
+- 目的：为后续将 `AuthManager` 的内存会话迁移到 PostgreSQL 提前准备建表脚本，保证服务重启或多实例部署时登录状态可延续。
+- 当前后端逻辑尚未接入该表；若需要落地会话持久化，可执行该 SQL 并将登录/验证/注销流程改为读写此表即可。回滚仅需删除脚本或忽略执行。
+
 ## 会话小结（2025-11-13 数据看板业务日输入稳定性）
 
 - 本次修复集中于前端 `DashBoard.vue`：当用户在仪表盘手动选择业务日期时，不再以 `/dashboard` 响应中的 `push_date` 强制覆盖输入框，仅在 `show_date` 未指定且本地值为空的情况下同步，以免界面显示的日期与查询参数不一致。
@@ -297,7 +303,8 @@
 - 新增 `services/auth_manager.py`、`services/workflow_status.py`、`api/v1/auth.py`、`schemas/auth.py`，负责账号认证、权限解析、审批状态缓存，数据源分别为 `backend_data/账户信息.json` 与新建 `backend_data/auth/permissions.json`。
 - `api/v1/routes.py` 的项目页面接口会根据 `permissions.page_access` 过滤可见页面；`api/v1/daily_report_25_26.py` 默认要求 Bearer Token，新增 `/workflow/status|approve|publish` 持久化接口（Biz 日=东八区昨日），状态文件位于 `backend_data/status.json`。
 - 新建 `backend_data/date.json` 统一维护“数据展示日期”，`auth_manager.current_display_date()` 若未发布当日数据则回落至上一期；发布成功后调用 `set_display_date()` 同步配置，确保展示端在审批完成前仍读取上一批数据。
-- 默认登录有效期 30 分钟（滑动），配置文件热更新自动清理会话；`/auth/login|logout|me` 提供登录、退出、会话自查。
+- 后台默认不再设置登录时长限制（仅在显式退出或管理员清理时失效），`/auth/login|logout|me` 继续提供登录、退出、会话自查。
+- “记住我的登录状态”勾选后，会将会话写入 PostgreSQL `auth_sessions` 表（默认 90 天滑动有效），服务重启或多副本部署时仍可自动恢复；未勾选则沿用内存会话，不触发数据库写入。
 - 回滚方式：删除上述新增模块并恢复 `routes.py`、`daily_report_25_26.py` 相关改动即可退回原“无鉴权”状态。
 
 ### 部署说明补充（2025-11-02 深夜）

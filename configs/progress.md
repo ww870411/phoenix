@@ -1,5 +1,43 @@
 # 进度记录
 
+## 2025-11-14（登录状态记忆选项 + 数据库存储）
+
+前置说明（降级留痕）：
+- Serena 仍无法对 Python/JS/Markdown 执行符号级写入，本次继续降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend/services/auth_manager.py`、`backend/api/v1/auth.py`、`backend/schemas/auth.py`、`frontend/src/daily_report_25_26/store/auth.js`、`frontend/.../pages/LoginView.vue`、前后端 README 以及本文件；如需回滚，恢复上述文件即可。
+
+本次动作：
+- 后端 `AuthManager` 支持“记住登录状态”：`/auth/login` 接收 `remember_me`，勾选后会话写入 `auth_sessions` 表（90 天滚动有效），`require_session` 可在服务重启后从数据库恢复；未勾选仍采用内存会话，不写库。
+- 新增 `_persist_session/_load_persistent_session/_touch_persistent_session` 等逻辑，自动维护 `expires_at` 与 `last_accessed`，并在 `logout`/过期时清理数据库记录。
+- `LoginRequest`/`LoginView`/Pinia `auth` store 增加复选框与参数传递；前端持久化策略改为“localStorage（记住）/sessionStorage（临时）”双通道，刷新或重开浏览器可按选项恢复登录。
+- README（前/后端）补充“记住登录”说明，记录 `auth_sessions` 表依赖与回滚策略。
+
+影响范围与回滚：
+- 仅影响账号体系与登录页面；回滚可将相关文件恢复至 2025-11-13 版本，并删除新增字段/SQL 调用。
+
+验证建议：
+1. 不勾选登录，刷新浏览器后需重新登录，数据库 `auth_sessions` 应保持空表。
+2. 勾选登录，确认 `auth_sessions` 有对应记录；重启后端服务、只携带 Bearer Token 调用 `/auth/me` 仍返回 200。
+3. 在登录状态下点击退出或接口 401 过期，`auth_sessions` 与 local/sessionStorage 均应清空。
+
+## 2025-11-14（登录状态稳定性提升）
+
+前置说明（降级留痕）：
+- Serena MCP 目前仍无法对 Python/JS/Markdown 执行符号级写入，本次依 AGENTS.md 3.9 规定降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend/services/auth_manager.py`、`backend/api/v1/auth.py`、前后端 README、Pinia `auth` store 以及本文件；如需回滚，恢复上述文件至变更前版本即可。
+
+本次动作：
+- 后端 `AuthManager` 去除固定 24 小时会话 TTL，改为默认无限期（仅手动退出或清理会失效），并允许同一账号多端并发登录，避免因单点登录冲突导致的掉线；`/auth/login` 在 `expires_in` 字段返回 `-1` 代表“长期有效”。
+- `require_session`/_cleanup 逻辑在关闭 TTL 时跳过过期校验与清理，彻底消除后台定时回收造成的“登录状态失效”提示。
+- 前端 `auth` 仓库存储策略改为 localStorage 优先、sessionStorage 兜底，刷新或重新打开浏览器后可自动恢复登录信息；README 记录新的持久化与稳定性策略。
+- `backend/README.md` 更新“登录与权限”段描述，明确当前版本默认不再限制会话时长。
+
+影响范围与回滚：
+- 影响 `/auth/login|logout|me` 及依赖 Authorization 头的所有页面；若需恢复时间限制，可重新设置 `SESSION_TTL_SECONDS` 并开启 `ALLOW_CONCURRENT_SESSIONS = False`。
+
+验证建议：
+1. 登录后长时间保持闲置（含刷新/新开页面），确认调用 `/auth/me` 仍返回 200，router 不再跳回登录页。
+2. 同一账号在不同浏览器同时登录，互不影响且 `me` 接口仍可获取权限。
+3. 手动调用 `/auth/logout` 或点击退出，确认 token 与 localStorage 条目清除，页面重定向至 `/login`。
+
 ## 2025-11-13（数据看板业务日切换修复）
 
 前置说明（降级留痕）：
@@ -1376,4 +1414,17 @@ sum_basic_data 相关：
 1. 选取任意业务日期重复提交后刷新页面，确认“香海 印尼煤”等行不会再跳到表头。
 2. 若数据库存在模板未定义的单位/煤种组合，确认它们会附加在模板行之后并保留数值。
 3. 通过 `docker logs phoenix-backend -f` 观察 `/query` 输出，确保 200 返回且 `rows` 顺序与模板一致。
+
+## 2025-11-15（会话持久化建表脚本）
+
+前置说明：
+- 本次仅新增 SQL 文件，无需 Serena 符号级操作；如需回滚，删除该脚本或忽略执行即可。
+
+本次动作：
+- 在 `backend/sql` 目录新增 `create_auth_sessions_table.sql`，包含 `auth_sessions` 表建表语句与 `username/expires_at` 索引，用于后续将登录 token 持久化到 PostgreSQL。
+- 表字段覆盖 token、用户名、所属组、单位、层级、权限 JSONB、可审批单位 JSONB、签发/过期/最近访问时间，便于与 `AuthManager` 的 dataclass 对应。
+
+影响与验证：
+- 当前仅是建表脚本，对运行中服务无影响；后续执行该 SQL 并修改后端即可实现会话持久化。
+- 建表成功后，可在数据库中通过 `\d auth_sessions` 检查结构，或插入示例记录验证索引生效。
 

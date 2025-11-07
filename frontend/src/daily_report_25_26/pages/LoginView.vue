@@ -27,6 +27,10 @@
           <span>密码</span>
           <input v-model="password" type="password" placeholder="输入密码" required />
         </label>
+        <label class="remember-toggle">
+          <input v-model="rememberMe" type="checkbox" />
+          <span>记住我的登录状态</span>
+        </label>
         <button class="login-button" type="submit" :disabled="isLoading">
           {{ isLoading ? '登录中...' : '登录' }}
         </button>
@@ -39,7 +43,7 @@
 
 <script setup>
 import '../styles/theme.css'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 
@@ -47,14 +51,22 @@ const auth = useAuthStore()
 const router = useRouter()
 const username = ref('')
 const password = ref('')
+const rememberMe = ref(auth.rememberLogin)
 const errorMessage = ref('')
 const isLoading = computed(() => auth.loading)
+
+watch(
+  () => auth.rememberLogin,
+  (val) => {
+    rememberMe.value = val
+  },
+)
 
 async function onSubmit() {
   if (isLoading.value) return
   errorMessage.value = ''
   try {
-    await auth.login(username.value, password.value)
+    await auth.login(username.value, password.value, rememberMe.value)
     await router.replace('/projects')
   } catch (err) {
     console.error(err)
@@ -239,6 +251,22 @@ async function onSubmit() {
   outline: none;
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.remember-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+  user-select: none;
+}
+
+.remember-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
 }
 
 .login-button {

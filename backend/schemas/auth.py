@@ -37,6 +37,7 @@ class UserInfo(BaseModel):
 class LoginRequest(BaseModel):
     username: constr(min_length=1, strip_whitespace=True)
     password: constr(min_length=1)
+    remember_me: bool = False
 
 
 class LoginResponse(BaseModel):

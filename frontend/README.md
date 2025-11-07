@@ -2,6 +2,12 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-15 会话持久化说明）
+
+- 本次改动仅涉及后端新增 `backend/sql/create_auth_sessions_table.sql`，准备将登录 token 持久化到 PostgreSQL，前端代码暂无变更。
+- 现有 Pinia `auth` 仓库、路由守卫与页面结构保持不变；待后端切换到数据库会话后，前端可继续沿用当前 `Authorization` 头部与刷新逻辑，无需额外适配。
+- 如需在前端提示用户“会话可跨重启保留”等信息，可在登录页或顶部 `AppHeader` 中追加文案；回滚时删除上述说明即可。
+
 # 前端说明（Vue3 + Vite）
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
