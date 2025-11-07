@@ -1,5 +1,12 @@
 # daily_report_25_26 前端说明
 
+## 仪表盘业务日同步策略（2025-11-13）
+
+- `DashBoard.vue` 的 `loadDashboardData(showDate)` 在收到接口响应后，会根据 `showDate` 是否为空决定是否同步 `payload.push_date` 到 `bizDateInput`：仅当未指定 `showDate` 且本地输入框为空（初次加载或用户清空日期）时才覆盖，防止手动选择的日期被后台默认推送日重置。
+- Watcher 仍以 `bizDateInput` 为源触发 `loadDashboardData`，因此日期输入框始终代表最新一次选中值；`effectiveBizDate`（展示在 UI 的“当前”提示）会优先显示该值。
+- 若接口无 `push_date` 且 `bizDateInput` 仍为空，则继续回落到 `defaultBizDate`（东八区今天-1 天），保持首屏体验一致；该兜底逻辑不影响用户后续手动切换。
+- 这样既兼容后台每天推送“默认业务日”，又保障运营人员可以自由回溯历史数据，不会再出现“切换日期后立即恢复原值”的体验问题。
+
 ## 仪表盘累计卡片气温数据准备（2025-11-12）
 
 - 后端“9.累计卡片”段的 `供暖期平均气温` 字段现返回逐日数组（`[{ date, value }]`），包含推送日区间内所有日期以及同期映射；缺失数据以 `value = null` 标识。

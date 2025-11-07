@@ -657,7 +657,8 @@ async function loadDashboardData(showDate = '') {
   suppressDashboardWatch = true
   try {
     const payload = await getDashboardData(projectKey, { showDate })
-    if (payload?.push_date) {
+    const allowBizDateSync = !showDate && !bizDateInput.value
+    if (payload?.push_date && allowBizDateSync) {
       bizDateInput.value = payload.push_date
     } else if (!bizDateInput.value) {
       bizDateInput.value = defaultBizDate

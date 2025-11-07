@@ -446,3 +446,21 @@ codex resume 019a5290-b9fb-7b33-b6e1-7c26434f3334
 
 codex resume 019a58fd-93c2-7601-b3c8-9170f6b2c216
 codex resume 019a5938-96cf-7ed3-87b4-3fc60f89e5e5
+
+4指标表，利润同比图，煤炭环比图
+登陆状态
+灵活日期及指标
+
+
+  排查发现                                                                                                                                                                                        
+                                                                                                                                                                                                  
+  - 前端 Pinia auth 仓库将令牌持久化在 sessionStorage（frontend/src/daily_report_25_26/store/auth.js:15、:19-34），浏览器每个标签页拥有独立副本。用户在新标签页打开平台时总是缺少 token，被迫再次登录，旧标签页因此失去会话，表现为“刚登陆又被踢出”。
+  - 后端强制“单会话”策略：AuthManager.login() 在创建新令牌前调用 _invalidate_user_sessions() 清空该账号所有旧 token（backend/services/auth_manager.py:272 与 backend/services/auth_manager.py:347）。这与前端 per-tab 存储叠加，使任何一次重复登录都会让其它标签页或设备立即 401。                                                                                          
+  - 会话只保存在进程内存（self._sessions / _user_tokens），_ensure_loaded() 在检测到账户或权限文件修改时会 self._sessions.clear() 与 self._user_tokens.clear()（backend/services/auth_manager.py:134-164），且生产日志显示后端曾以 uvicorn --reload 运行（configs/11.5登陆问题.md:1-25）。文件热更新或进程重启都会让全部用户掉线，加剧“登录不稳定”的感知。                     
+  - 调整后端会话策略：在 AuthManager.login() 中停止无条件调用 _invalidate_user_sessions()，改为“最多 N 个并发会话 + LRU 淘汰”或“同类型客户端复用 token”，并为管理员提供显式的注销 API 以便必要时手动清理。
+  - 提升会话可靠性：将 _sessions 持久化到 Redis/数据库，或至少在生产部署中关闭 uvicorn --reload，避免因热重载/配置文件 touch 而清空所有令牌；若必须重新加载配置，可遍历现有 AuthSession 并更新权限字段而不是整体 clear()。
+  - 前端网络层增加统一 401 处理（例如封装 fetch，遇到 401 调用 auth.logout() 并 router.replace('/login')），及时提示用户并减少“接口报错但不知道要重新登录”的困惑。
+
+  下一步
+  1. 若确认可以修改代码，请先授予写权限，我将落地上述改动并同步 configs/progress.md 与双端 README。
+  2. 在编写与部署阶段，建议同步关闭生产环境 uvicorn --reload 并监控 permissions.json 变更频率，避免频繁触发批量下线。

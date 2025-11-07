@@ -1,5 +1,24 @@
 # 进度记录
 
+## 2025-11-13（数据看板业务日切换修复）
+
+前置说明（降级留痕）：
+- Serena MCP 当前仍无法对 `.vue`/`.md` 文件执行符号级写入，本次依 AGENTS.md 3.9 要求降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`、前后端 README 以及本文件；回滚可恢复上述文件至变更前版本。
+
+本次动作：
+- `loadDashboardData` 仅在未显式指定 `showDate` 且本地 `bizDateInput` 为空时，才依据接口返回的 `push_date` 重写输入框，避免用户手动选择业务日期后又被服务器默认值覆盖，导致“切换日期无效”。
+- 若接口未返回 `push_date` 但输入框为空，仍回落到默认业务日（东八区前一日），确保初次加载有可视日期。
+- `frontend/src/daily_report_25_26/README.md` 增补“业务日同步策略（2025-11-13）”章节，描述前端如何决定是否覆盖日期；`backend/README.md` 记录本次交互纯前端处理，后端 `/dashboard` API 无需调整。
+- `configs/progress.md` 写入本记录，方便审计。
+
+影响范围与回滚：
+- 仅影响仪表盘页面的业务日期输入及其触发 `/dashboard?show_date=YYYY-MM-DD` 的行为；如需回滚，恢复 `DashBoard.vue` 中 `payload.push_date` 赋值逻辑即可。
+
+验证建议：
+1. 打开仪表盘默认加载一遍，确认自动填入的是推送日（或默认业务日），并显示最新数据。
+2. 手动选择任意历史日期，确认输入框维持用户选择值，且网络请求 `show_date` 参数与之匹配，数据渲染为对应日期。
+3. 清空输入或将日期改回默认值时，仍可重新回落到服务器推送日，watcher 不会陷入循环请求。
+
 ## 2025-11-12（数据展示页业务日自动刷新）
 
 前置说明（降级留痕）：

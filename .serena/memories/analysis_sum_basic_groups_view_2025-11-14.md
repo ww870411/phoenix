@@ -1,0 +1,1 @@
+时间：2025-11-14 任务：解析 sum_basic_data 与 groups 视图结构；原因：Serena 模式下无法直接展开 SQL 文件内容，只能降级使用 Codex CLI read_file 读取 backend/sql/sum_basic_data.sql 与 backend/sql/groups.sql（只读操作）。变更：无代码修改，仅阅读文件；已记录阅读来源与目的。

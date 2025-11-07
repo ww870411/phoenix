@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-13 数据看板业务日输入稳定性）
+
+- 本次修复集中于前端 `DashBoard.vue`：当用户在仪表盘手动选择业务日期时，不再以 `/dashboard` 响应中的 `push_date` 强制覆盖输入框，仅在 `show_date` 未指定且本地值为空的情况下同步，以免界面显示的日期与查询参数不一致。
+- 后端 `/api/v1/projects/daily_report_25_26/dashboard` 接口签名、参数与返回结构保持不变；仍建议在响应中保留 `push_date` 字段，供前端初次加载或清空输入时回落使用。
+- 回滚流程（若要恢复旧交互）：前端重新在每次响应后无条件同步 `payload.push_date` 即可，后端无需改动。
+
 ## 会话小结（2025-11-12 数据展示页业务日自动刷新）
 
 - 最新交互调整位于前端 `DisplayRuntimeView.vue`：选择新的业务日期时会在 400ms 去抖后自动调用 `/api/v1/projects/{project_key}/runtime/spec/eval`，若先前请求仍在执行则排队等待，避免向后端并发发送相同查询。

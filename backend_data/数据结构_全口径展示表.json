@@ -374,7 +374,7 @@
         "GuanWang_Center": "管网中心"
       },
       "accuracy": {
-        "default": 0,
+        "default": 2,
         "万平方米省市净投诉量":2,
         "日最高气温":2,
         "日最低气温":2,
