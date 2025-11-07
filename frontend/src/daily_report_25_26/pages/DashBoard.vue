@@ -262,8 +262,8 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--center">
-        <Card title="供热分中心单耗明细" :extra="heatingCenterExtraLabel">
-          <div class="center-card__controls" role="group" aria-label="供热分中心单耗排序">
+        <Card title="主城区供热服务中心单耗明细" :extra="heatingCenterExtraLabel">
+          <div class="center-card__controls" role="group" aria-label="供热服务中心单耗排序">
             <span class="center-card__controls-label">排序指标：</span>
             <button
               v-for="option in heatingCenterMetricOptions"

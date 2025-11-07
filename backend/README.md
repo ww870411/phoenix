@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-12 数据展示页业务日自动刷新）
+
+- 最新交互调整位于前端 `DisplayRuntimeView.vue`：选择新的业务日期时会在 400ms 去抖后自动调用 `/api/v1/projects/{project_key}/runtime/spec/eval`，若先前请求仍在执行则排队等待，避免向后端并发发送相同查询。
+- 后端接口签名、参数与返回结构保持不变；需要确保 `/runtime/spec/eval` 在 `biz_date` 为空字符串时继续按 `regular` 分支处理，以兼容用户清空日历触发的自动刷新。
+- 回滚流程：前端可移除 `pendingAutoRefresh` 与相关监听；后端无需回滚。
+
 ## 会话小结（2025-11-12 累计卡片气温逐日序列）
 
 - `/api/v1/projects/daily_report_25_26/dashboard` 的“9.累计卡片”板块新增逐日气温输出：`供暖期平均气温` 现返回 `[{"date": "YYYY-MM-DD", "value": <float|None>}, ...]`，覆盖供暖期起始日至 `push_date` 全部日期；同期数组按上一供暖季同区间映射。

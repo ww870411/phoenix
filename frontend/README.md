@@ -6,6 +6,14 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-12 数据展示页业务日自动刷新）
+
+- 状态：数据展示子页面（`DisplayRuntimeView.vue`）现会在用户调整业务日期后自动拉取最新只读数据，结束依赖手动点击“刷新”按钮。
+- 改动：新增 `pendingAutoRefresh`、`scheduleAutoRefresh` 与 `bizDateAutoRefreshTimer`，对 `<input type="date">` 的 `bizDate` 建立 400ms 去抖监听；当首次加载尚未完成或已有请求在途时，自动刷新请求会排队至当前任务结束，避免并发压垮 `/runtime/spec/eval`。
+- 安全措施：为 `loadDefaultBizDate()` 增加 `suppressNextBizDateReaction` 标记，跳过初始化时写入 `bizDate` 触发的监听，确保首屏只执行一次 `runEval()`；组件卸载时统一清理定时器。
+- 影响：`projects/.../pages/data_show/sheets` 的每个子页面在切换日历日期后会自动显示“数据载入中…”并刷新到对应日期；原“刷新”按钮仍可手动重试，逻辑保持不变。
+- 下一步：可视需要在顶部添加“自动刷新进行中”提示或禁用刷新按钮，进一步降低用户对请求状态的疑惑。
+
 ## 会话小结（2025-11-11 填报提交倒计时刷新）
 
 - `pages/DataEntryView.vue` 提交成功后新增 3 秒倒计时提示，实时展示剩余秒数，同时保持提示条常显。

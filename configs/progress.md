@@ -1,5 +1,23 @@
 # 进度记录
 
+## 2025-11-12（数据展示页业务日自动刷新）
+
+前置说明（降级留痕）：
+- Serena MCP 暂未开放本仓库 `.vue`/`.md` 文件的符号级写入能力，本次依照 AGENTS.md 3.9 规定，降级使用 `desktop-commander::read_file` + `apply_patch` 编辑 `frontend/src/daily_report_25_26/pages/DisplayRuntimeView.vue` 与前后端 README；如需回滚，可恢复上述文件至变更前版本。
+
+本次动作：
+- 为 `DisplayRuntimeView.vue` 增加 `pendingAutoRefresh`、`scheduleAutoRefresh`、`bizDateAutoRefreshTimer` 以及 `suppressNextBizDateReaction`，监听 `bizDate` 输入并在 400ms 去抖后自动调用 `runEval()`；当首次加载未完成或已有刷新进行中时，将自动刷新请求排队至当前任务结束，避免并发压测 `/runtime/spec/eval`。
+- 组件卸载时统一清理定时器，并跳过初始化阶段 `loadDefaultBizDate()` 对 `bizDate` 的写入，确保首屏仅发起一次请求。
+- 更新 `frontend/README.md`、`backend/README.md` 记录“数据展示页业务日自动刷新”特性及对后端接口的影响说明。
+
+影响范围与回滚：
+- 仅影响 `projects/daily_report_25_26/pages/data_show/sheets` 页面在切换业务日期时的行为；若要回滚，删除新增的自动刷新逻辑或恢复旧版组件即可，README 可同步恢复上一版本。
+
+验证建议：
+1. 进入数据展示任意子页面，等待首屏加载完成后切换业务日期，观察 400ms 内自动出现“数据载入中…”并刷新结果，无需再点击“刷新”按钮。
+2. 在加载过程中连续切换多个日期，确认前一次请求完成后会自动排队执行最新一次变更，网络面板不会出现大量并发 `runtime/spec/eval`。
+3. 清空日期或切回默认值仍能自动刷新，且 `effectiveBizDate` 提示与返回数据保持一致。
+
 ## 2025-11-10（数据库连接池扩容）
 
 前置说明（降级留痕）：
