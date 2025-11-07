@@ -6,6 +6,19 @@
 - 目的：为后续将 `AuthManager` 的内存会话迁移到 PostgreSQL 提前准备建表脚本，保证服务重启或多实例部署时登录状态可延续。
 - 当前后端逻辑尚未接入该表；若需要落地会话持久化，可执行该 SQL 并将登录/验证/注销流程改为读写此表即可。回滚仅需删除脚本或忽略执行。
 
+## 会话小结（2025-11-15 集团张屯煤耗汇总）
+
+- `backend/sql/groups.sql` 新增 `group_sum_raw_zhangtun`、`group_sum_std_zhangtun` 两个 CTE，并在 `company = 'Group'` 的输出中追加 `sum_consumption_amount_raw_coal_zhangtun`（原煤耗量汇总·张屯）与 `sum_consumption_std_coal_zhangtun`（标煤耗量汇总·张屯）两个指标。
+- 计算逻辑：以 `sum_basic_data` 视图为底，先聚合主城区（`BeiHai/XiangHai/GongRe`，对应视图中的 `ZhuChengQu` 汇总）、`JinZhou/BeiFang/JinPu` 的 `consumption_amount_raw_coal` 或 `consumption_std_coal`，再叠加 `ZhuangHe` 公司报送的 `*_zhangtun` 特殊口径，分别对日值、7 日、当月、供暖期累计以及同期数做逐列求和。
+- 前端或 BI 查询 `groups` 视图时，`company='Group'` 将多出上述两条记录，可直接沿用其它量化指标的字段（`value_biz_date/sum_ytd_peer` 等）；如需回滚，删除两个 CTE 及对应 `UNION ALL` 片段即可恢复旧版结构。
+
+## 会话小结（2025-11-16 张屯口径别名同步）
+
+- `backend_data/数据结构_数据看板.json` 新增顶层 `口径别名` 映射（如 `标煤耗量汇总(张屯)` → `标煤耗量`、`原煤耗量汇总(张屯)` → `原煤耗量`），用于标记“张屯汇总”指标在 UI 上的展示名称。
+- 该映射由前端 `DashBoard.vue` 读取，渲染时依旧显示“标煤耗量/原煤耗量”，同时后台照常按 `sum_consumption_amount_*_zhangtun` 指标取数；删除该映射即可回滚到旧表现。
+- 2025-11-16 晚间：前端在解析别名时出现“字符串递归替换”导致浏览器内存暴涨，本文件无须修改，但已记录问题原因，详见前端 README 的“张屯指标别名渲染”段（别名映射保持不变，只需避免无限替换）。
+- 2025-11-16 夜间：`dashboard_expression._fill_simple_metric` 支持在配置中为各公司写自定义表达式（如“标煤耗量汇总(张屯)”），若表达式为空则回落到根指标；`_fill_cumulative_cards` 也改用 `sum_consumption_std_coal_zhangtun` 作为集团供暖期标煤耗量的数据来源，确保前端 5/9 号段读取到张屯汇总数。
+
 ## 会话小结（2025-11-13 数据看板业务日输入稳定性）
 
 - 本次修复集中于前端 `DashBoard.vue`：当用户在仪表盘手动选择业务日期时，不再以 `/dashboard` 响应中的 `push_date` 强制覆盖输入框，仅在 `show_date` 未指定且本地值为空的情况下同步，以免界面显示的日期与查询参数不一致。

@@ -343,8 +343,18 @@ def _fill_simple_metric(
                 continue
             if company_cn not in data_bucket:
                 continue
-            bucket = metrics.get(item_code, {})
-            data_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
+            raw_expr = data_bucket[company_cn]
+            expression = raw_expr.strip() if isinstance(raw_expr, str) else ""
+            if expression:
+                data_bucket[company_cn] = _evaluate_expression(
+                    metrics,
+                    expression,
+                    item_cn_to_code,
+                    frame_key,
+                )
+            else:
+                bucket = metrics.get(item_code, {})
+                data_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
 
 
 def _fill_complaint_section(
@@ -814,7 +824,7 @@ def _fill_cumulative_cards(
     # 其余累计指标直接读取 groups 视图的 sum_ytd_* 字段
     metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
     mapping = {
-        "集团汇总供暖期标煤耗量": "consumption_std_coal",
+        "集团汇总供暖期标煤耗量": "sum_consumption_std_coal_zhangtun",
         "集团汇总供暖期可比煤价边际利润": "eco_comparable_marginal_profit",
         "集团汇总供暖期省市平台投诉量": "amount_daily_service_complaints",
     }

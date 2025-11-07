@@ -1,5 +1,40 @@
 # 进度记录
 
+## 2025-11-16（张屯煤耗口径别名 + DashBoard 渲染）
+
+前置说明（降级留痕）：
+- Serena 仍无法直接写入 SQL/前端文件，依照 AGENTS.md 3.9 要求，本次通过 `desktop-commander::read_file` + `apply_patch` 修改 `backend_data/数据结构_数据看板.json`、`frontend/src/daily_report_25_26/pages/DashBoard.vue` 以及相关 README/本文件；如需回滚，恢复上述文件至变更前版本即可。
+
+本次动作：
+- 在数据看板配置新增 `口径别名` 映射（`标煤耗量汇总(张屯)`→`标煤耗量`、`原煤耗量汇总(张屯)`→`原煤耗量`），用于指明张屯汇总口径的展示名称。
+- `DashBoard.vue` 补充 `metricAliasMap/buildLabelVariants` 辅助，`resolveSection` 支持多别名，`cumulativeUnits`、`getCumulativeMetric`、投诉图表/表格与收入/标煤表格均按别名展示，同时保持底层仍读取 `sum_consumption_amount_*_zhangtun` 数据。
+- 同日补丁：`buildLabelVariants` 过去会在别名包含原名时无限执行字符串替换（`标煤耗量` → `标煤耗量汇总(张屯)` → `标煤耗量汇总(张屯)汇总(张屯)` ...），导致浏览器堆爆；现已改为仅在“别名/规范名”节点之间 BFS，不再做 substring 替换，从而消除内存泄漏。
+- 后端 `dashboard_expression._fill_simple_metric` 现允许每家公司在配置里写表达式（例如“标煤耗量汇总(张屯)”），若留空则回落到根指标；`_fill_cumulative_cards` 的“集团汇总供暖期标煤耗量”改读 `sum_consumption_std_coal_zhangtun`，确保 5/9 号段与张屯汇总保持一致。
+
+影响范围与回滚：
+- 影响仪表盘所有读取张屯煤耗指标的卡片/表格；若要回滚，删除 `口径别名` 节点并恢复 `DashBoard.vue` 中 alias 相关逻辑即可。
+
+验证建议：
+1. 打开仪表盘，确认“标煤消耗量对比”“供暖期标煤耗量”等位置仍显示“标煤耗量”文案，但与数据库中 `sum_consumption_amount_std_coal_zhangtun` 数据一致。
+2. 手动修改 `口径别名` 中的映射条目，刷新后验证 `DashBoard.vue` 能自动采用新的展示文案；删除该节点则回退到原始名称。
+3. 在 `backend/sql` 刷新视图后请求 `/dashboard`，确认 5 号段“集团汇总”以及 9 号段累计卡片的数据都来源于新的 `sum_consumption_std_coal_zhangtun`；如需回滚，撤销上述配置与 `_fill_simple_metric` 的表达式支持即可。
+
+## 2025-11-15（集团张屯煤耗汇总视图增强）
+
+前置说明（降级留痕）：
+- Serena MCP 仍无法对 SQL/Markdown 执行符号级写入，按 AGENTS.md 3.9 要求本次降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend/sql/groups.sql`、前后端 README 及本文件；如需回滚，恢复上述文件即可。
+
+本次动作：
+- `groups` 视图新增 `group_sum_raw_zhangtun`、`group_sum_std_zhangtun` 聚合，追加 `sum_consumption_amount_raw_coal_zhangtun` 与 `sum_consumption_amount_std_coal_zhangtun` 两条 `company=Group` 指标，按主城区（BeiHai/XiangHai/GongRe）、JinZhou、BeiFang、JinPu 的常规煤耗叠加 `ZhuangHe` 张屯口径求和值覆盖全部时间窗口。
+- `backend/README.md`、`frontend/README.md` 记录新指标含义、取值来源与前端接入提示，保持进度对齐。
+
+影响范围与回滚：
+- 影响 `groups` 视图消费者（仪表盘/BI）；若需回滚删除张屯汇总，只需移除新增 CTE 与 `UNION ALL` 片段，并同步清理 README 说明。
+
+验证建议：
+1. 在数据库执行 `SELECT * FROM groups WHERE company='Group' AND item LIKE 'sum_consumption_amount_%_zhangtun';`，确认返回两行且 `value_biz_date` 等字段与期望的公司组合一致。
+2. 对比 `sum_ytd_biz` 是否等于（主城区 + JinZhou + BeiFang + JinPu 的 `consumption_amount_*`）+（ZhuangHe 的 `*_zhangtun`）。
+
 ## 2025-11-14（登录状态记忆选项 + 数据库存储）
 
 前置说明（降级留痕）：

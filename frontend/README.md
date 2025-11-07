@@ -8,6 +8,19 @@
 - 现有 Pinia `auth` 仓库、路由守卫与页面结构保持不变；待后端切换到数据库会话后，前端可继续沿用当前 `Authorization` 头部与刷新逻辑，无需额外适配。
 - 如需在前端提示用户“会话可跨重启保留”等信息，可在登录页或顶部 `AppHeader` 中追加文案；回滚时删除上述说明即可。
 
+## 会话小结（2025-11-15 集团张屯煤耗汇总数据对齐）
+
+- 后端 `groups` 视图为 `company = 'Group'` 新增 `sum_consumption_amount_raw_coal_zhangtun`、`sum_consumption_std_coal_zhangtun` 两条记录，均携带标准的 `value_biz_date / sum_ytd_biz` 等字段，可直接呈现为新的量化卡片或表格行。
+- 如需在仪表盘或数据展示页引用，请通过 `item` 判断（`sum_consumption_amount_*_zhangtun`），`item_cn` 已内置“原煤耗量汇总(张屯)/标煤耗量汇总(张屯)”中文名；其取值系 `ZhuChengQu + JinZhou + BeiFang + JinPu` 的常规煤耗与 `ZhuangHe` 张屯口径的叠加。
+- 当前前端代码未读取该条目，待设计稿确认后可在 `unitCards` 或 `unitSeries` 相关配置中追加映射。若需回滚，仅需忽略或过滤上述 `item` 即可。
+
+## 会话小结（2025-11-16 张屯指标别名渲染）
+
+- `DashBoard.vue` 读取配置新增的 `口径别名` 映射，统一构建 `metricAliasMap` 与 `buildLabelVariants`，在 `resolveSection`、`getCumulativeMetric`、`cumulativeUnits`、投诉图表/表格以及收入表格中始终以“标煤耗量/原煤耗量”等原口径文案展示，但数据来源仍是 `sum_consumption_amount_*_zhangtun`。
+- 兼容性：当后台未来继续追加其他别名，只需在 `backend_data/数据结构_数据看板.json` 的 `口径别名` 中注册即可；若要回滚，删除该配置并还原 `DashBoard.vue` 中的 alias 逻辑即可恢复旧有直读模式。
+- UI 不再出现“标煤耗量汇总(张屯)”等内部口径名称，且 `resolveSection` 现支持多别名参数，确保改名后仍可定位第 5 段落。
+- 2025-11-16 晚间补丁：修复 `buildLabelVariants` 在做字符串级别替换时导致的无限扩展（例如“标煤耗量”→“标煤耗量汇总(张屯)”→“标煤耗量汇总(张屯)汇总(张屯)”……），该 bug 会让浏览器内存持续膨胀直至崩溃；现在 BFS 仅在“别名/规范名”之间跳转，不再做字符串替换。
+
 # 前端说明（Vue3 + Vite）
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。

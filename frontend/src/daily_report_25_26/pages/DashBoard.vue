@@ -60,7 +60,7 @@
       <div class="summary-card summary-card--warning">
         <div class="summary-card__icon summary-card__icon--coal" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">当日集团标煤消耗</div>
+          <div class="summary-card__label">当日集团标煤消耗（剔除庄河改造锅炉房）</div>
           <div class="summary-card__value">
             <template v-if="primaryCoalHeadline.value !== null">
               {{ formatHeadlineNumber(
@@ -650,6 +650,82 @@ const dashboardData = reactive({
   sections: {},
 })
 
+const ALIAS_BUCKET_KEY = '口径别名'
+const metricAliasMap = computed(() => {
+  const sections = dashboardData.sections || {}
+  const bucket = sections[ALIAS_BUCKET_KEY]
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const metricAliasInverse = computed(() => {
+  const inverse = {}
+  Object.entries(metricAliasMap.value).forEach(([alias, canonical]) => {
+    if (typeof canonical !== 'string' || !canonical.trim()) {
+      return
+    }
+    const normalized = canonical.trim()
+    const list = inverse[normalized] || (inverse[normalized] = [])
+    const value = typeof alias === 'string' ? alias.trim() : ''
+    if (value && !list.includes(value)) {
+      list.push(value)
+    }
+  })
+  return inverse
+})
+
+const buildLabelVariants = (label) => {
+  const seed = typeof label === 'string' ? label.trim() : ''
+  if (!seed) return []
+  const visited = new Set()
+  const queue = [seed]
+  while (queue.length) {
+    const current = queue.shift()
+    if (!current || visited.has(current)) continue
+    visited.add(current)
+    const normalized = metricAliasMap.value[current]
+    if (typeof normalized === 'string' && normalized && !visited.has(normalized)) {
+      queue.push(normalized)
+    }
+    const aliasList = metricAliasInverse.value[current]
+    if (Array.isArray(aliasList)) {
+      aliasList.forEach((alias) => {
+        if (alias && !visited.has(alias)) {
+          queue.push(alias)
+        }
+      })
+    }
+  }
+  return Array.from(visited)
+}
+
+const resolveBucketByLabel = (section, label) => {
+  const variants = buildLabelVariants(label)
+  for (const key of variants) {
+    const bucket = section && typeof section === 'object' ? section[key] : undefined
+    if (bucket && typeof bucket === 'object') {
+      return bucket
+    }
+  }
+  return undefined
+}
+
+const pickUnitByLabel = (bucket, label, fallback) => {
+  const variants = buildLabelVariants(label)
+  for (const key of variants) {
+    const value = bucket?.[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return fallback
+}
+
+const getDisplayLabel = (label) => {
+  if (typeof label !== 'string') return label
+  const mapped = metricAliasMap.value[label]
+  return typeof mapped === 'string' && mapped ? mapped : label
+}
+
 async function loadDashboardData(showDate = '') {
   suppressDashboardWatch = true
   activeDashboardRequests += 1
@@ -722,14 +798,16 @@ const sectionIndexMap = computed(() => {
   return map
 })
 
-function resolveSection(index, legacyKey) {
+function resolveSection(index, ...legacyKeys) {
   const sections = dashboardData.sections || {}
   const key = sectionIndexMap.value[index]
   if (key && sections[key] && typeof sections[key] === 'object') {
     return sections[key]
   }
-  if (legacyKey && sections[legacyKey] && typeof sections[legacyKey] === 'object') {
-    return sections[legacyKey]
+  for (const legacyKey of legacyKeys) {
+    if (legacyKey && sections[legacyKey] && typeof sections[legacyKey] === 'object') {
+      return sections[legacyKey]
+    }
   }
   return undefined
 }
@@ -968,12 +1046,12 @@ const cumulativeSection = computed(() => {
 })
 
 const cumulativeUnits = computed(() => {
-  const bucket = cumulativeSection.value['计量单位']
+  const bucket = cumulativeSection.value['计量单位'] || {}
   return {
-    temperature: bucket?.['平均气温'] || '℃',
-    margin: bucket?.['可比煤价边际利润'] || '万元',
-    coal: bucket?.['标煤耗量'] || '吨',
-    complaints: bucket?.['省市平台投诉量'] || '件',
+    temperature: pickUnitByLabel(bucket, '平均气温', '℃'),
+    margin: pickUnitByLabel(bucket, '可比煤价边际利润', '万元'),
+    coal: pickUnitByLabel(bucket, '标煤耗量', '吨'),
+    complaints: pickUnitByLabel(bucket, '省市平台投诉量', '件'),
   }
 })
 
@@ -991,8 +1069,8 @@ const cumulativeSeasonAverageHeadline = computed(() => {
 })
 
 const getCumulativeMetric = (label) => {
-  const bucket = cumulativeSection.value[label]
-  if (!bucket || typeof bucket !== 'object') {
+  const bucket = resolveBucketByLabel(cumulativeSection.value, label)
+  if (!bucket) {
     return { main: null, peer: null }
   }
   return {
@@ -1263,8 +1341,9 @@ const complaintColumns = computed(() => {
   const columns = ['单位']
   const regex = /(.+)(（.+）)/ // Splits "Metric（unit）" into ["Metric", "（unit）"]
   complaintMetricKeys.value.forEach((metric) => {
-    const currentHeader = `${metric}（本期）`
-    const peerHeader = `${metric}（同期）`
+    const displayMetric = getDisplayLabel(metric)
+    const currentHeader = `${displayMetric}（本期）`
+    const peerHeader = `${displayMetric}（同期）`
     const currentMatch = currentHeader.match(regex)
     const peerMatch = peerHeader.match(regex)
 
@@ -1615,7 +1694,7 @@ const selectHeatingCenterMetric = (metric) => {
 }
 
 const coalStdSection = computed(() => {
-  const section = resolveSection('5', '5.标煤耗量')
+  const section = resolveSection('5', '5.标煤耗量', '5.标煤耗量汇总(张屯)')
   return section && typeof section === 'object' ? section : {}
 })
 
@@ -2548,11 +2627,14 @@ const complaintChartConfigs = computed(() => {
   if (!selected.length) {
     selected.push(complaintMetricOrder[0])
   }
-  return selected.slice(0, 2).map((metric) => ({
-    key: metric,
-    title: complaintMetricTitleMap[metric] || metric,
-    option: useComplaintSingleOption(metric, { companies, buckets, unitLabel }),
-  }))
+  return selected.slice(0, 2).map((metric) => {
+    const title = getDisplayLabel(complaintMetricTitleMap[metric] || metric)
+    return {
+      key: metric,
+      title,
+      option: useComplaintSingleOption(metric, { companies, buckets, unitLabel }),
+    }
+  })
 })
 const coalStockOpt = computed(() => useCoalStockOption(coalStockSeries.value))
 
@@ -2566,10 +2648,11 @@ const incomeTableData = computed(() => {
   const current = incomeSeries.value.current
   const peer = incomeSeries.value.peer
   return categories.map((label, index) => {
+    const displayLabel = getDisplayLabel(label)
     const currentVal = current[index]
     const peerVal = peer[index]
     return [
-      label,
+      displayLabel,
       Number.isFinite(currentVal) ? formatIncomeValue(currentVal) : '—',
       Number.isFinite(peerVal) ? formatIncomeValue(peerVal) : '—',
     ]

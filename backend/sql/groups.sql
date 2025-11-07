@@ -61,6 +61,48 @@ base_grp AS (
   WHERE company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
   GROUP BY item, item_cn, unit, biz_date, peer_date
 ),
+group_sum_raw_zhangtun AS (
+  SELECT
+    'sum_consumption_amount_raw_coal_zhangtun'::text AS item,
+    '原煤耗量汇总(张屯)'::text                      AS item_cn,
+    COALESCE(MAX(unit), '吨')                        AS unit,
+    biz_date,
+    peer_date,
+    SUM(value_biz_date)                              AS value_biz_date,
+    SUM(value_peer_date)                             AS value_peer_date,
+    SUM(sum_7d_biz)                                  AS sum_7d_biz,
+    SUM(sum_7d_peer)                                 AS sum_7d_peer,
+    SUM(sum_month_biz)                               AS sum_month_biz,
+    SUM(sum_month_peer)                              AS sum_month_peer,
+    SUM(sum_ytd_biz)                                 AS sum_ytd_biz,
+    SUM(sum_ytd_peer)                                AS sum_ytd_peer
+  FROM s
+  WHERE
+    (company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu') AND item='consumption_amount_raw_coal')
+    OR (company='ZhuangHe' AND item='consumption_amount_raw_coal_zhangtun')
+  GROUP BY biz_date, peer_date
+),
+group_sum_std_zhangtun AS (
+  SELECT
+    'sum_consumption_std_coal_zhangtun'::text AS item,
+    '标煤耗量汇总(张屯)'::text                      AS item_cn,
+    COALESCE(MAX(unit), '吨')                         AS unit,
+    biz_date,
+    peer_date,
+    SUM(value_biz_date)                               AS value_biz_date,
+    SUM(value_peer_date)                              AS value_peer_date,
+    SUM(sum_7d_biz)                                   AS sum_7d_biz,
+    SUM(sum_7d_peer)                                  AS sum_7d_peer,
+    SUM(sum_month_biz)                                AS sum_month_biz,
+    SUM(sum_month_peer)                               AS sum_month_peer,
+    SUM(sum_ytd_biz)                                  AS sum_ytd_biz,
+    SUM(sum_ytd_peer)                                 AS sum_ytd_peer
+  FROM s
+  WHERE
+    (company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu') AND item='consumption_std_coal')
+    OR (company='ZhuangHe' AND item='consumption_std_coal_zhangtun')
+  GROUP BY biz_date, peer_date
+),
 denom_zc AS (
   SELECT
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe')) AS area_biz,
@@ -288,6 +330,28 @@ SELECT
   sum_ytd_biz, sum_ytd_peer
 FROM base_grp
 WHERE item NOT IN ('amount_daily_net_complaints_per_10k_m2','rate_std_coal_per_heat','rate_heat_per_10k_m2','rate_power_per_10k_m2','rate_water_per_10k_m2','rate_overall_efficiency','amount_heat_lose','eco_direct_income')
+UNION ALL
+-- 集团：原煤耗量汇总（张屯范围）
+SELECT
+  'Group','集团全口径',
+  r.item, r.item_cn, r.unit,
+  r.biz_date, r.peer_date,
+  r.value_biz_date, r.value_peer_date,
+  r.sum_7d_biz, r.sum_7d_peer,
+  r.sum_month_biz, r.sum_month_peer,
+  r.sum_ytd_biz, r.sum_ytd_peer
+FROM group_sum_raw_zhangtun r
+UNION ALL
+-- 集团：标煤耗量汇总（张屯范围）
+SELECT
+  'Group','集团全口径',
+  s.item, s.item_cn, s.unit,
+  s.biz_date, s.peer_date,
+  s.value_biz_date, s.value_peer_date,
+  s.sum_7d_biz, s.sum_7d_peer,
+  s.sum_month_biz, s.sum_month_peer,
+  s.sum_ytd_biz, s.sum_ytd_peer
+FROM group_sum_std_zhangtun s
 UNION ALL
 -- 集团：全厂热效率（小数四位）
 SELECT
