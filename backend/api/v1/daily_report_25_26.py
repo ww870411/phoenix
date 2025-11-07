@@ -2026,10 +2026,30 @@ async def query_sheet(
                             if nt:
                                 row_map[key][note_idx] = nt
 
-                # 若无任何查询结果，则返回模板行而非空数组
+                # 若无任何查询结果，则返回模板行而非空数组；否则严格按模板行顺序回填
                 rows_raw = _extract_list(tpl_payload, ROW_KEYS) or []
                 if row_map:
-                    result_rows = list(row_map.values())
+                    ordered_rows: List[List[Any]] = []
+                    for tmpl_row in rows_raw:
+                        normalized_row = list(tmpl_row) if isinstance(tmpl_row, list) else []
+                        company_label = (
+                            str(normalized_row[0]).strip()
+                            if len(normalized_row) > 0 and normalized_row[0] is not None
+                            else ""
+                        )
+                        coal_label = (
+                            str(normalized_row[1]).strip()
+                            if len(normalized_row) > 1 and normalized_row[1] is not None
+                            else ""
+                        )
+                        key = (company_label, coal_label) if company_label and coal_label else None
+                        if key and key in row_map:
+                            ordered_rows.append(row_map.pop(key))
+                        else:
+                            ordered_rows.append(normalized_row)
+                    if row_map:
+                        ordered_rows.extend(row_map.values())
+                    result_rows = ordered_rows
                 else:
                     result_rows = [list(r) if isinstance(r, list) else [] for r in rows_raw]
 

@@ -434,6 +434,7 @@ docker compose up -d --build
 - 交叉表（crosstab，Coal_inventory_Sheet）
   - 首屏：`getTemplate` 后先确定 `template_type==='crosstab'`，调用 `setupCrosstabGrid` 初始化列与占位行 → 再 `queryData`，若返回 `columns` 则同步列头，并用 `rows` 重建 `gridSource`；
   - 日期切换：`queryData` 返回的 `columns/rows` 直接替换 `columns/gridSource`；
+  - 行顺序：后端 `/query` 已按模板定义的 `(单位, 煤种)` 顺序回填，前端无需额外排序即可保持与配置文件一致。
   - 关键代码：`pages/DataEntryView.vue:249`（`loadTemplate`）、`pages/DataEntryView.vue:592`（watch 处理）。
 
 - 接口：`services/api.js:85` `queryData(projectKey, sheetKey, payload, { config })`。

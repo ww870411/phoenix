@@ -436,9 +436,10 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
     - `v1/`
       - `__init__.py`
       - `routes.py`（统一前缀 `/api/v1`）
-  - `daily_report_25_26.py`（项目路由与模板/填报/查询逻辑）
-    - 标准表提交流程：`_flatten_records` 从“列头日期文本”提取每列 `date`；前端应确保列头根据所选 `biz_date` 动态替换。
-    - 煤炭库存表（`Coal_inventory_Sheet`）特殊处理：解析顶层 `biz_date` 并持久化到 `coal_inventory_data`。
+    - `daily_report_25_26.py`（项目路由与模板/填报/查询逻辑）
+      - 标准表提交流程：`_flatten_records` 从“列头日期文本”提取每列 `date`；前端应确保列头根据所选 `biz_date` 动态替换。
+      - 煤炭库存表（`Coal_inventory_Sheet`）特殊处理：解析顶层 `biz_date` 并持久化到 `coal_inventory_data`。
+      - 镜像查询：`Coal_inventory_Sheet` 的交叉表结果会按模板中 `(单位, 煤种)` 的顺序回填，数据库中额外的组合会附加在模板行之后，确保刷新页面时行顺序保持稳定。
     - 查询接口设计（提案，待实现）：
       - 单表查询：`POST /api/v1/projects/{project_key}/data_entry/sheets/{sheet_key}/query`
         - 内部按模板类型自适应返回：
