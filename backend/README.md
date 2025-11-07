@@ -6,6 +6,10 @@
 - 目的：为后续将 `AuthManager` 的内存会话迁移到 PostgreSQL 提前准备建表脚本，保证服务重启或多实例部署时登录状态可延续。
 - 当前后端逻辑尚未接入该表；若需要落地会话持久化，可执行该 SQL 并将登录/验证/注销流程改为读写此表即可。回滚仅需删除脚本或忽略执行。
 
+## 会话小结（2025-11-15 前端提示联动）
+
+- 前端 `DataEntryView` 的提交成功提示文案从“提交成功，数据已入库。”调整为“提交成功，数据已入库！”，后端接口与返回结构不变；提醒记录在此以便后续追踪前后端交互文案。
+
 ## 会话小结（2025-11-15 集团张屯煤耗汇总）
 
 - `backend/sql/groups.sql` 新增 `group_sum_raw_zhangtun`、`group_sum_std_zhangtun` 两个 CTE，并在 `company = 'Group'` 的输出中追加 `sum_consumption_amount_raw_coal_zhangtun`（原煤耗量汇总·张屯）与 `sum_consumption_std_coal_zhangtun`（标煤耗量汇总·张屯）两个指标。

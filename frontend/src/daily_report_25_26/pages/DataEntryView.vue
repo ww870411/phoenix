@@ -247,7 +247,7 @@ function showSubmitFeedback(type, message, options = {}) {
 function startRefreshCountdown(seconds) {
   clearRefreshCountdown();
   refreshCountdown.value = seconds;
-  showSubmitFeedback('success', '提交成功，数据已入库。', { autoHide: false });
+  showSubmitFeedback('success', '提交成功，数据已入库！', { autoHide: false });
   refreshCountdownTimer = window.setInterval(() => {
     if (refreshCountdown.value > 1) {
       refreshCountdown.value -= 1;

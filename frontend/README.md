@@ -8,6 +8,10 @@
 - 现有 Pinia `auth` 仓库、路由守卫与页面结构保持不变；待后端切换到数据库会话后，前端可继续沿用当前 `Authorization` 头部与刷新逻辑，无需额外适配。
 - 如需在前端提示用户“会话可跨重启保留”等信息，可在登录页或顶部 `AppHeader` 中追加文案；回滚时删除上述说明即可。
 
+## 会话小结（2025-11-15 填报提示符号优化）
+
+- `pages/DataEntryView.vue` 中填报成功提示由“提交成功，数据已入库。”更新为“提交成功，数据已入库！”，与产品文案保持一致；倒计时与刷新逻辑未改动。
+
 ## 会话小结（2025-11-15 集团张屯煤耗汇总数据对齐）
 
 - 后端 `groups` 视图为 `company = 'Group'` 新增 `sum_consumption_amount_raw_coal_zhangtun`、`sum_consumption_std_coal_zhangtun` 两条记录，均携带标准的 `value_biz_date / sum_ytd_biz` 等字段，可直接呈现为新的量化卡片或表格行。
