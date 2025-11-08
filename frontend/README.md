@@ -12,6 +12,10 @@
 
 - `pages/DataEntryView.vue` 中填报成功提示由“提交成功，数据已入库。”更新为“提交成功，数据已入库！”，与产品文案保持一致；倒计时与刷新逻辑未改动。
 
+## 会话小结（2025-11-15 审批列表隐藏集团行）
+
+- `pages/PageSelectView.vue` 的审批进度表格新增 `Set(['系统管理员','Group'])` 黑名单，默认不再展示集团本身的审批行，避免无意义的按钮。
+
 ## 会话小结（2025-11-15 集团张屯煤耗汇总数据对齐）
 
 - 后端 `groups` 视图为 `company = 'Group'` 新增 `sum_consumption_amount_raw_coal_zhangtun`、`sum_consumption_std_coal_zhangtun` 两条记录，均携带标准的 `value_biz_date / sum_ytd_biz` 等字段，可直接呈现为新的量化卡片或表格行。

@@ -1468,3 +1468,8 @@ sum_basic_data 相关：
 - 修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue` 中 `startRefreshCountdown()` 的提示文案，将“提交成功，数据已入库。”调整为“提交成功，数据已入库！”，保持倒计时逻辑不变。
 - 影响范围：仅前端提示文字，功能与交互一致；如需回滚，恢复该文件的文案即可。
 
+## 2025-11-15（审批进度过滤集团行）
+
+- `frontend/src/daily_report_25_26/pages/PageSelectView.vue` 的 `workflowUnits` 计算属性新增黑名单 `{'系统管理员','Group'}`，不再在审批表中展示集团本身的行。
+- 影响：审批列表仅保留需要人工审核的单位，集团行默认隐藏；回滚时删除该黑名单即可。
+

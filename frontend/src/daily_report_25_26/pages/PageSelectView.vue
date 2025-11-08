@@ -198,7 +198,8 @@ const breadcrumbItems = computed(() => [
 const workflowUnits = computed(() => {
   const units = workflow.value?.units
   if (!Array.isArray(units)) return []
-  return units.filter((item) => item?.unit && item.unit !== '系统管理员')
+  const blacklist = new Set(['系统管理员', 'Group'])
+  return units.filter((item) => item?.unit && !blacklist.has(item.unit))
 })
 
 const publishStatus = computed(() => workflow.value?.publish || null)
