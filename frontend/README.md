@@ -2,6 +2,11 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-18 仪表盘平均气温 trace 撤销）
+
+- 由于浏览器 Console 输出过多，`DashBoard.vue` 中针对“平均气温”折叠表的 `[dashboard-trace] summary-fold …` 调试日志已移除；切换业务日期时将不再自动打印本期/同期的本日值。
+- 若后续需要排查，可在本地备份中临时恢复该 `console.group/table` 代码或直接比对 UI 数值即可。
+
 ## 会话小结（2025-11-17 仪表盘折叠表格）
 
 - `pages/DashBoard.vue` 在第八个 summary 卡片后追加“供暖期关键指标详表”折叠区，默认收起，展开后渲染 4×5 表格（指标/单位/本日/本月累计/供暖期累计），并通过 `summary-card--span-full` 让其在 12 栅格中独占一行。

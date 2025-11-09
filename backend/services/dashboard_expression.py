@@ -583,7 +583,7 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
             )
 
         # 0.5 折叠卡片
-        summary_fold_section = get_section_by_index("0", "0.5卡片详细信数据表（折叠）")
+        summary_fold_section = get_section_by_index("0.5", "0.5卡片详细信数据表（折叠）")
         if isinstance(summary_fold_section, dict):
             _fill_summary_fold_section(session, summary_fold_section, push_date, item_cn_to_code)
 
@@ -763,16 +763,27 @@ def _fetch_average_temperature_between(
     start_date: date,
     end_date: date,
 ) -> Optional[float]:
-    """从 calc_temperature_data 视图求指定日期区间的平均气温。"""
-    daily_map = _fetch_daily_average_temperature_map(session, start_date, end_date)
-    if not daily_map:
+    """直接从 calc_temperature_data 视图求指定日期区间的平均气温。"""
+    if start_date > end_date:
         return None
 
-    values = [value for value in daily_map.values() if value is not None]
-    if not values:
+    stmt = text(
+        """
+        SELECT AVG(aver_temp) AS avg_temp
+          FROM calc_temperature_data
+         WHERE date BETWEEN :start_date AND :end_date
+        """,
+    )
+    result = session.execute(
+        stmt,
+        {"start_date": start_date, "end_date": end_date},
+    ).scalar()
+    if result is None:
         return None
-
-    return sum(values) / len(values)
+    try:
+        return float(result)
+    except (TypeError, ValueError):
+        return None
 
 
 def _fetch_temperature_value_from_view(session, target_date: Optional[date]) -> Optional[float]:
@@ -859,7 +870,7 @@ def _build_group_summary_metrics(
     item_cn_to_code: Dict[str, str],
     base_label: str,
     phase_name: str,
-    metric_map: Dict[str, Any],
+    mapping_source: Dict[str, Any],
 ) -> Dict[str, Optional[float]]:
     """根据配置映射获取 groups 指标的本期/同期多窗口值。"""
 
@@ -869,7 +880,7 @@ def _build_group_summary_metrics(
 
     canonical: Dict[str, Optional[float]] = {"daily": None, "monthly": None, "seasonal": None}
     for period_label, canonical_key in SUMMARY_PERIOD_CANONICAL.items():
-        mapping_value = metric_map.get(period_label)
+        mapping_value = mapping_source.get(period_label)
         item_code = _resolve_item_code(mapping_value)
         bucket = metrics.get(item_code)
         if not bucket:
@@ -908,6 +919,10 @@ def _fill_summary_fold_section(
             if not isinstance(metric_map, dict):
                 continue
             base_label, _ = _split_metric_label(raw_label)
+            mapping_source = {
+                period_label: metric_map.get(period_label)
+                for period_label in SUMMARY_PERIOD_CANONICAL
+            }
             if base_label == "平均气温":
                 values = _build_temperature_summary_metrics(session, target_date)
             else:
@@ -916,7 +931,7 @@ def _fill_summary_fold_section(
                     item_cn_to_code,
                     base_label,
                     phase_label,
-                    metric_map,
+                    mapping_source,
                 )
             metric_map["本日"] = values.get("daily")
             metric_map["本月累计"] = values.get("monthly")

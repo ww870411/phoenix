@@ -1,5 +1,21 @@
 # 进度记录
 
+## 2025-11-18（Dashboard 平均气温 trace）
+
+前置说明（降级留痕）：
+- 本次工作需要在后端 Python 文件中插入调试日志。Serena 对非符号级别的 Python 片段暂无法直接注入，因此根据 AGENTS.md 3.9 采用 `desktop-commander::apply_patch` 修改 `backend/services/dashboard_expression.py`，并同步更新 `backend/README.md`、`frontend/README.md` 与本记录；如需回滚，恢复上述文件即可。
+
+本次动作：
+- 撤销 `_build_temperature_summary_metrics` 中的 `[dashboard-trace] temperature-summary` 日志输出，避免服务器端 INFO 日志过量；同时在 README 中记录 trace 已移除。
+- 删除 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 针对“平均气温”折叠表的浏览器 `console.group/table` 调试逻辑，防止 Console 信息干扰业务使用；对应 README 说明亦已更新。
+
+影响范围与回滚：
+- 仅新增 INFO 级别日志输出，不影响接口返回或 SQL 逻辑；回滚可删除新增的 `logger.info` 行或提高服务日志级别到 WARNING 即可。
+
+验证建议：
+1. 运行 `/dashboard` 接口，确认服务器控制台已不再输出 `[dashboard-trace] temperature-summary`。
+2. 在浏览器中切换数据看板业务日期，检查 Console 不再出现 `[dashboard-trace] summary-fold` 相关日志。
+
 ## 2025-11-17（Dashboard 顶部折叠指标表）
 
 前置说明（降级留痕）：

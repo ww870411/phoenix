@@ -1,5 +1,10 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-18 Dashboard 平均气温 trace 撤销）
+
+- 为避免后端日志过量，`backend/services/dashboard_expression.py` 中 `_build_temperature_summary_metrics` 先前新增的 `[dashboard-trace] temperature-summary …` 输出已移除；现在 `/dashboard` 不再在服务器控制台打印日均/本月/供暖期均温的原始值。
+- 此变更不影响接口返回，若后续仍需调试，可临时在本地分支恢复该 `logger.info` 行或使用数据库查询对比。
+
 ## 会话小结（2025-11-17 Dashboard 顶部折叠表）
 
 - 本次需求仅调整前端 `DashBoard.vue` 展示方式：以 `/dashboard` 现有返回中的累计 headline（来源 `sum_basic_data`/`groups`）组合出 4×5 表格，并新增折叠交互。后端接口、视图、配置数据均无需改动。
