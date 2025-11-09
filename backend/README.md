@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-17 Dashboard 顶部折叠表）
+
+- 本次需求仅调整前端 `DashBoard.vue` 展示方式：以 `/dashboard` 现有返回中的累计 headline（来源 `sum_basic_data`/`groups`）组合出 4×5 表格，并新增折叠交互。后端接口、视图、配置数据均无需改动。
+- 请继续保证 `/api/v1/projects/daily_report_25_26/dashboard` 响应里提供 `9.累计卡片` 的 `计量单位` 与本期/同期数值，以及（若存在）`0.5卡片详细信数据表（折叠）` 节点，供前端在折叠表格中渲染与排序；如需回滚折叠表，仅需恢复前端模板即可，后端无须操作。
+- `_fill_summary_fold_section` 现已落地：后端会从 `calc_temperature_data` 直接写入日均气温/本月平均/供暖期平均，同时读取 `groups` 视图的 `value_biz_date/sum_month_biz/sum_ytd_biz`（含 `*_peer` 字段）填充标煤、边际利润、投诉列，确保 0.5 节点返回的就是展示用的最终数值。
+
 ## 会话小结（2025-11-17 数据看板配置蓝图）
 
 - 新增并扩展 `backend_data/dashboard_frontend_config.json`，作为仪表盘配置驱动蓝本。除原有 `/dashboard` 接口响应结构、全局组织顺序/单位、1~9 号板块组件布局外，本次补充 `data_contracts`，明确每个模块所依赖的真实视图/表（`sum_basic_data`、`groups`、`temperature_data`、`coal_inventory_data`、`calc_temperature_data` 等）、item_key、公司口径与时间窗口。

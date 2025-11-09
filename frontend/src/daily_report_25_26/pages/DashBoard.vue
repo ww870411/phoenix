@@ -189,6 +189,71 @@
           </div>
         </div>
       </div>
+      <div class="summary-card summary-card--outline summary-card--compact summary-card--span-full summary-card--expandable">
+        <div class="summary-card__meta summary-card__meta--full-width">
+          <div class="summary-card__expandable-header">
+            <div class="summary-card__expandable-info">
+              <div class="summary-card__label summary-card__label--center summary-card__label--strong">
+                供暖期关键指标详表(点击右侧按钮展开)
+              </div>
+            </div>
+            <button
+              type="button"
+              class="summary-card__toggle"
+              @click="toggleCumulativeTable"
+            >
+              {{ cumulativeTableExpanded ? '收起' : '展开' }}
+              <span class="summary-card__toggle-icon" :class="{ 'is-open': cumulativeTableExpanded }"></span>
+            </button>
+          </div>
+          <transition name="fold">
+            <div v-show="cumulativeTableExpanded" class="summary-card__foldable">
+              <div class="summary-fold-table-wrapper">
+                <table class="summary-fold-table">
+                  <colgroup>
+                    <col class="summary-fold-table__col-metric" />
+                    <col class="summary-fold-table__col-phase" />
+                    <col class="summary-fold-table__col-value" />
+                    <col class="summary-fold-table__col-value" />
+                    <col class="summary-fold-table__col-value" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>指标</th>
+                      <th>供暖期</th>
+                      <th>本日</th>
+                      <th>本月累计</th>
+                      <th>供暖期累计</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="item in summaryFoldTable" :key="item.label">
+                      <tr>
+                        <td :rowspan="item.rows.length">
+                          <div class="summary-fold-table__metric">
+                            <span>{{ item.label }}</span>
+                            <span v-if="item.unit" class="summary-fold-table__unit">（{{ item.unit }}）</span>
+                          </div>
+                        </td>
+                        <td>{{ item.rows[0].phase }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[0].daily }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[0].monthly }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[0].seasonal }}</td>
+                      </tr>
+                      <tr v-if="item.rows.length > 1">
+                        <td>{{ item.rows[1].phase }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[1].daily }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[1].monthly }}</td>
+                        <td class="summary-fold-table__value">{{ item.rows[1].seasonal }}</td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </div>
     </section>
 
     <main class="dashboard-grid">
@@ -1107,6 +1172,218 @@ const cumulativeComplaintHeadline = computed(() => {
     useThousands: true,
   })
 })
+
+const resolvePeerHeadlineValue = (headline) => {
+  if (!headline || !Number.isFinite(headline.value) || !Number.isFinite(headline.diff)) {
+    return null
+  }
+  return headline.value - headline.diff
+}
+
+const formatSummaryCell = (value, digits = 2, options = {}) => {
+  if (!Number.isFinite(value)) return '—'
+  return formatHeadlineNumber(value, digits, options)
+}
+
+const buildSummaryRows = ({
+  label,
+  unit = '',
+  dailyCurrent = null,
+  dailyPeer = null,
+  dailyDigits = 2,
+  dailyOptions = {},
+  monthlyCurrent = null,
+  monthlyPeer = null,
+  monthlyDigits = 2,
+  monthlyOptions = {},
+  seasonalHeadline = null,
+}) => {
+  const seasonalValue = seasonalHeadline?.value ?? null
+  const seasonalPeer = resolvePeerHeadlineValue(seasonalHeadline)
+  const seasonalDigits = seasonalHeadline?.digits ?? 2
+  const seasonalOptions = { useThousands: seasonalHeadline?.useThousands ?? false }
+
+  return {
+    label,
+    unit: unit || '',
+    rows: [
+      {
+        phase: '本期',
+        daily: formatSummaryCell(dailyCurrent, dailyDigits, dailyOptions),
+        monthly: formatSummaryCell(monthlyCurrent, monthlyDigits, monthlyOptions),
+        seasonal: formatSummaryCell(seasonalValue, seasonalDigits, seasonalOptions),
+      },
+      {
+        phase: '同期',
+        daily: formatSummaryCell(dailyPeer, dailyDigits, dailyOptions),
+        monthly: formatSummaryCell(monthlyPeer, monthlyDigits, monthlyOptions),
+        seasonal: formatSummaryCell(seasonalPeer, seasonalDigits, seasonalOptions),
+      },
+    ],
+  }
+}
+
+const summaryFoldSection = computed(() => {
+  const section = resolveSection('0.5', '0.5卡片详细信数据表（折叠）')
+  return section && typeof section === 'object' ? section : {}
+})
+
+const parseMetricLabel = (text) => {
+  if (typeof text !== 'string') return { label: text, unit: '' }
+  const match = text.match(/^(.*?)(?:（(.*)）)?$/)
+  const label = (match?.[1] ?? text).trim()
+  const unit = (match?.[2] ?? '').trim()
+  return { label, unit }
+}
+
+const SUMMARY_FOLD_FALLBACK_KEYS = [
+  '平均气温（℃）',
+  '标煤耗量（吨）',
+  '可比煤价边际利润（万元）',
+  '省市平台投诉量（件）',
+]
+
+const SUMMARY_VALUE_DIGITS = {
+  平均气温: 1,
+  标煤耗量: 1,
+  可比煤价边际利润: 2,
+  省市平台投诉量: 0,
+}
+
+const SUMMARY_VALUE_OPTIONS = {
+  平均气温: { useThousands: false },
+  标煤耗量: { useThousands: true },
+  可比煤价边际利润: { useThousands: true },
+  省市平台投诉量: { useThousands: false },
+}
+
+const formatSummaryDisplayValue = (value, label) => {
+  const digits = SUMMARY_VALUE_DIGITS[label] ?? 2
+  const options = SUMMARY_VALUE_OPTIONS[label] || {}
+  const normalized = normalizeMetricValue(value)
+  return formatSummaryCell(normalized, digits, options)
+}
+
+const buildSummaryTableFromSection = (section) => {
+  if (!section || typeof section !== 'object') {
+    return []
+  }
+  const phases = ['本期', '同期']
+  const labelMap = new Map()
+  phases.forEach((phase) => {
+    const bucket = section[phase]
+    if (!bucket || typeof bucket !== 'object') return
+    Object.entries(bucket).forEach(([rawLabel, values]) => {
+      if (!values || typeof values !== 'object') return
+      const record = labelMap.get(rawLabel) || { phaseData: {} }
+      record.phaseData[phase] = values
+      labelMap.set(rawLabel, record)
+    })
+  })
+  if (!labelMap.size) {
+    return []
+  }
+  const rows = []
+  labelMap.forEach((entry, rawLabel) => {
+    const { label, unit } = parseMetricLabel(rawLabel)
+    const phaseRows = ['本期', '同期'].map((phase) => {
+      const phaseBucket = entry.phaseData[phase] || {}
+      return {
+        phase,
+        daily: formatSummaryDisplayValue(phaseBucket['本日'], label),
+        monthly: formatSummaryDisplayValue(phaseBucket['本月累计'], label),
+        seasonal: formatSummaryDisplayValue(phaseBucket['本供暖期累计'], label),
+      }
+    })
+    rows.push({ label, unit, rows: phaseRows })
+  })
+  return rows
+}
+
+const resolveSummaryMetricPayload = (label, unitHint = '') => {
+  const units = cumulativeUnits.value || {}
+  switch (label) {
+    case '平均气温': {
+      const today = averageTempToday.value || {}
+      return {
+        unit: unitHint || units.temperature || '℃',
+        dailyCurrent: today.main ?? null,
+        dailyPeer: today.peer ?? null,
+        dailyDigits: 1,
+        seasonalHeadline: cumulativeSeasonAverageHeadline.value,
+      }
+    }
+    case '标煤耗量': {
+      const headline = primaryCoalHeadline.value || {}
+      return {
+        unit: unitHint || units.coal || '吨',
+        dailyCurrent: headline.value ?? null,
+        dailyPeer: resolvePeerHeadlineValue(headline),
+        dailyDigits: headline.digits ?? 1,
+        dailyOptions: { useThousands: headline.useThousands },
+        seasonalHeadline: cumulativeCoalHeadline.value,
+      }
+    }
+    case '可比煤价边际利润': {
+      const headline = primaryMarginHeadline.value || {}
+      return {
+        unit: unitHint || units.margin || '万元',
+        dailyCurrent: headline.value ?? null,
+        dailyPeer: resolvePeerHeadlineValue(headline),
+        dailyDigits: headline.digits ?? 2,
+        dailyOptions: { useThousands: headline.useThousands },
+        seasonalHeadline: cumulativeMarginHeadline.value,
+      }
+    }
+    case '省市平台投诉量': {
+      const headline = primaryComplaintHeadline.value || {}
+      return {
+        unit: unitHint || units.complaints || '件',
+        dailyCurrent: headline.value ?? null,
+        dailyPeer: resolvePeerHeadlineValue(headline),
+        dailyDigits: headline.digits ?? 0,
+        dailyOptions: { useThousands: headline.useThousands },
+        seasonalHeadline: cumulativeComplaintHeadline.value,
+      }
+    }
+    default:
+      return null
+  }
+}
+
+const summaryFoldFallbackTable = computed(() => {
+  const orderedLabels = []
+  const pushLabel = (key) => {
+    if (typeof key === 'string' && key.trim() && !orderedLabels.includes(key)) {
+      orderedLabels.push(key)
+    }
+  }
+  SUMMARY_FOLD_FALLBACK_KEYS.forEach(pushLabel)
+  return orderedLabels
+    .map((displayLabel) => {
+      const { label, unit } = parseMetricLabel(displayLabel)
+      const payload = resolveSummaryMetricPayload(label, unit)
+      if (!payload) return null
+      return buildSummaryRows({
+        label,
+        ...payload,
+      })
+    })
+    .filter(Boolean)
+})
+
+const summaryFoldTable = computed(() => {
+  const tableFromSection = buildSummaryTableFromSection(summaryFoldSection.value)
+  if (tableFromSection.length) {
+    return tableFromSection
+  }
+  return summaryFoldFallbackTable.value
+})
+
+const cumulativeTableExpanded = ref(false)
+const toggleCumulativeTable = () => {
+  cumulativeTableExpanded.value = !cumulativeTableExpanded.value
+}
 
 const UNIT_COMPANY_ORDER = ['研究院', '庄河环海', '金普热电', '北方热电', '金州热电', '主城区', '集团汇总']
 const PREFERRED_GROUP_NAMES = ['集团汇总', '集团全口径', 'Group']
@@ -3100,6 +3377,22 @@ onMounted(() => {
   text-transform: uppercase;
   opacity: 0.78;
 }
+.summary-card__expandable-info {
+  flex: 1 1 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.summary-card__label--center {
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+}
+.summary-card__label--strong {
+  font-weight: 700;
+  text-transform: none;
+}
 
 .summary-card__meta--centered {
   align-items: center;
@@ -3143,6 +3436,20 @@ onMounted(() => {
   font-size: 19px;
 }
 
+.summary-card--span-full {
+  grid-column: 1 / -1;
+}
+
+.summary-card__meta--full-width {
+  width: 100%;
+}
+
+.summary-card__value--muted {
+  font-size: 16px;
+  font-weight: 500;
+  color: #475569;
+}
+
 .summary-card--outline {
   background: transparent;
   color: #0f172a;
@@ -3169,6 +3476,124 @@ onMounted(() => {
   text-align: center;
 }
 
+.summary-card--expandable .summary-card__value {
+  text-align: left;
+}
+
+.summary-card__expandable-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-card__toggle {
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.summary-card__toggle:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.summary-card__toggle-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.summary-card__toggle-icon::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  display: inline-block;
+}
+
+.summary-card__toggle-icon.is-open {
+  transform: rotate(180deg);
+}
+
+.summary-card__foldable {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+}
+
+.summary-fold-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.summary-fold-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.summary-fold-table th,
+.summary-fold-table td {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.summary-fold-table th {
+  background: rgba(37, 99, 235, 0.04);
+  font-weight: 600;
+}
+
+.summary-fold-table__col-metric {
+  width: 180px;
+}
+
+.summary-fold-table__col-phase {
+  width: 76px;
+}
+
+.summary-fold-table__col-value {
+  width: 120px;
+}
+
+.summary-fold-table__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.summary-fold-table__unit {
+  font-size: 12px;
+  color: #475569;
+}
+
+.summary-fold-table__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .summary-card--outline .summary-card__delta {
   color: #2563eb;
 }
@@ -3192,6 +3617,23 @@ onMounted(() => {
 
 .summary-card--danger {
   background: linear-gradient(135deg, #ef4444, #fb7185);
+}
+
+.fold-enter-active,
+.fold-leave-active {
+  transition: max-height 0.25s ease, opacity 0.25s ease;
+}
+
+.fold-enter-from,
+.fold-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+.fold-enter-to,
+.fold-leave-from {
+  max-height: 500px;
+  opacity: 1;
 }
 
 .summary-card--stock {

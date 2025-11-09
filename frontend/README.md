@@ -2,6 +2,14 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-17 仪表盘折叠表格）
+
+- `pages/DashBoard.vue` 在第八个 summary 卡片后追加“供暖期关键指标详表”折叠区，默认收起，展开后渲染 4×5 表格（指标/单位/本日/本月累计/供暖期累计），并通过 `summary-card--span-full` 让其在 12 栅格中独占一行。
+- 新增 `summaryFoldTable`（原 `cumulativeHeadlineTable` 升级）、`toggleCumulativeTable` 及相关样式/动画（`fold` transition、`summary-card__toggle` 等），直接复用顶部 summary 卡片与 9 号累计卡片的数据，并可优先读取 `backend_data/数据结构_数据看板.json` 中的 `0.5卡片详细信数据表（折叠）` 配置来决定指标顺序与单位；其中“本月累计”列已预留，待后端提供数值后即可填充。
+- 折叠表格改为“第一列纵向合并 + 第二列标示本期/同期”的定制 `<table>`，支持双行对照展示（本期/同期），替换掉通用 `Table` 组件。
+- 当前版本已优先读取 `/dashboard` 响应中的 `0.5卡片详细信数据表（折叠）` 节点：只要后端填入 `本日/本月累计/本供暖期累计` 数值，前端即可直接渲染；若该节点缺失，则自动回退到既有 headline 推导逻辑。
+- 如需回滚，可删除新增 summary 块与相关 computed/样式，或恢复 `DashBoard.vue` 至变更前的版本。
+
 ## 会话小结（2025-11-17 仪表盘配置驱动蓝图）
 
 - `backend_data/dashboard_frontend_config.json` 现已包含两类信息：一是前端渲染所需的布局/组件绑定；二是 `data_contracts` 与 `data_mapping`，明确每个图表/卡片对应的真实视图、item_key 与公司口径。前端改造时可先读取该 JSON，按 `contract_id` + selection 直接驱动数据请求与渲染。

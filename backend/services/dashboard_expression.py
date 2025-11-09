@@ -582,6 +582,11 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 item_cn_to_code,
             )
 
+        # 0.5 折叠卡片
+        summary_fold_section = get_section_by_index("0", "0.5卡片详细信数据表（折叠）")
+        if isinstance(summary_fold_section, dict):
+            _fill_summary_fold_section(session, summary_fold_section, push_date, item_cn_to_code)
+
         # 9. 累计卡片
         cumulative_section = get_section_by_index("9", "9.累计卡片")
         if isinstance(cumulative_section, dict):
@@ -707,43 +712,31 @@ def _fetch_daily_average_temperature_map(
     start_date: date,
     end_date: date,
 ) -> Dict[date, Optional[float]]:
-    """按东八区日期聚合 temperature_data，缺失日期以 None 填充。"""
+    """按日从 calc_temperature_data 视图聚合平均气温，缺失日期以 None 填充。"""
     if start_date > end_date:
         return {}
 
-    start_local = datetime.combine(start_date, time.min, tzinfo=EAST_8)
-    end_local = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=EAST_8)
-    start_utc = start_local.astimezone(timezone.utc)
-    end_utc = end_local.astimezone(timezone.utc)
-
     stmt = text(
         """
-        SELECT (date_time AT TIME ZONE 'Asia/Shanghai')::date AS local_date,
-               AVG(value) AS avg_temp
-        FROM temperature_data
-        WHERE date_time >= :start_utc AND date_time < :end_utc
-        GROUP BY local_date
-        ORDER BY local_date
+        SELECT date, aver_temp
+          FROM calc_temperature_data
+         WHERE date BETWEEN :start_date AND :end_date
+         ORDER BY date
         """,
     )
     rows = session.execute(
         stmt,
-        {"start_utc": start_utc, "end_utc": end_utc},
+        {"start_date": start_date, "end_date": end_date},
     ).all()
 
     daily_map: Dict[date, Optional[float]] = {}
     for row_date, avg_temp in rows:
         if row_date is None:
             continue
-        if isinstance(row_date, datetime):
-            cast_date = row_date.date()
-        elif isinstance(row_date, date):
-            cast_date = row_date
-        else:
-            try:
-                cast_date = date.fromisoformat(str(row_date))
-            except ValueError:
-                continue
+        try:
+            cast_date = row_date if isinstance(row_date, date) else date.fromisoformat(str(row_date))
+        except ValueError:
+            continue
 
         if avg_temp is None:
             daily_map[cast_date] = None
@@ -780,6 +773,154 @@ def _fetch_average_temperature_between(
         return None
 
     return sum(values) / len(values)
+
+
+def _fetch_temperature_value_from_view(session, target_date: Optional[date]) -> Optional[float]:
+    """读取 calc_temperature_data 中指定日期的平均气温。"""
+    if target_date is None:
+        return None
+    stmt = text(
+        """
+        SELECT aver_temp
+          FROM calc_temperature_data
+         WHERE date = :target_date
+        """,
+    )
+    result = session.execute(stmt, {"target_date": target_date}).scalar()
+    if result is None:
+        return None
+    try:
+        return float(result)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_heating_season_start(anchor: date) -> date:
+    """根据 anchor 所在年份计算供暖期起始日期。"""
+    base_year = anchor.year
+    season_start = date(base_year, HEATING_SEASON_START.month, HEATING_SEASON_START.day)
+    if anchor < season_start:
+        season_start = date(base_year - 1, HEATING_SEASON_START.month, HEATING_SEASON_START.day)
+    return season_start
+
+
+SUMMARY_PERIOD_CANONICAL = {
+    "本日": "daily",
+    "本月累计": "monthly",
+    "本供暖期累计": "seasonal",
+}
+
+SUMMARY_PERIOD_FIELD_MAP = {
+    "本日": ("value_biz_date", "value_peer_date"),
+    "本月累计": ("sum_month_biz", "sum_month_peer"),
+    "本供暖期累计": ("sum_ytd_biz", "sum_ytd_peer"),
+}
+
+
+def _split_metric_label(label: str) -> Tuple[str, str]:
+    """拆分“指标（单位）”格式的标签。"""
+    text_label = str(label or "").strip()
+    if not text_label:
+        return "", ""
+    match = re.match(r"^(.*?)(?:（(.*)）)?$", text_label)
+    if not match:
+        return text_label, ""
+    base = match.group(1).strip()
+    unit = (match.group(2) or "").strip()
+    return base or text_label, unit
+
+
+def _build_temperature_summary_metrics(session, target_date: Optional[date]) -> Dict[str, Optional[float]]:
+    """构造平均气温的本期/同期、多窗口聚合结果。"""
+    if target_date is None:
+        return {"daily": None, "monthly": None, "seasonal": None}
+
+    month_start = target_date.replace(day=1)
+    season_start = _resolve_heating_season_start(target_date)
+
+    daily_value = _fetch_temperature_value_from_view(session, target_date)
+    month_avg = _fetch_average_temperature_between(session, month_start, target_date)
+    season_avg = _fetch_average_temperature_between(session, season_start, target_date)
+
+    def _round(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        return round(value, 2)
+
+    return {
+        "daily": _round(daily_value),
+        "monthly": _round(month_avg),
+        "seasonal": _round(season_avg),
+    }
+
+
+def _build_group_summary_metrics(
+    metrics: Dict[str, Dict[str, Decimal]],
+    item_cn_to_code: Dict[str, str],
+    base_label: str,
+    phase_name: str,
+    metric_map: Dict[str, Any],
+) -> Dict[str, Optional[float]]:
+    """根据配置映射获取 groups 指标的本期/同期多窗口值。"""
+
+    def _resolve_item_code(raw_value: Any) -> str:
+        candidate = str(raw_value or "").strip() or base_label
+        return item_cn_to_code.get(candidate, candidate)
+
+    canonical: Dict[str, Optional[float]] = {"daily": None, "monthly": None, "seasonal": None}
+    for period_label, canonical_key in SUMMARY_PERIOD_CANONICAL.items():
+        mapping_value = metric_map.get(period_label)
+        item_code = _resolve_item_code(mapping_value)
+        bucket = metrics.get(item_code)
+        if not bucket:
+            continue
+        field_pair = SUMMARY_PERIOD_FIELD_MAP.get(period_label)
+        if not field_pair:
+            continue
+        field_name = field_pair[0 if phase_name == "本期" else 1]
+        canonical[canonical_key] = _decimal_to_float(bucket.get(field_name))
+    return canonical
+
+
+def _fill_summary_fold_section(
+    session,
+    section: Dict[str, Any],
+    push_date: str,
+    item_cn_to_code: Dict[str, str],
+) -> None:
+    """填充“0.5卡片详细信息数据表（折叠）”内容。"""
+    if not isinstance(section, dict):
+        return
+
+    try:
+        push_dt = date.fromisoformat(push_date)
+    except ValueError:
+        push_dt = date.today()
+    peer_dt = _add_years(push_dt, -1)
+
+    metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+
+    for phase_label, target_date in (("本期", push_dt), ("同期", peer_dt)):
+        phase_bucket = section.get(phase_label)
+        if not isinstance(phase_bucket, dict):
+            continue
+        for raw_label, metric_map in phase_bucket.items():
+            if not isinstance(metric_map, dict):
+                continue
+            base_label, _ = _split_metric_label(raw_label)
+            if base_label == "平均气温":
+                values = _build_temperature_summary_metrics(session, target_date)
+            else:
+                values = _build_group_summary_metrics(
+                    metrics,
+                    item_cn_to_code,
+                    base_label,
+                    phase_label,
+                    metric_map,
+                )
+            metric_map["本日"] = values.get("daily")
+            metric_map["本月累计"] = values.get("monthly")
+            metric_map["本供暖期累计"] = values.get("seasonal")
 
 
 def _fill_cumulative_cards(

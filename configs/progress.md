@@ -1,5 +1,27 @@
 # 进度记录
 
+## 2025-11-17（Dashboard 顶部折叠指标表）
+
+前置说明（降级留痕）：
+- Serena MCP 仍无法对 `.vue` 模板执行符号级写入，依据 AGENTS.md 3.9 采用 `desktop-commander::read_file` + `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 及随附样式/逻辑；如需回滚，恢复该文件并删除下述条目。
+
+本次动作：
+- 在数据看板第八个 summary 卡片之后新增“供暖期关键指标详表”折叠区，使用 12 栅格宽度；按钮切换可折叠内容，折叠体内绘制 4×5 表格（指标/单位/本期/同期/差值）。
+- 新增 `cumulativeHeadlineTable`（后续升级为 `summaryFoldTable`）计算逻辑、`toggleCumulativeTable` 控制状态以及相关样式（`summary-card--span-full`、`summary-card__toggle`、`fold` transition），复用既有累计 headline 数据自动填充四行数据。
+- 按业务方要求将折叠表格的三项数据列更新为“本日 / 本月累计 / 供暖期累计”，并同步改写数据来源：本日列取自顶部 summary 卡片的即时值，供暖期列沿用 9 号累计卡片数据，月累计暂留空位以待后端提供。
+- 将折叠表格升级为“指标占两行、第一列纵向合并、第二列标示本期/同期”的结构：使用新 computed `summaryFoldTable` 和专用 `<table>` 模板替代通用 `Table` 组件，配套 `summary-fold-table` 样式，支持行合并及“本期/同期”双行对照。
+- 进一步优化列宽与对齐：通过 `<colgroup>` 固定“指标/口径/数值”列宽，增加单位展示与右对齐数字，让折叠表在不同屏幕下保持自然排版。
+- 折叠表数据源接入配置项 `0.5卡片详细信数据表（折叠）`：若配置存在则按其声明的指标顺序与单位解析，否则回落到默认顺序；指标映射逻辑会依据配置中的“标煤耗量汇总(张屯)”等别名自动匹配现有 headline 数据。
+- 后端 `evaluate_dashboard` 现对 `0.5卡片` 节点执行 `_fill_summary_fold_section`：直接从 `calc_temperature_data` 与 `groups` 视图写入“本日/本月累计/供暖期累计”数值，同时将温度月度/供暖期平均改为基于 `calc_temperature_data` 聚合，避免再手动平均逐小时数据。
+
+影响范围与回滚：
+- 仅前端展示层改动，对后端接口无影响；如需回滚，移除新增模板块、相关 computed 与样式，或直接恢复 `DashBoard.vue`。
+
+验证建议：
+1. 打开数据看板顶部 summary 区域，确认新增卡片默认折叠，点击“展开”后展示 4×5 表格且动画平滑。
+2. 切换业务日期，折叠表格数据应与供暖期 headline 一致（本期/同期/差值随日期联动）。
+3. 在移动端或窄屏下验证 summary 卡片排布，确认为 span-full 卡片独占一行但仍保持折叠逻辑。
+
 ## 2025-11-17（前端配置驱动蓝图文件）
 
 前置说明（降级留痕）：
