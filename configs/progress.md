@@ -1,5 +1,21 @@
 # 进度记录
 
+## 2025-11-17（前端配置驱动蓝图文件）
+
+前置说明（降级留痕）：
+- Serena 符号级工具暂不支持在 `backend_data` 下创建非代码类 JSON，因此依照 AGENTS.md 3.9 使用 `desktop-commander::read_file` + `apply_patch` 新增 `backend_data/dashboard_frontend_config.json` 并在本文件登记；如需回滚，删除该文件并恢复本记录即可。
+
+本次动作：
+- 新增 `backend_data/dashboard_frontend_config.json`，定义仪表盘前端所需的完整配置：包含数据源描述、全局组织顺序/单位、顶部摘要卡映射以及 1~9 号 section 的组件布局与数据绑定（图表、表格、排序规则等），使前端能够在后续改造中仅凭读取该文件即可渲染现有数据看板。
+- 追加 `data_contracts` 节点与 `data_mapping`/`data_mappings` 配置，逐条声明各组件所依赖的真实视图/表（如 `sum_basic_data`、`groups`、`temperature_data`、`coal_inventory_data`、`calc_temperature_data`）、item_key、公司口径以及可用窗口，确保“去哪取数、依据是什么”在同一份配置内可追溯。
+
+影响范围与回滚：
+- 目前仅新增配置文件，对现有运行逻辑无直接影响；若后续试点配置驱动出现问题，可先移除该文件并恢复前端硬编码逻辑。
+
+验证建议：
+1. 打开 `backend_data/dashboard_frontend_config.json`，确认 `data_sources / sections / widgets` 等节点与现有页面组件一致。
+2. 以脚本加载该 JSON，验证能解析出 summary cards、chart/table 绑定信息，为后续前端改造提供依据。
+
 ## 2025-11-16（张屯煤耗口径别名 + DashBoard 渲染）
 
 前置说明（降级留痕）：

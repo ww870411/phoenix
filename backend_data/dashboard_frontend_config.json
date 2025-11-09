@@ -1,0 +1,735 @@
+{
+  "config_name": "dashboard_frontend_blueprint",
+  "version": "2024-11-17",
+  "project_key": "daily_report_25_26",
+  "description": "仪表盘配置驱动蓝图；同时记录前端渲染布局与底层数据来源（视图/表、item_key、口径规则），便于通过配置还原当前页面。",
+  "data_sources": {
+    "dashboard_api": {
+      "type": "http",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_key}/dashboard",
+      "query_params": {
+        "showDate": "{{bizDate}}"
+      },
+      "response_contract": {
+        "push_date_path": "meta.push_date || data.push_date",
+        "sections_path": "data",
+        "alias_bucket_key": "口径别名"
+      }
+    }
+  },
+  "data_contracts": [
+    {
+      "id": "temperature_hourly",
+      "object": "temperature_data",
+      "type": "table",
+      "description": "逐小时气温原始采集表；字段源自天气 API 入库脚本。",
+      "key_fields": ["project_key", "biz_date", "date"],
+      "value_fields": ["value"],
+      "filters": {
+        "project_key": "daily_report_25_26"
+      },
+      "windows": {
+        "main": "biz_date",
+        "peer": "biz_date - 1 year",
+        "forecast_days": 3
+      },
+      "contract_notes": "供 1.逐小时气温、当日平均气温 summary、累计卡片“供暖期平均气温”使用。",
+      "consumers": ["summary:avg_temp_today", "section:1", "headline:season_avg_temp"]
+    },
+    {
+      "id": "margin_groups",
+      "object": "groups",
+      "type": "view",
+      "description": "集团/主城区级别聚合（backend/sql/groups.sql base_grp）。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date", "sum_7d_biz", "sum_month_biz", "sum_ytd_biz"],
+      "filters": {
+        "company": ["Group", "ZhuChengQu"],
+        "item": [
+          "eco_direct_income",
+          "eco_coal_cost",
+          "eco_outer_heat_cost",
+          "eco_measurable_auxiliary_materials",
+          "eco_marginal_profit",
+          "eco_comparable_marginal_profit"
+        ]
+      },
+      "contract_notes": "item_cn 对应配置里的中文指标；集团行对齐“集团汇总/集团全口径”。",
+      "consumers": ["summary:margin_today", "section:2"]
+    },
+    {
+      "id": "margin_plants",
+      "object": "sum_basic_data",
+      "type": "view",
+      "description": "各发电企业日值（backend/sql/sum_basic_data.sql base + calc_*）。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"],
+        "item": [
+          "eco_direct_income",
+          "eco_coal_cost",
+          "eco_outer_heat_cost",
+          "eco_measurable_auxiliary_materials",
+          "eco_marginal_profit",
+          "eco_comparable_marginal_profit"
+        ]
+      },
+      "contract_notes": "item_cn 读取 JSON 配置的中文；用于 section 2 细项。",
+      "consumers": ["section:2"]
+    },
+    {
+      "id": "income_group",
+      "object": "groups",
+      "type": "view",
+      "description": "集团收入分项（暖/电/高温水/汽），来自 groups 视图。",
+      "key_fields": ["biz_date", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["Group"],
+        "item": [
+          "eco_heat_income",
+          "eco_power_income",
+          "eco_hot_water_supply_income",
+          "eco_steam_supply_income"
+        ]
+      },
+      "consumers": ["section:3"]
+    },
+    {
+      "id": "unit_consumption_groups",
+      "object": "groups",
+      "type": "view",
+      "description": "主城区/集团供暖单耗，groups 视图内 rate_* 项（有口径除面积）。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["Group", "ZhuChengQu"],
+        "item": [
+          "rate_heat_per_10k_m2",
+          "rate_power_per_10k_m2",
+          "rate_water_per_10k_m2"
+        ]
+      },
+      "consumers": ["section:4", "summary:coal_consume_today"]
+    },
+    {
+      "id": "unit_consumption_plants",
+      "object": "sum_basic_data",
+      "type": "view",
+      "description": "发电企业单耗项，sum_basic_data 的 rate_* 系列。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"],
+        "item": [
+          "rate_heat_per_10k_m2",
+          "rate_power_per_10k_m2",
+          "rate_water_per_10k_m2"
+        ]
+      },
+      "consumers": ["section:4"]
+    },
+    {
+      "id": "coal_consumption_groups",
+      "object": "groups",
+      "type": "view",
+      "description": "集团/主城区标煤耗量；含张屯特殊指标（sum_consumption_std_coal_zhangtun）。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date", "sum_ytd_biz", "sum_ytd_peer"],
+      "filters": {
+        "company": ["Group", "ZhuChengQu"],
+        "item": [
+          "sum_consumption_std_coal",
+          "sum_consumption_std_coal_zhangtun"
+        ]
+      },
+      "consumers": ["summary:coal_consume_today", "section:5", "headline:season_coal"]
+    },
+    {
+      "id": "coal_consumption_plants",
+      "object": "sum_basic_data",
+      "type": "view",
+      "description": "发电企业标煤耗量字段（consumption_std_coal）。",
+      "key_fields": ["biz_date", "company", "item"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"],
+        "item": ["consumption_std_coal"]
+      },
+      "consumers": ["section:5"]
+    },
+    {
+      "id": "complaints_groups",
+      "object": "groups",
+      "type": "view",
+      "description": "集团/主城区投诉量（日值、净值），对应 item_cn “当日省市平台投诉量/当日净投诉量”。",
+      "key_fields": ["biz_date", "company", "item_cn"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["Group", "ZhuChengQu"],
+        "item_cn": ["当日省市平台投诉量", "当日净投诉量"]
+      },
+      "consumers": ["summary:complaint_today", "section:6", "headline:season_complaint"]
+    },
+    {
+      "id": "complaints_plants",
+      "object": "sum_basic_data",
+      "type": "view",
+      "description": "发电企业投诉指标（item_cn 同上）。",
+      "key_fields": ["biz_date", "company", "item_cn"],
+      "value_fields": ["value_biz_date", "value_peer_date"],
+      "filters": {
+        "company": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"],
+        "item_cn": ["当日省市平台投诉量", "当日净投诉量"]
+      },
+      "consumers": ["section:6"]
+    },
+    {
+      "id": "coal_inventory_detail",
+      "object": "coal_inventory_data",
+      "type": "table",
+      "description": "煤炭库存原始表，字段 company_cn / storage_type_cn / value。",
+      "key_fields": ["biz_date", "company_cn", "storage_type_cn"],
+      "value_fields": ["value"],
+      "filters": {
+        "company_cn": [
+          "北海热电厂",
+          "香海热电厂",
+          "金州热电",
+          "北方热电",
+          "金普热电",
+          "庄河环海"
+        ]
+      },
+      "contract_notes": "集团汇总通过配置内公式求和；section 7 使用。",
+      "consumers": ["section:7"]
+    },
+    {
+      "id": "heating_center_detail",
+      "object": "sum_basic_data",
+      "type": "view",
+      "description": "主城区供热服务中心单耗数据，自定义 company_cn 映射到中心名称。",
+      "key_fields": ["biz_date", "company_cn", "item"],
+      "value_fields": ["value_biz_date"],
+      "filters": {
+        "company_cn": [
+          "华乐中心",
+          "东港中心",
+          "春海中心",
+          "中山中心",
+          "北岗中心",
+          "双兴中心",
+          "香炉礁中心",
+          "兴工中心",
+          "大纺中心"
+        ],
+        "item": [
+          "rate_heat_per_10k_m2",
+          "rate_power_per_10k_m2",
+          "rate_water_per_10k_m2"
+        ]
+      },
+      "consumers": ["section:8"]
+    },
+    {
+      "id": "cumulative_temperature",
+      "object": "calc_temperature_data",
+      "type": "view",
+      "description": "供暖期每日平均气温视图（后端 `_fetch_daily_average_temperature_map`）。",
+      "key_fields": ["date"],
+      "value_fields": ["value"],
+      "filters": {
+        "project_key": "daily_report_25_26"
+      },
+      "consumers": ["headline:season_avg_temp"]
+    },
+    {
+      "id": "cumulative_margin",
+      "object": "groups",
+      "type": "view",
+      "description": "集团供暖期可比煤价边际利润，来自 groups item `eco_comparable_marginal_profit` 聚合。",
+      "key_fields": ["biz_date", "item"],
+      "value_fields": ["sum_ytd_biz", "sum_ytd_peer"],
+      "filters": {
+        "company": ["Group"],
+        "item": ["eco_comparable_marginal_profit"]
+      },
+      "consumers": ["headline:season_margin"]
+    },
+    {
+      "id": "cumulative_coal",
+      "object": "groups",
+      "type": "view",
+      "description": "集团供暖期标煤耗量（张屯口径）。",
+      "key_fields": ["biz_date", "item"],
+      "value_fields": ["sum_ytd_biz", "sum_ytd_peer"],
+      "filters": {
+        "company": ["Group"],
+        "item": ["sum_consumption_std_coal_zhangtun"]
+      },
+      "consumers": ["summary:coal_consume_today", "headline:season_coal"]
+    },
+    {
+      "id": "cumulative_complaint",
+      "object": "groups",
+      "type": "view",
+      "description": "集团供暖期省市平台投诉量累计。",
+      "key_fields": ["biz_date", "item_cn"],
+      "value_fields": ["sum_ytd_biz", "sum_ytd_peer"],
+      "filters": {
+        "company": ["Group"],
+        "item_cn": ["省市平台投诉量"]
+      },
+      "consumers": ["headline:season_complaint"]
+    }
+  ],
+  "global": {
+    "date": {
+      "default_offset_days": -1,
+      "primary_display_path": "meta.pushDate",
+      "biz_date_bindings": ["meta.showDate", "meta.pushDate", "data.展示日期"]
+    },
+    "organization_order": ["研究院", "庄河环海", "金普热电", "北方热电", "金州热电", "主城区", "集团汇总", "集团全口径"],
+    "preferred_group_names": ["集团汇总", "集团全口径", "Group"],
+    "heating_centers": ["华乐中心", "东港中心", "春海中心", "中山中心", "北岗中心", "双兴中心", "香炉礁中心", "兴工中心", "大纺中心"],
+    "unit_dictionary": {
+      "气温": "℃",
+      "边际利润": "万元",
+      "标煤耗量": "吨标煤",
+      "投诉量": "件",
+      "供暖热单耗": "GJ/万㎡",
+      "供暖电单耗": "kWh/万㎡",
+      "供暖水单耗": "吨/万㎡",
+      "煤炭库存": "吨"
+    }
+  },
+  "widgets": {
+    "header": {
+      "title": "大连洁净能源集团生产日报",
+      "subtitle": "Daily Production Report & Dashboard",
+      "effective_biz_date_path": "meta.pushDate",
+      "download": {
+        "type": "pdf",
+        "file_name_template": "phoenix-dashboard-{bizDate}.pdf"
+      }
+    },
+    "summary_cards": [
+      {
+        "id": "avg_temp_today",
+        "title": "当日平均气温（及同比增量）",
+        "source_section": "1.逐小时气温",
+        "calc": {
+          "type": "highlight_average",
+          "main_series": "本期",
+          "peer_series": "同期",
+          "highlight_key_path": "meta.pushDate"
+        },
+        "unit": "℃",
+        "data_mapping": {
+          "contract_id": "temperature_hourly",
+          "selection": {
+            "series": ["本期", "同期"]
+          }
+        }
+      },
+      {
+        "id": "margin_today",
+        "title": "当日集团可比煤价边际利润",
+        "source_section": "2.边际利润",
+        "calc": {
+          "type": "preferred_org_metric",
+          "preferred_orgs": ["集团汇总", "集团全口径", "Group"],
+          "metric_key": "可比煤价边际利润"
+        },
+        "unit": "万元",
+        "use_thousands": true,
+        "data_mapping": {
+          "contract_id": "margin_groups",
+          "selection": {
+            "item": "eco_comparable_marginal_profit"
+          }
+        }
+      },
+      {
+        "id": "coal_consume_today",
+        "title": "当日集团标煤消耗（剔除庄河改造锅炉房）",
+        "source_section": "5.标煤耗量",
+        "calc": {
+          "type": "preferred_org_metric",
+          "preferred_orgs": ["集团汇总", "集团全口径", "Group"],
+          "metric_key": "集团汇总"
+        },
+        "unit": "吨标煤",
+        "use_thousands": true,
+        "data_mapping": {
+          "contract_id": "coal_consumption_groups",
+          "selection": {
+            "item": "sum_consumption_std_coal_zhangtun"
+          }
+        }
+      },
+      {
+        "id": "complaint_today",
+        "title": "当日集团投诉量",
+        "source_section": "6.当日省市平台投诉量",
+        "calc": {
+          "type": "preferred_org_metric",
+          "preferred_orgs": ["集团汇总", "集团全口径", "Group"],
+          "metric_key": "当日省市平台投诉量"
+        },
+        "unit": "件",
+        "data_mapping": {
+          "contract_id": "complaints_groups",
+          "selection": {
+            "item_cn": "当日省市平台投诉量"
+          }
+        }
+      },
+      {
+        "id": "push_date_meta",
+        "title": "展示日期 / 推送时间",
+        "source_section": "meta",
+        "calc": {
+          "type": "text_pair",
+          "show_date_path": "meta.showDate",
+          "generated_at_path": "meta.generatedAt"
+        }
+      }
+    ]
+  },
+  "sections": [
+    {
+      "index": "1",
+      "key": "1.逐小时气温",
+      "title": "逐小时气温",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "temperature_hourly",
+          "selection": {
+            "bucket_keys": ["本期", "同期"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "line_chart",
+          "option_template": "temperature_lines",
+          "bindings": {
+            "main_series_path": "本期",
+            "peer_series_path": "同期",
+            "label_key": "biz_date || date",
+            "highlight_path": "meta.pushDate"
+          }
+        },
+        {
+          "type": "table",
+          "columns": [
+            {"key": "date", "label": "日期"},
+            {"key": "main", "label": "本期平均气温（℃）"},
+            {"key": "peer", "label": "同期平均气温（℃）"}
+          ],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "2",
+      "key": "2.边际利润",
+      "title": "边际利润简报",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "margin_groups",
+          "selection": {
+            "company_scope": ["Group", "ZhuChengQu"]
+          }
+        },
+        {
+          "contract_id": "margin_plants",
+          "selection": {
+            "company_scope": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "bar_line_combo",
+          "option_template": "margin_combo",
+          "bindings": {
+            "main_bucket_path": "本期",
+            "peer_bucket_path": "同期",
+            "metrics": ["直接收入", "煤成本", "外购热成本", "水、电及辅材成本", "边际利润", "可比煤价边际利润"],
+            "organizations": ["金州热电", "北方热电", "金普热电", "庄河环海", "研究院", "主城区", "集团汇总"]
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["单位", "直接收入", "煤成本", "外购热成本", "水、电及辅材成本", "边际利润", "可比煤价边际利润"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "3",
+      "key": "3.集团汇总收入明细",
+      "title": "收入分类对比（集团）",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "income_group",
+          "selection": {
+            "company": "Group"
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "stacked_bar",
+          "option_template": "income_stack",
+          "bindings": {
+            "metrics": ["暖收入", "售电收入", "售高温水收入", "售汽收入"],
+            "main_path": "本期",
+            "peer_path": "同期"
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["收入类别", "本期（万元）", "同期（万元）"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "4",
+      "key": "4.供暖单耗",
+      "title": "供暖单耗对比",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "unit_consumption_groups",
+          "selection": {
+            "company_scope": ["Group", "ZhuChengQu"]
+          }
+        },
+        {
+          "contract_id": "unit_consumption_plants",
+          "selection": {
+            "company_scope": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "multi_chart_group",
+          "charts": [
+            {"id": "unit_heat", "title": "供暖热单耗对比", "metric": "供暖热单耗", "unit": "GJ/万㎡"},
+            {"id": "unit_elec", "title": "供暖电单耗对比", "metric": "供暖电单耗", "unit": "kWh/万㎡"},
+            {"id": "unit_water", "title": "供暖水单耗对比", "metric": "供暖水单耗", "unit": "吨/万㎡"}
+          ],
+          "bindings": {
+            "main_path": "本期",
+            "peer_path": "同期",
+            "organizations_path": "global.organization_order"
+          }
+        }
+      ]
+    },
+    {
+      "index": "5",
+      "key": "5.标煤耗量",
+      "title": "标煤消耗量对比",
+      "layout": "span6",
+      "data_mappings": [
+        {
+          "contract_id": "coal_consumption_groups",
+          "selection": {
+            "company_scope": ["Group", "ZhuChengQu"],
+            "preferred_item": "sum_consumption_std_coal_zhangtun"
+          }
+        },
+        {
+          "contract_id": "coal_consumption_plants",
+          "selection": {
+            "company_scope": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "line_column_dual",
+          "option_template": "coal_std",
+          "bindings": {
+            "main_path": "本期",
+            "peer_path": "同期",
+            "unit": "吨"
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["单位", "本期（吨）", "同期（吨）"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "6",
+      "key": "6.当日省市平台投诉量",
+      "title": "投诉量分项",
+      "layout": "span6",
+      "data_mappings": [
+        {
+          "contract_id": "complaints_groups",
+          "selection": {
+            "company_scope": ["Group", "ZhuChengQu"]
+          }
+        },
+        {
+          "contract_id": "complaints_plants",
+          "selection": {
+            "company_scope": ["JinZhou", "BeiFang", "JinPu", "ZhuangHe", "YanJiuYuan"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "chart_group",
+          "charts": [
+            {"id": "complaint_total", "title": "当日投诉量", "metric_key": "当日省市平台投诉量"},
+            {"id": "complaint_net", "title": "当日净投诉量", "metric_key": "当日净投诉量"}
+          ],
+          "bindings": {
+            "main_path": "本期",
+            "peer_path": "同期"
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["单位", "当日投诉量（件）", "同期投诉量（件）", "当日净投诉量（件）", "同期净投诉量（件）"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "7",
+      "key": "7.煤炭库存明细",
+      "title": "煤炭库存",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "coal_inventory_detail",
+          "selection": {
+            "storage_types": ["厂内存煤", "港口存煤", "在途煤炭"]
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "stacked_bar",
+          "option_template": "coal_stock",
+          "bindings": {
+            "groups": ["厂内存煤", "港口存煤", "在途煤炭"],
+            "unit": "吨"
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["单位/口径", "厂内存煤（吨）", "港口存煤（吨）", "在途煤炭（吨）"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "8",
+      "key": "8.供热分中心单耗明细",
+      "title": "主城区供热服务中心单耗明细",
+      "layout": "span12",
+      "data_mappings": [
+        {
+          "contract_id": "heating_center_detail",
+          "selection": {
+            "centers": "global.heating_centers"
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "ranking_chart",
+          "option_template": "heating_center_ranking",
+          "bindings": {
+            "centers_path": "centers",
+            "metrics": ["供暖热单耗", "供暖电单耗", "供暖水单耗"]
+          }
+        },
+        {
+          "type": "table",
+          "columns": ["排名", "中心", "供暖热单耗（GJ/万㎡）", "供暖电单耗（kWh/万㎡）", "供暖水单耗（吨/万㎡）"],
+          "data_path": "tableRows"
+        }
+      ]
+    },
+    {
+      "index": "9",
+      "key": "9.累计卡片",
+      "title": "累计卡片",
+      "layout": "span12",
+      "data_mappings": [
+        {"contract_id": "cumulative_temperature"},
+        {"contract_id": "cumulative_margin"},
+        {"contract_id": "cumulative_coal"},
+        {"contract_id": "cumulative_complaint"}
+      ],
+      "components": [
+        {
+          "type": "headline_group",
+          "headlines": [
+            {
+              "id": "season_avg_temp",
+              "label": "供暖期平均气温",
+              "calc": {
+                "type": "list_average_compare",
+                "main_path": "供暖期平均气温.本期",
+                "peer_path": "供暖期平均气温.同期"
+              },
+              "unit": "℃"
+            },
+            {
+              "id": "season_margin",
+              "label": "集团汇总供暖期可比煤价边际利润",
+              "calc": {
+                "type": "numeric_compare",
+                "main_path": "集团汇总供暖期可比煤价边际利润.本期",
+                "peer_path": "集团汇总供暖期可比煤价边际利润.同期"
+              },
+              "unit": "万元",
+              "use_thousands": true
+            },
+            {
+              "id": "season_coal",
+              "label": "集团汇总供暖期标煤耗量",
+              "calc": {
+                "type": "numeric_compare",
+                "main_path": "集团汇总供暖期标煤耗量.本期",
+                "peer_path": "集团汇总供暖期标煤耗量.同期"
+              },
+              "unit": "吨",
+              "use_thousands": true
+            },
+            {
+              "id": "season_complaint",
+              "label": "集团汇总供暖期省市平台投诉量",
+              "calc": {
+                "type": "numeric_compare",
+                "main_path": "集团汇总供暖期省市平台投诉量.本期",
+                "peer_path": "集团汇总供暖期省市平台投诉量.同期"
+              },
+              "unit": "件"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

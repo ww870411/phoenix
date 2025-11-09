@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-17 数据看板配置蓝图）
+
+- 新增并扩展 `backend_data/dashboard_frontend_config.json`，作为仪表盘配置驱动蓝本。除原有 `/dashboard` 接口响应结构、全局组织顺序/单位、1~9 号板块组件布局外，本次补充 `data_contracts`，明确每个模块所依赖的真实视图/表（`sum_basic_data`、`groups`、`temperature_data`、`coal_inventory_data`、`calc_temperature_data` 等）、item_key、公司口径与时间窗口。
+- 配置中的 `widgets.summary_cards`、`sections[*].data_mappings` 等字段现可指向具体 `contract_id`，为后端未来“按配置生成查询”或“透传配置给前端”提供一手契约，逐步淘汰硬编码。
+- 当前后端实现尚未动态读取该文件，仅存档于 `backend_data`；如需回滚，删除该 JSON 并在 `configs/progress.md` 记录即可。
+
 ## 会话小结（2025-11-15 会话持久化筹备）
 
 - 在 `backend/sql` 新增 `create_auth_sessions_table.sql`，定义 `auth_sessions` 表结构：包含 token、username、user_group、unit、hierarchy、权限/可审批单位 JSONB、签发/过期/最近访问时间等字段，并创建 `username`、`expires_at` 索引。

@@ -2,6 +2,12 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-17 仪表盘配置驱动蓝图）
+
+- `backend_data/dashboard_frontend_config.json` 现已包含两类信息：一是前端渲染所需的布局/组件绑定；二是 `data_contracts` 与 `data_mapping`，明确每个图表/卡片对应的真实视图、item_key 与公司口径。前端改造时可先读取该 JSON，按 `contract_id` + selection 直接驱动数据请求与渲染。
+- 目标：把 `DashBoard.vue` 里关于组织顺序、单位、指标来源的硬编码迁移到配置层，未来仅需解析该文件即可完成页面搭建；当前代码仍未接入，待实现时请在加载 `/dashboard` 数据前同步加载该配置。
+- 如需回滚，删除上述 JSON 并沿用现有硬编码逻辑即可；本文件记录其存在，方便定位来源。
+
 ## 会话小结（2025-11-15 会话持久化说明）
 
 - 本次改动仅涉及后端新增 `backend/sql/create_auth_sessions_table.sql`，准备将登录 token 持久化到 PostgreSQL，前端代码暂无变更。
