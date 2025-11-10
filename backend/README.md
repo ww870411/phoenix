@@ -251,6 +251,21 @@
 - 影响：在 `backend_data/数据结构_基本指标表.json` 中声明 `"指标联动"` 的表格会在加载及提交时自动保持主子项数值一致，联动字段会随模板一并返回；如需回滚，可移除上述常量与辅助函数，恢复旧的自由填报行为。
 - 下一步：可考虑结合审计需求，对历史存在差异的联动项输出告警列表，或扩展 `_apply_linkage_constraints` 至煤炭库存等特殊模板分支。
 
+## 会话小结（2025-11-20 数据填报行内校验）
+
+- 状态：模板接口新增 `validation_rules`（JSON 中可用 `校验规则`/`数据校验` 别名）字段，`GET /projects/{project_key}/data_entry/sheets/{sheet_key}/template` 会与 `item_dict` 等字典一同返回，前端得以在本地执行行列校验。
+- 模板写法：以 `backend_data/数据结构_基本指标表.json` 中的 `BeiHai_co_generation_Sheet` 为例，`"校验规则": { "发电量": [{ "type":"number_range","min":0,"columns":[2,3],"message":"发电量需为非负数"}], "其中：电厂耗水量": [{ "type":"less_equal_than","reference_row":"耗水量","columns":[2,3]}] }`。键名对应行标签，`columns` 以 0 基列序定义作用范围。
+- 规则语义：
+  - `number_range`：支持 `min`/`max`/`allow_empty`/`level`/`message`，用于约束具体列的取值范围；
+  - `less_equal_than`：通过 `reference_row`（可写中文行名）比较行间关系，默认不允许被比较行大于参照行，可选 `tolerance` 指定容差。
+  - 2025-11-20 扩展：
+    - `column_ratio`：在同一行内比较“本期 vs 同期”或任意两列的比例，字段包含 `columns`（被检测列）、`reference_column`、`min_ratio`/`max_ratio`，适合声明“本期值在同期的80%-120%之间”等规则；
+    - `expression_range`：支持以 `value('行名')`（默认使用当前列）为基础编写任意算式，并设置 `min/max` 或 `reference_column`+`min_ratio`/`max_ratio`，可通过 `depends_on` 显式声明依赖行，示例：`(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))` 对应“全厂热效率”；
+    - `virtual: true` + `target_label`：用于声明“仅校验、不展示”的虚拟指标，例如衍生热效率，模板 `rows` 中无需增加对应行，系统会基于依赖行执行校验并在前端提示 `target_label`。
+- 校验开关：模板字典可额外提供 `validation_enabled` / `enable_validation` / `校验开关`（布尔值），后端会将其透传为 `validation_enabled` 字段；当设为 `false` 时，前端跳过所有规则解析与提示，仅保留基础填报能力。
+- 兼容性：`daily_report_25_26.py` 的 `DICT_KEY_GROUPS` 已纳入 `validation_rules`，因此老模板无需修改即可继续返回 `item_dict` 等已有字典；新字段缺省时后端/前端都会自动跳过校验。
+- 回滚方案：若未来不再需要本地校验，可在模板中删除 `"校验规则"` 段落，并在 `DICT_KEY_GROUPS` 中移除 `validation_rules` 配置即可恢复原状。
+
 ## 会话小结（2025-11-07 审批撤销能力）
 
 - 状态：审批流程新增 `/workflow/revoke` 接口与 `can_revoke` 权限，可撤回已批准的单位并恢复 `pending` 状态。

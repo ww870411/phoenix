@@ -1,5 +1,27 @@
 # 进度记录
 
+# 进度记录
+
+## 2025-11-20（数据填报行内校验）
+
+前置说明（降级留痕）：
+- Serena MCP 已用于项目定位与符号检索，但当前仍无法对 `.py/.vue/.json/.md` 进行写入，依据 AGENTS.md 3.9 采用 `desktop-commander::apply_patch` 完成代码与文档改动；若需回滚，恢复本次涉及的 `backend/api/v1/daily_report_25_26.py`、`backend_data/数据结构_基本指标表.json`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`backend/README.md`、`frontend/README.md`、`configs/progress.md` 即可。
+
+本次动作：
+- 后端模板接口：`daily_report_25_26.py` 将 `validation_rules/校验规则/数据校验` 归类到 `DICT_KEY_GROUPS`，`GET .../template` 会随 `item_dict` 等字典一并返回校验配置。
+- 模板示例：在 `BeiHai_co_generation_Sheet` 中新增 `"校验规则"`，对“发电量/供热量/耗水量/外购电量”执行非负校验，并约束“其中：电厂耗水量/外购电量”不得超过主项；同时演示 `column_ratio`（本期发电量维持在同期 80%-120% 区间）与 `expression_range`（以 `(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))` 计算“全厂热效率”并限制区间/同比）的配置，表达式规则可设置 `virtual: true` + `target_label` 隐藏衍生指标避免出现在表格中。
+- 模板示例提供 `校验开关`（别名 `validation_enabled`/`enable_validation`），置为 `false` 时前后端均跳过全部校验逻辑，可用于停运或调试阶段的临时放行。
+- 前端校验系统：`DataEntryView.vue` 引入 `validationRuleMap`、`runFullValidation`、`validateRow` 等逻辑，实时执行 `number_range`、`less_equal_than`、`column_ratio`、`expression_range` 规则；顶部新增“校验提醒”面板，阻止存在 error 的提交并在 warning 状态下提示放行。`校验开关` 为 false 时会隐藏提醒并允许提交。
+- 文档同步：在 `backend/README.md`、`frontend/README.md` 记录字段含义、示例写法、回滚路径，并在此文件登记任务背景与验证步骤。
+
+影响范围与回滚：
+- 仅对声称 `"校验规则"` 的表生效；删除模板中的该字段即可恢复旧体验。若需彻底移除，可同时还原 README 与 `DICT_KEY_GROUPS` 中的 `validation_rules` 项。
+
+验证建议：
+1. 调用 `GET /api/v1/projects/daily_report_25_26/data_entry/sheets/BeiHai_co_generation_Sheet/template`，确认响应中含 `validation_rules` 且规则与 JSON 声明一致。
+2. 在数据填报页面手动输入负的“发电量”，应立即出现“校验提醒”，提交按钮被禁用；调高值至 ≥0 后提示消失。
+3. 在“其中：电厂耗水量”输入大于“耗水量”的数字，应提示“不得大于耗水量”，修改主项或子项后可恢复提交。
+
 ## 2025-11-19（Dashboard 净投诉量累计）
 
 前置说明（降级留痕）：

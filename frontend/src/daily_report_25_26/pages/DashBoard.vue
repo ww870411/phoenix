@@ -235,7 +235,7 @@
           <div class="summary-card__expandable-header">
             <div class="summary-card__expandable-info">
               <div class="summary-card__label summary-card__label--center summary-card__label--strong">
-                供暖期关键指标详表(点击右侧按钮展开)
+                供暖期焦点指标详表(点击右侧按钮展开)
               </div>
             </div>
             <button

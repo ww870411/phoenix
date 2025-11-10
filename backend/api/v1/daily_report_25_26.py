@@ -189,12 +189,14 @@ COMPANY_DICT_KEYS = ("company_dict", "单位字典", "unit_dict")
 CENTER_DICT_KEYS = ("center_dict", "中心字典")
 STATUS_DICT_KEYS = ("status_dict", "状态字典")
 LINKAGE_DICT_KEYS = ("linkage_dict", "指标联动")
+VALIDATION_RULE_KEYS = ("validation_rules", "校验规则", "数据校验")
 DICT_KEY_GROUPS = {
     "item_dict": ITEM_DICT_KEYS,
     "company_dict": COMPANY_DICT_KEYS,
     "center_dict": CENTER_DICT_KEYS,
     "status_dict": STATUS_DICT_KEYS,
     "linkage_dict": LINKAGE_DICT_KEYS,
+    "validation_rules": VALIDATION_RULE_KEYS,
 }
 
 
@@ -354,6 +356,29 @@ def _coerce_mapping(value: Any) -> Dict[str, Any]:
         if converted:
             return converted
     return {}
+
+
+def _coerce_bool(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return default
+
+
+def _extract_validation_enabled(payload: Dict[str, Any]) -> bool:
+    for key in ("validation_enabled", "enable_validation", "校验开关", "validation_switch"):
+        if key in payload:
+            return _coerce_bool(payload.get(key), default=True)
+    return True
 
 
 def _extract_mapping(payload: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
@@ -1700,6 +1725,8 @@ def get_sheet_template(
 
     for dict_key, dict_value in dict_bundle.items():
         response_content[dict_key] = dict_value
+
+    response_content["validation_enabled"] = _extract_validation_enabled(payload)
 
     if _is_coal_inventory_sheet(sheet_key, payload):
         response_content["template_type"] = "crosstab"

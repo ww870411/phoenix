@@ -30,6 +30,30 @@
       </div>
     </header>
 
+    <section
+      v-if="validationEnabled && validationIssues.length"
+      class="validation-panel card"
+      role="alert"
+      aria-live="assertive"
+    >
+      <div class="validation-panel__header">
+        <strong>校验提醒</strong>
+        <span class="validation-panel__hint" v-if="hasBlockingValidation">（存在需修正的错误，提交按钮已锁定）</span>
+        <span class="validation-panel__hint" v-else>（存在提示信息，建议确认后再提交）</span>
+      </div>
+      <ul class="validation-panel__list">
+        <li
+          v-for="issue in validationIssues"
+          :key="issue.id"
+          :class="['validation-panel__item', `validation-panel__item--${issue.level}`]"
+        >
+          <span class="validation-panel__badge">{{ issue.level === 'warning' ? '提示' : '错误' }}</span>
+          <span class="validation-panel__label">{{ issue.rowLabel }} · {{ issue.columnLabel }}</span>
+          <span class="validation-panel__message">{{ issue.message }}</span>
+        </li>
+      </ul>
+    </section>
+
     <div class="table-wrap card" v-if="columns.length">
       <RevoGrid
         ref="gridRef"
@@ -193,10 +217,36 @@ const gridColumns = ref([]);
 const gridSource = ref([]);
 const gridRef = ref(null);
 const readOnlyThreshold = ref(1);
+const rowLabelIndex = ref(new Map());
+const templateValidationRaw = ref(null);
+const validationRuleMap = ref(new Map());
+const validationDependents = ref(new Map());
+const cellValidationMap = ref(new Map());
+const virtualValidationRules = ref([]);
+const validationEnabled = ref(true);
+const validationIssues = computed(() => {
+  if (!validationEnabled.value) {
+    return [];
+  }
+  const issues = Array.from(cellValidationMap.value.values());
+  return issues.sort((a, b) => {
+    if (a.level !== b.level) {
+      return a.level === 'error' ? -1 : 1;
+    }
+    if (a.rowIndex !== b.rowIndex) {
+      return a.rowIndex - b.rowIndex;
+    }
+    if (a.colIndex !== b.colIndex) {
+      return a.colIndex - b.colIndex;
+    }
+    return a.id.localeCompare(b.id);
+  });
+});
+const hasBlockingValidation = computed(() => validationEnabled.value && validationIssues.value.some(issue => issue.level === 'error'));
 
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
 const submitDisabled = computed(() => isReadOnlyForDate.value);
-const submitButtonDisabled = computed(() => submitDisabled.value || isSubmitting.value);
+const submitButtonDisabled = computed(() => submitDisabled.value || isSubmitting.value || hasBlockingValidation.value);
 
 watch(
   () => isReadOnlyForDate.value,
@@ -289,6 +339,23 @@ function normalizeDictPayload(raw) {
   return null;
 }
 
+function resolveValidationEnabledFlag(payload) {
+  if (!payload || typeof payload !== 'object') return true;
+  const keys = ['validation_enabled', 'enable_validation', '校验开关'];
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+    const raw = payload[key];
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return Boolean(raw);
+    if (typeof raw === 'string') {
+      const lowered = raw.trim().toLowerCase();
+      if (['false', '0', 'no', 'off'].includes(lowered)) return false;
+      if (['true', '1', 'yes', 'on'].includes(lowered)) return true;
+    }
+  }
+  return true;
+}
+
 function pickLinkageDict(source) {
   if (!source || typeof source !== 'object') return null;
   if (source.linkage_dict && typeof source.linkage_dict === 'object') {
@@ -341,6 +408,9 @@ function ensureLinkedRowsAligned() {
       }
       return row ?? {};
     });
+    if (validationEnabled.value) {
+      runFullValidation();
+    }
   }
 }
 
@@ -384,6 +454,622 @@ function rebuildLinkageMapFromPayload(rowsCandidate, dictSource, options = {}) {
   linkageMap.value = map;
   if (syncGrid) {
     ensureLinkedRowsAligned();
+  }
+}
+
+// --- 数据校验 ---
+function normalizeRowLabelValue(label) {
+  if (label == null) return '';
+  if (typeof label === 'string') return label.trim();
+  return String(label).trim();
+}
+
+function getRowLabelByIndex(rowIdx) {
+  const row = rows.value?.[rowIdx];
+  const raw = Array.isArray(row) ? row[0] : row?.c0;
+  const normalized = normalizeRowLabelValue(raw);
+  return normalized || `第 ${rowIdx + 1} 行`;
+}
+
+function getColumnLabel(colIdx) {
+  if (!Array.isArray(columns.value)) return `列 ${colIdx + 1}`;
+  const raw = columns.value[colIdx];
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  return `列 ${colIdx + 1}`;
+}
+
+function getDefaultDataColumnsIndexes() {
+  if (!Array.isArray(columns.value) || !columns.value.length) return [];
+  const total = columns.value.length;
+  const start = Math.max(readOnlyThreshold.value + 1, 2);
+  const result = [];
+  for (let ci = start; ci < total; ci += 1) {
+    result.push(ci);
+  }
+  return result;
+}
+
+function getRowIndexByLabel(label) {
+  if (!label) return null;
+  const normalized = normalizeRowLabelValue(label);
+  if (!normalized) return null;
+  return rowLabelIndex.value.get(normalized);
+}
+
+function getRowValueByLabel(label, columnIndex) {
+  const rowIdx = getRowIndexByLabel(label);
+  if (rowIdx == null) return null;
+  return getCellNumericValue(rowIdx, columnIndex);
+}
+
+function parseNumericValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  const normalized = str.replace(/[,，]/g, '').replace(/％$/, '');
+  if (!normalized) return null;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : null;
+}
+
+function compileRuleExpression(expression) {
+  if (!expression || typeof expression !== 'string') return null;
+  try {
+    const fn = new Function(
+      'ctx',
+      `
+        const { value, columnIndex } = ctx;
+        return (${expression});
+      `
+    );
+    return (ctx) => {
+      try {
+        const result = fn(ctx || {});
+        if (typeof result === 'number' && Number.isFinite(result)) {
+          return result;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
+function evaluateExpressionRule(rule, columnIndex) {
+  if (!rule || typeof rule.compiledExpression !== 'function') return null;
+  const evaluator = rule.compiledExpression;
+  const ctx = {
+    columnIndex,
+    value: (label, overrideColumn) => {
+      const targetColumn = typeof overrideColumn === 'number' ? overrideColumn : columnIndex;
+      return getRowValueByLabel(label, targetColumn);
+    },
+  };
+  const result = evaluator(ctx);
+  if (typeof result === 'number' && Number.isFinite(result)) {
+    return result;
+  }
+  return parseNumericValue(result);
+}
+
+function getCellNumericValue(rowIdx, colIdx) {
+  const record = Array.isArray(gridSource.value) ? gridSource.value[rowIdx] : null;
+  if (!record) return null;
+  const prop = `c${colIdx}`;
+  const raw = record[prop];
+  return parseNumericValue(raw);
+}
+
+function getRuleColumns(rule) {
+  if (rule && Array.isArray(rule.columns) && rule.columns.length) {
+    return rule.columns;
+  }
+  return getDefaultDataColumnsIndexes();
+}
+
+function collectRuleIssues(rule, rowIdx) {
+  const issues = [];
+  const columns = getRuleColumns(rule);
+  const targetRowIdx = typeof rowIdx === 'number' ? rowIdx : (typeof rule.rowIndex === 'number' ? rule.rowIndex : null);
+  const rowLabel = targetRowIdx != null ? getRowLabelByIndex(targetRowIdx) : (rule.targetLabel || '系统校验');
+  columns.forEach((colIdx) => {
+    const violation = evaluateRule(rule, targetRowIdx, colIdx);
+    if (!violation) return;
+    const columnLabel = getColumnLabel(colIdx);
+    const message = rule.message || buildDefaultRuleMessage(rule, columnLabel, violation);
+    const keyPrefix = targetRowIdx != null ? `${targetRowIdx}` : `virtual:${rule.id}`;
+    const key = `${keyPrefix}:${colIdx}:${rule.id}`;
+    issues.push({
+      key,
+      issue: {
+        id: key,
+        rowIndex: targetRowIdx ?? -1,
+        colIndex: colIdx,
+        rowLabel,
+        columnLabel,
+        level: rule.level,
+        message: message || `${columnLabel} 未通过校验`,
+      },
+    });
+  });
+  return issues;
+}
+
+function clearIssuesByPrefix(map, prefix) {
+  if (!map || !map.size) return { map, mutated: false };
+  const next = new Map();
+  let mutated = false;
+  map.forEach((value, key) => {
+    if (key.startsWith(prefix)) {
+      mutated = true;
+      return;
+    }
+    next.set(key, value);
+  });
+  return { map: mutated ? next : map, mutated };
+}
+
+function applyIssues(map, issues) {
+  if (!issues.length) return { map, mutated: false };
+  const next = map instanceof Map ? new Map(map) : new Map();
+  issues.forEach(({ key, issue }) => {
+    next.set(key, issue);
+  });
+  return { map: next, mutated: true };
+}
+
+function revalidateVirtualRulesForRow(rowIdx, workingMap = cellValidationMap.value) {
+  if (!validationEnabled.value || !Array.isArray(virtualValidationRules.value) || !virtualValidationRules.value.length) {
+    return { map: workingMap, mutated: false };
+  }
+  const targetRules = virtualValidationRules.value.filter(rule => rule.dependencies?.has(rowIdx));
+  if (!targetRules.length) return { map: workingMap, mutated: false };
+  let currentMap = workingMap instanceof Map ? workingMap : new Map();
+  let mutated = false;
+  targetRules.forEach((rule) => {
+    const prefix = `virtual:${rule.id}:`;
+    const cleared = clearIssuesByPrefix(currentMap, prefix);
+    currentMap = cleared.map;
+    mutated = mutated || cleared.mutated;
+    const issues = collectRuleIssues(rule, null);
+    const applied = applyIssues(currentMap, issues);
+    currentMap = applied.map;
+    mutated = mutated || applied.mutated;
+  });
+  return { map: currentMap, mutated };
+}
+
+function registerRowDependency(dependentsMap, dependencyIdx, targetRowIdx) {
+  if (dependencyIdx == null || targetRowIdx == null) {
+    return;
+  }
+  if (!dependentsMap.has(dependencyIdx)) {
+    dependentsMap.set(dependencyIdx, new Set());
+  }
+  dependentsMap.get(dependencyIdx).add(targetRowIdx);
+}
+
+function clearAllValidationIssues() {
+  if (cellValidationMap.value.size) {
+    cellValidationMap.value = new Map();
+  }
+}
+
+function rebuildValidationRulesFromRows(rowsPayload = rows.value) {
+  if (!validationEnabled.value || templateType.value !== 'standard') {
+    validationRuleMap.value = new Map();
+    validationDependents.value = new Map();
+    virtualValidationRules.value = [];
+    clearAllValidationIssues();
+    return;
+  }
+  const rawRules = templateValidationRaw.value;
+  if (!rawRules || typeof rawRules !== 'object' || !Array.isArray(rowsPayload)) {
+    validationRuleMap.value = new Map();
+    validationDependents.value = new Map();
+    virtualValidationRules.value = [];
+    clearAllValidationIssues();
+    return;
+  }
+  const labelIndex = new Map();
+  rowsPayload.forEach((row, idx) => {
+    const label = Array.isArray(row) ? row[0] : row?.c0;
+    const normalized = normalizeRowLabelValue(label);
+    if (normalized) {
+      labelIndex.set(normalized, idx);
+    }
+  });
+  rowLabelIndex.value = labelIndex;
+  const totalColumns = Array.isArray(columns.value) ? columns.value.length : 0;
+  const defaultColumns = getDefaultDataColumnsIndexes();
+  const ruleMap = new Map();
+  const dependents = new Map();
+  const virtualRules = [];
+  let ruleSerial = 0;
+  Object.entries(rawRules).forEach(([rawLabel, definitions]) => {
+    const normalizedLabel = normalizeRowLabelValue(rawLabel);
+    if (!normalizedLabel) return;
+    const rowIdx = labelIndex.get(normalizedLabel);
+    const list = Array.isArray(definitions) ? definitions : [definitions];
+    list.forEach((definition) => {
+      if (!definition || typeof definition !== 'object') return;
+      ruleSerial += 1;
+      const normalizedRule = normalizeRuleDefinition(definition, {
+        rowIdx,
+        totalColumns,
+        defaultColumns,
+        labelIndex,
+        ruleId: `rule_${rowIdx ?? 'virtual'}_${ruleSerial}`,
+        ruleLabel: normalizedLabel,
+      });
+      if (!normalizedRule) return;
+      if (normalizedRule.virtual && normalizedRule.rowIndex == null) {
+        normalizedRule.targetLabel = normalizedRule.targetLabel || normalizedLabel || normalizedRule.id;
+        virtualRules.push(normalizedRule);
+        return;
+      }
+      const targetRowIdx = normalizedRule.rowIndex != null ? normalizedRule.rowIndex : rowIdx;
+      if (targetRowIdx == null) {
+        normalizedRule.targetLabel = normalizedRule.targetLabel || normalizedLabel || normalizedRule.id;
+        virtualRules.push(normalizedRule);
+        return;
+      }
+      if (!ruleMap.has(targetRowIdx)) {
+        ruleMap.set(targetRowIdx, []);
+      }
+      ruleMap.get(targetRowIdx).push(normalizedRule);
+      if (normalizedRule.referenceRowIndex != null) {
+        registerRowDependency(dependents, normalizedRule.referenceRowIndex, targetRowIdx);
+      }
+      if (normalizedRule.dependencies && normalizedRule.dependencies.size) {
+        normalizedRule.dependencies.forEach((depIdx) => {
+          registerRowDependency(dependents, depIdx, targetRowIdx);
+        });
+      }
+    });
+  });
+  validationRuleMap.value = ruleMap;
+  validationDependents.value = dependents;
+  virtualValidationRules.value = virtualRules;
+}
+
+function normalizeRuleDefinition(definition, context) {
+  const type = typeof definition.type === 'string'
+    ? definition.type.toLowerCase()
+    : 'number_range';
+  const normalized = {
+    id: context.ruleId,
+    type,
+    level: definition.level === 'warning' ? 'warning' : 'error',
+    columns: resolveColumnIndexes(definition.columns, context),
+    min: typeof definition.min === 'number' ? definition.min : null,
+    max: typeof definition.max === 'number' ? definition.max : null,
+    allowEmpty: definition.allow_empty === false ? false : true,
+    referenceRowIndex: null,
+    referenceLabel: '',
+    tolerance: typeof definition.tolerance === 'number' ? definition.tolerance : 0,
+    message: typeof definition.message === 'string' ? definition.message.trim() : '',
+    referenceColumn: resolveSingleColumnIndex(
+      definition.reference_column ?? definition.compare_column ?? definition.peer_column,
+      context
+    ),
+    minRatio: typeof definition.min_ratio === 'number' ? definition.min_ratio : null,
+    maxRatio: typeof definition.max_ratio === 'number' ? definition.max_ratio : null,
+    compiledExpression: null,
+    expression: typeof definition.expression === 'string' ? definition.expression.trim() : '',
+    dependencies: new Set(),
+    rowIndex: typeof context.rowIdx === 'number' ? context.rowIdx : null,
+    virtual: definition.virtual === true || context.rowIdx == null,
+    targetLabel: typeof definition.target_label === 'string' && definition.target_label.trim()
+      ? definition.target_label.trim()
+      : (typeof context.ruleLabel === 'string' ? context.ruleLabel : ''),
+  };
+  if (!normalized.columns.length) {
+    normalized.columns = context.defaultColumns.slice();
+  }
+  if (definition.reference_row || definition.reference_label) {
+    const referenceLabel = normalizeRowLabelValue(definition.reference_row || definition.reference_label);
+    if (referenceLabel) {
+      const idx = context.labelIndex.get(referenceLabel);
+      if (idx != null) {
+        normalized.referenceRowIndex = idx;
+        normalized.referenceLabel = referenceLabel;
+        normalized.dependencies.add(idx);
+      }
+    }
+  }
+  if (Array.isArray(definition.depends_on)) {
+    definition.depends_on.forEach((labelRaw) => {
+      const label = normalizeRowLabelValue(labelRaw);
+      if (!label) return;
+      const idx = context.labelIndex.get(label);
+      if (idx != null) {
+        normalized.dependencies.add(idx);
+      }
+    });
+  }
+  if (normalized.expression && (type === 'expression_range' || type === 'expression')) {
+    normalized.compiledExpression = compileRuleExpression(normalized.expression);
+  }
+  if (normalized.columns.length === 0) {
+    return null;
+  }
+  return normalized;
+}
+
+function resolveColumnIndexes(columnsDef, context) {
+  if (!context || typeof context.totalColumns !== 'number') return [];
+  const max = context.totalColumns;
+  const validIndexes = [];
+  const appendIndex = (value) => {
+    const idx = Number(value);
+    if (Number.isInteger(idx) && idx >= 0 && idx < max) {
+      validIndexes.push(idx);
+    }
+  };
+  if (Array.isArray(columnsDef)) {
+    columnsDef.forEach(appendIndex);
+    return validIndexes;
+  }
+  if (typeof columnsDef === 'number') {
+    appendIndex(columnsDef);
+    return validIndexes;
+  }
+  if (typeof columnsDef === 'string') {
+    const lowered = columnsDef.toLowerCase();
+    if (lowered === 'all' || lowered === 'data' || lowered === 'all_data') {
+      return context.defaultColumns.slice();
+    }
+  }
+  return [];
+}
+
+function resolveSingleColumnIndex(columnDef, context) {
+  if (!context || typeof context.totalColumns !== 'number') return null;
+  const max = context.totalColumns;
+  if (typeof columnDef === 'number' && Number.isInteger(columnDef) && columnDef >= 0 && columnDef < max) {
+    return columnDef;
+  }
+  if (typeof columnDef === 'string') {
+    const trimmed = columnDef.trim();
+    if (/^\\d+$/.test(trimmed)) {
+      const idx = Number(trimmed);
+      return Number.isInteger(idx) && idx >= 0 && idx < max ? idx : null;
+    }
+    const byName = findColumnIndexByName(trimmed);
+    if (byName != null) return byName;
+  }
+  return null;
+}
+
+function findColumnIndexByName(name) {
+  if (!name || !Array.isArray(columns.value)) return null;
+  const target = String(name).trim();
+  if (!target) return null;
+  for (let i = 0; i < columns.value.length; i += 1) {
+    const label = String(columns.value[i] ?? '').trim();
+    if (label === target) return i;
+  }
+  return null;
+}
+
+function runFullValidation() {
+  if (!validationEnabled.value || templateType.value !== 'standard') {
+    clearAllValidationIssues();
+    return;
+  }
+  const ruleMap = validationRuleMap.value;
+  const hasVirtual = Array.isArray(virtualValidationRules.value) && virtualValidationRules.value.length > 0;
+  if (!(ruleMap instanceof Map) || ruleMap.size === 0) {
+    if (!hasVirtual) {
+      clearAllValidationIssues();
+      return;
+    }
+  }
+  const nextIssues = new Map();
+  ruleMap.forEach((ruleList, rowIdx) => {
+    ruleList.forEach((rule) => {
+      const issues = collectRuleIssues(rule, rowIdx);
+      issues.forEach(({ key, issue }) => {
+        nextIssues.set(key, issue);
+      });
+    });
+  });
+  if (hasVirtual) {
+    virtualValidationRules.value.forEach((rule) => {
+      const issues = collectRuleIssues(rule, null);
+      issues.forEach(({ key, issue }) => {
+        nextIssues.set(key, issue);
+      });
+    });
+  }
+  cellValidationMap.value = nextIssues;
+}
+
+function evaluateRule(rule, rowIdx, colIdx) {
+  const numericValue = getCellNumericValue(rowIdx, colIdx);
+  if (rule.type === 'number_range') {
+    if (numericValue == null) {
+      if (rule.allowEmpty === false) {
+        return { reason: 'required' };
+      }
+      return null;
+    }
+    if (typeof rule.min === 'number' && numericValue < rule.min) {
+      return { reason: 'min', expected: rule.min, actual: numericValue };
+    }
+    if (typeof rule.max === 'number' && numericValue > rule.max) {
+      return { reason: 'max', expected: rule.max, actual: numericValue };
+    }
+    return null;
+  }
+  if (rule.type === 'less_equal_than') {
+    if (numericValue == null || rule.referenceRowIndex == null) {
+      return null;
+    }
+    const referenceValue = getCellNumericValue(rule.referenceRowIndex, colIdx);
+    if (referenceValue == null) {
+      return null;
+    }
+    const tolerance = typeof rule.tolerance === 'number' ? rule.tolerance : 0;
+    if (numericValue > referenceValue + tolerance) {
+      return { reason: 'greater_than_reference', referenceValue };
+    }
+    return null;
+  }
+  if (rule.type === 'column_ratio') {
+    if (numericValue == null) {
+      if (rule.allowEmpty === false) {
+        return { reason: 'required' };
+      }
+      return null;
+    }
+    if (rule.referenceColumn == null) {
+      return null;
+    }
+    const referenceValue = getCellNumericValue(rowIdx, rule.referenceColumn);
+    if (referenceValue == null || referenceValue === 0) {
+      return null;
+    }
+    const ratio = numericValue / referenceValue;
+    if (typeof rule.minRatio === 'number' && ratio < rule.minRatio) {
+      return {
+        reason: 'ratio_min',
+        expected: rule.minRatio,
+        actual: ratio,
+        referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+      };
+    }
+    if (typeof rule.maxRatio === 'number' && ratio > rule.maxRatio) {
+      return {
+        reason: 'ratio_max',
+        expected: rule.maxRatio,
+        actual: ratio,
+        referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+      };
+    }
+    return null;
+  }
+  if (rule.type === 'expression_range' || rule.type === 'expression') {
+    const expressionValue = evaluateExpressionRule(rule, colIdx);
+    if (expressionValue == null) {
+      if (rule.allowEmpty === false) {
+        return { reason: 'expression_required' };
+      }
+      return null;
+    }
+    if (typeof rule.min === 'number' && expressionValue < rule.min) {
+      return { reason: 'expression_min', expected: rule.min, actual: expressionValue };
+    }
+    if (typeof rule.max === 'number' && expressionValue > rule.max) {
+      return { reason: 'expression_max', expected: rule.max, actual: expressionValue };
+    }
+    if (rule.referenceColumn != null && (typeof rule.minRatio === 'number' || typeof rule.maxRatio === 'number')) {
+      const referenceValue = evaluateExpressionRule(rule, rule.referenceColumn);
+      if (referenceValue != null && referenceValue !== 0) {
+        const ratio = expressionValue / referenceValue;
+        if (typeof rule.minRatio === 'number' && ratio < rule.minRatio) {
+          return {
+            reason: 'expression_ratio_min',
+            expected: rule.minRatio,
+            actual: ratio,
+            referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+          };
+        }
+        if (typeof rule.maxRatio === 'number' && ratio > rule.maxRatio) {
+          return {
+            reason: 'expression_ratio_max',
+            expected: rule.maxRatio,
+            actual: ratio,
+            referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+          };
+        }
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
+function buildDefaultRuleMessage(rule, columnLabel, violation) {
+  if (!violation) return '';
+  if (rule.type === 'number_range') {
+    if (violation.reason === 'required') {
+      return `${columnLabel} 不能为空`;
+    }
+    if (violation.reason === 'min') {
+      return `${columnLabel} 不得小于 ${violation.expected}`;
+    }
+    if (violation.reason === 'max') {
+      return `${columnLabel} 不得大于 ${violation.expected}`;
+    }
+  }
+  if (rule.type === 'less_equal_than') {
+    const referenceLabel = rule.referenceLabel || '参照指标';
+    return `${columnLabel} 不得大于 ${referenceLabel}`;
+  }
+  if (rule.type === 'column_ratio') {
+    const referenceColumnLabel = violation.referenceColumnLabel || '参照列';
+    if (violation.reason === 'ratio_min') {
+      return `${columnLabel} 相比 ${referenceColumnLabel} 的比例不得低于 ${violation.expected}`;
+    }
+    if (violation.reason === 'ratio_max') {
+      return `${columnLabel} 相比 ${referenceColumnLabel} 的比例不得高于 ${violation.expected}`;
+    }
+  }
+  if (rule.type === 'expression_range' || rule.type === 'expression') {
+    if (violation.reason === 'expression_required') {
+      return `${columnLabel} 的计算结果不能为空`;
+    }
+    if (violation.reason === 'expression_min') {
+      return `${columnLabel} 的计算结果不得小于 ${violation.expected}`;
+    }
+    if (violation.reason === 'expression_max') {
+      return `${columnLabel} 的计算结果不得大于 ${violation.expected}`;
+    }
+    if (violation.reason === 'expression_ratio_min') {
+      const ref = violation.referenceColumnLabel || '参照列';
+      return `${columnLabel} 相比 ${ref} 的计算结果比例不得低于 ${violation.expected}`;
+    }
+    if (violation.reason === 'expression_ratio_max') {
+      const ref = violation.referenceColumnLabel || '参照列';
+      return `${columnLabel} 相比 ${ref} 的计算结果比例不得高于 ${violation.expected}`;
+    }
+  }
+  return `${columnLabel} 未通过校验`;
+}
+
+function validateRow(rowIdx) {
+  if (!validationEnabled.value || templateType.value !== 'standard') {
+    return;
+  }
+  const ruleList = validationRuleMap.value.get(rowIdx);
+  const currentIssues = cellValidationMap.value;
+  const cleared = clearIssuesByPrefix(currentIssues, `${rowIdx}:`);
+  let workingMap = cleared.map;
+  let mutated = cleared.mutated;
+  if (ruleList && ruleList.length) {
+    const newIssues = [];
+    ruleList.forEach((rule) => {
+      newIssues.push(...collectRuleIssues(rule, rowIdx));
+    });
+    const applied = applyIssues(workingMap, newIssues);
+    workingMap = applied.map;
+    mutated = mutated || applied.mutated;
+  }
+  const virtualResult = revalidateVirtualRulesForRow(rowIdx, workingMap);
+  workingMap = virtualResult.map;
+  mutated = mutated || virtualResult.mutated;
+  if (mutated) {
+    cellValidationMap.value = workingMap;
   }
 }
 
@@ -487,12 +1173,24 @@ async function loadTemplate() {
   // 提前确定模板类型与行数据，避免初始化顺序导致回填被覆盖
   rows.value = tpl.rows || [];
   templateType.value = tpl.template_type || 'standard';
+  validationEnabled.value = resolveValidationEnabledFlag(tpl);
+  if (templateType.value === 'standard') {
+    templateValidationRaw.value = tpl.validation_rules || tpl['校验规则'] || null;
+  } else {
+    templateValidationRaw.value = null;
+  }
+  rebuildValidationRulesFromRows(rows.value);
   // 交叉表需先搭好列与占位行，再执行镜像查询，避免后续初始化覆盖查询结果
   if (templateType.value === 'crosstab') {
     await setupCrosstabGrid(tpl);
   } else {
     // 标准模板也需要预先搭好骨架，再查询填充
     await setupStandardGrid(tpl);
+    if (validationEnabled.value) {
+      runFullValidation();
+    } else {
+      clearAllValidationIssues();
+    }
   }
   // 初次加载后进行一次镜像查询（按当前 bizDate 或模板类型）；便于刷新后直接看到已填数据
   try {
@@ -634,6 +1332,9 @@ async function loadExisting() {
     }
   }
   await autoSizeFirstColumn();
+  if (validationEnabled.value) {
+    runFullValidation();
+  }
 }
 
 async function reloadTemplate() {
@@ -677,6 +1378,13 @@ async function onSubmit() {
   }
   if (isSubmitting.value) {
     return;
+  }
+  if (validationEnabled.value) {
+    runFullValidation();
+    if (hasBlockingValidation.value) {
+      showSubmitFeedback('error', '存在未通过的校验项，请先修正提示后再提交。', { autoHide: false });
+      return;
+    }
   }
   let submissionData;
   if (templateType.value === 'crosstab') {
@@ -742,20 +1450,41 @@ function handleAfterEdit(evt) {
     if (rowIndex == null || !prop) continue;
     if (!gridSource.value[rowIndex]) continue;
     gridSource.value[rowIndex][prop] = val;
-    if (templateType.value !== 'standard') continue;
-    const map = linkageMap.value;
-    if (!(map instanceof Map) || map.size === 0) continue;
-    const related = map.get(rowIndex);
-    if (!related || related.size === 0) continue;
-    if (isApplyingLinkage) continue;
-    isApplyingLinkage = true;
-    try {
-      related.forEach((linkedIdx) => {
-        if (!gridSource.value[linkedIdx]) return;
-        gridSource.value[linkedIdx][prop] = val;
-      });
-    } finally {
-      isApplyingLinkage = false;
+    const isStandardTemplate = templateType.value === 'standard';
+    const shouldValidate = isStandardTemplate && validationEnabled.value;
+    const rowsToRevalidate = shouldValidate ? new Set() : null;
+    const scheduleValidation = (idx) => {
+      if (!rowsToRevalidate || idx == null) return;
+      rowsToRevalidate.add(idx);
+      const dependents = validationDependents.value.get(idx);
+      if (dependents && dependents.size) {
+        dependents.forEach(dep => rowsToRevalidate.add(dep));
+      }
+    };
+    scheduleValidation(rowIndex);
+    if (isStandardTemplate) {
+      const map = linkageMap.value;
+      if (map instanceof Map && map.size > 0) {
+        const related = map.get(rowIndex);
+        if (related && related.size > 0) {
+          if (isApplyingLinkage) {
+            continue;
+          }
+          isApplyingLinkage = true;
+          try {
+            related.forEach((linkedIdx) => {
+              if (!gridSource.value[linkedIdx]) return;
+              gridSource.value[linkedIdx][prop] = val;
+              scheduleValidation(linkedIdx);
+            });
+          } finally {
+            isApplyingLinkage = false;
+          }
+        }
+      }
+    }
+    if (rowsToRevalidate && rowsToRevalidate.size) {
+      rowsToRevalidate.forEach((idx) => validateRow(idx));
     }
   }
 }
@@ -840,6 +1569,14 @@ async function applyStandardQueryResult(payload) {
     ['指标联动']: q && typeof q === 'object' ? q['指标联动'] : undefined,
   };
   rebuildLinkageMapFromPayload(rows.value, linkagePayload, { syncGrid: true });
+  if (templateType.value === 'standard') {
+    rebuildValidationRulesFromRows(rows.value);
+    if (validationEnabled.value) {
+      runFullValidation();
+    } else {
+      clearAllValidationIssues();
+    }
+  }
 }
 // 监听业务日期变更，标准表需用新日期重算列头与网格列定义
 const stop = watch(
@@ -948,5 +1685,15 @@ onBeforeUnmount(() => {
 .submit-feedback-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .submit-feedback-fade-enter-from,
 .submit-feedback-fade-leave-to { opacity: 0; transform: translateY(-8px); }
+.validation-panel { margin-bottom: 16px; padding: 16px 20px; border: 1px dashed rgba(248, 113, 113, 0.6); background: rgba(254, 242, 242, 0.8); border-radius: 12px; }
+.validation-panel__header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 12px; font-size: 14px; }
+.validation-panel__hint { color: #7f1d1d; font-weight: 500; }
+.validation-panel__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.validation-panel__item { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 1.5; padding: 8px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.65); border: 1px solid rgba(248, 113, 113, 0.35); }
+.validation-panel__item--warning { border-color: rgba(251, 191, 36, 0.5); background: rgba(255, 251, 235, 0.8); color: #92400e; }
+.validation-panel__badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(248, 113, 113, 0.15); color: #b91c1c; }
+.validation-panel__item--warning .validation-panel__badge { background: rgba(251, 191, 36, 0.2); color: #b45309; }
+.validation-panel__label { font-weight: 600; color: #1f2937; }
+.validation-panel__message { flex: 1; color: #374151; }
 
 </style>

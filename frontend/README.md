@@ -250,6 +250,18 @@
 - 影响：声明 `"指标联动"` 的表格初始展示与后续提交会自动保持各联动项的列值一致，旧数据加载后也会被前端同步为主行取值；若需回滚，可移除上述辅助函数并恢复原有 `handleAfterEdit` 逻辑。
 - 下一步：可在表格 UI 中增加联动提示（如行高亮、气泡说明）并关联后端差异告警，帮助填报人员理解同步规则。
 
+## 会话小结（2025-11-20 数据填报行内校验）
+
+- 状态：`DataEntryView.vue` 现会读取模板响应中的 `validation_rules`（后端兼容 `校验规则`/`数据校验`），在本地构建行列级校验映射并于编辑/提交前自动执行，校验结果通过“校验提醒”卡片集中提示。
+- 改动：
+  - 新增 `templateValidationRaw/validationRuleMap/validationDependents/cellValidationMap` 状态与 `rebuildValidationRulesFromRows`、`runFullValidation`、`validateRow` 等辅助方法，解析 `number_range` 与 `less_equal_than` 两类规则，支持列限定、参照行及 warning/error 级别；
+  - `handleAfterEdit` 在同步联动行的同时触发行内与被依赖行的校验；`onSubmit` 会在发送请求前强制执行一次全量校验并在存在 error 时阻止提交；
+  - 模板顶部新增“校验提醒”面板，按照严重级别与行列定位展示消息；若仍有 warning，提交按钮可用但会保留提醒；
+  - 2025-11-20：新增 `column_ratio`（本期列与 `reference_column` 的比例需落在 `min_ratio/max_ratio`）与 `expression_range`（通过 `value('行名')` 求值、可声明 `reference_column` + `min_ratio/max_ratio`、`depends_on`）两种语法，并支持 `virtual: true` + `target_label` 声明“只校验、不展示”的衍生指标，示例见“发电量”80%-120%与“全厂热效率”表达式校验。
+- 影响：示例模板 `BeiHai_co_generation_Sheet` 现对“发电量/供热量/耗水量/外购电量”执行非负校验，对“其中：电厂耗水量/外购电量”执行“不得大于主项”校验，并新增发电量本期/同期80%-120%区间与全厂热效率（虚拟指标）表达式校验。如需扩展其它表，只需在模板 JSON 中追加同名规则即可生效。无规则的模板体验保持不变。
+- 校验总开关：模板若返回 `validation_enabled` / `enable_validation` / `校验开关 = false`，页面会完全跳过校验（不展示提醒、不阻塞提交）；恢复为 `true` 时重新解析规则并立即失效/生效。
+- 回滚：若暂不需要校验，删除模板中的 `"校验规则"` 字段即可；前端检测到 `validation_rules` 为空后将自动移除提醒面板、恢复旧的提交行为。
+
 ## 会话小结（2025-11-07 审批取消批准按钮）
 
 - 状态：项目页审批进度卡片依据新增 `can_revoke` 权限显示“取消批准”按钮，允许在前端撤回已完成审批的单位。
