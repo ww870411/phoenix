@@ -2,6 +2,12 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-21 仪表盘气温标签错位）
+
+- `pages/DashBoard.vue` 的 `useTempOption` 现会计算 push_date 对应的本期/同期温度差，当差值 ≤1℃ 且双值有效时，自动把 markPoint 标签改为左右平移（左侧对齐蓝色“本期”，右侧对齐橙色“同期”），避免前后三日窗口内的标签上下堆叠；差值大于阈值时则维持原来的上下排布。
+- 新增 `buildTempLabel` 助手统一 label 样式（600 粗体、半透明白色背景、12px 间距与 padding），无论温度为正为负都能保持可读，并确保 markLine、折线本身不挡住数值。
+- 如需回退至旧行为，可删除 `buildTempLabel`、`highlightLabelOverlap` 相关逻辑并恢复 markPoint 标签的默认 `position: 'top'/'bottom'`。
+
 ## 会话小结（2025-11-19 仪表盘净投诉量累计数据）
 
 - 后端 `/dashboard` 现以 `sum_season_total_net_complaints` 提供“集团汇总净投诉量”本期/同期值，并在 `0.5卡片详细信数据表（折叠）` 中分别填充“当日/本月累计/本供暖期累计”净投诉量（全部使用 `value_biz_date/value_peer_date` 状态值），前端 `summaryFoldTable` 等组件直接沿用现有解析逻辑即可。

@@ -2,6 +2,20 @@
 
 # 进度记录
 
+## 2025-11-21（Dashboard 气温标签防重叠）
+
+前置说明（降级留痕）：
+- Serena MCP 已用于项目激活与 `DashBoard.vue` 片段检索，但当前对 `.vue/.md` 文件仍无法直接写入；依据 AGENTS.md 3.9 采用 `desktop-commander::apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue`、`configs/progress.md`、`frontend/README.md`、`backend/README.md`。若需回滚，恢复上述文件即可。
+
+本次动作：
+- 气温折线图在构造 option 时新增标签重叠检测：当 push_date 对应的本期与同期温差 ≤1℃ 且双值有效时，自动将两个 markPoint 标签改为左右平移（含 offset、align 配置）并共用 `buildTempLabel` 样式，彻底避免在“前后三日”窗口中上下堆叠。
+- 同步提升标签可读性：所有 markPoint 标签增加半透明背景、统一 padding 与 12px 距离，使零度附近也不会被线条遮挡。
+- 文档补记：在 `frontend/README.md` 的 Dashboard 章节描述气温标签错位策略，并在 `backend/README.md` 的前端依赖说明中注明 push_date 标注行为，便于后续追踪。
+
+验证建议：
+1. 打开仪表盘切换到 push_date 日期，观察气温图同一日期下的“本期/同期”标签已分列左右且互不覆盖。
+2. 将任一日期的同期温度调高至与本期差值 >1℃，刷新后应恢复默认的上下布局，以保持趋势直观。
+
 ## 2025-11-20（数据填报行内校验）
 
 前置说明（降级留痕）：

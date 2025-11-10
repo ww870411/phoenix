@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-21 Dashboard 气温标签提示）
+
+- `/api/v1/projects/daily_report_25_26/dashboard` 仍按 `sections['1']` 返回“本期/同期”逐日气温数组及 `meta.pushDate`；前端据此在折线图中定位 push_date，并在蓝/橙 markPoint 之间自动判定标签是否需要左右错位（温差 ≤1℃ 时启用）。若 push_date 或同期数组缺失，将跳过 markPoint 渲染。
+- 当前逻辑要求主/同期桶均能通过 `normalizeDateKey(label)` 匹配，如需变更日期格式，请维持 `YYYY-MM-DD` 或可被 `Date.parse` 识别的字符串，否则前端无法计算 highlight index。
+- 回滚仅牵涉前端展示，后端接口无需改动；若未来去掉该标签策略，保持 `sections['1']` 的结构不变即可。
+
 ## 会话小结（2025-11-19 Dashboard 净投诉量累计）
 
 - `/dashboard` 的 “集团汇总净投诉量” 现映射到 `sum_season_total_net_complaints` 指标，并直接取 `value_biz_date/value_peer_date` 作为供暖期累计本期/同期值，避免再次累加 `amount_daily_net_complaints`。

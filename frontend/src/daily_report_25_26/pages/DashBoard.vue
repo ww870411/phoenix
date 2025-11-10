@@ -2063,6 +2063,30 @@ const useTempOption = (series, highlightDate) => {
     return Number(value.toFixed(1)).toString()
   }
 
+  const mainValueVisible = highlightExists && shouldDisplayLabel(mainChartValue)
+  const peerValueVisible = highlightExists && shouldDisplayLabel(peerChartValue)
+  const comparable = mainValueVisible && peerValueVisible
+  const mainAbovePeer = comparable
+    ? mainChartValue >= peerChartValue
+    : mainValueVisible
+      ? true
+      : false
+
+  const mainLabelPlacement = mainAbovePeer ? 'top' : 'bottom'
+  const peerLabelPlacement = mainAbovePeer ? 'bottom' : 'top'
+  const resolveOffset = (position) => (position === 'top' ? [0, -4] : [0, 6])
+
+  const buildTempLabel = (formatter, color, position) => ({
+    show: true,
+    formatter,
+    position,
+    distance: 10,
+    color,
+    fontWeight: 600,
+    lineHeight: 18,
+    offset: resolveOffset(position),
+  })
+
   return {
     tooltip: { trigger: 'axis' },
     legend: { data: ['本期', '同期'], bottom: 0 },
@@ -2079,30 +2103,22 @@ const useTempOption = (series, highlightDate) => {
           ? {
               symbol: 'none',
               lineStyle: { type: 'dashed', color: '#f59e0b' },
-              label: {
-                show: true,
-                position: 'end',
-                formatter: () => `业务日期 ${highlightLabel}`,
-                color: '#f59e0b',
-              },
+              label: { show: false },
               data: [{ xAxis: highlightLabel }],
             }
           : undefined,
         markPoint:
-          highlightExists && shouldDisplayLabel(mainRawValue) && shouldDisplayLabel(mainChartValue)
+          highlightExists && shouldDisplayLabel(mainRawValue) && mainValueVisible
             ? {
                 symbol: 'circle',
                 symbolSize: 10,
                 itemStyle: { color: '#1d4ed8', borderColor: '#fff', borderWidth: 1 },
-                label: {
-                  show: true,
-                  formatter: () => `本期 ${formatTempDisplay(mainRawValue)}`,
-                  position: 'top',
-                  color: '#1d4ed8',
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  padding: [4, 6],
-                },
+                labelLayout: { moveOverlap: 'shiftY' },
+                label: buildTempLabel(
+                  () => `本期 ${formatTempDisplay(mainRawValue)}`,
+                  '#1d4ed8',
+                  mainLabelPlacement,
+                ),
                 data: [
                   {
                     coord: [highlightLabel, mainChartValue],
@@ -2118,20 +2134,17 @@ const useTempOption = (series, highlightDate) => {
         smooth: true,
         data: series.peerChart,
         markPoint:
-          highlightExists && shouldDisplayLabel(peerRawValue) && shouldDisplayLabel(peerChartValue)
+          highlightExists && shouldDisplayLabel(peerRawValue) && peerValueVisible
             ? {
                 symbol: 'diamond',
                 symbolSize: 12,
                 itemStyle: { color: '#f97316', borderColor: '#fff', borderWidth: 1 },
-                label: {
-                  show: true,
-                  formatter: () => `同期 ${formatTempDisplay(peerRawValue)}`,
-                  position: 'bottom',
-                  color: '#f97316',
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  padding: [4, 6],
-                },
+                labelLayout: { moveOverlap: 'shiftY' },
+                label: buildTempLabel(
+                  () => `同期 ${formatTempDisplay(peerRawValue)}`,
+                  '#f97316',
+                  peerLabelPlacement,
+                ),
                 data: [
                   {
                     coord: [highlightLabel, peerChartValue],
