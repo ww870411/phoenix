@@ -1,5 +1,26 @@
 # 进度记录
 
+## 2025-11-19（Dashboard 净投诉量累计）
+
+前置说明（降级留痕）：
+- Serena MCP 已用于 `dashboard_expression.py` 的符号级改动；但对 Markdown 记录（`configs/progress.md`、`backend/README.md`、`frontend/README.md`）仍缺乏写入支持，依据 AGENTS.md 3.9 采用 `apply_patch` 更新，回滚时只需恢复上述三个文件。
+
+本次动作：
+- `_fill_cumulative_cards` 现按配置将“集团汇总净投诉量”映射到 `sum_season_total_net_complaints`，直接取 `value_biz_date/value_peer_date`，避免重复累计；其它供暖期指标仍走 `sum_ytd_*` 字段。
+- `SUMMARY_PERIOD_ITEM_OVERRIDES` 新增“净投诉量”专属映射，并在 `_build_group_summary_metrics` 中支持 override mode：本日/本月/供暖期三列分别绑定“当日/本月累计/本供暖期累计净投诉量”，全部读取 `value_biz_date/value_peer_date`，杜绝二次累加。
+- “0.5卡片详细信数据表（折叠）” 中“净投诉量（件）”的“本日/本月累计/本供暖期累计”分别映射到“当日净投诉量 / 本月累计净投诉量 / 本供暖期累计净投诉量”，通过 `项目字典` 的别名自动定位，无需前端硬编码。
+- summary 第 4/8 张卡片同步展示“投诉量 / 净投诉量”：当日卡读取“当日省市平台投诉量 / 当日净投诉量”，供暖期卡读取“集团汇总供暖期省市平台投诉量 / 集团汇总净投诉量”，括号差值分别与同期值做差。
+- 两张投诉卡片的 `summary-card__value--paired` 字体整体较默认缩小 3px（24px→21px），便于与主 summary 卡片区分；“件”字保持原文本，未再单独包裹单位标签。
+- “供暖期关键指标详表”中的“净投诉量”列现以整数展示：在 `DashBoard.vue` 的 `SUMMARY_VALUE_DIGITS/OPTIONS` 中为“净投诉量”配置 0 位小数与非千分位格式。
+- 在 `backend/README.md` 与 `frontend/README.md` 记录本次接口补充与前端依赖说明，便于会后追踪。
+
+影响范围与回滚：
+- 后端仅新增一个 mapping 条目，不影响其它指标；若需回滚可从 `_fill_cumulative_cards` 中移除 “集团汇总净投诉量” 映射。
+
+验证建议：
+1. 调用 `/api/v1/projects/daily_report_25_26/dashboard`，确认 `9.累计卡片.集团汇总净投诉量` 返回本期/同期值。
+2. 在数据看板页面展开“供暖期关键指标详表”，查看“净投诉量（件）”列是否能展示本日/月累计/供暖期累计数据。
+
 ## 2025-11-18（Dashboard 平均气温 trace）
 
 前置说明（降级留痕）：

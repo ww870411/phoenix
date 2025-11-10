@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import re
 
 from fastapi import HTTPException
@@ -37,6 +37,7 @@ SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
 HEATING_SEASON_START = date(2025, 11, 1)
 
 
+from typing import Tuple
 @dataclass
 class DashboardResult:
     """标准化后的数据看板响应。"""
@@ -828,6 +829,21 @@ SUMMARY_PERIOD_FIELD_MAP = {
 }
 
 
+def _resolve_period_field_pair(period_label: str, override_mode: Optional[str]) -> Optional[Tuple[str, str]]:
+    if override_mode == "value":
+        return ("value_biz_date", "value_peer_date")
+    return SUMMARY_PERIOD_FIELD_MAP.get(period_label)
+
+
+SUMMARY_PERIOD_ITEM_OVERRIDES = {
+    # “净投诉量”在不同窗口需要独立指标，且月/供暖期值属于状态量
+    "净投诉量": {
+        "本日": {"item": "当日净投诉量", "mode": "value"},
+        "本月累计": {"item": "本月累计净投诉量", "mode": "value"},
+        "本供暖期累计": {"item": "本供暖期累计净投诉量", "mode": "value"},
+    },
+}
+
 def _split_metric_label(label: str) -> Tuple[str, str]:
     """拆分“指标（单位）”格式的标签。"""
     text_label = str(label or "").strip()
@@ -879,13 +895,26 @@ def _build_group_summary_metrics(
         return item_cn_to_code.get(candidate, candidate)
 
     canonical: Dict[str, Optional[float]] = {"daily": None, "monthly": None, "seasonal": None}
+    period_overrides = SUMMARY_PERIOD_ITEM_OVERRIDES.get(base_label)
+
     for period_label, canonical_key in SUMMARY_PERIOD_CANONICAL.items():
-        mapping_value = mapping_source.get(period_label)
+        override_payload = period_overrides.get(period_label) if period_overrides else None
+        override_mode: Optional[str] = None
+
+        if isinstance(override_payload, dict):
+            mapping_value = override_payload.get("item") or override_payload.get("value")
+            override_mode = override_payload.get("mode")
+        elif override_payload:
+            mapping_value = override_payload
+        else:
+            mapping_value = mapping_source.get(period_label)
+
         item_code = _resolve_item_code(mapping_value)
         bucket = metrics.get(item_code)
         if not bucket:
             continue
-        field_pair = SUMMARY_PERIOD_FIELD_MAP.get(period_label)
+
+        field_pair = _resolve_period_field_pair(period_label, override_mode)
         if not field_pair:
             continue
         field_name = field_pair[0 if phase_name == "本期" else 1]
@@ -977,18 +1006,25 @@ def _fill_cumulative_cards(
             for day, value in peer_series.items()
         ]
 
-    # 其余累计指标直接读取 groups 视图的 sum_ytd_* 字段
+    # 其余累计指标根据配置读取 groups 视图，区分字段模式
     metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
-    mapping = {
-        "集团汇总供暖期标煤耗量": "sum_consumption_std_coal_zhangtun",
-        "集团汇总供暖期可比煤价边际利润": "eco_comparable_marginal_profit",
-        "集团汇总供暖期省市平台投诉量": "amount_daily_service_complaints",
+    mapping: Dict[str, Tuple[str, str]] = {
+        "集团汇总供暖期标煤耗量": ("sum_consumption_std_coal_zhangtun", "sum_ytd"),
+        "集团汇总供暖期可比煤价边际利润": ("eco_comparable_marginal_profit", "sum_ytd"),
+        "集团汇总供暖期省市平台投诉量": ("amount_daily_service_complaints", "sum_ytd"),
+        "集团汇总净投诉量": ("sum_season_total_net_complaints", "value"),
     }
 
-    for label, item_code in mapping.items():
+    field_mode_map = {
+        "sum_ytd": ("sum_ytd_biz", "sum_ytd_peer"),
+        "value": ("value_biz_date", "value_peer_date"),
+    }
+
+    for label, (item_code, mode) in mapping.items():
         bucket = section.get(label)
         if not isinstance(bucket, dict):
             continue
         metric_payload = metrics.get(item_code, {})
-        bucket["本期"] = _decimal_to_float(metric_payload.get("sum_ytd_biz"))
-        bucket["同期"] = _decimal_to_float(metric_payload.get("sum_ytd_peer"))
+        biz_field, peer_field = field_mode_map.get(mode, ("sum_ytd_biz", "sum_ytd_peer"))
+        bucket["本期"] = _decimal_to_float(metric_payload.get(biz_field))
+        bucket["同期"] = _decimal_to_float(metric_payload.get(peer_field))

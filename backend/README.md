@@ -1,5 +1,13 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-19 Dashboard 净投诉量累计）
+
+- `/dashboard` 的 “集团汇总净投诉量” 现映射到 `sum_season_total_net_complaints` 指标，并直接取 `value_biz_date/value_peer_date` 作为供暖期累计本期/同期值，避免再次累加 `amount_daily_net_complaints`。
+- `_build_group_summary_metrics` 引入 `SUMMARY_PERIOD_ITEM_OVERRIDES` 与 override mode：当 0.5 折叠表解析“净投诉量（件）”时，会按“当日/本月累计/本供暖期累计净投诉量”三个指标分别取值，且全部走 `value_biz_date/value_peer_date`。
+- “0.5卡片详细信数据表（折叠）”下的“净投诉量（件）”分三列取值：本日=“当日净投诉量”、本月累计=“本月累计净投诉量”、本供暖期累计=“本供暖期累计净投诉量”，均借助 `项目字典` 别名解析，无需前端硬编码。
+- 2025-11-19 本次仅前端格式调整，后端逻辑保持不变。
+- 若后续要扩展至“省/市平台净投诉量”等拆分指标，可继续在配置内新增行，后端无需改动；如需回滚该功能，删除 `_fill_cumulative_cards` 的新 mapping 条目即可。
+
 ## 会话小结（2025-11-18 Dashboard 平均气温 trace 撤销）
 
 - 为避免后端日志过量，`backend/services/dashboard_expression.py` 中 `_build_temperature_summary_metrics` 先前新增的 `[dashboard-trace] temperature-summary …` 输出已移除；现在 `/dashboard` 不再在服务器控制台打印日均/本月/供暖期均温的原始值。

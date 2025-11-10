@@ -86,15 +86,33 @@
       <div class="summary-card summary-card--danger">
         <div class="summary-card__icon summary-card__icon--complaint" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">当日集团投诉量</div>
-          <div class="summary-card__value">
-            <template v-if="primaryComplaintHeadline.value !== null">
-              {{ primaryComplaintHeadline.value }} 件
-              <span
-                v-if="primaryComplaintHeadline.diff !== null"
-                class="summary-card__delta"
-              >
-                （{{ formatHeadlineDelta(primaryComplaintHeadline.diff, 0) }}）
+          <div class="summary-card__label">当日集团投诉量/净投诉量</div>
+          <div class="summary-card__value summary-card__value--paired">
+            <template v-if="primaryComplaintHeadline.value !== null || primaryNetComplaintHeadline.value !== null">
+              <span class="summary-card__pair-item">
+                <template v-if="primaryComplaintHeadline.value !== null">
+                  {{ primaryComplaintHeadline.value }} 件
+                  <span
+                    v-if="primaryComplaintHeadline.diff !== null"
+                    class="summary-card__delta"
+                  >
+                    （{{ formatHeadlineDelta(primaryComplaintHeadline.diff, 0) }}）
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </span>
+              <span class="summary-card__value-separator">/</span>
+              <span class="summary-card__pair-item">
+                <template v-if="primaryNetComplaintHeadline.value !== null">
+                  {{ primaryNetComplaintHeadline.value }} 件
+                  <span
+                    v-if="primaryNetComplaintHeadline.diff !== null"
+                    class="summary-card__delta"
+                  >
+                    （{{ formatHeadlineDelta(primaryNetComplaintHeadline.diff, 0) }}）
+                  </span>
+                </template>
+                <template v-else>—</template>
               </span>
             </template>
             <template v-else>—</template>
@@ -169,20 +187,43 @@
       </div>
       <div class="summary-card summary-card--outline summary-card--compact">
         <div class="summary-card__meta summary-card__meta--centered">
-          <div class="summary-card__label">供暖期投诉量</div>
-          <div class="summary-card__value">
-            <template v-if="cumulativeComplaintHeadline.value !== null">
-              {{ formatHeadlineNumber(
-                cumulativeComplaintHeadline.value,
-                cumulativeComplaintHeadline.digits,
-                { useThousands: cumulativeComplaintHeadline.useThousands },
-              ) }} {{ cumulativeComplaintHeadline.unit }}
-              <span class="summary-card__delta">
-                （{{ formatHeadlineDelta(
-                  cumulativeComplaintHeadline.diff,
-                  cumulativeComplaintHeadline.deltaDigits,
-                  { useThousands: cumulativeComplaintHeadline.useThousands },
-                ) }}）
+          <div class="summary-card__label">供暖期投诉量/净投诉量</div>
+          <div class="summary-card__value summary-card__value--paired">
+            <template v-if="cumulativeComplaintHeadline.value !== null || cumulativeNetComplaintHeadline.value !== null">
+              <span class="summary-card__pair-item">
+                <template v-if="cumulativeComplaintHeadline.value !== null">
+                  {{ formatHeadlineNumber(
+                    cumulativeComplaintHeadline.value,
+                    cumulativeComplaintHeadline.digits,
+                    { useThousands: cumulativeComplaintHeadline.useThousands },
+                  ) }} {{ cumulativeComplaintHeadline.unit }}
+                  <span class="summary-card__delta">
+                    （{{ formatHeadlineDelta(
+                      cumulativeComplaintHeadline.diff,
+                      cumulativeComplaintHeadline.deltaDigits,
+                      { useThousands: cumulativeComplaintHeadline.useThousands },
+                    ) }}）
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </span>
+              <span class="summary-card__value-separator">/</span>
+              <span class="summary-card__pair-item">
+                <template v-if="cumulativeNetComplaintHeadline.value !== null">
+                  {{ formatHeadlineNumber(
+                    cumulativeNetComplaintHeadline.value,
+                    cumulativeNetComplaintHeadline.digits,
+                    { useThousands: cumulativeNetComplaintHeadline.useThousands },
+                  ) }} {{ cumulativeNetComplaintHeadline.unit }}
+                  <span class="summary-card__delta">
+                    （{{ formatHeadlineDelta(
+                      cumulativeNetComplaintHeadline.diff,
+                      cumulativeNetComplaintHeadline.deltaDigits,
+                      { useThousands: cumulativeNetComplaintHeadline.useThousands },
+                    ) }}）
+                  </span>
+                </template>
+                <template v-else>—</template>
               </span>
             </template>
             <template v-else>—</template>
@@ -1173,6 +1214,16 @@ const cumulativeComplaintHeadline = computed(() => {
   })
 })
 
+const cumulativeNetComplaintHeadline = computed(() => {
+  const { main, peer } = getCumulativeMetric('集团汇总净投诉量')
+  return buildCumulativeHeadline(main, peer, {
+    digits: 0,
+    deltaDigits: 0,
+    unit: cumulativeUnits.value.complaints,
+    useThousands: true,
+  })
+})
+
 const resolvePeerHeadlineValue = (headline) => {
   if (!headline || !Number.isFinite(headline.value) || !Number.isFinite(headline.diff)) {
     return null
@@ -1243,6 +1294,7 @@ const SUMMARY_VALUE_DIGITS = {
   标煤耗量: 1,
   可比煤价边际利润: 2,
   省市平台投诉量: 0,
+  净投诉量: 0,
 }
 
 const SUMMARY_VALUE_OPTIONS = {
@@ -1250,6 +1302,7 @@ const SUMMARY_VALUE_OPTIONS = {
   标煤耗量: { useThousands: true },
   可比煤价边际利润: { useThousands: true },
   省市平台投诉量: { useThousands: false },
+  净投诉量: { useThousands: false },
 }
 
 const formatSummaryDisplayValue = (value, label) => {
@@ -1573,6 +1626,43 @@ const complaintTableData = computed(() => {
     return row
   })
 })
+
+const buildComplaintHeadlineByMetric = (metricKey) => {
+  if (!metricKey) {
+    return buildCumulativeHeadline(null, null, {
+      digits: 0,
+      deltaDigits: 0,
+      unit: '件',
+    })
+  }
+  const buckets = complaintBuckets.value || {}
+  const preferredCompanies = ['集团汇总', '主城区', ...complaintCompanies.value]
+  const pickValue = (bucket) => {
+    if (!bucket || typeof bucket !== 'object') return null
+    for (const company of preferredCompanies) {
+      const value = normalizeComplaintValue(bucket[company])
+      if (Number.isFinite(value)) {
+        return value
+      }
+    }
+    for (const key of Object.keys(bucket)) {
+      const value = normalizeComplaintValue(bucket[key])
+      if (Number.isFinite(value)) {
+        return value
+      }
+    }
+    return null
+  }
+
+  const main = pickValue(buckets[metricKey]?.['本期'])
+  const peer = pickValue(buckets[metricKey]?.['同期'])
+
+  return buildCumulativeHeadline(main, peer, {
+    digits: 0,
+    deltaDigits: 0,
+    unit: '件',
+  })
+}
 
 const coalStockSection = computed(() => {
   const section = resolveSection('7', '7.煤炭库存明细')
@@ -3018,37 +3108,8 @@ const primaryCoalHeadline = computed(() => {
   })
 })
 
-const primaryComplaintHeadline = computed(() => {
-  const buckets = complaintBuckets.value
-  const metricKey = complaintMetricOrder[0]
-  const preferredCompanies = ['集团汇总', '主城区', ...complaintCompanies.value]
-
-  const pickValue = (bucket) => {
-    if (!bucket || typeof bucket !== 'object') return null
-    for (const company of preferredCompanies) {
-      const value = normalizeComplaintValue(bucket[company])
-      if (Number.isFinite(value)) {
-        return value
-      }
-    }
-    for (const key of Object.keys(bucket)) {
-      const value = normalizeComplaintValue(bucket[key])
-      if (Number.isFinite(value)) {
-        return value
-      }
-    }
-    return null
-  }
-
-  const main = pickValue(buckets[metricKey]?.['本期'])
-  const peer = pickValue(buckets[metricKey]?.['同期'])
-
-  return buildCumulativeHeadline(main, peer, {
-    digits: 0,
-    deltaDigits: 0,
-    unit: '件',
-  })
-})
+const primaryComplaintHeadline = computed(() => buildComplaintHeadlineByMetric(complaintMetricOrder[0]))
+const primaryNetComplaintHeadline = computed(() => buildComplaintHeadlineByMetric('当日净投诉量'))
 
 const chartPalette = ref(['#2563eb', '#38bdf8', '#10b981', '#f97316', '#facc15', '#ec4899'])
 
@@ -3323,6 +3384,25 @@ onMounted(() => {
 .summary-card__value {
   font-size: 24px;
   font-weight: 700;
+}
+
+.summary-card__value--paired {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 21px;
+}
+
+.summary-card__pair-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.summary-card__value-separator {
+  color: #64748b;
+  font-weight: 600;
 }
 
 .summary-card__delta {
