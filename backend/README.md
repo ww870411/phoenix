@@ -758,3 +758,8 @@ out = render_spec(
 - 基础镜像改为 DaoCloud 镜像源，以规避 `auth.docker.io` EOF：
   - `docker.m.daocloud.io/library/python:3.12-slim`
 - 不影响应用逻辑；如需回退到官方 Hub，只需把 Dockerfile 的 FROM 改回官方镜像名即可。
+
+## 会话小结（2025-11-19 前端折叠表 fallback 移除）
+
+- 本次仅涉及前端展示层调整：移除了 `DashBoard.vue` 折叠表的兜底逻辑，后端 `/dashboard` 接口保持不变；请继续确保返回中包含 `0.5卡片详细信数据表（折叠）` 节点以供前端渲染。
+- 若 0.5 段落缺失，前端将不再回退到本地推导数据，以避免口径不一致；如需恢复原行为，仅需回滚前端对应代码。

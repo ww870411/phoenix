@@ -1527,3 +1527,22 @@ sum_basic_data 相关：
 - `frontend/src/daily_report_25_26/pages/PageSelectView.vue` 的 `workflowUnits` 计算属性新增黑名单 `{'系统管理员','Group'}`，不再在审批表中展示集团本身的行。
 - 影响：审批列表仅保留需要人工审核的单位，集团行默认隐藏；回滚时删除该黑名单即可。
 
+
+## 2025-11-19（Dashboard 折叠表 fallback 移除）
+
+前置说明（治理与留痕）：
+- 依据用户指令，前端折叠表不再使用任何兜底（fallback）推导，仅展示后端 0.5 段落返回的数据；符合“接口最小化与标准化”的原则，避免前后端口径不一致。
+- 变更通过 Codex CLI 的 apply_patch 完成；本次仅涉及前端 `.vue` 文件，未改动后端。
+
+本次动作：
+- 移除 `DashBoard.vue` 中折叠表的兜底逻辑（`SUMMARY_FOLD_FALLBACK_KEYS`、`resolveSummaryMetricPayload`、`summaryFoldFallbackTable`）。
+- `summaryFoldTable` 现在仅返回 `buildSummaryTableFromSection(summaryFoldSection.value)` 的结果；若 0.5 段落缺失或为空，则折叠表不再展示兜底数据。
+
+影响范围与回滚：
+- 影响：当后端未返回 `0.5卡片详细信数据表（折叠）` 或其数值为空时，折叠表可能为空（按预期）；避免误导性的展示。
+- 回滚：恢复被删除的三个代码块，并将 `summaryFoldTable` 改回“有数据用段落，否则回退兜底”的逻辑即可。
+
+验证建议：
+1) 访问仪表盘，确认折叠表数据与 `/dashboard` 返回中 0.5 段落一致；
+2) 临时在后端去除 0.5 段落，前端折叠表应不显示兜底数据；
+3) 切换业务日期（`push_date`），折叠表本期/同期联动更新。

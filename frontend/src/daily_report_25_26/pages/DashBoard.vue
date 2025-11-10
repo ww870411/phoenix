@@ -1236,12 +1236,7 @@ const parseMetricLabel = (text) => {
   return { label, unit }
 }
 
-const SUMMARY_FOLD_FALLBACK_KEYS = [
-  '平均气温（℃）',
-  '标煤耗量（吨）',
-  '可比煤价边际利润（万元）',
-  '省市平台投诉量（件）',
-]
+// 折叠表显示规则：仅使用后端 0.5 段落提供的数据，不再启用兜底推导。
 
 const SUMMARY_VALUE_DIGITS = {
   平均气温: 1,
@@ -1300,84 +1295,9 @@ const buildSummaryTableFromSection = (section) => {
   return rows
 }
 
-const resolveSummaryMetricPayload = (label, unitHint = '') => {
-  const units = cumulativeUnits.value || {}
-  switch (label) {
-    case '平均气温': {
-      const today = averageTempToday.value || {}
-      return {
-        unit: unitHint || units.temperature || '℃',
-        dailyCurrent: today.main ?? null,
-        dailyPeer: today.peer ?? null,
-        dailyDigits: 1,
-        seasonalHeadline: cumulativeSeasonAverageHeadline.value,
-      }
-    }
-    case '标煤耗量': {
-      const headline = primaryCoalHeadline.value || {}
-      return {
-        unit: unitHint || units.coal || '吨',
-        dailyCurrent: headline.value ?? null,
-        dailyPeer: resolvePeerHeadlineValue(headline),
-        dailyDigits: headline.digits ?? 1,
-        dailyOptions: { useThousands: headline.useThousands },
-        seasonalHeadline: cumulativeCoalHeadline.value,
-      }
-    }
-    case '可比煤价边际利润': {
-      const headline = primaryMarginHeadline.value || {}
-      return {
-        unit: unitHint || units.margin || '万元',
-        dailyCurrent: headline.value ?? null,
-        dailyPeer: resolvePeerHeadlineValue(headline),
-        dailyDigits: headline.digits ?? 2,
-        dailyOptions: { useThousands: headline.useThousands },
-        seasonalHeadline: cumulativeMarginHeadline.value,
-      }
-    }
-    case '省市平台投诉量': {
-      const headline = primaryComplaintHeadline.value || {}
-      return {
-        unit: unitHint || units.complaints || '件',
-        dailyCurrent: headline.value ?? null,
-        dailyPeer: resolvePeerHeadlineValue(headline),
-        dailyDigits: headline.digits ?? 0,
-        dailyOptions: { useThousands: headline.useThousands },
-        seasonalHeadline: cumulativeComplaintHeadline.value,
-      }
-    }
-    default:
-      return null
-  }
-}
-
-const summaryFoldFallbackTable = computed(() => {
-  const orderedLabels = []
-  const pushLabel = (key) => {
-    if (typeof key === 'string' && key.trim() && !orderedLabels.includes(key)) {
-      orderedLabels.push(key)
-    }
-  }
-  SUMMARY_FOLD_FALLBACK_KEYS.forEach(pushLabel)
-  return orderedLabels
-    .map((displayLabel) => {
-      const { label, unit } = parseMetricLabel(displayLabel)
-      const payload = resolveSummaryMetricPayload(label, unit)
-      if (!payload) return null
-      return buildSummaryRows({
-        label,
-        ...payload,
-      })
-    })
-    .filter(Boolean)
-})
-
 const summaryFoldTable = computed(() => {
   const tableFromSection = buildSummaryTableFromSection(summaryFoldSection.value)
-  if (tableFromSection.length) {
-    return tableFromSection
-  }
-  return summaryFoldFallbackTable.value
+  return tableFromSection
 })
 
 const cumulativeTableExpanded = ref(false)
