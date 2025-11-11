@@ -2,6 +2,24 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-24 数据模板行内格式统一）
+
+- 后端 `backend_data/数据结构_基本指标表.json` 现将所有 `“数据”` 数组行合并为单行，RevoGrid 模板接口返回的数据结构不变。前端解析 `rows/cells` 时无需改动，只是未来 `git diff` 更易阅读。
+- 若本地有依赖旧格式的脚本（例如基于换行数计算列宽），请改用 JSON 解析而非行文本判断，以免在模板再次格式化时受到影响。
+- `Coal_inventory_Sheet` 与 `GongRe_branches_detail_Sheet` 的长列表也已行内化，前端在渲染这些大表格时可获得更清晰的 diff；如需确认模板是否更新，可比较 `sheet_key` 相应的 `rows` 列表应全部为单行字符串数组。
+
+## 会话小结（2025-11-23 仪表盘图表监听优化）
+
+- `pages/DashBoard.vue` 中的 `DashboardEChart` 组件新增 `shallowRef` 缓存，`chart.setOption` 改为 `notMerge: false, lazyUpdate: true` 的增量更新，并取消 `deep` 级 watcher，避免每次响应式细节变化都触发整棵 option 深度遍历与整图重绘。
+- 由于 `props.option` 现在以浅引用追踪，任意图表数据更新只会触发一次重绘；图表在窗口 resize 或折叠面板切换时仍可通过已有的 `handleResize` 监听正常响应。
+- 若需回滚到旧实现，只需恢复 `DashboardEChart` 组件中的 `chart.setOption(props.option, true)` 与 `watch(..., { deep: true })` 逻辑。
+
+## 会话小结（2025-11-23 仪表盘日期请求防抖）
+
+- `pages/DashBoard.vue` 为业务日期切换新增 450ms 防抖（`scheduleDashboardLoad`）、内存缓存以及 `AbortController`，`loadDashboardData` 会取消仍在进行的旧请求，仅保留用户最后一次选择；命中缓存时直接复用上次 payload，避免重复渲染。
+- `services/api.js/getDashboardData` 允许传入 `signal`，供前端在切换日期时中止先前的 fetch；其他调用方可忽略此参数，行为保持不变。
+- 卸载页面时会清理计时器并 abort 悬挂的请求，防止切换路由后依旧写入已销毁的组件。
+
 ## 会话小结（2025-11-22 校验提示细化）
 
 - `pages/DataEntryView.vue` 在校验面板中追加“当前值/参照值/当前比例”等明细。`formatViolationDetail` 会根据 `evaluateRule` 返回的 `cellValue/referenceValue/expressionValue` 拼装文案，默认提示或自定义 `message` 都会附带这些括号说明。

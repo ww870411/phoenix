@@ -424,7 +424,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { getDashboardData } from '../services/api'
 
 // --- 仪表盘局部组件 ---
@@ -660,16 +660,23 @@ const EChart = defineComponent({
   },
   setup(props) {
     const container = ref(null)
-  const styleHeight = computed(() =>
-    typeof props.height === 'number' ? `${props.height}px` : props.height || '260px',
-  )
+    const styleHeight = computed(() =>
+      typeof props.height === 'number' ? `${props.height}px` : props.height || '260px',
+    )
     let chart = null
+    const latestOption = shallowRef(null)
 
     const dispose = () => {
       if (chart) {
         chart.dispose()
         chart = null
       }
+    }
+
+    const applyOption = () => {
+      if (!chart) return
+      if (!latestOption.value) return
+      chart.setOption(latestOption.value, { notMerge: false, lazyUpdate: true })
     }
 
     const ensureChart = () => {
@@ -681,9 +688,7 @@ const EChart = defineComponent({
       if (!chart) {
         chart = window.echarts.init(container.value)
       }
-      if (props.option) {
-        chart.setOption(props.option, true)
-      }
+      applyOption()
     }
 
     const handleResize = () => {
@@ -708,10 +713,11 @@ const EChart = defineComponent({
 
     watch(
       () => props.option,
-      () => {
+      (option) => {
+        latestOption.value = option || null
         ensureChart()
       },
-      { deep: true, immediate: true },
+      { immediate: true },
     )
 
     return () =>
@@ -745,6 +751,17 @@ const projectKey = 'daily_report_25_26'
 let suppressDashboardWatch = false
 let activeDashboardRequests = 0
 const isLoading = ref(false)
+const DASHBOARD_DEBOUNCE_MS = 450
+let dashboardLoadTimer = null
+const dashboardCache = new Map()
+let dashboardAbortController = null
+const DASHBOARD_DEFAULT_CACHE_KEY = '__latest__'
+const getDashboardCacheKey = (value) => {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+  return DASHBOARD_DEFAULT_CACHE_KEY
+}
 
 const dashboardData = reactive({
   meta: {
@@ -755,6 +772,42 @@ const dashboardData = reactive({
   },
   sections: {},
 })
+
+const assignDashboardPayload = (payload, { showDate }) => {
+  const allowBizDateSync = !showDate && !bizDateInput.value
+  if (payload?.push_date && allowBizDateSync) {
+    bizDateInput.value = payload.push_date
+  } else if (!bizDateInput.value) {
+    bizDateInput.value = defaultBizDate
+  }
+
+  if (payload && typeof payload === 'object') {
+    dashboardData.meta.showDate = typeof payload.show_date === 'string' ? payload.show_date : ''
+    dashboardData.meta.pushDate = typeof payload.push_date === 'string' ? payload.push_date : ''
+    dashboardData.meta.generatedAt =
+      typeof payload.generated_at === 'string' ? payload.generated_at : ''
+
+    const rawSections =
+      payload.data && typeof payload.data === 'object' ? { ...payload.data } : {}
+    if (typeof rawSections.push_date === 'string' && !dashboardData.meta.pushDate) {
+      dashboardData.meta.pushDate = rawSections.push_date
+    }
+    delete rawSections.push_date
+    if (Object.prototype.hasOwnProperty.call(rawSections, '展示日期')) {
+      delete rawSections['展示日期']
+    }
+    dashboardData.sections = rawSections
+  }
+}
+
+const scheduleDashboardLoad = (value) => {
+  if (dashboardLoadTimer) {
+    clearTimeout(dashboardLoadTimer)
+  }
+  dashboardLoadTimer = setTimeout(() => {
+    loadDashboardData(value || '')
+  }, DASHBOARD_DEBOUNCE_MS)
+}
 
 const ALIAS_BUCKET_KEY = '口径别名'
 const metricAliasMap = computed(() => {
@@ -832,44 +885,50 @@ const getDisplayLabel = (label) => {
   return typeof mapped === 'string' && mapped ? mapped : label
 }
 
-async function loadDashboardData(showDate = '') {
+async function loadDashboardData(showDate = '', options = {}) {
+  const normalizedShowDate = typeof showDate === 'string' ? showDate.trim() : ''
+  const cacheKey = getDashboardCacheKey(normalizedShowDate)
+  const allowCache = options.allowCache !== false
+  const cachedPayload = allowCache ? dashboardCache.get(cacheKey) : undefined
+
   suppressDashboardWatch = true
+
+  if (cachedPayload) {
+    assignDashboardPayload(cachedPayload, { showDate: normalizedShowDate })
+    suppressDashboardWatch = false
+    return
+  }
+
   activeDashboardRequests += 1
   isLoading.value = true
-  suppressDashboardWatch = true
-  try {
-    const payload = await getDashboardData(projectKey, { showDate })
-    const allowBizDateSync = !showDate && !bizDateInput.value
-    if (payload?.push_date && allowBizDateSync) {
-      bizDateInput.value = payload.push_date
-    } else if (!bizDateInput.value) {
-      bizDateInput.value = defaultBizDate
-    }
-    if (payload && typeof payload === 'object') {
-      dashboardData.meta.showDate = typeof payload.show_date === 'string' ? payload.show_date : ''
-      dashboardData.meta.pushDate = typeof payload.push_date === 'string' ? payload.push_date : ''
-      dashboardData.meta.generatedAt =
-        typeof payload.generated_at === 'string' ? payload.generated_at : ''
 
-      const rawSections =
-        payload.data && typeof payload.data === 'object' ? { ...payload.data } : {}
-      if (typeof rawSections.push_date === 'string' && !dashboardData.meta.pushDate) {
-        dashboardData.meta.pushDate = rawSections.push_date
-      }
-      delete rawSections.push_date
-      if (Object.prototype.hasOwnProperty.call(rawSections, '展示日期')) {
-        delete rawSections['展示日期']
-      }
-      dashboardData.sections = rawSections
-    }
+  if (dashboardAbortController) {
+    dashboardAbortController.abort()
+  }
+  const controller = new AbortController()
+  dashboardAbortController = controller
+
+  try {
+    const payload = await getDashboardData(projectKey, {
+      showDate: normalizedShowDate,
+      signal: controller.signal,
+    })
+    dashboardCache.set(cacheKey, payload)
+    assignDashboardPayload(payload, { showDate: normalizedShowDate })
     // TODO: 数据映射逻辑将在接入真实数据时实现
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      return
+    }
     const message = err instanceof Error ? err.message : String(err)
     console.error('[dashboard] 数据加载失败', message)
     if (!bizDateInput.value) {
       bizDateInput.value = defaultBizDate
     }
   } finally {
+    if (dashboardAbortController === controller) {
+      dashboardAbortController = null
+    }
     activeDashboardRequests = Math.max(activeDashboardRequests - 1, 0)
     suppressDashboardWatch = activeDashboardRequests > 0
     if (activeDashboardRequests === 0) {
@@ -887,9 +946,20 @@ watch(
   (value, oldValue) => {
     if (suppressDashboardWatch) return
     if (value === oldValue) return
-    loadDashboardData(value || '')
+    scheduleDashboardLoad(value || '')
   },
 )
+
+onBeforeUnmount(() => {
+  if (dashboardLoadTimer) {
+    clearTimeout(dashboardLoadTimer)
+    dashboardLoadTimer = null
+  }
+  if (dashboardAbortController) {
+    dashboardAbortController.abort()
+    dashboardAbortController = null
+  }
+})
 
 const sectionIndexMap = computed(() => {
   const sections = dashboardData.sections || {}

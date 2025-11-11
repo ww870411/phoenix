@@ -1,0 +1,1 @@
+2025-11-23：在 frontend/src/daily_report_25_26/pages/DashBoard.vue 为业务日期切换加入 450ms 防抖、请求缓存与 AbortController，loadDashboardData 会命中缓存否则自动终止上一条 /dashboard 请求；scheduleDashboardLoad 统一 watch 调度。在 frontend/src/daily_report_25_26/services/api.js 添加 signal 支持，确保 fetch 可中止。相关调整在 configs/progress.md、frontend/README.md、backend/README.md 留痕。

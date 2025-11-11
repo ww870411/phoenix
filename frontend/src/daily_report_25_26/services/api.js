@@ -248,6 +248,7 @@ export async function getDashboardData(projectKey, params = {}) {
   const search = `?show_date=${encodeURIComponent(showDate)}`
   const response = await fetch(`${projectPath(projectKey)}/dashboard${search}`, {
     headers: attachAuthHeaders(),
+    signal: params.signal,
   })
   if (!response.ok) {
     const message = await response.text()

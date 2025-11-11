@@ -1,8 +1,51 @@
 # 进度记录
 
+## 2025-11-24（数据模板行内格式统一）
+
+前置说明（降级留痕）：
+- Serena MCP 当前无法直接写入大体量 JSON 文件，本次需以 `desktop-commander::apply_patch` 批量改写 `backend_data/数据结构_基本指标表.json`；如需回滚，仅需恢复该文件至上一版本。
+
+本次动作：
+- 将 `backend_data/数据结构_基本指标表.json` 里全部 12 个 `“数据”` 数组的行项目改为单行表示（例如 `["发电量", "万kWh", "", "", ""]`），避免多行拆分导致的 diff 噪音与模板比对困难。
+- 同步刷新 `Coal_inventory_Sheet` 的煤种明细、供热公司分中心明细等近 200 条行记录，确保列顺序与原模板一致，仅调整排版不更改任何业务字段。
+- 在 `backend/README.md`、`frontend/README.md` 记录此次结构化调整及其影响范围，方便后续定位模板层面的差异。
+
+验证建议：
+1. 使用 `python -m json.tool backend_data/数据结构_基本指标表.json >/dev/null` 或任意 JSON linter 确认文件仍为合法 JSON，且只发生排版变化。
+2. 通过 `git diff backend_data/数据结构_基本指标表.json` 应仅看到每个行项目收敛为单行，没有字段值或顺序改变；若需比较具体表，可检视任意 `“数据”` 段落确认所有逗号位置正确。
+
 # 进度记录
 
 # 进度记录
+
+# 进度记录
+
+## 2025-11-23（仪表盘 ECharts 监听优化）
+
+前置说明（降级留痕）：
+- Serena MCP 暂无法直接写入 `.vue` 文件，此次对 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 的修改改用 `desktop-commander::apply_patch`，如需回滚请还原该文件。
+
+本次动作：
+- 优化 `DashboardEChart` 子组件：新增浅引用缓存以追踪 `props.option`，移除 `deep` 级别的 watcher 并通过 `chart.setOption(..., { notMerge: false, lazyUpdate: true })` 进行增量更新，避免每次响应式细节变化都触发整棵 option 深度遍历与整图重绘，降低页面加载与交互时的 CPU 占用。
+
+验证建议：
+1. 打开 `projects/daily_report_25_26/pages/dashboard` 页面，在 DevTools Performance 中观察业务日期切换过程，`setOption` 调用次数应较以往显著减少且不再伴随长时间 scripting 栈。
+2. 调整浏览器窗口尺寸或切换折叠面板，所有图表依旧能随容器 resize，数值展示与优化前保持一致。
+
+# 进度记录
+
+## 2025-11-23（仪表盘日期请求防抖与缓存）
+
+前置说明（降级留痕）：
+- Serena MCP 暂不支持直接写入 `.vue/.js/.md`，对 `frontend/src/daily_report_25_26/pages/DashBoard.vue`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/README.md`、`backend/README.md` 的调整全部通过 `desktop-commander::apply_patch` 完成，回滚即可恢复这些文件。
+
+本次动作：
+- `DashboardEChart` 之外，再次优化仪表盘数据加载：在前端为业务日期切换新增 450ms 防抖、请求缓存与 AbortController。`loadDashboardData` 现在会优先命中内存缓存，否则自动中止上一条 `/dashboard` 请求，仅保留最后一次；`scheduleDashboardLoad` 统一调度 watch 触发，避免用户连续输入导致的请求风暴。
+- `services/api.js` 的 `getDashboardData` 支持传入 `signal`，以便前端中止不再需要的请求。
+
+验证建议：
+1. 打开仪表盘页面，快速滚动日期选择器，Network 面板应只保留最后一次 `/dashboard?show_date=...` 请求，其余被标记为 `canceled`。
+2. 切换到曾经加载过的日期，再次点击时应瞬间完成渲染（命中缓存），同时 loading 提示不会闪烁；刷新页面后再次切换仍会触发真实请求。
 
 # 进度记录
 

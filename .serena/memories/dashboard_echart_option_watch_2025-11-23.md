@@ -1,0 +1,1 @@
+2025-11-23：优化 frontend/src/daily_report_25_26/pages/DashBoard.vue 中的 DashboardEChart 组件。使用 shallowRef 缓存图表 option，移除 deep watcher，改用 chart.setOption(option, { notMerge: false, lazyUpdate: true }) 增量刷新，避免每次响应式细节变化都触发整棵 option 深度遍历与整图重绘。Serena 目前无法直接写 .vue 文件，本次通过 desktop-commander::apply_patch 修改并在 configs/progress.md/frontend&backend README 留痕。
