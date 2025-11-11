@@ -475,3 +475,103 @@ codex resume 019a5938-96cf-7ed3-87b4-3fc60f89e5e5
 
 数据看板增加净投诉量
   codex resume 019a6bb7-ddc3-7712-bc2d-1fd372cde51d
+
+————————————————————————————————————————————————————————————
+8.22  
+  完整版校验规则
+  "校验规则": {
+      "发电量": [
+        {
+          "type": "number_range",
+          "min": 0,
+          "level": "error",
+          "columns": [2, 3],
+          "message": "发电量需为非负数"
+        },
+        {
+          "type": "column_ratio",
+          "columns": [2],
+          "reference_column": 3,
+          "min_ratio": 0.8,
+          "max_ratio": 1.2,
+          "level": "warning",
+          "message": "本期发电量应处于同期值的80%-120%"
+        }
+      ],
+      "供热量": [
+        {
+          "type": "number_range",
+          "min": 0,
+          "level": "error",
+          "columns": [2, 3],
+          "message": "供热量需为非负数"
+        }
+      ],
+      "耗水量": [
+        {
+          "type": "number_range",
+          "min": 0,
+          "level": "error",
+          "columns": [2, 3],
+          "message": "耗水量需为非负数"
+        }
+      ],
+      "其中：电厂耗水量": [
+        {
+          "type": "less_equal_than",
+          "reference_row": "耗水量",
+          "columns": [2, 3],
+          "level": "error",
+          "message": "“其中：电厂耗水量”不得大于“耗水量”"
+        }
+      ],
+      "外购电量": [
+        {
+          "type": "number_range",
+          "min": 0,
+          "level": "error",
+          "columns": [2, 3],
+          "message": "外购电量需为非负数"
+        }
+      ],
+      "其中：电厂外购电量": [
+        {
+          "type": "less_equal_than",
+          "reference_row": "外购电量",
+          "columns": [2, 3],
+          "level": "error",
+          "message": "“其中：电厂外购电量”不得大于“外购电量”"
+        }
+      ],
+      "全厂热效率": [
+        {
+          "type": "expression_range",
+          "expression": "(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))",
+          "columns": [2],
+          "min": 0.5,
+          "max": 1.0,
+          "reference_column": 3,
+          "min_ratio": 0.8,
+          "max_ratio": 1.2,
+          "level": "error",
+          "depends_on": ["供热量", "售电量", "标煤耗量"],
+          "virtual": true,
+          "target_label": "全厂热效率",
+          "message": "全厂热效率需在50%-100%，且与同期差异不超过±20%"
+        },
+        {
+          "type": "expression_range",
+          "expression": "(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))",
+          "columns": [3],
+          "min": 0.5,
+          "max": 1.0,
+          "level": "warning",
+          "depends_on": ["供热量", "售电量", "标煤耗量"],
+          "virtual": true,
+          "target_label": "全厂热效率",
+          "message": "同期全厂热效率需处于50%-100%区间"
+        }
+      ]
+    }
+
+    ————————————————————————————————————————————————————————————————————————————————

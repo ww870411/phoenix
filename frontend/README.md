@@ -2,6 +2,29 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-22 校验提示细化）
+
+- `pages/DataEntryView.vue` 在校验面板中追加“当前值/参照值/当前比例”等明细。`formatViolationDetail` 会根据 `evaluateRule` 返回的 `cellValue/referenceValue/expressionValue` 拼装文案，默认提示或自定义 `message` 都会附带这些括号说明。
+- `number_range`/`less_equal_than`/`column_ratio`/`expression_range` 均会把实时数值写入违规记录，便于提示面板直接展示；无须修改模板配置即可获得更详尽的错误描述。
+- 任何新增的规则只要沿用现有字段（如 `min/max/min_ratio/reference_row`），前端就能自动附带数值说明；若要关闭细节，可在模板级关闭校验或在 UI 端过滤。
+
+## 会话小结（2025-11-22 全局校验开关）
+
+- `pages/Sheets.vue` 在列表顶部新增“全局校验开关”复选框：所有用户都能看到当前状态；仅“系统管理员”可勾选，其他角色呈现禁用态并提示“仅系统管理员可修改”。
+- UI 已微调：开关控件整体下移以与页面标题对齐，同时仅在切换失败或加载中提示信息，普通用户不再看到“仅系统管理员可修改”字样；具备“系统管理员”关键词的账号即可操作。
+- `pages/DataEntryView.vue` 在“业务日期”输入框左侧新增无文字复选框（`Coal_inventory_Sheet` 除外），用于联动各模板的 `校验开关`：管理员勾选时调用 `/data_entry/sheets/{sheet_key}/validation-switch` 写入 JSON，并在成功后自动重载模板；普通用户只能查看当前状态。
+- 若存在 error 级校验且对应行的“解释说明”列已填写内容，则视为“带解释放行”，提交按钮不会被锁定；未填写说明的错误仍会阻止提交。
+- 各模板通过 `校验说明映射` 字段指定“错误行需要在哪个指标填写解释才能放行”，当前 `backend_data/数据结构_基本指标表.json` 为所有“全厂热效率”映射到“标煤耗量”。前端在模板响应的 `validation_explanation_map` 中读取该配置。
+- 勾选状态与后端 `/data_entry/validation/master-switch` GET/POST 同步，切换时先更新 UI，再落盘；写入失败会回滚到上一次值并显示错误信息。
+- `services/api.js` 暴露 `getValidationMasterSwitch/setValidationMasterSwitch`，供其他页面按需重用；如需自定义 UI，可复用这两个方法。
+
+## 会话小结（2025-11-22 数据填报校验联动）
+
+- `GET /api/v1/projects/daily_report_25_26/data_entry/sheets/{sheet_key}/template` 现会为除 `BeiHai_co_generation_Sheet`、`BeiHai_gas_boiler_Sheet`、`Coal_inventory_Sheet` 外的大部分模板返回 `validation_enabled: true`，且新增“全厂热效率”与“耗水量”规则；渲染 `DataEntryView` 时需尊重该开关，并在 `runFullValidation` 中读取新的 rule 集合。
+- “全厂热效率”规则沿用 `(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))`，前端需要把 `depends_on` 对应的行数值写入 `virtualContext` 才能计算表达式；若 `validation_rules['全厂热效率'][*].virtual` 为 true，则不要尝试在 RevoGrid 中渲染该指标。
+- “耗水量”规则由 `number_range`（本期/同期需 >0）与 `column_ratio`（本期需在同期 50%~115%）组成，UI 在展示错误摘要时应保留 message 原文，以指示用户是超出区间还是出现 0 值。
+- 特殊情况：`GongRe_branches_detail_Sheet` 暂无耗水量行，因此仍不会收到相关规则；`YanJiuYuan_Sheet` 只包含耗水量校验而无热效率校验，前端需要支持部分规则缺失的场景。
+
 ## 会话小结（2025-11-21 仪表盘气温标签错位）
 
 - `pages/DashBoard.vue` 的 `useTempOption` 现会计算 push_date 对应的本期/同期温度差，当差值 ≤1℃ 且双值有效时，自动把 markPoint 标签改为左右平移（左侧对齐蓝色“本期”，右侧对齐橙色“同期”），避免前后三日窗口内的标签上下堆叠；差值大于阈值时则维持原来的上下排布。

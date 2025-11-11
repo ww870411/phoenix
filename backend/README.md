@@ -1,5 +1,27 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-22 校验提示细化）
+
+- 本次仅调整前端校验信息的呈现方式，后端接口及 JSON 模板无需更新：`/template` 仍按照原格式返回 `validation_rules`，新增的“当前值/参照值/比例”明细由前端根据已有数值计算得出。
+- 若需要扩展提示内容，只需确保规则中附带的 `min/max/reference_row/columns` 等字段准确，前端就能自动读取并显示最新阈值。
+
+## 会话小结（2025-11-22 全局校验开关 API）
+
+- 新增 `/projects/{project_key}/data_entry/validation/master-switch`：
+  - `GET`：读取 `backend_data/数据结构_基本指标表.json` 的 `__global_settings__` 并返回 `validation_enabled`。
+  - `POST`：仅“系统管理员”可调用，接受 `{"validation_enabled": true/false}`，写入 `校验总开关/validation_master_switch/validation_master_toggle/validation_enabled`，并通过临时文件替换确保落盘成功。
+- 建议任何批处理脚本都调用该接口而非直接手改 JSON，避免格式差异或并发写入冲突。
+- 若需要扩展到其他数据源，可在 `DATA_FILE_CANDIDATES` 中新增路径并复用 `_load_master_validation_config()` 逻辑。
+- 同步新增 `/projects/{project_key}/data_entry/sheets/{sheet_key}/validation-switch` GET/POST，用于读取 & 修改各表的 `校验开关`；写操作同样仅 Global_admin/系统管理员可用，后端会在对应模板文件中更新 `validation_enabled/校验开关` 字段并安全落盘。
+- 各模板若存在虚拟校验项（如“全厂热效率”）却无对应行，可在 `backend_data/数据结构_基本指标表.json` 中为该表新增 `校验说明映射`，例如 `{"全厂热效率": "标煤耗量"}`，表示只要在“标煤耗量”的解释列填写原因即可放行该错误。接口会将该映射透传给前端。
+
+## 会话小结（2025-11-22 数据填报校验配置批量化）
+
+- `backend_data/数据结构_基本指标表.json` 现在维持 `__global_settings__.校验总开关 = false` 以便一键停用；但除 `BeiHai_co_generation_Sheet`、`BeiHai_gas_boiler_Sheet`、`Coal_inventory_Sheet` 外，其余常规模板均显式标记 `校验开关: true`，接口返回的 `validation_enabled` 可直接指导前端是否运行规则。
+- 针对拥有 `rate_overall_efficiency` 的电厂模板（北海水炉、香海、金州、北方、金普、庄河），补充了“全厂热效率” `expression_range` 规则：复用 `(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))` 计算虚拟指标，要求本期/同期均落在 0.5~0.95，且本期对同期的波动不超过 ±10%，违规则级别为 error。
+- 针对具备“耗水量”行的模板（包括研究院）新增 `number_range + column_ratio` 组合：本期与同期均需大于 0，同时强制本期位于同期 50%~115% 区间。供热公司模板仅启用耗水量规则（缺乏标煤字段无法计算热效率），煤炭库存/供热分中心明细因无对应指标保持不变。
+- 若需临时停用，可将某模板的 `校验开关` 置为 `false` 或直接删除 `校验规则` 块；彻底关闭则修改全局 `校验总开关`。
+
 ## 会话小结（2025-11-21 Dashboard 气温标签提示）
 
 - `/api/v1/projects/daily_report_25_26/dashboard` 仍按 `sections['1']` 返回“本期/同期”逐日气温数组及 `meta.pushDate`；前端据此在折线图中定位 push_date，并在蓝/橙 markPoint 之间自动判定标签是否需要左右错位（温差 ≤1℃ 时启用）。若 push_date 或同期数组缺失，将跳过 markPoint 渲染。
@@ -269,6 +291,7 @@
     - `expression_range`：支持以 `value('行名')`（默认使用当前列）为基础编写任意算式，并设置 `min/max` 或 `reference_column`+`min_ratio`/`max_ratio`，可通过 `depends_on` 显式声明依赖行，示例：`(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))` 对应“全厂热效率”；
     - `virtual: true` + `target_label`：用于声明“仅校验、不展示”的虚拟指标，例如衍生热效率，模板 `rows` 中无需增加对应行，系统会基于依赖行执行校验并在前端提示 `target_label`。
 - 校验开关：模板字典可额外提供 `validation_enabled` / `enable_validation` / `校验开关`（布尔值），后端会将其透传为 `validation_enabled` 字段；当设为 `false` 时，前端跳过所有规则解析与提示，仅保留基础填报能力。
+- 总开关：`backend_data/数据结构_基本指标表.json` 顶层的 `__global_settings__`（字段如 `校验总开关`）可统一控制校验启停；接口在加载模板时会读取该值并与模板局部 `校验开关` 取“全局 && 局部”，实现一处暂停全部校验。
 - 兼容性：`daily_report_25_26.py` 的 `DICT_KEY_GROUPS` 已纳入 `validation_rules`，因此老模板无需修改即可继续返回 `item_dict` 等已有字典；新字段缺省时后端/前端都会自动跳过校验。
 - 回滚方案：若未来不再需要本地校验，可在模板中删除 `"校验规则"` 段落，并在 `DICT_KEY_GROUPS` 中移除 `validation_rules` 配置即可恢复原状。
 

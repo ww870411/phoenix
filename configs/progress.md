@@ -2,6 +2,57 @@
 
 # 进度记录
 
+# 进度记录
+
+# 进度记录
+
+## 2025-11-22（全局校验开关可视化控制）
+
+前置说明（降级留痕）：
+- Serena MCP 暂无法直接写入 `.py/.vue/.md`，因此以 `desktop-commander::apply_patch` 调整 `backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/src/daily_report_25_26/pages/Sheets.vue`、`backend/README.md`、`frontend/README.md` 与 `configs/progress.md`。若需回滚，恢复上述文件即可。
+
+本次动作：
+- 后端新增 `/projects/{project_key}/data_entry/validation/master-switch` GET/POST：GET 返回 `validation_enabled`；POST 仅允许“系统管理员”调用，写入 `backend_data/数据结构_基本指标表.json` 的 `__global_settings__`，同步更新 `校验总开关/validation_master_switch/...` 字段，并采用临时文件覆写确保可回滚。
+- 前端 `Sheets.vue` 在卡片标题区增加“全局校验开关”复选框，所有角色都能看到实时状态；仅系统管理员可勾选，其他角色禁用控件。切换时调用新 API，出现错误会回退到原状态并记录日志。
+- 新增 `/projects/{project_key}/data_entry/sheets/{sheet_key}/validation-switch` GET/POST，用于读取/修改各表 `校验开关` 字段；同样仅 Global_admin 有写权限。
+- `DataEntryView.vue` 在“业务日期”左侧加入无文字复选框（除 `Coal_inventory_Sheet` 外），用于控件该表校验开关；管理员勾选后立即落盘并重载模板，普通用户只可查看。
+- 若存在 error 级校验项，但用户在对应行（或模板中 `校验说明映射` 指定的行）的“解释说明”列填写了内容，即视为“带解释放行”，提交按钮不再锁定；未给出说明的错误仍会阻止提交。相关映射直接记录在 `backend_data/数据结构_基本指标表.json` 的 `校验说明映射` 字段。
+- UI 微调：为避免控件顶端高于页面标题，开关整体下移并隐藏“仅系统管理员可修改”字样，管理员身份通过账号的 group 包含“系统管理员”即可启用，非管理员仍可查看状态但无法点击。
+- `services/api.js` 新增 `getValidationMasterSwitch/setValidationMasterSwitch` 用于发起请求。
+
+验证建议：
+1. 以系统管理员登录至 `.../sheets` 页面，右上角复选框加载后应与后端文件一致；切换勾选会立刻触发保存提示，刷新后仍保持最新状态。
+2. 以普通账号登录同页面，控件应处于禁用状态但实时反映当前开关；强制修改将被后端拒绝并在 UI 上看到“仅系统管理员可修改”。
+
+## 2025-11-22（校验提示细化为实际值）
+
+前置说明（降级留痕）：
+- Serena MCP 仍无法直接写入 `.vue/.md`，因此以 `desktop-commander::apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/README.md`、`backend/README.md`、`configs/progress.md`。回滚可恢复上述文件。
+
+本次动作：
+- `DataEntryView.vue` 的校验引擎新增 `formatNumericDisplay/formatViolationDetail` 助手，将数值格式化为中文本地化文案；`evaluateRule` 为 `number_range/less_equal_than/column_ratio/expression_range` 违规记录补充 `cellValue/referenceValue/expressionValue` 元数据。
+- 校验面板在默认/自定义提示语后自动拼接“（当前值…，参照值…）”等细节，示例：当耗水量 <0 会显示“当前值：-5”，比例违规则同时展示“当前值”“参照值”“当前比例”，方便定位问题单元格的真实数据。
+- 由于该逻辑完全运行在前端，后端接口及 JSON 模板无需改动，仅补充 README 说明以便排查。
+
+验证建议：
+1. 在数据填报页输入负数耗水量，校验面板会显示“耗水量 … 不得小于 0（当前值：-5）”；修正为正值后提示消失。
+2. 将本期耗水量调为同期的 30%，提示信息会追加“当前比例：0.30，参照值：xxx”，确认上下限区间与当前值匹配。
+
+## 2025-11-22（数据填报校验规则批量启用）
+
+前置说明（降级留痕）：
+- 已通过 Serena MCP 完成项目激活、定位 `backend_data/数据结构_基本指标表.json` 与 README/进度文件，但当前 Serena 仍无法直接写入 JSON/Markdown，依据 AGENTS.md 3.9 降级为 `desktop-commander::apply_patch` 修改 `backend_data/数据结构_基本指标表.json`、`configs/progress.md`、`backend/README.md`、`frontend/README.md`。如需回滚，恢复上述文件即可。
+
+本次动作：
+- 将 `__global_settings__.校验总开关` 维持关闭（便于一键停用），但把除 `BeiHai_co_generation_Sheet`、`BeiHai_gas_boiler_Sheet`、`Coal_inventory_Sheet` 之外的各表 `校验开关` 统一设为 `true`，使其表级规则默认生效。
+- 在 `BeiHai_water/XiangHai/JinZhou/BeiFang/JinPu/ZhuangHe` 等具备 `rate_overall_efficiency` 的模板中新增“全厂热效率” `expression_range` 规则：计算公式沿用 `(供热量 + 售电量*36)/(29.308*标煤耗量)`，本期/同期均需落在 0.5~0.95 且本期对同期的波动不超过 ±10%，全部归类为 `level: error`。
+- 为 `BeiHai_water/XiangHai/GongRe/JinZhou/BeiFang/JinPu/ZhuangHe/YanJiuYuan` 等存在“耗水量”行的模板补充 `number_range + column_ratio` 组合：强制本期/同期耗水量大于 0，并限定本期处于同期 50%~115% 区间；`YanJiuYuan_Sheet` 特别包含在该范围内。
+- 对 `GongRe` 模板仅落地耗水量规则（因无标煤指标无法计算热效率），`Coal_inventory_Sheet`、`BeiHai_co_generation_Sheet`、`BeiHai_gas_boiler_Sheet`、`GongRe_branches_detail_Sheet` 维持原状。
+
+验证建议：
+1. 通过 `GET /api/v1/projects/daily_report_25_26/data_entry/sheets/JinPu_Sheet/template`，确认响应包含 `validation_enabled: true` 以及新增的 `validation_rules.全厂热效率/耗水量` 条目，数值区间及 ratio 均与上述描述一致。
+2. 在前端数据填报界面选择任意已开启校验的表，输入 0 或负的“耗水量”应立即抛出 error 级提示；将本期耗水量调至同期 30%/150% 亦应触发区间校验，恢复 80%~110% 后可继续提交。
+
 ## 2025-11-21（Dashboard 气温标签防重叠）
 
 前置说明（降级留痕）：
@@ -25,6 +76,7 @@
 - 后端模板接口：`daily_report_25_26.py` 将 `validation_rules/校验规则/数据校验` 归类到 `DICT_KEY_GROUPS`，`GET .../template` 会随 `item_dict` 等字典一并返回校验配置。
 - 模板示例：在 `BeiHai_co_generation_Sheet` 中新增 `"校验规则"`，对“发电量/供热量/耗水量/外购电量”执行非负校验，并约束“其中：电厂耗水量/外购电量”不得超过主项；同时演示 `column_ratio`（本期发电量维持在同期 80%-120% 区间）与 `expression_range`（以 `(value('供热量') + value('售电量') * 36) / (29.308 * value('标煤耗量'))` 计算“全厂热效率”并限制区间/同比）的配置，表达式规则可设置 `virtual: true` + `target_label` 隐藏衍生指标避免出现在表格中。
 - 模板示例提供 `校验开关`（别名 `validation_enabled`/`enable_validation`），置为 `false` 时前后端均跳过全部校验逻辑，可用于停运或调试阶段的临时放行。
+- 全局总开关：在 `backend_data/数据结构_基本指标表.json` 顶部新增 `__global_settings__`，`\"校验总开关\": false` 时所有表一律关闭校验，优先级高于各模板 `校验开关`，便于提供“一键停用”能力。
 - 前端校验系统：`DataEntryView.vue` 引入 `validationRuleMap`、`runFullValidation`、`validateRow` 等逻辑，实时执行 `number_range`、`less_equal_than`、`column_ratio`、`expression_range` 规则；顶部新增“校验提醒”面板，阻止存在 error 的提交并在 warning 状态下提示放行。`校验开关` 为 false 时会隐藏提醒并允许提交。
 - 文档同步：在 `backend/README.md`、`frontend/README.md` 记录字段含义、示例写法、回滚路径，并在此文件登记任务背景与验证步骤。
 

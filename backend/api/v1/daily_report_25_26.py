@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone, date
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from backend.schemas.auth import (
     WorkflowApproveRequest,
     WorkflowRevokeRequest,
@@ -163,7 +164,6 @@ def _load_data_file_candidates() -> List[str]:
 
 
 DATA_FILE_CANDIDATES = _load_data_file_candidates()
-
 # otherwise, fall back to a path relative to the project root (for local dev).
 
 
@@ -258,19 +258,24 @@ def _extract_names(payload: Dict[str, Any]) -> Dict[str, str]:
 def _locate_sheet_payload(
     sheet_key: str,
     preferred_path: Optional[SysPath] = None,
-) -> Tuple[Optional[Dict[str, Any]], Optional[SysPath]]:
-    """在候选模板文件中按 sheet_key 查找配置。"""
+) -> Tuple[Optional[Dict[str, Any]], Optional[SysPath], bool]:
+    """在候选模板文件中按 sheet_key 查找配置，并返回对应的全局校验开关。"""
 
-    def _consider(payload: Dict[str, Any], path: SysPath) -> Optional[Tuple[Dict[str, Any], SysPath]]:
+    def _consider(
+        payload: Dict[str, Any],
+        path: SysPath,
+        global_validation_enabled: bool,
+    ) -> Optional[Tuple[Dict[str, Any], SysPath, bool]]:
         if not isinstance(payload, dict):
             return None
         names = _extract_names(payload)
         if names["unit_id"]:
-            return payload, path
+            return payload, path, global_validation_enabled
         return None
 
     best_payload: Optional[Dict[str, Any]] = None
     best_path: Optional[SysPath] = None
+    best_global_flag: bool = True
     target_key_lower = sheet_key.lower()
 
     candidate_paths: List[SysPath] = []
@@ -291,33 +296,36 @@ def _locate_sheet_payload(
         except Exception:
             # 跳过不可读取/非 JSON 的候选文件，避免整体查询失败
             continue
+        global_flag = _extract_global_validation_setting(raw)
 
         if isinstance(raw, dict):
             direct = raw.get(sheet_key)
             if isinstance(direct, dict):
-                hit = _consider(direct, data_path)
+                hit = _consider(direct, data_path, global_flag)
                 if hit:
                     return hit
                 if best_payload is None:
-                    best_payload, best_path = direct, data_path
+                    best_payload, best_path, best_global_flag = direct, data_path, global_flag
 
             for key, payload in raw.items():
                 if not isinstance(payload, dict):
                     continue
+                if key in {"__global_settings__", "__meta__", "全局配置"}:
+                    continue
                 if key.lower() == target_key_lower:
-                    hit = _consider(payload, data_path)
+                    hit = _consider(payload, data_path, global_flag)
                     if hit:
                         return hit
                     if best_payload is None:
-                        best_payload, best_path = payload, data_path
+                        best_payload, best_path, best_global_flag = payload, data_path, global_flag
                         continue
                 names = _extract_names(payload)
                 if names["sheet_name"] == sheet_key:
-                    hit = _consider(payload, data_path)
+                    hit = _consider(payload, data_path, global_flag)
                     if hit:
                         return hit
                     if best_payload is None:
-                        best_payload, best_path = payload, data_path
+                        best_payload, best_path, best_global_flag = payload, data_path, global_flag
 
         elif isinstance(raw, list):
             for payload in raw:
@@ -326,13 +334,13 @@ def _locate_sheet_payload(
                 candidate = payload.get("sheet_key")
                 names = _extract_names(payload)
                 if candidate == sheet_key or names["sheet_name"] == sheet_key:
-                    hit = _consider(payload, data_path)
+                    hit = _consider(payload, data_path, global_flag)
                     if hit:
                         return hit
                     if best_payload is None:
-                        best_payload, best_path = payload, data_path
+                        best_payload, best_path, best_global_flag = payload, data_path, global_flag
 
-    return best_payload, best_path
+    return best_payload, best_path, best_global_flag
 
 
 def _extract_list(payload: Dict[str, Any], keys: Iterable[str]) -> Optional[Iterable[Any]]:
@@ -358,6 +366,27 @@ def _coerce_mapping(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _extract_global_validation_setting(raw: Any) -> bool:
+    def _try_from_mapping(mapping: Dict[str, Any]) -> Optional[bool]:
+        for key in ("校验总开关", "validation_master_switch", "validation_master_toggle", "validation_enabled", "校验开关"):
+            if key in mapping:
+                return _coerce_bool(mapping.get(key), default=True)
+        return None
+
+    if isinstance(raw, dict):
+        for key in ("__global_settings__", "__meta__", "全局配置"):
+            settings = raw.get(key)
+            if isinstance(settings, dict):
+                result = _try_from_mapping(settings)
+                if result is not None:
+                    return result
+        # 兼容直接在根上声明的场景
+        root_result = _try_from_mapping(raw)
+        if root_result is not None:
+            return root_result
+    return True
+
+
 def _coerce_bool(value: Any, default: bool = True) -> bool:
     if value is None:
         return default
@@ -374,11 +403,111 @@ def _coerce_bool(value: Any, default: bool = True) -> bool:
     return default
 
 
-def _extract_validation_enabled(payload: Dict[str, Any]) -> bool:
+def _extract_validation_enabled(payload: Dict[str, Any], global_enabled: bool = True) -> bool:
+    local_enabled = True
     for key in ("validation_enabled", "enable_validation", "校验开关", "validation_switch"):
         if key in payload:
-            return _coerce_bool(payload.get(key), default=True)
-    return True
+            local_enabled = _coerce_bool(payload.get(key), default=True)
+            break
+    return global_enabled and local_enabled
+
+
+def _extract_local_validation_switch(payload: Dict[str, Any]) -> bool:
+    local_enabled = True
+    for key in ("validation_enabled", "enable_validation", "校验开关", "validation_switch"):
+        if key in payload:
+            local_enabled = _coerce_bool(payload.get(key), default=True)
+            break
+    return local_enabled
+
+
+def _load_master_validation_config() -> Tuple[bool, Dict[str, Any]]:
+    path = BASIC_TEMPLATE_PATH
+    if not path.exists():
+        raise HTTPException(status_code=500, detail="基准模板文件不存在，无法读取校验开关。")
+    try:
+        raw = _read_json(path)
+    except Exception as exc:  # pragma: no cover - 读取失败直接抛 500
+        raise HTTPException(status_code=500, detail=f"读取模板文件失败：{path}") from exc
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=500, detail="模板文件不是 JSON 对象，无法解析全局校验开关。")
+    flag = _extract_global_validation_setting(raw)
+    return flag, raw
+
+
+def _persist_master_validation_switch(enabled: bool) -> bool:
+    _, raw = _load_master_validation_config()
+    normalized = bool(enabled)
+    global_settings = raw.get("__global_settings__")
+    if not isinstance(global_settings, dict):
+        global_settings = {}
+    for key in ("校验总开关", "validation_master_switch", "validation_master_toggle", "validation_enabled"):
+        global_settings[key] = normalized
+    raw["__global_settings__"] = global_settings
+    serialized = json.dumps(raw, ensure_ascii=False, indent=2)
+    temp_path = BASIC_TEMPLATE_PATH.with_name(BASIC_TEMPLATE_PATH.name + ".tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as fh:
+            fh.write(serialized)
+            fh.write("\n")
+        temp_path.replace(BASIC_TEMPLATE_PATH)
+    except Exception as exc:  # pragma: no cover
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(status_code=500, detail="写入模板文件失败，校验总开关未更新。") from exc
+    return normalized
+
+
+def _find_sheet_entry_key(raw: Dict[str, Any], sheet_key: str) -> Optional[str]:
+    target_lower = sheet_key.lower()
+    for key, payload in raw.items():
+        if key in {"__global_settings__", "__meta__", "全局配置"}:
+            continue
+        if key == sheet_key or key.lower() == target_lower:
+            return key
+        if isinstance(payload, dict):
+            names = _extract_names(payload)
+            if names["sheet_name"] == sheet_key:
+                return key
+    return None
+
+
+def _persist_sheet_validation_switch(
+    sheet_key: str,
+    enabled: bool,
+    preferred_path: Optional[SysPath] = None,
+) -> bool:
+    payload, data_path, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+    if payload is None or data_path is None:
+        raise HTTPException(status_code=404, detail=f"未找到 sheet_key={sheet_key} 的模板配置。")
+    try:
+        raw = _read_json(data_path)
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"读取模板文件失败：{data_path}") from exc
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=500, detail="模板文件结构错误，无法更新校验开关。")
+    entry_key = _find_sheet_entry_key(raw, sheet_key)
+    if entry_key is None:
+        raise HTTPException(status_code=404, detail=f"模板中未找到 {sheet_key} 对应的配置。")
+    entry = raw.get(entry_key)
+    if not isinstance(entry, dict):
+        raise HTTPException(status_code=500, detail=f"{sheet_key} 配置格式异常，无法更新校验开关。")
+    normalized = bool(enabled)
+    for key in ("validation_enabled", "enable_validation", "校验开关", "validation_switch"):
+        entry[key] = normalized
+    raw[entry_key] = entry
+    serialized = json.dumps(raw, ensure_ascii=False, indent=2)
+    temp_path = data_path.with_name(data_path.name + ".tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as fh:
+            fh.write(serialized)
+            fh.write("\n")
+        temp_path.replace(data_path)
+    except Exception as exc:  # pragma: no cover
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(status_code=500, detail="写入模板文件失败，表级校验开关未更新。") from exc
+    return normalized
 
 
 def _extract_mapping(payload: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
@@ -1480,10 +1609,13 @@ def _collect_catalog(data_file: Optional[SysPath] = None) -> Dict[str, Dict[str,
 
     catalog: Dict[str, Dict[str, str]] = {}
     for sheet_key, payload in iterator:
+        normalized_key = str(sheet_key or "").strip()
+        if normalized_key in {"__global_settings__", "__meta__", "__config__", "全局配置"}:
+            continue
         if not isinstance(payload, dict):
             continue
         names = _extract_names(payload)
-        key = str(sheet_key or names["sheet_name"])
+        key = normalized_key or names["sheet_name"]
         if not key or key in catalog:
             continue
         sheet_name = names["sheet_name"] or key
@@ -1498,6 +1630,17 @@ def _collect_catalog(data_file: Optional[SysPath] = None) -> Dict[str, Dict[str,
 
 router = APIRouter(dependencies=[Depends(get_current_session)])
 public_router = APIRouter()
+
+
+class ValidationMasterSwitchPayload(BaseModel):
+    validation_enabled: bool
+
+
+def _ensure_system_admin(session: AuthSession) -> None:
+    group = (session.group or "").strip()
+    allowed = {"系统管理员", "Global_admin"}
+    if group not in allowed:
+        raise HTTPException(status_code=403, detail="仅系统管理员可修改校验总开关。")
 
 
 def _collect_seed_units() -> List[str]:
@@ -1656,6 +1799,76 @@ def get_dashboard_data(
     return {"ok": True, **result.to_dict()}
 
 
+@router.get(
+    "/data_entry/validation/master-switch",
+    summary="查看全局数据填报校验总开关状态",
+)
+def get_validation_master_switch_state():
+    flag, _ = _load_master_validation_config()
+    return {"ok": True, "validation_enabled": flag}
+
+
+@router.post(
+    "/data_entry/validation/master-switch",
+    summary="更新全局数据填报校验总开关",
+)
+def update_validation_master_switch(
+    payload: ValidationMasterSwitchPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_system_admin(session)
+    updated = _persist_master_validation_switch(payload.validation_enabled)
+    return {"ok": True, "validation_enabled": updated}
+
+
+@router.get(
+    "/data_entry/sheets/{sheet_key}/validation-switch",
+    summary="查看指定表的校验开关",
+)
+def get_sheet_validation_switch(
+    sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件",
+    ),
+):
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+        if preferred_path is None:
+            raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
+    payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"未找到 sheet_key={sheet_key} 的模板配置。")
+    local_flag = _extract_local_validation_switch(payload)
+    return {"ok": True, "validation_enabled": local_flag}
+
+
+@router.post(
+    "/data_entry/sheets/{sheet_key}/validation-switch",
+    summary="更新指定表的校验开关",
+)
+def update_sheet_validation_switch(
+    sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件",
+    ),
+    payload: ValidationMasterSwitchPayload = ...,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_system_admin(session)
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+        if preferred_path is None:
+            raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
+    updated = _persist_sheet_validation_switch(sheet_key, payload.validation_enabled, preferred_path=preferred_path)
+    return {"ok": True, "validation_enabled": updated}
+
+
 @router.get("/data_entry/sheets/{sheet_key}/template", summary="获取数据填报模板")
 def get_sheet_template(
     sheet_key: str = Path(..., description="目标 sheet_key"),
@@ -1677,7 +1890,10 @@ def get_sheet_template(
                 },
             )
 
-    payload, data_path = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+    payload, data_path, global_validation_enabled = _locate_sheet_payload(
+        sheet_key,
+        preferred_path=preferred_path,
+    )
     if payload is None:
         message = f"sheet_key={sheet_key} 未在 {', '.join(DATA_FILE_CANDIDATES)} 中找到"
         if preferred_path is not None:
@@ -1726,7 +1942,11 @@ def get_sheet_template(
     for dict_key, dict_value in dict_bundle.items():
         response_content[dict_key] = dict_value
 
-    response_content["validation_enabled"] = _extract_validation_enabled(payload)
+    validation_enabled_flag = _extract_validation_enabled(payload, global_validation_enabled)
+    response_content["validation_enabled"] = validation_enabled_flag
+    payload_map = payload.get("validation_explanation_map") or payload.get("校验说明映射")
+    if isinstance(payload_map, dict) and payload_map:
+        response_content["validation_explanation_map"] = payload_map
 
     if _is_coal_inventory_sheet(sheet_key, payload):
         response_content["template_type"] = "crosstab"
@@ -1836,7 +2056,7 @@ async def query_sheet(
         template_type = "constant"
     else:
         # 通过模板或名称启发式识别 crosstab
-        tpl_payload_detect, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+        tpl_payload_detect, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
         if _is_coal_inventory_sheet(sheet_key, tpl_payload_detect):
             template_type = "crosstab"
 
@@ -1849,7 +2069,7 @@ async def query_sheet(
                     content={"ok": False, "message": "供热分中心查询需提供 biz_date"},
                 )
 
-            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            tpl_payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
@@ -1973,7 +2193,7 @@ async def query_sheet(
                 )
 
             # 读取模板元信息与列头
-            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            tpl_payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
@@ -2153,7 +2373,7 @@ async def query_sheet(
 
         elif template_type == "constant":
             # 常量指标：按模板 columns/rows 结构回填（不再返回 cells，完全 rows-only）
-            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            tpl_payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
@@ -2284,7 +2504,7 @@ async def query_sheet(
                     content={"ok": False, "message": "标准表查询需提供 biz_date"},
                 )
 
-            tpl_payload, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            tpl_payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
             if tpl_payload is None:
                 return JSONResponse(
                     status_code=404,
@@ -2936,7 +3156,7 @@ async def runtime_eval(request: Request):
                     sheet_key = next(iter(raw.keys()))
             except Exception:
                 pass
-        spec, data_path = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+        spec, data_path, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
         if spec is None:
             return JSONResponse(
                 status_code=404,

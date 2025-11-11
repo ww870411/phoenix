@@ -255,3 +255,61 @@ export async function getDashboardData(projectKey, params = {}) {
   }
   return response.json()
 }
+
+export async function getValidationMasterSwitch(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取全局校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setValidationMasterSwitch(projectKey, enabled) {
+  const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ validation_enabled: Boolean(enabled) }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新全局校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getSheetValidationSwitch(projectKey, sheetKey, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/validation-switch${search}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取表级校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setSheetValidationSwitch(projectKey, sheetKey, enabled, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/validation-switch${search}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify({ validation_enabled: Boolean(enabled) }),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新表级校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}

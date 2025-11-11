@@ -21,6 +21,15 @@
       </div>
       <div class="right" style="display:flex;align-items:center;gap:8px;">
         <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
+        <input
+          v-if="shouldShowSheetValidationToggle"
+          type="checkbox"
+          class="sheet-validation-toggle"
+          :checked="sheetValidationEnabled"
+          :disabled="sheetValidationToggleDisabled"
+          aria-label="表级校验开关"
+          @change="onSheetValidationToggle"
+        />
         <label v-if="isDailyPage" class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;">
           <span>业务日期：</span>
           <input type="date" v-model="bizDate" />
@@ -84,7 +93,13 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { getTemplate, queryData, submitData } from '../services/api'
+import {
+  getTemplate,
+  queryData,
+  submitData,
+  getSheetValidationSwitch,
+  setSheetValidationSwitch,
+} from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
 import { useAuthStore } from '../store/auth'
@@ -224,6 +239,11 @@ const validationDependents = ref(new Map());
 const cellValidationMap = ref(new Map());
 const virtualValidationRules = ref([]);
 const validationEnabled = ref(true);
+const sheetValidationEnabled = ref(true);
+const sheetValidationLoading = ref(false);
+const sheetValidationSaving = ref(false);
+const sheetValidationError = ref('');
+const validationExplanationMap = ref(new Map());
 const validationIssues = computed(() => {
   if (!validationEnabled.value) {
     return [];
@@ -242,7 +262,87 @@ const validationIssues = computed(() => {
     return a.id.localeCompare(b.id);
   });
 });
-const hasBlockingValidation = computed(() => validationEnabled.value && validationIssues.value.some(issue => issue.level === 'error'));
+const explanationColumnIndex = computed(() => {
+  if (!Array.isArray(columns.value)) return -1;
+  for (let i = 0; i < columns.value.length; i += 1) {
+    const label = columns.value[i];
+    if (typeof label !== 'string') continue;
+    const trimmed = label.trim();
+    if (!trimmed) continue;
+    if (trimmed.includes('解释说明') || trimmed.endsWith('说明')) {
+      return i;
+    }
+  }
+  return -1;
+});
+
+function resolveIssueExplanationRowIndex(issue) {
+  if (issue && issue.rowIndex != null && issue.rowIndex >= 0) {
+    return issue.rowIndex;
+  }
+  const map = validationExplanationMap.value;
+  if (!(map instanceof Map) || map.size === 0) {
+    return null;
+  }
+  const normalizedIssueLabel = normalizeRowLabelValue(issue?.rowLabel);
+  if (!normalizedIssueLabel) {
+    return null;
+  }
+  const mappedLabel = map.get(normalizedIssueLabel);
+  if (!mappedLabel) {
+    return null;
+  }
+  const normalizedMapped = normalizeRowLabelValue(mappedLabel);
+  if (!normalizedMapped) {
+    return null;
+  }
+  const targetIndex = rowLabelIndex.value?.get(normalizedMapped);
+  return typeof targetIndex === 'number' ? targetIndex : null;
+}
+
+function isIssueExplained(issue) {
+  if (!issue || issue.level !== 'error') {
+    return false;
+  }
+  const explainCol = explanationColumnIndex.value;
+  if (explainCol < 0) {
+    return false;
+  }
+  const targetRowIdx = resolveIssueExplanationRowIndex(issue);
+  if (targetRowIdx == null) {
+    return false;
+  }
+  const record = Array.isArray(gridSource.value) ? gridSource.value[targetRowIdx] : null;
+  if (!record) {
+    return false;
+  }
+  const raw = record[`c${explainCol}`];
+  if (raw == null) {
+    return false;
+  }
+  const text = String(raw).trim();
+  return text.length > 0;
+}
+
+const blockingValidationIssues = computed(() => {
+  if (!validationEnabled.value) {
+    return [];
+  }
+  return validationIssues.value.filter(
+    issue => issue.level === 'error' && !isIssueExplained(issue),
+  );
+});
+
+const hasBlockingValidation = computed(() => blockingValidationIssues.value.length > 0);
+const shouldShowSheetValidationToggle = computed(() => sheetKey !== 'Coal_inventory_Sheet');
+const canToggleSheetValidation = computed(() => auth.user?.group === 'Global_admin');
+const sheetValidationToggleDisabled = computed(
+  () =>
+    !shouldShowSheetValidationToggle.value ||
+    !canToggleSheetValidation.value ||
+    sheetValidationLoading.value ||
+    sheetValidationSaving.value,
+);
 
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
 const submitDisabled = computed(() => isReadOnlyForDate.value);
@@ -337,6 +437,21 @@ function normalizeDictPayload(raw) {
     return cloned;
   }
   return null;
+}
+
+function normalizeExplanationMapping(raw) {
+  const map = new Map();
+  if (!raw || typeof raw !== 'object') {
+    return map;
+  }
+  Object.entries(raw).forEach(([ruleLabel, explanationLabel]) => {
+    const normalizedRule = normalizeRowLabelValue(ruleLabel);
+    const normalizedExplanation = normalizeRowLabelValue(explanationLabel);
+    if (normalizedRule && normalizedExplanation) {
+      map.set(normalizedRule, normalizedExplanation);
+    }
+  });
+  return map;
 }
 
 function resolveValidationEnabledFlag(payload) {
@@ -517,6 +632,45 @@ function parseNumericValue(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function formatNumericDisplay(value, options = {}) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  const { maximumFractionDigits = Math.abs(num) >= 1 ? 2 : 4 } = options;
+  try {
+    return num.toLocaleString('zh-CN', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits,
+    });
+  } catch {
+    const digits = Math.min(Math.max(maximumFractionDigits, 0), 6);
+    return num.toFixed(digits);
+  }
+}
+
+function formatViolationDetail(rule, violation) {
+  if (!violation) return '';
+  const parts = [];
+  if (typeof violation.cellValue === 'number' && Number.isFinite(violation.cellValue)) {
+    parts.push(`当前值：${formatNumericDisplay(violation.cellValue)}`);
+  }
+  const isExpressionReason = typeof violation.reason === 'string' && violation.reason.startsWith('expression');
+  if (isExpressionReason && typeof violation.actual === 'number' && Number.isFinite(violation.actual)) {
+    parts.push(`计算结果：${formatNumericDisplay(violation.actual)}`);
+  }
+  const isRatioReason = typeof violation.reason === 'string' && violation.reason.includes('ratio');
+  if (isRatioReason && typeof violation.actual === 'number' && Number.isFinite(violation.actual)) {
+    parts.push(`当前比例：${formatNumericDisplay(violation.actual, { maximumFractionDigits: 4 })}`);
+  }
+  if (typeof violation.referenceValue === 'number' && Number.isFinite(violation.referenceValue)) {
+    const refLabel = violation.referenceColumnLabel || rule.referenceLabel || '参照值';
+    parts.push(`${refLabel}：${formatNumericDisplay(violation.referenceValue)}`);
+  }
+  if (!parts.length && typeof violation.actual === 'number' && Number.isFinite(violation.actual)) {
+    parts.push(`当前值：${formatNumericDisplay(violation.actual)}`);
+  }
+  return parts.length ? `（${parts.join('，')}）` : '';
+}
+
 function compileRuleExpression(expression) {
   if (!expression || typeof expression !== 'string') return null;
   try {
@@ -584,7 +738,9 @@ function collectRuleIssues(rule, rowIdx) {
     const violation = evaluateRule(rule, targetRowIdx, colIdx);
     if (!violation) return;
     const columnLabel = getColumnLabel(colIdx);
-    const message = rule.message || buildDefaultRuleMessage(rule, columnLabel, violation);
+    const baseMessage = rule.message || buildDefaultRuleMessage(rule, columnLabel, violation);
+    const detail = formatViolationDetail(rule, violation);
+    const message = detail ? `${baseMessage}${detail}` : baseMessage;
     const keyPrefix = targetRowIdx != null ? `${targetRowIdx}` : `virtual:${rule.id}`;
     const key = `${keyPrefix}:${colIdx}:${rule.id}`;
     issues.push({
@@ -904,10 +1060,10 @@ function evaluateRule(rule, rowIdx, colIdx) {
       return null;
     }
     if (typeof rule.min === 'number' && numericValue < rule.min) {
-      return { reason: 'min', expected: rule.min, actual: numericValue };
+      return { reason: 'min', expected: rule.min, actual: numericValue, cellValue: numericValue };
     }
     if (typeof rule.max === 'number' && numericValue > rule.max) {
-      return { reason: 'max', expected: rule.max, actual: numericValue };
+      return { reason: 'max', expected: rule.max, actual: numericValue, cellValue: numericValue };
     }
     return null;
   }
@@ -921,7 +1077,11 @@ function evaluateRule(rule, rowIdx, colIdx) {
     }
     const tolerance = typeof rule.tolerance === 'number' ? rule.tolerance : 0;
     if (numericValue > referenceValue + tolerance) {
-      return { reason: 'greater_than_reference', referenceValue };
+      return {
+        reason: 'greater_than_reference',
+        referenceValue,
+        cellValue: numericValue,
+      };
     }
     return null;
   }
@@ -946,6 +1106,8 @@ function evaluateRule(rule, rowIdx, colIdx) {
         expected: rule.minRatio,
         actual: ratio,
         referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+        cellValue: numericValue,
+        referenceValue,
       };
     }
     if (typeof rule.maxRatio === 'number' && ratio > rule.maxRatio) {
@@ -954,6 +1116,8 @@ function evaluateRule(rule, rowIdx, colIdx) {
         expected: rule.maxRatio,
         actual: ratio,
         referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+        cellValue: numericValue,
+        referenceValue,
       };
     }
     return null;
@@ -967,10 +1131,20 @@ function evaluateRule(rule, rowIdx, colIdx) {
       return null;
     }
     if (typeof rule.min === 'number' && expressionValue < rule.min) {
-      return { reason: 'expression_min', expected: rule.min, actual: expressionValue };
+      return {
+        reason: 'expression_min',
+        expected: rule.min,
+        actual: expressionValue,
+        expressionValue,
+      };
     }
     if (typeof rule.max === 'number' && expressionValue > rule.max) {
-      return { reason: 'expression_max', expected: rule.max, actual: expressionValue };
+      return {
+        reason: 'expression_max',
+        expected: rule.max,
+        actual: expressionValue,
+        expressionValue,
+      };
     }
     if (rule.referenceColumn != null && (typeof rule.minRatio === 'number' || typeof rule.maxRatio === 'number')) {
       const referenceValue = evaluateExpressionRule(rule, rule.referenceColumn);
@@ -982,6 +1156,8 @@ function evaluateRule(rule, rowIdx, colIdx) {
             expected: rule.minRatio,
             actual: ratio,
             referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+            expressionValue,
+            referenceValue,
           };
         }
         if (typeof rule.maxRatio === 'number' && ratio > rule.maxRatio) {
@@ -990,6 +1166,8 @@ function evaluateRule(rule, rowIdx, colIdx) {
             expected: rule.maxRatio,
             actual: ratio,
             referenceColumnLabel: getColumnLabel(rule.referenceColumn),
+            expressionValue,
+            referenceValue,
           };
         }
       }
@@ -1097,6 +1275,59 @@ function applyReadonlyToColumns() {
   });
 }
 
+async function loadSheetValidationSwitch() {
+  if (!shouldShowSheetValidationToggle.value || !projectKey || !sheetKey) {
+    sheetValidationEnabled.value = true;
+    return;
+  }
+  sheetValidationLoading.value = true;
+  sheetValidationError.value = '';
+  try {
+    const payload = await getSheetValidationSwitch(projectKey, sheetKey, { config: pageConfig.value });
+    sheetValidationEnabled.value = Boolean(payload?.validation_enabled ?? true);
+  } catch (err) {
+    console.error(err);
+    sheetValidationError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    sheetValidationLoading.value = false;
+  }
+}
+
+async function updateSheetValidationSwitch(nextValue) {
+  if (
+    !shouldShowSheetValidationToggle.value ||
+    !canToggleSheetValidation.value ||
+    !projectKey ||
+    !sheetKey
+  ) {
+    return;
+  }
+  sheetValidationSaving.value = true;
+  const previous = sheetValidationEnabled.value;
+  sheetValidationEnabled.value = nextValue;
+  try {
+    await setSheetValidationSwitch(projectKey, sheetKey, nextValue, { config: pageConfig.value });
+    await reloadTemplate();
+    await loadSheetValidationSwitch();
+  } catch (err) {
+    console.error(err);
+    sheetValidationEnabled.value = previous;
+  } finally {
+    sheetValidationSaving.value = false;
+  }
+}
+
+function onSheetValidationToggle(event) {
+  if (sheetValidationToggleDisabled.value) {
+    if (event?.target) {
+      event.target.checked = sheetValidationEnabled.value;
+    }
+    return;
+  }
+  const checked = Boolean(event?.target?.checked);
+  updateSheetValidationSwitch(checked);
+}
+
 // --- 渲染逻辑：标准模板 ---
 async function setupStandardGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
@@ -1174,6 +1405,9 @@ async function loadTemplate() {
   rows.value = tpl.rows || [];
   templateType.value = tpl.template_type || 'standard';
   validationEnabled.value = resolveValidationEnabledFlag(tpl);
+  validationExplanationMap.value = normalizeExplanationMapping(
+    tpl.validation_explanation_map || tpl['校验说明映射']
+  );
   if (templateType.value === 'standard') {
     templateValidationRaw.value = tpl.validation_rules || tpl['校验规则'] || null;
   } else {
@@ -1493,6 +1727,7 @@ function handleAfterEdit(evt) {
 onMounted(async () => {
   await nextTick();
   await ensureProjectsLoaded().catch(() => {});
+  await loadSheetValidationSwitch();
   await loadTemplate();
 });
 
@@ -1663,6 +1898,20 @@ watch(
   }
 )
 
+watch(
+  () => route.params.sheetKey,
+  () => {
+    loadSheetValidationSwitch();
+  },
+);
+
+watch(
+  () => pageConfig.value,
+  () => {
+    loadSheetValidationSwitch();
+  },
+);
+
 onBeforeUnmount(() => {
   if (submitFeedbackTimer !== null) {
     clearTimeout(submitFeedbackTimer);
@@ -1677,6 +1926,17 @@ onBeforeUnmount(() => {
 .date-group input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
+.sheet-validation-toggle {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  accent-color: var(--primary-600, #2563eb);
+  cursor: pointer;
+}
+.sheet-validation-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .submit-feedback { margin: 0 auto 20px; padding: 14px 24px; border-radius: 16px; font-weight: 600; font-size: 14px; line-height: 1.55; display: flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid rgba(148, 163, 184, 0.28); box-shadow: none; width: min(100%, 620px); }
 .submit-feedback--success { background: rgba(187, 247, 208, 0.9); color: #0f5132; border-color: rgba(34, 197, 94, 0.45); }
 .submit-feedback--error { background: rgba(254, 226, 226, 0.92); color: #7f1d1d; border-color: rgba(248, 113, 113, 0.45); }

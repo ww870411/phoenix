@@ -5,8 +5,36 @@
       <Breadcrumbs :items="breadcrumbItems" />
       <section class="card elevated sheets-block">
         <header class="card-header">
-          <h2>{{ pageDisplayName }}</h2>
-          <p class="sheet-subtitle">项目：{{ projectName }}</p>
+          <div class="card-header__title">
+            <h2>{{ pageDisplayName }}</h2>
+            <p class="sheet-subtitle">项目：{{ projectName }}</p>
+          </div>
+          <div class="validation-toggle" role="group" aria-label="全局校验开关">
+            <label class="validation-toggle__control">
+              <input
+                type="checkbox"
+                class="validation-toggle__checkbox"
+                :checked="validationMasterEnabled"
+                :disabled="validationToggleDisabled"
+                @change="onValidationMasterToggle"
+              />
+              <span>全局校验开关</span>
+            </label>
+            <span
+              class="validation-toggle__status"
+              :class="{ 'validation-toggle__status--off': !validationMasterEnabled }"
+            >
+              {{ validationMasterEnabled ? '已开启' : '已关闭' }}
+            </span>
+            <span v-if="validationMasterLoading" class="validation-toggle__hint">状态加载中…</span>
+            <span v-else-if="validationMasterSaving" class="validation-toggle__hint">保存中…</span>
+            <span
+              v-if="validationMasterError"
+              class="validation-toggle__hint validation-toggle__hint--error"
+            >
+              {{ validationMasterError }}
+            </span>
+          </div>
         </header>
         <div v-if="loading" class="sheet-state">表格列表加载中，请稍候…</div>
         <div v-else-if="errorMessage" class="sheet-state error">{{ errorMessage }}</div>
@@ -37,7 +65,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { listSheets } from '../services/api'
+import { listSheets, getValidationMasterSwitch, setValidationMasterSwitch } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 
@@ -77,8 +105,16 @@ const groupedSheets = computed(() => {
 })
 const loading = ref(false)
 const errorMessage = ref('')
+const validationMasterEnabled = ref(true)
+const validationMasterLoading = ref(true)
+const validationMasterSaving = ref(false)
+const validationMasterError = ref('')
 
 const projectName = computed(() => getProjectNameById(projectKey.value) ?? projectKey.value)
+const canToggleValidation = computed(() => auth.user?.group === 'Global_admin')
+const validationToggleDisabled = computed(
+  () => validationMasterLoading.value || validationMasterSaving.value || !canToggleValidation.value,
+)
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -143,12 +179,59 @@ function openSheet(sheet) {
   router.push({ path, query: { config: pageConfig.value, pageName: pageDisplayName.value } })
 }
 
-onMounted(loadSheets)
+onMounted(() => {
+  loadSheets()
+  loadValidationMasterSwitch()
+})
 function applySheetFilter() {
   sheets.value = auth.filterSheetsByRule(pageKey.value, rawSheets.value)
   if (!sheets.value.length && rawSheets.value.length) {
     errorMessage.value = '当前账号无权访问该页面下的表格，请联系管理员调整权限。'
   }
+}
+
+async function loadValidationMasterSwitch() {
+  if (!projectKey.value) {
+    validationMasterLoading.value = false
+    return
+  }
+  validationMasterLoading.value = true
+  validationMasterError.value = ''
+  try {
+    const payload = await getValidationMasterSwitch(projectKey.value)
+    validationMasterEnabled.value = Boolean(payload?.validation_enabled ?? true)
+  } catch (err) {
+    console.error(err)
+    validationMasterError.value =
+      err instanceof Error ? err.message : '无法查询全局校验开关状态。'
+  } finally {
+    validationMasterLoading.value = false
+  }
+}
+
+async function updateValidationMasterSwitch(nextValue) {
+  if (!canToggleValidation.value || !projectKey.value) return
+  validationMasterSaving.value = true
+  validationMasterError.value = ''
+  const previous = validationMasterEnabled.value
+  validationMasterEnabled.value = nextValue
+  try {
+    const payload = await setValidationMasterSwitch(projectKey.value, nextValue)
+    validationMasterEnabled.value = Boolean(payload?.validation_enabled ?? nextValue)
+  } catch (err) {
+    console.error(err)
+    validationMasterEnabled.value = previous
+    validationMasterError.value =
+      err instanceof Error ? err.message : '更新校验总开关失败，请稍后再试。'
+  } finally {
+    validationMasterSaving.value = false
+  }
+}
+
+function onValidationMasterToggle(event) {
+  if (!canToggleValidation.value) return
+  const checked = Boolean(event?.target?.checked)
+  updateValidationMasterSwitch(checked)
 }
 
 watch(
@@ -160,6 +243,9 @@ watch(
 )
 
 watch([projectKey, pageKey, pageConfig], loadSheets)
+watch(projectKey, () => {
+  loadValidationMasterSwitch()
+})
 </script>
 
 <style scoped>
@@ -182,6 +268,65 @@ watch([projectKey, pageKey, pageConfig], loadSheets)
   margin-top: 8px;
   font-size: 14px;
   color: var(--neutral-500);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.card-header__title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.validation-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 220px;
+  margin-top: 20px;
+  margin-left: auto;
+}
+
+.validation-toggle__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+.validation-toggle__checkbox {
+  width: 18px;
+  height: 18px;
+}
+
+.validation-toggle__status {
+  font-size: 14px;
+  color: var(--success-600, #0f8a5f);
+  align-self: flex-end;
+  text-align: right;
+  width: 100%;
+}
+
+.validation-toggle__status--off {
+  color: var(--warning-700, #c45d00);
+}
+
+.validation-toggle__hint {
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.validation-toggle__hint--error {
+  color: var(--danger, #d93026);
 }
 
 .sheet-state {
