@@ -116,6 +116,25 @@ denom_grp AS (
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_peer,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_biz,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area'   AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_peer
+),
+yjy_power AS (
+  SELECT biz_date, peer_date,
+         SUM(value_biz_date)  AS value_biz_date,
+         SUM(value_peer_date) AS value_peer_date,
+         SUM(sum_7d_biz)      AS sum_7d_biz,
+         SUM(sum_7d_peer)     AS sum_7d_peer,
+         SUM(sum_month_biz)   AS sum_month_biz,
+         SUM(sum_month_peer)  AS sum_month_peer,
+         SUM(sum_ytd_biz)     AS sum_ytd_biz,
+         SUM(sum_ytd_peer)    AS sum_ytd_peer
+  FROM s
+  WHERE company='YanJiuYuan' AND item='consumption_station_purchased_power'
+  GROUP BY biz_date, peer_date
+),
+yjy_area AS (
+  SELECT
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area' AND c.company='YanJiuYuan') AS fee_biz,
+    (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area' AND c.company='YanJiuYuan') AS fee_peer
 )
 -- 1) 主城区：量/金额类直接汇总（排除比率与仅 GongRe 的网损热量）
 SELECT
@@ -503,6 +522,24 @@ SELECT
   (z.sum_ytd_biz*10000.0) / NULLIF(d.fee_biz,0),
   (z.sum_ytd_peer*10000.0) / NULLIF(d.fee_peer,0)
 FROM base_grp z, denom_grp d
+WHERE z.item='consumption_station_purchased_power'
+UNION ALL
+-- 集团：供暖电单耗（-研究院）
+SELECT
+  'Group','集团全口径',
+  'rate_power_per_10k_m2_YanJiuYuan','供暖电单耗(-研究院)','kWh/万㎡',
+  z.biz_date, z.peer_date,
+  ((z.value_biz_date - COALESCE(y.value_biz_date,0))*10000.0) / NULLIF(d.fee_biz - COALESCE(a.fee_biz,0),0) AS value_biz_date,
+  ((z.value_peer_date - COALESCE(y.value_peer_date,0))*10000.0) / NULLIF(d.fee_peer - COALESCE(a.fee_peer,0),0) AS value_peer_date,
+  ((z.sum_7d_biz - COALESCE(y.sum_7d_biz,0))*10000.0) / NULLIF(d.fee_biz - COALESCE(a.fee_biz,0),0) AS sum_7d_biz,
+  ((z.sum_7d_peer - COALESCE(y.sum_7d_peer,0))*10000.0) / NULLIF(d.fee_peer - COALESCE(a.fee_peer,0),0) AS sum_7d_peer,
+  ((z.sum_month_biz - COALESCE(y.sum_month_biz,0))*10000.0) / NULLIF(d.fee_biz - COALESCE(a.fee_biz,0),0) AS sum_month_biz,
+  ((z.sum_month_peer - COALESCE(y.sum_month_peer,0))*10000.0) / NULLIF(d.fee_peer - COALESCE(a.fee_peer,0),0) AS sum_month_peer,
+  ((z.sum_ytd_biz - COALESCE(y.sum_ytd_biz,0))*10000.0) / NULLIF(d.fee_biz - COALESCE(a.fee_biz,0),0) AS sum_ytd_biz,
+  ((z.sum_ytd_peer - COALESCE(y.sum_ytd_peer,0))*10000.0) / NULLIF(d.fee_peer - COALESCE(a.fee_peer,0),0) AS sum_ytd_peer
+FROM base_grp z
+LEFT JOIN yjy_power y ON y.biz_date=z.biz_date AND y.peer_date=z.peer_date
+, denom_grp d, yjy_area a
 WHERE z.item='consumption_station_purchased_power'
 UNION ALL
 -- 集团：供暖水单耗（一次网补水+换热站补水+热网补水）

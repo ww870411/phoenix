@@ -1,0 +1,1 @@
+2025-11-27晚：应用户要求撤销当天早些时候的集团站购电过滤，已恢复 `backend/sql/groups.sql` 中 `base_grp` 的原始聚合（重新包含 YanJiuYuan 的 `consumption_station_purchased_power`），并更新 backend/frontend README 与 progress.md 说明回滚背景及验证方式。

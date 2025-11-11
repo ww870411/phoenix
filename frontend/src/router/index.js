@@ -40,6 +40,10 @@ const routes = [
     component: () => import('../daily_report_25_26/pages/DisplayView.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/:pageKey/data-analysis',
+    component: () => import('../daily_report_25_26/pages/DataAnalysisView.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages/:pageKey/display/:sheetKey',
     component: () => import('../daily_report_25_26/pages/DisplayRuntimeView.vue'),
   },

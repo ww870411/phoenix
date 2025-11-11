@@ -1,0 +1,3 @@
+## 2025-11-26 数据分析 Schema 说明补档
+- 在 backend/README.md 顶部新增“2025-11-26 数据分析 Schema 接口”条目，记录 `/projects/{project_key}/data_analysis/schema` GET 的用途、config 覆盖逻辑、返回字段（unit_dict/unit_options、metric_dict/metric_options、view_mapping、analysis_modes、date_defaults）以及与 `DATA_ANALYSIS_SCHEMA_PATH` 的关系，方便前后端查阅。
+- 在 configs/progress.md 追加同名进展条目，并说明由于根 AGENTS.md 要求，本次编辑通过 `desktop-commander::edit_block`（apply_patch）完成；回滚恢复对应文件即可。

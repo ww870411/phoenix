@@ -124,6 +124,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_approval: '处理审批流程进度',
   data_entry: '填写并提交日报数据',
   constant_data: '维护常量指标数据',
+  data_analysis: '数据自由组合提取',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 const canApproveUnit = auth.canApproveUnit
@@ -334,6 +335,14 @@ function openPage(page) {
     router.push({
       path: `${base}/dashboard`,
       query: { pageName: page.page_name },
+    })
+    return
+  }
+  const isDataAnalysis = normalizedKey === 'data_analysis'
+  if (isDataAnalysis) {
+    router.push({
+      path: `${base}/data-analysis`,
+      query: { config: page.config_file, pageName: page.page_name },
     })
     return
   }

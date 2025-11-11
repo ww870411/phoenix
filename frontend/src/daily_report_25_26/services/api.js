@@ -257,6 +257,20 @@ export async function getDashboardData(projectKey, params = {}) {
   return response.json()
 }
 
+export async function getDataAnalysisSchema(projectKey, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_analysis/schema${search}`,
+    { headers: attachAuthHeaders() },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取数据分析配置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getValidationMasterSwitch(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
     headers: attachAuthHeaders(),

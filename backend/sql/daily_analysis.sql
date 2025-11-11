@@ -212,8 +212,8 @@ calc_power AS (
     'eco_power_supply_income'::text AS item,
     '供热供电收入'::text            AS item_cn,
     '万元'::text                    AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                 AS biz_date,
+    MAX(b.peer_date)                AS peer_date,
     (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0))/10000.0 AS value_biz_date,
     (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0))/10000.0 AS value_peer_date
   FROM base b
@@ -229,8 +229,8 @@ calc_inner_heat AS (
     'eco_inner_heat_cost'::text AS item,
     '其中：内部购热成本'::text      AS item_cn,
     '万元'::text                 AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)             AS biz_date,
+    MAX(b.peer_date)            AS peer_date,
     (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ih.value,0))/10000.0 AS value_biz_date,
     (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ih.value,0))/10000.0 AS value_peer_date
   FROM base b
@@ -239,17 +239,17 @@ calc_inner_heat AS (
   GROUP BY b.company, b.company_cn, cb_ih.value, cp_ih.value
 ),
 calc_heating_income AS (
-  -- 其中：采暖收入（万元）= c.采暖期供热收入 × days_to_biz() / 157
+  -- 其中：采暖收入（万元）= c.采暖期供热收入 × days_to_biz() / 156
   SELECT
     b.company,
     b.company_cn,
     'eco_heating_income'::text AS item,
     '其中：采暖收入'::text       AS item_cn,
     '万元'::text                AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
-    COALESCE(cb_sh.value,0) * (SELECT days_day_biz  FROM window_defs) / 157.0 AS value_biz_date,
-    COALESCE(cp_sh.value,0) * (SELECT days_day_peer FROM window_defs) / 157.0 AS value_peer_date
+    MAX(b.biz_date)             AS biz_date,
+    MAX(b.peer_date)            AS peer_date,
+    COALESCE(cb_sh.value,0) * (SELECT days_day_biz  FROM window_defs) / 156.0 AS value_biz_date,
+    COALESCE(cp_sh.value,0) * (SELECT days_day_peer FROM window_defs) / 156.0 AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_sh ON cb_sh.company=b.company AND cb_sh.item='eco_season_heating_income'
   LEFT JOIN const_peer cp_sh ON cp_sh.company=b.company AND cp_sh.item='eco_season_heating_income'
@@ -263,8 +263,8 @@ calc_hot_water AS (
     'eco_hot_water_supply_income'::text AS item,
     '其中：售高温水收入'::text           AS item_cn,
     '万元'::text                        AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                     AS biz_date,
+    MAX(b.peer_date)                    AS peer_date,
     CASE
       WHEN b.company='GongRe'
         THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.value_biz_date ELSE 0 END),0)
@@ -288,8 +288,8 @@ calc_steam AS (
     'eco_steam_supply_income'::text AS item,
     '其中：售汽收入'::text           AS item_cn,
     '万元'::text                    AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                 AS biz_date,
+    MAX(b.peer_date)                AS peer_date,
     CASE
       WHEN b.company='GongRe'
         THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.value_biz_date ELSE 0 END),0)
@@ -467,10 +467,10 @@ calc_direct_income AS (
     'eco_direct_income'::text AS item,
     '直接收入'::text           AS item_cn,
     '万元'::text               AS unit,
-    MAX(c.biz_date),
-    MAX(c.peer_date),
-    SUM(c.value_biz_date)  AS value_biz_date,
-    SUM(c.value_peer_date) AS value_peer_date
+    MAX(c.biz_date)           AS biz_date,
+    MAX(c.peer_date)          AS peer_date,
+    SUM(c.value_biz_date)     AS value_biz_date,
+    SUM(c.value_peer_date)    AS value_peer_date
   FROM (
     SELECT * FROM calc_power
     UNION ALL SELECT * FROM calc_inner_heat
@@ -1125,8 +1125,8 @@ calc_power AS (
     'eco_power_supply_income'::text AS item,
     '供热供电收入'::text            AS item_cn,
     '万元'::text                    AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                 AS biz_date,
+    MAX(b.peer_date)                AS peer_date,
     (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0))/10000.0 AS value_biz_date,
     (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0))/10000.0 AS value_peer_date
   FROM base b
@@ -1141,8 +1141,8 @@ calc_inner_heat AS (
     'eco_inner_heat_cost'::text AS item,
     '其中：内部购热成本'::text      AS item_cn,
     '万元'::text                 AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)             AS biz_date,
+    MAX(b.peer_date)            AS peer_date,
     (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ih.value,0))/10000.0 AS value_biz_date,
     (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ih.value,0))/10000.0 AS value_peer_date
   FROM base b
@@ -1157,10 +1157,10 @@ calc_heating_income AS (
     'eco_heating_income'::text AS item,
     '其中：采暖收入'::text       AS item_cn,
     '万元'::text                AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
-    COALESCE(cb_sh.value,0) * (SELECT days_range_biz FROM window_defs) / 157.0 AS value_biz_date,
-    COALESCE(cp_sh.value,0) * (SELECT days_range_peer FROM window_defs) / 157.0 AS value_peer_date
+    MAX(b.biz_date)             AS biz_date,
+    MAX(b.peer_date)            AS peer_date,
+    COALESCE(cb_sh.value,0) * (SELECT days_range_biz FROM window_defs) / 156.0 AS value_biz_date,
+    COALESCE(cp_sh.value,0) * (SELECT days_range_peer FROM window_defs) / 156.0 AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_sh ON cb_sh.company=b.company AND cb_sh.item='eco_season_heating_income'
   LEFT JOIN const_peer cp_sh ON cp_sh.company=b.company AND cp_sh.item='eco_season_heating_income'
@@ -1173,8 +1173,8 @@ calc_hot_water AS (
     'eco_hot_water_supply_income'::text AS item,
     '其中：售高温水收入'::text           AS item_cn,
     '万元'::text                        AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                     AS biz_date,
+    MAX(b.peer_date)                    AS peer_date,
     CASE
       WHEN b.company='GongRe'
         THEN COALESCE(SUM(CASE WHEN b.item='eco_hot_water_supply_income' THEN b.value_biz_date ELSE 0 END),0)
@@ -1197,8 +1197,8 @@ calc_steam AS (
     'eco_steam_supply_income'::text AS item,
     '其中：售汽收入'::text           AS item_cn,
     '万元'::text                    AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
+    MAX(b.biz_date)                 AS biz_date,
+    MAX(b.peer_date)                AS peer_date,
     CASE
       WHEN b.company='GongRe'
         THEN COALESCE(SUM(CASE WHEN b.item='eco_steam_supply_income' THEN b.value_biz_date ELSE 0 END),0)

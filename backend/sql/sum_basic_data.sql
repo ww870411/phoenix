@@ -386,7 +386,7 @@ calc_inner_heat AS (
   GROUP BY b.company, b.company_cn, cb_hin.value, cp_hin.value
 ),
 calc_heating_income AS (
-  -- 其中：暖收入（万元）= c.采暖期供暖收入 × days_to_biz() / 157
+  -- 其中：暖收入（万元）= c.采暖期供暖收入 × days_to_biz() / 156
   SELECT
     b.company,
     b.company_cn,
@@ -395,14 +395,14 @@ calc_heating_income AS (
     '万元'::text                      AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    COALESCE(cb_sh.value,0) * (SELECT days_day_biz    FROM window_defs) / 157.0,
-    COALESCE(cp_sh.value,0) * (SELECT days_day_peer   FROM window_defs) / 157.0,
-    COALESCE(cb_sh.value,0) * (SELECT days_7_biz      FROM window_defs) / 157.0,
-    COALESCE(cp_sh.value,0) * (SELECT days_7_peer     FROM window_defs) / 157.0,
-    COALESCE(cb_sh.value,0) * (SELECT days_month_biz  FROM window_defs) / 157.0,
-    COALESCE(cp_sh.value,0) * (SELECT days_month_peer FROM window_defs) / 157.0,
-    COALESCE(cb_sh.value,0) * (SELECT days_ytd_biz    FROM window_defs) / 157.0,
-    COALESCE(cp_sh.value,0) * (SELECT days_ytd_peer   FROM window_defs) / 157.0
+    COALESCE(cb_sh.value,0) * (SELECT days_day_biz    FROM window_defs) / 156.0,
+    COALESCE(cp_sh.value,0) * (SELECT days_day_peer   FROM window_defs) / 156.0,
+    COALESCE(cb_sh.value,0) * (SELECT days_7_biz      FROM window_defs) / 156.0,
+    COALESCE(cp_sh.value,0) * (SELECT days_7_peer     FROM window_defs) / 156.0,
+    COALESCE(cb_sh.value,0) * (SELECT days_month_biz  FROM window_defs) / 156.0,
+    COALESCE(cp_sh.value,0) * (SELECT days_month_peer FROM window_defs) / 156.0,
+    COALESCE(cb_sh.value,0) * (SELECT days_ytd_biz    FROM window_defs) / 156.0,
+    COALESCE(cp_sh.value,0) * (SELECT days_ytd_peer   FROM window_defs) / 156.0
   FROM base b
   LEFT JOIN const_biz  cb_sh ON cb_sh.company=b.company AND cb_sh.item='eco_season_heating_income'
   LEFT JOIN const_peer cp_sh ON cp_sh.company=b.company AND cp_sh.item='eco_season_heating_income'

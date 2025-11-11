@@ -1,5 +1,37 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-27 集团口径新增“-研究院”电单耗）
+
+- `backend/sql/groups.sql` 添加 `rate_power_per_10k_m2_YanJiuYuan` 指标，分子在集团 `consumption_station_purchased_power` 的聚合中扣除研究院值，分母同期扣除研究院 `amount_heating_fee_area`，其余逻辑与 `rate_power_per_10k_m2` 一致。
+- 新增 CTE `yjy_power`/`yjy_area` 分别存放研究院站购电与面积，便于同一查询中复用；`rate_power_per_10k_m2_YanJiuYuan` 输出完整 8 列（当日/同期/7日/月度/YTD）。
+- 该指标主要用于观察集团整体在剔除研究院后的单位电耗，仍保留原有 `rate_power_per_10k_m2` 以供对照。
+
+## 会话小结（2025-11-27 分析简报绑定“-研究院”电单耗）
+
+- `backend_data/数据结构_全口径展示表.json` 中 `Group_analysis_brief_report_Sheet` 的“供暖电单耗”行现明确调用 `value_biz_date(rate_power_per_10k_m2_YanJiuYuan)` / `value_peer_date(rate_power_per_10k_m2_YanJiuYuan)`，集团列直接使用新口径。
+- `date_diff_rate` 同步传入相同 key，避免函数 fallback 至旧 `rate_power_per_10k_m2` 导致默认值 0；其他单位维持默认 `value_biz_date()` 行为继续引用各自口径。
+- 数据看板 `4.供暖单耗` 已在早前配置中切换到该字段，两端配置现保持一致，报表与看板可对照同一指标。
+
+## 会话小结（2025-11-27 集团口径站购电回滚）
+
+- 用户确认“集团全口径”需重新包含研究院 `consumption_station_purchased_power`，已将 `backend/sql/groups.sql` 中 `base_grp` 的排除条件移除，恢复原始聚合范围。
+- 回滚后，`Group` 行的 `rate_power_per_10k_m2` 及其它依赖站购电的派生指标会再次涵盖 `YanJiuYuan`，与历史报表逻辑保持一致；主城区 `base_zc` 仍只含 `BeiHai/XiangHai/GongRe`。
+- 如已执行过带过滤条件的脚本，请重新 `\\i backend/sql/groups.sql`，并在数据库中比对 `SELECT company,item,value_biz_date FROM groups WHERE item='consumption_station_purchased_power' AND company='Group';`，确认集团值恢复为八家单位之和。
+
+## 会话小结（2025-11-26 数据分析 Schema 接口）
+
+- 新增 `/projects/{project_key}/data_analysis/schema` GET 接口，对应 FastAPI 路由 `get_data_analysis_schema`。接口默认读取 `DATA_ANALYSIS_SCHEMA_PATH`（容器路径 `/app/data/数据结构_数据分析表.json`），可通过 `?config=相对路径` 临时加载其他配置文件，返回值包含：
+  - `unit_dict/unit_options`：单位编码与显示名称（单选），供前端绘制单选芯片；
+  - `display_unit_keys/display_unit_options`：当 `backend_data/数据结构_数据分析表.json` 的 `显示单位` 列表存在时，仅将匹配到的单位返回给前端；若列表为空则回退到 `unit_options`；
+  - `metric_dict/metric_options`：可自由勾选的指标清单（多选），字段与 `entries.item_key` 保持一致；
+  - `primary_metric_dict/constant_metric_dict` + `metric_groups`：若 `指标选择` 划分了“主要指标字典/常量指标字典”，接口会同时返回分组选项与 `metric_view_mapping`，便于前端区分来自四张分析视图或 `constant_data` 的常量字段；
+  - `view_mapping`：按“单日/累计”区分的视图映射，后端在后续查询接口中可直接据此映射到 `company_daily_analysis`、`groups_sum_analysis` 等视图；
+  - `analysis_modes`：根据 `view_mapping` 动态生成的模式选项，前端据此切换“单日/累计”卡片；
+  - `date_defaults`：`backend_data/数据结构_数据分析表.json` 内 `日期选择` 区域的默认值（允许为空字符串）。
+- 该接口仅负责读取配置，不执行数据库查询，便于后续继续扩展真实的分析查询 API（可直接消费 `daily_analysis.sql` 内四张视图）。
+- 前端 `DataAnalysisView.vue` 通过 `getDataAnalysisSchema` 首屏加载，`PageSelectView` 新增“数据分析页面”入口卡片，后续若调整配置结构，只需保持上述字段兼容即可。
+- 权限配置 `backend_data/auth/permissions.json` 已同步把 `data_analysis` 加入各角色 `page_access`，确保页面卡片对具备登录权限的用户可见。
+
 ## 会话小结（2025-11-25 日分析视图拆分）
 
 - 新增 `backend/sql/daily_analysis.sql`，定义 `company_daily_analysis` 与 `gourps_daily_analysis` 两张日口径视图。前者在 `daily_basic_data`+`constant_data` 基础上重算所有派生指标，但仅保留 `value_biz_date/value_peer_date`，通过 `current_setting('phoenix.biz_date')` 接受任意查询日期，避免重复计算 7 日/月份/采暖期累计窗口。

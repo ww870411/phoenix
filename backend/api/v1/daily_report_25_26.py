@@ -61,6 +61,7 @@ COAL_INVENTORY_DEBUG_FILE = DATA_ROOT / "test.md"
 GONGRE_DEBUG_FILE = SysPath(__file__).resolve().parents[3] / "configs" / "111.md"
 GONGRE_SHEET_KEYS = {"gongre_branches_detail_sheet"}
 BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
+DATA_ANALYSIS_SCHEMA_PATH = DATA_ROOT / "数据结构_数据分析表.json"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -2712,8 +2713,211 @@ def list_sheets(
                 "ok": False,
                 "message": f"未在 {location} 中找到任何模板文件",
             },
-        )
+    )
     return JSONResponse(status_code=200, content=catalog)
+
+
+@router.get(
+    "/data_analysis/schema",
+    summary="获取数据分析页面配置",
+)
+def get_data_analysis_schema(
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先加载的配置文件路径（相对 DATA_DIRECTORY）",
+    ),
+):
+    data_file: Optional[SysPath]
+    if config:
+        data_file = _resolve_data_file(config)
+        if data_file is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "message": f"未找到页面配置文件: {config}",
+                },
+            )
+    else:
+        data_file = DATA_ANALYSIS_SCHEMA_PATH if DATA_ANALYSIS_SCHEMA_PATH.exists() else None
+
+    if data_file is None or not data_file.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "message": "未找到数据分析配置文件"},
+        )
+
+    try:
+        raw_payload = json.loads(data_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": f"{data_file} 解析失败"},
+        )
+
+    page_section = raw_payload.get("data_analysis_page")
+    if not isinstance(page_section, dict):
+        page_section = raw_payload if isinstance(raw_payload, dict) else None
+    if not isinstance(page_section, dict):
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "数据分析配置格式错误"},
+        )
+
+    units_section = page_section.get("单位选择") or {}
+    unit_dict_raw = units_section.get("单位字典") or {}
+    unit_dict = {
+        str(key): str(value)
+        for key, value in unit_dict_raw.items()
+        if isinstance(key, str)
+    }
+
+    view_mapping = units_section.get("视图映射")
+    if not isinstance(view_mapping, dict):
+        view_mapping = {}
+
+    metrics_section = page_section.get("指标选择") or {}
+
+    def _normalize_metric_dict(source: Any) -> Dict[str, str]:
+        if not isinstance(source, dict):
+            return {}
+        normalized: Dict[str, str] = {}
+        for key, value in source.items():
+            if not isinstance(key, str):
+                continue
+            normalized[key] = str(value) if value is not None else key
+        return normalized
+
+    legacy_metric_dict = _normalize_metric_dict(metrics_section.get("项目字典") or {})
+    primary_metric_dict = _normalize_metric_dict(
+        metrics_section.get("主要指标字典")
+        or metrics_section.get("primary_metrics_dict")
+    )
+    constant_metric_dict = _normalize_metric_dict(
+        metrics_section.get("常量指标字典")
+        or metrics_section.get("constant_metrics_dict")
+    )
+
+    if not primary_metric_dict and not constant_metric_dict:
+        primary_metric_dict = legacy_metric_dict
+    else:
+        for key, value in legacy_metric_dict.items():
+            if key not in primary_metric_dict and key not in constant_metric_dict:
+                primary_metric_dict[key] = value
+
+    def _merge_metric_dicts(dicts: Sequence[Dict[str, str]]) -> Dict[str, str]:
+        merged: Dict[str, str] = {}
+        for block in dicts:
+            for key, value in block.items():
+                if key not in merged:
+                    merged[key] = value
+        return merged
+
+    metric_dict = _merge_metric_dicts([primary_metric_dict, constant_metric_dict])
+
+    metric_view_mapping = metrics_section.get("视图映射")
+    if not isinstance(metric_view_mapping, dict):
+        metric_view_mapping = {}
+
+    date_defaults = raw_payload.get("日期选择")
+    if not isinstance(date_defaults, dict):
+        date_defaults = {}
+
+    def _options_from_dict(source: Dict[str, str]) -> List[Dict[str, str]]:
+        return [
+            {"value": key, "label": value if value else key}
+            for key, value in source.items()
+        ]
+
+    def _options_from_keys(keys: Sequence[str], label_source: Dict[str, str]) -> List[Dict[str, str]]:
+        options: List[Dict[str, str]] = []
+        for key in keys:
+            if not isinstance(key, str):
+                continue
+            label = label_source.get(key, key)
+            options.append({"value": key, "label": label if label else key})
+        return options
+
+    display_units_raw = units_section.get("显示单位") or units_section.get("display_units")
+    display_unit_keys: List[str] = []
+
+    def _match_unit_key(candidate: str) -> Optional[str]:
+        if not candidate:
+            return None
+        if candidate in unit_dict:
+            return candidate
+        for key, label in unit_dict.items():
+            if label == candidate:
+                return key
+        return None
+
+    if isinstance(display_units_raw, (list, tuple, set)):
+        seen: Set[str] = set()
+        for entry in display_units_raw:
+            if entry is None:
+                continue
+            normalized = _match_unit_key(str(entry).strip())
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                display_unit_keys.append(normalized)
+    if not display_unit_keys:
+        display_unit_keys = list(unit_dict.keys())
+
+    unit_options_all = _options_from_dict(unit_dict)
+    display_unit_options = _options_from_keys(display_unit_keys, unit_dict)
+    if not display_unit_options:
+        display_unit_options = unit_options_all[:]
+
+    primary_label = str(metrics_section.get("主要指标名称") or "主要指标")
+    constant_label = str(metrics_section.get("常量指标名称") or "常量指标")
+
+    primary_metric_options = _options_from_dict(primary_metric_dict)
+    constant_metric_options = _options_from_dict(constant_metric_dict)
+    metric_groups_payload: List[Dict[str, Any]] = []
+    if primary_metric_options:
+        metric_groups_payload.append(
+            {"key": "primary", "label": primary_label, "options": primary_metric_options}
+        )
+    if constant_metric_options:
+        metric_groups_payload.append(
+            {"key": "constant", "label": constant_label, "options": constant_metric_options}
+        )
+
+    mode_label_map = {"单日数据": "daily", "累计数据": "range"}
+    analysis_modes: List[Dict[str, Any]] = []
+    for idx, (label, mapping) in enumerate(view_mapping.items()):
+        if not isinstance(mapping, (dict, list)):
+            mapping = {}
+        analysis_modes.append(
+            {
+                "value": mode_label_map.get(label, f"mode_{idx}"),
+                "label": label,
+            }
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "config_path": str(data_file),
+            "unit_dict": unit_dict,
+            "unit_options": unit_options_all,
+            "display_unit_keys": display_unit_keys,
+            "display_unit_options": display_unit_options,
+            "view_mapping": view_mapping,
+            "metric_dict": metric_dict,
+            "primary_metric_dict": primary_metric_dict,
+            "constant_metric_dict": constant_metric_dict,
+            "metric_options": _options_from_dict(metric_dict),
+            "primary_metric_options": primary_metric_options,
+            "constant_metric_options": constant_metric_options,
+            "metric_groups": metric_groups_payload,
+            "metric_view_mapping": metric_view_mapping,
+            "date_defaults": date_defaults,
+            "analysis_modes": analysis_modes,
+        },
+    )
 
 
 def _detect_readonly_limit_backend(columns: Sequence[Any]) -> int:

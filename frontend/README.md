@@ -2,6 +2,31 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-27 集团电单耗双口径）
+
+- 后端 `groups` 视图新增 `rate_power_per_10k_m2_YanJiuYuan` 字段（中文名“供暖电单耗（-研究院）”），其值等于集团整体现有 `rate_power_per_10k_m2` 在分子、分母上扣除 `YanJiuYuan` 数据后的结果。
+- UI 若需要展示两个口径，可沿用当前表格结构增加一列或在 tooltip 中切换；字段 key 与接口一致，单位仍为 `kWh/万㎡`。
+- 旧字段 `rate_power_per_10k_m2` 继续返回包含研究院的全量数据，可用于对比分析。
+
+## 会话小结（2025-11-27 数据看板/展示表同步）
+
+- 数据看板 `backend_data/数据结构_数据看板.json` 的“4.供暖单耗-集团汇总”已将“供暖电单耗”映射到 `供暖电单耗（-研究院）`，仪表盘直接展示新口径。
+- `backend_data/数据结构_全口径展示表.json` 的 `Group_analysis_brief_report_Sheet` 现通过 `value_biz_date(rate_power_per_10k_m2_YanJiuYuan)`/`value_peer_date(rate_power_per_10k_m2_YanJiuYuan)` 读取同一字段，避免出现 0 值。
+- 前端无需额外改动即可在数据看板与分析简报中看到一致的“集团电单耗（-研究院）”数据，如需保留旧口径可继续使用 `rate_power_per_10k_m2` 字段。
+
+## 会话小结（2025-11-27 集团口径站购电回滚）
+
+- 因口径需求调整，后端已恢复 `consumption_station_purchased_power` 在集团层级中包含 `YanJiuYuan`，前端读取 `groups` 视图时会重新看到包含研究院的数据。
+- 这意味着“集团全口径” `rate_power_per_10k_m2` 与其它派生指标将再度与历史报表一致，如需与主城区对比请注意主城区仍只包含 `BeiHai/XiangHai/GongRe`。
+- 若要确认效果，可在调试面板中比较 `/groups` 返回的 `Group` 行与各单位数值总和：集团列应等于全部八家单位之和。
+
+## 会话小结（2025-11-26 数据分析页面入口补丁）
+
+- `PageSelectView.vue` 已自带 `data_analysis` 卡片逻辑，但受权限矩阵控制；后台 `permissions.json` 现将该 page_key 加入所有角色 `page_access`，登录后刷新即可看到“数据分析页面”卡片。
+- 新页面仍由 `DataAnalysisView.vue` 渲染，首屏依赖 `/data_analysis/schema` 接口拉取单位/指标/日期选项；后续若扩展真实查询 API，可在该页面中追加表单提交逻辑。
+- 若 `数据结构_数据分析表.json` 中配置 `显示单位` 列表，`DataAnalysisView.vue` 仅展示这些单位的单选项（其余单位仍保留在 `unit_dict` 中供派生逻辑使用）。
+- `指标选择` 支持“主要指标”与“常量指标”两组：常量组展示来自 `constant_data` 表的字段，并在 UI 中以独立卡片标示；多选集合依旧共享，方便后续统一提交。
+
 ## 会话小结（2025-11-25 日分析视图拆分）
 
 - 后端新增 `backend/sql/daily_analysis.sql`，提供 `company_daily_analysis`（公司维度）与 `gourps_daily_analysis`（主城区/集团汇总）两张“本日/同期”专用视图；自由构建页面在展示任意日期或日期区间时，可循环设置 `SET phoenix.biz_date = :target_date` 并查询上述视图，而不再调用包含月度/YTD 聚合的旧视图，显著降低资源消耗。
