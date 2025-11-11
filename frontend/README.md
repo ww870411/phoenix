@@ -2,6 +2,14 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-25 日分析视图拆分）
+
+- 后端新增 `backend/sql/daily_analysis.sql`，提供 `company_daily_analysis`（公司维度）与 `gourps_daily_analysis`（主城区/集团汇总）两张“本日/同期”专用视图；自由构建页面在展示任意日期或日期区间时，可循环设置 `SET phoenix.biz_date = :target_date` 并查询上述视图，而不再调用包含月度/YTD 聚合的旧视图，显著降低资源消耗。
+- `company_daily_analysis` 输出与现有 `sum_basic_data` 相同的 item 语义（含热效率、边际利润、投诉率等），字段仅保留 `value_biz_date/value_peer_date`。前端只需将新接口结果映射到既有 `valueCurrent/valuePeer` 即可。
+- `gourps_daily_analysis` 已将主城区与集团全口径的派生指标（投诉率、单耗、张屯口径煤耗、全厂热效率、直接收入等）重新按日值计算；当自由构建页面需要“主城区/集团”切换时，无需再重复在前端聚合。
+- 后续若为自由构建页面新增 API，建议直接调用上述视图，将日期/区间作为参数（循环查询或在 SQL 中聚合），即可与现有固定视图共享同一计算链路。
+- 若前端需要进行期间累计展示，可在调用前设置 `phoenix.sum_start_date`/`phoenix.sum_end_date`，复用后端新建的 `company_sum_analysis` 与 `groups_sum_analysis` 结果，直接获取区间累计值及主城区/集团派生指标，避免在浏览器端逐日累加。
+
 ## 会话小结（2025-11-24 数据模板行内格式统一）
 
 - 后端 `backend_data/数据结构_基本指标表.json` 现将所有 `“数据”` 数组行合并为单行，RevoGrid 模板接口返回的数据结构不变。前端解析 `rows/cells` 时无需改动，只是未来 `git diff` 更易阅读。

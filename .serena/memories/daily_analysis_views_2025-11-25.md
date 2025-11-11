@@ -1,0 +1,1 @@
+2025-11-25：在 backend/sql 下新增 daily_analysis.sql，内含 company_daily_analysis 与 gourps_daily_analysis 两张日口径视图。company_daily_analysis 基于 daily_basic_data+constant_data 重算所有派生指标但仅保留 value_biz_date/value_peer_date，依赖 current_setting('phoenix.biz_date') 设定业务日。gourps_daily_analysis 复用前者结果，对主城区（BeiHai/XiangHai/GongRe）和集团全口径（全部 8 个单位）做聚合，并重新计算投诉率、单耗、热效率、直接收入及张屯煤耗特殊口径，为自由构建页面提供轻量日查询基础。

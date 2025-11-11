@@ -1,0 +1,1 @@
+2025-11-25：在 backend/sql/daily_analysis.sql 中继续加入 company_sum_analysis 与 groups_sum_analysis。它们使用 GUC 变量 phoenix.sum_start_date/phoenix.sum_end_date（默认 2025-11-01 至昨日）确定累计窗口，在 company_sum_analysis 内直接对 daily_basic_data 做区间求和并沿用日视图相同的派生计算，groups_sum_analysis 复用该结果输出主城区和集团两个汇总层级（含张屯煤耗特例、投诉率、单耗、热效率等派生指标）。

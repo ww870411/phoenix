@@ -1,5 +1,20 @@
 # 进度记录
 
+## 2025-11-25（日分析视图拆分）
+
+前置说明（降级留痕）：
+- Serena MCP 暂无法直接写入 `.sql` 文件，本次以 `desktop-commander::apply_patch` 新建 `backend/sql/daily_analysis.sql` 并维护两张视图（company_daily_analysis / gourps_daily_analysis）；如需回滚，只需恢复该文件即可。
+
+本次动作：
+- 复制 `sum_basic_data.sql` / `groups.sql` 的口径与计算方式，重新梳理“仅包含本日/同期”所需字段，编写 `company_daily_analysis` 视图：保留全部派生指标（热效率、边际利润、各类成本/收入、投诉率等），但仅输出 `value_biz_date`、`value_peer_date`，去掉 7 日、月度、采暖期累计窗口以降低查询成本，并允许通过 `phoenix.biz_date` GUC 注入任意日期。
+- 在同一脚本中定义 `gourps_daily_analysis`（按需求保持拼写），基于 `company_daily_analysis` 汇总出“主城区”与“集团全口径”两大层级：常规指标直接求和，派生指标（净投诉量、标煤/热/电/水单耗、全厂热效率、直接收入、张屯煤耗补表等）按原逻辑重算，仅输出本期/同期数值。
+- 进一步扩展 `company_sum_analysis` / `groups_sum_analysis`：通过 `phoenix.sum_start_date`、`phoenix.sum_end_date` 指定累计区间，对本期与同期日历分别求和，并沿用相同的派生指标/汇总逻辑（含张屯特例、主城区/集团层级、投诉率与效率类指标），供自由构建页面进行期间累计查询。
+
+验证建议：
+1. 在数据库连接中执行 `\i backend/sql/daily_analysis.sql` 应成功创建/替换两张视图，且不依赖额外函数；如需指定日期，可在会话前执行 `SET phoenix.biz_date = '2025-11-15';`。
+2. 通过 `SELECT * FROM company_daily_analysis WHERE company='BeiHai' LIMIT 10;` 与 `SELECT * FROM gourps_daily_analysis WHERE company='Group' LIMIT 10;` 检查字段，只应包含 `value_biz_date/value_peer_date` 两列，且与旧视图在相同日期下的日值保持一致。
+3. 设置 `SET phoenix.sum_start_date='2025-11-01'; SET phoenix.sum_end_date='2025-11-15';` 后查询 `company_sum_analysis`/`groups_sum_analysis`，与直接在 `daily_basic_data` 汇总或旧 `sum_*` 逻辑比对，确认累计结果以及主城区/集团派生指标与期望一致。
+
 ## 2025-11-24（数据模板行内格式统一）
 
 前置说明（降级留痕）：

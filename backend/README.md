@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-25 日分析视图拆分）
+
+- 新增 `backend/sql/daily_analysis.sql`，定义 `company_daily_analysis` 与 `gourps_daily_analysis` 两张日口径视图。前者在 `daily_basic_data`+`constant_data` 基础上重算所有派生指标，但仅保留 `value_biz_date/value_peer_date`，通过 `current_setting('phoenix.biz_date')` 接受任意查询日期，避免重复计算 7 日/月份/采暖期累计窗口。
+- `gourps_daily_analysis` 直接复用 `company_daily_analysis` 的结果，分别对“主城区（BeiHai/XiangHai/GongRe）”与“集团全口径（全部 8 个单位）”做汇总、张屯口径特殊并表以及投诉率/单耗/热效率等派生指标，输出结构与旧 `groups` 视图一致但仅包含日值与同期值。
+- 部署数据库时可直接执行 `\i backend/sql/daily_analysis.sql`，或在迁移/初始化脚本中追加该文件；自由构建页面如需按日/区间查询，可循环设置 `SET phoenix.biz_date` 后访问两张新视图，再由业务层聚合时间段。
+- 同一脚本额外提供 `company_sum_analysis` / `groups_sum_analysis`：通过 `phoenix.sum_start_date`、`phoenix.sum_end_date` 参数指定累计区间（默认供暖期至昨日），直接在后端完成期间求和与派生指标计算，并输出主城区/集团两类累计口径，供自由构建页面重复使用。
+
 ## 会话小结（2025-11-24 数据模板行内格式统一）
 
 - `backend_data/数据结构_基本指标表.json` 的 12 个 `“数据”` 数组全部改为单行写法（如 `["发电量", "万kWh", "", "", ""]`），不再拆成多行。字段、顺序与值保持原样，仅压缩排版，便于代码审查与差异对比。
