@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS company_daily_analysis;
+DROP VIEW IF EXISTS analysis_company_daily;
 
-CREATE VIEW company_daily_analysis AS
+CREATE VIEW analysis_company_daily AS
 WITH params AS (
   SELECT COALESCE(
     current_setting('phoenix.biz_date', true)::date,
@@ -597,9 +597,9 @@ WHERE NOT (item='consumption_station_heat' AND company IN ('JinZhou','BeiFang','
 UNION ALL
 SELECT * FROM calc;
 
-DROP VIEW IF EXISTS groups_daily_analysis;
+DROP VIEW IF EXISTS analysis_groups_daily;
 
-CREATE VIEW groups_daily_analysis AS
+CREATE VIEW analysis_groups_daily AS
 WITH params AS (
   SELECT COALESCE(
     current_setting('phoenix.biz_date', true)::date,
@@ -633,7 +633,7 @@ w AS (
   FROM anchor_dates
 ),
 company AS (
-  SELECT * FROM company_daily_analysis
+  SELECT * FROM analysis_company_daily
 ),
 base_zc AS (
   SELECT
@@ -925,9 +925,9 @@ FROM (
   GROUP BY biz_date, peer_date
 ) a, denom_grp d;
 
-DROP VIEW IF EXISTS company_sum_analysis;
+DROP VIEW IF EXISTS analysis_company_sum;
 
-CREATE VIEW company_sum_analysis AS
+CREATE VIEW analysis_company_sum AS
 WITH params AS (
   SELECT
     COALESCE(current_setting('phoenix.sum_start_date', true)::date, DATE '2025-11-01') AS raw_start,
@@ -1528,9 +1528,9 @@ WHERE NOT (item='consumption_station_heat' AND company IN ('JinZhou','BeiFang','
 UNION ALL
 SELECT * FROM calc;
 
-DROP VIEW IF EXISTS groups_sum_analysis;
+DROP VIEW IF EXISTS analysis_groups_sum;
 
-CREATE VIEW groups_sum_analysis AS
+CREATE VIEW analysis_groups_sum AS
 WITH params AS (
   SELECT
     COALESCE(current_setting('phoenix.sum_start_date', true)::date, DATE '2025-11-01') AS sum_start,
@@ -1563,7 +1563,7 @@ w AS (
   FROM anchor_dates
 ),
 company AS (
-  SELECT * FROM company_sum_analysis
+  SELECT * FROM analysis_company_sum
 ),
 base_zc AS (
   SELECT item, item_cn, unit, biz_date, peer_date,
