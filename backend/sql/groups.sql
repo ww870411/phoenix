@@ -524,7 +524,7 @@ SELECT
 FROM base_grp z, denom_grp d
 WHERE z.item='consumption_station_purchased_power'
 UNION ALL
--- 集团：供暖电单耗（-研究院）
+-- 集团：供暖电单耗(-研究院)
 SELECT
   'Group','集团全口径',
   'rate_power_per_10k_m2_YanJiuYuan','供暖电单耗(-研究院)','kWh/万㎡',

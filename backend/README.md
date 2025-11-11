@@ -2,7 +2,7 @@
 
 ## 会话小结（2025-11-27 集团口径新增“-研究院”电单耗）
 
-- `backend/sql/groups.sql` 添加 `rate_power_per_10k_m2_YanJiuYuan` 指标，分子在集团 `consumption_station_purchased_power` 的聚合中扣除研究院值，分母同期扣除研究院 `amount_heating_fee_area`，其余逻辑与 `rate_power_per_10k_m2` 一致。
+- `backend/sql/groups.sql` 添加 `rate_power_per_10k_m2_YanJiuYuan` 指标，分子在集团 `consumption_station_purchased_power` 的聚合中扣除研究院值，分母同期扣除研究院 `amount_heating_fee_area`，其余逻辑与 `rate_power_per_10k_m2` 一致，并统一展示名为“供暖电单耗(-研究院)”。
 - 新增 CTE `yjy_power`/`yjy_area` 分别存放研究院站购电与面积，便于同一查询中复用；`rate_power_per_10k_m2_YanJiuYuan` 输出完整 8 列（当日/同期/7日/月度/YTD）。
 - 该指标主要用于观察集团整体在剔除研究院后的单位电耗，仍保留原有 `rate_power_per_10k_m2` 以供对照。
 
@@ -11,6 +11,12 @@
 - `backend_data/数据结构_全口径展示表.json` 中 `Group_analysis_brief_report_Sheet` 的“供暖电单耗”行现明确调用 `value_biz_date(rate_power_per_10k_m2_YanJiuYuan)` / `value_peer_date(rate_power_per_10k_m2_YanJiuYuan)`，集团列直接使用新口径。
 - `date_diff_rate` 同步传入相同 key，避免函数 fallback 至旧 `rate_power_per_10k_m2` 导致默认值 0；其他单位维持默认 `value_biz_date()` 行为继续引用各自口径。
 - 数据看板 `4.供暖单耗` 已在早前配置中切换到该字段，两端配置现保持一致，报表与看板可对照同一指标。
+
+## 会话小结（2025-11-27 数据分析页面权限收紧）
+
+- `backend_data/auth/permissions.json` 调整：除 `Global_admin` 外的角色（Group_admin、ZhuChengQu_admin、Unit_admin、unit_filler、Group_viewer）均移除 `data_analysis` page_access，确保 `projects/.../data_analysis` 仅对全局管理员可见。
+- 其他页面与表单权限保持不变，角色仍可照常访问 dashboard/data_entry 等模块。
+- 如需恢复访问，可在权限文件中为目标角色重新加入 `data_analysis`，或临时将用户加入 `Global_admin`。
 
 ## 会话小结（2025-11-27 集团口径站购电回滚）
 

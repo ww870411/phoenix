@@ -1,5 +1,18 @@
 # 进度记录
 
+## 2025-11-27（数据分析页面权限收紧）
+
+前置说明（降级留痕）：
+- Serena 暂无法直接写入 JSON/Markdown，本次使用 `apply_patch` 更新 `backend_data/auth/permissions.json`、`backend/README.md`、`frontend/README.md` 与本文；如需回滚，恢复对应文件即可。
+
+本次动作：
+- 仅 `Global_admin` 保留 `data_analysis` page_access，Group_admin / ZhuChengQu_admin / Unit_admin / unit_filler / Group_viewer 均移除该页面权限，确保 `http://localhost:5173/.../data_analysis` 仅全局管理员可见。
+- backend/frontend README 记录相应变更，提醒如需调试须使用 Global_admin 账号或恢复权限。
+
+影响范围与验证：
+- 执行 `GET /auth/permissions`（或查看 `permissions.json`）应显示只有 `Global_admin` 拥有 `data_analysis`；使用非 Global_admin 账号登录页面，`data_analysis` 卡片不再显示。
+- 如需恢复其他角色访问，需重新将 `data_analysis` 写回相应 `page_access` 列表。
+
 ## 2025-11-27（集团电单耗双口径）
 
 前置说明（降级留痕）：
@@ -21,7 +34,7 @@
 
 本次动作：
 - `Group_analysis_brief_report_Sheet` 的“供暖电单耗”行将集团列的 `value_biz_date/peer/date_diff_rate` 显式指向 `rate_power_per_10k_m2_YanJiuYuan`，其余单位仍沿用默认 `rate_power_per_10k_m2`。
-- backend/frontend README 追加说明，提示看板与分析简报均已引用“供暖电单耗（-研究院）”口径，避免再出现 0 值。
+- backend/frontend README 追加说明，提示看板与分析简报均已引用“供暖电单耗(-研究院)”口径，避免再出现 0 值。
 
 影响范围与验证：
 - 仅影响 `Group_analysis_brief_report_Sheet` 中“集团全口径”三列。执行自由构建/大屏查询时应能看到与数据看板一致的值；若仍为 0，请确认 `groups` 视图已重新加载并包含 `rate_power_per_10k_m2_YanJiuYuan`。

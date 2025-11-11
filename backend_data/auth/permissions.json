@@ -24,7 +24,7 @@
     },
     "Group_admin": {
       "hierarchy": 90,
-      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "data_analysis", "placeholder"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" },
         "data_approval": { "mode": "all" },
@@ -41,7 +41,7 @@
     },
     "ZhuChengQu_admin": {
       "hierarchy": 80,
-      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "data_analysis"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry"],
       "sheet_rules": {
         "data_show": {
           "mode": "explicit",
@@ -78,7 +78,7 @@
     },
     "Unit_admin": {
       "hierarchy": 70,
-      "page_access": ["data_approval", "data_entry", "data_analysis"],
+      "page_access": ["data_approval", "data_entry"],
       "sheet_rules": {
         "data_approval": { "mode": "by_unit" },
         "data_entry": { "mode": "by_unit" }
@@ -93,7 +93,7 @@
     },
     "unit_filler": {
       "hierarchy": 60,
-      "page_access": ["data_entry", "data_analysis"],
+      "page_access": ["data_entry"],
       "sheet_rules": {
         "data_entry": {
           "mode": "by_unit",
@@ -110,7 +110,7 @@
     },
     "Group_viewer": {
       "hierarchy": 50,
-      "page_access": ["dashboard", "data_show", "data_analysis", "placeholder"],
+      "page_access": ["dashboard", "data_show", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" }
       },

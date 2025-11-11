@@ -1,1 +1,1 @@
-2025-11-27：在 groups 视图中新增 `rate_power_per_10k_m2_YanJiuYuan`（供暖电单耗-研究院），通过 CTE `yjy_power`/`yjy_area` 扣除研究院的站购电与供热面积后再与完整集团值对比；文档与 progress.md 已说明用途及验证要点。
+2025-11-27（续）：应用户反馈，`rate_power_per_10k_m2_YanJiuYuan` 的中文名统一为“供暖电单耗(-研究院)”，已在 groups.sql item_cn、数据看板/全口径展示表配置、以及 README/进度记录中同步更新，避免因字符串不一致导致 Group_analysis_brief_report_Sheet 读取 0 值。

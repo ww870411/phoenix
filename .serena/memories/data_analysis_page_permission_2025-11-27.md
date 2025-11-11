@@ -1,0 +1,1 @@
+2025-11-27：应用户要求，`backend_data/auth/permissions.json` 调整为仅 Global_admin 拥有 `data_analysis` page_access，Group_admin、ZhuChengQu_admin、Unit_admin、unit_filler、Group_viewer 均移除该页面权限；相关说明同步至 backend/frontend README 及 progress.md。

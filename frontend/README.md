@@ -4,15 +4,20 @@
 
 ## 会话小结（2025-11-27 集团电单耗双口径）
 
-- 后端 `groups` 视图新增 `rate_power_per_10k_m2_YanJiuYuan` 字段（中文名“供暖电单耗（-研究院）”），其值等于集团整体现有 `rate_power_per_10k_m2` 在分子、分母上扣除 `YanJiuYuan` 数据后的结果。
+- 后端 `groups` 视图新增 `rate_power_per_10k_m2_YanJiuYuan` 字段（中文名“供暖电单耗(-研究院)”），其值等于集团整体现有 `rate_power_per_10k_m2` 在分子、分母上扣除 `YanJiuYuan` 数据后的结果。
 - UI 若需要展示两个口径，可沿用当前表格结构增加一列或在 tooltip 中切换；字段 key 与接口一致，单位仍为 `kWh/万㎡`。
 - 旧字段 `rate_power_per_10k_m2` 继续返回包含研究院的全量数据，可用于对比分析。
 
 ## 会话小结（2025-11-27 数据看板/展示表同步）
 
-- 数据看板 `backend_data/数据结构_数据看板.json` 的“4.供暖单耗-集团汇总”已将“供暖电单耗”映射到 `供暖电单耗（-研究院）`，仪表盘直接展示新口径。
+- 数据看板 `backend_data/数据结构_数据看板.json` 的“4.供暖单耗-集团汇总”已将“供暖电单耗”映射到 `供暖电单耗(-研究院)`，仪表盘直接展示新口径。
 - `backend_data/数据结构_全口径展示表.json` 的 `Group_analysis_brief_report_Sheet` 现通过 `value_biz_date(rate_power_per_10k_m2_YanJiuYuan)`/`value_peer_date(rate_power_per_10k_m2_YanJiuYuan)` 读取同一字段，避免出现 0 值。
 - 前端无需额外改动即可在数据看板与分析简报中看到一致的“集团电单耗（-研究院）”数据，如需保留旧口径可继续使用 `rate_power_per_10k_m2` 字段。
+
+## 会话小结（2025-11-27 数据分析页面仅限 Global_admin）
+
+- 后端权限矩阵仅为 `Global_admin` 保留 `data_analysis` page_access，页面 `/projects/daily_report_25_26/pages/data_analysis/data-analysis` 只有全局管理员可见，其余角色在页面入口列表中不再显示该卡片。
+- 如需调试，需使用 Global_admin 账号或临时调整 `permissions.json`；前端逻辑无需改动，入口是否可见完全由后端权限接口决定。
 
 ## 会话小结（2025-11-27 集团口径站购电回滚）
 
