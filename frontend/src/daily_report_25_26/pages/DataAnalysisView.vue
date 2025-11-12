@@ -8,9 +8,7 @@
         <header class="card-header">
           <div>
             <h2>{{ pageDisplayName }}</h2>
-            <p class="analysis-subtitle">
-              项目：{{ projectName }} ｜ 数据源：{{ shortConfig || '默认配置' }}
-            </p>
+            <p class="analysis-subtitle"></p>
           </div>
           <span class="analysis-tag">Beta</span>
         </header>
@@ -62,10 +60,6 @@
                   <span>{{ mode.label }}</span>
                 </label>
               </div>
-              <p class="mode-desc">
-                当前模式将使用视图：
-                <strong>{{ activeViewName }}</strong>
-              </p>
               <div class="date-subsection">
                 <div class="panel-header">
                   <h4>日期范围</h4>
@@ -101,7 +95,6 @@
               </div>
               <p class="panel-hint">
                 已选择 {{ selectedMetrics.size }} 项
-                <span v-if="hasConstantMetrics">｜ 常量指标来源于 constant_data 表，按日返回固定值</span>
               </p>
               <div class="metrics-panel-body">
                 <div v-if="resolvedMetricGroups.length" class="metrics-groups">
@@ -185,8 +178,7 @@
             <h3>分析结果预览</h3>
             <p class="analysis-subtitle">
               <template v-if="lastQueryMeta">
-                {{ lastQueryMeta.analysis_mode_label || analysisModeLabel }} ｜ 视图：{{ lastQueryMeta.view }} ｜
-                单位：{{ lastQueryMeta.unit_label }}
+                {{ lastQueryMeta.analysis_mode_label || analysisModeLabel }} ｜ 单位：{{ lastQueryMeta.unit_label }}
                 <template v-if="lastQueryMeta.start_date">
                   ｜ 日期：
                   <span>
@@ -200,10 +192,18 @@
                 </template>
               </template>
               <template v-else>
-                视图：{{ activeViewName }} ｜ 单位：{{ unitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
+                单位：{{ unitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
               </template>
             </p>
           </div>
+          <button
+            class="btn ghost"
+            type="button"
+            :disabled="!previewRows.length || queryLoading"
+            @click="downloadExcel"
+          >
+            下载 Excel
+          </button>
         </header>
 
         <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
@@ -242,22 +242,43 @@
                 </td>
                 <td>
                   <div class="value-cell">
-                    <span class="value-number">{{ formatNumber(row.current) }}</span>
+                    <span class="value-number">{{ formatNumber(resolveValue(row, 'current'), row.decimals || 2) }}</span>
                     <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
                   </div>
                 </td>
                 <td>
                   <div class="value-cell">
-                    <span class="value-number">{{ formatNumber(row.peer) }}</span>
+                    <span class="value-number">{{ formatNumber(resolveValue(row, 'peer'), row.decimals || 2) }}</span>
                     <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
                   </div>
                 </td>
-                <td :class="row.delta === null ? '' : row.delta >= 0 ? 'delta-up' : 'delta-down'">
-                  {{ formatDelta(row.delta) }}
+                <td :class="resolveDelta(row) === null ? '' : resolveDelta(row) >= 0 ? 'delta-up' : 'delta-down'">
+                  {{ formatDelta(resolveDelta(row)) }}
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section v-if="hasTimelineGrid" class="card elevated result-block">
+        <header class="card-header">
+          <div>
+            <h3>区间明细（逐日）</h3>
+            <p class="analysis-subtitle">
+              使用 RevoGrid 展示所选时间段内的每日本期/同期数据
+            </p>
+          </div>
+        </header>
+        <div class="timeline-grid-wrapper">
+          <RevoGrid
+            class="timeline-grid"
+            theme="material"
+            :readonly="true"
+            :columns="timelineGrid.columns"
+            :source="timelineGrid.rows"
+            :autoSizeColumn="true"
+          />
         </div>
       </section>
     </main>
@@ -267,6 +288,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import RevoGrid from '@revolist/vue3-datagrid'
+import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
@@ -353,6 +376,7 @@ const metricGroups = computed(() => resolveMetricGroups(schema.value))
 const metricOptions = computed(() => metricGroups.value.flatMap((group) => group.options))
 const unitDict = computed(() => schema.value?.unit_dict || {})
 const metricDict = computed(() => schema.value?.metric_dict || {})
+const metricDecimalsMap = computed(() => schema.value?.metric_decimals || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
 const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
 
@@ -370,6 +394,9 @@ const analysisModes = computed(() => {
 const hasConstantMetrics = computed(() =>
   metricGroups.value.some((group) => group.key === 'constant'),
 )
+const hasTimelineGrid = computed(
+  () => analysisMode.value === 'range' && timelineGrid.value.rows.length > 0,
+)
 
 const startDate = ref('')
 const endDate = ref('')
@@ -379,6 +406,7 @@ const formError = ref('')
 const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
 const queryLoading = ref(false)
+const timelineGrid = ref({ columns: [], rows: [] })
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -504,6 +532,7 @@ function clearPreviewState() {
   infoBanner.value = ''
   queryWarnings.value = []
   lastQueryMeta.value = null
+  timelineGrid.value = { columns: [], rows: [] }
 }
 
 function resetSelections() {
@@ -542,7 +571,13 @@ async function runAnalysis() {
     if (!response?.ok) {
       throw new Error(response?.message || '分析查询失败')
     }
-    previewRows.value = Array.isArray(response.rows) ? response.rows : []
+    const decoratedRows = Array.isArray(response.rows)
+      ? response.rows.map((row) => ({
+          ...row,
+          decimals: metricDecimalsMap.value?.[row.key] ?? 2,
+        }))
+      : []
+    previewRows.value = decoratedRows
     lastQueryMeta.value = {
       analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
       view: response.view || activeViewName.value,
@@ -551,6 +586,7 @@ async function runAnalysis() {
       unit_label: response.unit_label || unitLabel.value,
     }
     queryWarnings.value = Array.isArray(response.warnings) ? response.warnings : []
+    timelineGrid.value = buildTimelineGrid(previewRows.value)
     const dateRange =
       lastQueryMeta.value.start_date && lastQueryMeta.value.end_date
         ? lastQueryMeta.value.start_date === lastQueryMeta.value.end_date
@@ -559,7 +595,6 @@ async function runAnalysis() {
         : lastQueryMeta.value.start_date || lastQueryMeta.value.end_date || ''
     infoBanner.value = [
       lastQueryMeta.value.analysis_mode_label,
-      `视图：${lastQueryMeta.value.view}`,
       `单位：${lastQueryMeta.value.unit_label}`,
       dateRange ? `日期：${dateRange}` : null,
     ]
@@ -573,11 +608,11 @@ async function runAnalysis() {
   }
 }
 
-function formatNumber(value) {
+function formatNumber(value, decimals = 2) {
   if (value === null || value === undefined) return '—'
   const num = Number(value)
   if (Number.isNaN(num)) return '—'
-  return num.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
 function formatDelta(value) {
@@ -586,6 +621,164 @@ function formatDelta(value) {
   if (Number.isNaN(num)) return '—'
   const sign = num > 0 ? '+' : ''
   return `${sign}${num.toFixed(2)}%`
+}
+
+function resolveValue(row, field) {
+  const totalKey = `total_${field}`
+  if (analysisMode.value === 'range' && row[totalKey] !== undefined && row[totalKey] !== null) {
+    return row[totalKey]
+  }
+  return row[field]
+}
+
+function resolveDelta(row) {
+  if (analysisMode.value === 'range' && row.total_delta !== undefined && row.total_delta !== null) {
+    return row.total_delta
+  }
+  return row.delta
+}
+
+function applyDecimals(value, decimals = 2) {
+  if (value === null || value === undefined) return null
+  const num = Number(value)
+  if (Number.isNaN(num)) return null
+  return Number(num.toFixed(decimals))
+}
+
+function formatPercentValue(value) {
+  if (value === null || value === undefined) return null
+  const num = Number(value)
+  if (Number.isNaN(num)) return null
+  return `${num.toFixed(2)}%`
+}
+
+function buildTimelineGrid(rows) {
+  const dateSet = new Set()
+  const metrics = []
+  rows.forEach((row) => {
+    if (Array.isArray(row.timeline) && row.timeline.length) {
+      metrics.push(row)
+      row.timeline.forEach((entry) => {
+        if (entry?.date) {
+          dateSet.add(entry.date)
+        }
+      })
+    }
+  })
+  const sortedDates = Array.from(dateSet).sort()
+  if (!sortedDates.length || !metrics.length) {
+    return { columns: [], rows: [] }
+  }
+  const metricState = metrics.map((row) => ({
+    key: row.key,
+    label: row.label,
+    timeline: row.timeline,
+    decimals: row.decimals ?? 2,
+    sumCurrent: 0,
+    sumPeer: 0,
+  }))
+  const columns = [{ prop: 'date', name: '日期', size: 110 }]
+  metricState.forEach((row) => {
+    columns.push({ prop: `${row.key}__current`, name: `${row.label}(本期)`, size: 140 })
+    columns.push({ prop: `${row.key}__peer`, name: `${row.label}(同期)`, size: 140 })
+    columns.push({ prop: `${row.key}__delta`, name: `${row.label}(同比%)`, size: 120 })
+  })
+  const gridRows = sortedDates.map((date) => {
+    const record = { date }
+    metricState.forEach((row) => {
+      const entry = row.timeline.find((item) => item.date === date)
+      const current = entry?.current ?? null
+      const peer = entry?.peer ?? null
+      if (current !== null) {
+        row.sumCurrent += Number(current)
+      }
+      if (peer !== null) {
+        row.sumPeer += Number(peer)
+      }
+      const currentFormatted = current !== null ? applyDecimals(current, row.decimals) : null
+      const peerFormatted = peer !== null ? applyDecimals(peer, row.decimals) : null
+      record[`${row.key}__current`] = currentFormatted
+      record[`${row.key}__peer`] = peerFormatted
+      if (current !== null && peer) {
+        const delta = peer === 0 ? null : ((current - peer) / peer) * 100
+        record[`${row.key}__delta`] = formatPercentValue(delta)
+      } else {
+        record[`${row.key}__delta`] = null
+      }
+    })
+    return record
+  })
+  const totalRecord = { date: '总计' }
+  metricState.forEach((row) => {
+    const totalCurrent = row.sumCurrent || null
+    const totalPeer = row.sumPeer || null
+    totalRecord[`${row.key}__current`] = totalCurrent !== null ? applyDecimals(totalCurrent, row.decimals) : null
+    totalRecord[`${row.key}__peer`] = totalPeer !== null ? applyDecimals(totalPeer, row.decimals) : null
+    const totalDelta = totalPeer
+      ? ((totalCurrent - totalPeer) / totalPeer) * 100
+      : null
+    totalRecord[`${row.key}__delta`] = formatPercentValue(totalDelta)
+  })
+  gridRows.push(totalRecord)
+  return { columns, rows: gridRows }
+}
+
+function formatExportNumber(value, decimals = 2) {
+  if (value === null || value === undefined || value === '—') return ''
+  const num = Number(value)
+  if (Number.isNaN(num)) return value
+  return Number(num.toFixed(decimals))
+}
+
+function buildSummarySheetData() {
+  const header = ['指标', '本期', '同期', '同比', '单位', '类型']
+  const rows = previewRows.value.map((row) => [
+    row.label,
+    formatExportNumber(resolveValue(row, 'current'), row.decimals || 2),
+    formatExportNumber(resolveValue(row, 'peer'), row.decimals || 2),
+    formatPercentValue(resolveDelta(row)) || '',
+    row.unit || '',
+    row.value_type || '',
+  ])
+  return [header, ...rows]
+}
+
+function buildTimelineSheetData() {
+  if (!hasTimelineGrid.value) return null
+  const columns = timelineGrid.value.columns || []
+  const header = columns.map((col) => col.name || col.prop)
+  const rows = (timelineGrid.value.rows || []).map((record) =>
+    columns.map((col) => record[col.prop] ?? ''),
+  )
+  return [header, ...rows]
+}
+
+function buildMetaSheetData() {
+  const data = [
+    ['项目', pageDisplayName.value],
+    ['单位', unitLabel.value],
+    ['分析模式', analysisModeLabel.value],
+    ['日期范围', lastQueryMeta.value ? `${lastQueryMeta.value.start_date} ~ ${lastQueryMeta.value.end_date}` : `${startDate.value} ~ ${endDate.value}`],
+    ['生成时间', new Date().toLocaleString()],
+    ['指标数量', selectedMetrics.value.size],
+  ]
+  return data
+}
+
+function downloadExcel() {
+  if (!previewRows.value.length) return
+  const wb = XLSX.utils.book_new()
+  const summarySheet = XLSX.utils.aoa_to_sheet(buildSummarySheetData())
+  XLSX.utils.book_append_sheet(wb, summarySheet, '汇总')
+  const timelineData = buildTimelineSheetData()
+  if (timelineData) {
+    const timelineSheet = XLSX.utils.aoa_to_sheet(timelineData)
+    XLSX.utils.book_append_sheet(wb, timelineSheet, '区间明细')
+  }
+  const metaSheet = XLSX.utils.aoa_to_sheet(buildMetaSheetData())
+  XLSX.utils.book_append_sheet(wb, metaSheet, '查询信息')
+  const filename = `数据分析_${analysisMode.value === 'range' ? '累计' : '单日'}_${Date.now()}.xlsx`
+  XLSX.writeFile(wb, filename)
 }
 
 watch(
@@ -936,6 +1129,15 @@ onMounted(() => {
   padding-left: 18px;
   color: var(--warning-600, #b45309);
   font-size: 13px;
+}
+
+.timeline-grid-wrapper {
+  width: 100%;
+  overflow: hidden;
+}
+
+.timeline-grid {
+  height: 420px;
 }
 
 .metric-label {

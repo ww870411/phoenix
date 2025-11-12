@@ -23,7 +23,9 @@
 
 - `backend_data/数据结构_数据分析表.json` 新增“调整指标字典”与对应 `视图映射`，`get_data_analysis_schema` 现会在 `adjustment_metric_dict/adjustment_metric_options/metric_groups` 中返回该分组，同时 `metric_group_views` 明确每个分组允许的视图组合（例如调整指标仅允许 `groups_daily_analysis/groups_sum_analysis`）。
 - 同一接口同步支持“气温指标字典”，并将 `metric_group_views['temperature']` 映射到 `calc_temperature_data`。前端勾选 `aver_temp/max_temp/min_temp` 等键后，后端会直接查询 `calc_temperature_data`：单日模式读取指定 `date`，累计模式对窗口内的日均温做 `AVG()`；单位一律返回 `℃`。
+- 支持在配置中通过 `指标小数位` 指定个别指标的保留小数位（默认 2 位），例如 `rate_heat_per_10k_m2`、`rate_power_per_10k_m2`、`rate_water_per_10k_m2` 配置为 4。接口会在 `rows[].decimals` 中返回对应值，前端据此格式化展示。
 - 新增 `POST /projects/daily_report_25_26/data_analysis/query`：根据 `unit_key/analysis_mode` 自动映射到 `company_daily_analysis`、`groups_sum_analysis` 等视图，并在事务中通过 `SET LOCAL phoenix.biz_date` 或 `phoenix.sum_start_date/sum_end_date` 控制时间窗口；常量指标直接读取 `constant_data`，气温指标通过 `calc_temperature_data` 视图取数，结果集中统一返回 `value_type/source_view` 标记。
+- 累计模式会额外生成 `timeline` 明细：后端在 62 天范围内循环设置 `phoenix.biz_date` 调用逐日视图，返回 `[ { date, current, peer } ]`，并附带 `total_current/total_peer`，方便前端用 RevoGrid 展示逐日/累计。若日期跨度超过 62 天，会直接返回 400 提示缩小范围。
 - 响应额外包含 `rows/missing_metrics/warnings` 以及解析后的 `view/start_date/end_date`，前端可直接展示提示条与缺失标记；若所选指标不属于当前视图允许的范围，接口返回 400 并列出需调整的指标。
 - 可执行 `python -m py_compile backend/api/v1/daily_report_25_26.py` 快速校验语法，数据库层需确保 `analysis_company_daily`、`analysis_groups_daily`、`calc_temperature_data` 等视图已按 `analysis.sql`/`calc_temp.sql` 部署。
 

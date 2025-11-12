@@ -122,6 +122,11 @@
                 "max_temp":"最高气温",
                 "min_temp":"最低气温"
             },
+            "指标小数位":{
+                "rate_heat_per_10k_m2":4,
+                "rate_power_per_10k_m2":4,
+                "rate_water_per_10k_m2":4
+            },
             "常量指标字典":{
                 "price_inner_heat_sales": "内售热单价",
                 "price_std_coal": "标煤单价",

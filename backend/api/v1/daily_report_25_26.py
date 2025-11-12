@@ -71,6 +71,7 @@ TEMPERATURE_COLUMN_MAP = {
     "min_temp": "min_temp",
 }
 TEMPERATURE_UNIT = "℃"
+MAX_TIMELINE_DAYS = 62
 
 def _is_coal_inventory_sheet(name: Optional[str], tpl_payload: Optional[Dict[str, Any]] = None) -> bool:
     """
@@ -2842,6 +2843,18 @@ def _build_data_analysis_schema_payload(
     metric_dict = _merge_metric_dicts(
         [primary_metric_dict, adjustment_metric_dict, constant_metric_dict, temperature_metric_dict]
     )
+    metric_decimals_map = metrics_section.get("指标小数位") or metrics_section.get("metric_decimal_places") or {}
+    metric_decimals: Dict[str, int] = {}
+    for key in metric_dict.keys():
+        raw = metric_decimals_map.get(key)
+        try:
+            metric_decimals[key] = int(raw)
+        except (TypeError, ValueError):
+            metric_decimals[key] = 2
+    default_decimal = int(metrics_section.get("默认小数位") or metrics_section.get("default_decimal_places") or 2)
+    for key in metric_dict.keys():
+        if key not in metric_decimals:
+            metric_decimals[key] = default_decimal
 
     metric_view_mapping = metrics_section.get("视图映射")
     if not isinstance(metric_view_mapping, dict):
@@ -3025,6 +3038,7 @@ def _build_data_analysis_schema_payload(
         "metric_group_views": metric_group_views,
         "date_defaults": date_defaults,
         "analysis_modes": analysis_modes,
+        "metric_decimals": metric_decimals,
     }
     return content, None
 
@@ -3094,6 +3108,20 @@ def _resolve_active_view_name(
                         if isinstance(entry, str) and entry.strip() == normalized_label:
                             return view_name
     return "company_daily_analysis" if analysis_mode_value == "daily" else "company_sum_analysis"
+
+
+def _resolve_unit_view(
+    view_mapping: Dict[str, Any],
+    mode_label: str,
+    unit_label: str,
+    fallback: Optional[str] = None,
+) -> Optional[str]:
+    target = view_mapping.get(mode_label)
+    if isinstance(target, dict):
+        for view_name, units in target.items():
+            if isinstance(units, (list, tuple, set)) and unit_label in units:
+                return view_name
+    return fallback
 
 
 def _apply_analysis_window_settings(
@@ -3191,6 +3219,63 @@ def _query_analysis_rows(
         if isinstance(item_key, str) and item_key and item_key not in result:
             result[item_key] = dict(row)
     return result
+
+
+def _query_analysis_timeline(
+    view_name: str,
+    unit_key: str,
+    metric_keys: Sequence[str],
+    start_date: date,
+    end_date: date,
+) -> Dict[str, List[Dict[str, Any]]]:
+    if not metric_keys:
+        return {}
+    if start_date > end_date:
+        return {}
+    sanitized = _sanitize_identifier(view_name)
+    if sanitized is None:
+        raise ValueError(f"非法视图名称: {view_name}")
+    stmt = (
+        text(
+            f"""
+            SELECT item, item_cn, unit, biz_date, peer_date,
+                   value_biz_date, value_peer_date
+            FROM {sanitized}
+            WHERE company = :company
+              AND item IN :items
+            """
+        ).bindparams(bindparam("items", expanding=True))
+    )
+    timeline: Dict[str, List[Dict[str, Any]]] = {}
+    current = start_date
+    while current <= end_date:
+        with SessionLocal() as session:
+            with session.begin():
+                session.execute(
+                    text("SET LOCAL phoenix.biz_date = :biz_date"),
+                    {"biz_date": current.isoformat()},
+                )
+                rows = session.execute(
+                    stmt,
+                    {"company": unit_key, "items": list(metric_keys)},
+                ).mappings().all()
+        for row in rows:
+            item_key = row.get("item")
+            if not isinstance(item_key, str) or not item_key:
+                continue
+            entry = {
+                "date": row.get("biz_date").isoformat()
+                if isinstance(row.get("biz_date"), date)
+                else current.isoformat(),
+                "current": _decimal_to_float(row.get("value_biz_date")),
+                "peer": _decimal_to_float(row.get("value_peer_date")),
+                "peer_date": row.get("peer_date").isoformat()
+                if isinstance(row.get("peer_date"), date)
+                else None,
+            }
+            timeline.setdefault(item_key, []).append(entry)
+        current += timedelta(days=1)
+    return timeline
 
 
 def _query_constant_rows(unit_key: str, metric_keys: Sequence[str]) -> Dict[str, Dict[str, Any]]:
@@ -3401,6 +3486,7 @@ def _execute_data_analysis_query(
     metric_dict = schema_payload.get("metric_dict") or {}
     metric_groups = schema_payload.get("metric_groups") or []
     metric_group_views = schema_payload.get("metric_group_views") or {}
+    metric_decimals = schema_payload.get("metric_decimals") or {}
 
     ordered_metrics = _unique_metric_keys(payload.metrics)
     if not ordered_metrics:
@@ -3445,6 +3531,16 @@ def _execute_data_analysis_query(
     else:
         end_date = start_date
 
+    range_days = (end_date - start_date).days + 1
+    if analysis_mode_value == "range" and range_days > MAX_TIMELINE_DAYS:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": f"累计模式暂只支持 {MAX_TIMELINE_DAYS} 天内的区间，请缩小日期范围。",
+            },
+        )
+
     analysis_modes = schema_payload.get("analysis_modes") or []
     mode_label = next(
         (item.get("label") for item in analysis_modes if item.get("value") == analysis_mode_value),
@@ -3459,6 +3555,7 @@ def _execute_data_analysis_query(
         unit_label,
         analysis_mode_value,
     )
+    view_mapping = schema_payload.get("view_mapping") or {}
 
     metric_group_lookup = _build_metric_group_lookup(metric_groups)
     analysis_metric_keys: List[str] = []
@@ -3533,6 +3630,30 @@ def _execute_data_analysis_query(
                 status_code=500,
                 content={"ok": False, "message": f"查询气温指标失败: {exc}"},
             )
+    timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
+    if analysis_mode_value == "range" and analysis_metric_keys:
+        fallback_timeline_view = (
+            "analysis_groups_daily"
+            if unit_key in {"Group", "ZhuChengQu"}
+            else "analysis_company_daily"
+        )
+        timeline_view_name = _resolve_unit_view(
+            view_mapping,
+            "单日数据",
+            unit_label,
+            fallback=fallback_timeline_view,
+        )
+        if timeline_view_name:
+            try:
+                timeline_rows_map = _query_analysis_timeline(
+                    timeline_view_name,
+                    unit_key,
+                    analysis_metric_keys,
+                    start_date,
+                    end_date,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("生成逐日明细失败: %s", exc)
 
     rows_payload: List[Dict[str, Any]] = []
     missing_metrics: List[Dict[str, str]] = []
@@ -3543,6 +3664,7 @@ def _execute_data_analysis_query(
         source = analysis_rows.get(key)
         value_type = "analysis"
         source_view = active_view_name if source else None
+        decimals = metric_decimals.get(key, 2)
         if source is None:
             source = constant_rows.get(key)
             if source is not None:
@@ -3571,9 +3693,22 @@ def _execute_data_analysis_query(
             continue
 
         resolved_keys.append(key)
+        timeline_entries = timeline_rows_map.get(key, [])
+        timeline_current_sum = (
+            sum(entry["current"] for entry in timeline_entries if entry.get("current") is not None)
+            if timeline_entries
+            else None
+        )
+        timeline_peer_sum = (
+            sum(entry["peer"] for entry in timeline_entries if entry.get("peer") is not None)
+            if timeline_entries
+            else None
+        )
         if value_type == "constant":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
+            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
+            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -3587,12 +3722,19 @@ def _execute_data_analysis_query(
                     "period": source.get("period"),
                     "peer_period": source.get("peer_period"),
                     "missing": False,
+                    "decimals": decimals,
+                    "timeline": timeline_entries,
+                    "total_current": total_current,
+                    "total_peer": total_peer,
+                    "total_delta": _compute_delta(total_current, total_peer),
                 },
             )
         elif value_type == "temperature":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
             is_missing = source.get("missing")
+            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
+            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -3604,6 +3746,11 @@ def _execute_data_analysis_query(
                     "value_type": value_type,
                     "source_view": source_view,
                     "missing": bool(is_missing),
+                    "decimals": decimals,
+                    "timeline": timeline_entries,
+                    "total_current": total_current,
+                    "total_peer": total_peer,
+                    "total_delta": _compute_delta(total_current, total_peer),
                 },
             )
             if is_missing:
@@ -3611,6 +3758,8 @@ def _execute_data_analysis_query(
         else:
             current_value = _decimal_to_float(source.get("value_biz_date"))
             peer_value = _decimal_to_float(source.get("value_peer_date"))
+            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
+            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -3624,6 +3773,11 @@ def _execute_data_analysis_query(
                     "biz_date": source.get("biz_date").isoformat() if source.get("biz_date") else None,
                     "peer_date": source.get("peer_date").isoformat() if source.get("peer_date") else None,
                     "missing": False,
+                    "decimals": decimals,
+                    "timeline": timeline_entries,
+                    "total_current": total_current,
+                    "total_peer": total_peer,
+                    "total_delta": _compute_delta(total_current, total_peer),
                 },
             )
 
