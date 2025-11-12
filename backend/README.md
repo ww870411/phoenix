@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-30 数据分析服务抽离）
+
+- 新增 `backend/services/data_analysis.py`，集中实现数据分析 schema 解析、指标分组/小数位、常量与气温查询、逐日/累计取值以及 Excel 导出所需的全部辅助函数，FastAPI 端仅保留 Pydantic 校验与文件读取。
+- `backend/api/v1/daily_report_25_26.py` 的 `/data_analysis/schema` 在解析配置文件后直接调用 `data_analysis.build_schema_payload()`，`/data_analysis/query` 则委托 `execute_data_analysis_query()`，其余旧的 `_query_*` 辅助函数被包装成服务层别名，避免双份实现。
+- API 层复用了服务内的 `TEMPERATURE_COLUMN_MAP/TEMPERATURE_UNIT/MAX_TIMELINE_DAYS` 常量并保留 `_execute_data_analysis_query_legacy` 供需要调试旧逻辑时参考，正常路径全部走新的 service 实现，接口入参/出参保持不变。
+- 通过 `python -m py_compile backend/api/v1/daily_report_25_26.py backend/services/data_analysis.py` 校验语法，确保拆分后无缩进或依赖遗漏；如需回滚，可恢复旧版 API 函数或直接调用 `*_legacy` 版本。
+
 ## 会话小结（2025-11-28 全厂热效率分母引入油耗）
 
 - `backend/sql/sum_basic_data.sql` 的 `calc_overall_efficiency` 现以 `29.308 * (consumption_std_coal + 1.4571 * consumption_oil)` 作为分母，仍在 `base` 聚合结果上计算，确保单日/同期、7 日、月度、YTD 六个窗口全部共享同一口径。

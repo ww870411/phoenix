@@ -2,6 +2,12 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-30 数据分析接口模块化）
+
+- 后端已将 `/data_analysis/schema` 与 `/data_analysis/query` 的核心逻辑抽离到 `backend/services/data_analysis.py`，前端 `DataAnalysisView.vue` 继续沿用同一接口契约，不需要额外改动即可获得统一的 schema/查询结果。
+- 服务层统一处理指标分组、常量/气温/逐日明细与 Excel 导出数据，因此前端在渲染 RevoGrid、同比列以及下载文件时的字段含义保持不变；如需调试历史实现，可与后端 `_execute_data_analysis_query_legacy` 对照。
+- 若后续要在数据看板或其它页面复用同一查询结果，可直接请求 `/data_analysis/query`，现在的实现已经聚合在 service 层，便于多路调用共享逻辑。
+
 ## 会话小结（2025-11-28 全厂热效率分母引入油耗）
 
 - 后端 `sum_basic_data`/`groups` 视图更新后，`rate_overall_efficiency` 与集团同名字段在所有窗口的分母将包含 `consumption_oil`（按 1.4571 系数折算为等效标煤）；前端直接读取相同字段即可得到新口径。

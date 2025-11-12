@@ -265,9 +265,6 @@
         <header class="card-header">
           <div>
             <h3>区间明细（逐日）</h3>
-            <p class="analysis-subtitle">
-              使用 RevoGrid 展示所选时间段内的每日本期/同期数据
-            </p>
           </div>
         </header>
         <div class="timeline-grid-wrapper">
@@ -652,6 +649,47 @@ function formatPercentValue(value) {
   return `${num.toFixed(2)}%`
 }
 
+function createDeltaCellPayload(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return { text: '—', delta: null }
+  }
+  const deltaNumber = Number(value)
+  return {
+    text: formatPercentValue(deltaNumber) || '—',
+    delta: deltaNumber,
+  }
+}
+
+function getDeltaColor(deltaNumber) {
+  if (deltaNumber === null || deltaNumber === undefined || Number.isNaN(deltaNumber)) {
+    return 'var(--neutral-600, #5f6368)'
+  }
+  return deltaNumber >= 0 ? 'var(--danger-600, #d93025)' : 'var(--success-600, #0f9d58)'
+}
+
+const timelineDeltaCellTemplate = (createElement, props) => {
+  const rawValue = props?.model?.[props.prop]
+  const text =
+    typeof rawValue === 'object' && rawValue !== null
+      ? rawValue.text ?? '—'
+      : typeof rawValue === 'string'
+        ? rawValue
+        : '—'
+  const deltaNumber =
+    typeof rawValue === 'object' && rawValue !== null && typeof rawValue.delta === 'number'
+      ? rawValue.delta
+      : null
+  const style = { color: getDeltaColor(deltaNumber) }
+  return createElement('span', { style }, text || '—')
+}
+
+function extractTimelineCellText(value) {
+  if (value && typeof value === 'object') {
+    return value.text ?? ''
+  }
+  return value ?? ''
+}
+
 function buildTimelineGrid(rows) {
   const dateSet = new Set()
   const metrics = []
@@ -681,7 +719,12 @@ function buildTimelineGrid(rows) {
   metricState.forEach((row) => {
     columns.push({ prop: `${row.key}__current`, name: `${row.label}(本期)`, size: 140 })
     columns.push({ prop: `${row.key}__peer`, name: `${row.label}(同期)`, size: 140 })
-    columns.push({ prop: `${row.key}__delta`, name: `${row.label}(同比%)`, size: 120 })
+    columns.push({
+      prop: `${row.key}__delta`,
+      name: `${row.label}(同比%)`,
+      size: 120,
+      cellTemplate: timelineDeltaCellTemplate,
+    })
   })
   const gridRows = sortedDates.map((date) => {
     const record = { date }
@@ -699,12 +742,9 @@ function buildTimelineGrid(rows) {
       const peerFormatted = peer !== null ? applyDecimals(peer, row.decimals) : null
       record[`${row.key}__current`] = currentFormatted
       record[`${row.key}__peer`] = peerFormatted
-      if (current !== null && peer) {
-        const delta = peer === 0 ? null : ((current - peer) / peer) * 100
-        record[`${row.key}__delta`] = formatPercentValue(delta)
-      } else {
-        record[`${row.key}__delta`] = null
-      }
+      const hasPeer = peer !== null && peer !== undefined
+      const deltaValue = hasPeer && peer !== 0 ? (((current ?? 0) - peer) / peer) * 100 : null
+      record[`${row.key}__delta`] = createDeltaCellPayload(deltaValue)
     })
     return record
   })
@@ -714,10 +754,8 @@ function buildTimelineGrid(rows) {
     const totalPeer = row.sumPeer || null
     totalRecord[`${row.key}__current`] = totalCurrent !== null ? applyDecimals(totalCurrent, row.decimals) : null
     totalRecord[`${row.key}__peer`] = totalPeer !== null ? applyDecimals(totalPeer, row.decimals) : null
-    const totalDelta = totalPeer
-      ? ((totalCurrent - totalPeer) / totalPeer) * 100
-      : null
-    totalRecord[`${row.key}__delta`] = formatPercentValue(totalDelta)
+    const totalDelta = totalPeer ? ((totalCurrent - totalPeer) / totalPeer) * 100 : null
+    totalRecord[`${row.key}__delta`] = createDeltaCellPayload(totalDelta)
   })
   gridRows.push(totalRecord)
   return { columns, rows: gridRows }
@@ -748,7 +786,7 @@ function buildTimelineSheetData() {
   const columns = timelineGrid.value.columns || []
   const header = columns.map((col) => col.name || col.prop)
   const rows = (timelineGrid.value.rows || []).map((record) =>
-    columns.map((col) => record[col.prop] ?? ''),
+    columns.map((col) => extractTimelineCellText(record[col.prop])),
   )
   return [header, ...rows]
 }

@@ -1,5 +1,19 @@
 # 进度记录
 
+## 2025-11-30（数据分析服务抽离）
+
+前置说明：
+- Serena 无法在 4k+ 行的 `backend/api/v1/daily_report_25_26.py` 中定位 `_execute_data_analysis_query` 及相关私有函数，尝试多次 `find_symbol` 均返回空，因此降级到 Codex CLI `apply_patch` 进行重写；如需回滚，可恢复该文件在本次提交前的版本，或直接调用保留的 `_execute_data_analysis_query_legacy`。
+
+本次动作：
+- 将 `/data_analysis/schema` 与 `/data_analysis/query` 的核心实现迁移至 `backend/services/data_analysis.py`，包含模板解析、指标分组、小数位、常量/气温/逐日查询等逻辑，并补齐 `TEMPERATURE_COLUMN_MAP/TEMPERATURE_UNIT/MAX_TIMELINE_DAYS` 常量与辅助函数。
+- API 层 `backend/api/v1/daily_report_25_26.py` 现在只负责 JSON 读取与 Pydantic 校验，之后调用 service；旧的 `_query_*` 函数被包装成对 service 的别名，同时新增 `_execute_data_analysis_query_legacy` 以备调试。
+- `configs/progress.md`、`backend/README.md`、`frontend/README.md` 分别记录了该结构调整，便于后续参考；`py_compile` 校验通过，保证拆分后无语法问题。
+
+影响与验证：
+- 运行 `python -m py_compile backend/api/v1/daily_report_25_26.py backend/services/data_analysis.py`，确保 service 与 API 拆分后语法和依赖完整；接口入参/出参保持不变，前端页面无需调整即可继续调用。
+- 如需回退，可将 API 恢复为 legacy 版本，或直接在路由中调用 `_execute_data_analysis_query_legacy`，不影响其它模块。
+
 ## 2025-11-28（全厂热效率分母引入油耗）
 
 前置说明（降级留痕）：
