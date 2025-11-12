@@ -20,7 +20,7 @@
 
         <template v-else>
           <div class="form-grid">
-            <div class="form-panel">
+            <div class="form-panel form-panel--compact">
               <div class="panel-header">
                 <h3>单位选择（单选）</h3>
                 <span class="panel-hint">共 {{ unitOptions.length }} 个可选单位</span>
@@ -42,7 +42,7 @@
               </div>
             </div>
 
-            <div class="form-panel">
+            <div class="form-panel form-panel--compact">
               <div class="panel-header">
                 <h3>分析模式</h3>
                 <span class="panel-hint">切换单日或区间累计</span>
@@ -103,71 +103,59 @@
                 已选择 {{ selectedMetrics.size }} 项
                 <span v-if="hasConstantMetrics">｜ 常量指标来源于 constant_data 表，按日返回固定值</span>
               </p>
-              <div v-if="resolvedMetricGroups.length" class="metrics-groups">
-                <div
-                  v-for="group in resolvedMetricGroups"
-                  :key="group.key"
-                  class="metrics-group"
-                  :class="{ 'metrics-group--disabled': group.disabled }"
-                >
-                  <div class="metrics-group-header">
-                    <div class="metrics-group-title">
-                      <h4>{{ group.label }}</h4>
-                      <span class="panel-hint">共 {{ group.options.length }} 项</span>
-                    </div>
-                    <div class="metrics-group-actions">
-                      <span v-if="group.key === 'constant'" class="group-badge">常量</span>
-                      <span
-                        v-else-if="group.key === 'adjustment'"
-                        class="group-badge group-badge--outline"
-                      >
-                        调整
-                      </span>
-                      <span
-                        v-else-if="group.key === 'temperature'"
-                        class="group-badge group-badge--temp"
-                      >
-                        气温
-                      </span>
-                      <button
-                        class="btn ghost xs group-toggle"
-                        type="button"
-                        :disabled="queryLoading"
-                        @click="toggleGroupCollapse(group.key)"
-                      >
-                        {{ collapsedMetricGroups.has(group.key) ? '展开' : '收起' }}
-                      </button>
-                    </div>
-                  </div>
-                  <p v-if="group.disabled" class="panel-hint warning">
-                    当前视图不支持该组，请切换单位或分析模式。
-                  </p>
-                  <p
-                    v-else-if="collapsedMetricGroups.has(group.key)"
-                    class="panel-hint muted"
+              <div class="metrics-panel-body">
+                <div v-if="resolvedMetricGroups.length" class="metrics-groups">
+                  <div
+                    v-for="group in resolvedMetricGroups"
+                    :key="group.key"
+                    class="metrics-group"
+                    :class="{ 'metrics-group--disabled': group.disabled }"
                   >
-                    已折叠，点击“展开”查看指标。
-                  </p>
-                  <div v-show="!collapsedMetricGroups.has(group.key)" class="metrics-grid">
-                    <label
-                      v-for="metric in group.options"
-                      :key="`${group.key}-${metric.value}`"
-                      class="chip checkbox"
-                    >
-                      <input
-                        type="checkbox"
-                        :value="metric.value"
-                        :checked="selectedMetrics.has(metric.value)"
-                        :disabled="group.disabled || queryLoading"
-                        @change="toggleMetric(metric.value)"
-                      />
-                      <span>{{ metric.label }}</span>
-                    </label>
+                    <div class="metrics-group-header">
+                      <div class="metrics-group-title">
+                        <h4>{{ group.label }}</h4>
+                        <span class="panel-hint">共 {{ group.options.length }} 项</span>
+                      </div>
+                      <div class="metrics-group-actions">
+                        <span v-if="group.key === 'constant'" class="group-badge">常量</span>
+                        <span
+                          v-else-if="group.key === 'adjustment'"
+                          class="group-badge group-badge--outline"
+                        >
+                          调整
+                        </span>
+                        <span
+                          v-else-if="group.key === 'temperature'"
+                          class="group-badge group-badge--temp"
+                        >
+                          气温
+                        </span>
+                      </div>
+                    </div>
+                    <p v-if="group.disabled" class="panel-hint warning">
+                      当前视图不支持该组，请切换单位或分析模式。
+                    </p>
+                    <div class="metrics-grid">
+                      <label
+                        v-for="metric in group.options"
+                        :key="`${group.key}-${metric.value}`"
+                        class="chip checkbox"
+                      >
+                        <input
+                          type="checkbox"
+                          :value="metric.value"
+                          :checked="selectedMetrics.has(metric.value)"
+                          :disabled="group.disabled || queryLoading"
+                          @change="toggleMetric(metric.value)"
+                        />
+                        <span>{{ metric.label }}</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div v-else class="panel-hint">
-                暂无可选指标，请检查配置文件。
+                <div v-else class="panel-hint">
+                  暂无可选指标，请检查配置文件。
+                </div>
               </div>
             </div>
 
@@ -391,7 +379,6 @@ const formError = ref('')
 const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
 const queryLoading = ref(false)
-const collapsedMetricGroups = ref(new Set())
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -476,15 +463,6 @@ async function loadSchema() {
     selectedMetrics.value = new Set()
     analysisMode.value = payload.analysis_modes?.[0]?.value || 'daily'
     applyDateDefaults(payload.date_defaults)
-    const collapsed = new Set()
-    const groups = Array.isArray(payload.metric_groups) ? payload.metric_groups : []
-    groups.forEach((group, index) => {
-      const key = group?.key || `group_${index}`
-      if (index !== 0 && key) {
-        collapsed.add(key)
-      }
-    })
-    collapsedMetricGroups.value = collapsed
     clearPreviewState()
   } catch (err) {
     errorMessage.value = err?.message || '数据分析配置加载失败'
@@ -507,16 +485,6 @@ function toggleMetric(key) {
     next.add(key)
   }
   selectedMetrics.value = next
-}
-
-function toggleGroupCollapse(key) {
-  const next = new Set(collapsedMetricGroups.value)
-  if (next.has(key)) {
-    next.delete(key)
-  } else {
-    next.add(key)
-  }
-  collapsedMetricGroups.value = next
 }
 
 function selectAllMetrics() {
@@ -741,6 +709,10 @@ onMounted(() => {
   gap: 12px;
 }
 
+.form-panel--compact {
+  min-height: 220px;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -803,6 +775,12 @@ onMounted(() => {
 
 .chip.compact {
   padding: 4px 10px;
+}
+
+.metrics-panel-body {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .metrics-groups {

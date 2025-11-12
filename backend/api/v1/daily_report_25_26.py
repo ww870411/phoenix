@@ -3133,6 +3133,28 @@ def _compute_delta(current: Optional[float], peer: Optional[float]) -> Optional[
     return ((current - peer) / peer) * 100
 
 
+def _shift_year(value: date, years: int = 1) -> Optional[date]:
+    target_year = value.year - years
+    try:
+        return date(target_year, value.month, value.day)
+    except ValueError:
+        return None
+
+
+def _shift_period_label(label: Optional[str]) -> Optional[str]:
+    if not label:
+        return None
+    parts = str(label).split("-")
+    if len(parts) != 2:
+        return None
+    try:
+        start = int(parts[0])
+        end = int(parts[1])
+    except ValueError:
+        return None
+    return f"{start - 1:02d}-{end - 1:02d}"
+
+
 def _query_analysis_rows(
     view_name: str,
     unit_key: str,
@@ -3189,7 +3211,11 @@ def _query_constant_rows(unit_key: str, metric_keys: Sequence[str]) -> Dict[str,
             FROM constant_data
             WHERE company = :company
               AND item IN :items
-            ORDER BY item, operation_time DESC
+            ORDER BY
+                item,
+                COALESCE(NULLIF(split_part(period, '-', 1), '')::int, 0) DESC,
+                COALESCE(NULLIF(split_part(period, '-', 2), '')::int, 0) DESC,
+                operation_time DESC
             """
         ).bindparams(bindparam("items", expanding=True))
     )
@@ -3199,10 +3225,60 @@ def _query_constant_rows(unit_key: str, metric_keys: Sequence[str]) -> Dict[str,
             {"company": unit_key, "items": list(metric_keys)},
         ).mappings().all()
     result: Dict[str, Dict[str, Any]] = {}
+    peer_requests: Dict[str, str] = {}
     for row in rows:
         item_key = row.get("item")
-        if isinstance(item_key, str) and item_key and item_key not in result:
-            result[item_key] = dict(row)
+        if not isinstance(item_key, str) or not item_key:
+            continue
+        if item_key in result:
+            continue
+        result[item_key] = dict(row)
+        peer_period = _shift_period_label(row.get("period"))
+        if peer_period:
+            peer_requests[item_key] = peer_period
+
+    if peer_requests:
+        peer_stmt = (
+            text(
+                """
+                SELECT DISTINCT ON (item, period)
+                    item, period, value, operation_time
+                FROM constant_data
+                WHERE company = :company
+                  AND item IN :items
+                  AND period IN :periods
+                ORDER BY item, period, operation_time DESC
+                """
+            )
+            .bindparams(bindparam("items", expanding=True))
+            .bindparams(bindparam("periods", expanding=True))
+        )
+        with SessionLocal() as session:
+            peer_rows = session.execute(
+                peer_stmt,
+                {
+                    "company": unit_key,
+                    "items": list(peer_requests.keys()),
+                    "periods": list(set(peer_requests.values())),
+                },
+            ).mappings().all()
+        peer_lookup: Dict[Tuple[str, str], Any] = {}
+        for row in peer_rows:
+            item = row.get("item")
+            period = row.get("period")
+            if isinstance(item, str) and isinstance(period, str):
+                peer_lookup[(item, period)] = row.get("value")
+        for item_key, row in result.items():
+            peer_period = peer_requests.get(item_key)
+            if not peer_period:
+                continue
+            peer_value = peer_lookup.get((item_key, peer_period))
+            if peer_value is not None:
+                row["peer"] = peer_value
+                row["peer_period"] = peer_period
+            else:
+                row["peer"] = None
+                row["peer_period"] = peer_period
     return result
 
 
@@ -3230,7 +3306,8 @@ def _query_temperature_rows(
     if not columns:
         return {}
 
-    row: Optional[Dict[str, Any]]
+    row: Optional[Dict[str, Any]] = None
+    peer_row: Optional[Dict[str, Any]] = None
     with SessionLocal() as session:
         if analysis_mode == "range":
             select_clause = ", ".join(f"AVG({col}) AS {col}" for col in columns)
@@ -3245,6 +3322,20 @@ def _query_temperature_rows(
                 stmt,
                 {"start": start_date, "end": end_date},
             ).mappings().first()
+            peer_start = _shift_year(start_date)
+            peer_end = _shift_year(end_date)
+            if peer_start and peer_end:
+                peer_stmt = text(
+                    f"""
+                    SELECT {select_clause}
+                    FROM {sanitized}
+                    WHERE date BETWEEN :start AND :end
+                    """
+                )
+                peer_row = session.execute(
+                    peer_stmt,
+                    {"start": peer_start, "end": peer_end},
+                ).mappings().first()
         else:
             select_clause = ", ".join(columns)
             stmt = text(
@@ -3259,12 +3350,28 @@ def _query_temperature_rows(
                 stmt,
                 {"target": start_date},
             ).mappings().first()
+            peer_target = _shift_year(start_date)
+            if peer_target:
+                peer_stmt = text(
+                    f"""
+                    SELECT {select_clause}
+                    FROM {sanitized}
+                    WHERE date = :target
+                    LIMIT 1
+                    """
+                )
+                peer_row = session.execute(
+                    peer_stmt,
+                    {"target": peer_target},
+                ).mappings().first()
 
     result: Dict[str, Dict[str, Any]] = {}
     for key, column in column_lookup.items():
         value = row.get(column) if row else None
+        peer_value = peer_row.get(column) if peer_row else None
         result[key] = {
             "value": _decimal_to_float(value),
+            "peer": _decimal_to_float(peer_value),
             "unit": TEMPERATURE_UNIT,
             "source_view": sanitized,
             "missing": value is None,
@@ -3466,22 +3573,25 @@ def _execute_data_analysis_query(
         resolved_keys.append(key)
         if value_type == "constant":
             current_value = _decimal_to_float(source.get("value"))
+            peer_value = _decimal_to_float(source.get("peer"))
             rows_payload.append(
                 {
                     "key": key,
                     "label": label,
                     "unit": source.get("unit"),
                     "current": current_value,
-                    "peer": None,
-                    "delta": None,
+                    "peer": peer_value,
+                    "delta": _compute_delta(current_value, peer_value),
                     "value_type": value_type,
                     "source_view": source_view,
                     "period": source.get("period"),
+                    "peer_period": source.get("peer_period"),
                     "missing": False,
                 },
             )
         elif value_type == "temperature":
             current_value = _decimal_to_float(source.get("value"))
+            peer_value = _decimal_to_float(source.get("peer"))
             is_missing = source.get("missing")
             rows_payload.append(
                 {
@@ -3489,8 +3599,8 @@ def _execute_data_analysis_query(
                     "label": label,
                     "unit": source.get("unit"),
                     "current": current_value,
-                    "peer": None,
-                    "delta": None,
+                    "peer": peer_value,
+                    "delta": _compute_delta(current_value, peer_value),
                     "value_type": value_type,
                     "source_view": source_view,
                     "missing": bool(is_missing),
