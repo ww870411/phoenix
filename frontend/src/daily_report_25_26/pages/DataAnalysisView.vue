@@ -103,20 +103,52 @@
                 已选择 {{ selectedMetrics.size }} 项
                 <span v-if="hasConstantMetrics">｜ 常量指标来源于 constant_data 表，按日返回固定值</span>
               </p>
-              <div v-if="metricGroups.length" class="metrics-groups">
+              <div v-if="resolvedMetricGroups.length" class="metrics-groups">
                 <div
-                  v-for="group in metricGroups"
+                  v-for="group in resolvedMetricGroups"
                   :key="group.key"
                   class="metrics-group"
+                  :class="{ 'metrics-group--disabled': group.disabled }"
                 >
                   <div class="metrics-group-header">
-                    <h4>{{ group.label }}</h4>
-                    <span class="panel-hint">共 {{ group.options.length }} 项</span>
-                    <span v-if="group.key === 'constant'" class="group-badge">
-                      常量
-                    </span>
+                    <div class="metrics-group-title">
+                      <h4>{{ group.label }}</h4>
+                      <span class="panel-hint">共 {{ group.options.length }} 项</span>
+                    </div>
+                    <div class="metrics-group-actions">
+                      <span v-if="group.key === 'constant'" class="group-badge">常量</span>
+                      <span
+                        v-else-if="group.key === 'adjustment'"
+                        class="group-badge group-badge--outline"
+                      >
+                        调整
+                      </span>
+                      <span
+                        v-else-if="group.key === 'temperature'"
+                        class="group-badge group-badge--temp"
+                      >
+                        气温
+                      </span>
+                      <button
+                        class="btn ghost xs group-toggle"
+                        type="button"
+                        :disabled="queryLoading"
+                        @click="toggleGroupCollapse(group.key)"
+                      >
+                        {{ collapsedMetricGroups.has(group.key) ? '展开' : '收起' }}
+                      </button>
+                    </div>
                   </div>
-                  <div class="metrics-grid">
+                  <p v-if="group.disabled" class="panel-hint warning">
+                    当前视图不支持该组，请切换单位或分析模式。
+                  </p>
+                  <p
+                    v-else-if="collapsedMetricGroups.has(group.key)"
+                    class="panel-hint muted"
+                  >
+                    已折叠，点击“展开”查看指标。
+                  </p>
+                  <div v-show="!collapsedMetricGroups.has(group.key)" class="metrics-grid">
                     <label
                       v-for="metric in group.options"
                       :key="`${group.key}-${metric.value}`"
@@ -126,6 +158,7 @@
                         type="checkbox"
                         :value="metric.value"
                         :checked="selectedMetrics.has(metric.value)"
+                        :disabled="group.disabled || queryLoading"
                         @change="toggleMetric(metric.value)"
                       />
                       <span>{{ metric.label }}</span>
@@ -143,10 +176,15 @@
           <div v-if="formError" class="page-state error">{{ formError }}</div>
 
           <div class="form-actions">
-            <button class="btn primary" type="button" @click="runAnalysis">
-              生成分析结果
+            <button
+              class="btn primary"
+              type="button"
+              :disabled="queryLoading"
+              @click="runAnalysis"
+            >
+              {{ queryLoading ? '生成中…' : '生成分析结果' }}
             </button>
-            <button class="btn ghost" type="button" @click="resetSelections">
+            <button class="btn ghost" type="button" :disabled="queryLoading" @click="resetSelections">
               重置选择
             </button>
           </div>
@@ -158,32 +196,76 @@
           <div>
             <h3>分析结果预览</h3>
             <p class="analysis-subtitle">
-              视图：{{ activeViewName }} ｜ 单位：{{ unitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
+              <template v-if="lastQueryMeta">
+                {{ lastQueryMeta.analysis_mode_label || analysisModeLabel }} ｜ 视图：{{ lastQueryMeta.view }} ｜
+                单位：{{ lastQueryMeta.unit_label }}
+                <template v-if="lastQueryMeta.start_date">
+                  ｜ 日期：
+                  <span>
+                    <template v-if="lastQueryMeta.end_date && lastQueryMeta.end_date !== lastQueryMeta.start_date">
+                      {{ lastQueryMeta.start_date }} ~ {{ lastQueryMeta.end_date }}
+                    </template>
+                    <template v-else>
+                      {{ lastQueryMeta.start_date }}
+                    </template>
+                  </span>
+                </template>
+              </template>
+              <template v-else>
+                视图：{{ activeViewName }} ｜ 单位：{{ unitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
+              </template>
             </p>
           </div>
         </header>
 
-        <div v-if="!previewRows.length" class="page-state muted">
+        <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
+        <div v-else-if="!previewRows.length" class="page-state muted">
           请选择单位、指标与日期后点击“生成分析结果”，即可在此查看组合预览。
         </div>
         <div v-else>
           <div class="info-banner" v-if="infoBanner">{{ infoBanner }}</div>
+          <ul v-if="queryWarnings.length" class="warning-list">
+            <li v-for="(warning, idx) in queryWarnings" :key="`warn-${idx}`">
+              ⚠ {{ warning }}
+            </li>
+          </ul>
           <table class="result-table">
             <thead>
               <tr>
                 <th>指标</th>
                 <th>当前值</th>
                 <th>同期/对照</th>
-                <th>环比</th>
+                <th>同比</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in previewRows" :key="row.key">
-                <td>{{ row.label }}</td>
-                <td>{{ row.current }}</td>
-                <td>{{ row.peer }}</td>
-                <td :class="row.delta >= 0 ? 'delta-up' : 'delta-down'">
-                  {{ row.delta >= 0 ? '+' : '' }}{{ row.delta.toFixed(2) }}%
+              <tr
+                v-for="row in previewRows"
+                :key="row.key"
+                :class="{ 'result-row--missing': row.missing }"
+              >
+                <td>
+                  <div class="metric-label">
+                    <span>{{ row.label }}</span>
+                    <span v-if="row.value_type === 'temperature'" class="tag tag--subtle">气温</span>
+                    <span v-else-if="row.value_type === 'constant'" class="tag tag--subtle">常量</span>
+                    <span v-if="row.missing" class="tag tag--subtle">缺失</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="value-cell">
+                    <span class="value-number">{{ formatNumber(row.current) }}</span>
+                    <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="value-cell">
+                    <span class="value-number">{{ formatNumber(row.peer) }}</span>
+                    <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
+                  </div>
+                </td>
+                <td :class="row.delta === null ? '' : row.delta >= 0 ? 'delta-up' : 'delta-down'">
+                  {{ formatDelta(row.delta) }}
                 </td>
               </tr>
             </tbody>
@@ -200,7 +282,7 @@ import { useRoute } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
-import { getDataAnalysisSchema } from '../services/api'
+import { getDataAnalysisSchema, runDataAnalysis } from '../services/api'
 
 const route = useRoute()
 const projectKey = computed(() => String(route.params.projectKey ?? ''))
@@ -284,6 +366,7 @@ const metricOptions = computed(() => metricGroups.value.flatMap((group) => group
 const unitDict = computed(() => schema.value?.unit_dict || {})
 const metricDict = computed(() => schema.value?.metric_dict || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
+const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
 
 const selectedUnit = ref('')
 const selectedMetrics = ref(new Set())
@@ -305,6 +388,10 @@ const endDate = ref('')
 const previewRows = ref([])
 const infoBanner = ref('')
 const formError = ref('')
+const queryWarnings = ref([])
+const lastQueryMeta = ref(null)
+const queryLoading = ref(false)
+const collapsedMetricGroups = ref(new Set())
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -319,6 +406,18 @@ const analysisModeLabel = computed(() => {
 })
 
 const viewLabelMap = { daily: '单日数据', range: '累计数据' }
+const unitViewNames = computed(() => {
+  const names = new Set()
+  const mapping = viewMapping.value || {}
+  Object.values(mapping).forEach((entry) => {
+    if (entry && typeof entry === 'object') {
+      Object.keys(entry).forEach((view) => {
+        if (view) names.add(view)
+      })
+    }
+  })
+  return names
+})
 const activeViewName = computed(() => {
   const label = unitDict.value[selectedUnit.value] || selectedUnit.value
   const modeLabel = viewLabelMap[analysisMode.value] || analysisModeLabel.value
@@ -331,6 +430,32 @@ const activeViewName = computed(() => {
     }
   }
   return analysisMode.value === 'daily' ? 'company_daily_analysis' : 'company_sum_analysis'
+})
+
+const resolvedMetricGroups = computed(() => {
+  const activeView = activeViewName.value
+  const unitViews = unitViewNames.value
+  return metricGroups.value.map((group) => {
+    const allowedViews = metricGroupViews.value?.[group.key] || []
+    const referencesUnitView = allowedViews.some((view) => unitViews.has(view))
+    const disabled =
+      allowedViews.length > 0 &&
+      referencesUnitView &&
+      !['constant', 'temperature'].includes(group.key) &&
+      !allowedViews.includes(activeView)
+    return { ...group, disabled }
+  })
+})
+
+const availableMetricKeys = computed(() => {
+  const bucket = new Set()
+  resolvedMetricGroups.value.forEach((group) => {
+    if (group.disabled || !Array.isArray(group.options)) return
+    group.options.forEach((option) => {
+      if (option?.value) bucket.add(option.value)
+    })
+  })
+  return bucket
 })
 
 const breadcrumbProjectPath = computed(
@@ -348,9 +473,19 @@ async function loadSchema() {
     schema.value = payload
     const availableUnits = resolveUnitOptions(payload)
     selectedUnit.value = availableUnits?.[0]?.value || ''
-    selectedMetrics.value = new Set(payload.metric_options?.slice(0, 3).map((item) => item.value) || [])
+    selectedMetrics.value = new Set()
     analysisMode.value = payload.analysis_modes?.[0]?.value || 'daily'
     applyDateDefaults(payload.date_defaults)
+    const collapsed = new Set()
+    const groups = Array.isArray(payload.metric_groups) ? payload.metric_groups : []
+    groups.forEach((group, index) => {
+      const key = group?.key || `group_${index}`
+      if (index !== 0 && key) {
+        collapsed.add(key)
+      }
+    })
+    collapsedMetricGroups.value = collapsed
+    clearPreviewState()
   } catch (err) {
     errorMessage.value = err?.message || '数据分析配置加载失败'
   } finally {
@@ -374,24 +509,44 @@ function toggleMetric(key) {
   selectedMetrics.value = next
 }
 
+function toggleGroupCollapse(key) {
+  const next = new Set(collapsedMetricGroups.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  collapsedMetricGroups.value = next
+}
+
 function selectAllMetrics() {
-  selectedMetrics.value = new Set(metricOptions.value.map((item) => item.value))
+  if (!availableMetricKeys.value.size) {
+    formError.value = '当前视图暂无可选指标。'
+    return
+  }
+  selectedMetrics.value = new Set(availableMetricKeys.value)
 }
 
 function clearMetrics() {
   selectedMetrics.value = new Set()
 }
 
-function resetSelections() {
-  if (unitOptions.value.length) selectedUnit.value = unitOptions.value[0].value
-  selectedMetrics.value = new Set(metricOptions.value.slice(0, 3).map((item) => item.value))
-  applyDateDefaults(schema.value?.date_defaults || {})
+function clearPreviewState() {
   previewRows.value = []
-  formError.value = ''
   infoBanner.value = ''
+  queryWarnings.value = []
+  lastQueryMeta.value = null
 }
 
-function runAnalysis() {
+function resetSelections() {
+  if (unitOptions.value.length) selectedUnit.value = unitOptions.value[0].value
+  selectedMetrics.value = new Set()
+  applyDateDefaults(schema.value?.date_defaults || {})
+  formError.value = ''
+  clearPreviewState()
+}
+
+async function runAnalysis() {
   formError.value = ''
   if (!selectedUnit.value) {
     formError.value = '请选择单位。'
@@ -405,20 +560,64 @@ function runAnalysis() {
     formError.value = '请选择起止日期。'
     return
   }
-  const rows = Array.from(selectedMetrics.value).map((key, idx) => {
-    const label = metricDict.value[key] || key
-    const base = (idx + 2) * 37.5
-    const peer = base * (0.85 + Math.random() * 0.3)
-    return {
-      key,
-      label,
-      current: (base * (1 + Math.random())).toFixed(2),
-      peer: peer.toFixed(2),
-      delta: ((base - peer) / Math.max(peer, 1)) * 100,
+  const payload = {
+    unit_key: selectedUnit.value,
+    metrics: Array.from(selectedMetrics.value),
+    analysis_mode: analysisMode.value,
+    start_date: startDate.value,
+    end_date: endDate.value,
+  }
+  clearPreviewState()
+  queryLoading.value = true
+  try {
+    const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
+    if (!response?.ok) {
+      throw new Error(response?.message || '分析查询失败')
     }
-  })
-  previewRows.value = rows
-  infoBanner.value = `以下结果基于 ${analysisModeLabel.value} (${activeViewName.value}) 的示例数据，真实数据接入 SQL 视图后自动替换。`
+    previewRows.value = Array.isArray(response.rows) ? response.rows : []
+    lastQueryMeta.value = {
+      analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
+      view: response.view || activeViewName.value,
+      start_date: response.start_date || startDate.value,
+      end_date: response.end_date || endDate.value,
+      unit_label: response.unit_label || unitLabel.value,
+    }
+    queryWarnings.value = Array.isArray(response.warnings) ? response.warnings : []
+    const dateRange =
+      lastQueryMeta.value.start_date && lastQueryMeta.value.end_date
+        ? lastQueryMeta.value.start_date === lastQueryMeta.value.end_date
+          ? lastQueryMeta.value.start_date
+          : `${lastQueryMeta.value.start_date} ~ ${lastQueryMeta.value.end_date}`
+        : lastQueryMeta.value.start_date || lastQueryMeta.value.end_date || ''
+    infoBanner.value = [
+      lastQueryMeta.value.analysis_mode_label,
+      `视图：${lastQueryMeta.value.view}`,
+      `单位：${lastQueryMeta.value.unit_label}`,
+      dateRange ? `日期：${dateRange}` : null,
+    ]
+      .filter(Boolean)
+      .join(' ｜ ')
+  } catch (err) {
+    formError.value = err?.message || '分析查询失败'
+    clearPreviewState()
+  } finally {
+    queryLoading.value = false
+  }
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return '—'
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+}
+
+function formatDelta(value) {
+  if (value === null || value === undefined) return '—'
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  const sign = num > 0 ? '+' : ''
+  return `${sign}${num.toFixed(2)}%`
 }
 
 watch(
@@ -427,6 +626,7 @@ watch(
     if (mode === 'daily') {
       endDate.value = startDate.value
     }
+    clearPreviewState()
   },
 )
 
@@ -440,7 +640,7 @@ watch(
       endDate.value = value
     }
     if (value !== oldValue) {
-      previewRows.value = []
+      clearPreviewState()
     }
   },
 )
@@ -453,19 +653,38 @@ watch(
       startDate.value = value
     }
     if (value !== oldValue) {
-      previewRows.value = []
+      clearPreviewState()
     }
   },
 )
 
 watch(selectedUnit, () => {
-  previewRows.value = []
+  clearPreviewState()
 })
 
 watch(
   () => selectedMetrics.value,
   () => {
-    previewRows.value = []
+    clearPreviewState()
+  },
+  { deep: true },
+)
+
+watch(
+  resolvedMetricGroups,
+  () => {
+    if (!selectedMetrics.value.size) return
+    const allowed = availableMetricKeys.value
+    if (!allowed.size) {
+      selectedMetrics.value = new Set()
+      clearPreviewState()
+      return
+    }
+    const filtered = new Set([...selectedMetrics.value].filter((key) => allowed.has(key)))
+    if (filtered.size !== selectedMetrics.value.size) {
+      selectedMetrics.value = filtered
+      clearPreviewState()
+    }
   },
   { deep: true },
 )
@@ -539,6 +758,14 @@ onMounted(() => {
   color: var(--neutral-500);
 }
 
+.panel-hint.warning {
+  color: var(--warning-600, #b45309);
+}
+
+.panel-hint.muted {
+  color: var(--neutral-400);
+}
+
 .panel-actions {
   display: flex;
   gap: 8px;
@@ -593,11 +820,22 @@ onMounted(() => {
   gap: 10px;
 }
 
+.metrics-group--disabled {
+  opacity: 0.6;
+}
+
 .metrics-group-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.metrics-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .metrics-group-header h4 {
@@ -606,12 +844,29 @@ onMounted(() => {
   margin: 0;
 }
 
+.metrics-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .group-badge {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--neutral-100);
   color: var(--neutral-600);
+}
+
+.group-badge--outline {
+  border: 1px solid var(--primary-200);
+  color: var(--primary-600);
+  background: transparent;
+}
+
+.group-badge--temp {
+  background: var(--info-50, #eff6ff);
+  color: var(--info-600, #2563eb);
 }
 
 .metrics-grid {
@@ -696,6 +951,51 @@ onMounted(() => {
 .result-table th {
   background: var(--neutral-50);
   color: var(--neutral-700);
+}
+
+.warning-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--warning-600, #b45309);
+  font-size: 13px;
+}
+
+.metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.tag--subtle {
+  background: var(--neutral-100);
+  color: var(--neutral-600);
+}
+
+.value-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.value-number {
+  font-weight: 600;
+}
+
+.value-unit {
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.result-row--missing .value-number {
+  color: var(--neutral-400);
 }
 
 .delta-up {

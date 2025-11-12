@@ -28,12 +28,12 @@
             },
             "视图映射":{
                 "单日数据":{
-                    "company_daily_analysis":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
-                    "groups_daily_analysis":["集团全口径","主城区"]
+                    "analysis_company_daily":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
+                    "analysis_groups_daily":["集团全口径","主城区"]
                 },
                 "累计数据":{
-                    "company_sum_analysis":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
-                    "groups_sum_analysis":["集团全口径","主城区"]
+                    "analysis_company_sum":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
+                    "analysis_groups_sum":["集团全口径","主城区"]
                 }
                 
             },
@@ -117,6 +117,11 @@
                 "sum_consumption_std_coal_zhangtun": "标煤耗量汇总(张屯)",
                 "rate_power_per_10k_m2_YanJiuYuan":"供暖电单耗(-研究院)"
             },
+            "气温指标字典":{
+                "aver_temp":"平均气温",
+                "max_temp":"最高气温",
+                "min_temp":"最低气温"
+            },
             "常量指标字典":{
                 "price_inner_heat_sales": "内售热单价",
                 "price_std_coal": "标煤单价",
@@ -142,13 +147,14 @@
                 "price_denitration_agent": "脱硝剂单价"
             },
             "视图映射":{
-                    "主要指标":["company_daily_analysis","groups_daily_analysis","company_sum_analysis","groups_sum_analysis"],
-                    "调整指标":["groups_daily_analysis","groups_sum_analysis"],
-                    "常量指标":["constant_data"]
+                    "主要指标":["analysis_company_daily","analysis_groups_daily","analysis_company_sum","analysis_groups_sum"],
+                    "调整指标":["analysis_groups_daily","analysis_groups_sum"],
+                    "常量指标":["constant_data"],
+                    "气温指标":["calc_temperature_data"]
             },
             "累计数据":{
-                "company_sum_analysis":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
-                "groups_sum_analysis":["集团全口径","主城区"]
+                "analysis_company_sum":["北海热电厂","香海热电厂","供热公司","金州热电","北方热电","金普热电","庄河环海","研究院","华乐中心","东港中心","春海中心","中山中心","北岗中心","双兴中心","香炉礁中心","兴工中心","大纺中心","管网中心"],
+                "analysis_groups_sum":["集团全口径","主城区"]
             }
         }
 

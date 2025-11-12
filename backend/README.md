@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-11-28 全厂热效率分母引入油耗）
+
+- `backend/sql/sum_basic_data.sql` 的 `calc_overall_efficiency` 现以 `29.308 * (consumption_std_coal + 1.4571 * consumption_oil)` 作为分母，仍在 `base` 聚合结果上计算，确保单日/同期、7 日、月度、YTD 六个窗口全部共享同一口径。
+- `backend/sql/groups.sql` 中集团层的热效率派生段落同步更新，新口径应用于 `Group` 行的全部窗口，保持公司级与集团级视图一致。
+- 修改仅触及分母，分子仍为“供热量 + 36×售电量 - 外购热量”；无油耗数据的单位自动回落为旧表达式，不影响其他派生指标。
+- `backend/sql/analysis.sql` 的 `analysis_company_daily/analysis_groups_daily/analysis_company_sum/analysis_groups_sum` 四张视图全部沿用同一分母，主城区与集团汇总段落的 `rate_overall_efficiency` 也引用含油耗公式，避免分析接口与基础视图出现口径偏差。
+
 ## 会话小结（2025-11-27 集团口径新增“-研究院”电单耗）
 
 - `backend/sql/groups.sql` 添加 `rate_power_per_10k_m2_YanJiuYuan` 指标，分子在集团 `consumption_station_purchased_power` 的聚合中扣除研究院值，分母同期扣除研究院 `amount_heating_fee_area`，其余逻辑与 `rate_power_per_10k_m2` 一致，并统一展示名为“供暖电单耗(-研究院)”。
@@ -11,6 +18,14 @@
 - `backend_data/数据结构_全口径展示表.json` 中 `Group_analysis_brief_report_Sheet` 的“供暖电单耗”行现明确调用 `value_biz_date(rate_power_per_10k_m2_YanJiuYuan)` / `value_peer_date(rate_power_per_10k_m2_YanJiuYuan)`，集团列直接使用新口径。
 - `date_diff_rate` 同步传入相同 key，避免函数 fallback 至旧 `rate_power_per_10k_m2` 导致默认值 0；其他单位维持默认 `value_biz_date()` 行为继续引用各自口径。
 - 数据看板 `4.供暖单耗` 已在早前配置中切换到该字段，两端配置现保持一致，报表与看板可对照同一指标。
+
+## 会话小结（2025-11-27 数据分析查询接口 + 调整指标分组）
+
+- `backend_data/数据结构_数据分析表.json` 新增“调整指标字典”与对应 `视图映射`，`get_data_analysis_schema` 现会在 `adjustment_metric_dict/adjustment_metric_options/metric_groups` 中返回该分组，同时 `metric_group_views` 明确每个分组允许的视图组合（例如调整指标仅允许 `groups_daily_analysis/groups_sum_analysis`）。
+- 同一接口同步支持“气温指标字典”，并将 `metric_group_views['temperature']` 映射到 `calc_temperature_data`。前端勾选 `aver_temp/max_temp/min_temp` 等键后，后端会直接查询 `calc_temperature_data`：单日模式读取指定 `date`，累计模式对窗口内的日均温做 `AVG()`；单位一律返回 `℃`。
+- 新增 `POST /projects/daily_report_25_26/data_analysis/query`：根据 `unit_key/analysis_mode` 自动映射到 `company_daily_analysis`、`groups_sum_analysis` 等视图，并在事务中通过 `SET LOCAL phoenix.biz_date` 或 `phoenix.sum_start_date/sum_end_date` 控制时间窗口；常量指标直接读取 `constant_data`，气温指标通过 `calc_temperature_data` 视图取数，结果集中统一返回 `value_type/source_view` 标记。
+- 响应额外包含 `rows/missing_metrics/warnings` 以及解析后的 `view/start_date/end_date`，前端可直接展示提示条与缺失标记；若所选指标不属于当前视图允许的范围，接口返回 400 并列出需调整的指标。
+- 可执行 `python -m py_compile backend/api/v1/daily_report_25_26.py` 快速校验语法，数据库层需确保 `analysis_company_daily`、`analysis_groups_daily`、`calc_temperature_data` 等视图已按 `analysis.sql`/`calc_temp.sql` 部署。
 
 ## 会话小结（2025-11-27 数据分析页面权限收紧）
 

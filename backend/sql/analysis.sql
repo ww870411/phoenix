@@ -553,14 +553,20 @@ calc_overall_efficiency AS (
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_biz_date ELSE 0 END)
         )
-        / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END),0)
+        / NULLIF(29.308*(
+            SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END)
+            + 1.4571*SUM(CASE WHEN b.item='consumption_oil' THEN b.value_biz_date ELSE 0 END)
+          ),0)
       ),0), 4) AS value_biz_date,
     ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_peer_date ELSE 0 END)
         )
-        / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END),0)
+        / NULLIF(29.308*(
+            SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END)
+            + 1.4571*SUM(CASE WHEN b.item='consumption_oil' THEN b.value_peer_date ELSE 0 END)
+          ),0)
       ),0), 4) AS value_peer_date
   FROM base b
   GROUP BY b.company, b.company_cn
@@ -746,14 +752,20 @@ SELECT
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END)
       )
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_biz_date ELSE 0 END)
+        ),0)
     ),0), 4) AS value_biz_date,
   ROUND(COALESCE(
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END)
       )
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_peer_date ELSE 0 END)
+        ),0)
     ),0), 4) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
@@ -868,14 +880,20 @@ SELECT
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END)
       )
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_biz_date ELSE 0 END)
+        ),0)
     ),0), 4) AS value_biz_date,
   ROUND(COALESCE(
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END)
       )
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_peer_date ELSE 0 END)
+        ),0)
     ),0), 4) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date
@@ -1484,14 +1502,20 @@ calc_overall_efficiency AS (
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_biz_date ELSE 0 END)
         )
-        / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END),0)
+        / NULLIF(29.308*(
+            SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_biz_date ELSE 0 END)
+            + 1.4571*SUM(CASE WHEN b.item='consumption_oil' THEN b.value_biz_date ELSE 0 END)
+          ),0)
       ),0), 4) AS value_biz_date,
     ROUND(COALESCE(
       ( (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END)
         + 36.0*SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END)
         - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_peer_date ELSE 0 END)
         )
-        / NULLIF(29.308*SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END),0)
+        / NULLIF(29.308*(
+            SUM(CASE WHEN b.item='consumption_std_coal' THEN b.value_peer_date ELSE 0 END)
+            + 1.4571*SUM(CASE WHEN b.item='consumption_oil' THEN b.value_peer_date ELSE 0 END)
+          ),0)
       ),0), 4) AS value_peer_date
   FROM base b
   GROUP BY b.company, b.company_cn
@@ -1673,13 +1697,19 @@ SELECT
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_biz_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END))
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_biz_date ELSE 0 END)
+        ),0)
     ),0),4) AS value_biz_date,
   ROUND(COALESCE(
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END))
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_peer_date ELSE 0 END)
+        ),0)
     ),0),4) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
@@ -1838,13 +1868,19 @@ SELECT
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_biz_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END))
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_biz_date ELSE 0 END)
+        ),0)
     ),0),4) AS value_biz_date,
   ROUND(COALESCE(
     ( (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
       + 36.0*SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
       - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END))
-      / NULLIF(29.308*SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END),0)
+      / NULLIF(29.308*(
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_peer_date ELSE 0 END)
+        ),0)
     ),0),4) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date;

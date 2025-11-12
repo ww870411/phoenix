@@ -200,7 +200,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_biz_date ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_biz_date ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_biz_date ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_biz_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_biz_date ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS value_biz_date,
   ROUND(COALESCE(
@@ -208,7 +211,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.value_peer_date ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.value_peer_date ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.value_peer_date ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.value_peer_date ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.value_peer_date ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS value_peer_date,
   ROUND(COALESCE(
@@ -216,7 +222,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_biz ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_biz ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_biz ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_biz ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_biz ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_7d_biz ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_7d_biz,
   ROUND(COALESCE(
@@ -224,7 +233,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_7d_peer ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_7d_peer ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_7d_peer ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_peer ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_7d_peer ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_7d_peer ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_7d_peer,
   ROUND(COALESCE(
@@ -232,7 +244,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_biz ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_biz ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_biz ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_biz ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_biz ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_month_biz ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_month_biz,
   ROUND(COALESCE(
@@ -240,7 +255,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_month_peer ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_month_peer ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_month_peer ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_peer ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_month_peer ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_month_peer ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_month_peer,
   ROUND(COALESCE(
@@ -248,7 +266,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_biz ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_biz ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_biz ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_biz ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_biz ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_ytd_biz ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_ytd_biz,
   ROUND(COALESCE(
@@ -256,7 +277,10 @@ SELECT
       (SUM(CASE WHEN z.item='amount_heat_supply' THEN z.sum_ytd_peer ELSE 0 END)
        + 36.0 * SUM(CASE WHEN z.item='amount_power_sales' THEN z.sum_ytd_peer ELSE 0 END)
        - SUM(CASE WHEN z.item='consumption_outer_purchased_heat' THEN z.sum_ytd_peer ELSE 0 END))
-      / NULLIF(29.308 * SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_peer ELSE 0 END), 0)
+      / NULLIF(29.308 * (
+          SUM(CASE WHEN z.item='consumption_std_coal' THEN z.sum_ytd_peer ELSE 0 END)
+          + 1.4571*SUM(CASE WHEN z.item='consumption_oil' THEN z.sum_ytd_peer ELSE 0 END)
+        ), 0)
     ), 0
   ), 4) AS sum_ytd_peer
 FROM base_zc z

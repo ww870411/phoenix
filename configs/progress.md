@@ -1,5 +1,22 @@
 # 进度记录
 
+## 2025-11-28（全厂热效率分母引入油耗）
+
+前置说明（降级留痕）：
+- Serena 暂不支持直接编辑 SQL/Markdown，大文件亦无法在符号粒度上操作，本次使用 `apply_patch` 更新 `backend/sql/sum_basic_data.sql`、`backend/sql/groups.sql`、`backend/README.md`、`frontend/README.md` 与本文；如需回滚，请恢复上述文件的前一版本。
+
+本次动作：
+- `calc_overall_efficiency` 以及集团 `rate_overall_efficiency` 聚合的分母统一改为 `29.308 * (consumption_std_coal + 1.4571 * consumption_oil)`，保持分子不变，使热效率计算同时考虑燃油折算热量。
+- 各时间窗口（单日/同期、7 日、月度、YTD）全部按同一口径更新，防止不同窗口出现混用旧分母的情况。
+- backend/frontend README 记录此次口径微调，方便后续排查报表差异。
+- `backend/sql/analysis.sql` 中四张分析视图（company/group × daily/sum）的“全厂热效率”也同步使用新分母，主城区与集团聚合段落全部复用含油耗的 Nullif 表达式，保证自由构建/报表分析端与基础视图一致。
+
+影响范围与验证：
+- 执行 `\i backend/sql/sum_basic_data.sql`、`\i backend/sql/groups.sql` 重新创建视图后，查询 `SELECT company,item,value_biz_date FROM sum_basic_data WHERE item='rate_overall_efficiency'` 应能看到非零油耗的单位热效率略有下降；集团 `groups` 视图亦会出现相同变化。
+- 若某单位没有 `consumption_oil` 数据，新分母自动回落为旧表达式，无需额外常量配置。
+- 如需验证分母系数，可通过 `SELECT company, SUM(CASE ... consumption_oil ...) FROM daily_basic_data` 比对新增项在窗口内的累计值是否匹配预期。
+- 数据分析相关接口依赖 `analysis_company_daily/analysis_groups_daily/analysis_company_sum/analysis_groups_sum`，需重新 `\i backend/sql/analysis.sql` 并复查 `SELECT * FROM analysis_groups_sum WHERE item='rate_overall_efficiency'`，结果应与 `groups` 视图保持一致。
+
 ## 2025-11-27（数据分析页面权限收紧）
 
 前置说明（降级留痕）：
@@ -55,6 +72,36 @@
 - 仅影响 `groups` 视图项 `consumption_station_purchased_power` 及依赖该项的集团派生指标；主城区 `base_zc` 与其它量值保持不变。
 - 在数据库中执行 `SELECT company,item,value_biz_date FROM groups WHERE item='consumption_station_purchased_power' AND biz_date=:target AND company='Group';`，结果应等于 `BeiHai`~`YanJiuYuan` 全部八家相同日期的值之和。
 - 若需确认回滚成功，可与“剔除研究院”版本的查询结果对比，两者差值应正好等于研究院站购电。
+
+## 2025-11-27（数据分析查询上线）
+
+前置说明（降级留痕）：
+- 根目录 AGENTS.md 要求 Markdown/源码编辑统一使用 `apply_patch`，Serena 暂不支持对 `vue/js` 文件做结构化编辑，本次全量使用 `apply_patch` 更新 `backend/api/v1/daily_report_25_26.py`、README 及 `DataAnalysisView.vue`；如需回滚，恢复上述文件即可。
+
+本次动作：
+- `get_data_analysis_schema` 解析 `backend_data/数据结构_数据分析表.json` 新增的“调整指标”分组，并返回 `metric_group_views`，方便前端判断分组与视图的适配关系。
+- 新增 `POST /projects/daily_report_25_26/data_analysis/query`，根据单位/模式设置 `SET LOCAL phoenix.biz_date/sum_*` 后查询 `company_daily_analysis` 等视图，同时兼容 `constant_data`，统一返回 `rows/missing_metrics/warnings`。
+- `DataAnalysisView.vue` 接入上述查询接口，指标选择面板按视图自动禁用不兼容的分组，结果表支持单位、常量/缺失标签、环比增减色，并在查询中显示 Loading 与 warning。
+- `frontend/README.md` 与 `backend/README.md` 记录接口、视图映射与前端联动方式，方便后续排障。
+
+影响范围与验证：
+- 运行 `python -m py_compile backend/api/v1/daily_report_25_26.py` 已通过语法校验；前端部分尚未执行 `npm run build`，如需验证请在 node 环境中手动运行。
+- 打开 `http://localhost:5173/.../data_analysis`，选择不同单位/模式后提交，界面应提示“正在生成分析结果”，并在成功后显示后端返回的数据及 warning；若指标列表为空，请检查配置文件中的视图映射是否覆盖该单位。
+
+## 2025-11-27（气温指标 + 常量分组兼容）
+
+前置说明（降级留痕）：
+- Serena 仍无法对 Vue/Markdown 做结构化编辑，本次继续以 `apply_patch` 更新 `backend/api/v1/daily_report_25_26.py`、`DataAnalysisView.vue`、README 与本文；如需回滚，可恢复这些文件。
+
+本次动作：
+- Schema 解析新增“气温指标字典”，后端将 `metric_group_views['temperature']` 映射到 `calc_temperature_data`，并在查询阶段按模式（单日/累计）读取该视图：单日直接取 `date = start_date` 的记录，累计对区间做 `AVG()`；单位统一返回 `℃`。
+- 常量/气温分组不再依赖单位视图，前端芯片保持可选；真正不兼容的组合由后端 400 提示。
+- 结果表新增“气温”标签，前端 README 记录使用方式。
+
+影响范围与验证：
+- `python -m py_compile backend/api/v1/daily_report_25_26.py` 通过；若需验证新视图，请确保数据库已执行 `backend/sql/calc_temp.sql`。
+- 在数据分析页面选择“气温指标”并提交：单日模式会返回当日平均温度，累计模式返回区间平均值；常量分组可搭配任何视图使用。
+- 若自定义的 `气温指标` key 未在视图列中找到，会收到明确的字段缺失提示，可据此校对配置。
 
 ## 2025-11-27（集团购电汇总剔除研究院）
 

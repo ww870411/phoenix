@@ -2,6 +2,13 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-11-28 全厂热效率分母引入油耗）
+
+- 后端 `sum_basic_data`/`groups` 视图更新后，`rate_overall_efficiency` 与集团同名字段在所有窗口的分母将包含 `consumption_oil`（按 1.4571 系数折算为等效标煤）；前端直接读取相同字段即可得到新口径。
+- UI 若展示热效率对比，请注意新旧数据存在轻微差异，尤其是富油耗单位，必要时可在说明文字中提示“含油耗折算热量”。
+- 若需要回滚旧算法，仅需重新执行上一版本 SQL 并刷新接口，前端无需代码调整。
+- 数据分析页面调用的 `analysis_*` 视图也同步调整，`/data_analysis/query`、自由构建等功能读取的 `rate_overall_efficiency` 会与 dashboard/展示表一致，无需额外前端兼容。
+
 ## 会话小结（2025-11-27 集团电单耗双口径）
 
 - 后端 `groups` 视图新增 `rate_power_per_10k_m2_YanJiuYuan` 字段（中文名“供暖电单耗(-研究院)”），其值等于集团整体现有 `rate_power_per_10k_m2` 在分子、分母上扣除 `YanJiuYuan` 数据后的结果。

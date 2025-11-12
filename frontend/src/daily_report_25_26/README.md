@@ -1,5 +1,12 @@
 # daily_report_25_26 前端说明
 
+## 数据分析页面（2025-11-27 实时查询版）
+
+- `DataAnalysisView.vue` 首次接入 `POST /projects/daily_report_25_26/data_analysis/query`，根据所选单位/模式构造 `unit_key/metrics/start_date/end_date` 请求，响应中的 `rows/view/start_date/end_date/warnings` 直接驱动结果表、提示条与缺失标记。
+- Schema 中新增“调整指标”分组：前端会读取 `metric_group_views`，仅在当前视图（如 `groups_daily_analysis`）允许时展示该分组；禁用状态下芯片自动置灰并提示“请切换单位或模式”。“常量指标”“气温指标”属于跨视图分组，默认可选。
+- “气温指标”自动对应 `calc_temperature_data` 视图，可勾选 `aver_temp/max_temp/min_temp` 等键；单日模式读取指定日期，累计模式显示区间平均温度，表格会以“气温”标签标识该类行。
+- 指标面板提供“全选”/“清空”功能且会自动剔除当前视图不支持的指标；结果表展示单位、常量/气温/缺失标签及正负色差的环比列，查询进行中会显示 Loading 态与服务端告警列表。
+
 ## 仪表盘业务日同步策略（2025-11-13）
 
 - `DashBoard.vue` 的 `loadDashboardData(showDate)` 在收到接口响应后，会根据 `showDate` 是否为空决定是否同步 `payload.push_date` 到 `bizDateInput`：仅当未指定 `showDate` 且本地输入框为空（初次加载或用户清空日期）时才覆盖，防止手动选择的日期被后台默认推送日重置。

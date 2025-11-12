@@ -271,6 +271,24 @@ export async function getDataAnalysisSchema(projectKey, options = {}) {
   return response.json()
 }
 
+export async function runDataAnalysis(projectKey, payload, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_analysis/query${search}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify(payload || {}),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `执行数据分析失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getValidationMasterSwitch(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
     headers: attachAuthHeaders(),
