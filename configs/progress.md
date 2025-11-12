@@ -14,6 +14,21 @@
 - 运行 `python -m py_compile backend/api/v1/daily_report_25_26.py backend/services/data_analysis.py`，确保 service 与 API 拆分后语法和依赖完整；接口入参/出参保持不变，前端页面无需调整即可继续调用。
 - 如需回退，可将 API 恢复为 legacy 版本，或直接在路由中调用 `_execute_data_analysis_query_legacy`，不影响其它模块。
 
+## 2025-11-30（数据看板每日对比趋势）
+
+前置说明：
+- Serena 无法直接在 4k+ 行的 `DashBoard.vue` 中完成结构化插入，也无法更新大型 JSON 配置，因此本次针对 Dashboard 前端与 `dashboard_expression.py` 的改动使用 `apply_patch`；如需回滚，可恢复对应文件的上一版本。
+
+本次动作：
+- `backend/services/dashboard_expression.py` 新增 `_fill_daily_trend_section`，读取配置 `10.每日对比趋势`，按供暖期起点（2025-11-01）至 `push_date` 逐日拉取 `groups` 视图的“标煤耗量汇总(张屯)”以及 `calc_temperature_data` 的平均气温，生成本期/同期曲线数据并写回 `section['本期'/'同期']`。
+- 同步新增 `_normalize_metric_entries`、`_build_group_metric_cache` 等辅助函数，并在 `evaluate_dashboard` 中调用，API `/dashboard` 现会返回 `labels + series` 结构供前端绘图。
+- `frontend/src/daily_report_25_26/pages/DashBoard.vue` 新增“每日对比趋势”卡片（12 格宽，位于“煤炭库存”之后），`useDailyTrendOption` 根据后端提供的 `labels`/`series` 生成双轴折线图（左轴标煤耗量、右轴平均气温），并复用别名表展示图例。
+- 配套增加 `dailyTrendExtraLabel`、样式类 `.dashboard-grid__item--trend` 以及解析函数 `normalizeTrendBucket`，以便在数据缺失时 graceful degrade。
+
+影响与验证：
+- 运行 `python -m py_compile backend/services/dashboard_expression.py` 确认后端语法正确；前端尚未执行 `npm run build`，如需验证请在本地构建并刷新 `/projects/.../dashboard` 页面。
+- 历史配置仍可继续扩展其他指标；若要回滚该功能，可移除 10 号段配置并删除相应 helper 调用。
+
 ## 2025-11-28（全厂热效率分母引入油耗）
 
 前置说明（降级留痕）：

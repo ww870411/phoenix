@@ -844,6 +844,18 @@ def _decimal_to_float(value: Any) -> Optional[float]:
         return None
 
 
+def _to_float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric != numeric:  # NaN
+        return None
+    return numeric
+
+
 def _compute_delta(current: Optional[float], peer: Optional[float]) -> Optional[float]:
     if current is None or peer in (None, 0):
         return None

@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import re
 
 from fastapi import HTTPException
@@ -174,6 +174,18 @@ def _decimal_to_float(number) -> float:
         return float(number)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _to_float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric != numeric:  # NaN
+        return None
+    return numeric
 
 
 def _fetch_temperature_series(
@@ -593,6 +605,11 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
         if isinstance(cumulative_section, dict):
             _fill_cumulative_cards(session, cumulative_section, push_date)
 
+        # 10. 每日对比趋势
+        daily_trend_section = get_section_by_index("10", "10.每日对比趋势")
+        if isinstance(daily_trend_section, dict):
+            _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_code)
+
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
         str(DASHBOARD_CONFIG_PATH.relative_to(DATA_ROOT))
@@ -757,6 +774,180 @@ def _fetch_daily_average_temperature_map(
         ordered[current] = daily_map.get(current)
 
     return ordered
+
+
+def _normalize_metric_entries(raw_config: Any) -> List[Dict[str, Any]]:
+    """将配置指标列表标准化为 {key, axis} 结构。"""
+    entries: List[Dict[str, Any]] = []
+    if isinstance(raw_config, list):
+        iterable = raw_config
+    elif raw_config:
+        iterable = [raw_config]
+    else:
+        iterable = []
+    for item in iterable:
+        if isinstance(item, str):
+            key = item.strip()
+            axis = None
+        elif isinstance(item, dict):
+            key = str(item.get("指标") or item.get("key") or item.get("label") or "").strip()
+            axis = str(item.get("轴") or item.get("axis") or "").strip().lower() or None
+        else:
+            continue
+        if key:
+            entries.append({"key": key, "axis": axis})
+    return entries
+
+
+def _is_temperature_metric(metric_key: str) -> bool:
+    return "温" in metric_key
+
+
+def _resolve_metric_axis(metric_key: str, preferred: Optional[str]) -> str:
+    axis = (preferred or "").lower()
+    if axis in {"left", "right"}:
+        return axis
+    return "right" if _is_temperature_metric(metric_key) else "left"
+
+
+def _build_group_metric_cache(
+    session,
+    dates: Sequence[date],
+) -> Dict[str, Dict[str, Any]]:
+    cache: Dict[str, Dict[str, Any]] = {}
+    for dt in dates:
+        iso_key = dt.isoformat()
+        if iso_key in cache:
+            continue
+        cache[iso_key] = _fetch_metrics_from_view(session, "groups", "Group", iso_key)
+    return cache
+
+
+def _extract_group_metric_series(
+    cache: Dict[str, Dict[str, Any]],
+    iso_dates: Sequence[str],
+    item_code: str,
+) -> List[Optional[float]]:
+    series: List[Optional[float]] = []
+    for iso_key in iso_dates:
+        metrics = cache.get(iso_key)
+        bucket = metrics.get(item_code, {}) if metrics else {}
+        value = bucket.get("value_biz_date")
+        series.append(_to_float_or_none(value))
+    return series
+
+
+def _build_temperature_series(
+    temp_map: Dict[date, Optional[float]],
+    ordered_dates: Sequence[date],
+) -> List[Optional[float]]:
+    values: List[Optional[float]] = []
+    for day in ordered_dates:
+        value = temp_map.get(day)
+        values.append(None if value is None else round(value, 2))
+    return values
+
+
+def _fill_daily_trend_section(
+    session,
+    section: Dict[str, Any],
+    push_date: str,
+    item_cn_to_code: Dict[str, str],
+) -> None:
+    """填充“10.每日对比趋势”板块的时间序列数据。"""
+    if not isinstance(section, dict):
+        return
+
+    current_config = _normalize_metric_entries(section.get("本期"))
+    peer_config = _normalize_metric_entries(section.get("同期"))
+    if not current_config:
+        return
+
+    try:
+        push_dt = date.fromisoformat(push_date)
+    except ValueError:
+        push_dt = date.today()
+    start_dt = HEATING_SEASON_START if HEATING_SEASON_START <= push_dt else push_dt
+    if start_dt > push_dt:
+        start_dt = push_dt
+
+    total_days = (push_dt - start_dt).days + 1
+    if total_days <= 0:
+        total_days = 1
+    date_range = [start_dt + timedelta(days=idx) for idx in range(total_days)]
+    labels = [dt.isoformat() for dt in date_range]
+    peer_dates = [_add_years(dt, -1) for dt in date_range]
+    peer_labels = [dt.isoformat() for dt in peer_dates]
+
+    units_bucket = section.get("计量单位")
+    units_map = units_bucket if isinstance(units_bucket, dict) else {}
+
+    has_current_temp = any(_is_temperature_metric(entry["key"]) for entry in current_config)
+    has_peer_temp = any(_is_temperature_metric(entry["key"]) for entry in peer_config)
+    if has_current_temp and not has_peer_temp:
+        for entry in current_config:
+            if _is_temperature_metric(entry["key"]):
+                peer_config.append({"key": entry["key"], "axis": entry.get("axis")})
+        has_peer_temp = True
+
+    temp_series_map = _fetch_daily_average_temperature_map(session, start_dt, push_dt)
+    peer_temp_map: Optional[Dict[date, Optional[float]]] = None
+    if has_peer_temp:
+        peer_start = peer_dates[0] if peer_dates else start_dt
+        peer_end = peer_dates[-1] if peer_dates else peer_start
+        peer_temp_map = _fetch_daily_average_temperature_map(session, peer_start, peer_end)
+
+    needs_group_current = any(not _is_temperature_metric(entry["key"]) for entry in current_config)
+    needs_group_peer = any(not _is_temperature_metric(entry["key"]) for entry in peer_config)
+    current_cache = (
+        _build_group_metric_cache(session, date_range) if needs_group_current else {}
+    )
+    peer_cache = _build_group_metric_cache(session, peer_dates) if needs_group_peer else {}
+
+    def build_series(
+        entries: List[Dict[str, Any]],
+        iso_dates: List[str],
+        dates_obj: List[date],
+        cache: Dict[str, Dict[str, Any]],
+        temp_map: Optional[Dict[date, Optional[float]]],
+    ) -> List[Dict[str, Any]]:
+        series: List[Dict[str, Any]] = []
+        for entry in entries:
+            metric_key = entry["key"]
+            axis = _resolve_metric_axis(metric_key, entry.get("axis"))
+            unit_label = units_map.get(metric_key, "")
+            if _is_temperature_metric(metric_key):
+                values = _build_temperature_series(temp_map or {}, dates_obj)
+            else:
+                item_code = item_cn_to_code.get(metric_key, metric_key)
+                values = _extract_group_metric_series(cache, iso_dates, item_code)
+            series.append(
+                {
+                    "key": metric_key,
+                    "axis": axis,
+                    "unit": unit_label,
+                    "values": [None if v is None else round(v, 2) for v in values],
+                },
+            )
+        return series
+
+    current_series = build_series(current_config, labels, date_range, current_cache, temp_series_map)
+    peer_series = build_series(peer_config, peer_labels, peer_dates, peer_cache, peer_temp_map)
+
+    section["本期"] = {
+        "labels": labels,
+        "series": current_series,
+    }
+    section["同期"] = {
+        "labels": labels,
+        "series": peer_series,
+    }
+    section["meta"] = {
+        "start_date": start_dt.isoformat(),
+        "end_date": push_dt.isoformat(),
+        "peer_start_date": peer_dates[0].isoformat() if peer_dates else "",
+        "peer_end_date": peer_dates[-1].isoformat() if peer_dates else "",
+    }
 
 
 def _fetch_average_temperature_between(

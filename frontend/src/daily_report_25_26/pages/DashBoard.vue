@@ -415,6 +415,30 @@
           </div>
         </Card>
       </section>
+
+      <section class="dashboard-grid__item dashboard-grid__item--trend">
+        <Card
+          :class="{ 'dashboard-card--collapsed': dailyTrendCollapsed }"
+          title="标煤耗量与平均气温趋势图"
+          :extra="dailyTrendExtraLabel"
+        >
+          <div class="card-collapse-toolbar">
+            <button
+              type="button"
+              class="collapse-btn"
+              @click="dailyTrendCollapsed = !dailyTrendCollapsed"
+              :aria-expanded="(!dailyTrendCollapsed).toString()"
+            >
+              {{ dailyTrendCollapsed ? '展开' : '收起' }}
+            </button>
+          </div>
+          <transition name="trend-collapse">
+            <div v-show="!dailyTrendCollapsed" class="daily-trend-content">
+              <EChart :option="dailyTrendOpt" height="360px" />
+            </div>
+          </transition>
+        </Card>
+      </section>
     </main>
 
     <footer class="dashboard-footer">
@@ -435,18 +459,27 @@ const Card = defineComponent({
     subtitle: { type: String, default: '' },
     extra: { type: String, default: '' },
   },
-  setup(props, { slots }) {
-    return () =>
-      h('section', { class: 'dashboard-card' }, [
-        h('div', { class: 'dashboard-card__header' }, [
-          h('div', { class: 'dashboard-card__header-left' }, [
-            props.subtitle ? h('div', { class: 'dashboard-card__subtitle' }, props.subtitle) : null,
-            h('h3', { class: 'dashboard-card__title' }, props.title),
+  setup(props, { slots, attrs }) {
+    return () => {
+      const { class: className, ...restAttrs } = attrs
+      return h(
+        'section',
+        {
+          ...restAttrs,
+          class: ['dashboard-card', className],
+        },
+        [
+          h('div', { class: 'dashboard-card__header' }, [
+            h('div', { class: 'dashboard-card__header-left' }, [
+              props.subtitle ? h('div', { class: 'dashboard-card__subtitle' }, props.subtitle) : null,
+              h('h3', { class: 'dashboard-card__title' }, props.title),
+            ]),
+            props.extra ? h('div', { class: 'dashboard-card__extra' }, props.extra) : null,
           ]),
-          props.extra ? h('div', { class: 'dashboard-card__extra' }, props.extra) : null,
-        ]),
-        h('div', { class: 'dashboard-card__body' }, (slots.default && slots.default()) || null),
-      ])
+          h('div', { class: 'dashboard-card__body' }, (slots.default && slots.default()) || null),
+        ],
+      )
+    }
   },
 })
 
@@ -1827,6 +1860,14 @@ const coalStockTableData = computed(() => {
   })
 })
 
+const dailyTrendExtraLabel = computed(() => {
+  const leftUnit = dailyTrendSeries.value.leftUnit || '吨'
+  const rightUnit = dailyTrendSeries.value.rightUnit || '℃'
+  return `标煤耗量（${leftUnit}）｜平均气温（${rightUnit}）`
+})
+
+const dailyTrendCollapsed = ref(false)
+
 const unitSection = computed(() => {
   const section = resolveSection('4', '4.供暖单耗')
   return section && typeof section === 'object' ? section : {}
@@ -2096,6 +2137,48 @@ const coalStdSeries = computed(() => {
   const current = categories.map((org) => roundOrNull(currentEntries?.[org], 2) ?? 0)
   const peer = categories.map((org) => roundOrNull(peerEntries?.[org], 2) ?? 0)
   return { categories, current, peer }
+})
+
+const dailyTrendSection = computed(() => {
+  const section = resolveSection('10', '10.每日对比趋势')
+  return section && typeof section === 'object' ? section : {}
+})
+
+const normalizeTrendBucket = (bucket, units) => {
+  if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) {
+    return { labels: [], series: [] }
+  }
+  const labels = Array.isArray(bucket.labels) ? bucket.labels : []
+  const rawSeries = Array.isArray(bucket.series) ? bucket.series : []
+  const normalized = rawSeries
+    .map((item) => {
+      const key = typeof item?.key === 'string' ? item.key : ''
+      if (!key) return null
+      const axis = item?.axis === 'right' ? 'right' : 'left'
+      const unit = typeof item?.unit === 'string' && item.unit ? item.unit : pickUnitByLabel(units, key, axis === 'right' ? '℃' : '')
+      const values = Array.isArray(item?.values) ? item.values : labels.map(() => null)
+      return { key, axis, unit, values }
+    })
+    .filter(Boolean)
+  return { labels, series: normalized }
+}
+
+const dailyTrendSeries = computed(() => {
+  const section = dailyTrendSection.value
+  const units = (section && typeof section['计量单位'] === 'object') ? section['计量单位'] : {}
+  const currentBucket = normalizeTrendBucket(section?.['本期'], units)
+  const peerBucket = normalizeTrendBucket(section?.['同期'], units)
+  const labels = currentBucket.labels.length ? currentBucket.labels : peerBucket.labels
+  const peerSeries = peerBucket.series.map((item) => ({ ...item, phase: '同期' }))
+  const currentSeries = currentBucket.series.map((item) => ({ ...item, phase: '本期' }))
+  return {
+    labels,
+    current: currentSeries,
+    peer: peerSeries,
+    units,
+    leftUnit: pickUnitByLabel(units, '标煤耗量汇总(张屯)', '吨'),
+    rightUnit: pickUnitByLabel(units, '平均气温', '℃'),
+  }
 })
 
 // --- 模拟数据（后续可替换为后端数据源） ---
@@ -2964,6 +3047,153 @@ const useCoalStockOption = (seriesPayload) => {
   }
 }
 
+const useDailyTrendOption = (payload, highlightLabel) => {
+  const labels = Array.isArray(payload?.labels) ? payload.labels : []
+  const currentSeries = Array.isArray(payload?.current) ? payload.current : []
+  const peerSeries = Array.isArray(payload?.peer) ? payload.peer : []
+  const legendEntries = []
+  const CURRENT_COLOR = '#2563eb'
+  const PEER_COLOR = '#f97316'
+
+  const highlightSet = new Set()
+  if (highlightLabel) {
+    const idx = labels.indexOf(highlightLabel)
+    if (idx !== -1) {
+      highlightSet.add(idx)
+      if (idx - 1 >= 0) highlightSet.add(idx - 1)
+      if (idx - 2 >= 0) highlightSet.add(idx - 2)
+    }
+  }
+
+  const buildSeries = (entries, isPeer = false) => {
+    return entries.map((entry) => {
+      const nameBase = getDisplayLabel(entry.key)
+      const legendName = isPeer ? `${nameBase}（同期）` : nameBase
+      if (!legendEntries.includes(legendName)) {
+        legendEntries.push(legendName)
+      }
+      const color = isPeer ? PEER_COLOR : CURRENT_COLOR
+      const isTemperatureSeries = entry.axis === 'right'
+      const seriesConfig = {
+        name: legendName,
+        type: isTemperatureSeries ? 'bar' : 'line',
+        smooth: true,
+        data: Array.isArray(entry.values)
+          ? entry.values.map((value) => (value === null || value === undefined ? null : Number(value)))
+          : [],
+        lineStyle: isTemperatureSeries
+          ? undefined
+          : {
+              width: 2,
+              type: isPeer ? 'dashed' : 'solid',
+              color,
+            },
+        barWidth: isTemperatureSeries ? 16 : undefined,
+        symbol: 'circle',
+        symbolSize: 5,
+        itemStyle: isTemperatureSeries
+          ? {
+              color: isPeer ? 'rgba(249, 115, 22, 0.25)' : 'rgba(37, 99, 235, 0.25)',
+              borderColor: color,
+              borderWidth: 1.2,
+              borderType: isPeer ? 'dashed' : 'solid',
+            }
+          : { color },
+        yAxisIndex: entry.axis === 'right' ? 1 : 0,
+        emphasis: { focus: 'series' },
+      }
+      if (!isPeer && !isTemperatureSeries && highlightSet.size) {
+        const labelData = Array.from(highlightSet)
+          .filter((idx) => labels[idx] !== undefined)
+          .map((idx) => ({
+            coord: [labels[idx], seriesConfig.data[idx]],
+            label: {
+              formatter: (params) =>
+                Number.isFinite(params.value) ? formatWithThousands(params.value, 0) : '',
+            },
+          }))
+        if (labelData.length) {
+          seriesConfig.label = {
+            show: true,
+            position: 'top',
+            color: '#2563eb',
+            fontSize: 13,
+            fontWeight: 600,
+            formatter: (params) =>
+              Number.isFinite(params.value) ? formatWithThousands(params.value, 0) : '',
+            distance: 8,
+          }
+          seriesConfig.labelLayout = { moveOverlap: 'shiftY' }
+          seriesConfig.markPoint = {
+            symbol: 'circle',
+            symbolSize: 0,
+            data: labelData,
+          }
+        }
+      }
+      if (!isPeer && isTemperatureSeries && highlightSet.size) {
+        const labelData = Array.from(highlightSet)
+          .filter((idx) => labels[idx] !== undefined)
+          .map((idx) => ({
+            coord: [labels[idx], seriesConfig.data[idx]],
+            label: {
+              formatter: (params) =>
+                Number.isFinite(params.value) ? params.value.toFixed(1) : '',
+            },
+          }))
+        if (labelData.length) {
+          seriesConfig.label = {
+            show: true,
+            position: 'top',
+            color: '#2563eb',
+            fontSize: 12,
+            fontWeight: 600,
+            formatter: (params) =>
+              Number.isFinite(params.value) ? params.value.toFixed(1) : '',
+            distance: 6,
+          }
+          seriesConfig.labelLayout = { moveOverlap: 'shiftY' }
+          seriesConfig.markPoint = {
+            symbol: 'rect',
+            symbolSize: 0,
+            data: labelData,
+          }
+        }
+      }
+      return seriesConfig
+    })
+  }
+
+  const series = [...buildSeries(currentSeries, false), ...buildSeries(peerSeries, true)]
+
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: legendEntries, bottom: 0 },
+    grid: { left: 40, right: 40, top: 40, bottom: 60 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: { hideOverlap: true },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: payload?.leftUnit || '',
+        axisLine: { lineStyle: { color: '#0f172a' } },
+        splitLine: { lineStyle: { type: 'dashed' } },
+      },
+      {
+        type: 'value',
+        name: payload?.rightUnit || '',
+        position: 'right',
+        axisLine: { lineStyle: { color: '#ef4444' } },
+        splitLine: { show: false },
+      },
+    ],
+    series,
+  }
+}
+
 // --- 图表 option 实例 ---
 const tempOpt = computed(() => useTempOption(temperatureSeries.value, pushDateValue.value))
 const marginOpt = computed(() => useMarginOption(marginSeries.value))
@@ -2978,6 +3208,7 @@ const unitWaterOpt = computed(() =>
   useUnitConsumptionOption(unitSeries.value, '供暖水单耗', 'horizontal'),
 )
 const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
+const dailyTrendOpt = computed(() => useDailyTrendOption(dailyTrendSeries.value, pushDateValue.value))
 const complaintChartConfigs = computed(() => {
   const companies = complaintCompanies.value
   const buckets = complaintBuckets.value
@@ -3755,7 +3986,7 @@ onMounted(() => {
     display: grid;
     grid-template-columns: 1fr;
     gap: 14px;
-    grid-auto-rows: minmax(300px, auto);
+    grid-auto-rows: auto;
     align-items: stretch;
   }
 
@@ -3812,6 +4043,9 @@ onMounted(() => {
   .dashboard-grid__item--stock {
     grid-column: span 6;
   }
+  .dashboard-grid__item--trend {
+    grid-column: 1 / -1;
+  }
 }
 
 .dashboard-card {
@@ -3823,8 +4057,44 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  height: 100%;
-  min-height: 100%;
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.dashboard-card--collapsed {
+  min-height: auto;
+}
+
+.card-collapse-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.collapse-btn {
+  border: 1px solid #cbd5f5;
+  background: #f8fafc;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  color: #0f172a;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: #e2e8f0;
+}
+
+.trend-collapse-enter-active,
+.trend-collapse-leave-active {
+  transition: all 0.25s ease;
+}
+
+.trend-collapse-enter-from,
+.trend-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+  height: 0;
 }
 
 .dashboard-card__header {

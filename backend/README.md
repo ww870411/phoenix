@@ -7,6 +7,12 @@
 - API 层复用了服务内的 `TEMPERATURE_COLUMN_MAP/TEMPERATURE_UNIT/MAX_TIMELINE_DAYS` 常量并保留 `_execute_data_analysis_query_legacy` 供需要调试旧逻辑时参考，正常路径全部走新的 service 实现，接口入参/出参保持不变。
 - 通过 `python -m py_compile backend/api/v1/daily_report_25_26.py backend/services/data_analysis.py` 校验语法，确保拆分后无缩进或依赖遗漏；如需回滚，可恢复旧版 API 函数或直接调用 `*_legacy` 版本。
 
+## 会话小结（2025-11-30 数据看板每日对比趋势）
+
+- `backend/services/dashboard_expression.py` 新增 `_fill_daily_trend_section`、`_normalize_metric_entries`、`_build_group_metric_cache` 等 helper，按配置 `10.每日对比趋势` 将供暖期起点（HEATING_SEASON_START=2025-11-01）至 `push_date` 的每日日志转换为 `labels + series` 结构，本期包含“标煤耗量汇总(张屯)”与“平均气温”两条曲线，同期提供标煤耗量曲线。
+- helper 内部对 `groups` 视图结果做日期缓存，并调用 `_fetch_daily_average_temperature_map` 获取气温时间序列；填充结果写回 `section['本期'/'同期']`，并附 `meta`（起止日期、同期映射日期）以便前端展示。
+- `evaluate_dashboard` 在处理完累计卡片后调用该 helper，因此 `/dashboard` API 会自动返回新的时间序列数据；若要回滚此功能，只需移除配置中的 10 号段并删除该 helper 调用。
+
 ## 会话小结（2025-11-28 全厂热效率分母引入油耗）
 
 - `backend/sql/sum_basic_data.sql` 的 `calc_overall_efficiency` 现以 `29.308 * (consumption_std_coal + 1.4571 * consumption_oil)` 作为分母，仍在 `base` 聚合结果上计算，确保单日/同期、7 日、月度、YTD 六个窗口全部共享同一口径。

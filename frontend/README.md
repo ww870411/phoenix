@@ -8,6 +8,12 @@
 - 服务层统一处理指标分组、常量/气温/逐日明细与 Excel 导出数据，因此前端在渲染 RevoGrid、同比列以及下载文件时的字段含义保持不变；如需调试历史实现，可与后端 `_execute_data_analysis_query_legacy` 对照。
 - 若后续要在数据看板或其它页面复用同一查询结果，可直接请求 `/data_analysis/query`，现在的实现已经聚合在 service 层，便于多路调用共享逻辑。
 
+## 会话小结（2025-11-30 数据看板每日对比趋势）
+
+- `pages/DashBoard.vue` 新增 “每日对比趋势” 卡片（位于“煤炭库存”之后，栅格宽度 12），展示供暖期内标煤耗量（本期/同期）与平均气温同轴曲线，使用全新的 `useDailyTrendOption` 生成双纵轴折线图。
+- 新增 `dailyTrendSection/dailyTrendSeries` 解析函数，将后端返回的 `labels + series` 结构解耦为左轴（吨）与右轴（℃），并通过 `getDisplayLabel`/别名系统同步展示图例名称。
+- 样式层追加 `.dashboard-grid__item--trend` 以占满一行，`dailyTrendExtraLabel` 在卡片副标题中提示双轴单位；如需回滚，只需移除 10 号段配置与上述组件/样式即可。
+
 ## 会话小结（2025-11-28 全厂热效率分母引入油耗）
 
 - 后端 `sum_basic_data`/`groups` 视图更新后，`rate_overall_efficiency` 与集团同名字段在所有窗口的分母将包含 `consumption_oil`（按 1.4571 系数折算为等效标煤）；前端直接读取相同字段即可得到新口径。
