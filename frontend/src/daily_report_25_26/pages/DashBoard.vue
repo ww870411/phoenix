@@ -509,7 +509,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   cancelCachePublishJob,
@@ -864,6 +864,22 @@ const EChart = defineComponent({
 })
 
 // --- 通用工具函数 ---
+const acquireWatchSuppress = () => {
+  suppressDashboardWatchDepth += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    suppressDashboardWatchDepth = Math.max(0, suppressDashboardWatchDepth - 1)
+  }
+}
+
+const setBizDateInputSilently = (value) => {
+  const release = acquireWatchSuppress()
+  bizDateInput.value = value
+  nextTick(release)
+}
+
 const fmt = (date) => date.toISOString().slice(0, 10)
 const clamp = (value, min, max) => {
   if (!Number.isFinite(value)) return min
@@ -902,7 +918,7 @@ const effectiveBizDate = computed(() => {
 })
 
 const projectKey = 'daily_report_25_26'
-let suppressDashboardWatch = false
+let suppressDashboardWatchDepth = 0
 let activeDashboardRequests = 0
 const isLoading = ref(false)
 let loadingVisibilityTimer = null
@@ -951,9 +967,9 @@ const cacheStatus = reactive({
 const assignDashboardPayload = (payload, { showDate }) => {
   const allowBizDateSync = !showDate && !bizDateInput.value
   if (payload?.push_date && allowBizDateSync) {
-    bizDateInput.value = payload.push_date
+    setBizDateInputSilently(payload.push_date)
   } else if (!bizDateInput.value) {
-    bizDateInput.value = defaultBizDate
+    setBizDateInputSilently(defaultBizDate)
   }
 
   if (payload && typeof payload === 'object') {
@@ -1067,11 +1083,11 @@ async function loadDashboardData(showDate = '', options = {}) {
   const allowCache = options.allowCache !== false
   const cachedPayload = allowCache ? dashboardCache.get(cacheKey) : undefined
 
-  suppressDashboardWatch = true
+  const releaseWatchSuppress = acquireWatchSuppress()
 
   if (cachedPayload) {
     assignDashboardPayload(cachedPayload, { showDate: normalizedShowDate })
-    suppressDashboardWatch = false
+    releaseWatchSuppress()
     return
   }
 
@@ -1111,7 +1127,6 @@ async function loadDashboardData(showDate = '', options = {}) {
       dashboardAbortController = null
     }
     activeDashboardRequests = Math.max(activeDashboardRequests - 1, 0)
-    suppressDashboardWatch = activeDashboardRequests > 0
     if (activeDashboardRequests === 0) {
       if (loadingVisibilityTimer) {
         clearTimeout(loadingVisibilityTimer)
@@ -1119,6 +1134,7 @@ async function loadDashboardData(showDate = '', options = {}) {
       }
       isLoading.value = false
     }
+    releaseWatchSuppress()
   }
 }
 
@@ -1187,7 +1203,7 @@ onMounted(() => {
 watch(
   () => bizDateInput.value,
   (value, oldValue) => {
-    if (suppressDashboardWatch) return
+    if (suppressDashboardWatchDepth > 0) return
     if (value === oldValue) return
     scheduleDashboardLoad(value || '')
   },
