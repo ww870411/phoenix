@@ -1,5 +1,34 @@
 # 进度记录
 
+## 2025-12-01（数据看板缓存与前端管控）
+
+前置说明：
+- `backend/api/v1/daily_report_25_26.py` 与 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 均超过 4k 行，Serena 无法在单次操作中完成插入/替换，因此本次按指南降级使用 Codex CLI `apply_patch` 更新相关片段；如需回滚，可恢复上述文件及新增的 `backend/services/dashboard_cache.py` 的上一版本。
+
+本次动作：
+- 新增 `backend/services/dashboard_cache.py`，封装 `backend_data/dashboard_cache.json` 读写、set_biz_date 三日窗口推导、禁用/重建缓存与 key 规范化；`/dashboard` 接口在命中缓存后直接返回缓存内容，miss 时补写文件，并在响应中追加 `cache_hit/cache_disabled/cache_dates/cache_updated_at/cache_key`。
+- 新增后台接口 `POST /dashboard/cache/publish`（set_biz_date 及前两日 + 默认请求批量生成）、`POST /dashboard/cache/refresh`（单日刷新）与 `DELETE /dashboard/cache`（禁用并清空），仅 `can_publish` 权限可调用；禁用状态下 `/dashboard` 只读不写，避免误触导致缓存恢复。
+- `frontend/src/daily_report_25_26/services/api.js` 增加对应 API 调用；`DashBoard.vue` 顶部新增“发布缓存/刷新看板/禁用缓存”按钮与状态提示（命中缓存/实时加载/禁用、最近更新时刻、操作消息），并在成功后以 `allowCache: false` 重新加载仪表盘，确保 UI 与缓存一致。
+- README 同步：后端说明新增缓存章节，前端 README 记录操作流程，方便后续运维；`configs/progress.md`（本文）亦留存操作留痕。
+
+影响与验证：
+- 手动调用 `POST /api/v1/projects/daily_report_25_26/dashboard/cache/publish` 可在 `backend_data/dashboard_cache.json` 中看到三日数据与 `__default__` 条目；随后访问 `/dashboard?show_date=<任一日期>` 时响应带 `cache_hit=true`，命中缓存即不再命中数据库视图。
+- 前端登录具备发布权限的账号后，点击新增按钮即可驱动上述接口；普通账号看不到缓存操作区，避免误操作。尚未执行 `npm run build`，如需验证请本地构建后访问 Dashboard。
+- 如需回滚，可删除 `dashboard_cache.py`、移除 `/dashboard` 缓存逻辑及新增接口，同时撤销前端按钮与服务 API。
+
+## 2025-12-02（缓存窗口延长到五日）
+
+前置说明：
+- 继续沿用 2025-12-01 的缓存机制，本次仅调整窗口大小；Serena 无法直接对大文件做局部替换，因此仍通过 `apply_patch` 修改 `backend/services/dashboard_cache.py` 与 README。
+
+本次动作：
+- `default_publish_dates()` 的默认窗口从 3 改为 5（set_biz_date 及前四日）；`POST /dashboard/cache/publish` 也会同步生成 5 天的缓存切片，缓存命中范围扩大。
+- 更新后端 README 中的描述，明确缓存批量生成覆盖“set_biz_date + 前四日”；前端无需改动。
+
+影响与验证：
+- 调用 `POST /dashboard/cache/publish` 时应可在 `backend_data/dashboard_cache.json` 看到 5 个 ISO 日期键；`cache_dates` 元数据也会返回 5 日清单。
+- 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。
+
 ## 2025-11-30（数据分析服务抽离）
 
 前置说明：

@@ -7,20 +7,26 @@ daily_report_25_26 项目 v1 路由
 - 模板文件来源于容器内数据目录（默认 `/app/data`）中的 JSON 配置。
 """
 
-from datetime import datetime, timedelta, timezone, date
-
+import copy
+import json
+import re
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path as SysPath
-
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-
-from decimal import Decimal, InvalidOperation
-from datetime import datetime, timedelta, timezone, date
-
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import bindparam, delete, text
+
+from backend.config import DATA_DIRECTORY
+from backend.db.database_daily_report_25_26 import (
+    CoalInventoryData,
+    ConstantData,
+    DailyBasicData,
+    SessionLocal,
+)
 from backend.schemas.auth import (
     WorkflowApproveRequest,
     WorkflowRevokeRequest,
@@ -29,25 +35,11 @@ from backend.schemas.auth import (
     WorkflowStatusResponse,
     WorkflowUnitStatus,
 )
+from backend.services import dashboard_cache
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
 from backend.services.dashboard_expression import evaluate_dashboard
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
-from sqlalchemy import bindparam, delete, text
-from backend.db.database_daily_report_25_26 import SessionLocal
-
-import re
-
-from backend.config import DATA_DIRECTORY
-from backend.db.database_daily_report_25_26 import ConstantData
-from backend.db.database_daily_report_25_26 import (
-    CoalInventoryData,
-    ConstantData,
-    DailyBasicData,
-    SessionLocal,
-)
-
-import json
 
 
 
@@ -57,6 +49,7 @@ import json
 from backend.services import data_analysis as data_analysis_service
 
 DATA_ROOT = SysPath(DATA_DIRECTORY)
+PROJECT_KEY = "daily_report_25_26"
 COAL_INVENTORY_DEBUG_FILE = DATA_ROOT / "test.md"
 GONGRE_DEBUG_FILE = SysPath(__file__).resolve().parents[3] / "configs" / "111.md"
 GONGRE_SHEET_KEYS = {"gongre_branches_detail_sheet"}
@@ -1655,6 +1648,15 @@ def _ensure_system_admin(session: AuthSession) -> None:
         raise HTTPException(status_code=403, detail="仅系统管理员可修改校验总开关。")
 
 
+def _ensure_cache_operator(session: AuthSession) -> None:
+    """
+    数据看板缓存仅开放给具有发布权限的账号。
+    """
+    can_publish = getattr(session.permissions.actions, "can_publish", False)
+    if not can_publish:
+        raise HTTPException(status_code=403, detail="当前账号无权操作数据看板缓存。")
+
+
 def _collect_seed_units() -> List[str]:
     known = auth_manager.list_known_units()
     ordered: List[str] = list(known)
@@ -1796,6 +1798,28 @@ def ping_daily_report():
 from backend.services.dashboard_expression import evaluate_dashboard
 
 
+def _build_dashboard_payload(result) -> Dict[str, Any]:
+    base = result.to_dict()
+    payload = {"ok": True}
+    payload.update(base)
+    return payload
+
+
+def _attach_cache_metadata(
+    payload: Dict[str, Any],
+    cache_status: Dict[str, Any],
+    cache_hit: bool,
+    cache_key: str,
+) -> Dict[str, Any]:
+    enriched = copy.deepcopy(payload)
+    enriched["cache_hit"] = cache_hit
+    enriched["cache_disabled"] = cache_status.get("disabled", False)
+    enriched["cache_dates"] = cache_status.get("available_dates", [])
+    enriched["cache_updated_at"] = cache_status.get("updated_at")
+    enriched["cache_key"] = cache_key
+    return enriched
+
+
 @public_router.get(
     "/dashboard",
     summary="获取数据看板配置数据",
@@ -1807,8 +1831,85 @@ def get_dashboard_data(
         description="展示日期，格式为 YYYY-MM-DD；留空时返回默认配置",
     ),
 ):
-    result = evaluate_dashboard("daily_report_25_26", show_date=show_date)
-    return {"ok": True, **result.to_dict()}
+    cache_key = dashboard_cache.resolve_cache_key(show_date)
+    cached_payload, cache_status = dashboard_cache.get_cached_payload(PROJECT_KEY, cache_key)
+    if cached_payload is not None:
+        return _attach_cache_metadata(cached_payload, cache_status, cache_hit=True, cache_key=cache_key)
+
+    result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
+    payload = _build_dashboard_payload(result)
+    if cache_status.get("disabled"):
+        return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
+    cache_status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
+    return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
+
+
+@router.post(
+    "/dashboard/cache/publish",
+    summary="批量发布数据看板缓存（set_biz_date 及前两日）",
+    tags=["daily_report_25_26"],
+)
+def publish_dashboard_cache(
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    target_dates = dashboard_cache.default_publish_dates()
+    entries: Dict[str, Dict[str, Any]] = {}
+    for day in target_dates:
+        result = evaluate_dashboard(PROJECT_KEY, show_date=day)
+        entries[day] = _build_dashboard_payload(result)
+    # 额外写入默认请求（show_date 为空字符串）的缓存
+    default_result = evaluate_dashboard(PROJECT_KEY, show_date="")
+    entries[dashboard_cache.DEFAULT_CACHE_KEY] = _build_dashboard_payload(default_result)
+    status = dashboard_cache.replace_cache(PROJECT_KEY, entries, disabled=False)
+    return {
+        "ok": True,
+        "cached_dates": target_dates,
+        "cache_disabled": status.get("disabled", False),
+        "cache_updated_at": status.get("updated_at"),
+    }
+
+
+@router.post(
+    "/dashboard/cache/refresh",
+    summary="刷新指定日期的数据看板缓存",
+    tags=["daily_report_25_26"],
+)
+def refresh_dashboard_cache(
+    show_date: str = Query(
+        default="",
+        description="目标展示日期，格式 YYYY-MM-DD；留空刷新默认缓存",
+    ),
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    cache_key = dashboard_cache.resolve_cache_key(show_date)
+    result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
+    payload = _build_dashboard_payload(result)
+    status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
+    return {
+        "ok": True,
+        "cached_key": cache_key,
+        "cache_disabled": status.get("disabled", False),
+        "cache_updated_at": status.get("updated_at"),
+    }
+
+
+@router.delete(
+    "/dashboard/cache",
+    summary="禁用并清空数据看板缓存",
+    tags=["daily_report_25_26"],
+)
+def disable_dashboard_cache_endpoint(
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    status = dashboard_cache.disable_cache(PROJECT_KEY)
+    return {
+        "ok": True,
+        "cache_disabled": status.get("disabled", True),
+        "cache_updated_at": status.get("updated_at"),
+    }
 
 
 @router.get(

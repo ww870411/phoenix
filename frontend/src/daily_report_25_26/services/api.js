@@ -257,6 +257,46 @@ export async function getDashboardData(projectKey, params = {}) {
   return response.json()
 }
 
+export async function publishDashboardCache(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `发布缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function refreshDashboardCache(projectKey, params = {}) {
+  const showDate = typeof params.showDate === 'string' ? params.showDate : ''
+  const search = `?show_date=${encodeURIComponent(showDate)}`
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/refresh${search}`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `刷新缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function disableDashboardCache(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache`, {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `禁用缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getDataAnalysisSchema(projectKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''

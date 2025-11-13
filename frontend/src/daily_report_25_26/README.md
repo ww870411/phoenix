@@ -1,5 +1,11 @@
 # daily_report_25_26 前端说明
 
+## 仪表盘缓存控制（2025-12-01）
+
+- `DashBoard.vue` 顶部新增“发布缓存 / 刷新看板 / 禁用缓存”三个按钮，仅对 `canPublish` 权限账号显示；交互会调用对应的后端接口 `/dashboard/cache/publish`、`/refresh`、`DELETE /dashboard/cache`。
+- 缓存状态会在按钮下方展示：命中缓存 / 实时加载 / 已禁用，以及最近一次更新时间，便于判断当前页面的数据来源；操作结果提示直接显示在同一行。
+- 所有按钮都会在操作期间禁用自身，并强制以 `allowCache: false` 方式重新拉取仪表盘数据，确保 UI 立即反映最新缓存文件。
+
 ## 数据分析页面（2025-11-27 实时查询版）
 
 - `DataAnalysisView.vue` 首次接入 `POST /projects/daily_report_25_26/data_analysis/query`，根据所选单位/模式构造 `unit_key/metrics/start_date/end_date` 请求，响应中的 `rows/view/start_date/end_date/warnings` 直接驱动结果表、提示条与缺失标记。

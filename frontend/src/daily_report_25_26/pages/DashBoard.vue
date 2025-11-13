@@ -15,6 +15,41 @@
           <span class="dashboard-header__date-hint" v-else>当前：regular</span>
         </label>
         <button class="pdf-download-btn" @click="downloadPDF">下载PDF</button>
+        <div v-if="canManageCache" class="dashboard-cache-controls">
+          <div class="dashboard-cache-buttons">
+            <button
+              class="cache-btn"
+              type="button"
+              @click="handlePublishDashboardCache"
+              :disabled="cacheActionBusy"
+            >
+              发布缓存
+            </button>
+            <button
+              class="cache-btn"
+              type="button"
+              @click="handleRefreshDashboardCache"
+              :disabled="cacheActionBusy"
+            >
+              刷新看板
+            </button>
+            <button
+              class="cache-btn cache-btn--danger"
+              type="button"
+              @click="handleDisableDashboardCache"
+              :disabled="cacheActionBusy"
+            >
+              禁用缓存
+            </button>
+          </div>
+          <div class="dashboard-cache-status">
+            <span>{{ cacheStatusLabel }}</span>
+            <span v-if="cacheStatus.updatedAt">最近：{{ cacheStatus.updatedAt }}</span>
+          </div>
+          <div class="dashboard-cache-message" v-if="cacheActionMessage">
+            {{ cacheActionMessage }}
+          </div>
+        </div>
       </div>
     </header>
 
@@ -449,7 +484,9 @@
 
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
-import { getDashboardData } from '../services/api'
+import { storeToRefs } from 'pinia'
+import { disableDashboardCache, getDashboardData, publishDashboardCache, refreshDashboardCache } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 // --- 仪表盘局部组件 ---
 const Card = defineComponent({
@@ -764,6 +801,20 @@ const EChart = defineComponent({
 
 // --- 通用工具函数 ---
 const fmt = (date) => date.toISOString().slice(0, 10)
+const isIsoDateKey = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+const syncCacheStatus = (payload, sourceHint = '') => {
+  const disabled = typeof payload?.cache_disabled === 'boolean' ? payload.cache_disabled : false
+  cacheStatus.disabled = disabled
+  const rawDates = Array.isArray(payload?.cache_dates) ? payload.cache_dates : []
+  cacheStatus.dates = rawDates.filter(isIsoDateKey)
+  cacheStatus.updatedAt =
+    typeof payload?.cache_updated_at === 'string' ? payload.cache_updated_at : ''
+  if (sourceHint) {
+    cacheStatus.lastSource = sourceHint
+  } else if (typeof payload?.cache_hit === 'boolean') {
+    cacheStatus.lastSource = payload.cache_hit ? 'cache' : 'live'
+  }
+}
 
 // --- 日期与摘要指标 ---
 const today = new Date()
@@ -805,6 +856,25 @@ const dashboardData = reactive({
   },
   sections: {},
 })
+const selectedShowDate = computed(() => (effectiveBizDate.value || '').trim())
+const cacheStatusLabel = computed(() => {
+  if (cacheStatus.disabled) return '缓存已禁用'
+  if (cacheStatus.lastSource === 'cache') return '命中缓存'
+  if (cacheStatus.lastSource === 'live') return '实时加载'
+  return '状态未知'
+})
+
+const authStore = useAuthStore()
+const { canPublish } = storeToRefs(authStore)
+const canManageCache = computed(() => Boolean(canPublish.value))
+const cacheActionBusy = ref(false)
+const cacheActionMessage = ref('')
+const cacheStatus = reactive({
+  disabled: false,
+  dates: [],
+  updatedAt: '',
+  lastSource: '',
+})
 
 const assignDashboardPayload = (payload, { showDate }) => {
   const allowBizDateSync = !showDate && !bizDateInput.value
@@ -830,6 +900,7 @@ const assignDashboardPayload = (payload, { showDate }) => {
       delete rawSections['展示日期']
     }
     dashboardData.sections = rawSections
+    syncCacheStatus(payload)
   }
 }
 
@@ -967,6 +1038,55 @@ async function loadDashboardData(showDate = '', options = {}) {
     if (activeDashboardRequests === 0) {
       isLoading.value = false
     }
+  }
+}
+
+async function handlePublishDashboardCache() {
+  if (!canManageCache.value || cacheActionBusy.value) return
+  cacheActionBusy.value = true
+  cacheActionMessage.value = ''
+  try {
+    const payload = await publishDashboardCache(projectKey)
+    const list = Array.isArray(payload?.cached_dates) ? payload.cached_dates : []
+    cacheActionMessage.value = list.length
+      ? `已缓存：${list.join(', ')}`
+      : '缓存已刷新'
+    await loadDashboardData(selectedShowDate.value, { allowCache: false })
+  } catch (err) {
+    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    cacheActionBusy.value = false
+  }
+}
+
+async function handleRefreshDashboardCache() {
+  if (!canManageCache.value || cacheActionBusy.value) return
+  cacheActionBusy.value = true
+  cacheActionMessage.value = ''
+  try {
+    const payload = await refreshDashboardCache(projectKey, { showDate: selectedShowDate.value })
+    const key = typeof payload?.cached_key === 'string' ? payload.cached_key : selectedShowDate.value || '默认'
+    cacheActionMessage.value = `已刷新：${key}`
+    await loadDashboardData(selectedShowDate.value, { allowCache: false })
+  } catch (err) {
+    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    cacheActionBusy.value = false
+  }
+}
+
+async function handleDisableDashboardCache() {
+  if (!canManageCache.value || cacheActionBusy.value) return
+  cacheActionBusy.value = true
+  cacheActionMessage.value = ''
+  try {
+    await disableDashboardCache(projectKey)
+    cacheActionMessage.value = '缓存已禁用'
+    await loadDashboardData(selectedShowDate.value, { allowCache: false })
+  } catch (err) {
+    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    cacheActionBusy.value = false
   }
 }
 
@@ -3526,6 +3646,63 @@ onMounted(() => {
   padding: 12px 16px;
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-cache-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.dashboard-cache-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cache-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1e1b4b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cache-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cache-btn:not(:disabled):hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.cache-btn--danger {
+  border-color: #fecdd3;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.cache-btn--danger:not(:disabled):hover {
+  background: #fecdd3;
+}
+
+.dashboard-cache-status {
+  font-size: 12px;
+  color: #475569;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard-cache-message {
+  font-size: 12px;
+  color: #dc2626;
 }
 
 .dashboard-header__checkbox {
