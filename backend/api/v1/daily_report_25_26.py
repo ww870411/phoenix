@@ -1846,7 +1846,7 @@ def get_dashboard_data(
 
 @router.post(
     "/dashboard/cache/publish",
-    summary="批量发布数据看板缓存（set_biz_date 及前两日）",
+    summary="批量发布数据看板缓存（set_biz_date 及前六日）",
     tags=["daily_report_25_26"],
 )
 def publish_dashboard_cache(
@@ -1865,31 +1865,6 @@ def publish_dashboard_cache(
     return {
         "ok": True,
         "cached_dates": target_dates,
-        "cache_disabled": status.get("disabled", False),
-        "cache_updated_at": status.get("updated_at"),
-    }
-
-
-@router.post(
-    "/dashboard/cache/refresh",
-    summary="刷新指定日期的数据看板缓存",
-    tags=["daily_report_25_26"],
-)
-def refresh_dashboard_cache(
-    show_date: str = Query(
-        default="",
-        description="目标展示日期，格式 YYYY-MM-DD；留空刷新默认缓存",
-    ),
-    session: AuthSession = Depends(get_current_session),
-):
-    _ensure_cache_operator(session)
-    cache_key = dashboard_cache.resolve_cache_key(show_date)
-    result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
-    payload = _build_dashboard_payload(result)
-    status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
-    return {
-        "ok": True,
-        "cached_key": cache_key,
         "cache_disabled": status.get("disabled", False),
         "cache_updated_at": status.get("updated_at"),
     }
@@ -3981,3 +3956,27 @@ def debug_cache(company: str):
         })
     finally:
         session.close()
+@router.post(
+    "/dashboard/cache/refresh",
+    summary="刷新指定日期的数据看板缓存",
+    tags=["daily_report_25_26"],
+)
+def refresh_dashboard_cache(
+    show_date: str = Query(
+        default="",
+        description="目标展示日期，格式 YYYY-MM-DD；留空刷新默认缓存",
+    ),
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    cache_key = dashboard_cache.resolve_cache_key(show_date)
+    result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
+    payload = _build_dashboard_payload(result)
+    status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
+    return {
+        "ok": True,
+        "cached_key": cache_key,
+        "cache_disabled": status.get("disabled", False),
+        "cache_updated_at": status.get("updated_at"),
+    }
+

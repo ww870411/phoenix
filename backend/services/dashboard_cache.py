@@ -187,18 +187,8 @@ def summarize_cache(project_key: str) -> Dict[str, Any]:
     return get_cache_status(project_key)
 
 
-def cache_keys_from_dates(dates: Iterable[str]) -> List[str]:
-    keys: List[str] = []
-    for value in dates:
-        normalized = normalize_show_date(value)
-        if normalized:
-            keys.append(normalized)
-    return keys
-
-
 __all__ = [
     "DEFAULT_CACHE_KEY",
-    "cache_keys_from_dates",
     "default_publish_dates",
     "disable_cache",
     "get_cache_status",

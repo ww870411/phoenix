@@ -34,6 +34,13 @@
               禁用缓存
             </button>
           </div>
+          <div
+            class="dashboard-cache-progress"
+            v-if="cachePublishProgress.total"
+          >
+            缓存写入 {{ cachePublishProgress.current }}/{{ cachePublishProgress.total }} ·
+            {{ cachePublishProgress.label }}
+          </div>
           <div class="dashboard-cache-status">
             <span>{{ cacheStatusLabel }}</span>
             <span v-if="cacheStatus.updatedAt">最近：{{ cacheStatus.updatedAt }}</span>
@@ -487,7 +494,7 @@
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { disableDashboardCache, getDashboardData, publishDashboardCache } from '../services/api'
+import { disableDashboardCache, getDashboardData, refreshDashboardCache } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
 // --- 仪表盘局部组件 ---
@@ -1096,16 +1103,28 @@ async function handlePublishDashboardCache() {
   if (!canManageCache.value || cacheActionBusy.value) return
   cacheActionBusy.value = true
   cacheActionMessage.value = ''
+  const dates = cachePublishDates.value
+  const tasks = [
+    ...dates.map((day) => ({ label: day, showDate: day })),
+    { label: '默认', showDate: '' },
+  ]
+  cachePublishProgress.total = tasks.length
+  cachePublishProgress.current = 0
+  cachePublishProgress.label = ''
   try {
-    const payload = await publishDashboardCache(projectKey)
-    const list = Array.isArray(payload?.cached_dates) ? payload.cached_dates : []
-    cacheActionMessage.value = list.length
-      ? `已缓存：${list.join(', ')}`
-      : '缓存已刷新'
+    for (const task of tasks) {
+      cachePublishProgress.current += 1
+      cachePublishProgress.label = task.label
+      await refreshDashboardCache(projectKey, { showDate: task.showDate })
+    }
+    cacheActionMessage.value = `缓存已更新：${dates.join(', ')}`
     await loadDashboardData(selectedShowDate.value, { allowCache: false })
   } catch (err) {
     cacheActionMessage.value = err instanceof Error ? err.message : String(err)
   } finally {
+    cachePublishProgress.total = 0
+    cachePublishProgress.current = 0
+    cachePublishProgress.label = ''
     cacheActionBusy.value = false
   }
 }
@@ -2300,6 +2319,7 @@ const dailyTrendSection = computed(() => {
 })
 
 const DAILY_TREND_WINDOW_SIZE = 7
+const CACHE_PUBLISH_WINDOW_DAYS = 7
 const dailyTrendStartIndex = ref(null)
 
 const normalizeTrendBucket = (bucket, units) => {
@@ -2484,6 +2504,30 @@ const coalStockFallbackMatrix = coalStockFallbackStacks.map(() =>
 
 // --- 图表配置构造 ---
 const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
+
+const buildCachePublishDates = () => {
+  const pivot =
+    toDate(pushDateValue.value) ||
+    toDate(effectiveBizDate.value) ||
+    toDate(defaultBizDate)
+  if (!(pivot instanceof Date) || Number.isNaN(pivot.valueOf())) {
+    return []
+  }
+  const dates = []
+  for (let offset = 0; offset < CACHE_PUBLISH_WINDOW_DAYS; offset += 1) {
+    const date = shiftDate(pivot, -offset)
+    dates.push(formatDateKey(date))
+  }
+  return dates
+}
+
+const cachePublishDates = computed(() => buildCachePublishDates())
+
+const cachePublishProgress = reactive({
+  total: 0,
+  current: 0,
+  label: '',
+})
 
 const useTempOption = (series, highlightDate) => {
   const highlightKey = normalizeDateKey(highlightDate)
@@ -3881,6 +3925,11 @@ onMounted(() => {
 .dashboard-cache-message {
   font-size: 12px;
   color: #dc2626;
+}
+
+.dashboard-cache-progress {
+  font-size: 12px;
+  color: #2563eb;
 }
 
 .daily-trend-toolbar {
