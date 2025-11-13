@@ -469,27 +469,17 @@
           </div>
           <transition name="trend-collapse">
             <div v-show="!dailyTrendCollapsed" class="daily-trend-content">
-              <div class="daily-trend-toolbar" v-if="dailyTrendWindowSeries.windowSize">
+              <div class="daily-trend-toolbar" v-if="dailyTrendWindowMeta.size">
                 <div class="daily-trend-range">
                   {{ dailyTrendWindowRangeLabel }}
                 </div>
-                <div
-                  class="daily-trend-slider"
-                  v-if="dailyTrendSliderMax > 0"
-                >
-                  <input
-                    type="range"
-                    min="0"
-                    :max="dailyTrendSliderMax"
-                    v-model.number="dailyTrendSliderValue"
-                    aria-label="每日趋势窗口滑块"
-                  />
+                <div class="daily-trend-actions">
                   <button type="button" class="cache-btn" @click="resetDailyTrendWindow">
                     跳至最新
                   </button>
                 </div>
               </div>
-              <EChart :option="dailyTrendOpt" height="360px" />
+              <EChart :option="dailyTrendOpt" height="360px" :events="dailyTrendChartEvents" />
             </div>
           </transition>
         </Card>
@@ -747,6 +737,10 @@ const EChart = defineComponent({
       type: Boolean,
       default: true,
     },
+    events: {
+      type: Object,
+      default: () => ({}),
+    },
   },
   setup(props) {
     const container = ref(null)
@@ -755,12 +749,31 @@ const EChart = defineComponent({
     )
     let chart = null
     const latestOption = shallowRef(null)
+    const registeredEvents = new Map()
 
     const dispose = () => {
       if (chart) {
+        registeredEvents.forEach((handler, eventName) => {
+          chart.off(eventName, handler)
+        })
+        registeredEvents.clear()
         chart.dispose()
         chart = null
       }
+    }
+
+    const bindEvents = () => {
+      if (!chart) return
+      registeredEvents.forEach((handler, name) => {
+        chart.off(name, handler)
+      })
+      registeredEvents.clear()
+      const events = props.events || {}
+      Object.entries(events).forEach(([eventName, handler]) => {
+        if (typeof handler !== 'function') return
+        chart.on(eventName, handler)
+        registeredEvents.set(eventName, handler)
+      })
     }
 
     const applyOption = () => {
@@ -778,6 +791,7 @@ const EChart = defineComponent({
       if (!chart) {
         chart = window.echarts.init(container.value)
       }
+      bindEvents()
       applyOption()
     }
 
@@ -808,6 +822,14 @@ const EChart = defineComponent({
         ensureChart()
       },
       { immediate: true },
+    )
+
+    watch(
+      () => props.events,
+      () => {
+        bindEvents()
+      },
+      { deep: true },
     )
 
     return () =>
@@ -2290,7 +2312,7 @@ const dailyTrendSection = computed(() => {
   return section && typeof section === 'object' ? section : {}
 })
 
-const DAILY_TREND_WINDOW_SIZE = 10
+const DAILY_TREND_WINDOW_SIZE = 7
 const dailyTrendStartIndex = ref(null)
 
 const normalizeTrendBucket = (bucket, units) => {
@@ -2341,6 +2363,7 @@ watch(
     const maxStart = Math.max(length - size, 0)
     const start = dailyTrendStartIndex.value
     if (typeof start !== 'number' || Number.isNaN(start)) {
+      dailyTrendStartIndex.value = maxStart
       return
     }
     if (start > maxStart) {
@@ -2349,22 +2372,14 @@ watch(
   },
 )
 
-const dailyTrendWindowSeries = computed(() => {
-  const base = dailyTrendSeries.value
-  const labels = Array.isArray(base.labels) ? base.labels : []
+const dailyTrendWindowMeta = computed(() => {
+  const labels = dailyTrendSeries.value.labels || []
   const total = labels.length
   if (!total) {
     return {
-      labels: [],
-      current: [],
-      peer: [],
-      units: base.units,
-      leftUnit: base.leftUnit,
-      rightUnit: base.rightUnit,
-      windowStartLabel: '',
-      windowEndLabel: '',
-      windowSize: 0,
-      total: 0,
+      size: 0,
+      startLabel: '',
+      endLabel: '',
       maxStart: 0,
       startIndex: 0,
       endIndex: 0,
@@ -2372,77 +2387,105 @@ const dailyTrendWindowSeries = computed(() => {
   }
   const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
   const maxStart = Math.max(total - size, 0)
-  let start = dailyTrendStartIndex.value
-  if (typeof start !== 'number' || Number.isNaN(start)) {
-    start = maxStart
-  } else {
-    start = clamp(Math.round(start), 0, maxStart)
-  }
-  const end = start + size
-  const sliceSeries = (seriesList) =>
-    seriesList.map((item) => ({
-      ...item,
-      values: Array.isArray(item.values) ? item.values.slice(start, end) : [],
-    }))
+  const rawStart = dailyTrendStartIndex.value
+  const start =
+    typeof rawStart === 'number' && !Number.isNaN(rawStart)
+      ? clamp(Math.round(rawStart), 0, maxStart)
+      : maxStart
+  const end = Math.min(start + size - 1, total - 1)
   return {
-    labels: labels.slice(start, end),
-    current: sliceSeries(base.current),
-    peer: sliceSeries(base.peer),
-    units: base.units,
-    leftUnit: base.leftUnit,
-    rightUnit: base.rightUnit,
-    windowStartLabel: labels[start] || '',
-    windowEndLabel: labels[end - 1] || '',
-    windowSize: size,
-    total,
+    size,
+    startLabel: labels[start] || '',
+    endLabel: labels[end] || '',
     maxStart,
     startIndex: start,
-    endIndex: end - 1,
+    endIndex: end,
   }
-})
-
-const dailyTrendSliderMax = computed(() => {
-  const total = dailyTrendSeries.value.labels.length
-  if (!total) return 0
-  const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
-  return Math.max(total - size, 0)
-})
-
-const dailyTrendSliderValue = computed({
-  get() {
-    const max = dailyTrendSliderMax.value
-    if (max <= 0) return 0
-    const total = dailyTrendSeries.value.labels.length
-    const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
-    const defaultStart = Math.max(total - size, 0)
-    const start = dailyTrendStartIndex.value
-    return clamp(
-      typeof start === 'number' && !Number.isNaN(start) ? start : defaultStart,
-      0,
-      max,
-    )
-  },
-  set(value) {
-    const max = dailyTrendSliderMax.value
-    if (max <= 0) {
-      dailyTrendStartIndex.value = null
-      return
-    }
-    const next = clamp(Math.round(Number(value) || 0), 0, max)
-    dailyTrendStartIndex.value = next
-  },
 })
 
 const dailyTrendWindowRangeLabel = computed(() => {
-  if (!dailyTrendWindowSeries.value.windowSize) return '暂无数据'
-  const startLabel = dailyTrendWindowSeries.value.windowStartLabel || '—'
-  const endLabel = dailyTrendWindowSeries.value.windowEndLabel || '—'
+  if (!dailyTrendWindowMeta.value.size) return '暂无数据'
+  const startLabel = dailyTrendWindowMeta.value.startLabel || '—'
+  const endLabel = dailyTrendWindowMeta.value.endLabel || '—'
   return `${startLabel} ~ ${endLabel}`
 })
 
 const resetDailyTrendWindow = () => {
-  dailyTrendStartIndex.value = null
+  const labels = dailyTrendSeries.value.labels || []
+  if (!labels.length) {
+    dailyTrendStartIndex.value = null
+    return
+  }
+  const size = Math.min(DAILY_TREND_WINDOW_SIZE, labels.length)
+  dailyTrendStartIndex.value = Math.max(labels.length - size, 0)
 }
+
+const dailyTrendDataZoom = computed(() => {
+  const labels = dailyTrendSeries.value.labels || []
+  if (!labels.length) return []
+  const meta = dailyTrendWindowMeta.value
+  if (!meta.size) return []
+  const startLabel = labels[meta.startIndex] ?? labels[0]
+  const endLabel = labels[meta.endIndex] ?? labels[labels.length - 1]
+  const span = meta.size
+  const valueSpan = Math.max(span - 1, 0)
+  const showSlider = labels.length > span
+  const slider = {
+    type: 'slider',
+    show: showSlider,
+    xAxisIndex: 0,
+    startValue: startLabel,
+    endValue: endLabel,
+    minValueSpan: valueSpan,
+    maxValueSpan: valueSpan,
+    height: 26,
+    bottom: 24,
+    brushSelect: false,
+    handleSize: 16,
+    handleIcon:
+      'path://M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820.6C307.9 884.6 139.4 716.1 139.4 512S307.9 139.4 512 139.4 884.6 307.9 884.6 512 716.1 884.6 512 884.6z',
+  }
+  const inside = {
+    type: 'inside',
+    xAxisIndex: 0,
+    startValue: startLabel,
+    endValue: endLabel,
+    minValueSpan: valueSpan,
+    maxValueSpan: valueSpan,
+    zoomLock: true,
+  }
+  return [slider, inside]
+})
+
+const handleDailyTrendZoom = (event) => {
+  const payload =
+    Array.isArray(event?.batch) && event.batch.length
+      ? event.batch[0]
+      : event
+  if (!payload) return
+  const labels = dailyTrendSeries.value.labels || []
+  if (!labels.length) return
+  let startValue = payload.startValue
+  if (startValue == null && typeof payload.start === 'number') {
+    const total = labels.length
+    if (!total) return
+    const percent = clamp(payload.start, 0, 100) / 100
+    const index = Math.round(percent * (total - 1))
+    startValue = labels[clamp(index, 0, total - 1)]
+  }
+  if (startValue == null) return
+  const index = typeof startValue === 'number' ? startValue : labels.indexOf(startValue)
+  if (index === -1) return
+  const total = labels.length
+  const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
+  const maxStart = Math.max(total - size, 0)
+  const next = clamp(Number(index) || 0, 0, maxStart)
+  if (next !== dailyTrendStartIndex.value) {
+    dailyTrendStartIndex.value = next
+  }
+}
+
+const dailyTrendChartEvents = { dataZoom: handleDailyTrendZoom }
 
 // --- 模拟数据（后续可替换为后端数据源） ---
 
@@ -3310,7 +3353,7 @@ const useCoalStockOption = (seriesPayload) => {
   }
 }
 
-const useDailyTrendOption = (payload, highlightLabel) => {
+const useDailyTrendOption = (payload, highlightLabel, dataZoomConfig = []) => {
   const labels = Array.isArray(payload?.labels) ? payload.labels : []
   const currentSeries = Array.isArray(payload?.current) ? payload.current : []
   const peerSeries = Array.isArray(payload?.peer) ? payload.peer : []
@@ -3407,13 +3450,14 @@ const useDailyTrendOption = (payload, highlightLabel) => {
         if (labelData.length) {
           seriesConfig.label = {
             show: true,
-            position: 'top',
+            position: 'left',
             color: '#2563eb',
             fontSize: 12,
             fontWeight: 600,
             formatter: (params) =>
               Number.isFinite(params.value) ? params.value.toFixed(1) : '',
-            distance: 6,
+            distance: 8,
+            offset: [-12, 0],
           }
           seriesConfig.labelLayout = { moveOverlap: 'shiftY' }
           seriesConfig.markPoint = {
@@ -3431,8 +3475,8 @@ const useDailyTrendOption = (payload, highlightLabel) => {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: legendEntries, bottom: 0 },
-    grid: { left: 40, right: 40, top: 40, bottom: 60 },
+    legend: { data: legendEntries, top: 0, left: 'center' },
+    grid: { left: 40, right: 40, top: 60, bottom: 110 },
     xAxis: {
       type: 'category',
       data: labels,
@@ -3444,6 +3488,7 @@ const useDailyTrendOption = (payload, highlightLabel) => {
         name: payload?.leftUnit || '',
         axisLine: { lineStyle: { color: '#0f172a' } },
         splitLine: { lineStyle: { type: 'dashed' } },
+        min: 0,
       },
       {
         type: 'value',
@@ -3454,6 +3499,7 @@ const useDailyTrendOption = (payload, highlightLabel) => {
       },
     ],
     series,
+    dataZoom: dataZoomConfig && dataZoomConfig.length ? dataZoomConfig : undefined,
   }
 }
 
@@ -3471,7 +3517,9 @@ const unitWaterOpt = computed(() =>
   useUnitConsumptionOption(unitSeries.value, '供暖水单耗', 'horizontal'),
 )
 const coalStdOpt = computed(() => useCoalStdOption(coalStdSeries.value))
-const dailyTrendOpt = computed(() => useDailyTrendOption(dailyTrendWindowSeries.value, pushDateValue.value))
+const dailyTrendOpt = computed(() =>
+  useDailyTrendOption(dailyTrendSeries.value, pushDateValue.value, dailyTrendDataZoom.value),
+)
 const complaintChartConfigs = computed(() => {
   const companies = complaintCompanies.value
   const buckets = complaintBuckets.value
@@ -3869,16 +3917,10 @@ onMounted(() => {
   color: #0f172a;
 }
 
-.daily-trend-slider {
+.daily-trend-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
-}
-
-.daily-trend-slider input[type='range'] {
-  flex: 1;
-  accent-color: #2563eb;
 }
 
 .dashboard-header__checkbox {

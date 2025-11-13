@@ -16,7 +16,7 @@
 - 前端登录具备发布权限的账号后，点击新增按钮即可驱动上述接口；普通账号看不到缓存操作区，避免误操作。尚未执行 `npm run build`，如需验证请本地构建后访问 Dashboard。
 - 如需回滚，可删除 `dashboard_cache.py`、移除 `/dashboard` 缓存逻辑及新增接口，同时撤销前端按钮与服务 API。
 
-## 2025-12-02（缓存窗口延长到五日）
+## 2025-12-02（缓存窗口延长到五日 & 趋势图 dataZoom）
 
 前置说明：
 - 继续沿用 2025-12-01 的缓存机制，本次仅调整窗口大小；Serena 无法直接对大文件做局部替换，因此仍通过 `apply_patch` 修改 `backend/services/dashboard_cache.py` 与 README。
@@ -24,11 +24,11 @@
 本次动作：
 - `default_publish_dates()` 的默认窗口从 3 改为 5（set_biz_date 及前四日）；`POST /dashboard/cache/publish` 也会同步生成 5 天的缓存切片，缓存命中范围扩大。
 - 更新后端 README 中的描述，明确缓存批量生成覆盖“set_biz_date + 前四日”；前端无需改动。
-- `DashBoard.vue` 的“标煤耗量与平均气温趋势图”新增窗口滑块：默认展示 `push_date` 及前 9 日共 10 日的数据，并可向前滑动至 2025-11-01；同时提供“跳至最新”按钮，配合 CSS 调整保持布局紧凑。
+- `DashBoard.vue` 的“标煤耗量与平均气温趋势图”启用 ECharts `dataZoom`（slider + inside），支持直接在图表内拖拽/滚轮查看 2025-11-01 以来任意 7 日窗口；仍保留顶部范围提示与“跳至最新”按钮，同步 `dataZoom` 事件到 Vue 状态以便展示日期区间。
 
 影响与验证：
 - 调用 `POST /dashboard/cache/publish` 时应可在 `backend_data/dashboard_cache.json` 看到 5 个 ISO 日期键；`cache_dates` 元数据也会返回 5 日清单。
-- 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。趋势图若需恢复全量显示，可移除滑块相关状态并让 EChart 直接消费完整 `dailyTrendSeries`。
+- 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。若不要图表内 dataZoom，可移除 `dailyTrendDataZoom` 与事件同步，让 ECharts 直接渲染全量序列。
 
 ## 2025-11-30（数据分析服务抽离）
 
