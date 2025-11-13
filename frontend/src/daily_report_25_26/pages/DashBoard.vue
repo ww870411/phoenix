@@ -26,14 +26,6 @@
               发布缓存
             </button>
             <button
-              class="cache-btn"
-              type="button"
-              @click="handleRefreshDashboardCache"
-              :disabled="cacheActionBusy"
-            >
-              刷新看板
-            </button>
-            <button
               class="cache-btn cache-btn--danger"
               type="button"
               @click="handleDisableDashboardCache"
@@ -495,7 +487,7 @@
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { disableDashboardCache, getDashboardData, publishDashboardCache, refreshDashboardCache } from '../services/api'
+import { disableDashboardCache, getDashboardData, publishDashboardCache } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
 // --- 仪表盘局部组件 ---
@@ -883,6 +875,8 @@ const projectKey = 'daily_report_25_26'
 let suppressDashboardWatch = false
 let activeDashboardRequests = 0
 const isLoading = ref(false)
+let loadingVisibilityTimer = null
+const LOADING_MINIMUM_MS = 180
 const DASHBOARD_DEBOUNCE_MS = 450
 let dashboardLoadTimer = null
 const dashboardCache = new Map()
@@ -1052,7 +1046,12 @@ async function loadDashboardData(showDate = '', options = {}) {
   }
 
   activeDashboardRequests += 1
-  isLoading.value = true
+  if (!loadingVisibilityTimer) {
+    loadingVisibilityTimer = setTimeout(() => {
+      isLoading.value = true
+      loadingVisibilityTimer = null
+    }, 120)
+  }
 
   if (dashboardAbortController) {
     dashboardAbortController.abort()
@@ -1084,6 +1083,10 @@ async function loadDashboardData(showDate = '', options = {}) {
     activeDashboardRequests = Math.max(activeDashboardRequests - 1, 0)
     suppressDashboardWatch = activeDashboardRequests > 0
     if (activeDashboardRequests === 0) {
+      if (loadingVisibilityTimer) {
+        clearTimeout(loadingVisibilityTimer)
+        loadingVisibilityTimer = null
+      }
       isLoading.value = false
     }
   }
@@ -1099,22 +1102,6 @@ async function handlePublishDashboardCache() {
     cacheActionMessage.value = list.length
       ? `已缓存：${list.join(', ')}`
       : '缓存已刷新'
-    await loadDashboardData(selectedShowDate.value, { allowCache: false })
-  } catch (err) {
-    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    cacheActionBusy.value = false
-  }
-}
-
-async function handleRefreshDashboardCache() {
-  if (!canManageCache.value || cacheActionBusy.value) return
-  cacheActionBusy.value = true
-  cacheActionMessage.value = ''
-  try {
-    const payload = await refreshDashboardCache(projectKey, { showDate: selectedShowDate.value })
-    const key = typeof payload?.cached_key === 'string' ? payload.cached_key : selectedShowDate.value || '默认'
-    cacheActionMessage.value = `已刷新：${key}`
     await loadDashboardData(selectedShowDate.value, { allowCache: false })
   } catch (err) {
     cacheActionMessage.value = err instanceof Error ? err.message : String(err)

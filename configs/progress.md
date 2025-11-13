@@ -30,6 +30,19 @@
 - 调用 `POST /dashboard/cache/publish` 时应可在 `backend_data/dashboard_cache.json` 看到 5 个 ISO 日期键；`cache_dates` 元数据也会返回 5 日清单。
 - 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。若不要图表内 dataZoom，可移除 `dailyTrendDataZoom` 与事件同步，让 ECharts 直接渲染全量序列。
 
+## 2025-12-03（缓存窗口扩展至七日）
+
+前置说明：
+- 继续沿用 12-02 的实现，因业务希望在缓存里保留更长的展示期，需要再改一次窗口；Serena 仍无法对多文件做结构化替换，故使用 `apply_patch` 更新 `backend/services/dashboard_cache.py`、`backend/README.md` 及本文。
+
+本次动作：
+- 将 `default_publish_dates()` 默认 `window` 改为 7（set_biz_date 及前六日）；`POST /dashboard/cache/publish` 自然会生成 7 个日期的缓存切片，`cache_dates` 生效范围也同步拉长。
+- `backend/README.md` 更新为“七日窗口（含当日及前六日）”，文档与实际行为保持一致；前端 README 也同步说明仅保留“发布缓存/禁用缓存”两个按钮（去掉“刷新看板”），点击“发布”即可覆写已有缓存。
+
+影响与验证：
+- 调用 `POST /api/v1/projects/daily_report_25_26/dashboard/cache/publish` 后，`backend_data/dashboard_cache.json` 应包含 set_biz_date 及前六天共 7 个日期；`GET /dashboard` 响应里的 `cache_dates` 也会返回 7 条。
+- 若后续需要缩短窗口，只需重新调整 `default_publish_dates` 的默认参数并更新 README/进度记录。
+
 ## 2025-11-30（数据分析服务抽离）
 
 前置说明：

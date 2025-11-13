@@ -2,9 +2,9 @@
 
 ## 会话小结（2025-12-01 数据看板缓存）
 
-- 新增 `backend/services/dashboard_cache.py`，集中负责 `backend_data/dashboard_cache.json` 的读写、set_biz_date 五日窗口（含当日及前四日）生成与禁用逻辑；内部复用 `normalize_show_date/load_default_push_date`，写入时统一使用临时文件替换确保并发安全。
+- 新增 `backend/services/dashboard_cache.py`，集中负责 `backend_data/dashboard_cache.json` 的读写、set_biz_date 七日窗口（含当日及前六日）生成与禁用逻辑；内部复用 `normalize_show_date/load_default_push_date`，写入时统一使用临时文件替换确保并发安全。
 - `/api/v1/projects/daily_report_25_26/dashboard` 现在会先命中缓存文件，再 fallback 到 `evaluate_dashboard()`，响应中额外附带 `cache_hit/cache_disabled/cache_dates/cache_updated_at/cache_key` 供前端渲染提示；当缓存被手动禁用时接口不会再写入文件。
-- 新增后台接口：`POST /dashboard/cache/publish`（set_biz_date 及前四日 + 默认请求的批量缓存）、`POST /dashboard/cache/refresh`（按展示日期单独刷新）、`DELETE /dashboard/cache`（清空并禁用缓存）。所有动作要求 `can_publish` 权限账号调用。
+- 新增后台接口：`POST /dashboard/cache/publish`（set_biz_date 及前六日 + 默认请求的批量缓存）、`POST /dashboard/cache/refresh`（按展示日期单独刷新）、`DELETE /dashboard/cache`（清空并禁用缓存）。所有动作要求 `can_publish` 权限账号调用。
 - 默认缓存文件位于 `backend_data/dashboard_cache.json`，结构为 `{ project_key, disabled, items, updated_at }`，items 中的 value 就是 `/dashboard` 的原始响应对象，可直接对照前端请求排查。
 
 ## 会话小结（2025-11-30 数据分析服务抽离）

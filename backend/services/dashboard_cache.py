@@ -164,7 +164,7 @@ def disable_cache(project_key: str) -> Dict[str, Any]:
     return replace_cache(project_key, {}, disabled=True)
 
 
-def default_publish_dates(window: int = 5) -> List[str]:
+def default_publish_dates(window: int = 7) -> List[str]:
     """
     返回 set_biz_date 及其前 window-1 日（共 window 个日期），按时间升序排列。
     """

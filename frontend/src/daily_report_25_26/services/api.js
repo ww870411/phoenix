@@ -270,21 +270,6 @@ export async function publishDashboardCache(projectKey) {
   return response.json()
 }
 
-export async function refreshDashboardCache(projectKey, params = {}) {
-  const showDate = typeof params.showDate === 'string' ? params.showDate : ''
-  const search = `?show_date=${encodeURIComponent(showDate)}`
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/refresh${search}`, {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS),
-    body: JSON.stringify({}),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `刷新缓存失败: ${response.status}`)
-  }
-  return response.json()
-}
-
 export async function disableDashboardCache(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/dashboard/cache`, {
     method: 'DELETE',

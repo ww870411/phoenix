@@ -2,7 +2,7 @@
 
 ## 仪表盘缓存控制（2025-12-01）
 
-- `DashBoard.vue` 顶部新增“发布缓存 / 刷新看板 / 禁用缓存”三个按钮，仅对 `canPublish` 权限账号显示；交互会调用对应的后端接口 `/dashboard/cache/publish`、`/refresh`、`DELETE /dashboard/cache`。
+- `DashBoard.vue` 顶部仅保留“发布缓存 / 禁用缓存”两个按钮（仅对 `canPublish` 权限账号可见）：发布即调用 `/dashboard/cache/publish` 批量生成 set_biz_date 及前 6 日缓存；再点击即覆盖更新；禁用按钮调用 `DELETE /dashboard/cache` 清空缓存。
 - 缓存状态会在按钮下方展示：命中缓存 / 实时加载 / 已禁用，以及最近一次更新时间，便于判断当前页面的数据来源；操作结果提示直接显示在同一行。
 - 所有按钮都会在操作期间禁用自身，并强制以 `allowCache: false` 方式重新拉取仪表盘数据，确保 UI 立即反映最新缓存文件。
 - “标煤耗量与平均气温趋势图” 默认展示 `push_date` 及前 6 天（共 7 天）的窗口，图表底部启用 ECharts `dataZoom`（slider + inside）可回溯至 2025-11-01，依旧保留“跳至最新”按钮同步窗口与文本提示。
