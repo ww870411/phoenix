@@ -24,10 +24,11 @@
 本次动作：
 - `default_publish_dates()` 的默认窗口从 3 改为 5（set_biz_date 及前四日）；`POST /dashboard/cache/publish` 也会同步生成 5 天的缓存切片，缓存命中范围扩大。
 - 更新后端 README 中的描述，明确缓存批量生成覆盖“set_biz_date + 前四日”；前端无需改动。
+- `DashBoard.vue` 的“标煤耗量与平均气温趋势图”新增窗口滑块：默认展示 `push_date` 及前 9 日共 10 日的数据，并可向前滑动至 2025-11-01；同时提供“跳至最新”按钮，配合 CSS 调整保持布局紧凑。
 
 影响与验证：
 - 调用 `POST /dashboard/cache/publish` 时应可在 `backend_data/dashboard_cache.json` 看到 5 个 ISO 日期键；`cache_dates` 元数据也会返回 5 日清单。
-- 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。
+- 若需恢复三日窗口，可将 `default_publish_dates` 的默认 `window` 参数改回 3 并更新 README。趋势图若需恢复全量显示，可移除滑块相关状态并让 EChart 直接消费完整 `dailyTrendSeries`。
 
 ## 2025-11-30（数据分析服务抽离）
 
