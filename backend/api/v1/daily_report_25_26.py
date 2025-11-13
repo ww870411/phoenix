@@ -38,7 +38,7 @@ from backend.schemas.auth import (
 from backend.services import dashboard_cache
 from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
-from backend.services.dashboard_expression import evaluate_dashboard
+from backend.services.dashboard_expression import evaluate_dashboard, load_default_push_date
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
 
@@ -1843,6 +1843,18 @@ def get_dashboard_data(
         return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
     cache_status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
     return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
+
+
+@public_router.get(
+    "/dashboard/date",
+    summary="获取当前 set_biz_date",
+    tags=["daily_report_25_26"],
+)
+def get_dashboard_date():
+    return {
+        "ok": True,
+        "set_biz_date": load_default_push_date(),
+    }
 
 
 @router.post(

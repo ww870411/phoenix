@@ -257,6 +257,17 @@ export async function getDashboardData(projectKey, params = {}) {
   return response.json()
 }
 
+export async function getDashboardBizDate(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/date`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取业务日期失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function publishDashboardCache(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish`, {
     method: 'POST',

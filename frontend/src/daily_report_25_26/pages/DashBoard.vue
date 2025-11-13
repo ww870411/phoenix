@@ -515,6 +515,7 @@ import {
   cancelCachePublishJob,
   disableDashboardCache,
   getCachePublishStatus,
+  getDashboardBizDate,
   getDashboardData,
   publishDashboardCache,
 } from '../services/api'
@@ -923,6 +924,10 @@ let activeDashboardRequests = 0
 const isLoading = ref(false)
 let loadingVisibilityTimer = null
 const LOADING_MINIMUM_MS = 180
+const dashboardBootstrapState = reactive({
+  initialized: false,
+  targetDate: '',
+})
 const DASHBOARD_DEBOUNCE_MS = 450
 let dashboardLoadTimer = null
 const dashboardCache = new Map()
@@ -1192,7 +1197,7 @@ async function handleDisableDashboardCache() {
 }
 
 onMounted(() => {
-  loadDashboardData()
+  bootstrapDashboard()
   pollCacheJobStatus().then(() => {
     if (cacheJob.status === 'running') {
       startCacheJobPolling()
@@ -2613,6 +2618,26 @@ const pollCacheJobStatus = async () => {
   } catch (err) {
     console.warn('[cache job] 状态获取失败', err)
   }
+}
+
+const bootstrapDashboard = async () => {
+  if (dashboardBootstrapState.initialized) {
+    return loadDashboardData(dashboardBootstrapState.targetDate || '')
+  }
+  dashboardBootstrapState.initialized = true
+  try {
+    const payload = await getDashboardBizDate(projectKey)
+    const date =
+      typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
+    if (date) {
+      dashboardBootstrapState.targetDate = date
+      await loadDashboardData(date)
+      return
+    }
+  } catch (err) {
+    console.warn('[dashboard] 获取业务日期失败', err)
+  }
+  await loadDashboardData()
 }
 
 const useTempOption = (series, highlightDate) => {

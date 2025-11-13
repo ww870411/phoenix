@@ -5,6 +5,7 @@
 - `DashBoard.vue` 顶部仅保留“发布缓存 / 停止发布（运行时显示） / 禁用缓存”按钮（仅对 `canPublish` 权限账号可见）。发布按钮会触发后端后台任务（`POST /dashboard/cache/publish`），如果已有任务则直接返回当前进度；禁用按钮调用 `DELETE /dashboard/cache` 清空缓存。
 - 发布任务运行中时，前端轮询 `/dashboard/cache/publish/status` 展示进度（“X/Y · 当前日期”），并提供“停止发布”按钮调用 `/dashboard/cache/publish/cancel` 以便随时终止，防止资源占用。
 - 任务完成/失败/中断后，会在提示区显示结果，并自动强制刷新仪表盘数据（`allowCache: false`），使 UI 与缓存保持一致。
+- 首次进入看板页面时会先调用 `/dashboard/date` 获取当前 `set_biz_date`，再直接请求 `/dashboard?show_date=<set_biz_date>`，因此首屏访问也能命中缓存。
 - “标煤耗量与平均气温趋势图” 默认展示 `push_date` 及前 6 天（共 7 天）的窗口，图表底部启用 ECharts `dataZoom`（slider + inside）可回溯至 2025-11-01，依旧保留“跳至最新”按钮同步窗口与文本提示。
 
 ## 数据分析页面（2025-11-27 实时查询版）
