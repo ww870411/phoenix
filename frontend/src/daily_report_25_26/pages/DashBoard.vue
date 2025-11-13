@@ -21,9 +21,18 @@
               class="cache-btn"
               type="button"
               @click="handlePublishDashboardCache"
-              :disabled="cacheActionBusy"
+              :disabled="cacheActionBusy || cacheJob.status === 'running'"
             >
               发布缓存
+            </button>
+            <button
+              v-if="cacheJob.status === 'running'"
+              class="cache-btn cache-btn--warning"
+              type="button"
+              @click="handleCancelCacheJob"
+              :disabled="cacheActionBusy"
+            >
+              停止发布
             </button>
             <button
               class="cache-btn cache-btn--danger"
@@ -34,12 +43,20 @@
               禁用缓存
             </button>
           </div>
-          <div
-            class="dashboard-cache-progress"
-            v-if="cachePublishProgress.total"
-          >
-            缓存写入 {{ cachePublishProgress.current }}/{{ cachePublishProgress.total }} ·
-            {{ cachePublishProgress.label }}
+          <div class="dashboard-cache-progress" v-if="cacheJob.status !== 'idle'">
+            <template v-if="cacheJob.status === 'running'">
+              缓存写入 {{ cacheJob.processed }}/{{ cacheJob.total }} ·
+              {{ cacheJob.currentLabel || '...' }}
+            </template>
+            <template v-else-if="cacheJob.status === 'completed'">
+              缓存发布完成（{{ cacheJob.total }} 天）
+            </template>
+            <template v-else-if="cacheJob.status === 'failed'">
+              缓存发布失败：{{ cacheJob.error || '未知错误' }}
+            </template>
+            <template v-else-if="cacheJob.status === 'aborted'">
+              缓存发布已停止
+            </template>
           </div>
           <div class="dashboard-cache-status">
             <span>{{ cacheStatusLabel }}</span>
@@ -494,7 +511,13 @@
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { disableDashboardCache, getDashboardData, refreshDashboardCache } from '../services/api'
+import {
+  cancelCachePublishJob,
+  disableDashboardCache,
+  getCachePublishStatus,
+  getDashboardData,
+  publishDashboardCache,
+} from '../services/api'
 import { useAuthStore } from '../store/auth'
 
 // --- 仪表盘局部组件 ---
@@ -1100,31 +1123,39 @@ async function loadDashboardData(showDate = '', options = {}) {
 }
 
 async function handlePublishDashboardCache() {
-  if (!canManageCache.value || cacheActionBusy.value) return
+  if (!canManageCache.value || cacheActionBusy.value || cacheJob.status === 'running') return
   cacheActionBusy.value = true
   cacheActionMessage.value = ''
-  const dates = cachePublishDates.value
-  const tasks = [
-    ...dates.map((day) => ({ label: day, showDate: day })),
-    { label: '默认', showDate: '' },
-  ]
-  cachePublishProgress.total = tasks.length
-  cachePublishProgress.current = 0
-  cachePublishProgress.label = ''
   try {
-    for (const task of tasks) {
-      cachePublishProgress.current += 1
-      cachePublishProgress.label = task.label
-      await refreshDashboardCache(projectKey, { showDate: task.showDate })
+    const payload = await publishDashboardCache(projectKey)
+    if (payload?.job) {
+      handleCacheJobSnapshot(payload.job)
+      if (payload.job.status === 'running') {
+        cacheActionMessage.value = '缓存发布任务已启动'
+        startCacheJobPolling()
+      } else if (payload.job.status === 'completed') {
+        cacheActionMessage.value = '缓存发布完成'
+        await loadDashboardData(selectedShowDate.value, { allowCache: false })
+      }
     }
-    cacheActionMessage.value = `缓存已更新：${dates.join(', ')}`
-    await loadDashboardData(selectedShowDate.value, { allowCache: false })
   } catch (err) {
     cacheActionMessage.value = err instanceof Error ? err.message : String(err)
   } finally {
-    cachePublishProgress.total = 0
-    cachePublishProgress.current = 0
-    cachePublishProgress.label = ''
+    cacheActionBusy.value = false
+  }
+}
+
+async function handleCancelCacheJob() {
+  if (!canManageCache.value || cacheJob.status !== 'running' || cacheActionBusy.value) return
+  cacheActionBusy.value = true
+  try {
+    const payload = await cancelCachePublishJob(projectKey)
+    if (payload?.job) {
+      handleCacheJobSnapshot(payload.job)
+    }
+  } catch (err) {
+    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
     cacheActionBusy.value = false
   }
 }
@@ -1146,6 +1177,11 @@ async function handleDisableDashboardCache() {
 
 onMounted(() => {
   loadDashboardData()
+  pollCacheJobStatus().then(() => {
+    if (cacheJob.status === 'running') {
+      startCacheJobPolling()
+    }
+  })
 })
 
 watch(
@@ -1166,6 +1202,7 @@ onBeforeUnmount(() => {
     dashboardAbortController.abort()
     dashboardAbortController = null
   }
+  stopCacheJobPolling()
 })
 
 const sectionIndexMap = computed(() => {
@@ -2319,7 +2356,6 @@ const dailyTrendSection = computed(() => {
 })
 
 const DAILY_TREND_WINDOW_SIZE = 7
-const CACHE_PUBLISH_WINDOW_DAYS = 7
 const dailyTrendStartIndex = ref(null)
 
 const normalizeTrendBucket = (bucket, units) => {
@@ -2505,29 +2541,63 @@ const coalStockFallbackMatrix = coalStockFallbackStacks.map(() =>
 // --- 图表配置构造 ---
 const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
 
-const buildCachePublishDates = () => {
-  const pivot =
-    toDate(pushDateValue.value) ||
-    toDate(effectiveBizDate.value) ||
-    toDate(defaultBizDate)
-  if (!(pivot instanceof Date) || Number.isNaN(pivot.valueOf())) {
-    return []
-  }
-  const dates = []
-  for (let offset = 0; offset < CACHE_PUBLISH_WINDOW_DAYS; offset += 1) {
-    const date = shiftDate(pivot, -offset)
-    dates.push(formatDateKey(date))
-  }
-  return dates
+const cacheJob = reactive({
+  status: 'idle',
+  total: 0,
+  processed: 0,
+  currentLabel: '',
+  error: '',
+})
+let cacheJobPoller = null
+
+const updateCacheJob = (job = {}) => {
+  cacheJob.status = job.status || 'idle'
+  cacheJob.total = job.total ?? 0
+  cacheJob.processed = job.processed ?? 0
+  cacheJob.currentLabel = job.current_label || ''
+  cacheJob.error = job.error || ''
 }
 
-const cachePublishDates = computed(() => buildCachePublishDates())
+const stopCacheJobPolling = () => {
+  if (cacheJobPoller) {
+    clearInterval(cacheJobPoller)
+    cacheJobPoller = null
+  }
+}
 
-const cachePublishProgress = reactive({
-  total: 0,
-  current: 0,
-  label: '',
-})
+const startCacheJobPolling = () => {
+  if (cacheJobPoller) return
+  cacheJobPoller = setInterval(() => {
+    pollCacheJobStatus()
+  }, 1500)
+}
+
+const handleCacheJobSnapshot = (job) => {
+  const previous = cacheJob.status
+  updateCacheJob(job)
+  if (previous === 'running' && job?.status !== 'running') {
+    stopCacheJobPolling()
+    if (job?.status === 'completed') {
+      cacheActionMessage.value = '缓存发布完成'
+      loadDashboardData(selectedShowDate.value, { allowCache: false })
+    } else if (job?.status === 'failed') {
+      cacheActionMessage.value = `缓存发布失败：${job?.error || '未知错误'}`
+    } else if (job?.status === 'aborted') {
+      cacheActionMessage.value = '缓存发布已停止'
+    }
+  }
+}
+
+const pollCacheJobStatus = async () => {
+  try {
+    const payload = await getCachePublishStatus(projectKey)
+    if (payload?.job) {
+      handleCacheJobSnapshot(payload.job)
+    }
+  } catch (err) {
+    console.warn('[cache job] 状态获取失败', err)
+  }
+}
 
 const useTempOption = (series, highlightDate) => {
   const highlightKey = normalizeDateKey(highlightDate)
@@ -3912,6 +3982,16 @@ onMounted(() => {
 
 .cache-btn--danger:not(:disabled):hover {
   background: #fecdd3;
+}
+
+.cache-btn--warning {
+  border-color: #fde68a;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cache-btn--warning:not(:disabled):hover {
+  background: #fde68a;
 }
 
 .dashboard-cache-status {

@@ -270,6 +270,30 @@ export async function publishDashboardCache(projectKey) {
   return response.json()
 }
 
+export async function getCachePublishStatus(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish/status`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取缓存任务状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function cancelCachePublishJob(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish/cancel`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `发布缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function refreshDashboardCache(projectKey, params = {}) {
   const showDate = typeof params.showDate === 'string' ? params.showDate : ''
   const search = `?show_date=${encodeURIComponent(showDate)}`

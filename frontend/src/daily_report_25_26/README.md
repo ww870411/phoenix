@@ -2,10 +2,9 @@
 
 ## 仪表盘缓存控制（2025-12-01）
 
-- `DashBoard.vue` 顶部仅保留“发布缓存 / 禁用缓存”两个按钮（仅对 `canPublish` 权限账号可见）：发布即调用 `/dashboard/cache/publish` 批量生成 set_biz_date 及前 6 日缓存；再点击即覆盖更新；禁用按钮调用 `DELETE /dashboard/cache` 清空缓存。
-- 发布时会在按钮下方显示写入进度（“X/Y · 某日”），按顺序刷新各个业务日，完成后立刻重新拉取看板数据。
-- 缓存状态会在按钮下方展示：命中缓存 / 实时加载 / 已禁用，以及最近一次更新时间，便于判断当前页面的数据来源；操作结果提示直接显示在同一行。
-- 所有按钮都会在操作期间禁用自身，并强制以 `allowCache: false` 方式重新拉取仪表盘数据，确保 UI 立即反映最新缓存文件。
+- `DashBoard.vue` 顶部仅保留“发布缓存 / 停止发布（运行时显示） / 禁用缓存”按钮（仅对 `canPublish` 权限账号可见）。发布按钮会触发后端后台任务（`POST /dashboard/cache/publish`），如果已有任务则直接返回当前进度；禁用按钮调用 `DELETE /dashboard/cache` 清空缓存。
+- 发布任务运行中时，前端轮询 `/dashboard/cache/publish/status` 展示进度（“X/Y · 当前日期”），并提供“停止发布”按钮调用 `/dashboard/cache/publish/cancel` 以便随时终止，防止资源占用。
+- 任务完成/失败/中断后，会在提示区显示结果，并自动强制刷新仪表盘数据（`allowCache: false`），使 UI 与缓存保持一致。
 - “标煤耗量与平均气温趋势图” 默认展示 `push_date` 及前 6 天（共 7 天）的窗口，图表底部启用 ECharts `dataZoom`（slider + inside）可回溯至 2025-11-01，依旧保留“跳至最新”按钮同步窗口与文本提示。
 
 ## 数据分析页面（2025-11-27 实时查询版）

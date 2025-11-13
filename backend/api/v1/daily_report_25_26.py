@@ -36,6 +36,7 @@ from backend.schemas.auth import (
     WorkflowUnitStatus,
 )
 from backend.services import dashboard_cache
+from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
 from backend.services.dashboard_expression import evaluate_dashboard
 from backend.services.runtime_expression import render_spec
@@ -1854,19 +1855,12 @@ def publish_dashboard_cache(
 ):
     _ensure_cache_operator(session)
     target_dates = dashboard_cache.default_publish_dates()
-    entries: Dict[str, Dict[str, Any]] = {}
-    for day in target_dates:
-        result = evaluate_dashboard(PROJECT_KEY, show_date=day)
-        entries[day] = _build_dashboard_payload(result)
-    # 额外写入默认请求（show_date 为空字符串）的缓存
-    default_result = evaluate_dashboard(PROJECT_KEY, show_date="")
-    entries[dashboard_cache.DEFAULT_CACHE_KEY] = _build_dashboard_payload(default_result)
-    status = dashboard_cache.replace_cache(PROJECT_KEY, entries, disabled=False)
+    schedule = target_dates + [""]
+    snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
     return {
         "ok": True,
-        "cached_dates": target_dates,
-        "cache_disabled": status.get("disabled", False),
-        "cache_updated_at": status.get("updated_at"),
+        "started": started,
+        "job": snapshot,
     }
 
 
@@ -3956,6 +3950,27 @@ def debug_cache(company: str):
         })
     finally:
         session.close()
+@router.get(
+    "/dashboard/cache/publish/status",
+    summary="查询缓存发布任务状态",
+    tags=["daily_report_25_26"],
+)
+def get_cache_publish_status():
+    snapshot = cache_publish_job_manager.snapshot()
+    return {"ok": True, "job": snapshot}
+
+
+@router.post(
+    "/dashboard/cache/publish/cancel",
+    summary="停止正在运行的缓存发布任务",
+    tags=["daily_report_25_26"],
+)
+def cancel_cache_publish(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    snapshot = cache_publish_job_manager.request_cancel()
+    return {"ok": True, "job": snapshot}
+
+
 @router.post(
     "/dashboard/cache/refresh",
     summary="刷新指定日期的数据看板缓存",
@@ -3979,4 +3994,3 @@ def refresh_dashboard_cache(
         "cache_disabled": status.get("disabled", False),
         "cache_updated_at": status.get("updated_at"),
     }
-
