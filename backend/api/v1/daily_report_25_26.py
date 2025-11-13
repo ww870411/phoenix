@@ -1855,7 +1855,7 @@ def publish_dashboard_cache(
 ):
     _ensure_cache_operator(session)
     target_dates = list(reversed(dashboard_cache.default_publish_dates()))
-    schedule = target_dates + [""]
+    schedule = target_dates
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
     return {
         "ok": True,
