@@ -37,7 +37,7 @@
 
 本次动作：
 - 将 `default_publish_dates()` 默认 `window` 改为 7（set_biz_date 及前六日）；`POST /dashboard/cache/publish` 自然会生成 7 个日期的缓存切片，`cache_dates` 生效范围也同步拉长。
-- `backend/README.md` 更新为“七日窗口（含当日及前六日）”，文档与实际行为保持一致。为解决服务器性能瓶颈，新建 `dashboard_cache_job.py` 支持后台任务：`POST /dashboard/cache/publish` 只入队，`/status` 轮询、`/cancel` 停止；前端 README 同步说明“发布缓存”会展示后台进度并可停止。
+- `backend/README.md` 更新为“七日窗口（含当日及前六日）”，文档与实际行为保持一致。为解决服务器性能瓶颈，新建 `dashboard_cache_job.py` 支持后台任务：`POST /dashboard/cache/publish` 只入队、且按“set_biz_date→前 6 日”顺序写入，`/status` 轮询、`/cancel` 停止；前端 README 同步说明“发布缓存”会展示后台进度并可停止。
 
 影响与验证：
 - 调用 `POST /api/v1/projects/daily_report_25_26/dashboard/cache/publish` 后，`backend_data/dashboard_cache.json` 应包含 set_biz_date 及前六天共 7 个日期；`GET /dashboard` 响应里的 `cache_dates` 也会返回 7 条。

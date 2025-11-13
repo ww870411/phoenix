@@ -1854,7 +1854,7 @@ def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
 ):
     _ensure_cache_operator(session)
-    target_dates = dashboard_cache.default_publish_dates()
+    target_dates = list(reversed(dashboard_cache.default_publish_dates()))
     schedule = target_dates + [""]
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
     return {
