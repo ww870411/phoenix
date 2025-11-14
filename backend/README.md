@@ -1,9 +1,28 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-12-08 数据分析指标补齐）
+
+- 为修复数据分析页面在选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”时始终显示“缺失”的问题，已将该指标的计算逻辑从 `backend/sql/groups.sql` 同步到 `backend/sql/analysis.sql`。新增的 `yjy_power/yjy_area` CTE 会预先扣除研究院的站购电量与挂网面积，并在 `analysis_groups_daily`、`analysis_groups_sum` 两个视图中加入 `rate_power_per_10k_m2_YanJiuYuan` 的 `UNION ALL` 片段，确保单日和累计查询都能返回正确数据。
+- FastAPI 层无需改动即可受益：`backend/services/data_analysis.py` 在解析 schema 时已经把“供暖电单耗(-研究院)”放入调整指标分组，更新视图后 `/data_analysis/query` 会像普通指标一样读取 `analysis_groups_daily/analysis_groups_sum`，不再落入 missing 分支；`runDataAnalysis` 前端也能直接得到 `rows` 数据。
+- 部署时请重新执行 `analysis.sql`，以便数据库中的视图结构与 repo 同步。若未来新增集团级指标，需要同时更新 `analysis.sql` 和 `groups.sql`，避免再次出现服务层查询不到数据的情况。
+
+## 会话小结（2025-12-04 analysis.sql 视图列清理）
+
+- 执行 `psql -f backend/sql/analysis.sql` 时出现 `column \"sum_7d_biz\" does not exist`，原因是 `analysis_company_sum` 之前保留下的 `yjy_power` 聚合仍试图汇总 `sum_7d_* / sum_month_* / sum_ytd_*` 字段，但 `company` CTE 早已不再返回这些列。现已将该 CTE 中多余的列全部移除，仅保留 `value_biz_date/value_peer_date`，从而恢复视图创建。
+- 该调整只影响集团“供暖电单耗(-研究院)”的分子预处理逻辑，最终指标依旧按“集团站购电量 - 研究院站购电量”计算，不会改变对外接口。更新后重新执行 `psql -f backend/sql/analysis.sql` 即可。
+- 同日也将两个 `calc_rate_water_per_10k_m2` CTE 的分子改为一次网补水、站补水与网用水（`consumption_network_fill_water`、`consumption_station_fill_water`、`consumption_network_water`），修复“供热公司”等单位在“供暖水单耗”指标上查询不到数据的问题。
+
+## 会话小结（2025-12-04 AI 报告预研）
+
+- 为验证 Google Gemini 2.5 Flash 在本项目的可用性，新建了 `configs/ai_test.py`，使用官方 `google-generativeai`（别名 `genai`）SDK，可在服务器直接运行 `python configs/ai_test.py` 进行交互式调用，确认网络、API Key 及响应格式是否符合预期。脚本会按“环境变量 → `backend_data/api_key.json`”的顺序加载密钥，方便集中管理。
+- 后端计划以 `backend/app/services/ai.py` 的形式封装统一的 AI 客户端，再经由 `POST /api/v1/projects/daily_report_25_26/ai/report` 暴露给前端；测试脚本已经演示了请求体、超时与异常处理逻辑，可在正式落地时直接迁移。
+- 建议在 `.env` 或部署环境变量中声明 `GOOGLE_GEMINI_API_KEY` 与可选的 `GOOGLE_GEMINI_MODEL`；如需共享密钥或模型设定，可编辑 `backend_data/api_key.json`。若需要回滚 AI 功能，删除 `configs/ai_test.py` 即可恢复当前状态。
+
 ## 会话小结（2025-12-01 数据看板缓存）
 
 - 新增 `backend/services/dashboard_cache.py`，集中负责 `backend_data/dashboard_cache.json` 的读写、set_biz_date 七日窗口（含当日及前六日）生成与禁用逻辑；内部复用 `normalize_show_date/load_default_push_date`，写入时统一使用临时文件替换确保并发安全。
 - `/api/v1/projects/daily_report_25_26/dashboard` 现在会先命中缓存文件，再 fallback 到 `evaluate_dashboard()`，响应中额外附带 `cache_hit/cache_disabled/cache_dates/cache_updated_at/cache_key` 供前端渲染提示；当缓存被手动禁用时接口不会再写入文件。
+- 新增 `GET /projects/daily_report_25_26/dashboard/date`，直接读取 `backend_data/date.json` 的 `set_biz_date` 提供给前端，保证首屏加载即可携带业务日期命中缓存。
 - 为避免长时间占用资源，引入 `backend/services/dashboard_cache_job.py` 管理后台发布任务：`POST /dashboard/cache/publish` 按“set_biz_date → 前 6 日”的顺序（从最近向过去）执行并立即返回任务快照，`GET /dashboard/cache/publish/status` 可轮询进度，`POST /dashboard/cache/publish/cancel` 可中途停止；若需要单独刷新某一天仍可调用 `/dashboard/cache/refresh`，禁用逻辑继续使用 `DELETE /dashboard/cache`。以上接口均要求 `can_publish` 权限账号调用。
 - 默认缓存文件位于 `backend_data/dashboard_cache.json`，结构为 `{ project_key, disabled, items, updated_at }`，items 中的 value 就是 `/dashboard` 的原始响应对象，可直接对照前端请求排查。
 

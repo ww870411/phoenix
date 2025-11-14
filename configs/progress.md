@@ -1,5 +1,37 @@
 # 进度记录
 
+## 2025-12-04（AI 报告测试脚本）
+
+前置说明：
+- Serena 无法直接在 `configs` 目录创建新文件，因此按 3.9 降级矩阵改用 Codex CLI `apply_patch` 新建 `configs/ai_test.py`；若要回滚，删除该文件即可。
+- 本次仅新增独立测试脚本，未触及后端或前端业务逻辑，避免对现有流程造成影响。
+- 2025-12-04 晚间对脚本迭代（切换 genai SDK）时需同时修改模块注释、导入、常量与函数，Serena 无法对该文件做跨段落批量替换，因此继续沿用 `apply_patch`；若需回滚可重新写回旧版本。
+- 为便于后端后续集成，同步在 `backend/requirements.txt` 新增 `google-generativeai>=0.7.0`，确保部署及容器环境具备该依赖。
+
+本次动作：
+- 新增 `configs/ai_test.py`，实现 Gemini 2.5 Flash 的最小命令行聊天脚本，优先读取 `GOOGLE_GEMINI_API_KEY`，若未设置则使用用户提供的测试密钥，并在交互式循环中显示 AI 回复。
+- 在脚本中增加请求超时、HTTP 错误与通用异常的提示，运行失败时能快速定位问题，同时提示安装 `requests` 的方式，便于本地快速调试。
+- 根据最新需求，脚本已切换到官方 `google-generativeai (genai)` SDK，实现 `ensure_model()` 缓存客户端、自动配置密钥并直接调用 `GenerativeModel.generate_content()`，同样保留无 SDK/无密钥时的提示。
+- 用户要求将密钥写入 `backend_data/api_key.json`，并在程序运行时优先从该文件读取；`configs/ai_test.py` 新增 `load_api_config()`，按“环境变量 → JSON 文件”顺序加载密钥与模型名，文件缺失或解析失败会提示错误。
+- 新增并更新 `backend_data/api_key.json`，默认包含当前测试密钥与模型配置 `gemini_model`；如需变更可直接编辑该文件或设置环境变量覆盖。
+
+影响与验证：
+- 运行 `python configs/ai_test.py` 后输入问题即可获取回复；如需停止输入 `exit/quit` 或 Ctrl+C/EOF，即可退出程序。
+- 如未来不再需要，可直接删除 `configs/ai_test.py` 并清除任何缓存的 API 密钥，即可恢复至当前版本前的状态。
+
+## 2025-12-04（analysis.sql 视图列缺失修复）
+
+前置说明：
+- 执行 `psql -f backend/sql/analysis.sql` 时出现 `column "sum_7d_biz" does not exist`，定位为 `yjy_power` CTE 聚合了 `sum_7d_*`/`sum_month_*`/`sum_ytd_*` 字段，但 `company` CTE 已不再输出这些列；需清理冗余列。Serena 无法在该 SQL 文件内做多处删除，按降级矩阵使用 `apply_patch`。
+
+本次动作：
+- `backend/sql/analysis.sql` 删除 `yjy_power` 中所有不存在的 `SUM(sum_7d_* / sum_month_* / sum_ytd_*)` 语句，仅保留实际存在的 `value_biz_date/value_peer_date` 聚合，避免视图创建失败。
+- 同步将两个 `calc_rate_water_per_10k_m2` CTE 的分子改为一次网补水、站补水与网用水（`consumption_network_fill_water`、`consumption_station_fill_water`、`consumption_network_water`），修复“供热公司”在“供暖水单耗”指标上无数据的问题。
+
+影响与验证：
+- 再次运行 `psql -f backend/sql/analysis.sql` 应不再报列缺失错误；集团“供暖电单耗(-研究院)”仍以研究院购电量差额作为分子，行为与此前一致。
+- 数据分析/自由构建页面选择“供热公司 + 供暖水单耗”即可返回数值；若需恢复旧算法，请将上述 CTE 改回单一 `consumption_station_water_supply` 累计。
+
 ## 2025-12-01（数据看板缓存与前端管控）
 
 前置说明：
@@ -1944,3 +1976,21 @@ sum_basic_data 相关：
 1) 访问仪表盘，确认折叠表数据与 `/dashboard` 返回中 0.5 段落一致；
 2) 临时在后端去除 0.5 段落，前端折叠表应不显示兜底数据；
 3) 切换业务日期（`push_date`），折叠表本期/同期联动更新。
+
+## 2025-12-08（数据分析指标补齐 - 供暖电单耗(-研究院)）
+
+前置说明（降级留痕）：
+- Serena 目前无法对 SQL 文件执行符号级插入，本次遵循 3.9 矩阵降级使用 `apply_patch` 修改 `backend/sql/analysis.sql`；回滚时恢复该文件即可。
+
+本次动作：
+- 在 `analysis_groups_daily` CTE 中补充 `yjy_power`、`yjy_area` 定义，并新增 `rate_power_per_10k_m2_YanJiuYuan` 的 `UNION ALL` 片段，沿用 `groups.sql` 扣除研究院用电与面积的计算逻辑，确保单日分析视图可返回该指标。
+- 对 `analysis_groups_sum` 作同样调整，使累计视图同样输出“供暖电单耗(-研究院)”。
+
+影响范围与回滚：
+- 影响：`/data_analysis/query` 在选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”时将不再出现缺失，所有依赖 analysis 视图的模块都能读到该指标；其它指标逻辑保持不变。
+- 回滚方式：恢复 `backend/sql/analysis.sql` 修改前版本并重新执行视图部署。
+
+验证建议：
+1. 刷新数据库视图（`psql` 执行 updated SQL），随后在数据分析页选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”进行单日/累计查询，应得到 `missing=false` 且 `warning` 消失。
+2. 调用 `/api/v1/projects/daily_report_25_26/data_analysis/query`，确认 `rows` 中出现 `key=rate_power_per_10k_m2_YanJiuYuan` 且 `source_view=analysis_groups_daily/analysis_groups_sum`。
+3. 若仪表盘或展示页复用了该视图，也应能回填最新值，必要时对照数据库核对分子/分母扣除逻辑。

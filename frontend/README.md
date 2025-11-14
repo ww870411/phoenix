@@ -2,6 +2,24 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-12-08 数据分析指标补齐）
+
+- 今天后端 `analysis.sql` 已同步“供暖电单耗(-研究院)”指标的视图定义，`pages/DataAnalysisView.vue` 中当你选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”时，将直接从 `/data_analysis/query` 得到完整数据（`missing=false`），不再弹出“缺失”告警。
+- 该指标仍位于“调整指标”分组，key 为 `rate_power_per_10k_m2_YanJiuYuan`，单位 `kWh/万㎡`。前端渲染逻辑保持不变：选定指标 → 发送 `metrics` 数组 → 结果表格按 `previewRows` 显示当前值/同期值/同比，若有区间查询还可在“区间明细” RevoGrid 中看到逐日曲线。
+- 若需要确认后端刷新成功，可在调试面板观察 `/data_analysis/query` 返回对象内的 `source_view`（应为 `analysis_groups_daily` 或 `analysis_groups_sum`）以及 `missing=false`，再对比旧数据验证扣除研究院后的差异。
+
+## 会话小结（2025-12-04 analysis.sql 基础数据修复）
+
+- 后端执行 `analysis.sql` 报错 `column "sum_7d_biz" does not exist`，已移除 `yjy_power` CTE 中多余的 `sum_7d_* / sum_month_* / sum_ytd_*` 列聚合，只保留 `value_biz_date/value_peer_date`，保证集团“供暖电单耗(-研究院)”的指标能够顺利刷新。
+- 前端依赖的 `/data_analysis/query`、仪表盘展示表和后续 AI 报告在读取该指标时将继续得到稳定结果，无需额外代码调整；部署或本地调试时记得重新执行 `psql -f backend/sql/analysis.sql`。
+- 同期修复“供热公司”在“供暖水单耗”上无值的问题：后端 `calc_rate_water_per_10k_m2` 现在汇总一次网补水、站补水与网用水三类指标，前端无需修改即可正常查询。
+
+## 会话小结（2025-12-04 AI 报告预研）
+
+- AI 报告功能计划接入 `DashBoard.vue`，前端只需等待后端提供统一的 `/api/v1/projects/daily_report_25_26/ai/report` 接口；本次会话新增的 `configs/ai_test.py`（基于官方 `google-generativeai` SDK，并从 `backend_data/api_key.json` 读取密钥与模型配置）可用于提前验证 API Key 与模型表现。
+- 未来在 `pages/DashBoard.vue` 中将新增“生成 AI 报告”区域，捕获仪表盘现有数据包后请求后端 AI 接口，再将文本结果渲染为卡片或者弹窗；前端无需直接暴露 API Key。
+- 若后续评估中决定暂缓该功能，只需保持现有 DashBoard 结构不变，并删除 `configs/ai_test.py` 与相关文档说明即可。
+
 ## 会话小结（2025-11-30 数据分析接口模块化）
 
 - 后端已将 `/data_analysis/schema` 与 `/data_analysis/query` 的核心逻辑抽离到 `backend/services/data_analysis.py`，前端 `DataAnalysisView.vue` 继续沿用同一接口契约，不需要额外改动即可获得统一的 schema/查询结果。

@@ -585,3 +585,7 @@ codex resume 019a5938-96cf-7ed3-87b4-3fc60f89e5e5
     "rate_power_per_10k_m2_YanJiuYuan":"供暖电单耗(-研究院)"
 
     更新“全厂热效率”指标分母含油耗
+
+    ————————————————————————————————————————————————————————————————————
+    11.14
+    GEMINI API KEY:AIzaSyDDDosVdLA1bPy4hH7P7E90_t1xFStc4D8
