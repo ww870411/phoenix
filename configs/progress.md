@@ -1,5 +1,33 @@
 # 进度记录
 
+## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
+
+前置说明：
+- 本次将 `configs/ai_test.py` 切换到新版 `google-genai` SDK，并启用示例的 Google Search Grounding 工具调用；仍未触及后端/前端业务接口。如需回滚，可恢复 2025-12-04 版本的脚本。
+- 报告落盘路径 `runtime_reports/` 仍保持运行期输出，不影响现有数据。
+
+本次动作：
+- `configs/ai_test.py` 采用 `google-genai`（`from google import genai`）客户端，构造 `Tool(google_search=GoogleSearch())` 并在 `GenerateContentConfig` 中启用，便于验证 Grounding 能力；同时保留多轮对话与 HTML 报告生成分支。
+- 多轮上下文由 `_conversation` 列表追踪，`send_message` 会在调用后将用户与模型双方消息入栈；遇到“html报告”关键词时，按提示要求模型返回完整 HTML（默认包含 ECharts 脚本和至少一张图表），写入 `runtime_reports/gemini_report_*.html` 并尝试通过浏览器打开；提示语已强化为“禁止输出解释或复制粘贴指引”，确保模型只输出 HTML。
+
+影响与验证：
+- 运行 `python configs/ai_test.py` 即可多轮对话；凭据具备 Grounding 权限时，模型回答会结合实时搜索；输入含“html报告”会生成 HTML 文件并提示路径。
+- 若 Key 未开通 Grounding，调用会回退为纯生成或返回未授权错误，删除 `Tool` 配置即可恢复纯聊天；如不需要 HTML 分支，可移除相应逻辑并清理 `runtime_reports`。
+
+## 2025-12-09（NewAPI Gemini 兼容脚本）
+
+前置说明：
+- 应用户要求，在 `configs` 目录新增 `ai_test_newapi.py`，改为通过 NewAPI 的 Gemini 兼容端点（https://x666.me/v1beta/models/gemini-2.5-flash:generateContent）访问多模型网关；脚本只读写 `runtime_reports/`，未改动后端/前端业务逻辑。
+- API Key 支持三层：环境变量 `NEWAPI_API_KEY` → `backend_data/newapi_api_key.json` → 用户提供的默认密钥；如需回滚，仅删除该文件及新增文档说明即可。
+
+本次动作：
+- 新增 `configs/ai_test_newapi.py`，使用直接 HTTP 调用（requests）访问 NewAPI 的 Gemini 接口（默认 `/v1beta/models/gemini-2.5-pro:generateContent`），payload 附带 `tools: [{google_search:{}}]` 启用 Grounding，并在会话初始追加系统指令（以首条 user 消息形式）限定模型为“可爱、温柔体贴、充满爱意的 JK 少女”，禁止输出“无法生成/请复制粘贴”等免责声明；逻辑与现有 `ai_test.py` 一致：记录历史、支持 HTML 报告关键词检测、自动保存/打开 `runtime_reports/newapi_gemini_report_*.html`。
+- HTML 报告提示语沿用 ECharts 默认要求，并禁止模型输出“请复制粘贴”类说明；浏览器打开流程沿用 `os.startfile → cmd start → webbrowser` 的多级降级方案。
+
+影响与验证：
+- 执行 `python configs/ai_test_newapi.py` 即可使用 NewAPI（Gemini 端点）进行多轮对话；输入包含“html报告”会生成带 ECharts 的报告并尝试打开浏览器。
+- 如需改用其他模型或降级为 OpenAI 端点，可调整脚本中的 `MODEL_NAME` 与 `BASE_URL`；若无须此脚本，可删除文件并清理 `runtime_reports` 中对应产物。
+
 ## 2025-12-04（AI 报告测试脚本）
 
 前置说明：

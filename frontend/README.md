@@ -2,6 +2,17 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
+
+- `configs/ai_test.py` 现已改用 `google-genai` 客户端并启用 Google Search Grounding，可作为前端验证“带搜索引用的 AI 报告”交互的样例；若输入包含“html报告”，模型会输出完整 HTML 并尝试在浏览器打开，方便直接查看效果。
+- 该脚本的会话状态通过 `_conversation`（`google.genai.types.Content`）维护，展示了如何在发送请求时将历史轮次与工具配置一同提交，后续 DashBoard/DailyReport 若需要上线 AI 报告，可参考这一写法将前端收集的上下文附带到后端服务；为了防止模型输出“请复制粘贴”之类的提示，HTML 报告指令已强化为“只输出包含 ECharts 图表的完整 HTML”。
+
+## 会话小结（2025-12-09 NewAPI Gemini 兼容脚本）
+
+- 新增 `configs/ai_test_newapi.py`，针对 NewAPI (https://x666.me) 的 Gemini 端点（默认 `/v1beta/models/gemini-2.5-pro:generateContent`，payload 附带 `google_search` 工具启用 Grounding，并在会话起始以首条 user 消息注入人物设定：“可爱、温柔体贴、充满爱意的 JK 少女”，同时禁止模型输出“无法生成/请复制粘贴”提示）提供等价的 CLI 测试工具。逻辑与原 `ai_test.py` 一致：多轮对话、HTML/ECharts 报告、自动打开浏览器，便于前端在不同模型网关间对比表现。
+- 若前端未来要切换到 NewAPI 的多模型服务，可参考该脚本的请求结构（Gemini generateContent）与提示语；调整后端转发即可复用 UI 行为。
+- 如果未来 UI 需要允许用户选择“是否启用联网搜索”，可以仿照 `BASE_CONFIG` 中的 `tools` 参数，动态控制是否传入 `GoogleSearch()`；未开通 Grounding 的环境仍可退化为纯文本回答。
+
 ## 会话小结（2025-12-08 数据分析指标补齐）
 
 - 今天后端 `analysis.sql` 已同步“供暖电单耗(-研究院)”指标的视图定义，`pages/DataAnalysisView.vue` 中当你选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”时，将直接从 `/data_analysis/query` 得到完整数据（`missing=false`），不再弹出“缺失”告警。

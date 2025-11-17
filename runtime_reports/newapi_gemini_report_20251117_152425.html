@@ -1,0 +1,165 @@
+```html
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="utf-8">
+    <title>葡萄牙国家男子足球队最新报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #b00;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+        h2 {
+            color: #0056b3;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        p {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        ul {
+            list-style-type: disc;
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-top: 30px;
+            background-color: #fdfdfd;
+            border-radius: 6px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            padding: 10px;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>葡萄牙国家男子足球队最新报告</h1>
+
+        <h2>2026年国际足联世界杯资格赛情况</h2>
+        <p>葡萄牙国家男子足球队已成功获得2026年国际足联世界杯的参赛资格。</p>
+
+        <h2>近期比赛表现：2025年11月16日对阵亚美尼亚</h2>
+        <p>在2025年11月16日举行的一场世界杯预选赛中，葡萄牙队在主场以<span class="highlight">9-1</span>的悬殊比分战胜亚美尼亚队，提前锁定了世界杯席位。本场比赛中，球队核心克里斯蒂亚诺·罗纳尔多（Cristiano Ronaldo）因红牌停赛缺阵。尽管如此，球队依旧表现出色。</p>
+        <p>这场9-1的胜利是葡萄牙队史上第二大分差的胜利，仅次于2023年9-0战胜卢森堡的比赛。</p>
+
+        <h3>进球球员分布</h3>
+        <div id="goalsChart" class="chart-container"></div>
+
+        <h2>C罗与球队的讨论</h2>
+        <p>克里斯蒂亚诺·罗纳尔多（Cristiano Ronaldo）的缺席和球队的大胜引发了关于他是否应继续担任首发位置的讨论。有观点认为，葡萄牙队正在从“依赖巨星”向““团队足球”转型。C罗此前已参加过五届世界杯（2006、2010、2014、2018、2022），如果能在2026年再次参赛，他将创造参加六届世界杯的新纪录。</p>
+
+        <h2>球队概况</h2>
+        <ul>
+            <li><span class="highlight">现任主教练：</span>罗伯托·马丁内斯（Roberto Martinez）</li>
+            <li><span class="highlight">国际足联排名：</span>第5位（截至2025年10月17日）</li>
+        </ul>
+    </div>
+
+    <script type="text/javascript">
+        // 基于准备好的dom，初始化echarts实例
+        var myChart = echarts.init(document.getElementById('goalsChart'));
+
+        // 指定图表的配置项和数据
+        var option = {
+            title: {
+                text: '葡萄牙 vs 亚美尼亚 (9-1) 进球分布',
+                subtext: '2025年11月16日',
+                left: 'center',
+                textStyle: {
+                    color: '#333'
+                }
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'shadow'
+                }
+            },
+            legend: {
+                data: ['进球数'],
+                top: 'bottom'
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '10%',
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: ['布鲁诺·费尔南德斯', '若昂·内维斯', '雷纳托·维加', '贡萨洛·拉莫斯', '弗朗西斯科·孔塞桑'],
+                axisLabel: {
+                    interval: 0,
+                    rotate: 15
+                }
+            },
+            yAxis: {
+                type: 'value',
+                name: '进球数',
+                minInterval: 1 // 确保Y轴刻度为整数
+            },
+            series: [{
+                name: '进球数',
+                type: 'bar',
+                data: [3, 3, 1, 1, 1],
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(
+                        0, 0, 0, 1,
+                        [
+                            {offset: 0, color: '#007bff'}, // light blue
+                            {offset: 1, color: '#0056b3'}  // dark blue
+                        ]
+                    )
+                },
+                emphasis: {
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(
+                            0, 0, 0, 1,
+                            [
+                                {offset: 0, color: '#28a745'}, // light green
+                                {offset: 1, color: '#218838'}  // dark green
+                            ]
+                        )
+                    }
+                }
+            }]
+        };
+
+        // 使用刚指定的配置项和数据显示图表。
+        myChart.setOption(option);
+
+        // 响应窗口大小变化
+        window.addEventListener('resize', myChart.resize);
+    </script>
+</body>
+</html>
+```

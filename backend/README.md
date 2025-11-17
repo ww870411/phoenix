@@ -1,5 +1,18 @@
 # 后端说明（FastAPI）
 
+## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
+
+- `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。
+- 多轮上下文改由 `_conversation`（`types.Content` 列表）维护，每次 `send_message` 都会带上对话历史，方便后续在服务端迁移同样的会话管理机制；若后端要实现 `/ai/report` 等接口，可直接复用该结构并按需扩展缓存策略。
+- “HTML 报告”分支仍存在：检测到关键词后会额外附加统一的报告指令，让模型输出完整 HTML（包含 ECharts CDN 与至少一张图表）并保存到 `runtime_reports/gemini_report_*.html`，之后尝试用默认浏览器打开；提示语已加强为“禁止说明无法打开/请复制代码”，确保模型直接返回 HTML；若只需文本回答或不需要图表可自行修改提示语。
+
+## 会话小结（2025-12-09 NewAPI Gemini 兼容脚本）
+
+- 新增 `configs/ai_test_newapi.py`，改为通过 NewAPI 的 Gemini 端点（默认 https://x666.me/v1beta/models/gemini-2.5-pro:generateContent）进行多轮对话，使用 `requests` 直接访问 HTTP 接口，payload 附带 `tools: [{google_search:{}}]` 启用 Grounding；会话初始自动注入系统指令（限定模型扮演“可爱、温柔体贴、充满爱意的 JK 少女”，且禁止输出“无法生成/请复制粘贴”等免责声明），行为与原脚本一致，支持 HTML/ECharts 报告与自动打开浏览器。
+- API Key 按“环境变量 NEWAPI_API_KEY → backend_data/newapi_api_key.json → 默认密钥”顺序加载；如在后端服务中复用，可迁移到统一配置或 `.env`。
+- 该脚本仅为测试工具，未改动 FastAPI 代码；若后续要在服务端暴露 NewAPI 转发接口，可参考其请求/响应结构（Gemini generateContent 风格）及报告提示语。
+- 若部署环境尚未开通 Grounding 权限，只需将 `BASE_CONFIG` 中的 `tools` 去掉即可恢复纯生成模式；其余 API Key 与模型配置流程不变，仍按“环境变量 → backend_data/api_key.json”顺序加载。
+
 ## 会话小结（2025-12-08 数据分析指标补齐）
 
 - 为修复数据分析页面在选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”时始终显示“缺失”的问题，已将该指标的计算逻辑从 `backend/sql/groups.sql` 同步到 `backend/sql/analysis.sql`。新增的 `yjy_power/yjy_area` CTE 会预先扣除研究院的站购电量与挂网面积，并在 `analysis_groups_daily`、`analysis_groups_sum` 两个视图中加入 `rate_power_per_10k_m2_YanJiuYuan` 的 `UNION ALL` 片段，确保单日和累计查询都能返回正确数据。

@@ -1,0 +1,260 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2025-2026赛季英超阿森纳队数据报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #dc0024;
+            padding-bottom: 20px;
+        }
+        header img {
+            max-width: 150px;
+            margin-bottom: 15px;
+        }
+        h1 {
+            color: #dc0024;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #1a237e;
+            font-size: 1.8em;
+            margin-top: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        p {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            background-color: #fff;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #1a237e;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-top: 30px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .image-caption {
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/1200px-Arsenal_FC.svg.png" alt="阿森纳队徽">
+            <h1>2025-2026赛季英超阿森纳队数据报告</h1>
+        </header>
+
+        <p>欢迎来到这份关于阿森纳足球俱乐部在2025-2026赛季英格兰足球超级联赛中表现的最新数据报告。截至2025年11月10日，阿森纳在联赛中表现出色，暂居榜首。</p>
+
+        <h2>球队概览</h2>
+        <p>在英超联赛的第11轮比赛结束后，阿森纳以强劲的势头领跑积分榜。他们在已进行的11场比赛中取得了令人瞩目的成绩。</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>场次</th>
+                    <th>胜</th>
+                    <th>平</th>
+                    <th>负</th>
+                    <th>进球</th>
+                    <th>失球</th>
+                    <th>净胜球</th>
+                    <th>积分</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>11</td>
+                    <td>8</td>
+                    <td>2</td>
+                    <td>1</td>
+                    <td>20</td>
+                    <td>5</td>
+                    <td>+15</td>
+                    <td>26</td>
+                </tr>
+            </tbody>
+        </table>
+        <p>阿森纳以8胜2平1负的战绩，积26分位居联赛榜首，展现了强大的竞争力。</p>
+
+        <h2>关键球员数据</h2>
+        <p>以下是本赛季截至目前，阿森纳在英超联赛中的主要进球和助攻数据。</p>
+
+        <h3>英超射手榜 (阿森纳队内)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>球员</th>
+                    <th>进球数</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>维克托·哲凯赖什 (Viktor Gyökeres)</td>
+                    <td>4</td>
+                </tr>
+                <tr>
+                    <td>布卡约·萨卡 (Bukayo Saka)</td>
+                    <td>3</td>
+                </tr>
+                <tr>
+                    <td>莱昂德罗·特罗萨德 (Leandro Trossard)</td>
+                    <td>2</td>
+                </tr>
+                <tr>
+                    <td>德克兰·赖斯 (Declan Rice)</td>
+                    <td>2</td>
+                </tr>
+                <tr>
+                    <td>朱利安·廷贝尔 (Julian Timber)</td>
+                    <td>2</td>
+                </tr>
+                <tr>
+                    <td>马丁·苏比门迪 (Martin Zubimendi)</td>
+                    <td>2</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>英超助攻榜 (阿森纳队内)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>球员</th>
+                    <th>助攻数</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>莱昂德罗·特罗萨德 (Leandro Trossard)</td>
+                    <td>2</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>赛季表现概览 (可视化)</h2>
+        <p>以下图表展示了阿森纳本赛季在英超联赛中的胜、平、负场次以及总积分。</p>
+        <div id="performanceChart" class="chart-container"></div>
+
+        <script type="text/javascript">
+            var myChart = echarts.init(document.getElementById('performanceChart'));
+
+            var option = {
+                title: {
+                    text: '阿森纳2025-2026赛季英超表现',
+                    subtext: '截至第11轮',
+                    left: 'center',
+                    textStyle: {
+                        color: '#333'
+                    }
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'shadow'
+                    }
+                },
+                legend: {
+                    data: ['数量'],
+                    top: 'bottom',
+                    textStyle: {
+                        color: '#333'
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: ['胜场', '平局', '负场', '总积分'],
+                    axisLabel: {
+                        color: '#666'
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: {
+                        color: '#666'
+                    }
+                },
+                series: [{
+                    name: '数量',
+                    type: 'bar',
+                    data: [8, 2, 1, 26],
+                    itemStyle: {
+                        color: function(params) {
+                            var colorList = ['#4CAF50', '#FFC107', '#F44336', '#2196F3']; // 胜、平、负、积分
+                            return colorList[params.dataIndex];
+                        }
+                    },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: '{c}',
+                        color: '#333'
+                    }
+                }]
+            };
+
+            myChart.setOption(option);
+
+            // 自适应窗口大小
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        </script>
+    </div>
+</body>
+</html>
+```

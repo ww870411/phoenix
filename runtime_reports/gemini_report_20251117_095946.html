@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-t">
+    <title>阿森纳 2025-2026 赛季表现报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 960px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #efefef;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .header img {
+            max-width: 100px;
+            height: auto;
+        }
+        .header h1 {
+            color: #d00007;
+            margin: 10px 0;
+        }
+        h2 {
+            color: #023474;
+            border-bottom: 1px solid #efefef;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #023474;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #ddd;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #efefef;
+            font-size: 0.9em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/1200px-Arsenal_FC.svg.png" alt="Arsenal FC Logo">
+            <h1>阿森纳足球俱乐部 2025-2026 赛季中期报告</h1>
+            <p><strong>截至 2025年11月17日</strong></p>
+        </div>
+
+        <section id="overview">
+            <h2>赛季概览</h2>
+            <p>截至目前，阿森纳在2025-2026赛季的英超联赛中表现出色，位居积分榜前列。 以下是球队在本赛季英超联赛中的核心数据统计：</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>统计项目</th>
+                        <th>数据</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>联赛排名</td>
+                        <td>第 1 名</td>
+                    </tr>
+                    <tr>
+                        <td>已赛场次</td>
+                        <td>11 场</td>
+                    </tr>
+                    <tr>
+                        <td>战绩 (胜/平/负)</td>
+                        <td>8 / 2 / 1</td>
+                    </tr>
+                    <tr>
+                        <td>积分</td>
+                        <td>26 分</td>
+                    </tr>
+                    <tr>
+                        <td>进球数</td>
+                        <td>20 球</td>
+                    </tr>
+                    <tr>
+                        <td>失球数</td>
+                        <td>5 球</td>
+                    </tr>
+                    <tr>
+                        <td>净胜球</td>
+                        <td>15 球</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="performance-charts">
+            <h2>数据图表分析</h2>
+            
+            <h3>比赛结果分布</h3>
+            <div id="matchResultChart" class="chart-container"></div>
+            
+            <h3>球队联赛射手榜</h3>
+            <div id="topScorersChart" class="chart-container"></div>
+        </section>
+
+        <div class="footer">
+            <p>报告生成时间：2025年11月17日。数据源自公开足球统计网站。</p>
+        </div>
+    </div>
+
+    <script>
+        // 比赛结果分布 - 饼图
+        var matchResultChart = echarts.init(document.getElementById('matchResultChart'));
+        var matchResultOption = {
+            title: {
+                text: '英超联赛战绩分布',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: {c} ({d}%)'
+            },
+            legend: {
+                orient: 'vertical',
+                left: 'left',
+            },
+            series: [
+                {
+                    name: '比赛结果',
+                    type: 'pie',
+                    radius: '50%',
+                    data: [
+                        {value: 8, name: '胜利'},
+                        {value: 2, name: '平局'},
+                        {value: 1, name: '失利'}
+                    ],
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }
+            ]
+        };
+        matchResultChart.setOption(matchResultOption);
+
+        // 球队射手榜 - 柱状图
+        var topScorersChart = echarts.init(document.getElementById('topScorersChart'));
+        var topScorersOption = {
+            title: {
+                text: '队内主要射手 (英超)',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'shadow'
+                }
+            },
+            xAxis: {
+                type: 'category',
+                data: ['维克托·哲凯赖什', '布卡约·萨卡', '莱昂德罗·特罗萨德', '德克兰·赖斯', '朱利安·廷贝尔', '马丁·苏比门迪'],
+                axisLabel: {
+                    interval: 0,
+                    rotate: 30
+                }
+            },
+            yAxis: {
+                type: 'value',
+                name: '进球数'
+            },
+            series: [{
+                name: '进球数',
+                type: 'bar',
+                data:, // 数据来源于搜索结果
+                barWidth: '60%',
+                itemStyle: {
+                    color: '#d00007'
+                }
+            }]
+        };
+        topScorersChart.setOption(topScorersOption);
+
+        // ECharts 响应式调整
+        window.addEventListener('resize', function () {
+            matchResultChart.resize();
+            topScorersChart.resize();
+        });
+    </script>
+
+</body>
+</html>
