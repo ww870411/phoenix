@@ -20,20 +20,19 @@
           <div class="form-grid">
             <div class="form-panel form-panel--compact">
               <div class="panel-header">
-                <h3>单位选择（单选）</h3>
-                <span class="panel-hint">共 {{ unitOptions.length }} 个可选单位</span>
+                <h3>单位选择（多选）</h3>
+                <span class="panel-hint">已选 {{ selectedUnits.length }} / {{ unitOptions.length }}</span>
               </div>
               <div class="chip-group">
                 <label
                   v-for="unit in unitOptions"
                   :key="unit.value"
-                  class="chip radio"
+                  class="chip checkbox"
                 >
                   <input
-                    type="radio"
-                    name="unit"
+                    type="checkbox"
                     :value="unit.value"
-                    v-model="selectedUnit"
+                    v-model="selectedUnits"
                   />
                   <span>{{ unit.label }}</span>
                 </label>
@@ -192,14 +191,14 @@
                 </template>
               </template>
               <template v-else>
-                单位：{{ unitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
+                单位：{{ activeUnitLabel }} ｜ 指标数：{{ selectedMetrics.size }}
               </template>
             </p>
           </div>
           <button
             class="btn ghost"
             type="button"
-            :disabled="!previewRows.length || queryLoading"
+            :disabled="!resultUnitKeys.length || queryLoading"
             @click="downloadExcel"
           >
             下载 Excel
@@ -208,9 +207,29 @@
 
         <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
         <div v-else-if="!previewRows.length" class="page-state muted">
-          请选择单位、指标与日期后点击“生成分析结果”，即可在此查看组合预览。
+          <template v-if="resultUnitKeys.length">
+            当前单位暂无可显示的数据，请尝试切换其它单位或调整指标。
+          </template>
+          <template v-else>
+            请选择单位、指标与日期后点击“生成分析结果”，即可在此查看组合预览。
+          </template>
         </div>
         <div v-else>
+          <div v-if="resultUnitKeys.length > 1" class="unit-switch">
+            <span class="unit-switch__label">切换单位：</span>
+            <div class="unit-switch__chips">
+              <button
+                v-for="unitKey in resultUnitKeys"
+                :key="`result-unit-${unitKey}`"
+                type="button"
+                class="unit-toggle"
+                :class="{ active: activeUnit === unitKey }"
+                @click="handleSwitchUnit(unitKey)"
+              >
+                {{ resolveUnitLabel(unitKey) }}
+              </button>
+            </div>
+          </div>
           <div class="info-banner" v-if="infoBanner">{{ infoBanner }}</div>
           <ul v-if="queryWarnings.length" class="warning-list">
             <li v-for="(warning, idx) in queryWarnings" :key="`warn-${idx}`">
@@ -377,7 +396,9 @@ const metricDecimalsMap = computed(() => schema.value?.metric_decimals || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
 const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
 
-const selectedUnit = ref('')
+const selectedUnits = ref([])
+const activeUnit = ref('')
+const unitResults = ref({})
 const selectedMetrics = ref(new Set())
 const analysisMode = ref('daily')
 const analysisModes = computed(() => {
@@ -412,7 +433,12 @@ const shortConfig = computed(() => {
   return idx >= 0 ? pageConfig.value.slice(idx + 1) : pageConfig.value
 })
 
-const unitLabel = computed(() => unitDict.value[selectedUnit.value] || selectedUnit.value || '—')
+function resolveUnitLabel(unitKey) {
+  if (!unitKey) return '—'
+  return unitDict.value[unitKey] || unitKey
+}
+
+const activeUnitLabel = computed(() => resolveUnitLabel(activeUnit.value || selectedUnits.value[0] || ''))
 const analysisModeLabel = computed(() => {
   const found = analysisModes.value.find((item) => item.value === analysisMode.value)
   return found?.label || (analysisMode.value === 'daily' ? '单日数据' : '累计数据')
@@ -431,8 +457,8 @@ const unitViewNames = computed(() => {
   })
   return names
 })
-const activeViewName = computed(() => {
-  const label = unitDict.value[selectedUnit.value] || selectedUnit.value
+function resolveViewNameForUnit(unitKey) {
+  const label = resolveUnitLabel(unitKey)
   const modeLabel = viewLabelMap[analysisMode.value] || analysisModeLabel.value
   const target = viewMapping.value[modeLabel]
   if (target && typeof target === 'object') {
@@ -443,7 +469,10 @@ const activeViewName = computed(() => {
     }
   }
   return analysisMode.value === 'daily' ? 'company_daily_analysis' : 'company_sum_analysis'
-})
+}
+
+const activeViewName = computed(() => resolveViewNameForUnit(activeUnit.value || selectedUnits.value[0] || ''))
+const resultUnitKeys = computed(() => Object.keys(unitResults.value))
 
 const resolvedMetricGroups = computed(() => {
   const activeView = activeViewName.value
@@ -485,7 +514,9 @@ async function loadSchema() {
     }
     schema.value = payload
     const availableUnits = resolveUnitOptions(payload)
-    selectedUnit.value = availableUnits?.[0]?.value || ''
+    const defaultUnit = availableUnits?.[0]?.value || ''
+    selectedUnits.value = defaultUnit ? [defaultUnit] : []
+    activeUnit.value = defaultUnit || ''
     selectedMetrics.value = new Set()
     analysisMode.value = payload.analysis_modes?.[0]?.value || 'daily'
     await ensureDefaultBizDate()
@@ -556,10 +587,20 @@ function clearPreviewState() {
   queryWarnings.value = []
   lastQueryMeta.value = null
   timelineGrid.value = { columns: [], rows: [] }
+  unitResults.value = {}
+  if (!selectedUnits.value.includes(activeUnit.value)) {
+    activeUnit.value = selectedUnits.value[0] || ''
+  }
 }
 
 function resetSelections() {
-  if (unitOptions.value.length) selectedUnit.value = unitOptions.value[0].value
+  if (unitOptions.value.length) {
+    selectedUnits.value = [unitOptions.value[0].value]
+    activeUnit.value = selectedUnits.value[0]
+  } else {
+    selectedUnits.value = []
+    activeUnit.value = ''
+  }
   selectedMetrics.value = new Set()
   applyDateDefaults(schema.value?.date_defaults || {})
   formError.value = ''
@@ -568,8 +609,9 @@ function resetSelections() {
 
 async function runAnalysis() {
   formError.value = ''
-  if (!selectedUnit.value) {
-    formError.value = '请选择单位。'
+  const targetUnits = Array.from(new Set(selectedUnits.value.filter((unit) => unit && typeof unit === 'string')))
+  if (!targetUnits.length) {
+    formError.value = '请选择至少一个单位。'
     return
   }
   if (!selectedMetrics.value.size) {
@@ -580,55 +622,116 @@ async function runAnalysis() {
     formError.value = '请选择起止日期。'
     return
   }
-  const payload = {
-    unit_key: selectedUnit.value,
-    metrics: Array.from(selectedMetrics.value),
-    analysis_mode: analysisMode.value,
-    start_date: startDate.value,
-    end_date: endDate.value,
-  }
   clearPreviewState()
   queryLoading.value = true
   try {
-    const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
-    if (!response?.ok) {
-      throw new Error(response?.message || '分析查询失败')
+    const runMetrics = Array.from(selectedMetrics.value)
+    const requestBase = {
+      metrics: runMetrics,
+      analysis_mode: analysisMode.value,
+      start_date: startDate.value,
+      end_date: endDate.value,
     }
-    const decoratedRows = Array.isArray(response.rows)
-      ? response.rows.map((row) => ({
-          ...row,
-          decimals: metricDecimalsMap.value?.[row.key] ?? 2,
-        }))
-      : []
-    previewRows.value = decoratedRows
-    lastQueryMeta.value = {
-      analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
-      view: response.view || activeViewName.value,
-      start_date: response.start_date || startDate.value,
-      end_date: response.end_date || endDate.value,
-      unit_label: response.unit_label || unitLabel.value,
+    const aggregatedResults = {}
+    const errors = []
+    for (const unitKey of targetUnits) {
+      const payload = { ...requestBase, unit_key: unitKey }
+      try {
+        const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
+        if (!response?.ok) {
+          throw new Error(response?.message || '分析查询失败')
+        }
+        const decoratedRows = Array.isArray(response.rows)
+          ? response.rows.map((row) => ({
+              ...row,
+              decimals: metricDecimalsMap.value?.[row.key] ?? 2,
+            }))
+          : []
+        const meta = {
+          unit_key: unitKey,
+          unit_label: response.unit_label || resolveUnitLabel(unitKey),
+          analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
+          view: response.view || resolveViewNameForUnit(unitKey),
+          start_date: response.start_date || startDate.value,
+          end_date: response.end_date || endDate.value,
+        }
+        aggregatedResults[unitKey] = {
+          rows: decoratedRows,
+          warnings: Array.isArray(response.warnings) ? response.warnings : [],
+          timeline: buildTimelineGrid(decoratedRows),
+          infoBanner: buildInfoBannerFromMeta(meta),
+          meta,
+        }
+      } catch (err) {
+        errors.push(`${resolveUnitLabel(unitKey)}：${err instanceof Error ? err.message : String(err)}`)
+      }
     }
-    queryWarnings.value = Array.isArray(response.warnings) ? response.warnings : []
-    timelineGrid.value = buildTimelineGrid(previewRows.value)
-    const dateRange =
-      lastQueryMeta.value.start_date && lastQueryMeta.value.end_date
-        ? lastQueryMeta.value.start_date === lastQueryMeta.value.end_date
-          ? lastQueryMeta.value.start_date
-          : `${lastQueryMeta.value.start_date} ~ ${lastQueryMeta.value.end_date}`
-        : lastQueryMeta.value.start_date || lastQueryMeta.value.end_date || ''
-    infoBanner.value = [
-      lastQueryMeta.value.analysis_mode_label,
-      `单位：${lastQueryMeta.value.unit_label}`,
-      dateRange ? `日期：${dateRange}` : null,
-    ]
-      .filter(Boolean)
-      .join(' ｜ ')
+    const populatedKeys = Object.keys(aggregatedResults)
+    if (!populatedKeys.length) {
+      throw new Error(errors.join('；') || '分析查询失败')
+    }
+    unitResults.value = aggregatedResults
+    const nextActiveCandidate =
+      activeUnit.value && aggregatedResults[activeUnit.value] && targetUnits.includes(activeUnit.value)
+        ? activeUnit.value
+        : targetUnits.find((unit) => aggregatedResults[unit]) || ''
+    applyActiveUnitResult(nextActiveCandidate || '')
+    formError.value = errors.length ? errors.join('；') : ''
   } catch (err) {
-    formError.value = err?.message || '分析查询失败'
+    formError.value = err instanceof Error ? err.message : '分析查询失败'
     clearPreviewState()
   } finally {
     queryLoading.value = false
   }
+}
+
+function buildInfoBannerFromMeta(meta) {
+  if (!meta) return ''
+  const dateRange =
+    meta.start_date && meta.end_date
+      ? meta.start_date === meta.end_date
+        ? meta.start_date
+        : `${meta.start_date} ~ ${meta.end_date}`
+      : meta.start_date || meta.end_date || ''
+  return [
+    meta.analysis_mode_label,
+    `单位：${meta.unit_label}`,
+    dateRange ? `日期：${dateRange}` : null,
+  ]
+    .filter(Boolean)
+    .join(' ｜ ')
+}
+
+function applyActiveUnitResult(unitKey) {
+  if (!unitKey || !unitResults.value[unitKey]) {
+    previewRows.value = []
+    infoBanner.value = ''
+    queryWarnings.value = []
+    lastQueryMeta.value = null
+    timelineGrid.value = { columns: [], rows: [] }
+    activeUnit.value = ''
+    return
+  }
+  const result = unitResults.value[unitKey]
+  previewRows.value = result.rows
+  infoBanner.value = result.infoBanner
+  queryWarnings.value = result.warnings
+  lastQueryMeta.value = result.meta
+  timelineGrid.value = result.timeline
+  activeUnit.value = unitKey
+}
+
+function ensureActiveUnitFromSelection() {
+  if (activeUnit.value && selectedUnits.value.includes(activeUnit.value)) {
+    return
+  }
+  activeUnit.value = selectedUnits.value[0] || ''
+}
+
+function handleSwitchUnit(unitKey) {
+  if (!unitKey || unitKey === activeUnit.value) return
+  if (!unitResults.value[unitKey]) return
+  applyActiveUnitResult(unitKey)
 }
 
 function formatNumber(value, decimals = 2) {
@@ -794,9 +897,10 @@ function formatExportNumber(value, decimals = 2) {
   return Number(num.toFixed(decimals))
 }
 
-function buildSummarySheetData() {
+function buildSummarySheetData(rows) {
   const header = ['指标', '本期', '同期', '同比', '单位', '类型']
-  const rows = previewRows.value.map((row) => [
+  const source = Array.isArray(rows) ? rows : []
+  const mapped = source.map((row) => [
     row.label,
     formatExportNumber(resolveValue(row, 'current'), row.decimals || 2),
     formatExportNumber(resolveValue(row, 'peer'), row.decimals || 2),
@@ -804,43 +908,84 @@ function buildSummarySheetData() {
     row.unit || '',
     row.value_type || '',
   ])
-  return [header, ...rows]
+  return [header, ...mapped]
 }
 
-function buildTimelineSheetData() {
-  if (!hasTimelineGrid.value) return null
-  const columns = timelineGrid.value.columns || []
+function buildTimelineSheetData(timeline) {
+  if (!timeline || !Array.isArray(timeline.columns) || !timeline.columns.length) return null
+  const columns = timeline.columns
   const header = columns.map((col) => col.name || col.prop)
-  const rows = (timelineGrid.value.rows || []).map((record) =>
+  const rows = (timeline.rows || []).map((record) =>
     columns.map((col) => extractTimelineCellText(record[col.prop])),
   )
   return [header, ...rows]
 }
 
-function buildMetaSheetData() {
+function buildMetaSheetData(meta) {
   const data = [
     ['项目', pageDisplayName.value],
-    ['单位', unitLabel.value],
-    ['分析模式', analysisModeLabel.value],
-    ['日期范围', lastQueryMeta.value ? `${lastQueryMeta.value.start_date} ~ ${lastQueryMeta.value.end_date}` : `${startDate.value} ~ ${endDate.value}`],
+    ['单位', meta?.unit_label || activeUnitLabel.value],
+    ['分析模式', meta?.analysis_mode_label || analysisModeLabel.value],
+    [
+      '日期范围',
+      meta && meta.start_date && meta.end_date ? `${meta.start_date} ~ ${meta.end_date}` : `${startDate.value} ~ ${endDate.value}`,
+    ],
     ['生成时间', new Date().toLocaleString()],
     ['指标数量', selectedMetrics.value.size],
   ]
   return data
 }
 
-function downloadExcel() {
-  if (!previewRows.value.length) return
-  const wb = XLSX.utils.book_new()
-  const summarySheet = XLSX.utils.aoa_to_sheet(buildSummarySheetData())
-  XLSX.utils.book_append_sheet(wb, summarySheet, '汇总')
-  const timelineData = buildTimelineSheetData()
-  if (timelineData) {
-    const timelineSheet = XLSX.utils.aoa_to_sheet(timelineData)
-    XLSX.utils.book_append_sheet(wb, timelineSheet, '区间明细')
+function buildUnitSheetData(result) {
+  const sheetData = []
+  const summary = buildSummarySheetData(result?.rows)
+  summary.forEach((row) => sheetData.push(row))
+  const timelineData = buildTimelineSheetData(result?.timeline)
+  if (timelineData && timelineData.length) {
+    sheetData.push([])
+    sheetData.push(['区间明细'])
+    timelineData.forEach((row) => sheetData.push(row))
   }
-  const metaSheet = XLSX.utils.aoa_to_sheet(buildMetaSheetData())
-  XLSX.utils.book_append_sheet(wb, metaSheet, '查询信息')
+  sheetData.push([])
+  sheetData.push(['查询信息'])
+  buildMetaSheetData(result?.meta).forEach((row) => sheetData.push(row))
+  return sheetData
+}
+
+function sanitizeSheetName(name) {
+  if (!name) return 'Sheet'
+  return name.replace(/[\\/?*\\[\\]:]/g, '_').slice(0, 31) || 'Sheet'
+}
+
+function resolveSheetName(baseName, usedNames) {
+  const sanitized = sanitizeSheetName(baseName)
+  if (!usedNames.has(sanitized)) {
+    usedNames.add(sanitized)
+    return sanitized
+  }
+  let counter = 2
+  while (true) {
+    const candidate = sanitizeSheetName(`${sanitized}_${counter}`)
+    if (!usedNames.has(candidate)) {
+      usedNames.add(candidate)
+      return candidate
+    }
+    counter += 1
+  }
+}
+
+function downloadExcel() {
+  if (!resultUnitKeys.value.length) return
+  const wb = XLSX.utils.book_new()
+  const usedSheetNames = new Set()
+  resultUnitKeys.value.forEach((unitKey) => {
+    const result = unitResults.value[unitKey]
+    if (!result) return
+    const unitName = result.meta?.unit_label || resolveUnitLabel(unitKey)
+    const sheet = XLSX.utils.aoa_to_sheet(buildUnitSheetData(result))
+    const sheetName = resolveSheetName(unitName, usedSheetNames)
+    XLSX.utils.book_append_sheet(wb, sheet, sheetName)
+  })
   const filename = `数据分析_${analysisMode.value === 'range' ? '累计' : '单日'}_${Date.now()}.xlsx`
   XLSX.writeFile(wb, filename)
 }
@@ -883,9 +1028,14 @@ watch(
   },
 )
 
-watch(selectedUnit, () => {
-  clearPreviewState()
-})
+watch(
+  selectedUnits,
+  () => {
+    ensureActiveUnitFromSelection()
+    clearPreviewState()
+  },
+  { deep: true },
+)
 
 watch(
   () => selectedMetrics.value,
@@ -1193,6 +1343,46 @@ onMounted(() => {
   padding-left: 18px;
   color: var(--warning-600, #b45309);
   font-size: 13px;
+}
+
+.unit-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.unit-switch__label {
+  color: var(--neutral-500);
+  font-size: 14px;
+}
+
+.unit-switch__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.unit-toggle {
+  border: 1px solid var(--neutral-200);
+  background: var(--neutral-50);
+  color: var(--neutral-700);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.unit-toggle:hover {
+  border-color: var(--primary-300);
+  color: var(--primary-700);
+}
+
+.unit-toggle.active {
+  background: var(--primary-50);
+  border-color: var(--primary-400);
+  color: var(--primary-700);
+  font-weight: 600;
 }
 
 .timeline-grid-wrapper {

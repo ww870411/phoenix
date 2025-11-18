@@ -52,6 +52,23 @@
 1. 将 `backend_data/date.json` 的 `set_biz_date` 调整为指定日期，重新运行前端，首次进入数据分析页应看到日期选择器默认显示该日期。
 2. 清空 `date_defaults`（若有）并切换分析模式，确认 `重置` 按钮也会回落到同一业务日期。
 
+## 2025-12-10（数据分析支持多单位批量查询/导出）
+
+前置说明：
+- Serena 无法对大型 `.vue` 组件多处并行修改，本次按照 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 连续更新 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`、`frontend/README.md`、`backend/README.md`、本文；如需回滚，恢复上述文件即可。
+
+本次动作：
+- 单位选择改为多选芯片，`runAnalysis` 会按所选单位逐一调用 `/data_analysis/query`，结果缓存在 `unitResults` 中并新增“切换单位”标签，任一时刻只展示当前单位的分析预览/区间明细。
+- 导出 Excel 时，每个单位生成独立 Sheet，Sheet 内容包含该单位的汇总、区间明细及查询信息三个区块；Sheet 名自动去重，满足“一个单位一个标签”的要求。
+- README（前后端）记录该能力，指出后端无需新增 batch 接口且失败时会标注具体单位；Serena 记忆亦同步。
+
+影响范围与回滚：
+- 仅前端组件与文档；后端接口、权限、配置均未改动。回滚时恢复上述文件即可恢复单单位行为。
+
+验证建议：
+1. 在页面勾选多个单位并点击“生成分析结果”，确认结果区域出现单位切换标签，切换时预览/逐日数据均对应当前单位。
+2. 点击“下载 Excel”，检查导出文件中每个单位都有独立 Sheet，Sheet 内依次包含汇总表、区间明细（若有）及查询信息。
+
 ## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
 
 前置说明：

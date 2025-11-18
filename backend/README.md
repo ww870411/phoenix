@@ -17,6 +17,11 @@
 - 前端 `DataAnalysisView.vue` 现在会在加载 schema 前调用已存在的 `GET /projects/{project_key}/dashboard/date` 接口，并将 `start_date/end_date` 默认为 `backend_data/date.json` 中的 `set_biz_date`（若 schema 未提供专属默认值）。后端接口与 `date.json` 维护方式均保持原状，本条仅记录该接口已被数据分析页面复用。
 - 若未来调整 `date.json` 结构或接口路径，需要同步通知前端，避免默认日期回退到本地时间。
 
+## 会话小结（2025-12-10 数据分析支持多单位批量查询/导出）
+
+- 多单位需求完全由前端批量调用现有 `POST /projects/{project_key}/data_analysis/query` 实现，后端 service/API 无需新增 batch 接口。前端会按所选单位逐一请求，并在结果区提供“单位标签”切换展示，确保各单位的数据互不混合。
+- Excel 导出时，每个单位生成独立 Sheet（包含该单位的汇总、区间明细、查询信息），若某单位查询失败，前端会在错误提示中标注该单位，其它单位的结果仍可正常显示/导出。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。

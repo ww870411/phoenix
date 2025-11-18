@@ -17,6 +17,12 @@
 - `DataAnalysisView.vue` 加载 schema 前会调用 `getDashboardBizDate()`（即 `GET /projects/daily_report_25_26/dashboard/date`），将 `start_date/end_date` 默认值优先设置为 `backend_data/date.json` 的 `set_biz_date`，未命中时再退回当日。这样在 D 端未切换日期时能与仪表盘保持同一业务日期。
 - `resetSelections` 及日期默认逻辑也会复用这一配置，后续若需更改默认日期，只需更新 `date.json` 或相应接口。
 
+## 会话小结（2025-12-10 数据分析支持多单位批量查询/导出）
+
+- 单位选择改为多选芯片，点击“生成分析结果”会对所选单位逐一调用 `/data_analysis/query` 并缓存结果，在结果区域可通过“切换单位”标签切换查看，UI 中的指标/逐日明细始终只展示当前选中的单位。
+- 下载 Excel 时，每个单位都会生成独立 Sheet，内容包含“汇总”“区间明细”“查询信息”三部分（按顺序垂直排布），并自动去重 Sheet 名，满足“一个单位对应一个标签”的需求。
+- 如果部分单位查询失败，错误提示会标注具体单位名称，其他单位的结果仍可正常查看/导出，后端接口无需改动。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 现已改用 `google-genai` 客户端并启用 Google Search Grounding，可作为前端验证“带搜索引用的 AI 报告”交互的样例；若输入包含“html报告”，模型会输出完整 HTML 并尝试在浏览器打开，方便直接查看效果。
