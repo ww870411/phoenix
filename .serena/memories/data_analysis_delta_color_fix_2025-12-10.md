@@ -1,0 +1,1 @@
+2025-12-10：修复数据分析页面（DataAnalysisView.vue）同比颜色映射，`delta-up` 改为红色、`delta-down` 改为绿色，与 timelineDeltaCellTemplate 的 getDeltaColor 输出保持一致，防止同比结果颜色语义颠倒。

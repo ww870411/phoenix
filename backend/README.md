@@ -7,6 +7,11 @@
 - `backend_data/auth/permissions.json` 重新为 `Group_admin` 注入 `data_analysis` page_access，维持 `Global_admin` 全量权限不变，其它角色（ZhuChengQu_admin/Unit_admin/unit_filler/Group_viewer）仍无法看到该页面。FastAPI 层 `permissions` 响应会把该 page_key 下发给 Group_admin，前端 `PageSelectView` 将在卡片列表中显示“数据分析页面”入口。
 - 权限控制依旧由 `page_access` 与 `sheet_rules` 组合完成，新增 page_access 不会改变审批/填报等权限矩阵。若需再次收紧，可将 `data_analysis` 从目标角色的数组中移除并通知前端刷新 session。
 
+## 会话小结（2025-12-10 数据分析同比颜色纠正）
+
+- 本次问题由前端同比颜色映射导致，FastAPI 与数据计算逻辑无改动，接口依旧按照 `delta >= 0` 输出为正、`delta < 0` 输出为负。为保持前后端协同，这里留痕：前端 `DataAnalysisView.vue` 更新了 `.delta-up/.delta-down` 的颜色定义，使同比增加显示 `danger`（红色），同比下降显示 `success`（绿色）。
+- 若后续在其它客户端/导出流程复用同比字段，同样应遵循“同比增加=红、同比下降=绿”的约定，避免出现语义反转。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。

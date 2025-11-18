@@ -19,6 +19,22 @@
 1. 以 Group_admin 账号登录，进入 `/projects/.../pages` 列表，确认“数据分析页面”卡片出现并可跳转至 `/data-analysis`。
 2. 使用其他角色（如 ZhuChengQu_admin）登录，验证卡片仍不可见，确保权限未扩大。
 
+## 2025-12-10（数据分析同比颜色纠正）
+
+前置说明：
+- Serena 对 `.vue` 样式块缺少符号级写入，本次继续按 3.9 矩阵使用 `desktop-commander::read_file` + `apply_patch` 修改前端组件，同时同步 README 记录；回滚时恢复 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 及两份 README 即可。
+
+本次动作：
+- 将数据分析“分析预览”表格的同比颜色映射修正为：同比增加显示红色（danger），同比下降显示绿色（success），与逐日明细 `getDeltaColor` 逻辑一致。
+- README（后端/前端）新增会话小结，明确颜色语义约定，避免再次反转。
+
+影响范围与回滚：
+- 仅影响前端显示颜色，接口与数据计算逻辑不变；回滚只需恢复上述文件。
+
+验证建议：
+1. 选择任意单位、日期与指标，点击“生成分析结果”，在“分析预览”里找到同比列，确认正值为红色、负值为绿色。
+2. 在“区间明细”逐日表格中检查同比列颜色，与预览保持一致（正红负绿）。
+
 ## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
 
 前置说明：

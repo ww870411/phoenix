@@ -7,6 +7,11 @@
 - 登录态中 `Group_admin` 角色现在同样会在 `permissions.page_access` 中收到 `data_analysis`，`PageSelectView.vue` 因此会为集团管理员展示“数据分析页面”入口，导航逻辑沿用已有 `normalizedKey === 'data_analysis'` 分支。
 - 其他角色（ZhuChengQu_admin/Unit_admin/unit_filler/Group_viewer）依旧无法看见该卡片；如需临时排查，可切换到 `Global_admin` 或 `Group_admin` 账号登录。
 
+## 会话小结（2025-12-10 数据分析同比颜色纠正）
+
+- `pages/DataAnalysisView.vue` 中“分析预览”表格的 `.delta-up/.delta-down` 色彩定义调整为“同比增加=红、同比下降=绿”，与逐日区间明细中 `timelineDeltaCellTemplate` 的 `getDeltaColor` 输出保持一致，避免颜色语义反转。
+- 不涉及 API 调整；若后续新增其它同比展示模块，复用同一 CSS class 即可获得正确的颜色映射。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 现已改用 `google-genai` 客户端并启用 Google Search Grounding，可作为前端验证“带搜索引用的 AI 报告”交互的样例；若输入包含“html报告”，模型会输出完整 HTML 并尝试在浏览器打开，方便直接查看效果。

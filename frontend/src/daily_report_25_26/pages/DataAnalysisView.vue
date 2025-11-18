@@ -1217,11 +1217,11 @@ onMounted(() => {
 }
 
 .delta-up {
-  color: var(--success-600, #0f9d58);
+  color: var(--danger-600, #d93025);
 }
 
 .delta-down {
-  color: var(--danger-600, #d93025);
+  color: var(--success-600, #0f9d58);
 }
 
 .page-state {
