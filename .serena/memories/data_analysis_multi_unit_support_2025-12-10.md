@@ -1,1 +1,2 @@
 2025-12-10：DataAnalysisView.vue 支持多单位批量查询/导出：单位选择改为多选芯片，runAnalysis 会依次调用 /data_analysis/query 缓存结果，结果区通过“切换单位”标签查看单个单位；导出 Excel 为每个单位生成独立 Sheet（含汇总/区间/查询信息）。后端接口保持不变。
+顺序：单位芯片改为手动处理勾选，勾选顺序决定结果展示及导出 sheet 顺序；unit toggle 记录顺序并据此渲染标签和 Excel。

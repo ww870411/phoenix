@@ -31,10 +31,15 @@
                 >
                   <input
                     type="checkbox"
-                    :value="unit.value"
-                    v-model="selectedUnits"
+                    :checked="selectedUnits.includes(unit.value)"
+                    @change="handleUnitSelection(unit.value, $event.target.checked)"
                   />
-                  <span>{{ unit.label }}</span>
+                  <span class="chip-label">
+                    <span v-if="getUnitSelectionOrder(unit.value)" class="chip-order">
+                      {{ getUnitSelectionOrder(unit.value) }}
+                    </span>
+                    <span>{{ unit.label }}</span>
+                  </span>
                 </label>
               </div>
             </div>
@@ -140,7 +145,12 @@
                           :disabled="group.disabled || queryLoading"
                           @change="toggleMetric(metric.value)"
                         />
-                        <span>{{ metric.label }}</span>
+                        <span class="chip-label">
+                          <span v-if="getMetricSelectionOrder(metric.value)" class="chip-order">
+                            {{ getMetricSelectionOrder(metric.value) }}
+                          </span>
+                          <span>{{ metric.label }}</span>
+                        </span>
                       </label>
                     </div>
                   </div>
@@ -472,7 +482,11 @@ function resolveViewNameForUnit(unitKey) {
 }
 
 const activeViewName = computed(() => resolveViewNameForUnit(activeUnit.value || selectedUnits.value[0] || ''))
-const resultUnitKeys = computed(() => Object.keys(unitResults.value))
+const resultUnitKeys = computed(() => {
+  const ordered = selectedUnits.value.filter((key) => unitResults.value[key])
+  const leftovers = Object.keys(unitResults.value).filter((key) => !ordered.includes(key))
+  return [...ordered, ...leftovers]
+})
 
 const resolvedMetricGroups = computed(() => {
   const activeView = activeViewName.value
@@ -732,6 +746,30 @@ function handleSwitchUnit(unitKey) {
   if (!unitKey || unitKey === activeUnit.value) return
   if (!unitResults.value[unitKey]) return
   applyActiveUnitResult(unitKey)
+}
+
+function handleUnitSelection(unitKey, checked) {
+  const next = [...selectedUnits.value]
+  const exists = next.indexOf(unitKey)
+  if (checked && exists === -1) {
+    next.push(unitKey)
+  } else if (!checked && exists !== -1) {
+    next.splice(exists, 1)
+  }
+  selectedUnits.value = next
+}
+
+function getUnitSelectionOrder(unitKey) {
+  const index = selectedUnits.value.indexOf(unitKey)
+  if (index === -1) return ''
+  return String(index + 1)
+}
+
+function getMetricSelectionOrder(metricKey) {
+  const order = Array.from(selectedMetrics.value)
+  const index = order.indexOf(metricKey)
+  if (index === -1) return ''
+  return String(index + 1)
 }
 
 function formatNumber(value, decimals = 2) {
@@ -1178,6 +1216,25 @@ onMounted(() => {
 
 .chip.checkbox {
   border-radius: var(--radius);
+}
+
+.chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-order {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--primary-100);
 }
 
 .chip.compact {
