@@ -35,6 +35,23 @@
 1. 选择任意单位、日期与指标，点击“生成分析结果”，在“分析预览”里找到同比列，确认正值为红色、负值为绿色。
 2. 在“区间明细”逐日表格中检查同比列颜色，与预览保持一致（正红负绿）。
 
+## 2025-12-10（数据分析默认日期读取 date.json）
+
+前置说明：
+- Serena 暂不支持 `.vue` 逻辑区块的符号写入，本次依然通过 `desktop-commander::read_file` + `apply_patch` 调整 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`，并更新 README；若要回滚，恢复该组件与 README 的上一版本即可。
+
+本次动作：
+- 数据分析页面引入 `getDashboardBizDate()`，在加载 schema 之前读取 `backend_data/date.json` 的 `set_biz_date` 作为 `start_date/end_date` 的默认值，若 schema 自带默认值或接口失败则回退到组件原有逻辑。
+- README（前后端）新增说明，记录数据分析页面复用了 `/dashboard/date` 接口，确保默认展示日期受运营配置统一管理。
+- 修复 `defaultBizDate` 重复声明导致的构建报错。
+
+影响范围与回滚：
+- 仅前端默认日期逻辑变更，后端接口无改动；回滚时恢复 `DataAnalysisView.vue` 即可。
+
+验证建议：
+1. 将 `backend_data/date.json` 的 `set_biz_date` 调整为指定日期，重新运行前端，首次进入数据分析页应看到日期选择器默认显示该日期。
+2. 清空 `date_defaults`（若有）并切换分析模式，确认 `重置` 按钮也会回落到同一业务日期。
+
 ## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
 
 前置说明：

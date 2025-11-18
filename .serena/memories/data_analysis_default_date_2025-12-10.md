@@ -1,0 +1,2 @@
+2025-12-10：DataAnalysisView.vue 现在会调用 getDashboardBizDate (后端 /dashboard/date API) 读取 backend_data/date.json 的 set_biz_date，然后将 start_date/end_date 默认值优先设置为该日期；若接口失效或 Schema 提供默认值则按原逻辑回退。
+修正：删除 DataAnalysisView.vue 中重复声明的 defaultBizDate，避免 Vite 构建因重复变量报错。

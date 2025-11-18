@@ -12,6 +12,11 @@
 - `pages/DataAnalysisView.vue` 中“分析预览”表格的 `.delta-up/.delta-down` 色彩定义调整为“同比增加=红、同比下降=绿”，与逐日区间明细中 `timelineDeltaCellTemplate` 的 `getDeltaColor` 输出保持一致，避免颜色语义反转。
 - 不涉及 API 调整；若后续新增其它同比展示模块，复用同一 CSS class 即可获得正确的颜色映射。
 
+## 会话小结（2025-12-10 数据分析默认日期读取 set_biz_date）
+
+- `DataAnalysisView.vue` 加载 schema 前会调用 `getDashboardBizDate()`（即 `GET /projects/daily_report_25_26/dashboard/date`），将 `start_date/end_date` 默认值优先设置为 `backend_data/date.json` 的 `set_biz_date`，未命中时再退回当日。这样在 D 端未切换日期时能与仪表盘保持同一业务日期。
+- `resetSelections` 及日期默认逻辑也会复用这一配置，后续若需更改默认日期，只需更新 `date.json` 或相应接口。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 现已改用 `google-genai` 客户端并启用 Google Search Grounding，可作为前端验证“带搜索引用的 AI 报告”交互的样例；若输入包含“html报告”，模型会输出完整 HTML 并尝试在浏览器打开，方便直接查看效果。

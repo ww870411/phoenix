@@ -290,7 +290,7 @@ import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
-import { getDataAnalysisSchema, runDataAnalysis } from '../services/api'
+import { getDataAnalysisSchema, getDashboardBizDate, runDataAnalysis } from '../services/api'
 
 const route = useRoute()
 const projectKey = computed(() => String(route.params.projectKey ?? ''))
@@ -395,6 +395,7 @@ const hasTimelineGrid = computed(
   () => analysisMode.value === 'range' && timelineGrid.value.rows.length > 0,
 )
 
+const defaultBizDate = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const previewRows = ref([])
@@ -487,6 +488,7 @@ async function loadSchema() {
     selectedUnit.value = availableUnits?.[0]?.value || ''
     selectedMetrics.value = new Set()
     analysisMode.value = payload.analysis_modes?.[0]?.value || 'daily'
+    await ensureDefaultBizDate()
     applyDateDefaults(payload.date_defaults)
     clearPreviewState()
   } catch (err) {
@@ -496,10 +498,34 @@ async function loadSchema() {
   }
 }
 
-function applyDateDefaults(defaults = {}) {
+async function loadDefaultBizDate() {
   const today = new Date().toISOString().slice(0, 10)
-  startDate.value = typeof defaults?.起始日期 === 'string' && defaults.起始日期 ? defaults.起始日期 : today
-  endDate.value = typeof defaults?.结束日期 === 'string' && defaults.结束日期 ? defaults.结束日期 : startDate.value
+  try {
+    const payload = await getDashboardBizDate(projectKey.value)
+    const fromApi =
+      typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
+    defaultBizDate.value = fromApi || today
+  } catch (err) {
+    console.warn('[data-analysis] 获取业务日期失败', err)
+    defaultBizDate.value = today
+  }
+  return defaultBizDate.value
+}
+
+async function ensureDefaultBizDate() {
+  if (defaultBizDate.value) {
+    return defaultBizDate.value
+  }
+  return loadDefaultBizDate()
+}
+
+function applyDateDefaults(defaults = {}) {
+  const fallbackDate = defaultBizDate.value || new Date().toISOString().slice(0, 10)
+  const start =
+    typeof defaults?.起始日期 === 'string' && defaults.起始日期 ? defaults.起始日期 : fallbackDate
+  startDate.value = start
+  endDate.value =
+    typeof defaults?.结束日期 === 'string' && defaults.结束日期 ? defaults.结束日期 : start
 }
 
 function toggleMetric(key) {

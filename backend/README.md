@@ -12,6 +12,11 @@
 - 本次问题由前端同比颜色映射导致，FastAPI 与数据计算逻辑无改动，接口依旧按照 `delta >= 0` 输出为正、`delta < 0` 输出为负。为保持前后端协同，这里留痕：前端 `DataAnalysisView.vue` 更新了 `.delta-up/.delta-down` 的颜色定义，使同比增加显示 `danger`（红色），同比下降显示 `success`（绿色）。
 - 若后续在其它客户端/导出流程复用同比字段，同样应遵循“同比增加=红、同比下降=绿”的约定，避免出现语义反转。
 
+## 会话小结（2025-12-10 数据分析默认日期同步 set_biz_date）
+
+- 前端 `DataAnalysisView.vue` 现在会在加载 schema 前调用已存在的 `GET /projects/{project_key}/dashboard/date` 接口，并将 `start_date/end_date` 默认为 `backend_data/date.json` 中的 `set_biz_date`（若 schema 未提供专属默认值）。后端接口与 `date.json` 维护方式均保持原状，本条仅记录该接口已被数据分析页面复用。
+- 若未来调整 `date.json` 结构或接口路径，需要同步通知前端，避免默认日期回退到本地时间。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。
