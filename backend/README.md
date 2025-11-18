@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+# 后端说明（FastAPI）
+
+## 会话小结（2025-12-10 数据分析页面开放至 Group_admin）
+
+- `backend_data/auth/permissions.json` 重新为 `Group_admin` 注入 `data_analysis` page_access，维持 `Global_admin` 全量权限不变，其它角色（ZhuChengQu_admin/Unit_admin/unit_filler/Group_viewer）仍无法看到该页面。FastAPI 层 `permissions` 响应会把该 page_key 下发给 Group_admin，前端 `PageSelectView` 将在卡片列表中显示“数据分析页面”入口。
+- 权限控制依旧由 `page_access` 与 `sheet_rules` 组合完成，新增 page_access 不会改变审批/填报等权限矩阵。若需再次收紧，可将 `data_analysis` 从目标角色的数组中移除并通知前端刷新 session。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。
@@ -8,10 +15,8 @@
 
 ## 会话小结（2025-12-09 NewAPI Gemini 兼容脚本）
 
-- 新增 `configs/ai_test_newapi.py`，改为通过 NewAPI 的 Gemini 端点（默认 https://x666.me/v1beta/models/gemini-2.5-pro:generateContent）进行多轮对话，使用 `requests` 直接访问 HTTP 接口，payload 附带 `tools: [{google_search:{}}]` 启用 Grounding；会话初始自动注入系统指令（限定模型扮演“可爱、温柔体贴、充满爱意的 JK 少女”，且禁止输出“无法生成/请复制粘贴”等免责声明），行为与原脚本一致，支持 HTML/ECharts 报告与自动打开浏览器。
-- API Key 按“环境变量 NEWAPI_API_KEY → backend_data/newapi_api_key.json → 默认密钥”顺序加载；如在后端服务中复用，可迁移到统一配置或 `.env`。
-- 该脚本仅为测试工具，未改动 FastAPI 代码；若后续要在服务端暴露 NewAPI 转发接口，可参考其请求/响应结构（Gemini generateContent 风格）及报告提示语。
-- 若部署环境尚未开通 Grounding 权限，只需将 `BASE_CONFIG` 中的 `tools` 去掉即可恢复纯生成模式；其余 API Key 与模型配置流程不变，仍按“环境变量 → backend_data/api_key.json”顺序加载。
+- `configs/ai_test_newapi.py` 再次改为 OpenAI Chat Completions 兼容范式：基址 `https://api.voct.top/v1`、模型 `grok-4-expert`，直接发送 `{model, messages}`，保留多轮对话/HTML 报告分支与浏览器打开逻辑，便于验证“OpenAI SDK 语义 + Grok 模型”。
+- API Key 仍按“环境变量 NEWAPI_API_KEY → backend_data/newapi_api_key.json → 默认密钥”顺序加载，会话历史存储 `system/user/assistant` 消息；后续若要切换回 generateContent 版本，只需调整 `BASE_URL` 和 `send_message()` payload。
 
 ## 会话小结（2025-12-08 数据分析指标补齐）
 

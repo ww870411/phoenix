@@ -2,6 +2,11 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-12-10 数据分析页面开放 Group_admin）
+
+- 登录态中 `Group_admin` 角色现在同样会在 `permissions.page_access` 中收到 `data_analysis`，`PageSelectView.vue` 因此会为集团管理员展示“数据分析页面”入口，导航逻辑沿用已有 `normalizedKey === 'data_analysis'` 分支。
+- 其他角色（ZhuChengQu_admin/Unit_admin/unit_filler/Group_viewer）依旧无法看见该卡片；如需临时排查，可切换到 `Global_admin` 或 `Group_admin` 账号登录。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 现已改用 `google-genai` 客户端并启用 Google Search Grounding，可作为前端验证“带搜索引用的 AI 报告”交互的样例；若输入包含“html报告”，模型会输出完整 HTML 并尝试在浏览器打开，方便直接查看效果。
@@ -9,9 +14,8 @@
 
 ## 会话小结（2025-12-09 NewAPI Gemini 兼容脚本）
 
-- 新增 `configs/ai_test_newapi.py`，针对 NewAPI (https://x666.me) 的 Gemini 端点（默认 `/v1beta/models/gemini-2.5-pro:generateContent`，payload 附带 `google_search` 工具启用 Grounding，并在会话起始以首条 user 消息注入人物设定：“可爱、温柔体贴、充满爱意的 JK 少女”，同时禁止模型输出“无法生成/请复制粘贴”提示）提供等价的 CLI 测试工具。逻辑与原 `ai_test.py` 一致：多轮对话、HTML/ECharts 报告、自动打开浏览器，便于前端在不同模型网关间对比表现。
-- 若前端未来要切换到 NewAPI 的多模型服务，可参考该脚本的请求结构（Gemini generateContent）与提示语；调整后端转发即可复用 UI 行为。
-- 如果未来 UI 需要允许用户选择“是否启用联网搜索”，可以仿照 `BASE_CONFIG` 中的 `tools` 参数，动态控制是否传入 `GoogleSearch()`；未开通 Grounding 的环境仍可退化为纯文本回答。
+- `configs/ai_test_newapi.py` 再次切换到 OpenAI Chat Completions 兼容模式：`POST https://api.voct.top/v1/chat/completions`、`model=grok-4-expert`，`messages` 列表维持 system/user/assistant 历史，依旧在检测到 “html报告” 时追加提示并生成 HTML/ECharts 报告。
+- API Key 顺序未变（环境变量 → backend_data/newapi_api_key.json → 默认值），因此前端若要测试其他模型，可直接改 `MODEL_NAME` 并复用同样的 CLI 逻辑。
 
 ## 会话小结（2025-12-08 数据分析指标补齐）
 

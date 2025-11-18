@@ -1,0 +1,1 @@
+2025-12-10：应用户指示，将 Group_admin 重新加入 data_analysis page_access（backend_data/auth/permissions.json），保持 Global_admin 权限不变，其它角色仍无该页面入口。同批更新 backend/README.md、frontend/README.md、configs/progress.md 记录本次放开策略。

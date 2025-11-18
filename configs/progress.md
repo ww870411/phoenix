@@ -1,5 +1,24 @@
 # 进度记录
 
+## 2025-12-10（Group_admin 可访问数据分析页面）
+
+前置说明：
+- Serena 对 JSON/Markdown 文件暂无符号级写入能力，本次依照 3.9 降级矩阵使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend_data/auth/permissions.json`、`backend/README.md`、`frontend/README.md` 与本文；如需回滚，分别恢复上述文件即可。
+- 变更仅涉及权限配置与文档留痕，未触及前端组件或后端接口逻辑。
+
+本次动作：
+- 为 `Group_admin` 角色重新添加 `data_analysis` page_access，使其能收到数据分析页面入口，`Global_admin` 权限保持不变，其他角色仍不具备该入口。
+- 在前后端 README 中新增 2025-12-10 会话小结，明确 Group_admin 的新访问范围。
+- 本条即为记录更新，确保权限调整存在可追溯日志。
+
+影响范围与回滚：
+- FastAPI 权限接口会开始向 Group_admin 输出 `data_analysis`，前端 `PageSelectView` 将显示卡片；如需撤销，将该 page_access 从 `permissions.json` 中移除并刷新会话即可。
+- 文档仅新增描述，回滚时恢复两份 README 的前版本即可。
+
+验证建议：
+1. 以 Group_admin 账号登录，进入 `/projects/.../pages` 列表，确认“数据分析页面”卡片出现并可跳转至 `/data-analysis`。
+2. 使用其他角色（如 ZhuChengQu_admin）登录，验证卡片仍不可见，确保权限未扩大。
+
 ## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
 
 前置说明：
@@ -2004,6 +2023,21 @@ sum_basic_data 相关：
 1) 访问仪表盘，确认折叠表数据与 `/dashboard` 返回中 0.5 段落一致；
 2) 临时在后端去除 0.5 段落，前端折叠表应不显示兜底数据；
 3) 切换业务日期（`push_date`），折叠表本期/同期联动更新。
+
+## 2025-12-09（NewAPI Gemini CLI 切换 OpenAI 范式）
+
+前置说明：
+- Serena 的符号级编辑无法覆盖 docstring、常量与 README 文本多处同步修改，本次根据 3.9 矩阵降级使用 `apply_patch` 操作 `configs/ai_test_newapi.py` 及 README；回滚时恢复该脚本与两个 README 相应段落即可。
+
+本次动作：
+- `configs/ai_test_newapi.py` 再次改为 OpenAI Chat Completions 兼容模式：`BASE_URL=https://api.voct.top/v1`、`MODEL_NAME=grok-4-expert`，payload 使用 `{model, messages}`，维持多轮对话、HTML/ECharts 报告逻辑与会话历史。
+- 同步更新 `backend/README.md`、`frontend/README.md` 的 2025-12-09 会话小结，说明目前默认测试 Grok 模型，如需切换回 generateContent 版本可调整 `BASE_URL/MODEL_NAME`。
+- 依赖仍为 `requests`，API Key 顺序保持“环境变量 → backend_data/newapi_api_key.json → 默认密钥”。
+
+影响与验证：
+- 运行 `python configs/ai_test_newapi.py` 仅需 `requests`；若 `grok-4-expert` 分组暂无通道，可改 `MODEL_NAME` 再测。
+- HTML 报告关键词、保存与浏览器唤起逻辑不变，可通过输入“html报告”检查 `runtime_reports/newapi_gemini_report_*.html` 是否生成。
+
 
 ## 2025-12-08（数据分析指标补齐 - 供暖电单耗(-研究院)）
 

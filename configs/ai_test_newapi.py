@@ -1,5 +1,6 @@
 """
-NewAPI Gemini 接入脚本：调用 https://x666.me/v1beta/models/gemini-2.5-flash:generateContent
+NewAPI Grok 接入脚本（OpenAI Chat Completions 兼容范式）：
+调用 https://api.voct.top/v1/chat/completions ，目标模型 grok-4-expert。
 功能：多轮对话、HTML 报告生成（含 ECharts），自动保存到 runtime_reports 并尝试打开浏览器。
 
 依赖：
@@ -16,7 +17,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -26,9 +26,9 @@ import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_KEY_FILE = PROJECT_ROOT / "backend_data" / "newapi_api_key.json"
-DEFAULT_API_KEY = "sk-94KxfybMapdKugdMG0j7XlQ7dmYRoBG5PHVREfB3Qm3pPWlN"
-BASE_URL = "https://x666.me/v1beta"
-MODEL_NAME = "models/gemini-2.5-flash"
+DEFAULT_API_KEY = "sk-Yj7lUico5lN0yRDA2a30TvaVOO4xpXrzYhuRkerryDqMVYNr"
+BASE_URL = "https://api.voct.top/v1"
+MODEL_NAME = "gemini-2.5-pro"
 
 REPORTS_DIR = PROJECT_ROOT / "runtime_reports"
 HTML_REPORT_INSTRUCTION = (
@@ -78,46 +78,46 @@ def wants_html_report(text: str) -> bool:
 
 
 def _append_message(role: str, text: str) -> None:
-    _conversation.append({"role": role, "parts": [{"text": text}]})
+    _conversation.append({"role": role, "content": text})
 
 
 def _copy_history() -> List[dict]:
     return list(_conversation)
 
 
-def send_message(prompt: str, *, extra_instruction: Optional[str] = None) -> str:
+def _ensure_system_prompt() -> None:
     if not _conversation:
-        _conversation.append({"role": "user", "parts": [{"text": SYSTEM_PROMPT}]})
+        _conversation.append({"role": "system", "content": SYSTEM_PROMPT})
 
-    contents = _copy_history()
+
+def send_message(prompt: str, *, extra_instruction: Optional[str] = None) -> str:
+    _ensure_system_prompt()
     full_prompt = prompt if not extra_instruction else f"{prompt}\n\n{extra_instruction}"
-    contents.append({"role": "user", "parts": [{"text": full_prompt}]})
+    messages = _copy_history()
+    messages.append({"role": "user", "content": full_prompt})
 
-    url = f"{BASE_URL}/{MODEL_NAME}:generateContent"
+    url = f"{BASE_URL}/chat/completions"
     payload = {
-        "contents": contents,
-        "tools": [{"google_search": {}}],
+        "model": MODEL_NAME,
+        "messages": messages,
     }
 
-    resp = requests.post(url, headers=auth_headers(), data=json.dumps(payload), timeout=60)
+    resp = requests.post(url, headers=auth_headers(), json=payload, timeout=60)
     if resp.status_code != 200:
         raise RuntimeError(f"请求失败 {resp.status_code}: {resp.text}")
 
     data = resp.json()
-    candidates = data.get("candidates") or []
-    if not candidates:
+    choices = data.get("choices") or []
+    if not choices:
         raise RuntimeError(f"未返回候选项：{data}")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    text = ""
-    for part in parts:
-        if isinstance(part, dict) and part.get("text"):
-            text = part["text"]
-            break
+
+    message = choices[0].get("message") or {}
+    text = message.get("content", "") if isinstance(message, dict) else ""
     if not text.strip():
         raise RuntimeError(f"模型未返回文本内容：{data}")
 
     _append_message("user", full_prompt)
-    _append_message("model", text.strip())
+    _append_message("assistant", text.strip())
     return text.strip()
 
 
