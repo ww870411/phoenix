@@ -328,6 +328,10 @@
               </button>
             </div>
           </div>
+          <div v-if="timelineAxisHints" class="timeline-axis-hint">
+            <span>左轴：{{ timelineAxisHints.left }}</span>
+            <span v-if="timelineAxisHints.right.length">｜ 右轴：{{ timelineAxisHints.right.join('、') }}</span>
+          </div>
           <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="360px" />
           <div v-else class="timeline-chart-empty">
             请选择至少一个包含逐日数据的指标以生成趋势图
@@ -380,7 +384,7 @@ const TrendChart = defineComponent({
         chart.value = window.echarts.init(container.value)
       }
       if (latestOption.value) {
-        chart.value.setOption(latestOption.value, { notMerge: false, lazyUpdate: true })
+        chart.value.setOption(latestOption.value, { notMerge: true, lazyUpdate: false })
       }
     }
 
@@ -543,6 +547,14 @@ const timelineMetrics = computed(() =>
   previewRows.value.filter((row) => Array.isArray(row.timeline) && row.timeline.length),
 )
 
+const activeTimelineMetrics = computed(() => {
+  const metricMap = new Map()
+  timelineMetrics.value.forEach((metric) => {
+    metricMap.set(metric.key, metric)
+  })
+  return activeTimelineMetricKeys.value.map((key) => metricMap.get(key)).filter(Boolean)
+})
+
 const timelineCategories = computed(() =>
   timelineGrid.value.rows
     .filter((row) => row?.date && row.date !== '总计')
@@ -558,8 +570,7 @@ watch(
       return
     }
     const retained = activeTimelineMetricKeys.value.filter((key) => available.includes(key))
-    activeTimelineMetricKeys.value =
-      retained.length > 0 ? retained : available.slice(0, Math.min(2, available.length))
+    activeTimelineMetricKeys.value = retained.length > 0 ? retained.slice(0, 2) : [available[0]]
   },
   { immediate: true },
 )
@@ -574,19 +585,31 @@ const timelinePalette = [
 
 const timelineChartOption = computed(() => {
   if (!hasTimelineGrid.value || !timelineCategories.value.length) return null
-  const metricMap = new Map()
-  timelineMetrics.value.forEach((metric) => {
-    metricMap.set(metric.key, metric)
-  })
-  const activeMetrics = activeTimelineMetricKeys.value
-    .map((key) => metricMap.get(key))
-    .filter(Boolean)
+  const activeMetrics = activeTimelineMetrics.value
   if (!activeMetrics.length) return null
 
   const categories = timelineCategories.value
   const series = []
   const legend = []
   const seriesMeta = {}
+  const useDualAxis = activeMetrics.length >= 2
+
+  const makeAxisBase = () => ({
+    type: 'value',
+    axisLabel: { color: '#475569' },
+    splitLine: { lineStyle: { type: 'dashed', color: 'rgba(148, 163, 184, 0.35)' } },
+  })
+
+  const yAxis = useDualAxis
+    ? [
+        makeAxisBase(),
+        {
+          ...makeAxisBase(),
+          position: 'right',
+          axisLabel: { color: '#475569' },
+        },
+      ]
+    : makeAxisBase()
 
   activeMetrics.forEach((metric, index) => {
     const palette = timelinePalette[index % timelinePalette.length]
@@ -604,6 +627,7 @@ const timelineChartOption = computed(() => {
     const peerName = `${metric.label}（同期）`
     const currentData = categories.map((date) => timelineMap[date]?.current ?? null)
     const peerData = categories.map((date) => timelineMap[date]?.peer ?? null)
+    const yAxisIndex = useDualAxis && index >= 1 ? 1 : 0
 
     series.push({
       name: currentName,
@@ -612,7 +636,7 @@ const timelineChartOption = computed(() => {
       symbol: 'circle',
       showSymbol: categories.length <= 31,
       data: currentData,
-      yAxisIndex: 0,
+      yAxisIndex,
       lineStyle: { width: 3, color: palette.current },
       areaStyle: {
         opacity: 0.18,
@@ -637,7 +661,7 @@ const timelineChartOption = computed(() => {
       symbol: 'circle',
       showSymbol: categories.length <= 31,
       data: peerData,
-      yAxisIndex: 0,
+      yAxisIndex,
       lineStyle: { width: 2, color: palette.peer, type: 'dashed' },
       emphasis: { focus: 'series' },
     })
@@ -717,11 +741,7 @@ const timelineChartOption = computed(() => {
         },
       },
     },
-    yAxis: {
-      type: 'value',
-      axisLabel: { color: '#475569' },
-      splitLine: { lineStyle: { type: 'dashed', color: 'rgba(148, 163, 184, 0.35)' } },
-    },
+    yAxis,
     series,
   }
 })
@@ -730,9 +750,6 @@ function toggleTimelineMetric(metricKey) {
   const list = [...activeTimelineMetricKeys.value]
   const index = list.indexOf(metricKey)
   if (index >= 0) {
-    if (list.length === 1) {
-      return
-    }
     list.splice(index, 1)
   } else {
     list.push(metricKey)
@@ -743,6 +760,15 @@ function toggleTimelineMetric(metricKey) {
 function isTimelineMetricActive(metricKey) {
   return activeTimelineMetricKeys.value.includes(metricKey)
 }
+
+const timelineAxisHints = computed(() => {
+  const metrics = activeTimelineMetrics.value
+  if (metrics.length < 2) return null
+  const left = metrics[0]?.label || ''
+  const right = metrics.slice(1).map((metric) => metric?.label).filter(Boolean)
+  if (!left && !right.length) return null
+  return { left, right }
+})
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -1857,6 +1883,14 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.timeline-axis-hint {
+  font-size: 13px;
+  color: var(--neutral-600);
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .chip--toggle {

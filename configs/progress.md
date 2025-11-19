@@ -6,8 +6,10 @@
 - Serena 仍无法对 `.vue` 大文件的多段插入提供符号级能力，本次继续依照 3.9 降级矩阵使用 `desktop-commander::read_file` + `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`、`frontend/README.md`、`backend/README.md` 与本文；如要回滚还原上述文件即可。
 
 本次动作：
-- 在“区间明细（逐日）”卡片下方新增趋势图面板：引入轻量 `TrendChart`（ECharts 包装），基于当前单位的 timeline 数据绘制“本期 vs 同期”双折线，默认展示首两个指标，支持 dataZoom 缩放与平滑曲线。
+- 在“区间明细（逐日）”卡片下方新增趋势图面板：引入轻量 `TrendChart`（ECharts 包装），基于当前单位的 timeline 数据绘制“本期 vs 同期”双折线，默认仅展示首个指标，支持 dataZoom 缩放与平滑曲线；当用户启用第二个指标时自动切换为双纵轴策略，并允许通过芯片或图例将所有指标取消（展示空态提示）。
 - 新增指标切换芯片，联动 active 单位切换；Tooltip 展示单位与实时同比百分比并使用半透明背景；当没有逐日数据时提示“请选择至少一个包含逐日数据的指标”。
+- 双轴时面板额外显示“左轴/右轴”对应的指标说明，确保用户知道各轴刻度含义；ECharts legend 不再强制选中，支持点选隐藏某条曲线。
+- 2025-12-10 补充：`TrendChart` 在调用 `setOption` 时改为 `notMerge: true`，彻底清理旧 series，解决芯片/图例取消选择后曲线仍残留的问题。
 - README（前/后端）记录新增趋势能力与对后端的依赖边界，确保后续 Schema 变动可追溯。
 
 影响范围与回滚：
