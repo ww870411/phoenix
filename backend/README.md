@@ -22,6 +22,11 @@
 - 多单位需求完全由前端批量调用现有 `POST /projects/{project_key}/data_analysis/query` 实现，后端 service/API 无需新增 batch 接口。前端会按所选单位逐一请求，并在结果区提供“单位标签”切换展示，确保各单位的数据互不混合。
 - Excel 导出时，每个单位生成独立 Sheet（包含该单位的汇总、区间明细、查询信息），若某单位查询失败，前端会在错误提示中标注该单位，其它单位的结果仍可正常显示/导出。
 
+## 会话小结（2025-12-10 数据分析常量/气温逐日补齐）
+
+- `data_analysis_service` 现会为常量指标构造逐日 timeline：在区间模式下，`price_std_coal` 等常量会把当前值/同期值按日期展开到“区间明细”表格里，虽然每天数据相同，但可与其它指标并排查看。
+- 气温指标新增逐日查询：`calc_temperature_data` 每日值会写入 timeline，区间汇总的 `total_current/total_peer` 改为对逐日数据取平均，满足“显示每日气温 + 合计用平均值”的需求；同时逐日数据包含本期与同期（peer_date）以供对照。
+
 ## 会话小结（2025-12-09 AI 多轮助手 + google-genai Grounding）
 
 - `configs/ai_test.py` 已切换到官方新版 `google-genai` SDK（`from google import genai`），并示范如何在 `GenerateContentConfig` 中注册 `Tool(google_search=GoogleSearch())`，用于测试 Gemini 2.5 Flash 结合 Google Search Grounding 的回答效果。

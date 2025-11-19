@@ -881,6 +881,9 @@ function buildTimelineGrid(rows) {
     decimals: row.decimals ?? 2,
     sumCurrent: 0,
     sumPeer: 0,
+    valueType: row.value_type || 'analysis',
+    totalCurrent: row.total_current ?? null,
+    totalPeer: row.total_peer ?? null,
   }))
   const columns = [{ prop: 'date', name: '日期', size: 110 }]
   metricState.forEach((row) => {
@@ -917,11 +920,32 @@ function buildTimelineGrid(rows) {
   })
   const totalRecord = { date: '总计' }
   metricState.forEach((row) => {
-    const totalCurrent = row.sumCurrent || null
-    const totalPeer = row.sumPeer || null
+    let totalCurrent = row.totalCurrent
+    let totalPeer = row.totalPeer
+    if (totalCurrent == null) {
+      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
+        totalCurrent = row.timeline[0]?.current ?? null
+      } else if (row.valueType === 'analysis') {
+        totalCurrent = row.sumCurrent || null
+      } else {
+        totalCurrent = row.sumCurrent || null
+      }
+    }
+    if (totalPeer == null) {
+      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
+        totalPeer = row.timeline[0]?.peer ?? null
+      } else if (row.valueType === 'analysis') {
+        totalPeer = row.sumPeer || null
+      } else {
+        totalPeer = row.sumPeer || null
+      }
+    }
     totalRecord[`${row.key}__current`] = totalCurrent !== null ? applyDecimals(totalCurrent, row.decimals) : null
     totalRecord[`${row.key}__peer`] = totalPeer !== null ? applyDecimals(totalPeer, row.decimals) : null
-    const totalDelta = totalPeer ? ((totalCurrent - totalPeer) / totalPeer) * 100 : null
+    const totalDelta =
+      totalPeer !== null && totalPeer !== 0 && totalCurrent !== null
+        ? ((totalCurrent - totalPeer) / totalPeer) * 100
+        : null
     totalRecord[`${row.key}__delta`] = createDeltaCellPayload(totalDelta)
   })
   gridRows.push(totalRecord)

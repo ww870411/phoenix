@@ -70,6 +70,23 @@
 1. 在页面勾选多个单位并点击“生成分析结果”，确认结果区域出现单位切换标签，切换时预览/逐日数据均对应当前单位。
 2. 点击“下载 Excel”，检查导出文件中每个单位都有独立 Sheet，Sheet 内依次包含汇总表、区间明细（若有）及查询信息。
 
+## 2025-12-10（数据分析常量/气温逐日补齐）
+
+前置说明：
+- Serena 无法直接对 backend Python 文件做符号级插入，本次继续使用 `desktop-commander::read_file` + `apply_patch` 改写 `backend/services/data_analysis.py`，并同步更新 README 留痕。
+
+本次动作：
+- 常量指标在区间模式下生成逐日 timeline（每日同值），写入结果的 `timeline`，且合计 `total_current/total_peer` 采用逐日平均值，防止按天累加。
+- 气温指标新增逐日查询：从 `calc_temperature_data` 按日期取本期/同期，timeline 包含 `peer_date`，合计同样采用逐日平均；区间汇总仍输出到主表。
+- 前后端 README 记录新逻辑，提醒“区间明细”现在也包含常量/气温。
+
+影响范围与回滚：
+- 仅影响数据分析接口与前端显示；回滚时恢复 `backend/services/data_analysis.py`、两份 README、本文即可。
+
+验证建议：
+1. 选择区间模式并勾选常量/气温指标，检查“区间明细”出现对应指标，常量每天同值，气温每天显示本期/同期。
+2. 查看汇总表的合计行，常量与气温的 total 应为逐日平均值（而不是天数累加）。
+
 ## 2025-12-09（AI 多轮对话助手升级：google-genai + Grounding）
 
 前置说明：

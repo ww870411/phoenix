@@ -1,0 +1,1 @@
+2025-12-10：data_analysis_service 为常量与气温指标补齐逐日 timeline：区间模式下常量每天写入同值，气温从 calc_temperature_data 逐日读取本期/同期并在合计处取平均值。DataAnalysisView 的“区间明细”和 Excel 导出因此也会呈现常量/气温逐日数据。

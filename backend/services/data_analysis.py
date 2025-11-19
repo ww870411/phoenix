@@ -435,16 +435,19 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         )
 
     temperature_rows: Dict[str, Dict[str, Any]] = {}
+    temperature_column_lookup: Dict[str, str] = {}
     if temperature_metric_keys:
         view_name = temperature_view_name or "calc_temperature_data"
+        temperature_column_lookup = _build_temperature_column_lookup(temperature_metric_keys)
         try:
-            temperature_rows = _query_temperature_rows(
+            temperature_result, temperature_column_lookup = _query_temperature_rows(
                 view_name,
                 temperature_metric_keys,
                 start_date,
                 end_date,
                 analysis_mode_value,
             )
+            temperature_rows = temperature_result
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"ok": False, "message": str(exc)})
         except Exception as exc:  # pylint: disable=broad-except
@@ -453,29 +456,51 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
                 content={"ok": False, "message": f"查询气温指标失败: {exc}"},
             )
     timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
-    if analysis_mode_value == "range" and analysis_metric_keys:
-        fallback_timeline_view = (
-            "analysis_groups_daily"
-            if unit_key in {"Group", "ZhuChengQu"}
-            else "analysis_company_daily"
-        )
-        timeline_view_name = _resolve_unit_view(
-            view_mapping,
-            "单日数据",
-            unit_label,
-            fallback=fallback_timeline_view,
-        )
-        if timeline_view_name:
+    if analysis_mode_value == "range":
+        if analysis_metric_keys:
+            fallback_timeline_view = (
+                "analysis_groups_daily"
+                if unit_key in {"Group", "ZhuChengQu"}
+                else "analysis_company_daily"
+            )
+            timeline_view_name = _resolve_unit_view(
+                view_mapping,
+                "单日数据",
+                unit_label,
+                fallback=fallback_timeline_view,
+            )
+            if timeline_view_name:
+                try:
+                    timeline_rows_map.update(
+                        _query_analysis_timeline(
+                            timeline_view_name,
+                            unit_key,
+                            analysis_metric_keys,
+                            start_date,
+                            end_date,
+                        )
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("生成逐日明细失败: %s", exc)
+        if constant_metric_keys:
+            const_value_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+            for key in constant_metric_keys:
+                row = constant_rows.get(key)
+                if row:
+                    const_value_map[key] = (_decimal_to_float(row.get("value")), _decimal_to_float(row.get("peer")))
+            for key, (val, peer_val) in const_value_map.items():
+                timeline_rows_map[key] = _build_constant_timeline(val, peer_val, start_date, end_date)
+        if temperature_metric_keys and temperature_column_lookup:
             try:
-                timeline_rows_map = _query_analysis_timeline(
-                    timeline_view_name,
-                    unit_key,
-                    analysis_metric_keys,
+                temp_timeline = _query_temperature_timeline(
+                    temperature_view_name or "calc_temperature_data",
+                    temperature_column_lookup,
                     start_date,
                     end_date,
                 )
+                timeline_rows_map.update(temp_timeline)
             except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("生成逐日明细失败: %s", exc)
+                logger.warning("生成气温逐日明细失败: %s", exc)
 
     rows_payload: List[Dict[str, Any]] = []
     missing_metrics: List[Dict[str, str]] = []
@@ -530,8 +555,8 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         if value_type == "constant":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            total_current = current_value
+            total_peer = peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -556,8 +581,14 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
             is_missing = source.get("missing")
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            if analysis_mode_value == "range" and timeline_entries:
+                avg_current, _ = _average_numeric(timeline_entries, "current")
+                avg_peer, _ = _average_numeric(timeline_entries, "peer")
+            else:
+                avg_current = None
+                avg_peer = None
+            total_current = avg_current if avg_current is not None else current_value
+            total_peer = avg_peer if avg_peer is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -679,6 +710,38 @@ def _shift_year(value: date, years: int = 1) -> Optional[date]:
         return date(target_year, value.month, value.day)
     except ValueError:
         return None
+
+
+def _average_numeric(entries: List[Dict[str, Any]], field: str) -> Tuple[Optional[float], int]:
+    values = [entry.get(field) for entry in entries if entry.get(field) is not None]
+    count = len(values)
+    if not count:
+        return None, 0
+    return sum(values) / count, count
+
+
+def _build_constant_timeline(
+    value: Optional[float],
+    peer_value: Optional[float],
+    start_date: date,
+    end_date: date,
+) -> List[Dict[str, Any]]:
+    if start_date > end_date:
+        return []
+    entries: List[Dict[str, Any]] = []
+    current = start_date
+    while current <= end_date:
+        peer_date = _shift_year(current)
+        entries.append(
+            {
+                "date": current.isoformat(),
+                "current": _decimal_to_float(value),
+                "peer": _decimal_to_float(peer_value),
+                "peer_date": peer_date.isoformat() if peer_date else None,
+            }
+        )
+        current += timedelta(days=1)
+    return entries
 
 
 def _resolve_active_view_name(
@@ -967,29 +1030,34 @@ def _query_constant_rows(unit_key: str, metric_keys: Sequence[str]) -> Dict[str,
     return result
 
 
-def _query_temperature_rows(
-    view_name: str,
-    metric_keys: Sequence[str],
-    start_date: date,
-    end_date: date,
-    analysis_mode: str,
-) -> Dict[str, Dict[str, Any]]:
-    if not metric_keys:
-        return {}
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法气温视图: {view_name}")
-
+def _build_temperature_column_lookup(metric_keys: Sequence[str]) -> Dict[str, str]:
     column_lookup: Dict[str, str] = {}
     for key in metric_keys:
         column = TEMPERATURE_COLUMN_MAP.get(key)
         if not column:
             raise ValueError(f"气温指标 {key} 缺少对应列映射")
         column_lookup[key] = column
+    return column_lookup
 
+
+def _query_temperature_rows(
+    view_name: str,
+    metric_keys: Sequence[str],
+    start_date: date,
+    end_date: date,
+    analysis_mode: str,
+    column_lookup: Optional[Dict[str, str]] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
+    if not metric_keys:
+        return {}, {}
+    sanitized = _sanitize_identifier(view_name)
+    if sanitized is None:
+        raise ValueError(f"非法气温视图: {view_name}")
+
+    column_lookup = column_lookup or _build_temperature_column_lookup(metric_keys)
     columns = sorted(set(column_lookup.values()))
     if not columns:
-        return {}
+        return {}, column_lookup
 
     row: Optional[Dict[str, Any]] = None
     peer_row: Optional[Dict[str, Any]] = None
@@ -1061,4 +1129,69 @@ def _query_temperature_rows(
             "source_view": sanitized,
             "missing": value is None,
         }
-    return result
+    return result, column_lookup
+
+
+def _query_temperature_timeline(
+    view_name: str,
+    column_lookup: Dict[str, str],
+    start_date: date,
+    end_date: date,
+) -> Dict[str, List[Dict[str, Any]]]:
+    if start_date > end_date or not column_lookup:
+        return {}
+    sanitized = _sanitize_identifier(view_name)
+    if sanitized is None:
+        raise ValueError(f"非法气温视图: {view_name}")
+    columns = sorted(set(column_lookup.values()))
+    select_clause = ", ".join(["date"] + columns)
+    with SessionLocal() as session:
+        current_rows = session.execute(
+            text(
+                f"""
+                SELECT {select_clause}
+                FROM {sanitized}
+                WHERE date BETWEEN :start AND :end
+                """
+            ),
+            {"start": start_date, "end": end_date},
+        ).mappings().all()
+    peer_start = _shift_year(start_date)
+    peer_end = _shift_year(end_date)
+    peer_rows = []
+    if peer_start and peer_end:
+        with SessionLocal() as session:
+            peer_rows = session.execute(
+                text(
+                    f"""
+                    SELECT {select_clause}
+                    FROM {sanitized}
+                    WHERE date BETWEEN :start AND :end
+                    """
+                ),
+                {"start": peer_start, "end": peer_end},
+            ).mappings().all()
+    peer_map: Dict[date, Dict[str, Any]] = {}
+    for row in peer_rows:
+        peer_date_val = row.get("date")
+        if isinstance(peer_date_val, date):
+            peer_map[peer_date_val] = dict(row)
+    timeline: Dict[str, List[Dict[str, Any]]] = {}
+    current_date = start_date
+    while current_date <= end_date:
+        current_row = next(
+            (row for row in current_rows if isinstance(row.get("date"), date) and row.get("date") == current_date),
+            None,
+        )
+        peer_date_val = _shift_year(current_date)
+        peer_row = peer_map.get(peer_date_val) if peer_date_val else None
+        for key, column in column_lookup.items():
+            entry = {
+                "date": current_date.isoformat(),
+                "current": _decimal_to_float(current_row.get(column)) if current_row else None,
+                "peer": _decimal_to_float(peer_row.get(column)) if peer_row else None,
+                "peer_date": peer_date_val.isoformat() if peer_date_val else None,
+            }
+            timeline.setdefault(key, []).append(entry)
+        current_date += timedelta(days=1)
+    return timeline
