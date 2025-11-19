@@ -108,7 +108,6 @@
                     v-for="group in resolvedMetricGroups"
                     :key="group.key"
                     class="metrics-group"
-                    :class="{ 'metrics-group--disabled': group.disabled }"
                   >
                     <div class="metrics-group-header">
                       <div class="metrics-group-title">
@@ -131,9 +130,6 @@
                         </span>
                       </div>
                     </div>
-                    <p v-if="group.disabled" class="panel-hint warning">
-                      当前视图不支持该组，请切换单位或分析模式。
-                    </p>
                     <div class="metrics-grid">
                       <label
                         v-for="metric in group.options"
@@ -144,7 +140,7 @@
                           type="checkbox"
                           :value="metric.value"
                           :checked="selectedMetrics.has(metric.value)"
-                          :disabled="group.disabled || queryLoading"
+                          :disabled="queryLoading"
                           @change="toggleMetric(metric.value)"
                         />
                         <span class="chip-label">
@@ -251,7 +247,7 @@
           <section v-if="analysisSummaryEntries.length" class="card summary-card headline-card">
             <header class="card-header card-header--tight">
               <div>
-                <h3>头条简报</h3>
+                <h3>数据简报</h3>
                 <p class="panel-hint">基于当前单位与区间的自动摘要</p>
               </div>
               <button
@@ -545,8 +541,6 @@ const unitDict = computed(() => schema.value?.unit_dict || {})
 const metricDict = computed(() => schema.value?.metric_dict || {})
 const metricDecimalsMap = computed(() => schema.value?.metric_decimals || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
-const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
-
 const TEMPERATURE_KEYWORDS = ['气温', '温度']
 const TEMPERATURE_PRIORITY_LABELS = ['平均气温', '平均温度']
 
@@ -702,6 +696,30 @@ const timelinePalette = [
   { current: '#22c55e', peer: '#86efac' },
 ]
 
+function assignAxisSlots(metrics, temperatureKey) {
+  if (!Array.isArray(metrics) || !metrics.length) return []
+  const isTempMetric = (metric) => {
+    if (!metric) return false
+    if (temperatureKey && metric.key === temperatureKey) return true
+    return isTemperatureMetric(metric)
+  }
+  const hasTemperature = metrics.length >= 2 && metrics.some((metric) => isTempMetric(metric))
+  return metrics.map((metric, index) => {
+    const slot = {
+      key: metric?.key || `__timeline_metric_${index}`,
+      axis: 'left',
+    }
+    if (metrics.length >= 2) {
+      if (hasTemperature && isTempMetric(metric)) {
+        slot.axis = 'right'
+      } else if (!hasTemperature && index >= 1) {
+        slot.axis = 'right'
+      }
+    }
+    return slot
+  })
+}
+
 const timelineChartOption = computed(() => {
   if (!hasTimelineGrid.value || !timelineCategories.value.length) return null
   const activeMetrics = activeTimelineMetrics.value
@@ -711,7 +729,8 @@ const timelineChartOption = computed(() => {
   const series = []
   const legend = []
   const seriesMeta = {}
-  const useDualAxis = activeMetrics.length >= 2
+  const axisSlots = assignAxisSlots(activeMetrics, temperatureMetricKey.value)
+  const hasRightAxis = axisSlots.some((slot) => slot.axis === 'right')
 
   const makeAxisBase = () => ({
     type: 'value',
@@ -719,7 +738,7 @@ const timelineChartOption = computed(() => {
     splitLine: { lineStyle: { type: 'dashed', color: 'rgba(148, 163, 184, 0.35)' } },
   })
 
-  const yAxis = useDualAxis
+  const yAxis = hasRightAxis
     ? [
         makeAxisBase(),
         {
@@ -746,7 +765,8 @@ const timelineChartOption = computed(() => {
     const peerName = `${metric.label}（同期）`
     const currentData = categories.map((date) => timelineMap[date]?.current ?? null)
     const peerData = categories.map((date) => timelineMap[date]?.peer ?? null)
-    const yAxisIndex = useDualAxis && index >= 1 ? 1 : 0
+    const axisSlot = axisSlots[index] || { axis: 'left' }
+    const yAxisIndex = hasRightAxis && axisSlot.axis === 'right' ? 1 : 0
 
     series.push({
       name: currentName,
@@ -882,11 +902,23 @@ function isTimelineMetricActive(metricKey) {
 
 const timelineAxisHints = computed(() => {
   const metrics = activeTimelineMetrics.value
-  if (metrics.length < 2) return null
-  const left = metrics[0]?.label || ''
-  const right = metrics.slice(1).map((metric) => metric?.label).filter(Boolean)
-  if (!left && !right.length) return null
-  return { left, right }
+  if (!metrics.length) return null
+  const axisSlots = assignAxisSlots(metrics, temperatureMetricKey.value)
+  const hasRightAxis = axisSlots.some((slot) => slot.axis === 'right')
+  if (!hasRightAxis) return null
+  const leftLabels = []
+  const rightLabels = []
+  axisSlots.forEach((slot, index) => {
+    const label = metrics[index]?.label || ''
+    if (!label) return
+    if (slot.axis === 'right') {
+      rightLabels.push(label)
+    } else {
+      leftLabels.push(label)
+    }
+  })
+  if (!leftLabels.length && !rightLabels.length) return null
+  return { left: leftLabels.join('、'), right: rightLabels }
 })
 
 const metricSnapshot = computed(() =>
@@ -1097,18 +1129,6 @@ const analysisModeLabel = computed(() => {
 })
 
 const viewLabelMap = { daily: '单日数据', range: '累计数据' }
-const unitViewNames = computed(() => {
-  const names = new Set()
-  const mapping = viewMapping.value || {}
-  Object.values(mapping).forEach((entry) => {
-    if (entry && typeof entry === 'object') {
-      Object.keys(entry).forEach((view) => {
-        if (view) names.add(view)
-      })
-    }
-  })
-  return names
-})
 function resolveViewNameForUnit(unitKey) {
   const label = resolveUnitLabel(unitKey)
   const modeLabel = viewLabelMap[analysisMode.value] || analysisModeLabel.value
@@ -1123,32 +1143,18 @@ function resolveViewNameForUnit(unitKey) {
   return analysisMode.value === 'daily' ? 'company_daily_analysis' : 'company_sum_analysis'
 }
 
-const activeViewName = computed(() => resolveViewNameForUnit(activeUnit.value || selectedUnits.value[0] || ''))
 const resultUnitKeys = computed(() => {
   const ordered = selectedUnits.value.filter((key) => unitResults.value[key])
   const leftovers = Object.keys(unitResults.value).filter((key) => !ordered.includes(key))
   return [...ordered, ...leftovers]
 })
 
-const resolvedMetricGroups = computed(() => {
-  const activeView = activeViewName.value
-  const unitViews = unitViewNames.value
-  return metricGroups.value.map((group) => {
-    const allowedViews = metricGroupViews.value?.[group.key] || []
-    const referencesUnitView = allowedViews.some((view) => unitViews.has(view))
-    const disabled =
-      allowedViews.length > 0 &&
-      referencesUnitView &&
-      !['constant', 'temperature'].includes(group.key) &&
-      !allowedViews.includes(activeView)
-    return { ...group, disabled }
-  })
-})
+const resolvedMetricGroups = computed(() => metricGroups.value)
 
 const availableMetricKeys = computed(() => {
   const bucket = new Set()
   resolvedMetricGroups.value.forEach((group) => {
-    if (group.disabled || !Array.isArray(group.options)) return
+    if (!Array.isArray(group.options)) return
     group.options.forEach((option) => {
       if (option?.value) bucket.add(option.value)
     })
@@ -2033,10 +2039,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.metrics-group--disabled {
-  opacity: 0.6;
 }
 
 .metrics-group-header {
