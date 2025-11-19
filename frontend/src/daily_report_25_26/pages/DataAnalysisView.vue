@@ -332,7 +332,7 @@
             <span>左轴：{{ timelineAxisHints.left }}</span>
             <span v-if="timelineAxisHints.right.length">｜ 右轴：{{ timelineAxisHints.right.join('、') }}</span>
           </div>
-          <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="360px" />
+          <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="420px" />
           <div v-else class="timeline-chart-empty">
             请选择至少一个包含逐日数据的指标以生成趋势图
           </div>
@@ -1060,11 +1060,11 @@ function applyActiveUnitResult(unitKey) {
     return
   }
   const result = unitResults.value[unitKey]
-  previewRows.value = result.rows
+  previewRows.value = cloneResultRows(result.rows)
   infoBanner.value = result.infoBanner
   queryWarnings.value = result.warnings
   lastQueryMeta.value = result.meta
-  timelineGrid.value = result.timeline
+  timelineGrid.value = cloneTimelineGrid(result.timeline)
   activeUnit.value = unitKey
 }
 
@@ -1148,6 +1148,24 @@ function formatChartDelta(entry) {
   if (!Number.isFinite(delta)) return ''
   const sign = delta >= 0 ? '+' : ''
   return `<span class="chart-tooltip__delta">${sign}${delta.toFixed(2)}%</span>`
+}
+
+function cloneResultRows(rows) {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => ({ ...row }))
+}
+
+function cloneTimelineGrid(timeline) {
+  if (!timeline || typeof timeline !== 'object') {
+    return { columns: [], rows: [] }
+  }
+  const columns = Array.isArray(timeline.columns)
+    ? timeline.columns.map((col) => ({ ...col }))
+    : []
+  const rows = Array.isArray(timeline.rows)
+    ? timeline.rows.map((row) => ({ ...row }))
+    : []
+  return { columns, rows }
 }
 
 function resolveValue(row, field) {
