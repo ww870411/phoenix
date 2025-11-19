@@ -2,6 +2,11 @@
 
 该目录使用 Vue3 + Vite 作为开发脚手架，业务模块 `daily_report_25_26` 与后端接口一一对应。
 
+## 会话小结（2025-12-10 数据分析筛选布局优化）
+
+- `pages/DataAnalysisView.vue` 将“单位选择（多选）”与“分析模式”并排在同一行（`form-grid--top` 最小列宽 320px），新增 `form-layout` 容器，将“指标选择（多选）”移动到下一行独占整行，保持指标面板的滚动与操作区域不受压缩。
+- 样式新增 `.form-layout/.form-grid--top/.form-panel--metrics`，确保宽屏为“两列 + 一列”布局，窄屏自动折行；未改动接口调用或数据处理逻辑。
+
 ## 会话小结（2025-12-10 数据分析页面开放 Group_admin）
 
 - 登录态中 `Group_admin` 角色现在同样会在 `permissions.page_access` 中收到 `data_analysis`，`PageSelectView.vue` 因此会为集团管理员展示“数据分析页面”入口，导航逻辑沿用已有 `normalizedKey === 'data_analysis'` 分支。

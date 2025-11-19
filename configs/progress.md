@@ -1,5 +1,21 @@
 # 进度记录
 
+## 2025-12-10（数据分析筛选布局重排）
+
+前置说明：
+- Serena 暂无法对 `.vue` 模板/样式进行符号级写入，本次依照 3.9 降级矩阵使用 `desktop-commander::read_file` + `apply_patch` 调整 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`，并同步更新 `frontend/README.md`、`backend/README.md` 与本文；如需回滚，恢复上述文件即可。
+
+本次动作：
+- 新增 `form-layout/form-grid--top/form-panel--metrics` 容器，将“单位选择（多选）”与“分析模式”固定在第一行并排展示，`form-grid--top` 设定最小列宽 320px；“指标选择（多选）”移动到下一行独占整行，保持指标滚动区域高度不变。
+- 指标面板的逻辑与接口调用保持不变，仅更新样式以避免指标列表挤压；前后端 README 留痕，说明本次属于前端交互优化，无新增 API。
+
+影响范围与回滚：
+- 仅影响数据分析页面的前端布局与样式，后端 Schema/接口未改动；回滚恢复 `DataAnalysisView.vue` 与两份 README 即可。
+
+验证建议：
+1. 进入数据分析页面，确认“单位选择（多选）”与“分析模式”处于同一行，宽屏下始终保持并排，窄屏下可自动折行。
+2. 检查“指标选择（多选）”是否独占下一行，滚动区域高度稳定，芯片选择、全选/清空操作仍按原逻辑工作。
+
 ## 2025-12-10（Group_admin 可访问数据分析页面）
 
 前置说明：

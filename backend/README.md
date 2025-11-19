@@ -2,6 +2,11 @@
 
 # 后端说明（FastAPI）
 
+## 会话小结（2025-12-10 数据分析筛选布局重排）
+
+- 本次需求仅涉及前端 `DataAnalysisView.vue` 布局：通过新增 `form-layout/form-grid--top/form-panel--metrics`，将“单位选择（多选）”与“分析模式”固定在同一行，指标面板独占下一行，便于并排操作。后端接口、Schema 与服务逻辑均未改变，此处仅留痕说明前端已对交互方式进行调整。
+- 若未来接口返回结构或筛选项顺序发生改变，需要同步通知前端以免布局假设失效；当前版本继续复用既有 `/data_analysis/schema` 与 `/data_analysis/query`。
+
 ## 会话小结（2025-12-10 数据分析页面开放至 Group_admin）
 
 - `backend_data/auth/permissions.json` 重新为 `Group_admin` 注入 `data_analysis` page_access，维持 `Global_admin` 全量权限不变，其它角色（ZhuChengQu_admin/Unit_admin/unit_filler/Group_viewer）仍无法看到该页面。FastAPI 层 `permissions` 响应会把该 page_key 下发给 Group_admin，前端 `PageSelectView` 将在卡片列表中显示“数据分析页面”入口。

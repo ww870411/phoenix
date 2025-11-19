@@ -17,75 +17,77 @@
         <div v-else-if="errorMessage" class="page-state error">{{ errorMessage }}</div>
 
         <template v-else>
-          <div class="form-grid">
-            <div class="form-panel form-panel--compact">
-              <div class="panel-header">
-                <h3>单位选择（多选）</h3>
-                <span class="panel-hint">已选 {{ selectedUnits.length }} / {{ unitOptions.length }}</span>
-              </div>
-              <div class="chip-group">
-                <label
-                  v-for="unit in unitOptions"
-                  :key="unit.value"
-                  class="chip checkbox"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="selectedUnits.includes(unit.value)"
-                    @change="handleUnitSelection(unit.value, $event.target.checked)"
-                  />
-                  <span class="chip-label">
-                    <span v-if="getUnitSelectionOrder(unit.value)" class="chip-order">
-                      {{ getUnitSelectionOrder(unit.value) }}
-                    </span>
-                    <span>{{ unit.label }}</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div class="form-panel form-panel--compact">
-              <div class="panel-header">
-                <h3>分析模式</h3>
-                <span class="panel-hint">切换单日或区间累计</span>
-              </div>
-              <div class="chip-group compact">
-                <label
-                  v-for="mode in analysisModes"
-                  :key="mode.value"
-                  class="chip radio"
-                >
-                  <input
-                    type="radio"
-                    name="analysisMode"
-                    :value="mode.value"
-                    v-model="analysisMode"
-                  />
-                  <span>{{ mode.label }}</span>
-                </label>
-              </div>
-              <div class="date-subsection">
+          <div class="form-layout">
+            <div class="form-grid form-grid--top">
+              <div class="form-panel form-panel--compact">
                 <div class="panel-header">
-                  <h4>日期范围</h4>
-                  <span class="panel-hint">与分析模式联动</span>
+                  <h3>单位选择（多选）</h3>
+                  <span class="panel-hint">已选 {{ selectedUnits.length }} / {{ unitOptions.length }}</span>
                 </div>
-                <div class="date-grid">
-                  <label class="date-field">
-                    <span>起始日期</span>
-                    <input type="date" v-model="startDate" />
-                  </label>
-                  <label class="date-field">
-                    <span>结束日期</span>
-                    <input type="date" v-model="endDate" :disabled="analysisMode === 'daily'" />
+                <div class="chip-group">
+                  <label
+                    v-for="unit in unitOptions"
+                    :key="unit.value"
+                    class="chip checkbox"
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="selectedUnits.includes(unit.value)"
+                      @change="handleUnitSelection(unit.value, $event.target.checked)"
+                    />
+                    <span class="chip-label">
+                      <span v-if="getUnitSelectionOrder(unit.value)" class="chip-order">
+                        {{ getUnitSelectionOrder(unit.value) }}
+                      </span>
+                      <span>{{ unit.label }}</span>
+                    </span>
                   </label>
                 </div>
-                <p class="panel-hint">
-                  {{ analysisMode === 'daily' ? '单日模式会自动将结束日期同步为起始日期。' : '累计模式支持跨日期区间。' }}
-                </p>
+              </div>
+
+              <div class="form-panel form-panel--compact">
+                <div class="panel-header">
+                  <h3>分析模式</h3>
+                  <span class="panel-hint">切换单日或区间累计</span>
+                </div>
+                <div class="chip-group compact">
+                  <label
+                    v-for="mode in analysisModes"
+                    :key="mode.value"
+                    class="chip radio"
+                  >
+                    <input
+                      type="radio"
+                      name="analysisMode"
+                      :value="mode.value"
+                      v-model="analysisMode"
+                    />
+                    <span>{{ mode.label }}</span>
+                  </label>
+                </div>
+                <div class="date-subsection">
+                  <div class="panel-header">
+                    <h4>日期范围</h4>
+                    <span class="panel-hint">与分析模式联动</span>
+                  </div>
+                  <div class="date-grid">
+                    <label class="date-field">
+                      <span>起始日期</span>
+                      <input type="date" v-model="startDate" />
+                    </label>
+                    <label class="date-field">
+                      <span>结束日期</span>
+                      <input type="date" v-model="endDate" :disabled="analysisMode === 'daily'" />
+                    </label>
+                  </div>
+                  <p class="panel-hint">
+                    {{ analysisMode === 'daily' ? '单日模式会自动将结束日期同步为起始日期。' : '累计模式支持跨日期区间。' }}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div class="form-panel">
+            <div class="form-panel form-panel--metrics">
               <div class="panel-header">
                 <h3>指标选择（多选）</h3>
                 <div class="panel-actions">
@@ -1163,10 +1165,21 @@ onMounted(() => {
   align-self: flex-start;
 }
 
+.form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+
+.form-grid--top {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: stretch;
 }
 
 .form-panel {
@@ -1176,6 +1189,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.form-panel--metrics {
+  width: 100%;
 }
 
 .form-panel--compact {
