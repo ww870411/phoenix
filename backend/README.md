@@ -2,6 +2,11 @@
 
 # 后端说明（FastAPI）
 
+## 会话小结（2025-12-11 数据分析默认选项优化）
+
+- 数据分析页面的默认选项逻辑全部在前端完成：单位多选默认置空，温度指标通过权重算法优先锁定“平均气温”，后端 `/data_analysis/schema` 与 `/data_analysis/query` 无需任何调整。该变更仅影响前端如何解读现有 Schema。
+- 若未来需要为不同项目提供其它温度指标作为默认项，可在 `metric_groups` 中明确 temperature 组并保证 `平均气温` 出现在选项列表中，前端会自动捕捉并勾选；后端仍按既定格式返回 `metric_groups/metric_dict` 即可。
+
 ## 会话小结（2025-12-10 数据分析区间趋势图支持）
 
 - 前端 `DataAnalysisView.vue` 在“区间明细（逐日）”下方新增 ECharts 趋势图组件，通过既有 `/data_analysis/query` 返回的 `timeline` 数据绘制本期/同期双折线，并提供指标芯片切换及 dataZoom 缩放。该功能完全复用后端结果，无需追加接口或字段。

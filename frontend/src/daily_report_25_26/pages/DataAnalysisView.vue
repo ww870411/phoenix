@@ -541,23 +541,76 @@ function resolveMetricGroups(payload) {
 
 const unitOptions = computed(() => resolveUnitOptions(schema.value))
 const metricGroups = computed(() => resolveMetricGroups(schema.value))
-const metricOptions = computed(() => metricGroups.value.flatMap((group) => group.options))
 const unitDict = computed(() => schema.value?.unit_dict || {})
 const metricDict = computed(() => schema.value?.metric_dict || {})
 const metricDecimalsMap = computed(() => schema.value?.metric_decimals || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
 const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
 
-const temperatureMetricKey = computed(() => {
-  const tempGroup = metricGroups.value.find((g) => g.key === 'temperature')
-  if (tempGroup && tempGroup.options.length > 0) {
-    return tempGroup.options[0].value
-  }
-  const tempMetric = metricOptions.value.find((m) => (m.label || '').includes('气温'))
-  return tempMetric?.value || null
-})
-
 const TEMPERATURE_KEYWORDS = ['气温', '温度']
+const TEMPERATURE_PRIORITY_LABELS = ['平均气温', '平均温度']
+
+function getTemperatureWeight(label = '') {
+  if (typeof label !== 'string' || !label) return 0
+  const normalized = label.trim()
+  const hasKeyword = TEMPERATURE_KEYWORDS.some((keyword) => normalized.includes(keyword))
+  if (!hasKeyword) return 0
+  if (TEMPERATURE_PRIORITY_LABELS.some((keyword) => normalized.includes(keyword))) return 4
+  if (normalized.includes('平均')) return 3
+  return 1
+}
+
+function findDefaultTemperatureKeys(payload) {
+  if (!payload) return []
+  const result = []
+  let order = 0
+  const visit = (options = [], bonus = 0) => {
+    if (!Array.isArray(options)) return
+    options.forEach((option) => {
+      const value = option?.value
+      if (!value) return
+      const label = option?.label ?? option?.name ?? ''
+      const weight = getTemperatureWeight(label)
+      if (!weight) return
+      result.push({
+        value,
+        weight: weight + bonus,
+        order: order++,
+      })
+    })
+  }
+  const groups = Array.isArray(payload?.metric_groups) ? payload.metric_groups : []
+  groups
+    .filter((group) => group?.options && group.key === 'temperature')
+    .forEach((group) => visit(group.options, 2))
+  groups
+    .filter((group) => group?.options && group.key !== 'temperature')
+    .forEach((group) => visit(group.options))
+  if (!result.length) {
+    visit(payload?.metric_options || [])
+  }
+  if (!result.length && payload?.metric_dict) {
+    Object.entries(payload.metric_dict).forEach(([value, label]) => {
+      const weight = getTemperatureWeight(label)
+      if (weight) {
+        result.push({
+          value,
+          weight,
+          order: order++,
+        })
+      }
+    })
+  }
+  return result
+    .sort((a, b) => {
+      if (b.weight !== a.weight) return b.weight - a.weight
+      return a.order - b.order
+    })
+    .map((item) => item.value)
+}
+
+const temperatureCandidates = computed(() => findDefaultTemperatureKeys(schema.value))
+const temperatureMetricKey = computed(() => temperatureCandidates.value[0] || null)
 
 const selectedUnits = ref([])
 const activeUnit = ref('')
@@ -850,12 +903,19 @@ const metricSnapshot = computed(() =>
 const summaryOverallLine = computed(() => {
   if (!metricSnapshot.value.length) return ''
   const withDelta = metricSnapshot.value.filter((item) => Number.isFinite(item.delta))
-  if (!withDelta.length) {
-    return `本期共呈现 ${metricSnapshot.value.length} 项指标，暂无同比参考。`
+  const withValue = metricSnapshot.value.filter((item) => Number.isFinite(item.value))
+  if (!withValue.length) {
+    return `本期共呈现 ${metricSnapshot.value.length} 项指标，暂无可用数据。`
   }
+  const avgValue =
+    withValue.reduce((sum, item) => sum + (Number(item.value) || 0), 0) / (withValue.length || 1)
+  const maxItem = [...withValue].sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity))[0]
   const upCount = withDelta.filter((item) => item.delta >= 0).length
   const downCount = withDelta.filter((item) => item.delta < 0).length
-  return `本期覆盖 ${metricSnapshot.value.length} 项指标，其中 ${upCount} 项同比上升、${downCount} 项同比下降。`
+  const avgText = Number.isFinite(avgValue) ? `平均水平约 ${formatNumber(avgValue, 2)}` : ''
+  const maxText = maxItem ? `最高值来自 ${maxItem.label}` : ''
+  const deltaText = withDelta.length ? `同比上升 ${upCount} 项、下降 ${downCount} 项` : '暂无同比参考'
+  return `共 ${withValue.length} 项指标，${maxText}${maxText && avgText ? '，' : ''}${avgText}，${deltaText}。`
 })
 
 function formatMetricPair(metric) {
@@ -919,20 +979,19 @@ function computeCorrelation(valuesA = [], valuesB = []) {
 }
 
 const summaryCorrelationLines = computed(() => {
-  const lines = []
   const temperatureMetric = selectedTimelineMetrics.value.find((metric) => isTemperatureMetric(metric))
   if (!temperatureMetric) {
-    lines.push('【相关性】未选温度类指标，无法计算与气温的相关性')
-    return lines
+    return ['【相关性】未勾选平均气温，无法计算相关性']
   }
-  const tempMap = new Map()
+  const tempValuesByDate = new Map()
   ;(temperatureMetric.timeline || []).forEach((entry) => {
     if (entry?.date && Number.isFinite(entry.current)) {
-      tempMap.set(entry.date, Number(entry.current))
+      tempValuesByDate.set(entry.date, Number(entry.current))
     }
   })
-  // 仅列出已勾选的主要指标（有无 timeline 都要给结论/提示）
   const selectedKeys = new Set(selectedMetrics.value || [])
+  const correlationEntries = []
+  const missingEntries = []
   const allSelectedMetrics = timelineMetrics.value.filter((metric) => selectedKeys.has(metric.key))
   allSelectedMetrics.forEach((metric) => {
     if (metric.key === temperatureMetric.key) return
@@ -941,7 +1000,7 @@ const summaryCorrelationLines = computed(() => {
     if (Array.isArray(metric.timeline)) {
       metric.timeline.forEach((entry) => {
         if (!entry?.date || !Number.isFinite(entry.current)) return
-        const tempValue = tempMap.get(entry.date)
+        const tempValue = tempValuesByDate.get(entry.date)
         if (!Number.isFinite(tempValue)) return
         alignedA.push(Number(entry.current))
         alignedB.push(tempValue)
@@ -949,14 +1008,25 @@ const summaryCorrelationLines = computed(() => {
     }
     const corr = computeCorrelation(alignedA, alignedB)
     if (corr === null) {
-      lines.push(`【相关性】${metric.label} 与 ${temperatureMetric.label}：缺少有效逐日数据，无法计算`)
+      missingEntries.push(`${metric.label} 缺少逐日数据`)
       return
     }
-    const level = Math.abs(corr) >= 0.7 ? '高度' : Math.abs(corr) >= 0.4 ? '中等' : '低度'
-    const tendency = corr >= 0 ? '正相关' : '负相关'
-    lines.push(`【相关性】${metric.label} 与 ${temperatureMetric.label} ${level}${tendency}（r=${corr.toFixed(2)}）`)
+    correlationEntries.push({
+      label: metric.label,
+      corr,
+      level: Math.abs(corr) >= 0.7 ? '高度' : Math.abs(corr) >= 0.4 ? '中等' : '低度',
+      tendency: corr >= 0 ? '正相关' : '负相关',
+    })
   })
-  return lines
+  correlationEntries.sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr))
+  const pieces = correlationEntries.map(
+    (entry) => `${entry.label} 与 ${temperatureMetric.label} ${entry.level}${entry.tendency}（r=${entry.corr.toFixed(2)}）`,
+  )
+  missingEntries.forEach((msg) => pieces.push(`${msg}，无法计算相关性`))
+  if (!pieces.length) {
+    return ['【相关性】缺少有效逐日数据，无法计算与气温的相关性']
+  }
+  return [`【相关性】${pieces.join('；')}`]
 })
 
 const analysisSummaryEntries = computed(() => {
@@ -1099,11 +1169,10 @@ async function loadSchema() {
       throw new Error(payload?.message || '配置加载失败')
     }
     schema.value = payload
-    const availableUnits = resolveUnitOptions(payload)
-    const defaultUnit = availableUnits?.[0]?.value || ''
-    selectedUnits.value = defaultUnit ? [defaultUnit] : []
-    activeUnit.value = defaultUnit || ''
-    selectedMetrics.value = new Set()
+    selectedUnits.value = []
+    activeUnit.value = ''
+    const defaultTempKey = temperatureMetricKey.value
+    selectedMetrics.value = defaultTempKey ? new Set([defaultTempKey]) : new Set()
     analysisMode.value = payload.analysis_modes?.[0]?.value || 'daily'
     await ensureDefaultBizDate()
     applyDateDefaults(payload.date_defaults)
@@ -1180,14 +1249,10 @@ function clearPreviewState() {
 }
 
 function resetSelections() {
-  if (unitOptions.value.length) {
-    selectedUnits.value = [unitOptions.value[0].value]
-    activeUnit.value = selectedUnits.value[0]
-  } else {
-    selectedUnits.value = []
-    activeUnit.value = ''
-  }
-  selectedMetrics.value = new Set()
+  selectedUnits.value = []
+  activeUnit.value = ''
+  const defaultTempKey = temperatureMetricKey.value
+  selectedMetrics.value = defaultTempKey ? new Set([defaultTempKey]) : new Set()
   applyDateDefaults(schema.value?.date_defaults || {})
   formError.value = ''
   clearPreviewState()
