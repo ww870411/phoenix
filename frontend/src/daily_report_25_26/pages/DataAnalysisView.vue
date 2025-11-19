@@ -308,13 +308,38 @@
             :autoSizeColumn="true"
           />
         </div>
+        <div class="timeline-chart-panel">
+          <div class="timeline-chart-toolbar" v-if="timelineMetrics.length">
+            <div class="timeline-chart-toolbar__info">
+              <h4>趋势洞察</h4>
+              <span class="panel-hint">切换单位与指标，即时对比本期与同期</span>
+            </div>
+            <div class="timeline-chart-toolbar__metrics">
+              <button
+                v-for="metric in timelineMetrics"
+                :key="`timeline-metric-${metric.key}`"
+                type="button"
+                class="chip chip--toggle"
+                :class="{ active: isTimelineMetricActive(metric.key) }"
+                @click="toggleTimelineMetric(metric.key)"
+              >
+                <span>{{ metric.label }}</span>
+                <span v-if="metric.unit" class="chip-hint">（{{ metric.unit }}）</span>
+              </button>
+            </div>
+          </div>
+          <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="360px" />
+          <div v-else class="timeline-chart-empty">
+            请选择至少一个包含逐日数据的指标以生成趋势图
+          </div>
+        </div>
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx'
@@ -322,6 +347,80 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
 import { getDataAnalysisSchema, getDashboardBizDate, runDataAnalysis } from '../services/api'
+
+const TrendChart = defineComponent({
+  name: 'TrendChart',
+  props: {
+    option: { type: Object, required: true },
+    height: { type: [Number, String], default: '320px' },
+    autoresize: { type: Boolean, default: true },
+  },
+  setup(props) {
+    const container = ref(null)
+    const chart = shallowRef(null)
+    const latestOption = shallowRef(null)
+    const styleHeight = computed(() =>
+      typeof props.height === 'number' ? `${props.height}px` : props.height || '320px',
+    )
+
+    const dispose = () => {
+      if (chart.value) {
+        chart.value.dispose()
+        chart.value = null
+      }
+    }
+
+    const ensureChart = () => {
+      if (!container.value) return
+      if (!window.echarts) {
+        console.warn('[data-analysis] ECharts 全局对象未加载，请检查入口文件是否引入 CDN 脚本')
+        return
+      }
+      if (!chart.value) {
+        chart.value = window.echarts.init(container.value)
+      }
+      if (latestOption.value) {
+        chart.value.setOption(latestOption.value, { notMerge: false, lazyUpdate: true })
+      }
+    }
+
+    const handleResize = () => {
+      if (chart.value) {
+        chart.value.resize()
+      }
+    }
+
+    onMounted(() => {
+      ensureChart()
+      if (props.autoresize) {
+        window.addEventListener('resize', handleResize)
+      }
+    })
+
+    onBeforeUnmount(() => {
+      if (props.autoresize) {
+        window.removeEventListener('resize', handleResize)
+      }
+      dispose()
+    })
+
+    watch(
+      () => props.option,
+      (option) => {
+        latestOption.value = option || null
+        ensureChart()
+      },
+      { deep: true, immediate: true },
+    )
+
+    return () =>
+      h('div', {
+        ref: container,
+        class: 'timeline-chart',
+        style: { height: styleHeight.value },
+      })
+  },
+})
 
 const route = useRoute()
 const projectKey = computed(() => String(route.params.projectKey ?? ''))
@@ -438,6 +537,212 @@ const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
 const queryLoading = ref(false)
 const timelineGrid = ref({ columns: [], rows: [] })
+const activeTimelineMetricKeys = ref([])
+
+const timelineMetrics = computed(() =>
+  previewRows.value.filter((row) => Array.isArray(row.timeline) && row.timeline.length),
+)
+
+const timelineCategories = computed(() =>
+  timelineGrid.value.rows
+    .filter((row) => row?.date && row.date !== '总计')
+    .map((row) => row.date),
+)
+
+watch(
+  timelineMetrics,
+  (metrics) => {
+    const available = metrics.map((item) => item.key).filter(Boolean)
+    if (!available.length) {
+      activeTimelineMetricKeys.value = []
+      return
+    }
+    const retained = activeTimelineMetricKeys.value.filter((key) => available.includes(key))
+    activeTimelineMetricKeys.value =
+      retained.length > 0 ? retained : available.slice(0, Math.min(2, available.length))
+  },
+  { immediate: true },
+)
+
+const timelinePalette = [
+  { current: '#2563eb', peer: '#93c5fd' },
+  { current: '#f97316', peer: '#fdba74' },
+  { current: '#0ea5e9', peer: '#7dd3fc' },
+  { current: '#a855f7', peer: '#d8b4fe' },
+  { current: '#22c55e', peer: '#86efac' },
+]
+
+const timelineChartOption = computed(() => {
+  if (!hasTimelineGrid.value || !timelineCategories.value.length) return null
+  const metricMap = new Map()
+  timelineMetrics.value.forEach((metric) => {
+    metricMap.set(metric.key, metric)
+  })
+  const activeMetrics = activeTimelineMetricKeys.value
+    .map((key) => metricMap.get(key))
+    .filter(Boolean)
+  if (!activeMetrics.length) return null
+
+  const categories = timelineCategories.value
+  const series = []
+  const legend = []
+  const seriesMeta = {}
+
+  activeMetrics.forEach((metric, index) => {
+    const palette = timelinePalette[index % timelinePalette.length]
+    const decimals = metric.decimals ?? 2
+    const timelineMap = {}
+    ;(metric.timeline || []).forEach((entry) => {
+      if (entry?.date) {
+        timelineMap[entry.date] = {
+          current: normalizeChartValue(entry.current, decimals),
+          peer: normalizeChartValue(entry.peer, decimals),
+        }
+      }
+    })
+    const currentName = `${metric.label}（本期）`
+    const peerName = `${metric.label}（同期）`
+    const currentData = categories.map((date) => timelineMap[date]?.current ?? null)
+    const peerData = categories.map((date) => timelineMap[date]?.peer ?? null)
+
+    series.push({
+      name: currentName,
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      showSymbol: categories.length <= 31,
+      data: currentData,
+      yAxisIndex: 0,
+      lineStyle: { width: 3, color: palette.current },
+      areaStyle: {
+        opacity: 0.18,
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(palette.current, 0.45) },
+            { offset: 1, color: 'rgba(255,255,255,0)' },
+          ],
+        },
+      },
+      emphasis: { focus: 'series' },
+    })
+    series.push({
+      name: peerName,
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      showSymbol: categories.length <= 31,
+      data: peerData,
+      yAxisIndex: 0,
+      lineStyle: { width: 2, color: palette.peer, type: 'dashed' },
+      emphasis: { focus: 'series' },
+    })
+    legend.push(currentName, peerName)
+    seriesMeta[currentName] = {
+      unit: metric.unit || '',
+      type: 'current',
+      label: metric.label,
+      getEntry: (date) => timelineMap[date],
+    }
+    seriesMeta[peerName] = {
+      unit: metric.unit || '',
+      type: 'peer',
+      label: metric.label,
+      getEntry: (date) => timelineMap[date],
+    }
+  })
+
+  const tooltipFormatter = (params = []) => {
+    if (!Array.isArray(params) || !params.length) return ''
+    const dateLabel = params[0].axisValue ?? ''
+    const lines = [`<div class="chart-tooltip__title">${dateLabel}</div>`]
+    params.forEach((item) => {
+      const meta = seriesMeta[item.seriesName] || {}
+      const unit = meta.unit ? ` ${meta.unit}` : ''
+      const value =
+        item.data === null || item.data === undefined
+          ? '—'
+          : formatNumber(item.data, 2)
+      const delta = meta.type === 'current' ? formatChartDelta(meta.getEntry?.(dateLabel)) : ''
+      const colorChip =
+        typeof item.color === 'string'
+          ? item.color
+          : Array.isArray(item.color)
+            ? item.color[0]
+            : '#2563eb'
+      lines.push(
+        `<div class="chart-tooltip__item"><span class="chart-tooltip__dot" style="background:${colorChip}"></span>${item.seriesName}：${value}${unit}${delta}</div>`,
+      )
+    })
+    return lines.join('')
+  }
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: 'rgba(15, 23, 42, 0.94)',
+      borderWidth: 0,
+      textStyle: { color: '#f8fafc' },
+      formatter: tooltipFormatter,
+      extraCssText: 'box-shadow: 0 10px 40px rgba(15,23,42,0.35); border-radius: 12px; padding: 12px 16px;',
+    },
+    legend: {
+      type: 'scroll',
+      top: 0,
+      icon: 'roundRect',
+      inactiveColor: '#cbd5f5',
+      data: legend,
+    },
+    grid: { left: 48, right: 24, top: 70, bottom: 90 },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', height: 18, bottom: 30, borderColor: 'transparent', backgroundColor: 'rgba(148,163,184,0.15)' },
+    ],
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: categories,
+      axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.5)' } },
+      axisLabel: { color: '#475569' },
+      axisPointer: {
+        label: {
+          show: true,
+          backgroundColor: '#0f172a',
+          color: '#f8fafc',
+        },
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#475569' },
+      splitLine: { lineStyle: { type: 'dashed', color: 'rgba(148, 163, 184, 0.35)' } },
+    },
+    series,
+  }
+})
+
+function toggleTimelineMetric(metricKey) {
+  const list = [...activeTimelineMetricKeys.value]
+  const index = list.indexOf(metricKey)
+  if (index >= 0) {
+    if (list.length === 1) {
+      return
+    }
+    list.splice(index, 1)
+  } else {
+    list.push(metricKey)
+  }
+  activeTimelineMetricKeys.value = list
+}
+
+function isTimelineMetricActive(metricKey) {
+  return activeTimelineMetricKeys.value.includes(metricKey)
+}
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -787,6 +1092,36 @@ function formatDelta(value) {
   if (Number.isNaN(num)) return '—'
   const sign = num > 0 ? '+' : ''
   return `${sign}${num.toFixed(2)}%`
+}
+
+function normalizeChartValue(value, decimals = 2) {
+  if (value === null || value === undefined) return null
+  const num = Number(value)
+  if (Number.isNaN(num)) return null
+  return Number(num.toFixed(decimals))
+}
+
+function withAlpha(hex, alpha) {
+  if (typeof hex !== 'string' || !hex.startsWith('#')) return hex
+  const value = hex.slice(1)
+  if (value.length !== 6) return hex
+  const r = parseInt(value.slice(0, 2), 16)
+  const g = parseInt(value.slice(2, 4), 16)
+  const b = parseInt(value.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function formatChartDelta(entry) {
+  if (!entry || entry.peer === null || entry.peer === undefined) return ''
+  const current = Number(entry.current)
+  const peer = Number(entry.peer)
+  if (!Number.isFinite(current) || !Number.isFinite(peer) || peer === 0) {
+    return ''
+  }
+  const delta = ((current - peer) / peer) * 100
+  if (!Number.isFinite(delta)) return ''
+  const sign = delta >= 0 ? '+' : ''
+  return `<span class="chart-tooltip__delta">${sign}${delta.toFixed(2)}%</span>`
 }
 
 function resolveValue(row, field) {
@@ -1490,6 +1825,94 @@ onMounted(() => {
 
 .timeline-grid {
   height: 420px;
+}
+
+.timeline-chart-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--neutral-100);
+  border-radius: var(--radius);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timeline-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-chart-toolbar__info h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.timeline-chart-toolbar__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip--toggle {
+  border-radius: 999px;
+  border: 1px solid var(--neutral-200);
+  background: var(--neutral-50);
+  color: var(--neutral-700);
+  transition: all 0.2s ease;
+}
+
+.chip--toggle .chip-hint {
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.chip--toggle.active {
+  border-color: var(--primary-400);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary-700);
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
+}
+
+.timeline-chart-empty {
+  padding: 18px;
+  border: 1px dashed var(--neutral-200);
+  border-radius: var(--radius);
+  text-align: center;
+  color: var(--neutral-500);
+  font-size: 14px;
+}
+
+.chart-tooltip__title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.chart-tooltip__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.chart-tooltip__dot {
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.chart-tooltip__delta {
+  margin-left: 6px;
+  color: var(--danger-100, #fecdd3);
+  font-weight: 600;
 }
 
 .metric-label {

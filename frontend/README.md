@@ -7,6 +7,12 @@
 - `pages/DataAnalysisView.vue` 将“单位选择（多选）”与“分析模式”并排在同一行（`form-grid--top` 最小列宽 320px），新增 `form-layout` 容器，将“指标选择（多选）”移动到下一行独占整行，保持指标面板的滚动与操作区域不受压缩。
 - 样式新增 `.form-layout/.form-grid--top/.form-panel--metrics`，确保宽屏为“两列 + 一列”布局，窄屏自动折行；未改动接口调用或数据处理逻辑。
 
+## 会话小结（2025-12-10 数据分析区间明细趋势图）
+
+- “区间明细（逐日）”下方新增趋势图：基于逐日 timeline 同时绘制本期/同期双折线，支持 dataZoom（slider + inside）缩放；Tooltip 显示单位与同比百分比，右上角 Legend 可滚动。
+- 新增指标切换器：按照当前查询结果中带有 timeline 的指标生成芯片，多选控制 series 显示；当切换单位或重新查询时自动保留可用指标，缺失时提示“请选择至少一个包含逐日数据的指标”。
+- 图表组件 `TrendChart` 内置自适应 resize，配色含渐变填充（本期）+ 虚线（同期），依赖全局 `echarts` CDN 与输入的 timeline 数据，后端无需改动。
+
 ## 会话小结（2025-12-10 数据分析页面开放 Group_admin）
 
 - 登录态中 `Group_admin` 角色现在同样会在 `permissions.page_access` 中收到 `data_analysis`，`PageSelectView.vue` 因此会为集团管理员展示“数据分析页面”入口，导航逻辑沿用已有 `normalizedKey === 'data_analysis'` 分支。
