@@ -354,6 +354,21 @@
             <h3>区间明细（逐日）</h3>
           </div>
         </header>
+        <div v-if="resultUnitKeys.length > 1" class="unit-switch unit-switch--inline unit-switch--grid">
+          <span class="unit-switch__label">切换单位：</span>
+          <div class="unit-switch__chips">
+            <button
+              v-for="unitKey in resultUnitKeys"
+              :key="`timeline-grid-unit-${unitKey}`"
+              type="button"
+              class="unit-toggle"
+              :class="{ active: activeUnit === unitKey }"
+              @click="handleSwitchUnit(unitKey)"
+            >
+              {{ resolveUnitLabel(unitKey) }}
+            </button>
+          </div>
+        </div>
         <div class="timeline-grid-wrapper">
           <RevoGrid
             class="timeline-grid"
@@ -1085,7 +1100,9 @@ function formatMetricPair(metric) {
 
 const summaryTimelineInsight = computed(() => {
   if (!hasTimelineGrid.value || !timelineCategories.value.length) return ''
-  const metrics = activeTimelineMetrics.value
+  const metrics = selectedTimelineMetrics.value.length
+    ? selectedTimelineMetrics.value
+    : activeTimelineMetrics.value
   if (!metrics.length) return ''
   const phrases = metrics
     .map((metric) => {
@@ -1112,7 +1129,7 @@ const summaryTimelineInsight = computed(() => {
           comparisonText = `较同期差值 ${formatNumber(diff, decimals)}${unit}`
         }
       }
-      return `${metric.label} 区间均值约 ${formatNumber(currentAvg, decimals)}${unit}（${comparisonText}）`
+      return `${metric.label} 区间均值 ${formatNumber(currentAvg, decimals)}${unit}（${comparisonText}）`
     })
     .filter(Boolean)
   if (!phrases.length) return ''
@@ -2413,6 +2430,10 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.unit-switch--grid {
+  margin: 0 24px 12px;
 }
 
 .unit-toggle {
