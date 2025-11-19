@@ -264,6 +264,44 @@
                 {{ line }}
               </li>
             </ul>
+            <div v-if="correlationMatrixState.ready" class="correlation-matrix-panel">
+              <div class="correlation-matrix__header">
+                <h4>相关矩阵</h4>
+                <span class="panel-hint">r=1 表示完全正相关，-1 表示完全负相关</span>
+              </div>
+              <div class="correlation-matrix__table-wrapper">
+                <table class="correlation-matrix__table">
+                  <thead>
+                    <tr>
+                      <th>指标</th>
+                      <th v-for="label in correlationMatrixState.headers" :key="`corr-col-${label}`">{{ label }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in correlationMatrixState.rows" :key="`corr-row-${row.label}`">
+                      <th>{{ row.label }}</th>
+                      <td
+                        v-for="(cell, cellIndex) in row.cells"
+                        :key="`corr-cell-${rowIndex}-${cellIndex}`"
+                        :class="['corr-cell', `corr-cell--${cell.tone || 'neutral'}`]"
+                      >
+                        <span class="corr-cell__value">{{ cell.formatted }}</span>
+                        <span v-if="cell.strength > 0" class="corr-cell__meter" aria-hidden="true">
+                          <span
+                            class="corr-cell__meter-bar"
+                            :class="`corr-cell__meter-bar--${cell.tone || 'neutral'}`"
+                            :style="{ width: `${Math.round(cell.strength * 100)}%` }"
+                          ></span>
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-if="correlationMatrixState.notes.length" class="panel-hint warning correlation-matrix__notes">
+                {{ correlationMatrixState.notes.join('；') }}
+              </p>
+            </div>
             <div v-if="summaryCopyMessage" class="summary-copy-hint">{{ summaryCopyMessage }}</div>
           </section>
           <table class="result-table">
@@ -658,6 +696,99 @@ const selectedTimelineMetrics = computed(() => {
   )
 })
 
+function buildTimelineValueMap(metric) {
+  const map = new Map()
+  if (!metric || !Array.isArray(metric.timeline)) return map
+  metric.timeline.forEach((entry) => {
+    if (!entry?.date) return
+    const value = Number(entry.current)
+    if (!Number.isFinite(value)) return
+    map.set(entry.date, value)
+  })
+  return map
+}
+
+function computeCorrelationFromMaps(mapA, mapB) {
+  if (!mapA || !mapB) return null
+  const alignedA = []
+  const alignedB = []
+  mapA.forEach((value, date) => {
+    const other = mapB.get(date)
+    if (!Number.isFinite(other)) return
+    alignedA.push(value)
+    alignedB.push(other)
+  })
+  if (alignedA.length < 2 || alignedB.length < 2) return null
+  return computeCorrelation(alignedA, alignedB)
+}
+
+const correlationMatrixState = computed(() => {
+  const state = {
+    ready: false,
+    headers: [],
+    rows: [],
+    notes: [],
+    insufficientMetrics: [],
+  }
+  const metrics = selectedTimelineMetrics.value
+  if (!metrics.length) return state
+  const prepared = []
+  metrics.forEach((metric) => {
+    const valueMap = buildTimelineValueMap(metric)
+    if (valueMap.size >= 2) {
+      prepared.push({ key: metric.key, label: metric.label, valueMap })
+    } else {
+      state.insufficientMetrics.push(metric.label)
+    }
+  })
+  if (prepared.length < 2) return state
+  const headers = prepared.map((metric) => metric.label)
+  const pairCache = new Map()
+  const missingPairs = new Set()
+  const rows = prepared.map((metricA, rowIndex) => ({
+    label: metricA.label,
+    cells: prepared.map((metricB, columnIndex) => {
+      if (rowIndex === columnIndex) {
+        return { value: 1, formatted: '1.00', tone: 'neutral' }
+      }
+      const cacheKey =
+        rowIndex < columnIndex ? `${metricA.key}__${metricB.key}` : `${metricB.key}__${metricA.key}`
+      if (!pairCache.has(cacheKey)) {
+        const corr = computeCorrelationFromMaps(metricA.valueMap, metricB.valueMap)
+        if (corr === null) {
+          missingPairs.add(`${metricA.label} × ${metricB.label}`)
+        }
+        pairCache.set(cacheKey, corr)
+      }
+      const value = pairCache.get(cacheKey)
+      return {
+        value,
+        formatted: typeof value === 'number' ? value.toFixed(2) : '—',
+        tone:
+          typeof value === 'number'
+            ? value > 0
+              ? 'positive'
+              : value < 0
+                ? 'negative'
+                : 'neutral'
+            : 'muted',
+        strength: typeof value === 'number' ? Math.min(Math.abs(value), 1) : 0,
+      }
+    }),
+  }))
+  state.ready = true
+  state.headers = headers
+  state.rows = rows
+  state.notes = []
+  if (state.insufficientMetrics.length) {
+    state.notes.push(`以下指标逐日样本不足：${state.insufficientMetrics.slice(0, 4).join('、')}`)
+  }
+  if (missingPairs.size) {
+    state.notes.push(`部分组合缺少共同日期：${Array.from(missingPairs).slice(0, 4).join('、')}`)
+  }
+  return state
+})
+
 const timelineCategories = computed(() =>
   timelineGrid.value.rows
     .filter((row) => row?.date && row.date !== '总计')
@@ -934,20 +1065,18 @@ const metricSnapshot = computed(() =>
 
 const summaryOverallLine = computed(() => {
   if (!metricSnapshot.value.length) return ''
-  const withDelta = metricSnapshot.value.filter((item) => Number.isFinite(item.delta))
   const withValue = metricSnapshot.value.filter((item) => Number.isFinite(item.value))
+  const withDelta = metricSnapshot.value.filter((item) => Number.isFinite(item.delta))
   if (!withValue.length) {
-    return `本期共呈现 ${metricSnapshot.value.length} 项指标，暂无可用数据。`
+    return `当前共 ${metricSnapshot.value.length} 项指标，暂无可用数据。`
   }
-  const avgValue =
-    withValue.reduce((sum, item) => sum + (Number(item.value) || 0), 0) / (withValue.length || 1)
-  const maxItem = [...withValue].sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity))[0]
   const upCount = withDelta.filter((item) => item.delta >= 0).length
   const downCount = withDelta.filter((item) => item.delta < 0).length
-  const avgText = Number.isFinite(avgValue) ? `平均水平约 ${formatNumber(avgValue, 2)}` : ''
-  const maxText = maxItem ? `最高值来自 ${maxItem.label}` : ''
+  const missingCount = Math.max(metricSnapshot.value.length - withValue.length, 0)
+  const baseText = `共 ${withValue.length} 项指标`
   const deltaText = withDelta.length ? `同比上升 ${upCount} 项、下降 ${downCount} 项` : '暂无同比参考'
-  return `共 ${withValue.length} 项指标，${maxText}${maxText && avgText ? '，' : ''}${avgText}，${deltaText}。`
+  const missingText = missingCount ? `；另有 ${missingCount} 项暂缺数据` : ''
+  return `${baseText}，${deltaText}${missingText}。`
 })
 
 function formatMetricPair(metric) {
@@ -958,18 +1087,36 @@ const summaryTimelineInsight = computed(() => {
   if (!hasTimelineGrid.value || !timelineCategories.value.length) return ''
   const metrics = activeTimelineMetrics.value
   if (!metrics.length) return ''
-  const primaryMetric = metrics[0]
-  const entries = primaryMetric.timeline || []
-  if (!entries.length) return ''
-  const firstEntry = entries[0]
-  const lastEntry = entries[entries.length - 1]
-  if (!Number.isFinite(firstEntry?.current) || !Number.isFinite(lastEntry?.current) || firstEntry.current === 0) {
-    return ''
-  }
-  const growth = ((lastEntry.current - firstEntry.current) / Math.abs(firstEntry.current)) * 100
-  const trendLabel =
-    growth >= 0 ? `呈现稳步上行（${growth.toFixed(2)}%）` : `出现回落（${Math.abs(growth).toFixed(2)}%）`
-  return `区间趋势：${primaryMetric.label} ${trendLabel}。`
+  const phrases = metrics
+    .map((metric) => {
+      if (!metric || !Array.isArray(metric.timeline)) return ''
+      const currentValues = []
+      const peerValues = []
+      metric.timeline.forEach((entry) => {
+        if (Number.isFinite(entry?.current)) currentValues.push(Number(entry.current))
+        if (Number.isFinite(entry?.peer)) peerValues.push(Number(entry.peer))
+      })
+      const currentAvg = computeAverage(currentValues)
+      if (!Number.isFinite(currentAvg)) return ''
+      const peerAvg = computeAverage(peerValues)
+      const unit = metric.unit ? ` ${metric.unit}` : ''
+      const decimals = Number.isInteger(metric.decimals) ? metric.decimals : 2
+      let comparisonText = '较同期暂无数据'
+      if (Number.isFinite(peerAvg)) {
+        const denominator = Math.abs(peerAvg) > 1e-6 ? Math.abs(peerAvg) : null
+        if (denominator) {
+          const pct = ((currentAvg - peerAvg) / denominator) * 100
+          comparisonText = `较同期${formatDelta(pct)}`
+        } else {
+          const diff = currentAvg - peerAvg
+          comparisonText = `较同期差值 ${formatNumber(diff, decimals)}${unit}`
+        }
+      }
+      return `${metric.label} 区间均值约 ${formatNumber(currentAvg, decimals)}${unit}（${comparisonText}）`
+    })
+    .filter(Boolean)
+  if (!phrases.length) return ''
+  return `区间趋势：${phrases.join('；')}。`
 })
 
 const summaryWarningLine = computed(() => {
@@ -1010,55 +1157,32 @@ function computeCorrelation(valuesA = [], valuesB = []) {
   return Number.isFinite(result) ? result : null
 }
 
+function computeAverage(values = []) {
+  const valid = Array.isArray(values) ? values.filter((value) => Number.isFinite(value)) : []
+  if (!valid.length) return null
+  const sum = valid.reduce((total, value) => total + Number(value), 0)
+  return sum / valid.length
+}
+
 const summaryCorrelationLines = computed(() => {
-  const temperatureMetric = selectedTimelineMetrics.value.find((metric) => isTemperatureMetric(metric))
-  if (!temperatureMetric) {
-    return ['【相关性】未勾选平均气温，无法计算相关性']
+  const state = correlationMatrixState.value
+  if (state.ready) {
+    if (!state.notes.length) {
+      return ['【相关性】已生成相关矩阵（r=1 表示完全正相关，-1 表示完全负相关）。']
+    }
+    return [
+      `【相关性】已生成相关矩阵（r=1 表示完全正相关，-1 表示完全负相关），${state.notes.join('；')}`,
+    ]
   }
-  const tempValuesByDate = new Map()
-  ;(temperatureMetric.timeline || []).forEach((entry) => {
-    if (entry?.date && Number.isFinite(entry.current)) {
-      tempValuesByDate.set(entry.date, Number(entry.current))
-    }
-  })
-  const selectedKeys = new Set(selectedMetrics.value || [])
-  const correlationEntries = []
-  const missingEntries = []
-  const allSelectedMetrics = timelineMetrics.value.filter((metric) => selectedKeys.has(metric.key))
-  allSelectedMetrics.forEach((metric) => {
-    if (metric.key === temperatureMetric.key) return
-    const alignedA = []
-    const alignedB = []
-    if (Array.isArray(metric.timeline)) {
-      metric.timeline.forEach((entry) => {
-        if (!entry?.date || !Number.isFinite(entry.current)) return
-        const tempValue = tempValuesByDate.get(entry.date)
-        if (!Number.isFinite(tempValue)) return
-        alignedA.push(Number(entry.current))
-        alignedB.push(tempValue)
-      })
-    }
-    const corr = computeCorrelation(alignedA, alignedB)
-    if (corr === null) {
-      missingEntries.push(`${metric.label} 缺少逐日数据`)
-      return
-    }
-    correlationEntries.push({
-      label: metric.label,
-      corr,
-      level: Math.abs(corr) >= 0.7 ? '高度' : Math.abs(corr) >= 0.4 ? '中等' : '低度',
-      tendency: corr >= 0 ? '正相关' : '负相关',
-    })
-  })
-  correlationEntries.sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr))
-  const pieces = correlationEntries.map(
-    (entry) => `${entry.label} 与 ${temperatureMetric.label} ${entry.level}${entry.tendency}（r=${entry.corr.toFixed(2)}）`,
-  )
-  missingEntries.forEach((msg) => pieces.push(`${msg}，无法计算相关性`))
-  if (!pieces.length) {
-    return ['【相关性】缺少有效逐日数据，无法计算与气温的相关性']
+  const metrics = selectedTimelineMetrics.value
+  if (!metrics.length) {
+    return ['【相关性】请选择至少两个指标（且需包含逐日数据）以生成相关矩阵。']
   }
-  return [`【相关性】${pieces.join('；')}`]
+  const availableCount = metrics.length - (state.insufficientMetrics?.length || 0)
+  if (availableCount < 2) {
+    return ['【相关性】当前勾选指标的逐日样本不足，暂无法生成相关矩阵。']
+  }
+  return []
 })
 
 const analysisSummaryEntries = computed(() => {
@@ -1700,7 +1824,7 @@ function formatExportNumber(value, decimals = 2) {
 }
 
 function buildSummarySheetData(rows) {
-  const header = ['指标', '本期', '同期', '同比', '单位', '类型']
+  const header = ['指标', '本期', '同期', '同比', '单位']
   const source = Array.isArray(rows) ? rows : []
   const mapped = source.map((row) => [
     row.label,
@@ -1708,7 +1832,6 @@ function buildSummarySheetData(rows) {
     formatExportNumber(resolveValue(row, 'peer'), row.decimals || 2),
     formatPercentValue(resolveDelta(row)) || '',
     row.unit || '',
-    row.value_type || '',
   ])
   return [header, ...mapped]
 }
@@ -2039,6 +2162,103 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.correlation-matrix-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.correlation-matrix__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.correlation-matrix__table-wrapper {
+  overflow-x: auto;
+}
+
+.correlation-matrix__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 360px;
+}
+
+.correlation-matrix__table th,
+.correlation-matrix__table td {
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.correlation-matrix__table th {
+  background: var(--neutral-50, #f8fafc);
+  font-weight: 600;
+}
+
+.corr-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.corr-cell--positive {
+  color: var(--danger-600, #dc2626);
+}
+
+.corr-cell--negative {
+  color: var(--success-600, #16a34a);
+}
+
+.corr-cell--neutral {
+  color: var(--neutral-600, #475569);
+}
+
+.corr-cell--muted {
+  color: var(--neutral-400, #94a3b8);
+}
+
+.corr-cell__meter {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--neutral-100, #f1f5f9);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.corr-cell__meter-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.corr-cell__meter-bar--positive {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), rgba(220, 38, 38, 0.85));
+}
+
+.corr-cell__meter-bar--negative {
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), rgba(22, 163, 74, 0.85));
+}
+
+.corr-cell__meter-bar--neutral {
+  background: linear-gradient(90deg, rgba(71, 85, 105, 0.15), rgba(71, 85, 105, 0.8));
+}
+
+.corr-cell__meter-bar--muted {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.15), rgba(148, 163, 184, 0.4));
+}
+
+.correlation-matrix__notes {
+  margin: 0;
 }
 
 .metrics-group-header {
