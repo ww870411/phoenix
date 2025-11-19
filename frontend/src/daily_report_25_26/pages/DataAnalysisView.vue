@@ -248,6 +248,28 @@
               ⚠ {{ warning }}
             </li>
           </ul>
+          <section v-if="analysisSummaryEntries.length" class="card summary-card headline-card">
+            <header class="card-header card-header--tight">
+              <div>
+                <h3>头条简报</h3>
+                <p class="panel-hint">基于当前单位与区间的自动摘要</p>
+              </div>
+              <button
+                class="btn ghost xs"
+                type="button"
+                :disabled="!analysisSummaryText"
+                @click="copyAnalysisSummary"
+              >
+                复制简报
+              </button>
+            </header>
+            <ul class="headline-list">
+              <li v-for="(line, idx) in analysisSummaryEntries" :key="`headline-${idx}`">
+                {{ line }}
+              </li>
+            </ul>
+            <div v-if="summaryCopyMessage" class="summary-copy-hint">{{ summaryCopyMessage }}</div>
+          </section>
           <table class="result-table">
             <thead>
               <tr>
@@ -309,6 +331,21 @@
           />
         </div>
         <div class="timeline-chart-panel">
+          <div v-if="resultUnitKeys.length > 1" class="unit-switch unit-switch--inline">
+            <span class="unit-switch__label">切换单位：</span>
+            <div class="unit-switch__chips">
+              <button
+                v-for="unitKey in resultUnitKeys"
+                :key="`timeline-unit-${unitKey}`"
+                type="button"
+                class="unit-toggle"
+                :class="{ active: activeUnit === unitKey }"
+                @click="handleSwitchUnit(unitKey)"
+              >
+                {{ resolveUnitLabel(unitKey) }}
+              </button>
+            </div>
+          </div>
           <div class="timeline-chart-toolbar" v-if="timelineMetrics.length">
             <div class="timeline-chart-toolbar__info">
               <h4>趋势洞察</h4>
@@ -511,6 +548,17 @@ const metricDecimalsMap = computed(() => schema.value?.metric_decimals || {})
 const viewMapping = computed(() => schema.value?.view_mapping || {})
 const metricGroupViews = computed(() => schema.value?.metric_group_views || {})
 
+const temperatureMetricKey = computed(() => {
+  const tempGroup = metricGroups.value.find((g) => g.key === 'temperature')
+  if (tempGroup && tempGroup.options.length > 0) {
+    return tempGroup.options[0].value
+  }
+  const tempMetric = metricOptions.value.find((m) => (m.label || '').includes('气温'))
+  return tempMetric?.value || null
+})
+
+const TEMPERATURE_KEYWORDS = ['气温', '温度']
+
 const selectedUnits = ref([])
 const activeUnit = ref('')
 const unitResults = ref({})
@@ -555,6 +603,14 @@ const activeTimelineMetrics = computed(() => {
   return activeTimelineMetricKeys.value.map((key) => metricMap.get(key)).filter(Boolean)
 })
 
+// 所有被选中（勾选）的指标中，具备 timeline 的集合，用于统计/简报
+const selectedTimelineMetrics = computed(() => {
+  const selectedKeys = new Set(selectedMetrics.value || [])
+  return timelineMetrics.value.filter(
+    (metric) => metric.key && selectedKeys.has(metric.key) && Array.isArray(metric.timeline) && metric.timeline.length,
+  )
+})
+
 const timelineCategories = computed(() =>
   timelineGrid.value.rows
     .filter((row) => row?.date && row.date !== '总计')
@@ -570,7 +626,17 @@ watch(
       return
     }
     const retained = activeTimelineMetricKeys.value.filter((key) => available.includes(key))
-    activeTimelineMetricKeys.value = retained.length > 0 ? retained.slice(0, 2) : [available[0]]
+    const ordered = reorderMetricKeys(retained, temperatureMetricKey.value, available)
+    if (ordered.length) {
+      activeTimelineMetricKeys.value = ordered
+      return
+    }
+    if (temperatureMetricKey.value) {
+      const other = available.find((key) => key !== temperatureMetricKey.value)
+      activeTimelineMetricKeys.value = other ? [other, temperatureMetricKey.value] : [temperatureMetricKey.value]
+      return
+    }
+    activeTimelineMetricKeys.value = [available[0]]
   },
   { immediate: true },
 )
@@ -769,6 +835,179 @@ const timelineAxisHints = computed(() => {
   if (!left && !right.length) return null
   return { left, right }
 })
+
+const metricSnapshot = computed(() =>
+  previewRows.value.map((row) => ({
+    label: row.label,
+    unit: row.unit || '',
+    value: resolveValue(row, 'current'),
+    peer: resolveValue(row, 'peer'),
+    delta: resolveDelta(row),
+    missing: !!row.missing,
+  })),
+)
+
+const summaryOverallLine = computed(() => {
+  if (!metricSnapshot.value.length) return ''
+  const withDelta = metricSnapshot.value.filter((item) => Number.isFinite(item.delta))
+  if (!withDelta.length) {
+    return `本期共呈现 ${metricSnapshot.value.length} 项指标，暂无同比参考。`
+  }
+  const upCount = withDelta.filter((item) => item.delta >= 0).length
+  const downCount = withDelta.filter((item) => item.delta < 0).length
+  return `本期覆盖 ${metricSnapshot.value.length} 项指标，其中 ${upCount} 项同比上升、${downCount} 项同比下降。`
+})
+
+function formatMetricPair(metric) {
+  return `${metric.label} ${formatNumber(metric.value, 2)}${metric.unit || ''}（同比 ${formatDelta(metric.delta)}）`
+}
+
+const summaryTimelineInsight = computed(() => {
+  if (!hasTimelineGrid.value || !timelineCategories.value.length) return ''
+  const metrics = activeTimelineMetrics.value
+  if (!metrics.length) return ''
+  const primaryMetric = metrics[0]
+  const entries = primaryMetric.timeline || []
+  if (!entries.length) return ''
+  const firstEntry = entries[0]
+  const lastEntry = entries[entries.length - 1]
+  if (!Number.isFinite(firstEntry?.current) || !Number.isFinite(lastEntry?.current) || firstEntry.current === 0) {
+    return ''
+  }
+  const growth = ((lastEntry.current - firstEntry.current) / Math.abs(firstEntry.current)) * 100
+  const trendLabel =
+    growth >= 0 ? `呈现稳步上行（${growth.toFixed(2)}%）` : `出现回落（${Math.abs(growth).toFixed(2)}%）`
+  return `区间趋势：${primaryMetric.label} ${trendLabel}。`
+})
+
+const summaryWarningLine = computed(() => {
+  const warnings = [...(queryWarnings.value || [])]
+  const missingLabels = metricSnapshot.value.filter((item) => item.missing).map((item) => item.label)
+  if (missingLabels.length) {
+    warnings.push(`以下指标暂缺数据：${missingLabels.slice(0, 3).join('、')}`)
+  }
+  return warnings.join('；')
+})
+
+function computeCorrelation(valuesA = [], valuesB = []) {
+  if (!Array.isArray(valuesA) || !Array.isArray(valuesB)) return null
+  const n = Math.min(valuesA.length, valuesB.length)
+  if (!n) return null
+  let sumA = 0
+  let sumB = 0
+  let sumASq = 0
+  let sumBSq = 0
+  let sumAB = 0
+  let count = 0
+  for (let i = 0; i < n; i += 1) {
+    const a = Number(valuesA[i])
+    const b = Number(valuesB[i])
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+    sumA += a
+    sumB += b
+    sumASq += a * a
+    sumBSq += b * b
+    sumAB += a * b
+    count += 1
+  }
+  if (count < 2) return null
+  const numerator = count * sumAB - sumA * sumB
+  const denominator = Math.sqrt((count * sumASq - sumA * sumA) * (count * sumBSq - sumB * sumB))
+  if (!Number.isFinite(denominator) || denominator === 0) return null
+  const result = numerator / denominator
+  return Number.isFinite(result) ? result : null
+}
+
+const summaryCorrelationLines = computed(() => {
+  const lines = []
+  const temperatureMetric = selectedTimelineMetrics.value.find((metric) => isTemperatureMetric(metric))
+  if (!temperatureMetric) {
+    lines.push('【相关性】未选温度类指标，无法计算与气温的相关性')
+    return lines
+  }
+  const tempMap = new Map()
+  ;(temperatureMetric.timeline || []).forEach((entry) => {
+    if (entry?.date && Number.isFinite(entry.current)) {
+      tempMap.set(entry.date, Number(entry.current))
+    }
+  })
+  // 仅列出已勾选的主要指标（有无 timeline 都要给结论/提示）
+  const selectedKeys = new Set(selectedMetrics.value || [])
+  const allSelectedMetrics = timelineMetrics.value.filter((metric) => selectedKeys.has(metric.key))
+  allSelectedMetrics.forEach((metric) => {
+    if (metric.key === temperatureMetric.key) return
+    const alignedA = []
+    const alignedB = []
+    if (Array.isArray(metric.timeline)) {
+      metric.timeline.forEach((entry) => {
+        if (!entry?.date || !Number.isFinite(entry.current)) return
+        const tempValue = tempMap.get(entry.date)
+        if (!Number.isFinite(tempValue)) return
+        alignedA.push(Number(entry.current))
+        alignedB.push(tempValue)
+      })
+    }
+    const corr = computeCorrelation(alignedA, alignedB)
+    if (corr === null) {
+      lines.push(`【相关性】${metric.label} 与 ${temperatureMetric.label}：缺少有效逐日数据，无法计算`)
+      return
+    }
+    const level = Math.abs(corr) >= 0.7 ? '高度' : Math.abs(corr) >= 0.4 ? '中等' : '低度'
+    const tendency = corr >= 0 ? '正相关' : '负相关'
+    lines.push(`【相关性】${metric.label} 与 ${temperatureMetric.label} ${level}${tendency}（r=${corr.toFixed(2)}）`)
+  })
+  return lines
+})
+
+const analysisSummaryEntries = computed(() => {
+  const entries = []
+  if (summaryOverallLine.value) {
+    entries.push(`【整体概览】${summaryOverallLine.value}`)
+  }
+  if (summaryTimelineInsight.value) {
+    entries.push(`【趋势观测】${summaryTimelineInsight.value}`)
+  }
+  summaryCorrelationLines.value.forEach((line) => entries.push(line))
+  if (summaryWarningLine.value) {
+    entries.push(`【风险提示】${summaryWarningLine.value}`)
+  }
+  return entries
+})
+
+const analysisSummaryText = computed(() => {
+  if (!analysisSummaryEntries.value.length) return ''
+  const header = infoBanner.value || `${analysisModeLabel.value} ｜ 单位：${activeUnitLabel.value}`
+  return [header, ...analysisSummaryEntries.value.map((line, index) => `${index + 1}. ${line}`)].join('\n')
+})
+
+const summaryCopyMessage = ref('')
+async function copyAnalysisSummary() {
+  if (!analysisSummaryText.value) return
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(analysisSummaryText.value)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = analysisSummaryText.value
+      textarea.style.position = 'fixed'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    summaryCopyMessage.value = '已复制到剪贴板'
+    setTimeout(() => {
+      summaryCopyMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    summaryCopyMessage.value = '复制失败，请手动选择文本'
+    setTimeout(() => {
+      summaryCopyMessage.value = ''
+    }, 2000)
+  }
+}
+
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -971,6 +1210,14 @@ async function runAnalysis() {
   }
   clearPreviewState()
   queryLoading.value = true
+  const startedAt = Date.now()
+  console.log('[data-analysis] runAnalysis:start', {
+    units: targetUnits,
+    metrics: Array.from(selectedMetrics.value),
+    analysis_mode: analysisMode.value,
+    start: startDate.value,
+    end: endDate.value,
+  })
   try {
     const runMetrics = Array.from(selectedMetrics.value)
     const requestBase = {
@@ -982,6 +1229,7 @@ async function runAnalysis() {
     const aggregatedResults = {}
     const errors = []
     for (const unitKey of targetUnits) {
+      console.log('[data-analysis] runAnalysis:request', { unitKey, payload: { ...requestBase } })
       const payload = { ...requestBase, unit_key: unitKey }
       try {
         const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
@@ -1009,8 +1257,14 @@ async function runAnalysis() {
           infoBanner: buildInfoBannerFromMeta(meta),
           meta,
         }
+        console.log('[data-analysis] runAnalysis:success', {
+          unitKey,
+          rows: decoratedRows.length,
+          warnings: aggregatedResults[unitKey].warnings.length,
+        })
       } catch (err) {
         errors.push(`${resolveUnitLabel(unitKey)}：${err instanceof Error ? err.message : String(err)}`)
+        console.error('[data-analysis] runAnalysis:unitError', unitKey, err)
       }
     }
     const populatedKeys = Object.keys(aggregatedResults)
@@ -1027,8 +1281,16 @@ async function runAnalysis() {
   } catch (err) {
     formError.value = err instanceof Error ? err.message : '分析查询失败'
     clearPreviewState()
+    console.error('[data-analysis] runAnalysis:error', err)
   } finally {
     queryLoading.value = false
+    const elapsed = Date.now() - startedAt
+    console.log('[data-analysis] runAnalysis:finished', {
+      elapsed_ms: elapsed,
+      activeUnit: activeUnit.value,
+      units: Object.keys(unitResults.value),
+      error: formError.value || null,
+    })
   }
 }
 
@@ -1066,6 +1328,11 @@ function applyActiveUnitResult(unitKey) {
   lastQueryMeta.value = result.meta
   timelineGrid.value = cloneTimelineGrid(result.timeline)
   activeUnit.value = unitKey
+  console.log('[data-analysis] applyActiveUnitResult', {
+    unitKey,
+    rows: previewRows.value.length,
+    timelineRows: timelineGrid.value.rows.length,
+  })
 }
 
 function ensureActiveUnitFromSelection() {
@@ -1166,6 +1433,27 @@ function cloneTimelineGrid(timeline) {
     ? timeline.rows.map((row) => ({ ...row }))
     : []
   return { columns, rows }
+}
+
+function isTemperatureMetric(metric) {
+  if (!metric) return false
+  if (metric.value_type === 'temperature') return true
+  const label = metric.label || ''
+  return TEMPERATURE_KEYWORDS.some((keyword) => label.includes(keyword))
+}
+
+function reorderMetricKeys(keys, temperatureKey, availableKeys = []) {
+  if (!keys || !keys.length) return []
+  const filtered = keys.filter((key) => !availableKeys.length || availableKeys.includes(key))
+  if (!filtered.length) return []
+  if (!temperatureKey) return filtered.slice(0, 2)
+  const hasTemp = filtered.includes(temperatureKey)
+  const withoutTemp = filtered.filter((key) => key !== temperatureKey)
+  if (!hasTemp) return filtered.slice(0, 2)
+  if (!withoutTemp.length) return [temperatureKey]
+  const ordered = withoutTemp.slice(0, 1)
+  ordered.push(temperatureKey)
+  return ordered
 }
 
 function resolveValue(row, field) {
@@ -1862,6 +2150,10 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.unit-switch--inline {
+  margin-bottom: 8px;
+}
+
 .timeline-grid-wrapper {
   width: 100%;
   overflow: hidden;
@@ -1966,6 +2258,31 @@ onMounted(() => {
   color: var(--danger-100, #fecdd3);
   font-weight: 600;
 }
+
+.headline-card {
+  margin-bottom: 16px;
+}
+
+.card-header--tight {
+  padding-bottom: 10px;
+}
+
+.headline-list {
+  list-style: disc;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.summary-copy-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--primary-600);
+}
+
 
 .metric-label {
   display: flex;
