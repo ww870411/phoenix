@@ -463,7 +463,6 @@ const TrendChart = defineComponent({
     const ensureChart = () => {
       if (!container.value) return
       if (!window.echarts) {
-        console.warn('[data-analysis] ECharts 全局对象未加载，请检查入口文件是否引入 CDN 脚本')
         return
       }
       if (!chart.value) {
@@ -1339,7 +1338,6 @@ async function loadDefaultBizDate() {
       typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
     defaultBizDate.value = fromApi || today
   } catch (err) {
-    console.warn('[data-analysis] 获取业务日期失败', err)
     defaultBizDate.value = today
   }
   return defaultBizDate.value
@@ -1423,13 +1421,6 @@ async function runAnalysis() {
   clearPreviewState()
   queryLoading.value = true
   const startedAt = Date.now()
-  console.log('[data-analysis] runAnalysis:start', {
-    units: targetUnits,
-    metrics: Array.from(selectedMetrics.value),
-    analysis_mode: analysisMode.value,
-    start: startDate.value,
-    end: endDate.value,
-  })
   try {
     const runMetrics = Array.from(selectedMetrics.value)
     const requestBase = {
@@ -1441,7 +1432,6 @@ async function runAnalysis() {
     const aggregatedResults = {}
     const errors = []
     for (const unitKey of targetUnits) {
-      console.log('[data-analysis] runAnalysis:request', { unitKey, payload: { ...requestBase } })
       const payload = { ...requestBase, unit_key: unitKey }
       try {
         const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
@@ -1469,14 +1459,8 @@ async function runAnalysis() {
           infoBanner: buildInfoBannerFromMeta(meta),
           meta,
         }
-        console.log('[data-analysis] runAnalysis:success', {
-          unitKey,
-          rows: decoratedRows.length,
-          warnings: aggregatedResults[unitKey].warnings.length,
-        })
       } catch (err) {
         errors.push(`${resolveUnitLabel(unitKey)}：${err instanceof Error ? err.message : String(err)}`)
-        console.error('[data-analysis] runAnalysis:unitError', unitKey, err)
       }
     }
     const populatedKeys = Object.keys(aggregatedResults)
@@ -1493,16 +1477,8 @@ async function runAnalysis() {
   } catch (err) {
     formError.value = err instanceof Error ? err.message : '分析查询失败'
     clearPreviewState()
-    console.error('[data-analysis] runAnalysis:error', err)
   } finally {
     queryLoading.value = false
-    const elapsed = Date.now() - startedAt
-    console.log('[data-analysis] runAnalysis:finished', {
-      elapsed_ms: elapsed,
-      activeUnit: activeUnit.value,
-      units: Object.keys(unitResults.value),
-      error: formError.value || null,
-    })
   }
 }
 
@@ -1540,11 +1516,6 @@ function applyActiveUnitResult(unitKey) {
   lastQueryMeta.value = result.meta
   timelineGrid.value = cloneTimelineGrid(result.timeline)
   activeUnit.value = unitKey
-  console.log('[data-analysis] applyActiveUnitResult', {
-    unitKey,
-    rows: previewRows.value.length,
-    timelineRows: timelineGrid.value.rows.length,
-  })
 }
 
 function ensureActiveUnitFromSelection() {
