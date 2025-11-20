@@ -11,6 +11,7 @@
 - 追加：比对返回 `overlap_records`（所有重合小时的接口/库值，差异标记 different），前端全部列出并将差异高亮。
 - 更新：即便数据库无该小时，也会在明细中列出接口值（库值为空用 “—”），保证每小时对齐结果可见。
 - 提示：前端在写库成功后会提示“气温数据写库成功”，失败时显示错误原因。
+- 增强：仪表盘业务日期默认值现优先使用后端 `set_biz_date`，仅在获取失败时回退到“昨日”，保证日期显示与数据源一致。
 - `backend/services/weather_importer.py` 新增 `compare_with_existing`，统一小时粒度（东八区），用于比对 API 数据与 `temperature_data`；对比逻辑仅做读取，不改数据库。
 - 回滚方式：恢复 `backend/services/weather_importer.py` 与 `backend/api/v1/daily_report_25_26.py` 的本次修改即可。
 

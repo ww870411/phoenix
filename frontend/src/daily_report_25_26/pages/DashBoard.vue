@@ -981,7 +981,7 @@ const syncCacheStatus = (payload, sourceHint = '') => {
 
 // --- 日期与摘要指标 ---
 const today = new Date()
-const defaultBizDate = (() => {
+let defaultBizDate = (() => {
   const bizDate = new Date(today)
   bizDate.setDate(bizDate.getDate() - 1)
   return fmt(bizDate)
@@ -2803,6 +2803,8 @@ const bootstrapDashboard = async () => {
     const date =
       typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
     if (date) {
+      defaultBizDate = date
+      setBizDateInputSilently(date)
       dashboardBootstrapState.targetDate = date
       await loadDashboardData(date)
       return
