@@ -36,11 +36,17 @@ from backend.schemas.auth import (
     WorkflowUnitStatus,
 )
 from backend.services import dashboard_cache
-from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.auth_manager import EAST_8, AuthSession, auth_manager, get_current_session
 from backend.services.dashboard_expression import evaluate_dashboard, load_default_push_date
+from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.runtime_expression import render_spec
 from backend.services.workflow_status import workflow_status_manager
+from backend.services.weather_importer import (
+    WeatherImporterError,
+    fetch_hourly_temperatures,
+    compare_with_existing,
+    persist_hourly_temperatures,
+)
 
 
 
@@ -1890,6 +1896,72 @@ def disable_dashboard_cache_endpoint(
         "ok": True,
         "cache_disabled": status.get("disabled", True),
         "cache_updated_at": status.get("updated_at"),
+    }
+
+
+@router.post(
+    "/dashboard/temperature/import",
+    summary="获取 Open-Meteo 气温数据（仅预览，不写库）",
+    tags=["daily_report_25_26"],
+)
+def import_dashboard_temperature(
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    db_session = SessionLocal()
+    try:
+        result = fetch_hourly_temperatures()
+        tz_name = (result.get("source") or {}).get("timezone")
+        compare_result = compare_with_existing(db_session, result.get("hourly", []), tz_name)
+    except WeatherImporterError as exc:
+        db_session.close()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        db_session.close()
+    fetched_at = datetime.now(tz=EAST_8).isoformat()
+    return {
+        "ok": True,
+        "fetched_at": fetched_at,
+        "source": result.get("source"),
+        "summary": result.get("summary"),
+        "dates": result.get("dates", []),
+        "hourly": result.get("hourly", []),
+        "overlap": compare_result.get("overlap"),
+        "differences": compare_result.get("differences", []),
+        "overlap_records": compare_result.get("overlap_records", []),
+    }
+
+
+@router.post(
+    "/dashboard/temperature/import/commit",
+    summary="获取 Open-Meteo 气温数据并写入 temperature_data（覆盖同一时间段）",
+    tags=["daily_report_25_26"],
+)
+def commit_dashboard_temperature(
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    db_session = SessionLocal()
+    try:
+        result = fetch_hourly_temperatures()
+        tz_name = (result.get("source") or {}).get("timezone")
+        persist_result = persist_hourly_temperatures(db_session, result.get("hourly", []), tz_name)
+    except WeatherImporterError as exc:
+        db_session.close()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception:
+        db_session.rollback()
+        db_session.close()
+        raise
+    fetched_at = datetime.now(tz=EAST_8).isoformat()
+    db_session.close()
+    return {
+        "ok": True,
+        "fetched_at": fetched_at,
+        "source": result.get("source"),
+        "summary": result.get("summary"),
+        "dates": result.get("dates", []),
+        "write_result": persist_result,
     }
 
 

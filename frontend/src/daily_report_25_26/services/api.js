@@ -332,6 +332,32 @@ export async function disableDashboardCache(projectKey) {
   return response.json()
 }
 
+export async function importTemperatureData(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取气温数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function commitTemperatureData(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `写入气温数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getDataAnalysisSchema(projectKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''

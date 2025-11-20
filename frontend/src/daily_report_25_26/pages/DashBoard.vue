@@ -1,5 +1,53 @@
 <template>
   <div class="dashboard-page" :style="pageStyles">
+    <div v-if="temperatureImportDialogVisible" class="temp-import-modal">
+      <div class="temp-import-modal__mask"></div>
+      <div class="temp-import-modal__panel">
+        <div class="temp-import-modal__header">
+          <h3>气温导入预览</h3>
+          <button class="temp-import-modal__close" @click="closeTemperatureImportDialog">×</button>
+        </div>
+          <div class="temp-import-modal__content">
+            <p v-if="temperatureImportStatus.message">{{ temperatureImportStatus.message }}</p>
+            <p v-if="temperatureImportStatus.fetchedAt">获取时间：{{ temperatureImportStatus.fetchedAt }}</p>
+            <p v-if="temperatureImportStatus.dates.length">
+              涉及日期：{{ temperatureImportStatus.dates.join('、') }}
+            </p>
+          <p v-if="temperatureImportStatus.overlapHours">
+            重合区间：{{ temperatureImportStatus.overlapRange }}（{{ temperatureImportStatus.overlapHours }} 小时）
+          </p>
+          <div v-if="temperatureImportStatus.overlapRecords.length" class="temp-import-modal__diffs">
+            <div class="temp-import-modal__diffs-title">重合时段明细（红色代表差异，未命中数据库的记录显示为“—”）：</div>
+            <ul>
+              <li
+                v-for="item in temperatureImportStatus.overlapRecords"
+                :key="item.time"
+                :class="['temp-import-modal__diff-item', { 'temp-import-modal__diff-item--different': item.different }]"
+              >
+                {{ item.time }}：接口 {{ item.apiValue }}℃ / 数据库 {{ item.inDb ? (item.dbValue ?? '—') : '—' }}℃
+              </li>
+            </ul>
+          </div>
+          <p class="temp-import-modal__hint">
+            当前已支持手动入库：点击“确认入库”将覆盖重合时间段的历史气温记录；不操作则仅保留预览。
+          </p>
+            <p v-if="temperatureImportStatus.writeMessage" class="temp-import-modal__write">{{ temperatureImportStatus.writeMessage }}</p>
+          </div>
+        <div class="temp-import-modal__actions">
+          <button
+            class="temp-import-modal__btn temp-import-modal__btn--primary"
+            :disabled="temperatureImportCommitBusy"
+            @click="handleConfirmTemperatureImport"
+          >
+            {{ temperatureImportCommitBusy ? '写入中…' : '确认入库' }}
+          </button>
+          <button class="temp-import-modal__btn" :disabled="temperatureImportCommitBusy" @click="closeTemperatureImportDialog">
+            稍后处理
+          </button>
+        </div>
+      </div>
+    </div>
+
     <header class="dashboard-header">
       <div class="dashboard-header__info">
         <div class="dashboard-header__titles">
@@ -42,6 +90,14 @@
             >
               禁用缓存
             </button>
+            <button
+              class="cache-btn cache-btn--info"
+              type="button"
+              @click="handleImportTemperatureData"
+              :disabled="temperatureImportBusy"
+            >
+              {{ temperatureImportBusy ? '获取中…' : '导入气温' }}
+            </button>
           </div>
           <div class="dashboard-cache-progress" v-if="cacheJob.status !== 'idle'">
             <template v-if="cacheJob.status === 'running'">
@@ -64,6 +120,24 @@
           </div>
           <div class="dashboard-cache-message" v-if="cacheActionMessage">
             {{ cacheActionMessage }}
+          </div>
+          <div class="dashboard-temp-import-status" v-if="temperatureImportStatus.message">
+            <div>{{ temperatureImportStatus.message }}</div>
+            <div v-if="temperatureImportStatus.fetchedAt">获取时间：{{ temperatureImportStatus.fetchedAt }}</div>
+            <div v-if="temperatureImportStatus.dates.length">
+              涉及日期：{{ temperatureImportStatus.dates.join('、') }}
+            </div>
+            <div v-if="temperatureImportStatus.overlapHours">
+              重合区间：{{ temperatureImportStatus.overlapRange }}（{{ temperatureImportStatus.overlapHours }} 小时）
+            </div>
+            <div v-if="temperatureImportStatus.differences.length">
+              值差异（接口 / 数据库）：
+              <ul class="temperature-diff-list">
+                <li v-for="item in temperatureImportStatus.differences" :key="item.time">
+                  {{ item.time }}：{{ item.apiValue }}℃ / {{ item.dbValue }}℃
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -517,6 +591,8 @@ import {
   getCachePublishStatus,
   getDashboardBizDate,
   getDashboardData,
+  importTemperatureData,
+  commitTemperatureData,
   publishDashboardCache,
 } from '../services/api'
 import { useAuthStore } from '../store/auth'
@@ -962,12 +1038,38 @@ const { canPublish } = storeToRefs(authStore)
 const canManageCache = computed(() => Boolean(canPublish.value))
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
+const temperatureImportBusy = ref(false)
+const temperatureImportDialogVisible = ref(false)
+const temperatureImportCommitBusy = ref(false)
+const temperatureImportStatus = reactive({
+  message: '',
+  fetchedAt: '',
+  dates: [],
+  overlapRange: '',
+  overlapHours: 0,
+  differences: [],
+  overlapRecords: [],
+  writeMessage: '',
+})
 const cacheStatus = reactive({
   disabled: false,
   dates: [],
   updatedAt: '',
   lastSource: '',
 })
+
+const resetTemperatureImportStatus = () => {
+  temperatureImportStatus.message = ''
+  temperatureImportStatus.fetchedAt = ''
+  temperatureImportStatus.dates = []
+  temperatureImportStatus.overlapRange = ''
+  temperatureImportStatus.overlapHours = 0
+  temperatureImportStatus.differences = []
+  temperatureImportStatus.overlapRecords = []
+  temperatureImportStatus.writeMessage = ''
+  temperatureImportDialogVisible.value = false
+  temperatureImportCommitBusy.value = false
+}
 
 const assignDashboardPayload = (payload, { showDate }) => {
   const allowBizDateSync = !showDate && !bizDateInput.value
@@ -1194,6 +1296,77 @@ async function handleDisableDashboardCache() {
   } finally {
     cacheActionBusy.value = false
   }
+}
+
+async function handleImportTemperatureData() {
+  if (!canManageCache.value || temperatureImportBusy.value) return
+  temperatureImportBusy.value = true
+  resetTemperatureImportStatus()
+  try {
+    const payload = await importTemperatureData(projectKey)
+    const total = Number(payload?.summary?.total_hours ?? 0)
+    temperatureImportStatus.message =
+      total > 0
+        ? `成功获取 ${total} 条逐小时气温数据`
+        : '成功获取气温数据，但响应中未包含条数'
+    temperatureImportStatus.fetchedAt =
+      typeof payload?.fetched_at === 'string' ? payload.fetched_at : ''
+    temperatureImportStatus.dates = Array.isArray(payload?.dates) ? payload.dates : []
+    const overlap = payload?.overlap
+    if (overlap && typeof overlap === 'object' && overlap.start && overlap.end) {
+      temperatureImportStatus.overlapRange = `${overlap.start} ~ ${overlap.end}`
+      temperatureImportStatus.overlapHours = Number(overlap.hours || 0)
+    } else {
+      temperatureImportStatus.overlapRange = ''
+      temperatureImportStatus.overlapHours = 0
+    }
+    temperatureImportStatus.differences = Array.isArray(payload?.differences)
+      ? payload.differences.map((item) => ({
+          time: item?.time || '',
+          apiValue: typeof item?.api_value === 'number' ? item.api_value : item?.apiValue,
+          dbValue: typeof item?.db_value === 'number' ? item.db_value : item?.dbValue,
+        }))
+      : []
+    temperatureImportStatus.overlapRecords = Array.isArray(payload?.overlap_records)
+      ? payload.overlap_records.map((item) => ({
+          time: item?.time || '',
+          apiValue: typeof item?.api_value === 'number' ? item.api_value : item?.apiValue,
+          dbValue: typeof item?.db_value === 'number' ? item.db_value : item?.dbValue,
+          different: Boolean(item?.different),
+          inDb: Boolean(item?.in_db),
+        }))
+      : []
+    temperatureImportDialogVisible.value = true
+  } catch (err) {
+    temperatureImportStatus.message = err instanceof Error ? err.message : String(err)
+  } finally {
+    temperatureImportBusy.value = false
+  }
+}
+
+function handleConfirmTemperatureImport() {
+  if (!canManageCache.value || temperatureImportCommitBusy.value) return
+  temperatureImportCommitBusy.value = true
+  temperatureImportStatus.writeMessage = ''
+  commitTemperatureData(projectKey)
+    .then((resp) => {
+      const inserted = Number(resp?.write_result?.inserted || 0)
+      const replaced = Number(resp?.write_result?.replaced || 0)
+      temperatureImportStatus.writeMessage = `已写入 ${inserted} 条，覆盖 ${replaced} 条同时间段记录。`
+      cacheActionMessage.value = '气温数据写库成功'
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      temperatureImportStatus.writeMessage = msg
+      cacheActionMessage.value = `气温入库失败：${msg}`
+    })
+    .finally(() => {
+      temperatureImportCommitBusy.value = false
+    })
+}
+
+function closeTemperatureImportDialog() {
+  temperatureImportDialogVisible.value = false
 }
 
 onMounted(() => {
@@ -4033,6 +4206,109 @@ onMounted(() => {
 
 .cache-btn--warning:not(:disabled):hover {
   background: #fde68a;
+}
+
+.cache-btn--info {
+  border-color: #bae6fd;
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.cache-btn--info:not(:disabled):hover {
+  background: #bae6fd;
+}
+
+.dashboard-temp-import-status {
+  font-size: 12px;
+  color: #0f172a;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.temp-import-modal {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.temp-import-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+.temp-import-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 94vw);
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 12px;
+  overflow: hidden;
+}
+.temp-import-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.temp-import-modal__header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.temp-import-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+.temp-import-modal__content {
+  overflow: auto;
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  padding-right: 4px;
+}
+.temp-import-modal__diffs ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+.temp-import-modal__diff-item--different {
+  color: #b91c1c;
+  font-weight: 600;
+}
+.temp-import-modal__hint {
+  margin-top: 8px;
+  color: #888;
+}
+.temp-import-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+.temp-import-modal__write {
+  margin-top: 8px;
+  color: #0f172a;
+  font-weight: 600;
+}
+.temp-import-modal__btn {
+  min-width: 120px;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #f6f6f6;
+  cursor: pointer;
+}
+.temp-import-modal__btn--primary {
+  background: #1677ff;
+  color: #fff;
+  border-color: #1677ff;
 }
 
 .dashboard-cache-status {

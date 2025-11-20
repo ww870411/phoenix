@@ -8,6 +8,21 @@
 - 温度类指标引入权重排序：优先匹配 `平均气温/平均温度`，其次是包含“平均”+“气温/温度”关键字的指标，最后才退回其它温度选项。页面加载与“重置选择”都会根据该排序仅勾选一个温度指标，其余指标保持未选，确保趋势图与“数据简报”的相关性分析始终具备温度基准。
 - 若 Schema 中未提供 temperature 组，也会遍历 `metric_options/metric_dict` 查找气温关键词，确保默认选中逻辑在不同配置下都能触发；无需追加后端字段。
 
+## 会话小结（2025-12-?? 仪表盘气温导入对比）
+
+- “导入气温”按钮保持仅 `can_publish` 账号可见，执行后除条数/日期外新增“重合区间 + 差异列表”展示：后端返回 `overlap/differences`，前端以弹窗呈现，并提供“确认入库/稍后处理”；点击确认会调用新接口写入 `temperature_data` 并返回写入/覆盖条数。
+- `services/api.js` 添加 `commitTemperatureData()`，`DashBoard.vue` 的 `temperatureImportStatus` 增加 `overlapRange/overlapHours/differences` 与写入提示，便于人工对比后再写库。
+- 修复：补充 `commitTemperatureData` 引入，避免前端控制台出现未定义错误。
+- 更新：弹窗现在列出所有重合小时的接口/数据库值，差异项标红，便于人工审阅即使无差异也能看到完整对齐情况。
+- 追加：数据库缺少的小时也会被列出（库值显示为 “—”），确保“每一时刻的气温对比”始终呈现。
+- 提示：确认入库写成功后页面顶部会显示“气温数据写库成功”，失败时展示具体错误。
+- 回滚方式：恢复 `DashBoard.vue` 与 `services/api.js` 本次改动即可，按钮行为会退回到仅显示条数/日期。
+
+## 会话小结（2025-12-?? 仪表盘气温导入按钮）
+
+- 仪表盘顶部缓存按钮组新增“导入气温”按钮，仅在具备 `can_publish` 权限的账号下可见。点击后调用 `POST /projects/daily_report_25_26/dashboard/temperature/import`，实时展示“获取中…”状态，并在完成后提示“成功获取 XX 条逐小时气温数据 / 涉及日期列表”。
+- `services/api.js` 新增 `importTemperatureData()`，界面状态通过 `temperatureImportStatus` 在 `DashBoard.vue` 内部管理，确保导入提示与缓存操作互不干扰；当前阶段仅获取 Open-Meteo 数据，不写入数据库。
+
 ## 会话小结（2025-12-11 数据分析指标组自由组合）
 
 - 数据分析页去掉了基于 `metric_group_views` 的视图约束逻辑，“当前视图不支持该组”提示被移除，任意单位/分析模式下所有指标组均可勾选。

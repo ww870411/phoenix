@@ -2,6 +2,24 @@
 
 # 后端说明（FastAPI）
 
+## 会话小结（2025-12-?? 仪表盘气温导入对比）
+
+- `POST /api/v1/projects/daily_report_25_26/dashboard/temperature/import` 继续保持 `can_publish` 权限，但返回值新增“重合区间与差异列表”：调用 Open-Meteo 后，会在同一事务外只读查询 `temperature_data`，计算接口返回的小时与数据库已存小时的重合区间（start/end/hours），并列出同小时但数值不同的记录（接口值/数据库值），方便人工决策。
+- 新增 `POST /api/v1/projects/daily_report_25_26/dashboard/temperature/import/commit`：再次拉取 Open-Meteo 数据并覆盖写入 `temperature_data`（按时间段 delete+bulk insert，小时去重），返回写入/覆盖条数与起止时间；仍需 `can_publish` 权限。
+- 补充：前端已引入 `commitTemperatureData` 调用新接口，修复未定义报错。
+- 修复：入库/比对时统一补齐时区为东八区并按小时归一，避免 API 时间缺少 tzinfo 导致的时区错位。
+- 追加：比对返回 `overlap_records`（所有重合小时的接口/库值，差异标记 different），前端全部列出并将差异高亮。
+- 更新：即便数据库无该小时，也会在明细中列出接口值（库值为空用 “—”），保证每小时对齐结果可见。
+- 提示：前端在写库成功后会提示“气温数据写库成功”，失败时显示错误原因。
+- `backend/services/weather_importer.py` 新增 `compare_with_existing`，统一小时粒度（东八区），用于比对 API 数据与 `temperature_data`；对比逻辑仅做读取，不改数据库。
+- 回滚方式：恢复 `backend/services/weather_importer.py` 与 `backend/api/v1/daily_report_25_26.py` 的本次修改即可。
+
+## 会话小结（2025-12-?? 仪表盘气温导入预览）
+
+- 新增 `backend/services/weather_importer.py`，封装固定 Open-Meteo 请求（past_days=3、Asia/Singapore 时区、用户提供坐标），解析 `hourly.time/temperature_2m` 并返回逐小时列表与涉及日期；当前阶段仅提供数据预览，不落库。
+- `/api/v1/projects/daily_report_25_26/dashboard/temperature/import` 仅允许具备 `can_publish` 权限的账号调用，成功后返回 `hourly/summary/dates/source/fetched_at`，供仪表盘按钮展示“导入进度”。
+- `backend/requirements.txt` 新增 `httpx` 依赖，后续若要真正写入 `temperature_data` 可在该服务基础上追加 upsert/事务逻辑；若要停用该功能，删除新模块与路由即可回滚。
+
 ## 会话小结（2025-12-11 数据分析默认选项优化）
 
 - 数据分析页面的默认选项逻辑全部在前端完成：单位多选默认置空，温度指标通过权重算法优先锁定“平均气温”，后端 `/data_analysis/schema` 与 `/data_analysis/query` 无需任何调整。该变更仅影响前端如何解读现有 Schema。

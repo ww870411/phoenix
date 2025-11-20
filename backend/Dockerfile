@@ -8,11 +8,12 @@ WORKDIR /app
 # 可选：加速国内源（按需启用）
 # RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 复制代码与依赖文件
-COPY . /app
+# 复制依赖文件并优先安装，便于充分利用缓存
+COPY backend/requirements.txt /tmp/backend_requirements.txt
+RUN pip install --no-cache-dir -r /tmp/backend_requirements.txt
 
-# 安装依赖（若未来添加 requirements.txt/pyproject.toml，可改为更严谨的安装方式）
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" pydantic "sqlalchemy>=2.0" psycopg2-binary openpyxl
+# 再复制全部源代码
+COPY . /app
 
 EXPOSE 8000
 

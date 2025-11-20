@@ -1,5 +1,43 @@
 # 进度记录
 
+## 2025-12-??（气温导入对比预览）
+
+前置说明（降级留痕）：
+- Serena 暂不支持对大体量 FastAPI/Vue 文件做多处插入，本次依 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 修改 `backend/services/weather_importer.py`、`backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DashBoard.vue`，未触及写库逻辑；回滚恢复上述文件即可。
+
+本次动作：
+- `POST /projects/daily_report_25_26/dashboard/temperature/import`：在仅限 `can_publish` 权限的前提下，调用 Open-Meteo 后即时比对 `temperature_data` 表同一时间的记录，返回重合时段与“同小时数值不同”列表，默认不写库。
+- 新增 `POST /projects/daily_report_25_26/dashboard/temperature/import/commit`：调用 Open-Meteo 再次拉取并将重合时间段数据覆盖写入 `temperature_data`（先删区间后写入去重小时），返回 `inserted/replaced/start/end`。
+- 前端“导入气温”按钮改为弹窗展示比对结果，并提供“确认入库/稍后处理”；确认时调用新接口写库，弹窗显示写入条数与覆盖量。
+- 修复：补充 `commitTemperatureData` 前端导入，避免控制台未定义错误。
+- 修复：入库/比对时统一补齐时区（默认东八区）并归一到小时粒度，避免 API 时间与数据库时间存在时区偏移导致的小时错位。
+- 更新：比对响应增加 `overlap_records`，前端弹窗会完整列出重合时间的接口/库值，差异项标红，即使无差异也能看到对齐明细。
+- 更新：即便数据库不存在该小时，也会在明细中列出接口值（库值为 “—”），确保“每一时刻的气温对比”始终可见。
+- 更新：写库成功后前端提示“气温数据写库成功”，失败则提示错误原因。
+
+验证建议：
+1. 以 `can_publish` 账号点击“导入气温”，确认返回信息包含重合区间与差异列表；若数据库为空，重合小时应为 0，差异列表为空。
+2. 人为在 `temperature_data` 写入与 API 返回时间相同但数值不同的记录，再次点击按钮，确认差异列表按小时列出“接口值 / 数据库值”。
+
+## 2025-12-??（仪表盘按钮触发气温数据预览）
+
+前置说明（降级留痕）：
+- Serena 符号编辑暂不支持同时修改 FastAPI 路由与 `.vue` 大文件，本次依 3.9 矩阵降级使用 `desktop-commander::read_file` + `apply_patch` 更新 `backend/api/v1/daily_report_25_26.py`、`backend/services/weather_importer.py`、`backend/requirements.txt`、`frontend/src/daily_report_25_26/services/api.js` 与 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；如需回滚，请恢复上述文件。
+
+本次动作：
+- 新增 `backend/services/weather_importer.py`，封装对固定 Open-Meteo API（含 past_days=3、Asia/Singapore 时区）的调用，解析 `hourly.time/temperature_2m` 并输出列表、日期集合与来源信息，不触碰数据库。
+- FastAPI 增加 `POST /projects/daily_report_25_26/dashboard/temperature/import`，仅允许 `can_publish` 账号调用，返回获取时间、涉及日期与逐小时温度，作为“导入”预览阶段；`backend/requirements.txt` 补充 `httpx` 依赖，并将 `backend/Dockerfile` 调整为“先复制 requirements.txt 并 pip install -r，再复制源码”，确保容器环境自动安装该依赖。
+- 仪表盘顶部新增“导入气温”按钮（与缓存按钮同组，只有可发布账号可见），点击即调用上述接口并在按钮区域展示“获取总条数 / 时间 / 涉及日期”的提示信息，当前阶段仅拉取数据、未写入数据库。
+
+影响范围与回滚：
+- 后端新增的天气服务与接口仅提供预览数据，不修改 `temperature_data` 表；如需回滚，删除新模块并撤销路由注册即可。
+- 前端仅在拥有缓存发布权限的账号下显示“导入气温”按钮，普通账号 UI 无变化；若要移除该按钮，恢复 `DashBoard.vue` 与 `services/api.js` 修改即可。
+
+验证建议：
+1. 使用具有 `can_publish` 权限的账号登录仪表盘，点击“导入气温”按钮，确认按钮在请求期间显示“获取中…”，完成后提示“成功获取 XX 条逐小时气温数据”并列出涉及日期。
+2. 观察浏览器网络请求，确认调用 `/dashboard/temperature/import` 得到 200 响应，`summary.total_hours` 与 `dates` 与 open-meteo 控制台一致。
+3. 使用普通账号或登出状态访问仪表盘，验证顶部按钮组未出现“导入气温”，避免越权调用。
+
 ## 2025-12-11（数据分析默认选项优化）
 
 前置说明：
