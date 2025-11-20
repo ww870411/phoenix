@@ -1,18 +1,15 @@
 """
-Gemini 2.5 Flash 测试脚本（使用新版 google-genai SDK，支持 Google Search Grounding）。
+Gemini 2.5 Flash 文本对话测试脚本（使用新版 google-genai SDK，支持 Google Search Grounding）。
 1. 运行 `pip install google-genai` 安装依赖。
 2. 推荐通过环境变量 `GOOGLE_GEMINI_API_KEY` 提供密钥；若为空则读取 backend_data/api_key.json。
-3. 执行 `python configs/ai_test.py` 进入多轮对话；输入包含“html报告”时会生成 HTML 页面并尝试在浏览器打开。
+3. 执行 `python configs/ai_test.py` 进入多轮对话，仅输出文本答复。
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
-import webbrowser
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -22,18 +19,22 @@ from google.genai import types
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_KEY_FILE = PROJECT_ROOT / "backend_data" / "api_key.json"
 API_KEY = os.environ.get("GOOGLE_GEMINI_API_KEY")
-
-REPORTS_DIR = PROJECT_ROOT / "runtime_reports"
-HTML_REPORT_INSTRUCTION = (
-    "你现在是 HTML 报告生成器，必须严格按照要求输出。"
-    "请根据当前多轮对话的全部上下文，直接输出完整的 HTML 文档，包含 <html>、<head>（含<meta charset=\"utf-8\">）和 <body>，"
-    "需要包含 ECharts 可视化（使用 https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js），至少渲染一张图表，可为折线/柱状/饼图等，"
-    "并配套生成图表依赖的数据脚本。可附加内联样式，使整体适合直接在浏览器展示。"
-    "报告内容需符合用户在问题中描述的主题与结构，语言为中文。"
-    "禁止输出任何解释、提示、免责声明或关于无法打开浏览器/需要复制粘贴的描述，不得包含纯文本说明，"
-    "只能返回完整 HTML 源码。若无法遵守，仍需输出符合要求的 HTML。"
-)
-HTML_TRIGGER_KEYS = ("html报告", "html報告", "html report", "html报告书")
+BASE_SYSTEM_PROMPT = '''1. 角色设定 (Role Definition)
+你是【大连洁净能源集团】的高级经营分析师。你的文风严谨、客观、数据驱动，通过分析财务和生产数据来揭示经营状况。你的受众是集团高层管理者，因此报告需要直击痛点，既要肯定成绩（如成本节约），也要犀利地指出未达标的具体单位和原因。
+2. 任务指令 (Task Instruction)
+请根据我提供的【月度经营数据（JSON/CSV格式）】和【关键事件备注】，撰写一份《经济活动分析报告》。
+报告结构必须包含：
+经营指标分析：收入、成本、利润的同比及计划完成情况。重点分析煤价变动对成本的影响。
+产销情况分析：燃煤计划完成情况、产销边际利润。重点关注“标煤耗量”和“热效率”。
+下月预测：基于当前气温和消耗趋势进行预测。
+存在问题及要求：（关键） 找出数据中“红字”（未达标/同比恶化）的项目，结合我提供的备注，严厉指出问题。
+下阶段措施：基于问题提出改进建议。
+3. 写作逻辑约束 (Logic Constraints) - 这是最重要的一步
+在撰写时，请遵循以下逻辑：
+数据呈现：必须使用“本期数值 + 同比增减量 + 同比增减率 + 计划完成率”的格式。
+归因逻辑：当利润/成本发生重大变化（超过±10%）时，必须引用我提供的【备注】进行解释（如：煤价下跌、气温变化、设备故障）。
+术语使用：准确使用“标煤”、“主营业务收入”、“网损率”、“边际利润”等术语。
+语气控制：在“存在问题”部分，对未达标单位（特别是金州、庄河等）使用严肃、警示性的语言；在“利润分析”部分，如果是因为降本增效，要使用肯定的语言（如“实实在在取得开门红”）。。'''
 
 _client: Optional[genai.Client] = None
 _model_name: Optional[str] = None
@@ -90,15 +91,15 @@ def _extract_text(response: types.GenerateContentResponse) -> str:
     return text.strip()
 
 
-def wants_html_report(user_text: str) -> bool:
-    normalized = user_text.lower().replace(" ", "")
-    return any(key in normalized for key in HTML_TRIGGER_KEYS)
-
-
 def send_message(prompt: str, *, extra_instruction: Optional[str] = None) -> str:
     client = ensure_client()
     contents = _copy_conversation()
-    full_prompt = prompt if not extra_instruction else f"{prompt}\n\n{extra_instruction}"
+    instructions = [
+        item.strip()
+        for item in (BASE_SYSTEM_PROMPT, extra_instruction)
+        if item and item.strip()
+    ]
+    full_prompt = f"{prompt}\n\n{'\n\n'.join(instructions)}" if instructions else prompt
     user_content = types.Content(role="user", parts=[types.Part(text=full_prompt)])
     contents.append(user_content)
     response = client.models.generate_content(
@@ -111,57 +112,9 @@ def send_message(prompt: str, *, extra_instruction: Optional[str] = None) -> str
     _append_message("model", answer)
     return answer
 
-
-def save_html_report(html: str) -> Path:
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = REPORTS_DIR / f"gemini_report_{datetime.now():%Y%m%d_%H%M%S}.html"
-    file_path.write_text(html, encoding="utf-8")
-    return file_path
-
-
-def open_html_report(file_path: Path) -> None:
-    # 依次尝试：os.startfile -> cmd start -> webbrowser，全部失败则提示手动打开
-    opened = False
-    try:
-        os.startfile(file_path)  # type: ignore[attr-defined]
-        opened = True
-    except Exception:
-        pass
-
-    if not opened:
-        try:
-            subprocess.run(
-                ["cmd", "/c", "start", "", str(file_path)],
-                check=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # type: ignore[attr-defined]
-            )
-            opened = True
-        except Exception:
-            pass
-
-    if not opened:
-        try:
-            webbrowser.open_new_tab(file_path.as_uri())
-            opened = True
-        except Exception:
-            pass
-
-    if opened:
-        print(f"已尝试在浏览器打开：{file_path}")
-    else:
-        print(f"[警告] 无法自动打开浏览器，请手动打开该文件：{file_path}")
-
-
-def request_html_report(prompt: str) -> Path:
-    html = send_message(prompt, extra_instruction=HTML_REPORT_INSTRUCTION)
-    file_path = save_html_report(html)
-    open_html_report(file_path)
-    return file_path
-
-
 def main() -> None:
     print("Gemini 2.5 Flash 多轮对话助手（google-genai SDK + Google Search Grounding）。")
-    print("输入 exit/quit 结束；若问题包含“html报告”将生成 HTML 页面并尝试打开浏览器。")
+    print("输入 exit/quit 结束，将返回纯文本答案。")
     while True:
         try:
             question = input("你: ").strip()
@@ -177,12 +130,8 @@ def main() -> None:
             break
 
         try:
-            if wants_html_report(question):
-                report_path = request_html_report(question)
-                print(f"AI: 已生成 HTML 报告 → {report_path}")
-            else:
-                answer = send_message(question)
-                print(f"AI: {answer}")
+            answer = send_message(question)
+            print(f"AI: {answer}")
         except Exception as exc:
             print(f"[调用失败] {exc}")
 

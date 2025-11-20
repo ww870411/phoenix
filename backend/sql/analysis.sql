@@ -269,12 +269,12 @@ calc_inner_heat AS (
   GROUP BY b.company, b.company_cn, cb_ih.value, cp_ih.value
 ),
 calc_heating_income AS (
-  -- 其中：采暖收入（万元）= c.采暖期供热收入 × days_to_biz() / 156
+  -- 其中：暖收入（万元）= c.采暖期供热收入 × days_to_biz() / 156
   SELECT
     b.company,
     b.company_cn,
-    'eco_heating_income'::text AS item,
-    '其中：采暖收入'::text       AS item_cn,
+    'eco_heating_supply_income'::text AS item,
+    '其中：暖收入'::text              AS item_cn,
     '万元'::text                AS unit,
     MAX(b.biz_date)             AS biz_date,
     MAX(b.peer_date)            AS peer_date,
@@ -772,8 +772,8 @@ SELECT
   'ZhuChengQu','主城区',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -900,8 +900,8 @@ SELECT
   'Group','集团全口径',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -1259,11 +1259,11 @@ calc_heating_income AS (
   SELECT
     b.company,
     b.company_cn,
-    'eco_heating_income'::text AS item,
-    '其中：采暖收入'::text       AS item_cn,
-    '万元'::text                AS unit,
-    MAX(b.biz_date)             AS biz_date,
-    MAX(b.peer_date)            AS peer_date,
+    'eco_heating_supply_income'::text AS item,
+    '其中：暖收入'::text              AS item_cn,
+    '万元'::text                     AS unit,
+    MAX(b.biz_date)                  AS biz_date,
+    MAX(b.peer_date)                 AS peer_date,
     COALESCE(cb_sh.value,0) * (SELECT days_range_biz FROM window_defs) / 156.0 AS value_biz_date,
     COALESCE(cp_sh.value,0) * (SELECT days_range_peer FROM window_defs) / 156.0 AS value_peer_date
   FROM base b
@@ -1775,8 +1775,8 @@ SELECT
   'ZhuChengQu','主城区',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -1901,8 +1901,8 @@ SELECT
   'Group','集团全口径',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
-  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL

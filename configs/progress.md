@@ -1,5 +1,46 @@
 # 进度记录
 
+## 2025-12-12（新增 .dockerignore 忽略 db_data）
+
+前置说明（降级留痕）：
+- Serena 对根目录非符号文件创建不支持，按 3.9 矩阵使用 `apply_patch` 新建 `.dockerignore`，仅新增忽略项，不触碰代码；如需回滚可删除该文件。
+
+本次动作：
+- 新增 `.dockerignore`，忽略 `db_data` 数据目录，避免本地 PostgreSQL 数据卷被打包进镜像上下文。
+
+## 2025-12-13（AI 测试脚本改为纯文本模式）
+
+前置说明（降级留痕）：
+- Serena 对非符号 Python 脚本的段落级删除/改写支持有限，本次依 3.9 矩阵使用 `apply_patch` 修改 `configs/ai_test.py`；回滚时恢复该文件原先 HTML 报告逻辑即可。
+
+本次动作：
+- `configs/ai_test.py`：移除 HTML 报告指令、保存与浏览器唤起逻辑，仅保留多轮文本对话；提示文案改为“返回纯文本答案”。
+
+影响与验证：
+- 运行 `python configs/ai_test.py` 后直接返回文本回复，不再生成 `runtime_reports/*.html`；API Key 读取顺序、Google Search Grounding 工具保持不变。
+
+## 2025-12-13（AI 测试脚本新增基础提示变量）
+
+前置说明（降级留痕）：
+- Serena 符号级操作无法一次性为非符号 Python 文件新增常量并穿透到发送函数，本次依 3.9 矩阵使用 `apply_patch` 修改 `configs/ai_test.py`；若需回滚，恢复该文件即可。
+
+本次动作：
+- `configs/ai_test.py` 增加 `BASE_SYSTEM_PROMPT` 字符串，用于统一设置基础提示词并自动拼接到每次用户问题之后；默认文案为“你是凤凰计划的数据填报辅助助手，请用中文简洁回答，避免编造或虚构数据。”
+
+影响与验证：
+- 运行 `python configs/ai_test.py`，任意提问会自动附带基础提示词；若将 `BASE_SYSTEM_PROMPT` 置空字符串，则恢复为原始用户输入。
+
+## 2025-12-13（分析视图采暖收入键名纠正）
+
+前置说明（降级留痕）：
+- Serena 对 SQL 视图的字符串替换不支持符号级精确改名，本次依 3.9 矩阵使用 `apply_patch` 修改 `backend/sql/analysis.sql`；回滚可恢复该文件改名前版本。
+
+本次动作：
+- 将四个分析视图中采暖收入键由 `eco_heating_income`/`其中：采暖收入` 统一更名为 `eco_heating_supply_income`/`其中：暖收入`，包含日视图与累计视图、集团/主城区直接收入汇总的聚合列表。
+
+影响与验证：
+- 运行数据库视图脚本后，`analysis_company_daily/analysis_company_sum/analysis_groups_daily/analysis_groups_sum` 返回的采暖收入 item 应为 `eco_heating_supply_income`、item_cn 为 `其中：暖收入`；直接收入汇总中的合计亦应按新键名聚合。
+
 ## 2025-12-??（气温导入对比预览）
 
 前置说明（降级留痕）：
