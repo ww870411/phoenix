@@ -30,6 +30,15 @@
           aria-label="表级校验开关"
           @change="onSheetValidationToggle"
         />
+        <label class="unit-analysis-inline" title="本单位数据分析开关">
+          <input
+            type="checkbox"
+            :checked="isUnitAnalysisEnabled"
+            :disabled="!canEditUnitAnalysisToggle"
+            @change="handleUnitAnalysisToggleChange"
+          />
+          <span>本单位分析</span>
+        </label>
         <label v-if="isDailyPage" class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;">
           <span>业务日期：</span>
           <input type="date" v-model="bizDate" />
@@ -83,208 +92,15 @@
     </div>
     <div v-else class="placeholder">无模板数据</div>
 
-    <section class="analysis-lite card">
-      <header class="analysis-lite__header">
-        <div>
-          <h3>本单位数据分析（仅当前单位）</h3>
-          <p class="analysis-lite__hint">默认折叠，展开后按时间段生成汇总对比</p>
-        </div>
-        <div class="analysis-lite__actions">
-          <button class="btn ghost" type="button" @click="toggleAnalysisFold">
-            {{ analysisFolded ? '展开' : '收起' }}
-          </button>
-          <button
-            class="btn ghost"
-            type="button"
-            :disabled="analysisResult.rows.length === 0"
-            @click="downloadAnalysisExcel"
-          >
-            导出本单位汇总
-          </button>
-        </div>
-      </header>
-
-      <div v-if="analysisFolded" class="analysis-lite__fold-hint">
-        点击“展开”即可针对当前单位（{{ unitName || unitId || '未知单位' }}）按时间段生成汇总对比。
-      </div>
-
-      <div v-else class="analysis-lite__body">
-        <div v-if="analysisSchemaLoading" class="page-state">分析配置加载中…</div>
-        <div v-else-if="analysisSchemaError" class="page-state error">{{ analysisSchemaError }}</div>
-        <template v-else>
-          <div class="analysis-lite__form">
-            <div class="analysis-lite__field">
-              <label>时间范围（累计）</label>
-              <div class="analysis-lite__dates">
-                <input type="date" v-model="analysisStartDate" />
-                <span>~</span>
-                <input type="date" v-model="analysisEndDate" />
-              </div>
-            </div>
-          <div class="analysis-lite__field">
-            <div class="analysis-lite__field-header">
-              <label>指标选择（多选）</label>
-              <div class="analysis-lite__field-actions">
-                <button class="btn ghost xs" type="button" @click="selectAllAnalysisMetrics">全选</button>
-                <button class="btn ghost xs" type="button" @click="clearAnalysisMetrics">清空</button>
-              </div>
-            </div>
-            <div v-if="analysisMetricGroups.length" class="analysis-lite__grid">
-              <div
-                v-for="group in analysisMetricGroups"
-                :key="`metric-group-${group.key}`"
-                class="analysis-lite__group-card"
-              >
-                <div class="analysis-lite__group-header">
-                  <strong>{{ group.label || '指标' }}</strong>
-                  <span class="analysis-lite__hint">共 {{ (group.options || []).length }} 项</span>
-                </div>
-                <div class="analysis-lite__metrics-grid">
-                  <label
-                    v-for="metric in group.options"
-                    :key="`metric-${group.key}-${metric.value}`"
-                    class="chip checkbox"
-                  >
-                    <input
-                      type="checkbox"
-                      :value="metric.value"
-                      :checked="selectedMetricKeys.has(metric.value)"
-                      @change="toggleAnalysisMetric(metric.value)"
-                    />
-                    <span class="chip-label">
-                      <span
-                        v-if="getAnalysisMetricSelectionOrder(metric.value)"
-                        class="chip-order"
-                      >
-                        {{ getAnalysisMetricSelectionOrder(metric.value) }}
-                      </span>
-                      <span>{{ metric.label }}</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div v-else-if="analysisMetricOptions.length" class="analysis-lite__metrics-grid">
-              <label
-                v-for="metric in analysisMetricOptions"
-                :key="`metric-${metric.value}`"
-                class="chip checkbox"
-              >
-                <input
-                  type="checkbox"
-                  :value="metric.value"
-                  :checked="selectedMetricKeys.has(metric.value)"
-                  @change="toggleAnalysisMetric(metric.value)"
-                />
-                <span class="chip-label">
-                  <span
-                    v-if="getAnalysisMetricSelectionOrder(metric.value)"
-                    class="chip-order"
-                  >
-                    {{ getAnalysisMetricSelectionOrder(metric.value) }}
-                  </span>
-                  <span>{{ metric.label }}</span>
-                </span>
-              </label>
-            </div>
-            <p v-else class="analysis-lite__hint">暂无可选指标，请检查数据分析配置。</p>
-          </div>
-            <div class="analysis-lite__form-actions">
-              <button class="btn primary" type="button" :disabled="analysisLoading" @click="runUnitAnalysis">
-                {{ analysisLoading ? '生成中…' : '生成汇总对比' }}
-              </button>
-              <span class="analysis-lite__unit-label">当前单位：{{ unitName || unitId || '未知' }}</span>
-            </div>
-          </div>
-
-          <div v-if="analysisFormError" class="page-state error">{{ analysisFormError }}</div>
-          <div v-else-if="analysisLoading" class="page-state">正在生成汇总，请稍候…</div>
-          <div v-else-if="!analysisResult.rows.length" class="page-state muted">
-            运行后将在此显示本单位的汇总对比结果。
-          </div>
-          <div v-else class="analysis-lite__result">
-            <div v-if="analysisResult.warnings.length" class="analysis-lite__warnings">
-              <strong>提示：</strong>
-              <ul>
-                <li v-for="(warn, i) in analysisResult.warnings" :key="`warn-${i}`">{{ warn }}</li>
-              </ul>
-            </div>
-            <table class="analysis-lite__table">
-              <colgroup>
-                <col style="width: 32%;" />
-                <col style="width: 22%;" />
-                <col style="width: 22%;" />
-                <col style="width: 24%;" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>指标</th>
-                  <th>本期</th>
-                  <th>同期</th>
-                  <th>同比</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in analysisResult.rows" :key="row.key">
-                  <td class="analysis-lite__metric">{{ row.label }}</td>
-                <td>
-                  <div class="analysis-lite__value">
-                    <span class="analysis-lite__number">{{ formatNumber(row.total_current ?? row.current, row.decimals || 2) }}</span>
-                    <span v-if="row.unit" class="analysis-lite__unit">{{ row.unit }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="analysis-lite__value">
-                    <span class="analysis-lite__number">{{ formatNumber(row.total_peer ?? row.peer, row.decimals || 2) }}</span>
-                    <span v-if="row.unit" class="analysis-lite__unit">{{ row.unit }}</span>
-                  </div>
-                </td>
-                <td :class="resolveDeltaClass(row)">
-                  {{ formatDelta(resolveRowDelta(row)) }}
-                </td>
-              </tr>
-              </tbody>
-            </table>
-            <section v-if="hasTimelineData" class="analysis-lite__timeline">
-              <header class="analysis-lite__timeline-header">
-                <div>
-                  <h3>区间明细（逐日）</h3>
-                  <p class="analysis-lite__hint">展示所选指标的逐日数据与趋势</p>
-                </div>
-              </header>
-              <div v-if="analysisTimelineMetrics.length" class="analysis-lite__timeline-metrics">
-                <button
-                  v-for="metric in analysisTimelineMetrics"
-                  :key="`timeline-chip-${metric.key}`"
-                  type="button"
-                  class="chip chip--toggle"
-                  :class="{ active: activeTimelineMetricKeys.includes(metric.key) }"
-                  @click="toggleTimelineMetric(metric.key)"
-                >
-                  <span>{{ metric.label }}</span>
-                  <span v-if="metric.unit" class="chip-hint">（{{ metric.unit }}）</span>
-                </button>
-              </div>
-              <div class="analysis-lite__timeline-grid">
-                <RevoGrid
-                  class="timeline-grid"
-                  theme="material"
-                  :readonly="true"
-                  :columns="analysisTimelineGrid.columns"
-                  :source="analysisTimelineGrid.rows"
-                  :autoSizeColumn="true"
-                  :rowSize="30"
-                />
-              </div>
-              <div class="analysis-lite__timeline-chart">
-                <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="360px" />
-                <div v-else class="page-state muted">请选择至少一个包含逐日数据的指标生成趋势图</div>
-              </div>
-            </section>
-          </div>
-        </template>
-      </div>
-    </section>
+    <UnitAnalysisLite
+      v-if="isUnitAnalysisEnabled"
+      :project-key="projectKey"
+      :unit-key="unitId || sheetKey"
+      :unit-name="unitName || unitId || sheetKey"
+      :sheet-key="sheetKey"
+      :page-config="pageConfig"
+      :biz-date="bizDate"
+    />
   </div>
   </div>
 </template>
@@ -294,90 +110,19 @@ import '../styles/theme.css'
 import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import UnitAnalysisLite from '../components/UnitAnalysisLite.vue'
 import { useRouter, useRoute } from 'vue-router'
-import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   getTemplate,
   queryData,
   submitData,
   getSheetValidationSwitch,
   setSheetValidationSwitch,
-  getUnitAnalysisMetrics,
-  runDataAnalysis,
-  getDashboardBizDate,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
 import { useAuthStore } from '../store/auth'
-import * as XLSX from 'xlsx'
-
-const TrendChart = defineComponent({
-  name: 'TrendChart',
-  props: {
-    option: { type: Object, required: true },
-    height: { type: [Number, String], default: '320px' },
-    autoresize: { type: Boolean, default: true },
-  },
-  setup(props) {
-    const container = ref(null)
-    const chart = shallowRef(null)
-    const latestOption = shallowRef(null)
-    const styleHeight = computed(() =>
-      typeof props.height === 'number' ? `${props.height}px` : props.height || '320px',
-    )
-
-    const dispose = () => {
-      if (chart.value) {
-        chart.value.dispose()
-        chart.value = null
-      }
-    }
-
-    const ensureChart = () => {
-      if (!container.value || !window.echarts) return
-      if (!chart.value) {
-        chart.value = window.echarts.init(container.value)
-      }
-      if (latestOption.value) {
-        chart.value.setOption(latestOption.value, { notMerge: true, lazyUpdate: false })
-      }
-    }
-
-    const handleResize = () => {
-      if (chart.value) chart.value.resize()
-    }
-
-    onMounted(() => {
-      ensureChart()
-      if (props.autoresize) {
-        window.addEventListener('resize', handleResize)
-      }
-    })
-
-    onBeforeUnmount(() => {
-      if (props.autoresize) {
-        window.removeEventListener('resize', handleResize)
-      }
-      dispose()
-    })
-
-    watch(
-      () => props.option,
-      (option) => {
-        latestOption.value = option || null
-        ensureChart()
-      },
-      { deep: true, immediate: true },
-    )
-
-    return () =>
-      h('div', {
-        ref: container,
-        class: 'timeline-chart',
-        style: { height: styleHeight.value },
-      })
-  },
-})
 
 // --- 基本路由和状态 --- 
 const route = useRoute()
@@ -408,16 +153,6 @@ const isDailyPage = computed(() => {
 const userGroup = computed(() => auth.user?.group ?? '')
 const normalizedGroup = computed(() => userGroup.value.toLowerCase())
 const isUnitScopedEditor = computed(() => normalizedGroup.value === 'unit_admin' || normalizedGroup.value === 'unit_filler')
-const analysisMetricGroups = computed(() => analysisSchema.value?.groups || []);
-const analysisMetricOptions = computed(() => {
-  if (!analysisMetricGroups.value.length) {
-    return (analysisSchema.value?.options || []).slice().sort((a, b) => (a.label || '').localeCompare(b.label || ''));
-  }
-  return analysisMetricGroups.value.flatMap((group) =>
-    (group.options || []).slice().sort((a, b) => (a.label || '').localeCompare(b.label || '')),
-  );
-});
-
 function formatDateYYYYMMDD(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -467,716 +202,69 @@ function newRequestId() { return `${Date.now()}_${Math.random().toString(36).sli
 // 在模板加载过程中，抑制由程序性设置 bizDate 引发的 watch 重入
 const isLoadingTemplate = ref(false);
 
-// --- 本单位分析（轻量版） ---
-function toggleAnalysisFold() {
-  analysisFolded.value = !analysisFolded.value;
-  if (!analysisFolded.value) {
-    ensureAnalysisDefaultDates();
-    ensureAnalysisSchema();
-  }
-}
+// --- 本单位分析启用开关 ---
+const UNIT_ANALYSIS_DEFAULT_ENABLED = new Set([
+  'BeiHai_co_generation_Sheet',
+  'XiangHai_Sheet',
+  'GongRe_Sheet',
+  'JinZhou_Sheet',
+  'BeiFang_Sheet',
+  'JinPu_Sheet',
+  'ZhuangHe_Sheet',
+  'YanJiuYuan_Sheet',
+]);
+const UNIT_ANALYSIS_STORAGE_KEY = 'unit_analysis_enabled_map';
 
-function shiftDateByDays(dateStr, offsetDays) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '';
-  date.setDate(date.getDate() + offsetDays);
-  return formatLocalYYYYMMDD(date);
-}
-
-function applyAnalysisDateWindow(endDate) {
-  if (!endDate) return;
-  const normalizedEnd = formatDateYYYYMMDD(endDate) || endDate;
-  const start = shiftDateByDays(normalizedEnd, -6) || normalizedEnd;
-  analysisStartDate.value = start;
-  analysisEndDate.value = normalizedEnd;
-}
-
-async function loadAnalysisDefaultBizDate() {
-  if (analysisDefaultBizDate.value) {
-    return analysisDefaultBizDate.value;
-  }
+function loadUnitAnalysisToggleMap() {
+  if (typeof window === 'undefined') return {};
   try {
-    const payload = await getDashboardBizDate(projectKey);
-    const value = typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : '';
-    if (value) {
-      analysisDefaultBizDate.value = value;
-      return analysisDefaultBizDate.value;
+    const raw = window.localStorage.getItem(UNIT_ANALYSIS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
     }
   } catch (err) {
-    // 忽略，回退到当前业务日期
+    // ignore
   }
-  const fallback = bizDate.value || canonicalBizDate.value || initialDate;
-  analysisDefaultBizDate.value = fallback;
-  return fallback;
+  return {};
 }
 
-async function ensureAnalysisDefaultDates() {
-  if (analysisDefaultDateApplied.value) return;
-  const base = await loadAnalysisDefaultBizDate();
-  applyAnalysisDateWindow(base);
-  analysisDefaultDateApplied.value = true;
-}
+const unitAnalysisToggleMap = ref(loadUnitAnalysisToggleMap());
+const canEditUnitAnalysisToggle = computed(() => normalizedGroup.value === 'global_admin');
 
-async function ensureAnalysisSchema() {
-  if (analysisSchema.value || analysisSchemaLoading.value) return;
-  analysisSchemaLoading.value = true;
-  analysisSchemaError.value = '';
+const isUnitAnalysisEnabled = computed(() => {
+  if (!sheetKey) return false;
+  const map = unitAnalysisToggleMap.value || {};
+  if (Object.prototype.hasOwnProperty.call(map, sheetKey)) {
+    return !!map[sheetKey];
+  }
+  return UNIT_ANALYSIS_DEFAULT_ENABLED.has(sheetKey);
+});
+
+function persistUnitAnalysisToggle(map) {
+  if (typeof window === 'undefined') return;
   try {
-    const payload = await getUnitAnalysisMetrics(projectKey, {
-      unit_key: unitId.value || sheetKey || '',
-    });
-    if (!payload?.ok) {
-      throw new Error(payload?.message || '分析配置加载失败');
-    }
-    analysisSchema.value = payload;
-    if (!selectedMetricKeys.value.size) {
-      const defaultTemp = analysisTemperatureMetricKey.value;
-      selectedMetricKeys.value = defaultTemp ? new Set([defaultTemp]) : new Set();
-    }
+    window.localStorage.setItem(UNIT_ANALYSIS_STORAGE_KEY, JSON.stringify(map));
   } catch (err) {
-    analysisSchemaError.value = err instanceof Error ? err.message : '分析配置加载失败';
-  } finally {
-    analysisSchemaLoading.value = false;
+    // ignore
   }
 }
 
-function toggleAnalysisMetric(key) {
-  const next = new Set(selectedMetricKeys.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  selectedMetricKeys.value = next;
+function updateUnitAnalysisToggle(value) {
+  if (!sheetKey) return;
+  const nextMap = { ...(unitAnalysisToggleMap.value || {}) };
+  nextMap[sheetKey] = !!value;
+  unitAnalysisToggleMap.value = nextMap;
+  persistUnitAnalysisToggle(nextMap);
 }
 
-function getAnalysisMetricSelectionOrder(metricKey) {
-  const order = Array.from(selectedMetricKeys.value);
-  const index = order.indexOf(metricKey);
-  if (index === -1) return '';
-  return String(index + 1);
+function handleUnitAnalysisToggleChange(event) {
+  if (!canEditUnitAnalysisToggle.value) return;
+  updateUnitAnalysisToggle(event.target.checked);
 }
 
-function selectAllAnalysisMetrics() {
-  const next = new Set();
-  analysisMetricOptions.value.forEach((item) => next.add(item.value));
-  selectedMetricKeys.value = next;
-}
-
-function clearAnalysisMetrics() {
-  selectedMetricKeys.value = new Set();
-}
-
-function resolveRowDelta(row) {
-  if (row.total_delta !== undefined && row.total_delta !== null) return row.total_delta;
-  return row.delta;
-}
-
-function resolveDeltaClass(row) {
-  const delta = resolveRowDelta(row);
-  if (delta === null || delta === undefined || Number.isNaN(Number(delta))) return '';
-  return Number(delta) >= 0 ? 'delta-up' : 'delta-down';
-}
-
-function formatNumber(value, decimals = 2) {
-  if (value === null || value === undefined) return '—';
-  const num = Number(value);
-  if (Number.isNaN(num)) return '—';
-  return num.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
-
-function formatDelta(value) {
-  if (value === null || value === undefined) return '—';
-  const num = Number(value);
-  if (Number.isNaN(num)) return '—';
-  const sign = num > 0 ? '+' : '';
-  return `${sign}${num.toFixed(2)}%`;
-}
-
-function formatPercentValue(value) {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  if (Number.isNaN(num)) return null;
-  return `${num.toFixed(2)}%`;
-}
-
-function applyDecimals(value, decimals = 2) {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  if (Number.isNaN(num)) return null;
-  return Number(num.toFixed(decimals));
-}
-
-function createDeltaCellPayload(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return { text: '—', delta: null };
-  }
-  const deltaNumber = Number(value);
-  return {
-    text: formatPercentValue(deltaNumber) || '—',
-    delta: deltaNumber,
-  };
-}
-
-const timelineDeltaCellTemplate = (createElement, props) => {
-  const rawValue = props?.model?.[props.prop];
-  const text =
-    typeof rawValue === 'object' && rawValue !== null
-      ? rawValue.text ?? '—'
-      : typeof rawValue === 'string'
-        ? rawValue
-        : '—';
-  const deltaNumber =
-    typeof rawValue === 'object' && rawValue !== null && typeof rawValue.delta === 'number'
-      ? rawValue.delta
-      : null;
-  const style = { color: deltaNumber === null ? '#475569' : deltaNumber >= 0 ? '#b91c1c' : '#0f9d58' };
-  return createElement('span', { style }, text || '—');
-};
-
-function normalizeAnalysisRows(rows) {
-  if (!Array.isArray(rows)) return [];
-  return rows.map((row) => ({
-    ...row,
-    decimals: metricDecimalsMap.value?.[row.key] ?? row.decimals ?? 2,
-  }));
-}
-
-function toggleTimelineMetric(metricKey) {
-  const list = [...activeTimelineMetricKeys.value];
-  const index = list.indexOf(metricKey);
-  if (index >= 0) {
-    list.splice(index, 1);
-  } else {
-    list.push(metricKey);
-  }
-  activeTimelineMetricKeys.value = list;
-}
-
-function extractTimelineCellText(value) {
-  if (value && typeof value === 'object') {
-    return value.text ?? '';
-  }
-  return value ?? '';
-}
-
-function normalizeChartValue(value, decimals = 2) {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  if (Number.isNaN(num)) return null;
-  return Number(num.toFixed(decimals));
-}
-
-function withAlpha(hex, alpha) {
-  if (typeof hex !== 'string' || !hex.startsWith('#')) return hex;
-  const value = hex.slice(1);
-  if (value.length !== 6) return hex;
-  const r = parseInt(value.slice(0, 2), 16);
-  const g = parseInt(value.slice(2, 4), 16);
-  const b = parseInt(value.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function formatChartDelta(entry) {
-  if (!entry || entry.peer === null || entry.peer === undefined) return '';
-  const current = Number(entry.current);
-  const peer = Number(entry.peer);
-  if (!Number.isFinite(current) || !Number.isFinite(peer) || peer === 0) {
-    return '';
-  }
-  const delta = ((current - peer) / peer) * 100;
-  if (!Number.isFinite(delta)) return '';
-  const sign = delta >= 0 ? '+' : '';
-  return `<span class="chart-tooltip__delta">${sign}${delta.toFixed(2)}%</span>`;
-}
-
-function isAnalysisTemperatureMetric(metric) {
-  if (!metric) return false;
-  if (analysisTemperatureMetricCandidates.value.includes(metric.key)) return true;
-  if (metric.value_type === 'temperature') return true;
-  const label = metric.label || '';
-  return TEMPERATURE_KEYWORDS.some((keyword) => label.includes(keyword));
-}
-
-function assignTimelineAxisSlots(metrics, temperatureKey) {
-  if (!Array.isArray(metrics) || !metrics.length) return [];
-  const hasTemp = metrics.length >= 2 && metrics.some((metric) => {
-    if (!metric) return false;
-    if (temperatureKey && metric.key === temperatureKey) return true;
-    return isAnalysisTemperatureMetric(metric);
-  });
-  return metrics.map((metric, index) => {
-    const slot = { key: metric?.key || `__timeline_metric_${index}`, axis: 'left' };
-    if (metrics.length >= 2) {
-      if (hasTemp && isAnalysisTemperatureMetric(metric)) {
-        slot.axis = 'right';
-      } else if (!hasTemp && index >= 1) {
-        slot.axis = 'right';
-      }
-    }
-    return slot;
-  });
-}
-
-function buildTimelineGrid(rows) {
-  const dateSet = new Set();
-  const metrics = [];
-  rows.forEach((row) => {
-    if (Array.isArray(row.timeline) && row.timeline.length) {
-      metrics.push(row);
-      row.timeline.forEach((entry) => {
-        if (entry?.date) {
-          dateSet.add(entry.date);
-        }
-      });
-    }
-  });
-  const sortedDates = Array.from(dateSet).sort();
-  if (!sortedDates.length || !metrics.length) {
-    return { columns: [], rows: [] };
-  }
-  const metricState = metrics.map((row) => ({
-    key: row.key,
-    label: row.label,
-    timeline: row.timeline,
-    decimals: row.decimals ?? 2,
-    valueType: row.value_type || 'analysis',
-    totalCurrent: row.total_current ?? null,
-    totalPeer: row.total_peer ?? null,
-    sumCurrent: 0,
-    sumPeer: 0,
-  }));
-  const columns = [{ prop: 'date', name: '日期', size: 110 }];
-  metricState.forEach((row) => {
-    columns.push({ prop: `${row.key}__current`, name: `${row.label}(本期)`, size: 140 });
-    columns.push({ prop: `${row.key}__peer`, name: `${row.label}(同期)`, size: 140 });
-    columns.push({
-      prop: `${row.key}__delta`,
-      name: `${row.label}(同比%)`,
-      size: 120,
-      cellTemplate: timelineDeltaCellTemplate,
-    });
-  });
-  const gridRows = sortedDates.map((date) => {
-    const record = { date };
-    metricState.forEach((row) => {
-      const entry = row.timeline.find((item) => item.date === date);
-      const current = entry?.current ?? null;
-      const peer = entry?.peer ?? null;
-      if (current !== null) {
-        row.sumCurrent += Number(current);
-      }
-      if (peer !== null) {
-        row.sumPeer += Number(peer);
-      }
-      record[`${row.key}__current`] = current !== null ? applyDecimals(current, row.decimals) : null;
-      record[`${row.key}__peer`] = peer !== null ? applyDecimals(peer, row.decimals) : null;
-      const deltaValue =
-        peer !== null && peer !== 0 && current !== null ? ((current - peer) / peer) * 100 : null;
-      record[`${row.key}__delta`] = createDeltaCellPayload(deltaValue);
-    });
-    return record;
-  });
-  const totalRecord = { date: '总计' };
-  metricState.forEach((row) => {
-    let totalCurrent = row.totalCurrent;
-    let totalPeer = row.totalPeer;
-    if (totalCurrent == null) {
-      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
-        totalCurrent = row.timeline[0]?.current ?? null;
-      } else {
-        totalCurrent = row.sumCurrent || null;
-      }
-    }
-    if (totalPeer == null) {
-      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
-        totalPeer = row.timeline[0]?.peer ?? null;
-      } else {
-        totalPeer = row.sumPeer || null;
-      }
-    }
-    totalRecord[`${row.key}__current`] =
-      totalCurrent !== null ? applyDecimals(totalCurrent, row.decimals) : null;
-    totalRecord[`${row.key}__peer`] =
-      totalPeer !== null ? applyDecimals(totalPeer, row.decimals) : null;
-    const deltaValue =
-      totalPeer !== null && totalPeer !== 0 && totalCurrent !== null
-        ? ((totalCurrent - totalPeer) / totalPeer) * 100
-        : null;
-    totalRecord[`${row.key}__delta`] = createDeltaCellPayload(deltaValue);
-  });
-  gridRows.push(totalRecord);
-  return { columns, rows: gridRows };
-}
-
-async function runUnitAnalysis() {
-  analysisFormError.value = '';
-  if (!analysisUnitKey.value) {
-    analysisFormError.value = '缺少单位信息，无法生成分析。';
-    return;
-  }
-  if (!selectedMetricKeys.value.size) {
-    analysisFormError.value = '请至少选择一个指标。';
-    return;
-  }
-  if (!analysisStartDate.value || !analysisEndDate.value) {
-    analysisFormError.value = '请选择时间范围。';
-    return;
-  }
-  const start = analysisStartDate.value;
-  const end = analysisEndDate.value;
-  if (start > end) {
-    analysisFormError.value = '开始日期不能晚于结束日期。';
-    return;
-  }
-  analysisLoading.value = true;
-  analysisResult.value = { rows: [], warnings: [], meta: null };
-  resetAnalysisTimeline();
-  try {
-    const payload = {
-      unit_key: analysisUnitKey.value,
-      metrics: Array.from(selectedMetricKeys.value),
-      analysis_mode: 'range',
-      start_date: start,
-      end_date: end,
-    };
-    const response = await runDataAnalysis(projectKey, payload, {});
-    if (!response?.ok) {
-      throw new Error(response?.message || '分析生成失败');
-    }
-    const decoratedRows = normalizeAnalysisRows(response.rows);
-    analysisResult.value = {
-      rows: decoratedRows,
-      warnings: Array.isArray(response.warnings) ? response.warnings : [],
-      meta: {
-        unit_label: response.unit_label || unitName.value || unitId.value,
-        start_date: response.start_date || start,
-        end_date: response.end_date || end,
-      },
-    };
-    analysisTimelineGrid.value = buildTimelineGrid(decoratedRows);
-    analysisTimelineMetrics.value = decoratedRows
-      .filter((row) => Array.isArray(row.timeline) && row.timeline.length)
-      .map((row) => ({
-        key: row.key,
-        label: row.label,
-        unit: row.unit,
-        decimals: row.decimals,
-        value_type: row.value_type,
-        timeline: row.timeline?.map((entry) => ({ ...entry })) || [],
-      }));
-  } catch (err) {
-    analysisFormError.value = err instanceof Error ? err.message : '分析生成失败';
-    resetAnalysisTimeline();
-  } finally {
-    analysisLoading.value = false;
-  }
-}
-
-function buildAnalysisMetaRows() {
-  const rows = analysisResult.value.rows || [];
-  return [
-    ['单位', analysisResult.value.meta?.unit_label || unitName.value || unitId.value || ''],
-    ['开始日期', analysisResult.value.meta?.start_date || analysisStartDate.value || ''],
-    ['结束日期', analysisResult.value.meta?.end_date || analysisEndDate.value || ''],
-    ['指标数量', rows.length],
-  ];
-}
-
-function buildAnalysisTimelineSheetData() {
-  const columns = Array.isArray(analysisTimelineGrid.value?.columns)
-    ? analysisTimelineGrid.value.columns
-    : [];
-  const rows = Array.isArray(analysisTimelineGrid.value?.rows) ? analysisTimelineGrid.value.rows : [];
-  if (!columns.length || !rows.length) return null;
-  const header = columns.map((column) => column.name || column.prop || '');
-  const body = rows.map((record) =>
-    columns.map((column) => extractTimelineCellText(record[column.prop])),
-  );
-  return [header, ...body];
-}
-
-function buildAnalysisSheetData() {
-  const header = ['指标', '本期', '同期', '同比', '单位'];
-  const rows = analysisResult.value.rows || [];
-  const mapped = rows.map((row) => [
-    row.label,
-    row.total_current ?? row.current ?? '',
-    row.total_peer ?? row.peer ?? '',
-    formatDelta(resolveRowDelta(row)) || '',
-    row.unit || '',
-  ]);
-  const result = [header, ...mapped];
-  const timeline = buildAnalysisTimelineSheetData();
-  if (timeline && timeline.length) {
-    result.push([]);
-    result.push(['区间明细']);
-    timeline.forEach((row) => result.push(row));
-  }
-  result.push([]);
-  result.push(['查询信息']);
-  buildAnalysisMetaRows().forEach((row) => result.push(row));
-  return result;
-}
-
-function downloadAnalysisExcel() {
-  if (!analysisResult.value.rows.length) return;
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet(buildAnalysisSheetData());
-  XLSX.utils.book_append_sheet(wb, sheet, '本单位汇总');
-  const filename = `本单位数据汇总_${analysisResult.value.meta?.unit_label || unitName.value || unitId.value || 'unit'}_${Date.now()}.xlsx`;
-  XLSX.writeFile(wb, filename);
-}
-
-function resetAnalysisResult() {
-  analysisResult.value = { rows: [], warnings: [], meta: null };
-  analysisFormError.value = '';
-  resetAnalysisTimeline();
-}
-
-function resetAnalysisTimeline() {
-  analysisTimelineGrid.value = { columns: [], rows: [] };
-  analysisTimelineMetrics.value = [];
-  activeTimelineMetricKeys.value = [];
-}
-
-// --- 本单位分析（轻量版，默认折叠） ---
-const analysisFolded = ref(true);
-const analysisSchema = ref(null);
-const analysisSchemaLoading = ref(false);
-const analysisSchemaError = ref('');
-const analysisStartDate = ref(bizDate.value);
-const analysisEndDate = ref(bizDate.value);
-const analysisDefaultBizDate = ref('');
-const analysisDefaultDateApplied = ref(false);
-const selectedMetricKeys = ref(new Set());
-const analysisLoading = ref(false);
-const analysisFormError = ref('');
-const analysisResult = ref({ rows: [], warnings: [], meta: null });
-const metricDecimalsMap = computed(() => analysisSchema.value?.decimals || {});
-const analysisUnitKey = computed(() => analysisSchema.value?.unit_key || unitId.value || sheetKey || '');
-const analysisTimelineGrid = ref({ columns: [], rows: [] });
-const analysisTimelineMetrics = ref([]);
-const activeTimelineMetricKeys = ref([]);
-const hasTimelineData = computed(
-  () =>
-    Array.isArray(analysisTimelineGrid.value?.columns) &&
-    analysisTimelineGrid.value.columns.length > 1 &&
-    Array.isArray(analysisTimelineGrid.value?.rows) &&
-    analysisTimelineGrid.value.rows.length > 0,
-);
-const timelinePalette = [
-  { current: '#2563eb', peer: '#93c5fd' },
-  { current: '#f97316', peer: '#fdba74' },
-  { current: '#0ea5e9', peer: '#7dd3fc' },
-  { current: '#a855f7', peer: '#d8b4fe' },
-  { current: '#22c55e', peer: '#86efac' },
-];
-const TEMPERATURE_KEYWORDS = ['气温', '温度'];
-
-const analysisTemperatureMetricCandidates = computed(() => {
-  const groups = Array.isArray(analysisSchema.value?.groups) ? analysisSchema.value.groups : [];
-  const candidates = [];
-  groups.forEach((group) => {
-    if (!group || group.key !== 'temperature') return;
-    (group.options || []).forEach((option) => {
-      if (option?.value) {
-        candidates.push(option.value);
-      }
-    });
-  });
-  return Array.from(new Set(candidates));
-});
-const analysisTemperatureMetricKey = computed(() => analysisTemperatureMetricCandidates.value[0] || null);
-
-const timelineCategories = computed(() =>
-  analysisTimelineGrid.value.rows
-    .filter((row) => row?.date && row.date !== '总计')
-    .map((row) => row.date),
-);
-
-const analysisTimelineMetricMap = computed(() => {
-  const map = new Map();
-  analysisTimelineMetrics.value.forEach((metric) => {
-    if (metric?.key) {
-      map.set(metric.key, metric);
-    }
-  });
-  return map;
-});
-
-const activeTimelineMetrics = computed(() =>
-  activeTimelineMetricKeys.value.map((key) => analysisTimelineMetricMap.value.get(key)).filter(Boolean),
-);
-
-const timelineChartOption = computed(() => {
-  const categories = timelineCategories.value;
-  const metrics = activeTimelineMetrics.value;
-  if (!categories.length || !metrics.length) return null;
-
-  const series = [];
-  const legend = [];
-  const seriesMeta = {};
-  const axisSlots = assignTimelineAxisSlots(metrics, analysisTemperatureMetricKey.value);
-  const hasRightAxis = axisSlots.some((slot) => slot.axis === 'right');
-
-  const makeAxisBase = () => ({
-    type: 'value',
-    axisLabel: { color: '#475569' },
-    splitLine: { lineStyle: { type: 'dashed', color: 'rgba(148, 163, 184, 0.35)' } },
-  });
-
-  const yAxis = hasRightAxis
-    ? [
-        makeAxisBase(),
-        {
-          ...makeAxisBase(),
-          position: 'right',
-          axisLabel: { color: '#475569' },
-        },
-      ]
-    : makeAxisBase();
-
-  metrics.forEach((metric, index) => {
-    if (!metric) return;
-    const palette = timelinePalette[index % timelinePalette.length];
-    const decimals = Number.isInteger(metric.decimals) ? metric.decimals : 2;
-    const timelineMap = {};
-    (metric.timeline || []).forEach((entry) => {
-      if (entry?.date) {
-        timelineMap[entry.date] = {
-          current: normalizeChartValue(entry.current, decimals),
-          peer: normalizeChartValue(entry.peer, decimals),
-        };
-      }
-    });
-    const currentName = `${metric.label}（本期）`;
-    const peerName = `${metric.label}（同期）`;
-    const currentData = categories.map((date) => timelineMap[date]?.current ?? null);
-    const peerData = categories.map((date) => timelineMap[date]?.peer ?? null);
-    const axisSlot = axisSlots[index] || { axis: 'left' };
-    const yAxisIndex = hasRightAxis && axisSlot.axis === 'right' ? 1 : 0;
-
-    series.push({
-      name: currentName,
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      showSymbol: categories.length <= 31,
-      data: currentData,
-      yAxisIndex,
-      lineStyle: { width: 3, color: palette.current },
-      areaStyle: {
-        opacity: 0.18,
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: withAlpha(palette.current, 0.45) },
-            { offset: 1, color: 'rgba(255,255,255,0)' },
-          ],
-        },
-      },
-      emphasis: { focus: 'series' },
-    });
-    series.push({
-      name: peerName,
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      showSymbol: categories.length <= 31,
-      data: peerData,
-      yAxisIndex,
-      lineStyle: { width: 2, color: palette.peer, type: 'dashed' },
-      emphasis: { focus: 'series' },
-    });
-    legend.push(currentName, peerName);
-    seriesMeta[currentName] = {
-      unit: metric.unit || '',
-      type: 'current',
-      label: metric.label,
-      getEntry: (date) => timelineMap[date],
-    };
-    seriesMeta[peerName] = {
-      unit: metric.unit || '',
-      type: 'peer',
-      label: metric.label,
-      getEntry: (date) => timelineMap[date],
-    };
-  });
-
-  const tooltipFormatter = (params = []) => {
-    if (!Array.isArray(params) || !params.length) return '';
-    const dateLabel = params[0].axisValue ?? '';
-    const lines = [`<div class="chart-tooltip__title">${dateLabel}</div>`];
-    params.forEach((item) => {
-      const meta = seriesMeta[item.seriesName] || {};
-      const unit = meta.unit ? ` ${meta.unit}` : '';
-      const value =
-        item.data === null || item.data === undefined ? '—' : formatNumber(item.data, 2);
-      const delta = meta.type === 'current' ? formatChartDelta(meta.getEntry?.(dateLabel)) : '';
-      const colorChip =
-        typeof item.color === 'string'
-          ? item.color
-          : Array.isArray(item.color)
-            ? item.color[0]
-            : '#2563eb';
-      lines.push(
-        `<div class="chart-tooltip__item"><span class="chart-tooltip__dot" style="background:${colorChip}"></span>${item.seriesName}：${value}${unit}${delta}</div>`,
-      );
-    });
-    return lines.join('');
-  };
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' },
-      backgroundColor: 'rgba(15, 23, 42, 0.94)',
-      borderWidth: 0,
-      textStyle: { color: '#f8fafc' },
-      formatter: tooltipFormatter,
-      extraCssText: 'box-shadow: 0 10px 40px rgba(15,23,42,0.35); border-radius: 12px; padding: 12px 16px;',
-    },
-    legend: {
-      type: 'scroll',
-      top: 0,
-      icon: 'roundRect',
-      inactiveColor: '#cbd5f5',
-      data: legend,
-    },
-    grid: { left: 48, right: 24, top: 72, bottom: 90 },
-    dataZoom: [
-      { type: 'inside', start: 0, end: 100 },
-      {
-        type: 'slider',
-        height: 18,
-        bottom: 30,
-        borderColor: 'transparent',
-        backgroundColor: 'rgba(148, 163, 184, 0.15)',
-      },
-    ],
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: categories,
-      axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.5)' } },
-      axisLabel: { color: '#475569' },
-      axisPointer: {
-        label: {
-          show: true,
-          backgroundColor: '#0f172a',
-          color: '#f8fafc',
-        },
-      },
-    },
-    yAxis,
-    series,
-  };
-});
-
-if (!projectKey || !pageKey || !sheetKey || !pageConfig.value) {
+if (!projectKey || !pageKey || !sheetKey) {
   router.replace({ name: 'projects' });
 }
 
@@ -2905,34 +1993,6 @@ watch(
   },
 );
 
-watch(
-  () => analysisTimelineMetrics.value,
-  (metrics) => {
-    const available = metrics.map((item) => item?.key).filter(Boolean);
-    if (!available.length) {
-      activeTimelineMetricKeys.value = [];
-      return;
-    }
-    const retained = activeTimelineMetricKeys.value.filter((key) => available.includes(key));
-    if (retained.length) {
-      activeTimelineMetricKeys.value = retained;
-      return;
-    }
-    activeTimelineMetricKeys.value = available.slice(0, Math.min(2, available.length));
-  },
-  { immediate: true },
-);
-
-watch(
-  () => bizDate.value,
-  (value) => {
-    if (!value) return;
-    applyAnalysisDateWindow(value);
-    analysisDefaultDateApplied.value = true;
-    resetAnalysisResult();
-  },
-);
-
 onBeforeUnmount(() => {
   if (submitFeedbackTimer !== null) {
     clearTimeout(submitFeedbackTimer);
@@ -2976,59 +2036,28 @@ onBeforeUnmount(() => {
 .validation-panel__item--warning .validation-panel__badge { background: rgba(251, 191, 36, 0.2); color: #b45309; }
 .validation-panel__label { font-weight: 600; color: #1f2937; }
 .validation-panel__message { flex: 1; color: #374151; }
-.analysis-lite { margin-top: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.analysis-lite__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.analysis-lite__actions { display: flex; gap: 8px; }
-.analysis-lite__hint { color: #64748b; font-size: 13px; }
-.analysis-lite__fold-hint { padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; color: #475569; }
-.analysis-lite__body { display: flex; flex-direction: column; gap: 12px; }
-.analysis-lite__form { display: flex; flex-direction: column; gap: 12px; }
-.analysis-lite__field { display: flex; flex-direction: column; gap: 6px; }
-.analysis-lite__field-header { display: flex; justify-content: space-between; align-items: center; }
-.analysis-lite__field-actions { display: flex; gap: 6px; }
-.analysis-lite__dates { display: flex; align-items: center; gap: 8px; }
-.analysis-lite__metrics { max-height: 200px; overflow: auto; }
-.analysis-lite__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-.analysis-lite__group-card { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; display: flex; flex-direction: column; gap: 8px; }
-.analysis-lite__group-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.analysis-lite__metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; max-height: 220px; overflow: auto; padding-right: 4px; }
-.analysis-lite__form-actions { display: flex; align-items: center; gap: 12px; }
-.analysis-lite__unit-label { font-size: 13px; color: #475569; }
-.analysis-lite__result { display: flex; flex-direction: column; gap: 10px; }
-.analysis-lite__warnings { padding: 10px 12px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; color: #9a3412; }
-.analysis-lite__table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.analysis-lite__table th, .analysis-lite__table td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; vertical-align: middle; }
-.analysis-lite__table th { text-align: center; white-space: nowrap; }
-.analysis-lite__table td { text-align: center; }
-.analysis-lite__metric { font-weight: 600; color: #0f172a; min-width: 160px; }
-.analysis-lite__value { display: inline-flex; justify-content: center; align-items: baseline; gap: 6px; color: #0f172a; width: 100%; }
-.analysis-lite__number { font-weight: 700; }
-.analysis-lite__unit { color: #475569; font-size: 13px; }
-.analysis-lite__table .delta-up { color: #b91c1c; }
-.analysis-lite__table .delta-down { color: #0f9d58; }
-.analysis-lite__timeline { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
-.analysis-lite__timeline-header { display: flex; justify-content: space-between; align-items: center; }
-.analysis-lite__timeline-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip--toggle { border: 1px solid #cbd5f5; background: #fff; }
-.chip--toggle.active { background: #2563eb; color: #fff; border-color: #2563eb; }
-.chip-label { display: inline-flex; align-items: center; gap: 6px; }
-.chip-order {
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--primary-50, #eef2ff);
-  color: var(--primary-700, #1d4ed8);
-  font-size: 12px;
+.unit-analysis-inline {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--primary-100, #dbeafe);
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--neutral-50);
+  color: var(--neutral-700);
 }
-.analysis-lite__timeline-grid { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
-.analysis-lite__timeline-chart { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fff; }
-.chart-tooltip__title { font-weight: 700; margin-bottom: 8px; }
-.chart-tooltip__item { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.6; }
-.chart-tooltip__dot { display: inline-flex; width: 10px; height: 10px; border-radius: 999px; }
-.chart-tooltip__delta { margin-left: 6px; color: #fecdd3; font-weight: 600; }
+.unit-analysis-inline input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-600, #2563eb);
+}
+.unit-analysis-toggle__hint { color: #64748b; font-size: 13px; }
+.unit-analysis-toggle__switch { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #0f172a; }
+.unit-analysis-toggle__switch input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-600, #2563eb);
+}
+.unit-analysis-toggle__switch input:disabled + span { color: #94a3b8; }
 
 </style>

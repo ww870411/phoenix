@@ -2482,3 +2482,130 @@ sum_basic_data 相关：
 
 影响范围与回滚：
 - 本次仅阅读，无代码变更，无需回滚。
+
+## 2025-12-16（数据分析页现状复盘，仅阅读）
+
+前置说明（降级留痕）：
+- Serena 对 Markdown 追加暂不支持符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 追加文档；未改动任何代码，回滚仅需删除本节。
+
+本次动作：
+- 复核 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 组件结构：加载 schema 后解析单位/指标/分析模式/默认日期；温度指标按权重默认勾选；表单校验要求至少选择单位与指标，支持单日/区间模式的日期联动。
+- `runAnalysis` 按所选单位逐一调用 `/data_analysis/query`，缓存 `rows/warnings/timeline/meta`，并在前端完成摘要、相关矩阵、趋势图与 Excel 导出（多单位多 Sheet）。
+- 结果区支持单位切换、warnings 提示、数据简报（整体/趋势/相关性/风险）、相关矩阵与复制；区间模式提供 RevoGrid 逐日表与 ECharts 趋势图（温度或第二指标自动绑定右轴，包含 dataZoom 与 tooltip）。
+
+影响范围与回滚：
+- 仅文档登记，无代码或接口改动；删除本节即可回滚。
+
+## 2025-12-16（填报页本单位分析组件完成）
+
+前置说明（降级留痕）：
+- Serena 未对 `.vue` 混合片段提供完整写入，本次依 3.9 矩阵降级使用 `apply_patch` 完成 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 补全本单位分析独立组件逻辑：默认折叠，展开时加载分析指标 schema（`getUnitAnalysisMetrics`），按 `set_biz_date` 回溯 7 天设置起止日期，仅允许当前单位、`analysis_mode=range` 调用 `runDataAnalysis`，并缓存 rows/warnings/timeline/meta。
+- 支持指标多选（温度按权重默认勾选）、日期联动、结果表/提示、本期同期同比、区间逐日 RevoGrid、趋势图（温度优先右轴）及单单位 Excel 导出（汇总+逐日+查询信息）。
+- 增补样式与导出工具函数，修复表单重置与 delta 计算；指标/日期变更会清空旧结果，切换单位重新加载 schema。
+
+影响范围与回滚：
+- 仅前端 `UnitAnalysisLite.vue`；后端接口不变。回滚恢复该文件即可，折叠区将退回空白状态。
+
+## 2025-12-16（数据填报页编译错误修复）
+
+前置说明（降级留痕）：
+- Serena 无法对 `.vue` 混合片段追加符号级修改，本次依 3.9 矩阵降级使用 `apply_patch` 修复 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 修复意外悬挂的 `router.replace` 代码块，恢复参数缺失时的跳转校验 `if (!projectKey || !pageKey || !sheetKey)`，消除编译期 Unexpected token 报错。
+
+影响范围与回滚：
+- 仅前端脚本语法修复，后端接口与配置不变；回滚删除本次改动即可。
+
+## 2025-12-17（数据填报页分析开关位置调整）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 混合片段符号写入有限，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 将“本单位数据分析”启用开关移至顶栏“业务日期”左侧，独立于表级校验开关，保持仅管理员可切换；移除页面中原卡片式开关。
+- 新增行内样式 `unit-analysis-inline`，与顶栏控件对齐，功能逻辑不变。
+
+影响范围与回滚：
+- 仅前端 UI 布局，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（数据填报页分析开关尺寸统一）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 混合片段符号写入有限，本次依 3.9 矩阵降级使用 `apply_patch` 调整 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 将顶栏“本单位分析”开关的 checkbox 尺寸统一为 16x16，与表级校验开关一致，保持行内样式不变。
+
+影响范围与回滚：
+- 仅前端样式微调，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析指标面板滚动）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 混合片段符号写入有限，本次依 3.9 矩阵降级使用 `apply_patch` 调整 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 在“指标选择（多选）”区域增加高度限制并启用纵向滚动，避免选项过多时撑高页面：指标分组网格 `max-height:360px`，组内网格 `max-height:320px`，均添加内边距与滚动条。
+
+影响范围与回滚：
+- 仅前端样式优化，功能和接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析未知单位容错）
+
+前置说明（降级留痕）：
+- Serena 不支持 `.vue` 符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 计算 `analysisUnitKey` 时优先使用 schema 下发的 `unit_key`，否则根据 `unit_dict` 匹配当前单位（按 key、label 精确/模糊）再回退到 props `unitKey/sheetKey`，避免出现 “未知单位: BeiHai” 报错。
+
+影响范围与回滚：
+- 仅前端请求参数选择逻辑调整，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析单位匹配再修正）
+
+前置说明（降级留痕）：
+- Serena 仍不支持 `.vue` 符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 再次更新 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 优化 `analysisUnitKey` 选择顺序：去除默认取 `unit_dict` 首项的行为，改为优先 schema `unit_key`，再用 `unit_dict` 与 props（key/label）做大小写与模糊匹配，最后回退到 props 提供的 key/label/sheetKey，避免误用其他单位导致 400/未知单位报错。
+
+影响范围与回滚：
+- 仅前端 unit_key 选择逻辑调整，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析单位匹配再修正 v2）
+
+前置说明（降级留痕）：
+- Serena 仍不支持 `.vue` 符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 继续完善 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- 增加 sheetKey 去除 `_Sheet` 的候选、大小写无关精确匹配、label 精确匹配与模糊匹配的顺序，最后才回退 props 与 unit_dict 首项，进一步降低 “未知单位: BeiHai” 报错概率。
+
+影响范围与回滚：
+- 仅前端 unit_key 选择逻辑调整，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析 schema 等待与空单位校验）
+
+前置说明（降级留痕）：
+- Serena 仍不支持 `.vue` 符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- `runUnitAnalysis` 运行前强制等待 `ensureAnalysisSchema`，若 schema 未加载成功立即提示，不再用空配置发请求。
+- 在运行前校验 `analysisUnitKey` 非空，缺失时提示“缺少单位信息”，避免发送空单位导致 400。
+
+影响范围与回滚：
+- 仅前端请求前置校验，后端接口不变；回滚删除本次改动即可。
+
+## 2025-12-17（本单位分析禁用填报 config 透传）
+
+前置说明（降级留痕）：
+- Serena 仍不支持 `.vue` 符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue`；回滚恢复该文件即可。
+
+本次动作：
+- `runDataAnalysis` 调用不再透传页面的填报 config（如 `数据结构_基本指标表.json`），改为使用后端默认分析配置，避免因错误 config 导致单位匹配失败（“未知单位: BeiHai”）。
+
+影响范围与回滚：
+- 仅前端请求参数调整，后端接口不变；回滚删除本次改动即可。

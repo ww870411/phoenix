@@ -1,5 +1,53 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-16 填报页本单位分析组件完成）
+
+- 前端 `UnitAnalysisLite.vue` 完成本单位分析折叠区：只允许当前单位、`analysis_mode=range`，按 `set_biz_date` 向前 7 天设置区间，调用现有 `/data_analysis/query` 获取 rows/warnings/timeline/meta；支持指标多选、温度默认勾选、逐日表/趋势图与单单位 Excel 导出。后端接口保持不变，无新增依赖。
+- 本次未改动后端代码；若需回滚前端行为，恢复该组件即可。
+
+# 会话小结（2025-12-16 数据填报页编译错误修复）
+
+- 前端 `DataEntryView.vue` 出现悬挂的 `router.replace` 代码导致编译报错；已恢复缺失的参数校验 `if (!projectKey || !pageKey || !sheetKey)`。后端接口未改动。
+- 若需回滚仅恢复该前端文件即可。
+
+# 会话小结（2025-12-17 数据填报页分析开关位置调整）
+
+- 前端调整本单位分析开关位置：移动到顶栏“业务日期”左侧，与表级校验开关分离，功能逻辑不变。后端接口保持不变。
+
+# 会话小结（2025-12-17 数据填报页分析开关尺寸统一）
+
+- 顶栏“本单位分析”开关的 checkbox 尺寸统一为 16x16，与表级校验开关一致；仅样式微调，后端接口无变化。
+
+# 会话小结（2025-12-17 本单位分析指标面板滚动）
+
+- 前端优化 `UnitAnalysisLite.vue` 指标选择区域：限制高度并启用滚动，防止指标过多撑高页面；后端接口不变。
+
+# 会话小结（2025-12-17 本单位分析未知单位容错）
+
+- 前端 `UnitAnalysisLite` 在选择 `analysisUnitKey` 时优先使用 schema 的 `unit_key`，否则按 `unit_dict` 匹配当前单位（key/label 精确或模糊），最后回退到 props，避免出现“未知单位”报错；后端接口未改动。
+
+# 会话小结（2025-12-17 本单位分析单位匹配再修正）
+
+- 进一步调整前端 `analysisUnitKey` 选择顺序：移除默认取 `unit_dict` 首项的行为，改为 schema `unit_key` → `unit_dict` 与 props（key/label）大小写/模糊匹配 → props 回退，防止误用其他单位导致 400。后端接口无变化。
+
+# 会话小结（2025-12-17 本单位分析单位匹配再修正 v2）
+
+- 增加 `_Sheet` 去除、大小写无关精确匹配和 label 模糊匹配，再回退 props 与 unit_dict 首项，进一步避免“未知单位”报错；后端接口未改动。
+
+# 会话小结（2025-12-17 本单位分析 schema 等待与单位校验）
+
+- 前端 `runUnitAnalysis` 先等待 schema 加载完成，若失败直接提示；运行前校验 `analysisUnitKey` 非空，避免携带空 unit_key 导致 400。后端接口无变化。
+
+# 会话小结（2025-12-17 本单位分析禁用填报 config 透传）
+
+- 前端调用 `/data_analysis/query` 时不再透传填报页的 config（如 `数据结构_基本指标表.json`），改用后端默认分析配置，避免因 config 错配导致“未知单位”报错。后端接口未改动。
+
+# 会话小结（2025-12-16 数据分析页现状复盘）
+
+- 复核前端 `pages/DataAnalysisView.vue`：加载 schema 后解析单位/指标/分析模式/默认日期，按温度权重默认勾选气温类指标，表单校验要求至少选择单位与指标；`runAnalysis` 按所选单位逐一调用 `/data_analysis/query`（附带 `analysis_mode/start_date/end_date`），前端缓存 `rows/warnings/timeline/meta` 并生成摘要、相关矩阵、趋势图与多 Sheet Excel 导出。
+- 后端接口契约保持现状即可：`/data_analysis/schema|query` 提供单位/指标/小数位/时间线数据，`/dashboard/date` 返回 `set_biz_date` 供默认日期使用，无需新增字段或变更逻辑。
+- 未修改后端代码或配置，本次仅文档登记；若需回滚，删除本小节即可。
+
 # 会话小结（2025-12-14 数据分析页面结构梳理）
 
 - 本次仅阅读前端 `DataAnalysisView.vue`，确认数据分析流程依赖现有 `/data_analysis/schema` 与 `/data_analysis/query`，后端无需改动：前端按所选单位逐一调用查询接口，缓存 `rows/warnings/timeline/meta` 后在浏览器端完成相关矩阵、摘要、趋势图与 Excel 导出。

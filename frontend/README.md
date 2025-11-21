@@ -1,5 +1,52 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-16 填报页本单位分析组件完成）
+
+- `components/UnitAnalysisLite.vue` 完成本单位分析折叠区：展开时读取 `getUnitAnalysisMetrics`、按 `set_biz_date` 回溯 7 天设置日期，强制当前单位 + `analysis_mode=range` 调用 `/data_analysis/query`，生成本期/同期/同比汇总、warning、逐日 RevoGrid 表、趋势图（温度优先右轴），并支持单单位 Excel 导出（汇总+逐日+查询信息）。
+- 指标多选带序号展示，温度按权重默认勾选；指标/日期变更会清空旧结果，切换单位自动重新加载 schema。未改动其他页面。
+
+## 会话小结（2025-12-16 数据填报页编译错误修复）
+
+- 修复 `pages/DataEntryView.vue` 悬挂的 `router.replace` 代码块，恢复 `if (!projectKey || !pageKey || !sheetKey)` 路由校验，解决编译阶段 Unexpected token 报错。仅前端脚本调整，后端接口不变。
+
+## 会话小结（2025-12-17 数据填报页分析开关位置调整）
+
+- 将“本单位数据分析”启用开关移动到顶栏“业务日期”左侧，与校验开关分离；保持仅管理员可切换，功能逻辑不变。
+- 移除页面中原有独立卡片式开关，避免重复入口。
+
+## 会话小结（2025-12-17 数据填报页分析开关尺寸统一）
+
+- 调整顶栏“本单位分析”开关的 checkbox 尺寸为 16x16，与表级校验开关保持一致，样式对齐更整洁，功能未变。
+
+## 会话小结（2025-12-17 本单位分析指标面板滚动）
+
+- 优化 `components/UnitAnalysisLite.vue` 指标选择区域：为分组网格与组内网格设置最大高度并启用纵向滚动，避免指标过多时撑高页面。
+
+## 会话小结（2025-12-17 本单位分析未知单位容错）
+
+- `UnitAnalysisLite` 计算 `analysisUnitKey` 时优先用 schema 下发的 `unit_key`，否则按 `unit_dict` 匹配当前单位（key/label 精确与模糊），最后再回退 props，避免出现 “未知单位” 报错。
+
+## 会话小结（2025-12-17 本单位分析单位匹配再修正）
+
+- 进一步优化 `analysisUnitKey` 选择：移除默认取 `unit_dict` 首项的行为，改为 schema `unit_key` → `unit_dict` 与 props（key/label）大小写/模糊匹配 → props 回退，防止误用其他单位导致 400。
+
+## 会话小结（2025-12-17 本单位分析单位匹配再修正 v2）
+
+- 添加 `_Sheet` 去除、大小写无关的精确匹配以及 label 模糊匹配，再回退 props 与 unit_dict 首项，进一步避免“未知单位”报错。
+
+## 会话小结（2025-12-17 本单位分析 schema 等待与单位校验）
+
+- `runUnitAnalysis` 先等待 `ensureAnalysisSchema` 完成，schema 未加载时提示错误；运行前校验 `analysisUnitKey` 非空，缺失则提示“缺少单位信息”，避免携带空 unit_key 导致 400。
+
+## 会话小结（2025-12-17 本单位分析禁用填报 config 透传）
+
+- `runDataAnalysis` 调用不再透传填报页的 config（如 `数据结构_基本指标表.json`），改用后端默认分析配置，避免因错误 config 触发“未知单位”。
+
+## 会话小结（2025-12-16 数据分析页现状复盘）
+
+- 复核 `pages/DataAnalysisView.vue`：首屏加载 schema 解析单位/指标/分析模式/默认日期，温度指标按权重自动勾选；表单校验要求至少选择单位与指标，日期联动单日/区间模式。`runAnalysis` 按所选单位逐一调用 `/data_analysis/query`，缓存 `rows/warnings/timeline/meta`，结果区支持单位切换、warnings、摘要（整体/趋势/相关性/风险）、相关矩阵、RevoGrid 逐日表、ECharts 趋势图及多单位多 Sheet Excel 导出。
+- 趋势图沿用温度优先右轴策略，芯片/单位切换与 dataZoom/tooltip 联动；摘要可复制，相关矩阵仅在已勾选且具逐日数据的指标间生成。未改动代码，本次仅文档登记，回滚删除本节即可。
+
 ## 会话小结（2025-12-14 数据分析页面结构梳理）
 
 - 梳理 `pages/DataAnalysisView.vue` 的主要流程：首屏加载 schema（单位/指标/分析模式/默认日期），按温度权重自动勾选默认气温指标但不选单位；表单校验要求至少选择单位与指标后方可调用 `runDataAnalysis`，并按所选单位逐一请求 `/data_analysis/query` 缓存结果。
