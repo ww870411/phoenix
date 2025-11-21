@@ -1,5 +1,12 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-14 数据分析页面结构梳理）
+
+- 梳理 `pages/DataAnalysisView.vue` 的主要流程：首屏加载 schema（单位/指标/分析模式/默认日期），按温度权重自动勾选默认气温指标但不选单位；表单校验要求至少选择单位与指标后方可调用 `runDataAnalysis`，并按所选单位逐一请求 `/data_analysis/query` 缓存结果。
+- 预览区按 active 单位展示汇总表、warning、数据简报（整体概览/趋势观测/相关矩阵/风险提示），支持相关矩阵与摘要复制；多单位可在单位切换区切换视图。
+- 区间模式提供 RevoGrid 逐日明细与趋势图（温度强制右轴，带 dataZoom/tooltip），指标芯片与单位切换保持联动；Excel 导出按单位生成独立 Sheet，包含汇总/逐日/查询信息。
+- 本次仅做结构梳理与文档登记，未修改代码或接口。
+
 ## 会话小结（2025-12-12 dockerignore 添加）
 
 - 仓库根目录新增 `.dockerignore`，将 `db_data` 数据目录排除出镜像构建上下文，前端代码与依赖未变更；若需临时保留该目录，可在 `.dockerignore` 中移除对应条目。
@@ -800,3 +807,8 @@ docker compose up -d --build
 - 前端影响：
   - 提交 `constant` 模板时，继续发送 `columns/rows` 与字典字段；无需包含中心字段；
   - 若模板包含“中心”列，其值仅用于后端解析 `company/company_cn`，前端无需特殊处理。
+
+## 结构快照更新（2025-12-13 数据分析页梳理）
+
+- 文件：`frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`。主要包含单位多选、分析模式（单日/累计）、日期联动、指标分组多选、生成分析结果入口，以及摘要/相关矩阵/逐日 RevoGrid/趋势图（ECharts）与 Excel 导出；状态由 `selectedUnits`、`selectedMetrics`、`analysisMode`、`timelineGrid`、`activeTimelineMetricKeys` 等 ref 管理，计算属性生成 `correlationMatrixState`、`timelineChartOption` 等图表配置。
+- 本次仅阅读结构，无代码改动；若后续调整交互/样式，请同步更新本说明与进度记录。

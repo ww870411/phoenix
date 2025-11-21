@@ -1,5 +1,14 @@
 # 进度记录
 
+## 2025-12-14（数据分析页面结构梳理，无代码改动）
+
+前置说明：
+- 本次仅阅读 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 以梳理结构与执行流程，未修改任何代码或配置，未触碰数据库，故无回滚需求。
+
+本次动作：
+- 记录数据分析页面的核心模块：单位/指标多选表单、默认日期/温度指标推断、`runAnalysis` 对所选单位逐一调用 `/data_analysis/query` 并缓存结果、预览表/逐日 RevoGrid/趋势图切换、相关矩阵与数据简报、Excel 导出（按单位独立 Sheet）等逻辑，为后续功能开发与联调提供结构参考。
+
+
 ## 2025-12-12（新增 .dockerignore 忽略 db_data）
 
 前置说明（降级留痕）：
@@ -2384,3 +2393,14 @@ sum_basic_data 相关：
 1. 刷新数据库视图（`psql` 执行 updated SQL），随后在数据分析页选择“集团全口径 + 调整指标 > 供暖电单耗(-研究院)”进行单日/累计查询，应得到 `missing=false` 且 `warning` 消失。
 2. 调用 `/api/v1/projects/daily_report_25_26/data_analysis/query`，确认 `rows` 中出现 `key=rate_power_per_10k_m2_YanJiuYuan` 且 `source_view=analysis_groups_daily/analysis_groups_sum`。
 3. 若仪表盘或展示页复用了该视图，也应能回填最新值，必要时对照数据库核对分子/分母扣除逻辑。
+
+## 2025-12-13（数据分析页组件梳理，仅阅读）
+
+前置说明：
+- 按照 AGENTS 流程，仅使用 `desktop-commander::read_file` 查看 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 结构，无任何代码改动，未触发降级编辑。
+
+本次动作：
+- 梳理数据分析页核心组件与交互：单位多选、分析模式切换（单日/累计）、日期联动、指标分组多选、生成结果与 Excel 导出、摘要与相关矩阵、逐日网格与趋势图（ECharts）等；确认现有状态管理（selectedUnits/selectedMetrics/analysisMode/timelineGrid 等）与计算属性（correlationMatrixState、timelineChartOption 等）齐备。
+
+影响范围与回滚：
+- 本次仅阅读，无代码变更，无需回滚。

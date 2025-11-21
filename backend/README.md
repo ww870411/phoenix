@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-14 数据分析页面结构梳理）
+
+- 本次仅阅读前端 `DataAnalysisView.vue`，确认数据分析流程依赖现有 `/data_analysis/schema` 与 `/data_analysis/query`，后端无需改动：前端按所选单位逐一调用查询接口，缓存 `rows/warnings/timeline/meta` 后在浏览器端完成相关矩阵、摘要、趋势图与 Excel 导出。
+- 该页面默认业务日取自 `GET /dashboard/date`（`set_biz_date`），温度指标默认勾选取决于 schema 的温度关键词；多单位导出时每个单位生成独立 Sheet，后端响应格式保持现状即可。
+- 未对后端代码、接口或配置做任何修改，记录结构梳理以便后续联调。
+
 # 会话小结（2025-12-12 dockerignore 添加）
 
 - 仓库根目录新增 `.dockerignore`，默认忽略 `db_data`（PostgreSQL 本地数据目录），避免容器构建上下文携带大体积数据库文件；后端代码与依赖未改动，回滚只需删除该忽略文件或移除对应条目。
