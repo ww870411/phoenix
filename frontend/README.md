@@ -42,6 +42,13 @@
 - 新增温度指标识别（依赖 `/data_entry/analysis/metrics` 返回的 `temperature` 组 + `value_type`），`assignTimelineAxisSlots` 保证“平均气温”等温度项始终绑定右轴，其它指标走左轴；无温度时退回“首个左轴、其余右轴”的旧策略。
 - `analysisTimelineMetrics` 记录 `value_type`，趋势图缓存 `seriesMeta` 在 Tooltip 中显示单位与实时 delta，避免“本期/同期”错列；无后端改动，回滚恢复该 .vue 文件即可。
 
+## 会话小结（2025-12-14 填报页分析默认日期/指标与导出增强）
+
+- 折叠区默认日期改为读取 `/projects/{key}/dashboard/date` 返回的 `set_biz_date`，结束日期固定为该值，开始日期自动回溯 6 天，总是覆盖最近 7 天；切换业务日期时沿用同样窗口。
+- 指标多选默认仅勾选“平均气温”类指标，并在每个选项旁展示勾选顺序编号，与 `DataAnalysisView` 一致；若未选择任何指标会提示“请至少选择一个指标”，不再自动全选。
+- 逐日合计行遵循数据分析页的 `value_type` 规则：常量直接使用单日值，其它指标按区间累计，避免平均气温等被错误求和。
+- 导出 Excel 结果现包含“区间明细”区块，直接写入逐日 RevoGrid 表格数据（含总计行），同时修复汇总区同比列缺少 “%” 的显示问题；生成的文件可完整反映本期每日数据。回滚恢复 `DataEntryView.vue` 即可。
+
 ## 会话小结（2025-12-12 dockerignore 添加）
 
 - 仓库根目录新增 `.dockerignore`，将 `db_data` 数据目录排除出镜像构建上下文，前端代码与依赖未变更；若需临时保留该目录，可在 `.dockerignore` 中移除对应条目。

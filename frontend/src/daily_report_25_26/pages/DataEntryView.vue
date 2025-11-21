@@ -151,7 +151,15 @@
                       :checked="selectedMetricKeys.has(metric.value)"
                       @change="toggleAnalysisMetric(metric.value)"
                     />
-                    <span>{{ metric.label }}</span>
+                    <span class="chip-label">
+                      <span
+                        v-if="getAnalysisMetricSelectionOrder(metric.value)"
+                        class="chip-order"
+                      >
+                        {{ getAnalysisMetricSelectionOrder(metric.value) }}
+                      </span>
+                      <span>{{ metric.label }}</span>
+                    </span>
                   </label>
                 </div>
               </div>
@@ -168,7 +176,15 @@
                   :checked="selectedMetricKeys.has(metric.value)"
                   @change="toggleAnalysisMetric(metric.value)"
                 />
-                <span>{{ metric.label }}</span>
+                <span class="chip-label">
+                  <span
+                    v-if="getAnalysisMetricSelectionOrder(metric.value)"
+                    class="chip-order"
+                  >
+                    {{ getAnalysisMetricSelectionOrder(metric.value) }}
+                  </span>
+                  <span>{{ metric.label }}</span>
+                </span>
               </label>
             </div>
             <p v-else class="analysis-lite__hint">暂无可选指标，请检查数据分析配置。</p>
@@ -288,6 +304,7 @@ import {
   setSheetValidationSwitch,
   getUnitAnalysisMetrics,
   runDataAnalysis,
+  getDashboardBizDate,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -459,10 +476,46 @@ function toggleAnalysisFold() {
   }
 }
 
-function ensureAnalysisDefaultDates() {
-  const date = bizDate.value || initialDate;
-  if (!analysisStartDate.value) analysisStartDate.value = date;
-  if (!analysisEndDate.value) analysisEndDate.value = date;
+function shiftDateByDays(dateStr, offsetDays) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setDate(date.getDate() + offsetDays);
+  return formatLocalYYYYMMDD(date);
+}
+
+function applyAnalysisDateWindow(endDate) {
+  if (!endDate) return;
+  const normalizedEnd = formatDateYYYYMMDD(endDate) || endDate;
+  const start = shiftDateByDays(normalizedEnd, -6) || normalizedEnd;
+  analysisStartDate.value = start;
+  analysisEndDate.value = normalizedEnd;
+}
+
+async function loadAnalysisDefaultBizDate() {
+  if (analysisDefaultBizDate.value) {
+    return analysisDefaultBizDate.value;
+  }
+  try {
+    const payload = await getDashboardBizDate(projectKey);
+    const value = typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : '';
+    if (value) {
+      analysisDefaultBizDate.value = value;
+      return analysisDefaultBizDate.value;
+    }
+  } catch (err) {
+    // 忽略，回退到当前业务日期
+  }
+  const fallback = bizDate.value || canonicalBizDate.value || initialDate;
+  analysisDefaultBizDate.value = fallback;
+  return fallback;
+}
+
+async function ensureAnalysisDefaultDates() {
+  if (analysisDefaultDateApplied.value) return;
+  const base = await loadAnalysisDefaultBizDate();
+  applyAnalysisDateWindow(base);
+  analysisDefaultDateApplied.value = true;
 }
 
 async function ensureAnalysisSchema() {
@@ -478,18 +531,8 @@ async function ensureAnalysisSchema() {
     }
     analysisSchema.value = payload;
     if (!selectedMetricKeys.value.size) {
-      const candidates = (payload.groups || []).flatMap((item) =>
-        Array.isArray(item?.options) ? item.options : [],
-      );
-      const selected = new Set(
-        (Array.isArray(candidates) ? candidates : [])
-          .map((opt) => opt?.value)
-          .filter(Boolean),
-      );
-      if (selected.size === 0 && Array.isArray(payload.options)) {
-        payload.options.forEach((opt) => opt?.value && selected.add(opt.value));
-      }
-      selectedMetricKeys.value = selected;
+      const defaultTemp = analysisTemperatureMetricKey.value;
+      selectedMetricKeys.value = defaultTemp ? new Set([defaultTemp]) : new Set();
     }
   } catch (err) {
     analysisSchemaError.value = err instanceof Error ? err.message : '分析配置加载失败';
@@ -503,6 +546,13 @@ function toggleAnalysisMetric(key) {
   if (next.has(key)) next.delete(key);
   else next.add(key);
   selectedMetricKeys.value = next;
+}
+
+function getAnalysisMetricSelectionOrder(metricKey) {
+  const order = Array.from(selectedMetricKeys.value);
+  const index = order.indexOf(metricKey);
+  if (index === -1) return '';
+  return String(index + 1);
 }
 
 function selectAllAnalysisMetrics() {
@@ -683,20 +733,25 @@ function buildTimelineGrid(rows) {
   if (!sortedDates.length || !metrics.length) {
     return { columns: [], rows: [] };
   }
-  const columns = [{ prop: 'date', name: '日期', size: 110 }];
   const metricState = metrics.map((row) => ({
     key: row.key,
     label: row.label,
-    decimals: row.decimals ?? 2,
     timeline: row.timeline,
-    unit: row.unit,
+    decimals: row.decimals ?? 2,
+    valueType: row.value_type || 'analysis',
+    totalCurrent: row.total_current ?? null,
+    totalPeer: row.total_peer ?? null,
+    sumCurrent: 0,
+    sumPeer: 0,
   }));
+  const columns = [{ prop: 'date', name: '日期', size: 110 }];
   metricState.forEach((row) => {
-    columns.push({ prop: `${row.key}__current`, name: `${row.label}(本期)` });
-    columns.push({ prop: `${row.key}__peer`, name: `${row.label}(同期)` });
+    columns.push({ prop: `${row.key}__current`, name: `${row.label}(本期)`, size: 140 });
+    columns.push({ prop: `${row.key}__peer`, name: `${row.label}(同期)`, size: 140 });
     columns.push({
       prop: `${row.key}__delta`,
       name: `${row.label}(同比%)`,
+      size: 120,
       cellTemplate: timelineDeltaCellTemplate,
     });
   });
@@ -706,6 +761,12 @@ function buildTimelineGrid(rows) {
       const entry = row.timeline.find((item) => item.date === date);
       const current = entry?.current ?? null;
       const peer = entry?.peer ?? null;
+      if (current !== null) {
+        row.sumCurrent += Number(current);
+      }
+      if (peer !== null) {
+        row.sumPeer += Number(peer);
+      }
       record[`${row.key}__current`] = current !== null ? applyDecimals(current, row.decimals) : null;
       record[`${row.key}__peer`] = peer !== null ? applyDecimals(peer, row.decimals) : null;
       const deltaValue =
@@ -716,12 +777,22 @@ function buildTimelineGrid(rows) {
   });
   const totalRecord = { date: '总计' };
   metricState.forEach((row) => {
-    let totalCurrent = 0;
-    let totalPeer = 0;
-    row.timeline.forEach((entry) => {
-      if (Number.isFinite(Number(entry?.current))) totalCurrent += Number(entry.current);
-      if (Number.isFinite(Number(entry?.peer))) totalPeer += Number(entry.peer);
-    });
+    let totalCurrent = row.totalCurrent;
+    let totalPeer = row.totalPeer;
+    if (totalCurrent == null) {
+      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
+        totalCurrent = row.timeline[0]?.current ?? null;
+      } else {
+        totalCurrent = row.sumCurrent || null;
+      }
+    }
+    if (totalPeer == null) {
+      if (row.valueType === 'constant' && row.timeline && row.timeline.length) {
+        totalPeer = row.timeline[0]?.peer ?? null;
+      } else {
+        totalPeer = row.sumPeer || null;
+      }
+    }
     totalRecord[`${row.key}__current`] =
       totalCurrent !== null ? applyDecimals(totalCurrent, row.decimals) : null;
     totalRecord[`${row.key}__peer`] =
@@ -742,11 +813,8 @@ async function runUnitAnalysis() {
     analysisFormError.value = '缺少单位信息，无法生成分析。';
     return;
   }
-  if (!selectedMetricKeys.value.size && analysisMetricOptions.value.length) {
-    selectedMetricKeys.value = new Set(analysisMetricOptions.value.map((item) => item.value).filter(Boolean));
-  }
   if (!selectedMetricKeys.value.size) {
-    analysisFormError.value = '当前单位无可用指标。';
+    analysisFormError.value = '请至少选择一个指标。';
     return;
   }
   if (!analysisStartDate.value || !analysisEndDate.value) {
@@ -803,6 +871,29 @@ async function runUnitAnalysis() {
   }
 }
 
+function buildAnalysisMetaRows() {
+  const rows = analysisResult.value.rows || [];
+  return [
+    ['单位', analysisResult.value.meta?.unit_label || unitName.value || unitId.value || ''],
+    ['开始日期', analysisResult.value.meta?.start_date || analysisStartDate.value || ''],
+    ['结束日期', analysisResult.value.meta?.end_date || analysisEndDate.value || ''],
+    ['指标数量', rows.length],
+  ];
+}
+
+function buildAnalysisTimelineSheetData() {
+  const columns = Array.isArray(analysisTimelineGrid.value?.columns)
+    ? analysisTimelineGrid.value.columns
+    : [];
+  const rows = Array.isArray(analysisTimelineGrid.value?.rows) ? analysisTimelineGrid.value.rows : [];
+  if (!columns.length || !rows.length) return null;
+  const header = columns.map((column) => column.name || column.prop || '');
+  const body = rows.map((record) =>
+    columns.map((column) => extractTimelineCellText(record[column.prop])),
+  );
+  return [header, ...body];
+}
+
 function buildAnalysisSheetData() {
   const header = ['指标', '本期', '同期', '同比', '单位'];
   const rows = analysisResult.value.rows || [];
@@ -810,16 +901,20 @@ function buildAnalysisSheetData() {
     row.label,
     row.total_current ?? row.current ?? '',
     row.total_peer ?? row.peer ?? '',
-    resolveRowDelta(row) ?? '',
+    formatDelta(resolveRowDelta(row)) || '',
     row.unit || '',
   ]);
-  const meta = [
-    ['单位', analysisResult.value.meta?.unit_label || unitName.value || unitId.value || ''],
-    ['开始日期', analysisResult.value.meta?.start_date || analysisStartDate.value || ''],
-    ['结束日期', analysisResult.value.meta?.end_date || analysisEndDate.value || ''],
-    ['指标数量', rows.length],
-  ];
-  return [header, ...mapped, [], ['查询信息'], ...meta];
+  const result = [header, ...mapped];
+  const timeline = buildAnalysisTimelineSheetData();
+  if (timeline && timeline.length) {
+    result.push([]);
+    result.push(['区间明细']);
+    timeline.forEach((row) => result.push(row));
+  }
+  result.push([]);
+  result.push(['查询信息']);
+  buildAnalysisMetaRows().forEach((row) => result.push(row));
+  return result;
 }
 
 function downloadAnalysisExcel() {
@@ -850,6 +945,8 @@ const analysisSchemaLoading = ref(false);
 const analysisSchemaError = ref('');
 const analysisStartDate = ref(bizDate.value);
 const analysisEndDate = ref(bizDate.value);
+const analysisDefaultBizDate = ref('');
+const analysisDefaultDateApplied = ref(false);
 const selectedMetricKeys = ref(new Set());
 const analysisLoading = ref(false);
 const analysisFormError = ref('');
@@ -2829,8 +2926,9 @@ watch(
 watch(
   () => bizDate.value,
   (value) => {
-    analysisStartDate.value = value;
-    analysisEndDate.value = value;
+    if (!value) return;
+    applyAnalysisDateWindow(value);
+    analysisDefaultDateApplied.value = true;
     resetAnalysisResult();
   },
 );
@@ -2913,6 +3011,19 @@ onBeforeUnmount(() => {
 .analysis-lite__timeline-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip--toggle { border: 1px solid #cbd5f5; background: #fff; }
 .chip--toggle.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.chip-label { display: inline-flex; align-items: center; gap: 6px; }
+.chip-order {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--primary-50, #eef2ff);
+  color: var(--primary-700, #1d4ed8);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--primary-100, #dbeafe);
+}
 .analysis-lite__timeline-grid { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
 .analysis-lite__timeline-chart { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fff; }
 .chart-tooltip__title { font-weight: 700; margin-bottom: 8px; }

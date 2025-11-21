@@ -24,6 +24,12 @@
 - 接口契约未改动，仍返回 `timeline.current/peer/date`、`decimals` 与按组区分的指标选项；若未来 schema 需要新增其它“特殊轴”类型，可继续在接口层通过 `value_type` / 分组标识传递，前端即可沿用同一轴分配逻辑。
 - 无需部署后端，回滚仅涉及前端文件恢复。
 
+# 会话小结（2025-12-14 填报页分析默认日期/导出增强）
+
+- `DataEntryView.vue` 现在也会调用现有 `GET /projects/{project_key}/dashboard/date` 接口获取 `set_biz_date`，并在折叠区默认将分析区间设置为“set_biz_date 向前 6 天”，与仪表盘/数据分析页面保持一致；后端接口无需改动。
+- 指标多选与 Excel 导出增强完全发生在前端：仍沿用 `GET /data_entry/analysis/metrics` 与 `POST /data_analysis/query` 的返回结构，额外的序号展示与逐日表导出均在浏览器侧完成。
+- 若需要回滚，只需恢复前端 `DataEntryView.vue`；后端 API 无新增依赖。
+
 # 会话小结（2025-12-14 指标排序与命名更新）
 
 - `GET /projects/daily_report_25_26/data_entry/analysis/metrics` 中，将“审批指标”重命名为“主要指标”，主要/常量指标按配置文件原始顺序输出，附带 `unit_dict` 供前端使用正确的 `unit_key`。

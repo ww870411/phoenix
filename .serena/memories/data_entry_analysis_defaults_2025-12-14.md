@@ -1,0 +1,1 @@
+2025-12-14：填报页“本单位数据分析”折叠区默认结束日期改为 `/dashboard/date` 的 set_biz_date，开始日期自动回溯 6 天保持 7 天窗口；指标多选默认只勾选平均气温并按勾选顺序显示编号，导出的 Excel 也追加“区间明细”逐日数据。仅修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`。
