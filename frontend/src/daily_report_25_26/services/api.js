@@ -390,6 +390,22 @@ export async function runDataAnalysis(projectKey, payload, options = {}) {
   return response.json()
 }
 
+export async function getUnitAnalysisMetrics(projectKey, params = {}) {
+  const { config, unit_key: unitKey } = params
+  const searchParams = new URLSearchParams()
+  if (config) searchParams.set('config', config)
+  if (unitKey) searchParams.set('unit_key', unitKey)
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/analysis/metrics?${searchParams.toString()}`,
+    { headers: attachAuthHeaders() },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取本单位分析指标失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getValidationMasterSwitch(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
     headers: attachAuthHeaders(),

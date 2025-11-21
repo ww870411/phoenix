@@ -62,6 +62,8 @@ GONGRE_DEBUG_FILE = SysPath(__file__).resolve().parents[3] / "configs" / "111.md
 GONGRE_SHEET_KEYS = {"gongre_branches_detail_sheet"}
 BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
 DATA_ANALYSIS_SCHEMA_PATH = DATA_ROOT / "数据结构_数据分析表.json"
+APPROVAL_STRUCTURE_PATH = DATA_ROOT / "数据结构_审批用表.json"
+CONSTANT_STRUCTURE_PATH = DATA_ROOT / "数据结构_常量指标表.json"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -2866,8 +2868,8 @@ def list_sheets(
                 content={
                     "ok": False,
                     "message": f"未找到页面配置文件: {config}",
-                },
-            )
+            },
+        )
 
     catalog = _collect_catalog(data_file)
     if not catalog:
@@ -2880,6 +2882,230 @@ def list_sheets(
             },
     )
     return JSONResponse(status_code=200, content=catalog)
+
+
+def _load_json_dict(path: SysPath) -> Optional[Dict[str, Any]]:
+    if not path or not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _try_inject_constant_metric(schema_payload: Dict[str, Any], metric_key: str) -> bool:
+    """若数据分析 schema 中缺少某常量指标，尝试从常量配置补齐到 metric_dict 与视图映射。"""
+    const_struct = _load_json_dict(CONSTANT_STRUCTURE_PATH)
+    if not const_struct:
+        return False
+    found_label: Optional[str] = None
+    for sheet in const_struct.values():
+        if not isinstance(sheet, dict):
+            continue
+        item_dict = sheet.get("项目字典") or sheet.get("item_dict")
+        if not isinstance(item_dict, dict):
+            continue
+        if metric_key in item_dict:
+            found_label = str(item_dict[metric_key])
+            break
+    if not found_label:
+        return False
+
+    metric_dict = schema_payload.setdefault("metric_dict", {})
+    metric_group_views = schema_payload.setdefault("metric_group_views", {})
+    metric_decimals = schema_payload.setdefault("metric_decimals", {})
+
+    metric_dict[metric_key] = found_label
+    metric_group_views.setdefault("constant", [])
+    if "constant_data" not in metric_group_views["constant"]:
+        metric_group_views["constant"].append("constant_data")
+    metric_decimals.setdefault(metric_key, 2)
+    return True
+
+
+def _collect_unit_metric_options(struct: Dict[str, Any], unit_key: str) -> Dict[str, str]:
+    """
+    从审批/常量配置中按单位汇总 项目字典 -> {key: label}
+    """
+    results: Dict[str, str] = {}
+    if not struct or not unit_key:
+        return results
+    for sheet in struct.values():
+        if not isinstance(sheet, dict):
+            continue
+        unit_id = sheet.get("单位标识") or sheet.get("unit_id") or sheet.get("unit_key")
+        if not unit_id or str(unit_id).strip() != unit_key:
+            continue
+        item_dict = sheet.get("项目字典") or sheet.get("item_dict")
+        if isinstance(item_dict, dict):
+            for key, label in item_dict.items():
+                if not key:
+                    continue
+                results[str(key)] = str(label) if label is not None else str(key)
+    return results
+
+
+def _build_unit_analysis_metric_payload(
+    unit_key: str, config: Optional[str]
+) -> Tuple[Optional[Dict[str, Any]], Optional[JSONResponse]]:
+    if not unit_key:
+        return None, JSONResponse(
+            status_code=400, content={"ok": False, "message": "缺少 unit_key"}
+        )
+
+    schema_payload, schema_error = _build_data_analysis_schema_payload(config)
+    if schema_error is not None and schema_payload is None:
+        return None, schema_error
+
+    approval_struct = _load_json_dict(APPROVAL_STRUCTURE_PATH)
+    constant_struct = _load_json_dict(CONSTANT_STRUCTURE_PATH)
+    source_stats = {"approval": 0, "constant": 0, "temperature": 0}
+
+    def _labels_from_rows(rows: Any) -> List[str]:
+        labels: List[str] = []
+        if not isinstance(rows, list):
+            return labels
+        for row in rows:
+            if isinstance(row, list) and row:
+                label = str(row[0]).strip()
+                if label:
+                    labels.append(label)
+        return labels
+
+    def _match_labels_with_dict(
+        labels: Sequence[str], item_dict: Dict[str, str]
+    ) -> Tuple[Dict[str, str], List[Tuple[str, str]]]:
+        result: Dict[str, str] = {}
+        order: List[Tuple[str, str]] = []
+        if not labels:
+            return result, order
+        reversed_map = {str(v).strip(): str(k) for k, v in item_dict.items() if k}
+        for label in labels:
+            key = reversed_map.get(label)
+            if not key:
+                # 找不到匹配时用中文作为 key，至少可选
+                key = label
+            result[key] = label
+            order.append((key, label))
+        return result, order
+
+    major_options: Dict[str, str] = {}
+    constant_options: Dict[str, str] = {}
+    major_order: List[Tuple[str, str]] = []
+    constant_order: List[Tuple[str, str]] = []
+
+    if approval_struct:
+        for sheet in approval_struct.values():
+            if not isinstance(sheet, dict):
+                continue
+            unit_id = sheet.get("单位标识") or sheet.get("unit_id") or sheet.get("unit_key")
+            if not unit_id or str(unit_id).strip() != unit_key:
+                continue
+            labels = _labels_from_rows(sheet.get("数据"))
+            item_dict = sheet.get("项目字典") or sheet.get("item_dict") or {}
+            merged, order = _match_labels_with_dict(
+                labels,
+                item_dict if isinstance(item_dict, dict) else {},
+            )
+            major_options.update(merged)
+            major_order.extend(order)
+        source_stats["approval"] = len(major_options)
+
+    if constant_struct:
+        for sheet in constant_struct.values():
+            if not isinstance(sheet, dict):
+                continue
+            unit_id = sheet.get("单位标识") or sheet.get("unit_id") or sheet.get("unit_key")
+            if not unit_id or str(unit_id).strip() != unit_key:
+                continue
+            labels = _labels_from_rows(sheet.get("数据"))
+            item_dict = sheet.get("项目字典") or sheet.get("item_dict") or {}
+            merged, order = _match_labels_with_dict(
+                labels,
+                item_dict if isinstance(item_dict, dict) else {},
+            )
+            constant_options.update(merged)
+            constant_order.extend(order)
+        source_stats["constant"] = len(constant_options)
+
+    decimals_map: Dict[str, Any] = {}
+    temperature_options: Dict[str, str] = {}
+    unit_dict = schema_payload.get("unit_dict") or {}
+    unit_label = unit_dict.get(unit_key, unit_key)
+
+    if schema_payload:
+        temperature_dict = schema_payload.get("temperature_metric_dict") or {}
+        if isinstance(temperature_dict, dict):
+            source_stats["temperature"] = len(temperature_dict)
+            for key, label in temperature_dict.items():
+                if not key:
+                    continue
+                temperature_options[str(key)] = str(label) if label is not None else str(key)
+        decimals = schema_payload.get("metric_decimals")
+        if isinstance(decimals, dict):
+            decimals_map = {str(k): v for k, v in decimals.items()}
+
+    groups = []
+    if major_order:
+        groups.append(
+            {
+                "key": "major",
+                "label": "主要指标",
+                "options": [{"value": key, "label": value} for key, value in major_order],
+            }
+        )
+    if constant_order:
+        groups.append(
+            {
+                "key": "constant",
+                "label": "常量指标",
+                "options": [{"value": key, "label": value} for key, value in constant_order],
+            }
+        )
+    if temperature_options:
+        groups.append(
+            {
+                "key": "temperature",
+                "label": "气温指标",
+                "options": [{"value": k, "label": v} for k, v in sorted(temperature_options.items(), key=lambda x: x[1])],
+            }
+        )
+
+    # 扁平化 options 方便前端兜底使用
+    flat_options = []
+    for group in groups:
+        flat_options.extend(group["options"])
+
+    payload = {
+        "ok": True,
+        "unit_key": unit_key,
+        "unit_label": unit_label,
+        "groups": groups,
+        "options": flat_options,
+        "decimals": decimals_map,
+        "source": source_stats,
+        "unit_dict": schema_payload.get("unit_dict") or {},
+    }
+    return payload, None
+
+
+@router.get(
+    "/data_entry/analysis/metrics",
+    summary="获取填报页本单位可用的分析指标（审批+常量+气温）",
+)
+def get_unit_analysis_metrics(
+    unit_key: str = Query(..., description="单位标识，例如 BeiHai"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="数据分析/审批/常量配置文件（相对 DATA_DIRECTORY 的路径）",
+    ),
+):
+    payload, error = _build_unit_analysis_metric_payload(unit_key.strip(), config)
+    if error is not None:
+        return error
+    return JSONResponse(status_code=200, content=payload)
 
 
 def _build_data_analysis_schema_payload(
@@ -3069,6 +3295,16 @@ def _execute_data_analysis_query_legacy(
     unit_label = unit_dict.get(unit_key, unit_key)
 
     unknown_metrics = [key for key in ordered_metrics if key not in metric_dict]
+    if unknown_metrics:
+        injected = False
+        for key in list(unknown_metrics):
+            if _try_inject_constant_metric(schema_payload, key):
+                injected = True
+        if injected:
+            metric_dict = schema_payload.get("metric_dict") or metric_dict
+            metric_group_views = schema_payload.get("metric_group_views") or metric_group_views
+            metric_decimals = schema_payload.get("metric_decimals") or metric_decimals
+            unknown_metrics = [key for key in ordered_metrics if key not in metric_dict]
     if unknown_metrics:
         labels = [metric_dict.get(key, key) for key in unknown_metrics]
         return JSONResponse(

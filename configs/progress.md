@@ -8,6 +8,69 @@
 本次动作：
 - 记录数据分析页面的核心模块：单位/指标多选表单、默认日期/温度指标推断、`runAnalysis` 对所选单位逐一调用 `/data_analysis/query` 并缓存结果、预览表/逐日 RevoGrid/趋势图切换、相关矩阵与数据简报、Excel 导出（按单位独立 Sheet）等逻辑，为后续功能开发与联调提供结构参考。
 
+## 2025-12-14（填报页面新增“本单位数据分析”折叠区）
+
+前置说明：
+- Serena 对 `.vue` 大文件符号级编辑不支持，依 3.9 矩阵使用 `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，仅前端逻辑与样式改动，未触数据库或后端。
+
+本次动作：
+- 在数据填报页面底部新增“本单位数据分析（折叠）”卡片，默认折叠；展开后自动加载 data_analysis schema，强制使用当前单位（模板下发的 `unit_id/unit_name`），仅支持区间查询。
+- 支持时间段选择、指标多选（无分组限制）、全选/清空；调用 `/data_analysis/query`（range 模式，附 page config），仅请求当前单位，显示本期/同期/同比汇总表与 warnings。
+- 导出按钮生成单 Sheet Excel（本期/同期/同比/单位 + 查询信息），不提供跨单位或逐日趋势，确保无跨单位数据泄露。
+
+影响与验证：
+- 前端新增折叠区与样式，现有填报/校验/提交逻辑不变；若需回滚，恢复上述文件即可。展开后应加载 schema 成功并能选择指标、生成本单位汇总，导出文件仅含单单位数据。
+
+
+## 2025-12-14（二次迭代：填报页分析指标自动聚合 + 后端指标接口）
+
+前置说明：
+- Serena 仍无法对 `.vue`/`.py` 大文件符号级写入，按 3.9 矩阵使用 `apply_patch` 修改 `backend/api/v1/daily_report_25_26.py`、`frontend/src/daily_report_25_26/pages/DataEntryView.vue`、`frontend/src/daily_report_25_26/services/api.js`；未改动数据库。
+
+本次动作：
+- 后端新增 `GET /projects/daily_report_25_26/data_entry/analysis/metrics`：按 `unit_key` 动态汇总指标，来源于 `数据结构_审批用表.json`、`数据结构_常量指标表.json` 的项目字典，并自动附加数据分析 schema 的气温指标与小数位，返回 `{options, decimals, source}`。
+- 前端“本单位数据分析”折叠区改为调用新接口获取指标集合；若用户未选指标则默认全选返回集合再调用 `/data_analysis/query`（range 模式、强制当前单位）。保留单单位汇总表和单 Sheet 导出，不提供跨单位/逐日数据，避免泄露。
+
+影响与验证：
+- 回滚恢复上述三个文件即可。验证：展开折叠区→即使不选指标也会自动填充本单位指标并生成汇总；接口返回 options 应包含审批/常量/气温指标（如平均气温）；导出仍仅含单单位数据。
+
+## 2025-12-14（指标分组排序 + 命名与布局栅格化）
+
+前置说明：
+- Serena 仍无法对 `.vue`/`.py` 文件符号级写入，依 3.9 矩阵使用 `apply_patch` 修改 `backend/api/v1/daily_report_25_26.py` 与 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`。
+
+本次动作：
+- 指标接口将“审批指标”重命名为“主要指标”，并按配置文件原始顺序输出主要/常量指标（气温指标保留原顺序），同时返回 `unit_dict` 供前端调用 `/data_analysis/query` 时使用准确的 `unit_key`，避免“未知单位”错误。
+- 前端指标面板采用栅格卡片布局（每组独立卡片、内部等宽网格），避免标签纵向堆叠；若无分组则使用统一网格排布。
+
+影响与验证：
+- 回滚恢复上述文件即可。验证：折叠区显示为“主要指标/常量指标/气温指标”卡片，顺序与配置一致；点击生成不再出现“未知单位: BeiHai”，汇总仍仅本单位。
+
+## 2025-12-14（填报页新增逐日表与趋势图）
+
+前置说明：
+- Serena 仍无法对 `.vue` 大文件符号级写入，依 3.9 矩阵使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`。
+
+本次动作：
+- “本单位数据分析”折叠区接入 `/data_analysis/query` 返回的 `timeline` 数据，构建逐日 RevoGrid 表与 ECharts 趋势图，支持指标芯片切换、同比颜色提示。
+- 生成结果时同步填充 `analysisTimelineGrid/analysisTimelineMetrics`，默认选中前两个指标绘制折线，空态下提示选择指标。
+
+影响与验证：
+- 回滚恢复 `DataEntryView.vue` 即可。验证：生成结果后表格下出现“区间明细（逐日）”表格与趋势图；切换芯片能控制曲线显示。
+
+## 2025-12-14（填报页趋势图图例与温度坐标同步）
+
+前置说明：
+- Serena 仍无法对 `.vue` 大文件做符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，未改动后端或数据库；如需回滚恢复该文件即可。
+
+本次动作：
+- 复用数据分析页面的 `legend/tooltip` 与折线配置，趋势图图例改为顶部滚动样式，Tooltip 加入单位＋同比百分比，配色与渐变与正式分析页一致，保持体验统一。
+- 新增温度指标识别逻辑：优先读取指标 schema 中的 `temperature` 组，结合 `value_type === 'temperature'` 或“气温/温度”关键词，`assignTimelineAxisSlots` 强制将平均气温（及其他气温项）固定在右轴，其余指标走左轴；当不存在温度指标时退回“首个左轴，其余右轴”的策略。
+- `analysisTimelineMetrics` 记录 `value_type`，趋势图每条 series 同步缓存单位/Label/逐日数据，Tooltip 显示本期/同期、单位与实时同比，防止本期/同期折线或 delta 显示错位。
+
+影响与验证：
+- 展开“本单位数据分析”折叠区并生成结果后，区间趋势图应在顶部显示完整图例、Tooltip 使用深色卡片并包含“同比 XX%”；当勾选“平均气温”时无论芯片顺序如何均使用右侧纵轴，去掉温度后再勾选其它指标则恢复左右轴默认分布。
+- 若需回滚，仅恢复 `DataEntryView.vue` 既可移除上述视觉/坐标逻辑，逐日表与其它折叠功能不受影响。
 
 ## 2025-12-12（新增 .dockerignore 忽略 db_data）
 

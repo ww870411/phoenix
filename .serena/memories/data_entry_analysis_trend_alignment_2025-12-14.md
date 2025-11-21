@@ -1,0 +1,1 @@
+2025-12-14：填报页“本单位数据分析”折叠区的趋势图沿用数据分析页面的配置——图例移到顶部滚动，tooltip 改为深色卡片并附单位/同比，折线配色+渐变保持一致；新增温度指标识别（读取 `/data_entry/analysis/metrics` 的 temperature 分组或 value_type）让平均气温等永远走右轴，其它指标走左轴，tooltip 还会根据逐日数据实时输出 delta。该改动仅触及 `frontend/src/daily_report_25_26/pages/DataEntryView.vue`，未改后端 API。

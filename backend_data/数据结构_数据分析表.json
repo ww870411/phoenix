@@ -128,6 +128,7 @@
                 "rate_water_per_10k_m2":4
             },
             "常量指标字典":{
+                "price_power_sales": "售电单价",
                 "price_inner_heat_sales": "内售热单价",
                 "price_std_coal": "标煤单价",
                 "price_std_coal_comparable": "可比标煤单价",

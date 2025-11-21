@@ -7,6 +7,41 @@
 - 区间模式提供 RevoGrid 逐日明细与趋势图（温度强制右轴，带 dataZoom/tooltip），指标芯片与单位切换保持联动；Excel 导出按单位生成独立 Sheet，包含汇总/逐日/查询信息。
 - 本次仅做结构梳理与文档登记，未修改代码或接口。
 
+## 会话小结（2025-12-14 填报页本单位分析折叠区）
+
+- `pages/DataEntryView.vue` 底部新增“本单位数据分析”折叠卡片（默认收起），展开后自动读取 data_analysis schema，强制使用当前表对应单位（模板下发的 `unit_id/unit_name`），仅支持区间模式。
+- 提供时间范围选择、指标多选（全选/清空），调用 `/data_analysis/query` 以 `analysis_mode=range`、单一 `unit_key` 生成本期/同期/同比汇总与 warnings，不返回其他单位或逐日曲线，避免数据泄露。
+- 支持导出单 Sheet Excel（汇总表 + 查询信息），无多单位/相关矩阵/趋势图，仅作为填报页的轻量汇总辅助。
+- 若需回滚，恢复 `DataEntryView.vue` 即可，原有填报/校验/提交逻辑保持不变。
+
+## 会话小结（2025-12-14 填报页指标自动聚合接口）
+
+- 后端新增 `GET /projects/daily_report_25_26/data_entry/analysis/metrics`，按单位聚合审批/常量配置的项目字典并追加气温指标与小数位；前端 `DataEntryView` 调用该接口获取可选指标。
+- 折叠区若未选择指标将自动全选接口返回集合，再以 `analysis_mode=range`、当前单位调用 `/data_analysis/query`，保证能生成本单位汇总且不会跨单位泄露。
+- 导出仍为单单位单 Sheet；回滚恢复 `daily_report_25_26.py`、`DataEntryView.vue`、`services/api.js` 即可。
+
+## 会话小结（2025-12-14 填报页指标分组栅格布局）
+
+- 指标接口输出顺序与配置一致，并返回 `unit_dict` 供前端使用准确 `unit_key`，避免“未知单位”报错。
+- 折叠区改为栅格卡片布局：每个分组独立卡片、内部等宽网格，便于阅读；未分组时同样使用网格排布。
+- 回滚恢复 `daily_report_25_26.py` 与 `DataEntryView.vue` 即可。
+
+## 会话小结（2025-12-14 填报页指标分组与单位修正）
+
+- 指标面板按“审批/常量/气温”分组展示，组内按中文排序；空选时默认全选分组集合。接口附带 `unit_dict`，前端查询 `unit_key` 优先用接口值，避免“未知单位”报错。
+- 回滚同上：恢复 `daily_report_25_26.py`、`DataEntryView.vue`、`services/api.js` 即可。
+
+## 会话小结（2025-12-14 填报页逐日表与趋势图）
+
+- “本单位数据分析”折叠区读取 `/data_analysis/query` 的 `timeline`，新增逐日 RevoGrid 表与 ECharts 趋势图，支持指标芯片切换、同比色彩提示。
+- 仅前端变动，回滚恢复 `DataEntryView.vue` 即可。
+
+## 会话小结（2025-12-14 填报页分析趋势图对齐）
+
+- `DataEntryView.vue` 的趋势图配置与数据分析页面保持一致：图例移至顶部滚动、Tooltip 改为深色卡片并附单位与同比百分比，折线/渐变/虚线配色与正式分析页同步。
+- 新增温度指标识别（依赖 `/data_entry/analysis/metrics` 返回的 `temperature` 组 + `value_type`），`assignTimelineAxisSlots` 保证“平均气温”等温度项始终绑定右轴，其它指标走左轴；无温度时退回“首个左轴、其余右轴”的旧策略。
+- `analysisTimelineMetrics` 记录 `value_type`，趋势图缓存 `seriesMeta` 在 Tooltip 中显示单位与实时 delta，避免“本期/同期”错列；无后端改动，回滚恢复该 .vue 文件即可。
+
 ## 会话小结（2025-12-12 dockerignore 添加）
 
 - 仓库根目录新增 `.dockerignore`，将 `db_data` 数据目录排除出镜像构建上下文，前端代码与依赖未变更；若需临时保留该目录，可在 `.dockerignore` 中移除对应条目。

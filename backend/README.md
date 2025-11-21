@@ -6,6 +6,34 @@
 - 该页面默认业务日取自 `GET /dashboard/date`（`set_biz_date`），温度指标默认勾选取决于 schema 的温度关键词；多单位导出时每个单位生成独立 Sheet，后端响应格式保持现状即可。
 - 未对后端代码、接口或配置做任何修改，记录结构梳理以便后续联调。
 
+# 会话小结（2025-12-14 填报页本单位分析折叠区）
+
+- 前端在 `DataEntryView.vue` 增加“本单位数据分析”折叠卡片，调用现有 `/data_analysis/schema|query`，强制使用当前模板的 `unit_id/unit_name`，仅以 `analysis_mode=range` 查询本单位汇总，不提供逐日或跨单位数据。
+- 后端接口无需变更，但需确保 data_analysis 查询对传入的 `unit_key` 做权限/范围校验即可；导出为单 Sheet Excel 由前端完成。
+- 未改动后端代码，如需回滚可仅恢复前端文件。
+
+# 会话小结（2025-12-14 填报页指标聚合接口）
+
+- 新增 `GET /projects/daily_report_25_26/data_entry/analysis/metrics`：按 `unit_key` 汇总审批/常量配置中的项目字典，并追加数据分析 schema 的气温指标与小数位，返回 `{options, decimals, source}` 供填报页本单位分析使用。
+- 仅读取 JSON 配置文件，不访问数据库；调用方仍通过 `/data_analysis/query` 获取单单位汇总结果，保持数据范围受限。
+- 回滚恢复 `backend/api/v1/daily_report_25_26.py` 对应增量即可。
+
+# 会话小结（2025-12-14 填报页趋势图轴/图例同步）
+
+- 本次只在前端 `DataEntryView.vue` 调整趋势图配置：复用数据分析页面的 legend/tooltip/渐变配色，并在前端依据 `/data_entry/analysis/metrics` 返回的 `temperature` 分组（以及 `value_type == 'temperature'`）将平均气温固定映射到右轴，其余指标走左轴；后端 `/data_analysis/query` 与 `/data_entry/analysis/metrics` 的数据结构保持不变。
+- 接口契约未改动，仍返回 `timeline.current/peer/date`、`decimals` 与按组区分的指标选项；若未来 schema 需要新增其它“特殊轴”类型，可继续在接口层通过 `value_type` / 分组标识传递，前端即可沿用同一轴分配逻辑。
+- 无需部署后端，回滚仅涉及前端文件恢复。
+
+# 会话小结（2025-12-14 指标排序与命名更新）
+
+- `GET /projects/daily_report_25_26/data_entry/analysis/metrics` 中，将“审批指标”重命名为“主要指标”，主要/常量指标按配置文件原始顺序输出，附带 `unit_dict` 供前端使用正确的 `unit_key`。
+- 不涉及数据库操作，回滚恢复 `daily_report_25_26.py` 即可。
+
+# 会话小结（2025-12-14 填报页指标分组排序 + 单位修正）
+
+- 指标接口附带 `unit_dict`，前端查询 `unit_key` 优先用接口值，避免“未知单位”错误；分组选项以审批/常量/气温顺序并按中文排序。
+- 后端仍仅读取 JSON 配置，无数据库改动；回滚同上。
+
 # 会话小结（2025-12-12 dockerignore 添加）
 
 - 仓库根目录新增 `.dockerignore`，默认忽略 `db_data`（PostgreSQL 本地数据目录），避免容器构建上下文携带大体积数据库文件；后端代码与依赖未改动，回滚只需删除该忽略文件或移除对应条目。
