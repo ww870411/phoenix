@@ -302,82 +302,91 @@
                 {{ correlationMatrixState.notes.join('；') }}
               </p>
             </div>
-            <div v-if="ringComparisonEntries.length" class="ring-summary">
-              <div class="ring-summary__header">
-                <h4>环比比较</h4>
-                <span class="panel-hint" v-if="ringPreviousRangeLabel">
-                  {{ ringCurrentRangeLabel }} vs {{ ringPreviousRangeLabel }}
-                </span>
-              </div>
-              <table class="ring-summary__table">
-                <thead>
-                  <tr>
-                    <th>指标</th>
-                    <th>上期累计</th>
-                    <th>本期累计</th>
-                    <th>环比</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
-                    <td>{{ entry.label }}</td>
-                    <td class="num">
-                      {{ formatNumber(entry.prev, entry.decimals || 2) }}
-                      <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
-                    </td>
-                    <td class="num">
-                      {{ formatNumber(entry.current, entry.decimals || 2) }}
-                      <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
-                    </td>
-                    <td class="num">{{ entry.rate === null ? '—' : formatDelta(entry.rate) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p v-else-if="ringComparisonNote" class="panel-hint warning">{{ ringComparisonNote }}</p>
             <div v-if="summaryCopyMessage" class="summary-copy-hint">{{ summaryCopyMessage }}</div>
           </section>
-          <table class="result-table">
-            <thead>
-              <tr>
-                <th>指标</th>
-                <th>当前值</th>
-                <th>同期/对照</th>
-                <th>同比</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="row in previewRows"
-                :key="row.key"
-                :class="{ 'result-row--missing': row.missing }"
-              >
-                <td>
-                  <div class="metric-label">
-                    <span>{{ row.label }}</span>
-                    <span v-if="row.value_type === 'temperature'" class="tag tag--subtle">气温</span>
-                    <span v-else-if="row.value_type === 'constant'" class="tag tag--subtle">常量</span>
-                    <span v-if="row.missing" class="tag tag--subtle">缺失</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="value-cell">
-                    <span class="value-number">{{ formatNumber(resolveValue(row, 'current'), row.decimals || 2) }}</span>
-                    <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="value-cell">
-                    <span class="value-number">{{ formatNumber(resolveValue(row, 'peer'), row.decimals || 2) }}</span>
-                    <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
-                  </div>
-                </td>
-                <td :class="resolveDelta(row) === null ? '' : resolveDelta(row) >= 0 ? 'delta-up' : 'delta-down'">
-                  {{ formatDelta(resolveDelta(row)) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="comparison-section" v-if="previewRows.length">
+            <h3 class="comparison-title">同比比较</h3>
+            <table class="result-table result-table--centered">
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>当前值</th>
+                  <th>同期/对照</th>
+                  <th>同比</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in previewRows"
+                  :key="row.key"
+                  :class="{ 'result-row--missing': row.missing }"
+                >
+                  <td>
+                    <div class="metric-label">
+                      <span>{{ row.label }}</span>
+                      <span v-if="row.value_type === 'temperature'" class="tag tag--subtle">气温</span>
+                      <span v-else-if="row.value_type === 'constant'" class="tag tag--subtle">常量</span>
+                      <span v-if="row.missing" class="tag tag--subtle">缺失</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="value-cell">
+                      <span class="value-number">{{ formatNumber(resolveValue(row, 'current'), row.decimals || 2) }}</span>
+                      <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="value-cell">
+                      <span class="value-number">{{ formatNumber(resolveValue(row, 'peer'), row.decimals || 2) }}</span>
+                      <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
+                    </div>
+                  </td>
+                  <td
+                    class="delta-cell"
+                    :class="resolveDelta(row) === null ? '' : resolveDelta(row) >= 0 ? 'delta-up' : 'delta-down'"
+                  >
+                    {{ formatDelta(resolveDelta(row)) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="comparison-section" v-if="ringComparisonEntries.length">
+            <h3 class="comparison-title">环比比较</h3>
+            <div class="panel-hint" v-if="ringPreviousRangeLabel">
+              {{ ringCurrentRangeLabel }} vs {{ ringPreviousRangeLabel }}
+            </div>
+            <table class="result-table result-table--centered">
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>上期累计</th>
+                  <th>本期累计</th>
+                  <th>环比</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
+                  <td>{{ entry.label }}</td>
+                  <td>
+                    {{ formatNumber(entry.prev, entry.decimals || 2) }}
+                    <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                  </td>
+                  <td>
+                    {{ formatNumber(entry.current, entry.decimals || 2) }}
+                    <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                  </td>
+                  <td
+                    class="delta-cell"
+                    :class="entry.rate === null ? '' : entry.rate >= 0 ? 'delta-up' : 'delta-down'"
+                  >
+                    {{ entry.rate === null ? '—' : formatDelta(entry.rate) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else-if="ringComparisonNote" class="panel-hint warning">{{ ringComparisonNote }}</p>
         </div>
       </section>
 
@@ -2484,25 +2493,6 @@ onMounted(() => {
 
 .ring-summary__table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.ring-summary__table th,
-.ring-summary__table td {
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
-  padding: 8px 10px;
-  text-align: center;
-}
-
-.ring-summary__table th {
-  background: var(--neutral-50, #f8fafc);
-  font-weight: 600;
-}
-
-.ring-summary__table td.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .metrics-group-header {
@@ -2625,13 +2615,41 @@ onMounted(() => {
 .result-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  text-align: left;
+  text-align: center;
   font-size: 14px;
 }
 
 .result-table th {
   background: var(--neutral-50);
   color: var(--neutral-700);
+}
+
+.result-table--centered th,
+.result-table--centered td {
+  text-align: center;
+}
+
+.result-table .metric-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  width: 100%;
+}
+
+.result-table .value-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.result-table .value-number {
+  text-align: center;
+  display: inline-block;
 }
 
 .warning-list {
@@ -2696,6 +2714,20 @@ onMounted(() => {
 
 .timeline-grid {
   height: 420px;
+}
+
+.comparison-section {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comparison-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--neutral-800, #1f2937);
 }
 
 .timeline-chart-panel {
