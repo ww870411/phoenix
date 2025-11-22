@@ -42,6 +42,10 @@
 
 - `runDataAnalysis` 调用不再透传填报页的 config（如 `数据结构_基本指标表.json`），改用后端默认分析配置，避免因错误 config 触发“未知单位”。
 
+## 会话小结（2025-12-17 本单位分析相关矩阵接入）
+
+- `UnitAnalysisLite` 新增相关矩阵板块：基于已勾选且有逐日数据的指标计算相关系数，展示 r 值、强度条与缺失提示，不额外调用接口。
+
 ## 会话小结（2025-12-16 数据分析页现状复盘）
 
 - 复核 `pages/DataAnalysisView.vue`：首屏加载 schema 解析单位/指标/分析模式/默认日期，温度指标按权重自动勾选；表单校验要求至少选择单位与指标，日期联动单日/区间模式。`runAnalysis` 按所选单位逐一调用 `/data_analysis/query`，缓存 `rows/warnings/timeline/meta`，结果区支持单位切换、warnings、摘要（整体/趋势/相关性/风险）、相关矩阵、RevoGrid 逐日表、ECharts 趋势图及多单位多 Sheet Excel 导出。

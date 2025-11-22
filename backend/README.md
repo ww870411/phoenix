@@ -42,6 +42,10 @@
 
 - 前端调用 `/data_analysis/query` 时不再透传填报页的 config（如 `数据结构_基本指标表.json`），改用后端默认分析配置，避免因 config 错配导致“未知单位”报错。后端接口未改动。
 
+# 会话小结（2025-12-17 本单位分析相关矩阵接入）
+
+- 前端 `UnitAnalysisLite` 新增相关矩阵计算与展示，基于已选且有逐日数据的指标自行计算 r 值与提示；后端接口未变。
+
 # 会话小结（2025-12-16 数据分析页现状复盘）
 
 - 复核前端 `pages/DataAnalysisView.vue`：加载 schema 后解析单位/指标/分析模式/默认日期，按温度权重默认勾选气温类指标，表单校验要求至少选择单位与指标；`runAnalysis` 按所选单位逐一调用 `/data_analysis/query`（附带 `analysis_mode/start_date/end_date`），前端缓存 `rows/warnings/timeline/meta` 并生成摘要、相关矩阵、趋势图与多 Sheet Excel 导出。

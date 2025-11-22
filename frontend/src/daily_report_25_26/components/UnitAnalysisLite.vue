@@ -203,6 +203,45 @@
               <TrendChart v-if="timelineChartOption" :option="timelineChartOption" height="360px" />
               <div v-else class="page-state muted">请选择至少一个包含逐日数据的指标生成趋势图</div>
             </div>
+
+            <div v-if="correlationMatrixState.ready" class="analysis-lite__corr">
+              <div class="analysis-lite__corr-header">
+                <h4>相关矩阵</h4>
+                <span class="analysis-lite__hint">r=1 为完全正相关，-1 为完全负相关</span>
+              </div>
+              <div class="analysis-lite__corr-table-wrapper">
+                <table class="analysis-lite__corr-table">
+                  <thead>
+                    <tr>
+                      <th>指标</th>
+                      <th v-for="label in correlationMatrixState.headers" :key="`corr-col-${label}`">{{ label }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in correlationMatrixState.rows" :key="`corr-row-${row.label}`">
+                      <th>{{ row.label }}</th>
+                      <td
+                        v-for="(cell, cellIndex) in row.cells"
+                        :key="`corr-cell-${rowIndex}-${cellIndex}`"
+                        :class="['analysis-lite__corr-cell', `analysis-lite__corr-cell--${cell.tone || 'neutral'}`]"
+                      >
+                        <span class="analysis-lite__corr-value">{{ cell.formatted }}</span>
+                        <span v-if="cell.strength > 0" class="analysis-lite__corr-meter" aria-hidden="true">
+                          <span
+                            class="analysis-lite__corr-meter-bar"
+                            :class="`analysis-lite__corr-meter-bar--${cell.tone || 'neutral'}`"
+                            :style="{ width: `${Math.round(cell.strength * 100)}%` }"
+                          ></span>
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-if="correlationMatrixState.notes.length" class="analysis-lite__hint warning">
+                {{ correlationMatrixState.notes.join('；') }}
+              </p>
+            </div>
           </section>
         </div>
       </template>
@@ -1081,6 +1120,139 @@ function applyAnalysisTimelineFromRows(rows) {
   analysisTimelineMetrics.value = rows.filter((row) => Array.isArray(row.timeline) && row.timeline.length)
 }
 
+function buildTimelineValueMap(metric) {
+  const map = new Map()
+  if (!metric || !Array.isArray(metric.timeline)) return map
+  metric.timeline.forEach((entry) => {
+    if (!entry?.date) return
+    const value = Number(entry.current)
+    if (!Number.isFinite(value)) return
+    map.set(entry.date, value)
+  })
+  return map
+}
+
+function computeCorrelation(valuesA = [], valuesB = []) {
+  if (!Array.isArray(valuesA) || !Array.isArray(valuesB)) return null
+  const n = Math.min(valuesA.length, valuesB.length)
+  if (!n) return null
+  let sumA = 0
+  let sumB = 0
+  let sumASq = 0
+  let sumBSq = 0
+  let sumAB = 0
+  let count = 0
+  for (let i = 0; i < n; i += 1) {
+    const a = Number(valuesA[i])
+    const b = Number(valuesB[i])
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+    sumA += a
+    sumB += b
+    sumASq += a * a
+    sumBSq += b * b
+    sumAB += a * b
+    count += 1
+  }
+  if (count < 2) return null
+  const numerator = count * sumAB - sumA * sumB
+  const denominator = Math.sqrt((count * sumASq - sumA * sumA) * (count * sumBSq - sumB * sumB))
+  if (!Number.isFinite(denominator) || denominator === 0) return null
+  const result = numerator / denominator
+  return Number.isFinite(result) ? result : null
+}
+
+function computeCorrelationFromMaps(mapA, mapB) {
+  if (!mapA || !mapB) return null
+  const alignedA = []
+  const alignedB = []
+  mapA.forEach((value, date) => {
+    const other = mapB.get(date)
+    if (!Number.isFinite(other)) return
+    alignedA.push(value)
+    alignedB.push(other)
+  })
+  if (alignedA.length < 2 || alignedB.length < 2) return null
+  return computeCorrelation(alignedA, alignedB)
+}
+
+const selectedTimelineMetrics = computed(() => {
+  const selectedKeys = new Set(selectedMetricKeys.value || [])
+  return analysisTimelineMetrics.value.filter(
+    (metric) => metric.key && selectedKeys.has(metric.key) && Array.isArray(metric.timeline) && metric.timeline.length,
+  )
+})
+
+const correlationMatrixState = computed(() => {
+  const state = {
+    ready: false,
+    headers: [],
+    rows: [],
+    notes: [],
+    insufficient: [],
+  }
+  const metrics = selectedTimelineMetrics.value
+  if (!metrics.length) return state
+  const prepared = []
+  metrics.forEach((metric) => {
+    const valueMap = buildTimelineValueMap(metric)
+    if (valueMap.size >= 2) {
+      prepared.push({ key: metric.key, label: metric.label, valueMap })
+    } else {
+      state.insufficient.push(metric.label)
+    }
+  })
+  if (prepared.length < 2) {
+    if (state.insufficient.length) {
+      state.notes.push(`以下指标逐日样本不足：${state.insufficient.slice(0, 4).join('、')}`)
+    }
+    return state
+  }
+  const headers = prepared.map((metric) => metric.label)
+  const pairCache = new Map()
+  const missingPairs = new Set()
+  const rows = prepared.map((metricA, rowIndex) => ({
+    label: metricA.label,
+    cells: prepared.map((metricB, columnIndex) => {
+      if (rowIndex === columnIndex) {
+        return { value: 1, formatted: '1.00', tone: 'neutral', strength: 1 }
+      }
+      const cacheKey =
+        rowIndex < columnIndex ? `${metricA.key}__${metricB.key}` : `${metricB.key}__${metricA.key}`
+      if (!pairCache.has(cacheKey)) {
+        const corr = computeCorrelationFromMaps(metricA.valueMap, metricB.valueMap)
+        if (corr === null) {
+          missingPairs.add(`${metricA.label} × ${metricB.label}`)
+        }
+        pairCache.set(cacheKey, corr)
+      }
+      const value = pairCache.get(cacheKey)
+      return {
+        value,
+        formatted: typeof value === 'number' ? value.toFixed(2) : '—',
+        tone:
+          typeof value === 'number'
+            ? value > 0
+              ? 'positive'
+              : value < 0
+                ? 'negative'
+                : 'neutral'
+            : 'muted',
+        strength: typeof value === 'number' ? Math.min(Math.abs(value), 1) : 0,
+      }
+    }),
+  }))
+  state.ready = true
+  state.headers = headers
+  state.rows = rows
+  if (state.insufficient.length) {
+    state.notes.push(`以下指标逐日样本不足：${state.insufficient.slice(0, 4).join('、')}`)
+  }
+  if (missingPairs.size) {
+    state.notes.push(`部分组合缺少共同日期：${Array.from(missingPairs).slice(0, 4).join('、')}`)
+  }
+  return state
+})
+
 function formatExportNumber(value, decimals = 2) {
   if (value === null || value === undefined || value === '—') return ''
   const num = Number(value)
@@ -1410,6 +1582,78 @@ watch(
   padding: 12px;
   background: #fff;
 }
+
+.analysis-lite__corr {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analysis-lite__corr-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.analysis-lite__corr-table-wrapper {
+  overflow-x: auto;
+}
+
+.analysis-lite__corr-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 360px;
+}
+
+.analysis-lite__corr-table th,
+.analysis-lite__corr-table td {
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.analysis-lite__corr-table th {
+  background: var(--neutral-50, #f8fafc);
+  font-weight: 600;
+}
+
+.analysis-lite__corr-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-lite__corr-cell--positive { color: var(--danger-600, #dc2626); }
+.analysis-lite__corr-cell--negative { color: var(--success-600, #16a34a); }
+.analysis-lite__corr-cell--neutral { color: var(--neutral-600, #475569); }
+.analysis-lite__corr-cell--muted { color: var(--neutral-400, #94a3b8); }
+
+.analysis-lite__corr-meter {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--neutral-100, #f1f5f9);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.analysis-lite__corr-meter-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.analysis-lite__corr-meter-bar--positive { background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), rgba(220, 38, 38, 0.85)); }
+.analysis-lite__corr-meter-bar--negative { background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), rgba(22, 163, 74, 0.85)); }
+.analysis-lite__corr-meter-bar--neutral { background: linear-gradient(90deg, rgba(71, 85, 105, 0.15), rgba(71, 85, 105, 0.8)); }
+.analysis-lite__corr-meter-bar--muted { background: linear-gradient(90deg, rgba(148, 163, 184, 0.15), rgba(148, 163, 184, 0.4)); }
 
 .chip--toggle {
   border-radius: 999px;
