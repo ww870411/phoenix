@@ -905,3 +905,13 @@ docker compose up -d --build
 
 - 文件：`frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`。主要包含单位多选、分析模式（单日/累计）、日期联动、指标分组多选、生成分析结果入口，以及摘要/相关矩阵/逐日 RevoGrid/趋势图（ECharts）与 Excel 导出；状态由 `selectedUnits`、`selectedMetrics`、`analysisMode`、`timelineGrid`、`activeTimelineMetricKeys` 等 ref 管理，计算属性生成 `correlationMatrixState`、`timelineChartOption` 等图表配置。
 - 本次仅阅读结构，无代码改动；若后续调整交互/样式，请同步更新本说明与进度记录。
+
+## 会话小结（2025-12-17 供暖水单耗口径提示）
+
+- 后端 `analysis.sql` 调整“供暖水单耗”分子，不再乘以 10000，公式为耗水量总和 / 供暖收费面积（万㎡）；前端数据分析页、展示页无需改动，读取新视图值即可。
+- 若发现数值骤降属预期口径收敛；如需回滚，后端恢复乘以 10000 的公式即可。
+
+## 会话小结（2025-12-18 数据分析页环比比较）
+
+- `pages/DataAnalysisView.vue` 新增“累计数据”模式下的环比比较：当选择的起止日期不同，自动取紧邻上一段（同长度；整月则取上月）累计值进行对比，最早不早于 2025-11-01。
+- “数据简报”新增环比表格，展示上期累计、本期累计与环比百分比；若上一周期早于最早日期或无数据，则提示环比未计算。

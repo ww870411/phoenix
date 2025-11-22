@@ -178,37 +178,33 @@ calc_rate_water_per_10k_m2 AS (
     '吨/万㎡'::text                AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (
-      COALESCE(
-        SUM(
-          CASE
-            WHEN b.item IN (
-              'consumption_network_fill_water',
-              'consumption_station_fill_water',
-              'consumption_network_water'
-            )
-            THEN b.value_biz_date
-            ELSE 0
-          END
-        ),
-        0
-      ) * 10000.0
+    COALESCE(
+      SUM(
+        CASE
+          WHEN b.item IN (
+            'consumption_network_fill_water',
+            'consumption_station_fill_water',
+            'consumption_network_water'
+          )
+          THEN b.value_biz_date
+          ELSE 0
+        END
+      ),
+      0
     )/NULLIF(COALESCE(cb_fee.value,0),0),
-    (
-      COALESCE(
-        SUM(
-          CASE
-            WHEN b.item IN (
-              'consumption_network_fill_water',
-              'consumption_station_fill_water',
-              'consumption_network_water'
-            )
-            THEN b.value_peer_date
-            ELSE 0
-          END
-        ),
-        0
-      ) * 10000.0
+    COALESCE(
+      SUM(
+        CASE
+          WHEN b.item IN (
+            'consumption_network_fill_water',
+            'consumption_station_fill_water',
+            'consumption_network_water'
+          )
+          THEN b.value_peer_date
+          ELSE 0
+        END
+      ),
+      0
     )/NULLIF(COALESCE(cp_fee.value,0),0)
   FROM base b
   LEFT JOIN const_biz  cb_fee ON cb_fee.company=b.company AND cb_fee.item='amount_heating_fee_area'
@@ -1168,37 +1164,33 @@ calc_rate_water_per_10k_m2 AS (
     '吨/万㎡'::text                AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (
-      COALESCE(
-        SUM(
-          CASE
-            WHEN b.item IN (
-              'consumption_network_fill_water',
-              'consumption_station_fill_water',
-              'consumption_network_water'
-            )
-            THEN b.value_biz_date
-            ELSE 0
-          END
-        ),
-        0
-      ) * 10000.0
+    COALESCE(
+      SUM(
+        CASE
+          WHEN b.item IN (
+            'consumption_network_fill_water',
+            'consumption_station_fill_water',
+            'consumption_network_water'
+          )
+          THEN b.value_biz_date
+          ELSE 0
+        END
+      ),
+      0
     )/NULLIF(COALESCE(cb_fee.value,0),0),
-    (
-      COALESCE(
-        SUM(
-          CASE
-            WHEN b.item IN (
-              'consumption_network_fill_water',
-              'consumption_station_fill_water',
-              'consumption_network_water'
-            )
-            THEN b.value_peer_date
-            ELSE 0
-          END
-        ),
-        0
-      ) * 10000.0
+    COALESCE(
+      SUM(
+        CASE
+          WHEN b.item IN (
+            'consumption_network_fill_water',
+            'consumption_station_fill_water',
+            'consumption_network_water'
+          )
+          THEN b.value_peer_date
+          ELSE 0
+        END
+      ),
+      0
     )/NULLIF(COALESCE(cp_fee.value,0),0)
   FROM base b
   LEFT JOIN const_biz  cb_fee ON cb_fee.company=b.company AND cb_fee.item='amount_heating_fee_area'

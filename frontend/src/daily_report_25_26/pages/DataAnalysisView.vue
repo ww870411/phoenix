@@ -302,6 +302,39 @@
                 {{ correlationMatrixState.notes.join('；') }}
               </p>
             </div>
+            <div v-if="ringComparisonEntries.length" class="ring-summary">
+              <div class="ring-summary__header">
+                <h4>环比比较</h4>
+                <span class="panel-hint" v-if="ringPreviousRangeLabel">
+                  {{ ringCurrentRangeLabel }} vs {{ ringPreviousRangeLabel }}
+                </span>
+              </div>
+              <table class="ring-summary__table">
+                <thead>
+                  <tr>
+                    <th>指标</th>
+                    <th>上期累计</th>
+                    <th>本期累计</th>
+                    <th>环比</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
+                    <td>{{ entry.label }}</td>
+                    <td class="num">
+                      {{ formatNumber(entry.prev, entry.decimals || 2) }}
+                      <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                    </td>
+                    <td class="num">
+                      {{ formatNumber(entry.current, entry.decimals || 2) }}
+                      <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                    </td>
+                    <td class="num">{{ entry.rate === null ? '—' : formatDelta(entry.rate) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else-if="ringComparisonNote" class="panel-hint warning">{{ ringComparisonNote }}</p>
             <div v-if="summaryCopyMessage" class="summary-copy-hint">{{ summaryCopyMessage }}</div>
           </section>
           <table class="result-table">
@@ -663,6 +696,7 @@ const activeUnit = ref('')
 const unitResults = ref({})
 const selectedMetrics = ref(new Set())
 const analysisMode = ref('daily')
+const MIN_ANALYSIS_DATE = '2025-11-01'
 const analysisModes = computed(() => {
   const modes = Array.isArray(schema.value?.analysis_modes) ? schema.value.analysis_modes : []
   if (modes.length) return modes
@@ -1201,6 +1235,66 @@ const summaryCorrelationLines = computed(() => {
   return []
 })
 
+const ringComparisonEntries = computed(() => {
+  const unitKey = activeUnit.value
+  const unitResult = unitResults.value[unitKey]
+  if (!unitResult?.ringCompare?.range || !unitResult.ringCompare.prevTotals) return []
+  return previewRows.value
+    .map((row) => {
+      const current = resolveTotalCurrentFromRow(row)
+      const prev = unitResult.ringCompare.prevTotals[row.key]
+      if (!Number.isFinite(current) || !Number.isFinite(prev)) return null
+      const diff = current - prev
+      const rate = prev !== 0 ? (diff / prev) * 100 : null
+      return {
+        key: row.key,
+        label: row.label,
+        unit: row.unit || '',
+        decimals: row.decimals ?? 2,
+        current,
+        prev,
+        rate,
+      }
+    })
+    .filter(Boolean)
+})
+
+const ringComparisonNote = computed(() => {
+  const unitKey = activeUnit.value
+  const unitResult = unitResults.value[unitKey]
+  if (!unitResult?.ringCompare) return ''
+  if (unitResult.ringCompare.range && unitResult.ringCompare.prevTotals) {
+    return ringComparisonEntries.value.length ? '' : '当前指标无可用环比数据'
+  }
+  return unitResult.ringCompare.note || ''
+})
+
+const ringCurrentRangeLabel = computed(() => {
+  const meta = lastQueryMeta.value
+  if (!meta?.start_date || !meta?.end_date) return ''
+  return meta.start_date === meta.end_date ? meta.start_date : `${meta.start_date} ~ ${meta.end_date}`
+})
+
+const ringPreviousRangeLabel = computed(() => {
+  const unitKey = activeUnit.value
+  const range = unitResults.value[unitKey]?.ringCompare?.range
+  if (!range?.start || !range?.end) return ''
+  return range.start === range.end ? range.start : `${range.start} ~ ${range.end}`
+})
+
+const ringSummaryLines = computed(() => {
+  if (!ringComparisonEntries.value.length) return []
+  const rangeNote = ringPreviousRangeLabel.value ? `（上期：${ringPreviousRangeLabel.value}）` : ''
+  const phrases = ringComparisonEntries.value.slice(0, 3).map((entry) => {
+    const unitText = entry.unit ? entry.unit : ''
+    const prevText = formatNumber(entry.prev, entry.decimals || 2)
+    const rateText = entry.rate === null ? '—' : formatDelta(entry.rate)
+    return `${entry.label} 上期 ${prevText}${unitText}，环比 ${rateText}`
+  })
+  const suffix = ringComparisonEntries.value.length > 3 ? '（其余略）' : ''
+  return phrases.length ? [`【环比】${phrases.join('；')}${suffix}${rangeNote}`] : []
+})
+
 const analysisSummaryEntries = computed(() => {
   const entries = []
   if (summaryOverallLine.value) {
@@ -1209,6 +1303,7 @@ const analysisSummaryEntries = computed(() => {
   if (summaryTimelineInsight.value) {
     entries.push(`【趋势观测】${summaryTimelineInsight.value}`)
   }
+  ringSummaryLines.value.forEach((line) => entries.push(line))
   summaryCorrelationLines.value.forEach((line) => entries.push(line))
   if (summaryWarningLine.value) {
     entries.push(`【风险提示】${summaryWarningLine.value}`)
@@ -1403,6 +1498,103 @@ function resetSelections() {
   clearPreviewState()
 }
 
+function parseDateStrict(value) {
+  if (!value) return null
+  const ts = Date.parse(String(value))
+  if (Number.isNaN(ts)) return null
+  return new Date(ts)
+}
+
+function formatDateIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.valueOf())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+function shiftDays(date, offset) {
+  const cloned = new Date(date)
+  cloned.setDate(cloned.getDate() + offset)
+  return cloned
+}
+
+function daysBetweenInclusive(start, end) {
+  const msPerDay = 24 * 60 * 60 * 1000
+  return Math.floor((end - start) / msPerDay) + 1
+}
+
+function isFullMonthRange(startDateStr, endDateStr) {
+  const start = parseDateStrict(startDateStr)
+  const end = parseDateStrict(endDateStr)
+  if (!start || !end) return false
+  if (start.getFullYear() !== end.getFullYear() || start.getMonth() !== end.getMonth()) return false
+  const firstDay = new Date(start.getFullYear(), start.getMonth(), 1)
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0)
+  return start.getTime() === firstDay.getTime() && end.getTime() === lastDay.getTime()
+}
+
+function computePreviousRangeForRing(startDateStr, endDateStr, mode) {
+  if (mode !== 'range') return { range: null, note: '环比仅支持累计模式' }
+  if (!startDateStr || !endDateStr) return { range: null, note: '缺少起止日期，无法计算环比' }
+  if (startDateStr === endDateStr) return { range: null, note: '单日不计算环比' }
+  const start = parseDateStrict(startDateStr)
+  const end = parseDateStrict(endDateStr)
+  if (!start || !end) return { range: null, note: '日期格式异常，环比已跳过' }
+  const minDate = parseDateStrict(MIN_ANALYSIS_DATE)
+  if (!minDate) return { range: null, note: '最早日期未设置，环比已跳过' }
+
+  let prevStart = null
+  let prevEnd = null
+  if (isFullMonthRange(startDateStr, endDateStr)) {
+    prevStart = new Date(start.getFullYear(), start.getMonth() - 1, 1)
+    prevEnd = new Date(start.getFullYear(), start.getMonth(), 0)
+  } else {
+    const span = daysBetweenInclusive(start, end)
+    prevEnd = shiftDays(start, -1)
+    prevStart = shiftDays(start, -span)
+  }
+
+  if (prevStart < minDate) {
+    return { range: null, note: `起始早于 ${MIN_ANALYSIS_DATE}，环比已跳过` }
+  }
+
+  return {
+    range: {
+      start: formatDateIso(prevStart),
+      end: formatDateIso(prevEnd),
+    },
+    note: '',
+  }
+}
+
+function resolveTotalCurrentFromRow(row) {
+  if (!row) return null
+  if (row.total_current !== undefined && row.total_current !== null) {
+    const num = Number(row.total_current)
+    return Number.isFinite(num) ? num : null
+  }
+  if (Array.isArray(row.timeline)) {
+    const sum = row.timeline.reduce((acc, entry) => {
+      const num = Number(entry?.current)
+      if (Number.isFinite(num)) return acc + num
+      return acc
+    }, 0)
+    return Number.isFinite(sum) ? sum : null
+  }
+  return null
+}
+
+function buildTotalsMap(rows) {
+  const map = {}
+  if (!Array.isArray(rows)) return map
+  rows.forEach((row) => {
+    if (!row?.key) return
+    const total = resolveTotalCurrentFromRow(row)
+    if (total !== null) {
+      map[row.key] = total
+    }
+  })
+  return map
+}
+
 async function runAnalysis() {
   formError.value = ''
   const targetUnits = Array.from(new Set(selectedUnits.value.filter((unit) => unit && typeof unit === 'string')))
@@ -1429,6 +1621,7 @@ async function runAnalysis() {
       start_date: startDate.value,
       end_date: endDate.value,
     }
+    const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
     const aggregatedResults = {}
     const errors = []
     for (const unitKey of targetUnits) {
@@ -1444,6 +1637,26 @@ async function runAnalysis() {
               decimals: metricDecimalsMap.value?.[row.key] ?? 2,
             }))
           : []
+        let prevTotals = null
+        let ringNote = prevRangeInfo.note
+        if (prevRangeInfo.range) {
+          try {
+            const prevPayload = {
+              ...payload,
+              start_date: prevRangeInfo.range.start,
+              end_date: prevRangeInfo.range.end,
+            }
+            const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
+            if (prevResponse?.ok) {
+              const prevRows = Array.isArray(prevResponse.rows) ? prevResponse.rows : []
+              prevTotals = buildTotalsMap(prevRows)
+            } else {
+              ringNote = prevResponse?.message || '环比数据获取失败'
+            }
+          } catch (err) {
+            ringNote = err instanceof Error ? err.message : String(err)
+          }
+        }
         const meta = {
           unit_key: unitKey,
           unit_label: response.unit_label || resolveUnitLabel(unitKey),
@@ -1457,6 +1670,11 @@ async function runAnalysis() {
           warnings: Array.isArray(response.warnings) ? response.warnings : [],
           timeline: buildTimelineGrid(decoratedRows),
           infoBanner: buildInfoBannerFromMeta(meta),
+          ringCompare: {
+            range: prevRangeInfo.range || null,
+            prevTotals,
+            note: ringNote,
+          },
           meta,
         }
       } catch (err) {
@@ -2247,6 +2465,44 @@ onMounted(() => {
 
 .correlation-matrix__notes {
   margin: 0;
+}
+
+.ring-summary {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light, rgba(0, 0, 0, 0.05));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ring-summary__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ring-summary__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ring-summary__table th,
+.ring-summary__table td {
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.ring-summary__table th {
+  background: var(--neutral-50, #f8fafc);
+  font-weight: 600;
+}
+
+.ring-summary__table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .metrics-group-header {
