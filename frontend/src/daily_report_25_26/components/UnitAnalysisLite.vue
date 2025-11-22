@@ -123,21 +123,23 @@
               <li v-for="(warn, i) in analysisResult.warnings" :key="`warn-${i}`">{{ warn }}</li>
             </ul>
           </div>
-          <table class="analysis-lite__table">
+          <div class="analysis-lite__section">
+            <h4 class="analysis-lite__section-title">同比比较</h4>
+            <table class="analysis-lite__table analysis-lite__table--center">
             <colgroup>
               <col style="width: 32%" />
               <col style="width: 22%" />
               <col style="width: 22%" />
               <col style="width: 24%" />
             </colgroup>
-            <thead>
-              <tr>
-                <th>指标</th>
-                <th>本期</th>
-                <th>同期</th>
-                <th>同比</th>
-              </tr>
-            </thead>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>本期累计</th>
+                  <th>同期累计</th>
+                  <th>同比</th>
+                </tr>
+              </thead>
             <tbody>
               <tr v-for="row in analysisResult.rows" :key="row.key">
                 <td class="analysis-lite__metric">
@@ -166,7 +168,52 @@
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
+
+          <div class="analysis-lite__section" v-if="ringComparisonEntries.length">
+            <h4 class="analysis-lite__section-title">环比比较</h4>
+            <div class="analysis-lite__hint" v-if="ringPreviousRangeLabel">
+              {{ ringCurrentRangeLabel }} vs {{ ringPreviousRangeLabel }}
+            </div>
+            <table class="analysis-lite__table analysis-lite__table--center">
+              <colgroup>
+                <col style="width: 32%" />
+                <col style="width: 22%" />
+                <col style="width: 22%" />
+                <col style="width: 24%" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>本期累计</th>
+                  <th>上期累计</th>
+                  <th>环比</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
+                  <td class="analysis-lite__metric">{{ entry.label }}</td>
+                  <td>
+                    <div class="analysis-lite__value">
+                      <span class="analysis-lite__number">{{ formatNumber(entry.current, entry.decimals || 2) }}</span>
+                      <span v-if="entry.unit" class="analysis-lite__unit">{{ entry.unit }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="analysis-lite__value">
+                      <span class="analysis-lite__number">{{ formatNumber(entry.prev, entry.decimals || 2) }}</span>
+                      <span v-if="entry.unit" class="analysis-lite__unit">{{ entry.unit }}</span>
+                    </div>
+                  </td>
+                  <td :class="entry.rate === null ? '' : entry.rate >= 0 ? 'delta-up' : 'delta-down'">
+                    {{ entry.rate === null ? '—' : formatDelta(entry.rate) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else-if="ringComparisonNote" class="analysis-lite__hint warning">{{ ringComparisonNote }}</p>
 
           <section v-if="hasTimelineData" class="analysis-lite__timeline">
             <header class="analysis-lite__timeline-header">
@@ -282,12 +329,13 @@ const analysisEndDate = ref(props.bizDate || '')
 const selectedMetricKeys = ref(new Set())
 const analysisLoading = ref(false)
 const analysisFormError = ref('')
-const analysisResult = ref({ rows: [], warnings: [], meta: null })
+const analysisResult = ref({ rows: [], warnings: [], meta: null, ringCompare: null })
 const analysisTimelineGrid = ref({ columns: [], rows: [] })
 const analysisTimelineMetrics = ref([])
 const activeTimelineMetricKeys = ref([])
 const analysisDefaultBizDate = ref('')
 const analysisDefaultDateApplied = ref(false)
+const MIN_ANALYSIS_DATE = '2025-11-01'
 
 const analysisMetricGroups = computed(() => analysisSchema.value?.groups || [])
 const analysisMetricOptions = computed(() => {
@@ -748,7 +796,7 @@ function clearAnalysisMetrics() {
 }
 
 function resetAnalysisResult() {
-  analysisResult.value = { rows: [], warnings: [], meta: null }
+  analysisResult.value = { rows: [], warnings: [], meta: null, ringCompare: null }
   analysisFormError.value = ''
   resetAnalysisTimeline()
 }
@@ -793,6 +841,102 @@ function formatPercentValue(value) {
   const num = Number(value)
   if (Number.isNaN(num)) return null
   return `${num.toFixed(2)}%`
+}
+
+function parseDateStrict(value) {
+  if (!value) return null
+  const ts = Date.parse(String(value))
+  if (Number.isNaN(ts)) return null
+  return new Date(ts)
+}
+
+function formatDateIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.valueOf())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+function shiftDays(date, offset) {
+  const cloned = new Date(date)
+  cloned.setDate(cloned.getDate() + offset)
+  return cloned
+}
+
+function daysBetweenInclusive(start, end) {
+  const msPerDay = 24 * 60 * 60 * 1000
+  return Math.floor((end - start) / msPerDay) + 1
+}
+
+function isFullMonthRange(startDateStr, endDateStr) {
+  const start = parseDateStrict(startDateStr)
+  const end = parseDateStrict(endDateStr)
+  if (!start || !end) return false
+  if (start.getFullYear() !== end.getFullYear() || start.getMonth() !== end.getMonth()) return false
+  const firstDay = new Date(start.getFullYear(), start.getMonth(), 1)
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0)
+  return start.getTime() === firstDay.getTime() && end.getTime() === lastDay.getTime()
+}
+
+function computePreviousRangeForRing(startDateStr, endDateStr) {
+  if (!startDateStr || !endDateStr) return { range: null, note: '缺少起止日期，环比已跳过' }
+  if (startDateStr === endDateStr) return { range: null, note: '单日不计算环比' }
+  const start = parseDateStrict(startDateStr)
+  const end = parseDateStrict(endDateStr)
+  if (!start || !end) return { range: null, note: '日期格式异常，环比已跳过' }
+  const minDate = parseDateStrict(MIN_ANALYSIS_DATE)
+  if (!minDate) return { range: null, note: '最早日期未配置，环比已跳过' }
+
+  let prevStart = null
+  let prevEnd = null
+  if (isFullMonthRange(startDateStr, endDateStr)) {
+    prevStart = new Date(start.getFullYear(), start.getMonth() - 1, 1)
+    prevEnd = new Date(start.getFullYear(), start.getMonth(), 0)
+  } else {
+    const span = daysBetweenInclusive(start, end)
+    prevEnd = shiftDays(start, -1)
+    prevStart = shiftDays(start, -span)
+  }
+
+  if (prevStart < minDate) {
+    return { range: null, note: `起始早于 ${MIN_ANALYSIS_DATE}，环比已跳过` }
+  }
+
+  return {
+    range: {
+      start: formatDateIso(prevStart),
+      end: formatDateIso(prevEnd),
+    },
+    note: '',
+  }
+}
+
+function resolveTotalCurrentFromRow(row) {
+  if (!row) return null
+  if (row.total_current !== undefined && row.total_current !== null) {
+    const num = Number(row.total_current)
+    return Number.isFinite(num) ? num : null
+  }
+  if (Array.isArray(row.timeline)) {
+    const sum = row.timeline.reduce((acc, entry) => {
+      const num = Number(entry?.current)
+      if (Number.isFinite(num)) return acc + num
+      return acc
+    }, 0)
+    return Number.isFinite(sum) ? sum : null
+  }
+  return null
+}
+
+function buildTotalsMap(rows) {
+  const map = {}
+  if (!Array.isArray(rows)) return map
+  rows.forEach((row) => {
+    if (!row?.key) return
+    const total = resolveTotalCurrentFromRow(row)
+    if (total !== null) {
+      map[row.key] = total
+    }
+  })
+  return map
 }
 
 function applyDecimals(value, decimals = 2) {
@@ -1030,6 +1174,30 @@ function buildSummarySheetData(rows) {
   return [header, ...mapped]
 }
 
+function buildRingSheetData(result) {
+  const prevTotals = result?.ringCompare?.prevTotals
+  const range = result?.ringCompare?.range
+  if (!prevTotals || !range) return null
+  const rows = Array.isArray(result?.rows) ? result.rows : []
+  const header = ['指标', '上期累计', '本期累计', '环比', '单位']
+  const mapped = rows.map((row) => {
+    const current = resolveTotalCurrentFromRow(row)
+    const prev = prevTotals[row.key]
+    const rate =
+      Number.isFinite(prev) && prev !== 0 && Number.isFinite(current)
+        ? ((current - prev) / prev) * 100
+        : null
+    return [
+      row.label,
+      formatExportNumber(prev, row.decimals || 2),
+      formatExportNumber(current, row.decimals || 2),
+      formatPercentValue(rate) || '',
+      row.unit || '',
+    ]
+  })
+  return [header, ...mapped]
+}
+
 function buildMetaSheetData(meta) {
   const data = [
     ['单位', meta?.unit_label || unitLabel.value],
@@ -1044,6 +1212,16 @@ function buildMetaSheetData(meta) {
 function buildUnitSheetData(result) {
   const sheetData = []
   buildSummarySheetData(result?.rows).forEach((row) => sheetData.push(row))
+  const ringData = buildRingSheetData(result)
+  if (ringData && ringData.length) {
+    sheetData.push([])
+    sheetData.push(['环比比较'])
+    ringData.forEach((row) => sheetData.push(row))
+  } else if (result?.ringCompare?.note) {
+    sheetData.push([])
+    sheetData.push(['环比比较'])
+    sheetData.push([result.ringCompare.note])
+  }
   const timelineData = buildTimelineSheetData(result?.timeline)
   if (timelineData && timelineData.length) {
     sheetData.push([])
@@ -1069,6 +1247,7 @@ function downloadAnalysisExcel() {
     buildUnitSheetData({
       rows: analysisResult.value.rows,
       timeline: analysisTimelineGrid.value,
+      ringCompare: analysisResult.value.ringCompare,
       meta: analysisResult.value.meta,
     }),
   )
@@ -1253,6 +1432,49 @@ const correlationMatrixState = computed(() => {
   return state
 })
 
+const ringComparisonEntries = computed(() => {
+  const ringCompare = analysisResult.value?.ringCompare
+  const prevTotals = ringCompare?.prevTotals
+  const range = ringCompare?.range
+  if (!prevTotals || !range) return []
+  return analysisResult.value.rows
+    .map((row) => {
+      const current = resolveTotalCurrentFromRow(row)
+      const prev = prevTotals[row.key]
+      if (!Number.isFinite(current) || !Number.isFinite(prev)) return null
+      const rate = prev !== 0 ? ((current - prev) / prev) * 100 : null
+      return {
+        key: row.key,
+        label: row.label,
+        unit: row.unit || '',
+        decimals: row.decimals ?? 2,
+        current,
+        prev,
+        rate,
+      }
+    })
+    .filter(Boolean)
+})
+
+const ringComparisonNote = computed(() => {
+  const ringCompare = analysisResult.value?.ringCompare
+  if (!ringCompare) return ''
+  if (ringCompare.range && ringComparisonEntries.value.length) return ''
+  return ringCompare.note || ''
+})
+
+const ringCurrentRangeLabel = computed(() => {
+  const meta = analysisResult.value?.meta
+  if (!meta?.start_date || !meta?.end_date) return ''
+  return meta.start_date === meta.end_date ? meta.start_date : `${meta.start_date} ~ ${meta.end_date}`
+})
+
+const ringPreviousRangeLabel = computed(() => {
+  const range = analysisResult.value?.ringCompare?.range
+  if (!range?.start || !range?.end) return ''
+  return range.start === range.end ? range.start : `${range.start} ~ ${range.end}`
+})
+
 function formatExportNumber(value, decimals = 2) {
   if (value === null || value === undefined || value === '—') return ''
   const num = Number(value)
@@ -1302,15 +1524,40 @@ async function runUnitAnalysis() {
       end_date: analysisEndDate.value,
       unit_key: unitKey,
     }
+    const prevRangeInfo = computePreviousRangeForRing(analysisStartDate.value, analysisEndDate.value)
     // data_entry 页面传入的 config 指向填报模板，不适用于分析接口，这里不透传 config 以使用后端默认配置
     const response = await runDataAnalysis(props.projectKey, payload)
     if (!response?.ok) {
       throw new Error(response?.message || '生成汇总失败')
     }
     const rows = normalizeAnalysisRows(response.rows)
+    let prevTotals = null
+    let ringNote = prevRangeInfo.note
+    if (prevRangeInfo.range) {
+      try {
+        const prevResponse = await runDataAnalysis(props.projectKey, {
+          ...payload,
+          start_date: prevRangeInfo.range.start,
+          end_date: prevRangeInfo.range.end,
+        })
+        if (prevResponse?.ok) {
+          const prevRows = normalizeAnalysisRows(prevResponse.rows)
+          prevTotals = buildTotalsMap(prevRows)
+        } else {
+          ringNote = prevResponse?.message || '环比数据获取失败'
+        }
+      } catch (err) {
+        ringNote = err instanceof Error ? err.message : String(err)
+      }
+    }
     analysisResult.value = {
       rows,
       warnings: Array.isArray(response.warnings) ? response.warnings : [],
+      ringCompare: {
+        range: prevRangeInfo.range || null,
+        prevTotals,
+        note: ringNote,
+      },
       meta: normalizeAnalysisMeta(response),
     }
     applyAnalysisTimelineFromRows(rows)
@@ -1529,16 +1776,25 @@ watch(
   color: var(--neutral-700);
 }
 
+.analysis-lite__table--center th,
+.analysis-lite__table--center td {
+  text-align: center;
+}
+
 .analysis-lite__metric {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: 100%;
 }
 
 .analysis-lite__value {
-  display: flex;
+  display: inline-flex;
   align-items: baseline;
+  justify-content: center;
   gap: 6px;
+  width: 100%;
 }
 
 .analysis-lite__number {
@@ -1581,6 +1837,20 @@ watch(
   border-radius: var(--radius);
   padding: 12px;
   background: #fff;
+}
+
+.analysis-lite__section {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-lite__section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--neutral-800, #1f2937);
 }
 
 .analysis-lite__corr {

@@ -310,8 +310,8 @@
               <thead>
                 <tr>
                   <th>指标</th>
-                  <th>当前值</th>
-                  <th>同期/对照</th>
+                  <th>本期累计</th>
+                  <th>同期累计</th>
                   <th>同比</th>
                 </tr>
               </thead>
@@ -360,8 +360,8 @@
               <thead>
                 <tr>
                   <th>指标</th>
-                  <th>上期累计</th>
                   <th>本期累计</th>
+                  <th>上期累计</th>
                   <th>环比</th>
                 </tr>
               </thead>
@@ -369,11 +369,11 @@
                 <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
                   <td>{{ entry.label }}</td>
                   <td>
-                    {{ formatNumber(entry.prev, entry.decimals || 2) }}
+                    <span class="value-number">{{ formatNumber(entry.current, entry.decimals || 2) }}</span>
                     <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
                   </td>
                   <td>
-                    {{ formatNumber(entry.current, entry.decimals || 2) }}
+                    <span class="value-number">{{ formatNumber(entry.prev, entry.decimals || 2) }}</span>
                     <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
                   </td>
                   <td
@@ -2051,6 +2051,30 @@ function buildSummarySheetData(rows) {
   return [header, ...mapped]
 }
 
+function buildRingSheetData(result) {
+  const prevTotals = result?.ringCompare?.prevTotals
+  const range = result?.ringCompare?.range
+  if (!prevTotals || !range) return null
+  const rows = Array.isArray(result?.rows) ? result.rows : []
+  const header = ['指标', '上期累计', '本期累计', '环比', '单位']
+  const mapped = rows.map((row) => {
+    const current = resolveTotalCurrentFromRow(row)
+    const prev = prevTotals[row.key]
+    const rate =
+      Number.isFinite(prev) && prev !== 0 && Number.isFinite(current)
+        ? ((current - prev) / prev) * 100
+        : null
+    return [
+      row.label,
+      formatExportNumber(prev, row.decimals || 2),
+      formatExportNumber(current, row.decimals || 2),
+      formatPercentValue(rate) || '',
+      row.unit || '',
+    ]
+  })
+  return [header, ...mapped]
+}
+
 function buildTimelineSheetData(timeline) {
   if (!timeline || !Array.isArray(timeline.columns) || !timeline.columns.length) return null
   const columns = timeline.columns
@@ -2080,6 +2104,16 @@ function buildUnitSheetData(result) {
   const sheetData = []
   const summary = buildSummarySheetData(result?.rows)
   summary.forEach((row) => sheetData.push(row))
+  const ringData = buildRingSheetData(result)
+  if (ringData && ringData.length) {
+    sheetData.push([])
+    sheetData.push(['环比比较'])
+    ringData.forEach((row) => sheetData.push(row))
+  } else if (result?.ringCompare?.note) {
+    sheetData.push([])
+    sheetData.push(['环比比较'])
+    sheetData.push([result.ringCompare.note])
+  }
   const timelineData = buildTimelineSheetData(result?.timeline)
   if (timelineData && timelineData.length) {
     sheetData.push([])
