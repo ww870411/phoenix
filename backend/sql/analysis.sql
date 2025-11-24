@@ -231,7 +231,7 @@ calc_amount_heat_lose AS (
   GROUP BY b.company, b.company_cn
 ),
 calc_power AS (
-  -- 供热供电收入（万元）= 供热供电量 × 单价 / 10000
+  -- 供热供电收入（万元）= 供热供电量 × 单价
   SELECT
     b.company,
     b.company_cn,
@@ -240,8 +240,8 @@ calc_power AS (
     '万元'::text                    AS unit,
     MAX(b.biz_date)                 AS biz_date,
     MAX(b.peer_date)                AS peer_date,
-    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0))/10000.0 AS value_peer_date
+    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0)) AS value_biz_date,
+    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0)) AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_ps ON cb_ps.company=b.company AND cb_ps.item='price_power_sales'
   LEFT JOIN const_peer cp_ps ON cp_ps.company=b.company AND cp_ps.item='price_power_sales'
@@ -366,7 +366,7 @@ calc_natural_gas_cost AS (
   GROUP BY b.company, b.company_cn, cb_ng.value, cp_ng.value
 ),
 calc_purchased_power_cost AS (
-  -- 外购电成本（万元）= 外购电量 × 外购电单价 / 10000
+  -- 外购电成本（万元）= 外购电量 × 外购电单价 
   SELECT
     b.company,
     b.company_cn,
@@ -375,8 +375,8 @@ calc_purchased_power_cost AS (
     '万元'::text                     AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_pp.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_pp.value,0))/10000.0 AS value_peer_date
+    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_pp.value,0)) AS value_biz_date,
+    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_pp.value,0)) AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_pp ON cb_pp.company=b.company AND cb_pp.item='price_purchased_power'
   LEFT JOIN const_peer cp_pp ON cp_pp.company=b.company AND cp_pp.item='price_purchased_power'
@@ -1224,8 +1224,8 @@ calc_power AS (
     '万元'::text                    AS unit,
     MAX(b.biz_date)                 AS biz_date,
     MAX(b.peer_date)                AS peer_date,
-    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0))/10000.0 AS value_peer_date
+    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ps.value,0)) AS value_biz_date,
+    (SUM(CASE WHEN b.item='amount_power_sales' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ps.value,0)) AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_ps ON cb_ps.company=b.company AND cb_ps.item='price_power_sales'
   LEFT JOIN const_peer cp_ps ON cp_ps.company=b.company AND cp_ps.item='price_power_sales'
@@ -1352,8 +1352,8 @@ calc_purchased_power_cost AS (
     '万元'::text                     AS unit,
     MAX(b.biz_date),
     MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_pp.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_pp.value,0))/10000.0 AS value_peer_date
+    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_pp.value,0)) AS value_biz_date,
+    (SUM(CASE WHEN b.item='consumption_purchased_power' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_pp.value,0)) AS value_peer_date
   FROM base b
   LEFT JOIN const_biz  cb_pp ON cb_pp.company=b.company AND cb_pp.item='price_purchased_power'
   LEFT JOIN const_peer cp_pp ON cp_pp.company=b.company AND cp_pp.item='price_purchased_power'
