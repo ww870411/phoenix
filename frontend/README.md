@@ -1,5 +1,21 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-23 数据看板页面结构复盘）
+
+- 阅读 `frontend/src/daily_report_25_26/pages/DashBoard.vue`：模板顶部由业务日期/PDF 下载/缓存发布/气温导入面板组成，中段摘要卡片读取 `summary` 系列 computed（行 1484-2050），折叠表使用 `summaryFoldTable`（行 1859 起）渲染“指标 × 本日/本月累计/供暖期累计”矩阵，主网格渲染气温、边际利润、收入、投诉、单耗、主城中心、煤耗、库存、趋势等卡片。
+- 逻辑层围绕 `dashboardData.sections` 解析 `/dashboard` 响应：`loadDashboardData`（行 1187）支持缓存、本地 pending 计数与 AbortController；`metricAliasMap` 与 `resolveSection/resolveBucketByLabel`（行 1038-1475）统一处理“编号.标题”/别名等键，`temperatureSeries/summaryFoldTable/complaintTableData/...` 等 computed 将各段落转换为图表/Table 所需的结构；`useTempOption/useMarginOption/useIncomeCompareOption` 等函数（行 2818 起）统一生成 ECharts option。
+- 页面还内置 `temperatureImportStatus` 模态（行 1023 起）和 `cacheJob` 轮询（行 2738 起），`downloadPDF`（行 3934 起）沿用 `html2canvas+jsPDF` 方案导出当前视图；样式区控制摘要/网格/弹窗布局，方便追踪 UI 变体。无代码改动，仅文档留痕，后续调试可直接定位至对应行。
+
+## 会话小结（2025-12-23 供暖单耗供暖期累计切换）
+
+- 供暖单耗板块新增“展示范围”标签（“本期 / 同期”“供暖期累计”），按钮位于三张卡片前，`unitPhaseMode` 控制当前模式，`unitSeries` 会在 `/dashboard` 响应中读取 `本期/同期` 或 `本供暖期累计/同供暖期累计` 数据，并把 legend 传给图表。
+- `useUnitConsumptionOption` 根据 `seriesData.legend` 动态渲染 “（本供暖期累计）”“（同供暖期累计）” 等标签，tooltip 也改为按最后一个括号分割名称，三张单耗图与后续主城区排序表保持同步切换。
+
+## 会话小结（2025-12-23 供暖单耗 UI 微调）
+
+- “展示范围”按钮组改为独立网格项 `dashboard-grid__item--unit-toggle`，宽屏下占满 12 列，避免把“供暖水单耗”卡片挤到下一行，样式统一在 `.unit-phase-toggle*` 中维护。
+- `unitSeries` 里新增过滤逻辑：对于“供暖电单耗”，自动将“研究院”数据置为 `null`，确保图表和表格不再显示该单位的电单耗；fallback 数据同样遵循这一规则。
+
 ## 会话小结（2025-12-22 数据看板单耗配置补充供暖期累计）
 
 - 更新伪配置 `backend_data/数据结构_数据看板.json` 中“4.供暖单耗”节点，新增“本供暖期累计”“同期供暖期累计”占位，结构与本期/同期一致（集团/主城区/各厂，研究院电单耗仍排除标记），计量单位沿用热/电/水默认值。

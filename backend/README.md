@@ -1,5 +1,17 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-23 供暖单耗供暖期累计）
+
+- `/api/v1/projects/{project_key}/dashboard` 现针对 “4.供暖单耗” 节点额外输出 “本供暖期累计”“同供暖期累计” 两个阶段，服务层通过 `_fill_metric_panel(..., "sum_ytd_biz")` / `_fill_metric_panel(..., "sum_ytd_peer")` 直接读取 `groups/sum_basic_data` 视图的 YTD 字段，字段口径与 `backend_data/数据结构_数据看板.json` 中的配置保持一致。
+- 其他板块及接口未改动；若需还原旧行为，只需移除新增的两次 `_fill_metric_panel` 调用即可恢复仅本期/同期的响应结构。
+
+# 会话小结（2025-12-23 数据看板前端结构复盘）
+
+- 解析 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 确认 `/api/v1/projects/{project_key}/dashboard` 的 sections 仍以“编号.名称”作为 key，前端通过 `metricAliasMap`（行 1038-1145）双向映射别名 → 实际 item，并在 `resolveSection/resolveBucketByLabel`（行 1410-1475）中按编号或旧键回退；因此若后端配置新增别名或重排段落，只要保持编号与 `口径别名` 映射即可兼容现有解析。
+- 缓存/气温导入动作全部依赖既有 API：`publishDashboardCache/disable.../cancel...` 与 `importTemperatureData/commitTemperatureData`（行 1232-1356、1077-1141）会在 UI 层防重/轮询，无需额外接口；同时 `getDashboardBizDate`（行 1368-1398）决定默认业务日，若后端未来新增“业务日锁定”字段可在该接口返回即可。
+- 页面读取的板块有：`1.逐小时气温` → 折线/表格/平均值，`2.边际利润`、`3.集团全口径收入`、`4.供暖单耗`、`5.标煤耗量`、`6.投诉量`、`7.煤炭库存`、`8.供热中心单耗`、`9.累计卡片`、`10.每日对比趋势` 与 `0.5` 折叠表。若新增板块，请保证 sections 字典中包含可辨识索引并在配置 `口径别名` 中注明展示名，避免前端额外硬编码。
+- 本次仅梳理契约，无 FastAPI 代码调整；回滚仅需删除本节记录。
+
 # 会话小结（2025-12-22 数据看板单耗配置补充供暖期累计）
 
 - 更新伪配置 `backend_data/数据结构_数据看板.json` “4.供暖单耗”节点，新增“本供暖期累计”“同期供暖期累计”占位，结构与本期/同期一致（集团/主城区/各厂，研究院电单耗仍标注剔除），计量单位沿用热/电/水默认值。

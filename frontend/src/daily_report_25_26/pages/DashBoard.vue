@@ -474,6 +474,22 @@
         </Card>
       </section>
 
+      <section class="dashboard-grid__item dashboard-grid__item--unit-toggle">
+        <div class="unit-phase-toggle" role="group" aria-label="供暖单耗展示范围">
+          <span class="unit-phase-toggle__label">展示范围：</span>
+          <button
+            v-for="option in unitPhaseOptions"
+            :key="option.value"
+            type="button"
+            class="unit-phase-toggle__btn"
+            :class="{ 'is-active': option.value === unitPhaseMode }"
+            @click="unitPhaseMode = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </section>
+
       <section class="dashboard-grid__item dashboard-grid__item--unit">
         <Card title="供暖热单耗对比" :extra="`单位：${unitSeries.units['供暖热单耗'] || '—'}`">
           <EChart :option="unitHeatOpt" height="450px" />
@@ -2288,6 +2304,16 @@ const unitPeer = computed(() => {
   return bucket && typeof bucket === 'object' ? bucket : {}
 })
 
+const unitSeasonCurrent = computed(() => {
+  const bucket = unitSection.value?.['本供暖期累计']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const unitSeasonPeer = computed(() => {
+  const bucket = unitSection.value?.['同供暖期累计']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
 const unitOrganizations = computed(() => {
   const categories = []
   const seen = new Set()
@@ -2303,26 +2329,71 @@ const unitOrganizations = computed(() => {
   }
   appendFromBucket(unitCurrent.value)
   appendFromBucket(unitPeer.value)
+  appendFromBucket(unitSeasonCurrent.value)
+  appendFromBucket(unitSeasonPeer.value)
   return categories
 })
+
+const unitPhaseOptions = [
+  { value: 'current', label: '本期 / 同期' },
+  { value: 'seasonal', label: '供暖期累计' },
+]
+
+const unitPhaseMode = ref(unitPhaseOptions[0].value)
+
+const unitPhaseBuckets = computed(() => {
+  if (unitPhaseMode.value === 'seasonal') {
+    return {
+      current: unitSeasonCurrent.value,
+      peer: unitSeasonPeer.value,
+      legend: { current: '本供暖期累计', peer: '同供暖期累计' },
+    }
+  }
+  return {
+    current: unitCurrent.value,
+    peer: unitPeer.value,
+    legend: { current: '本期', peer: '同期' },
+  }
+})
+
+const shouldHideOrgForMetric = (metric, org) =>
+  metric === '供暖电单耗' && org === '研究院'
+
+const sanitizeUnitMatrix = (matrix, categories, metrics) => {
+  metrics.forEach((metric, metricIdx) => {
+    if (!Array.isArray(matrix?.[metricIdx])) return
+    categories.forEach((org, orgIdx) => {
+      if (shouldHideOrgForMetric(metric, org)) {
+        matrix[metricIdx][orgIdx] = null
+      }
+    })
+  })
+}
 
 const unitSeries = computed(() => {
   const categories = unitOrganizations.value
   const metrics = unitMetrics
-  const currentEntries = unitCurrent.value
-  const peerEntries = unitPeer.value
+  const phase = unitPhaseBuckets.value
+  const currentEntries = phase.current || {}
+  const peerEntries = phase.peer || {}
   const units = unitSection.value?.['计量单位']
   if (!categories.length) {
+    const fallbackCategories = [...unitFallbackOrgs]
+    const fallbackCurrent = [
+      unitFallbackSeries.map((item) => roundOrNull(item.heat)),
+      unitFallbackSeries.map((item) => roundOrNull(item.elec)),
+      unitFallbackSeries.map((item) => roundOrNull(item.water)),
+    ]
+    const fallbackPeer = metrics.map(() => fallbackCategories.map(() => null))
+    sanitizeUnitMatrix(fallbackCurrent, fallbackCategories, metrics)
+    sanitizeUnitMatrix(fallbackPeer, fallbackCategories, metrics)
     return {
-      categories: unitFallbackOrgs,
+      categories: fallbackCategories,
       metrics,
-      current: [
-        unitFallbackSeries.map((item) => roundOrNull(item.heat)),
-        unitFallbackSeries.map((item) => roundOrNull(item.elec)),
-        unitFallbackSeries.map((item) => roundOrNull(item.water)),
-      ],
-      peer: metrics.map(() => unitFallbackOrgs.map(() => null)),
+      current: fallbackCurrent,
+      peer: fallbackPeer,
       units: unitFallbackUnits,
+      legend: phase.legend,
     }
   }
   const current = metrics.map((metric) =>
@@ -2331,12 +2402,15 @@ const unitSeries = computed(() => {
   const peer = metrics.map((metric) =>
     categories.map((org) => roundOrNull(peerEntries?.[org]?.[metric])),
   )
+  sanitizeUnitMatrix(current, categories, metrics)
+  sanitizeUnitMatrix(peer, categories, metrics)
   return {
     categories,
     metrics,
     current,
     peer,
     units: units && typeof units === 'object' ? units : unitFallbackUnits,
+    legend: phase.legend,
   }
 })
 
@@ -3089,6 +3163,10 @@ const useUnitConsumptionOption = (seriesData, metricName, orientation = 'vertica
   const currentMatrix = Array.isArray(seriesData?.current) ? seriesData.current : []
   const peerMatrix = Array.isArray(seriesData?.peer) ? seriesData.peer : []
   const units = seriesData && typeof seriesData.units === 'object' ? seriesData.units : unitFallbackUnits
+  const legendConfig =
+    seriesData && typeof seriesData.legend === 'object'
+      ? seriesData.legend
+      : { current: '本期', peer: '同期' }
   const targetIndex = metrics.indexOf(metricName)
   const metricLabel = targetIndex >= 0 ? metricName : metricName
   const currentData =
@@ -3129,7 +3207,7 @@ const useUnitConsumptionOption = (seriesData, metricName, orientation = 'vertica
     const lines = [`<strong>${axisLabel}</strong>`]
     params.forEach((item) => {
       const rawName = typeof item.seriesName === 'string' ? item.seriesName : ''
-      const metricName = rawName.replace(/（本期）|（同期）/g, '')
+      const metricName = rawName.replace(/（.*?）$/, '')
       const resolved = resolveItemValue(item)
       const numericValue = Number.isFinite(resolved) ? Number(resolved).toFixed(2) : '—'
       const color = item.color || '#475569'
@@ -3145,8 +3223,8 @@ const useUnitConsumptionOption = (seriesData, metricName, orientation = 'vertica
   let chartCategories = categories
 
   metricsToRender.forEach((metric) => {
-    const currentLabel = `${metric}（本期）`
-    const peerLabel = `${metric}（同期）`
+    const currentLabel = `${metric}（${legendConfig.current || '本期'}）`
+    const peerLabel = `${metric}（${legendConfig.peer || '同期'}）`
     legendData.push(currentLabel, peerLabel)
 
     const zipped = categories.map((org, index) => ({
@@ -4827,9 +4905,13 @@ onMounted(() => {
     display: flex;
   }
 
-  .dashboard-grid__item > .dashboard-card {
-    flex: 1 1 auto;
-  }
+.dashboard-grid__item > .dashboard-card {
+  flex: 1 1 auto;
+}
+
+.dashboard-grid__item--unit-toggle {
+  min-height: auto;
+}
 
 @media (min-width: 1024px) {
   .dashboard-grid {
@@ -4875,6 +4957,13 @@ onMounted(() => {
   }
   .dashboard-grid__item--trend {
     grid-column: 1 / -1;
+  }
+
+  .dashboard-grid__item--unit-toggle {
+    grid-column: 1 / -1;
+    min-height: auto;
+    display: flex;
+    align-items: center;
   }
 }
 
@@ -4993,6 +5082,42 @@ onMounted(() => {
 
 .dashboard-table-wrapper--small .dashboard-table table {
   font-size: 11px;
+}
+
+.unit-phase-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.unit-phase-toggle__label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.unit-phase-toggle__btn {
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.unit-phase-toggle__btn.is-active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+}
+
+.unit-phase-toggle__btn:not(.is-active):hover {
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .complaint-charts {

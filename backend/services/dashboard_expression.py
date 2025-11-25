@@ -538,6 +538,28 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 item_cn_to_code,
                 "value_peer_date",
             )
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
+                "本供暖期累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_ytd_biz",
+            )
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
+                "同供暖期累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_ytd_peer",
+            )
 
         # 5. 标煤耗量
         coal_section = get_section_by_index("5", "5.标煤耗量")

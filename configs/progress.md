@@ -2485,16 +2485,43 @@ sum_basic_data 相关：
 
 ## 2025-12-16（数据分析页现状复盘，仅阅读）
 
+## 2025-12-23（数据看板页面结构复盘）
+
 前置说明（降级留痕）：
-- Serena 对 Markdown 追加暂不支持符号级写入，本次依 3.9 矩阵降级使用 `apply_patch` 追加文档；未改动任何代码，回滚仅需删除本节。
+- Serena `search_for_pattern` 无法完整输出大型 `.vue` 文件内容（提示结果超长），为梳理页面结构，本次依 3.9 矩阵降级使用 `read_file`/`apply_patch` 系列原生命令只读 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 与相关 Markdown；未修改代码，回滚无须处理。
 
 本次动作：
-- 复核 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 组件结构：加载 schema 后解析单位/指标/分析模式/默认日期；温度指标按权重默认勾选；表单校验要求至少选择单位与指标，支持单日/区间模式的日期联动。
-- `runAnalysis` 按所选单位逐一调用 `/data_analysis/query`，缓存 `rows/warnings/timeline/meta`，并在前端完成摘要、相关矩阵、趋势图与 Excel 导出（多单位多 Sheet）。
-- 结果区支持单位切换、warnings 提示、数据简报（整体/趋势/相关性/风险）、相关矩阵与复制；区间模式提供 RevoGrid 逐日表与 ECharts 趋势图（温度或第二指标自动绑定右轴，包含 dataZoom 与 tooltip）。
+- 解析 `DashBoard.vue` 模板/脚本/样式：顶部头部区绑定业务日期、PDF 下载、缓存与气温导入控制，主体摘要卡片与折叠表消费“9.累计卡片”“0.5 折叠表”节内容，主网格含气温、边际利润、收入、投诉、单耗、煤耗、库存、趋势等图表与表格，底部提供主城中心单耗排序与标煤趋势折叠。
+- 重点梳理响应式数据流：局部组件 `Card/Table/EChart`（行 601-869）负责统一 UI；`loadDashboardData`（行 1187-1266）支持缓存/AbortController/防抖，`assignDashboardPayload` 将 `/dashboard` 响应写入 `dashboardData.sections` 并配合 `metricAlias` 映射（行 1038-1462）。2950+ 行的 `use*Option` 构造函数统一生成 ECharts 配置并由 3824 行起的 `tempOpt/marginOpt/...` computed 注入模板。
+- 温度导入弹窗/写库（行 1023-1162）、缓存发布/轮询（行 1268-1444）、daily trend data zoom（行 2574-2721）与 heating center/complaint/coal stock 等多个 computed（行 2098-2550）逻辑梳理完毕，为后续联调或问题定位提供结构参考。
 
 影响范围与回滚：
-- 仅文档登记，无代码或接口改动；删除本节即可回滚。
+- 仅知识记录，无代码改动；删除本节即可回滚。
+
+## 2025-12-23（供暖单耗板块新增供暖期累计切换）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 混合片段符号写入仍不稳定，本次跨前后端联动调整供暖单耗逻辑，依 3.9 矩阵降级使用 `apply_patch` 更新 `backend/services/dashboard_expression.py` 与 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；如需回滚，恢复对应文件修改即可。
+
+本次动作：
+- 后端 `/dashboard` 4 号段调用 `_fill_metric_panel` 时新增 “本供暖期累计”/“同供暖期累计” 两个阶段，分别读取 `sum_ytd_biz`、`sum_ytd_peer`，使响应数据与配置文件 `backend_data/数据结构_数据看板.json` 中的供暖期累计占位保持一致。
+- 前端 DashBoard 供暖单耗区域新增“展示范围”标签：默认显示本期/同期，可一键切换到供暖期累计；`unitSeries` 根据当前模式切换数据源并透传 legend，`useUnitConsumptionOption` 动态渲染 “（本供暖期累计）” 等图例，三张单耗图与后续主城区排序表共享同一按钮状态。
+
+影响范围与回滚：
+- **后端**：仅 `evaluate_dashboard` 中 4 号段新增两次 `_fill_metric_panel` 调用；删除新增调用即可恢复旧版。
+- **前端**：仅 `DashBoard.vue`（供暖单耗三个图表 + 样式 + 图表 option）受影响；恢复该文件即可回退，切换按钮会消失、图例回到本期/同期。
+
+## 2025-12-23（供暖单耗 UI 微调）
+
+前置说明（降级留痕）：
+- Serena 仍无法精确插入 `.vue` 片段，本次继续依 3.9 矩阵降级使用 `apply_patch` 调整 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；仅前端样式与数据处理变动，回滚恢复该文件即可。
+
+本次动作：
+- 将“展示范围”按钮组改为独立网格项 `dashboard-grid__item--unit-toggle`，宽屏下占满 12 列，避免把“供暖水单耗”卡片挤到下一行；新增对应样式以保证高度与栅格一致。
+- 按业务口径过滤掉“研究院”在“供暖电单耗”中的数值：在 `unitSeries` 中统一判定，当指标为“供暖电单耗”且机构为“研究院”时直接返回 `null`，图表与 fallback 数据均不再展示该单位。
+
+影响范围与回滚：
+- 仅 `DashBoard.vue` 样式及 `unitSeries` 逻辑，恢复前文件即可回滚，按钮会回到卡片之间、研究院电单耗重新出现。
 
 ## 2025-12-16（填报页本单位分析组件完成）
 
