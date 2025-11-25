@@ -453,7 +453,6 @@
       <section class="dashboard-grid__item dashboard-grid__item--complaint">
         <Card
           title="投诉量分项"
-          subtitle="本期与同期对比"
           :extra="`单位：${complaintUnit || '件'}`"
         >
           <div class="complaint-charts">
