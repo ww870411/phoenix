@@ -2622,8 +2622,9 @@ const dailyTrendSection = computed(() => {
   return section && typeof section === 'object' ? section : {}
 })
 
-const DAILY_TREND_WINDOW_SIZE = 7
+const DAILY_TREND_DEFAULT_WINDOW = 7
 const dailyTrendStartIndex = ref(null)
+const dailyTrendWindowSize = ref(DAILY_TREND_DEFAULT_WINDOW)
 
 const normalizeTrendBucket = (bucket, units) => {
   if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) {
@@ -2667,9 +2668,12 @@ watch(
   (length) => {
     if (!length) {
       dailyTrendStartIndex.value = null
+      dailyTrendWindowSize.value = DAILY_TREND_DEFAULT_WINDOW
       return
     }
-    const size = Math.min(DAILY_TREND_WINDOW_SIZE, length)
+    const requested = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
+    const size = Math.min(requested, length)
+    dailyTrendWindowSize.value = size
     const maxStart = Math.max(length - size, 0)
     const start = dailyTrendStartIndex.value
     if (typeof start !== 'number' || Number.isNaN(start)) {
@@ -2695,7 +2699,8 @@ const dailyTrendWindowMeta = computed(() => {
       endIndex: 0,
     }
   }
-  const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
+  const requestedSize = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
+  const size = Math.min(requestedSize, total)
   const maxStart = Math.max(total - size, 0)
   const rawStart = dailyTrendStartIndex.value
   const start =
@@ -2726,7 +2731,9 @@ const resetDailyTrendWindow = () => {
     dailyTrendStartIndex.value = null
     return
   }
-  const size = Math.min(DAILY_TREND_WINDOW_SIZE, labels.length)
+  const requestedSize = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
+  const size = Math.min(requestedSize, labels.length)
+  dailyTrendWindowSize.value = size
   dailyTrendStartIndex.value = Math.max(labels.length - size, 0)
 }
 
@@ -2738,7 +2745,6 @@ const dailyTrendDataZoom = computed(() => {
   const startLabel = labels[meta.startIndex] ?? labels[0]
   const endLabel = labels[meta.endIndex] ?? labels[labels.length - 1]
   const span = meta.size
-  const valueSpan = Math.max(span - 1, 0)
   const showSlider = labels.length > span
   const slider = {
     type: 'slider',
@@ -2746,8 +2752,6 @@ const dailyTrendDataZoom = computed(() => {
     xAxisIndex: 0,
     startValue: startLabel,
     endValue: endLabel,
-    minValueSpan: valueSpan,
-    maxValueSpan: valueSpan,
     height: 26,
     bottom: 24,
     brushSelect: false,
@@ -2760,9 +2764,7 @@ const dailyTrendDataZoom = computed(() => {
     xAxisIndex: 0,
     startValue: startLabel,
     endValue: endLabel,
-    minValueSpan: valueSpan,
-    maxValueSpan: valueSpan,
-    zoomLock: true,
+    zoomLock: false,
   }
   return [slider, inside]
 })
@@ -2775,24 +2777,43 @@ const handleDailyTrendZoom = (event) => {
   if (!payload) return
   const labels = dailyTrendSeries.value.labels || []
   if (!labels.length) return
-  let startValue = payload.startValue
-  if (startValue == null && typeof payload.start === 'number') {
-    const total = labels.length
-    if (!total) return
-    const percent = clamp(payload.start, 0, 100) / 100
-    const index = Math.round(percent * (total - 1))
-    startValue = labels[clamp(index, 0, total - 1)]
-  }
-  if (startValue == null) return
-  const index = typeof startValue === 'number' ? startValue : labels.indexOf(startValue)
-  if (index === -1) return
   const total = labels.length
-  const size = Math.min(DAILY_TREND_WINDOW_SIZE, total)
-  const maxStart = Math.max(total - size, 0)
-  const next = clamp(Number(index) || 0, 0, maxStart)
-  if (next !== dailyTrendStartIndex.value) {
-    dailyTrendStartIndex.value = next
+  const resolveValueIndex = (value, percentField, fallbackIndex) => {
+    if (value != null) {
+      if (typeof value === 'number') {
+        return clamp(Math.round(value), 0, total - 1)
+      }
+      const idx = labels.indexOf(value)
+      if (idx !== -1) return idx
+    }
+    if (typeof payload[percentField] === 'number') {
+      const percent = clamp(payload[percentField], 0, 100) / 100
+      return clamp(Math.round(percent * (total - 1)), 0, total - 1)
+    }
+    return clamp(fallbackIndex, 0, total - 1)
   }
+
+  const currentSize = Math.max(
+    1,
+    Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW,
+  )
+  const startIdx = resolveValueIndex(
+    payload.startValue,
+    'start',
+    dailyTrendStartIndex.value ?? total - currentSize,
+  )
+  const endIdx = resolveValueIndex(
+    payload.endValue,
+    'end',
+    startIdx + currentSize - 1,
+  )
+  const normalizedStart = Math.min(startIdx, endIdx)
+  const normalizedEnd = Math.max(startIdx, endIdx)
+  const size = clamp(normalizedEnd - normalizedStart + 1, 1, total)
+  const maxStart = Math.max(total - size, 0)
+  const nextStart = clamp(normalizedStart, 0, maxStart)
+  dailyTrendStartIndex.value = nextStart
+  dailyTrendWindowSize.value = size
 }
 
 const dailyTrendChartEvents = { dataZoom: handleDailyTrendZoom }

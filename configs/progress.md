@@ -2534,6 +2534,17 @@ sum_basic_data 相关：
 影响范围与回滚：
 - 仅前端模板静态文案，恢复 `DashBoard.vue` 即可回退。
 
+## 2025-12-23（日趋势窗口可拉伸）
+
+前置说明（降级留痕）：
+- Serena 对 `.vue` 混合片段依旧不支持精准增量，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `frontend/src/daily_report_25_26/pages/DashBoard.vue`；仅前端逻辑与样式调优，回滚恢复该文件即可。
+
+本次动作：
+- “标煤耗量与平均气温趋势图”卡片的 dataZoom 解除固定 7 天窗口限制：移除 `minValueSpan/maxValueSpan` 锁定，新增 `dailyTrendWindowSize` 状态，`handleDailyTrendZoom` 根据拖动区间动态更新开始位置与跨度，`dailyTrendDataZoom`/`dailyTrendWindowMeta`/`resetDailyTrendWindow` 同步使用该长度，用户可拖拉滑块查看更多/更少天数。
+
+影响范围与回滚：
+- 仅 `DashBoard.vue` 相关 `dailyTrend*` 逻辑；恢复该文件即可回退至固定 7 天窗口。
+
 ## 2025-12-16（填报页本单位分析组件完成）
 
 前置说明（降级留痕）：
