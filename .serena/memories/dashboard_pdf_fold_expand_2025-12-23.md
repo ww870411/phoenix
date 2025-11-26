@@ -1,0 +1,1 @@
+2025-12-23：为了确保导出的仪表盘 PDF 始终包含“供暖期焦点指标详表”，前端 DashBoard.vue 将 downloadPDF 改为 async；在调用 html2canvas/jsPDF 前若检测到 cumulativeTableExpanded 为 false 会先展开折叠表，并串行等待 nextTick → requestAnimationFrame → 360ms 过渡后再截图，导出完成后按初始状态还原。此需求按用户指令使用 apply_patch 完成，并同步更新 progress.md 及前后端 README。

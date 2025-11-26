@@ -4029,20 +4029,48 @@ const coalStdTableData = computed(() => {
 })
 
 
-const downloadPDF = () => {
+const waitForNextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
+const delay = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms))
+const FOLD_TRANSITION_GUARD_MS = 360
+
+const ensureCumulativeTableVisibleForExport = async () => {
+  const alreadyExpanded = Boolean(cumulativeTableExpanded.value)
+  if (!alreadyExpanded) {
+    cumulativeTableExpanded.value = true
+  }
+  await nextTick()
+  await waitForNextFrame()
+  if (!alreadyExpanded) {
+    await delay(FOLD_TRANSITION_GUARD_MS)
+  }
+  return async () => {
+    if (!alreadyExpanded) {
+      cumulativeTableExpanded.value = false
+      await nextTick()
+    }
+  }
+}
+
+const downloadPDF = async () => {
   const { jsPDF } = window.jspdf;
   const dashboard = document.querySelector('.dashboard-page');
+  if (!dashboard) {
+    console.warn('未找到 dashboard 容器，取消导出。')
+    return
+  }
+  const releaseFold = await ensureCumulativeTableVisibleForExport()
 
-  html2canvas(dashboard, {
-    useCORS: true,
-    scale: 2,
-    onclone: (document) => {
-      const btn = document.querySelector('.pdf-download-btn');
-      if (btn) {
-        btn.style.display = 'none';
-      }
-    },
-  }).then(canvas => {
+  try {
+    const canvas = await html2canvas(dashboard, {
+      useCORS: true,
+      scale: 2,
+      onclone: (clonedDocument) => {
+        const btn = clonedDocument.querySelector('.pdf-download-btn');
+        if (btn) {
+          btn.style.display = 'none';
+        }
+      },
+    });
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
@@ -4061,7 +4089,9 @@ const downloadPDF = () => {
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
     const formattedDate = (effectiveBizDate.value || bizDateInput.value || '').replace(/-/g, '.');
     pdf.save(`${formattedDate} 洁净能源集团生产日报数据看板.pdf`);
-  });
+  } finally {
+    await releaseFold()
+  }
 };
 
 // --- 顶部指标展示 ---

@@ -1,5 +1,9 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-23 仪表盘导出自动展开折叠表）
+
+- 前端 `DashBoard.vue` 在导出 PDF 前会强制展开“0.5 供暖期焦点指标详表”，串行等待 `nextTick → requestAnimationFrame → 360ms` 动画后再调 `html2canvas/jsPDF`，导出完毕再按初始状态还原；后端 `/dashboard` 接口与缓存逻辑无需改动，只要持续输出 0.5 段落即可满足导出内容。
+
 # 会话小结（2025-12-23 供暖单耗供暖期累计）
 
 - `/api/v1/projects/{project_key}/dashboard` 现针对 “4.供暖单耗” 节点额外输出 “本供暖期累计”“同供暖期累计” 两个阶段，服务层通过 `_fill_metric_panel(..., "sum_ytd_biz")` / `_fill_metric_panel(..., "sum_ytd_peer")` 直接读取 `groups/sum_basic_data` 视图的 YTD 字段，字段口径与 `backend_data/数据结构_数据看板.json` 中的配置保持一致。

@@ -1,5 +1,10 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-23 仪表盘导出自动展开折叠表）
+
+- `pages/DashBoard.vue` 的 `downloadPDF` 升级为 `async` 流程：执行前若“供暖期焦点指标详表”处于收起状态，会先将 `cumulativeTableExpanded` 置为 `true`，并串行等待 `nextTick → requestAnimationFrame → 360ms` 过渡时间后再调用 `html2canvas/jsPDF`，保证折叠内容已经完全展开；导出完成后按初始状态恢复，避免破坏用户当前视图。
+- `html2canvas` 的 `onclone` 现在使用克隆文档对象隐藏“下载PDF”按钮，保证截图中不再出现按钮本体，生成的 PDF 始终包含完整的折叠表内容。
+
 ## 会话小结（2025-12-23 数据看板页面结构复盘）
 
 - 阅读 `frontend/src/daily_report_25_26/pages/DashBoard.vue`：模板顶部由业务日期/PDF 下载/缓存发布/气温导入面板组成，中段摘要卡片读取 `summary` 系列 computed（行 1484-2050），折叠表使用 `summaryFoldTable`（行 1859 起）渲染“指标 × 本日/本月累计/供暖期累计”矩阵，主网格渲染气温、边际利润、收入、投诉、单耗、主城中心、煤耗、库存、趋势等卡片。

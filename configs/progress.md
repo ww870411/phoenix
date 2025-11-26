@@ -1,5 +1,31 @@
 # 进度记录
 
+## 2025-12-23（仪表盘导出前强制展开供暖期指标表）
+
+前置说明：
+- 用户要求所有读写操作使用 `apply_patch`，与 AGENTS 中“Serena 优先”存在冲突，本次在记录中说明并依指令降级执行；仅修改 `frontend/src/daily_report_25_26/pages/DashBoard.vue` 前端逻辑，无数据库/后端改动，回滚还原该文件即可。
+
+本次动作：
+- 将 `downloadPDF` 改为 `async` 函数，点击“下载PDF”时先记录 `cumulativeTableExpanded` 状态，若折叠表处于收起则自动设为展开并等待一次 `nextTick + requestAnimationFrame`，确保“供暖期焦点指标详表”在截图前渲染完成。
+- `html2canvas` 调用改为 `await`，并在拷贝的 DOM 中隐藏“下载PDF”按钮；生成完 PDF 后若最初为收起状态则异步还原 `cumulativeTableExpanded`，避免改变用户当前视图。
+
+影响与验证：
+- 任意折叠状态下点击“下载PDF”，导出文件都会包含展开的焦点指标详表；若用户原本收起，导出结束后会自动恢复收起，保持交互一致。
+- 验证建议：先收起折叠卡片后导出 PDF，确认生成的 PDF 中该表格处于展开状态且页面上在导出完成后恢复原折叠；再在已展开情况下导出，状态应保持展开不变。
+
+## 2025-12-23（仪表盘导出展开等待补丁）
+
+前置说明：
+- 延续上一条需求，实测发现仅等待单帧不足以确保折叠表完全展开；根据用户反馈再次使用 `apply_patch` 调整 `DashBoard.vue`，其余服务未改动，可通过恢复该文件回滚。
+
+本次动作：
+- 新增 `waitForNextFrame/delay/ensureCumulativeTableVisibleForExport` 辅助函数：在点击“下载PDF”时若折叠表原本收起，会先展开、等待 `nextTick` + `requestAnimationFrame` + 360ms 过渡时间后再执行 `html2canvas`。导出完成后按初始状态还原，并在未找到 `.dashboard-page` 时直接退出避免报错。
+- `downloadPDF` 逻辑改为调用上述 helper 并在 `finally` 中 `await releaseFold()`，确保即便导出失败也能恢复原状态。
+
+影响与验证：
+- 折叠表即便带动画，导出也能捕获完全展开的内容；连续快速点击下载不会导致表格状态错乱。
+- 验证建议：在折叠/展开两种状态下多次导出，确认 PDF 始终包含展开的“供暖期焦点指标详表”，且页面在导出后保留用户原先的折叠习惯。
+
 ## 2025-12-14（数据分析页面结构梳理，无代码改动）
 
 前置说明：
