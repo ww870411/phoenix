@@ -4,9 +4,14 @@
 
 - 前端 `DashBoard.vue` 在导出 PDF 前会强制展开“0.5 供暖期焦点指标详表”，串行等待 `nextTick → requestAnimationFrame → 360ms` 动画后再调 `html2canvas/jsPDF`，导出完毕再按初始状态还原；后端 `/dashboard` 接口与缓存逻辑无需改动，只要持续输出 0.5 段落即可满足导出内容。
 
-# 会话小结（2025-12-23 标煤消耗量卡片多维切换蓝图）
+# 会话小结（2025-12-23 标煤消耗量卡片多维切换）
 
-- 前端“5.标煤耗量”卡片新增“本期/同期”“本月累计/同期月累计”“供暖期累计/同供暖期累计”三档展示模式，均直接读取 `/dashboard` 5 号 section 对应的键值；若后端需要支持该能力，请在响应中补充 `本月累计/同期月累计/本供暖期累计/同供暖期累计` 节点（结构与 `4.供暖单耗` 的多阶段分桶一致），名称与 `metricAlias` 将由前端自动映射。
+- `/api/v1/projects/{project_key}/dashboard` 现已为 “5.标煤耗量” 节填充 `本月累计/同期月累计/本供暖期累计/同供暖期累计` 四个 buckets：服务层调用 `_fill_simple_metric(..., frame_key)`，分别对应 `sum_month_biz/sum_month_peer/sum_ytd_biz/sum_ytd_peer`，与既有“本期/同期”一致；前端即可直接读取三种展示维度，无需再 mock。
+
+# 会话小结（2025-12-23 供暖单耗卡片新增“本月累计”数据）
+
+- “4.供暖单耗” 节新增 `本月累计/同期月累计` 节点，`dashboard_expression._fill_metric_panel` 对应走 `sum_month_biz/sum_month_peer`，使前端能与标煤耗卡片一致支持三档维度（本期 / 本月累计 / 供暖期累计）；旧的“本供暖期累计/同供暖期累计”逻辑保持不变。
+- “8.供热分中心单耗明细” 改为和单耗卡片一致的阶段结构（本期/同期/本月/同期月/本供暖期/同供暖期），`_fill_heating_branch_consumption` 现在接受阶段参数并复用 `sum_basic_data` 的 `value_*`/`sum_month_*`/`sum_ytd_*` 字段，前端即可在卡片上切换三档维度。
 
 # 会话小结（2025-12-23 供暖单耗供暖期累计）
 

@@ -29,15 +29,17 @@
 ## 2025-12-23（标煤消耗量对比卡片多阶段切换）
 
 前置说明：
-- 继续按照用户的 apply_patch 要求直接编辑 `frontend/src/daily_report_25_26/pages/DashBoard.vue`，未触及后端或数据库，若需回滚恢复该文件即可。
+- 继续按照用户的 apply_patch 要求直接编辑 `frontend/src/daily_report_25_26/pages/DashBoard.vue`、`backend/services/dashboard_expression.py` 与 `backend_data/数据结构_数据看板.json`；如需回滚恢复这三处即可。
 
 本次动作：
 - 新增 `coalStdPhaseOptions/coalStdPhaseMode` 与 `selectCoalStdPhase`，在“标煤消耗量对比”卡片顶部加入 pill 样式按钮，支持在“本期/同期”“本月累计/同期月累计”“供暖期累计/同供暖期累计”三种维度之间切换；`coalStdSeries` 会根据所选维度读取 `/dashboard` 5 号 section 对应的桶，并在缺失时回落到占位数组。
 - 表格列、柱状图 legend 及卡片副标题 `coalStdExtraLabel` 随选择即时更新，差值列继续展示“当前 - 对比”结果；按钮样式复用供暖单耗的 `.unit-phase-toggle`，与页面整体视觉保持一致。
+- `backend_data/数据结构_数据看板.json` 的 “5.标煤耗量” 蓝图补充 `本月累计/同期月累计/本供暖期累计/同供暖期累计` 节点；`backend/services/dashboard_expression.py` 对应调用 `_fill_simple_metric`，以 `sum_month_biz/sum_month_peer/sum_ytd_biz/sum_ytd_peer` 四种 frame_key 自动写入数据，从而让前端按钮切换直接命中真实值。
+- “4.供暖单耗” 与 “8.供热分中心单耗明细” 同步扩展 `本月累计/同期月累计` 结构，后端 `dashboard_expression` 也为相应阶段调用 `_fill_metric_panel/_fill_heating_branch_consumption`（frame key 指向 `sum_month_*`、`sum_ytd_*`），前端便能在供暖单耗三张卡片与主城区供热服务中心卡片中插入“本月累计”按钮。
 
 影响与验证：
-- 当前后端若尚未提供“本月累计/供暖期”桶，将自动显示占位零值；一旦补齐数据，前端无需再改动即可按新维度展示。
-- 验证建议：切换三种按钮，确认柱状图/表格列标题同步变化；在浏览器网络面板检查 `/dashboard` 仍只请求一次，切换仅在前端完成重算。
+- `/dashboard` 结果中 5 号 section 会附带上述四个阶段，前端切换后显示的表格、图表数据均会跟随改变。
+- 验证建议：切换各卡片的三种按钮，确认柱状图/表格列标题同步变化；在浏览器网络面板检查 `/dashboard` 仍只请求一次，切换仅在前端完成重算。
 
 ## 2025-12-14（数据分析页面结构梳理，无代码改动）
 

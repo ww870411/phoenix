@@ -509,6 +509,19 @@
 
       <section class="dashboard-grid__item dashboard-grid__item--center">
         <Card title="主城区供热服务中心单耗明细" :extra="heatingCenterExtraLabel">
+          <div class="unit-phase-toggle" role="group" aria-label="供热服务中心单耗展示维度">
+            <span class="unit-phase-toggle__label">展示维度：</span>
+            <button
+              v-for="option in heatingCenterPhaseOptions"
+              :key="option.value"
+              type="button"
+              class="unit-phase-toggle__btn"
+              :class="{ 'is-active': option.value === heatingCenterPhaseMode }"
+              @click="selectHeatingCenterPhase(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
           <div class="center-card__controls" role="group" aria-label="供热服务中心单耗排序">
             <span class="center-card__controls-label">排序指标：</span>
             <button
@@ -2348,6 +2361,16 @@ const unitPeer = computed(() => {
   return bucket && typeof bucket === 'object' ? bucket : {}
 })
 
+const unitMonthCurrent = computed(() => {
+  const bucket = unitSection.value?.['本月累计']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
+const unitMonthPeer = computed(() => {
+  const bucket = unitSection.value?.['同期月累计']
+  return bucket && typeof bucket === 'object' ? bucket : {}
+})
+
 const unitSeasonCurrent = computed(() => {
   const bucket = unitSection.value?.['本供暖期累计']
   return bucket && typeof bucket === 'object' ? bucket : {}
@@ -2373,6 +2396,8 @@ const unitOrganizations = computed(() => {
   }
   appendFromBucket(unitCurrent.value)
   appendFromBucket(unitPeer.value)
+  appendFromBucket(unitMonthCurrent.value)
+  appendFromBucket(unitMonthPeer.value)
   appendFromBucket(unitSeasonCurrent.value)
   appendFromBucket(unitSeasonPeer.value)
   return categories
@@ -2380,12 +2405,20 @@ const unitOrganizations = computed(() => {
 
 const unitPhaseOptions = [
   { value: 'current', label: '本期 / 同期' },
+  { value: 'monthly', label: '本月累计 / 同期月累计' },
   { value: 'seasonal', label: '供暖期累计' },
 ]
 
 const unitPhaseMode = ref(unitPhaseOptions[0].value)
 
 const unitPhaseBuckets = computed(() => {
+  if (unitPhaseMode.value === 'monthly') {
+    return {
+      current: unitMonthCurrent.value,
+      peer: unitMonthPeer.value,
+      legend: { current: '本月累计', peer: '同期月累计' },
+    }
+  }
   if (unitPhaseMode.value === 'seasonal') {
     return {
       current: unitSeasonCurrent.value,
@@ -2466,6 +2499,29 @@ const heatingCenterSection = computed(() => {
   return section && typeof section === 'object' ? section : {}
 })
 
+const heatingCenterPhaseOptions = [
+  { value: 'daily', label: '本期', bucketKey: '本期' },
+  { value: 'monthly', label: '本月累计', bucketKey: '本月累计' },
+  { value: 'seasonal', label: '供暖期累计', bucketKey: '本供暖期累计' },
+]
+
+const heatingCenterPhaseMode = ref(heatingCenterPhaseOptions[0].value)
+
+const heatingCenterPhaseSelection = computed(() => {
+  return heatingCenterPhaseOptions.find((option) => option.value === heatingCenterPhaseMode.value) || heatingCenterPhaseOptions[0]
+})
+
+const resolveHeatingCenterBucket = (key) => {
+  if (!key) return null
+  const bucket = heatingCenterSection.value?.[key]
+  return bucket && typeof bucket === 'object' ? bucket : null
+}
+
+const heatingCenterCurrentBucket = computed(() => {
+  const selection = heatingCenterPhaseSelection.value
+  return resolveHeatingCenterBucket(selection.bucketKey) || resolveHeatingCenterBucket('本期') || {}
+})
+
 const heatingCenterUnits = computed(() => {
   const rawUnits = heatingCenterSection.value?.['计量单位']
   if (rawUnits && typeof rawUnits === 'object') {
@@ -2479,9 +2535,9 @@ const heatingCenterUnits = computed(() => {
 })
 
 const heatingCenterCenters = computed(() => {
-  const section = heatingCenterSection.value
+  const bucket = heatingCenterCurrentBucket.value
   const centers = []
-  for (const [name, payload] of Object.entries(section)) {
+  for (const [name, payload] of Object.entries(bucket || {})) {
     if (heatingCenterMetaKeys.has(name)) continue
     if (!payload || typeof payload !== 'object') continue
     const metrics = {}
@@ -2501,6 +2557,12 @@ const heatingCenterCenters = computed(() => {
   }
   return centers
 })
+
+const selectHeatingCenterPhase = (value) => {
+  if (typeof value !== 'string') return
+  if (heatingCenterPhaseMode.value === value) return
+  heatingCenterPhaseMode.value = value
+}
 
 const heatingCenterMetricOptions = computed(() => {
   const units = heatingCenterUnits.value || {}
@@ -2531,8 +2593,9 @@ const heatingCenterData = computed(() => {
   const centers = heatingCenterCenters.value
   const metric = heatingCenterMetric.value
   const units = heatingCenterUnits.value || {}
+  const phaseLabel = heatingCenterPhaseSelection.value?.label || ''
   if (!metric || !centers.length) {
-    return { metric, unit: units?.[metric] || '', list: [], average: null }
+    return { metric, unit: units?.[metric] || '', list: [], average: null, phaseLabel }
   }
   const sorted = [...centers].sort((a, b) => {
     const av = a.metrics?.[metric]
@@ -2561,6 +2624,7 @@ const heatingCenterData = computed(() => {
     list: enriched,
     average,
     units,
+    phaseLabel,
   }
 })
 
@@ -2605,6 +2669,10 @@ const heatingCenterTableData = computed(() => {
 
 const heatingCenterExtraLabel = computed(() => {
   const unit = heatingCenterData.value.unit
+  const phaseLabel = heatingCenterData.value.phaseLabel
+  if (unit && phaseLabel) {
+    return `单位：${unit} · ${phaseLabel}`
+  }
   return unit ? `单位：${unit}` : ''
 })
 

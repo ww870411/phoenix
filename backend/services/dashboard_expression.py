@@ -543,6 +543,28 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 heating_section,
                 project_key,
                 push_date,
+                "本月累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_month_biz",
+            )
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
+                "同期月累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_month_peer",
+            )
+            _fill_metric_panel(
+                session,
+                heating_section,
+                project_key,
+                push_date,
                 "本供暖期累计",
                 company_cn_to_code,
                 company_code_to_cn,
@@ -584,6 +606,46 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 "value_peer_date",
                 push_date,
             )
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "本月累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_month_biz",
+                push_date,
+            )
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "同期月累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_month_peer",
+                push_date,
+            )
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "本供暖期累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_ytd_biz",
+                push_date,
+            )
+            _fill_simple_metric(
+                session,
+                coal_section,
+                "同供暖期累计",
+                company_cn_to_code,
+                company_code_to_cn,
+                item_cn_to_code,
+                "sum_ytd_peer",
+                push_date,
+            )
 
         # 6. 省市平台投诉量
         complaint_section = get_section_by_index("6", "6.当日省市平台服务投诉量")
@@ -606,12 +668,59 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
                 inventory_date = date.today()
             _fill_coal_inventory(session, coal_detail_section, inventory_date)
 
-        # 8. 供热分中心单耗明细（仅需本期）
+        # 8. 供热分中心单耗明细
         branch_consumption_section = get_section_by_index("8", "8.供热分中心单耗明细")
         if isinstance(branch_consumption_section, dict):
             _fill_heating_branch_consumption(
                 session,
                 branch_consumption_section,
+                "本期",
+                "value_biz_date",
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                "同期",
+                "value_peer_date",
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                "本月累计",
+                "sum_month_biz",
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                "同期月累计",
+                "sum_month_peer",
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                "本供暖期累计",
+                "sum_ytd_biz",
+                push_date,
+                company_cn_to_code,
+                item_cn_to_code,
+            )
+            _fill_heating_branch_consumption(
+                session,
+                branch_consumption_section,
+                "同供暖期累计",
+                "sum_ytd_peer",
                 push_date,
                 company_cn_to_code,
                 item_cn_to_code,
@@ -709,11 +818,13 @@ def _fill_coal_inventory(
 def _fill_heating_branch_consumption(
     session,
     section: Dict[str, Any],
+    phase_key: str,
+    frame_key: str,
     push_date: str,
     company_cn_to_code: Dict[str, str],
     item_cn_to_code: Dict[str, str],
 ) -> None:
-    """填充供热分中心单耗明细，按中心直接取 sum_basic_data 的本期数。"""
+    """填充供热分中心单耗明细，支持多阶段框架。"""
     if not isinstance(section, dict):
         return
 
@@ -721,9 +832,11 @@ def _fill_heating_branch_consumption(
     if not source_table:
         return
 
-    for center_name, metrics_map in section.items():
-        if center_name in {"数据来源", "查询结构", "计量单位"}:
-            continue
+    data_bucket = section.get(phase_key)
+    if not isinstance(data_bucket, dict):
+        return
+
+    for center_name, metrics_map in data_bucket.items():
         if not isinstance(metrics_map, dict):
             continue
         company_code = company_cn_to_code.get(str(center_name).strip(), str(center_name).strip())
@@ -733,7 +846,7 @@ def _fill_heating_branch_consumption(
         for label, expr in list(metrics_map.items()):
             expression = str(expr).strip() if isinstance(expr, str) else ""
             target = expression or label
-            value = _evaluate_expression(metrics, target, item_cn_to_code, "value_biz_date")
+            value = _evaluate_expression(metrics, target, item_cn_to_code, frame_key)
             metrics_map[label] = value
 
 
