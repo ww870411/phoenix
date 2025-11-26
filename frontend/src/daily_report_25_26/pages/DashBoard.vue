@@ -537,7 +537,20 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--coal">
-        <Card title="标煤消耗量对比" extra="单位：吨标煤">
+        <Card title="标煤消耗量对比" :extra="coalStdExtraLabel">
+          <div class="unit-phase-toggle" role="group" aria-label="标煤耗量展示维度">
+            <span class="unit-phase-toggle__label">展示维度：</span>
+            <button
+              v-for="option in coalStdPhaseOptions"
+              :key="option.value"
+              type="button"
+              class="unit-phase-toggle__btn"
+              :class="{ 'is-active': option.value === coalStdPhaseMode }"
+              @click="selectCoalStdPhase(option.value)"
+            >
+              {{ option.badge || option.label }}
+            </button>
+          </div>
           <EChart :option="coalStdOpt" height="340px" />
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
@@ -545,7 +558,6 @@
         </Card>
       </section>
 
-      
 
       <section class="dashboard-grid__item dashboard-grid__item--stock">
         <Card title="煤炭库存" subtitle="厂内/港口/在途（堆积）" extra="单位：吨">
@@ -1947,6 +1959,39 @@ const orderUnitCompanies = (items) => {
 const coalStdFallbackCategories = ['集团汇总', '主城区', '金州热电', '北方热电', '金普热电', '庄河环海']
 const coalStdFallbackCurrent = Array(coalStdFallbackCategories.length).fill(0)
 const coalStdFallbackPeer = Array(coalStdFallbackCategories.length).fill(0)
+const coalStdPhaseOptions = [
+  {
+    value: 'daily',
+    label: '本期 / 同期',
+    badge: '当日',
+    currentKey: '本期',
+    peerKey: '同期',
+    currentLabel: '本期',
+    peerLabel: '同期',
+  },
+  {
+    value: 'monthly',
+    label: '本月累计 / 同期月累计',
+    badge: '本月累计',
+    currentKey: '本月累计',
+    peerKey: '同期月累计',
+    currentLabel: '本月累计',
+    peerLabel: '同期月累计',
+  },
+  {
+    value: 'seasonal',
+    label: '供暖期累计 / 同供暖期累计',
+    badge: '供暖期累计',
+    currentKey: '本供暖期累计',
+    peerKey: '同供暖期累计',
+    currentLabel: '本供暖期累计',
+    peerLabel: '同供暖期累计',
+  },
+]
+const coalStdPhaseMode = ref(coalStdPhaseOptions[0].value)
+const selectedCoalStdPhase = computed(() => {
+  return coalStdPhaseOptions.find((option) => option.value === coalStdPhaseMode.value) || coalStdPhaseOptions[0]
+})
 const complaintMetricOrder = ['当日省市平台投诉量', '当日省市平台服务投诉量', '当日净投诉量']
 const complaintMetricTitleMap = {
   当日省市平台投诉量: '省市平台投诉量',
@@ -2574,21 +2619,24 @@ const coalStdSection = computed(() => {
   return section && typeof section === 'object' ? section : {}
 })
 
-const coalStdCurrent = computed(() => {
-  const bucket = coalStdSection.value?.['本期']
+const getCoalStdBucket = (key) => {
+  if (!key) return {}
+  const bucket = coalStdSection.value?.[key]
   return bucket && typeof bucket === 'object' ? bucket : {}
-})
+}
 
-const coalStdPeer = computed(() => {
-  const bucket = coalStdSection.value?.['同期']
-  return bucket && typeof bucket === 'object' ? bucket : {}
-})
+const selectCoalStdPhase = (value) => {
+  if (typeof value !== 'string') return
+  if (coalStdPhaseMode.value === value) return
+  coalStdPhaseMode.value = value
+}
 
 const coalStdSeries = computed(() => {
+  const phase = selectedCoalStdPhase.value
   const categories = []
   const seen = new Set()
-  const currentEntries = coalStdCurrent.value
-  const peerEntries = coalStdPeer.value
+  const currentEntries = getCoalStdBucket(phase.currentKey)
+  const peerEntries = getCoalStdBucket(phase.peerKey)
   if (currentEntries && typeof currentEntries === 'object') {
     for (const key of Object.keys(currentEntries)) {
       if (!seen.has(key)) {
@@ -2615,6 +2663,17 @@ const coalStdSeries = computed(() => {
   const current = categories.map((org) => roundOrNull(currentEntries?.[org], 2) ?? 0)
   const peer = categories.map((org) => roundOrNull(peerEntries?.[org], 2) ?? 0)
   return { categories, current, peer }
+})
+const coalStdColumns = computed(() => {
+  const phase = selectedCoalStdPhase.value
+  const currentLabel = phase.currentLabel || phase.currentKey || '本期'
+  const peerLabel = phase.peerLabel || phase.peerKey || '同期'
+  return ['单位', currentLabel, peerLabel, '差值']
+})
+const coalStdExtraLabel = computed(() => {
+  const phase = selectedCoalStdPhase.value
+  const badge = phase.badge || phase.label
+  return badge ? `单位：吨标煤 · ${badge}` : '单位：吨标煤'
 })
 
 const dailyTrendSection = computed(() => {
@@ -4007,7 +4066,7 @@ const marginTableData = computed(() =>
   ]),
 )
 
-const coalStdColumns = ['单位', '本期', '同期', '差值']
+const baseCoalStdColumns = ['单位', '本期', '同期', '差值']
 const coalStdTableData = computed(() => {
   const categories = coalStdSeries.value.categories
   const current = coalStdSeries.value.current

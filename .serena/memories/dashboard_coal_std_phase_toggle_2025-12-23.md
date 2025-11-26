@@ -1,0 +1,1 @@
+2025-12-23：DashBoard.vue 的“标煤消耗量对比”卡片新增展示维度切换（本期/同期、本月累计/同期月累计、供暖期累计/同供暖期累计），通过 coalStdPhaseOptions/coalStdPhaseMode 控制图表与表格列，同时在卡片顶部渲染 pill 样式按钮并展示动态 extra 文案。

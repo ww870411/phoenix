@@ -4,6 +4,10 @@
 
 - 前端 `DashBoard.vue` 在导出 PDF 前会强制展开“0.5 供暖期焦点指标详表”，串行等待 `nextTick → requestAnimationFrame → 360ms` 动画后再调 `html2canvas/jsPDF`，导出完毕再按初始状态还原；后端 `/dashboard` 接口与缓存逻辑无需改动，只要持续输出 0.5 段落即可满足导出内容。
 
+# 会话小结（2025-12-23 标煤消耗量卡片多维切换蓝图）
+
+- 前端“5.标煤耗量”卡片新增“本期/同期”“本月累计/同期月累计”“供暖期累计/同供暖期累计”三档展示模式，均直接读取 `/dashboard` 5 号 section 对应的键值；若后端需要支持该能力，请在响应中补充 `本月累计/同期月累计/本供暖期累计/同供暖期累计` 节点（结构与 `4.供暖单耗` 的多阶段分桶一致），名称与 `metricAlias` 将由前端自动映射。
+
 # 会话小结（2025-12-23 供暖单耗供暖期累计）
 
 - `/api/v1/projects/{project_key}/dashboard` 现针对 “4.供暖单耗” 节点额外输出 “本供暖期累计”“同供暖期累计” 两个阶段，服务层通过 `_fill_metric_panel(..., "sum_ytd_biz")` / `_fill_metric_panel(..., "sum_ytd_peer")` 直接读取 `groups/sum_basic_data` 视图的 YTD 字段，字段口径与 `backend_data/数据结构_数据看板.json` 中的配置保持一致。
