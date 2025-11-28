@@ -413,8 +413,21 @@
                     <span class="value-number">{{ formatNumber(entry.planValue, entry.decimals) }}</span>
                     <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
                   </td>
-                  <td class="delta-cell">
-                    {{ entry.completionRate === null ? '—' : formatPercentValue(entry.completionRate) }}
+                  <td>
+                    <div class="plan-progress" :class="resolvePlanProgressClass(entry.completionRate)">
+                      <div class="plan-progress__bar">
+                        <span
+                          class="plan-progress__bar-fill"
+                          :style="{ width: formatPlanProgressWidth(entry.completionRate) }"
+                        ></span>
+                      </div>
+                      <div class="plan-progress__meta">
+                        <span class="plan-progress__value">
+                          {{ entry.completionRate === null ? '—' : formatPercentValue(entry.completionRate) }}
+                        </span>
+                        <span class="plan-progress__status">{{ formatPlanStatusLabel(entry.completionRate) }}</span>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -1286,8 +1299,7 @@ const ringComparisonEntries = computed(() => {
       const current = resolveTotalCurrentFromRow(row)
       const prev = unitResult.ringCompare.prevTotals[row.key]
       if (!Number.isFinite(current) || !Number.isFinite(prev)) return null
-      const diff = current - prev
-      const rate = prev !== 0 ? (diff / prev) * 100 : null
+      const rate = computeRelativeRate(current, prev)
       return {
         key: row.key,
         label: row.label,
@@ -1366,6 +1378,60 @@ const planComparisonPeriodText = computed(() => {
   return `${payload.period_start} ~ ${payload.period_end}`
 })
 
+function classifyPlanCompletion(rate) {
+  if (!Number.isFinite(rate)) return 'neutral'
+  if (Math.abs(rate - 100) < 1e-6) return 'ontarget'
+  return rate > 100 ? 'ahead' : 'lag'
+}
+
+function formatPlanProgressWidth(rate) {
+  if (!Number.isFinite(rate)) return '0%'
+  const clamped = Math.max(0, Math.min(rate, 130))
+  return `${clamped}%`
+}
+
+function formatPlanStatusLabel(rate) {
+  const status = classifyPlanCompletion(rate)
+  if (status === 'ahead') return '超出计划'
+  if (status === 'ontarget') return '达成计划'
+  if (status === 'lag') return '落后计划'
+  return '无数据'
+}
+
+function resolvePlanProgressClass(rate) {
+  return `plan-progress--${classifyPlanCompletion(rate)}`
+}
+
+const yoySummaryLines = computed(() => {
+  if (!previewRows.value.length) return []
+  const entries = previewRows.value
+    .map((row) => {
+      const current = resolveValue(row, 'current')
+      const peer = resolveValue(row, 'peer')
+      const delta = resolveDelta(row)
+      if (!Number.isFinite(current) || !Number.isFinite(peer)) return null
+      return {
+        label: row.label,
+        unit: row.unit || '',
+        current,
+        peer,
+        decimals: row.decimals ?? 2,
+        delta,
+      }
+    })
+    .filter(Boolean)
+  if (!entries.length) return []
+  const phrases = entries.slice(0, 3).map((entry) => {
+    const unitText = entry.unit ? entry.unit : ''
+    const currentText = `${formatNumber(entry.current, entry.decimals)}${unitText}`
+    const peerText = `${formatNumber(entry.peer, entry.decimals)}${unitText}`
+    const deltaText = entry.delta === null ? '同比暂无数据' : `同比 ${formatDelta(entry.delta)}`
+    return `${entry.label} 本期 ${currentText}，同期 ${peerText}，${deltaText}`
+  })
+  const suffix = entries.length > 3 ? '（其余略）' : ''
+  return [`【同比】${phrases.join('；')}${suffix}`]
+})
+
 const planSummaryLines = computed(() => {
   if (!planComparisonEntries.value.length) return []
   const monthNote = planComparisonMonthLabel.value ? `（${planComparisonMonthLabel.value}）` : ''
@@ -1376,7 +1442,8 @@ const planSummaryLines = computed(() => {
     const planText = `${formatNumber(entry.planValue, entry.decimals)}${entry.unit || ''}`
     const completion =
       entry.completionRate === null ? '完成率暂无' : `完成率 ${formatPercentValue(entry.completionRate)}`
-    return `${entry.label} 本期 ${actual}，计划 ${planText}，${completion}`
+    const statusText = formatPlanStatusLabel(entry.completionRate)
+    return `${entry.label} 本期 ${actual}，计划 ${planText}，${completion}（${statusText}）`
   })
   const suffix = planComparisonEntries.value.length > 3 ? '（其余略）' : ''
   return phrases.length ? [`【计划】${phrases.join('；')}${suffix}${monthNote}`] : []
@@ -1390,6 +1457,7 @@ const analysisSummaryEntries = computed(() => {
   if (summaryTimelineInsight.value) {
     entries.push(`【趋势观测】${summaryTimelineInsight.value}`)
   }
+  yoySummaryLines.value.forEach((line) => entries.push(line))
   ringSummaryLines.value.forEach((line) => entries.push(line))
   planSummaryLines.value.forEach((line) => entries.push(line))
   summaryCorrelationLines.value.forEach((line) => entries.push(line))
@@ -1993,11 +2061,19 @@ function resolveValue(row, field) {
   return row[field]
 }
 
-function resolveDelta(row) {
-  if (analysisMode.value === 'range' && row.total_delta !== undefined && row.total_delta !== null) {
-    return row.total_delta
+function computeRelativeRate(current, reference) {
+  const curr = Number(current)
+  const ref = Number(reference)
+  if (!Number.isFinite(curr) || !Number.isFinite(ref) || Math.abs(ref) < 1e-9) {
+    return null
   }
-  return row.delta
+  return ((curr - ref) / Math.abs(ref)) * 100
+}
+
+function resolveDelta(row) {
+  const current = resolveValue(row, 'current')
+  const peer = resolveValue(row, 'peer')
+  return computeRelativeRate(current, peer)
 }
 
 function applyDecimals(value, decimals = 2) {
@@ -2197,12 +2273,13 @@ function buildRingSheetData(result) {
 function buildPlanSheetData(result) {
   const entries = mapPlanComparisonEntries(result?.planComparison, result?.rows || [])
   if (!entries.length) return null
-  const header = ['指标', '本期', '月度计划', '完成率', '单位']
+  const header = ['指标', '本期', '月度计划', '完成率', '状态', '单位']
   const mapped = entries.map((entry) => [
     entry.label,
     formatExportNumber(entry.actualValue, entry.decimals),
     formatExportNumber(entry.planValue, entry.decimals),
     formatPercentValue(entry.completionRate) || '',
+    formatPlanStatusLabel(entry.completionRate),
     entry.unit || '',
   ])
   const payload = [header, ...mapped]
@@ -2828,6 +2905,74 @@ onMounted(() => {
 .result-table .value-number {
   text-align: center;
   display: inline-block;
+}
+
+.plan-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-progress__bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--neutral-100, #f1f5f9);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.plan-progress__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.plan-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--neutral-600);
+}
+
+.plan-progress__value {
+  font-weight: 600;
+}
+
+.plan-progress__status {
+  color: var(--neutral-500);
+}
+
+.plan-progress--ahead .plan-progress__bar-fill {
+  background: var(--success-500, #16a34a);
+}
+
+.plan-progress--ontarget .plan-progress__bar-fill {
+  background: var(--primary-500, #2563eb);
+}
+
+.plan-progress--lag .plan-progress__bar-fill {
+  background: var(--danger-500, #dc2626);
+}
+
+.plan-progress--neutral .plan-progress__bar-fill {
+  background: var(--neutral-300, #cbd5f5);
+}
+
+.plan-progress--ahead .plan-progress__value {
+  color: var(--success-600, #15803d);
+}
+
+.plan-progress--ontarget .plan-progress__value {
+  color: var(--primary-600, #1d4ed8);
+}
+
+.plan-progress--lag .plan-progress__value {
+  color: var(--danger-600, #b91c1c);
 }
 
 .warning-list {

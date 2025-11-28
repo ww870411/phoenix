@@ -1,0 +1,1 @@
+2025-12-25：填报页本单位分析（`components/UnitAnalysisLite.vue`）接入 `plan_comparison`。同月区间会显示“计划比较”表格，完成率以颜色+进度条区分落后/达成/超出，并在 Excel 导出中附带计划板块；跨月或无计划值则自动隐藏。

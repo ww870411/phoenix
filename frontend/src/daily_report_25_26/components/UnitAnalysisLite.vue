@@ -214,6 +214,62 @@
             </table>
           </div>
           <p v-else-if="ringComparisonNote" class="analysis-lite__hint warning">{{ ringComparisonNote }}</p>
+          <div class="analysis-lite__section" v-if="planComparisonEntries.length">
+            <h4 class="analysis-lite__section-title">计划比较</h4>
+            <div class="analysis-lite__hint">
+              <span v-if="planComparisonMonthLabel">计划月份：{{ planComparisonMonthLabel }}</span>
+              <span v-if="planComparisonPeriodText">（{{ planComparisonPeriodText }}）</span>
+            </div>
+            <table class="analysis-lite__table analysis-lite__table--center">
+              <colgroup>
+                <col style="width: 32%" />
+                <col style="width: 22%" />
+                <col style="width: 22%" />
+                <col style="width: 24%" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>本期累计</th>
+                  <th>月度计划</th>
+                  <th>完成率</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in planComparisonEntries" :key="`plan-${entry.key}`">
+                  <td class="analysis-lite__metric">{{ entry.label }}</td>
+                  <td>
+                    <div class="analysis-lite__value">
+                      <span class="analysis-lite__number">{{ formatNumber(entry.actualValue, entry.decimals) }}</span>
+                      <span v-if="entry.unit" class="analysis-lite__unit">{{ entry.unit }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="analysis-lite__value">
+                      <span class="analysis-lite__number">{{ formatNumber(entry.planValue, entry.decimals) }}</span>
+                      <span v-if="entry.unit" class="analysis-lite__unit">{{ entry.unit }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="plan-progress" :class="resolvePlanProgressClass(entry.completionRate)">
+                      <div class="plan-progress__bar">
+                        <span
+                          class="plan-progress__bar-fill"
+                          :style="{ width: formatPlanProgressWidth(entry.completionRate) }"
+                        ></span>
+                      </div>
+                      <div class="plan-progress__meta">
+                        <span class="plan-progress__value">
+                          {{ entry.completionRate === null ? '—' : formatPercentValue(entry.completionRate) }}
+                        </span>
+                        <span class="plan-progress__status">{{ formatPlanStatusLabel(entry.completionRate) }}</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <section v-if="hasTimelineData" class="analysis-lite__timeline">
             <header class="analysis-lite__timeline-header">
@@ -329,7 +385,7 @@ const analysisEndDate = ref(props.bizDate || '')
 const selectedMetricKeys = ref(new Set())
 const analysisLoading = ref(false)
 const analysisFormError = ref('')
-const analysisResult = ref({ rows: [], warnings: [], meta: null, ringCompare: null })
+const analysisResult = ref({ rows: [], warnings: [], meta: null, ringCompare: null, planComparison: null })
 const analysisTimelineGrid = ref({ columns: [], rows: [] })
 const analysisTimelineMetrics = ref([])
 const activeTimelineMetricKeys = ref([])
@@ -796,7 +852,7 @@ function clearAnalysisMetrics() {
 }
 
 function resetAnalysisResult() {
-  analysisResult.value = { rows: [], warnings: [], meta: null, ringCompare: null }
+  analysisResult.value = { rows: [], warnings: [], meta: null, ringCompare: null, planComparison: null }
   analysisFormError.value = ''
   resetAnalysisTimeline()
 }
@@ -807,9 +863,19 @@ function resetAnalysisTimeline() {
   activeTimelineMetricKeys.value = []
 }
 
+function computeRelativeRate(current, reference) {
+  const curr = Number(current)
+  const ref = Number(reference)
+  if (!Number.isFinite(curr) || !Number.isFinite(ref) || Math.abs(ref) < 1e-9) {
+    return null
+  }
+  return ((curr - ref) / Math.abs(ref)) * 100
+}
+
 function resolveRowDelta(row) {
-  if (row.total_delta !== undefined && row.total_delta !== null) return row.total_delta
-  return row.delta
+  const current = row.total_current ?? row.current
+  const peer = row.total_peer ?? row.peer
+  return computeRelativeRate(current, peer)
 }
 
 function resolveDeltaClass(row) {
@@ -937,6 +1003,76 @@ function buildTotalsMap(rows) {
     }
   })
   return map
+}
+
+function resolvePlanActualValue(row) {
+  if (!row) return null
+  const total = row.total_current ?? row.current
+  if (total === undefined || total === null) return null
+  const num = Number(total)
+  return Number.isFinite(num) ? num : null
+}
+
+function mapPlanComparisonEntries(planPayload, rows = []) {
+  if (!planPayload?.entries || !planPayload.entries.length) return []
+  const rowMap = new Map()
+  rows.forEach((row) => {
+    if (row?.key && !rowMap.has(row.key)) {
+      rowMap.set(row.key, row)
+    }
+  })
+  return planPayload.entries
+    .map((entry) => {
+      if (!entry?.key) return null
+      const row = rowMap.get(entry.key)
+      const decimals = Number.isInteger(row?.decimals) ? row.decimals : 2
+      const actualValue =
+        entry.actual_value !== undefined && entry.actual_value !== null
+          ? Number(entry.actual_value)
+          : resolvePlanActualValue(row)
+      const planValue = Number(entry.plan_value)
+      if (!Number.isFinite(planValue)) return null
+      const completionRate =
+        entry.completion_rate !== undefined && entry.completion_rate !== null
+          ? Number(entry.completion_rate)
+          : Number.isFinite(actualValue) && planValue !== 0
+            ? (actualValue / planValue) * 100
+            : null
+      return {
+        key: entry.key,
+        label: entry.label || row?.label || entry.key,
+        unit: entry.unit || row?.unit || '',
+        planValue,
+        actualValue: Number.isFinite(actualValue) ? actualValue : null,
+        completionRate: Number.isFinite(completionRate) ? completionRate : null,
+        decimals,
+      }
+    })
+    .filter(Boolean)
+}
+
+function classifyPlanCompletion(rate) {
+  if (!Number.isFinite(rate)) return 'neutral'
+  if (Math.abs(rate - 100) < 1e-6) return 'ontarget'
+  return rate > 100 ? 'ahead' : 'lag'
+}
+
+function formatPlanProgressWidth(rate) {
+  if (!Number.isFinite(rate)) return '0%'
+  const clamped = Math.max(0, Math.min(rate, 130))
+  return `${clamped}%`
+}
+
+function formatPlanStatusLabel(rate) {
+  const status = classifyPlanCompletion(rate)
+  if (status === 'ahead') return '超出计划'
+  if (status === 'ontarget') return '达成计划'
+  if (status === 'lag') return '落后计划'
+  return '无数据'
+}
+
+function resolvePlanProgressClass(rate) {
+  return `plan-progress--${classifyPlanCompletion(rate)}`
 }
 
 function applyDecimals(value, decimals = 2) {
@@ -1198,6 +1334,25 @@ function buildRingSheetData(result) {
   return [header, ...mapped]
 }
 
+function buildPlanSheetData(planPayload, rows) {
+  const entries = mapPlanComparisonEntries(planPayload, rows || [])
+  if (!entries.length) return null
+  const header = ['指标', '本期累计', '月度计划', '完成率', '单位']
+  const mapped = entries.map((entry) => [
+    entry.label,
+    formatExportNumber(entry.actualValue, entry.decimals),
+    formatExportNumber(entry.planValue, entry.decimals),
+    formatPercentValue(entry.completionRate) || '',
+    entry.unit || '',
+  ])
+  const result = [header, ...mapped]
+  if (planPayload?.month_label) {
+    result.push([])
+    result.push(['计划月份', planPayload.month_label])
+  }
+  return result
+}
+
 function buildMetaSheetData(meta) {
   const data = [
     ['单位', meta?.unit_label || unitLabel.value],
@@ -1221,6 +1376,12 @@ function buildUnitSheetData(result) {
     sheetData.push([])
     sheetData.push(['环比比较'])
     sheetData.push([result.ringCompare.note])
+  }
+  const planData = buildPlanSheetData(result?.planComparison, result?.rows)
+  if (planData && planData.length) {
+    sheetData.push([])
+    sheetData.push(['计划比较'])
+    planData.forEach((row) => sheetData.push(row))
   }
   const timelineData = buildTimelineSheetData(result?.timeline)
   if (timelineData && timelineData.length) {
@@ -1248,6 +1409,7 @@ function downloadAnalysisExcel() {
       rows: analysisResult.value.rows,
       timeline: analysisTimelineGrid.value,
       ringCompare: analysisResult.value.ringCompare,
+      planComparison: analysisResult.value.planComparison,
       meta: analysisResult.value.meta,
     }),
   )
@@ -1442,7 +1604,7 @@ const ringComparisonEntries = computed(() => {
       const current = resolveTotalCurrentFromRow(row)
       const prev = prevTotals[row.key]
       if (!Number.isFinite(current) || !Number.isFinite(prev)) return null
-      const rate = prev !== 0 ? ((current - prev) / prev) * 100 : null
+      const rate = computeRelativeRate(current, prev)
       return {
         key: row.key,
         label: row.label,
@@ -1473,6 +1635,27 @@ const ringPreviousRangeLabel = computed(() => {
   const range = analysisResult.value?.ringCompare?.range
   if (!range?.start || !range?.end) return ''
   return range.start === range.end ? range.start : `${range.start} ~ ${range.end}`
+})
+
+const planComparisonPayload = computed(() => analysisResult.value?.planComparison || null)
+
+const planComparisonEntries = computed(() =>
+  mapPlanComparisonEntries(planComparisonPayload.value, analysisResult.value?.rows || []),
+)
+
+const planComparisonMonthLabel = computed(() => {
+  const payload = planComparisonPayload.value
+  if (!payload) return ''
+  if (payload.month_label) return payload.month_label
+  if (payload.period_start?.length >= 7) return payload.period_start.slice(0, 7)
+  return ''
+})
+
+const planComparisonPeriodText = computed(() => {
+  const payload = planComparisonPayload.value
+  if (!payload?.period_start || !payload?.period_end) return ''
+  if (payload.period_start === payload.period_end) return payload.period_start
+  return `${payload.period_start} ~ ${payload.period_end}`
 })
 
 function formatExportNumber(value, decimals = 2) {
@@ -1559,6 +1742,7 @@ async function runUnitAnalysis() {
         note: ringNote,
       },
       meta: normalizeAnalysisMeta(response),
+      planComparison: response.plan_comparison || null,
     }
     applyAnalysisTimelineFromRows(rows)
   } catch (err) {
@@ -1795,6 +1979,70 @@ watch(
   justify-content: center;
   gap: 6px;
   width: 100%;
+}
+
+.plan-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-progress__bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--neutral-100, #f1f5f9);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.plan-progress__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.plan-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--neutral-600);
+}
+
+.plan-progress__value {
+  font-weight: 600;
+}
+
+.plan-progress--ahead .plan-progress__bar-fill {
+  background: var(--success-500, #16a34a);
+}
+
+.plan-progress--ontarget .plan-progress__bar-fill {
+  background: var(--primary-500, #2563eb);
+}
+
+.plan-progress--lag .plan-progress__bar-fill {
+  background: var(--danger-500, #dc2626);
+}
+
+.plan-progress--neutral .plan-progress__bar-fill {
+  background: var(--neutral-300, #cbd5f5);
+}
+
+.plan-progress--ahead .plan-progress__value {
+  color: var(--success-600, #15803d);
+}
+
+.plan-progress--ontarget .plan-progress__value {
+  color: var(--primary-600, #1d4ed8);
+}
+
+.plan-progress--lag .plan-progress__value {
+  color: var(--danger-600, #b91c1c);
 }
 
 .analysis-lite__number {

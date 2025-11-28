@@ -2802,18 +2802,19 @@ sum_basic_data 相关：
 
 验证建议：
 - 前端若接入供暖期累计切换，应能从新增两组键读取对应数值；缺数据时仍可回落现有本期/同期逻辑。
-## 2025-12-25（数据分析页计划比较）
+## 2025-12-25（数据分析页/本单位分析计划比较）
 
 前置说明（降级留痕）：
-- Serena 无法在 `backend/services/data_analysis.py` 与 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 这类长文件内进行精确符号编辑，本次按 3.9 矩阵降级为 `apply_patch`；回滚恢复上述文件即可。
+- Serena 无法在 `backend/services/data_analysis.py`、`frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 与 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue` 这类长文件内进行精确符号编辑，本次按 3.9 矩阵降级为 `apply_patch`；回滚分别恢复上述文件即可。
 
 本次动作：
 - 后端 `execute_data_analysis_query` 在同月查询时返回 `plan_comparison` 载荷（含计划值、实际合计、完成率及 `month_label/period_start/period_end`），依赖 `paln_and_real_month_data` 自动匹配公司/指标计划值。
 - 前端数据分析页新增“计划比较”表格、摘要 `【计划】` 段落，并在 Excel 导出中写入对应板块，实现月度计划值与本期结果的并排对比。
+- 填报页 `UnitAnalysisLite.vue` 同步消费 `plan_comparison`：同月区间会渲染计划比较表，并在完成率列使用颜色/进度条区分“落后/达成/超出”，单单位 Excel 导出亦追加计划板块。
 
 影响范围与回滚：
-- 仅数据分析接口与页面受影响；跨月或无计划值仍沿用旧行为。回滚恢复 `backend/services/data_analysis.py` 与 `DataAnalysisView.vue` 即可。
+- 仅数据分析 API 与相关前端页面/组件受影响；跨月或无计划值仍沿用旧行为。回滚恢复上述文件即可。
 
 验证建议：
-1) 选择同月区间运行分析，确认“计划比较”表格、摘要 `【计划】` 段与 Excel 导出一致，完成率 = 实际/计划。
-2) 选择跨月区间运行，应看不到计划比较与相关摘要，验证兼容旧版行为。
+1) 选择同月区间运行分析或本单位分析，确认页面与导出中的“计划比较”表格、完成率进度条与提示一致，完成率 = 实际/计划。
+2) 选择跨月区间运行，应看不到计划比较与相关摘要/表格，验证兼容旧版行为。
