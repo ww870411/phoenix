@@ -1,5 +1,18 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-25 数据分析页月度计划对比 API）
+
+- `backend/services/data_analysis.py` 新增 `_query_plan_month_rows/_build_plan_comparison_payload` 辅助函数：当 `start_date/end_date` 位于同一自然月时，会按 `company/company_cn` 与 `item/item_cn` 同步检索 `paln_and_real_month_data`，自动匹配所选指标的月度计划值。
+- `execute_data_analysis_query` 在满足上述条件且命中计划值时，响应体新增 `plan_comparison` 字段（包含 `month_label/period_start/period_end` 与逐指标的 `plan_value/actual_value/completion_rate`），前端即可直接渲染“计划比较”表与摘要；跨月或无计划值则不返回该字段，保持兼容。
+- 计划值计算默认使用“本期合计（range 模式取 total_current，daily 模式取当前日值）”，完成率 = 实际/计划，计划类型字段沿用 `paln_and_real_month_data.type`（当前固定为 `plan`）。回滚只需还原 `backend/services/data_analysis.py` 的新函数与主流程插桩即可。
+
+# 会话小结（2025-12-24 月度计划与实绩月度数据表）
+
+- `backend/sql/create_tables.sql` 新增 `paln_and_real_month_data` 表定义，字段覆盖 `company/company_cn/item/item_cn/unit/period/value/type` 并沿用 `daily_basic_data` 的同名字段类型与约束，追加 `id BIGSERIAL` 与 `operation_time` 以保持统一的审计列。
+- 表创建语句附带唯一索引 `idx_paln_and_real_month_unique (company, item, period, type)`，用于限制同单位+指标+周期+类型仅保留单条记录，便于计划值与实绩值分别入库。
+- 在 `backend/sql` 目录新增独立的 `paln_and_real_month_data.sql`，脚本内容与主建表脚本保持一致，便于需要单独部署该表时直接执行；未来若要扩展月度汇总接口，可引用这一脚本落库后再实现 API。
+- `backend/db/database_daily_report_25_26.py` 同步新增 `PlanAndRealMonthData` ORM 模型，字段与新表一一对应（含 `period/type`），后续服务层可直接通过 SQLAlchemy 读取或写入计划/实绩月度数据。
+
 # 会话小结（2025-12-23 仪表盘导出自动展开折叠表）
 
 - 前端 `DashBoard.vue` 在导出 PDF 前会强制展开“0.5 供暖期焦点指标详表”，串行等待 `nextTick → requestAnimationFrame → 360ms` 动画后再调 `html2canvas/jsPDF`，导出完毕再按初始状态还原；后端 `/dashboard` 接口与缓存逻辑无需改动，只要持续输出 0.5 段落即可满足导出内容。

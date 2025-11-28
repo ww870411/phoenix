@@ -87,6 +87,21 @@ class CoalInventoryData(Base):
     date = Column(Date, nullable=False)
     operation_time = Column(DateTime, nullable=False)
 
+
+class PlanAndRealMonthData(Base):
+    __tablename__ = "paln_and_real_month_data"
+
+    id = Column(Integer, primary_key=True)
+    company = Column(Text, nullable=False)
+    company_cn = Column(Text)
+    item = Column(Text, nullable=False)
+    item_cn = Column(Text)
+    unit = Column(Text)
+    period = Column(Text, nullable=False)
+    value = Column(Numeric(18, 4))
+    type = Column(Text, nullable=False)
+    operation_time = Column(DateTime, nullable=False)
+
 def get_session() -> Generator:
     session = SessionLocal()
     try:

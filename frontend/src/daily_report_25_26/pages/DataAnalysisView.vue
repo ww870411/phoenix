@@ -387,6 +387,39 @@
             </table>
           </div>
           <p v-else-if="ringComparisonNote" class="panel-hint warning">{{ ringComparisonNote }}</p>
+          <div class="comparison-section" v-if="planComparisonEntries.length">
+            <h3 class="comparison-title">计划比较</h3>
+            <div class="panel-hint" v-if="planComparisonMonthLabel">
+              计划月份：{{ planComparisonMonthLabel }}
+              <span v-if="planComparisonPeriodText">（{{ planComparisonPeriodText }}）</span>
+            </div>
+            <table class="result-table result-table--centered">
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>本期</th>
+                  <th>月度计划</th>
+                  <th>完成率</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in planComparisonEntries" :key="`plan-${entry.key}`">
+                  <td>{{ entry.label }}</td>
+                  <td>
+                    <span class="value-number">{{ formatNumber(entry.actualValue, entry.decimals) }}</span>
+                    <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                  </td>
+                  <td>
+                    <span class="value-number">{{ formatNumber(entry.planValue, entry.decimals) }}</span>
+                    <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
+                  </td>
+                  <td class="delta-cell">
+                    {{ entry.completionRate === null ? '—' : formatPercentValue(entry.completionRate) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1304,6 +1337,51 @@ const ringSummaryLines = computed(() => {
   return phrases.length ? [`【环比】${phrases.join('；')}${suffix}${rangeNote}`] : []
 })
 
+const planComparisonPayload = computed(() => {
+  const unitKey = activeUnit.value
+  return unitResults.value[unitKey]?.planComparison || null
+})
+
+const planComparisonEntries = computed(() => {
+  const unitKey = activeUnit.value
+  const unitResult = unitResults.value[unitKey]
+  if (!unitResult) return []
+  return mapPlanComparisonEntries(unitResult.planComparison, unitResult.rows)
+})
+
+const planComparisonMonthLabel = computed(() => {
+  const payload = planComparisonPayload.value
+  if (!payload) return ''
+  if (payload.month_label) return payload.month_label
+  if (payload.period_start && payload.period_start.length >= 7) {
+    return payload.period_start.slice(0, 7)
+  }
+  return ''
+})
+
+const planComparisonPeriodText = computed(() => {
+  const payload = planComparisonPayload.value
+  if (!payload?.period_start || !payload?.period_end) return ''
+  if (payload.period_start === payload.period_end) return payload.period_start
+  return `${payload.period_start} ~ ${payload.period_end}`
+})
+
+const planSummaryLines = computed(() => {
+  if (!planComparisonEntries.value.length) return []
+  const monthNote = planComparisonMonthLabel.value ? `（${planComparisonMonthLabel.value}）` : ''
+  const phrases = planComparisonEntries.value.slice(0, 3).map((entry) => {
+    const actual = Number.isFinite(entry.actualValue)
+      ? `${formatNumber(entry.actualValue, entry.decimals)}${entry.unit || ''}`
+      : '—'
+    const planText = `${formatNumber(entry.planValue, entry.decimals)}${entry.unit || ''}`
+    const completion =
+      entry.completionRate === null ? '完成率暂无' : `完成率 ${formatPercentValue(entry.completionRate)}`
+    return `${entry.label} 本期 ${actual}，计划 ${planText}，${completion}`
+  })
+  const suffix = planComparisonEntries.value.length > 3 ? '（其余略）' : ''
+  return phrases.length ? [`【计划】${phrases.join('；')}${suffix}${monthNote}`] : []
+})
+
 const analysisSummaryEntries = computed(() => {
   const entries = []
   if (summaryOverallLine.value) {
@@ -1313,6 +1391,7 @@ const analysisSummaryEntries = computed(() => {
     entries.push(`【趋势观测】${summaryTimelineInsight.value}`)
   }
   ringSummaryLines.value.forEach((line) => entries.push(line))
+  planSummaryLines.value.forEach((line) => entries.push(line))
   summaryCorrelationLines.value.forEach((line) => entries.push(line))
   if (summaryWarningLine.value) {
     entries.push(`【风险提示】${summaryWarningLine.value}`)
@@ -1604,6 +1683,45 @@ function buildTotalsMap(rows) {
   return map
 }
 
+function mapPlanComparisonEntries(planPayload, rows = []) {
+  if (!planPayload?.entries || !planPayload.entries.length) return []
+  const rowMap = new Map()
+  rows.forEach((row) => {
+    if (row?.key && !rowMap.has(row.key)) {
+      rowMap.set(row.key, row)
+    }
+  })
+  return planPayload.entries
+    .map((entry) => {
+      if (!entry?.key) return null
+      const row = rowMap.get(entry.key)
+      const decimals = Number.isInteger(row?.decimals) ? row.decimals : 2
+      const actualValue =
+        entry.actual_value !== undefined && entry.actual_value !== null
+          ? Number(entry.actual_value)
+          : resolveValue(row, 'current')
+      const planValue =
+        entry.plan_value !== undefined && entry.plan_value !== null ? Number(entry.plan_value) : null
+      if (!Number.isFinite(planValue)) return null
+      const completionRate =
+        entry.completion_rate !== undefined && entry.completion_rate !== null
+          ? Number(entry.completion_rate)
+          : Number.isFinite(actualValue) && planValue !== 0
+            ? (actualValue / planValue) * 100
+            : null
+      return {
+        key: entry.key,
+        label: entry.label || row?.label || entry.key,
+        unit: entry.unit || row?.unit || '',
+        planValue,
+        actualValue: Number.isFinite(actualValue) ? actualValue : null,
+        completionRate: Number.isFinite(completionRate) ? completionRate : null,
+        decimals,
+      }
+    })
+    .filter(Boolean)
+}
+
 async function runAnalysis() {
   formError.value = ''
   const targetUnits = Array.from(new Set(selectedUnits.value.filter((unit) => unit && typeof unit === 'string')))
@@ -1684,6 +1802,7 @@ async function runAnalysis() {
             prevTotals,
             note: ringNote,
           },
+          planComparison: response.plan_comparison || null,
           meta,
         }
       } catch (err) {
@@ -2075,6 +2194,25 @@ function buildRingSheetData(result) {
   return [header, ...mapped]
 }
 
+function buildPlanSheetData(result) {
+  const entries = mapPlanComparisonEntries(result?.planComparison, result?.rows || [])
+  if (!entries.length) return null
+  const header = ['指标', '本期', '月度计划', '完成率', '单位']
+  const mapped = entries.map((entry) => [
+    entry.label,
+    formatExportNumber(entry.actualValue, entry.decimals),
+    formatExportNumber(entry.planValue, entry.decimals),
+    formatPercentValue(entry.completionRate) || '',
+    entry.unit || '',
+  ])
+  const payload = [header, ...mapped]
+  if (result?.planComparison?.month_label) {
+    payload.push([])
+    payload.push(['计划月份', result.planComparison.month_label])
+  }
+  return payload
+}
+
 function buildTimelineSheetData(timeline) {
   if (!timeline || !Array.isArray(timeline.columns) || !timeline.columns.length) return null
   const columns = timeline.columns
@@ -2113,6 +2251,12 @@ function buildUnitSheetData(result) {
     sheetData.push([])
     sheetData.push(['环比比较'])
     sheetData.push([result.ringCompare.note])
+  }
+  const planData = buildPlanSheetData(result)
+  if (planData && planData.length) {
+    sheetData.push([])
+    sheetData.push(['计划比较'])
+    planData.forEach((row) => sheetData.push(row))
   }
   const timelineData = buildTimelineSheetData(result?.timeline)
   if (timelineData && timelineData.length) {

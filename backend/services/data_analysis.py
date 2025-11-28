@@ -641,6 +641,19 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
             "以下指标暂无可返回数据：{}".format(", ".join(item["label"] for item in missing_metrics))
         )
 
+    plan_comparison_payload: Optional[Dict[str, Any]] = None
+    if _is_same_month(start_date, end_date):
+        plan_comparison_payload = _build_plan_comparison_payload(
+            unit_key,
+            unit_label,
+            ordered_metrics,
+            rows_payload,
+            metric_dict,
+            start_date,
+            end_date,
+            analysis_mode_value,
+        )
+
     response_payload = {
         "ok": True,
         "config_path": schema_payload.get("config_path"),
@@ -657,6 +670,8 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         "missing_metrics": missing_metrics,
         "warnings": warnings,
     }
+    if plan_comparison_payload:
+        response_payload["plan_comparison"] = plan_comparison_payload
     return JSONResponse(status_code=200, content=response_payload)
 
 
@@ -742,6 +757,39 @@ def _build_constant_timeline(
         )
         current += timedelta(days=1)
     return entries
+
+
+def _is_same_month(start: date, end: date) -> bool:
+    return start.year == end.year and start.month == end.month
+
+
+def _month_bounds(value: date) -> Tuple[date, date]:
+    month_start = date(value.year, value.month, 1)
+    if value.month == 12:
+        next_month = date(value.year + 1, 1, 1)
+    else:
+        next_month = date(value.year, value.month + 1, 1)
+    month_end = next_month - timedelta(days=1)
+    return month_start, month_end
+
+
+def _resolve_row_value_for_plan(row: Optional[Dict[str, Any]], analysis_mode: str) -> Optional[float]:
+    if not row:
+        return None
+    if analysis_mode == "range":
+        if row.get("total_current") is not None:
+            return _to_float_or_none(row.get("total_current"))
+    return _to_float_or_none(row.get("current"))
+
+
+def _compute_completion_rate(actual: Optional[float], planned: Optional[float]) -> Optional[float]:
+    actual_value = _to_float_or_none(actual)
+    plan_value = _to_float_or_none(planned)
+    if actual_value is None or plan_value in (None, 0):
+        return None
+    if abs(plan_value) < 1e-9:
+        return None
+    return (actual_value / plan_value) * 100
 
 
 def _resolve_active_view_name(
@@ -1030,6 +1078,79 @@ def _query_constant_rows(unit_key: str, metric_keys: Sequence[str]) -> Dict[str,
     return result
 
 
+def _query_plan_month_rows(
+    unit_key: str,
+    unit_label: str,
+    metric_keys: Sequence[str],
+    metric_dict: Dict[str, str],
+    period_start: date,
+    plan_type: str = "plan",
+) -> Dict[str, Dict[str, Any]]:
+    if not metric_keys:
+        return {}
+    company_conditions = ["company = :company_key", "company_cn = :company_key"]
+    params: Dict[str, Any] = {
+        "plan_type": plan_type,
+        "period_start": period_start,
+        "company_key": unit_key,
+    }
+    normalized_label = (unit_label or "").strip()
+    if normalized_label and normalized_label != unit_key:
+        company_conditions.extend(["company = :company_label", "company_cn = :company_label"])
+        params["company_label"] = normalized_label
+    unique_metric_keys = list(dict.fromkeys(metric_keys))
+    params["item_keys"] = unique_metric_keys
+    item_conditions = ["item IN :item_keys"]
+    metric_labels: List[str] = []
+    for key in unique_metric_keys:
+        label_value = metric_dict.get(key)
+        if isinstance(label_value, str):
+            normalized = label_value.strip()
+            if normalized:
+                metric_labels.append(normalized)
+    if metric_labels:
+        deduped_labels = list(dict.fromkeys(metric_labels))
+        params["item_labels"] = deduped_labels
+        item_conditions.append("item_cn IN :item_labels")
+    query = f"""
+        SELECT item, item_cn, unit, period::date AS period, value, type
+        FROM paln_and_real_month_data
+        WHERE type = :plan_type
+          AND period::date = :period_start
+          AND ({' OR '.join(company_conditions)})
+          AND ({' OR '.join(item_conditions)})
+    """
+    stmt = text(query).bindparams(bindparam("item_keys", expanding=True))
+    if "item_labels" in params:
+        stmt = stmt.bindparams(bindparam("item_labels", expanding=True))
+    with SessionLocal() as session:
+        rows = session.execute(stmt, params).mappings().all()
+    key_lookup = set(unique_metric_keys)
+    label_lookup: Dict[str, str] = {}
+    for key in unique_metric_keys:
+        label_value = metric_dict.get(key)
+        if isinstance(label_value, str):
+            normalized = label_value.strip()
+            if normalized and normalized not in label_lookup:
+                label_lookup[normalized] = key
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        matched_key: Optional[str] = None
+        item_key = row.get("item")
+        if isinstance(item_key, str) and item_key in key_lookup:
+            matched_key = item_key
+        else:
+            item_cn = row.get("item_cn")
+            if isinstance(item_cn, str):
+                normalized = item_cn.strip()
+                matched_key = label_lookup.get(normalized)
+        if matched_key and matched_key not in result:
+            materialized = dict(row)
+            materialized["value"] = _decimal_to_float(materialized.get("value"))
+            result[matched_key] = materialized
+    return result
+
+
 def _build_temperature_column_lookup(metric_keys: Sequence[str]) -> Dict[str, str]:
     column_lookup: Dict[str, str] = {}
     for key in metric_keys:
@@ -1195,3 +1316,58 @@ def _query_temperature_timeline(
             timeline.setdefault(key, []).append(entry)
         current_date += timedelta(days=1)
     return timeline
+
+
+def _build_plan_comparison_payload(
+    unit_key: str,
+    unit_label: str,
+    metric_keys: Sequence[str],
+    rows_payload: Sequence[Dict[str, Any]],
+    metric_dict: Dict[str, str],
+    start_date: date,
+    end_date: date,
+    analysis_mode: str,
+) -> Optional[Dict[str, Any]]:
+    if not metric_keys or not _is_same_month(start_date, end_date):
+        return None
+    period_start, period_end = _month_bounds(start_date)
+    plan_rows = _query_plan_month_rows(unit_key, unit_label, metric_keys, metric_dict, period_start)
+    if not plan_rows:
+        return None
+    row_lookup: Dict[str, Dict[str, Any]] = {}
+    for row in rows_payload or []:
+        key = row.get("key")
+        if isinstance(key, str) and key not in row_lookup:
+            row_lookup[key] = row
+    entries: List[Dict[str, Any]] = []
+    for key in metric_keys:
+        plan_row = plan_rows.get(key)
+        if not plan_row:
+            continue
+        plan_value = _to_float_or_none(plan_row.get("value"))
+        if plan_value is None:
+            continue
+        row = row_lookup.get(key)
+        label = (row.get("label") if row else None) or metric_dict.get(key, key)
+        unit = (row.get("unit") if row else None) or plan_row.get("unit")
+        actual_value = _resolve_row_value_for_plan(row, analysis_mode)
+        entries.append(
+            {
+                "key": key,
+                "label": label,
+                "unit": unit,
+                "plan_value": plan_value,
+                "actual_value": actual_value,
+                "completion_rate": _compute_completion_rate(actual_value, plan_value),
+                "plan_type": plan_row.get("type") or "plan",
+            }
+        )
+    if not entries:
+        return None
+    return {
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "month_label": f"{period_start.year}-{period_start.month:02d}",
+        "entries": entries,
+        "source": "paln_and_real_month_data",
+    }

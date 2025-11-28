@@ -1,0 +1,1 @@
+2025-12-24：在 backend/db/database_daily_report_25_26.py 新增 PlanAndRealMonthData ORM 模型，字段与 paln_and_real_month_data 表一致（company/company_cn/item/item_cn/unit/period/value/type/operation_time）。仍沿用 apply_patch 降级策略并在 README、progress.md 留痕，指明前端尚未消费该表。

@@ -1,0 +1,1 @@
+2025-12-25：数据分析页支持月度计划对比。`backend/services/data_analysis.py` 在同月查询时读取 `paln_and_real_month_data` 并返回 `plan_comparison`（计划值、实际合计、完成率、月份范围）；`frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 新增“计划比较”表格、摘要【计划】段与 Excel 导出板块，仅同月区间展示，跨月保持旧行为。

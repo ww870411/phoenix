@@ -1,5 +1,18 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-25 数据分析页计划比较与摘要）
+
+- `pages/DataAnalysisView.vue` 解析后端返回的 `plan_comparison` 载荷：当查询日期在同一自然月内，会在“同比/环比比较”之后渲染新的“计划比较”表格（本期、月度计划、完成率），支持单位切换与 Excel 导出同步包含该分块。
+- “数据简报”新增 `【计划】` 段落，概述前 3 个有计划值的指标：展示本期实际、月度计划与完成率，并附计划月份提示；若无计划数据则自动隐藏。
+- Excel 多 Sheet 导出在各单位 Sheet 中追加“计划比较”板块，沿用页面展示的数据与月份说明，便于与同比/环比结果共同归档。回滚只需恢复 `DataAnalysisView.vue` 的新增模板/脚本段落即可。
+
+## 会话小结（2025-12-24 月度计划/实绩数据准备）
+
+- 后端新建 `paln_and_real_month_data` 表及独立 SQL（`backend/sql/paln_and_real_month_data.sql`），用于统一存储“计划值/实际值”类的月度颗粒数据，字段与 `daily_basic_data` 相同（company/item/unit/value 等），并额外标识 `period` 与 `type`（计划/实绩）。
+- 前端暂未消费该表，但在数据填报、报表或仪表盘需要展示“月度计划 vs 实际”曲线时，可直接约定 API 从该表提供聚合后的 datasets（按 `period` 拆分月份、`type` 区分计划/实绩），无需额外结构调整。
+- 后端 ORM (`backend/db/database_daily_report_25_26.py`) 已加入 `PlanAndRealMonthData` 模型，后续若提供 API，前端可直接请求对应接口获得计划/实绩曲线数据；本次前端代码仍未改动，仅记录数据面已准备就绪。
+- 如需调试，可在本地执行 `psql -f backend/sql/paln_and_real_month_data.sql` 创建表，再通过后端 API 接口读取；待接口落地后在此 README 补充前端接入方式。
+
 ## 会话小结（2025-12-23 仪表盘导出自动展开折叠表）
 
 - `pages/DashBoard.vue` 的 `downloadPDF` 升级为 `async` 流程：执行前若“供暖期焦点指标详表”处于收起状态，会先将 `cumulativeTableExpanded` 置为 `true`，并串行等待 `nextTick → requestAnimationFrame → 360ms` 过渡时间后再调用 `html2canvas/jsPDF`，保证折叠内容已经完全展开；导出完成后按初始状态恢复，避免破坏用户当前视图。

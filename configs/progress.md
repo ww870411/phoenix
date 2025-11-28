@@ -1,5 +1,32 @@
 # 进度记录
 
+## 2025-12-24（月度计划与实绩数据表落地）
+
+前置说明：
+- 根目录 AGENTS 要求 Serena 优先，但开发环境同时要求所有文本编辑必须使用 `apply_patch`，Serena 对 SQL/Markdown 非符号文件写入不适用，故按 3.9 降级矩阵说明使用 `apply_patch` 完成建表脚本与 README 记录；回滚恢复 `backend/sql/create_tables.sql`、`backend/sql/paln_and_real_month_data.sql`、`backend/README.md`、`frontend/README.md` 对应段落即可。
+
+本次动作：
+- 在 `backend/sql/create_tables.sql` 追加 `paln_and_real_month_data` 表定义，字段 `company/company_cn/item/item_cn/unit/value` 等沿用 `daily_basic_data` 的同名类型，并新增 `period TEXT NOT NULL` 与 `type TEXT NOT NULL`（用于区分计划/实绩），同时保留 `id/operation_time` 作为统一审计列。
+- 新建 `backend/sql/paln_and_real_month_data.sql` 独立脚本，包含与主建表脚本一致的 `CREATE TABLE` 与唯一索引 `idx_paln_and_real_month_unique (company, item, period, type)`，方便单独部署或迁移。
+- 更新 `backend/README.md`、`frontend/README.md` 记录新增月度计划/实绩数据表及后续可用场景，便于前后端协作定位该数据源。
+
+影响与验证：
+- 执行 `psql -f backend/sql/paln_and_real_month_data.sql` 或重新运行 `backend/sql/create_tables.sql` 后，可通过 `\d+ paln_and_real_month_data` 检查表结构与唯一索引是否正确；插入同一 `company+item+period+type` 的重复记录会因唯一索引而冲突，符合“计划/实绩”互斥要求。
+- 后续若需在 API 中读写该表，可复用 `TEXT/NUMERIC(18,4)` 字段定义，无需担心类型不一致；如需回滚，删除上述 SQL 增量并重建数据库即可。
+
+## 2025-12-24（月度计划与实绩 ORM 接入）
+
+前置说明：
+- 继续沿用本日“apply_patch 取代 Serena 写入”的降级策略，针对 `backend/db/database_daily_report_25_26.py`、两份 README 与本文进行记录，确保 ORM + 文档同步更新，可通过恢复这些文件的最新变更段落回滚。
+
+本次动作：
+- 在 `backend/db/database_daily_report_25_26.py` 新增 `PlanAndRealMonthData` SQLAlchemy 模型，字段 `company/company_cn/item/item_cn/unit/period/value/type/operation_time` 对应 `paln_and_real_month_data` 表，便于服务层以 ORM 方式访问月度计划/实绩数据。
+- 后端 README 同步补充 ORM 信息；前端 README 说明数据面已准备而前端尚未消费，方便后续联调。
+
+影响与验证：
+- 导入 `PlanAndRealMonthData` 后即可在服务代码中通过 SQLAlchemy 查询新表，例如 `session.query(PlanAndRealMonthData).filter_by(company=\"Group\", period=\"2025-11\", type=\"plan\")`；结构字段与 SQL 表一致，避免序列化/字段对不上。
+- 若未来需回滚，删除该 ORM 类并更新 README/进度记录即可，数据库表结构不受影响。
+
 ## 2025-12-23（仪表盘导出前强制展开供暖期指标表）
 
 前置说明：
@@ -2775,3 +2802,18 @@ sum_basic_data 相关：
 
 验证建议：
 - 前端若接入供暖期累计切换，应能从新增两组键读取对应数值；缺数据时仍可回落现有本期/同期逻辑。
+## 2025-12-25（数据分析页计划比较）
+
+前置说明（降级留痕）：
+- Serena 无法在 `backend/services/data_analysis.py` 与 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 这类长文件内进行精确符号编辑，本次按 3.9 矩阵降级为 `apply_patch`；回滚恢复上述文件即可。
+
+本次动作：
+- 后端 `execute_data_analysis_query` 在同月查询时返回 `plan_comparison` 载荷（含计划值、实际合计、完成率及 `month_label/period_start/period_end`），依赖 `paln_and_real_month_data` 自动匹配公司/指标计划值。
+- 前端数据分析页新增“计划比较”表格、摘要 `【计划】` 段落，并在 Excel 导出中写入对应板块，实现月度计划值与本期结果的并排对比。
+
+影响范围与回滚：
+- 仅数据分析接口与页面受影响；跨月或无计划值仍沿用旧行为。回滚恢复 `backend/services/data_analysis.py` 与 `DataAnalysisView.vue` 即可。
+
+验证建议：
+1) 选择同月区间运行分析，确认“计划比较”表格、摘要 `【计划】` 段与 Excel 导出一致，完成率 = 实际/计划。
+2) 选择跨月区间运行，应看不到计划比较与相关摘要，验证兼容旧版行为。
