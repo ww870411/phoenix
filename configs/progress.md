@@ -1,5 +1,26 @@
 # 进度记录
 
+## 2025-12-27（数据分析功能讨论与留痕）
+
+前置说明：
+- 根目录 AGENTS 要求 Serena 优先，但本次仅需在 `configs/progress.md`、`frontend/README.md`、`backend/README.md` 追加讨论记录，且仓库强制使用 `apply_patch` 进行读写，遂直接以 `apply_patch` 编辑上述文档；如需回滚恢复这三处即可。
+
+本次动作：
+- 阅读 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`，与用户同步页面核心结构（单位/指标/日期筛选、`runAnalysis` 多单位查询流程、结果区摘要/相关矩阵/区间 RevoGrid/趋势图/Excel 导出等）及数据流，作为后续分析功能讨论的共识基础。
+- 在前后端 README 记录本次“仅讨论、不改代码”的小结，维持目录对外部协作者可见的最新状态，并在本文落档，满足“每次对话登记”要求。
+- 继续讨论 AI 报告接入方案，结论为：沿用现有 `/data_analysis/query` 同步返回主体数据，同时在后端触发一次性 AI 任务（无需缓存复用），异步生成报告后通过专门接口轮询获取；记录在 README 供后续实现。
+- 实装“智能报告生成（BETA）”复选框（默认关闭），位于“生成分析结果/重置选择”按钮右侧，勾选后在请求体附带 `request_ai_report`，并同步新增“下载智能分析报告”按钮（生成中禁用，支持状态提示）。
+- 新建 `backend/services/data_analysis_ai_report.py`，读取 `backend_data/api_key.json` 的 Gemini 配置，将查询结果入队线程池并调用 SDK 生成 Markdown 报告；同时扩展 `/data_analysis/query` 返回 `ai_report_job_id` 并新增 `GET /data_analysis/ai_report/{job_id}` 查询状态，Prompt 更新为面向周/月度汇报的详细模板。
+
+影响范围与回滚：
+- 前端：`DataAnalysisView.vue` 加入复选框与样式，并在调用时附带新字段；恢复文件即可回滚。
+- 后端：`daily_report_25_26.py` 新增布尔参数、AI job 返回与查询接口，配套服务模块位于 `backend/services/data_analysis_ai_report.py`；删除对应改动即可回滚。
+
+验证建议：
+1) 打开本文与前/后端 README 顶部，确认本次会话小结已写入即视为完成。
+2) 在数据分析页勾选“智能报告生成（BETA）”，提交后 Network 中的 `/data_analysis/query` payload 应包含 `request_ai_report: true`；响应应带 `ai_report_job_id`；访问 `/data_analysis/ai_report/{job_id}` 可查看状态流转。
+3) 等待状态 ready 后点击“下载智能分析报告”，应下载到 Markdown 文本；生成中或未勾选时按钮需保持禁用并显示提示。
+
 ## 2025-12-26（analysis 视图移除供热输差/内部购热成本）
 
 前置说明（降级留痕）：

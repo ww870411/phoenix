@@ -175,6 +175,10 @@
             <button class="btn ghost" type="button" :disabled="queryLoading" @click="resetSelections">
               重置选择
             </button>
+            <label class="ai-report-toggle">
+              <input type="checkbox" v-model="aiReportEnabled" :disabled="queryLoading" />
+              <span>智能报告生成（BETA）</span>
+            </label>
           </div>
         </template>
       </section>
@@ -203,15 +207,26 @@
               </template>
             </p>
           </div>
-          <button
-            class="btn ghost"
-            type="button"
-            :disabled="!resultUnitKeys.length || queryLoading"
-            @click="downloadExcel"
-          >
-            下载 Excel
-          </button>
+          <div class="result-header-actions">
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="!resultUnitKeys.length || queryLoading"
+              @click="downloadExcel"
+            >
+              下载 Excel
+            </button>
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="aiReportButtonDisabled"
+              @click="downloadAiReport"
+            >
+              {{ aiReportButtonLabel }}
+            </button>
+          </div>
         </header>
+        <p v-if="aiReportStatusMessage" class="ai-report-status">{{ aiReportStatusMessage }}</p>
 
         <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
         <div v-else-if="!previewRows.length" class="page-state muted">
@@ -524,7 +539,12 @@ import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
-import { getDataAnalysisSchema, getDashboardBizDate, runDataAnalysis } from '../services/api'
+import {
+  getDataAnalysisSchema,
+  getDashboardBizDate,
+  runDataAnalysis,
+  getDataAnalysisAiReport,
+} from '../services/api'
 
 const TrendChart = defineComponent({
   name: 'TrendChart',
@@ -776,8 +796,15 @@ const formError = ref('')
 const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
 const queryLoading = ref(false)
+const aiReportEnabled = ref(false)
+const aiReportJobId = ref('')
+const aiReportStatus = ref('idle')
+const aiReportContent = ref('')
+const aiReportStatusMessage = ref('')
 const timelineGrid = ref({ columns: [], rows: [] })
 const activeTimelineMetricKeys = ref([])
+
+let aiReportPollTimer = null
 
 const timelineMetrics = computed(() =>
   previewRows.value.filter((row) => Array.isArray(row.timeline) && row.timeline.length),
@@ -1501,6 +1528,54 @@ async function copyAnalysisSummary() {
   }
 }
 
+function clearAiReportPolling() {
+  if (aiReportPollTimer !== null) {
+    clearTimeout(aiReportPollTimer)
+    aiReportPollTimer = null
+  }
+}
+
+function resetAiReportState() {
+  clearAiReportPolling()
+  aiReportJobId.value = ''
+  aiReportStatus.value = 'idle'
+  aiReportContent.value = ''
+  aiReportStatusMessage.value = ''
+}
+
+function startAiReportPolling(jobId) {
+  clearAiReportPolling()
+  if (!jobId) return
+  aiReportStatus.value = 'pending'
+  aiReportStatusMessage.value = '智能报告生成中…'
+  const poll = async () => {
+    try {
+      const payload = await getDataAnalysisAiReport(projectKey.value, jobId)
+      if (!payload?.ok) {
+        throw new Error(payload?.message || '获取智能报告失败')
+      }
+      const status = payload.status || 'pending'
+      aiReportStatus.value = status
+      if (status === 'ready' && typeof payload.report === 'string') {
+        aiReportContent.value = payload.report
+        aiReportStatusMessage.value = ''
+        clearAiReportPolling()
+        return
+      }
+      if (status === 'failed') {
+        aiReportStatusMessage.value = payload.error || '智能报告生成失败'
+        clearAiReportPolling()
+        return
+      }
+      aiReportStatusMessage.value = '智能报告生成中…'
+    } catch (err) {
+      aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
+    }
+    aiReportPollTimer = window.setTimeout(poll, 5000)
+  }
+  poll()
+}
+
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -1538,6 +1613,21 @@ const resultUnitKeys = computed(() => {
   const ordered = selectedUnits.value.filter((key) => unitResults.value[key])
   const leftovers = Object.keys(unitResults.value).filter((key) => !ordered.includes(key))
   return [...ordered, ...leftovers]
+})
+
+const aiReportButtonLabel = computed(() => {
+  if (aiReportEnabled.value && aiReportJobId.value && aiReportStatus.value !== 'ready') {
+    return '智能报告生成中'
+  }
+  return '下载智能分析报告'
+})
+
+const aiReportButtonDisabled = computed(() => {
+  if (!aiReportEnabled.value) return true
+  if (!resultUnitKeys.value.length) return true
+  if (queryLoading.value) return true
+  if (!aiReportJobId.value) return true
+  return aiReportStatus.value !== 'ready'
 })
 
 const resolvedMetricGroups = computed(() => metricGroups.value)
@@ -1639,6 +1729,7 @@ function clearPreviewState() {
   lastQueryMeta.value = null
   timelineGrid.value = { columns: [], rows: [] }
   unitResults.value = {}
+  resetAiReportState()
   if (!selectedUnits.value.includes(activeUnit.value)) {
     activeUnit.value = selectedUnits.value[0] || ''
   }
@@ -1651,6 +1742,7 @@ function resetSelections() {
   selectedMetrics.value = defaultTempKey ? new Set([defaultTempKey]) : new Set()
   applyDateDefaults(schema.value?.date_defaults || {})
   formError.value = ''
+  aiReportEnabled.value = false
   clearPreviewState()
 }
 
@@ -1828,6 +1920,14 @@ async function runAnalysis() {
       analysis_mode: analysisMode.value,
       start_date: startDate.value,
       end_date: endDate.value,
+      request_ai_report: aiReportEnabled.value,
+    }
+    if (aiReportEnabled.value) {
+      aiReportStatus.value = 'pending'
+      aiReportStatusMessage.value = '智能报告生成中…'
+      aiReportContent.value = ''
+    } else {
+      resetAiReportState()
     }
     const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
     const aggregatedResults = {}
@@ -1845,6 +1945,10 @@ async function runAnalysis() {
               decimals: metricDecimalsMap.value?.[row.key] ?? 2,
             }))
           : []
+        const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
+        if (aiReportEnabled.value && aiJobId) {
+          aiReportJobId.value = aiJobId
+        }
         let prevTotals = null
         let ringNote = prevRangeInfo.note
         if (prevRangeInfo.range) {
@@ -1853,6 +1957,7 @@ async function runAnalysis() {
               ...payload,
               start_date: prevRangeInfo.range.start,
               end_date: prevRangeInfo.range.end,
+              request_ai_report: false,
             }
             const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
             if (prevResponse?.ok) {
@@ -1872,6 +1977,7 @@ async function runAnalysis() {
           view: response.view || resolveViewNameForUnit(unitKey),
           start_date: response.start_date || startDate.value,
           end_date: response.end_date || endDate.value,
+          ai_report_job_id: aiJobId,
         }
         aggregatedResults[unitKey] = {
           rows: decoratedRows,
@@ -1885,6 +1991,7 @@ async function runAnalysis() {
           },
           planComparison: response.plan_comparison || null,
           meta,
+          aiReportJobId: aiJobId,
         }
       } catch (err) {
         errors.push(`${resolveUnitLabel(unitKey)}：${err instanceof Error ? err.message : String(err)}`)
@@ -1934,6 +2041,7 @@ function applyActiveUnitResult(unitKey) {
     lastQueryMeta.value = null
     timelineGrid.value = { columns: [], rows: [] }
     activeUnit.value = ''
+    resetAiReportState()
     return
   }
   const result = unitResults.value[unitKey]
@@ -1943,6 +2051,28 @@ function applyActiveUnitResult(unitKey) {
   lastQueryMeta.value = result.meta
   timelineGrid.value = cloneTimelineGrid(result.timeline)
   activeUnit.value = unitKey
+  if (aiReportEnabled.value) {
+    const jobId = result.aiReportJobId || result.meta?.ai_report_job_id || aiReportJobId.value || ''
+    if (jobId) {
+      if (aiReportJobId.value !== jobId) {
+        aiReportJobId.value = jobId
+        aiReportContent.value = ''
+        startAiReportPolling(jobId)
+      } else if (
+        aiReportStatus.value === 'pending' &&
+        !aiReportContent.value &&
+        aiReportPollTimer === null
+      ) {
+        startAiReportPolling(jobId)
+      }
+    } else {
+      aiReportStatus.value = 'pending'
+      aiReportStatusMessage.value = '已提交生成请求，等待后台任务启动…'
+      aiReportJobId.value = ''
+    }
+  } else {
+    resetAiReportState()
+  }
 }
 
 function ensureActiveUnitFromSelection() {
@@ -2398,6 +2528,58 @@ function downloadExcel() {
   XLSX.writeFile(wb, filename)
 }
 
+async function downloadAiReport() {
+  if (aiReportButtonDisabled.value) return
+  try {
+    if (!aiReportContent.value && aiReportJobId.value) {
+      const payload = await getDataAnalysisAiReport(projectKey.value, aiReportJobId.value)
+      if (payload?.status === 'ready' && typeof payload.report === 'string') {
+        aiReportContent.value = payload.report
+        aiReportStatus.value = 'ready'
+      } else if (payload?.status === 'failed') {
+        aiReportStatus.value = 'failed'
+        aiReportStatusMessage.value = payload?.error || '智能报告生成失败'
+        return
+      } else {
+        aiReportStatus.value = payload?.status || 'pending'
+        aiReportStatusMessage.value = '智能报告仍在生成中，请稍候…'
+        return
+      }
+    }
+    if (!aiReportContent.value) {
+      aiReportStatusMessage.value = '暂未获取到智能报告内容'
+      return
+    }
+    const blob = new Blob([aiReportContent.value], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `智能分析报告_${Date.now()}.md`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+watch(
+  () => aiReportEnabled.value,
+  (enabled) => {
+    if (!enabled) {
+      resetAiReportState()
+      return
+    }
+    if (aiReportJobId.value) {
+      startAiReportPolling(aiReportJobId.value)
+    } else {
+      aiReportStatus.value = 'pending'
+      aiReportStatusMessage.value = '请生成分析结果后稍候，系统将自动获取智能报告'
+    }
+  },
+)
+
 watch(
   () => analysisMode.value,
   (mode) => {
@@ -2474,6 +2656,10 @@ watch(
 
 onMounted(() => {
   loadSchema()
+})
+
+onBeforeUnmount(() => {
+  clearAiReportPolling()
 })
 </script>
 
@@ -2866,6 +3052,32 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+.ai-report-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--neutral-600);
+  cursor: pointer;
+}
+
+.ai-report-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.result-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-report-status {
+  font-size: 12px;
+  color: var(--neutral-500);
+  margin: -8px 0 8px;
+  text-align: right;
 }
 
 .result-block {

@@ -9,6 +9,7 @@ daily_report_25_26 项目 v1 路由
 
 import copy
 import json
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -54,6 +55,7 @@ from backend.services.weather_importer import (
 
 # Use统一的数据目录常量，默认指向容器内 /app/data
 from backend.services import data_analysis as data_analysis_service
+from backend.services import data_analysis_ai_report
 
 DATA_ROOT = SysPath(DATA_DIRECTORY)
 PROJECT_KEY = "daily_report_25_26"
@@ -72,6 +74,8 @@ COAL_STORAGE_NAME_MAP = {
 TEMPERATURE_COLUMN_MAP = data_analysis_service.TEMPERATURE_COLUMN_MAP
 TEMPERATURE_UNIT = data_analysis_service.TEMPERATURE_UNIT
 MAX_TIMELINE_DAYS = data_analysis_service.MAX_TIMELINE_DAYS
+
+logger = logging.getLogger(__name__)
 
 def _is_coal_inventory_sheet(name: Optional[str], tpl_payload: Optional[Dict[str, Any]] = None) -> bool:
     """
@@ -1648,6 +1652,7 @@ class DataAnalysisQueryPayload(BaseModel):
     analysis_mode: Optional[str] = "daily"
     start_date: date
     end_date: Optional[date] = None
+    request_ai_report: bool = False
 
 
 def _ensure_system_admin(session: AuthSession) -> None:
@@ -3604,6 +3609,14 @@ def _execute_data_analysis_query_legacy(
         "missing_metrics": missing_metrics,
         "warnings": warnings,
     }
+    if payload.request_ai_report:
+        try:
+            job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("触发 AI 报告生成失败: %s", exc)
+        else:
+            if job_id:
+                response_payload["ai_report_job_id"] = job_id
     return JSONResponse(status_code=200, content=response_payload)
 
 
@@ -3644,6 +3657,19 @@ async def query_data_analysis(
             content={"ok": False, "message": "无法加载数据分析配置"},
         )
     return _execute_data_analysis_query(payload, schema_payload)
+
+
+@router.get(
+    "/data_analysis/ai_report/{job_id}",
+    summary="查询 AI 数据分析报告状态",
+)
+async def get_data_analysis_ai_report(job_id: str = Path(..., description="AI 报告任务 ID")):
+    job_payload = data_analysis_ai_report.get_report_job(job_id)
+    if not job_payload:
+        return JSONResponse(status_code=404, content={"ok": False, "message": "报告不存在或已过期"})
+    response = {"ok": True}
+    response.update(job_payload)
+    return JSONResponse(status_code=200, content=response)
 
 
 def _detect_readonly_limit_backend(columns: Sequence[Any]) -> int:

@@ -1,5 +1,10 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 数据分析流程讨论）
+
+- 本轮仅与用户确认数据分析页面仍依赖现有 `/data_analysis/schema`（单位/指标/分析模式/小数位/默认日期）与 `/data_analysis/query`（本期/同期/环比/计划比较/逐日 timeline）接口，以及 `getDashboardBizDate` 提供的默认业务日，无任何 FastAPI 或 SQL 变更。
+- `/data_analysis/query` 现支持 `request_ai_report` 布尔参数，若为真则调用 `backend/services/data_analysis_ai_report.py`：该模块读取 `backend_data/api_key.json` 的 Gemini 配置，将查询 payload 入队线程池生成 Markdown 报告，并把 `ai_report_job_id` 回传给前端。新增 `GET /data_analysis/ai_report/{job_id}` 用于查询状态（pending/ready/failed），失败不会阻断主查询；Prompt 内容已升级为“面向周/月汇报”的固定大纲，要求生成管理层可直接引用的文字。
+
 # 会话小结（2025-12-26 analysis 指标精简）
 
 - `backend/sql/analysis.sql` 移除 `calc_amount_heat_lose` 与 `calc_inner_heat`（内部购热成本）两个 CTE，并在 `calc`/`calc_direct_income` 中去掉对应 `UNION ALL`，主城区/集团 `WHERE item NOT IN (...)` 清理 `amount_heat_lose` 条目，保证视图与 API 不再产出“其中：供热输差”“其中：内部购热成本”。

@@ -1,0 +1,1 @@
+2025-12-27：与用户讨论 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 的功能结构，确认单位/指标/日期筛选、温度默认勾选、`runAnalysis` 多单位串行查询、摘要/相关矩阵/区间表格+趋势图/Excel 导出、计划对比与 warnings 等流程均按现状运行；未改动代码，仅在 `configs/progress.md` 与前后端 README 登记此次讨论及“无业务改动”说明。

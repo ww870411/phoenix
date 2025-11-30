@@ -390,6 +390,23 @@ export async function runDataAnalysis(projectKey, payload, options = {}) {
   return response.json()
 }
 
+export async function getDataAnalysisAiReport(projectKey, jobId) {
+  if (!jobId) {
+    throw new Error('缺少智能报告任务 ID')
+  }
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_analysis/ai_report/${encodeURIComponent(jobId)}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取智能报告失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getUnitAnalysisMetrics(projectKey, params = {}) {
   const { config, unit_key: unitKey } = params
   const searchParams = new URLSearchParams()
