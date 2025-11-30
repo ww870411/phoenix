@@ -1,5 +1,16 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-26 analysis 指标精简）
+
+- `backend/sql/analysis.sql` 移除 `calc_amount_heat_lose` 与 `calc_inner_heat`（内部购热成本）两个 CTE，并在 `calc`/`calc_direct_income` 中去掉对应 `UNION ALL`，主城区/集团 `WHERE item NOT IN (...)` 清理 `amount_heat_lose` 条目，保证视图与 API 不再产出“其中：供热输差”“其中：内部购热成本”。
+- 成本口径仍由 `calc_inner_purchased_heat_cost`、`calc_outer_heat_cost` 等 CTE 负责，边际利润与其他派生指标不会受影响；执行 `psql -f backend/sql/analysis.sql` 后 `/data_analysis/query` 与 `analysis_groups_*` 结果即会同步。
+
+# 会话小结（2025-12-26 analysis 视图内售热收入补齐）
+
+- `backend/sql/analysis.sql` 为 `analysis_company_daily`/`analysis_company_sum` 新增 `calc_inner_heat_supply_income` CTE，按 `amount_heat_supply × price_inner_heat_sales / 10000` 计算“其中：内售热收入（万元）”，并将其写入视图输出。
+- `calc_direct_income` 与共享的 `calc` UNION 列表现显式合并该 CTE，使“直接收入=售电+内售热+暖+售高温水+售汽”恢复正确口径；边际利润、可比煤价边际利润自动使用新的直接收入值。
+- 原 `calc_inner_heat`（内购热成本）保持不变，继续为成本项服务；执行 `psql -f backend/sql/analysis.sql` 后即可在 `/data_analysis/query`、`analysis_groups_*` 聚合中看到 `eco_inner_heat_supply_income`。
+
 # 会话小结（2025-12-25 数据分析页月度计划对比 API）
 
 - `backend/services/data_analysis.py` 新增 `_query_plan_month_rows/_build_plan_comparison_payload` 辅助函数：当 `start_date/end_date` 位于同一自然月时，会按 `company/company_cn` 与 `item/item_cn` 同步检索 `paln_and_real_month_data`，自动匹配所选指标的月度计划值。

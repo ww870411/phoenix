@@ -15,36 +15,42 @@
       </div>
     </transition>
     <header class="topbar">
-      <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="topbar__title-group">
         <h2>数据填报</h2>
         <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
       </div>
-      <div class="right" style="display:flex;align-items:center;gap:8px;">
-        <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
-        <input
-          v-if="shouldShowSheetValidationToggle"
-          type="checkbox"
-          class="sheet-validation-toggle"
-          :checked="sheetValidationEnabled"
-          :disabled="sheetValidationToggleDisabled"
-          aria-label="表级校验开关"
-          @change="onSheetValidationToggle"
-        />
-        <label class="unit-analysis-inline" title="本单位数据分析开关">
+      <div class="topbar__actions">
+        <div class="topbar__status-row">
+          <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
           <input
+            v-if="shouldShowSheetValidationToggle"
             type="checkbox"
-            :checked="isUnitAnalysisEnabled"
-            :disabled="!canEditUnitAnalysisToggle"
-            @change="handleUnitAnalysisToggleChange"
+            class="sheet-validation-toggle"
+            :checked="sheetValidationEnabled"
+            :disabled="sheetValidationToggleDisabled"
+            aria-label="表级校验开关"
+            @change="onSheetValidationToggle"
           />
-          <span>本单位分析</span>
-        </label>
-        <label v-if="isDailyPage" class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;">
-          <span>业务日期：</span>
-          <input type="date" v-model="bizDate" />
-        </label>
-        <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
-        <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">提交</button>
+          <label class="unit-analysis-inline" title="本单位数据分析开关">
+            <input
+              type="checkbox"
+              :checked="isUnitAnalysisEnabled"
+              :disabled="!canEditUnitAnalysisToggle"
+              @change="handleUnitAnalysisToggleChange"
+            />
+            <span>本单位分析</span>
+          </label>
+        </div>
+        <div class="topbar__action-row">
+          <label v-if="isDailyPage" class="date-group topbar__date" title="业务日期">
+            <span>业务日期：</span>
+            <input type="date" v-model="bizDate" />
+          </label>
+          <div class="topbar__buttons">
+            <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
+            <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">提交</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -2003,7 +2009,52 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.topbar { gap: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.topbar__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+}
+.topbar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+  flex: 1 1 320px;
+}
+.topbar__status-row,
+.topbar__action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+.topbar__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.topbar__buttons .btn {
+  min-width: 120px;
+}
+.topbar__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
 .date-group input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
@@ -2059,5 +2110,46 @@ onBeforeUnmount(() => {
   accent-color: var(--primary-600, #2563eb);
 }
 .unit-analysis-toggle__switch input:disabled + span { color: #94a3b8; }
+.table-wrap { overflow: auto; }
+
+@media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .topbar__actions {
+    align-items: stretch;
+    flex: 1 1 auto;
+  }
+  .topbar__status-row,
+  .topbar__action-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .submit-time {
+    margin-right: 0;
+    width: 100%;
+  }
+  .unit-analysis-inline,
+  .topbar__date {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .topbar__buttons {
+    flex-direction: column;
+  }
+  .topbar__buttons .btn {
+    width: 100%;
+  }
+  .validation-panel__item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .table-wrap {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+}
 
 </style>

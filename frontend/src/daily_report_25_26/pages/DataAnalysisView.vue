@@ -397,7 +397,7 @@
               <thead>
                 <tr>
                   <th>指标</th>
-                  <th>本期</th>
+                  <th>截至本期末完成</th>
                   <th>月度计划</th>
                   <th>完成率</th>
                 </tr>
@@ -1751,23 +1751,36 @@ function buildTotalsMap(rows) {
   return map
 }
 
-function mapPlanComparisonEntries(planPayload, rows = []) {
-  if (!planPayload?.entries || !planPayload.entries.length) return []
-  const rowMap = new Map()
-  rows.forEach((row) => {
-    if (row?.key && !rowMap.has(row.key)) {
-      rowMap.set(row.key, row)
-    }
+function accumulateValueToMonthEnd(timelineEntries, periodEnd) {
+  if (!Array.isArray(timelineEntries) || !timelineEntries.length) return null
+  const cutoff = periodEnd ? Date.parse(periodEnd) : Number.NaN
+  let sum = 0
+  let hasValue = false
+  timelineEntries.forEach((entry) => {
+    if (!entry?.date) return
+    const ts = Date.parse(entry.date)
+    if (Number.isNaN(ts)) return
+    if (!Number.isNaN(cutoff) && ts > cutoff) return
+    const value = Number(entry.current)
+    if (!Number.isFinite(value)) return
+    sum += value
+    hasValue = true
   })
+  return hasValue ? sum : null
+}
+
+function mapPlanComparisonEntries(planPayload, rows = [], timelineMap = new Map()) {
+  if (!planPayload?.entries || !planPayload.entries.length) return []
   return planPayload.entries
     .map((entry) => {
       if (!entry?.key) return null
-      const row = rowMap.get(entry.key)
+      const row = rows.find((item) => item.key === entry.key)
+      const timelineEntries = timelineMap.get(entry.key) || row?.timeline || []
       const decimals = Number.isInteger(row?.decimals) ? row.decimals : 2
       const actualValue =
         entry.actual_value !== undefined && entry.actual_value !== null
           ? Number(entry.actual_value)
-          : resolveValue(row, 'current')
+          : accumulateValueToMonthEnd(timelineEntries, planPayload.period_end)
       const planValue =
         entry.plan_value !== undefined && entry.plan_value !== null ? Number(entry.plan_value) : null
       if (!Number.isFinite(planValue)) return null
@@ -2234,7 +2247,7 @@ function formatExportNumber(value, decimals = 2) {
 }
 
 function buildSummarySheetData(rows) {
-  const header = ['指标', '本期', '同期', '同比', '单位']
+  const header = ['指标', '本期', '同期', '同比', '计量单位']
   const source = Array.isArray(rows) ? rows : []
   const mapped = source.map((row) => [
     row.label,
@@ -2273,7 +2286,7 @@ function buildRingSheetData(result) {
 function buildPlanSheetData(result) {
   const entries = mapPlanComparisonEntries(result?.planComparison, result?.rows || [])
   if (!entries.length) return null
-  const header = ['指标', '本期', '月度计划', '完成率', '状态', '单位']
+  const header = ['指标', '截至本期末完成', '月度计划', '完成率', '状态', '计量单位']
   const mapped = entries.map((entry) => [
     entry.label,
     formatExportNumber(entry.actualValue, entry.decimals),

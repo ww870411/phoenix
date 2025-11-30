@@ -1,0 +1,1 @@
+2025-12-26：在 backend/sql/analysis.sql 中为 analysis_company_daily / analysis_company_sum 新增 calc_inner_heat_supply_income CTE，按供热量乘以 price_inner_heat_sales 计算 item=eco_inner_heat_supply_income，并在 calc_direct_income 与 calc UNION 中引用，确保“直接收入 = 售电 + 内售热 + 暖收入 + 售高温水 + 售汽”口径正确，边际利润/可比煤价边际利润会自动使用新的直接收入值。

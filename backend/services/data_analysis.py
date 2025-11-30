@@ -652,6 +652,7 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
             start_date,
             end_date,
             analysis_mode_value,
+            schema_payload.get("view_mapping") or {},
         )
 
     response_payload = {
@@ -1327,6 +1328,7 @@ def _build_plan_comparison_payload(
     start_date: date,
     end_date: date,
     analysis_mode: str,
+    view_mapping: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     if not metric_keys or not _is_same_month(start_date, end_date):
         return None
@@ -1339,6 +1341,22 @@ def _build_plan_comparison_payload(
         key = row.get("key")
         if isinstance(key, str) and key not in row_lookup:
             row_lookup[key] = row
+    plan_actual_lookup: Dict[str, Optional[float]] = {}
+    plan_view_name = _resolve_active_view_name(
+        view_mapping,
+        "累计数据",
+        unit_label,
+        "range",
+    )
+    if not plan_view_name:
+        plan_view_name = "company_sum_analysis"
+    try:
+        month_actual_rows = _query_analysis_rows(plan_view_name, unit_key, metric_keys, period_start, end_date)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("查询计划累计值失败: unit=%s view=%s err=%s", unit_key, plan_view_name, exc)
+        month_actual_rows = {}
+    for key, payload in month_actual_rows.items():
+        plan_actual_lookup[key] = _decimal_to_float(payload.get("value_biz_date"))
     entries: List[Dict[str, Any]] = []
     for key in metric_keys:
         plan_row = plan_rows.get(key)
@@ -1350,7 +1368,9 @@ def _build_plan_comparison_payload(
         row = row_lookup.get(key)
         label = (row.get("label") if row else None) or metric_dict.get(key, key)
         unit = (row.get("unit") if row else None) or plan_row.get("unit")
-        actual_value = _resolve_row_value_for_plan(row, analysis_mode)
+        actual_value = plan_actual_lookup.get(key)
+        if actual_value is None:
+            actual_value = _resolve_row_value_for_plan(row, analysis_mode)
         entries.append(
             {
                 "key": key,

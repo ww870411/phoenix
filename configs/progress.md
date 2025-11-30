@@ -1,5 +1,54 @@
 # 进度记录
 
+## 2025-12-26（analysis 视图移除供热输差/内部购热成本）
+
+前置说明（降级留痕）：
+- 同上，Serena 无法对大型 SQL 精准写入，依 3.9 矩阵全程使用 `apply_patch` 修改 `backend/sql/analysis.sql`；如需回滚恢复该文件即可。
+
+本次动作：
+- 删除 `calc_amount_heat_lose`、`calc_inner_heat`（内购热成本） CTE 及其在 `calc`/`calc_direct_income` 中的 `UNION ALL`，并移除主城区/集团 `WHERE item NOT IN (...)` 中对 `amount_heat_lose` 的排除条目，彻底下线“其中：供热输差”“其中：内部购热成本”两项指标。
+- 其余成本口径维持在 `calc_inner_purchased_heat_cost` 等 CTE 中，不影响边际利润/可比煤价边际利润的扣减逻辑。
+
+影响范围与回滚：
+- 影响：`analysis_company_daily`、`analysis_company_sum` 及聚合视图将不再输出上述两项 item，报表与 API 中不会再看到 `eco_inner_heat_cost`/`amount_heat_lose`。
+- 回滚：恢复 `backend/sql/analysis.sql` 里对应 CTE 与 `UNION ALL` 即可。
+
+验证建议：
+1) 重新执行 `psql -f backend/sql/analysis.sql` 后查询 `analysis_company_daily`，确认不存在 `item IN ('eco_inner_heat_cost','amount_heat_lose')` 的记录。
+2) 访问 `/data_analysis/query` 选择主城区/集团，验证“暂无可返回数据”提示不再包含上述指标。
+
+## 2025-12-26（analysis 视图内售热收入补齐）
+
+前置说明（降级留痕）：
+- Serena 对超长 SQL 文件的符号写入能力有限，且本仓库强制使用 `apply_patch`，本次依 3.9 矩阵降级使用 `apply_patch` 更新 `backend/sql/analysis.sql`；回滚恢复该文件对应 CTE 与 README/本文新增段落即可。
+
+本次动作：
+- 在 `analysis_company_daily`/`analysis_company_sum` 两段视图定义中新增 `calc_inner_heat_supply_income`，按 `amount_heat_supply × price_inner_heat_sales / 10000` 计算“其中：内售热收入（万元）”。
+- `calc_direct_income`、`calc` 汇总段插入上述 CTE，确保“直接收入=售电+内售热+暖+售高温水+售汽”真正包含内售热收入，边际利润、可比煤价边际利润的分子值随之修正。
+- 保持旧的 `calc_inner_heat`（内购热成本）继续供成本项使用，避免成本/收入口径混淆。
+
+影响范围与回滚：
+- 影响：`analysis_company_daily`、`analysis_company_sum` 及依赖其结果的 `analysis_groups_*` 查询将新增 `eco_inner_heat_supply_income` 项，并在直接收入/边际利润计算中使用该数值；原有 `eco_inner_heat_cost` 仍作为成本项参与扣减。
+- 回滚：恢复 `backend/sql/analysis.sql` 相应 CTE 与 README/进度记录条目即可，内售热收入重新缺失。
+
+验证建议：
+1) 重新执行 `psql -f backend/sql/analysis.sql` 刷新视图后，查询 `analysis_company_daily` 中 `item='eco_inner_heat_supply_income'` 应返回各公司的内售热收入；`eco_direct_income` 应等于售电+内售热+暖+售高温水+售汽。
+2) 通过 `/data_analysis/query` 请求携带 `eco_marginal_profit` 或 `eco_direct_income`，确认主城区/集团等聚合口径的值与 `sum_basic_data` 保持一致，无需额外兼容。
+
+## 2025-12-25（数据填报页移动端布局优化）
+
+前置说明：
+- 根目录 AGENTS 规定 Serena 优先，但当前对 `.vue` 大文件的符号级写入仍受限，且用户要求所有读写使用 `apply_patch`，本次针对 `frontend/src/daily_report_25_26/pages/DataEntryView.vue` 及辅助文档按 3.9 降级矩阵操作；如需回滚，恢复该文件与 README/本文最新段落即可。
+
+本次动作：
+- 重构数据填报页顶部工具栏结构，引入 `topbar__title-group/topbar__actions` 分区与分行按钮容器，使“业务日期”“本单位分析开关”“重载/提交”在窄屏下自动换行并拉伸至整行，勾选项与按钮均具备触控友好的点击区域。
+- 为 `.topbar`、`.unit-analysis-inline`、`.date-group`、按钮与校验提示面板新增响应式样式：768px 以下自动纵向排列、表单控件撑满宽度，校验项改为上下排布文本，确保手机端阅读与操作不拥挤。
+- `table-wrap` 新增横向滚动与移动端边距处理，避免 RevoGrid 在小屏被截断；同时让提交反馈、校验面板维持现有间距与字体，整体体验保持一致。
+
+影响与验证：
+- 在手机浏览器或 DevTools 移动视口下，顶部区域会分为上下两段，业务日期与按钮各占一行，切换校验/本单位分析时不再挤压按钮；RevoGrid 外层可左右滚动查看完整表格。
+- 验证建议：分别在桌面和窄屏宽度 <768px 时访问数据填报页面，确认工具栏布局自动切换、按钮宽度自适应、表格可以横向滚动且提交/校验功能正常。
+
 ## 2025-12-24（月度计划与实绩数据表落地）
 
 前置说明：

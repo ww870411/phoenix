@@ -211,25 +211,6 @@ calc_rate_water_per_10k_m2 AS (
   LEFT JOIN const_peer cp_fee ON cp_fee.company=b.company AND cp_fee.item='amount_heating_fee_area'
   GROUP BY b.company, b.company_cn, cb_fee.value, cp_fee.value
 ),
-calc_amount_heat_lose AS (
-  -- 其中：供热输差（GJ）= 供热量 - 供热计量热量 - 供热外购热量
-  SELECT
-    b.company,
-    b.company_cn,
-    'amount_heat_lose'::text AS item,
-    '其中：供热输差'::text     AS item_cn,
-    'GJ'::text               AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_biz_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='amount_heat_metered' THEN b.value_biz_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_biz_date ELSE 0 END)) AS value_biz_date,
-    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='amount_heat_metered' THEN b.value_peer_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_peer_date ELSE 0 END)) AS value_peer_date
-  FROM base b
-  GROUP BY b.company, b.company_cn
-),
 calc_power AS (
   -- 供热供电收入（万元）= 供热供电量 × 单价
   SELECT
@@ -247,22 +228,22 @@ calc_power AS (
   LEFT JOIN const_peer cp_ps ON cp_ps.company=b.company AND cp_ps.item='price_power_sales'
   GROUP BY b.company, b.company_cn, cb_ps.value, cp_ps.value
 ),
-calc_inner_heat AS (
-  -- 其中：内部购热成本（万元）= 内部购热量 × 单价 / 10000
+calc_inner_heat_supply_income AS (
+  -- 其中：内售热收入（万元）= 供热量 × 内售热单价 / 10000
   SELECT
     b.company,
     b.company_cn,
-    'eco_inner_heat_cost'::text AS item,
-    '其中：内部购热成本'::text      AS item_cn,
-    '万元'::text                 AS unit,
-    MAX(b.biz_date)             AS biz_date,
-    MAX(b.peer_date)            AS peer_date,
-    (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ih.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ih.value,0))/10000.0 AS value_peer_date
+    'eco_inner_heat_supply_income'::text AS item,
+    '其中：内售热收入'::text              AS item_cn,
+    '万元'::text                         AS unit,
+    MAX(b.biz_date)                      AS biz_date,
+    MAX(b.peer_date)                     AS peer_date,
+    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_hin.value,0))/10000.0 AS value_biz_date,
+    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_hin.value,0))/10000.0 AS value_peer_date
   FROM base b
-  LEFT JOIN const_biz  cb_ih ON cb_ih.company=b.company AND cb_ih.item='price_inner_purchased_heat'
-  LEFT JOIN const_peer cp_ih ON cp_ih.company=b.company AND cp_ih.item='price_inner_purchased_heat'
-  GROUP BY b.company, b.company_cn, cb_ih.value, cp_ih.value
+  LEFT JOIN const_biz  cb_hin ON cb_hin.company=b.company AND cb_hin.item='price_inner_heat_sales'
+  LEFT JOIN const_peer cp_hin ON cp_hin.company=b.company AND cp_hin.item='price_inner_heat_sales'
+  GROUP BY b.company, b.company_cn, cb_hin.value, cp_hin.value
 ),
 calc_heating_income AS (
   -- 其中：暖收入（万元）= c.采暖期供热收入 × days_to_biz() / 156
@@ -499,7 +480,7 @@ calc_direct_income AS (
     SUM(c.value_peer_date)    AS value_peer_date
   FROM (
     SELECT * FROM calc_power
-    UNION ALL SELECT * FROM calc_inner_heat
+    UNION ALL SELECT * FROM calc_inner_heat_supply_income
     UNION ALL SELECT * FROM calc_heating_income
     UNION ALL SELECT * FROM calc_hot_water
     UNION ALL SELECT * FROM calc_steam
@@ -604,9 +585,8 @@ calc AS (
   UNION ALL SELECT * FROM calc_rate_heat_per_10k_m2
   UNION ALL SELECT * FROM calc_rate_power_per_10k_m2
   UNION ALL SELECT * FROM calc_rate_water_per_10k_m2
-  UNION ALL SELECT * FROM calc_amount_heat_lose
   UNION ALL SELECT * FROM calc_power
-  UNION ALL SELECT * FROM calc_inner_heat
+  UNION ALL SELECT * FROM calc_inner_heat_supply_income
   UNION ALL SELECT * FROM calc_heating_income
   UNION ALL SELECT * FROM calc_hot_water
   UNION ALL SELECT * FROM calc_steam
@@ -759,7 +739,6 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'amount_heat_lose',
   'eco_direct_income'
 )
 UNION ALL
@@ -871,7 +850,6 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'amount_heat_lose',
   'eco_direct_income'
 )
 UNION ALL
@@ -1197,24 +1175,6 @@ calc_rate_water_per_10k_m2 AS (
   LEFT JOIN const_peer cp_fee ON cp_fee.company=b.company AND cp_fee.item='amount_heating_fee_area'
   GROUP BY b.company, b.company_cn, cb_fee.value, cp_fee.value
 ),
-calc_amount_heat_lose AS (
-  SELECT
-    b.company,
-    b.company_cn,
-    'amount_heat_lose'::text AS item,
-    '其中：供热输差'::text     AS item_cn,
-    'GJ'::text               AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
-    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_biz_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='amount_heat_metered' THEN b.value_biz_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_biz_date ELSE 0 END)) AS value_biz_date,
-    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='amount_heat_metered' THEN b.value_peer_date ELSE 0 END)
-      - SUM(CASE WHEN b.item='consumption_outer_purchased_heat' THEN b.value_peer_date ELSE 0 END)) AS value_peer_date
-  FROM base b
-  GROUP BY b.company, b.company_cn
-),
 calc_power AS (
   SELECT
     b.company,
@@ -1231,21 +1191,21 @@ calc_power AS (
   LEFT JOIN const_peer cp_ps ON cp_ps.company=b.company AND cp_ps.item='price_power_sales'
   GROUP BY b.company, b.company_cn, cb_ps.value, cp_ps.value
 ),
-calc_inner_heat AS (
+calc_inner_heat_supply_income AS (
   SELECT
     b.company,
     b.company_cn,
-    'eco_inner_heat_cost'::text AS item,
-    '其中：内部购热成本'::text      AS item_cn,
-    '万元'::text                 AS unit,
-    MAX(b.biz_date)             AS biz_date,
-    MAX(b.peer_date)            AS peer_date,
-    (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_ih.value,0))/10000.0 AS value_biz_date,
-    (SUM(CASE WHEN b.item='consumption_inner_purchased_heat' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_ih.value,0))/10000.0 AS value_peer_date
+    'eco_inner_heat_supply_income'::text AS item,
+    '其中：内售热收入'::text              AS item_cn,
+    '万元'::text                         AS unit,
+    MAX(b.biz_date)                      AS biz_date,
+    MAX(b.peer_date)                     AS peer_date,
+    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_biz_date ELSE 0 END) * COALESCE(cb_hin.value,0))/10000.0 AS value_biz_date,
+    (SUM(CASE WHEN b.item='amount_heat_supply' THEN b.value_peer_date ELSE 0 END) * COALESCE(cp_hin.value,0))/10000.0 AS value_peer_date
   FROM base b
-  LEFT JOIN const_biz  cb_ih ON cb_ih.company=b.company AND cb_ih.item='price_inner_purchased_heat'
-  LEFT JOIN const_peer cp_ih ON cp_ih.company=b.company AND cp_ih.item='price_inner_purchased_heat'
-  GROUP BY b.company, b.company_cn, cb_ih.value, cp_ih.value
+  LEFT JOIN const_biz  cb_hin ON cb_hin.company=b.company AND cb_hin.item='price_inner_heat_sales'
+  LEFT JOIN const_peer cp_hin ON cp_hin.company=b.company AND cp_hin.item='price_inner_heat_sales'
+  GROUP BY b.company, b.company_cn, cb_hin.value, cp_hin.value
 ),
 calc_heating_income AS (
   SELECT
@@ -1472,8 +1432,8 @@ calc_direct_income AS (
     SUM(c.value_peer_date) AS value_peer_date
   FROM (
     SELECT * FROM calc_power
-    UNION ALL SELECT * FROM calc_inner_heat
-    UNION ALL SELECT * FROM calc_heating_income
+    UNION ALL SELECT * FROM calc_inner_heat_supply_income
+      UNION ALL SELECT * FROM calc_heating_income
     UNION ALL SELECT * FROM calc_hot_water
     UNION ALL SELECT * FROM calc_steam
   ) c
@@ -1504,8 +1464,8 @@ calc_direct_income AS (
     SUM(c.value_peer_date)    AS value_peer_date
   FROM (
     SELECT * FROM calc_power
-    UNION ALL SELECT * FROM calc_inner_heat
-    UNION ALL SELECT * FROM calc_heating_income
+    UNION ALL SELECT * FROM calc_inner_heat_supply_income
+      UNION ALL SELECT * FROM calc_heating_income
     UNION ALL SELECT * FROM calc_hot_water
     UNION ALL SELECT * FROM calc_steam
   ) c
@@ -1606,9 +1566,8 @@ calc AS (
   UNION ALL SELECT * FROM calc_rate_heat_per_10k_m2
   UNION ALL SELECT * FROM calc_rate_power_per_10k_m2
   UNION ALL SELECT * FROM calc_rate_water_per_10k_m2
-  UNION ALL SELECT * FROM calc_amount_heat_lose
   UNION ALL SELECT * FROM calc_power
-  UNION ALL SELECT * FROM calc_inner_heat
+  UNION ALL SELECT * FROM calc_inner_heat_supply_income
   UNION ALL SELECT * FROM calc_heating_income
   UNION ALL SELECT * FROM calc_hot_water
   UNION ALL SELECT * FROM calc_steam
@@ -1758,7 +1717,6 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'amount_heat_lose',
   'eco_direct_income'
 )
 UNION ALL
@@ -1868,7 +1826,6 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'amount_heat_lose',
   'eco_direct_income'
 )
 UNION ALL
