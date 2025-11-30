@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import bindparam, text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.services import data_analysis_ai_report
 
 import re
 from decimal import Decimal
@@ -673,6 +674,15 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
     }
     if plan_comparison_payload:
         response_payload["plan_comparison"] = plan_comparison_payload
+
+    if getattr(payload, "request_ai_report", False):
+        try:
+            job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)
+            if job_id:
+                response_payload["ai_report_job_id"] = job_id
+        except Exception as exc:
+            logger.warning("触发 AI 报告生成失败: %s", exc)
+
     return JSONResponse(status_code=200, content=response_payload)
 
 
