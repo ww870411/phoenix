@@ -2550,11 +2550,11 @@ async function downloadAiReport() {
       aiReportStatusMessage.value = '暂未获取到智能报告内容'
       return
     }
-    const blob = new Blob([aiReportContent.value], { type: 'text/markdown;charset=utf-8' })
+    const blob = new Blob([aiReportContent.value], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `智能分析报告_${Date.now()}.md`
+    link.download = `智能分析报告_${Date.now()}.html`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

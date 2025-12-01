@@ -21,6 +21,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import math
+import statistics
+from typing import Any, Dict, List, Optional
+
 import google.generativeai as genai
 
 from backend.config import DATA_DIRECTORY
@@ -28,21 +32,29 @@ from backend.config import DATA_DIRECTORY
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
 
-PROMPT_TEMPLATE = """你是一名供热集团生产经营分析顾问，当前任务是为集团领导的周/月度经营汇报撰写“智能数据分析报告”。请严格遵循：
-1. 报告必须完全基于给定 JSON 数据，禁止杜撰或补全未提供的数字。
-2. 文字面向管理层，可直接粘贴进 PPT/Word 汇报，语气专业、结论导向、强调行动建议。
-3. 输出 Markdown，段落顺序如下（无数据可省略相关段落）：
-   ## 总体态势 —— 概括本期表现与同期/上期差异，简述气温对热负荷的影响。
-   ## 核心亮点 —— 罗列 2~4 条积极信号，说明指标、原因及延续建议。
-   ## 风险与异常 —— 罗列 2~4 条重点风险，指出偏差来源、潜在影响和建议措施。
-   ## 计划执行 —— 对有计划值的指标说明完成率、落后/超计划程度，并给出原因分析。
-   ## 趋势洞察 —— 结合逐日数据或相关性提示走势、波动点及温度与单耗/利润的关系。
-4. 若存在 warnings 或数据缺失，需在“风险与异常”段落提示。
-5. 引用指标时注明单位、同比/环比/计划完成率等百分比，并保留“较同期±X%”描述。
-6. 最后一段可附 1~2 条后续跟进建议，帮助管理层快速决策。
+PROMPT_TEMPLATE = """你是一个数据可视化专家。请基于以下**已预处理好的 JSON 数据**，生成一个 HTML 单页报告。
 
-JSON 数据：
-{payload_json}
+### 关键原则（严禁修改数据）
+1. **直接引用**：JSON 中的 `value`, `delta_percent`, `correlation_with_temp` 等字段都是**已经计算好**的精确值。请直接在 HTML 中显示它们，**绝对不要**自己重新计算同比或汇总。
+2. **趋势描述**：利用 `trend_description` 字段的内容来描述指标与气温的关系。
+
+### 核心需求
+1. **可视化（ECharts）**：
+   - 使用 `metrics` 数组中的 `timeline_json` 数据绘制图表。
+   - **图表 1：双轴趋势图**
+     - 左轴：选择一个核心指标（如供热量/耗煤量）。
+     - 右轴：气温（如果 `is_temperature=true` 的指标存在）。
+     - 使用 ECharts `dataset` 或直接填入 data。
+2. **排版布局**：
+   - **概览卡片**：顶部横排展示关键指标（名称、数值、单位、同比红绿箭头）。
+   - **详细分析**：下方展示图表，并配以文字说明（引用 `stats` 中的极值、均值）。
+
+### 输出格式
+- 完整的 HTML5 (含 <!DOCTYPE html>)。
+- 内联 CSS 美化。
+- 无 Markdown 标记。
+
+### 数据内容
 """
 
 _logger = logging.getLogger(__name__)
@@ -75,6 +87,130 @@ def _safe_json_dumps(payload: Dict[str, Any]) -> str:
         return value
 
     return json.dumps(payload, ensure_ascii=False, default=_convert)
+
+
+def _calculate_trend_stats(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """计算时间序列的统计特征：极值、均值、波动。"""
+    if not timeline:
+        return {}
+    
+    current_values = [float(t["current"]) for t in timeline if t.get("current") is not None]
+    peer_values = [float(t["peer"]) for t in timeline if t.get("peer") is not None]
+    
+    stats = {}
+    if current_values:
+        stats["current_max"] = max(current_values)
+        stats["current_min"] = min(current_values)
+        stats["current_avg"] = statistics.mean(current_values)
+    
+    if peer_values:
+        stats["peer_avg"] = statistics.mean(peer_values)
+
+    return stats
+
+
+def _calculate_correlation(data_x: List[float], data_y: List[float]) -> Optional[float]:
+    """计算皮尔逊相关系数。"""
+    if len(data_x) != len(data_y) or len(data_x) < 2:
+        return None
+    try:
+        # 使用 statistics.correlation (Python 3.10+) 或手写简单实现
+        if hasattr(statistics, 'correlation'):
+            return statistics.correlation(data_x, data_y)
+        
+        # 简易实现
+        n = len(data_x)
+        sum_x = sum(data_x)
+        sum_y = sum(data_y)
+        sum_x_sq = sum(x * x for x in data_x)
+        sum_y_sq = sum(y * y for y in data_y)
+        sum_xy = sum(x * y for x, y in zip(data_x, data_y))
+        
+        denominator = math.sqrt((n * sum_x_sq - sum_x ** 2) * (n * sum_y_sq - sum_y ** 2))
+        
+        if denominator == 0:
+            return 0
+        return numerator / denominator
+    except Exception:
+        return None
+
+
+def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    核心预处理：清洗数据、计算同比、统计趋势、分析气温相关性。
+    AI 将直接使用这里的计算结果，不再自行运算。
+    """
+    rows = payload.get("rows") or []
+    processed_metrics = []
+    
+    # 1. 提取气温数据（如果有），用于计算相关性
+    temp_timeline_map = {} # date -> temperature value
+    for row in rows:
+        if row.get("value_type") == "temperature" and row.get("timeline"):
+            for t in row["timeline"]:
+                if t.get("date") and t.get("current") is not None:
+                    temp_timeline_map[t["date"]] = float(t["current"])
+            break # 假设只有一个主气温指标
+
+    for row in rows:
+        # 基础数据提取
+        current = row.get("total_current") if row.get("total_current") is not None else row.get("current")
+        peer = row.get("total_peer") if row.get("total_peer") is not None else row.get("peer")
+        
+        # 1. 严格计算同比 (Delta)
+        delta = None
+        if current is not None and peer is not None and peer != 0:
+            delta = ((float(current) - float(peer)) / abs(float(peer))) * 100
+        
+        # 2. 时间序列统计 (Stats)
+        timeline = row.get("timeline") or []
+        stats = _calculate_trend_stats(timeline)
+        
+        # 3. 气温相关性 (Correlation)
+        correlation = None
+        trend_desc = ""
+        if timeline and temp_timeline_map:
+            # 对齐数据
+            metric_vals = []
+            temp_vals = []
+            for t in timeline:
+                d = t.get("date")
+                v = t.get("current")
+                if d in temp_timeline_map and v is not None:
+                    metric_vals.append(float(v))
+                    temp_vals.append(temp_timeline_map[d])
+            
+            corr = _calculate_correlation(metric_vals, temp_vals)
+            if corr is not None:
+                correlation = round(corr, 2)
+                if correlation < -0.6:
+                    trend_desc = "与气温呈显著负相关(气温越低数值越高)"
+                elif correlation > 0.6:
+                    trend_desc = "与气温呈显著正相关"
+
+        processed_metrics.append({
+            "label": row.get("label"),
+            "unit": row.get("unit"),
+            "value": current,
+            "peer_value": peer,
+            "delta_percent": round(delta, 2) if delta is not None else None,
+            "stats": stats,
+            "correlation_with_temp": correlation,
+            "trend_description": trend_desc,
+            "is_temperature": row.get("value_type") == "temperature",
+            # 保留 timeline 供 ECharts 使用，但 AI 不需再读 timeline 计算
+            "timeline_json": json.dumps([{
+                "d": t.get("date"), 
+                "v": t.get("current"), 
+                "p": t.get("peer")
+            } for t in timeline]) # 简化字段名以节省 Token
+        })
+
+    return {
+        "meta": payload.get("meta"),
+        "metrics": processed_metrics,
+        "generated_at": _current_time_iso()
+    }
 
 
 def _build_prompt_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -118,9 +254,12 @@ def _build_prompt_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _build_prompt_text(payload: Dict[str, Any]) -> str:
-    prompt_payload = _build_prompt_payload(payload)
-    payload_json = _safe_json_dumps(prompt_payload)
-    return PROMPT_TEMPLATE.format(payload_json=payload_json)
+    # 1. 先进行 Python 端的精密计算和预处理
+    processed_data = _preprocess_payload(payload)
+    # 2. 将处理后的干净数据转为 JSON 字符串
+    payload_json = _safe_json_dumps(processed_data)
+    # 3. 拼接 Prompt
+    return PROMPT_TEMPLATE + "\n" + payload_json
 
 
 def _get_model() -> genai.GenerativeModel:
