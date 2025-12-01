@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -677,7 +678,66 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
 
     if getattr(payload, "request_ai_report", False):
         try:
-            job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)
+            # 准备 ring comparison 数据
+            # 逻辑复刻自 DataAnalysisView.vue: computePreviousRangeForRing
+            ai_payload = copy.deepcopy(response_payload)
+            
+            if analysis_mode_value == "range" and start_date and end_date:
+                prev_start_date = None
+                prev_end_date = None
+                
+                # 判断是否整月
+                is_full_month = False
+                if start_date.day == 1:
+                    import calendar
+                    _, last_day = calendar.monthrange(start_date.year, start_date.month)
+                    if end_date.day == last_day:
+                        is_full_month = True
+                
+                if is_full_month:
+                    # 上月
+                    first_day_this_month = date(start_date.year, start_date.month, 1)
+                    prev_end_date = first_day_this_month - timedelta(days=1)
+                    prev_start_date = date(prev_end_date.year, prev_end_date.month, 1)
+                else:
+                    # 平移周期
+                    span = (end_date - start_date).days + 1
+                    prev_end_date = start_date - timedelta(days=1)
+                    prev_start_date = start_date - timedelta(days=span)
+                
+                if prev_start_date and prev_end_date:
+                    try:
+                        # 执行上期查询
+                        prev_analysis_rows = _query_analysis_rows(
+                            active_view_name,
+                            unit_key,
+                            analysis_metric_keys,
+                            prev_start_date,
+                            prev_end_date
+                        )
+                        
+                        # 将上期数据注入 current rows
+                        for row in ai_payload.get("rows", []):
+                            key = row.get("key")
+                            if not key or row.get("value_type") != "analysis":
+                                continue
+                                
+                            prev_data = prev_analysis_rows.get(key)
+                            if prev_data:
+                                prev_val = _decimal_to_float(prev_data.get("value_biz_date"))
+                                # 注入 ring_prev 字段
+                                row["ring_prev"] = prev_val
+                                
+                                # 计算环比 (Ring Growth)
+                                curr_val = row.get("total_current") if row.get("total_current") is not None else row.get("current")
+                                if curr_val is not None and prev_val is not None and prev_val != 0:
+                                    ring_rate = ((curr_val - prev_val) / abs(prev_val)) * 100
+                                    row["ring_growth"] = ring_rate
+                                    
+                    except Exception as e:
+                        logger.warning(f"AI 报告准备环比数据失败: {e}")
+
+            job_id = data_analysis_ai_report.enqueue_ai_report_job(ai_payload)
             if job_id:
                 response_payload["ai_report_job_id"] = job_id
         except Exception as exc:

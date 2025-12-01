@@ -34,25 +34,71 @@ API_KEY_PATH = DATA_ROOT / "api_key.json"
 
 PROMPT_TEMPLATE = """你是一个数据可视化专家。请基于以下**已预处理好的 JSON 数据**，生成一个 HTML 单页报告。
 
-### 关键原则（严禁修改数据）
-1. **直接引用**：JSON 中的 `value`, `delta_percent`, `correlation_with_temp` 等字段都是**已经计算好**的精确值。请直接在 HTML 中显示它们，**绝对不要**自己重新计算同比或汇总。
-2. **趋势描述**：利用 `trend_description` 字段的内容来描述指标与气温的关系。
+### 1. 样式与布局 (CSS)
+请在 HTML `<head>` 中嵌入以下 CSS 风格，**确保卡片紧凑**：
+```css
+body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
+.header { margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; text-align: center; }
+.header h1 { margin: 0 0 10px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
+.meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.meta-item { display: flex; align-items: center; gap: 5px; }
+.meta-icon { color: #3498db; }
+.metric-tags { margin-top: 10px; font-size: 12px; color: #7f8c8d; }
 
-### 核心需求
-1. **可视化（ECharts）**：
-   - 使用 `metrics` 数组中的 `timeline_json` 数据绘制图表。
-   - **图表 1：双轴趋势图**
-     - 左轴：选择一个核心指标（如供热量/耗煤量）。
-     - 右轴：气温（如果 `is_temperature=true` 的指标存在）。
-     - 使用 ECharts `dataset` 或直接填入 data。
-2. **排版布局**：
-   - **概览卡片**：顶部横排展示关键指标（名称、数值、单位、同比红绿箭头）。
-   - **详细分析**：下方展示图表，并配以文字说明（引用 `stats` 中的极值、均值）。
+/* 卡片布局：紧凑、多列 */
+.cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 12px 16px; border-left: 4px solid #3498db; }
+.card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: 600; }
+.card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
+.card .unit { font-size: 12px; color: #95a5a6; font-weight: normal; margin-left: 4px; }
+.card .delta-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
+.card .delta-item { display: flex; flex-direction: column; }
+.card .delta-label { color: #999; font-size: 10px; margin-bottom: 2px; }
+.card .delta-val { font-weight: 600; }
 
-### 输出格式
-- 完整的 HTML5 (含 <!DOCTYPE html>)。
-- 内联 CSS 美化。
-- 无 Markdown 标记。
+/* 分析文字区域 */
+.analysis-section { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.analysis-section h2 { font-size: 18px; margin-top: 0; border-left: 4px solid #27ae60; padding-left: 10px; color: #2c3e50; }
+.insight-item { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #eee; }
+.insight-item:last-child { border-bottom: none; }
+.insight-label { font-weight: 700; color: #34495e; }
+.insight-text { font-size: 14px; line-height: 1.5; color: #555; }
+
+/* 图表容器 */
+.chart-container { background: #fff; padding: 16px; border-radius: 8px; height: 400px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
+```
+
+### 2. 核心需求
+1. **页头信息**：
+   - 标题固定为：**智能分析报告**
+   - 在标题下方展示详细元数据（使用 `.meta-info` 容器）：
+     - **分析单位**：`meta.unit_label`
+     - **时间范围**：`meta.start_date` ~ `meta.end_date` (如果是单日，只显示 start_date)
+     - **生成时间**：`generated_at`
+   - 展示所选指标：将 `metrics` 数组中所有 `label` 拼接显示。
+
+2. **数据填充**：
+   - **概览卡片**：遍历 `metrics` 数组，为每个指标生成一个卡片。
+     - 数值使用 `value`。
+     - **底部对比行**：
+       - 左侧：**同比** (Label: "同比", Value: `delta_fmt`, Color: `delta_color`)
+       - 右侧：**环比** (Label: "环比", Value: `ring_fmt`, Color: `ring_color`)
+   
+3. **深度分析（拒绝空洞）**：
+   - 在“数据洞察”部分，**不要**只复述数字。
+   - **必须引用** `trend_description` 字段。如果该字段有内容（如“与气温呈显著负相关”），请围绕它展开：“由于本期气温变化...导致供热量...，统计显示二者呈显著负相关，符合预期。”
+   - 如果存在 `stats.recent_trend_desc` (如“呈上升趋势”)，请在分析中指出：“近期数据（后半段）较前半段**{{stats.recent_trend_desc}}** ({{stats.recent_trend_pct}}%)”，这体现了最新的运行变化。
+
+4. **可视化（ECharts）**：
+   - 必须引入 ECharts CDN。
+   - 绘制一个 **双轴折线图**：
+     - **左轴**：主要业务指标（如 供热量、发电量、耗煤量 中的第一个）。
+     - **右轴**：气温（`is_temperature=true` 的指标，通常需**逆序**展示以符合供热习惯）。
+     - **数据源**：使用 `metrics` 中的 `timeline_json`。
+
+### 3. 输出格式
+- 完整的 HTML5 代码 (<!DOCTYPE html>...).
+- 不要包含 Markdown 标记。
 
 ### 数据内容
 """
@@ -90,21 +136,36 @@ def _safe_json_dumps(payload: Dict[str, Any]) -> str:
 
 
 def _calculate_trend_stats(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """计算时间序列的统计特征：极值、均值、波动。"""
+    """计算趋势特征：重点关注近期走势（后半段 vs 前半段）。"""
     if not timeline:
         return {}
     
     current_values = [float(t["current"]) for t in timeline if t.get("current") is not None]
-    peer_values = [float(t["peer"]) for t in timeline if t.get("peer") is not None]
     
     stats = {}
     if current_values:
-        stats["current_max"] = max(current_values)
-        stats["current_min"] = min(current_values)
         stats["current_avg"] = statistics.mean(current_values)
-    
-    if peer_values:
-        stats["peer_avg"] = statistics.mean(peer_values)
+        
+        # 计算“期内趋势”：后半段均值 vs 前半段均值
+        n = len(current_values)
+        if n >= 2:
+            mid = n // 2
+            first_half = current_values[:mid]
+            second_half = current_values[mid:]
+            avg1 = statistics.mean(first_half)
+            avg2 = statistics.mean(second_half)
+            
+            if avg1 != 0:
+                trend_pct = ((avg2 - avg1) / abs(avg1)) * 100
+                stats["recent_trend_pct"] = round(trend_pct, 2)
+                if trend_pct > 5:
+                    stats["recent_trend_desc"] = "呈上升趋势"
+                elif trend_pct < -5:
+                    stats["recent_trend_desc"] = "呈下降趋势"
+                else:
+                    stats["recent_trend_desc"] = "走势平稳"
+            else:
+                stats["recent_trend_desc"] = "数据不足"
 
     return stats
 
@@ -159,8 +220,28 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         
         # 1. 严格计算同比 (Delta)
         delta = None
+        delta_color = "#333" # 默认黑色
+        arrow = ""
+        
         if current is not None and peer is not None and peer != 0:
             delta = ((float(current) - float(peer)) / abs(float(peer))) * 100
+            # 颜色逻辑：升高用红色，下降用绿色
+            if delta > 0:
+                delta_color = "#d93025" # Red
+                arrow = "↑"
+            elif delta < 0:
+                delta_color = "#188038" # Green
+                arrow = "↓"
+
+        # 1.5 环比 (Ring Growth) - 新增逻辑
+        ring_rate = row.get("ring_growth")
+        ring_fmt = "--"
+        ring_color = "#666"
+        if ring_rate is not None:
+            r_val = float(ring_rate)
+            r_arrow = "↑" if r_val > 0 else "↓" if r_val < 0 else ""
+            ring_fmt = f"{r_arrow} {abs(r_val):.2f}%"
+            ring_color = "#d93025" if r_val > 0 else "#188038" if r_val < 0 else "#666"
         
         # 2. 时间序列统计 (Stats)
         timeline = row.get("timeline") or []
@@ -193,7 +274,10 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "unit": row.get("unit"),
             "value": current,
             "peer_value": peer,
-            "delta_percent": round(delta, 2) if delta is not None else None,
+            "delta_fmt": f"{arrow} {abs(delta):.2f}%" if delta is not None else "--",
+            "delta_color": delta_color,
+            "ring_fmt": ring_fmt,
+            "ring_color": ring_color,
             "stats": stats,
             "correlation_with_temp": correlation,
             "trend_description": trend_desc,
