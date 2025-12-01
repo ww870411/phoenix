@@ -19,11 +19,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import math
 import statistics
-from typing import Any, Dict, List, Optional
 
 import google.generativeai as genai
 
@@ -32,20 +31,74 @@ from backend.config import DATA_DIRECTORY
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
 
-PROMPT_TEMPLATE = """你是一个数据可视化专家。请基于以下**已预处理好的 JSON 数据**，生成一个 HTML 单页报告。
+INSIGHT_PROMPT_TEMPLATE = """你是一名热力行业数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
-### 1. 样式与布局 (CSS)
-请在 HTML `<head>` 中嵌入以下 CSS 风格，**确保卡片紧凑**：
-```css
-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
+输出 JSON 结构：
+{
+  "headline": "一句话概括整体运行结论",
+  "key_findings": [
+    {
+      "metric": "指标名称",
+      "status": "up | down | stable",
+      "evidence": "引用 value/delta/ring/stats 的文字，说明原因",
+      "risk_level": "low | medium | high"
+    }
+  ],
+  "temperature_effect": "若存在 trend_description 或 correlation，说明气温联动，否则写 \"无显著气温影响\"",
+  "risks": ["列出潜在风险或需要关注的点，至少 1 条"],
+  "recommendations": ["针对运行/调度/数据的建议，至少 1 条"],
+  "notable_metrics": ["按照重要性列出 3~5 个指标 key 或标签，供下一阶段使用"]
+}
+
+要求：
+- 必须使用中文；
+- `key_findings` 至少 2 条，与 `notable_metrics` 对齐；
+- `status` 依据 delta/ring 与趋势判断；
+- 没有相关性的指标也可以写在 `key_findings`，但要解释依据。
+"""
+
+LAYOUT_PROMPT_TEMPLATE = """你是资深运营报告编辑。现在已得到：
+1. 已预处理好的指标数据；
+2. 阶段一输出的洞察 JSON。
+
+请规划 HTML 报告的章节结构，并只输出 JSON。结构：
+{
+  "sections": [
+    {
+      "id": "overview | trend | temperature | risks",
+      "title": "章节标题",
+      "purpose": "这一章想传达的重点",
+      "bullets": ["段落要点，引用 key_findings/risks/temperature_effect"],
+      "metrics": ["本章重点指标 key 列表，可为空"]
+    }
+  ],
+  "chart_plan": {
+    "primary_metric": "建议放在左轴的指标 key",
+    "temperature_metric": "若存在温度指标则指定 key，否则置空",
+    "narrative": "图表想表达的故事，如走势/相关性"
+  },
+  "callouts": [
+    {
+      "title": "提示或警示标题",
+      "body": "一句话说明",
+      "level": "info | warning | danger"
+    }
+  ]
+}
+
+要求：
+- `sections` 至少 3 个，顺序要合理；
+- `callouts` 数组至少包含 1 条，用于页面醒目提示；
+- 若没有温度指标，请把 `temperature_metric` 设为 null（而不是字符串）。
+"""
+
+REPORT_STYLE_CSS = """body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
 .header { margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; text-align: center; }
 .header h1 { margin: 0 0 10px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
 .meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
 .meta-item { display: flex; align-items: center; gap: 5px; }
 .meta-icon { color: #3498db; }
 .metric-tags { margin-top: 10px; font-size: 12px; color: #7f8c8d; }
-
-/* 卡片布局：紧凑、多列 */
 .cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 12px 16px; border-left: 4px solid #3498db; }
 .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: 600; }
@@ -55,52 +108,38 @@ body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background
 .card .delta-item { display: flex; flex-direction: column; }
 .card .delta-label { color: #999; font-size: 10px; margin-bottom: 2px; }
 .card .delta-val { font-weight: 600; }
-
-/* 分析文字区域 */
 .analysis-section { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 .analysis-section h2 { font-size: 18px; margin-top: 0; border-left: 4px solid #27ae60; padding-left: 10px; color: #2c3e50; }
 .insight-item { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #eee; }
 .insight-item:last-child { border-bottom: none; }
 .insight-label { font-weight: 700; color: #34495e; }
 .insight-text { font-size: 14px; line-height: 1.5; color: #555; }
-
-/* 图表容器 */
 .chart-container { background: #fff; padding: 16px; border-radius: 8px; height: 400px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
-```
+.callouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.callout { border-radius: 8px; padding: 12px 16px; border-left: 4px solid #3498db; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.callout.warning { border-left-color: #f39c12; }
+.callout.danger { border-left-color: #e74c3c; }
+.callout h4 { margin: 0 0 6px 0; font-size: 14px; }
+.callout p { margin: 0; font-size: 13px; color: #555; }
+"""
 
-### 2. 核心需求
-1. **页头信息**：
-   - 标题固定为：**智能分析报告**
-   - 在标题下方展示详细元数据（使用 `.meta-info` 容器）：
-     - **分析单位**：`meta.unit_label`
-     - **时间范围**：`meta.start_date` ~ `meta.end_date` (如果是单日，只显示 start_date)
-     - **生成时间**：`generated_at`
-   - 展示所选指标：将 `metrics` 数组中所有 `label` 拼接显示。
+REPORT_PROMPT_TEMPLATE = """你是高级报告撰稿人。请根据以下材料生成完整的 HTML5 报告：
+1. 预处理后的指标数据；
+2. 阶段一的洞察 JSON；
+3. 阶段二的章节规划 JSON；
+4. 必须使用的 CSS 片段（嵌入 <style>）。
 
-2. **数据填充**：
-   - **概览卡片**：遍历 `metrics` 数组，为每个指标生成一个卡片。
-     - 数值使用 `value`。
-     - **底部对比行**：
-       - 左侧：**同比** (Label: "同比", Value: `delta_fmt`, Color: `delta_color`)
-       - 右侧：**环比** (Label: "环比", Value: `ring_fmt`, Color: `ring_color`)
-   
-3. **深度分析（拒绝空洞）**：
-   - 在“数据洞察”部分，**不要**只复述数字。
-   - **必须引用** `trend_description` 字段。如果该字段有内容（如“与气温呈显著负相关”），请围绕它展开：“由于本期气温变化...导致供热量...，统计显示二者呈显著负相关，符合预期。”
-   - 如果存在 `stats.recent_trend_desc` (如“呈上升趋势”)，请在分析中指出：“近期数据（后半段）较前半段**{{stats.recent_trend_desc}}** ({{stats.recent_trend_pct}}%)”，这体现了最新的运行变化。
-
-4. **可视化（ECharts）**：
-   - 必须引入 ECharts CDN。
-   - 绘制一个 **双轴折线图**：
-     - **左轴**：主要业务指标（如 供热量、发电量、耗煤量 中的第一个）。
-     - **右轴**：气温（`is_temperature=true` 的指标，通常需**逆序**展示以符合供热习惯）。
-     - **数据源**：使用 `metrics` 中的 `timeline_json`。
-
-### 3. 输出格式
-- 完整的 HTML5 代码 (<!DOCTYPE html>...).
-- 不要包含 Markdown 标记。
-
-### 数据内容
+输出要求：
+- 完整 HTML 文本（含 <!DOCTYPE html>、<html>、<head>、<body>）；
+- <head> 中嵌入提供的 CSS（不可使用 ```css 或 ```html 这类 Markdown 代码块）；
+- 页头固定标题“智能分析报告”，并展示单位、分析模式、日期范围、生成时间（从 meta 中获取 unit_label/start_date/end_date 等字段）；缺失单位字段视为错误；
+- 指标卡片按 `metrics` 数据渲染，引用 delta/ring 颜色；
+- “数据洞察”区根据 sections 与 key_findings 生成多段落文字；
+- “重点提示”区渲染 callouts；
+- 最后插入一个引用 ECharts CDN 的双轴折线图脚本，series 数据来自 `metrics.timeline_json`；
+- 为每个指标输出一个“逐日明细”表格（日期/本期/同期/同比），必须使用 `timeline_entries` 字段（已按日期给出 current/peer/delta_pct），若缺少该表视为不合格；
+- 图表需要提供指标切换控件（如按钮或下拉），默认加载首个指标；切换时更新左轴数据，右轴保留气温指标，可直接遍历 `metrics.timeline_entries` 或 `timeline_json`；
+- 全文使用中文，禁止输出任何 Markdown 代码块（包括 ```html/```css/```），只输出 HTML 内容。
 """
 
 _logger = logging.getLogger(__name__)
@@ -133,6 +172,90 @@ def _safe_json_dumps(payload: Dict[str, Any]) -> str:
         return value
 
     return json.dumps(payload, ensure_ascii=False, default=_convert)
+
+
+def _extract_json_block(raw: str) -> Optional[str]:
+    if not raw:
+        return None
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    return raw[start : end + 1]
+
+
+def _parse_json_response(raw: str, stage: str) -> Dict[str, Any]:
+    if not raw:
+        raise ValueError(f"{stage} 阶段返回为空")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        json_block = _extract_json_block(raw)
+        if json_block:
+            try:
+                return json.loads(json_block)
+            except json.JSONDecodeError:
+                pass
+        raise ValueError(f"{stage} 阶段 JSON 解析失败: {exc}")
+
+
+def _call_model(prompt: str) -> str:
+    model = _get_model()
+    response = model.generate_content(prompt)
+    text = (response.text or "").strip() if response else ""
+    if not text and response and getattr(response, "candidates", None):
+        parts = []
+        for candidate in response.candidates:
+            for part in getattr(candidate, "content", {}).parts or []:
+                part_text = getattr(part, "text", "")
+                if part_text:
+                    parts.append(part_text)
+        text = "\n".join(parts).strip()
+    if not text:
+        raise RuntimeError("模型未返回内容")
+    return text
+
+
+def _run_json_stage(stage: str, prompt: str, retries: int = 2) -> Dict[str, Any]:
+    last_error: Optional[Exception] = None
+    for attempt in range(1, retries + 1):
+        raw = _call_model(prompt)
+        try:
+            return _parse_json_response(raw, stage)
+        except ValueError as exc:  # pylint: disable=broad-except
+            last_error = exc
+            _logger.warning("%s 阶段第 %s 次解析失败: %s", stage, attempt, exc)
+    raise RuntimeError(f"{stage} 阶段多次解析失败: {last_error}")
+
+
+def _build_insight_prompt(processed_data: Dict[str, Any]) -> str:
+    data_json = _safe_json_dumps(processed_data)
+    return f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
+
+
+def _build_layout_prompt(processed_data: Dict[str, Any], insight_data: Dict[str, Any]) -> str:
+    data_json = _safe_json_dumps(processed_data)
+    insight_json = _safe_json_dumps(insight_data)
+    return (
+        f"{LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}\n\n### 洞察\n{insight_json}"
+    )
+
+
+def _build_report_prompt(
+    processed_data: Dict[str, Any],
+    insight_data: Dict[str, Any],
+    layout_data: Dict[str, Any],
+) -> str:
+    data_json = _safe_json_dumps(processed_data)
+    insight_json = _safe_json_dumps(insight_data)
+    layout_json = _safe_json_dumps(layout_data)
+    css_block = REPORT_STYLE_CSS.strip()
+    return (
+        f"{REPORT_PROMPT_TEMPLATE}\n\n### CSS（请直接写入 <style> 标签中）\n{css_block}\n"
+        f"\n### 预处理数据\n{data_json}\n"
+        f"\n### 洞察 JSON\n{insight_json}\n"
+        f"\n### 版面规划 JSON\n{layout_json}\n"
+    )
 
 
 def _calculate_trend_stats(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -188,9 +311,9 @@ def _calculate_correlation(data_x: List[float], data_y: List[float]) -> Optional
         sum_xy = sum(x * y for x, y in zip(data_x, data_y))
         
         denominator = math.sqrt((n * sum_x_sq - sum_x ** 2) * (n * sum_y_sq - sum_y ** 2))
-        
         if denominator == 0:
             return 0
+        numerator = n * sum_xy - sum_x * sum_y
         return numerator / denominator
     except Exception:
         return None
@@ -247,9 +370,10 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         timeline = row.get("timeline") or []
         stats = _calculate_trend_stats(timeline)
         
-        # 3. 气温相关性 (Correlation)
+        # 3. 时间序列明细 + 气温相关性
         correlation = None
         trend_desc = ""
+        timeline_entries = []
         if timeline and temp_timeline_map:
             # 对齐数据
             metric_vals = []
@@ -260,7 +384,7 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
                 if d in temp_timeline_map and v is not None:
                     metric_vals.append(float(v))
                     temp_vals.append(temp_timeline_map[d])
-            
+
             corr = _calculate_correlation(metric_vals, temp_vals)
             if corr is not None:
                 correlation = round(corr, 2)
@@ -268,6 +392,31 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
                     trend_desc = "与气温呈显著负相关(气温越低数值越高)"
                 elif correlation > 0.6:
                     trend_desc = "与气温呈显著正相关"
+
+        for entry in timeline:
+            date_val = entry.get("date")
+            current_val = entry.get("current")
+            peer_val = entry.get("peer")
+            delta_pct = None
+            if (
+                current_val is not None
+                and peer_val is not None
+                and peer_val not in (0, 0.0)
+            ):
+                try:
+                    delta_pct = (
+                        (float(current_val) - float(peer_val)) / abs(float(peer_val))
+                    ) * 100
+                except (ValueError, ZeroDivisionError):
+                    delta_pct = None
+            timeline_entries.append(
+                {
+                    "date": date_val,
+                    "current": current_val,
+                    "peer": peer_val,
+                    "delta_pct": round(delta_pct, 2) if delta_pct is not None else None,
+                }
+            )
 
         processed_metrics.append({
             "label": row.get("label"),
@@ -282,10 +431,11 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "correlation_with_temp": correlation,
             "trend_description": trend_desc,
             "is_temperature": row.get("value_type") == "temperature",
+            "timeline_entries": timeline_entries,
             # 保留 timeline 供 ECharts 使用，但 AI 不需再读 timeline 计算
             "timeline_json": json.dumps([{
-                "d": t.get("date"), 
-                "v": t.get("current"), 
+                "d": t.get("date"),
+                "v": t.get("current"),
                 "p": t.get("peer")
             } for t in timeline]) # 简化字段名以节省 Token
         })
@@ -336,16 +486,6 @@ def _build_prompt_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "resolved_metrics": payload.get("resolved_metrics"),
     }
 
-
-def _build_prompt_text(payload: Dict[str, Any]) -> str:
-    # 1. 先进行 Python 端的精密计算和预处理
-    processed_data = _preprocess_payload(payload)
-    # 2. 将处理后的干净数据转为 JSON 字符串
-    payload_json = _safe_json_dumps(processed_data)
-    # 3. 拼接 Prompt
-    return PROMPT_TEMPLATE + "\n" + payload_json
-
-
 def _get_model() -> genai.GenerativeModel:
     global _model, _model_name  # pylint: disable=global-statement
     if _model is not None:
@@ -378,24 +518,25 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
             meta.get("analysis_mode"),
             ",".join(payload.get("resolved_metrics") or []),
         )
-        prompt = _build_prompt_text(payload)
-        model = _get_model()
-        response = model.generate_content(prompt)
-        text = (response.text or "").strip() if response else ""
-        if not text and response and getattr(response, "candidates", None):
-            parts = []
-            for candidate in response.candidates:
-                for part in getattr(candidate, "content", {}).parts or []:
-                    part_text = getattr(part, "text", "")
-                    if part_text:
-                        parts.append(part_text)
-            text = "\n".join(parts).strip()
-        if not text:
-            raise RuntimeError("模型未返回内容")
+        processed_data = _preprocess_payload(payload)
+        _update_job(job_id, status="running", stage="insight", started_at=_current_time_iso())
+
+        insight_prompt = _build_insight_prompt(processed_data)
+        insight_data = _run_json_stage("洞察分析", insight_prompt)
+        _update_job(job_id, stage="layout", insight=insight_data)
+
+        layout_prompt = _build_layout_prompt(processed_data, insight_data)
+        layout_data = _run_json_stage("结构规划", layout_prompt)
+        _update_job(job_id, stage="render", layout=layout_data)
+
+        report_prompt = _build_report_prompt(processed_data, insight_data, layout_data)
+        html_report = _call_model(report_prompt)
+
         _update_job(
             job_id,
             status="ready",
-            report=text,
+            stage="ready",
+            report=html_report,
             model=_model_name,
             finished_at=_current_time_iso(),
         )
@@ -405,6 +546,7 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
         _update_job(
             job_id,
             status="failed",
+            stage="failed",
             error=str(exc),
             finished_at=_current_time_iso(),
         )
@@ -419,10 +561,14 @@ def enqueue_ai_report_job(payload: Dict[str, Any]) -> str:
     snapshot = {
         "job_id": job_id,
         "status": "pending",
+        "stage": "pending",
         "created_at": _current_time_iso(),
+        "started_at": None,
         "report": None,
         "error": None,
         "model": None,
+        "insight": None,
+        "layout": None,
     }
     with _lock:
         _jobs[job_id] = snapshot

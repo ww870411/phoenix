@@ -1,5 +1,22 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-27 数据分析 AI 报告阶段进度 UI）
+
+- `pages/DataAnalysisView.vue` 现在在“智能报告生成中…”提示后附加 `阶段 x/3：…` 字串，分别对应洞察分析/结构规划/页面渲染三个阶段；任务刚入队会显示 `阶段 0/3`，完成时提示自动消失，失败仍显示后端返回的错误信息。
+- 轮询 `/data_analysis/ai_report/{job_id}` 及“下载智能分析报告”前的即时查询都会读取 `payload.stage` 并刷新阶段提示；切换单位、重新发起查询或关闭智能报告时会同步清空阶段状态，避免沿用旧任务的进度。
+- 本次仅改前端 UI，接口契约不变，仍依赖后端返回的 `stage` 字段；若要回滚，恢复 `DataAnalysisView.vue` 即可。
+
+## 会话小结（2025-12-27 AI 报告 HTML 输出提醒）
+
+- 后端调整 AI 报告 Prompt，模型必须输出纯 HTML（禁止 ```html/```css 代码块），页头需包含单位/模式/日期、正文含逐日明细表与可切换图表控件；每个指标的 `timeline_entries` 已在 payload 中提供，供渲染逐日表时使用。
+- 前端无需改动即可消费新版 HTML，但在调试或内嵌展示时可假定输出总是 `<html>...</html>` 结构；若检测到 Markdown 包裹，可提示后端重新生成。
+
+## 会话小结（2025-12-27 数据分析 AI 报告阶段化）
+
+- 后端 AI 报告接口现采三阶段执行（洞察 → 结构 → HTML），`/data_analysis/ai_report/{job_id}` 返回字段新增 `stage`（pending/insight/layout/render/ready/failed）、`insight`、`layout`、`started_at`，供前端展示生成进度或调试中间结果。
+- `DataAnalysisView.vue` 现有的“智能报告生成（BETA）”轮询逻辑无需改动即可享受新状态：如果需要更细粒度的提示，可根据 `stage` 显示“分析中/排版中/渲染中”；当接口返回 `insight/layout` 时，也可在 UI 中预览 JSON，便于定位模型输出问题。
+- 若模型输出非法 JSON，后端会在 2 次重试后将 job 标记为 `status=failed` 并附 `error` 描述（如“洞察分析 阶段多次解析失败”），前端的已有错误提示机制可直接展示该消息。
+
 ## 会话小结（2025-12-27 数据分析功能讨论）
 
 - 本轮与用户复盘 `pages/DataAnalysisView.vue` 的结构，确认单位/指标/日期筛选、温度指标权重默认勾选、`runAnalysis` 针对多单位串行调用 `/data_analysis/query` 并缓存结果、结果区的摘要/相关矩阵/同比与环比/计划比较、区间 RevoGrid 与趋势图、Excel 多 Sheet 导出等流程均已具备，暂未修改任何前端代码。

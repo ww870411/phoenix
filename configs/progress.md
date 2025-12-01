@@ -1,5 +1,59 @@
 # 进度记录
 
+## 2025-12-27（AI 报告多阶段生成）
+
+前置说明（降级留痕）：
+- 根目录 AGENTS 要求优先使用 Serena，但仓库同时强制“所有文本读写须通过 `apply_patch`”，且本次涉及 `.py/.md` 多文件段落级改写，Serena 写入会失败；因此依 3.9 降级矩阵全程使用 `apply_patch` 修改 `backend/services/data_analysis_ai_report.py`、`configs/progress.md`、`backend/README.md`、`frontend/README.md`，如需回滚恢复上述文件即可。
+
+本次动作：
+- 将 `backend/services/data_analysis_ai_report.py` 改造成“三阶段 LLM 管线”：阶段一“洞察分析”输出结构化 JSON（headline/key_findings/risks/recommendations/notable_metrics），阶段二“版面规划”生成章节/图表计划 JSON，阶段三再依据前两阶段结果和统一 CSS 让模型输出完整 HTML5 报告；每阶段都写入 `_jobs[job_id]`，并在状态中记录 `stage/insight/layout`，失败会返回对应阶段提示。
+- 新增 `_call_model/_run_json_stage/_build_insight_prompt/_build_layout_prompt/_build_report_prompt` 等辅助函数，自动拼装 JSON & CSS 提示词并带重试解析；`_calculate_correlation` fallback 分支补齐 `numerator = n * sum_xy - sum_x * sum_y`，避免相关系数无法计算。
+- `enqueue_ai_report_job` 的快照新增 `stage/started_at/insight/layout` 字段，前端查询 `/data_analysis/ai_report/{job_id}` 即可看到实时阶段；任务状态在“running → layout → render → ready/failed”之间流转，日志同步输出阶段信息。
+- `configs/progress.md`、后端/前端 README 分别登记本次改造的目的、接口影响、回滚与验证建议，满足“对话+改动留痕”要求。
+
+影响范围与回滚：
+- 后端：仅 `backend/services/data_analysis_ai_report.py`；恢复该文件即可回滚为旧版“一次性 Prompt”实现。
+- 文档：`configs/progress.md`、`backend/README.md`、`frontend/README.md` 追加会话小结；恢复这些段落即可撤销记录，接口行为不受影响。
+
+验证建议：
+1. 触发 `/data_analysis/query` 时勾选“智能报告生成（BETA）”，记录响应返回的 `ai_report_job_id`，随后轮询 `/data_analysis/ai_report/{id}`，应可看到 `stage` 依次进入 `insight/layout/render/ready` 并在 ready 时返回 HTML 字符串。
+2. 若故意让模型返回无法解析的 JSON，可在日志看到“阶段第 N 次解析失败”并于 2 次重试后宣告失败，接口返回 `status=failed` 与错误原因为 “洞察分析 阶段多次解析失败”。
+3. 阅读后端/前端 README 顶部会话小结，确认多阶段流程/状态字段/前端提示逻辑均已记录，便于后续协作者查阅。
+
+## 2025-12-27（前端 AI 报告阶段进度提示）
+
+前置说明：
+- Serena 对 `.vue` 大文件的符号级写入不稳定，且项目要求所有编辑通过 `apply_patch`，本次直接以 `apply_patch` 修改 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`、`frontend/README.md`；如需回滚恢复两处文件即可。本次无后端代码改动，仅消费既有 `/data_analysis/ai_report` 的阶段字段。
+
+本次动作：
+- `DataAnalysisView.vue` 新增 AI 报告阶段映射（洞察分析/结构规划/页面渲染），轮询 `/data_analysis/ai_report/{job_id}` 时根据 `stage` 字段输出“阶段 x/3：…”提示，默认 `阶段 0/3` 表示排队；开启智能报告后或下载前拉取实时状态时都统一显示该进度串。
+- 新增 `aiReportStage` state，切换单位、重新发起查询或关闭智能报告时会同步重置阶段，避免沿用旧任务的阶段提示。下载按钮在报告未 ready 时会回退到最新阶段提示并阻止导出。
+
+影响范围与回滚：
+- 仅 `DataAnalysisView.vue` 与 `frontend/README.md`；恢复两处变更即可移除阶段进度提示。
+
+验证建议：
+1. 勾选“智能报告生成（BETA）”后提交查询，观察“智能报告生成中…”后附带“阶段 0/3 → 1/3 → 2/3”，完成后提示消失。
+2. 在生成过程中切换单位或再次请求下载，阶段提示会同步更新，不会显示上一任务的阶段。
+
+## 2025-12-27（AI 报告 HTML 输出修订）
+
+前置说明：
+- 仅修改 `backend/services/data_analysis_ai_report.py` 的报告 Prompt，未触及前端代码；依照仓库要求使用 `apply_patch` 编辑 Python 文件、更新 README 与本文记录。
+
+本次动作：
+- `_preprocess_payload` 为每个指标新增 `timeline_entries`（含 date/current/peer/delta_pct），并继续保留 `timeline_json`；方便 Prompt 直接遍历结构化日数据。
+- `REPORT_PROMPT_TEMPLATE` 明确要求页头必须展示单位/模式/日期及生成时间，禁止模型输出任何 ```html/```css 代码块，并将“逐日明细表 + 指标切换图表”设为硬性要求，需使用 `timeline_entries` 构建表格。
+- `_build_report_prompt` 在拼装 CSS 片段时去掉 ```css 包裹，强调需直接写入 `<style>`。
+
+影响范围与回滚：
+- 仅 `backend/services/data_analysis_ai_report.py`；恢复该文件即可退回旧 Prompt。
+
+验证建议：
+1. 触发一次智能报告生成，确认输出 HTML 不再包含 ```html/```css 代码块。
+2. 报告页头应展示单位、分析模式和日期信息；若缺失单位即视为 Prompt 未生效，需要重新调整。
+3. 报告中每个指标都应出现逐日表格（从 `timeline_entries` 生成），若缺表格需查看 Prompt 执行日志。
+
 ## 2025-12-27（数据分析功能讨论与留痕）
 
 前置说明：

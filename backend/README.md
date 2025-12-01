@@ -1,5 +1,27 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 AI 报告阶段字段前端消费）
+
+- 本次无 FastAPI 或服务端代码改动，仅确认前端 `DataAnalysisView.vue` 会读取 `/data_analysis/ai_report/{job_id}` 响应中的 `stage` 字段，并据此在 UI 显示“阶段 x/3：…”的生成进度；后端仍按照 12-27 多阶段改造时定义的 `stage=insight/layout/render/ready/failed` 写入 `_jobs`。
+- 若后续调整阶段名称或数量，请同步更新前端枚举（洞察分析/结构规划/页面渲染）及 README，避免提示错位。
+
+# 会话小结（2025-12-27 AI 报告 Prompt 输出修订）
+
+- `backend/services/data_analysis_ai_report.py` 在 `_preprocess_payload` 为每个指标新增 `timeline_entries`（结构化的日数据 + delta_pct），供 Prompt 直接渲染表格。
+- `REPORT_PROMPT_TEMPLATE` 强化约束：禁止生成 ```html/```css 等 Markdown 代码块，要求页头明确展示 unit_label/analysis_mode/date 等信息，并新增“逐日明细表 + 指标切换图表”指示，确保每个指标都含日数据列表且图表支持切换。
+- `_build_report_prompt` 传递 CSS 时去掉 Markdown 样式，仅给出纯文本片段并提示模型嵌入 `<style>`，避免诱导输出围栏。
+- 若模型仍输出 Markdown，可再调整 Prompt 或在生成后做正则清洗；回滚只需恢复该文件到上一版本。
+
+# 会话小结（2025-12-27 数据分析 AI 报告多阶段管线）
+
+- `backend/services/data_analysis_ai_report.py` 由单次 Prompt 改为三段式流程：
+  1. **洞察分析阶段**：先调用 `_preprocess_payload` 得到本期/同比/环比/趋势/气温相关性指标，再用 `INSIGHT_PROMPT_TEMPLATE` 调度 Gemini 输出结构化 JSON（headline/key_findings/risks/recommendations/notable_metrics/temperature_effect）。
+  2. **版面规划阶段**：基于阶段一 JSON 生成章节规划、图表计划、callouts，所有内容仍要求模型返回 JSON，由 `_run_json_stage` 自动重试最多两次并在 `_jobs` 中写入 `insight/layout`。
+  3. **HTML 渲染阶段**：将预处理数据 + 洞察 JSON + 版面规划 JSON + 固定 CSS 拼成 `REPORT_PROMPT_TEMPLATE`，要求模型输出完整 HTML5（含统一样式、指标卡、数据洞察段落、callout 区、ECharts 双轴折线图）。
+- 公共 helper `_call_model` 负责统一处理 candidate/parts，`_run_json_stage` 针对 JSON 阶段自带解析与重试；`enqueue_ai_report_job` 的内存快照新增 `stage/started_at/insight/layout` 字段，`get_report_job` 查询结果据此可以展示实时阶段。
+- `_calculate_correlation` 的 fallback 分支补齐缺失的 numerator 运算，避免 Python 3.9 环境无 `statistics.correlation` 时相关系数恒为 0；异常信息会同步写入 job。
+- 回滚方式：恢复 `backend/services/data_analysis_ai_report.py` 即可返回旧版“一次 Prompt + Markdown 报告”逻辑。
+
 # 会话小结（2025-12-27 数据分析流程讨论）
 
 - 本轮仅与用户确认数据分析页面仍依赖现有 `/data_analysis/schema`（单位/指标/分析模式/小数位/默认日期）与 `/data_analysis/query`（本期/同期/环比/计划比较/逐日 timeline）接口，以及 `getDashboardBizDate` 提供的默认业务日，无任何 FastAPI 或 SQL 变更。

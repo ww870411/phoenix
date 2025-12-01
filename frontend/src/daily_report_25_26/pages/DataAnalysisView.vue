@@ -801,6 +801,42 @@ const aiReportJobId = ref('')
 const aiReportStatus = ref('idle')
 const aiReportContent = ref('')
 const aiReportStatusMessage = ref('')
+const aiReportStage = ref('')
+
+const AI_REPORT_STAGE_STEPS = [
+  { key: 'insight', order: 1, label: '洞察分析' },
+  { key: 'layout', order: 2, label: '结构规划' },
+  { key: 'render', order: 3, label: '页面渲染' },
+]
+const AI_REPORT_STAGE_TOTAL = AI_REPORT_STAGE_STEPS.length
+const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
+  acc[step.key] = step
+  return acc
+}, {})
+
+function formatAiReportProgress(stageKey) {
+  if (stageKey === 'ready') {
+    return `（阶段 ${AI_REPORT_STAGE_TOTAL}/${AI_REPORT_STAGE_TOTAL}：完成）`
+  }
+  const step = AI_REPORT_STAGE_LOOKUP[stageKey]
+  if (step) {
+    return `（阶段 ${step.order}/${AI_REPORT_STAGE_TOTAL}：${step.label}）`
+  }
+  return `（阶段 0/${AI_REPORT_STAGE_TOTAL}：等待任务启动）`
+}
+
+function buildAiRunningMessage(stageKey) {
+  return `智能报告生成中…${formatAiReportProgress(stageKey)}`
+}
+
+function updateAiReportStage(stageKey) {
+  aiReportStage.value = stageKey || ''
+}
+
+function setAiReportRunningMessage(stageKey) {
+  const key = stageKey || aiReportStage.value || 'pending'
+  aiReportStatusMessage.value = buildAiRunningMessage(key)
+}
 const timelineGrid = ref({ columns: [], rows: [] })
 const activeTimelineMetricKeys = ref([])
 
@@ -1541,13 +1577,15 @@ function resetAiReportState() {
   aiReportStatus.value = 'idle'
   aiReportContent.value = ''
   aiReportStatusMessage.value = ''
+  aiReportStage.value = ''
 }
 
 function startAiReportPolling(jobId) {
   clearAiReportPolling()
   if (!jobId) return
   aiReportStatus.value = 'pending'
-  aiReportStatusMessage.value = '智能报告生成中…'
+  updateAiReportStage('pending')
+  setAiReportRunningMessage('pending')
   const poll = async () => {
     try {
       const payload = await getDataAnalysisAiReport(projectKey.value, jobId)
@@ -1555,19 +1593,25 @@ function startAiReportPolling(jobId) {
         throw new Error(payload?.message || '获取智能报告失败')
       }
       const status = payload.status || 'pending'
+      const stageKey = payload.stage || ''
+      if (stageKey) {
+        updateAiReportStage(stageKey)
+      }
       aiReportStatus.value = status
       if (status === 'ready' && typeof payload.report === 'string') {
         aiReportContent.value = payload.report
         aiReportStatusMessage.value = ''
+        updateAiReportStage('ready')
         clearAiReportPolling()
         return
       }
       if (status === 'failed') {
         aiReportStatusMessage.value = payload.error || '智能报告生成失败'
+        updateAiReportStage('failed')
         clearAiReportPolling()
         return
       }
-      aiReportStatusMessage.value = '智能报告生成中…'
+      setAiReportRunningMessage(stageKey || 'pending')
     } catch (err) {
       aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
     }
@@ -1924,7 +1968,8 @@ async function runAnalysis() {
     }
     if (aiReportEnabled.value) {
       aiReportStatus.value = 'pending'
-      aiReportStatusMessage.value = '智能报告生成中…'
+      updateAiReportStage('pending')
+      setAiReportRunningMessage('pending')
       aiReportContent.value = ''
     } else {
       resetAiReportState()
@@ -2068,6 +2113,7 @@ function applyActiveUnitResult(unitKey) {
     } else {
       aiReportStatus.value = 'pending'
       aiReportStatusMessage.value = '已提交生成请求，等待后台任务启动…'
+      updateAiReportStage('')
       aiReportJobId.value = ''
     }
   } else {
@@ -2542,7 +2588,8 @@ async function downloadAiReport() {
         return
       } else {
         aiReportStatus.value = payload?.status || 'pending'
-        aiReportStatusMessage.value = '智能报告仍在生成中，请稍候…'
+        updateAiReportStage(payload?.stage || '')
+        setAiReportRunningMessage(payload?.stage || 'pending')
         return
       }
     }
@@ -2576,6 +2623,7 @@ watch(
     } else {
       aiReportStatus.value = 'pending'
       aiReportStatusMessage.value = '请生成分析结果后稍候，系统将自动获取智能报告'
+      updateAiReportStage('')
     }
   },
 )
