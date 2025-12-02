@@ -1,5 +1,11 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-27 北海分表分析视图说明）
+
+- 后端新增 `analysis_beihai_sub_daily/analysis_beihai_sub_sum` 视图并独立于 `analysis_company_*`，输出字段完全一致但以 `sheet_name` 粒度过滤（仅 `BeiHai_co_generation_Sheet`、`BeiHai_water_boiler_Sheet`）。本轮未改动前端代码，仅在此登记数据口径，后续若页面需要直接按模板查询，可在 API 层切换到新视图或新增 `/analysis_beihai_sub/*` 入口，前端无需额外适配即可消费。
+- 视图只暴露 9 个经济指标（内售热收入/煤成本/外购电/外购水/可计量辅材/直接收入/边际利润/可比煤价边际利润/全厂热效率）和底表原始行，若要在 UI 中展示其它指标，应继续调用现有 `analysis_company_*`。
+- 若未来需要根据 sheet_name 动态渲染 sub-view，可重用 data analysis 页现有的单位切换/指标映射逻辑，只需在接口中提供 `sheet_name` 列表或另建下拉选项即可；本次仅做文档说明，无构建或依赖更新。
+
 ## 会话小结（2025-12-27 数据分析 AI 报告阶段进度 UI）
 
 - `pages/DataAnalysisView.vue` 现在在“智能报告生成中…”提示后附加 `阶段 x/3：…` 字串，分别对应洞察分析/结构规划/页面渲染三个阶段；任务刚入队会显示 `阶段 0/3`，完成时提示自动消失，失败仍显示后端返回的错误信息。
@@ -1017,3 +1023,10 @@ docker compose up -d --build
 
 - `components/UnitAnalysisLite.vue` 增加环比比较：累计模式起止不同才计算，整月取上月、否则同长度上一段，最早不早于 2025-11-01；无可用上一周期则提示。
 - “同比比较/环比比较”表格居中显示，环比率带正负颜色；导出 Excel 时会包含环比比较分块或提示。
+
+## 会话小结（2025-12-02 北海分表分析视图说明）
+- 后端新增 `analysis_beihai_sub_daily` / `analysis_beihai_sub_sum` 视图，专供北海分表（热电/水锅炉）按 sheet_name 聚合的 9 个指标，口径与原公司级视图一致。
+- 前端当前页面无需改动；若后续需要按 sheet_name 维度展示，可直接调用上述视图并沿用原指标字段（item/item_cn/unit/value_*）。
+
+### 2025-12-02 本单位分析口径扩展（北海）
+- `components/UnitAnalysisLite.vue`：当单位为 BeiHai 时，新增“分析口径”单选，默认公司级，另可选择 `BeiHai_co_generation_Sheet`、`BeiHai_water_boiler_Sheet` 分表口径；切换后重新加载指标与结果，导出内容随口径变化。

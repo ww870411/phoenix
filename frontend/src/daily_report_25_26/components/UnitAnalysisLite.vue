@@ -37,6 +37,25 @@
               <input type="date" v-model="analysisEndDate" />
             </div>
           </div>
+          <div class="analysis-lite__field" v-if="analysisScopeOptions.length > 1">
+            <label>分析口径</label>
+            <div class="analysis-lite__scopes">
+              <label
+                v-for="opt in analysisScopeOptions"
+                :key="`scope-${opt.value}`"
+                class="chip checkbox"
+              >
+                <input
+                  type="radio"
+                  name="analysis-scope"
+                  :value="opt.value"
+                  :checked="opt.value === selectedAnalysisScope"
+                  @change="selectAnalysisScope(opt.value)"
+                />
+                <span class="chip-label">{{ opt.label }}</span>
+              </label>
+            </div>
+          </div>
           <div class="analysis-lite__field">
             <div class="analysis-lite__field-header">
               <label>指标选择（多选）</label>
@@ -449,10 +468,38 @@ const analysisUnitKey = computed(() => {
   if (entries.length) return entries[0][0]
   return ''
 })
-const unitLabel = computed(() => {
-  const key = analysisUnitKey.value
+const selectedAnalysisScope = ref('')
+const isBeiHaiUnit = computed(() => {
+  const key = normalizeUnitValue(props.unitKey).toLowerCase()
+  const name = normalizeUnitValue(props.unitName).toLowerCase()
+  return key === 'beihai' || name === 'beihai' || name.includes('北海')
+})
+const resolveUnitLabelByKey = (key) => {
+  if (!key) return ''
   const dict = analysisUnitDict.value || {}
-  if (key && dict[key]) return dict[key]
+  if (dict[key]) return dict[key]
+  return stripSheetSuffix(key) || key
+}
+const analysisScopeOptions = computed(() => {
+  const options = []
+  const primaryKey = analysisUnitKey.value
+  if (primaryKey) {
+    options.push({ value: primaryKey, label: resolveUnitLabelByKey(primaryKey) })
+  }
+  if (isBeiHaiUnit.value) {
+    ;['BeiHai_co_generation_Sheet', 'BeiHai_water_boiler_Sheet'].forEach((key) => {
+      if (key && !options.find((item) => item.value === key)) {
+        options.push({ value: key, label: resolveUnitLabelByKey(key) })
+      }
+    })
+  }
+  return options
+})
+const effectiveAnalysisUnitKey = computed(() => selectedAnalysisScope.value || analysisUnitKey.value)
+const unitLabel = computed(() => {
+  const key = effectiveAnalysisUnitKey.value
+  const label = resolveUnitLabelByKey(key)
+  if (label) return label
   return props.unitName || props.unitKey || props.sheetKey || '未知单位'
 })
 
@@ -816,7 +863,7 @@ async function ensureAnalysisSchema() {
   analysisSchemaError.value = ''
   try {
     const payload = await getUnitAnalysisMetrics(props.projectKey, {
-      unit_key: props.unitKey || props.sheetKey,
+      unit_key: effectiveAnalysisUnitKey.value || props.unitKey || props.sheetKey,
     })
     if (!payload?.ok) {
       throw new Error(payload?.message || '分析配置加载失败')
@@ -849,6 +896,10 @@ function selectAllAnalysisMetrics() {
 
 function clearAnalysisMetrics() {
   selectedMetricKeys.value = new Set()
+}
+
+function selectAnalysisScope(value) {
+  selectedAnalysisScope.value = value || ''
 }
 
 function resetAnalysisResult() {
@@ -1722,7 +1773,7 @@ async function runUnitAnalysis() {
       analysis_mode: 'range',
       start_date: analysisStartDate.value,
       end_date: analysisEndDate.value,
-      unit_key: unitKey,
+      unit_key: effectiveAnalysisUnitKey.value || unitKey,
     }
     const prevRangeInfo = computePreviousRangeForRing(analysisStartDate.value, analysisEndDate.value)
     // data_entry 页面传入的 config 指向填报模板，不适用于分析接口，这里不透传 config 以使用后端默认配置
@@ -1769,6 +1820,32 @@ async function runUnitAnalysis() {
     analysisLoading.value = false
   }
 }
+
+watch(
+  analysisScopeOptions,
+  (options) => {
+    if (!Array.isArray(options) || !options.length) {
+      selectedAnalysisScope.value = ''
+      return
+    }
+    if (!selectedAnalysisScope.value || !options.find((item) => item.value === selectedAnalysisScope.value)) {
+      selectedAnalysisScope.value = options[0].value
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => selectedAnalysisScope.value,
+  () => {
+    analysisSchema.value = null
+    selectedMetricKeys.value = new Set()
+    resetAnalysisResult()
+    if (!analysisFolded.value) {
+      ensureAnalysisSchema()
+    }
+  },
+)
 
 watch(
   () => props.bizDate,

@@ -1,5 +1,25 @@
 # 进度记录
 
+## 2025-12-27（analysis_beihai_sub 视图）
+
+前置说明：
+- 根目录 AGENTS 要求 Serena 优先，但创建整段 SQL/文档记录在符号层面不受 Serena 支持，且仓库另外强制所有文本写入必须通过 `apply_patch`；本次在 `backend/sql/analysis_beihai_sub.sql`、`backend/README.md`、`frontend/README.md`、`configs/progress.md` 统一使用 `apply_patch` 完成变更。如需回滚，依次恢复上述文件最新段落即可。
+
+本次动作：
+- 新增脚本 `backend/sql/analysis_beihai_sub.sql`，定义 `analysis_beihai_sub_daily` 与 `analysis_beihai_sub_sum` 两个视图：结构完全沿用 `analysis_company_daily/sum` 的 params/base/const/calc 链条，将维度扩展为 `sheet_name + company` 并限制在 `company='BeiHai'`、`sheet_name ∈ {BeiHai_co_generation_Sheet, BeiHai_water_boiler_Sheet}`。
+- base CTE 在日视图按 `phoenix.biz_date`（默认 T-1）仅拉取当日/同期的行，累计视图按 `phoenix.sum_start_date/sum_end_date` 累加；两者都只再输出 9 个经济指标（内售热收入、煤成本、外购电/水、可计量辅材、直接收入、边际利润、可比煤价边际利润、全厂热效率），其余 calc_* 仅作为依赖保留。
+- `calc_direct_income/calc_marginal_profit/calc_comparable_marginal_profit` 全部按 sheet 粒度重新聚合，`calc_selected` 只 `UNION ALL` 指定 9 项并与 base 结果拼接，供后续 API 直接按模板粒度查询。
+- 在 `backend/README.md`、`frontend/README.md` 分别新增会话小结，描述视图作用、字段口径与前端调用注意事项，满足“前后端 README 同步结构”要求。
+
+影响范围与回滚：
+- 新增 SQL 文件只在手动执行 `psql -f backend/sql/analysis_beihai_sub.sql` 时创建视图，对现有 `analysis.sql` 不产生侵入；若需撤销，删除该文件并 `DROP VIEW analysis_beihai_sub_*` 即可。
+- 文档仅追加会话记录，恢复对应段落即可撤销说明。
+
+验证建议：
+1. 复制 `backend/sql/analysis_beihai_sub.sql` 在数据库中执行，随后运行 `SELECT COUNT(*) FROM analysis_beihai_sub_daily;`，确认视图创建成功（没有列错或语法报错）。
+2. 执行 `SET LOCAL phoenix.biz_date = '2025-11-15'; SELECT DISTINCT sheet_name FROM analysis_beihai_sub_daily;` 应仅返回 `BeiHai_co_generation_Sheet` 与 `BeiHai_water_boiler_Sheet`，各自包含原始底表行 + 9 个 calc 指标。
+3. 设置 `SET LOCAL phoenix.sum_start_date='2025-11-01'; SET LOCAL phoenix.sum_end_date='2025-11-20';` 后查询 `analysis_beihai_sub_sum`，核对 `eco_direct_income` 是否等于售电/内售热/暖/高温水/售汽之和，`rate_overall_efficiency` 与 `analysis_company_sum` 中 `company='BeiHai'` 且 `sheet_name` 对应记录的值一致。
+
 ## 2025-12-27（AI 报告多阶段生成）
 
 前置说明（降级留痕）：
@@ -2942,3 +2962,31 @@ sum_basic_data 相关：
 验证建议：
 1) 选择同月区间运行分析或本单位分析，确认页面与导出中的“计划比较”表格、完成率进度条与提示一致，完成率 = 实际/计划。
 2) 选择跨月区间运行，应看不到计划比较与相关摘要/表格，验证兼容旧版行为。
+
+## 2025-12-02（北海分表分析视图补充）
+
+前置说明（降级留痕）：
+- Serena 对大体量 SQL 非符号文件不支持精确写入，本次按治理 3.9 矩阵使用 Desktop Commander `write_file` 重写 `backend/sql/analysis_beihai_sub.sql`；回滚恢复该文件即可。
+
+本次动作：
+- 新增/重写 `analysis_beihai_sub_daily`、`analysis_beihai_sub_sum` 视图（过滤 `company='BeiHai'` 且 sheet_name ∈ {BeiHai_co_generation_Sheet, BeiHai_water_boiler_Sheet}），聚合同步输出指定 9 个指标：内售热收入、煤成本、外购电成本、购水成本、可计量辅材成本、直接收入、边际利润、可比煤价边际利润、全厂热效率。
+- 累计视图支持 `phoenix.sum_start_date/sum_end_date` 区间，暖收入按区间天数缩放；日视图默认 `phoenix.biz_date`（缺省为昨天），同比取去年同日/同区间。
+
+影响范围与回滚：
+- 新增视图供查询/分析使用，未修改原 `analysis.sql` 逻辑；如需回退删除，恢复旧版 `backend/sql/analysis_beihai_sub.sql` 或直接 `DROP VIEW` 这两个视图。
+
+验证建议：
+1) `psql -f backend/sql/analysis_beihai_sub.sql` 刷新视图不应报错。
+2) `SELECT * FROM analysis_beihai_sub_daily WHERE item='eco_inner_heat_supply_income' LIMIT 5;` 应返回北海分表按日的数据/同比。
+3) 设置 `SET phoenix.sum_start_date='2025-11-01'; SET phoenix.sum_end_date='2025-11-07'; SELECT * FROM analysis_beihai_sub_sum WHERE item='eco_marginal_profit';` 应得到区间累计及同期对照。
+## 2025-12-02（前端本单位分析增加北海分表口径切换）
+
+- `UnitAnalysisLite.vue` 在单位为 BeiHai 时新增“分析口径”单选，默认公司级口径，额外提供 `BeiHai_co_generation_Sheet`、`BeiHai_water_boiler_Sheet` 两个分表视图选择，分析与导出均使用选定口径的指标数据。
+- 选项变化会重新加载分析指标与结果，当前单位标签随所选口径更新。
+
+影响与回滚：
+- 仅前端分析组件逻辑与 UI 变更，回滚恢复 `frontend/src/daily_report_25_26/components/UnitAnalysisLite.vue` 即可。
+
+验证建议：
+1) 在北海填报页展开“本单位数据分析”，看到“分析口径”单选，默认公司级；切换到两个分表仍能加载指标、生成结果与导出 Excel。
+2) 非北海单位不显示口径切换，行为与此前一致。

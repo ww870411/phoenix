@@ -1,5 +1,11 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 北海分表分析视图）
+
+- 新增 `backend/sql/analysis_beihai_sub.sql`，定义 `analysis_beihai_sub_daily`（读取 `phoenix.biz_date` 当日/同期）与 `analysis_beihai_sub_sum`（读取 `phoenix.sum_start_date/sum_end_date` 区间）两张视图：复用 `analysis_company_daily/sum` 的 params/base/const/calc 链条，并限制 `company='BeiHai'` 且 `sheet_name ∈ {BeiHai_co_generation_Sheet, BeiHai_water_boiler_Sheet}`，所有 CTE 均输出 `sheet_name` 以便直接按模板过滤。
+- base 仍保留原始 `daily_basic_data` 行，calc 链只向最终结果输出 9 个指标（内售热收入、煤成本、外购电/水、可计量辅材、直接收入、边际利润、可比煤价边际利润、全厂热效率），其余 calc_* 仅作为依赖存在；`calc_direct_income/eco_marginal_profit/eco_comparable_marginal_profit` 在 sheet 粒度重算，常量 CTE 只加载 BeiHai 公司的价格/面积等参数。
+- 使用方式：部署后执行 `psql -f backend/sql/analysis_beihai_sub.sql` 创建视图 → 通过 `SET LOCAL phoenix.biz_date = :date` 或设置累计区间后直接 `SELECT * FROM analysis_beihai_sub_daily|sum WHERE sheet_name='BeiHai_co_generation_Sheet'`；如需回滚，`DROP VIEW analysis_beihai_sub_daily; DROP VIEW analysis_beihai_sub_sum;` 并删除脚本即可。
+
 # 会话小结（2025-12-27 AI 报告阶段字段前端消费）
 
 - 本次无 FastAPI 或服务端代码改动，仅确认前端 `DataAnalysisView.vue` 会读取 `/data_analysis/ai_report/{job_id}` 响应中的 `stage` 字段，并据此在 UI 显示“阶段 x/3：…”的生成进度；后端仍按照 12-27 多阶段改造时定义的 `stage=insight/layout/render/ready/failed` 写入 `_jobs`。
@@ -1216,3 +1222,11 @@ out = render_spec(
 ## 会话小结（2025-12-18 数据分析环比提示）
 
 - 前端 `DataAnalysisView.vue` 增加区间环比比较（同长度上一周期、整月取上月，最早不早于 2025-11-01），后端接口保持不变；如需支持更早日期，可在后端放宽最小日期并同步更新前端逻辑。
+
+## 会话小结（2025-12-02 北海分表分析视图）
+- 新增 `backend/sql/analysis_beihai_sub.sql` 定义视图 `analysis_beihai_sub_daily`、`analysis_beihai_sub_sum`，仅对 `company='BeiHai'` 且 `sheet_name` ∈ {BeiHai_co_generation_Sheet, BeiHai_water_boiler_Sheet} 聚合。
+- 输出 9 个指标：内售热收入、煤成本、外购电成本、购水成本、可计量辅材成本、直接收入、边际利润、可比煤价边际利润、全厂热效率；日视图按 `phoenix.biz_date`，累计视图按 `phoenix.sum_start_date/sum_end_date`，暖收入按天数缩放。
+- 使用方法：`psql -f backend/sql/analysis_beihai_sub.sql` 刷新后，可直接 `SELECT * FROM analysis_beihai_sub_daily WHERE item='eco_direct_income';` 或设置区间参数查询累计视图。
+
+### 2025-12-02 北海分表分析口径切换（前端配合说明）
+- 前端 `UnitAnalysisLite.vue` 增加北海公司口径切换（公司级 + 2 个分表），后端可直接复用现有分析接口/视图（含 `analysis_beihai_sub_*`）。无需额外接口调整，保持指标字段一致。
