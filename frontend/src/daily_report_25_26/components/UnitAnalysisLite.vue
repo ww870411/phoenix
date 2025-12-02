@@ -39,21 +39,13 @@
           </div>
           <div class="analysis-lite__field" v-if="analysisScopeOptions.length > 1">
             <label>分析口径</label>
-            <div class="analysis-lite__scopes">
-              <label
-                v-for="opt in analysisScopeOptions"
-                :key="`scope-${opt.value}`"
-                class="chip checkbox"
-              >
-                <input
-                  type="radio"
-                  name="analysis-scope"
-                  :value="opt.value"
-                  :checked="opt.value === selectedAnalysisScope"
-                  @change="selectAnalysisScope(opt.value)"
-                />
-                <span class="chip-label">{{ opt.label }}</span>
-              </label>
+            <div class="analysis-lite__scopes analysis-lite__select">
+              <select v-model="selectedAnalysisScope">
+                <option v-for="opt in analysisScopeOptions" :key="`scope-${opt.value}`" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <span class="analysis-lite__hint">默认为公司口径，可切换分表</span>
             </div>
           </div>
           <div class="analysis-lite__field">
@@ -469,33 +461,44 @@ const analysisUnitKey = computed(() => {
   return ''
 })
 const selectedAnalysisScope = ref('')
+const BEIHAI_SCOPE_LABELS = {
+  BeiHai: '北海汇总',
+  BeiHai_co_generation_Sheet: '北海热电联产',
+  BeiHai_water_boiler_Sheet: '北海水炉',
+}
+const BEIHAI_SCOPE_KEYS = new Set(Object.keys(BEIHAI_SCOPE_LABELS))
 const isBeiHaiUnit = computed(() => {
   const key = normalizeUnitValue(props.unitKey).toLowerCase()
   const name = normalizeUnitValue(props.unitName).toLowerCase()
-  return key === 'beihai' || name === 'beihai' || name.includes('北海')
+  const sheet = normalizeUnitValue(props.sheetKey).toLowerCase()
+  return key === 'beihai' || name === 'beihai' || sheet.startsWith('beihai_') || name.includes('北海')
 })
+const isBeiHaiScope = (key) => BEIHAI_SCOPE_KEYS.has(normalizeUnitValue(key))
 const resolveUnitLabelByKey = (key) => {
   if (!key) return ''
+  if (BEIHAI_SCOPE_LABELS[key]) return BEIHAI_SCOPE_LABELS[key]
   const dict = analysisUnitDict.value || {}
   if (dict[key]) return dict[key]
   return stripSheetSuffix(key) || key
 }
 const analysisScopeOptions = computed(() => {
   const options = []
-  const primaryKey = analysisUnitKey.value
-  if (primaryKey) {
-    options.push({ value: primaryKey, label: resolveUnitLabelByKey(primaryKey) })
-  }
   if (isBeiHaiUnit.value) {
-    ;['BeiHai_co_generation_Sheet', 'BeiHai_water_boiler_Sheet'].forEach((key) => {
+    ;['BeiHai', 'BeiHai_co_generation_Sheet', 'BeiHai_water_boiler_Sheet'].forEach((key) => {
       if (key && !options.find((item) => item.value === key)) {
         options.push({ value: key, label: resolveUnitLabelByKey(key) })
       }
     })
+  } else {
+    const primaryKey = analysisUnitKey.value
+    if (primaryKey) {
+      options.push({ value: primaryKey, label: resolveUnitLabelByKey(primaryKey) })
+    }
   }
   return options
 })
 const effectiveAnalysisUnitKey = computed(() => selectedAnalysisScope.value || analysisUnitKey.value)
+const schemaUnitKey = computed(() => (isBeiHaiScope(effectiveAnalysisUnitKey.value) ? 'BeiHai' : effectiveAnalysisUnitKey.value))
 const unitLabel = computed(() => {
   const key = effectiveAnalysisUnitKey.value
   const label = resolveUnitLabelByKey(key)
@@ -863,7 +866,7 @@ async function ensureAnalysisSchema() {
   analysisSchemaError.value = ''
   try {
     const payload = await getUnitAnalysisMetrics(props.projectKey, {
-      unit_key: effectiveAnalysisUnitKey.value || props.unitKey || props.sheetKey,
+      unit_key: schemaUnitKey.value || props.unitKey || props.sheetKey,
     })
     if (!payload?.ok) {
       throw new Error(payload?.message || '分析配置加载失败')
@@ -898,9 +901,6 @@ function clearAnalysisMetrics() {
   selectedMetricKeys.value = new Set()
 }
 
-function selectAnalysisScope(value) {
-  selectedAnalysisScope.value = value || ''
-}
 
 function resetAnalysisResult() {
   analysisResult.value = { rows: [], warnings: [], meta: null, ringCompare: null, planComparison: null }
@@ -1773,7 +1773,10 @@ async function runUnitAnalysis() {
       analysis_mode: 'range',
       start_date: analysisStartDate.value,
       end_date: analysisEndDate.value,
-      unit_key: effectiveAnalysisUnitKey.value || unitKey,
+      // 后端单位仍按公司口径（避免未知单位），scope_key 标识用户选择的分表以便路由子视图
+      unit_key: schemaUnitKey.value || 'BeiHai',
+      scope_key: effectiveAnalysisUnitKey.value || unitKey,
+      schema_unit_key: schemaUnitKey.value || 'BeiHai',
     }
     const prevRangeInfo = computePreviousRangeForRing(analysisStartDate.value, analysisEndDate.value)
     // data_entry 页面传入的 config 指向填报模板，不适用于分析接口，这里不透传 config 以使用后端默认配置
@@ -1829,7 +1832,9 @@ watch(
       return
     }
     if (!selectedAnalysisScope.value || !options.find((item) => item.value === selectedAnalysisScope.value)) {
-      selectedAnalysisScope.value = options[0].value
+      // 北海默认公司口径，否则取首项
+      const preferCompany = options.find((item) => item.value === 'BeiHai')
+      selectedAnalysisScope.value = preferCompany ? preferCompany.value : options[0].value
     }
   },
   { immediate: true },

@@ -1030,3 +1030,13 @@ docker compose up -d --build
 
 ### 2025-12-02 本单位分析口径扩展（北海）
 - `components/UnitAnalysisLite.vue`：当单位为 BeiHai 时，新增“分析口径”单选，默认公司级，另可选择 `BeiHai_co_generation_Sheet`、`BeiHai_water_boiler_Sheet` 分表口径；切换后重新加载指标与结果，导出内容随口径变化。
+- 北海单位“分析口径”改为下拉框并默认公司口径，热电/水锅炉分表与公司并列可选，指标一致。- 北海默认口径文案更新为“北海汇总”。- 北海分表口径文案：热电分表“北海热电联产”，水锅炉分表“北海水炉”。- 北海分表口径指标统一用公司口径加载，确保指标一致，结果按所选分表查询。- 北海分表口径接口参数：unit_key 固定 BeiHai，scope_key 携带所选分表，防止未知单位错误；后端若需要区分分表可据 scope_key 处理。- 分表口径查询参数：unit_key=所选口径（含分表），schema_unit_key=BeiHai（加载指标），scope_key=所选分表，便于后端切换 `analysis_beihai_sub_*` 视图。- 分表分析请求：unit_key=BeiHai（公司口径），scope_key=分表，用于后端选择北海子视图；schema_unit_key 仍为 BeiHai 以加载指标。- 北海分表分析后端已支持 scope_key 分流到子视图（analysis_beihai_sub_daily/sum），前端无需额外修改。
+# 会话小结（2025-12-02 数据分析接口 scope_key 修复）
+
+- 后端修复：`backend/api/v1/daily_report_25_26.py` 中的 `DataAnalysisQueryPayload` 补充了 `scope_key` 和 `schema_unit_key` 字段。
+
+# 会话小结（2025-12-02 数据分析接口异常修复）
+
+- 后端修复了查询气温指标时的 500 错误（Tuple 解包问题）。
+- 后端修复了北海分表查询时误报“不支持该指标”的问题。前端无需改动，现在切换分表口径后应能正常展示数据。
+

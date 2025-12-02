@@ -2990,3 +2990,42 @@ sum_basic_data 相关：
 验证建议：
 1) 在北海填报页展开“本单位数据分析”，看到“分析口径”单选，默认公司级；切换到两个分表仍能加载指标、生成结果与导出 Excel。
 2) 非北海单位不显示口径切换，行为与此前一致。
+- UI 调整：北海单位的口径选择改为下拉框，默认选中公司口径（BeiHai），并与热电/水锅炉两分表并列。- 口径标签微调：北海公司口径显示为“北海汇总”。- 口径标签再调整：分表显示为“北海热电联产”“北海水炉”。- 修复：北海分表口径请求分析指标时统一使用公司口径加载（schema_unit_key=BeiHai），避免分表缺指标，仅指标口径一致；结果仍按所选分表 unit_key 查询。- 修复：分表口径分析请求统一使用公司 unit_key（BeiHai）并携带 scope_key 为所选分表，避免“未知单位”错误，后端可据 scope_key 定向视图。
+- 调整查询参数：schema_unit_key 保持公司口径加载指标，unit_key 切换为用户选择的口径（含分表），附带 scope_key 以提示后端选用对应分表视图。- 修复：分表查询统一传 unit_key=BeiHai（公司口径），scope_key=所选分表，用于后端路由 `analysis_beihai_sub_*`，避免“未知单位”错误。
+- 后端 data_analysis：当 scope_key 为北海分表时，自动切换视图（daily→analysis_beihai_sub_daily，range→analysis_beihai_sub_sum），查询传递 sheet_name 过滤；timeline 同步使用分表日视图。- 后端 data_analysis 接口（api/v1/daily_report_25_26.py）：接受 scope_key/schema_unit_key，北海分表口径切换到 analysis_beihai_sub_daily/sum，并按 sheet_name 过滤；timeline 同步使用分表日视图；请求模型兼容 legacy 调用。
+- CORS 放宽：backend/main.py 默认 allow_origins=["*"]，避免本地端口差异导致跨域失败；仍可通过 PHOENIX_CORS_ORIGINS 环境变量收紧。
+
+## 2025-12-02（数据分析接口 scope_key 修复）
+
+前置说明（降级留痕）：
+- 根目录 AGENTS 要求 Markdown 编辑使用 `apply_patch`，本次动作涉及 `backend/api/v1/daily_report_25_26.py` 的 Pydantic 模型修正与文档记录；如需回滚，恢复该 Python 文件即可。
+
+本次动作：
+- 修正 `backend/api/v1/daily_report_25_26.py` 中的 `DataAnalysisQueryPayload` 模型定义，显式添加 `scope_key` 与 `schema_unit_key` 字段（均为 `Optional[str] = None`）。
+- 原因：前端 `UnitAnalysisLite.vue` 在请求分析时会发送 `scope_key`（用于区分北海分厂子表），但后端 Pydantic 模型缺失该字段导致参数被过滤，进而导致后端逻辑 `is_beihai_sub_scope` 判定失效，错误地回落到默认汇总视图。
+- 修复后：后端能正确接收 `scope_key`，并根据 `BEIHAI_SUB_SCOPES` 判定切换至 `analysis_beihai_sub_daily/sum` 视图，从而正确返回子表数据而非汇总数据。
+
+影响范围与回滚：
+- 仅影响 `/data_analysis/query` 接口对 `scope_key` 参数的接收；回滚时删除模型中的这两个字段即可复现 bug。
+
+验证建议：
+1. 在数据填报页面进入“北海热电厂”或“北海水炉”，展开“本单位数据分析”。
+2. 切换分析口径为“北海热电联产”或“北海水炉”，点击“生成汇总对比”。
+
+## 2025-12-02（数据分析接口 500 错误与指标支持修复）
+
+前置说明（降级留痕）：
+- 本次修复针对 `backend/api/v1/daily_report_25_26.py` 中的两个问题，继续使用 `apply_patch` 进行修正并记录。
+
+本次动作：
+1.  **修复 `tuple object has no attribute get` 错误**：修改 `_query_temperature_rows` wrapper 函数，使其解包 `data_analysis_service._query_temperature_rows` 返回的元组，只返回结果字典。此前直接返回元组导致后续代码尝试对元组调用 `.get()` 时崩溃。
+2.  **修复子表指标被误判为“不支持”**：在 `_execute_data_analysis_query_legacy` 的指标校验逻辑中添加特例处理。如果当前视图是 `analysis_beihai_sub_*`（分表视图），则会检查其对应的 `analysis_company_*`（公司视图）是否在指标的允许视图列表中。如果公司视图允许，则分表视图也默认允许，从而解决切换到分表口径后提示“当前视图不支持以下指标”的问题。
+3.  **增强错误捕获**：在 `_execute_data_analysis_query` 中添加顶层 `try...except` 块，捕获所有未处理异常并返回 500 JSON 响应，避免前端因 CORS 错误而白屏，便于调试。
+
+影响范围与回滚：
+- 仅影响数据分析接口；回滚时恢复 `daily_report_25_26.py` 即可。
+
+验证建议：
+1.  在“北海汇总”口径下选择“平均气温”或其他指标，生成分析结果，确认不再报错 500。
+2.  切换到“北海热电联产”分表口径，选择“供热量”等指标，确认不再提示“不支持该指标”，并能正常返回数据。
+

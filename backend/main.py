@@ -45,18 +45,16 @@ def create_app() -> FastAPI:
     if cors_origins_env:
         allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
     else:
-        allowed_origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost",
-            "http://127.0.0.1",
-        ]
+        # 默认放宽为全部来源，避免本地前端与后端端口不一致导致跨域失败
+        allowed_origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=86400,
     )
 
     # 挂载 v1 路由前缀：/api/v1

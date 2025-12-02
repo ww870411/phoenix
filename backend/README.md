@@ -1230,3 +1230,14 @@ out = render_spec(
 
 ### 2025-12-02 北海分表分析口径切换（前端配合说明）
 - 前端 `UnitAnalysisLite.vue` 增加北海公司口径切换（公司级 + 2 个分表），后端可直接复用现有分析接口/视图（含 `analysis_beihai_sub_*`）。无需额外接口调整，保持指标字段一致。
+- 前端口径选择改为下拉，北海默认公司口径，可切换两个分表（口径一致、指标同源）。- 北海公司口径文案改为“北海汇总”。- 北海分表口径文案：热电分表改为“北海热电联产”，水锅炉分表改为“北海水炉”。- 北海分表口径指标加载改为用公司口径获取 schema，避免分表缺失指标；查询仍用所选分表 unit_key。- 前端对北海分表分析统一以公司 unit_key=BeiHai 调用接口，附带 scope_key（分表）供后端区分，避免未知单位错误。- 前端分析请求：schema_unit_key 仍用公司（BeiHai）加载指标；unit_key 随用户口径（含分表）传递；scope_key 携带分表，便于后端路由至 `analysis_beihai_sub_*`。- 分表查询参数：unit_key 固定 BeiHai（防未知单位），scope_key 为所选分表，后端可据 scope_key 路由至 analysis_beihai_sub_* 视图。- data_analysis 路由支持北海分表：scope_key 为北海分表时切换视图至 analysis_beihai_sub_daily/analysis_beihai_sub_sum，并按 sheet_name 过滤。
+# 会话小结（2025-12-02 数据分析接口 scope_key 修复）
+
+- 修正 `backend/api/v1/daily_report_25_26.py` 中 `DataAnalysisQueryPayload` 模型，补充缺失的 `scope_key` 与 `schema_unit_key` 字段。
+
+# 会话小结（2025-12-02 数据分析接口异常修复）
+
+- 修复 `backend/api/v1/daily_report_25_26.py`：
+  1.  修正 `_query_temperature_rows` 返回值类型错误（Tuple -> Dict），解决查询气温指标时的 500 崩溃。
+  2.  放宽指标视图校验逻辑，允许 `analysis_beihai_sub_*` 继承 `analysis_company_*` 的指标白名单，解决分表查询时提示“指标不支持”的问题。
+  3.  增加全局异常捕获，确保 API 报错时返回标准 JSON 而非触发 CORS 错误。

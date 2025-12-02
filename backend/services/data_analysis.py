@@ -23,6 +23,7 @@ TEMPERATURE_COLUMN_MAP = {
     "min_temp": "min_temp",
 }
 TEMPERATURE_UNIT = "℃"
+BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
 
 
 def build_schema_payload(
@@ -320,12 +321,18 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         )
 
     unit_key = (payload.unit_key or "").strip()
+    scope_key = (getattr(payload, "scope_key", "") or "").strip()
+    schema_unit_key = (getattr(payload, "schema_unit_key", "") or "").strip()
+    if schema_unit_key and schema_unit_key in unit_dict:
+        unit_key = schema_unit_key
     if not unit_key or unit_key not in unit_dict:
         return JSONResponse(
             status_code=400,
             content={"ok": False, "message": f"未知单位: {unit_key or '未提供'}"},
         )
     unit_label = unit_dict.get(unit_key, unit_key)
+    is_beihai_sub_scope = scope_key in BEIHAI_SUB_SCOPES
+    sheet_name_filter: Optional[str] = scope_key if is_beihai_sub_scope else None
 
     unknown_metrics = [key for key in ordered_metrics if key not in metric_dict]
     if unknown_metrics:
@@ -373,13 +380,22 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
     if not mode_label:
         mode_label = "单日数据" if analysis_mode_value == "daily" else "累计数据"
 
-    active_view_name = _resolve_active_view_name(
-        schema_payload.get("view_mapping") or {},
-        mode_label,
-        unit_label,
-        analysis_mode_value,
-    )
     view_mapping = schema_payload.get("view_mapping") or {}
+    if is_beihai_sub_scope:
+        active_view_name = (
+            "analysis_beihai_sub_sum"
+            if analysis_mode_value == "range"
+            else "analysis_beihai_sub_daily"
+        )
+    else:
+        active_view_name = _resolve_active_view_name(
+            view_mapping,
+            mode_label,
+            unit_label,
+            analysis_mode_value,
+        )
+    # 使用公司口径做常量/指标映射，但查询可按 sheet 过滤
+    unit_key_for_query = unit_key
 
     metric_group_lookup = _build_metric_group_lookup(metric_groups)
     analysis_metric_keys: List[str] = []
@@ -415,10 +431,11 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
     try:
         analysis_rows = _query_analysis_rows(
             active_view_name,
-            unit_key,
+            unit_key_for_query,
             analysis_metric_keys,
             start_date,
             end_date,
+            sheet_name=sheet_name_filter,
         )
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "message": str(exc)})
@@ -460,26 +477,32 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
     timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
     if analysis_mode_value == "range":
         if analysis_metric_keys:
-            fallback_timeline_view = (
-                "analysis_groups_daily"
-                if unit_key in {"Group", "ZhuChengQu"}
-                else "analysis_company_daily"
-            )
-            timeline_view_name = _resolve_unit_view(
-                view_mapping,
-                "单日数据",
-                unit_label,
-                fallback=fallback_timeline_view,
-            )
+            if is_beihai_sub_scope:
+                timeline_view_name = "analysis_beihai_sub_daily"
+                timeline_sheet_name = sheet_name_filter
+            else:
+                fallback_timeline_view = (
+                    "analysis_groups_daily"
+                    if unit_key in {"Group", "ZhuChengQu"}
+                    else "analysis_company_daily"
+                )
+                timeline_view_name = _resolve_unit_view(
+                    view_mapping,
+                    "单日数据",
+                    unit_label,
+                    fallback=fallback_timeline_view,
+                )
+                timeline_sheet_name = None
             if timeline_view_name:
                 try:
                     timeline_rows_map.update(
                         _query_analysis_timeline(
                             timeline_view_name,
-                            unit_key,
+                            unit_key_for_query,
                             analysis_metric_keys,
                             start_date,
                             end_date,
+                            sheet_name=timeline_sheet_name,
                         )
                     )
                 except Exception as exc:  # pylint: disable=broad-except
@@ -897,12 +920,14 @@ def _query_analysis_rows(
     metric_keys: Sequence[str],
     start_date: date,
     end_date: date,
+    sheet_name: Optional[str] = None,
 ) -> Dict[str, Dict[str, Any]]:
     if not metric_keys:
         return {}
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法视图名称: {view_name}")
+    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
     stmt = (
         text(
             f"""
@@ -911,6 +936,7 @@ def _query_analysis_rows(
             FROM {sanitized}
             WHERE company = :company
               AND item IN :items
+              {sheet_clause}
             """
         ).bindparams(bindparam("items", expanding=True))
     )
@@ -919,7 +945,11 @@ def _query_analysis_rows(
             _apply_analysis_window_settings(session, sanitized, start_date, end_date)
             rows = session.execute(
                 stmt,
-                {"company": unit_key, "items": list(metric_keys)},
+                {
+                    "company": unit_key,
+                    "items": list(metric_keys),
+                    "sheet_name": sheet_name,
+                },
             ).mappings().all()
     result: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -936,6 +966,7 @@ def _query_analysis_timeline(
     metric_keys: Sequence[str],
     start_date: date,
     end_date: date,
+    sheet_name: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     if not metric_keys:
         return {}
@@ -944,6 +975,7 @@ def _query_analysis_timeline(
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法视图名称: {view_name}")
+    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
     stmt = (
         text(
             f"""
@@ -952,6 +984,7 @@ def _query_analysis_timeline(
             FROM {sanitized}
             WHERE company = :company
               AND item IN :items
+              {sheet_clause}
             """
         ).bindparams(bindparam("items", expanding=True))
     )
@@ -966,7 +999,11 @@ def _query_analysis_timeline(
                 )
                 rows = session.execute(
                     stmt,
-                    {"company": unit_key, "items": list(metric_keys)},
+                    {
+                        "company": unit_key,
+                        "items": list(metric_keys),
+                        "sheet_name": sheet_name,
+                    },
                 ).mappings().all()
         for row in rows:
             item_key = row.get("item")

@@ -74,6 +74,7 @@ COAL_STORAGE_NAME_MAP = {
 TEMPERATURE_COLUMN_MAP = data_analysis_service.TEMPERATURE_COLUMN_MAP
 TEMPERATURE_UNIT = data_analysis_service.TEMPERATURE_UNIT
 MAX_TIMELINE_DAYS = data_analysis_service.MAX_TIMELINE_DAYS
+BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
 
 logger = logging.getLogger(__name__)
 
@@ -1652,6 +1653,8 @@ class DataAnalysisQueryPayload(BaseModel):
     analysis_mode: Optional[str] = "daily"
     start_date: date
     end_date: Optional[date] = None
+    scope_key: Optional[str] = None
+    schema_unit_key: Optional[str] = None
     request_ai_report: bool = False
 
 
@@ -3229,9 +3232,10 @@ def _query_analysis_rows(
     metric_keys: Sequence[str],
     start_date: date,
     end_date: date,
+    sheet_name: Optional[str] = None,
 ) -> Dict[str, Dict[str, Any]]:
     return data_analysis_service._query_analysis_rows(
-        view_name, unit_key, metric_keys, start_date, end_date
+        view_name, unit_key, metric_keys, start_date, end_date, sheet_name=sheet_name
     )
 
 
@@ -3241,9 +3245,10 @@ def _query_analysis_timeline(
     metric_keys: Sequence[str],
     start_date: date,
     end_date: date,
+    sheet_name: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     return data_analysis_service._query_analysis_timeline(
-        view_name, unit_key, metric_keys, start_date, end_date
+        view_name, unit_key, metric_keys, start_date, end_date, sheet_name=sheet_name
     )
 
 
@@ -3258,9 +3263,10 @@ def _query_temperature_rows(
     end_date: date,
     analysis_mode: str,
 ) -> Dict[str, Dict[str, Any]]:
-    return data_analysis_service._query_temperature_rows(
+    result, _ = data_analysis_service._query_temperature_rows(
         view_name, metric_keys, start_date, end_date, analysis_mode
     )
+    return result
 
 
 def _build_metric_group_lookup(groups: Sequence[Dict[str, Any]]) -> Dict[str, str]:
@@ -3271,11 +3277,19 @@ def _execute_data_analysis_query(
     payload: DataAnalysisQueryPayload,
     schema_payload: Dict[str, Any],
 ) -> JSONResponse:
-    return data_analysis_service.execute_data_analysis_query(payload, schema_payload)
+    # 使用 legacy 版本以兼容当前定制逻辑
+    try:
+        return _execute_data_analysis_query_legacy(payload, schema_payload)
+    except Exception as exc:
+        logger.exception("执行数据分析查询时发生未捕获异常")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": f"服务器内部错误: {str(exc)}"},
+        )
 
 
 def _execute_data_analysis_query_legacy(
-    payload: DataAnalysisQueryPayload,
+    payload: Any,  # 原有签名兼容，实际为 DataAnalysisQueryPayload
     schema_payload: Dict[str, Any],
 ) -> JSONResponse:
     unit_dict = schema_payload.get("unit_dict") or {}
@@ -3284,20 +3298,27 @@ def _execute_data_analysis_query_legacy(
     metric_group_views = schema_payload.get("metric_group_views") or {}
     metric_decimals = schema_payload.get("metric_decimals") or {}
 
-    ordered_metrics = _unique_metric_keys(payload.metrics)
+    metrics_input = payload.metrics if hasattr(payload, "metrics") else payload.get("metrics", [])
+    ordered_metrics = _unique_metric_keys(metrics_input)
     if not ordered_metrics:
         return JSONResponse(
             status_code=400,
             content={"ok": False, "message": "至少需要选择一个指标"},
         )
 
-    unit_key = (payload.unit_key or "").strip()
+    scope_key = (payload.scope_key or "").strip() if hasattr(payload, "scope_key") else (payload.get("scope_key", "").strip() if isinstance(payload, dict) else "")
+    schema_unit_key = (payload.schema_unit_key or "").strip() if hasattr(payload, "schema_unit_key") else (payload.get("schema_unit_key", "").strip() if isinstance(payload, dict) else "")
+    unit_key = (payload.unit_key or "").strip() if hasattr(payload, "unit_key") else (payload.get("unit_key", "").strip() if isinstance(payload, dict) else "")
+    if schema_unit_key and schema_unit_key in unit_dict:
+        unit_key = schema_unit_key
     if not unit_key or unit_key not in unit_dict:
         return JSONResponse(
             status_code=400,
             content={"ok": False, "message": f"未知单位: {unit_key or '未提供'}"},
         )
     unit_label = unit_dict.get(unit_key, unit_key)
+    is_beihai_sub_scope = scope_key in BEIHAI_SUB_SCOPES
+    sheet_name_filter: Optional[str] = scope_key if is_beihai_sub_scope else None
 
     unknown_metrics = [key for key in ordered_metrics if key not in metric_dict]
     if unknown_metrics:
@@ -3355,13 +3376,20 @@ def _execute_data_analysis_query_legacy(
     if not mode_label:
         mode_label = "单日数据" if analysis_mode_value == "daily" else "累计数据"
 
-    active_view_name = _resolve_active_view_name(
-        schema_payload.get("view_mapping") or {},
-        mode_label,
-        unit_label,
-        analysis_mode_value,
-    )
     view_mapping = schema_payload.get("view_mapping") or {}
+    if is_beihai_sub_scope:
+        active_view_name = (
+            "analysis_beihai_sub_sum"
+            if analysis_mode_value == "range"
+            else "analysis_beihai_sub_daily"
+        )
+    else:
+        active_view_name = _resolve_active_view_name(
+            view_mapping,
+            mode_label,
+            unit_label,
+            analysis_mode_value,
+        )
 
     metric_group_lookup = _build_metric_group_lookup(metric_groups)
     analysis_metric_keys: List[str] = []
@@ -3383,8 +3411,15 @@ def _execute_data_analysis_query_legacy(
             continue
         allowed_views = metric_group_views.get(group_key) or []
         if allowed_views and active_view_name not in allowed_views:
-            unsupported_metrics.append(key)
-            continue
+            # 特殊处理北海分表视图：如果对应的公司视图允许，则分表视图也允许
+            allowed = False
+            if "analysis_beihai_sub_" in active_view_name:
+                fallback_view = active_view_name.replace("analysis_beihai_sub_", "analysis_company_")
+                if fallback_view in allowed_views:
+                    allowed = True
+            if not allowed:
+                unsupported_metrics.append(key)
+                continue
         analysis_metric_keys.append(key)
 
     if unsupported_metrics:
@@ -3401,6 +3436,7 @@ def _execute_data_analysis_query_legacy(
             analysis_metric_keys,
             start_date,
             end_date,
+            sheet_name=sheet_name_filter,
         )
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "message": str(exc)})
@@ -3438,17 +3474,22 @@ def _execute_data_analysis_query_legacy(
             )
     timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
     if analysis_mode_value == "range" and analysis_metric_keys:
-        fallback_timeline_view = (
-            "analysis_groups_daily"
-            if unit_key in {"Group", "ZhuChengQu"}
-            else "analysis_company_daily"
-        )
-        timeline_view_name = _resolve_unit_view(
-            view_mapping,
-            "单日数据",
-            unit_label,
-            fallback=fallback_timeline_view,
-        )
+        if is_beihai_sub_scope:
+            timeline_view_name = "analysis_beihai_sub_daily"
+            timeline_sheet_name = sheet_name_filter
+        else:
+            fallback_timeline_view = (
+                "analysis_groups_daily"
+                if unit_key in {"Group", "ZhuChengQu"}
+                else "analysis_company_daily"
+            )
+            timeline_view_name = _resolve_unit_view(
+                view_mapping,
+                "单日数据",
+                unit_label,
+                fallback=fallback_timeline_view,
+            )
+            timeline_sheet_name = None
         if timeline_view_name:
             try:
                 timeline_rows_map = _query_analysis_timeline(
@@ -3457,6 +3498,7 @@ def _execute_data_analysis_query_legacy(
                     analysis_metric_keys,
                     start_date,
                     end_date,
+                    sheet_name=timeline_sheet_name,
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("生成逐日明细失败: %s", exc)
