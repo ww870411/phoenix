@@ -1738,7 +1738,9 @@ function normalizeAnalysisMeta(responseMeta) {
   const end = responseMeta?.end_date || analysisEndDate.value
   return {
     unit_key: analysisUnitKey.value,
-    unit_label: responseMeta?.unit_label || unitLabel.value,
+    // 优先使用前端计算的 unitLabel，因为它准确反映了下拉框的选择（含子表信息）
+    // 后端返回的 unit_label 仅基于 unit_key (如 BeiHai)，无法区分前端的 scope
+    unit_label: unitLabel.value,
     analysis_mode_label: responseMeta?.analysis_mode_label || '累计数据',
     start_date: start,
     end_date: end,
