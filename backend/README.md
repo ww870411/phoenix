@@ -1235,9 +1235,8 @@ out = render_spec(
 
 - 修正 `backend/api/v1/daily_report_25_26.py` 中 `DataAnalysisQueryPayload` 模型，补充缺失的 `scope_key` 与 `schema_unit_key` 字段。
 
-# 会话小结（2025-12-02 数据分析接口异常修复）
 
-- 修复 `backend/api/v1/daily_report_25_26.py`：
-  1.  修正 `_query_temperature_rows` 返回值类型错误（Tuple -> Dict），解决查询气温指标时的 500 崩溃。
-  2.  放宽指标视图校验逻辑，允许 `analysis_beihai_sub_*` 继承 `analysis_company_*` 的指标白名单，解决分表查询时提示“指标不支持”的问题。
-  3.  增加全局异常捕获，确保 API 报错时返回标准 JSON 而非触发 CORS 错误。
+
+## 会话小结（2025-12-02 本单位分析口径交互优化）
+
+- 前端 `UnitAnalysisLite.vue` 交互调整（文案更新、保留指标选择），后端无变更。

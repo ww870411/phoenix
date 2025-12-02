@@ -1035,8 +1035,10 @@ docker compose up -d --build
 
 - 后端修复：`backend/api/v1/daily_report_25_26.py` 中的 `DataAnalysisQueryPayload` 补充了 `scope_key` 和 `schema_unit_key` 字段。
 
-# 会话小结（2025-12-02 数据分析接口异常修复）
 
-- 后端修复了查询气温指标时的 500 错误（Tuple 解包问题）。
-- 后端修复了北海分表查询时误报“不支持该指标”的问题。前端无需改动，现在切换分表口径后应能正常展示数据。
+
+## 会话小结（2025-12-02 本单位分析口径交互优化）
+
+- `UnitAnalysisLite.vue` 中北海分表口径文案已更新为“子表：...”。
+- 切换口径时现在会保留已选指标，不再自动清空，方便对比。
 

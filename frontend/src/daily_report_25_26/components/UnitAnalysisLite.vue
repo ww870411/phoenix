@@ -463,8 +463,8 @@ const analysisUnitKey = computed(() => {
 const selectedAnalysisScope = ref('')
 const BEIHAI_SCOPE_LABELS = {
   BeiHai: '北海汇总',
-  BeiHai_co_generation_Sheet: '北海热电联产',
-  BeiHai_water_boiler_Sheet: '北海水炉',
+  BeiHai_co_generation_Sheet: '子表：北海热电联产',
+  BeiHai_water_boiler_Sheet: '子表：北海水炉',
 }
 const BEIHAI_SCOPE_KEYS = new Set(Object.keys(BEIHAI_SCOPE_LABELS))
 const isBeiHaiUnit = computed(() => {
@@ -1843,8 +1843,6 @@ watch(
 watch(
   () => selectedAnalysisScope.value,
   () => {
-    analysisSchema.value = null
-    selectedMetricKeys.value = new Set()
     resetAnalysisResult()
     if (!analysisFolded.value) {
       ensureAnalysisSchema()
@@ -1981,6 +1979,41 @@ watch(
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 8px;
+}
+
+.analysis-lite__scopes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analysis-lite__scopes select {
+  appearance: none;
+  background-color: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 32px 8px 12px;
+  font-size: 14px;
+  color: var(--neutral-700);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 200px;
+}
+
+.analysis-lite__scopes select:focus {
+  outline: none;
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.analysis-lite__scopes .analysis-lite__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--neutral-500);
 }
 
 .analysis-lite__grid {

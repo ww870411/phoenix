@@ -79,7 +79,7 @@ calc_power AS (
     b.company,
     b.company_cn,
     'eco_power_supply_income'::text AS item,
-    '供热供电收入'::text            AS item_cn,
+    '其中：售电收入'::text            AS item_cn,
     '万元'::text                    AS unit,
     MAX(b.biz_date)                 AS biz_date,
     MAX(b.peer_date)                AS peer_date,
@@ -443,7 +443,8 @@ calc_overall_efficiency AS (
   GROUP BY b.sheet_name, b.company, b.company_cn
 ),
 calc_selected AS (
-  SELECT * FROM calc_inner_heat_supply_income
+  SELECT * FROM calc_power
+  UNION ALL SELECT * FROM calc_inner_heat_supply_income
   UNION ALL SELECT * FROM calc_coal_cost
   UNION ALL SELECT * FROM calc_purchased_power_cost
   UNION ALL SELECT * FROM calc_purchased_water_cost
@@ -532,7 +533,7 @@ calc_sum_power AS (
     b.company,
     b.company_cn,
     'eco_power_supply_income'::text AS item,
-    '供热供电收入'::text            AS item_cn,
+    '其中：售电收入'::text            AS item_cn,
     '万元'::text                    AS unit,
     MAX(b.biz_date) AS biz_date,
     MAX(b.peer_date) AS peer_date,
@@ -896,7 +897,8 @@ calc_sum_overall_efficiency AS (
   GROUP BY b.sheet_name, b.company, b.company_cn
 ),
 calc_sum_selected AS (
-  SELECT * FROM calc_sum_inner_heat_supply_income
+  SELECT * FROM calc_sum_power
+  UNION ALL SELECT * FROM calc_sum_inner_heat_supply_income
   UNION ALL SELECT * FROM calc_sum_coal_cost
   UNION ALL SELECT * FROM calc_sum_purchased_power_cost
   UNION ALL SELECT * FROM calc_sum_purchased_water_cost
