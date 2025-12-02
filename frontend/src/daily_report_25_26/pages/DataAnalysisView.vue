@@ -806,7 +806,7 @@ const aiReportStage = ref('')
 const AI_REPORT_STAGE_STEPS = [
   { key: 'insight', order: 1, label: '洞察分析' },
   { key: 'layout', order: 2, label: '结构规划' },
-  { key: 'render', order: 3, label: '页面渲染' },
+  { key: 'render', order: 3, label: '内容撰写与渲染' },
 ]
 const AI_REPORT_STAGE_TOTAL = AI_REPORT_STAGE_STEPS.length
 const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
@@ -818,11 +818,17 @@ function formatAiReportProgress(stageKey) {
   if (stageKey === 'ready') {
     return `（阶段 ${AI_REPORT_STAGE_TOTAL}/${AI_REPORT_STAGE_TOTAL}：完成）`
   }
+  if (stageKey === 'failed') {
+    return `（任务失败）`
+  }
+  if (stageKey === 'pending') {
+    return `（等待后台任务启动）`
+  }
   const step = AI_REPORT_STAGE_LOOKUP[stageKey]
   if (step) {
     return `（阶段 ${step.order}/${AI_REPORT_STAGE_TOTAL}：${step.label}）`
   }
-  return `（阶段 0/${AI_REPORT_STAGE_TOTAL}：等待任务启动）`
+  return `（进行中…）`
 }
 
 function buildAiRunningMessage(stageKey) {
@@ -1615,11 +1621,16 @@ function startAiReportPolling(jobId) {
     } catch (err) {
       aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
     }
-    aiReportPollTimer = window.setTimeout(poll, 5000)
+    if (aiReportStatus.value !== 'ready' && aiReportStatus.value !== 'failed') {
+      aiReportPollTimer = window.setTimeout(poll, 1000)
+    }
   }
   poll()
 }
 
+onBeforeUnmount(() => {
+  clearAiReportPolling()
+})
 
 const shortConfig = computed(() => {
   if (!pageConfig.value) return ''
@@ -1993,6 +2004,7 @@ async function runAnalysis() {
         const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
         if (aiReportEnabled.value && aiJobId) {
           aiReportJobId.value = aiJobId
+          startAiReportPolling(aiJobId)
         }
         let prevTotals = null
         let ringNote = prevRangeInfo.note

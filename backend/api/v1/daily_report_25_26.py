@@ -14,7 +14,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path as SysPath
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
@@ -3269,6 +3269,39 @@ def _query_temperature_rows(
     return result
 
 
+def _compute_previous_range(
+    start_date: Union[date, datetime, str],
+    end_date: Union[date, datetime, str],
+) -> Tuple[Optional[date], Optional[date]]:
+    MIN_DATE = date(2025, 11, 1)
+    s = _parse_date_value(start_date)
+    e = _parse_date_value(end_date)
+    if not s or not e:
+        return None, None
+
+    # Check for full month
+    # Calculate next day of end_date to see if it is the 1st of next month
+    next_day = e + timedelta(days=1)
+    is_full_month = (s.day == 1 and next_day.day == 1)
+
+    if is_full_month:
+        # Previous month range
+        # last day of prev month = start_date - 1 day
+        prev_end = s - timedelta(days=1)
+        # first day of prev month = replace day with 1
+        prev_start = prev_end.replace(day=1)
+    else:
+        # Fixed span shift
+        span = (e - s).days + 1
+        prev_end = s - timedelta(days=1)
+        prev_start = s - timedelta(days=span)
+
+    if prev_start < MIN_DATE:
+        return None, None
+    
+    return prev_start, prev_end
+
+
 def _build_metric_group_lookup(groups: Sequence[Dict[str, Any]]) -> Dict[str, str]:
     return data_analysis_service._build_metric_group_lookup(groups)
 
@@ -3454,6 +3487,7 @@ def _execute_data_analysis_query_legacy(
             content={"ok": False, "message": f"查询常量指标失败: {exc}"},
         )
 
+    # ... existing code ...
     temperature_rows: Dict[str, Dict[str, Any]] = {}
     if temperature_metric_keys:
         view_name = temperature_view_name or "calc_temperature_data"
@@ -3503,6 +3537,23 @@ def _execute_data_analysis_query_legacy(
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("生成逐日明细失败: %s", exc)
 
+    # Calculate Ring Growth for AI Report
+    prev_rows_map: Dict[str, Dict[str, Any]] = {}
+    if getattr(payload, "request_ai_report", False) and analysis_mode_value == "range":
+        try:
+            prev_start, prev_end = _compute_previous_range(start_date, end_date)
+            if prev_start and prev_end:
+                prev_rows_map = _query_analysis_rows(
+                    active_view_name,
+                    unit_key,
+                    analysis_metric_keys,
+                    prev_start,
+                    prev_end,
+                    sheet_name=sheet_name_filter,
+                )
+        except Exception as exc:
+            logger.warning("计算环比数据失败: %s", exc)
+
     rows_payload: List[Dict[str, Any]] = []
     missing_metrics: List[Dict[str, str]] = []
     resolved_keys: List[str] = []
@@ -3542,21 +3593,52 @@ def _execute_data_analysis_query_legacy(
 
         resolved_keys.append(key)
         timeline_entries = timeline_rows_map.get(key, [])
-        timeline_current_sum = (
-            sum(entry["current"] for entry in timeline_entries if entry.get("current") is not None)
-            if timeline_entries
-            else None
-        )
-        timeline_peer_sum = (
-            sum(entry["peer"] for entry in timeline_entries if entry.get("peer") is not None)
-            if timeline_entries
-            else None
-        )
+        
+        # Calculate totals based on value type
+        if value_type == "temperature":
+            # For temperature, use Average instead of Sum
+            valid_currents = [entry["current"] for entry in timeline_entries if entry.get("current") is not None]
+            valid_peers = [entry["peer"] for entry in timeline_entries if entry.get("peer") is not None]
+            
+            timeline_current_val = (sum(valid_currents) / len(valid_currents)) if valid_currents else None
+            timeline_peer_val = (sum(valid_peers) / len(valid_peers)) if valid_peers else None
+        else:
+            # For others, use Sum
+            timeline_current_val = (
+                sum(entry["current"] for entry in timeline_entries if entry.get("current") is not None)
+                if timeline_entries
+                else None
+            )
+            timeline_peer_val = (
+                sum(entry["peer"] for entry in timeline_entries if entry.get("peer") is not None)
+                if timeline_entries
+                else None
+            )
+
+        # Calculate Ring Ratio
+        ring_ratio = None
+        if prev_rows_map and key in prev_rows_map:
+            prev_source = prev_rows_map[key]
+            prev_val = _decimal_to_float(prev_source.get("value_biz_date"))
+            
+            # Determine current value for ring calculation
+            if value_type == "temperature":
+                current_val_for_ring = _decimal_to_float(source.get("value")) # Temperature view returns average
+            elif value_type == "constant":
+                current_val_for_ring = _decimal_to_float(source.get("value"))
+            else:
+                current_val_for_ring = _decimal_to_float(source.get("value_biz_date"))
+
+            if current_val_for_ring is not None and prev_val is not None and abs(prev_val) > 1e-9:
+                ring_ratio = (current_val_for_ring - prev_val) / abs(prev_val) * 100
+
         if value_type == "constant":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            # For constant, total is just the value itself if timeline is empty or same
+            total_current = timeline_current_val if timeline_current_val is not None else current_value
+            total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
+            
             rows_payload.append(
                 {
                     "key": key,
@@ -3575,14 +3657,15 @@ def _execute_data_analysis_query_legacy(
                     "total_current": total_current,
                     "total_peer": total_peer,
                     "total_delta": _compute_delta(total_current, total_peer),
+                    "ring_ratio": ring_ratio,
                 },
             )
         elif value_type == "temperature":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
             is_missing = source.get("missing")
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            total_current = timeline_current_val if timeline_current_val is not None else current_value
+            total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -3599,6 +3682,7 @@ def _execute_data_analysis_query_legacy(
                     "total_current": total_current,
                     "total_peer": total_peer,
                     "total_delta": _compute_delta(total_current, total_peer),
+                    "ring_ratio": ring_ratio,
                 },
             )
             if is_missing:
@@ -3606,8 +3690,8 @@ def _execute_data_analysis_query_legacy(
         else:
             current_value = _decimal_to_float(source.get("value_biz_date"))
             peer_value = _decimal_to_float(source.get("value_peer_date"))
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            total_current = timeline_current_val if timeline_current_val is not None else current_value
+            total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
             rows_payload.append(
                 {
                     "key": key,
@@ -3626,10 +3710,12 @@ def _execute_data_analysis_query_legacy(
                     "total_current": total_current,
                     "total_peer": total_peer,
                     "total_delta": _compute_delta(total_current, total_peer),
+                    "ring_ratio": ring_ratio,
                 },
             )
 
     warnings: List[str] = []
+    # ... existing code ...
     if missing_metrics:
         warnings.append(
             "以下指标暂无可返回数据：{}".format(", ".join(item["label"] for item in missing_metrics))

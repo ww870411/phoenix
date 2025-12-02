@@ -92,54 +92,29 @@ LAYOUT_PROMPT_TEMPLATE = """你是资深运营报告编辑。现在已得到：
 - 若没有温度指标，请把 `temperature_metric` 设为 null（而不是字符串）。
 """
 
-REPORT_STYLE_CSS = """body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
-.header { margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; text-align: center; }
-.header h1 { margin: 0 0 10px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
-.meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
-.meta-item { display: flex; align-items: center; gap: 5px; }
-.meta-icon { color: #3498db; }
-.metric-tags { margin-top: 10px; font-size: 12px; color: #7f8c8d; }
-.cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
-.card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 12px 16px; border-left: 4px solid #3498db; }
-.card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: 600; }
-.card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
-.card .unit { font-size: 12px; color: #95a5a6; font-weight: normal; margin-left: 4px; }
-.card .delta-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
-.card .delta-item { display: flex; flex-direction: column; }
-.card .delta-label { color: #999; font-size: 10px; margin-bottom: 2px; }
-.card .delta-val { font-weight: 600; }
-.analysis-section { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-.analysis-section h2 { font-size: 18px; margin-top: 0; border-left: 4px solid #27ae60; padding-left: 10px; color: #2c3e50; }
-.insight-item { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #eee; }
-.insight-item:last-child { border-bottom: none; }
-.insight-label { font-weight: 700; color: #34495e; }
-.insight-text { font-size: 14px; line-height: 1.5; color: #555; }
-.chart-container { background: #fff; padding: 16px; border-radius: 8px; height: 400px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
-.callouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 24px; }
-.callout { border-radius: 8px; padding: 12px 16px; border-left: 4px solid #3498db; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-.callout.warning { border-left-color: #f39c12; }
-.callout.danger { border-left-color: #e74c3c; }
-.callout h4 { margin: 0 0 6px 0; font-size: 14px; }
-.callout p { margin: 0; font-size: 13px; color: #555; }
-"""
+CONTENT_PROMPT_TEMPLATE = """你现在的任务是“内容撰写”。请根据阶段一的洞察（Insight）和阶段二的规划（Layout），为报告的每个章节撰写具体的分析段落。
 
-REPORT_PROMPT_TEMPLATE = """你是高级报告撰稿人。请根据以下材料生成完整的 HTML5 报告：
-1. 预处理后的指标数据；
-2. 阶段一的洞察 JSON；
-3. 阶段二的章节规划 JSON；
-4. 必须使用的 CSS 片段（嵌入 <style>）。
+请只输出 JSON，结构如下：
+{
+  "section_contents": {
+    "overview": "第一章的正文内容...",
+    "trend": "第二章的正文内容...",
+    "risks": "第三章的正文内容..."
+  },
+  "callouts": [
+    {
+      "title": "提示标题",
+      "body": "提示内容",
+      "level": "info | warning | danger"
+    }
+  ]
+}
 
-输出要求：
-- 完整 HTML 文本（含 <!DOCTYPE html>、<html>、<head>、<body>）；
-- <head> 中嵌入提供的 CSS（不可使用 ```css 或 ```html 这类 Markdown 代码块）；
-- 页头固定标题“智能分析报告”，并展示单位、分析模式、日期范围、生成时间（从 meta 中获取 unit_label/start_date/end_date 等字段）；缺失单位字段视为错误；
-- 指标卡片按 `metrics` 数据渲染，引用 delta/ring 颜色；
-- “数据洞察”区根据 sections 与 key_findings 生成多段落文字；
-- “重点提示”区渲染 callouts；
-- 最后插入一个引用 ECharts CDN 的双轴折线图脚本，series 数据来自 `metrics.timeline_json`；
-- 为每个指标输出一个“逐日明细”表格（日期/本期/同期/同比），必须使用 `timeline_entries` 字段（已按日期给出 current/peer/delta_pct），若缺少该表视为不合格；
-- 图表需要提供指标切换控件（如按钮或下拉），默认加载首个指标；切换时更新左轴数据，右轴保留气温指标，可直接遍历 `metrics.timeline_entries` 或 `timeline_json`；
-- 全文使用中文，禁止输出任何 Markdown 代码块（包括 ```html/```css/```），只输出 HTML 内容。
+要求：
+- `section_contents` 的 key 必须与阶段二 Layout 中定义的 `sections[].id` 一一对应；
+- 内容要专业、客观，直接引用数据，不要说废话；
+- 使用 HTML 标签（如 <p>, <ul>, <li>, <strong>）来排版段落内容，但不要包含外层容器；
+- 不要输出完整的 HTML 页面，只输出段落内容。
 """
 
 _logger = logging.getLogger(__name__)
@@ -228,6 +203,112 @@ def _run_json_stage(stage: str, prompt: str, retries: int = 2) -> Dict[str, Any]
     raise RuntimeError(f"{stage} 阶段多次解析失败: {last_error}")
 
 
+
+def _current_time_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _update_job(job_id: str, **kwargs: Any) -> None:
+    with _lock:
+        if job_id in _jobs:
+            _jobs[job_id].update(kwargs)
+
+
+def _get_model() -> genai.GenerativeModel:
+    global _model, _model_name
+    if _model is None:
+        settings = _load_gemini_settings()
+        genai.configure(api_key=settings["api_key"])
+        _model_name = settings["model"]
+        _model = genai.GenerativeModel(_model_name)
+    return _model
+
+
+def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    预处理 API 返回的原始 payload，为 Prompt 和 HTML 渲染准备数据。
+    """
+    rows = payload.get("rows") or []
+    meta = {
+        "unit_label": payload.get("unit_label"),
+        "analysis_mode": payload.get("analysis_mode"),
+        "analysis_mode_label": payload.get("analysis_mode_label"),
+        "start_date": payload.get("start_date"),
+        "end_date": payload.get("end_date"),
+    }
+
+    processed_metrics = []
+    for row in rows:
+        if row.get("missing"):
+            continue
+
+        label = row.get("label")
+        unit = row.get("unit")
+        # 优先取 range 模式下的 total_current，否则取 current
+        val = row.get("total_current")
+        if val is None:
+            val = row.get("current")
+        
+        # 简单的格式化辅助
+        val_fmt = f"{val:.2f}" if isinstance(val, (int, float)) else "--"
+        
+        # 同比
+        delta = row.get("total_delta") if row.get("total_delta") is not None else row.get("delta")
+        if isinstance(delta, (int, float)):
+            delta_fmt = f"{delta:+.2f}%"
+            delta_color = "#e74c3c" if delta < 0 else "#27ae60" # 默认涨绿跌红？需确认业务。通常热力行业：产量涨是红(好?) or 消耗涨是红(坏?)。这里暂按通用习惯：红=涨，绿=跌，或反之。
+            # 修正：通常财务/运营报表中，红色代表“警示/下降”或“赤字”，绿色代表“安全/增长”？
+            # 实际上 delta_color 最好由前端或业务决定。这里暂定：>0 红, <0 绿 (类似股市?) 或 >0 绿, <0 红?
+            # 观察 frontend: :class="resolveDelta(row) >= 0 ? 'delta-up' : 'delta-down'"
+            # CSS unknown. Assuming Up=Red, Down=Green for China stock market style? Or Up=Green (Growth), Down=Red (Decline)?
+            # Let's use generic colors: Up=Red (#d32f2f), Down=Green (#2e7d32) for now.
+            if delta > 0:
+                delta_color = "#d32f2f" 
+            elif delta < 0:
+                delta_color = "#2e7d32"
+            else:
+                delta_color = "#7f8c8d"
+        else:
+            delta_fmt = "--"
+            delta_color = "#7f8c8d"
+
+        # 构造 timeline_json (for echarts)
+        timeline = row.get("timeline") or []
+        chart_data = []
+        for entry in timeline:
+            d = entry.get("date")
+            # 截取 MM-DD
+            if d and len(d) >= 10:
+                d_str = d[5:10]
+            else:
+                d_str = d or ""
+            chart_data.append({
+                "d": d_str,
+                "v": entry.get("current"),
+                "p": entry.get("peer")
+            })
+        
+        processed_metrics.append({
+            "label": label,
+            "unit": unit,
+            "value": val,
+            "delta": delta,
+            "delta_fmt": delta_fmt,
+            "delta_color": delta_color,
+            "ring_fmt": "--", # 暂无环比数据
+            "ring_color": "#7f8c8d",
+            "is_temperature": row.get("value_type") == "temperature",
+            "timeline_entries": timeline,
+            "timeline_json": json.dumps(chart_data, ensure_ascii=False)
+        })
+
+    return {
+        "meta": meta,
+        "metrics": processed_metrics,
+        "raw_warnings": payload.get("warnings") or []
+    }
+
+
 def _build_insight_prompt(processed_data: Dict[str, Any]) -> str:
     data_json = _safe_json_dumps(processed_data)
     return f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
@@ -241,271 +322,243 @@ def _build_layout_prompt(processed_data: Dict[str, Any], insight_data: Dict[str,
     )
 
 
-def _build_report_prompt(
-    processed_data: Dict[str, Any],
+def _build_content_prompt(
     insight_data: Dict[str, Any],
     layout_data: Dict[str, Any],
 ) -> str:
-    data_json = _safe_json_dumps(processed_data)
     insight_json = _safe_json_dumps(insight_data)
     layout_json = _safe_json_dumps(layout_data)
-    css_block = REPORT_STYLE_CSS.strip()
     return (
-        f"{REPORT_PROMPT_TEMPLATE}\n\n### CSS（请直接写入 <style> 标签中）\n{css_block}\n"
-        f"\n### 预处理数据\n{data_json}\n"
-        f"\n### 洞察 JSON\n{insight_json}\n"
+        f"{CONTENT_PROMPT_TEMPLATE}\n\n### 洞察 JSON\n{insight_json}\n"
         f"\n### 版面规划 JSON\n{layout_json}\n"
     )
 
 
-def _calculate_trend_stats(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """计算趋势特征：重点关注近期走势（后半段 vs 前半段）。"""
-    if not timeline:
-        return {}
+def _generate_report_html(
+    processed_data: Dict[str, Any],
+    insight_data: Dict[str, Any],
+    layout_data: Dict[str, Any],
+    content_data: Dict[str, Any],
+) -> str:
+    """
+    使用 Python 拼接 HTML，替代 LLM 渲染。
+    """
+    meta = processed_data.get("meta") or {}
+    metrics = processed_data.get("metrics") or []
+    sections = layout_data.get("sections") or []
+    section_contents = content_data.get("section_contents") or {}
+    callouts = content_data.get("callouts") or []
     
-    current_values = [float(t["current"]) for t in timeline if t.get("current") is not None]
+    # 1. 基础样式
+    css = """
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
+        .header { margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; text-align: center; }
+        .header h1 { margin: 0 0 10px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
+        .meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+        .cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 12px 16px; border-left: 4px solid #3498db; }
+        .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: 600; }
+        .card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
+        .card .unit { font-size: 12px; color: #95a5a6; font-weight: normal; margin-left: 4px; }
+        .card .delta-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
+        .card .delta-val { font-weight: 600; }
+        .analysis-section { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .analysis-section h2 { font-size: 18px; margin-top: 0; margin-bottom: 16px; border-left: 4px solid #27ae60; padding-left: 10px; color: #2c3e50; }
+        .callouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .callout { border-radius: 8px; padding: 12px 16px; border-left: 4px solid #3498db; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .callout.warning { border-left-color: #f39c12; }
+        .callout.danger { border-left-color: #e74c3c; }
+        .callout h4 { margin: 0 0 6px 0; font-size: 14px; }
+        .callout p { margin: 0; font-size: 13px; color: #555; }
+        .chart-wrapper { height: 400px; margin-top: 20px; border: 1px solid #eee; border-radius: 8px; padding: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th, td { border: 1px solid #eee; padding: 8px; text-align: center; }
+        th { background: #f8f9fa; color: #666; }
+        .metric-selector { margin-bottom: 10px; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+    """
+
+    # 2. 构建页面主体
+    html_parts = [
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        f"<style>{css}</style>",
+        "<script src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js'></script>",
+        "</head><body>",
+        f"<div class='header'><h1>智能分析报告：{insight_data.get('headline', '数据分析报告')}</h1>",
+        "<div class='meta-info'>",
+        f"<span>单位：{meta.get('unit_label')}</span>",
+        f"<span>模式：{meta.get('analysis_mode_label')}</span>",
+        f"<span>日期：{meta.get('start_date')} ~ {meta.get('end_date')}</span>",
+        f"<span>生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</span>",
+        "</div></div>"
+    ]
+
+    # 3. 指标卡片
+    html_parts.append("<div class='cards-container'>")
+    for m in metrics:
+        val = f"{m['value']:.2f}" if m['value'] is not None else "--"
+        delta_style = f"color: {m['delta_color']}"
+        html_parts.append(f"""
+            <div class='card'>
+                <h3>{m['label']}</h3>
+                <div class='value'>{val}<span class='unit'>{m['unit'] or ''}</span></div>
+                <div class='delta-row'>
+                    <span>同比 <span style='{delta_style}' class='delta-val'>{m['delta_fmt']}</span></span>
+                    <span>环比 <span style='color: {m['ring_color']}' class='delta-val'>{m['ring_fmt']}</span></span>
+                </div>
+            </div>
+        """)
+    html_parts.append("</div>")
+
+    # 4. 重点提示
+    if callouts:
+        html_parts.append("<div class='callouts'>")
+        for c in callouts:
+            level = c.get('level', 'info')
+            html_parts.append(f"""
+                <div class='callout {level}'>
+                    <h4>{c.get('title')}</h4>
+                    <p>{c.get('body')}</p>
+                </div>
+            """)
+        html_parts.append("</div>")
+
+    # 5. 图表区域 (含数据注入)
+    timeline_data_json = json.dumps([
+        {
+            "key": m["label"], # Use label as key for simplicity in selector
+            "label": m["label"],
+            "unit": m["unit"],
+            "is_temp": m["is_temperature"],
+            "data": json.loads(m["timeline_json"]) # restore to list
+        }
+        for m in metrics if m.get("timeline_json")
+    ], ensure_ascii=False)
     
-    stats = {}
-    if current_values:
-        stats["current_avg"] = statistics.mean(current_values)
-        
-        # 计算“期内趋势”：后半段均值 vs 前半段均值
-        n = len(current_values)
-        if n >= 2:
-            mid = n // 2
-            first_half = current_values[:mid]
-            second_half = current_values[mid:]
-            avg1 = statistics.mean(first_half)
-            avg2 = statistics.mean(second_half)
+    chart_html = f"""
+    <div class='analysis-section'>
+        <h2>趋势分析</h2>
+        <select id='metricSelect' class='metric-selector' onchange='updateChart()'></select>
+        <div id='mainChart' class='chart-wrapper'></div>
+        <script>
+            var rawData = {timeline_data_json};
+            var myChart = echarts.init(document.getElementById('mainChart'));
+            var selector = document.getElementById('metricSelect');
             
-            if avg1 != 0:
-                trend_pct = ((avg2 - avg1) / abs(avg1)) * 100
-                stats["recent_trend_pct"] = round(trend_pct, 2)
-                if trend_pct > 5:
-                    stats["recent_trend_desc"] = "呈上升趋势"
-                elif trend_pct < -5:
-                    stats["recent_trend_desc"] = "呈下降趋势"
-                else:
-                    stats["recent_trend_desc"] = "走势平稳"
-            else:
-                stats["recent_trend_desc"] = "数据不足"
+            // Init Selector
+            rawData.forEach(function(item, index) {{
+                var opt = document.createElement('option');
+                opt.value = index;
+                opt.innerHTML = item.label;
+                selector.appendChild(opt);
+            }});
 
-    return stats
+            function updateChart() {{
+                var idx = selector.value;
+                var currentMetric = rawData[idx];
+                var tempMetric = rawData.find(m => m.is_temp) || null;
+                
+                var dates = currentMetric.data.map(i => i.d);
+                var series = [];
+                var yAxis = [
+                    {{ type: 'value', name: currentMetric.unit || '', position: 'left' }}
+                ];
 
+                // 左轴：选定指标
+                series.push({{
+                    name: currentMetric.label + ' (本期)',
+                    type: 'line',
+                    data: currentMetric.data.map(i => i.v),
+                    smooth: true,
+                    yAxisIndex: 0,
+                    itemStyle: {{ color: '#3498db' }}
+                }});
+                series.push({{
+                    name: currentMetric.label + ' (同期)',
+                    type: 'line',
+                    data: currentMetric.data.map(i => i.p),
+                    smooth: true,
+                    lineStyle: {{ type: 'dashed' }},
+                    yAxisIndex: 0,
+                    itemStyle: {{ color: '#95a5a6' }}
+                }});
 
-def _calculate_correlation(data_x: List[float], data_y: List[float]) -> Optional[float]:
-    """计算皮尔逊相关系数。"""
-    if len(data_x) != len(data_y) or len(data_x) < 2:
-        return None
-    try:
-        # 使用 statistics.correlation (Python 3.10+) 或手写简单实现
-        if hasattr(statistics, 'correlation'):
-            return statistics.correlation(data_x, data_y)
-        
-        # 简易实现
-        n = len(data_x)
-        sum_x = sum(data_x)
-        sum_y = sum(data_y)
-        sum_x_sq = sum(x * x for x in data_x)
-        sum_y_sq = sum(y * y for y in data_y)
-        sum_xy = sum(x * y for x, y in zip(data_x, data_y))
-        
-        denominator = math.sqrt((n * sum_x_sq - sum_x ** 2) * (n * sum_y_sq - sum_y ** 2))
-        if denominator == 0:
-            return 0
-        numerator = n * sum_xy - sum_x * sum_y
-        return numerator / denominator
-    except Exception:
-        return None
+                // 右轴：气温 (如果存在且不是自己)
+                if (tempMetric && tempMetric.label !== currentMetric.label) {{
+                    yAxis.push({{ type: 'value', name: '气温 ℃', position: 'right', splitLine: {{ show: false }} }});
+                    series.push({{
+                        name: '平均气温',
+                        type: 'line',
+                        data: tempMetric.data.map(i => i.v),
+                        smooth: true,
+                        yAxisIndex: 1,
+                        itemStyle: {{ color: '#e67e22' }},
+                        areaStyle: {{ opacity: 0.1 }}
+                    }});
+                }}
 
-
-def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+                var option = {{
+                    tooltip: {{ trigger: 'axis' }},
+                    legend: {{ bottom: 0 }},
+                    grid: {{ top: 40, bottom: 30, left: 50, right: 50 }},
+                    xAxis: {{ type: 'category', data: dates }},
+                    yAxis: yAxis,
+                    series: series
+                }};
+                myChart.setOption(option, true);
+            }}
+            
+            if(rawData.length > 0) updateChart();
+            window.onresize = function() {{ myChart.resize(); }};
+        </script>
+    </div>
     """
-    核心预处理：清洗数据、计算同比、统计趋势、分析气温相关性。
-    AI 将直接使用这里的计算结果，不再自行运算。
-    """
-    rows = payload.get("rows") or []
-    processed_metrics = []
-    
-    # 1. 提取气温数据（如果有），用于计算相关性
-    temp_timeline_map = {} # date -> temperature value
-    for row in rows:
-        if row.get("value_type") == "temperature" and row.get("timeline"):
-            for t in row["timeline"]:
-                if t.get("date") and t.get("current") is not None:
-                    temp_timeline_map[t["date"]] = float(t["current"])
-            break # 假设只有一个主气温指标
+    html_parts.append(chart_html)
 
-    for row in rows:
-        # 基础数据提取
-        current = row.get("total_current") if row.get("total_current") is not None else row.get("current")
-        peer = row.get("total_peer") if row.get("total_peer") is not None else row.get("peer")
+    # 6. 正文章节 + 表格
+    for sec in sections:
+        sec_id = sec.get("id")
+        content = section_contents.get(sec_id, "暂无内容")
         
-        # 1. 严格计算同比 (Delta)
-        delta = None
-        delta_color = "#333" # 默认黑色
-        arrow = ""
+        # 渲染指标表格 (如果有 metrics 定义)
+        table_html = ""
+        sec_metrics_keys = sec.get("metrics") or []
+        target_metrics = [m for m in metrics if m["label"] in sec_metrics_keys] # 简单按 Label 匹配
         
-        if current is not None and peer is not None and peer != 0:
-            delta = ((float(current) - float(peer)) / abs(float(peer))) * 100
-            # 颜色逻辑：升高用红色，下降用绿色
-            if delta > 0:
-                delta_color = "#d93025" # Red
-                arrow = "↑"
-            elif delta < 0:
-                delta_color = "#188038" # Green
-                arrow = "↓"
+        if target_metrics:
+            table_html += "<table><thead><tr><th>日期</th>"
+            for m in target_metrics:
+                table_html += f"<th>{m['label']}<br>本期</th><th>{m['label']}<br>同期</th>"
+            table_html += "</tr></thead><tbody>"
+            
+            # 假设所有 timeline 长度一致，取第一个非空的
+            sample_tl = next((m["timeline_entries"] for m in target_metrics if m.get("timeline_entries")), [])
+            for i, entry in enumerate(sample_tl):
+                date_str = entry["date"]
+                table_html += f"<tr><td>{date_str}</td>"
+                for m in target_metrics:
+                    # 保护性取值
+                    tl = m.get("timeline_entries") or []
+                    if i < len(tl):
+                        cur = tl[i].get("current")
+                        peer = tl[i].get("peer")
+                        c_val = f"{float(cur):.2f}" if cur is not None else "-"
+                        p_val = f"{float(peer):.2f}" if peer is not None else "-"
+                        table_html += f"<td>{c_val}</td><td>{p_val}</td>"
+                    else:
+                        table_html += "<td>-</td><td>-</td>"
+                table_html += "</tr>"
+            table_html += "</tbody></table>"
 
-        # 1.5 环比 (Ring Growth) - 新增逻辑
-        ring_rate = row.get("ring_growth")
-        ring_fmt = "--"
-        ring_color = "#666"
-        if ring_rate is not None:
-            r_val = float(ring_rate)
-            r_arrow = "↑" if r_val > 0 else "↓" if r_val < 0 else ""
-            ring_fmt = f"{r_arrow} {abs(r_val):.2f}%"
-            ring_color = "#d93025" if r_val > 0 else "#188038" if r_val < 0 else "#666"
-        
-        # 2. 时间序列统计 (Stats)
-        timeline = row.get("timeline") or []
-        stats = _calculate_trend_stats(timeline)
-        
-        # 3. 时间序列明细 + 气温相关性
-        correlation = None
-        trend_desc = ""
-        timeline_entries = []
-        if timeline and temp_timeline_map:
-            # 对齐数据
-            metric_vals = []
-            temp_vals = []
-            for t in timeline:
-                d = t.get("date")
-                v = t.get("current")
-                if d in temp_timeline_map and v is not None:
-                    metric_vals.append(float(v))
-                    temp_vals.append(temp_timeline_map[d])
+        html_parts.append(f"""
+            <div class='analysis-section'>
+                <h2>{sec.get('title')}</h2>
+                <div class='insight-text'>{content}</div>
+                {table_html}
+            </div>
+        """)
 
-            corr = _calculate_correlation(metric_vals, temp_vals)
-            if corr is not None:
-                correlation = round(corr, 2)
-                if correlation < -0.6:
-                    trend_desc = "与气温呈显著负相关(气温越低数值越高)"
-                elif correlation > 0.6:
-                    trend_desc = "与气温呈显著正相关"
-
-        for entry in timeline:
-            date_val = entry.get("date")
-            current_val = entry.get("current")
-            peer_val = entry.get("peer")
-            delta_pct = None
-            if (
-                current_val is not None
-                and peer_val is not None
-                and peer_val not in (0, 0.0)
-            ):
-                try:
-                    delta_pct = (
-                        (float(current_val) - float(peer_val)) / abs(float(peer_val))
-                    ) * 100
-                except (ValueError, ZeroDivisionError):
-                    delta_pct = None
-            timeline_entries.append(
-                {
-                    "date": date_val,
-                    "current": current_val,
-                    "peer": peer_val,
-                    "delta_pct": round(delta_pct, 2) if delta_pct is not None else None,
-                }
-            )
-
-        processed_metrics.append({
-            "label": row.get("label"),
-            "unit": row.get("unit"),
-            "value": current,
-            "peer_value": peer,
-            "delta_fmt": f"{arrow} {abs(delta):.2f}%" if delta is not None else "--",
-            "delta_color": delta_color,
-            "ring_fmt": ring_fmt,
-            "ring_color": ring_color,
-            "stats": stats,
-            "correlation_with_temp": correlation,
-            "trend_description": trend_desc,
-            "is_temperature": row.get("value_type") == "temperature",
-            "timeline_entries": timeline_entries,
-            # 保留 timeline 供 ECharts 使用，但 AI 不需再读 timeline 计算
-            "timeline_json": json.dumps([{
-                "d": t.get("date"),
-                "v": t.get("current"),
-                "p": t.get("peer")
-            } for t in timeline]) # 简化字段名以节省 Token
-        })
-
-    return {
-        "meta": payload.get("meta"),
-        "metrics": processed_metrics,
-        "generated_at": _current_time_iso()
-    }
-
-
-def _build_prompt_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    rows = payload.get("rows") or []
-    trimmed_rows = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        trimmed_rows.append(
-            {
-                "key": row.get("key"),
-                "label": row.get("label"),
-                "unit": row.get("unit"),
-                "current": row.get("current"),
-                "peer": row.get("peer"),
-                "delta": row.get("delta"),
-                "total_current": row.get("total_current"),
-                "total_peer": row.get("total_peer"),
-                "total_delta": row.get("total_delta"),
-                "value_type": row.get("value_type"),
-            },
-        )
-
-    meta = {
-        "unit_key": payload.get("unit_key"),
-        "unit_label": payload.get("unit_label"),
-        "analysis_mode": payload.get("analysis_mode"),
-        "analysis_mode_label": payload.get("analysis_mode_label"),
-        "start_date": payload.get("start_date"),
-        "end_date": payload.get("end_date"),
-    }
-
-    return {
-        "meta": meta,
-        "rows": trimmed_rows,
-        "plan_comparison": payload.get("plan_comparison"),
-        "warnings": payload.get("warnings"),
-        "requested_metrics": payload.get("requested_metrics"),
-        "resolved_metrics": payload.get("resolved_metrics"),
-    }
-
-def _get_model() -> genai.GenerativeModel:
-    global _model, _model_name  # pylint: disable=global-statement
-    if _model is not None:
-        return _model
-    settings = _load_gemini_settings()
-    genai.configure(api_key=settings["api_key"])
-    _model_name = settings["model"]
-    _model = genai.GenerativeModel(_model_name)
-    return _model
-
-
-def _update_job(job_id: str, **updates: Any) -> None:
-    with _lock:
-        if job_id not in _jobs:
-            return
-        _jobs[job_id].update(updates)
-
-
-def _current_time_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    html_parts.append("</body></html>")
+    return "\n".join(html_parts)
 
 
 def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
@@ -529,8 +582,12 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
         layout_data = _run_json_stage("结构规划", layout_prompt)
         _update_job(job_id, stage="render", layout=layout_data)
 
-        report_prompt = _build_report_prompt(processed_data, insight_data, layout_data)
-        html_report = _call_model(report_prompt)
+        # NEW: 阶段三改为“内容撰写”，只生成段落 JSON
+        content_prompt = _build_content_prompt(insight_data, layout_data)
+        content_data = _run_json_stage("内容撰写", content_prompt)
+        
+        # Python 组装 HTML
+        html_report = _generate_report_html(processed_data, insight_data, layout_data, content_data)
 
         _update_job(
             job_id,

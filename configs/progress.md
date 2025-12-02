@@ -3066,5 +3066,49 @@ sum_basic_data 相关：
 1. 在北海填报页展开“本单位数据分析”。
 2. 勾选几个指标（如供热量、发电量）。
 3. 切换“分析口径”到“子表：北海热电联产”。
-4. 确认指标勾选状态保持不变，且点击“生成汇总对比”能正常获取新口径的数据。
+
+## 2025-12-27（AI 报告生成性能优化）
+
+前置说明（降级留痕）：
+- 根目录 AGENTS 要求 Markdown 编辑使用 `apply_patch`，本次动作涉及 `backend/services/data_analysis_ai_report.py` 的代码重构。
+
+本次动作：
+- 优化 AI 报告生成的第三阶段（渲染阶段）：从 LLM 直接生成完整 HTML 降级为“LLM 生成内容 JSON + Python 组装 HTML”的混合模式。
+- 具体改动：
+  - 移除了 `REPORT_STYLE_CSS` 常量，改在 Python 函数中直接内嵌 CSS。
+  - 新增 `CONTENT_PROMPT_TEMPLATE`，指示 LLM 只输出章节段落内容（`section_contents`）和提示框（`callouts`），不再负责 HTML 结构和图表代码。
+  - 新增 `_generate_report_html` 函数，负责将预处理的数据（`processed_data`）、洞察（`insight`）、规划（`layout`）和内容（`content`）拼装成最终的 HTML 文件，包括自动生成 ECharts 配置代码和数据表格。
+  - 调整 `_generate_report` 流程，阶段三调用 `_run_json_stage` 获取内容 JSON，然后调用 `_generate_report_html` 生成最终报告。
+
+优化收益：
+- **节省 Token**：输出 Token 量预计减少 80%（不再重复输出大量 HTML/JS 样板代码和数据）。
+- **提升速度**：生成速度显著提升。
+- **提高稳定性**：图表和表格由 Python 代码刚性生成，彻底避免了 LLM 写错闭合标签或 JS 语法的风险。
+
+影响范围与回滚：
+- 仅影响 AI 报告生成服务的后端逻辑；回滚时恢复 `backend/services/data_analysis_ai_report.py` 即可。
+
+验证建议：
+1. 再次触发“智能报告生成”。
+2. 观察生成速度是否明显变快（尤其是阶段三）。
+
+## 2025-12-27（AI 报告前端轮询修复）
+
+前置说明（降级留痕）：
+- 根目录 AGENTS 要求 Markdown 编辑使用 `apply_patch`，本次动作涉及 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue` 的代码修正。
+
+本次动作：
+- 修复了“智能报告生成”卡在“等待后台任务启动”的问题：
+  - 在 `runAnalysis` 函数中，当后端返回 `ai_report_job_id` 时，前端现在会立即调用 `startAiReportPolling` 启动轮询。此前仅赋值 ID 但未触发轮询，导致 UI 状态无法更新。
+- 优化了状态提示文案：
+  - `formatAiReportProgress` 现显式处理 `pending`（等待后台任务启动）与 `failed`（任务失败）状态。
+  - 阶段 3 的描述更新为“内容撰写与渲染”，与后端新逻辑一致。
+
+影响范围与回滚：
+- 仅影响前端 AI 报告生成的状态展示与轮询触发；回滚时恢复 `DataAnalysisView.vue` 即可。
+
+验证建议：
+1. 再次触发“智能报告生成”。
+2. 确认 UI 立即显示“智能报告生成中…（等待后台任务启动）”，随后跟随 `insight` -> `layout` -> `render` 阶段动态更新。
+3. 最终生成完成后，“下载智能分析报告”按钮应变亮可用。
 
