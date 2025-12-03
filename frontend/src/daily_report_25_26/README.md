@@ -14,6 +14,11 @@
 - 现状：后端已于 `backend/api/v1/daily_report_25_26.py` 内为常量与气温指标补齐 timeline，前端无需额外逻辑；本页维持既有 `timelineGrid` 渲染，默认勾选平均气温即可直接看到逐日温度数据。
 - 注意：若未来切换回 service 版 `execute_data_analysis_query`，需确保同样提供 `timeline` 字段，否则需复用本次修复思路。
 
+### AI 报告环比字段（2025-12-27）
+
+- 后端 `_preprocess_payload` 已补充 `ring` 数值字段，Prompt 可以直接读取环比百分比；若想强调环比，请确保 UI 勾选“智能报告生成”并在累计模式下填写完整区间，使 `ring_ratio` 能按“上一窗口”计算。
+- AI 报告 HTML 已内置“环比比较”小节，直接复用了前端的“指标／本期累计／上期累计／环比”表格逻辑，避免模型忽略该段；即便环比数据缺失也会显示 warning。
+
 ## 数据分析页面（2025-11-27 实时查询版）
 
 - `DataAnalysisView.vue` 首次接入 `POST /projects/daily_report_25_26/data_analysis/query`，根据所选单位/模式构造 `unit_key/metrics/start_date/end_date` 请求，响应中的 `rows/view/start_date/end_date/warnings` 直接驱动结果表、提示条与缺失标记。

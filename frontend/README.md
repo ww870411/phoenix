@@ -1,5 +1,11 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-27 AI 报告新增同比＆区间明细）
+
+- 后端 `data_analysis_ai_report.py` 针对智能报告输出新增“同比比较”“环比比较”“区间明细（逐日）”三块表格，与网页端 `DataAnalysisView` 的对比区一致；前端无需改动即可直接展示新版 HTML，平均气温与常量指标的累计值、环比差异在卡片与表格中都会同步出现。
+- 逐日区间表采用与网页端相同的列设计（指标列拆分为本期/同期/同比三列）并附带总计行，delta 列根据正负着色；如需在前端内嵌展示，可继续沿用原有 iframe/下载逻辑，默认视图已经包含这些段落。
+- 若未来需要在前端本地渲染同样结构，可参考该 HTML 中的 `<table class="timeline-table">` 与 CSS 命名，直接复用即可；本次无前端源码改动，回滚仅需恢复后端生成逻辑。
+
 ## 会话小结（2025-12-27 北海分表分析视图说明）
 
 - 后端新增 `analysis_beihai_sub_daily/analysis_beihai_sub_sum` 视图并独立于 `analysis_company_*`，输出字段完全一致但以 `sheet_name` 粒度过滤（仅 `BeiHai_co_generation_Sheet`、`BeiHai_water_boiler_Sheet`）。本轮未改动前端代码，仅在此登记数据口径，后续若页面需要直接按模板查询，可在 API 层切换到新视图或新增 `/analysis_beihai_sub/*` 入口，前端无需额外适配即可消费。
@@ -1043,4 +1049,3 @@ docker compose up -d --build
 
 - `UnitAnalysisLite.vue` 中北海分表口径文案已更新为“子表：...”。
 - 切换口径时现在会保留已选指标，不再自动清空，方便对比。
-

@@ -1,5 +1,29 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 AI 报告同比＆区间明细渲染）
+
+- 目的：与数据分析网页同步，智能报告需补充“同比比较”“环比比较”“区间明细（逐日）”三块表格，同时让指标卡片/图表正确读取常量、气温指标的累计值与环比差异。
+- 实施：  
+  1. `backend/services/data_analysis_ai_report.py` 的 `_preprocess_payload` 现在保留 `value_type/decimals/timeline_entries`，并调用 `_build_timeline_matrix` 生成逐日矩阵；常量指标的累计值强制等于单值，气温指标累计改为日均。  
+  2. `_build_timeline_matrix` 会输出每日数据 + “总计”行，常量复用单值、气温取平均、其余指标求和，同时返回 `summary_row` 供 HTML 渲染。  
+  3. `_generate_report_html` 用新的结构渲染“同比比较”“环比比较”表、逐日双表头（日期×本期/同期/同比），卡片展示值改用 `decimals` 精度，折线图仅注入带 timeline 的指标，delta 单元格新增颜色提示。
+- 验证：`python -m py_compile backend/services/data_analysis_ai_report.py` 正常；本地调用 `/api/v1/daily_report_25_26/data_analysis/query` 勾选“生成智能报告”后下载 HTML，可看到新增的同比/区间表格与平均气温的环比百分比；常量指标的“本期累计/上期累计”与单日值一致。
+- 回滚：恢复 `backend/services/data_analysis_ai_report.py` 即可撤销所有渲染与预处理调整。
+
+# 会话小结（2025-12-27 AI 报告环比字段补齐）
+
+- 问题：AI 报告多阶段流程的预处理只输出了 `ring_fmt`（字符串），Prompt 中引用的 `ring` 字段始终为 `null`，导致洞察/段落无法写出环比结论。
+- 修复：`backend/services/data_analysis_ai_report.py` 在 `_preprocess_payload` 中新增 `ring` 数值字段（直接透传 `ring_ratio`），模板仍保留 `ring_fmt/ring_color` 供 HTML 卡片使用。
+- 验证：`python -m py_compile backend/services/data_analysis_ai_report.py` 通过，触发报告后 `_jobs[job_id]['payload']['metrics']` 可看到 `ring` 有实际数值，模型输出的 JSON 也重新包含环比描述。
+- 回滚：恢复该文件即可。
+
+# 会话小结（2025-12-27 AI 报告环比比较板块）
+
+- 问题：虽然 `ring_ratio` 已对外暴露，但 AI 报告未自动呈现与前端一致的“环比比较”板块，原因是流水线既未向 Prompt 提供 `ringCompare` 数据，也没有在 HTML 模板里渲染该段。
+- 处理：\n  - `backend/api/v1/daily_report_25_26.py` 在 `request_ai_report=true & analysis_mode=range` 场景下，自动计算上一窗口（`_compute_previous_range`），按指标查询上一窗口的聚合值与气温平均值，写入响应 `ringCompare = { range, prevTotals, note }`，无需前端二次请求即可取得同样数据。\n  - `backend/services/data_analysis_ai_report.py` 新增 `_build_ring_compare_payload`，将 `ringCompare` 转换为 entries、范围标签与摘要写入 `processed_data['ring_compare']`；`_generate_report_html` 渲染“环比比较”表格（指标 / 本期 / 上期 / 环比）及【环比】摘要或 warning，确保 AI 报告可视化与网页一致。
+- 验证：`python -m py_compile backend/services/data_analysis_ai_report.py` 通过；生成报告后 HTML 中出现“环比比较”段，表格数据与摘要均与前端一致，Prompt 中也能引用该结构。
+- 回滚：恢复该 Python 文件即可撤销本次增强。
+
 # 会话小结（2025-12-27 数据分析区间温度 timeline 修复）
 
 - 症状：累计模式仅勾选“平均气温”等气温指标时，数据分析页的“区间明细（逐日）”不再渲染温度列。排查 `backend/api/v1/daily_report_25_26.py` 发现 API 仍使用 legacy 流程，`timeline_rows_map` 只在存在常规指标时才构建，且未给常量/气温行注入逐日数据。

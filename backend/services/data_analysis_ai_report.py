@@ -31,7 +31,7 @@ from backend.config import DATA_DIRECTORY
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
 
-INSIGHT_PROMPT_TEMPLATE = """你是一名热力行业数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
+INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
 输出 JSON 结构：
 {
@@ -149,6 +149,211 @@ def _safe_json_dumps(payload: Dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=_convert)
 
 
+def _to_float_or_none(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, Decimal):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_relative_rate(current: Optional[float], reference: Optional[float]) -> Optional[float]:
+    if current is None or reference is None:
+        return None
+    if abs(reference) < 1e-9:
+        return None
+    return ((current - reference) / abs(reference)) * 100
+
+
+def _format_percent_text(value: Optional[float]) -> str:
+    if value is None or isinstance(value, float) and (value != value):
+        return "—"
+    return f"{value:+.2f}%"
+
+
+def _classify_delta(value: Optional[float]) -> str:
+    if value is None or isinstance(value, float) and (value != value):
+        return "delta-muted"
+    if value > 0:
+        return "delta-positive"
+    if value < 0:
+        return "delta-negative"
+    return "delta-neutral"
+
+
+def _format_number(value: Optional[float], decimals: int = 2) -> str:
+    if value is None:
+        return "—"
+    fmt = f"{{:,.{decimals}f}}"
+    return fmt.format(value)
+
+
+def _format_range_label(start: Optional[str], end: Optional[str]) -> str:
+    if start and end:
+        return start if start == end else f"{start} ~ {end}"
+    return start or end or ""
+
+
+def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    ring_block = payload.get("ringCompare") or payload.get("ring_compare")
+    if not isinstance(ring_block, dict):
+        return None
+    prev_totals = ring_block.get("prevTotals") or ring_block.get("prev_totals")
+    if not isinstance(prev_totals, dict) or not prev_totals:
+        note = ring_block.get("note")
+        if note:
+            return {
+                "entries": [],
+                "note": note,
+                "current_range": _format_range_label(payload.get("start_date"), payload.get("end_date")),
+                "previous_range": _format_range_label(
+                    (ring_block.get("range") or {}).get("start"),
+                    (ring_block.get("range") or {}).get("end"),
+                ),
+                "summary_lines": [],
+            }
+        return None
+
+    rows = payload.get("rows") or []
+    entries: List[Dict[str, Any]] = []
+    for row in rows:
+        key = row.get("key")
+        if not key or key not in prev_totals:
+            continue
+        current_val = row.get("total_current")
+        if current_val is None:
+            current_val = row.get("current")
+        current = _to_float_or_none(current_val)
+        previous = _to_float_or_none(prev_totals.get(key))
+        if current is None or previous is None:
+            continue
+        decimals = int(row.get("decimals")) if isinstance(row.get("decimals"), int) else 2
+        entries.append(
+            {
+                "key": key,
+                "label": row.get("label") or key,
+                "unit": row.get("unit") or "",
+                "current": current,
+                "previous": previous,
+                "rate": _compute_relative_rate(current, previous),
+                "decimals": decimals,
+            }
+        )
+
+    range_info = ring_block.get("range") or {}
+    previous_range_label = _format_range_label(range_info.get("start"), range_info.get("end"))
+    current_range_label = _format_range_label(payload.get("start_date"), payload.get("end_date"))
+    summary_lines: List[str] = []
+    if entries:
+        phrases = []
+        for entry in entries[:3]:
+            unit_text = entry["unit"]
+            prev_text = _format_number(entry["previous"], entry["decimals"])
+            rate_text = _format_percent_text(entry["rate"])
+            phrases.append(f"{entry['label']} 上期 {prev_text}{unit_text}，环比 {rate_text}")
+        suffix = "（其余略）" if len(entries) > 3 else ""
+        range_note = f"（上期：{previous_range_label}）" if previous_range_label else ""
+        summary_lines.append(f"【环比】{'；'.join(phrases)}{suffix}{range_note}")
+
+    note = ring_block.get("note") or ("当前指标无可用环比数据" if not entries else "")
+
+    return {
+        "entries": entries,
+        "note": note,
+        "current_range": current_range_label,
+        "previous_range": previous_range_label,
+        "summary_lines": summary_lines,
+    }
+
+
+def _build_timeline_matrix(metrics: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    timeline_metrics = [m for m in metrics if m.get("timeline_entries")]
+    if not timeline_metrics:
+        return None
+    date_set = set()
+    prepared = []
+    for metric in timeline_metrics:
+        entries = metric.get("timeline_entries") or []
+        mapping = {}
+        for entry in entries:
+            date_val = entry.get("date")
+            if not date_val:
+                continue
+            mapping[date_val] = entry
+            date_set.add(date_val)
+        if mapping:
+            prepared.append(
+                {
+                    "key": metric.get("key") or metric.get("label"),
+                    "label": metric.get("label"),
+                    "unit": metric.get("unit"),
+                    "decimals": metric.get("decimals", 2),
+                    "value_type": metric.get("value_type") or ("temperature" if metric.get("is_temperature") else None),
+                    "entries": mapping,
+                }
+            )
+    if not prepared:
+        return None
+    dates = sorted(date_set)
+    rows: List[Dict[str, Any]] = []
+    for date in dates:
+        record = {"date": date}
+        for metric in prepared:
+            entry = metric["entries"].get(date) or {}
+            curr = _to_float_or_none(entry.get("current"))
+            peer = _to_float_or_none(entry.get("peer"))
+            record[f"{metric['key']}__current"] = curr
+            record[f"{metric['key']}__peer"] = peer
+            record[f"{metric['key']}__delta"] = _compute_relative_rate(curr, peer)
+        rows.append(record)
+    summary_row = {"date": "总计"}
+    has_summary = False
+    for metric in prepared:
+        entries = list(metric["entries"].values())
+        current_values: List[float] = []
+        peer_values: List[float] = []
+        for entry in entries:
+            if not entry:
+                continue
+            curr_val = _to_float_or_none(entry.get("current"))
+            if curr_val is not None:
+                current_values.append(curr_val)
+            peer_val = _to_float_or_none(entry.get("peer"))
+            if peer_val is not None:
+                peer_values.append(peer_val)
+        value_type = metric.get("value_type")
+        if value_type == "constant":
+            summary_current = current_values[0] if current_values else None
+            summary_peer = peer_values[0] if peer_values else None
+        elif value_type == "temperature":
+            summary_current = statistics.fmean(current_values) if current_values else None
+            summary_peer = statistics.fmean(peer_values) if peer_values else None
+        else:
+            summary_current = sum(current_values) if current_values else None
+            summary_peer = sum(peer_values) if peer_values else None
+        summary_delta = _compute_relative_rate(summary_current, summary_peer)
+        summary_row[f"{metric['key']}__current"] = summary_current
+        summary_row[f"{metric['key']}__peer"] = summary_peer
+        summary_row[f"{metric['key']}__delta"] = summary_delta
+        if (
+            summary_current is not None
+            or summary_peer is not None
+            or summary_delta is not None
+        ):
+            has_summary = True
+    if has_summary:
+        rows.append(summary_row)
+    return {
+        "dates": dates,
+        "metrics": prepared,
+        "rows": rows,
+        "summary": summary_row if has_summary else None,
+    }
+
+
 def _extract_json_block(raw: str) -> Optional[str]:
     if not raw:
         return None
@@ -244,14 +449,21 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         label = row.get("label")
         unit = row.get("unit")
+        decimals = row.get("decimals")
+        if not isinstance(decimals, int):
+            decimals = 2
         # 优先取 range 模式下的 total_current，否则取 current
         val = row.get("total_current")
         if val is None:
             val = row.get("current")
-        
+
         # 简单的格式化辅助
-        val_fmt = f"{val:.2f}" if isinstance(val, (int, float)) else "--"
-        
+        val_fmt = f"{val:.{decimals}f}" if isinstance(val, (int, float)) else "--"
+
+        peer_total = row.get("total_peer")
+        if peer_total is None:
+            peer_total = row.get("peer")
+
         # 同比
         delta = row.get("total_delta") if row.get("total_delta") is not None else row.get("delta")
         if isinstance(delta, (int, float)):
@@ -267,16 +479,17 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             delta_color = "#7f8c8d"
 
         # 环比
-        ring = row.get("ring_ratio")
-        if isinstance(ring, (int, float)):
-            ring_fmt = f"{ring:+.2f}%"
-            if ring > 0:
+        ring_value = row.get("ring_ratio")
+        if isinstance(ring_value, (int, float)):
+            ring_fmt = f"{ring_value:+.2f}%"
+            if ring_value > 0:
                 ring_color = "#d32f2f" 
-            elif ring < 0:
+            elif ring_value < 0:
                 ring_color = "#2e7d32"
             else:
                 ring_color = "#7f8c8d"
         else:
+            ring_value = None
             ring_fmt = "--"
             ring_color = "#7f8c8d"
 
@@ -297,22 +510,55 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             })
         
         processed_metrics.append({
+            "key": row.get("key") or row.get("label"),
             "label": label,
             "unit": unit,
             "value": val,
+            "peer_value": peer_total,
             "delta": delta,
             "delta_fmt": delta_fmt,
             "delta_color": delta_color,
+            "ring": ring_value,
             "ring_fmt": ring_fmt,
             "ring_color": ring_color,
             "is_temperature": row.get("value_type") == "temperature",
+            "value_type": row.get("value_type"),
+            "decimals": decimals,
             "timeline_entries": timeline,
             "timeline_json": json.dumps(chart_data, ensure_ascii=False)
         })
 
+    ring_compare = _build_ring_compare_payload(payload)
+    if ring_compare:
+        entries = ring_compare.get("entries") or []
+        entry_by_key = {entry.get("key"): entry for entry in entries if entry.get("key")}
+        entry_by_label = {entry.get("label"): entry for entry in entries if entry.get("label")}
+        for metric in processed_metrics:
+            if metric.get("ring") is not None:
+                continue
+            match = entry_by_key.get(metric.get("key")) or entry_by_label.get(metric.get("label"))
+            if not match:
+                continue
+            rate = match.get("rate")
+            if isinstance(rate, (int, float)):
+                metric["ring"] = rate
+                metric["ring_fmt"] = _format_percent_text(rate)
+                if rate > 0:
+                    metric["ring_color"] = "#d32f2f"
+                elif rate < 0:
+                    metric["ring_color"] = "#2e7d32"
+                else:
+                    metric["ring_color"] = "#7f8c8d"
+            else:
+                metric["ring"] = None
+
+    timeline_matrix = _build_timeline_matrix(processed_metrics)
+
     return {
         "meta": meta,
         "metrics": processed_metrics,
+        "ring_compare": ring_compare,
+        "timeline_matrix": timeline_matrix,
         "raw_warnings": payload.get("warnings") or []
     }
 
@@ -353,6 +599,7 @@ def _generate_report_html(
     """
     meta = processed_data.get("meta") or {}
     metrics = processed_data.get("metrics") or []
+    timeline_matrix = processed_data.get("timeline_matrix") or {}
     sections = layout_data.get("sections") or []
     section_contents = content_data.get("section_contents") or {}
     callouts = content_data.get("callouts") or []
@@ -379,12 +626,25 @@ def _generate_report_html(
         .callout.danger { border-left-color: #e74c3c; }
         .callout h4 { margin: 0 0 8px 0; font-size: 15px; color: #2c3e50; }
         .callout p { margin: 0; font-size: 14px; color: #555; line-height: 1.5; }
+        .ring-section__header { margin-bottom: 10px; font-size: 14px; color: #475569; }
+        .ring-section__note { font-size: 14px; color: #b45309; margin-top: 6px; }
+        .ring-summary__table { margin-top: 12px; }
+        .ring-summary__table td, .ring-summary__table th { text-align: center; }
+        .ring-unit { font-size: 12px; color: #94a3b8; margin-left: 4px; }
+        .ring-summary-line { margin-top: 10px; font-size: 14px; color: #334155; }
         .chart-wrapper { height: 420px; margin-top: 24px; border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }
         table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
         th, td { border: 1px solid #e0e0e0; padding: 10px 12px; text-align: center; }
         th { background: #f4f6f7; color: #555; font-weight: 600; }
         tr:nth-child(even) { background: #fafafa; }
         .metric-selector { margin-bottom: 12px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; min-width: 200px; }
+        .timeline-table th { background: #e2e8f0; color: #334155; }
+        .timeline-table .sub-head th { background: #f8fafc; color: #475569; font-size: 13px; }
+        .timeline-table td:first-child { font-weight: 600; color: #1e293b; }
+        .delta-positive { color: #d32f2f; font-weight: 600; }
+        .delta-negative { color: #2e7d32; font-weight: 600; }
+        .delta-neutral { color: #475569; font-weight: 600; }
+        .delta-muted { color: #94a3b8; font-weight: 600; }
     """
 
     # 2. 构建页面主体
@@ -405,16 +665,16 @@ def _generate_report_html(
     # 3. 指标卡片
     html_parts.append("<div class='cards-container'>")
     for m in metrics:
-        val = f"{m['value']:.2f}" if m['value'] is not None else "--"
+        value_text = _format_number(m.get("value"), m.get("decimals", 2))
         delta_style = f"color: {m['delta_color']}"
         # Use .get() for ring properties to be safe, though _preprocess_payload should provide them
         ring_fmt = m.get('ring_fmt', '--')
         ring_color = m.get('ring_color', '#7f8c8d')
-        
+
         html_parts.append(f"""
             <div class='card'>
                 <h3>{m['label']}</h3>
-                <div class='value'>{val}<span class='unit'>{m['unit'] or ''}</span></div>
+                <div class='value'>{value_text}<span class='unit'>{m['unit'] or ''}</span></div>
                 <div class='delta-row'>
                     <span>同比 <span style='{delta_style}' class='delta-val'>{m['delta_fmt']}</span></span>
                     <span>环比 <span style='color: {ring_color}' class='delta-val'>{ring_fmt}</span></span>
@@ -434,18 +694,132 @@ def _generate_report_html(
                     <p>{c.get('body')}</p>
                 </div>
             """)
+    html_parts.append("</div>")
+
+    # 同比比较
+    yoy_entries = []
+    for m in metrics:
+        current = m.get("value")
+        peer_val = m.get("peer_value")
+        if current is None and peer_val is None:
+            continue
+        yoy_entries.append(
+            {
+                "label": m.get("label"),
+                "unit": m.get("unit") or "",
+                "current": current,
+                "peer": peer_val,
+                "delta": m.get("delta"),
+                "decimals": m.get("decimals", 2),
+            }
+        )
+    if yoy_entries:
+        html_parts.append("<div class='analysis-section'>")
+        html_parts.append("<h2>同比比较</h2>")
+        html_parts.append(
+            "<table class='ring-summary__table'><thead><tr>"
+            "<th>指标</th><th>本期累计</th><th>同期累计</th><th>同比</th>"
+            "</tr></thead><tbody>"
+        )
+        for entry in yoy_entries:
+            current_text = _format_number(entry["current"], entry["decimals"])
+            peer_text = _format_number(entry["peer"], entry["decimals"])
+            delta_text = _format_percent_text(entry.get("delta"))
+            unit_html = f"<span class='ring-unit'>{entry['unit']}</span>" if entry["unit"] else ""
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry['label']}</td>"
+                f"<td>{current_text}{unit_html}</td>"
+                f"<td>{peer_text}{unit_html}</td>"
+                f"<td>{delta_text}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table></div>")
+
+    ring_data = processed_data.get("ring_compare") or {}
+    if ring_data and (ring_data.get("entries") or ring_data.get("note")):
+        html_parts.append("<div class='analysis-section'>")
+        html_parts.append("<h2>环比比较</h2>")
+        header_bits = []
+        if ring_data.get("current_range"):
+            header_bits.append(f"本期：{ring_data['current_range']}")
+        if ring_data.get("previous_range"):
+            header_bits.append(f"上期：{ring_data['previous_range']}")
+        if header_bits:
+            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(header_bits)}</p>")
+        entries = ring_data.get("entries") or []
+        if entries:
+            html_parts.append("<table class='ring-summary__table'>")
+            html_parts.append(
+                "<thead><tr><th>指标</th><th>本期累计</th><th>上期累计</th><th>环比</th></tr></thead><tbody>"
+            )
+            for entry in entries:
+                decimals = entry.get("decimals", 2)
+                current_text = _format_number(entry.get("current"), decimals)
+                prev_text = _format_number(entry.get("previous"), decimals)
+                rate_text = _format_percent_text(entry.get("rate"))
+                unit = entry.get("unit") or ""
+                unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+                html_parts.append(
+                    "<tr>"
+                    f"<td>{entry.get('label')}</td>"
+                    f"<td>{current_text}{unit_html}</td>"
+                    f"<td>{prev_text}{unit_html}</td>"
+                    f"<td>{rate_text}</td>"
+                    "</tr>"
+                )
+            html_parts.append("</tbody></table>")
+        elif ring_data.get("note"):
+            html_parts.append(f"<p class='ring-section__note'>{ring_data['note']}</p>")
+        if ring_data.get("summary_lines"):
+            for line in ring_data["summary_lines"]:
+                html_parts.append(f"<p class='ring-summary-line'>{line}</p>")
         html_parts.append("</div>")
+
+    # 区间明细（逐日）
+    timeline_metrics = timeline_matrix.get("metrics") or []
+    timeline_rows = timeline_matrix.get("rows") or []
+    if timeline_metrics and timeline_rows:
+        html_parts.append("<div class='analysis-section'>")
+        html_parts.append("<h2>区间明细（逐日）</h2>")
+        html_parts.append("<table class='timeline-table'>")
+        html_parts.append("<thead>")
+        html_parts.append("<tr><th rowspan='2'>日期</th>")
+        for metric in timeline_metrics:
+            unit_html = f"<span class='ring-unit'>{metric.get('unit')}</span>" if metric.get("unit") else ""
+            html_parts.append(f"<th colspan='3'>{metric.get('label')}{unit_html}</th>")
+        html_parts.append("</tr>")
+        html_parts.append("<tr class='sub-head'>")
+        for _ in timeline_metrics:
+            html_parts.append("<th>本期</th><th>同期</th><th>同比</th>")
+        html_parts.append("</tr></thead><tbody>")
+        for row in timeline_rows:
+            date_label = row.get("date") or ""
+            html_parts.append(f"<tr><td>{date_label}</td>")
+            for metric in timeline_metrics:
+                key = metric.get("key")
+                decimals = metric.get("decimals", 2)
+                current_val = _format_number(row.get(f"{key}__current"), decimals)
+                peer_val = _format_number(row.get(f"{key}__peer"), decimals)
+                delta_value = row.get(f"{key}__delta")
+                delta_text = _format_percent_text(delta_value)
+                delta_class = _classify_delta(delta_value)
+                html_parts.append(f"<td>{current_val}</td>")
+                html_parts.append(f"<td>{peer_val}</td>")
+                html_parts.append(f"<td class='{delta_class}'>{delta_text}</td>")
+            html_parts.append("</tr>")
+        html_parts.append("</tbody></table></div>")
 
     # 5. 图表区域 (含数据注入)
     timeline_data_json = json.dumps([
         {
-            "key": m["label"], # Use label as key for simplicity in selector
+            "key": m["label"],  # Use label as key for simplicity in selector
             "label": m["label"],
             "unit": m["unit"],
             "is_temp": m["is_temperature"],
-            "data": json.loads(m["timeline_json"]) # restore to list
+            "data": json.loads(m["timeline_json"])  # restore to list
         }
-        for m in metrics if m.get("timeline_json")
+        for m in metrics if m.get("timeline_entries")
     ], ensure_ascii=False)
     
     chart_html = f"""

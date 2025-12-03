@@ -3536,6 +3536,7 @@ def _execute_data_analysis_query_legacy(
                 content={"ok": False, "message": f"查询气温指标失败: {exc}"},
             )
     timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
+    const_value_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
     if analysis_mode_value == "range":
         if analysis_metric_keys:
             if is_beihai_sub_scope:
@@ -3569,7 +3570,6 @@ def _execute_data_analysis_query_legacy(
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("生成逐日明细失败: %s", exc)
         if constant_metric_keys:
-            const_value_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
             for key in constant_metric_keys:
                 row = constant_rows.get(key)
                 if row:
@@ -3591,8 +3591,11 @@ def _execute_data_analysis_query_legacy(
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("生成气温逐日明细失败: %s", exc)
 
-    # Calculate Ring Growth for AI Report
+    # Calculate Ring Growth for AI Report and provide previous totals for clients
     prev_rows_map: Dict[str, Dict[str, Any]] = {}
+    prev_temp_rows: Dict[str, Dict[str, Any]] = {}
+    prev_range_payload: Optional[Dict[str, str]] = None
+    ring_compare_note = ""
     if getattr(payload, "request_ai_report", False) and analysis_mode_value == "range":
         try:
             prev_start, prev_end = _compute_previous_range(start_date, end_date)
@@ -3605,7 +3608,24 @@ def _execute_data_analysis_query_legacy(
                     prev_end,
                     sheet_name=sheet_name_filter,
                 )
+                if temperature_metric_keys and temperature_column_lookup:
+                    try:
+                        prev_temp_rows, _ = _query_temperature_rows(
+                            temperature_view_name or "calc_temperature_data",
+                            temperature_metric_keys,
+                            prev_start,
+                            prev_end,
+                            analysis_mode_value,
+                            temperature_column_lookup,
+                        )
+                    except Exception as exc:
+                        logger.warning("查询环比气温指标失败: %s", exc)
+                prev_range_payload = {
+                    "start": prev_start.isoformat(),
+                    "end": prev_end.isoformat(),
+                }
         except Exception as exc:
+            ring_compare_note = str(exc)
             logger.warning("计算环比数据失败: %s", exc)
 
     rows_payload: List[Dict[str, Any]] = []
@@ -3671,27 +3691,32 @@ def _execute_data_analysis_query_legacy(
 
         # Calculate Ring Ratio
         ring_ratio = None
-        if prev_rows_map and key in prev_rows_map:
-            prev_source = prev_rows_map[key]
-            # In range mode, the query returns 'value' (aggregated), not 'value_biz_date'
-            prev_val = _decimal_to_float(prev_source.get("value"))
+        prev_val = None
+        if value_type == "temperature" and prev_temp_rows.get(key):
+            prev_val = _decimal_to_float(prev_temp_rows[key].get("value"))
+        elif value_type == "constant" and key in const_value_map:
+            prev_val = const_value_map[key][0]
+        elif prev_rows_map and key in prev_rows_map:
+            prev_val = _decimal_to_float(prev_rows_map[key].get("value"))
 
-            # Determine current value for ring calculation
-            # Use the calculated total/average from timeline if available, otherwise fallback to source value
+        if prev_val is not None:
             if timeline_current_val is not None:
                 current_val_for_ring = timeline_current_val
-            else:
+            elif value_type == "temperature":
                 current_val_for_ring = _decimal_to_float(source.get("value"))
-
-            if current_val_for_ring is not None and prev_val is not None and abs(prev_val) > 1e-9:
+            elif value_type == "constant":
+                current_val_for_ring = _decimal_to_float(source.get("value"))
+            else:
+                current_val_for_ring = _decimal_to_float(source.get("value_biz_date"))
+            if current_val_for_ring is not None and abs(prev_val) > 1e-9:
                 ring_ratio = (current_val_for_ring - prev_val) / abs(prev_val) * 100
 
         if value_type == "constant":
             current_value = _decimal_to_float(source.get("value"))
             peer_value = _decimal_to_float(source.get("peer"))
-            # For constant, total is just the value itself if timeline is empty or same
-            total_current = timeline_current_val if timeline_current_val is not None else current_value
-            total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
+            # 常量指标在累计模式下不做求和，累计值=单值
+            total_current = current_value
+            total_peer = peer_value
 
             rows_payload.append(
                 {
@@ -3768,6 +3793,27 @@ def _execute_data_analysis_query_legacy(
                 },
             )
 
+    # Build previous totals map for ring comparison (only when AI 请求需要)
+    prev_totals_map: Dict[str, float] = {}
+    if prev_rows_map:
+        for key, prev_row in prev_rows_map.items():
+            value = _decimal_to_float(prev_row.get("value_biz_date"))
+            if value is not None:
+                prev_totals_map[key] = value
+    if constant_metric_keys:
+        for key in constant_metric_keys:
+            row = constant_rows.get(key)
+            if row is None:
+                continue
+            value = _decimal_to_float(row.get("value"))
+            if value is not None and key not in prev_totals_map:
+                prev_totals_map[key] = value
+    if temperature_metric_keys and prev_temp_rows:
+        for key, prev_entry in prev_temp_rows.items():
+            value = _decimal_to_float(prev_entry.get("value"))
+            if value is not None:
+                prev_totals_map[key] = value
+
     warnings: List[str] = []
     # ... existing code ...
     if missing_metrics:
@@ -3791,6 +3837,12 @@ def _execute_data_analysis_query_legacy(
         "missing_metrics": missing_metrics,
         "warnings": warnings,
     }
+    if prev_range_payload and prev_totals_map:
+        response_payload["ringCompare"] = {
+            "range": prev_range_payload,
+            "prevTotals": prev_totals_map,
+            "note": ring_compare_note,
+        }
     if payload.request_ai_report:
         try:
             job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)

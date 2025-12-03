@@ -1,5 +1,25 @@
 # 进度记录
 
+## 2025-12-27（AI 报告同比与区间明细渲染）
+
+前置说明：
+- 根目录 AGENTS 要求 Serena 优先，但仓库同时规定“所有文件编辑必须使用 apply_patch”，且需在单个 Python 文件内多处插入/替换代码；Serena 当前无法在该场景下完成精确写操作，因此依 3.9 降级矩阵使用 `apply_patch` 修改 `backend/services/data_analysis_ai_report.py`、`backend/README.md`、`frontend/README.md` 与本文，阅读/检索仍通过 Serena 工具完成。需回滚时按上述文件逆序还原即可。
+
+本次动作：
+- `_preprocess_payload` 记录 `value_type/decimals/timeline_entries`，并在预处理阶段调用 `_build_timeline_matrix` 产出逐日矩阵，保证常量指标的累计值永远等于单值、气温指标累计改为日均，同时为后续 HTML 渲染提供 `timeline_matrix`。
+- `_build_timeline_matrix` 依据指标类型自动生成“每日 + 总计”行：常量复用单值、气温取平均、其余指标求和，并携带本期/同期/同比百分比；卡片和同比表均可重用这些数值。
+- `_generate_report_html` 新增“同比比较”表、完善“环比比较”表描述，并渲染“区间明细（逐日）”双表头（日期 × 每个指标的本期/同期/同比）及颜色提示；指标卡片数值遵从各自 `decimals`，ECharts 只注入存在逐日数据的指标，平均气温、常量的环比差异与单位信息在卡片和表格中均可见。
+- 新增 `_classify_delta` 与 CSS 样式（`delta-positive/negative/...`、`timeline-table`），统一控制同比/环比颜色；`timeline_data_json` 仅包含真实 timeline 指标，避免图表下拉出现空项。README（前/后端）同步写入本次会话摘要，说明后台渲染已追平网页端。
+
+影响范围与回滚：
+- 代码改动仅在 `backend/services/data_analysis_ai_report.py`，回滚恢复该文件即可撤销所有预处理/渲染更新；README 与本文只追加记录，按需删除对应段落即可。
+- 新 HTML 输出包含更多段落，嵌入端（如前端下载或 iframe 展示）若有自定义 CSS 需确保未覆盖 `.timeline-table` 等新类名；否则无需额外调整。
+
+验证建议：
+1. 运行 `python -m py_compile backend/services/data_analysis_ai_report.py` 确认语法正确。
+2. 在数据分析页勾选“智能报告生成（BETA）”，选择包含“平均气温”“常量指标”的区间后下载报告，检查顶部卡片显示红绿环比、正文包含“同比比较/环比比较/区间明细（逐日）”三块表格，气温/常量的累计值与网页显示一致。
+3. 若需进一步验证，使用无逐日数据的指标请求报告，确认 ECharts 只提供有 timeline 的指标、区间明细表自动隐藏空列；常量指标的“本期/上期累计”应与单日相等。
+
 ## 2025-12-27（analysis_beihai_sub 视图）
 
 前置说明：
@@ -3128,3 +3148,31 @@ sum_basic_data 相关：
 
 影响范围与回滚：
 - 仅影响数据分析 API 的累计模式 timeline；回滚可还原上述 Python 文件即可。
+
+## 2025-12-27（AI 报告环比字段缺失修复）
+
+- 现象：勾选“环比分析”并开启智能报告后，生成的 AI 报告正文多处原计划描述环比的句子留空；调试 `_preprocess_payload` 发现我们只输出了格式化字符串 `ring_fmt`，却没有把原始 `ring_ratio` 数值写入 JSON，导致 Prompt 中引用 `ring` 字段时拿到 `null`。
+- 改动：
+  1. `backend/services/data_analysis_ai_report.py` 在预处理阶段新增 `ring_value`（原始环比百分比），并一并写入 `processed_metrics` 字典（字段名 `ring`），保留 `ring_fmt/ring_color` 供 HTML 卡片使用。
+  2. 其余三个阶段逻辑保持不变，Prompt 现在能同时读取 `ring` 与 `ring_fmt`，从而在洞察/段落中引用环比数据。
+- 验证：`python -m py_compile backend/services/data_analysis_ai_report.py` 通过；本地触发一次 AI 报告后抓取 `_jobs[job_id]['payload']['metrics']`，可见 `ring` 为浮点值而不再是 `null`，模型输出的 JSON 亦会引用环比描述。
+- 回滚：恢复上述 Python 文件即可撤销本次改动。
+
+## 2025-12-27（AI 报告环比比较板块对齐前端）
+
+- 现象：虽然补回 `ring_ratio` 数值，但 AI 报告仍未自动写出环比结论；与前端逻辑对比后发现，网页的“环比比较”依赖一个独立的 `ringCompare` 数据块（包含上期区间与逐指标对比），而我们在 AI 流水线中既没有把这块数据提供给 Prompt，也没有在 HTML 模板里渲染对应板块。
+- 处理：
+  1. `backend/services/data_analysis_ai_report.py` 新增辅助函数 `_build_ring_compare_payload`，根据接口返回的 `ringCompare`（上期区间、`prevTotals`、提示语）构造与前端相同的 entries、范围标签与摘要句，并写入 `processed_data['ring_compare']`，供 Prompt/HTML 同时消费。
+  2. `_generate_report_html` 追加“环比比较”段：若存在 entries，则输出“指标 / 本期累计 / 上期累计 / 环比”表格和摘要句；若仅有备注，则展示 warning 提示，确保 AI 报告始终可视化环比对比。
+- 验证：`python -m py_compile backend/services/data_analysis_ai_report.py`；本地触发一次 AI 报告，HTML 中出现“环比比较”表格及【环比】摘要，LLM 输出 JSON 也能读取同样的数据结构。
+- 回滚：还原该 Python 文件即可移除本次增强。
+
+## 2025-12-27（/data_analysis/query 输出 ringCompare 数据）
+
+- 发现：网页端的“环比比较”依赖前端额外发起的上期查询并在浏览器本地计算 `ringCompare.prevTotals`；AI 报告在服务端触发时只有当前窗口的数据，导致我们虽在报告模板中新增了“环比比较”段，但实际 payload 并未包含 `ringCompare` 字段，生成结果依旧为空。
+- 调整：当 `request_ai_report=true` 且模式为累计时，API `_execute_data_analysis_query_legacy` 现在会：
+  1. 计算上一窗口的起止日期并查询分析视图 `_query_analysis_rows`；同时，为气温指标调用 `_query_temperature_rows` 取得上一窗口平均值。
+  2. 汇总所有指标的上一期 totals（分析指标用 `value_biz_date`、常量复用 `constant_rows`、气温取上一窗口平均），构造 `ringCompare = { range, prevTotals, note }` 并写入响应；AI 报告即可直接消费，不再需要前端额外上传。
+- 伴随修改：保留原有 `ring_ratio` 逻辑，且在无法计算上一窗口时会把异常信息写入 `note`。前端旧逻辑不受影响（仍可自行二次查询）。
+- 验证：`python -m py_compile backend/api/v1/daily_report_25_26.py` 通过；勾选“智能报告生成”后抓包可见响应附带 `ringCompare.prevTotals`。
+- 补充：为确保 AI 队列拿到 `ringCompare`，已将响应字段的写入提前到调用 `enqueue_ai_report_job` 之前（`backend/api/v1/daily_report_25_26.py`）。- 附加：AI 报告卡片若缺少环比值，会根据 `ringCompare.entries` 回填 `ring` 数值与颜色，使“环比”字段不再为空（`backend/services/data_analysis_ai_report.py`）。- 再补：温度指标过去不会计算 ring_ratio（因为上一窗口数据存放在独立结构），导致 AI 卡片上的“环比”始终 `--`。现已在 `_execute_data_analysis_query_legacy` 中使用 `prev_temp_rows`/`const_value_map` 回填 `prev_val`，无论指标类型都能得到环比百分比。- 针对常量累计与气温环比：`backend/services/data_analysis.py` 现强制常量指标的 `total_current/total_peer` 等于单日值，不再把逐日数组累加；而 `backend/api/v1/daily_report_25_26.py` 在计算 `ring_ratio` 时，针对 temperature/constant/analysis 三类指标分别回填上一窗口的参考值，避免气温/常量缺少环比或使用错误的参考值。- 再优化：legacy API（`backend/api/v1/daily_report_25_26.py`）的常量指标在累计模式下不再使用逐日和累加，而是直接返回单值，保证“本期/同期/环比累计”与常量本身一致。

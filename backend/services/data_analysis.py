@@ -637,8 +637,8 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         else:
             current_value = _decimal_to_float(source.get("value_biz_date"))
             peer_value = _decimal_to_float(source.get("value_peer_date"))
-            total_current = timeline_current_sum if timeline_current_sum is not None else current_value
-            total_peer = timeline_peer_sum if timeline_peer_sum is not None else peer_value
+            total_current = current_value
+            total_peer = peer_value
             rows_payload.append(
                 {
                     "key": key,
