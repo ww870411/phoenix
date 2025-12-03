@@ -7,6 +7,7 @@ Gemini 2.5 Flash 文本对话测试脚本（使用新版 google-genai SDK，支�
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -19,6 +20,8 @@ from google.genai import types
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_KEY_FILE = PROJECT_ROOT / "backend_data" / "api_key.json"
 API_KEY = os.environ.get("GOOGLE_GEMINI_API_KEY")
+AI_KEY_ENCRYPT_PREFIX = "enc::"
+AI_KEY_SALT = "phoenix-ai-salt"
 BASE_SYSTEM_PROMPT = '''1. 角色设定 (Role Definition)
 你是【大连洁净能源集团】的高级经营分析师。你的文风严谨、客观、数据驱动，通过分析财务和生产数据来揭示经营状况。你的受众是集团高层管理者，因此报告需要直击痛点，既要肯定成绩（如成本节约），也要犀利地指出未达标的具体单位和原因。
 2. 任务指令 (Task Instruction)
@@ -44,6 +47,21 @@ GROUNDING_TOOL = types.Tool(google_search=types.GoogleSearch())
 BASE_CONFIG = types.GenerateContentConfig(tools=[GROUNDING_TOOL])
 
 
+def _decrypt_api_secret(value: str) -> str:
+    if not value:
+        return ""
+    if not value.startswith(AI_KEY_ENCRYPT_PREFIX):
+        return value
+    encoded = value[len(AI_KEY_ENCRYPT_PREFIX) :]
+    try:
+        decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    if decoded.endswith(AI_KEY_SALT):
+        return decoded[: -len(AI_KEY_SALT)]
+    return ""
+
+
 def load_api_config() -> Tuple[str, str]:
     """
     加载 API Key 与模型名：优先环境变量，否则读取 backend_data/api_key.json。
@@ -55,7 +73,7 @@ def load_api_config() -> Tuple[str, str]:
     if API_KEY_FILE.exists():
         try:
             data = json.loads(API_KEY_FILE.read_text(encoding="utf-8"))
-            key = data.get("gemini_api_key", "").strip()
+            key = _decrypt_api_secret(data.get("gemini_api_key", "").strip())
             model_name = data.get("gemini_model", "").strip() or "gemini-2.5-flash"
             if key:
                 return key, model_name

@@ -32,3 +32,10 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 - **改动内容**：在 `backend/services/data_analysis.py` 内调整 `_query_plan_month_rows` 查询参数，新增 `period_exact=YYYY-MM-01`、`period_prefix=YYYY-MM%` 以及 `period_digits_prefix=YYYYMM%`，SQL 条件扩展为 `period = :period_exact OR period LIKE :period_prefix OR regexp_replace(period, '[^0-9]', '', 'g') LIKE :period_digits_prefix)`，替换原本的 `period::date = :period_start`。这样即可兼容月底日期、仅月份以及“2025年11月”此类含中文或分隔符的 period 文本，恢复 `plan_comparison` 载荷。若仍无法命中，则在响应中返回 `plan_comparison_note`（如“仅支持同月”“本月缺少计划值”），数据分析页与本单位分析组件会显示提示原因。
 - **影响范围**：仅影响 `/data_analysis/query` 在同月区间返回的 `plan_comparison` 字段，前端逻辑无需修改即可重新渲染“计划比较”表和导出板块。
 - **验证建议**：使用 2025-11-10 ~ 2025-11-30 等同月累计区间执行查询，应重新看到计划比较数据；将计划表中的 period 写为月底日期后再次查询，仍能返回对应计划值与完成率。
+
+## 2025-12-30（AI 配置文件加密）
+
+- **触发原因**：`backend_data/api_key.json` 中的 `gemini_api_key` 为明文，存在泄露风险。
+- **改动内容**：在 `backend/api/v1/daily_report_25_26.py` 引入 `_encrypt_api_secret/_decrypt_api_secret`，`_persist_ai_settings` 存储时统一写入 `enc::<base64(urlsafe(api_key + phoenix-ai-salt))>`，读取与接口返回均自动解密。`backend/services/data_analysis_ai_report.py` 及 `configs/ai_test.py` 同步支持该编码，避免 AI 模块拿到密文。配置文件示例已改为加密串。
+- **影响范围**：AI 设置接口与前端“智能体设定”仍传输明文，无需改动；仅文件内与本地脚本读写受到影响。回滚需去除加解密逻辑并把配置恢复为明文。
+- **验证建议**：1) 访问 `GET /data_analysis/ai_settings` 应能看到解密后的 key；2) 使用 AI 报告或 `configs/ai_test.py` 能正常连通 Gemini；3) 检查 `backend_data/api_key.json` 确认存储形式以 `enc::` 开头。

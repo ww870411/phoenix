@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import logging
@@ -30,7 +31,28 @@ from backend.config import DATA_DIRECTORY
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
+AI_KEY_ENCRYPT_PREFIX = "enc::"
+AI_KEY_SALT = "phoenix-ai-salt"
 PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
+
+
+def _decrypt_api_secret(value: Any) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    if not value:
+        return ""
+    if not value.startswith(AI_KEY_ENCRYPT_PREFIX):
+        return value
+    encoded = value[len(AI_KEY_ENCRYPT_PREFIX) :]
+    try:
+        decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    if decoded.endswith(AI_KEY_SALT):
+        return decoded[: -len(AI_KEY_SALT)]
+    return ""
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
@@ -160,7 +182,7 @@ def _load_gemini_settings() -> Dict[str, str]:
     if not API_KEY_PATH.exists():
         raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")
     data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    api_key = data.get("gemini_api_key")
+    api_key = _decrypt_api_secret(data.get("gemini_api_key"))
     model = data.get("gemini_model")
     if not api_key or not isinstance(api_key, str):
         raise RuntimeError("缺少 gemini_api_key 配置")

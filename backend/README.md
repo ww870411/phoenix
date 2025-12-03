@@ -94,6 +94,12 @@
 - `backend/services/data_analysis.py` 的 `_build_plan_comparison_payload` 改为按月份前缀匹配：构造 `period_exact=YYYY-MM-01`、`period_prefix=YYYY-MM%` 与 `period_digits_prefix=YYYYMM%`，SQL 条件扩展为 `period = :period_exact OR period LIKE :period_prefix OR regexp_replace(period, '[^0-9]', '', 'g') LIKE :period_digits_prefix`，去掉 `period::date` 强制转换后即可兼容多种 period 字符串。若仍无法生成比较，会附带 `plan_comparison_note`（如“仅支持同月区间”“该月份缺少计划值”）方便前端展示原因。
 - 修复后 `/data_analysis/query` 只要起止日期位于同月且存在计划数据即可重新返回 `plan_comparison` 数据，前端“计划比较”表和 Excel 导出恢复显示；回滚只需撤销上述函数的 SQL 变更。
 
+# 会话小结（2025-12-30 AI 配置加密）
+
+- `backend_data/api_key.json` 中的 `gemini_api_key` 现以 `enc::<base64>` 形式保存，内容为 `api_key + phoenix-ai-salt` 的 urlsafe base64，避免明文泄露；空值仍写空字符串。
+- `backend/api/v1/daily_report_25_26.py` 读取配置时会自动解密，并在写入接口 `_persist_ai_settings` 中统一加密；对外 API (`GET/POST /data_analysis/ai_settings`) 仍返回/接受明文，前端无须改动。
+- `backend/services/data_analysis_ai_report.py` 及 `configs/ai_test.py` 的本地调试脚本同样支持解密后的 key，确保 AI 报告与测试工具行为一致。若需回滚，去除 `_encrypt_api_secret/_decrypt_api_secret` 的调用并将配置文件恢复为明文即可。
+
 # 会话小结（2025-12-27 数据分析流程讨论）
 
 - 本轮仅与用户确认数据分析页面仍依赖现有 `/data_analysis/schema`（单位/指标/分析模式/小数位/默认日期）与 `/data_analysis/query`（本期/同期/环比/计划比较/逐日 timeline）接口，以及 `getDashboardBizDate` 提供的默认业务日，无任何 FastAPI 或 SQL 变更。

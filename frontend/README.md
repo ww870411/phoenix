@@ -6,6 +6,11 @@
 - 前端数据分析页与本单位分析组件读取到新的 `plan_comparison_note` 字段，在无计划值或跨月区间时会显示原因提示；只要选择同一自然月且计划表有数据，原有“计划比较”表、摘要 `【计划】` 与导出内容都会恢复。
 - 若需回滚旧逻辑，恢复后端对应函数即可；前端保持监听 `response.plan_comparison/plan_comparison_note` 的处理流程即可兼容后续扩展。
 
+## 会话小结（2025-12-30 AI 配置加密联动）
+
+- 后端将 `backend_data/api_key.json` 中的 `gemini_api_key` 以 `enc::<base64>` 格式保存，接口 `GET/POST /data_analysis/ai_settings` 在服务端自动解密/加密。前端“智能体设定”对话框依旧以明文显示/提交，无需额外处理。
+- 若未来检测到 `plan_comparison_note` 类似的提示，应先确认后端是否返回 `ok: true` 与新的 note 字段；前端当前逻辑会在 `ai_settings` 接口失败时提示用户稍后重试。
+
 ## 会话小结（2025-12-27 数据分析智能体设定入口）
 
 - 数据分析页“智能报告生成（BETA）”旁新增“智能体设定”按钮，仅 `Global_admin` 可见。点击后弹出模态窗，读取并展示 `backend_data/api_key.json` 里的 `api_key`、`model`，支持直接编辑并保存，保存成功后提示“智能体配置已保存”。

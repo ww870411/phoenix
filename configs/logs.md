@@ -592,3 +592,8 @@ codex resume 019a5938-96cf-7ed3-87b4-3fc60f89e5e5
 
 数据分析页面优化中
     codex resume 019a95aa-b849-7c60-8b3c-3aacd43396f9
+
+
+    
+• - 已在 backend/api/v1/daily_report_25_26.py 中引入 enc::<base64> 的简单加密机制：存盘时自动把 gemini_api_key 与固定盐 phoenix-ai-salt 拼接后做 urlsafe base64，再加前缀 enc::；读取/接口返回都会
+    调用 _decrypt_api_secret 还原明文，因此 AI 模块与“智能体设定”弹窗看到的依旧是解密后的 key。_safe_read_ai_settings 也顺带修正为通用异常兜底
