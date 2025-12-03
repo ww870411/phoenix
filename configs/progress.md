@@ -1,5 +1,55 @@
 # 进度记录
 
+## 2025-12-27（数据分析接口一次返回上期气温）
+
+前置说明：
+- Serena 负责检索/定位，但代码与文档需通过 `apply_patch` 修改。本次针对 `backend/api/v1/daily_report_25_26.py`、`backend/README.md`、`frontend/README.md`、本文同步更新，如需回滚按同序恢复。
+
+本次动作：
+- `_execute_data_analysis_query` 在累计模式下默认计算上一窗口：新增 `need_prev_range` 判定（存在任意分析或气温指标即可），主动调用 `_compute_previous_range`、`_query_analysis_rows`、`_query_temperature_rows`，结果写入 `prev_rows_map/prev_temp_rows` 并生成 `prev_range_payload`。
+- `ringCompare` 与 `rows[].ring_ratio` 因此不再依赖 `request_ai_report`，数据分析页第一次调用 `/data_analysis/query` 就能拿到平均气温的上期区间平均值与环比百分比，也无需再发起第二次请求获取“上期包”。
+- README（前/后端）补充说明“首次响应即包含上期平均气温”，便于协作者了解接口行 为调整。
+
+影响范围与回滚：
+- 仅 `backend/api/v1/daily_report_25_26.py` 逻辑更新；恢复该文件即可让接口回到“仅 AI 请求才返回上期数据”的旧策略。文档段落可视情况删除。
+
+验证建议：
+1. 在数据分析页选择累计模式并勾选“平均气温”，调用 `/data_analysis/query` 后应在响应 `ringCompare.entries` 中看到平均气温的本期/上期 + 环比；卡片 `ring_ratio` 同时出现。
+2. 不勾选“智能报告”也能获得同样结果，证明一次调用就包含上期数据。
+
+## 2025-12-27（AI 报告环比表百分比展示修复）
+
+前置说明：
+- 后端 API 已将 `rate_overall_efficiency` 等百分比指标按 0.8→80 的方式输出，但 AI 报告“环比比较”表仍直接读取 `ringCompare.prevTotals` 中的原始小数，导致“上期累计”列显示 0.8%。需在 AI 服务中同步缩放。
+
+本次动作：
+- `backend/services/data_analysis_ai_report.py` 新增 `PERCENTAGE_SCALE_METRICS` 并在 `_build_ring_compare_payload` 中对 `prevTotals` 的相应指标乘以 100，确保环比表中的“上期累计”与“本期累计”展示口径一致（80%）。
+
+影响范围与回滚：
+- 仅影响 AI 报告 HTML 的环比表格，不改变 API 返回值。恢复该 Python 文件即可回滚。
+
+验证建议：
+1. company=Group、环比比较→“全厂热效率”行的“上期累计”应显示 80% 而非 0.8%。
+2. 其他数值型指标保持原有展示。
+
+## 2025-12-27（全厂热效率累计口径修复）
+
+前置说明：
+- 同上，Serena 仅用于检索，`backend/api/v1/daily_report_25_26.py`、`backend/README.md`、本文均以 `apply_patch` 修改。若需回滚恢复上述文件即可。
+
+本次动作：
+- 在 `_execute_data_analysis_query` 新增 `NON_ACCUMULATION_METRICS = {'rate_overall_efficiency'}`，在累计模式构建 `timeline_current_val/timeline_peer_val` 时，遇到该类“比例”指标改为取逐日时间线中最后一个非空值，而非默认求和，确保 `total_current/total_peer` 等同于统计视图中的“全厂热效率”。
+- 同时在 `value_type='analysis'` 且 `analysis_mode=range` 的分支，直接使用 `analysis_*_sum` 视图返回的 `value_biz_date/value_peer_date` 作为 `total_current/total_peer`，避免即使有 timeline 也重新求和造成偏差。
+- 新增 `PERCENTAGE_SCALE_METRICS`，目前只包含 `rate_overall_efficiency`，将其本期/同期/总计及逐日取值统一乘以 100（0.8→80），使接口与前端展示遵循“数据库小数=百分比”的约定。
+- README 记录修复说明，提醒协作者如有其他“不可累加”指标，可继续在该集合维护。
+
+影响范围与回滚：
+- 仅影响 `rate_overall_efficiency` 等在集合中的指标，其他指标仍维持原本求和或平均逻辑。恢复 `backend/api/v1/daily_report_25_26.py` 即可撤销。
+
+验证建议：
+1. 在数据分析页累计模式下选择“Group/主城区 + 全厂热效率”，确认 `total_current` 与 SQL 视图一致、不再出现大于 1 的异常累计值。
+2. 比较修复前后的响应，`ringCompare`、`rows[].ring_ratio` 等引用的热效率值应与 `analysis_groups_sum` 对应字段吻合。
+
 ## 2025-12-27（AI 报告同比与区间明细渲染）
 
 前置说明：

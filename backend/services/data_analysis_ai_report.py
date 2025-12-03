@@ -30,6 +30,7 @@ from backend.config import DATA_DIRECTORY
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
+PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
@@ -227,7 +228,8 @@ def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, A
         if current_val is None:
             current_val = row.get("current")
         current = _to_float_or_none(current_val)
-        previous = _to_float_or_none(prev_totals.get(key))
+        previous_raw = _to_float_or_none(prev_totals.get(key))
+        previous = previous_raw * 100 if key in PERCENTAGE_SCALE_METRICS and previous_raw is not None else previous_raw
         if current is None or previous is None:
             continue
         decimals = int(row.get("decimals")) if isinstance(row.get("decimals"), int) else 2

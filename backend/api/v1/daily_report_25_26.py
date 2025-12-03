@@ -75,8 +75,18 @@ TEMPERATURE_COLUMN_MAP = data_analysis_service.TEMPERATURE_COLUMN_MAP
 TEMPERATURE_UNIT = data_analysis_service.TEMPERATURE_UNIT
 MAX_TIMELINE_DAYS = data_analysis_service.MAX_TIMELINE_DAYS
 BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
+NON_ACCUMULATION_METRICS = {"rate_overall_efficiency"}
+PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency": 100.0}
 
 logger = logging.getLogger(__name__)
+def _scale_metric_value(metric_key: str, value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    factor = PERCENTAGE_SCALE_METRICS.get(metric_key)
+    if factor is None:
+        return value
+    return value * factor
+
 
 def _is_coal_inventory_sheet(name: Optional[str], tpl_payload: Optional[Dict[str, Any]] = None) -> bool:
     """
@@ -3596,27 +3606,31 @@ def _execute_data_analysis_query_legacy(
     prev_temp_rows: Dict[str, Dict[str, Any]] = {}
     prev_range_payload: Optional[Dict[str, str]] = None
     ring_compare_note = ""
-    if getattr(payload, "request_ai_report", False) and analysis_mode_value == "range":
+    need_prev_range = (
+        analysis_mode_value == "range"
+        and bool(analysis_metric_keys or temperature_metric_keys)
+    )
+    if need_prev_range:
         try:
             prev_start, prev_end = _compute_previous_range(start_date, end_date)
             if prev_start and prev_end:
-                prev_rows_map = _query_analysis_rows(
-                    active_view_name,
-                    unit_key,
-                    analysis_metric_keys,
-                    prev_start,
-                    prev_end,
-                    sheet_name=sheet_name_filter,
-                )
-                if temperature_metric_keys and temperature_column_lookup:
+                if analysis_metric_keys:
+                    prev_rows_map = _query_analysis_rows(
+                        active_view_name,
+                        unit_key,
+                        analysis_metric_keys,
+                        prev_start,
+                        prev_end,
+                        sheet_name=sheet_name_filter,
+                    )
+                if temperature_metric_keys:
                     try:
-                        prev_temp_rows, _ = _query_temperature_rows(
+                        prev_temp_rows = _query_temperature_rows(
                             temperature_view_name or "calc_temperature_data",
                             temperature_metric_keys,
                             prev_start,
                             prev_end,
                             analysis_mode_value,
-                            temperature_column_lookup,
                         )
                     except Exception as exc:
                         logger.warning("查询环比气温指标失败: %s", exc)
@@ -3688,6 +3702,34 @@ def _execute_data_analysis_query_legacy(
                 if timeline_entries
                 else None
             )
+            if key in NON_ACCUMULATION_METRICS:
+                last_current = next(
+                    (
+                        entry.get("current")
+                        for entry in reversed(timeline_entries)
+                        if entry.get("current") is not None
+                    ),
+                    None,
+                )
+                last_peer = next(
+                    (
+                        entry.get("peer")
+                        for entry in reversed(timeline_entries)
+                        if entry.get("peer") is not None
+                    ),
+                    None,
+                )
+                timeline_current_val = last_current if last_current is not None else timeline_current_val
+                timeline_peer_val = last_peer if last_peer is not None else timeline_peer_val
+        if key in PERCENTAGE_SCALE_METRICS:
+            timeline_current_val = _scale_metric_value(key, timeline_current_val)
+            timeline_peer_val = _scale_metric_value(key, timeline_peer_val)
+            if timeline_entries:
+                for entry in timeline_entries:
+                    curr = entry.get("current")
+                    peer = entry.get("peer")
+                    entry["current"] = _scale_metric_value(key, curr)
+                    entry["peer"] = _scale_metric_value(key, peer)
 
         # Calculate Ring Ratio
         ring_ratio = None
@@ -3769,8 +3811,16 @@ def _execute_data_analysis_query_legacy(
         else:
             current_value = _decimal_to_float(source.get("value_biz_date"))
             peer_value = _decimal_to_float(source.get("value_peer_date"))
-            total_current = timeline_current_val if timeline_current_val is not None else current_value
-            total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
+            if analysis_mode_value == "range":
+                total_current = current_value
+                total_peer = peer_value
+            else:
+                total_current = timeline_current_val if timeline_current_val is not None else current_value
+                total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
+            current_value = _scale_metric_value(key, current_value)
+            peer_value = _scale_metric_value(key, peer_value)
+            total_current = _scale_metric_value(key, total_current)
+            total_peer = _scale_metric_value(key, total_peer)
             rows_payload.append(
                 {
                     "key": key,

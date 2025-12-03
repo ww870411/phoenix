@@ -1,5 +1,25 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 全厂热效率累计口径修复）
+
+- 问题：`rate_overall_efficiency` 属于百分比指标，累计模式下不应把逐日值求和；先前 `_execute_data_analysis_query` 在构造 `total_current/total_peer` 时默认对所有非温度指标求和，导致主城区/集团查询时的“全厂热效率”累计值错误。
+- 修复：`backend/api/v1/daily_report_25_26.py` 进行了三处调整：① `NON_ACCUMULATION_METRICS = {'rate_overall_efficiency'}`，在 range 模式下遇到该类指标时改为取逐日时间线中“最近的非空值”（即区间末值），避免把百分比累加；② 对 `value_type="analysis"` 的指标在 range 模式下直接使用 `analysis_company_sum/analysis_groups_sum` 视图返回的 `value_biz_date/value_peer_date` 作为 `total_current/total_peer`，彻底与数据库视图保持一致；③ 新增 `PERCENTAGE_SCALE_METRICS`，把 `rate_overall_efficiency` 的本期/同期/总计及逐日取值统一乘以 100，以 0.8 → 80% 的形式对外展示。
+- 影响：数据分析页和智能报告在累计模式下读取 `total_current/total_peer` 时即可获得正确热效率；环比/同比计算也随之恢复准确。若后续还有其他“不能求和的指标”，可继续把 key 加入该集合。
+- 回滚：恢复 `backend/api/v1/daily_report_25_26.py` 的相关补丁即可。
+
+# 会话小结（2025-12-27 AI 报告环比表百分比修复）
+
+- 问题：API 已把 `rate_overall_efficiency` 从 0.8 → 80 输出，但 AI 报告渲染“环比比较”时仍取 `ringCompare.prevTotals` 的原始小数，导致“上期累计”列显示 0.8%。
+- 修复：`backend/services/data_analysis_ai_report.py` 引入 `PERCENTAGE_SCALE_METRICS`，在 `_build_ring_compare_payload` 内对相应指标的 `prevTotals` 值统一乘以 100，确保上期/本期列展示一致。
+- 影响：仅影响 AI 报告 HTML 的环比表格，API 主体结果不变。若需回滚，恢复该 Python 文件即可。
+
+# 会话小结（2025-12-27 数据分析接口提前返回上期气温）
+
+- 诉求：数据分析页希望一次请求就拿到“上期区间”的平均气温与环比，无需第二次请求。原实现仅在 `request_ai_report=true` 时才调用 `_compute_previous_range` 并写入 `ringCompare`，导致常规页面首次查询缺少上期平均气温。
+- 改动：`backend/api/v1/daily_report_25_26.py` 在累计模式下只要存在分析指标或气温指标，就默认计算上一窗口：按需调用 `_query_analysis_rows`、`_query_temperature_rows` 并写入 `prev_rows_map/prev_temp_rows`，`ringCompare.prevTotals` 因此会包含平均气温，`rows[].ring_ratio` 也能立即得到环比值。
+- 影响：数据分析页面第一次调用 `/data_analysis/query` 就能拿到 `ringCompare` 和平均气温的环比，无需再发第二个请求；AI 报告逻辑不再是唯一触发点。若要回滚，只需恢复上述 Python 文件的差异。
+- 验证：累计模式下选择含“平均气温”的指标，单次请求即可在响应 `ringCompare.entries`、卡片环比字段中看到“上期平均气温 + 环比%”；无需额外参数。
+
 # 会话小结（2025-12-27 AI 报告同比＆区间明细渲染）
 
 - 目的：与数据分析网页同步，智能报告需补充“同比比较”“环比比较”“区间明细（逐日）”三块表格，同时让指标卡片/图表正确读取常量、气温指标的累计值与环比差异。
