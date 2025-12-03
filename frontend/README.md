@@ -1,5 +1,11 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-30 数据分析计划比较数据恢复）
+
+- 后端 `_query_plan_month_rows` 改为按月份前缀匹配 `paln_and_real_month_data.period`，可同时兼容“YYYY-MM-01”“YYYY-MM-30”“YYYY-MM”等写法，解决最近导入的计划值（记录为月底日期）无法返回 `plan_comparison` 的问题。
+- 数据分析页与本单位分析组件无须改动即可再次收到 `plan_comparison` 载荷，只要选择同一自然月区间，页面“计划比较”表、摘要 `【计划】` 以及 Excel 导出板块都会自动恢复显示。
+- 若需回滚旧逻辑，恢复后端对应函数即可；前端保持监听 `response.plan_comparison` 的处理流程，后续若新增计划类型字段同样可直接透传展示。
+
 ## 会话小结（2025-12-27 数据分析智能体设定入口）
 
 - 数据分析页“智能报告生成（BETA）”旁新增“智能体设定”按钮，仅 `Global_admin` 可见。点击后弹出模态窗，读取并展示 `backend_data/api_key.json` 里的 `api_key`、`model`，支持直接编辑并保存，保存成功后提示“智能体配置已保存”。

@@ -1199,7 +1199,8 @@ def _query_plan_month_rows(
     company_conditions = ["company = :company_key", "company_cn = :company_key"]
     params: Dict[str, Any] = {
         "plan_type": plan_type,
-        "period_start": period_start,
+        "period_exact": period_start.isoformat(),
+        "period_prefix": f"{period_start:%Y-%m}%",
         "company_key": unit_key,
     }
     normalized_label = (unit_label or "").strip()
@@ -1220,11 +1221,12 @@ def _query_plan_month_rows(
         deduped_labels = list(dict.fromkeys(metric_labels))
         params["item_labels"] = deduped_labels
         item_conditions.append("item_cn IN :item_labels")
+    period_conditions = "(period = :period_exact OR period LIKE :period_prefix)"
     query = f"""
-        SELECT item, item_cn, unit, period::date AS period, value, type
+        SELECT item, item_cn, unit, period, value, type
         FROM paln_and_real_month_data
         WHERE type = :plan_type
-          AND period::date = :period_start
+          AND {period_conditions}
           AND ({' OR '.join(company_conditions)})
           AND ({' OR '.join(item_conditions)})
     """

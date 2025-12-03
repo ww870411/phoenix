@@ -1,0 +1,1 @@
+2025-12-30：修复数据分析同月查询下未返回 plan_comparison 的问题。`backend/services/data_analysis.py` 中 `_query_plan_month_rows` 不再要求 `period::date = :period_start`，而是新增 `period_exact`（YYYY-MM-01）与 `period_prefix`（YYYY-MM%）两个参数，通过 `(period = :period_exact OR period LIKE :period_prefix)` 匹配 `paln_and_real_month_data` 的 period 字段，从而兼容月底日期或仅到月份的记录格式，恢复“计划比较”表格与 Excel 板块。

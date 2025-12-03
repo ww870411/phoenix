@@ -88,6 +88,12 @@
 - `_calculate_correlation` 的 fallback 分支补齐缺失的 numerator 运算，避免 Python 3.9 环境无 `statistics.correlation` 时相关系数恒为 0；异常信息会同步写入 job。
 - 回滚方式：恢复 `backend/services/data_analysis_ai_report.py` 即可返回旧版“一次 Prompt + Markdown 报告”逻辑。
 
+# 会话小结（2025-12-30 数据分析计划比较修复）
+
+- `paln_and_real_month_data.period` 近期导入的数据使用“月底日期”或“YYYY-MM”字符串，原逻辑使用 `period::date = :period_start` 仅能匹配每月 1 日，导致同月区间无法命中计划值。
+- `backend/services/data_analysis.py` 的 `_query_plan_month_rows` 改为按月份前缀匹配：构造 `period_exact=YYYY-MM-01` 与 `period_prefix=YYYY-MM%`，SQL 使用 `(period = :period_exact OR period LIKE :period_prefix)`，并去掉 `period::date` 强制转换，确保任何“YYYY-MM*”格式都能返回计划行。
+- 修复后 `/data_analysis/query` 只要起止日期位于同月即可重新返回 `plan_comparison` 数据，前端“计划比较”表和 Excel 导出恢复显示；回滚只需撤销上述函数的 SQL 变更。
+
 # 会话小结（2025-12-27 数据分析流程讨论）
 
 - 本轮仅与用户确认数据分析页面仍依赖现有 `/data_analysis/schema`（单位/指标/分析模式/小数位/默认日期）与 `/data_analysis/query`（本期/同期/环比/计划比较/逐日 timeline）接口，以及 `getDashboardBizDate` 提供的默认业务日，无任何 FastAPI 或 SQL 变更。
