@@ -3619,15 +3619,15 @@ def _execute_data_analysis_query_legacy(
         ring_ratio = None
         if prev_rows_map and key in prev_rows_map:
             prev_source = prev_rows_map[key]
-            prev_val = _decimal_to_float(prev_source.get("value_biz_date"))
+            # In range mode, the query returns 'value' (aggregated), not 'value_biz_date'
+            prev_val = _decimal_to_float(prev_source.get("value"))
             
             # Determine current value for ring calculation
-            if value_type == "temperature":
-                current_val_for_ring = _decimal_to_float(source.get("value")) # Temperature view returns average
-            elif value_type == "constant":
-                current_val_for_ring = _decimal_to_float(source.get("value"))
+            # Use the calculated total/average from timeline if available, otherwise fallback to source value
+            if timeline_current_val is not None:
+                current_val_for_ring = timeline_current_val
             else:
-                current_val_for_ring = _decimal_to_float(source.get("value_biz_date"))
+                current_val_for_ring = _decimal_to_float(source.get("value"))
 
             if current_val_for_ring is not None and prev_val is not None and abs(prev_val) > 1e-9:
                 ring_ratio = (current_val_for_ring - prev_val) / abs(prev_val) * 100

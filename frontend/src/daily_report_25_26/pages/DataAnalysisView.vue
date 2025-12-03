@@ -1593,11 +1593,18 @@ function startAiReportPolling(jobId) {
   updateAiReportStage('pending')
   setAiReportRunningMessage('pending')
   const poll = async () => {
+    // Prevent zombie pollers if active job changed during await
+    if (aiReportJobId.value !== jobId) return
+
     try {
       const payload = await getDataAnalysisAiReport(projectKey.value, jobId)
       if (!payload?.ok) {
         throw new Error(payload?.message || '获取智能报告失败')
       }
+      
+      // Re-check active job ID after await
+      if (aiReportJobId.value !== jobId) return
+
       const status = payload.status || 'pending'
       const stageKey = payload.stage || ''
       if (stageKey) {
@@ -1619,10 +1626,12 @@ function startAiReportPolling(jobId) {
       }
       setAiReportRunningMessage(stageKey || 'pending')
     } catch (err) {
+      // Re-check active job ID after await
+      if (aiReportJobId.value !== jobId) return
       aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
     }
     if (aiReportStatus.value !== 'ready' && aiReportStatus.value !== 'failed') {
-      aiReportPollTimer = window.setTimeout(poll, 1000)
+      aiReportPollTimer = window.setTimeout(poll, 2000)
     }
   }
   poll()

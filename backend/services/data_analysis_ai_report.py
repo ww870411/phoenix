@@ -40,7 +40,7 @@ INSIGHT_PROMPT_TEMPLATE = """你是一名热力行业数据分析师。请阅读
     {
       "metric": "指标名称",
       "status": "up | down | stable",
-      "evidence": "引用 value/delta/ring/stats 的文字，说明原因",
+      "evidence": "引用 value/delta(同比)/ring(环比)/stats 的文字，说明原因",
       "risk_level": "low | medium | high"
     }
   ],
@@ -53,7 +53,7 @@ INSIGHT_PROMPT_TEMPLATE = """你是一名热力行业数据分析师。请阅读
 要求：
 - 必须使用中文；
 - `key_findings` 至少 2 条，与 `notable_metrics` 对齐；
-- `status` 依据 delta/ring 与趋势判断；
+- `status` 依据 delta(同比) 与 ring(环比) 综合判断；
 - 没有相关性的指标也可以写在 `key_findings`，但要解释依据。
 """
 
@@ -256,12 +256,6 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         delta = row.get("total_delta") if row.get("total_delta") is not None else row.get("delta")
         if isinstance(delta, (int, float)):
             delta_fmt = f"{delta:+.2f}%"
-            delta_color = "#e74c3c" if delta < 0 else "#27ae60" # 默认涨绿跌红？需确认业务。通常热力行业：产量涨是红(好?) or 消耗涨是红(坏?)。这里暂按通用习惯：红=涨，绿=跌，或反之。
-            # 修正：通常财务/运营报表中，红色代表“警示/下降”或“赤字”，绿色代表“安全/增长”？
-            # 实际上 delta_color 最好由前端或业务决定。这里暂定：>0 红, <0 绿 (类似股市?) 或 >0 绿, <0 红?
-            # 观察 frontend: :class="resolveDelta(row) >= 0 ? 'delta-up' : 'delta-down'"
-            # CSS unknown. Assuming Up=Red, Down=Green for China stock market style? Or Up=Green (Growth), Down=Red (Decline)?
-            # Let's use generic colors: Up=Red (#d32f2f), Down=Green (#2e7d32) for now.
             if delta > 0:
                 delta_color = "#d32f2f" 
             elif delta < 0:
@@ -271,6 +265,20 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             delta_fmt = "--"
             delta_color = "#7f8c8d"
+
+        # 环比
+        ring = row.get("ring_ratio")
+        if isinstance(ring, (int, float)):
+            ring_fmt = f"{ring:+.2f}%"
+            if ring > 0:
+                ring_color = "#d32f2f" 
+            elif ring < 0:
+                ring_color = "#2e7d32"
+            else:
+                ring_color = "#7f8c8d"
+        else:
+            ring_fmt = "--"
+            ring_color = "#7f8c8d"
 
         # 构造 timeline_json (for echarts)
         timeline = row.get("timeline") or []
@@ -295,8 +303,8 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "delta": delta,
             "delta_fmt": delta_fmt,
             "delta_color": delta_color,
-            "ring_fmt": "--", # 暂无环比数据
-            "ring_color": "#7f8c8d",
+            "ring_fmt": ring_fmt,
+            "ring_color": ring_color,
             "is_temperature": row.get("value_type") == "temperature",
             "timeline_entries": timeline,
             "timeline_json": json.dumps(chart_data, ensure_ascii=False)
@@ -352,29 +360,31 @@ def _generate_report_html(
     # 1. 基础样式
     css = """
         body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
-        .header { margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; text-align: center; }
-        .header h1 { margin: 0 0 10px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
-        .meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
-        .cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 12px 16px; border-left: 4px solid #3498db; }
-        .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #7f8c8d; font-weight: 600; }
-        .card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
-        .card .unit { font-size: 12px; color: #95a5a6; font-weight: normal; margin-left: 4px; }
-        .card .delta-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; }
+        .header { margin-bottom: 24px; border-bottom: 2px solid #e0e0e0; padding-bottom: 16px; text-align: center; }
+        .header h1 { margin: 0 0 12px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
+        .meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+        .cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: #fff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 16px 20px; border-left: 5px solid #3498db; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+        .card h3 { margin: 0 0 10px 0; font-size: 15px; color: #7f8c8d; font-weight: 600; }
+        .card .value { font-size: 26px; font-weight: 700; color: #2c3e50; margin-bottom: 6px; }
+        .card .unit { font-size: 13px; color: #95a5a6; font-weight: normal; margin-left: 6px; }
+        .card .delta-row { display: flex; justify-content: space-between; margin-top: 12px; font-size: 13px; border-top: 1px solid #f0f0f0; padding-top: 8px; }
         .card .delta-val { font-weight: 600; }
-        .analysis-section { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .analysis-section h2 { font-size: 18px; margin-top: 0; margin-bottom: 16px; border-left: 4px solid #27ae60; padding-left: 10px; color: #2c3e50; }
-        .callouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .callout { border-radius: 8px; padding: 12px 16px; border-left: 4px solid #3498db; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .analysis-section { background: #fff; padding: 24px; border-radius: 10px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .analysis-section h2 { font-size: 20px; margin-top: 0; margin-bottom: 18px; border-left: 5px solid #27ae60; padding-left: 12px; color: #2c3e50; }
+        .callouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .callout { border-radius: 10px; padding: 16px 20px; border-left: 5px solid #3498db; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .callout.warning { border-left-color: #f39c12; }
         .callout.danger { border-left-color: #e74c3c; }
-        .callout h4 { margin: 0 0 6px 0; font-size: 14px; }
-        .callout p { margin: 0; font-size: 13px; color: #555; }
-        .chart-wrapper { height: 400px; margin-top: 20px; border: 1px solid #eee; border-radius: 8px; padding: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-        th, td { border: 1px solid #eee; padding: 8px; text-align: center; }
-        th { background: #f8f9fa; color: #666; }
-        .metric-selector { margin-bottom: 10px; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .callout h4 { margin: 0 0 8px 0; font-size: 15px; color: #2c3e50; }
+        .callout p { margin: 0; font-size: 14px; color: #555; line-height: 1.5; }
+        .chart-wrapper { height: 420px; margin-top: 24px; border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px 12px; text-align: center; }
+        th { background: #f4f6f7; color: #555; font-weight: 600; }
+        tr:nth-child(even) { background: #fafafa; }
+        .metric-selector { margin-bottom: 12px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; min-width: 200px; }
     """
 
     # 2. 构建页面主体
@@ -397,13 +407,17 @@ def _generate_report_html(
     for m in metrics:
         val = f"{m['value']:.2f}" if m['value'] is not None else "--"
         delta_style = f"color: {m['delta_color']}"
+        # Use .get() for ring properties to be safe, though _preprocess_payload should provide them
+        ring_fmt = m.get('ring_fmt', '--')
+        ring_color = m.get('ring_color', '#7f8c8d')
+        
         html_parts.append(f"""
             <div class='card'>
                 <h3>{m['label']}</h3>
                 <div class='value'>{val}<span class='unit'>{m['unit'] or ''}</span></div>
                 <div class='delta-row'>
                     <span>同比 <span style='{delta_style}' class='delta-val'>{m['delta_fmt']}</span></span>
-                    <span>环比 <span style='color: {m['ring_color']}' class='delta-val'>{m['ring_fmt']}</span></span>
+                    <span>环比 <span style='color: {ring_color}' class='delta-val'>{ring_fmt}</span></span>
                 </div>
             </div>
         """)
