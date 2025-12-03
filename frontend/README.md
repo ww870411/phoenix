@@ -5,11 +5,7 @@
 - 后端 `_build_plan_comparison_payload` 改为按月份前缀匹配 `paln_and_real_month_data.period`，除 `period LIKE 'YYYY-MM%'` 外，还会通过 `regexp_replace(period, '[^0-9]', '', 'g') LIKE 'YYYYMM%'` 抓取“月底日期”“2025年11月”这类字符串，解决最近导入的计划值无法返回 `plan_comparison` 的问题。
 - 前端数据分析页与本单位分析组件读取到新的 `plan_comparison_note` 字段，在无计划值或跨月区间时会显示原因提示；只要选择同一自然月且计划表有数据，原有“计划比较”表、摘要 `【计划】` 与导出内容都会恢复。
 - 若需回滚旧逻辑，恢复后端对应函数即可；前端保持监听 `response.plan_comparison/plan_comparison_note` 的处理流程即可兼容后续扩展。
-
-## 会话小结（2025-12-30 AI 配置加密联动）
-
-- 后端将 `backend_data/api_key.json` 中的 `gemini_api_key` 以 `enc::<base64>` 格式保存，接口 `GET/POST /data_analysis/ai_settings` 在服务端自动解密/加密。前端“智能体设定”对话框依旧以明文显示/提交，无需额外处理。
-- 若未来检测到 `plan_comparison_note` 类似的提示，应先确认后端是否返回 `ok: true` 与新的 note 字段；前端当前逻辑会在 `ai_settings` 接口失败时提示用户稍后重试。
+- AI 报告 HTML 现同步渲染“计划比较”表格与摘要说明，当接口返回 `plan_comparison` 时，下载的报告会列出本期/计划/完成率，与页面上的内容保持一致。
 
 ## 会话小结（2025-12-27 数据分析智能体设定入口）
 

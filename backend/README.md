@@ -87,6 +87,7 @@
 - 所有 Prompt 都会在最前端插入“### AI 指令（最高优先级）”并遵循 `backend_data/api_key.json` 的 `instruction` 文本；公共 helper `_call_model` 负责统一处理 candidate/parts，`_run_json_stage` 针对 JSON 阶段自带解析与重试；`enqueue_ai_report_job` 的内存快照新增 `stage/started_at/insight/layout/content/validation` 字段，`get_report_job` 查询结果据此可以展示实时阶段。
 - `_calculate_correlation` 的 fallback 分支补齐缺失的 numerator 运算，避免 Python 3.9 环境无 `statistics.correlation` 时相关系数恒为 0；异常信息会同步写入 job。
 - 回滚方式：恢复 `backend/services/data_analysis_ai_report.py` 即可返回旧版“一次 Prompt + Markdown 报告”逻辑。
+- AI 报告预处理会同步消费 `plan_comparison` 字段，生成“计划比较”表格与摘要（完成率/计划值对比），确保文本段落与 HTML 导出均包含计划完成情况。
 
 # 会话小结（2025-12-30 数据分析计划比较修复）
 
@@ -94,11 +95,10 @@
 - `backend/services/data_analysis.py` 的 `_build_plan_comparison_payload` 改为按月份前缀匹配：构造 `period_exact=YYYY-MM-01`、`period_prefix=YYYY-MM%` 与 `period_digits_prefix=YYYYMM%`，SQL 条件扩展为 `period = :period_exact OR period LIKE :period_prefix OR regexp_replace(period, '[^0-9]', '', 'g') LIKE :period_digits_prefix`，去掉 `period::date` 强制转换后即可兼容多种 period 字符串。若仍无法生成比较，会附带 `plan_comparison_note`（如“仅支持同月区间”“该月份缺少计划值”）方便前端展示原因。
 - 修复后 `/data_analysis/query` 只要起止日期位于同月且存在计划数据即可重新返回 `plan_comparison` 数据，前端“计划比较”表和 Excel 导出恢复显示；回滚只需撤销上述函数的 SQL 变更。
 
-# 会话小结（2025-12-30 AI 配置加密）
+# 会话小结（2025-12-30 AI 配置改回明文）
 
-- `backend_data/api_key.json` 中的 `gemini_api_key` 现以 `enc::<base64>` 形式保存，内容为 `api_key + phoenix-ai-salt` 的 urlsafe base64，避免明文泄露；空值仍写空字符串。
-- `backend/api/v1/daily_report_25_26.py` 读取配置时会自动解密，并在写入接口 `_persist_ai_settings` 中统一加密；对外 API (`GET/POST /data_analysis/ai_settings`) 仍返回/接受明文，前端无须改动。
-- `backend/services/data_analysis_ai_report.py` 及 `configs/ai_test.py` 的本地调试脚本同样支持解密后的 key，确保 AI 报告与测试工具行为一致。若需回滚，去除 `_encrypt_api_secret/_decrypt_api_secret` 的调用并将配置文件恢复为明文即可。
+- 由于临时加密方案导致各模块解密不一致，现已回退：`backend_data/api_key.json` 再次保存明文 `gemini_api_key`，FastAPI 读取/写入也不再进行加解密。
+- 如需保护密钥，请使用部署环境提供的安全存储（例如环境变量或密钥管理服务），当前仓库内的示例配置仍然用于本地联调。
 
 # 会话小结（2025-12-27 数据分析流程讨论）
 

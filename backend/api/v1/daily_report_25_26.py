@@ -7,7 +7,6 @@ daily_report_25_26 项目 v1 路由
 - 模板文件来源于容器内数据目录（默认 `/app/data`）中的 JSON 配置。
 """
 
-import base64
 import copy
 import json
 import logging
@@ -68,8 +67,6 @@ DATA_ANALYSIS_SCHEMA_PATH = DATA_ROOT / "数据结构_数据分析表.json"
 APPROVAL_STRUCTURE_PATH = DATA_ROOT / "数据结构_审批用表.json"
 CONSTANT_STRUCTURE_PATH = DATA_ROOT / "数据结构_常量指标表.json"
 AI_SETTINGS_PATH = DATA_ROOT / "api_key.json"
-AI_KEY_ENCRYPT_PREFIX = "enc::"
-AI_KEY_SALT = "phoenix-ai-salt"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -1702,35 +1699,6 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
-def _encrypt_api_secret(value: str) -> str:
-    if not value:
-        return ""
-    if value.startswith(AI_KEY_ENCRYPT_PREFIX):
-        return value
-    payload = f"{value}{AI_KEY_SALT}".encode("utf-8")
-    token = base64.urlsafe_b64encode(payload).decode("ascii")
-    return f"{AI_KEY_ENCRYPT_PREFIX}{token}"
-
-
-def _decrypt_api_secret(value: Any) -> str:
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    if not value:
-        return ""
-    if not value.startswith(AI_KEY_ENCRYPT_PREFIX):
-        return value
-    encoded = value[len(AI_KEY_ENCRYPT_PREFIX) :]
-    try:
-        decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return ""
-    if decoded.endswith(AI_KEY_SALT):
-        return decoded[: -len(AI_KEY_SALT)]
-    return ""
-
-
 def _read_ai_settings() -> Dict[str, str]:
     if not AI_SETTINGS_PATH.exists():
         return {
@@ -1752,9 +1720,8 @@ def _read_ai_settings() -> Dict[str, str]:
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
-    api_key = _decrypt_api_secret(data.get("gemini_api_key"))
     return {
-        "api_key": api_key,
+        "api_key": str(data.get("gemini_api_key") or ""),
         "model": str(data.get("gemini_model") or ""),
         "instruction": str(data.get("instruction") or ""),
         "enable_validation": _coerce_bool(data.get("enable_validation"), True),
@@ -1767,7 +1734,7 @@ def _read_ai_settings() -> Dict[str, str]:
 def _safe_read_ai_settings() -> Dict[str, Any]:
     try:
         return _read_ai_settings()
-    except Exception:  # pylint: disable=broad-except
+    except HTTPException:
         return {
             "api_key": "",
             "model": "",
@@ -1792,7 +1759,7 @@ def _persist_ai_settings(
             payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    payload["gemini_api_key"] = _encrypt_api_secret(api_key)
+    payload["gemini_api_key"] = api_key
     payload["gemini_model"] = model
     payload["instruction"] = instruction
     payload["enable_validation"] = bool(enable_validation)

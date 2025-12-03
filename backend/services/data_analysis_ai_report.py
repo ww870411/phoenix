@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import base64
 import copy
 import json
 import logging
@@ -31,28 +30,7 @@ from backend.config import DATA_DIRECTORY
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
-AI_KEY_ENCRYPT_PREFIX = "enc::"
-AI_KEY_SALT = "phoenix-ai-salt"
 PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
-
-
-def _decrypt_api_secret(value: Any) -> str:
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    if not value:
-        return ""
-    if not value.startswith(AI_KEY_ENCRYPT_PREFIX):
-        return value
-    encoded = value[len(AI_KEY_ENCRYPT_PREFIX) :]
-    try:
-        decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return ""
-    if decoded.endswith(AI_KEY_SALT):
-        return decoded[: -len(AI_KEY_SALT)]
-    return ""
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
@@ -182,7 +160,7 @@ def _load_gemini_settings() -> Dict[str, str]:
     if not API_KEY_PATH.exists():
         raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")
     data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    api_key = _decrypt_api_secret(data.get("gemini_api_key"))
+    api_key = data.get("gemini_api_key")
     model = data.get("gemini_model")
     if not api_key or not isinstance(api_key, str):
         raise RuntimeError("缺少 gemini_api_key 配置")
@@ -349,6 +327,54 @@ def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, A
         "current_range": current_range_label,
         "previous_range": previous_range_label,
         "summary_lines": summary_lines,
+    }
+
+
+def _build_plan_compare_payload(plan_payload: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(plan_payload, dict):
+        return None
+    entries_raw = plan_payload.get("entries")
+    if not isinstance(entries_raw, list) or not entries_raw:
+        return None
+    entries: List[Dict[str, Any]] = []
+    summary_phrases: List[str] = []
+    for entry in entries_raw:
+        if not isinstance(entry, dict):
+            continue
+        plan_value = _to_float_or_none(entry.get("plan_value")) or 0.0
+        actual_value = _to_float_or_none(entry.get("actual_value"))
+        completion_rate = _to_float_or_none(entry.get("completion_rate"))
+        label = entry.get("label") or entry.get("key") or "未命名指标"
+        unit = entry.get("unit") or ""
+        decimals = 2
+        entries.append(
+            {
+                "label": label,
+                "unit": unit,
+                "plan_value": plan_value,
+                "actual_value": actual_value,
+                "completion_rate": completion_rate,
+                "decimals": decimals,
+                "plan_type": entry.get("plan_type") or "plan",
+            }
+        )
+        plan_text = _format_number(plan_value, decimals)
+        actual_text = _format_number(actual_value, decimals)
+        completion_text = _format_percent_text(completion_rate)
+        summary_phrases.append(
+            f"{label} 计划 {plan_text}{unit}，本期 {actual_text}{unit}，完成率 {completion_text}"
+        )
+    if not entries:
+        return None
+    period_start = plan_payload.get("period_start")
+    period_end = plan_payload.get("period_end")
+    period_text = _format_range_label(period_start, period_end)
+    month_label = plan_payload.get("month_label") or (period_start[:7] if isinstance(period_start, str) else "")
+    return {
+        "entries": entries,
+        "period_text": period_text,
+        "month_label": month_label,
+        "summary_lines": summary_phrases,
     }
 
 
@@ -612,6 +638,7 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         })
 
     ring_compare = _build_ring_compare_payload(payload)
+    plan_compare = _build_plan_compare_payload(payload.get("plan_comparison"))
     if ring_compare:
         entries = ring_compare.get("entries") or []
         entry_by_key = {entry.get("key"): entry for entry in entries if entry.get("key")}
@@ -641,6 +668,7 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "meta": meta,
         "metrics": processed_metrics,
         "ring_compare": ring_compare,
+        "plan_compare": plan_compare,
         "timeline_matrix": timeline_matrix,
         "raw_warnings": payload.get("warnings") or []
     }
@@ -862,8 +890,45 @@ def _generate_report_html(
             peer_text = _format_number(entry["peer"], entry["decimals"])
             delta_text = _format_percent_text(entry.get("delta"))
             summary_phrases.append(f"{entry['label']} 同期 {peer_text}{unit_text}，同比 {delta_text}")
-        if summary_phrases:
-            html_parts.append(f"<p class='ring-summary-line'>【同比】{'；'.join(summary_phrases)}</p>")
+        for phrase in summary_phrases:
+            html_parts.append(f"<p class='ring-summary-line'>【同比】{phrase}</p>")
+    plan_data = processed_data.get("plan_compare") or {}
+    plan_entries = plan_data.get("entries") or []
+    if plan_entries:
+        html_parts.append("<div class='analysis-section'>")
+        html_parts.append("<h2>计划比较</h2>")
+        note_bits = []
+        if plan_data.get("month_label"):
+            note_bits.append(f"计划月份：{plan_data['month_label']}")
+        if plan_data.get("period_text"):
+            note_bits.append(f"期间：{plan_data['period_text']}")
+        if note_bits:
+            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(note_bits)}</p>")
+        html_parts.append(
+            "<table class='ring-summary__table'><thead><tr>"
+            "<th>指标</th><th>截至本期末</th><th>月度计划</th><th>完成率</th>"
+            "</tr></thead><tbody>"
+        )
+        for entry in plan_entries:
+            decimals = entry.get("decimals", 2)
+            actual_text = _format_number(entry.get("actual_value"), decimals)
+            plan_text = _format_number(entry.get("plan_value"), decimals)
+            completion_text = _format_percent_text(entry.get("completion_rate"))
+            unit = entry.get("unit") or ""
+            unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry.get('label')}</td>"
+                f"<td>{actual_text}{unit_html}</td>"
+                f"<td>{plan_text}{unit_html}</td>"
+                f"<td>{completion_text}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table>")
+        summary_lines = plan_data.get("summary_lines") or []
+        for line in summary_lines:
+            html_parts.append(f"<p class='ring-summary-line'>【计划】{line}</p>")
+        html_parts.append("</div>")
 
     ring_data = processed_data.get("ring_compare") or {}
     if ring_data and (ring_data.get("entries") or ring_data.get("note")):

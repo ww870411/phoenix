@@ -33,9 +33,45 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 - **影响范围**：仅影响 `/data_analysis/query` 在同月区间返回的 `plan_comparison` 字段，前端逻辑无需修改即可重新渲染“计划比较”表和导出板块。
 - **验证建议**：使用 2025-11-10 ~ 2025-11-30 等同月累计区间执行查询，应重新看到计划比较数据；将计划表中的 period 写为月底日期后再次查询，仍能返回对应计划值与完成率。
 
-## 2025-12-30（AI 配置文件加密）
+## 2025-12-30（AI 配置文件加密→回退）
 
-- **触发原因**：`backend_data/api_key.json` 中的 `gemini_api_key` 为明文，存在泄露风险。
-- **改动内容**：在 `backend/api/v1/daily_report_25_26.py` 引入 `_encrypt_api_secret/_decrypt_api_secret`，`_persist_ai_settings` 存储时统一写入 `enc::<base64(urlsafe(api_key + phoenix-ai-salt))>`，读取与接口返回均自动解密。`backend/services/data_analysis_ai_report.py` 及 `configs/ai_test.py` 同步支持该编码，避免 AI 模块拿到密文。配置文件示例已改为加密串。
-- **影响范围**：AI 设置接口与前端“智能体设定”仍传输明文，无需改动；仅文件内与本地脚本读写受到影响。回滚需去除加解密逻辑并把配置恢复为明文。
-- **验证建议**：1) 访问 `GET /data_analysis/ai_settings` 应能看到解密后的 key；2) 使用 AI 报告或 `configs/ai_test.py` 能正常连通 Gemini；3) 检查 `backend_data/api_key.json` 确认存储形式以 `enc::` 开头。
+- **触发原因**：尝试以 `enc::<base64>` 存储 `gemini_api_key` 后，AI 模块解密链路复杂且易出错。
+- **处理结果**：撤销 `_encrypt_api_secret/_decrypt_api_secret` 相关逻辑，`backend/api/v1/daily_report_25_26.py`、`backend/services/data_analysis_ai_report.py`、`configs/ai_test.py` 均恢复读取/写入明文 key；`backend_data/api_key.json` 改回裸字符串。
+- **影响范围**：前后端“智能体设定”交互与 AI 报告调用恢复旧行为，仓库内样例配置为明文。建议在部署环境使用环境变量或专用密钥存储替代。
+- **验证建议**：调用 `GET /data_analysis/ai_settings` 应直接返回明文 key；执行 AI 报告或 `configs/ai_test.py` 可正常连接 Gemini。
+
+## 2025-12-30（AI 报告计划比较展示）
+
+- **触发原因**：计划完成情况虽已在页面恢复，但智能报告下载件仍缺少计划 vs 实际的说明。
+- **改动内容**：`backend/services/data_analysis_ai_report.py` 新增 `_build_plan_compare_payload`，在 `_preprocess_payload` 中解析 `plan_comparison` 并附带到 processed_data；HTML 生成阶段插入“计划比较”表格与 `summary_lines`，并把结构化数据提供给洞察/版面/内容 Prompt，使模型可引用计划完成率。
+- **影响范围**：仅 AI 报告输出。接口响应结构未改，前端无需额外处理。回滚删除该 helper 及 HTML 片段即可。
+- **验证建议**：在同月区间触发 AI 报告，下载的 HTML 应包含“计划比较”章节，数值与页面计划板块一致，summary 中能看到 `【计划】` 开头的描述。
+
+## 2025-12-30（AI 报告同比/环比简报分行）
+
+- **触发原因**：AI 报告中“计划比较”摘要已按指标换行，但“同比比较”“环比比较”仍以分号拼接，阅读体验不一致。
+- **改动内容**：`backend/services/data_analysis_ai_report.py` 生成 HTML 时，将同比、环比的 `summary_phrases` 改为逐条输出 `<p class='ring-summary-line'>…</p>`，使每个指标独占一行，与计划比较保持一致。
+- **影响范围**：仅影响 AI 报告 HTML，接口返回结构不变。回滚只需恢复原本 `';'.join(summary_phrases)` 的拼接方式。
+- **验证建议**：重新下载智能报告，观察“同比比较”“环比比较”章节下方的提示是否按指标分行展示。
+
+---
+
+## 2025-12-30（修复数据分析计划对比显示问题）
+
+**问题根源：**
+1.  **逻辑缺失**：后端 API 路由 (`api/v1/daily_report_25_26.py`) 中使用了一个遗留的查询函数 `_execute_data_analysis_query_legacy`，该函数在复制 Service 层逻辑时，**漏掉了调用“计划对比”相关的代码**（`_build_plan_comparison_payload`）。导致无论底层数据和逻辑是否正确，API 都从未尝试生成计划对比数据。
+2.  **单位 Key 不匹配**：前端传递的单位标识符（如 `BeiHai_co_generation_Sheet`）与数据库中计划表的单位代码（如 `BeiHai`）不一致，且之前的 Service 层逻辑缺乏映射机制。
+
+**改动内容：**
+1.  **API 层补全**：在 `backend/api/v1/daily_report_25_26.py` 的 `_execute_data_analysis_query_legacy` 函数中，手动补上了对 `data_analysis_service._build_plan_comparison_payload` 的调用，接通了逻辑链路。
+2.  **Service 层增强**：在 `backend/services/data_analysis.py` 中新增 `PLAN_UNIT_MAPPING` 映射表，强制将 `BeiHai_co_generation_Sheet` 等表单 Key 映射为 `BeiHai` 等计划表 Key，并增加了智能去后缀的兜底逻辑和详细的调试日志。
+
+**验证结果：**
+前端查询同月区间（如 2025-11-05 ~ 2025-11-16）时，后端现在能正确识别计划月份，映射正确的单位 Key，并返回 `plan_comparison` 数据，前端随之成功渲染“计划完成情况”板块。
+
+## 2025-12-30（AI 报告计划比较展示）
+
+- **触发原因**：页面已经可以显示计划对比，但下载的 AI 报告仍缺少计划 vs 实际说明。
+- **改动内容**：`backend/services/data_analysis_ai_report.py` 在 `_preprocess_payload` 中解析 `plan_comparison`，新建 `_build_plan_compare_payload` 预处理完成率、计划值，HTML 生成阶段插入“计划比较”表格与 `【计划】` 摘要；相关 prompt 输入也带上这部分数据，确保模型文本会提及计划完成情况。
+- **影响范围**：仅影响 AI 报告的生成输出，接口格式与前端逻辑保持不变。回滚只需移除新 helper 及 HTML 片段。
+- **验证建议**：选择同月区间启用“下载智能分析报告”，HTML 中应出现“计划比较”章节，表格与摘要与页面数值一致。
