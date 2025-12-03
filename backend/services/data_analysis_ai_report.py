@@ -310,13 +310,13 @@ def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, A
     current_range_label = _format_range_label(payload.get("start_date"), payload.get("end_date"))
     summary_lines: List[str] = []
     if entries:
-        range_note = f"（上期：{previous_range_label}）" if previous_range_label else ""
         for entry in entries:
             unit_text = entry["unit"]
+            curr_text = _format_number(entry["current"], entry["decimals"])
             prev_text = _format_number(entry["previous"], entry["decimals"])
             rate_text = _format_percent_text(entry["rate"])
             summary_lines.append(
-                f"【环比】{entry['label']} 上期 {prev_text}{unit_text}，环比 {rate_text}{range_note}"
+                f"{entry['label']} 本期 {curr_text}{unit_text}，上期 {prev_text}{unit_text}，环比 {rate_text}"
             )
 
     note = ring_block.get("note") or ("当前指标无可用环比数据" if not entries else "")
@@ -746,7 +746,8 @@ def _generate_report_html(
     css = """
         body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8f9fa; color: #333; margin: 0; padding: 20px; }
         .header { margin-bottom: 24px; border-bottom: 2px solid #e0e0e0; padding-bottom: 16px; text-align: center; }
-        .header h1 { margin: 0 0 12px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
+        .header h1 { margin: 0 0 8px 0; font-size: 28px; color: #2c3e50; letter-spacing: 1px; }
+        .header .sub-title { margin: 0 0 12px 0; font-size: 16px; color: #475569; line-height: 1.4; font-weight: 500; }
         .meta-info { font-size: 13px; color: #555; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
         .cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
         .card { background: #fff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 16px 20px; border-left: 5px solid #3498db; transition: transform 0.2s; }
@@ -802,7 +803,8 @@ def _generate_report_html(
         f"<style>{css}</style>",
         "<script src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js'></script>",
         "</head><body>",
-        f"<div class='header'><h1>智能分析报告：{insight_data.get('headline', '数据分析报告')}</h1>",
+        "<div class='header'><h1>智能分析报告（BETA）</h1>",
+        f"<h2 class='sub-title'>{insight_data.get('headline', '数据分析报告')}</h2>",
         "<div class='meta-info'>",
         f"<span>单位：{meta.get('unit_label')}</span>",
         f"<span>模式：{meta.get('analysis_mode_label')}</span>",
@@ -887,11 +889,14 @@ def _generate_report_html(
         summary_phrases = []
         for entry in yoy_entries:
             unit_text = entry.get("unit") or ""
+            current_text = _format_number(entry["current"], entry["decimals"])
             peer_text = _format_number(entry["peer"], entry["decimals"])
             delta_text = _format_percent_text(entry.get("delta"))
-            summary_phrases.append(f"{entry['label']} 同期 {peer_text}{unit_text}，同比 {delta_text}")
+            summary_phrases.append(
+                f"{entry['label']} 本期 {current_text}{unit_text}，同期 {peer_text}{unit_text}，同比 {delta_text}"
+            )
         for phrase in summary_phrases:
-            html_parts.append(f"<p class='ring-summary-line'>【同比】{phrase}</p>")
+            html_parts.append(f"<p class='ring-summary-line'>{phrase}</p>")
     ring_data = processed_data.get("ring_compare") or {}
     if ring_data and (ring_data.get("entries") or ring_data.get("note")):
         html_parts.append("<div class='analysis-section'>")

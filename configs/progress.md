@@ -50,7 +50,7 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 ## 2025-12-30（AI 报告同比/环比简报分行）
 
 - **触发原因**：AI 报告中“计划比较”摘要已按指标换行，但“同比比较”“环比比较”仍以分号拼接，阅读体验不一致。
-- **改动内容**：`backend/services/data_analysis_ai_report.py` 生成 HTML 时，将同比、环比的 `summary_phrases` 改为逐条输出 `<p class='ring-summary-line'>…</p>`，使每个指标独占一行，与计划比较保持一致。
+- **改动内容**：`backend/services/data_analysis_ai_report.py` 生成 HTML 时，将同比、环比的 `summary_phrases` 改为逐条输出 `<p class='ring-summary-line'>…</p>`，并改写文案为“本期…同期/上期…同比/环比…”的格式（去掉 `【同比】/【环比】` 前缀），使每个指标独占一行并包含本期数值。
 - **影响范围**：仅影响 AI 报告 HTML，接口返回结构不变。回滚只需恢复原本 `';'.join(summary_phrases)` 的拼接方式。
 - **验证建议**：重新下载智能报告，观察“同比比较”“环比比较”章节下方的提示是否按指标分行展示。
 
