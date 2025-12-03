@@ -56,6 +56,7 @@ from backend.services.weather_importer import (
 # Use统一的数据目录常量，默认指向容器内 /app/data
 from backend.services import data_analysis as data_analysis_service
 from backend.services import data_analysis_ai_report
+from backend.services.api_key_cipher import decrypt_api_key, encrypt_api_key
 
 DATA_ROOT = SysPath(DATA_DIRECTORY)
 PROJECT_KEY = "daily_report_25_26"
@@ -1720,8 +1721,9 @@ def _read_ai_settings() -> Dict[str, str]:
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
+    encrypted_key = str(data.get("gemini_api_key") or "")
     return {
-        "api_key": str(data.get("gemini_api_key") or ""),
+        "api_key": decrypt_api_key(encrypted_key),
         "model": str(data.get("gemini_model") or ""),
         "instruction": str(data.get("instruction") or ""),
         "enable_validation": _coerce_bool(data.get("enable_validation"), True),
@@ -1759,7 +1761,7 @@ def _persist_ai_settings(
             payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    payload["gemini_api_key"] = api_key
+    payload["gemini_api_key"] = encrypt_api_key(api_key or "")
     payload["gemini_model"] = model
     payload["instruction"] = instruction
     payload["enable_validation"] = bool(enable_validation)

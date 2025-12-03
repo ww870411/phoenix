@@ -93,3 +93,14 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 - **修正补充（12-31 PM）**：实际值仅在来源于数据库查询（`month_actual_rows`）时放大，若退回到 `rows` 里的聚合结果则不再二次乘以 100，避免网页端/AI 报告“截至本期末”展示 8000% 的异常。
 - **影响范围**：仅影响 `plan_comparison.entries` 中的 `plan_value/actual_value` 数字展示，其它指标保持原样；网页端与 AI 报告都会直接读取修正后的 80% 文本。若需回滚，只需移除新 helper 以及 `_build_plan_comparison_payload` 中的缩放逻辑。
 - **验证建议**：选择同月区间并包含“全厂热效率”的查询，Web 端“计划比较”表的“计划值/截至本期末”应显示如 `80.00%`；下载智能报告查看“计划比较”和 `【计划】` 摘要，同样应展示 80%。
+
+## 2026-01-02（AI 配置伪加密恢复）
+
+- **背景**：`backend_data/api_key.json` 之前为明文密钥，存在被直接读取的风险。用户希望沿用一套轻量可逆的“掩码”方案，同时保持前端依旧看到/提交明文，以方便快速更换密钥。
+- **处理**：
+  1. 新增 `backend/services/api_key_cipher.py`，提供 `encrypt_api_key/decrypt_api_key`（在明文第 5 个字符后插入 `ww`）；
+  2. `backend/api/v1/daily_report_25_26.py` 的 `_read/_persist_ai_settings` 读写时自动解密/加密，接口仍返回明文；
+  3. `backend/services/data_analysis_ai_report.py` 与 `configs/ai_test.py` 读取密钥时统一调用 `decrypt_api_key`；
+  4. 示例配置 `backend_data/api_key.json` 更新为密文（`AIzaSww...`）。
+- **结果**：AI 报告线程池、智能体设定弹窗、CLI 调试脚本均可透明读取真实 key；仓库内落盘值为伪加密字符串，降低直接暴露风险。
+- **验证**：保存新 key 后检查 `backend_data/api_key.json`，应能看到插入 `ww` 的密文；调用 `GET /api/v1/daily_report_25_26/data_analysis/ai_settings` 仍返回明文；运行 `configs/ai_test.py` 可正常调用 Gemini。

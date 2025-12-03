@@ -20,6 +20,13 @@
 - **改动**：`backend/services/data_analysis.py` 增加 `PERCENTAGE_SCALE_METRICS` 与 `_scale_percentage_metric_value`，在构造 `plan_comparison.entries` 时自动将列入集合的指标乘以 100（仅对数据库原始值进行缩放，避免对 fallback 聚合结果重复乘 100），完成率计算逻辑保持不变。
 - **影响**：`/data_analysis/query`、网页“计划比较”板块以及 AI 报告导出的“计划比较”段落都会直接展示 80% 等符合预期的百分比，数据库存储格式无需调整；如需回滚，只需移除该集合与缩放调用。
 
+# 会话小结（2026-01-02 AI 配置简易加密恢复）
+
+- **触发原因**：`backend_data/api_key.json` 长期以明文保存 `gemini_api_key`，虽然方便替换但在协同开发中容易被直接读取。
+- **改动内容**：新增 `backend/services/api_key_cipher.py`，通过在明文第 5 个字符后插入固定串 `ww` 实现最小可逆“加密”；`_read/_persist_ai_settings` 保存/读取时分别调用 `encrypt_api_key/decrypt_api_key`，`data_analysis_ai_report.py` 与 `configs/ai_test.py` 也统一使用 `decrypt_api_key`。示例配置文件现已存储插入 `ww` 的密文。
+- **影响范围**：FastAPI 返回值与前端交互保持明文体验，只是落盘改为伪加密；AI 报告线程池、测试脚本依然可以透明使用 API Key，部署环境若改用环境变量也不会受影响。
+- **验证建议**：调用 `GET /api/v1/daily_report_25_26/data_analysis/ai_settings` 应看到解密后的明文；保存新 Key 后查看 `backend_data/api_key.json`，可见 `ww` 被插入第 5 位；运行 `configs/ai_test.py` 或触发 AI 报告可正常连接 Gemini。
+
 # 会话小结（2025-12-27 全厂热效率累计口径修复）
 
 - 问题：`rate_overall_efficiency` 属于百分比指标，累计模式下不应把逐日值求和；先前 `_execute_data_analysis_query` 在构造 `total_current/total_peer` 时默认对所有非温度指标求和，导致主城区/集团查询时的“全厂热效率”累计值错误。

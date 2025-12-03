@@ -16,6 +16,8 @@ from typing import List, Optional, Tuple
 from google import genai
 from google.genai import types
 
+from backend.services.api_key_cipher import decrypt_api_key
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_KEY_FILE = PROJECT_ROOT / "backend_data" / "api_key.json"
 API_KEY = os.environ.get("GOOGLE_GEMINI_API_KEY")
@@ -55,7 +57,8 @@ def load_api_config() -> Tuple[str, str]:
     if API_KEY_FILE.exists():
         try:
             data = json.loads(API_KEY_FILE.read_text(encoding="utf-8"))
-            key = data.get("gemini_api_key", "").strip()
+            encrypted_key = str(data.get("gemini_api_key", ""))
+            key = decrypt_api_key(encrypted_key).strip()
             model_name = data.get("gemini_model", "").strip() or "gemini-2.5-flash"
             if key:
                 return key, model_name

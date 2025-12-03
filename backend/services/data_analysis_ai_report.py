@@ -27,6 +27,7 @@ import statistics
 import google.generativeai as genai
 
 from backend.config import DATA_DIRECTORY
+from backend.services.api_key_cipher import decrypt_api_key
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 API_KEY_PATH = DATA_ROOT / "api_key.json"
@@ -176,7 +177,8 @@ def _load_gemini_settings() -> Dict[str, str]:
     if not API_KEY_PATH.exists():
         raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")
     data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    api_key = data.get("gemini_api_key")
+    raw_api_key = data.get("gemini_api_key") or ""
+    api_key = decrypt_api_key(str(raw_api_key))
     model = data.get("gemini_model")
     if not api_key or not isinstance(api_key, str):
         raise RuntimeError("缺少 gemini_api_key 配置")
