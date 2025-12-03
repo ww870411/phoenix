@@ -1,5 +1,10 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-31 计划比较百分比展示修复）
+
+- 数据分析页、填报页本单位分析以及 AI 报告下载的“计划比较”区块均直接使用 `/data_analysis/query` 的 `plan_comparison.entries`。后端现将 `rate_overall_efficiency` 这类百分比指标在返回前统一乘以 100，因此页面与导出文案会显示为 “80.00%” 而非 “0.80%”，无需前端额外处理。
+- 若未来新增其它百分比指标，也会通过同一后端集合自动缩放；前端继续沿用现有格式（`formatPercent` 等）即可，无需判断 0-1 小数。
+
 ## 会话小结（2025-12-30 数据分析计划比较数据恢复）
 
 - 后端 `_build_plan_comparison_payload` 改为按月份前缀匹配 `paln_and_real_month_data.period`，除 `period LIKE 'YYYY-MM%'` 外，还会通过 `regexp_replace(period, '[^0-9]', '', 'g') LIKE 'YYYYMM%'` 抓取“月底日期”“2025年11月”这类字符串，解决最近导入的计划值无法返回 `plan_comparison` 的问题。

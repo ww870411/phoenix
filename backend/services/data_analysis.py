@@ -24,6 +24,7 @@ TEMPERATURE_COLUMN_MAP = {
 }
 TEMPERATURE_UNIT = "℃"
 BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
+PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
 
 # 映射填报表 Key -> 计划表 Company Key
 # 即使后端已有 fuzzy 匹配逻辑，显式映射能避免潜在的大小写或后缀问题
@@ -1099,6 +1100,14 @@ def _to_float_or_none(value: Any) -> Optional[float]:
     return numeric
 
 
+def _scale_percentage_metric_value(metric_key: str, value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    if metric_key in PERCENTAGE_SCALE_METRICS:
+        return value * 100
+    return value
+
+
 def _compute_delta(current: Optional[float], peer: Optional[float]) -> Optional[float]:
     if current is None or peer in (None, 0):
         return None
@@ -1529,7 +1538,10 @@ def _build_plan_comparison_payload(
         logger.warning("查询计划累计值失败: unit=%s view=%s err=%s", unit_key, plan_view_name, exc)
         month_actual_rows = {}
     for key, payload in month_actual_rows.items():
-        plan_actual_lookup[key] = _decimal_to_float(payload.get("value_biz_date"))
+        plan_actual_lookup[key] = _scale_percentage_metric_value(
+            key,
+            _decimal_to_float(payload.get("value_biz_date")),
+        )
     entries: List[Dict[str, Any]] = []
     for key in metric_keys:
         plan_row = plan_rows.get(key)
@@ -1538,6 +1550,7 @@ def _build_plan_comparison_payload(
         plan_value = _to_float_or_none(plan_row.get("value"))
         if plan_value is None:
             continue
+        plan_value = _scale_percentage_metric_value(key, plan_value)
         row = row_lookup.get(key)
         label = (row.get("label") if row else None) or metric_dict.get(key, key)
         unit = (row.get("unit") if row else None) or plan_row.get("unit")

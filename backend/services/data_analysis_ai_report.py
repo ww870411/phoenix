@@ -148,6 +148,22 @@ VALIDATION_PROMPT_TEMPLATE = """你是一名严谨的能源行业数据审计员
 - description 中要包含具体证据（指标名称、数值、日期等），避免空泛表述。
 """
 
+REVISION_PROMPT_TEMPLATE = """你是一名能源行业的资深报告复核负责人。当前报告在核查阶段暴露出数据或逻辑问题，需要你在保持章节结构与 JSON 输出格式不变的前提下完成修订。
+
+要求：
+- 仔细阅读核查结果中的 issues，逐条修复或在正文中给出解释，禁止忽略；
+- `section_contents` 的 key 必须与 layout.sections[].id 严格一致；
+- 引用 processed_data 中真实的数值、同比/环比和单位，所有修订后的描述都要与数据吻合；
+- 可以重写段落和提示，但需确保 callouts 至少保留 1 条有效信息；
+- 若 issues 涉及遗漏指标或单位错误，必须在修订内容中显式更正。
+
+输出结构需与内容撰写阶段完全相同：
+{
+  "section_contents": {...},
+  "callouts": [...]
+}
+"""
+
 _logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -724,6 +740,29 @@ def _build_validation_prompt(
     return _prepend_instruction_block(base, instruction)
 
 
+def _build_revision_prompt(
+    processed_data: Dict[str, Any],
+    insight_data: Dict[str, Any],
+    layout_data: Dict[str, Any],
+    previous_content: Dict[str, Any],
+    validation_result: Dict[str, Any],
+    instruction: str = "",
+) -> str:
+    data_json = _safe_json_dumps(processed_data)
+    insight_json = _safe_json_dumps(insight_data)
+    layout_json = _safe_json_dumps(layout_data)
+    content_json = _safe_json_dumps(previous_content)
+    validation_json = _safe_json_dumps(validation_result)
+    base = (
+        f"{REVISION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}\n"
+        f"\n### 洞察 JSON\n{insight_json}\n"
+        f"\n### 版面规划 JSON\n{layout_json}\n"
+        f"\n### 现有正文 JSON\n{content_json}\n"
+        f"\n### 核查问题 JSON\n{validation_json}\n"
+    )
+    return _prepend_instruction_block(base, instruction)
+
+
 def _generate_report_html(
     processed_data: Dict[str, Any],
     insight_data: Dict[str, Any],
@@ -1224,6 +1263,33 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
             )
             validation_data = _run_json_stage("检查核实", validation_prompt)
             _update_job(job_id, validation=validation_data)
+
+            status = (validation_data.get("status") or "").lower() if validation_data else ""
+            issues = (validation_data or {}).get("issues") or []
+            needs_revision = bool(issues) and status in {"warning", "fail"}
+            if needs_revision:
+                _logger.info(
+                    "AI report job %s entering revision stage (status=%s, issues=%d)",
+                    job_id,
+                    status,
+                    len(issues),
+                )
+                _update_job(job_id, stage="revision_pending")
+                revision_prompt = _build_revision_prompt(
+                    processed_data,
+                    insight_data,
+                    layout_data,
+                    content_data,
+                    validation_data,
+                    extra_instruction,
+                )
+                content_data = _run_json_stage("内容修订", revision_prompt)
+                _update_job(job_id, stage="revision_content", content=content_data)
+                validation_prompt = _build_validation_prompt(
+                    processed_data, content_data, extra_instruction
+                )
+                validation_data = _run_json_stage("复核检查", validation_prompt)
+                _update_job(job_id, stage="review", validation=validation_data)
         else:
             _update_job(job_id, stage="content", content=content_data)
 

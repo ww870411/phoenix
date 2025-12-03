@@ -8,6 +8,18 @@
 - `api_key.json` 新增 `instruction` 字段，并在 `data_analysis_ai_report.py` 中通过 `_load_instruction_text` 注入三个 Prompt 模板（在模板最前端输出 `### AI 指令（最高优先级）`）；如无需额外指令可留空，LLM 会继续使用默认模板。
 - 同一配置文件新增 `enable_validation`（默认 True）与 `allow_non_admin_report`（默认 False）字段：前者决定 AI 报告是否执行第 4 阶段“检查核实”，后者控制非 Global_admin 账号能否勾选“智能报告生成”。Schema API 会透出 `ai_report_flags` 供前端渲染，`/data_analysis/query` 也会在 flag 未开启时自动忽略非授权的请求。
 
+# 会话小结（2025-12-31 AI 报告核查自动修订）
+
+- **新增修订阶段**：`backend/services/data_analysis_ai_report.py` 在 validation（第 4 阶段）返回 `warning/fail` 且存在 issues 时，自动进入“内容修订”阶段，再次调用 LLM 根据问题列表重写 `section_contents/callouts`，确保所有指摘被修正。
+- **Prompt 支撑**：新增 `REVISION_PROMPT_TEMPLATE` 与 `_build_revision_prompt`，向模型提供 processed_data/insight/layout/旧正文/validation JSON，要求维持章节结构并逐条回应 issues。
+- **复检机制**：修订后的内容会重新触发 validation，一旦通过才输出最终 HTML，同时 `_jobs[job_id]['stage']` 会依次记录 `revision_pending → revision_content → review`，便于前端进度条显示。
+
+# 会话小结（2025-12-31 计划比较百分比统一）
+
+- **问题**：月度计划 `plan_comparison` 中的 `rate_overall_efficiency` 以 0.8 存储，接口在“计划比较”表及 AI 报告摘要里都显示为 “0.80%”，与其它场景展示的 80% 不一致。
+- **改动**：`backend/services/data_analysis.py` 增加 `PERCENTAGE_SCALE_METRICS` 与 `_scale_percentage_metric_value`，在构造 `plan_comparison.entries` 时自动将列入集合的指标乘以 100（仅对数据库原始值进行缩放，避免对 fallback 聚合结果重复乘 100），完成率计算逻辑保持不变。
+- **影响**：`/data_analysis/query`、网页“计划比较”板块以及 AI 报告导出的“计划比较”段落都会直接展示 80% 等符合预期的百分比，数据库存储格式无需调整；如需回滚，只需移除该集合与缩放调用。
+
 # 会话小结（2025-12-27 全厂热效率累计口径修复）
 
 - 问题：`rate_overall_efficiency` 属于百分比指标，累计模式下不应把逐日值求和；先前 `_execute_data_analysis_query` 在构造 `total_current/total_peer` 时默认对所有非温度指标求和，导致主城区/集团查询时的“全厂热效率”累计值错误。

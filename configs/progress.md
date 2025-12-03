@@ -75,3 +75,21 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 - **改动内容**：`backend/services/data_analysis_ai_report.py` 在 `_preprocess_payload` 中解析 `plan_comparison`，新建 `_build_plan_compare_payload` 预处理完成率、计划值，HTML 生成阶段插入“计划比较”表格与 `【计划】` 摘要；相关 prompt 输入也带上这部分数据，确保模型文本会提及计划完成情况。
 - **影响范围**：仅影响 AI 报告的生成输出，接口格式与前端逻辑保持不变。回滚只需移除新 helper 及 HTML 片段。
 - **验证建议**：选择同月区间启用“下载智能分析报告”，HTML 中应出现“计划比较”章节，表格与摘要与页面数值一致。
+
+## 2025-12-31（AI 报告核查阶段自动修订）
+
+- **问题背景**：AI 报告虽然新增了“检查核实”环节，但当 LLM 发现差异时仅提示 warning/fail，正文并未自动纠正，用户仍可能得到含错误数据的报告。
+- **改动内容**：
+  1. 在 `backend/services/data_analysis_ai_report.py` 新增 `REVISION_PROMPT_TEMPLATE` 与 `_build_revision_prompt`，用于在 validation 指出问题后指导模型重写正文并引用正确数据。
+  2. `_generate_report` 流程中，当核查结果 `status` 为 warning/fail 且包含 issues 时，自动进入“内容修订”阶段：先根据问题列表生成修订 prompt，再重新运行内容撰写、复核一次，直到得到新的 validation 结果。
+  3. 任务状态机新增 `revision_pending`、`revision_content` 等阶段，日志能明确记录是否发生修订。
+- **影响范围**：仅影响 AI 报告生成流程。当发现问题时系统会尝试一次自我修正，再次验证后才输出，避免把明显错误的报告交付用户。若需回退，可移除新增 prompt 及 `_generate_report` 中的修订逻辑。
+- **验证建议**：人为构造一个 validation 会报错的场景（例如故意删除某章节关键数据），启动 AI 报告后应在日志和任务状态里看到 revision 阶段，并且最终 HTML 里的结论会被重新表述且与数据一致。
+
+## 2025-12-31（计划比较百分比展示统一）
+
+- **问题背景**：`rate_overall_efficiency` 为百分比指标，计划表及实际值在数据库中以 0.8 形式存储，导致 `/data_analysis/query` 的 `plan_comparison.entries`、网页“计划比较”表以及 AI 报告导出的“计划比较”段落都展示为 0.8%，违反页面对 80% 的展示预期。
+- **改动内容**：`backend/services/data_analysis.py` 引入 `PERCENTAGE_SCALE_METRICS` 集合和 `_scale_percentage_metric_value` 辅助函数，只要指标 key 在集合中，就在构造 `plan_comparison` 时统一乘以 100。具体包含：① 为计划值/实际值写入时即时放大；② `completion_rate` 仍按放大后的值计算，比例保持一致；③ 同一结构被 AI 报告的 `_build_plan_compare_payload` 复用，因此导出的 HTML 也同步修正。
+- **修正补充（12-31 PM）**：实际值仅在来源于数据库查询（`month_actual_rows`）时放大，若退回到 `rows` 里的聚合结果则不再二次乘以 100，避免网页端/AI 报告“截至本期末”展示 8000% 的异常。
+- **影响范围**：仅影响 `plan_comparison.entries` 中的 `plan_value/actual_value` 数字展示，其它指标保持原样；网页端与 AI 报告都会直接读取修正后的 80% 文本。若需回滚，只需移除新 helper 以及 `_build_plan_comparison_payload` 中的缩放逻辑。
+- **验证建议**：选择同月区间并包含“全厂热效率”的查询，Web 端“计划比较”表的“计划值/截至本期末”应显示如 `80.00%`；下载智能报告查看“计划比较”和 `【计划】` 摘要，同样应展示 80%。
