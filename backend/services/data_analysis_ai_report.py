@@ -310,14 +310,14 @@ def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, A
     current_range_label = _format_range_label(payload.get("start_date"), payload.get("end_date"))
     summary_lines: List[str] = []
     if entries:
-        phrases = []
+        range_note = f"（上期：{previous_range_label}）" if previous_range_label else ""
         for entry in entries:
             unit_text = entry["unit"]
             prev_text = _format_number(entry["previous"], entry["decimals"])
             rate_text = _format_percent_text(entry["rate"])
-            phrases.append(f"{entry['label']} 上期 {prev_text}{unit_text}，环比 {rate_text}")
-        range_note = f"（上期：{previous_range_label}）" if previous_range_label else ""
-        summary_lines.append(f"【环比】{'；'.join(phrases)}{range_note}")
+            summary_lines.append(
+                f"【环比】{entry['label']} 上期 {prev_text}{unit_text}，环比 {rate_text}{range_note}"
+            )
 
     note = ring_block.get("note") or ("当前指标无可用环比数据" if not entries else "")
 
@@ -892,44 +892,6 @@ def _generate_report_html(
             summary_phrases.append(f"{entry['label']} 同期 {peer_text}{unit_text}，同比 {delta_text}")
         for phrase in summary_phrases:
             html_parts.append(f"<p class='ring-summary-line'>【同比】{phrase}</p>")
-    plan_data = processed_data.get("plan_compare") or {}
-    plan_entries = plan_data.get("entries") or []
-    if plan_entries:
-        html_parts.append("<div class='analysis-section'>")
-        html_parts.append("<h2>计划比较</h2>")
-        note_bits = []
-        if plan_data.get("month_label"):
-            note_bits.append(f"计划月份：{plan_data['month_label']}")
-        if plan_data.get("period_text"):
-            note_bits.append(f"期间：{plan_data['period_text']}")
-        if note_bits:
-            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(note_bits)}</p>")
-        html_parts.append(
-            "<table class='ring-summary__table'><thead><tr>"
-            "<th>指标</th><th>截至本期末</th><th>月度计划</th><th>完成率</th>"
-            "</tr></thead><tbody>"
-        )
-        for entry in plan_entries:
-            decimals = entry.get("decimals", 2)
-            actual_text = _format_number(entry.get("actual_value"), decimals)
-            plan_text = _format_number(entry.get("plan_value"), decimals)
-            completion_text = _format_percent_text(entry.get("completion_rate"))
-            unit = entry.get("unit") or ""
-            unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
-            html_parts.append(
-                "<tr>"
-                f"<td>{entry.get('label')}</td>"
-                f"<td>{actual_text}{unit_html}</td>"
-                f"<td>{plan_text}{unit_html}</td>"
-                f"<td>{completion_text}</td>"
-                "</tr>"
-            )
-        html_parts.append("</tbody></table>")
-        summary_lines = plan_data.get("summary_lines") or []
-        for line in summary_lines:
-            html_parts.append(f"<p class='ring-summary-line'>【计划】{line}</p>")
-        html_parts.append("</div>")
-
     ring_data = processed_data.get("ring_compare") or {}
     if ring_data and (ring_data.get("entries") or ring_data.get("note")):
         html_parts.append("<div class='analysis-section'>")
@@ -968,6 +930,44 @@ def _generate_report_html(
         if ring_data.get("summary_lines"):
             for line in ring_data["summary_lines"]:
                 html_parts.append(f"<p class='ring-summary-line'>{line}</p>")
+        html_parts.append("</div>")
+
+    plan_data = processed_data.get("plan_compare") or {}
+    plan_entries = plan_data.get("entries") or []
+    if plan_entries:
+        html_parts.append("<div class='analysis-section'>")
+        html_parts.append("<h2>计划比较</h2>")
+        note_bits = []
+        if plan_data.get("month_label"):
+            note_bits.append(f"计划月份：{plan_data['month_label']}")
+        if plan_data.get("period_text"):
+            note_bits.append(f"期间：{plan_data['period_text']}")
+        if note_bits:
+            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(note_bits)}</p>")
+        html_parts.append(
+            "<table class='ring-summary__table'><thead><tr>"
+            "<th>指标</th><th>截至本期末</th><th>月度计划</th><th>完成率</th>"
+            "</tr></thead><tbody>"
+        )
+        for entry in plan_entries:
+            decimals = entry.get("decimals", 2)
+            actual_text = _format_number(entry.get("actual_value"), decimals)
+            plan_text = _format_number(entry.get("plan_value"), decimals)
+            completion_text = _format_percent_text(entry.get("completion_rate"))
+            unit = entry.get("unit") or ""
+            unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry.get('label')}</td>"
+                f"<td>{actual_text}{unit_html}</td>"
+                f"<td>{plan_text}{unit_html}</td>"
+                f"<td>{completion_text}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table>")
+        summary_lines = plan_data.get("summary_lines") or []
+        for line in summary_lines:
+            html_parts.append(f"<p class='ring-summary-line'>【计划】{line}</p>")
         html_parts.append("</div>")
 
     # 区间明细（逐日）
