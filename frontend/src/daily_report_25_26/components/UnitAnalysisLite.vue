@@ -281,6 +281,7 @@
               </tbody>
             </table>
           </div>
+          <p v-else-if="planComparisonNote" class="analysis-lite__hint warning">{{ planComparisonNote }}</p>
 
           <section v-if="hasTimelineData" class="analysis-lite__timeline">
             <header class="analysis-lite__timeline-header">
@@ -396,7 +397,14 @@ const analysisEndDate = ref(props.bizDate || '')
 const selectedMetricKeys = ref(new Set())
 const analysisLoading = ref(false)
 const analysisFormError = ref('')
-const analysisResult = ref({ rows: [], warnings: [], meta: null, ringCompare: null, planComparison: null })
+const analysisResult = ref({
+  rows: [],
+  warnings: [],
+  meta: null,
+  ringCompare: null,
+  planComparison: null,
+  planComparisonNote: '',
+})
 const analysisTimelineGrid = ref({ columns: [], rows: [] })
 const analysisTimelineMetrics = ref([])
 const activeTimelineMetricKeys = ref([])
@@ -903,7 +911,14 @@ function clearAnalysisMetrics() {
 
 
 function resetAnalysisResult() {
-  analysisResult.value = { rows: [], warnings: [], meta: null, ringCompare: null, planComparison: null }
+  analysisResult.value = {
+    rows: [],
+    warnings: [],
+    meta: null,
+    ringCompare: null,
+    planComparison: null,
+    planComparisonNote: '',
+  }
   analysisFormError.value = ''
   resetAnalysisTimeline()
 }
@@ -1711,6 +1726,8 @@ const planComparisonEntries = computed(() =>
   mapPlanComparisonEntries(planComparisonPayload.value, analysisResult.value?.rows || []),
 )
 
+const planComparisonNote = computed(() => analysisResult.value?.planComparisonNote || '')
+
 const planComparisonMonthLabel = computed(() => {
   const payload = planComparisonPayload.value
   if (!payload) return ''
@@ -1816,6 +1833,7 @@ async function runUnitAnalysis() {
       },
       meta: normalizeAnalysisMeta(response),
       planComparison: response.plan_comparison || null,
+      planComparisonNote: response.plan_comparison_note || '',
     }
     applyAnalysisTimelineFromRows(rows)
   } catch (err) {

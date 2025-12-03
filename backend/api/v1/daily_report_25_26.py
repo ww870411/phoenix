@@ -4023,6 +4023,26 @@ def _execute_data_analysis_query_legacy(
             "以下指标暂无可返回数据：{}".format(", ".join(item["label"] for item in missing_metrics))
         )
 
+    plan_comparison_payload: Optional[Dict[str, Any]] = None
+    plan_comparison_note: Optional[str] = None
+    if data_analysis_service._is_same_month(start_date, end_date):
+        (
+            plan_comparison_payload,
+            plan_comparison_note,
+        ) = data_analysis_service._build_plan_comparison_payload(
+            unit_key,
+            unit_label,
+            ordered_metrics,
+            rows_payload,
+            metric_dict,
+            start_date,
+            end_date,
+            analysis_mode_value,
+            schema_payload.get("view_mapping") or {},
+        )
+    else:
+        plan_comparison_note = "计划比较仅支持起止日期位于同一自然月"
+
     response_payload = {
         "ok": True,
         "config_path": schema_payload.get("config_path"),
@@ -4039,6 +4059,11 @@ def _execute_data_analysis_query_legacy(
         "missing_metrics": missing_metrics,
         "warnings": warnings,
     }
+    if plan_comparison_payload:
+        response_payload["plan_comparison"] = plan_comparison_payload
+    if plan_comparison_note and not plan_comparison_payload:
+        response_payload["plan_comparison_note"] = plan_comparison_note
+
     if prev_range_payload and prev_totals_map:
         response_payload["ringCompare"] = {
             "range": prev_range_payload,

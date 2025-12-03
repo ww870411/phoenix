@@ -467,6 +467,7 @@
               </tbody>
             </table>
           </div>
+          <p v-else-if="planComparisonNote" class="panel-hint warning">{{ planComparisonNote }}</p>
         </div>
       </section>
 
@@ -1639,6 +1640,11 @@ const planComparisonEntries = computed(() => {
   return mapPlanComparisonEntries(unitResult.planComparison, unitResult.rows)
 })
 
+const planComparisonNote = computed(() => {
+  const unitKey = activeUnit.value
+  return unitResults.value[unitKey]?.planComparisonNote || ''
+})
+
 const planComparisonMonthLabel = computed(() => {
   const payload = planComparisonPayload.value
   if (!payload) return ''
@@ -2266,6 +2272,7 @@ async function runAnalysis() {
             note: ringNote,
           },
           planComparison: response.plan_comparison || null,
+          planComparisonNote: response.plan_comparison_note || '',
           meta,
           aiReportJobId: aiJobId,
         }

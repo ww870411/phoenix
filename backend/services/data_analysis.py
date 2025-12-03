@@ -25,6 +25,22 @@ TEMPERATURE_COLUMN_MAP = {
 TEMPERATURE_UNIT = "℃"
 BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
 
+# 映射填报表 Key -> 计划表 Company Key
+# 即使后端已有 fuzzy 匹配逻辑，显式映射能避免潜在的大小写或后缀问题
+PLAN_UNIT_MAPPING = {
+    "BeiHai_co_generation_Sheet": "BeiHai",
+    "BeiHai_water_boiler_Sheet": "BeiHai",
+    "BeiHai_co_generation_sheet": "BeiHai", # 兼容大小写
+    "BeiHai_water_boiler_sheet": "BeiHai",
+    "XiangHai_co_generation_sheet": "XiangHai",
+    "JinPu_co_generation_sheet": "JinPu",
+    "JinZhou_co_generation_sheet": "JinZhou",
+    "BeiFang_co_generation_sheet": "BeiFang",
+    "ZhuangHe_co_generation_sheet": "ZhuangHe",
+    "GongRe_boiler_sheet": "GongRe",
+    # 如有更多 sheet -> company 映射可在此添加
+}
+
 
 def build_schema_payload(
     raw_payload: Dict[str, Any],
@@ -667,8 +683,12 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         )
 
     plan_comparison_payload: Optional[Dict[str, Any]] = None
+    plan_comparison_note: Optional[str] = None
     if _is_same_month(start_date, end_date):
-        plan_comparison_payload = _build_plan_comparison_payload(
+        (
+            plan_comparison_payload,
+            plan_comparison_note,
+        ) = _build_plan_comparison_payload(
             unit_key,
             unit_label,
             ordered_metrics,
@@ -679,6 +699,8 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
             analysis_mode_value,
             schema_payload.get("view_mapping") or {},
         )
+    else:
+        plan_comparison_note = "计划比较仅支持起止日期位于同一自然月"
 
     response_payload = {
         "ok": True,
@@ -698,6 +720,8 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
     }
     if plan_comparison_payload:
         response_payload["plan_comparison"] = plan_comparison_payload
+    if plan_comparison_note and not plan_comparison_payload:
+        response_payload["plan_comparison_note"] = plan_comparison_note
 
     if getattr(payload, "request_ai_report", False):
         try:
@@ -1196,17 +1220,47 @@ def _query_plan_month_rows(
 ) -> Dict[str, Dict[str, Any]]:
     if not metric_keys:
         return {}
+
+    # 1. 尝试通过映射表规范化 unit_key
+    effective_unit_key = PLAN_UNIT_MAPPING.get(unit_key, unit_key)
+    # 2. 如果 unit_key 包含 "_Sheet" 或 "_sheet" 后缀且不在映射表中，尝试自动去除
+    if effective_unit_key == unit_key and "_sheet" in unit_key.lower():
+        # 简单的去除后缀逻辑作为兜底
+        import re
+        effective_unit_key = re.sub(r"_[Ss]heet$", "", unit_key)
+        # 特殊处理：有些 key 去除 sheet 后还需要去除中间的描述词？
+        # 目前观察 paln_and_real_month_data 中存储的是短码 (BeiHai, ZhuangHe)
+        # 而 sheet key 通常是 BeiHai_co_generation_sheet
+        # 如果简单的去除后缀变成了 BeiHai_co_generation，可能还是匹配不上
+        # 所以尽量依赖 PLAN_UNIT_MAPPING
+
+    logger.info(
+        "Querying plan rows: unit_key=%s (mapped=%s), label=%s, period=%s, metrics_count=%d",
+        unit_key,
+        effective_unit_key,
+        unit_label,
+        period_start,
+        len(metric_keys),
+    )
+
     company_conditions = ["company = :company_key", "company_cn = :company_key"]
     params: Dict[str, Any] = {
         "plan_type": plan_type,
         "period_exact": period_start.isoformat(),
         "period_prefix": f"{period_start:%Y-%m}%",
-        "company_key": unit_key,
+        "period_digits_prefix": f"{period_start:%Y%m}%",
+        "company_key": effective_unit_key,
     }
     normalized_label = (unit_label or "").strip()
-    if normalized_label and normalized_label != unit_key:
+    if normalized_label and normalized_label != effective_unit_key:
         company_conditions.extend(["company = :company_label", "company_cn = :company_label"])
         params["company_label"] = normalized_label
+    
+    # 额外添加一个 fallback：如果 effective_unit_key 还是没匹配上，尝试用原始 key
+    if effective_unit_key != unit_key:
+         company_conditions.append("company = :raw_unit_key")
+         params["raw_unit_key"] = unit_key
+
     unique_metric_keys = list(dict.fromkeys(metric_keys))
     params["item_keys"] = unique_metric_keys
     item_conditions = ["item IN :item_keys"]
@@ -1221,7 +1275,11 @@ def _query_plan_month_rows(
         deduped_labels = list(dict.fromkeys(metric_labels))
         params["item_labels"] = deduped_labels
         item_conditions.append("item_cn IN :item_labels")
-    period_conditions = "(period = :period_exact OR period LIKE :period_prefix)"
+    period_conditions = "("
+    period_conditions += "period = :period_exact"
+    period_conditions += " OR period LIKE :period_prefix"
+    period_conditions += " OR regexp_replace(period, '[^0-9]', '', 'g') LIKE :period_digits_prefix"
+    period_conditions += ")"
     query = f"""
         SELECT item, item_cn, unit, period, value, type
         FROM paln_and_real_month_data
@@ -1235,6 +1293,9 @@ def _query_plan_month_rows(
         stmt = stmt.bindparams(bindparam("item_labels", expanding=True))
     with SessionLocal() as session:
         rows = session.execute(stmt, params).mappings().all()
+    
+    logger.info("Plan query returned %d rows", len(rows))
+
     key_lookup = set(unique_metric_keys)
     label_lookup: Dict[str, str] = {}
     for key in unique_metric_keys:
@@ -1438,13 +1499,16 @@ def _build_plan_comparison_payload(
     end_date: date,
     analysis_mode: str,
     view_mapping: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    if not metric_keys or not _is_same_month(start_date, end_date):
-        return None
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not metric_keys:
+        return None, "尚未选择可用于计划比较的指标"
+    if not _is_same_month(start_date, end_date):
+        return None, "计划比较仅支持起止日期位于同一自然月"
     period_start, period_end = _month_bounds(start_date)
     plan_rows = _query_plan_month_rows(unit_key, unit_label, metric_keys, metric_dict, period_start)
     if not plan_rows:
-        return None
+        month_label = f"{period_start.year}-{period_start.month:02d}"
+        return None, f"{month_label} 未找到所选指标的月度计划值"
     row_lookup: Dict[str, Dict[str, Any]] = {}
     for row in rows_payload or []:
         key = row.get("key")
@@ -1492,11 +1556,11 @@ def _build_plan_comparison_payload(
             }
         )
     if not entries:
-        return None
+        return None, "所选指标的计划值或实际值为空，无法生成计划比较"
     return {
         "period_start": period_start.isoformat(),
         "period_end": period_end.isoformat(),
         "month_label": f"{period_start.year}-{period_start.month:02d}",
         "entries": entries,
         "source": "paln_and_real_month_data",
-    }
+    }, None

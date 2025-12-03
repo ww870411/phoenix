@@ -2,9 +2,9 @@
 
 ## 会话小结（2025-12-30 数据分析计划比较数据恢复）
 
-- 后端 `_query_plan_month_rows` 改为按月份前缀匹配 `paln_and_real_month_data.period`，可同时兼容“YYYY-MM-01”“YYYY-MM-30”“YYYY-MM”等写法，解决最近导入的计划值（记录为月底日期）无法返回 `plan_comparison` 的问题。
-- 数据分析页与本单位分析组件无须改动即可再次收到 `plan_comparison` 载荷，只要选择同一自然月区间，页面“计划比较”表、摘要 `【计划】` 以及 Excel 导出板块都会自动恢复显示。
-- 若需回滚旧逻辑，恢复后端对应函数即可；前端保持监听 `response.plan_comparison` 的处理流程，后续若新增计划类型字段同样可直接透传展示。
+- 后端 `_build_plan_comparison_payload` 改为按月份前缀匹配 `paln_and_real_month_data.period`，除 `period LIKE 'YYYY-MM%'` 外，还会通过 `regexp_replace(period, '[^0-9]', '', 'g') LIKE 'YYYYMM%'` 抓取“月底日期”“2025年11月”这类字符串，解决最近导入的计划值无法返回 `plan_comparison` 的问题。
+- 前端数据分析页与本单位分析组件读取到新的 `plan_comparison_note` 字段，在无计划值或跨月区间时会显示原因提示；只要选择同一自然月且计划表有数据，原有“计划比较”表、摘要 `【计划】` 与导出内容都会恢复。
+- 若需回滚旧逻辑，恢复后端对应函数即可；前端保持监听 `response.plan_comparison/plan_comparison_note` 的处理流程即可兼容后续扩展。
 
 ## 会话小结（2025-12-27 数据分析智能体设定入口）
 

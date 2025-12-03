@@ -1,0 +1,1 @@
+2025-12-30：当数据分析查询不满足计划比较条件时，后端 `/data_analysis/query` 会返回 `plan_comparison_note` 说明原因（同月限制、缺少计划值等）。前端 `DataAnalysisView.vue` 与 `UnitAnalysisLite.vue` 若 `planComparisonEntries` 为空，会直接渲染该提示，便于用户知晓为何计划对比板块未出现。

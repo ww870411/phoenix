@@ -29,6 +29,6 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 ## 2025-12-30（数据分析月度计划匹配修复）
 
 - **问题背景**：数据分析页同月区间不再显示“计划比较”，排查发现 `paln_and_real_month_data.period` 存在“月底日期”或仅 `YYYY-MM` 的多种写法，原 SQL 条件 `period::date = :period_start` 只能命中写成每月 1 日的记录，导致计划值缺失。
-- **改动内容**：在 `backend/services/data_analysis.py` 内调整 `_query_plan_month_rows` 查询参数，新增 `period_exact=YYYY-MM-01` 与 `period_prefix=YYYY-MM%`，并以 `(period = :period_exact OR period LIKE :period_prefix)` 替换原本的 `period::date = :period_start`。这样即可兼容月底日期及仅月份格式的 period 文本，恢复 `plan_comparison` 载荷。
+- **改动内容**：在 `backend/services/data_analysis.py` 内调整 `_query_plan_month_rows` 查询参数，新增 `period_exact=YYYY-MM-01`、`period_prefix=YYYY-MM%` 以及 `period_digits_prefix=YYYYMM%`，SQL 条件扩展为 `period = :period_exact OR period LIKE :period_prefix OR regexp_replace(period, '[^0-9]', '', 'g') LIKE :period_digits_prefix)`，替换原本的 `period::date = :period_start`。这样即可兼容月底日期、仅月份以及“2025年11月”此类含中文或分隔符的 period 文本，恢复 `plan_comparison` 载荷。若仍无法命中，则在响应中返回 `plan_comparison_note`（如“仅支持同月”“本月缺少计划值”），数据分析页与本单位分析组件会显示提示原因。
 - **影响范围**：仅影响 `/data_analysis/query` 在同月区间返回的 `plan_comparison` 字段，前端逻辑无需修改即可重新渲染“计划比较”表和导出板块。
 - **验证建议**：使用 2025-11-10 ~ 2025-11-30 等同月累计区间执行查询，应重新看到计划比较数据；将计划表中的 period 写为月底日期后再次查询，仍能返回对应计划值与完成率。
