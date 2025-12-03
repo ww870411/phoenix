@@ -3112,3 +3112,19 @@ sum_basic_data 相关：
 2. 确认 UI 立即显示“智能报告生成中…（等待后台任务启动）”，随后跟随 `insight` -> `layout` -> `render` 阶段动态更新。
 3. 最终生成完成后，“下载智能分析报告”按钮应变亮可用。
 
+
+## 2025-12-27（数据分析平均气温区间明细缺失修复）
+
+前置说明：外部 AI 修改“智能报告生成”流程后反馈累计模式仅勾选“平均气温”时，数据分析页的“区间明细（逐日）”不再显示气温列；排查发现 API 仍使用 `legacy` 实现，未为温度/常量指标补齐 timeline 数据，导致前端无法生成表格。
+
+本次动作：
+- 在 `backend/api/v1/daily_report_25_26.py` 中新增 `_build_constant_timeline/_build_temperature_column_lookup/_query_temperature_timeline` 包装函数，复用服务层的逐日构造逻辑。
+- 改造 `_execute_data_analysis_query_legacy`：
+  - 累计模式下一并为常量与气温指标注入逐日数组（常量走 `_build_constant_timeline`、气温走 `_query_temperature_timeline`），即使没有常规指标也能生成时间轴；
+  - 重构 timeline map 构建流程，支持多来源 `update`，避免温度数据被分析指标覆盖。
+- 维持 AI 报告环比增量、ring_ratio 计算等 legacy 行为不变。
+
+验证：`python -m py_compile backend/api/v1/daily_report_25_26.py` 通过；本地以 `aver_temp` 单项触发 `/data_analysis/query`，响应 `rows[0].timeline` 与 `timeline.rows` 均返回逐日温度数组。
+
+影响范围与回滚：
+- 仅影响数据分析 API 的累计模式 timeline；回滚可还原上述 Python 文件即可。

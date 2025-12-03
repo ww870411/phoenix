@@ -8,6 +8,12 @@
 - 首次进入看板页面时会先调用 `/dashboard/date` 获取当前 `set_biz_date`，再直接请求 `/dashboard?show_date=<set_biz_date>`，因此首屏访问也能命中缓存。
 - “标煤耗量与平均气温趋势图” 默认展示 `push_date` 及前 6 天（共 7 天）的窗口，图表底部启用 ECharts `dataZoom`（slider + inside）可回溯至 2025-11-01，依旧保留“跳至最新”按钮同步窗口与文本提示。
 
+## 数据分析页面（2025-12-27 区间温度列修复）
+
+- 背景：累计模式下仅勾选“平均气温”等气温指标时，后端 legacy API 未返回 `timeline` 数组，导致“区间明细（逐日）”表格没有温度列，趋势图与 AI 报告数据也缺少逐日温度。
+- 现状：后端已于 `backend/api/v1/daily_report_25_26.py` 内为常量与气温指标补齐 timeline，前端无需额外逻辑；本页维持既有 `timelineGrid` 渲染，默认勾选平均气温即可直接看到逐日温度数据。
+- 注意：若未来切换回 service 版 `execute_data_analysis_query`，需确保同样提供 `timeline` 字段，否则需复用本次修复思路。
+
 ## 数据分析页面（2025-11-27 实时查询版）
 
 - `DataAnalysisView.vue` 首次接入 `POST /projects/daily_report_25_26/data_analysis/query`，根据所选单位/模式构造 `unit_key/metrics/start_date/end_date` 请求，响应中的 `rows/view/start_date/end_date/warnings` 直接驱动结果表、提示条与缺失标记。

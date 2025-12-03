@@ -1,5 +1,12 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 数据分析区间温度 timeline 修复）
+
+- 症状：累计模式仅勾选“平均气温”等气温指标时，数据分析页的“区间明细（逐日）”不再渲染温度列。排查 `backend/api/v1/daily_report_25_26.py` 发现 API 仍使用 legacy 流程，`timeline_rows_map` 只在存在常规指标时才构建，且未给常量/气温行注入逐日数据。
+- 变更：新增 `_build_constant_timeline/_build_temperature_column_lookup/_query_temperature_timeline` 包装函数，复用服务层的逐日生成逻辑；`_execute_data_analysis_query_legacy` 在 range 模式下统一 `update` timeline，常量行调用 `_build_constant_timeline` 生成同值序列，气温行直接读取 `calc_temperature_data` 逐日值，即使无常规指标也能得到完整日期数组。
+- 验证：`python -m py_compile backend/api/v1/daily_report_25_26.py` 通过；使用 `aver_temp` 单项拉取 `/data_analysis/query`，响应 `rows[0].timeline` 及 `timeline.rows` 均包含指定区间内的日均气温，前端 RevoGrid 恢复渲染。
+- 回滚：恢复 `backend/api/v1/daily_report_25_26.py` 的新增 helper 与 timeline 注入逻辑即可。
+
 # 会话小结（2025-12-27 北海分表分析视图）
 
 - 新增 `backend/sql/analysis_beihai_sub.sql`，定义 `analysis_beihai_sub_daily`（读取 `phoenix.biz_date` 当日/同期）与 `analysis_beihai_sub_sum`（读取 `phoenix.sum_start_date/sum_end_date` 区间）两张视图：复用 `analysis_company_daily/sum` 的 params/base/const/calc 链条，并限制 `company='BeiHai'` 且 `sheet_name ∈ {BeiHai_co_generation_Sheet, BeiHai_water_boiler_Sheet}`，所有 CTE 均输出 `sheet_name` 以便直接按模板过滤。

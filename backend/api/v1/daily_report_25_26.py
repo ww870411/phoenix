@@ -3269,6 +3269,33 @@ def _query_temperature_rows(
     return result
 
 
+def _build_constant_timeline(
+    value: Optional[float],
+    peer_value: Optional[float],
+    start_date: date,
+    end_date: date,
+) -> List[Dict[str, Any]]:
+    return data_analysis_service._build_constant_timeline(value, peer_value, start_date, end_date)
+
+
+def _build_temperature_column_lookup(metric_keys: Sequence[str]) -> Dict[str, str]:
+    return data_analysis_service._build_temperature_column_lookup(metric_keys)
+
+
+def _query_temperature_timeline(
+    view_name: str,
+    column_lookup: Dict[str, str],
+    start_date: date,
+    end_date: date,
+) -> Dict[str, List[Dict[str, Any]]]:
+    return data_analysis_service._query_temperature_timeline(
+        view_name,
+        column_lookup,
+        start_date,
+        end_date,
+    )
+
+
 def _compute_previous_range(
     start_date: Union[date, datetime, str],
     end_date: Union[date, datetime, str],
@@ -3489,8 +3516,10 @@ def _execute_data_analysis_query_legacy(
 
     # ... existing code ...
     temperature_rows: Dict[str, Dict[str, Any]] = {}
+    temperature_column_lookup: Dict[str, str] = {}
     if temperature_metric_keys:
         view_name = temperature_view_name or "calc_temperature_data"
+        temperature_column_lookup = _build_temperature_column_lookup(temperature_metric_keys)
         try:
             temperature_rows = _query_temperature_rows(
                 view_name,
@@ -3507,35 +3536,60 @@ def _execute_data_analysis_query_legacy(
                 content={"ok": False, "message": f"查询气温指标失败: {exc}"},
             )
     timeline_rows_map: Dict[str, List[Dict[str, Any]]] = {}
-    if analysis_mode_value == "range" and analysis_metric_keys:
-        if is_beihai_sub_scope:
-            timeline_view_name = "analysis_beihai_sub_daily"
-            timeline_sheet_name = sheet_name_filter
-        else:
-            fallback_timeline_view = (
-                "analysis_groups_daily"
-                if unit_key in {"Group", "ZhuChengQu"}
-                else "analysis_company_daily"
-            )
-            timeline_view_name = _resolve_unit_view(
-                view_mapping,
-                "单日数据",
-                unit_label,
-                fallback=fallback_timeline_view,
-            )
-            timeline_sheet_name = None
-        if timeline_view_name:
+    if analysis_mode_value == "range":
+        if analysis_metric_keys:
+            if is_beihai_sub_scope:
+                timeline_view_name = "analysis_beihai_sub_daily"
+                timeline_sheet_name = sheet_name_filter
+            else:
+                fallback_timeline_view = (
+                    "analysis_groups_daily"
+                    if unit_key in {"Group", "ZhuChengQu"}
+                    else "analysis_company_daily"
+                )
+                timeline_view_name = _resolve_unit_view(
+                    view_mapping,
+                    "单日数据",
+                    unit_label,
+                    fallback=fallback_timeline_view,
+                )
+                timeline_sheet_name = None
+            if timeline_view_name:
+                try:
+                    timeline_rows_map.update(
+                        _query_analysis_timeline(
+                            timeline_view_name,
+                            unit_key,
+                            analysis_metric_keys,
+                            start_date,
+                            end_date,
+                            sheet_name=timeline_sheet_name,
+                        )
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("生成逐日明细失败: %s", exc)
+        if constant_metric_keys:
+            const_value_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+            for key in constant_metric_keys:
+                row = constant_rows.get(key)
+                if row:
+                    const_value_map[key] = (
+                        _decimal_to_float(row.get("value")),
+                        _decimal_to_float(row.get("peer")),
+                    )
+            for key, (val, peer_val) in const_value_map.items():
+                timeline_rows_map[key] = _build_constant_timeline(val, peer_val, start_date, end_date)
+        if temperature_metric_keys and temperature_column_lookup:
             try:
-                timeline_rows_map = _query_analysis_timeline(
-                    timeline_view_name,
-                    unit_key,
-                    analysis_metric_keys,
+                temp_timeline = _query_temperature_timeline(
+                    temperature_view_name or "calc_temperature_data",
+                    temperature_column_lookup,
                     start_date,
                     end_date,
-                    sheet_name=timeline_sheet_name,
                 )
+                timeline_rows_map.update(temp_timeline)
             except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("生成逐日明细失败: %s", exc)
+                logger.warning("生成气温逐日明细失败: %s", exc)
 
     # Calculate Ring Growth for AI Report
     prev_rows_map: Dict[str, Dict[str, Any]] = {}
@@ -3593,13 +3647,13 @@ def _execute_data_analysis_query_legacy(
 
         resolved_keys.append(key)
         timeline_entries = timeline_rows_map.get(key, [])
-        
+
         # Calculate totals based on value type
         if value_type == "temperature":
             # For temperature, use Average instead of Sum
             valid_currents = [entry["current"] for entry in timeline_entries if entry.get("current") is not None]
             valid_peers = [entry["peer"] for entry in timeline_entries if entry.get("peer") is not None]
-            
+
             timeline_current_val = (sum(valid_currents) / len(valid_currents)) if valid_currents else None
             timeline_peer_val = (sum(valid_peers) / len(valid_peers)) if valid_peers else None
         else:
@@ -3621,7 +3675,7 @@ def _execute_data_analysis_query_legacy(
             prev_source = prev_rows_map[key]
             # In range mode, the query returns 'value' (aggregated), not 'value_biz_date'
             prev_val = _decimal_to_float(prev_source.get("value"))
-            
+
             # Determine current value for ring calculation
             # Use the calculated total/average from timeline if available, otherwise fallback to source value
             if timeline_current_val is not None:
@@ -3638,7 +3692,7 @@ def _execute_data_analysis_query_legacy(
             # For constant, total is just the value itself if timeline is empty or same
             total_current = timeline_current_val if timeline_current_val is not None else current_value
             total_peer = timeline_peer_val if timeline_peer_val is not None else peer_value
-            
+
             rows_payload.append(
                 {
                     "key": key,
