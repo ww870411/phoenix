@@ -407,6 +407,34 @@ export async function getDataAnalysisAiReport(projectKey, jobId) {
   return response.json()
 }
 
+export async function getAiSettings(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取智能体配置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateAiSettings(projectKey, payload) {
+  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      api_key: payload?.api_key ?? '',
+      model: payload?.model ?? '',
+      instruction: payload?.instruction ?? '',
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存智能体配置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getUnitAnalysisMetrics(projectKey, params = {}) {
   const { config, unit_key: unitKey } = params
   const searchParams = new URLSearchParams()

@@ -1,5 +1,13 @@
 # 后端说明（FastAPI）
 
+# 会话小结（2025-12-27 AI 智能体设定接口供前端接入）
+
+- FastAPI 先前已提供 `GET/POST /projects/{project_key}/data_analysis/ai_settings`，读取与写入 `backend_data/api_key.json` 的 `gemini_api_key/gemini_model`。本轮前端已接入该接口，并限制仅 `Global_admin` 触发，后端无需额外改动。
+- 若需联调，请确认 `AI_SETTINGS_PATH`（`backend_data/api_key.json`）具备读写权限，且调用入口的用户组为“系统管理员”或 `Global_admin`（由 `_ensure_system_admin` 校验）。否则接口会返回 403。
+- 若未来要扩展更多字段，可在 `AiSettingsPayload`、`_read_ai_settings/_persist_ai_settings` 中补充键，再通知前端追加表单项即可；当前保持 `api_key/model` 双字段结构。
+- `api_key.json` 新增 `instruction` 字段，并在 `data_analysis_ai_report.py` 中通过 `_load_instruction_text` 注入三个 Prompt 模板（在模板最前端输出 `### AI 指令（最高优先级）`）；如无需额外指令可留空，LLM 会继续使用默认模板。
+- 同一配置文件新增 `enable_validation`（默认 True）与 `allow_non_admin_report`（默认 False）字段：前者决定 AI 报告是否执行第 4 阶段“检查核实”，后者控制非 Global_admin 账号能否勾选“智能报告生成”。Schema API 会透出 `ai_report_flags` 供前端渲染，`/data_analysis/query` 也会在 flag 未开启时自动忽略非授权的请求。
+
 # 会话小结（2025-12-27 全厂热效率累计口径修复）
 
 - 问题：`rate_overall_efficiency` 属于百分比指标，累计模式下不应把逐日值求和；先前 `_execute_data_analysis_query` 在构造 `total_current/total_peer` 时默认对所有非温度指标求和，导致主城区/集团查询时的“全厂热效率”累计值错误。
@@ -59,8 +67,8 @@
 
 # 会话小结（2025-12-27 AI 报告阶段字段前端消费）
 
-- 本次无 FastAPI 或服务端代码改动，仅确认前端 `DataAnalysisView.vue` 会读取 `/data_analysis/ai_report/{job_id}` 响应中的 `stage` 字段，并据此在 UI 显示“阶段 x/3：…”的生成进度；后端仍按照 12-27 多阶段改造时定义的 `stage=insight/layout/render/ready/failed` 写入 `_jobs`。
-- 若后续调整阶段名称或数量，请同步更新前端枚举（洞察分析/结构规划/页面渲染）及 README，避免提示错位。
+- 本次无 FastAPI 或服务端代码改动，仅确认前端 `DataAnalysisView.vue` 会读取 `/data_analysis/ai_report/{job_id}` 响应中的 `stage` 字段，并据此在 UI 显示“阶段 x/4：…”的生成进度；后端现在按“洞察 → 结构 → 内容 → 检查”写入 `stage=insight/layout/content/review/ready/failed`。
+- 若后续调整阶段名称或数量，请同步更新前端枚举（洞察分析/结构规划/内容撰写/检查核实）及 README，避免提示错位。
 
 # 会话小结（2025-12-27 AI 报告 Prompt 输出修订）
 
@@ -71,11 +79,12 @@
 
 # 会话小结（2025-12-27 数据分析 AI 报告多阶段管线）
 
-- `backend/services/data_analysis_ai_report.py` 由单次 Prompt 改为三段式流程：
+- `backend/services/data_analysis_ai_report.py` 由单次 Prompt 改为四段式流程：
   1. **洞察分析阶段**：先调用 `_preprocess_payload` 得到本期/同比/环比/趋势/气温相关性指标，再用 `INSIGHT_PROMPT_TEMPLATE` 调度 Gemini 输出结构化 JSON（headline/key_findings/risks/recommendations/notable_metrics/temperature_effect）。
   2. **版面规划阶段**：基于阶段一 JSON 生成章节规划、图表计划、callouts，所有内容仍要求模型返回 JSON，由 `_run_json_stage` 自动重试最多两次并在 `_jobs` 中写入 `insight/layout`。
-  3. **HTML 渲染阶段**：将预处理数据 + 洞察 JSON + 版面规划 JSON + 固定 CSS 拼成 `REPORT_PROMPT_TEMPLATE`，要求模型输出完整 HTML5（含统一样式、指标卡、数据洞察段落、callout 区、ECharts 双轴折线图）。
-- 公共 helper `_call_model` 负责统一处理 candidate/parts，`_run_json_stage` 针对 JSON 阶段自带解析与重试；`enqueue_ai_report_job` 的内存快照新增 `stage/started_at/insight/layout` 字段，`get_report_job` 查询结果据此可以展示实时阶段。
+  3. **内容撰写阶段**：根据洞察与规划生成实际段落、callouts（HTML 片段），写入 `_jobs` 的 `content` 字段。
+  4. **检查核实阶段**：以 `processed_data + content_data` 为输入，通过 `VALIDATION_PROMPT_TEMPLATE` 生成校验 JSON（status/issues/notes），确保报告中的数值与差异率与数据一致，结果写入 `_jobs.validation` 并在最终 HTML 输出“AI 自检结果”段落。
+- 所有 Prompt 都会在最前端插入“### AI 指令（最高优先级）”并遵循 `backend_data/api_key.json` 的 `instruction` 文本；公共 helper `_call_model` 负责统一处理 candidate/parts，`_run_json_stage` 针对 JSON 阶段自带解析与重试；`enqueue_ai_report_job` 的内存快照新增 `stage/started_at/insight/layout/content/validation` 字段，`get_report_job` 查询结果据此可以展示实时阶段。
 - `_calculate_correlation` 的 fallback 分支补齐缺失的 numerator 运算，避免 Python 3.9 环境无 `statistics.correlation` 时相关系数恒为 0；异常信息会同步写入 job。
 - 回滚方式：恢复 `backend/services/data_analysis_ai_report.py` 即可返回旧版“一次 Prompt + Markdown 报告”逻辑。
 

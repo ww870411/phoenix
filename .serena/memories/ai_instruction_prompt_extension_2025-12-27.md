@@ -1,0 +1,3 @@
+日期：2025-12-27
+文件：backend/api/v1/daily_report_25_26.py、backend/services/data_analysis_ai_report.py、frontend/src/daily_report_25_26/pages/DataAnalysisView.vue、frontend/src/daily_report_25_26/services/api.js、README、configs/progress.md
+摘要：AI 智能体配置新增 instruction 字段。FastAPI 的 AI 设置接口和前端“智能体设定”弹窗可读取/编辑该字段；数据分析 AI 报告在洞察/结构/内容三个 Prompt 拼接中调用 `_load_instruction_text` 并附加“### 额外指令”段，确保额外提示词随配置实时生效。同时模态窗提供多行输入与预览，保存成功提示同步更新。

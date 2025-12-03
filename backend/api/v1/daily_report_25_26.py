@@ -66,6 +66,7 @@ BASIC_TEMPLATE_PATH = DATA_ROOT / "数据结构_基本指标表.json"
 DATA_ANALYSIS_SCHEMA_PATH = DATA_ROOT / "数据结构_数据分析表.json"
 APPROVAL_STRUCTURE_PATH = DATA_ROOT / "数据结构_审批用表.json"
 CONSTANT_STRUCTURE_PATH = DATA_ROOT / "数据结构_常量指标表.json"
+AI_SETTINGS_PATH = DATA_ROOT / "api_key.json"
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -1668,11 +1669,115 @@ class DataAnalysisQueryPayload(BaseModel):
     request_ai_report: bool = False
 
 
+class AiSettingsPayload(BaseModel):
+    api_key: str
+    model: str
+    instruction: str = ""
+    enable_validation: bool = True
+    allow_non_admin_report: bool = False
+
+
 def _ensure_system_admin(session: AuthSession) -> None:
     group = (session.group or "").strip()
     allowed = {"系统管理员", "Global_admin"}
     if group not in allowed:
         raise HTTPException(status_code=403, detail="仅系统管理员可修改校验总开关。")
+
+
+def _is_global_admin(session: AuthSession) -> bool:
+    group = (session.group or "").strip()
+    return group == "Global_admin" or group == "系统管理员"
+
+
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
+def _read_ai_settings() -> Dict[str, str]:
+    if not AI_SETTINGS_PATH.exists():
+        return {
+            "api_key": "",
+            "model": "",
+            "instruction": "",
+            "enable_validation": True,
+            "allow_non_admin_report": False,
+        }
+    try:
+        data = json.loads(AI_SETTINGS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"AI 配置解析失败: {exc}") from exc
+    if not isinstance(data, dict):
+        return {
+            "api_key": "",
+            "model": "",
+            "instruction": "",
+            "enable_validation": True,
+            "allow_non_admin_report": False,
+        }
+    return {
+        "api_key": str(data.get("gemini_api_key") or ""),
+        "model": str(data.get("gemini_model") or ""),
+        "instruction": str(data.get("instruction") or ""),
+        "enable_validation": _coerce_bool(data.get("enable_validation"), True),
+        "allow_non_admin_report": _coerce_bool(
+            data.get("allow_non_admin_report"), False
+        ),
+    }
+
+
+def _safe_read_ai_settings() -> Dict[str, Any]:
+    try:
+        return _read_ai_settings()
+    except HTTPException:
+        return {
+            "api_key": "",
+            "model": "",
+            "instruction": "",
+            "enable_validation": True,
+            "allow_non_admin_report": False,
+        }
+    return {
+        "api_key": str(data.get("gemini_api_key") or ""),
+        "model": str(data.get("gemini_model") or ""),
+        "instruction": str(data.get("instruction") or ""),
+    }
+
+
+def _persist_ai_settings(
+    api_key: str,
+    model: str,
+    instruction: str,
+    enable_validation: bool,
+    allow_non_admin_report: bool,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    if AI_SETTINGS_PATH.exists():
+        try:
+            payload = json.loads(AI_SETTINGS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["gemini_api_key"] = api_key
+    payload["gemini_model"] = model
+    payload["instruction"] = instruction
+    payload["enable_validation"] = bool(enable_validation)
+    payload["allow_non_admin_report"] = bool(allow_non_admin_report)
+    AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    AI_SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "api_key": api_key,
+        "model": model,
+        "instruction": instruction,
+        "enable_validation": bool(enable_validation),
+        "allow_non_admin_report": bool(allow_non_admin_report),
+    }
 
 
 def _ensure_cache_operator(session: AuthSession) -> None:
@@ -2005,6 +2110,48 @@ def update_validation_master_switch(
     _ensure_system_admin(session)
     updated = _persist_master_validation_switch(payload.validation_enabled)
     return {"ok": True, "validation_enabled": updated}
+
+
+@router.get(
+    "/data_analysis/ai_settings",
+    summary="读取 AI 智能体配置",
+)
+async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_session)):
+    _ensure_system_admin(session)
+    data = _read_ai_settings()
+    return {
+        "ok": True,
+        "api_key": data["api_key"],
+        "model": data["model"],
+        "instruction": data["instruction"],
+        "enable_validation": data["enable_validation"],
+        "allow_non_admin_report": data["allow_non_admin_report"],
+    }
+
+
+@router.post(
+    "/data_analysis/ai_settings",
+    summary="更新 AI 智能体配置",
+)
+async def update_ai_settings_endpoint(
+    payload: AiSettingsPayload, session: AuthSession = Depends(get_current_session)
+):
+    _ensure_system_admin(session)
+    result = _persist_ai_settings(
+        payload.api_key.strip(),
+        payload.model.strip(),
+        (payload.instruction or "").strip(),
+        payload.enable_validation,
+        payload.allow_non_admin_report,
+    )
+    return {
+        "ok": True,
+        "api_key": result["api_key"],
+        "model": result["model"],
+        "instruction": result["instruction"],
+        "enable_validation": result["enable_validation"],
+        "allow_non_admin_report": result["allow_non_admin_report"],
+    }
 
 
 @router.get(
@@ -3176,6 +3323,11 @@ def get_data_analysis_schema(
             status_code=500,
             content={"ok": False, "message": "无法生成数据分析配置"},
         )
+    flags = _safe_read_ai_settings()
+    content["ai_report_flags"] = {
+        "allow_non_admin": bool(flags.get("allow_non_admin_report", False)),
+        "validation_enabled": bool(flags.get("enable_validation", True)),
+    }
     return JSONResponse(status_code=200, content=content)
 
 
@@ -3915,6 +4067,7 @@ async def query_data_analysis(
         alias="config",
         description="可选配置文件路径（相对 DATA_DIRECTORY）",
     ),
+    session: AuthSession = Depends(get_current_session),
 ):
     try:
         raw_payload = await request.json()
@@ -3931,6 +4084,11 @@ async def query_data_analysis(
             status_code=422,
             content={"ok": False, "message": "参数校验失败", "errors": exc.errors()},
         )
+
+    flags = _safe_read_ai_settings()
+    allow_non_admin = bool(flags.get("allow_non_admin_report", False))
+    if payload.request_ai_report and not (allow_non_admin or _is_global_admin(session)):
+        payload.request_ai_report = False
 
     schema_payload, error = _build_data_analysis_schema_payload(config)
     if error:

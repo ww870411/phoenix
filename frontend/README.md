@@ -1,5 +1,13 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2025-12-27 数据分析智能体设定入口）
+
+- 数据分析页“智能报告生成（BETA）”旁新增“智能体设定”按钮，仅 `Global_admin` 可见。点击后弹出模态窗，读取并展示 `backend_data/api_key.json` 里的 `api_key`、`model`，支持直接编辑并保存，保存成功后提示“智能体配置已保存”。
+- 新增 `getAiSettings/updateAiSettings` API 封装，分别对应 FastAPI 的 `GET/POST /projects/{project_key}/data_analysis/ai_settings`。模态窗打开时会自动拉取配置，保存时禁用关闭按钮避免误操作。
+- 普通用户看不到该按钮；如需联调请确保登录账户属于 Global_admin。若需回滚入口，恢复 `pages/DataAnalysisView.vue` 与 `services/api.js` 即可。
+- 弹窗新增“智能体提示词（instruction）”多行输入区域。该字段会在 AI 报告四阶段 Prompt（洞察/结构/内容/检查）最前端以 “### AI 指令（最高优先级）” 注入，用于统一定义文风/重点；空值则保持原提示词不变。
+- 新增“启用检查核实阶段”“允许非 Global_admin 启用智能报告”两个开关：保存后会写入 `enable_validation/allow_non_admin_report`，页面会根据 schema 中的 `ai_report_flags` 自动禁用非授权用户的勾选，并在 AI 流程末尾是否呈现“AI 自检结果”。
+
 ## 会话小结（2025-12-27 数据分析接口一次返回上期气温）
 
 - 后端 `/data_analysis/query` 在累计模式下已默认计算上一窗口（上期）并在响应 `ringCompare` 中附带 `prevTotals`，其中含平均气温等温度指标的区间平均值；不再依赖“智能报告”开关才能拿到环比数据。
@@ -20,7 +28,7 @@
 
 ## 会话小结（2025-12-27 数据分析 AI 报告阶段进度 UI）
 
-- `pages/DataAnalysisView.vue` 现在在“智能报告生成中…”提示后附加 `阶段 x/3：…` 字串，分别对应洞察分析/结构规划/页面渲染三个阶段；任务刚入队会显示 `阶段 0/3`，完成时提示自动消失，失败仍显示后端返回的错误信息。
+- `pages/DataAnalysisView.vue` 在“智能报告生成中…”提示后附加 `阶段 x/4：…` 字串，阶段依次为洞察分析 → 结构规划 → 内容撰写 → 检查核实；任务刚入队会显示 `阶段 0/4`，完成时提示自动消失，失败仍显示后端返回的错误信息。
 - 轮询 `/data_analysis/ai_report/{job_id}` 及“下载智能分析报告”前的即时查询都会读取 `payload.stage` 并刷新阶段提示；切换单位、重新发起查询或关闭智能报告时会同步清空阶段状态，避免沿用旧任务的进度。
 - 本次仅改前端 UI，接口契约不变，仍依赖后端返回的 `stage` 字段；若要回滚，恢复 `DataAnalysisView.vue` 即可。
 
@@ -31,12 +39,9 @@
 
 ## 会话小结（2025-12-27 数据分析 AI 报告阶段化）
 
-- 后端 AI 报告接口现采三阶段执行（洞察 → 结构 → HTML），`/data_analysis/ai_report/{job_id}` 返回字段新增 `stage`（pending/insight/layout/render/ready/failed）、`insight`、`layout`、`started_at`，供前端展示生成进度或调试中间结果。
-- `DataAnalysisView.vue` 现有的“智能报告生成（BETA）”轮询逻辑无需改动即可享受新状态：如果需要更细粒度的提示，可根据 `stage` 显示“分析中/排版中/渲染中”；当接口返回 `insight/layout` 时，也可在 UI 中预览 JSON，便于定位模型输出问题。
+- 后端 AI 报告接口现采四阶段执行（洞察 → 结构 → 内容 → 检查），`/data_analysis/ai_report/{job_id}` 会在不同阶段返回 `stage`（pending/insight/layout/content/review/ready/failed）以及 `insight/layout/content/validation/started_at`，供前端展示生成进度或调试中间结果。
+- `DataAnalysisView.vue` 现有的“智能报告生成（BETA）”轮询逻辑无需改动即可享受新状态：如果需要更细粒度的提示，可根据 `stage` 显示“分析中/排版中/内容撰写/检查核实”；当接口返回 `insight/layout/content/validation` 时，也可在 UI 中预览 JSON，便于定位模型输出问题。
 - 若模型输出非法 JSON，后端会在 2 次重试后将 job 标记为 `status=failed` 并附 `error` 描述（如“洞察分析 阶段多次解析失败”），前端的已有错误提示机制可直接展示该消息。
-
-
-
 
 ## 会话小结（2025-12-27 AI 报告前端轮询修复）
 

@@ -118,6 +118,36 @@ CONTENT_PROMPT_TEMPLATE = """你现在的任务是“内容撰写”。请根据
 - 不要输出完整的 HTML 页面，只输出段落内容。
 """
 
+VALIDATION_PROMPT_TEMPLATE = """你是一名严谨的能源行业数据审计员。现在需要对智能分析报告的最终内容进行核实，重点检查：
+1. 报告正文中引用的数值、差异率（同比 delta、环比 ring）是否与提供的指标数据一致；
+2. 逐日区间（timeline）中的本期/同期/同比描述是否与数据吻合；
+3. 是否存在逻辑冲突或未说明的异常，例如宣称“环比下降”但数据为正；
+4. 是否遗漏对关键指标的说明或误用了单位。
+
+输入：
+- `processed_data`：包含所有指标的原始数据（value、delta、ring、timeline 等）；
+- `content_data`：阶段三“内容撰写”输出的段落。
+
+输出仅限 JSON，结构如下：
+{
+  "status": "pass | warning | fail",
+  "issues": [
+    {
+      "section": "对应段落或指标名称",
+      "description": "发现的问题，尽量引用数据说明",
+      "severity": "info | warning | error",
+      "suggestion": "如何修复或需要补充的内容，可为空"
+    }
+  ],
+  "notes": "整体结论或说明"
+}
+
+要求：
+- 若所有检查通过且未发现问题，可令 status=pass、issues 为空，并在 notes 中说明已核实；
+- 若发现轻微问题（如缺少引用）可设置 status=warning；重大数据矛盾需设为 fail；
+- description 中要包含具体证据（指标名称、数值、日期等），避免空泛表述。
+"""
+
 _logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -137,6 +167,36 @@ def _load_gemini_settings() -> Dict[str, str]:
     if not model or not isinstance(model, str):
         raise RuntimeError("缺少 gemini_model 配置")
     return {"api_key": api_key, "model": model}
+
+
+def _load_instruction_text() -> str:
+    if not API_KEY_PATH.exists():
+        return ""
+    try:
+        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return ""
+    instruction = data.get("instruction")
+    if isinstance(instruction, str):
+        return instruction.strip()
+    return ""
+
+
+def _load_ai_runtime_flags() -> Dict[str, bool]:
+    defaults = {"enable_validation": True, "allow_non_admin_report": False}
+    if not API_KEY_PATH.exists():
+        return defaults
+    try:
+        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return defaults
+    flags = defaults.copy()
+    if isinstance(data, dict):
+        if "enable_validation" in data:
+            flags["enable_validation"] = bool(data["enable_validation"])
+        if "allow_non_admin_report" in data:
+            flags["allow_non_admin_report"] = bool(data["allow_non_admin_report"])
+    return flags
 
 
 def _safe_json_dumps(payload: Dict[str, Any]) -> str:
@@ -251,14 +311,13 @@ def _build_ring_compare_payload(payload: Dict[str, Any]) -> Optional[Dict[str, A
     summary_lines: List[str] = []
     if entries:
         phrases = []
-        for entry in entries[:3]:
+        for entry in entries:
             unit_text = entry["unit"]
             prev_text = _format_number(entry["previous"], entry["decimals"])
             rate_text = _format_percent_text(entry["rate"])
             phrases.append(f"{entry['label']} 上期 {prev_text}{unit_text}，环比 {rate_text}")
-        suffix = "（其余略）" if len(entries) > 3 else ""
         range_note = f"（上期：{previous_range_label}）" if previous_range_label else ""
-        summary_lines.append(f"【环比】{'；'.join(phrases)}{suffix}{range_note}")
+        summary_lines.append(f"【环比】{'；'.join(phrases)}{range_note}")
 
     note = ring_block.get("note") or ("当前指标无可用环比数据" if not entries else "")
 
@@ -565,29 +624,54 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _build_insight_prompt(processed_data: Dict[str, Any]) -> str:
+def _prepend_instruction_block(prompt: str, instruction: str) -> str:
+    extra = (instruction or "").strip()
+    if not extra:
+        return prompt
+    return f"### AI 指令（最高优先级）\n{extra}\n\n{prompt}"
+
+
+def _build_insight_prompt(processed_data: Dict[str, Any], instruction: str = "") -> str:
     data_json = _safe_json_dumps(processed_data)
-    return f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
+    base = f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
+    return _prepend_instruction_block(base, instruction)
 
 
-def _build_layout_prompt(processed_data: Dict[str, Any], insight_data: Dict[str, Any]) -> str:
+def _build_layout_prompt(
+    processed_data: Dict[str, Any], insight_data: Dict[str, Any], instruction: str = ""
+) -> str:
     data_json = _safe_json_dumps(processed_data)
     insight_json = _safe_json_dumps(insight_data)
-    return (
-        f"{LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}\n\n### 洞察\n{insight_json}"
-    )
+    base = f"{LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}\n\n### 洞察\n{insight_json}"
+    return _prepend_instruction_block(base, instruction)
 
 
 def _build_content_prompt(
     insight_data: Dict[str, Any],
     layout_data: Dict[str, Any],
+    instruction: str = "",
 ) -> str:
     insight_json = _safe_json_dumps(insight_data)
     layout_json = _safe_json_dumps(layout_data)
-    return (
+    base = (
         f"{CONTENT_PROMPT_TEMPLATE}\n\n### 洞察 JSON\n{insight_json}\n"
         f"\n### 版面规划 JSON\n{layout_json}\n"
     )
+    return _prepend_instruction_block(base, instruction)
+
+
+def _build_validation_prompt(
+    processed_data: Dict[str, Any],
+    content_data: Dict[str, Any],
+    instruction: str = "",
+) -> str:
+    data_json = _safe_json_dumps(processed_data)
+    content_json = _safe_json_dumps(content_data)
+    base = (
+        f"{VALIDATION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}"
+        f"\n\n### 报告内容 JSON\n{content_json}\n"
+    )
+    return _prepend_instruction_block(base, instruction)
 
 
 def _generate_report_html(
@@ -595,6 +679,7 @@ def _generate_report_html(
     insight_data: Dict[str, Any],
     layout_data: Dict[str, Any],
     content_data: Dict[str, Any],
+    validation_data: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     使用 Python 拼接 HTML，替代 LLM 渲染。
@@ -605,6 +690,7 @@ def _generate_report_html(
     sections = layout_data.get("sections") or []
     section_contents = content_data.get("section_contents") or {}
     callouts = content_data.get("callouts") or []
+    validation_block = validation_data or {}
     
     # 1. 基础样式
     css = """
@@ -640,13 +726,24 @@ def _generate_report_html(
         th { background: #f4f6f7; color: #555; font-weight: 600; }
         tr:nth-child(even) { background: #fafafa; }
         .metric-selector { margin-bottom: 12px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; min-width: 200px; }
-        .timeline-table th { background: #e2e8f0; color: #334155; }
+        .timeline-table-wrap { width: 100%; overflow-x: auto; }
+        .timeline-table { min-width: 640px; }
+        .timeline-table th { background: #e2e8f0; color: #334155; position: sticky; top: 0; z-index: 3; }
+        .timeline-table th:first-child { left: 0; z-index: 4; }
         .timeline-table .sub-head th { background: #f8fafc; color: #475569; font-size: 13px; }
-        .timeline-table td:first-child { font-weight: 600; color: #1e293b; }
+        .timeline-table td:first-child { font-weight: 600; color: #1e293b; position: sticky; left: 0; background: #fff; z-index: 2; }
         .delta-positive { color: #d32f2f; font-weight: 600; }
         .delta-negative { color: #2e7d32; font-weight: 600; }
         .delta-neutral { color: #475569; font-weight: 600; }
         .delta-muted { color: #94a3b8; font-weight: 600; }
+        .self-review__status { font-size: 15px; margin: 0 0 8px 0; }
+        .self-review__status--pass { color: #15803d; }
+        .self-review__status--warning { color: #b45309; }
+        .self-review__status--fail { color: #b91c1c; }
+        .self-review__issues { list-style: disc; padding-left: 20px; color: #475569; }
+        .self-review__issues li { margin-bottom: 6px; }
+        .self-review__issue-tag { font-weight: 600; margin-right: 6px; }
+        .self-review__notes { font-size: 14px; color: #475569; margin-top: 8px; }
     """
 
     # 2. 构建页面主体
@@ -737,6 +834,14 @@ def _generate_report_html(
                 "</tr>"
             )
         html_parts.append("</tbody></table></div>")
+        summary_phrases = []
+        for entry in yoy_entries:
+            unit_text = entry.get("unit") or ""
+            peer_text = _format_number(entry["peer"], entry["decimals"])
+            delta_text = _format_percent_text(entry.get("delta"))
+            summary_phrases.append(f"{entry['label']} 同期 {peer_text}{unit_text}，同比 {delta_text}")
+        if summary_phrases:
+            html_parts.append(f"<p class='ring-summary-line'>【同比】{'；'.join(summary_phrases)}</p>")
 
     ring_data = processed_data.get("ring_compare") or {}
     if ring_data and (ring_data.get("entries") or ring_data.get("note")):
@@ -784,6 +889,7 @@ def _generate_report_html(
     if timeline_metrics and timeline_rows:
         html_parts.append("<div class='analysis-section'>")
         html_parts.append("<h2>区间明细（逐日）</h2>")
+        html_parts.append("<div class='timeline-table-wrap'>")
         html_parts.append("<table class='timeline-table'>")
         html_parts.append("<thead>")
         html_parts.append("<tr><th rowspan='2'>日期</th>")
@@ -810,7 +916,43 @@ def _generate_report_html(
                 html_parts.append(f"<td>{peer_val}</td>")
                 html_parts.append(f"<td class='{delta_class}'>{delta_text}</td>")
             html_parts.append("</tr>")
-        html_parts.append("</tbody></table></div>")
+        html_parts.append("</tbody></table></div></div>")
+
+    review_section: List[str] = []
+    if validation_block:
+        status = (validation_block.get("status") or "pending").lower()
+        status_label_map = {
+            "pass": "核对通过",
+            "warning": "存在提示",
+            "fail": "发现异常",
+            "pending": "待核对",
+        }
+        status_label = status_label_map.get(status, "待核对")
+        review_section.append("<div class='analysis-section'>")
+        review_section.append("<h2>智能核对结果</h2>")
+        review_section.append(
+            f"<p class='self-review__status self-review__status--{status}'><strong>结论：</strong>{status_label}</p>"
+        )
+        issues = validation_block.get("issues") or []
+        if issues:
+            review_section.append("<ul class='self-review__issues'>")
+            for issue in issues:
+                section = issue.get("section") or "未注明段落"
+                desc = issue.get("description") or "无描述"
+                level = (issue.get("severity") or "").lower() or "info"
+                suggestion = issue.get("suggestion")
+                review_section.append(
+                    "<li>"
+                    f"<span class='self-review__issue-tag'>[{section} / {level}]</span>"
+                    f"{desc}"
+                    f"{f'（建议：{suggestion}）' if suggestion else ''}"
+                    "</li>"
+                )
+            review_section.append("</ul>")
+        notes = validation_block.get("notes")
+        if notes:
+            review_section.append(f"<p class='self-review__notes'>{notes}</p>")
+        review_section.append("</div>")
 
     # 5. 图表区域 (含数据注入)
     timeline_data_json = json.dumps([
@@ -841,12 +983,16 @@ def _generate_report_html(
                 opt.innerHTML = item.label;
                 selector.appendChild(opt);
             }});
+            var defaultIndex = rawData.findIndex(function(item) {{ return !item.is_temp; }});
+            if (defaultIndex < 0) {{ defaultIndex = 0; }}
+            selector.value = defaultIndex;
 
             function updateChart() {{
-                var idx = selector.value;
+                var idx = parseInt(selector.value, 10);
+                if (isNaN(idx) || idx < 0 || idx >= rawData.length) {{ idx = 0; }}
                 var currentMetric = rawData[idx];
                 var tempMetric = rawData.find(m => m.is_temp) || null;
-                
+
                 var dates = currentMetric.data.map(i => i.d);
                 var series = [];
                 var yAxis = [
@@ -872,8 +1018,8 @@ def _generate_report_html(
                     itemStyle: {{ color: '#95a5a6' }}
                 }});
 
-                // 右轴：气温 (如果存在且不是自己)
-                if (tempMetric && tempMetric.label !== currentMetric.label) {{
+                // 右轴：气温参考线
+                if (tempMetric) {{
                     yAxis.push({{ type: 'value', name: '气温 ℃', position: 'right', splitLine: {{ show: false }} }});
                     series.push({{
                         name: '平均气温',
@@ -903,6 +1049,7 @@ def _generate_report_html(
     </div>
     """
     html_parts.append(chart_html)
+    html_parts.extend(review_section)
 
     # 6. 正文章节 + 表格
     for sec in sections:
@@ -962,22 +1109,39 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
             ",".join(payload.get("resolved_metrics") or []),
         )
         processed_data = _preprocess_payload(payload)
+        extra_instruction = _load_instruction_text()
+        feature_flags = _load_ai_runtime_flags()
+        enable_validation_stage = feature_flags.get("enable_validation", True)
         _update_job(job_id, status="running", stage="insight", started_at=_current_time_iso())
 
-        insight_prompt = _build_insight_prompt(processed_data)
+        insight_prompt = _build_insight_prompt(processed_data, extra_instruction)
         insight_data = _run_json_stage("洞察分析", insight_prompt)
         _update_job(job_id, stage="layout", insight=insight_data)
 
-        layout_prompt = _build_layout_prompt(processed_data, insight_data)
+        layout_prompt = _build_layout_prompt(processed_data, insight_data, extra_instruction)
         layout_data = _run_json_stage("结构规划", layout_prompt)
-        _update_job(job_id, stage="render", layout=layout_data)
+        _update_job(job_id, stage="content", layout=layout_data)
 
-        # NEW: 阶段三改为“内容撰写”，只生成段落 JSON
-        content_prompt = _build_content_prompt(insight_data, layout_data)
+        content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
         content_data = _run_json_stage("内容撰写", content_prompt)
-        
-        # Python 组装 HTML
-        html_report = _generate_report_html(processed_data, insight_data, layout_data, content_data)
+        validation_data = None
+        if enable_validation_stage:
+            _update_job(job_id, stage="review", content=content_data)
+            validation_prompt = _build_validation_prompt(
+                processed_data, content_data, extra_instruction
+            )
+            validation_data = _run_json_stage("检查核实", validation_prompt)
+            _update_job(job_id, validation=validation_data)
+        else:
+            _update_job(job_id, stage="content", content=content_data)
+
+        html_report = _generate_report_html(
+            processed_data,
+            insight_data,
+            layout_data,
+            content_data,
+            validation_data,
+        )
 
         _update_job(
             job_id,
@@ -1016,6 +1180,8 @@ def enqueue_ai_report_job(payload: Dict[str, Any]) -> str:
         "model": None,
         "insight": None,
         "layout": None,
+        "content": None,
+        "validation": None,
     }
     with _lock:
         _jobs[job_id] = snapshot

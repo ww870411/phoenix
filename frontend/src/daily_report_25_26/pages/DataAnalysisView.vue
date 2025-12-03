@@ -175,10 +175,29 @@
             <button class="btn ghost" type="button" :disabled="queryLoading" @click="resetSelections">
               重置选择
             </button>
-            <label class="ai-report-toggle">
-              <input type="checkbox" v-model="aiReportEnabled" :disabled="queryLoading" />
-              <span>智能报告生成（BETA）</span>
-            </label>
+            <div class="ai-report-controls">
+              <label class="ai-report-toggle">
+                <input
+                  type="checkbox"
+                  v-model="aiReportEnabled"
+                  :disabled="queryLoading || !aiFeatureAccessible"
+                  :title="!aiFeatureAccessible ? '当前账号未被授权使用智能报告' : ''"
+                />
+                <span>智能报告生成（BETA）</span>
+              </label>
+              <span v-if="!aiFeatureAccessible" class="ai-report-hint">
+                当前账号未开放智能报告
+              </span>
+              <button
+                v-if="canConfigureAiSettings"
+                type="button"
+                class="btn ghost ai-settings-btn"
+                :disabled="aiSettingsLoading || aiSettingsSaving"
+                @click="openAiSettingsDialog"
+              >
+                智能体设定
+              </button>
+            </div>
           </div>
         </template>
       </section>
@@ -528,11 +547,114 @@
         </div>
       </section>
     </main>
+    <transition name="fade">
+      <div
+        v-if="aiSettingsDialogVisible"
+        class="ai-settings-dialog__backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="智能体设定"
+      >
+        <div class="ai-settings-dialog__panel">
+          <header class="ai-settings-dialog__header">
+            <div>
+              <h4>智能体设定</h4>
+              <p>配置智能报告使用的 API Key 与模型。</p>
+            </div>
+            <button
+              type="button"
+              class="ai-settings-dialog__close"
+              :disabled="aiSettingsSaving"
+              aria-label="关闭智能体设定"
+              @click="closeAiSettingsDialog"
+            >
+              ×
+            </button>
+          </header>
+          <div class="ai-settings-dialog__body">
+            <div v-if="aiSettingsLoading" class="ai-settings-dialog__loading">配置读取中，请稍候…</div>
+            <template v-else>
+              <label class="ai-settings-dialog__field">
+                <span>API Key</span>
+                <input
+                  type="text"
+                  v-model="aiSettingsForm.apiKey"
+                  :disabled="aiSettingsSaving"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="ai-settings-dialog__field">
+                <span>模型</span>
+                <input
+                  type="text"
+                  v-model="aiSettingsForm.model"
+                  :disabled="aiSettingsSaving"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="ai-settings-dialog__field">
+                <span>智能体提示词（instruction）</span>
+                <textarea
+                  rows="5"
+                  v-model="aiSettingsForm.instruction"
+                  :disabled="aiSettingsSaving"
+                  placeholder="可填写多条指引，用于追加到提示词末尾。"
+                ></textarea>
+              </label>
+              <label class="ai-settings-dialog__toggle">
+                <input
+                  type="checkbox"
+                  v-model="aiSettingsForm.validationEnabled"
+                  :disabled="aiSettingsSaving"
+                />
+                <span>启用检查核实（第 4 阶段自检）</span>
+              </label>
+              <label class="ai-settings-dialog__toggle">
+                <input
+                  type="checkbox"
+                  v-model="aiSettingsForm.allowNonAdmin"
+                  :disabled="aiSettingsSaving"
+                />
+                <span>允许非 Global_admin 启用智能报告</span>
+              </label>
+              <p class="ai-settings-dialog__hint">保存后将同步更新 backend_data/api_key.json。</p>
+            </template>
+            <p v-if="aiSettingsError" class="ai-settings-dialog__alert ai-settings-dialog__alert--error">
+              {{ aiSettingsError }}
+            </p>
+            <p
+              v-else-if="aiSettingsSuccess"
+              class="ai-settings-dialog__alert ai-settings-dialog__alert--success"
+            >
+              {{ aiSettingsSuccess }}
+            </p>
+          </div>
+          <footer class="ai-settings-dialog__actions">
+            <button
+              type="button"
+              class="btn ghost"
+              :disabled="aiSettingsSaving"
+              @click="closeAiSettingsDialog"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="btn primary"
+              :disabled="aiSettingsLoading || aiSettingsSaving"
+              @click="handleAiSettingsSave"
+            >
+              {{ aiSettingsSaving ? '保存中…' : '保存' }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx'
@@ -544,7 +666,10 @@ import {
   getDashboardBizDate,
   runDataAnalysis,
   getDataAnalysisAiReport,
+  getAiSettings,
+  updateAiSettings,
 } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 const TrendChart = defineComponent({
   name: 'TrendChart',
@@ -620,6 +745,7 @@ const TrendChart = defineComponent({
 })
 
 const route = useRoute()
+const auth = useAuthStore()
 const projectKey = computed(() => String(route.params.projectKey ?? ''))
 const pageKey = computed(() => String(route.params.pageKey ?? ''))
 const pageConfig = computed(() => (typeof route.query.config === 'string' ? route.query.config : ''))
@@ -637,6 +763,78 @@ const breadcrumbItems = computed(() => [
 const loading = ref(false)
 const errorMessage = ref('')
 const schema = ref(null)
+const isGlobalAdmin = computed(() => (auth.user?.group || '').trim() === 'Global_admin')
+const canConfigureAiSettings = computed(() => isGlobalAdmin.value)
+const aiSchemaFlags = computed(() => schema.value?.ai_report_flags || {})
+const allowNonAdminAiReport = computed(() => Boolean(aiSchemaFlags.value.allow_non_admin))
+const aiSettingsDialogVisible = ref(false)
+const aiSettingsLoading = ref(false)
+const aiSettingsSaving = ref(false)
+const aiSettingsError = ref('')
+const aiSettingsSuccess = ref('')
+const aiSettingsForm = reactive({
+  apiKey: '',
+  model: '',
+  instruction: '',
+  validationEnabled: true,
+  allowNonAdmin: false,
+})
+
+function applyAiSettingsPayload(payload) {
+  aiSettingsForm.apiKey = payload?.api_key ?? ''
+  aiSettingsForm.model = payload?.model ?? ''
+  aiSettingsForm.instruction = payload?.instruction ?? ''
+  aiSettingsForm.validationEnabled =
+    payload?.enable_validation !== undefined ? Boolean(payload.enable_validation) : true
+  aiSettingsForm.allowNonAdmin =
+    payload?.allow_non_admin_report !== undefined
+      ? Boolean(payload.allow_non_admin_report)
+      : false
+}
+
+function closeAiSettingsDialog() {
+  if (aiSettingsSaving.value) return
+  aiSettingsDialogVisible.value = false
+}
+
+async function openAiSettingsDialog() {
+  if (!canConfigureAiSettings.value || !projectKey.value) return
+  aiSettingsDialogVisible.value = true
+  aiSettingsLoading.value = true
+  aiSettingsError.value = ''
+  aiSettingsSuccess.value = ''
+  try {
+    const payload = await getAiSettings(projectKey.value)
+    applyAiSettingsPayload(payload)
+  } catch (err) {
+    aiSettingsError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    aiSettingsLoading.value = false
+  }
+}
+
+async function handleAiSettingsSave() {
+  if (!canConfigureAiSettings.value || !projectKey.value) return
+  if (aiSettingsLoading.value || aiSettingsSaving.value) return
+  aiSettingsSaving.value = true
+  aiSettingsError.value = ''
+  aiSettingsSuccess.value = ''
+  try {
+    const payload = await updateAiSettings(projectKey.value, {
+      api_key: aiSettingsForm.apiKey || '',
+      model: aiSettingsForm.model || '',
+      instruction: aiSettingsForm.instruction || '',
+      enable_validation: Boolean(aiSettingsForm.validationEnabled),
+      allow_non_admin_report: Boolean(aiSettingsForm.allowNonAdmin),
+    })
+    applyAiSettingsPayload(payload)
+    aiSettingsSuccess.value = '智能体配置已保存'
+  } catch (err) {
+    aiSettingsError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    aiSettingsSaving.value = false
+  }
+}
 
 function resolveUnitOptions(payload) {
   if (!payload) return []
@@ -802,11 +1000,22 @@ const aiReportStatus = ref('idle')
 const aiReportContent = ref('')
 const aiReportStatusMessage = ref('')
 const aiReportStage = ref('')
+const aiFeatureAccessible = computed(() => isGlobalAdmin.value || allowNonAdminAiReport.value)
+watch(
+  () => aiFeatureAccessible.value,
+  (allowed) => {
+    if (!allowed && aiReportEnabled.value) {
+      aiReportEnabled.value = false
+    }
+  },
+  { immediate: true },
+)
 
 const AI_REPORT_STAGE_STEPS = [
   { key: 'insight', order: 1, label: '洞察分析' },
   { key: 'layout', order: 2, label: '结构规划' },
-  { key: 'render', order: 3, label: '内容撰写与渲染' },
+  { key: 'content', order: 3, label: '内容撰写' },
+  { key: 'review', order: 4, label: '检查核实' },
 ]
 const AI_REPORT_STAGE_TOTAL = AI_REPORT_STAGE_STEPS.length
 const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
@@ -1687,6 +1896,7 @@ const aiReportButtonLabel = computed(() => {
 })
 
 const aiReportButtonDisabled = computed(() => {
+  if (!aiFeatureAccessible.value) return true
   if (!aiReportEnabled.value) return true
   if (!resultUnitKeys.value.length) return true
   if (queryLoading.value) return true
@@ -1978,20 +2188,20 @@ async function runAnalysis() {
   queryLoading.value = true
   const startedAt = Date.now()
   try {
-    const runMetrics = Array.from(selectedMetrics.value)
-    const requestBase = {
-      metrics: runMetrics,
-      analysis_mode: analysisMode.value,
-      start_date: startDate.value,
-      end_date: endDate.value,
-      request_ai_report: aiReportEnabled.value,
-    }
-    if (aiReportEnabled.value) {
-      aiReportStatus.value = 'pending'
-      updateAiReportStage('pending')
-      setAiReportRunningMessage('pending')
-      aiReportContent.value = ''
-    } else {
+  const runMetrics = Array.from(selectedMetrics.value)
+  const requestBase = {
+    metrics: runMetrics,
+    analysis_mode: analysisMode.value,
+    start_date: startDate.value,
+    end_date: endDate.value,
+    request_ai_report: aiReportEnabled.value && aiFeatureAccessible.value,
+  }
+  if (aiReportEnabled.value && aiFeatureAccessible.value) {
+    aiReportStatus.value = 'pending'
+    updateAiReportStage('pending')
+    setAiReportRunningMessage('pending')
+    aiReportContent.value = ''
+  } else {
       resetAiReportState()
     }
     const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
@@ -2618,11 +2828,19 @@ async function downloadAiReport() {
       aiReportStatusMessage.value = '暂未获取到智能报告内容'
       return
     }
+    const meta = unitResults.value[activeUnit.value]?.meta || lastQueryMeta.value || {}
+    const unitName = meta.unit_label || resolveUnitLabel(activeUnit.value) || '未知单位'
+    const start = meta.start_date || startDate.value || ''
+    const end = meta.end_date || endDate.value || start
+    const rangeLabel = start && end ? (start === end ? start : `${start}_${end}`) : '日期未定'
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+    const safeUnitName = unitName.replace(/[\\/:*?"<>|]/g, '_')
+    const filename = `智能分析报告_${safeUnitName}_${rangeLabel}_${timestamp}.html`
     const blob = new Blob([aiReportContent.value], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `智能分析报告_${Date.now()}.html`
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -3123,6 +3341,13 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+.ai-report-controls {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .ai-report-toggle {
   display: inline-flex;
   align-items: center;
@@ -3135,6 +3360,16 @@ onBeforeUnmount(() => {
 .ai-report-toggle input {
   width: 16px;
   height: 16px;
+}
+
+.ai-report-hint {
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.ai-settings-btn {
+  font-size: 13px;
+  padding: 6px 12px;
 }
 
 .result-header-actions {
@@ -3199,6 +3434,139 @@ onBeforeUnmount(() => {
 .result-table .value-number {
   text-align: center;
   display: inline-block;
+}
+
+.ai-settings-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 2000;
+}
+
+.ai-settings-dialog__panel {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.3);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-settings-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-settings-dialog__header h4 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.ai-settings-dialog__header p {
+  margin: 0;
+  color: var(--neutral-500);
+  font-size: 13px;
+}
+
+.ai-settings-dialog__close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--neutral-500);
+  padding: 2px 6px;
+}
+
+.ai-settings-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ai-settings-dialog__loading {
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--neutral-600);
+}
+
+.ai-settings-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--neutral-600);
+}
+
+.ai-settings-dialog__field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.ai-settings-dialog__field textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+}
+
+.ai-settings-dialog__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
+.ai-settings-dialog__alert {
+  margin: 4px 0 0;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+
+.ai-settings-dialog__alert--error {
+  background: rgba(248, 113, 113, 0.1);
+  color: #b91c1c;
+}
+
+.ai-settings-dialog__alert--success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.ai-settings-dialog__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--neutral-600);
+}
+
+.ai-settings-dialog__toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-settings-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .plan-progress {

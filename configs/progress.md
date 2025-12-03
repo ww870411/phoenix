@@ -1,5 +1,27 @@
 # 进度记录
 
+## 2025-12-27（数据分析智能体设定前端入口）
+
+前置说明（降级留痕）：
+- Serena 现阶段无法对 Vue/JS/Markdown 执行精确写入，本次涉及 `frontend/src/daily_report_25_26/pages/DataAnalysisView.vue`、`frontend/src/daily_report_25_26/services/api.js`、`frontend/README.md`、`backend/README.md` 及本文日志的修改均使用 `apply_patch` 完成；回滚时按上述文件还原即可。
+
+本次动作：
+- 为数据分析页“智能报告生成（BETA）”旁新增“智能体设定”按钮，仅 Global_admin 用户可见。按钮弹出模态窗，展示/编辑 `backend_data/api_key.json` 中的 `api_key`、`model`，并在加载/保存阶段显示状态提示。
+- 新增前端 API 封装 `getAiSettings/updateAiSettings`，分别调用 FastAPI 的 `GET/POST /projects/{key}/data_analysis/ai_settings`；模态窗保存后会立即刷新本地表单，避免重复请求。
+- 模态窗支持错误/成功提示，保存按钮对 loading/saving 状态做禁用保护，关闭时若正在写入会阻止误操作。
+- 修复后台路由路径：原先 FastAPI 端点误写成 `/projects/{project_key}/data_analysis/ai_settings`，与路由前缀叠加导致 404；现改为 `/data_analysis/ai_settings` 并保留系统管理员鉴权，前端路径无需调整即可命中。
+- `backend_data/api_key.json` 新增 `instruction` 字段：FastAPI 现在会读取/写入该键，AI 报告流水线将其作为“最高优先级指令”插入每个 Prompt 的开头（先输出 `### AI 指令` 再进入原模板），以便集中控制风格/语气；前端弹窗也新增“智能体提示词”输入区域，便于 Global_admin 动态配置。
+- 新增 `enable_validation` 与 `allow_non_admin_report` 两个标识：后台可决定是否执行第 4 阶段自检，以及是否允许非 Global_admin 用户触发智能报告。配置通过同一个文件维护，schema API 会下发 `ai_report_flags`，前端据此自动禁用勾选，并在“智能体设定”弹窗提供两个开关。
+- AI 报告生成管线扩展为四阶段：洞察 → 结构 → 内容 → 检查。新增 `VALIDATION_PROMPT_TEMPLATE`，在 HTML 末尾渲染“AI 自检结果”段落，并在任务状态中暴露 `content/validation`；前端阶段提示同步更新为 `阶段 x/4`。
+- “区间明细（逐日）”表格放入 `.timeline-table-wrap` 并启用 `overflow-x:auto`，避免指标过多时内容溢出，保证下载报告可横向滚动查看完整列。
+
+影响范围与回滚：
+- 仅影响数据分析前端与进度/README 说明；恢复上述文件即可移除配置入口。后端接口未再修改。
+
+验证建议：
+1. 使用 Global_admin 账户进入数据分析页，勾选“智能报告生成”旁出现“智能体设定”按钮；点击后弹窗展示当前 `api_key` 与 `model`。
+2. 修改字段后点击“保存”，接口返回成功提示“智能体配置已保存”，刷新后端文件应同步更新；非 Global_admin 登录时按钮不展示。
+
 ## 2025-12-27（数据分析接口一次返回上期气温）
 
 前置说明：
