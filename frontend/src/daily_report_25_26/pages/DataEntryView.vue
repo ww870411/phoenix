@@ -40,6 +40,15 @@
             />
             <span>本单位分析</span>
           </label>
+          <label v-if="shouldShowSheetAiToggle" class="unit-analysis-inline" title="开放智能报告给其他用户">
+            <input
+              type="checkbox"
+              :checked="sheetAiReportEnabled"
+              :disabled="sheetAiToggleDisabled"
+              @change="onSheetAiToggle"
+            />
+            <span>开放智能报告</span>
+          </label>
         </div>
         <div class="topbar__action-row">
           <label v-if="isDailyPage" class="date-group topbar__date" title="业务日期">
@@ -126,6 +135,8 @@ import {
   submitData,
   getSheetValidationSwitch,
   setSheetValidationSwitch,
+  getSheetAiSwitch,
+  setSheetAiSwitch,
   getDataAnalysisSchema,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
@@ -162,8 +173,15 @@ const userGroup = computed(() => auth.user?.group ?? '')
 const normalizedGroup = computed(() => userGroup.value.toLowerCase())
 const isUnitScopedEditor = computed(() => normalizedGroup.value === 'unit_admin' || normalizedGroup.value === 'unit_filler')
 const isGlobalAdmin = computed(() => normalizedGroup.value === 'global_admin')
+const isGroupAdminOrHigher = computed(() => normalizedGroup.value === 'global_admin' || normalizedGroup.value === 'group_admin')
 const allowNonAdminAiReport = ref(false)
-const aiFeatureAccessible = computed(() => isGlobalAdmin.value || allowNonAdminAiReport.value)
+const sheetAiReportEnabled = ref(false)
+const sheetAiSwitchLoading = ref(false)
+const sheetAiSwitchSaving = ref(false)
+const aiFeatureAccessible = computed(() => isGlobalAdmin.value || isGroupAdminOrHigher.value || sheetAiReportEnabled.value)
+const shouldShowSheetAiToggle = computed(() => isGroupAdminOrHigher.value && sheetKey !== 'Coal_inventory_Sheet')
+const sheetAiToggleDisabled = computed(() => sheetAiSwitchLoading.value || sheetAiSwitchSaving.value)
+
 function formatDateYYYYMMDD(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -1420,6 +1438,48 @@ function onSheetValidationToggle(event) {
   updateSheetValidationSwitch(checked);
 }
 
+async function loadSheetAiSwitch() {
+  if (!projectKey || !sheetKey) {
+    sheetAiReportEnabled.value = false
+    return
+  }
+  sheetAiSwitchLoading.value = true
+  try {
+    const payload = await getSheetAiSwitch(projectKey, sheetKey, { config: pageConfig.value })
+    sheetAiReportEnabled.value = Boolean(payload?.ai_report_enabled)
+  } catch (err) {
+    // fail silently or log
+    console.error('Failed to load AI switch:', err)
+  } finally {
+    sheetAiSwitchLoading.value = false
+  }
+}
+
+async function updateSheetAiSwitch(nextValue) {
+  if (!projectKey || !sheetKey || !shouldShowSheetAiToggle.value) return
+  sheetAiSwitchSaving.value = true
+  const previous = sheetAiReportEnabled.value
+  sheetAiReportEnabled.value = nextValue
+  try {
+    await setSheetAiSwitch(projectKey, sheetKey, nextValue, { config: pageConfig.value })
+  } catch (err) {
+    console.error('Failed to save AI switch:', err)
+    sheetAiReportEnabled.value = previous
+    alert('更新 AI 开关失败：' + (err.message || '未知错误'))
+  } finally {
+    sheetAiSwitchSaving.value = false
+  }
+}
+
+function onSheetAiToggle(event) {
+  if (sheetAiToggleDisabled.value) {
+    if (event?.target) event.target.checked = sheetAiReportEnabled.value
+    return
+  }
+  const checked = Boolean(event?.target?.checked)
+  updateSheetAiSwitch(checked)
+}
+
 // --- 渲染逻辑：标准模板 ---
 async function setupStandardGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
@@ -1820,6 +1880,7 @@ onMounted(async () => {
   await nextTick();
   await ensureProjectsLoaded().catch(() => {});
   await loadSheetValidationSwitch();
+  await loadSheetAiSwitch();
   await loadTemplate();
 });
 
@@ -1994,6 +2055,7 @@ watch(
   () => route.params.sheetKey,
   () => {
     loadSheetValidationSwitch();
+    loadSheetAiSwitch();
   },
 );
 
@@ -2001,6 +2063,7 @@ watch(
   () => pageConfig.value,
   () => {
     loadSheetValidationSwitch();
+    loadSheetAiSwitch();
   },
 );
 
@@ -2162,7 +2225,7 @@ async function loadAiFlag() {
   try {
     const payload = await getDataAnalysisSchema(projectKey)
     const flags = payload?.ai_report_flags || {}
-    allowNonAdminAiReport.value = Boolean(flags.allow_non_admin_report)
+    allowNonAdminAiReport.value = Boolean(flags.allow_non_admin)
   } catch (err) {
     allowNonAdminAiReport.value = false
   }

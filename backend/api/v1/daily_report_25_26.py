@@ -56,6 +56,7 @@ from backend.services.weather_importer import (
 # Use统一的数据目录常量，默认指向容器内 /app/data
 from backend.services import data_analysis as data_analysis_service
 from backend.services import data_analysis_ai_report
+from backend.services import ai_usage_service
 from backend.services.api_key_cipher import decrypt_api_key, encrypt_api_key
 
 DATA_ROOT = SysPath(DATA_DIRECTORY)
@@ -1659,6 +1660,10 @@ class ValidationMasterSwitchPayload(BaseModel):
     validation_enabled: bool
 
 
+class AiReportSwitchPayload(BaseModel):
+    ai_report_enabled: bool
+
+
 class DataAnalysisQueryPayload(BaseModel):
     unit_key: str
     metrics: List[str]
@@ -1671,7 +1676,7 @@ class DataAnalysisQueryPayload(BaseModel):
 
 
 class AiSettingsPayload(BaseModel):
-    api_key: str
+    api_keys: List[str]
     model: str
     instruction: str = ""
     enable_validation: bool = True
@@ -1690,6 +1695,13 @@ def _is_global_admin(session: AuthSession) -> bool:
     return group == "Global_admin" or group == "系统管理员"
 
 
+def _ensure_group_admin_or_higher(session: AuthSession) -> None:
+    group = (session.group or "").strip()
+    allowed = {"系统管理员", "Global_admin", "Group_admin"}
+    if group not in allowed:
+        raise HTTPException(status_code=403, detail="仅集团管理员及以上角色可执行此操作。")
+
+
 def _coerce_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -1700,10 +1712,10 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
-def _read_ai_settings() -> Dict[str, str]:
+def _read_ai_settings() -> Dict[str, Any]:
     if not AI_SETTINGS_PATH.exists():
         return {
-            "api_key": "",
+            "api_keys": [],
             "model": "",
             "instruction": "",
             "enable_validation": True,
@@ -1715,15 +1727,23 @@ def _read_ai_settings() -> Dict[str, str]:
         raise HTTPException(status_code=500, detail=f"AI 配置解析失败: {exc}") from exc
     if not isinstance(data, dict):
         return {
-            "api_key": "",
+            "api_keys": [],
             "model": "",
             "instruction": "",
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
-    encrypted_key = str(data.get("gemini_api_key") or "")
+    
+    # 读取多 Key 列表，若无则尝试迁移旧单 Key
+    raw_keys = data.get("gemini_api_keys")
+    if not isinstance(raw_keys, list):
+        old_key = str(data.get("gemini_api_key") or "").strip()
+        raw_keys = [old_key] if old_key else []
+    
+    decrypted_keys = [decrypt_api_key(str(k)) for k in raw_keys if k]
+
     return {
-        "api_key": decrypt_api_key(encrypted_key),
+        "api_keys": decrypted_keys,
         "model": str(data.get("gemini_model") or ""),
         "instruction": str(data.get("instruction") or ""),
         "enable_validation": _coerce_bool(data.get("enable_validation"), True),
@@ -1738,7 +1758,7 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
         return _read_ai_settings()
     except HTTPException:
         return {
-            "api_key": "",
+            "api_keys": [],
             "model": "",
             "instruction": "",
             "enable_validation": True,
@@ -1747,7 +1767,7 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
 
 
 def _persist_ai_settings(
-    api_key: str,
+    api_keys: List[str],
     model: str,
     instruction: str,
     enable_validation: bool,
@@ -1761,7 +1781,13 @@ def _persist_ai_settings(
             payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    payload["gemini_api_key"] = encrypt_api_key(api_key or "")
+    
+    encrypted_keys = [encrypt_api_key(k) for k in api_keys if k.strip()]
+    payload["gemini_api_keys"] = encrypted_keys
+    # 清理旧字段以避免混淆
+    if "gemini_api_key" in payload:
+        del payload["gemini_api_key"]
+        
     payload["gemini_model"] = model
     payload["instruction"] = instruction
     payload["enable_validation"] = bool(enable_validation)
@@ -1769,7 +1795,7 @@ def _persist_ai_settings(
     AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     AI_SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return {
-        "api_key": api_key,
+        "api_keys": api_keys,
         "model": model,
         "instruction": instruction,
         "enable_validation": bool(enable_validation),
@@ -1784,6 +1810,56 @@ def _ensure_cache_operator(session: AuthSession) -> None:
     can_publish = getattr(session.permissions.actions, "can_publish", False)
     if not can_publish:
         raise HTTPException(status_code=403, detail="当前账号无权操作数据看板缓存。")
+
+
+def _extract_local_ai_report_switch(payload: Dict[str, Any]) -> bool:
+    local_enabled = False
+    for key in ("ai_report_enabled", "ai_report_switch", "智能报告开关", "enable_ai_report"):
+        if key in payload:
+            local_enabled = _coerce_bool(payload.get(key), default=False)
+            break
+    return local_enabled
+
+
+def _persist_sheet_ai_report_switch(
+    sheet_key: str,
+    enabled: bool,
+    preferred_path: Optional[SysPath] = None,
+) -> bool:
+    payload, data_path, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+    if payload is None or data_path is None:
+        raise HTTPException(status_code=404, detail=f"未找到 sheet_key={sheet_key} 的模板配置。")
+    try:
+        raw = _read_json(data_path)
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"读取模板文件失败：{data_path}") from exc
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=500, detail="模板文件结构错误，无法更新 AI 报告开关。")
+    entry_key = _find_sheet_entry_key(raw, sheet_key)
+    if entry_key is None:
+        raise HTTPException(status_code=404, detail=f"模板中未找到 {sheet_key} 对应的配置。")
+    entry = raw.get(entry_key)
+    if not isinstance(entry, dict):
+        raise HTTPException(status_code=500, detail=f"{sheet_key} 配置格式异常，无法更新 AI 报告开关。")
+    normalized = bool(enabled)
+    for key in ("ai_report_enabled", "ai_report_switch", "智能报告开关", "enable_ai_report"):
+        # 清理旧键，统一使用 ai_report_enabled
+        if key in entry:
+            del entry[key]
+    entry["ai_report_enabled"] = normalized
+    raw[entry_key] = entry
+    serialized = json.dumps(raw, ensure_ascii=False, indent=2)
+    temp_path = data_path.with_name(data_path.name + ".tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as fh:
+            fh.write(serialized)
+            fh.write("\n")
+        temp_path.replace(data_path)
+    except Exception as exc:  # pragma: no cover
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(status_code=500, detail="写入模板文件失败，表级 AI 报告开关未更新。") from exc
+    return normalized
 
 
 def _collect_seed_units() -> List[str]:
@@ -2118,7 +2194,7 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
     data = _read_ai_settings()
     return {
         "ok": True,
-        "api_key": data["api_key"],
+        "api_keys": data["api_keys"],
         "model": data["model"],
         "instruction": data["instruction"],
         "enable_validation": data["enable_validation"],
@@ -2135,7 +2211,7 @@ async def update_ai_settings_endpoint(
 ):
     _ensure_system_admin(session)
     result = _persist_ai_settings(
-        payload.api_key.strip(),
+        payload.api_keys,
         payload.model.strip(),
         (payload.instruction or "").strip(),
         payload.enable_validation,
@@ -2144,7 +2220,7 @@ async def update_ai_settings_endpoint(
     data_analysis_ai_report.reset_gemini_client()
     return {
         "ok": True,
-        "api_key": result["api_key"],
+        "api_keys": result["api_keys"],
         "model": result["model"],
         "instruction": result["instruction"],
         "enable_validation": result["enable_validation"],
@@ -2198,6 +2274,54 @@ def update_sheet_validation_switch(
             raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
     updated = _persist_sheet_validation_switch(sheet_key, payload.validation_enabled, preferred_path=preferred_path)
     return {"ok": True, "validation_enabled": updated}
+
+
+@router.get(
+    "/data_entry/sheets/{sheet_key}/ai-switch",
+    summary="查看指定表的 AI 报告开关",
+)
+def get_sheet_ai_switch(
+    sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件",
+    ),
+):
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+        if preferred_path is None:
+            raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
+    payload, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"未找到 sheet_key={sheet_key} 的模板配置。")
+    local_flag = _extract_local_ai_report_switch(payload)
+    return {"ok": True, "ai_report_enabled": local_flag}
+
+
+@router.post(
+    "/data_entry/sheets/{sheet_key}/ai-switch",
+    summary="更新指定表的 AI 报告开关",
+)
+def update_sheet_ai_switch(
+    sheet_key: str = Path(..., description="目标 sheet_key"),
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="优先查找的模板配置文件",
+    ),
+    payload: AiReportSwitchPayload = ...,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_group_admin_or_higher(session)
+    preferred_path = None
+    if config:
+        preferred_path = _resolve_data_file(config)
+        if preferred_path is None:
+            raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
+    updated = _persist_sheet_ai_report_switch(sheet_key, payload.ai_report_enabled, preferred_path=preferred_path)
+    return {"ok": True, "ai_report_enabled": updated}
 
 
 @router.get("/data_entry/sheets/{sheet_key}/template", summary="获取数据填报模板")
@@ -3496,10 +3620,11 @@ def _build_metric_group_lookup(groups: Sequence[Dict[str, Any]]) -> Dict[str, st
 def _execute_data_analysis_query(
     payload: DataAnalysisQueryPayload,
     schema_payload: Dict[str, Any],
+    session: Optional[AuthSession] = None,
 ) -> JSONResponse:
     # 使用 legacy 版本以兼容当前定制逻辑
     try:
-        return _execute_data_analysis_query_legacy(payload, schema_payload)
+        return _execute_data_analysis_query_legacy(payload, schema_payload, session)
     except Exception as exc:
         logger.exception("执行数据分析查询时发生未捕获异常")
         return JSONResponse(
@@ -3511,12 +3636,24 @@ def _execute_data_analysis_query(
 def _execute_data_analysis_query_legacy(
     payload: Any,  # 原有签名兼容，实际为 DataAnalysisQueryPayload
     schema_payload: Dict[str, Any],
+    session: Optional[AuthSession] = None,
 ) -> JSONResponse:
     unit_dict = schema_payload.get("unit_dict") or {}
     metric_dict = schema_payload.get("metric_dict") or {}
     metric_groups = schema_payload.get("metric_groups") or []
     metric_group_views = schema_payload.get("metric_group_views") or {}
     metric_decimals = schema_payload.get("metric_decimals") or {}
+
+    # Check AI usage limit if AI report is requested
+    ai_limit_warning = None
+    if getattr(payload, "request_ai_report", False):
+        username = session.username if session else "anonymous"
+        user_group = session.group if session else ""
+        allowed, message = ai_usage_service.check_and_increment_usage(username, user_group)
+        if not allowed:
+            payload.request_ai_report = False
+            ai_limit_warning = message
+            logger.info(f"AI report request denied for user '{username}' ({user_group}): {message}")
 
     metrics_input = payload.metrics if hasattr(payload, "metrics") else payload.get("metrics", [])
     ordered_metrics = _unique_metric_keys(metrics_input)
@@ -3539,6 +3676,17 @@ def _execute_data_analysis_query_legacy(
     unit_label = unit_dict.get(unit_key, unit_key)
     is_beihai_sub_scope = scope_key in BEIHAI_SUB_SCOPES
     sheet_name_filter: Optional[str] = scope_key if is_beihai_sub_scope else None
+
+    # 如果是北海分表，尝试使用更具体的子表名称作为 unit_label
+    if is_beihai_sub_scope:
+        # 优先尝试从 unit_dict 获取（如果前端已经把子表 key 放进去了）
+        # 或者直接硬编码映射，因为 BEIHAI_SUB_SCOPES 是固定的
+        if scope_key in unit_dict:
+            unit_label = unit_dict[scope_key]
+        elif scope_key == "BeiHai_co_generation_Sheet":
+            unit_label = "北海热电联产"
+        elif scope_key == "BeiHai_water_boiler_Sheet":
+            unit_label = "北海水炉"
 
     unknown_metrics = [key for key in ordered_metrics if key not in metric_dict]
     if unknown_metrics:
@@ -4016,6 +4164,9 @@ def _execute_data_analysis_query_legacy(
                 prev_totals_map[key] = value
 
     warnings: List[str] = []
+    if ai_limit_warning:
+        warnings.append(f"【智能报告】{ai_limit_warning}")
+
     # ... existing code ...
     if missing_metrics:
         warnings.append(
@@ -4077,6 +4228,9 @@ def _execute_data_analysis_query_legacy(
         else:
             if job_id:
                 response_payload["ai_report_job_id"] = job_id
+    elif ai_limit_warning:
+        response_payload["ai_report_error"] = ai_limit_warning
+
     return JSONResponse(status_code=200, content=response_payload)
 
 
@@ -4111,8 +4265,10 @@ async def query_data_analysis(
 
     flags = _safe_read_ai_settings()
     allow_non_admin = bool(flags.get("allow_non_admin_report", False))
-    if payload.request_ai_report and not (allow_non_admin or _is_global_admin(session)):
-        payload.request_ai_report = False
+    
+    # 权限检查下放至 _execute_data_analysis_query 中的 usage service 以及前端的开关控制
+    # if payload.request_ai_report and not (allow_non_admin or _is_global_admin(session)):
+    #     payload.request_ai_report = False
 
     schema_payload, error = _build_data_analysis_schema_payload(config)
     if error:
@@ -4122,7 +4278,7 @@ async def query_data_analysis(
             status_code=500,
             content={"ok": False, "message": "无法加载数据分析配置"},
         )
-    return _execute_data_analysis_query(payload, schema_payload)
+    return _execute_data_analysis_query(payload, schema_payload, session)
 
 
 @router.get(

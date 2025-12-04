@@ -575,15 +575,55 @@
           <div class="ai-settings-dialog__body">
             <div v-if="aiSettingsLoading" class="ai-settings-dialog__loading">配置读取中，请稍候…</div>
             <template v-else>
-              <label class="ai-settings-dialog__field">
-                <span>API Key</span>
-                <input
-                  type="text"
-                  v-model="aiSettingsForm.apiKey"
-                  :disabled="aiSettingsSaving"
-                  autocomplete="off"
-                />
-              </label>
+              <div class="ai-settings-dialog__field">
+                <span>API Keys（首个为当前使用的 Key）</span>
+                <div class="api-key-list">
+                  <div
+                    v-for="(key, index) in aiSettingsForm.apiKeys"
+                    :key="index"
+                    class="api-key-item"
+                  >
+                    <span class="api-key-index">
+                      <span v-if="index === 0" class="api-key-badge">使用中</span>
+                      <span v-else>{{ index + 1 }}.</span>
+                    </span>
+                    <input
+                      type="text"
+                      v-model="aiSettingsForm.apiKeys[index]"
+                      :disabled="aiSettingsSaving"
+                      autocomplete="off"
+                      placeholder="输入 API Key"
+                    />
+                    <button
+                      v-if="index > 0"
+                      type="button"
+                      class="btn ghost xs"
+                      :disabled="aiSettingsSaving"
+                      @click="setApiKeyActive(index)"
+                      title="设为当前使用"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      class="btn ghost xs"
+                      :disabled="aiSettingsSaving"
+                      @click="removeApiKey(index)"
+                      title="删除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn ghost xs add-key-btn"
+                    :disabled="aiSettingsSaving"
+                    @click="addApiKey"
+                  >
+                    + 添加 API Key
+                  </button>
+                </div>
+              </div>
               <label class="ai-settings-dialog__field">
                 <span>模型</span>
                 <input
@@ -775,15 +815,39 @@ const aiSettingsSaving = ref(false)
 const aiSettingsError = ref('')
 const aiSettingsSuccess = ref('')
 const aiSettingsForm = reactive({
-  apiKey: '',
+  apiKeys: [],
   model: '',
   instruction: '',
   validationEnabled: true,
   allowNonAdmin: false,
 })
 
+function addApiKey() {
+  aiSettingsForm.apiKeys.push('')
+}
+
+function setApiKeyActive(index) {
+  if (index <= 0 || index >= aiSettingsForm.apiKeys.length) return
+  const item = aiSettingsForm.apiKeys[index]
+  aiSettingsForm.apiKeys.splice(index, 1)
+  aiSettingsForm.apiKeys.unshift(item)
+}
+
+function removeApiKey(index) {
+  if (index >= 0 && index < aiSettingsForm.apiKeys.length) {
+    aiSettingsForm.apiKeys.splice(index, 1)
+  }
+}
+
 function applyAiSettingsPayload(payload) {
-  aiSettingsForm.apiKey = payload?.api_key ?? ''
+  if (Array.isArray(payload?.api_keys)) {
+    aiSettingsForm.apiKeys = [...payload.api_keys]
+  } else {
+    // 兼容旧格式
+    const oldKey = payload?.api_key || ''
+    aiSettingsForm.apiKeys = oldKey ? [oldKey] : []
+  }
+  
   aiSettingsForm.model = payload?.model ?? ''
   aiSettingsForm.instruction = payload?.instruction ?? ''
   aiSettingsForm.validationEnabled =
@@ -822,8 +886,11 @@ async function handleAiSettingsSave() {
   aiSettingsError.value = ''
   aiSettingsSuccess.value = ''
   try {
+    // 过滤掉空 key
+    const validKeys = aiSettingsForm.apiKeys.map(k => k.trim()).filter(k => k)
+    
     const payload = await updateAiSettings(projectKey.value, {
-      api_key: aiSettingsForm.apiKey || '',
+      api_keys: validKeys,
       model: aiSettingsForm.model || '',
       instruction: aiSettingsForm.instruction || '',
       enable_validation: Boolean(aiSettingsForm.validationEnabled),
@@ -3536,6 +3603,47 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: 13px;
   color: var(--neutral-600);
+}
+
+.api-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.api-key-index {
+  font-weight: 600;
+  color: var(--neutral-500);
+  min-width: 24px;
+  text-align: right;
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.api-key-badge {
+  font-size: 10px;
+  background: var(--success-50, #ecfdf5);
+  color: var(--success-700, #047857);
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--success-200, #a7f3d0);
+  white-space: nowrap;
+}
+
+.api-key-item input {
+  flex: 1;
+}
+
+.add-key-btn {
+  align-self: flex-start;
+  margin-left: 28px; /* Align with input */
 }
 
 .ai-settings-dialog__field input {

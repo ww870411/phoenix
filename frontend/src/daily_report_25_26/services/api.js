@@ -423,7 +423,7 @@ export async function updateAiSettings(projectKey, payload) {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
-      api_key: payload?.api_key ?? '',
+      api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
       instruction: payload?.instruction ?? '',
       enable_validation: payload?.enable_validation ?? true,
@@ -507,6 +507,40 @@ export async function setSheetValidationSwitch(projectKey, sheetKey, enabled, op
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `更新表级校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getSheetAiSwitch(projectKey, sheetKey, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/ai-switch${search}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取表级 AI 开关失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setSheetAiSwitch(projectKey, sheetKey, enabled, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/ai-switch${search}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify({ ai_report_enabled: Boolean(enabled) }),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新表级 AI 开关失败: ${response.status}`)
   }
   return response.json()
 }

@@ -184,12 +184,29 @@ def reset_gemini_client() -> None:
 def _load_gemini_settings() -> Dict[str, str]:
     if not API_KEY_PATH.exists():
         raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")
-    data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    raw_api_key = data.get("gemini_api_key") or ""
-    api_key = decrypt_api_key(str(raw_api_key))
+    try:
+        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise RuntimeError(f"API Key 配置解析失败：{API_KEY_PATH}")
+
+    # 优先尝试读取 gemini_api_keys 列表
+    raw_keys = data.get("gemini_api_keys")
+    api_key = ""
+    if isinstance(raw_keys, list) and len(raw_keys) > 0:
+        # 取第一个 Key 并解密
+        first_raw = str(raw_keys[0] or "")
+        if first_raw:
+            api_key = decrypt_api_key(first_raw)
+    
+    # 回退：尝试读取旧的 gemini_api_key
+    if not api_key:
+        raw_single_key = data.get("gemini_api_key")
+        if raw_single_key:
+            api_key = decrypt_api_key(str(raw_single_key))
+
     model = data.get("gemini_model")
     if not api_key or not isinstance(api_key, str):
-        raise RuntimeError("缺少 gemini_api_key 配置")
+        raise RuntimeError("缺少有效的 gemini_api_key 配置 (请检查 gemini_api_keys 列表)")
     if not model or not isinstance(model, str):
         raise RuntimeError("缺少 gemini_model 配置")
     return {"api_key": api_key, "model": model}
