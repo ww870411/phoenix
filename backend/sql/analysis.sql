@@ -708,6 +708,32 @@ denom_grp AS (
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_peer,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_biz,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_peer
+),
+season_total_net_complaints_zc AS (
+  SELECT
+    w.biz_date,
+    w.peer_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0)  AS value_biz_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date
+  FROM daily_basic_data d
+  CROSS JOIN w
+  WHERE d.item='sum_season_total_net_complaints'
+    AND d.company IN ('BeiHai','XiangHai','GongRe')
+    AND d.date IN (w.biz_date, w.peer_date)
+  GROUP BY w.biz_date, w.peer_date
+),
+season_total_net_complaints_grp AS (
+  SELECT
+    w.biz_date,
+    w.peer_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0)  AS value_biz_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date
+  FROM daily_basic_data d
+  CROSS JOIN w
+  WHERE d.item='sum_season_total_net_complaints'
+    AND d.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')
+    AND d.date IN (w.biz_date, w.peer_date)
+  GROUP BY w.biz_date, w.peer_date
 )
 ,yjy_power AS (
   SELECT
@@ -756,11 +782,14 @@ UNION ALL
 SELECT
   'ZhuChengQu','主城区',
   'amount_daily_net_complaints_per_10k_m2','万平方米省市净投诉量','件/万㎡',
-  z.biz_date, z.peer_date,
-  z.value_biz_date / NULLIF(d.area_biz,0) AS value_biz_date,
-  z.value_peer_date / NULLIF(d.area_peer,0) AS value_peer_date
-FROM base_zc z, denom_zc d
-WHERE z.item='amount_daily_net_complaints'
+  w.biz_date, w.peer_date,
+  COALESCE(z.value_biz_date,0) / NULLIF(d.area_biz,0) AS value_biz_date,
+  COALESCE(z.value_peer_date,0) / NULLIF(d.area_peer,0) AS value_peer_date
+FROM denom_zc d
+CROSS JOIN w
+LEFT JOIN season_total_net_complaints_zc z
+  ON z.biz_date = w.biz_date
+ AND z.peer_date = w.peer_date
 UNION ALL
 -- 主城区：全厂热效率
 SELECT
@@ -1015,8 +1044,14 @@ base AS (
     d.unit,
     w.biz_end   AS biz_date,
     w.peer_end  AS peer_date,
-    COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.biz_start AND w.biz_end), 0) AS value_biz_date,
-    COALESCE(SUM(d.value) FILTER (WHERE d.date BETWEEN w.peer_start AND w.peer_end), 0) AS value_peer_date
+    COALESCE(SUM(d.value) FILTER (
+      WHERE (d.item IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints') AND d.date = w.biz_end)
+         OR (d.item NOT IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints') AND d.date BETWEEN w.biz_start AND w.biz_end)
+    ), 0) AS value_biz_date,
+    COALESCE(SUM(d.value) FILTER (
+      WHERE (d.item IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints') AND d.date = w.peer_end)
+         OR (d.item NOT IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints') AND d.date BETWEEN w.peer_start AND w.peer_end)
+    ), 0) AS value_peer_date
   FROM daily_basic_data d
   CROSS JOIN window_defs w
   WHERE d.date BETWEEN w.peer_start AND w.biz_end
@@ -1037,6 +1072,24 @@ const_peer AS (
   CROSS JOIN window_defs w
   WHERE c.period = w.peer_period
   GROUP BY c.company, c.item
+),
+company_list AS (
+  SELECT DISTINCT b.company, b.company_cn
+  FROM base b
+),
+season_total_net_complaints AS (
+  SELECT
+    d.company,
+    d.company_cn,
+    w.biz_end  AS biz_date,
+    w.peer_end AS peer_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_end), 0)  AS value_biz_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_end), 0) AS value_peer_date
+  FROM daily_basic_data d
+  CROSS JOIN window_defs w
+  WHERE d.item='sum_season_total_net_complaints'
+    AND d.date IN (w.biz_end, w.peer_end)
+  GROUP BY d.company, d.company_cn, w.biz_end, w.peer_end
 ),
 calc_station_heat AS (
   SELECT
@@ -1071,19 +1124,23 @@ calc_station_heat_selected AS (
 ),
 calc_amount_daily_net_complaints_per_10k_m2 AS (
   SELECT
-    b.company,
-    b.company_cn,
+    cl.company,
+    cl.company_cn,
     'amount_daily_net_complaints_per_10k_m2'::text AS item,
     '万平方米省市净投诉量'::text                   AS item_cn,
     '件/万㎡'::text                                 AS unit,
-    MAX(b.biz_date),
-    MAX(b.peer_date),
-    COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.value_biz_date ELSE 0 END),0) / NULLIF(COALESCE(cb_area.value,0),0),
-    COALESCE(SUM(CASE WHEN b.item='amount_daily_net_complaints' THEN b.value_peer_date ELSE 0 END),0) / NULLIF(COALESCE(cp_area.value,0),0)
-  FROM base b
-  LEFT JOIN const_biz  cb_area ON cb_area.company=b.company AND cb_area.item='amount_heating_fee_area'
-  LEFT JOIN const_peer cp_area ON cp_area.company=b.company AND cp_area.item='amount_heating_fee_area'
-  GROUP BY b.company, b.company_cn, cb_area.value, cp_area.value
+    w.biz_end  AS biz_date,
+    w.peer_end AS peer_date,
+    COALESCE(st.value_biz_date,0) / NULLIF(COALESCE(cb_area.value,0),0) AS value_biz_date,
+    COALESCE(st.value_peer_date,0) / NULLIF(COALESCE(cp_area.value,0),0) AS value_peer_date
+  FROM company_list cl
+  CROSS JOIN window_defs w
+  LEFT JOIN season_total_net_complaints st
+    ON st.company = cl.company
+   AND st.biz_date = w.biz_end
+   AND st.peer_date = w.peer_end
+  LEFT JOIN const_biz  cb_area ON cb_area.company=cl.company AND cb_area.item='amount_heating_fee_area'
+  LEFT JOIN const_peer cp_area ON cp_area.company=cl.company AND cp_area.item='amount_heating_fee_area'
 ),
 calc_rate_std_coal_per_heat AS (
   SELECT
@@ -1686,6 +1743,20 @@ denom_grp AS (
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS area_peer,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.biz_period  AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_biz,
     (SELECT SUM(c.value) FROM constant_data c, w WHERE c.period=w.peer_period AND c.item='amount_heating_fee_area' AND c.company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) AS fee_peer
+),
+season_total_net_complaints AS (
+  SELECT
+    d.company,
+    d.company_cn,
+    w.biz_date,
+    w.peer_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.biz_date), 0)  AS value_biz_date,
+    COALESCE(SUM(d.value) FILTER (WHERE d.date = w.peer_date), 0) AS value_peer_date
+  FROM daily_basic_data d
+  CROSS JOIN w
+  WHERE d.item='sum_season_total_net_complaints'
+    AND d.date IN (w.biz_date, w.peer_date)
+  GROUP BY d.company, d.company_cn, w.biz_date, w.peer_date
 )
 ,yjy_power AS (
   SELECT
@@ -1734,11 +1805,12 @@ UNION ALL
 SELECT
   'ZhuChengQu','主城区',
   'amount_daily_net_complaints_per_10k_m2','万平方米省市净投诉量','件/万㎡',
-  z.biz_date, z.peer_date,
-  z.value_biz_date / NULLIF(d.area_biz,0),
-  z.value_peer_date / NULLIF(d.area_peer,0)
-FROM base_zc z, denom_zc d
-WHERE z.item='amount_daily_net_complaints'
+  w.biz_date,
+  w.peer_date,
+  (SELECT SUM(value_biz_date) FROM season_total_net_complaints WHERE company IN ('BeiHai','XiangHai','GongRe')) / NULLIF(d.area_biz,0) AS value_biz_date,
+  (SELECT SUM(value_peer_date) FROM season_total_net_complaints WHERE company IN ('BeiHai','XiangHai','GongRe')) / NULLIF(d.area_peer,0) AS value_peer_date
+FROM denom_zc d
+CROSS JOIN w
 UNION ALL
 -- 主城区：全厂热效率
 SELECT
@@ -1859,11 +1931,12 @@ UNION ALL
 SELECT
   'Group','集团全口径',
   'amount_daily_net_complaints_per_10k_m2','万平方米省市净投诉量','件/万㎡',
-  z.biz_date, z.peer_date,
-  z.value_biz_date / NULLIF(d.area_biz,0),
-  z.value_peer_date / NULLIF(d.area_peer,0)
-FROM base_grp z, denom_grp d
-WHERE z.item='amount_daily_net_complaints'
+  w.biz_date,
+  w.peer_date,
+  (SELECT SUM(value_biz_date) FROM season_total_net_complaints WHERE company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) / NULLIF(d.area_biz,0) AS value_biz_date,
+  (SELECT SUM(value_peer_date) FROM season_total_net_complaints WHERE company IN ('BeiHai','XiangHai','GongRe','JinZhou','BeiFang','JinPu','ZhuangHe','YanJiuYuan')) / NULLIF(d.area_peer,0) AS value_peer_date
+FROM denom_grp d
+CROSS JOIN w
 UNION ALL
 -- 集团：供热标煤单耗
 SELECT

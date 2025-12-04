@@ -148,3 +148,13 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
   2. 应用户要求回退了 `backend/config.py` 的本地路径探测逻辑，保持 `/app/data` 优先，以兼容本地 Docker 挂载习惯。
 - **影响范围**：修复了数据分析页面“智能体设定”弹窗中开关状态无法保存的 Bug。
 - **验证建议**：打开“智能体设定”，勾选“允许非 Global_admin 启用智能报告”并保存，刷新页面或重开弹窗后，该选项应保持勾选状态。
+
+## 2026-01-03（analysis 视图净投诉量口径切换）
+
+- **问题背景**：`analysis_company_sum` 与 `analysis_groups_sum` 的“万平方米省市净投诉量”一直累计 `amount_daily_net_complaints` 后再除面积，无法满足“按终止日期的 `sum_season_total_net_complaints` 折算”的最新统计要求。
+- **改动内容**：
+  1. `analysis_company_sum` 新增 `company_list`、`season_total_net_complaints` 两个 CTE，仅在 `phoenix.sum_end_date` 及同比终止日提取 `sum_season_total_net_complaints`，`calc_amount_daily_net_complaints_per_10k_m2` 改为按公司直接除以常量表 `amount_heating_fee_area`。
+  2. `analysis_groups_sum` 引入 `season_total_net_complaints_zc/_grp`，主城区与集团的“万㎡净投诉量”分支均以这些 CTE 的终止日值作为分子、`denom_zc/denom_grp` 的面积汇总为分母，放弃旧的“sum(amount_daily_net_complaints)”算法。
+- **修复补充（2026-01-03 PM）**：首版脚本把相关 CTE 误添加到 `analysis_company_daily`，执行 `analysis.sql` 时会因引用 `w.biz_end` 报错；现已改为仅在 `analysis_company_sum` 中生成 `company_list/season_total_net_complaints`，并在主城区/集团口径里按 `biz_date/peer_date` 显式与 `w` 对齐，确保视图可一次性创建成功。
+- **影响范围**：只影响视图中 `item='amount_daily_net_complaints_per_10k_m2'` 的 `value_biz_date/value_peer_date`；其它指标、接口结构和常量分母保持不变。重新执行 `backend/sql/analysis.sql` 即可让 `/data_analysis/query`、仪表盘等读取到新口径。
+- **验证建议**：`SET phoenix.sum_start_date='2025-11-01'; SET phoenix.sum_end_date='2025-12-31';` 后执行 `SELECT company,value_biz_date FROM analysis_company_sum WHERE item='amount_daily_net_complaints_per_10k_m2';` 以及 `SELECT company,value_biz_date FROM analysis_groups_sum WHERE company IN ('ZhuChengQu','Group') AND item='amount_daily_net_complaints_per_10k_m2';`，应当等于终止日 `sum_season_total_net_complaints ÷ 供暖收费面积`。

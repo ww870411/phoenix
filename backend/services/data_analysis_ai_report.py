@@ -1112,6 +1112,13 @@ def _generate_report_html(
             review_section.append(f"<p class='self-review__notes'>{notes}</p>")
         review_section.append("</div>")
 
+    # 7. 底部免责声明
+    html_parts.append("""
+        <div style='text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; color: #9ca3af; font-size: 12px;'>
+            <p>本报告根据查询数据自动生成，仅供参考</p>
+        </div>
+    """)
+
     # 5. 图表区域 (含数据注入)
     timeline_data_json = json.dumps([
         {

@@ -1,5 +1,11 @@
 # 前端说明（Vue3 + Vite）
 
+## 会话小结（2026-01-03 数据分析净投诉量新口径说明）
+
+- 后端 `analysis_company_sum/analysis_groups_sum` 的 `amount_daily_net_complaints_per_10k_m2` 现以终止日 `sum_season_total_net_complaints` 除 `amount_heating_fee_area` 计算，取代旧的“区间内当日净投诉量求和”算法。前端可直接沿用现有接口展示，数值含义自动更新为“终止日累计投诉折算面积”，无需额外处理。
+- 主城区与集团的“万㎡净投诉量”卡片、数据分析表格、仪表盘投诉区均会读取视图新结果即可，与 UI 层逻辑完全解耦；如需验证，可在浏览器网络面板检查 `/data_analysis/query` 的该指标值，相比旧版本会与终止日的累计投诉保持一致。
+- 本次无前端源码改动，此处仅记录口径更新，方便排查数据差异；如需回滚旧口径，只需恢复后端 SQL，前端展示逻辑不必调整。
+
 ## 会话小结（2025-12-31 计划比较百分比展示修复）
 
 - 数据分析页、填报页本单位分析以及 AI 报告下载的“计划比较”区块均直接使用 `/data_analysis/query` 的 `plan_comparison.entries`。后端现将 `rate_overall_efficiency` 这类百分比指标在返回前统一乘以 100，因此页面与导出文案会显示为 “80.00%” 而非 “0.80%”，无需前端额外处理。

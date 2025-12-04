@@ -33,6 +33,14 @@
 - **影响**：确保本地开发时能正常读写配置文件；增强了密钥加解密的健壮性。Docker 环境行为保持不变。
 - **验证**：本地启动后端，在数据分析页打开“智能体设定”，应能成功读取配置；保存新 Key 后重开弹窗应回显正确。
 
+## 2026-01-03（analysis 视图净投诉量口径切换）
+
+- **背景**：`analysis_company_sum` / `analysis_groups_sum` 的 `amount_daily_net_complaints_per_10k_m2` 仍按区间内“当日净投诉”累计后除面积，无法满足“按终止日期 `sum_season_total_net_complaints` 折算”的最新统计要求。
+- **实现**：
+  1. `analysis_company_sum` 新增 `company_list`、`season_total_net_complaints` CTE，仅在 `phoenix.sum_end_date` 及同比终止日抓取 `sum_season_total_net_complaints`，`calc_amount_daily_net_complaints_per_10k_m2` 改为用该值直接除常量表 `amount_heating_fee_area`。
+  2. `analysis_groups_sum` 引入 `season_total_net_complaints_zc/_grp`，主城区与集团分支统一采用这些 CTE 的终止日值作分子、`denom_zc/denom_grp` 的面积合计作分母，舍弃旧的“sum(amount_daily_net_complaints)”。
+- **结果**：视图输出的 `value_biz_date/value_peer_date` 即为“终止日累计投诉 ÷ 面积”，API 和仪表盘无需再做额外换算；其余指标结构保持不变。部署时请重新执行 `backend/sql/analysis.sql` 以刷新视图。
+
 # 会话小结（2026-01-02 AI 配置简易加密恢复）
 
 - **触发原因**：`backend_data/api_key.json` 长期以明文保存 `gemini_api_key`，虽然方便替换但在协同开发中容易被直接读取。
