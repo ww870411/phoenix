@@ -31,12 +31,21 @@ def encrypt_api_key(plaintext: Optional[str]) -> str:
 def decrypt_api_key(ciphertext: Optional[str]) -> str:
     """
     检查密文第 6、7 位是否为固定 token，若是则移除。
+    兼容处理长度不足 5 时 token 位于末尾的情况。
     """
 
     if not ciphertext:
         return ""
     text = str(ciphertext)
-    token_end = _INSERT_POS + len(_INSERT_TOKEN)
-    if len(text) >= token_end and text[_INSERT_POS:token_end] == _INSERT_TOKEN:
-        return f"{text[:_INSERT_POS]}{text[token_end:]}"
+    
+    # Case 1: 原文长度 >= 5，token 插入在 index 5
+    token_at_5 = _INSERT_POS + len(_INSERT_TOKEN)
+    if len(text) >= token_at_5 and text[_INSERT_POS:token_at_5] == _INSERT_TOKEN:
+        return f"{text[:_INSERT_POS]}{text[token_at_5:]}"
+    
+    # Case 2: 原文长度 < 5，token 拼接在末尾
+    # 密文长度应 < 5 + 2 = 7
+    if len(text) < token_at_5 and text.endswith(_INSERT_TOKEN):
+        return text[:-len(_INSERT_TOKEN)]
+        
     return text

@@ -14,11 +14,24 @@
 - **Prompt 支撑**：新增 `REVISION_PROMPT_TEMPLATE` 与 `_build_revision_prompt`，向模型提供 processed_data/insight/layout/旧正文/validation JSON，要求维持章节结构并逐条回应 issues。
 - **复检机制**：修订后的内容会重新触发 validation，一旦通过才输出最终 HTML，同时 `_jobs[job_id]['stage']` 会依次记录 `revision_pending → revision_content → review`，便于前端进度条显示。
 
-# 会话小结（2025-12-31 计划比较百分比统一）
+## 2026-01-02（填报页本单位分析支持智能报告）
 
-- **问题**：月度计划 `plan_comparison` 中的 `rate_overall_efficiency` 以 0.8 存储，接口在“计划比较”表及 AI 报告摘要里都显示为 “0.80%”，与其它场景展示的 80% 不一致。
-- **改动**：`backend/services/data_analysis.py` 增加 `PERCENTAGE_SCALE_METRICS` 与 `_scale_percentage_metric_value`，在构造 `plan_comparison.entries` 时自动将列入集合的指标乘以 100（仅对数据库原始值进行缩放，避免对 fallback 聚合结果重复乘 100），完成率计算逻辑保持不变。
-- **影响**：`/data_analysis/query`、网页“计划比较”板块以及 AI 报告导出的“计划比较”段落都会直接展示 80% 等符合预期的百分比，数据库存储格式无需调整；如需回滚，只需移除该集合与缩放调用。
+- **目标**：在各数据填报页面底部的 `UnitAnalysisLite` 组件接入 AI 报告功能，仅需“启用”与“下载”控制，且仅允许 `Global_admin` 操作。
+- **实现**：
+  1. `UnitAnalysisLite` 新增 `aiFeatureAccessible` prop、AI 报告状态、后台轮询（共享与数据分析页一致的阶段提示）。
+  2. 运行分析时若勾选“智能报告”会附带 `request_ai_report=true`，后端返回的 `ai_report_job_id` 将触发轮询，待生成完成即可点击“下载智能报告”按钮。
+  3. `DataEntryView` 在渲染组件时传入 `isGlobalAdmin`，其他角色看不到/无法勾选开关。
+- **结果**：管理员在填报界面即可触发与主数据分析页一致的 AI 报告流程，普通用户依旧只能运行汇总对比，不会看到 API Key 设定按钮。
+- **验证**：以 Global_admin 登录填报页 → 展开分析 → 勾选“智能报告”后运行，待按钮提示“智能报告生成中”直至可下载；使用非管理员账号则看不到该功能。
+
+## 2026-01-03（本地开发环境配置路径修复）
+
+- **问题**：在 Windows 本地开发环境（非 Docker）下，`backend/config.py` 默认 `DATA_DIRECTORY` 指向 `/app/data`，导致 `backend_data` 目录下的配置文件（如 `api_key.json`）无法被读取/写入，致使“智能体设定”功能报错。同时 `decrypt_api_key` 无法处理长度不足 5 位的短密钥。
+- **改动**：
+  1. `backend/config.py` 新增路径探测逻辑：优先环境变量，次选 `/app/data`，最后回退到项目根目录下的 `backend_data`（基于 `__file__` 相对路径）。
+  2. `backend/services/api_key_cipher.py` 修复 `decrypt_api_key`，兼容处理短密钥加密后 `ww` 拼接在末尾的情况。
+- **影响**：确保本地开发时能正常读写配置文件；增强了密钥加解密的健壮性。Docker 环境行为保持不变。
+- **验证**：本地启动后端，在数据分析页打开“智能体设定”，应能成功读取配置；保存新 Key 后重开弹窗应回显正确。
 
 # 会话小结（2026-01-02 AI 配置简易加密恢复）
 

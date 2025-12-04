@@ -120,3 +120,31 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
 - **实现**：FastAPI `_execute_data_analysis_query_legacy` 中的 `need_prev_range` 逻辑改为：只要存在可比较的指标（分析类或气温指标）且“处于累计模式”或“start_date==end_date”，就计算上一时间窗口（通过 `_compute_previous_range` 取得上一日或上一相同跨度区间），并将 `ringCompare` 写入响应。
 - **结果**：前端无需修改即可在单日模式（或累计但跨度为 1 天）显示“环比比较”表格，并在摘要/导出中引用环比数据；若上一窗口超出 2025-11-01 最小支持日期仍会自动跳过。
 - **验证**：以单日模式查询 2025-12-15，前端应看到“环比比较”表格且“上期”范围为 2025-12-14；将累计模式起止都设成 2025-12-20，同样会与上一日比较。
+
+## 2026-01-02（填报页本单位分析支持智能报告）
+
+- **目标**：在各数据填报页面底部的 `UnitAnalysisLite` 组件接入 AI 报告功能，仅需“启用”与“下载”控制，且仅允许 `Global_admin` 操作。
+- **实现**：
+  1. `UnitAnalysisLite` 新增 `aiFeatureAccessible` prop、AI 报告状态、后台轮询（共享与数据分析页一致的阶段提示）。
+  2. 运行分析时若勾选“智能报告”会附带 `request_ai_report=true`，后端返回的 `ai_report_job_id` 将触发轮询，待生成完成即可点击“下载智能报告”按钮。
+  3. `DataEntryView` 在渲染组件时传入 `isGlobalAdmin`，其他角色看不到/无法勾选开关。
+- **结果**：管理员在填报界面即可触发与主数据分析页一致的 AI 报告流程，普通用户依旧只能运行汇总对比，不会看到 API Key 设定按钮。
+- **验证**：以 Global_admin 登录填报页 → 展开分析 → 勾选“智能报告”后运行，待按钮提示“智能报告生成中”直至可下载；使用非管理员账号则看不到该功能。
+
+## 2026-01-03（本地开发环境配置路径修复）
+
+- **问题背景**：在 Windows 本地开发环境（非 Docker）下，`backend/config.py` 默认的 `DATA_DIRECTORY` 指向 `/app/data`，导致 `backend_data` 目录下的配置文件（如 `api_key.json`）无法被正确读取或写入，使得“智能体设定”功能失效。此外，`decrypt_api_key` 存在逻辑缺陷，无法解密长度不足 5 位的短密钥（虽然 API Key 通常较长，但属于潜在 Bug）。
+- **改动内容**：
+  1. 修改 `backend/config.py`，新增对本地开发路径的智能识别逻辑：若 `/app/data` 不存在，则尝试定位到项目根目录下的 `backend_data` 文件夹。
+  2. 修正 `backend/services/api_key_cipher.py` 中的 `decrypt_api_key` 函数，增加对短密钥（token 拼接在末尾）的解密支持。
+- **影响范围**：修复了本地启动后端服务时无法读取配置文件的 Critical Issue，Docker 环境不受影响（优先使用 `/app/data`）。
+- **验证建议**：在本地环境启动后端，访问“智能体设定”，应能正确读取并保存配置；使用短字符串（如 "1234"）作为 Key 进行保存测试，确认能正确解密回显。
+
+## 2026-01-03（智能体设定写入修复）
+
+- **问题背景**：前端在调用 `updateAiSettings` 保存配置时，仅序列化了 `api_key/model/instruction` 字段，导致 `allow_non_admin_report`（允许非管理员使用）与 `enable_validation` 开关的状态无法传递给后端，出现“能读取但无法保存”的现象。
+- **改动内容**：
+  1. 修正 `frontend/src/daily_report_25_26/services/api.js`，在 `updateAiSettings` 请求体中补齐 `enable_validation` 与 `allow_non_admin_report` 字段。
+  2. 应用户要求回退了 `backend/config.py` 的本地路径探测逻辑，保持 `/app/data` 优先，以兼容本地 Docker 挂载习惯。
+- **影响范围**：修复了数据分析页面“智能体设定”弹窗中开关状态无法保存的 Bug。
+- **验证建议**：打开“智能体设定”，勾选“允许非 Global_admin 启用智能报告”并保存，刷新页面或重开弹窗后，该选项应保持勾选状态。

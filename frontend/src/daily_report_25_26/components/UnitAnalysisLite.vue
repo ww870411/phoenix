@@ -119,7 +119,23 @@
               {{ analysisLoading ? '生成中…' : '生成汇总对比' }}
             </button>
             <span class="analysis-lite__unit-label">当前单位：{{ unitLabel }}</span>
+            <div class="analysis-lite__ai-controls" v-if="aiFeatureAccessible">
+              <label class="analysis-lite__ai-toggle" :class="{ disabled: !aiFeatureAccessible }">
+                <input
+                  type="checkbox"
+                  v-model="aiReportEnabled"
+                  :disabled="!aiFeatureAccessible"
+                />
+                <span>智能报告生成（BETA）</span>
+              </label>
+              <button class="btn ghost" type="button" :disabled="aiReportButtonDisabled" @click="downloadAiReport">
+                {{ aiReportButtonLabel }}
+              </button>
+            </div>
           </div>
+          <p v-if="aiReportStatusMessage" class="analysis-lite__hint analysis-lite__ai-status">
+            {{ aiReportStatusMessage }}
+          </p>
         </div>
 
         <div v-if="analysisFormError" class="page-state error">{{ analysisFormError }}</div>
@@ -377,7 +393,7 @@ import {
   watch,
 } from 'vue'
 import * as XLSX from 'xlsx'
-import { getDashboardBizDate, getUnitAnalysisMetrics, runDataAnalysis } from '../services/api'
+import { getDashboardBizDate, getUnitAnalysisMetrics, runDataAnalysis, getDataAnalysisAiReport } from '../services/api'
 
 const props = defineProps({
   projectKey: { type: String, required: true },
@@ -386,6 +402,7 @@ const props = defineProps({
   sheetKey: { type: String, required: true },
   pageConfig: { type: String, default: '' },
   bizDate: { type: String, required: true },
+  aiFeatureAccessible: { type: Boolean, default: false },
 })
 
 const analysisFolded = ref(true)
@@ -411,6 +428,26 @@ const activeTimelineMetricKeys = ref([])
 const analysisDefaultBizDate = ref('')
 const analysisDefaultDateApplied = ref(false)
 const MIN_ANALYSIS_DATE = '2025-11-01'
+
+const aiReportEnabled = ref(false)
+const aiReportJobId = ref('')
+const aiReportStatus = ref('idle')
+const aiReportContent = ref('')
+const aiReportStage = ref('')
+const aiReportStatusMessage = ref('')
+let aiReportPollTimer = null
+const AI_REPORT_STAGE_STEPS = [
+  { key: 'insight', order: 1, label: '洞察分析' },
+  { key: 'layout', order: 2, label: '结构规划' },
+  { key: 'content', order: 3, label: '内容撰写' },
+  { key: 'review', order: 4, label: '检查核实' },
+]
+const AI_REPORT_STAGE_TOTAL = AI_REPORT_STAGE_STEPS.length
+const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
+  acc[step.key] = step
+  return acc
+}, {})
+const aiFeatureAccessible = computed(() => Boolean(props.aiFeatureAccessible))
 
 const analysisMetricGroups = computed(() => analysisSchema.value?.groups || [])
 const analysisMetricOptions = computed(() => {
@@ -920,6 +957,7 @@ function resetAnalysisResult() {
     planComparisonNote: '',
   }
   analysisFormError.value = ''
+  resetAiReportState()
   resetAnalysisTimeline()
 }
 
@@ -1501,6 +1539,142 @@ function downloadAnalysisExcel() {
   XLSX.writeFile(wb, filename)
 }
 
+function formatAiReportProgress(stageKey) {
+  if (stageKey === 'ready') {
+    return `（阶段 ${AI_REPORT_STAGE_TOTAL}/${AI_REPORT_STAGE_TOTAL}：完成）`
+  }
+  if (stageKey === 'failed') {
+    return '（任务失败）'
+  }
+  if (stageKey === 'pending') {
+    return '（等待后台任务启动）'
+  }
+  const step = AI_REPORT_STAGE_LOOKUP[stageKey]
+  if (step) {
+    return `（阶段 ${step.order}/${AI_REPORT_STAGE_TOTAL}：${step.label}）`
+  }
+  return '（进行中…）'
+}
+
+function buildAiRunningMessage(stageKey) {
+  return `智能报告生成中…${formatAiReportProgress(stageKey)}`
+}
+
+function updateAiReportStage(stageKey) {
+  aiReportStage.value = stageKey || ''
+}
+
+function setAiReportRunningMessage(stageKey) {
+  const key = stageKey || aiReportStage.value || 'pending'
+  aiReportStatusMessage.value = buildAiRunningMessage(key)
+}
+
+function clearAiReportPolling() {
+  if (aiReportPollTimer !== null) {
+    clearTimeout(aiReportPollTimer)
+    aiReportPollTimer = null
+  }
+}
+
+function resetAiReportState() {
+  clearAiReportPolling()
+  aiReportJobId.value = ''
+  aiReportContent.value = ''
+  aiReportStatus.value = aiReportEnabled.value ? 'pending' : 'idle'
+  aiReportStatusMessage.value = ''
+  aiReportStage.value = ''
+}
+
+function startAiReportPolling(jobId) {
+  clearAiReportPolling()
+  if (!jobId) return
+  aiReportStatus.value = 'pending'
+  updateAiReportStage('pending')
+  setAiReportRunningMessage('pending')
+
+  const poll = async () => {
+    if (aiReportJobId.value !== jobId) return
+    try {
+      const payload = await getDataAnalysisAiReport(props.projectKey, jobId)
+      if (!payload?.ok) {
+        throw new Error(payload?.message || '获取智能报告失败')
+      }
+      if (aiReportJobId.value !== jobId) return
+      const status = payload.status || 'pending'
+      const stageKey = payload.stage || ''
+      if (stageKey) updateAiReportStage(stageKey)
+      aiReportStatus.value = status
+      if (status === 'ready' && typeof payload.report === 'string') {
+        aiReportContent.value = payload.report
+        aiReportStatusMessage.value = ''
+        updateAiReportStage('ready')
+        clearAiReportPolling()
+        return
+      }
+      if (status === 'failed') {
+        aiReportStatusMessage.value = payload.error || '智能报告生成失败'
+        updateAiReportStage('failed')
+        clearAiReportPolling()
+        return
+      }
+      setAiReportRunningMessage(stageKey || 'pending')
+    } catch (err) {
+      if (aiReportJobId.value !== jobId) return
+      aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
+    }
+    if (aiReportStatus.value !== 'ready' && aiReportStatus.value !== 'failed') {
+      aiReportPollTimer = window.setTimeout(poll, 2000)
+    }
+  }
+
+  poll()
+}
+
+async function downloadAiReport() {
+  if (aiReportButtonDisabled.value) return
+  try {
+    if (!aiReportContent.value && aiReportJobId.value) {
+      const payload = await getDataAnalysisAiReport(props.projectKey, aiReportJobId.value)
+      if (payload?.status === 'ready' && typeof payload.report === 'string') {
+        aiReportContent.value = payload.report
+        aiReportStatus.value = 'ready'
+      } else if (payload?.status === 'failed') {
+        aiReportStatus.value = 'failed'
+        aiReportStatusMessage.value = payload?.error || '智能报告生成失败'
+        return
+      } else {
+        aiReportStatus.value = payload?.status || 'pending'
+        updateAiReportStage(payload?.stage || '')
+        setAiReportRunningMessage(payload?.stage || 'pending')
+        return
+      }
+    }
+    if (!aiReportContent.value) {
+      aiReportStatusMessage.value = '暂未获取到智能报告内容'
+      return
+    }
+    const meta = analysisResult.value?.meta || {}
+    const unitName = meta.unit_label || unitLabel.value || '未知单位'
+    const start = meta.start_date || analysisStartDate.value || ''
+    const end = meta.end_date || analysisEndDate.value || start
+    const rangeLabel = start && end ? (start === end ? start : `${start}_${end}`) : '日期未定'
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+    const safeUnitName = unitName.replace(/[\\/:*?"<>|]/g, '_')
+    const filename = `智能分析报告_${safeUnitName}_${rangeLabel}_${timestamp}.html`
+    const blob = new Blob([aiReportContent.value], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 function reorderMetricKeys(keys, temperatureKey, availableKeys = []) {
   if (!keys || !keys.length) return []
   const filtered = keys.filter((key) => !availableKeys.length || availableKeys.includes(key))
@@ -1536,6 +1710,31 @@ watch(
     activeTimelineMetricKeys.value = [available[0]]
   },
   { immediate: true },
+)
+
+watch(
+  aiFeatureAccessible,
+  (allowed) => {
+    if (!allowed && aiReportEnabled.value) {
+      aiReportEnabled.value = false
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => aiReportEnabled.value,
+  (enabled) => {
+    if (!enabled) {
+      resetAiReportState()
+      return
+    }
+    if (aiReportJobId.value) {
+      startAiReportPolling(aiReportJobId.value)
+    } else {
+      aiReportStatus.value = 'pending'
+    }
+  },
 )
 
 function applyAnalysisTimelineFromRows(rows) {
@@ -1743,6 +1942,21 @@ const planComparisonPeriodText = computed(() => {
   return `${payload.period_start} ~ ${payload.period_end}`
 })
 
+const aiReportButtonLabel = computed(() => {
+  if (aiReportEnabled.value && aiReportJobId.value && aiReportStatus.value !== 'ready') {
+    return '智能报告生成中'
+  }
+  return '下载智能报告'
+})
+
+const aiReportButtonDisabled = computed(() => {
+  if (!aiFeatureAccessible.value) return true
+  if (!aiReportEnabled.value) return true
+  if (!analysisResult.value.rows.length) return true
+  if (!aiReportJobId.value) return true
+  return aiReportStatus.value !== 'ready'
+})
+
 function formatExportNumber(value, decimals = 2) {
   if (value === null || value === undefined || value === '—') return ''
   const num = Number(value)
@@ -1792,6 +2006,7 @@ async function runUnitAnalysis() {
       analysis_mode: 'range',
       start_date: analysisStartDate.value,
       end_date: analysisEndDate.value,
+      request_ai_report: aiReportEnabled.value && aiFeatureAccessible.value,
       // 后端单位仍按公司口径（避免未知单位），scope_key 标识用户选择的分表以便路由子视图
       unit_key: schemaUnitKey.value || 'BeiHai',
       scope_key: effectiveAnalysisUnitKey.value || unitKey,
@@ -1804,6 +2019,17 @@ async function runUnitAnalysis() {
       throw new Error(response?.message || '生成汇总失败')
     }
     const rows = normalizeAnalysisRows(response.rows)
+    const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
+    if (aiReportEnabled.value && aiFeatureAccessible.value && aiJobId) {
+      aiReportJobId.value = aiJobId
+      startAiReportPolling(aiJobId)
+    } else if (!aiReportEnabled.value) {
+      resetAiReportState()
+    } else {
+      aiReportJobId.value = ''
+      aiReportStatus.value = 'pending'
+      aiReportStatusMessage.value = response.ai_report_error || ''
+    }
     let ringComparePayload = null
     if (response.ring_compare || response.ringCompare) {
       const payloadSource = response.ring_compare || response.ringCompare
@@ -1941,6 +2167,10 @@ watch(
   },
   { deep: true },
 )
+
+onBeforeUnmount(() => {
+  clearAiReportPolling()
+})
 </script>
 
 <style scoped>
@@ -2092,6 +2322,31 @@ watch(
 .analysis-lite__unit-label {
   color: var(--neutral-500);
   font-size: 14px;
+}
+
+.analysis-lite__ai-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.analysis-lite__ai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--neutral-600);
+}
+
+.analysis-lite__ai-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.analysis-lite__ai-status {
+  margin-top: 8px;
+  color: var(--primary-600, #2563eb);
 }
 
 .analysis-lite__result {

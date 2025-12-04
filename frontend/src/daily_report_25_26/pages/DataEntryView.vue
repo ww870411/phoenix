@@ -106,6 +106,7 @@
       :sheet-key="sheetKey"
       :page-config="pageConfig"
       :biz-date="bizDate"
+      :ai-feature-accessible="aiFeatureAccessible"
     />
   </div>
   </div>
@@ -125,6 +126,7 @@ import {
   submitData,
   getSheetValidationSwitch,
   setSheetValidationSwitch,
+  getDataAnalysisSchema,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -159,6 +161,9 @@ const isDailyPage = computed(() => {
 const userGroup = computed(() => auth.user?.group ?? '')
 const normalizedGroup = computed(() => userGroup.value.toLowerCase())
 const isUnitScopedEditor = computed(() => normalizedGroup.value === 'unit_admin' || normalizedGroup.value === 'unit_filler')
+const isGlobalAdmin = computed(() => normalizedGroup.value === 'global_admin')
+const allowNonAdminAiReport = ref(false)
+const aiFeatureAccessible = computed(() => isGlobalAdmin.value || allowNonAdminAiReport.value)
 function formatDateYYYYMMDD(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -2153,3 +2158,20 @@ onBeforeUnmount(() => {
 }
 
 </style>
+async function loadAiFlag() {
+  try {
+    const payload = await getDataAnalysisSchema(projectKey)
+    const flags = payload?.ai_report_flags || {}
+    allowNonAdminAiReport.value = Boolean(flags.allow_non_admin_report)
+  } catch (err) {
+    allowNonAdminAiReport.value = false
+  }
+}
+
+watch(
+  () => pageConfig.value,
+  () => {
+    loadAiFlag()
+  },
+  { immediate: true },
+)

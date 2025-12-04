@@ -613,8 +613,9 @@
               <label class="ai-settings-dialog__toggle">
                 <input
                   type="checkbox"
-                  v-model="aiSettingsForm.allowNonAdmin"
+                  :checked="aiSettingsForm.allowNonAdmin"
                   :disabled="aiSettingsSaving"
+                  @change="aiSettingsForm.allowNonAdmin = $event.target.checked"
                 />
                 <span>允许非 Global_admin 启用智能报告</span>
               </label>
