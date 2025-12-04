@@ -24,7 +24,8 @@
 
 - **触发原因**：`backend_data/api_key.json` 长期以明文保存 `gemini_api_key`，虽然方便替换但在协同开发中容易被直接读取。
 - **改动内容**：新增 `backend/services/api_key_cipher.py`，通过在明文第 5 个字符后插入固定串 `ww` 实现最小可逆“加密”；`_read/_persist_ai_settings` 保存/读取时分别调用 `encrypt_api_key/decrypt_api_key`，`data_analysis_ai_report.py` 与 `configs/ai_test.py` 也统一使用 `decrypt_api_key`。示例配置文件现已存储插入 `ww` 的密文。
-- **影响范围**：FastAPI 返回值与前端交互保持明文体验，只是落盘改为伪加密；AI 报告线程池、测试脚本依然可以透明使用 API Key，部署环境若改用环境变量也不会受影响。
+- **影响范围**：FastAPI 返回值与前端交互保持明文体验，只是落盘改为伪加密；AI 报告线程池、测试脚本依然可以透明使用 API Key，部署环境若改用环境变量也不会受影响。保存新配置后会调用 `data_analysis_ai_report.reset_gemini_client()` 清空已缓存的 SDK 实例，确保下一次 AI 报告立刻使用更新后的密钥/模型。
+- **额外优化**：无论 `analysis_mode` 为单日还是累计、只要存在上一窗口数据，API 现在都会计算 `ringCompare` 并回传环比结果；当选择“单日模式”或累计模式的起止日期相同，也会触发上一日窗口，供前端在单日视图下展示环比比较。
 - **验证建议**：调用 `GET /api/v1/daily_report_25_26/data_analysis/ai_settings` 应看到解密后的明文；保存新 Key 后查看 `backend_data/api_key.json`，可见 `ww` 被插入第 5 位；运行 `configs/ai_test.py` 或触发 AI 报告可正常连接 Gemini。
 
 # 会话小结（2025-12-27 全厂热效率累计口径修复）

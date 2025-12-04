@@ -2141,6 +2141,7 @@ async def update_ai_settings_endpoint(
         payload.enable_validation,
         payload.allow_non_admin_report,
     )
+    data_analysis_ai_report.reset_gemini_client()
     return {
         "ok": True,
         "api_key": result["api_key"],
@@ -3755,9 +3756,10 @@ def _execute_data_analysis_query_legacy(
     prev_temp_rows: Dict[str, Dict[str, Any]] = {}
     prev_range_payload: Optional[Dict[str, str]] = None
     ring_compare_note = ""
-    need_prev_range = (
-        analysis_mode_value == "range"
-        and bool(analysis_metric_keys or temperature_metric_keys)
+    same_day_window = start_date == end_date
+    has_metrics_for_ring = bool(analysis_metric_keys or temperature_metric_keys)
+    need_prev_range = has_metrics_for_ring and (
+        analysis_mode_value == "range" or same_day_window
     )
     if need_prev_range:
         try:

@@ -173,6 +173,14 @@ _model: Optional[genai.GenerativeModel] = None
 _model_name: Optional[str] = None
 
 
+def reset_gemini_client() -> None:
+    """清空已缓存的 Gemini 客户端实例，确保下次调用重新读取配置。"""
+
+    global _model, _model_name
+    _model = None
+    _model_name = None
+
+
 def _load_gemini_settings() -> Dict[str, str]:
     if not API_KEY_PATH.exists():
         raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")

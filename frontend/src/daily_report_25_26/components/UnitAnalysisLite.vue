@@ -1804,33 +1804,53 @@ async function runUnitAnalysis() {
       throw new Error(response?.message || '生成汇总失败')
     }
     const rows = normalizeAnalysisRows(response.rows)
-    let prevTotals = null
-    let ringNote = prevRangeInfo.note
-    if (prevRangeInfo.range) {
-      try {
-        const prevResponse = await runDataAnalysis(props.projectKey, {
-          ...payload,
-          start_date: prevRangeInfo.range.start,
-          end_date: prevRangeInfo.range.end,
-        })
-        if (prevResponse?.ok) {
-          const prevRows = normalizeAnalysisRows(prevResponse.rows)
-          prevTotals = buildTotalsMap(prevRows)
-        } else {
-          ringNote = prevResponse?.message || '环比数据获取失败'
+    let ringComparePayload = null
+    if (response.ring_compare || response.ringCompare) {
+      const payloadSource = response.ring_compare || response.ringCompare
+      if (payloadSource?.prevTotals && payloadSource.range) {
+        ringComparePayload = {
+          range: payloadSource.range,
+          prevTotals: payloadSource.prevTotals,
+          note: payloadSource.note || '',
         }
-      } catch (err) {
-        ringNote = err instanceof Error ? err.message : String(err)
+      } else if (payloadSource?.note) {
+        ringComparePayload = {
+          range: payloadSource.range || null,
+          prevTotals: payloadSource.prevTotals || null,
+          note: payloadSource.note,
+        }
+      }
+    }
+    if (!ringComparePayload) {
+      let prevTotals = null
+      let ringNote = prevRangeInfo.note
+      if (prevRangeInfo.range) {
+        try {
+          const prevResponse = await runDataAnalysis(props.projectKey, {
+            ...payload,
+            start_date: prevRangeInfo.range.start,
+            end_date: prevRangeInfo.range.end,
+          })
+          if (prevResponse?.ok) {
+            const prevRows = normalizeAnalysisRows(prevResponse.rows)
+            prevTotals = buildTotalsMap(prevRows)
+          } else {
+            ringNote = prevResponse?.message || '环比数据获取失败'
+          }
+        } catch (err) {
+          ringNote = err instanceof Error ? err.message : String(err)
+        }
+      }
+      ringComparePayload = {
+        range: prevRangeInfo.range || null,
+        prevTotals,
+        note: ringNote,
       }
     }
     analysisResult.value = {
       rows,
       warnings: Array.isArray(response.warnings) ? response.warnings : [],
-      ringCompare: {
-        range: prevRangeInfo.range || null,
-        prevTotals,
-        note: ringNote,
-      },
+      ringCompare: ringComparePayload,
       meta: normalizeAnalysisMeta(response),
       planComparison: response.plan_comparison || null,
       planComparisonNote: response.plan_comparison_note || '',

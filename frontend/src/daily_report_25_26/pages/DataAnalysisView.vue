@@ -2231,25 +2231,49 @@ async function runAnalysis() {
           aiReportJobId.value = aiJobId
           startAiReportPolling(aiJobId)
         }
-        let prevTotals = null
-        let ringNote = prevRangeInfo.note
-        if (prevRangeInfo.range) {
-          try {
-            const prevPayload = {
-              ...payload,
-              start_date: prevRangeInfo.range.start,
-              end_date: prevRangeInfo.range.end,
-              request_ai_report: false,
+        let ringComparePayload = null
+        if (response.ring_compare || response.ringCompare) {
+          const payloadSource = response.ring_compare || response.ringCompare
+          if (payloadSource?.prevTotals && payloadSource.range) {
+            ringComparePayload = {
+              range: payloadSource.range,
+              prevTotals: payloadSource.prevTotals,
+              note: payloadSource.note || '',
             }
-            const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
-            if (prevResponse?.ok) {
-              const prevRows = Array.isArray(prevResponse.rows) ? prevResponse.rows : []
-              prevTotals = buildTotalsMap(prevRows)
-            } else {
-              ringNote = prevResponse?.message || '环比数据获取失败'
+          } else if (payloadSource?.note) {
+            ringComparePayload = {
+              range: payloadSource.range || null,
+              prevTotals: payloadSource.prevTotals || null,
+              note: payloadSource.note,
             }
-          } catch (err) {
-            ringNote = err instanceof Error ? err.message : String(err)
+          }
+        }
+        if (!ringComparePayload) {
+          let prevTotals = null
+          let ringNote = prevRangeInfo.note
+          if (prevRangeInfo.range) {
+            try {
+              const prevPayload = {
+                ...payload,
+                start_date: prevRangeInfo.range.start,
+                end_date: prevRangeInfo.range.end,
+                request_ai_report: false,
+              }
+              const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
+              if (prevResponse?.ok) {
+                const prevRows = Array.isArray(prevResponse.rows) ? prevResponse.rows : []
+                prevTotals = buildTotalsMap(prevRows)
+              } else {
+                ringNote = prevResponse?.message || '环比数据获取失败'
+              }
+            } catch (err) {
+              ringNote = err instanceof Error ? err.message : String(err)
+            }
+          }
+          ringComparePayload = {
+            range: prevRangeInfo.range || null,
+            prevTotals,
+            note: ringNote,
           }
         }
         const meta = {
@@ -2266,11 +2290,7 @@ async function runAnalysis() {
           warnings: Array.isArray(response.warnings) ? response.warnings : [],
           timeline: buildTimelineGrid(decoratedRows),
           infoBanner: buildInfoBannerFromMeta(meta),
-          ringCompare: {
-            range: prevRangeInfo.range || null,
-            prevTotals,
-            note: ringNote,
-          },
+          ringCompare: ringComparePayload,
           planComparison: response.plan_comparison || null,
           planComparisonNote: response.plan_comparison_note || '',
           meta,

@@ -104,3 +104,19 @@ Since I cannot inspect the live rendered HTML, I cannot definitively tell you th
   4. 示例配置 `backend_data/api_key.json` 更新为密文（`AIzaSww...`）。
 - **结果**：AI 报告线程池、智能体设定弹窗、CLI 调试脚本均可透明读取真实 key；仓库内落盘值为伪加密字符串，降低直接暴露风险。
 - **验证**：保存新 key 后检查 `backend_data/api_key.json`，应能看到插入 `ww` 的密文；调用 `GET /api/v1/daily_report_25_26/data_analysis/ai_settings` 仍返回明文；运行 `configs/ai_test.py` 可正常调用 Gemini。
+
+## 2026-01-02（AI 配置热加载修复）
+
+- **问题**：AI 报告服务在 `_get_model` 中缓存 Gemini SDK 实例，一旦首次加载后就不会重新读取 `backend_data/api_key.json`。即便在界面中保存了新的 API Key/模型，下次调用仍沿用旧凭证，必须重启进程才能生效。
+- **改动**：
+  1. `backend/services/data_analysis_ai_report.py` 新增 `reset_gemini_client()`，将缓存的 `_model/_model_name` 清空。
+  2. `update_ai_settings_endpoint` 保存配置后立即调用该重置函数，保证下一次 `_get_model()` 会重新读取最新 Key/模型。
+- **影响**：用户在前端“智能体设定”窗口保存新的密钥后，无需重启服务即可立即用新凭证触发 AI 报告；CLI 测试脚本仍靠重新运行进程加载最新配置。
+- **验证**：保存一个无效 Key，再次触发 AI 报告应立刻提示认证失败；换回正确 Key 后再触发即可恢复成功，证明无需重启即可切换。
+
+## 2026-01-02（单日模式环比比较）
+
+- **诉求**：数据分析页面与本单位分析组件在“单日模式”下仍希望展示“环比比较”，即使用户只选择某一天或累计区间只有一天。
+- **实现**：FastAPI `_execute_data_analysis_query_legacy` 中的 `need_prev_range` 逻辑改为：只要存在可比较的指标（分析类或气温指标）且“处于累计模式”或“start_date==end_date”，就计算上一时间窗口（通过 `_compute_previous_range` 取得上一日或上一相同跨度区间），并将 `ringCompare` 写入响应。
+- **结果**：前端无需修改即可在单日模式（或累计但跨度为 1 天）显示“环比比较”表格，并在摘要/导出中引用环比数据；若上一窗口超出 2025-11-01 最小支持日期仍会自动跳过。
+- **验证**：以单日模式查询 2025-12-15，前端应看到“环比比较”表格且“上期”范围为 2025-12-14；将累计模式起止都设成 2025-12-20，同样会与上一日比较。
