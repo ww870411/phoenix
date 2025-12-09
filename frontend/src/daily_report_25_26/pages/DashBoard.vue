@@ -768,6 +768,28 @@ const Table = defineComponent({
       return { key: index, cells: [], meta: {} }
     }
 
+    const renderDeviceBar = (cell) => {
+      const { value, percent, color } = cell
+      const count = typeof value === 'number' ? value : 0
+      
+      if (count <= 0) {
+        return h('span', { style: { color: '#cbd5e1', fontWeight: '400' } }, '—')
+      }
+
+      return h('div', { class: 'device-bar-cell' }, [
+        h('div', { class: 'device-bar-track' }, [
+          h('div', {
+            class: 'device-bar-fill',
+            style: {
+              width: `${percent}%`,
+              backgroundColor: color || '#2563eb',
+            },
+          }),
+        ]),
+        h('span', { class: 'device-num' }, count),
+      ])
+    }
+
     return () =>
       h(
         'div',
@@ -820,6 +842,30 @@ const Table = defineComponent({
                       },
                     },
                     normalized.cells.map((cell, cellIndex) => {
+                      // Render device bars
+                      if (cell && typeof cell === 'object' && cell.type === 'device-bar') {
+                        return h(
+                          'td',
+                          {
+                            key: `${rowIndex}-${cellIndex}`,
+                            style: { ...tdStyle, textAlign: 'center', verticalAlign: 'middle', padding: '8px 16px' },
+                          },
+                          renderDeviceBar(cell)
+                        )
+                      }
+                      
+                      // Legacy dot rendering (optional, kept for compatibility if needed)
+                      if (cell && typeof cell === 'object' && cell.type === 'device-count') {
+                        return h(
+                          'td',
+                          {
+                            key: `${rowIndex}-${cellIndex}`,
+                            style: { ...tdStyle, textAlign: 'center', verticalAlign: 'middle' },
+                          },
+                          renderDeviceCount(cell.value)
+                        )
+                      }
+
                       const numeric = isNumericValue(cell) && cell !== ''
                       const display =
                         numeric && typeof cell === 'number'
@@ -2371,12 +2417,42 @@ const deviceStatusColumns = computed(() => {
 const deviceStatusTableData = computed(() => {
   const { orgs, metrics, bucket } = deviceStatusMeta.value
 
+  // Pre-calculate max values for each metric column to determine bar width
+  const maxValues = metrics.map((metric) => {
+    let max = 0
+    orgs.forEach((org) => {
+      const val = normalizeMetricValue(bucket[org]?.[metric])
+      if (Number.isFinite(val) && val > max) {
+        max = val
+      }
+    })
+    return max
+  })
+
+  // Metric-specific colors
+  const metricColors = [
+    '#f97316', // Orange (Boilers)
+    '#3b82f6', // Blue (Turbines)
+    '#06b6d4', // Cyan (Water Boilers)
+    '#8b5cf6', // Purple (Coal Boilers)
+    '#10b981', // Green (Electric Boilers)
+  ]
+
   return orgs.map((org) => {
     const row = [org]
     const orgData = bucket[org] || {}
-    metrics.forEach((metric) => {
+    metrics.forEach((metric, index) => {
       const val = normalizeMetricValue(orgData[metric])
-      row.push(Number.isFinite(val) ? val : '—')
+      const numericVal = Number.isFinite(val) ? val : 0
+      const max = maxValues[index] || 1 // Avoid division by zero
+      
+      // Use structured object for visual rendering with micro-bar props
+      row.push({
+        type: 'device-bar',
+        value: numericVal,
+        percent: Math.min(100, (numericVal / max) * 100),
+        color: metricColors[index % metricColors.length],
+      })
     })
     return row
   })
@@ -5602,7 +5678,55 @@ onMounted(() => {
   background-color: #1d4ed8;
 }
 
+/* Device Status Visualization */
+.device-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+}
 
+.device-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.device-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981; /* Green-500 */
+}
+
+.device-num {
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 12px;
+  text-align: right;
+}
+
+/* Device Bar Visualization */
+.device-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  width: 100%;
+}
+
+.device-bar-track {
+  flex: 1;
+  height: 6px;
+  background-color: #f1f5f9; /* Slate-100 */
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.device-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease-out;
+}
 
 </style>
-  padding: 0;
