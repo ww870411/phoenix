@@ -581,6 +581,14 @@
         </Card>
       </section>
 
+      <section class="dashboard-grid__item dashboard-grid__item--device">
+        <Card title="各单位运行设备数量明细表" subtitle="本期" extra="单位：台">
+          <div class="dashboard-table-wrapper">
+            <Table :columns="deviceStatusColumns" :data="deviceStatusTableData" />
+          </div>
+        </Card>
+      </section>
+
       <section class="dashboard-grid__item dashboard-grid__item--trend">
         <Card
           :class="{ 'dashboard-card--collapsed': dailyTrendCollapsed }"
@@ -2335,6 +2343,42 @@ const coalStockTableData = computed(() => {
         ? formatWithThousands(total, 0)
         : ''
     return [company, ...formattedStacks, totalFormatted]
+  })
+})
+
+const deviceStatusSection = computed(() => {
+  const section = resolveSection('11', '11.各单位运行设备数量明细表')
+  return section && typeof section === 'object' ? section : {}
+})
+
+const deviceStatusMeta = computed(() => {
+  const section = deviceStatusSection.value
+  const fallbackOrgs = ['北海热电厂', '香海热电厂', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
+  const fallbackMetrics = ['运行汽炉数', '运行汽轮机数', '运行水炉数', '运行燃煤锅炉房锅炉数', '运行电锅炉数']
+
+  const orgs = Array.isArray(section?.['单位']) ? section['单位'] : fallbackOrgs
+  const metrics = Array.isArray(section?.['指标']) ? section['指标'] : fallbackMetrics
+  const bucket = section?.['本期'] || {}
+
+  return { orgs, metrics, bucket }
+})
+
+const deviceStatusColumns = computed(() => {
+  const { metrics } = deviceStatusMeta.value
+  return ['单位', ...metrics]
+})
+
+const deviceStatusTableData = computed(() => {
+  const { orgs, metrics, bucket } = deviceStatusMeta.value
+
+  return orgs.map((org) => {
+    const row = [org]
+    const orgData = bucket[org] || {}
+    metrics.forEach((metric) => {
+      const val = normalizeMetricValue(orgData[metric])
+      row.push(Number.isFinite(val) ? val : '—')
+    })
+    return row
   })
 })
 
@@ -5131,6 +5175,10 @@ onMounted(() => {
 
   .dashboard-grid__item--stock {
     grid-column: span 6;
+  }
+
+  .dashboard-grid__item--device {
+    grid-column: 1 / -1;
   }
   .dashboard-grid__item--trend {
     grid-column: 1 / -1;

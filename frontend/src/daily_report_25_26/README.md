@@ -32,7 +32,7 @@
 
 ## 仪表盘业务日同步策略（2025-11-13）
 
-- `DashBoard.vue` 的 `loadDashboardData(showDate)` 在收到接口响应后，会根据 `showDate` 是否为空决定是否同步 `payload.push_date` 到 `bizDateInput`：仅当未指定 `showDate` 且本地输入框为空（初次加载或用户清空日期）时才覆盖，防止手动选择的日期被后台默认推送日重置。
+- `DashBoard.vue` 的 `loadDashboardData(showDate)` 在收到接口响应后，会根据 `showDate` 是否为空决定是否同步 `payload.push_date` 到 `bizDateInput`：仅当未指定 `showDate`且本地输入框为空（初次加载或用户清空日期）时才覆盖，防止手动选择的日期被后台默认推送日重置。
 - Watcher 仍以 `bizDateInput` 为源触发 `loadDashboardData`，因此日期输入框始终代表最新一次选中值；`effectiveBizDate`（展示在 UI 的“当前”提示）会优先显示该值。
 - 若接口无 `push_date` 且 `bizDateInput` 仍为空，则继续回落到 `defaultBizDate`（东八区今天-1 天），保持首屏体验一致；该兜底逻辑不影响用户后续手动切换。
 - 这样既兼容后台每天推送“默认业务日”，又保障运营人员可以自由回溯历史数据，不会再出现“切换日期后立即恢复原值”的体验问题。
@@ -125,3 +125,9 @@
 - `evalSpec(projectKey, body)`：运行时表达式求值；若响应包含 `accuracy_overrides`（后端从 `render_spec` 透传），审批/展示页直接使用该行级精度；否则退回 `getTemplate` 解析模板 `accuracy` 字段。
 
 上述接口若返回非 2xx 状态会抛出异常，由页面组件统一处理并提示用户。
+
+## 仪表盘设备运行状态板块（2025-12-09）
+
+- **功能新增**：在“煤炭库存”与“趋势图”之间新增“各单位运行设备数量明细表”板块，以全宽卡片形式展示“运行汽炉数”、“运行汽轮机数”、“运行水炉数”、“运行燃煤锅炉房锅炉数”、“运行电锅炉数”。
+- **数据来源**：前端预埋了对 key 为 `"11.各单位运行设备数量明细表"` 的 Section 数据解析逻辑；若后端响应中未包含该 key，则显示默认表头并留空数据，待 API 就绪后无需再次发版即可自动渲染。
+- **展示优化**：鉴于指标名称较长，该板块在桌面端强制设为 `span 12`（全宽），确保内容不被挤压截断。
