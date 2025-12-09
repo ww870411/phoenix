@@ -1679,6 +1679,7 @@ class AiSettingsPayload(BaseModel):
     api_keys: List[str]
     model: str
     instruction: str = ""
+    report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
 
@@ -1718,6 +1719,7 @@ def _read_ai_settings() -> Dict[str, Any]:
             "api_keys": [],
             "model": "",
             "instruction": "",
+            "report_mode": "full",
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
@@ -1730,22 +1732,24 @@ def _read_ai_settings() -> Dict[str, Any]:
             "api_keys": [],
             "model": "",
             "instruction": "",
+            "report_mode": "full",
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
-    
+
     # 读取多 Key 列表，若无则尝试迁移旧单 Key
     raw_keys = data.get("gemini_api_keys")
     if not isinstance(raw_keys, list):
         old_key = str(data.get("gemini_api_key") or "").strip()
         raw_keys = [old_key] if old_key else []
-    
+
     decrypted_keys = [decrypt_api_key(str(k)) for k in raw_keys if k]
 
     return {
         "api_keys": decrypted_keys,
         "model": str(data.get("gemini_model") or ""),
         "instruction": str(data.get("instruction") or ""),
+        "report_mode": str(data.get("report_mode") or "full"),
         "enable_validation": _coerce_bool(data.get("enable_validation"), True),
         "allow_non_admin_report": _coerce_bool(
             data.get("allow_non_admin_report"), False
@@ -1770,6 +1774,7 @@ def _persist_ai_settings(
     api_keys: List[str],
     model: str,
     instruction: str,
+    report_mode: str,
     enable_validation: bool,
     allow_non_admin_report: bool,
 ) -> Dict[str, Any]:
@@ -1781,15 +1786,16 @@ def _persist_ai_settings(
             payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    
+
     encrypted_keys = [encrypt_api_key(k) for k in api_keys if k.strip()]
     payload["gemini_api_keys"] = encrypted_keys
     # 清理旧字段以避免混淆
     if "gemini_api_key" in payload:
         del payload["gemini_api_key"]
-        
+
     payload["gemini_model"] = model
     payload["instruction"] = instruction
+    payload["report_mode"] = report_mode
     payload["enable_validation"] = bool(enable_validation)
     payload["allow_non_admin_report"] = bool(allow_non_admin_report)
     AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1798,6 +1804,7 @@ def _persist_ai_settings(
         "api_keys": api_keys,
         "model": model,
         "instruction": instruction,
+        "report_mode": report_mode,
         "enable_validation": bool(enable_validation),
         "allow_non_admin_report": bool(allow_non_admin_report),
     }
@@ -2197,6 +2204,7 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
         "api_keys": data["api_keys"],
         "model": data["model"],
         "instruction": data["instruction"],
+        "report_mode": data["report_mode"],
         "enable_validation": data["enable_validation"],
         "allow_non_admin_report": data["allow_non_admin_report"],
     }
@@ -2214,6 +2222,7 @@ async def update_ai_settings_endpoint(
         payload.api_keys,
         payload.model.strip(),
         (payload.instruction or "").strip(),
+        payload.report_mode or "full",
         payload.enable_validation,
         payload.allow_non_admin_report,
     )
@@ -2223,6 +2232,7 @@ async def update_ai_settings_endpoint(
         "api_keys": result["api_keys"],
         "model": result["model"],
         "instruction": result["instruction"],
+        "report_mode": result["report_mode"],
         "enable_validation": result["enable_validation"],
         "allow_non_admin_report": result["allow_non_admin_report"],
     }

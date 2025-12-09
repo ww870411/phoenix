@@ -642,6 +642,37 @@
                   placeholder="可填写多条指引，用于追加到提示词末尾。"
                 ></textarea>
               </label>
+              <div class="ai-settings-dialog__field">
+                <span>报告生成模式</span>
+                <div class="report-mode-options">
+                  <label class="report-mode-option">
+                    <input
+                      type="radio"
+                      name="reportMode"
+                      value="full"
+                      v-model="aiSettingsForm.reportMode"
+                      :disabled="aiSettingsSaving"
+                    />
+                    <div class="report-mode-content">
+                      <span class="report-mode-label">完整模式</span>
+                      <span class="report-mode-desc">5 阶段深度分析，包含验证与修订（约 60-120 秒）</span>
+                    </div>
+                  </label>
+                  <label class="report-mode-option">
+                    <input
+                      type="radio"
+                      name="reportMode"
+                      value="fast"
+                      v-model="aiSettingsForm.reportMode"
+                      :disabled="aiSettingsSaving"
+                    />
+                    <div class="report-mode-content">
+                      <span class="report-mode-label">极速模式</span>
+                      <span class="report-mode-desc">2 阶段快速生成，适合免费 API（约 25-50 秒）</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
               <label class="ai-settings-dialog__toggle">
                 <input
                   type="checkbox"
@@ -818,6 +849,7 @@ const aiSettingsForm = reactive({
   apiKeys: [],
   model: '',
   instruction: '',
+  reportMode: 'full',
   validationEnabled: true,
   allowNonAdmin: false,
 })
@@ -847,9 +879,10 @@ function applyAiSettingsPayload(payload) {
     const oldKey = payload?.api_key || ''
     aiSettingsForm.apiKeys = oldKey ? [oldKey] : []
   }
-  
+
   aiSettingsForm.model = payload?.model ?? ''
   aiSettingsForm.instruction = payload?.instruction ?? ''
+  aiSettingsForm.reportMode = payload?.report_mode ?? 'full'
   aiSettingsForm.validationEnabled =
     payload?.enable_validation !== undefined ? Boolean(payload.enable_validation) : true
   aiSettingsForm.allowNonAdmin =
@@ -893,6 +926,7 @@ async function handleAiSettingsSave() {
       api_keys: validKeys,
       model: aiSettingsForm.model || '',
       instruction: aiSettingsForm.instruction || '',
+      report_mode: aiSettingsForm.reportMode || 'full',
       enable_validation: Boolean(aiSettingsForm.validationEnabled),
       allow_non_admin_report: Boolean(aiSettingsForm.allowNonAdmin),
     })
@@ -3697,6 +3731,56 @@ onBeforeUnmount(() => {
 .ai-settings-dialog__toggle input {
   width: 16px;
   height: 16px;
+}
+
+.report-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.report-mode-option:hover {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.report-mode-option input[type="radio"] {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.report-mode-option input[type="radio"]:checked ~ .report-mode-content {
+  color: var(--primary);
+}
+
+.report-mode-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.report-mode-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+.report-mode-desc {
+  font-size: 12px;
+  color: var(--neutral-500);
+  line-height: 1.4;
 }
 
 .ai-settings-dialog__actions {

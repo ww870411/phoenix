@@ -165,6 +165,57 @@ REVISION_PROMPT_TEMPLATE = """你是一名能源行业的资深报告复核负�
 }
 """
 
+# ========== 极速模式 Prompt ==========
+
+FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据，一次性完成洞察分析和报告结构规划，仅输出结构化 JSON。
+
+输出 JSON 结构：
+{
+  "insight": {
+    "headline": "一句话概括整体运行结论",
+    "key_findings": [
+      {"metric": "指标名称", "status": "up|down|stable", "evidence": "引用数据说明原因", "risk_level": "low|medium|high"}
+    ],
+    "temperature_effect": "气温联动说明或'无显著气温影响'",
+    "risks": ["潜在风险，至少1条"],
+    "recommendations": ["建议，至少1条"]
+  },
+  "layout": {
+    "sections": [
+      {"id": "overview|trend|risks", "title": "章节标题", "purpose": "重点", "bullets": ["要点"], "metrics": []}
+    ],
+    "chart_plan": {"primary_metric": "指标key", "temperature_metric": null, "narrative": "图表故事"},
+    "callouts": [{"title": "提示标题", "body": "说明", "level": "info|warning|danger"}]
+  }
+}
+
+要求：
+- 必须使用中文；
+- key_findings 至少 2 条；
+- sections 至少 2 个；
+- callouts 至少 1 条。
+"""
+
+FAST_VALIDATION_PROMPT_TEMPLATE = """快速核查报告中引用的关键数值是否与原始数据一致。
+
+只检查以下内容：
+1. 同比（delta）数值是否正确引用；
+2. 环比（ring）数值是否正确引用；
+3. 累计值是否与数据一致。
+
+输出 JSON：
+{
+  "status": "pass | warning",
+  "issues": [{"section": "位置", "description": "问题描述", "severity": "info|warning"}],
+  "notes": "简要结论"
+}
+
+要求：
+- 只标记明显的数据错误；
+- 不需要修订建议；
+- 若无明显问题，status 设为 pass，issues 为空。
+"""
+
 _logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -225,8 +276,8 @@ def _load_instruction_text() -> str:
     return ""
 
 
-def _load_ai_runtime_flags() -> Dict[str, bool]:
-    defaults = {"enable_validation": True, "allow_non_admin_report": False}
+def _load_ai_runtime_flags() -> Dict[str, Any]:
+    defaults = {"enable_validation": True, "allow_non_admin_report": False, "report_mode": "full"}
     if not API_KEY_PATH.exists():
         return defaults
     try:
@@ -239,6 +290,8 @@ def _load_ai_runtime_flags() -> Dict[str, bool]:
             flags["enable_validation"] = bool(data["enable_validation"])
         if "allow_non_admin_report" in data:
             flags["allow_non_admin_report"] = bool(data["allow_non_admin_report"])
+        if "report_mode" in data:
+            flags["report_mode"] = str(data["report_mode"]) if data["report_mode"] in ("full", "fast") else "full"
     return flags
 
 
@@ -727,6 +780,28 @@ def _prepend_instruction_block(prompt: str, instruction: str) -> str:
 def _build_insight_prompt(processed_data: Dict[str, Any], instruction: str = "") -> str:
     data_json = _safe_json_dumps(processed_data)
     base = f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
+    return _prepend_instruction_block(base, instruction)
+
+
+def _build_fast_insight_layout_prompt(processed_data: Dict[str, Any], instruction: str = "") -> str:
+    """极速模式：合并洞察分析和结构规划为一个阶段"""
+    data_json = _safe_json_dumps(processed_data)
+    base = f"{FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
+    return _prepend_instruction_block(base, instruction)
+
+
+def _build_fast_validation_prompt(
+    processed_data: Dict[str, Any],
+    content_data: Dict[str, Any],
+    instruction: str = "",
+) -> str:
+    """极速模式：轻量验证 Prompt"""
+    data_json = _safe_json_dumps(processed_data)
+    content_json = _safe_json_dumps(content_data)
+    base = (
+        f"{FAST_VALIDATION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}"
+        f"\n\n### 报告内容 JSON\n{content_json}\n"
+    )
     return _prepend_instruction_block(base, instruction)
 
 
@@ -1277,55 +1352,82 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
         extra_instruction = _load_instruction_text()
         feature_flags = _load_ai_runtime_flags()
         enable_validation_stage = feature_flags.get("enable_validation", True)
+        report_mode = feature_flags.get("report_mode", "full")
         _update_job(job_id, status="running", stage="insight", started_at=_current_time_iso())
 
-        insight_prompt = _build_insight_prompt(processed_data, extra_instruction)
-        insight_data = _run_json_stage("洞察分析", insight_prompt)
-        _update_job(job_id, stage="layout", insight=insight_data)
-
-        layout_prompt = _build_layout_prompt(processed_data, insight_data, extra_instruction)
-        layout_data = _run_json_stage("结构规划", layout_prompt)
-        _update_job(job_id, stage="content", layout=layout_data)
-
-        content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
-        content_data = _run_json_stage("内容撰写", content_prompt)
         validation_data = None
-        if enable_validation_stage:
-            _update_job(job_id, stage="review", content=content_data)
-            validation_prompt = _build_validation_prompt(
-                processed_data, content_data, extra_instruction
-            )
-            validation_data = _run_json_stage("检查核实", validation_prompt)
-            _update_job(job_id, validation=validation_data)
 
-            status = (validation_data.get("status") or "").lower() if validation_data else ""
-            issues = (validation_data or {}).get("issues") or []
-            needs_revision = bool(issues) and status in {"warning", "fail"}
-            if needs_revision:
-                _logger.info(
-                    "AI report job %s entering revision stage (status=%s, issues=%d)",
-                    job_id,
-                    status,
-                    len(issues),
+        if report_mode == "fast":
+            # ========== 极速模式：合并 Insight + Layout ==========
+            _logger.info("AI report job %s using FAST mode", job_id)
+            fast_prompt = _build_fast_insight_layout_prompt(processed_data, extra_instruction)
+            combined_data = _run_json_stage("洞察+规划", fast_prompt)
+            insight_data = combined_data.get("insight") or {}
+            layout_data = combined_data.get("layout") or {}
+            _update_job(job_id, stage="content", insight=insight_data, layout=layout_data)
+
+            content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
+            content_data = _run_json_stage("内容撰写", content_prompt)
+
+            if enable_validation_stage:
+                _update_job(job_id, stage="review", content=content_data)
+                fast_validation_prompt = _build_fast_validation_prompt(
+                    processed_data, content_data, extra_instruction
                 )
-                _update_job(job_id, stage="revision_pending")
-                revision_prompt = _build_revision_prompt(
-                    processed_data,
-                    insight_data,
-                    layout_data,
-                    content_data,
-                    validation_data,
-                    extra_instruction,
-                )
-                content_data = _run_json_stage("内容修订", revision_prompt)
-                _update_job(job_id, stage="revision_content", content=content_data)
+                validation_data = _run_json_stage("快速核查", fast_validation_prompt)
+                _update_job(job_id, validation=validation_data)
+                # 极速模式不触发 Revision，只记录警告
+            else:
+                _update_job(job_id, stage="content", content=content_data)
+        else:
+            # ========== 完整模式：5 阶段流程 ==========
+            insight_prompt = _build_insight_prompt(processed_data, extra_instruction)
+            insight_data = _run_json_stage("洞察分析", insight_prompt)
+            _update_job(job_id, stage="layout", insight=insight_data)
+
+            layout_prompt = _build_layout_prompt(processed_data, insight_data, extra_instruction)
+            layout_data = _run_json_stage("结构规划", layout_prompt)
+            _update_job(job_id, stage="content", layout=layout_data)
+
+            content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
+            content_data = _run_json_stage("内容撰写", content_prompt)
+
+            if enable_validation_stage:
+                _update_job(job_id, stage="review", content=content_data)
                 validation_prompt = _build_validation_prompt(
                     processed_data, content_data, extra_instruction
                 )
-                validation_data = _run_json_stage("复核检查", validation_prompt)
-                _update_job(job_id, stage="review", validation=validation_data)
-        else:
-            _update_job(job_id, stage="content", content=content_data)
+                validation_data = _run_json_stage("检查核实", validation_prompt)
+                _update_job(job_id, validation=validation_data)
+
+                status = (validation_data.get("status") or "").lower() if validation_data else ""
+                issues = (validation_data or {}).get("issues") or []
+                needs_revision = bool(issues) and status in {"warning", "fail"}
+                if needs_revision:
+                    _logger.info(
+                        "AI report job %s entering revision stage (status=%s, issues=%d)",
+                        job_id,
+                        status,
+                        len(issues),
+                    )
+                    _update_job(job_id, stage="revision_pending")
+                    revision_prompt = _build_revision_prompt(
+                        processed_data,
+                        insight_data,
+                        layout_data,
+                        content_data,
+                        validation_data,
+                        extra_instruction,
+                    )
+                    content_data = _run_json_stage("内容修订", revision_prompt)
+                    _update_job(job_id, stage="revision_content", content=content_data)
+                    validation_prompt = _build_validation_prompt(
+                        processed_data, content_data, extra_instruction
+                    )
+                    validation_data = _run_json_stage("复核检查", validation_prompt)
+                    _update_job(job_id, stage="review", validation=validation_data)
+            else:
+                _update_job(job_id, stage="content", content=content_data)
 
         html_report = _generate_report_html(
             processed_data,

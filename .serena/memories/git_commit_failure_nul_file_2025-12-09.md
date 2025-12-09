@@ -1,0 +1,1 @@
+2025-12-09 排查 git commit 失败原因：工作区多出一个文件名为 "nul" (D:\编程项目\phoenix\nul)，Windows 把 NUL 当作设备名，git add -A 试图索引它时会报 "short read while indexing nul" 并终止。解决：删除或重命名该文件（如改成 gemini_prompt_config.json）并将其加入 .gitignore；随后重新执行 git add/commit。顺带注意仓库 core.autocrlf=true，提交时会提示 backend_data/*.json 等文件的 LF 将在下一次检出时被改为 CRLF，这是行尾配置造成的，不影响功能，可按需改 gitattributes。

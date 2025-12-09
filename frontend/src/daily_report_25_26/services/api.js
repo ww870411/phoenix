@@ -426,6 +426,7 @@ export async function updateAiSettings(projectKey, payload) {
       api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
       instruction: payload?.instruction ?? '',
+      report_mode: payload?.report_mode ?? 'full',
       enable_validation: payload?.enable_validation ?? true,
       allow_non_admin_report: payload?.allow_non_admin_report ?? false,
     }),
