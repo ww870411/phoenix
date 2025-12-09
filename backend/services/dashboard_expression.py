@@ -415,6 +415,60 @@ def _fill_complaint_section(
                     company_bucket[company_cn] = _decimal_to_float(bucket.get(frame_key))
 
 
+def _fill_device_status_section(
+    session,
+    section: Dict[str, Any],
+    push_date: str,
+    company_cn_to_code: Dict[str, str],
+    item_cn_to_code: Dict[str, str],
+) -> None:
+    """填充“各单位运行设备数量明细表”板块。"""
+    if not isinstance(section, dict):
+        return
+
+    companies = section.get("单位")
+    if not isinstance(companies, list):
+        return
+    metrics_list = section.get("指标")
+    if not isinstance(metrics_list, list):
+        return
+
+    # 初始化本期桶
+    bucket = section.setdefault("本期", {})
+
+    source_config = section.get("数据来源") or {}
+    # 默认从 sum_basic_data 取数
+    table_name = "sum_basic_data"
+    if isinstance(source_config, dict):
+        for t, _ in source_config.items():
+            table_name = t
+            break
+
+    for company_cn in companies:
+        company_cn_str = str(company_cn).strip()
+        if not company_cn_str:
+            continue
+
+        company_code = company_cn_to_code.get(company_cn_str, company_cn_str)
+
+        # 获取该单位当日的所有指标数据
+        metrics_data = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+
+        company_bucket = bucket.setdefault(company_cn_str, {})
+
+        for item_cn in metrics_list:
+            item_cn_str = str(item_cn).strip()
+            if not item_cn_str:
+                continue
+
+            item_code = item_cn_to_code.get(item_cn_str, item_cn_str)
+            item_payload = metrics_data.get(item_code, {})
+
+            # 设备数量通常是当日值
+            val = _decimal_to_float(item_payload.get("value_biz_date"))
+            company_bucket[item_cn_str] = val
+
+
 def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
@@ -740,6 +794,11 @@ def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult
         daily_trend_section = get_section_by_index("10", "10.每日对比趋势")
         if isinstance(daily_trend_section, dict):
             _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_code)
+
+        # 11. 各单位运行设备数量明细表
+        device_status_section = get_section_by_index("11", "11.各单位运行设备数量明细表")
+        if isinstance(device_status_section, dict):
+            _fill_device_status_section(session, device_status_section, push_date, company_cn_to_code, item_cn_to_code)
 
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
