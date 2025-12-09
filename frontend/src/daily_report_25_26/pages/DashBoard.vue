@@ -769,14 +769,21 @@ const Table = defineComponent({
     }
 
     const renderDeviceBar = (cell) => {
-      const { value, percent, color } = cell
-      const count = typeof value === 'number' ? value : 0
+      const { current, peer, max, color } = cell
+      const percent = max > 0 ? Math.min(100, (current / max) * 100) : 0
       
-      if (count <= 0) {
+      const isZero = current <= 0 && peer <= 0
+
+      if (isZero) {
         return h('span', { style: { color: '#cbd5e1', fontWeight: '400' } }, '—')
       }
 
       return h('div', { class: 'device-bar-cell' }, [
+        h('div', { class: 'device-values' }, [
+          h('span', { class: 'device-num-current' }, current),
+          h('span', { class: 'device-sep' }, '/'),
+          h('span', { class: 'device-num-peer' }, peer),
+        ]),
         h('div', { class: 'device-bar-track' }, [
           h('div', {
             class: 'device-bar-fill',
@@ -786,7 +793,6 @@ const Table = defineComponent({
             },
           }),
         ]),
-        h('span', { class: 'device-num' }, count),
       ])
     }
 
@@ -2400,34 +2406,50 @@ const deviceStatusSection = computed(() => {
 const deviceStatusMeta = computed(() => {
   const section = deviceStatusSection.value
   const fallbackOrgs = ['北海热电厂', '香海热电厂', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
-  const fallbackMetrics = ['运行汽炉数', '运行汽轮机数', '运行水炉数', '运行燃煤锅炉房锅炉数', '运行电锅炉数']
 
   const orgs = Array.isArray(section?.['单位']) ? section['单位'] : fallbackOrgs
-  const metrics = Array.isArray(section?.['指标']) ? section['指标'] : fallbackMetrics
-  const bucket = section?.['本期'] || {}
+  const currentMetricsConfig = Array.isArray(section?.['本期']) ? section['本期'] : []
+  const peerMetricsConfig = Array.isArray(section?.['同期']) ? section['同期'] : []
 
-  return { orgs, metrics, bucket }
-})
+  // 合并本期和同期指标列表，获取所有唯一的指标
+  const allUniqueMetrics = Array.from(new Set([...currentMetricsConfig, ...peerMetricsConfig]))
 
-const deviceStatusColumns = computed(() => {
-  const { metrics } = deviceStatusMeta.value
-  return ['单位', ...metrics]
-})
+  const currentData = section?.['本期数据'] || {}
+  const peerData = section?.['同期数据'] || {}
 
-const deviceStatusTableData = computed(() => {
-  const { orgs, metrics, bucket } = deviceStatusMeta.value
-
-  // Pre-calculate max values for each metric column to determine bar width
-  const maxValues = metrics.map((metric) => {
+  // 计算每个指标（列）的最大值，用于进度条 scaling
+  // 需要考虑所有公司的本期和同期数据
+  const maxValues = allUniqueMetrics.map((metric) => {
     let max = 0
     orgs.forEach((org) => {
-      const val = normalizeMetricValue(bucket[org]?.[metric])
-      if (Number.isFinite(val) && val > max) {
-        max = val
+      const currentVal = normalizeMetricValue(currentData[org]?.[metric])
+      const peerVal = normalizeMetricValue(peerData[org]?.[metric])
+      if (Number.isFinite(currentVal) && currentVal > max) {
+        max = currentVal
+      }
+      if (Number.isFinite(peerVal) && peerVal > max) {
+        max = peerVal
       }
     })
     return max
   })
+
+  return {
+    orgs,
+    uniqueMetrics: allUniqueMetrics,
+    currentData,
+    peerData,
+    maxValues,
+  }
+})
+
+const deviceStatusColumns = computed(() => {
+  const { uniqueMetrics } = deviceStatusMeta.value
+  return ['单位', ...uniqueMetrics]
+})
+
+const deviceStatusTableData = computed(() => {
+  const { orgs, uniqueMetrics, currentData, peerData, maxValues } = deviceStatusMeta.value
 
   // Metric-specific colors
   const metricColors = [
@@ -2440,18 +2462,25 @@ const deviceStatusTableData = computed(() => {
 
   return orgs.map((org) => {
     const row = [org]
-    const orgData = bucket[org] || {}
-    metrics.forEach((metric, index) => {
-      const val = normalizeMetricValue(orgData[metric])
-      const numericVal = Number.isFinite(val) ? val : 0
-      const max = maxValues[index] || 1 // Avoid division by zero
-      
-      // Use structured object for visual rendering with micro-bar props
+    uniqueMetrics.forEach((metric, metricIndex) => {
+      const max = maxValues[metricIndex] || 1 // Avoid division by zero
+      const color = metricColors[metricIndex % metricColors.length]
+
+      // Current period data
+      const currentVal = normalizeMetricValue(currentData[org]?.[metric])
+      const currentNumericVal = Number.isFinite(currentVal) ? currentVal : 0
+
+      // Peer period data
+      const peerVal = normalizeMetricValue(peerData[org]?.[metric])
+      const peerNumericVal = Number.isFinite(peerVal) ? peerVal : 0
+
+      // Combine into single cell object
       row.push({
         type: 'device-bar',
-        value: numericVal,
-        percent: Math.min(100, (numericVal / max) * 100),
-        color: metricColors[index % metricColors.length],
+        current: currentNumericVal,
+        peer: peerNumericVal,
+        max: max,
+        color: color,
       })
     })
     return row
@@ -5679,45 +5708,44 @@ onMounted(() => {
 }
 
 /* Device Status Visualization */
-.device-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 100%;
-}
-
-.device-dots {
-  display: flex;
-  gap: 2px;
-}
-
-.device-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #10b981; /* Green-500 */
-}
-
-.device-num {
-  font-weight: 600;
-  color: #0f172a;
-  min-width: 12px;
-  text-align: right;
-}
-
-/* Device Bar Visualization */
 .device-bar-cell {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
   height: 100%;
   width: 100%;
+  min-width: 60px;
+}
+
+.device-values {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  line-height: 1;
+}
+
+.device-num-current {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.device-sep {
+  margin: 0 4px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.device-num-peer {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .device-bar-track {
-  flex: 1;
-  height: 6px;
+  width: 100%;
+  height: 4px;
   background-color: #f1f5f9; /* Slate-100 */
   border-radius: 999px;
   overflow: hidden;

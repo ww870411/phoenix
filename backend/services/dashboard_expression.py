@@ -429,44 +429,56 @@ def _fill_device_status_section(
     companies = section.get("单位")
     if not isinstance(companies, list):
         return
-    metrics_list = section.get("指标")
-    if not isinstance(metrics_list, list):
+    
+    # 从配置中获取本期和同期的指标列表
+    current_metrics_list = section.get("本期")
+    peer_metrics_list = section.get("同期")
+
+    if not isinstance(current_metrics_list, list) and not isinstance(peer_metrics_list, list):
         return
 
-    # 初始化本期桶
-    bucket = section.setdefault("本期", {})
-
-    source_config = section.get("数据来源") or {}
-    # 默认从 sum_basic_data 取数
     table_name = "sum_basic_data"
+    source_config = section.get("数据来源") or {}
     if isinstance(source_config, dict):
         for t, _ in source_config.items():
             table_name = t
             break
 
+    # 初始化本期和同期的数据桶
+    current_bucket = section.setdefault("本期数据", {}) # 避免与配置的 "本期" 列表冲突，改名为 "本期数据"
+    peer_bucket = section.setdefault("同期数据", {})   # 新增同期数据桶
+
     for company_cn in companies:
         company_cn_str = str(company_cn).strip()
         if not company_cn_str:
             continue
-
+        
         company_code = company_cn_to_code.get(company_cn_str, company_cn_str)
-
-        # 获取该单位当日的所有指标数据
         metrics_data = _fetch_metrics_from_view(session, table_name, company_code, push_date)
-
-        company_bucket = bucket.setdefault(company_cn_str, {})
-
-        for item_cn in metrics_list:
-            item_cn_str = str(item_cn).strip()
-            if not item_cn_str:
-                continue
-
-            item_code = item_cn_to_code.get(item_cn_str, item_cn_str)
-            item_payload = metrics_data.get(item_code, {})
-
-            # 设备数量通常是当日值
-            val = _decimal_to_float(item_payload.get("value_biz_date"))
-            company_bucket[item_cn_str] = val
+        
+        # 填充本期数据
+        if isinstance(current_metrics_list, list):
+            current_company_bucket = current_bucket.setdefault(company_cn_str, {})
+            for item_cn in current_metrics_list:
+                item_cn_str = str(item_cn).strip()
+                if not item_cn_str:
+                    continue
+                item_code = item_cn_to_code.get(item_cn_str, item_cn_str)
+                item_payload = metrics_data.get(item_code, {})
+                val = _decimal_to_float(item_payload.get("value_biz_date"))
+                current_company_bucket[item_cn_str] = val
+        
+        # 填充同期数据
+        if isinstance(peer_metrics_list, list):
+            peer_company_bucket = peer_bucket.setdefault(company_cn_str, {})
+            for item_cn in peer_metrics_list:
+                item_cn_str = str(item_cn).strip()
+                if not item_cn_str:
+                    continue
+                item_code = item_cn_to_code.get(item_cn_str, item_cn_str)
+                item_payload = metrics_data.get(item_code, {})
+                val = _decimal_to_float(item_payload.get("value_peer_date")) # 同期数据取 value_peer_date
+                peer_company_bucket[item_cn_str] = val
 
 
 def evaluate_dashboard(project_key: str, show_date: str = "") -> DashboardResult:
