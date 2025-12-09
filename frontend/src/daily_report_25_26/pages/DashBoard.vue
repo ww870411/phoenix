@@ -582,7 +582,7 @@
       </section>
 
       <section class="dashboard-grid__item dashboard-grid__item--device">
-        <Card title="各单位运行设备数量明细表" subtitle="本期" extra="单位：台">
+        <Card title="各单位运行设备数量明细表" extra="单位：台">
           <div class="dashboard-table-wrapper">
             <Table :columns="deviceStatusColumns" :data="deviceStatusTableData" />
           </div>
@@ -770,26 +770,29 @@ const Table = defineComponent({
 
     const renderDeviceCombo = (cell) => {
       if (!Array.isArray(cell.items) || !cell.items.length) {
-        return h('span', { style: { color: '#cbd5e1', fontWeight: '400' } }, '—')
+        return h('span', { class: 'combo-zero-cell' }, '—') // 如果 items 为空，显示 —
       }
 
-      const elements = cell.items.map(item => {
-        const isZero = item.current <= 0 && item.peer <= 0
-        const displayValue = isZero 
-          ? h('span', { class: 'combo-zero' }, '—')
-          : [
-              h('span', { class: 'combo-val-current' }, item.current),
-              h('span', { class: 'combo-sep' }, '/'),
-              h('span', { class: 'combo-val-peer' }, item.peer)
-            ]
+      const activeItems = cell.items.filter(item => !(item.current <= 0 && item.peer <= 0)); // 过滤掉全部为零的项
+
+      if (activeItems.length === 0) {
+        return h('span', { class: 'combo-zero-cell' }, '—') // 如果所有项都为零，显示 —
+      }
+
+      const elements = activeItems.map(item => {
+        const displayValue = [
+          h('span', { class: 'combo-val-current', style: { color: item.color } }, item.current),
+          h('span', { class: 'combo-sep' }, '/'),
+          h('span', { class: 'combo-val-peer', style: { color: item.color } }, item.peer)
+        ];
 
         return h('div', { class: 'combo-item' }, [
-          h('div', { class: 'combo-label', style: { backgroundColor: item.color + '20', color: item.color } }, item.label),
-          h('div', { class: 'combo-value' }, displayValue)
-        ])
-      })
+          h('span', { class: 'combo-label', style: { backgroundColor: item.color + '20', color: item.color, marginRight: '4px' } }, item.label),
+          h('span', { class: 'combo-value' }, displayValue)
+        ]);
+      });
 
-      return h('div', { class: 'device-combo-cell' }, elements)
+      return h('div', { class: 'device-combo-cell' }, elements);
     }
 
     return () =>
@@ -2413,7 +2416,7 @@ const deviceStatusMeta = computed(() => {
 // Define logical groups for display
 const deviceGroups = [
   {
-    title: '炉机组态 (汽炉 / 汽轮机)',
+    title: '炉机组态',
     metrics: [
       { key: '运行汽炉数', label: '炉', color: '#f97316' },
       { key: '运行汽轮机数', label: '机', color: '#3b82f6' },
@@ -2426,9 +2429,14 @@ const deviceGroups = [
     ]
   },
   {
-    title: '其它热源 (煤 / 电)',
+    title: '燃煤锅炉',
     metrics: [
       { key: '运行燃煤锅炉房锅炉数', label: '煤', color: '#8b5cf6' },
+    ]
+  },
+  {
+    title: '电锅炉',
+    metrics: [
       { key: '运行电锅炉数', label: '电', color: '#10b981' },
     ]
   }
@@ -5740,26 +5748,24 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   height: 100%;
 }
 
 .combo-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .combo-label {
-  width: 20px;
-  height: 20px;
+  padding: 1px 5px;
   border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.4;
+  display: inline-block;
 }
 
 .combo-value {
@@ -5788,6 +5794,16 @@ onMounted(() => {
 
 .combo-zero {
   color: #cbd5e1;
+}
+
+.combo-zero-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #cbd5e1;
+  font-weight: 400;
+  font-size: 14px;
 }
 
 </style>
