@@ -768,32 +768,28 @@ const Table = defineComponent({
       return { key: index, cells: [], meta: {} }
     }
 
-    const renderDeviceBar = (cell) => {
-      const { current, peer, max, color } = cell
-      const percent = max > 0 ? Math.min(100, (current / max) * 100) : 0
-      
-      const isZero = current <= 0 && peer <= 0
-
-      if (isZero) {
+    const renderDeviceCombo = (cell) => {
+      if (!Array.isArray(cell.items) || !cell.items.length) {
         return h('span', { style: { color: '#cbd5e1', fontWeight: '400' } }, '—')
       }
 
-      return h('div', { class: 'device-bar-cell' }, [
-        h('div', { class: 'device-values' }, [
-          h('span', { class: 'device-num-current' }, current),
-          h('span', { class: 'device-sep' }, '/'),
-          h('span', { class: 'device-num-peer' }, peer),
-        ]),
-        h('div', { class: 'device-bar-track' }, [
-          h('div', {
-            class: 'device-bar-fill',
-            style: {
-              width: `${percent}%`,
-              backgroundColor: color || '#2563eb',
-            },
-          }),
-        ]),
-      ])
+      const elements = cell.items.map(item => {
+        const isZero = item.current <= 0 && item.peer <= 0
+        const displayValue = isZero 
+          ? h('span', { class: 'combo-zero' }, '—')
+          : [
+              h('span', { class: 'combo-val-current' }, item.current),
+              h('span', { class: 'combo-sep' }, '/'),
+              h('span', { class: 'combo-val-peer' }, item.peer)
+            ]
+
+        return h('div', { class: 'combo-item' }, [
+          h('div', { class: 'combo-label', style: { backgroundColor: item.color + '20', color: item.color } }, item.label),
+          h('div', { class: 'combo-value' }, displayValue)
+        ])
+      })
+
+      return h('div', { class: 'device-combo-cell' }, elements)
     }
 
     return () =>
@@ -848,7 +844,19 @@ const Table = defineComponent({
                       },
                     },
                     normalized.cells.map((cell, cellIndex) => {
-                      // Render device bars
+                      // Render device combo group
+                      if (cell && typeof cell === 'object' && cell.type === 'device-combo') {
+                        return h(
+                          'td',
+                          {
+                            key: `${rowIndex}-${cellIndex}`,
+                            style: { ...tdStyle, textAlign: 'center', verticalAlign: 'middle', padding: '6px 12px' },
+                          },
+                          renderDeviceCombo(cell)
+                        )
+                      }
+
+                      // Render device bars (kept for backward compatibility if needed elsewhere)
                       if (cell && typeof cell === 'object' && cell.type === 'device-bar') {
                         return h(
                           'td',
@@ -860,18 +868,6 @@ const Table = defineComponent({
                         )
                       }
                       
-                      // Legacy dot rendering (optional, kept for compatibility if needed)
-                      if (cell && typeof cell === 'object' && cell.type === 'device-count') {
-                        return h(
-                          'td',
-                          {
-                            key: `${rowIndex}-${cellIndex}`,
-                            style: { ...tdStyle, textAlign: 'center', verticalAlign: 'middle' },
-                          },
-                          renderDeviceCount(cell.value)
-                        )
-                      }
-
                       const numeric = isNumericValue(cell) && cell !== ''
                       const display =
                         numeric && typeof cell === 'number'
@@ -2408,79 +2404,61 @@ const deviceStatusMeta = computed(() => {
   const fallbackOrgs = ['北海热电厂', '香海热电厂', '金州热电', '北方热电', '金普热电', '庄河环海', '研究院']
 
   const orgs = Array.isArray(section?.['单位']) ? section['单位'] : fallbackOrgs
-  const currentMetricsConfig = Array.isArray(section?.['本期']) ? section['本期'] : []
-  const peerMetricsConfig = Array.isArray(section?.['同期']) ? section['同期'] : []
-
-  // 合并本期和同期指标列表，获取所有唯一的指标
-  const allUniqueMetrics = Array.from(new Set([...currentMetricsConfig, ...peerMetricsConfig]))
-
   const currentData = section?.['本期数据'] || {}
   const peerData = section?.['同期数据'] || {}
 
-  // 计算每个指标（列）的最大值，用于进度条 scaling
-  // 需要考虑所有公司的本期和同期数据
-  const maxValues = allUniqueMetrics.map((metric) => {
-    let max = 0
-    orgs.forEach((org) => {
-      const currentVal = normalizeMetricValue(currentData[org]?.[metric])
-      const peerVal = normalizeMetricValue(peerData[org]?.[metric])
-      if (Number.isFinite(currentVal) && currentVal > max) {
-        max = currentVal
-      }
-      if (Number.isFinite(peerVal) && peerVal > max) {
-        max = peerVal
-      }
-    })
-    return max
-  })
-
-  return {
-    orgs,
-    uniqueMetrics: allUniqueMetrics,
-    currentData,
-    peerData,
-    maxValues,
-  }
+  return { orgs, currentData, peerData }
 })
 
+// Define logical groups for display
+const deviceGroups = [
+  {
+    title: '炉机组态 (汽炉 / 汽轮机)',
+    metrics: [
+      { key: '运行汽炉数', label: '炉', color: '#f97316' },
+      { key: '运行汽轮机数', label: '机', color: '#3b82f6' },
+    ]
+  },
+  {
+    title: '调峰水炉',
+    metrics: [
+      { key: '运行水炉数', label: '水', color: '#06b6d4' },
+    ]
+  },
+  {
+    title: '其它热源 (煤 / 电)',
+    metrics: [
+      { key: '运行燃煤锅炉房锅炉数', label: '煤', color: '#8b5cf6' },
+      { key: '运行电锅炉数', label: '电', color: '#10b981' },
+    ]
+  }
+]
+
 const deviceStatusColumns = computed(() => {
-  const { uniqueMetrics } = deviceStatusMeta.value
-  return ['单位', ...uniqueMetrics]
+  return ['单位', ...deviceGroups.map(g => g.title)]
 })
 
 const deviceStatusTableData = computed(() => {
-  const { orgs, uniqueMetrics, currentData, peerData, maxValues } = deviceStatusMeta.value
-
-  // Metric-specific colors
-  const metricColors = [
-    '#f97316', // Orange (Boilers)
-    '#3b82f6', // Blue (Turbines)
-    '#06b6d4', // Cyan (Water Boilers)
-    '#8b5cf6', // Purple (Coal Boilers)
-    '#10b981', // Green (Electric Boilers)
-  ]
+  const { orgs, currentData, peerData } = deviceStatusMeta.value
 
   return orgs.map((org) => {
     const row = [org]
-    uniqueMetrics.forEach((metric, metricIndex) => {
-      const max = maxValues[metricIndex] || 1 // Avoid division by zero
-      const color = metricColors[metricIndex % metricColors.length]
+    
+    deviceGroups.forEach(group => {
+      const items = group.metrics.map(m => {
+        const currentVal = normalizeMetricValue(currentData[org]?.[m.key])
+        const peerVal = normalizeMetricValue(peerData[org]?.[m.key])
+        return {
+          label: m.label,
+          color: m.color,
+          current: Number.isFinite(currentVal) ? currentVal : 0,
+          peer: Number.isFinite(peerVal) ? peerVal : 0,
+        }
+      })
 
-      // Current period data
-      const currentVal = normalizeMetricValue(currentData[org]?.[metric])
-      const currentNumericVal = Number.isFinite(currentVal) ? currentVal : 0
-
-      // Peer period data
-      const peerVal = normalizeMetricValue(peerData[org]?.[metric])
-      const peerNumericVal = Number.isFinite(peerVal) ? peerVal : 0
-
-      // Combine into single cell object
       row.push({
-        type: 'device-bar',
-        current: currentNumericVal,
-        peer: peerNumericVal,
-        max: max,
-        color: color,
+        type: 'device-combo',
+        items: items
       })
     })
     return row
@@ -5755,6 +5733,61 @@ onMounted(() => {
   height: 100%;
   border-radius: 999px;
   transition: width 0.5s ease-out;
+}
+
+/* Device Combo Visualization */
+.device-combo-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+}
+
+.combo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.combo-label {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.combo-value {
+  display: flex;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.combo-val-current {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.combo-sep {
+  margin: 0 2px;
+  color: #94a3b8;
+  font-size: 11px;
+  transform: scale(0.9);
+}
+
+.combo-val-peer {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.combo-zero {
+  color: #cbd5e1;
 }
 
 </style>
