@@ -3384,6 +3384,14 @@ def _build_unit_analysis_metric_payload(
         "source": source_stats,
         "unit_dict": schema_payload.get("unit_dict") or {},
     }
+
+    # 注入 AI 报告权限标志
+    flags = _safe_read_ai_settings()
+    payload["ai_report_flags"] = {
+        "allow_non_admin": bool(flags.get("allow_non_admin_report", False)),
+        "validation_enabled": bool(flags.get("enable_validation", True)),
+    }
+
     return payload, None
 
 

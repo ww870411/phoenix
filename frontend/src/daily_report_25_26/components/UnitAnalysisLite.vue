@@ -394,6 +394,7 @@ import {
 } from 'vue'
 import * as XLSX from 'xlsx'
 import { getDashboardBizDate, getUnitAnalysisMetrics, runDataAnalysis, getDataAnalysisAiReport } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 const props = defineProps({
   projectKey: { type: String, required: true },
@@ -405,6 +406,7 @@ const props = defineProps({
   aiFeatureAccessible: { type: Boolean, default: false },
 })
 
+const auth = useAuthStore()
 const analysisFolded = ref(true)
 const analysisSchema = ref(null)
 const analysisSchemaLoading = ref(false)
@@ -447,7 +449,17 @@ const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
   acc[step.key] = step
   return acc
 }, {})
-const aiFeatureAccessible = computed(() => Boolean(props.aiFeatureAccessible))
+const aiFeatureAccessible = computed(() => {
+  // 1. 优先使用 props 传入的权限
+  if (props.aiFeatureAccessible) return true
+  // 2. 检查当前用户是否为 Global_admin
+  const isGlobalAdmin = (auth.user?.group || '').trim() === 'Global_admin'
+  if (isGlobalAdmin) return true
+  // 3. 检查 schema 配置是否允许非管理员访问
+  const schemaFlags = analysisSchema.value?.ai_report_flags || {}
+  if (schemaFlags.allow_non_admin) return true
+  return false
+})
 
 const analysisMetricGroups = computed(() => analysisSchema.value?.groups || [])
 const analysisMetricOptions = computed(() => {
