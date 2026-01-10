@@ -1100,3 +1100,7 @@ docker compose up -d --build
 ## 会话小结（2026-01-03 智能体设定保存修复）
 
 - 修复了 `services/api.js` 中 `updateAiSettings` 方法漏传 `allow_non_admin_report` 与 `enable_validation` 字段的问题，确保前端开关状态能正确写入后端配置。
+
+## 会话小结（2026-01-10 数据分析环比缩放修正）
+
+- 后端修正了 `/data_analysis/query` 响应中 `ringCompare.prevTotals` 的百分比缩放问题。前端 `DataAnalysisView` 在渲染环比表格时，不再会出现“本期 85% vs 上期 0.85%”的量级冲突，所有百分比指标的“上期累计”列均已对齐至 0-100 量级。

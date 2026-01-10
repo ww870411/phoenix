@@ -3454,6 +3454,7 @@ def get_data_analysis_schema(
         alias="config",
         description="优先加载的配置文件路径（相对 DATA_DIRECTORY）",
     ),
+    session: AuthSession = Depends(get_current_session),
 ):
     content, error = _build_data_analysis_schema_payload(config)
     if error:
@@ -3463,6 +3464,27 @@ def get_data_analysis_schema(
             status_code=500,
             content={"ok": False, "message": "无法生成数据分析配置"},
         )
+
+    allowed_units = session.allowed_units
+    if "*" not in allowed_units:
+        if "unit_dict" in content and isinstance(content["unit_dict"], dict):
+            content["unit_dict"] = {
+                k: v for k, v in content["unit_dict"].items()
+                if k in allowed_units
+            }
+
+        if "unit_options" in content and isinstance(content["unit_options"], list):
+            content["unit_options"] = [
+                opt for opt in content["unit_options"]
+                if isinstance(opt, dict) and opt.get("value") in allowed_units
+            ]
+
+        if "display_unit_options" in content and isinstance(content["display_unit_options"], list):
+            content["display_unit_options"] = [
+                opt for opt in content["display_unit_options"]
+                if isinstance(opt, dict) and opt.get("value") in allowed_units
+            ]
+
     flags = _safe_read_ai_settings()
     content["ai_report_flags"] = {
         "allow_non_admin": bool(flags.get("allow_non_admin_report", False)),
@@ -4059,6 +4081,7 @@ def _execute_data_analysis_query_legacy(
             prev_val = _decimal_to_float(prev_rows_map[key].get("value"))
 
         if prev_val is not None:
+            prev_val = _scale_metric_value(key, prev_val)
             if timeline_current_val is not None:
                 current_val_for_ring = timeline_current_val
             elif value_type == "temperature":
@@ -4067,6 +4090,11 @@ def _execute_data_analysis_query_legacy(
                 current_val_for_ring = _decimal_to_float(source.get("value"))
             else:
                 current_val_for_ring = _decimal_to_float(source.get("value_biz_date"))
+            
+            # Ensure current_val_for_ring is also scaled if it wasn't already (though it should be for non-temperature/non-constant)
+            if value_type == "analysis":
+                current_val_for_ring = _scale_metric_value(key, current_val_for_ring)
+                
             if current_val_for_ring is not None and abs(prev_val) > 1e-9:
                 ring_ratio = (current_val_for_ring - prev_val) / abs(prev_val) * 100
 
@@ -4166,7 +4194,7 @@ def _execute_data_analysis_query_legacy(
         for key, prev_row in prev_rows_map.items():
             value = _decimal_to_float(prev_row.get("value_biz_date"))
             if value is not None:
-                prev_totals_map[key] = value
+                prev_totals_map[key] = _scale_metric_value(key, value)
     if constant_metric_keys:
         for key in constant_metric_keys:
             row = constant_rows.get(key)
@@ -4174,12 +4202,12 @@ def _execute_data_analysis_query_legacy(
                 continue
             value = _decimal_to_float(row.get("value"))
             if value is not None and key not in prev_totals_map:
-                prev_totals_map[key] = value
+                prev_totals_map[key] = _scale_metric_value(key, value)
     if temperature_metric_keys and prev_temp_rows:
         for key, prev_entry in prev_temp_rows.items():
             value = _decimal_to_float(prev_entry.get("value"))
             if value is not None:
-                prev_totals_map[key] = value
+                prev_totals_map[key] = _scale_metric_value(key, value)
 
     warnings: List[str] = []
     if ai_limit_warning:
