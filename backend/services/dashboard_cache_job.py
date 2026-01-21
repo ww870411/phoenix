@@ -87,6 +87,9 @@ class CachePublishJobManager:
             return self._state.snapshot()
 
     def _run(self, project_key: str, schedule: List[str]) -> None:
+        def check_abort() -> bool:
+            return self._abort_requested
+
         for index, show_date in enumerate(schedule, start=1):
             with self._lock:
                 if self._abort_requested:
@@ -99,10 +102,18 @@ class CachePublishJobManager:
                 self._state.updated_at = _now()
 
             try:
-                result = evaluate_dashboard(project_key, show_date=show_date)
+                # 传入 check_abort 回调，允许深层中断
+                result = evaluate_dashboard(project_key, show_date=show_date, check_abort=check_abort)
                 payload = {"ok": True, **result.to_dict()}
                 cache_key = resolve_cache_key(show_date or "")
                 update_cache_entry(project_key, cache_key, payload)
+            except InterruptedError:
+                # 捕获主动中断信号，优雅停止
+                with self._lock:
+                    self._state.status = "aborted"
+                    self._state.finished_at = _now()
+                    self._state.updated_at = _now()
+                return
             except Exception as exc:  # pragma: no cover
                 with self._lock:
                     self._state.status = "failed"
