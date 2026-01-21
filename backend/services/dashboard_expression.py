@@ -883,7 +883,7 @@ def evaluate_dashboard(
         _tick("正在生成：趋势图表...")
         daily_trend_section = get_section_by_index("10", "10.每日对比趋势")
         if isinstance(daily_trend_section, dict):
-            _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_item)
+            _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_item, _get_metrics, _tick)
 
         # 11. 各单位运行设备数量明细表
         _tick("正在获取：设备运行状态...")
@@ -1101,13 +1101,20 @@ def _resolve_metric_axis(metric_key: str, preferred: Optional[str]) -> str:
 def _build_group_metric_cache(
     session,
     dates: Sequence[date],
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
+    tick_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     cache: Dict[str, Dict[str, Any]] = {}
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
+    
     for dt in dates:
         iso_key = dt.isoformat()
+        if tick_callback:
+            tick_callback(f"正在加载趋势数据：{iso_key}...")
+            
         if iso_key in cache:
             continue
-        cache[iso_key] = _fetch_metrics_from_view(session, "groups", "Group", iso_key)
+        cache[iso_key] = _fetch(session, "groups", "Group", iso_key)
     return cache
 
 
@@ -1141,6 +1148,8 @@ def _fill_daily_trend_section(
     section: Dict[str, Any],
     push_date: str,
     item_cn_to_code: Dict[str, str],
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
+    tick_callback: Optional[Callable[[str], None]] = None,
 ) -> None:
     """填充“10.每日对比趋势”板块的时间序列数据。"""
     if not isinstance(section, dict):
@@ -1155,7 +1164,12 @@ def _fill_daily_trend_section(
         push_dt = date.fromisoformat(push_date)
     except ValueError:
         push_dt = date.today()
-    start_dt = HEATING_SEASON_START if HEATING_SEASON_START <= push_dt else push_dt
+    
+    # 优化：默认仅展示/缓存最近30天的数据（含当日），减轻生成压力
+    # 起始日期 = max(供暖期开始, 30天前)
+    window_start = push_dt - timedelta(days=29)
+    start_dt = window_start if window_start > HEATING_SEASON_START else HEATING_SEASON_START
+    
     if start_dt > push_dt:
         start_dt = push_dt
 
@@ -1187,10 +1201,24 @@ def _fill_daily_trend_section(
 
     needs_group_current = any(not _is_temperature_metric(entry["key"]) for entry in current_config)
     needs_group_peer = any(not _is_temperature_metric(entry["key"]) for entry in peer_config)
-    current_cache = (
-        _build_group_metric_cache(session, date_range) if needs_group_current else {}
-    )
-    peer_cache = _build_group_metric_cache(session, peer_dates) if needs_group_peer else {}
+    
+    current_cache = {}
+    if needs_group_current:
+        current_cache = _build_group_metric_cache(
+            session, 
+            date_range, 
+            fetcher=fetcher, 
+            tick_callback=tick_callback
+        )
+        
+    peer_cache = {}
+    if needs_group_peer:
+        peer_cache = _build_group_metric_cache(
+            session, 
+            peer_dates, 
+            fetcher=fetcher, 
+            tick_callback=tick_callback
+        )
 
     def build_series(
         entries: List[Dict[str, Any]],

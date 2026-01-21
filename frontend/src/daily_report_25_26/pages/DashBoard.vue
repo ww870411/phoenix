@@ -1,5 +1,28 @@
 <template>
   <div class="dashboard-page" :style="pageStyles">
+    <div v-if="cacheLogVisible" class="log-modal">
+      <div class="log-modal__mask" @click="cacheLogVisible = false"></div>
+      <div class="log-modal__panel">
+        <div class="log-modal__header">
+          <h3>缓存发布日志</h3>
+          <button class="log-modal__close" @click="cacheLogVisible = false">×</button>
+        </div>
+        <div class="log-modal__content" ref="logContentRef">
+          <div v-if="cacheLogs.length === 0" class="log-modal__empty">暂无日志</div>
+          <div v-else class="log-list">
+            <div v-for="(log, index) in cacheLogs" :key="index" class="log-item">
+              <span class="log-item__time">{{ log.time }}</span>
+              <span class="log-item__text">{{ log.text }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="log-modal__footer">
+          <button class="cache-btn" @click="cacheLogs.length = 0">清空</button>
+          <button class="cache-btn cache-btn--primary" @click="cacheLogVisible = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="temperatureImportDialogVisible" class="temp-import-modal">
       <div class="temp-import-modal__mask"></div>
       <div class="temp-import-modal__panel">
@@ -91,12 +114,19 @@
               禁用缓存
             </button>
             <button
-              class="cache-btn cache-btn--info"
+              class="cache-btn"
               type="button"
               @click="handleImportTemperatureData"
               :disabled="temperatureImportBusy"
             >
               {{ temperatureImportBusy ? '获取中…' : '导入气温' }}
+            </button>
+            <button
+              class="cache-btn"
+              type="button"
+              @click="cacheLogVisible = true"
+            >
+              📜 日志
             </button>
           </div>
           <div class="dashboard-cache-progress" v-if="cacheJob.status !== 'idle'">
@@ -3099,13 +3129,40 @@ const cacheJob = reactive({
   error: '',
 })
 let cacheJobPoller = null
+const cacheLogVisible = ref(false)
+const cacheLogs = reactive([])
+const logContentRef = ref(null)
+let lastLoggedLabel = ''
 
 const updateCacheJob = (job = {}) => {
   cacheJob.status = job.status || 'idle'
   cacheJob.total = job.total ?? 0
   cacheJob.processed = job.processed ?? 0
-  cacheJob.currentLabel = job.current_label || ''
+  
+  const newLabel = job.current_label || ''
+  cacheJob.currentLabel = newLabel
   cacheJob.error = job.error || ''
+
+  if (newLabel && newLabel !== lastLoggedLabel) {
+    lastLoggedLabel = newLabel
+    const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    cacheLogs.push({
+      time: timeStr,
+      text: newLabel,
+    })
+    // Limit log size
+    if (cacheLogs.length > 1000) {
+      cacheLogs.shift()
+    }
+    // Auto scroll
+    if (cacheLogVisible.value && logContentRef.value) {
+      nextTick(() => {
+        if (logContentRef.value) {
+          logContentRef.value.scrollTop = logContentRef.value.scrollHeight
+        }
+      })
+    }
+  }
 }
 
 const stopCacheJobPolling = () => {
@@ -4701,6 +4758,100 @@ onMounted(() => {
   background: #1677ff;
   color: #fff;
   border-color: #1677ff;
+}
+
+.log-modal {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.log-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+.log-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(600px, 90vw);
+  height: 70vh;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.log-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.log-modal__header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1f2937;
+}
+.log-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  color: #9ca3af;
+}
+.log-modal__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f8fafc;
+}
+.log-modal__footer {
+  padding: 12px 20px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.log-modal__empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 40px 0;
+}
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.log-item {
+  display: flex;
+  gap: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.log-item__time {
+  color: #64748b;
+  flex-shrink: 0;
+  width: 60px;
+}
+.log-item__text {
+  color: #334155;
+  word-break: break-all;
+}
+.cache-btn--primary {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+.cache-btn--primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .dashboard-cache-status {
