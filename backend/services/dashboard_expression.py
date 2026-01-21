@@ -302,6 +302,7 @@ def _fill_metric_panel(
     company_code_to_cn: Dict[str, str],
     item_cn_to_code: Dict[str, str],
     frame_key: str,
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """通用填充逻辑：处理按单位/指标展开的面板（边际利润、单耗等）。"""
     source_config = section.get("数据来源")
@@ -309,10 +310,12 @@ def _fill_metric_panel(
     if not isinstance(source_config, dict) or not isinstance(data_bucket, dict):
         return
 
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
+
     resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
     for table_name, company_codes in resolved_sources.items():
         for company_code in company_codes:
-            metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+            metrics = _fetch(session, table_name, company_code, push_date)
             company_cn = company_code_to_cn.get(company_code, company_code)
             company_bucket = data_bucket.get(company_cn)
             if not isinstance(company_bucket, dict):
@@ -331,6 +334,7 @@ def _fill_simple_metric(
     item_cn_to_code: Dict[str, str],
     frame_key: str,
     push_date: str,
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充只有单个根指标的面板（标煤耗量、投诉量等）。"""
     root_item_cn = section.get("根指标")
@@ -343,6 +347,8 @@ def _fill_simple_metric(
     if not isinstance(source_config, dict) or not isinstance(data_bucket, dict):
         return
 
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
+
     # “研究院”不参与标煤耗量统计，确保配置与响应保持一致
     if root_item_cn == "标煤耗量" and "研究院" in data_bucket:
         data_bucket.pop("研究院", None)
@@ -350,7 +356,7 @@ def _fill_simple_metric(
     resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
     for table_name, company_codes in resolved_sources.items():
         for company_code in company_codes:
-            metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+            metrics = _fetch(session, table_name, company_code, push_date)
             company_cn = company_code_to_cn.get(company_code, company_code)
             if root_item_cn == "标煤耗量" and company_cn == "研究院":
                 continue
@@ -377,6 +383,7 @@ def _fill_complaint_section(
     company_code_to_cn: Dict[str, str],
     item_cn_to_code: Dict[str, str],
     push_date: str,
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充投诉量板块，支持多个指标并区分本期/同期。"""
 
@@ -386,6 +393,8 @@ def _fill_complaint_section(
     source_config = section.get("数据来源")
     if not isinstance(source_config, dict):
         return
+
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
 
     resolved_sources = _resolve_company_codes(source_config, company_cn_to_code)
     metric_keys = [
@@ -407,7 +416,7 @@ def _fill_complaint_section(
 
             for table_name, company_codes in resolved_sources.items():
                 for company_code in company_codes:
-                    metrics = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+                    metrics = _fetch(session, table_name, company_code, push_date)
                     company_cn = company_code_to_cn.get(company_code, company_code)
                     if company_cn not in company_bucket:
                         continue
@@ -421,6 +430,7 @@ def _fill_device_status_section(
     push_date: str,
     company_cn_to_code: Dict[str, str],
     item_cn_to_code: Dict[str, str],
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充“各单位运行设备数量明细表”板块。"""
     if not isinstance(section, dict):
@@ -430,6 +440,8 @@ def _fill_device_status_section(
     if not isinstance(companies, list):
         return
     
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
+
     # 从配置中获取本期和同期的指标列表
     current_metrics_list = section.get("本期")
     peer_metrics_list = section.get("同期")
@@ -454,7 +466,7 @@ def _fill_device_status_section(
             continue
         
         company_code = company_cn_to_code.get(company_cn_str, company_cn_str)
-        metrics_data = _fetch_metrics_from_view(session, table_name, company_code, push_date)
+        metrics_data = _fetch(session, table_name, company_code, push_date)
         
         # 填充本期数据
         if isinstance(current_metrics_list, list):
@@ -482,7 +494,10 @@ def _fill_device_status_section(
 
 
 def evaluate_dashboard(
-    project_key: str, show_date: str = "", check_abort: Optional[Callable[[], bool]] = None
+    project_key: str,
+    show_date: str = "",
+    check_abort: Optional[Callable[[], bool]] = None,
+    on_progress: Optional[Callable[[str], None]] = None,
 ) -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
@@ -518,15 +533,33 @@ def evaluate_dashboard(
         return None
     
     # 辅助：执行检查并释放 GIL
-    def _tick():
+    def _tick(msg: str = ""):
         if check_abort and check_abort():
             raise InterruptedError("Dashboard evaluation aborted by user")
+        if on_progress and msg:
+            on_progress(msg)
         import time
         time.sleep(0.002)  # 释放 GIL，防止阻塞主线程
 
+    # 请求级缓存：避免同一请求中对 (table, company, date) 的重复查询
+    metrics_cache: Dict[str, Dict[str, Any]] = {}
+
+    def _get_metrics(session, table: str, company: str, date_str: str) -> Dict[str, Any]:
+        key = f"{table}:{company}:{date_str}"
+        if key in metrics_cache:
+            return metrics_cache[key]
+        
+        # 细粒度播报：仅在真正查库时触发
+        source_cn = "分组数据" if "group" in table.lower() else "基础数据"
+        _tick(f"正在加载：{company} {source_cn}...")
+        
+        data = _fetch_metrics_from_view(session, table, company, date_str)
+        metrics_cache[key] = data
+        return data
+
     with SessionLocal() as session:
         # 1. 逐小时气温
-        _tick()
+        _tick("正在获取：逐小时气温...")
         temp_section = get_section_by_index("1", "1.逐小时气温")
         if isinstance(temp_section, dict):
             forecast_days = max(int(temp_section.get("预测天数", 0)), 0)
@@ -557,7 +590,7 @@ def evaluate_dashboard(
                 _fill_temperature_block(session, peer_bucket, peer_dates)
 
         # 2. 边际利润
-        _tick()
+        _tick("正在计算：边际利润...")
         margin_section = get_section_by_index("2", "2.边际利润")
         if isinstance(margin_section, dict):
             _fill_metric_panel(
@@ -570,6 +603,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "value_biz_date",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -581,14 +615,15 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "value_peer_date",
+                _get_metrics,
             )
 
         # 3. 集团汇总收入明细
-        _tick()
+        _tick("正在计算：集团收入明细...")
         income_section = get_section_by_index("3", "3.集团汇总收入明细", "3.集团全口径收入明细")
         if isinstance(income_section, dict):
             income_items = list(income_section.get("本期", {}).keys())
-            metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+            metrics = _get_metrics(session, "groups", "Group", push_date)
             for label in income_items:
                 item_code = item_cn_to_item.get(label, label)
                 bucket = metrics.get(item_code, {})
@@ -596,7 +631,7 @@ def evaluate_dashboard(
                 income_section["同期"][label] = _decimal_to_float(bucket.get("value_peer_date"))
 
         # 4. 供暖单耗
-        _tick()
+        _tick("正在计算：供暖单耗...")
         heating_section = get_section_by_index("4", "4.供暖单耗")
         if isinstance(heating_section, dict):
             _fill_metric_panel(
@@ -609,6 +644,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "value_biz_date",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -620,6 +656,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "value_peer_date",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -631,6 +668,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "sum_month_biz",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -642,6 +680,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "sum_month_peer",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -653,6 +692,7 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "sum_ytd_biz",
+                _get_metrics,
             )
             _fill_metric_panel(
                 session,
@@ -664,10 +704,11 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 "sum_ytd_peer",
+                _get_metrics,
             )
 
         # 5. 标煤耗量
-        _tick()
+        _tick("正在计算：标煤耗量...")
         coal_section = get_section_by_index("5", "5.标煤耗量")
         if isinstance(coal_section, dict):
             _fill_simple_metric(
@@ -679,6 +720,7 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "value_biz_date",
                 push_date,
+                _get_metrics,
             )
             _fill_simple_metric(
                 session,
@@ -689,6 +731,7 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "value_peer_date",
                 push_date,
+                _get_metrics,
             )
             _fill_simple_metric(
                 session,
@@ -699,6 +742,7 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "sum_month_biz",
                 push_date,
+                _get_metrics,
             )
             _fill_simple_metric(
                 session,
@@ -709,6 +753,7 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "sum_month_peer",
                 push_date,
+                _get_metrics,
             )
             _fill_simple_metric(
                 session,
@@ -719,6 +764,7 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "sum_ytd_biz",
                 push_date,
+                _get_metrics,
             )
             _fill_simple_metric(
                 session,
@@ -729,10 +775,11 @@ def evaluate_dashboard(
                 item_cn_to_item,
                 "sum_ytd_peer",
                 push_date,
+                _get_metrics,
             )
 
         # 6. 省市平台投诉量
-        _tick()
+        _tick("正在获取：投诉量数据...")
         complaint_section = get_section_by_index("6", "6.当日省市平台服务投诉量")
         if isinstance(complaint_section, dict):
             _fill_complaint_section(
@@ -742,10 +789,11 @@ def evaluate_dashboard(
                 company_code_to_cn,
                 item_cn_to_item,
                 push_date,
+                _get_metrics,
             )
 
         # 7. 煤炭库存明细
-        _tick()
+        _tick("正在获取：煤炭库存...")
         coal_detail_section = get_section_by_index("7", "7.煤炭库存明细")
         if isinstance(coal_detail_section, dict):
             try:
@@ -755,7 +803,7 @@ def evaluate_dashboard(
             _fill_coal_inventory(session, coal_detail_section, inventory_date)
 
         # 8. 供热分中心单耗明细
-        _tick()
+        _tick("正在计算：分中心单耗...")
         branch_consumption_section = get_section_by_index("8", "8.供热分中心单耗明细")
         if isinstance(branch_consumption_section, dict):
             _fill_heating_branch_consumption(
@@ -766,6 +814,7 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
             _fill_heating_branch_consumption(
                 session,
@@ -775,6 +824,7 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
             _fill_heating_branch_consumption(
                 session,
@@ -784,6 +834,7 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
             _fill_heating_branch_consumption(
                 session,
@@ -793,6 +844,7 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
             _fill_heating_branch_consumption(
                 session,
@@ -802,6 +854,7 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
             _fill_heating_branch_consumption(
                 session,
@@ -811,31 +864,32 @@ def evaluate_dashboard(
                 push_date,
                 company_cn_to_code,
                 item_cn_to_item,
+                _get_metrics,
             )
 
         # 0.5 折叠卡片
-        _tick()
+        _tick("正在生成：折叠详情表...")
         summary_fold_section = get_section_by_index("0.5", "0.5卡片详细信数据表（折叠）")
         if isinstance(summary_fold_section, dict):
-            _fill_summary_fold_section(session, summary_fold_section, push_date, item_cn_to_item)
+            _fill_summary_fold_section(session, summary_fold_section, push_date, item_cn_to_item, _get_metrics)
 
         # 9. 累计卡片
-        _tick()
+        _tick("正在生成：累计卡片...")
         cumulative_section = get_section_by_index("9", "9.累计卡片")
         if isinstance(cumulative_section, dict):
-            _fill_cumulative_cards(session, cumulative_section, push_date)
+            _fill_cumulative_cards(session, cumulative_section, push_date, _get_metrics)
 
         # 10. 每日对比趋势
-        _tick()
+        _tick("正在生成：趋势图表...")
         daily_trend_section = get_section_by_index("10", "10.每日对比趋势")
         if isinstance(daily_trend_section, dict):
             _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_item)
 
         # 11. 各单位运行设备数量明细表
-        _tick()
+        _tick("正在获取：设备运行状态...")
         device_status_section = get_section_by_index("11", "11.各单位运行设备数量明细表")
         if isinstance(device_status_section, dict):
-            _fill_device_status_section(session, device_status_section, push_date, company_cn_to_code, item_cn_to_item)
+            _fill_device_status_section(session, device_status_section, push_date, company_cn_to_code, item_cn_to_item, _get_metrics)
 
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
@@ -919,6 +973,7 @@ def _fill_heating_branch_consumption(
     push_date: str,
     company_cn_to_code: Dict[str, str],
     item_cn_to_code: Dict[str, str],
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充供热分中心单耗明细，支持多阶段框架。"""
     if not isinstance(section, dict):
@@ -932,13 +987,15 @@ def _fill_heating_branch_consumption(
     if not isinstance(data_bucket, dict):
         return
 
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
+
     for center_name, metrics_map in data_bucket.items():
         if not isinstance(metrics_map, dict):
             continue
         company_code = company_cn_to_code.get(str(center_name).strip(), str(center_name).strip())
         if not company_code:
             continue
-        metrics = _fetch_metrics_from_view(session, source_table, company_code, push_date)
+        metrics = _fetch(session, source_table, company_code, push_date)
         for label, expr in list(metrics_map.items()):
             expression = str(expr).strip() if isinstance(expr, str) else ""
             target = expression or label
@@ -1349,10 +1406,13 @@ def _fill_summary_fold_section(
     section: Dict[str, Any],
     push_date: str,
     item_cn_to_code: Dict[str, str],
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充“0.5卡片详细信息数据表（折叠）”内容。"""
     if not isinstance(section, dict):
         return
+
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
 
     try:
         push_dt = date.fromisoformat(push_date)
@@ -1360,7 +1420,7 @@ def _fill_summary_fold_section(
         push_dt = date.today()
     peer_dt = _add_years(push_dt, -1)
 
-    metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+    metrics = _fetch(session, "groups", "Group", push_date)
 
     for phase_label, target_date in (("本期", push_dt), ("同期", peer_dt)):
         phase_bucket = section.get(phase_label)
@@ -1393,10 +1453,13 @@ def _fill_cumulative_cards(
     session,
     section: Dict[str, Any],
     push_date: str,
+    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
 ) -> None:
     """填充“累计卡片”板块（平均气温 + 供暖期累计指标）。"""
     if not isinstance(section, dict):
         return
+
+    _fetch = fetcher if fetcher else _fetch_metrics_from_view
 
     try:
         push_dt = date.fromisoformat(push_date)
@@ -1429,7 +1492,7 @@ def _fill_cumulative_cards(
         ]
 
     # 其余累计指标根据配置读取 groups 视图，区分字段模式
-    metrics = _fetch_metrics_from_view(session, "groups", "Group", push_date)
+    metrics = _fetch(session, "groups", "Group", push_date)
     mapping: Dict[str, Tuple[str, str]] = {
         "集团汇总供暖期标煤耗量": ("sum_consumption_std_coal_zhangtun", "sum_ytd"),
         "集团汇总供暖期可比煤价边际利润": ("eco_comparable_marginal_profit", "sum_ytd"),

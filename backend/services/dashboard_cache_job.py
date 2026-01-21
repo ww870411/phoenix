@@ -90,6 +90,14 @@ class CachePublishJobManager:
         def check_abort() -> bool:
             return self._abort_requested
 
+        def update_progress(step: str) -> None:
+            # 回调更新当前正在处理的步骤
+            with self._lock:
+                # 使用外层循环的 show_date 确保前缀稳定
+                base = show_date or "默认"
+                self._state.current_label = f"{base} - {step}"
+                self._state.updated_at = _now()
+
         for index, show_date in enumerate(schedule, start=1):
             with self._lock:
                 if self._abort_requested:
@@ -102,8 +110,13 @@ class CachePublishJobManager:
                 self._state.updated_at = _now()
 
             try:
-                # 传入 check_abort 回调，允许深层中断
-                result = evaluate_dashboard(project_key, show_date=show_date, check_abort=check_abort)
+                # 传入 check_abort 和 on_progress 回调
+                result = evaluate_dashboard(
+                    project_key,
+                    show_date=show_date,
+                    check_abort=check_abort,
+                    on_progress=update_progress,
+                )
                 payload = {"ok": True, **result.to_dict()}
                 cache_key = resolve_cache_key(show_date or "")
                 update_cache_entry(project_key, cache_key, payload)
