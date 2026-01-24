@@ -49,7 +49,19 @@
                 class="card elevated sheet-card"
                 @click="openSheet(sheet)"
               >
-                <div class="sheet-card-title">{{ sheet.sheet_name }}</div>
+                <div class="sheet-card-header">
+                  <div class="sheet-card-title">{{ sheet.sheet_name }}</div>
+                  <div 
+                    class="status-indicator" 
+                    :class="{ 
+                      'status-indicator--partial': getSheetStatus(sheet.sheet_key)?.count > 0 && (!getSheetStatus(sheet.sheet_key)?.expected || getSheetStatus(sheet.sheet_key).count / getSheetStatus(sheet.sheet_key).expected < 0.85),
+                      'status-indicator--complete': getSheetStatus(sheet.sheet_key)?.count > 0 && getSheetStatus(sheet.sheet_key)?.expected > 0 && getSheetStatus(sheet.sheet_key).count / getSheetStatus(sheet.sheet_key).expected >= 0.85
+                    }"
+                    :title="getSheetStatus(sheet.sheet_key)?.text ? `填报进度: ${getSheetStatus(sheet.sheet_key).text}` : '暂无数据提交'"
+                  >
+                    <span class="status-text">{{ getSheetStatus(sheet.sheet_key)?.text || '' }}</span>
+                  </div>
+                </div>
                 <div class="sheet-card-desc">填报单位：{{ sheet.unit_name || '未配置' }}</div>
               </button>
             </div>
@@ -65,7 +77,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { listSheets, getValidationMasterSwitch, setValidationMasterSwitch } from '../services/api'
+import { listSheets, getValidationMasterSwitch, setValidationMasterSwitch, getSheetsSubmissionStatus } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 
@@ -89,6 +101,7 @@ const pageDisplayName = computed(() => {
 
 const rawSheets = ref([])
 const sheets = ref([])
+const submissionStatus = ref({}) // { sheet_key: { count: 10 } }
 const groupedSheets = computed(() => {
   const groups = new Map()
   for (const s of sheets.value) {
@@ -140,16 +153,26 @@ async function loadSheets() {
   }
   loading.value = true
   errorMessage.value = ''
+  submissionStatus.value = {}
   try {
     await ensureProjectsLoaded()
-    const response = await listSheets(projectKey.value, pageConfig.value)
-    const catalog = response?.content || response // 兼容旧结构
+    const [sheetRes, statusRes] = await Promise.all([
+      listSheets(projectKey.value, pageConfig.value),
+      getSheetsSubmissionStatus(projectKey.value, pageConfig.value)
+    ])
+    
+    const catalog = sheetRes?.content || sheetRes // 兼容旧结构
     const entries = catalog && typeof catalog === 'object' ? Object.entries(catalog) : []
     rawSheets.value = entries.map(([sheetKey, meta]) => ({
       sheet_key: sheetKey,
       sheet_name: meta?.sheet_name ?? sheetKey,
       unit_name: meta?.unit_name ?? '',
     }))
+    
+    if (statusRes && statusRes.ok && statusRes.status) {
+      submissionStatus.value = statusRes.status
+    }
+
     applySheetFilter()
     if (!rawSheets.value.length) {
       errorMessage.value = '该页面暂未配置任何表格。'
@@ -161,6 +184,15 @@ async function loadSheets() {
   } finally {
     loading.value = false
   }
+}
+
+function getSheetStatus(sheetKey) {
+  const st = submissionStatus.value[sheetKey]
+  // 煤炭表特殊处理：如果找不到 sheetKey，尝试查找 __coal_inventory__
+  if (!st && (sheetKey.toLowerCase().includes('coal') || sheetKey.toLowerCase().includes('inventory'))) {
+    return submissionStatus.value['__coal_inventory__'] || null
+  }
+  return st || null
 }
 
 function openSheet(sheet) {
@@ -350,6 +382,46 @@ watch(projectKey, () => {
 
 .sheet-card:hover {
   transform: translateY(-2px);
+}
+
+.sheet-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 12px; /* Pill shape */
+  background-color: #f3f4f6; /* Gray-100 */
+  color: #9ca3af; /* Gray-400 */
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 8px;
+  border: 1px solid #e5e7eb; /* Gray-200 */
+  min-width: 20px; /* Ensure visibility if empty */
+  height: 20px;
+}
+
+.status-indicator--partial {
+  background-color: #fef9c3; /* Yellow-100 */
+  color: #854d0e; /* Yellow-800 */
+  border-color: #fef08a; /* Yellow-200 */
+}
+
+.status-indicator--complete {
+  background-color: #10b981; /* Emerald-500 */
+  color: white;
+  border-color: #059669; /* Emerald-600 */
+}
+
+.status-text {
+  line-height: 1;
 }
 
 .sheet-card-title {

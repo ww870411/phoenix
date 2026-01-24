@@ -117,6 +117,22 @@ export async function listSheets(projectKey, configFile) {
   return response.json()
 }
 
+export async function getSheetsSubmissionStatus(projectKey, configFile) {
+  const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
+  const response = await fetch(
+    `${projectPath(projectKey)}/data_entry/sheets/submission-status${search}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    // 静默失败，返回空状态
+    console.warn('获取填报状态失败', response.status)
+    return { ok: true, status: {} }
+  }
+  return response.json()
+}
+
 export async function getTemplate(projectKey, sheetKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''

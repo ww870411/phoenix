@@ -539,7 +539,8 @@ def evaluate_dashboard(
         if on_progress and msg:
             on_progress(msg)
         import time
-        time.sleep(0.002)  # 释放 GIL，防止阻塞主线程
+        # 增加节流延时至 0.1s，降低 CPU 密集计算时的并发压力，防止低性能服务器卡死
+        time.sleep(0.1)
 
     # 请求级缓存：避免同一请求中对 (table, company, date) 的重复查询
     metrics_cache: Dict[str, Dict[str, Any]] = {}
@@ -1165,9 +1166,9 @@ def _fill_daily_trend_section(
     except ValueError:
         push_dt = date.today()
     
-    # 优化：默认仅展示/缓存最近30天的数据（含当日），减轻生成压力
-    # 起始日期 = max(供暖期开始, 30天前)
-    window_start = push_dt - timedelta(days=29)
+    # 优化：默认仅展示/缓存最近10天的数据（含当日），进一步减轻低性能服务器压力
+    # 起始日期 = max(供暖期开始, 10天前)
+    window_start = push_dt - timedelta(days=9)
     start_dt = window_start if window_start > HEATING_SEASON_START else HEATING_SEASON_START
     
     if start_dt > push_dt:

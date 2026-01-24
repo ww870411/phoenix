@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Un
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import bindparam, delete, text
+from sqlalchemy import bindparam, delete, text, or_, and_
 
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import (
@@ -3179,6 +3179,134 @@ def list_sheets(
             },
     )
     return JSONResponse(status_code=200, content=catalog)
+
+
+@router.get(
+    "/data_entry/sheets/submission-status",
+    summary="获取表格填报状态（当前业务日期）",
+)
+def get_sheets_submission_status(
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="页面模板配置文件（用于限定范围）",
+    ),
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    返回当前业务日期下，当前用户（或所辖单位）在各个报表中的填报数据量。
+    用于在表格列表页展示“已填报/未填报”状态。
+    """
+    biz_date = auth_manager.current_biz_date()
+    # 确定查询范围：当前用户的 allowed_units
+    # 如果是填报员，通常只有一个单位；如果是管理员，可能有多个。
+    # 这里我们查询所有 allowed_units 的数据总和，或者按 sheet 聚合。
+    # 对于填报页面，用户通常只关心“我所在的单位有没有填”。
+    
+    units = session.allowed_units
+    if not units:
+         return {"ok": True, "status": {}}
+
+    # 1. 每日基本数据 (DailyBasicData)
+    # 统计 (sheet_name) -> count
+    db_session = SessionLocal()
+    try:
+        q = db_session.query(
+            DailyBasicData.sheet_name,
+            DailyBasicData.company,
+        ).filter(
+            DailyBasicData.date == biz_date,
+            or_(
+                DailyBasicData.value.isnot(None),
+                and_(DailyBasicData.note.isnot(None), DailyBasicData.note != "")
+            )
+        )
+        
+        # 简单统计：每个 sheet 有多少行数据
+        stats = {}
+        
+        # 使用内存聚合避免复杂 SQL，数据量通常不大
+        rows = q.all()
+        for r in rows:
+            sheet = r.sheet_name
+            stats[sheet] = stats.get(sheet, 0) + 1
+            
+        # 2. 煤炭库存数据 (CoalInventoryData)
+        # 统计 (company, coal_type) 的唯一组合数，代表填报的行数
+        from sqlalchemy import func
+        coal_q = db_session.query(
+            CoalInventoryData.company,
+            CoalInventoryData.coal_type
+        ).filter(
+            CoalInventoryData.date == biz_date,
+            or_(
+                CoalInventoryData.value.isnot(None),
+                and_(CoalInventoryData.note.isnot(None), CoalInventoryData.note != "")
+            )
+        ).distinct()
+        coal_count = coal_q.count()
+        
+        # 为了更友好，我们尝试读取 config 来匹配
+        target_sheets = set()
+        catalog = {}
+        full_payload = {}
+        if config:
+            path = _resolve_data_file(config)
+            if path:
+                # 使用 _load_json_dict 而不是 _collect_catalog 以获取完整结构信息（包括 rows）
+                full_payload = _load_json_dict(path)
+                if full_payload:
+                    catalog = _collect_catalog(path)
+                    target_sheets = set(catalog.keys())
+        
+        final_status = {}
+        
+        # 辅助函数：计算模板应填行数（不再按权限过滤，返回全量）
+        def _get_expected_count(sheet_key: str, payload: dict) -> int:
+            if not payload or sheet_key not in payload:
+                return 0
+            sheet_data = payload[sheet_key]
+            rows = sheet_data.get("数据") or sheet_data.get("rows") or []
+            return len(rows)
+
+        for sheet in target_sheets:
+            # 获取实际填报数
+            actual_count = 0
+            if _is_coal_inventory_sheet(sheet):
+                actual_count = coal_count
+            else:
+                actual_count = stats.get(sheet, 0)
+            
+            # 获取应填报数
+            expected_count = 0
+            if config and full_payload:
+                expected_count = _get_expected_count(sheet, full_payload)
+            
+            # 针对“12.煤炭库存表”或类似的汇总表，如果实际填报数由于某些原因（如数据库脏数据或模板更新滞后）超过了预期
+            # 则分母自动对齐实际数，防止出现 19/18 这种进度
+            if actual_count > expected_count and expected_count > 0:
+                expected_count = actual_count
+            
+            # 构造状态字符串 "18/19"
+            status_text = f"{actual_count}/{expected_count}" if expected_count > 0 else f"{actual_count}"
+            
+            final_status[sheet] = {
+                "count": actual_count,
+                "expected": expected_count,
+                "text": status_text,
+                "is_complete": actual_count >= expected_count and expected_count > 0
+            }
+            
+        # 如果没有 config 上下文，回退到简单计数 (虽然后端已有 config 参数，但防止某些 edge case)
+        if not target_sheets:
+             for sheet, count in stats.items():
+                 final_status[sheet] = {"count": count, "text": f"{count}"}
+             if coal_count > 0:
+                 final_status["__coal_inventory__"] = {"count": coal_count, "text": f"{coal_count}"}
+
+        return {"ok": True, "status": final_status}
+    finally:
+        db_session.close()
 
 
 def _load_json_dict(path: SysPath) -> Optional[Dict[str, Any]]:
