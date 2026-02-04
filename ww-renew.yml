@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  certbot-renew:
+    image: certbot/certbot
+    container_name: phoenix-certbot-standalone
+    ports:
+      - "80:80"
+    volumes:
+      - /home/ww870411/25-26/certbot/letsencrypt:/etc/letsencrypt
+    # 使用 standalone 模式，不需要依赖其它 web 服务
+    command: >
+      certonly --standalone
+      --non-interactive --agree-tos
+      --email locookies12@gmail.com
+      -d platform.smartview.top
+    restart: "no"
