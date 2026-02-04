@@ -1,0 +1,64 @@
+# Phoenix 项目服务器部署文件 - 适配新服务器 NPM (Nginx Proxy Manager)
+# 
+# 使用方法:
+# 1. 确保服务器上已安装 Docker 和 Docker Compose。
+# 2. 在本文件所在目录下创建一个名为 .env 的文件，配置数据库变量。
+# 3. 在 NPM 中配置 platform2.smartview.top 转发至 http://<服务器IP>:8001
+# 4. 执行命令: docker-compose -f lo1_new_server.yml up -d
+
+version: "3.9"
+
+services:
+  backend:
+    image: ww870411/phoenix-backend:__TIMESTAMP__
+    container_name: phoenix-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-phoenix}@db:5432/${POSTGRES_DB:-phoenix}
+      DATA_DIRECTORY: /app/data
+    volumes:
+      - /home/ww870411/25-26/backend_data:/app/data
+    depends_on:
+      - db
+    networks:
+      - phoenix_net
+
+  db:
+    image: postgres:15-alpine
+    container_name: phoenix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-phoenix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phoenix}
+      POSTGRES_DB: ${POSTGRES_DB:-phoenix}
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phoenix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - phoenix_net
+
+  web:
+    image: ww870411/phoenix-web:__TIMESTAMP__
+    container_name: phoenix-web
+    restart: unless-stopped
+    ports:
+      - "8001:80"
+    # SSL 证书由宿主机的 NPM 统一管理，容器内部使用纯 HTTP 模式
+    depends_on:
+      - backend
+    networks:
+      - phoenix_net
+
+networks:
+  phoenix_net:
+    driver: bridge
+
+volumes:
+  db_data:
