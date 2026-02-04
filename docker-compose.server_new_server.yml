@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   backend:
+    platform: linux/arm64
     container_name: phoenix-backend
     build:
       context: .
@@ -37,6 +38,7 @@ services:
       - phoenix_net
 
   web:
+    platform: linux/arm64
     container_name: phoenix-web
     build:
       context: .
