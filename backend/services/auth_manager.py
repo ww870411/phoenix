@@ -1,8 +1,8 @@
 """
 认证与权限管理。
 
-- 账号来源：backend_data/账户信息.json
-- 权限矩阵：backend_data/auth/permissions.json
+- 账号来源：backend_data/shared/auth/账户信息.json（兼容旧路径回退）
+- 权限矩阵：backend_data/shared/auth/permissions.json（兼容旧路径回退）
 
 提供：
 1. 账号认证（明文密码，仅用于当前开发环境）
@@ -26,8 +26,12 @@ from fastapi import Header, HTTPException, status
 
 from sqlalchemy import text
 
-from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.services.project_data_paths import (
+    resolve_accounts_path,
+    resolve_global_date_path,
+    resolve_permissions_path,
+)
 
 
 EAST_8 = timezone(timedelta(hours=8))
@@ -117,8 +121,8 @@ class AuthManager:
     """集中式账号、权限、会话管理。"""
 
     def __init__(self) -> None:
-        self._accounts_path = (DATA_DIRECTORY / "账户信息.json").resolve()
-        self._permissions_path = (DATA_DIRECTORY / "auth" / "permissions.json").resolve()
+        self._accounts_path = resolve_accounts_path()
+        self._permissions_path = resolve_permissions_path()
         self._lock = threading.RLock()
         self._session_lock = threading.RLock()
 
@@ -130,7 +134,7 @@ class AuthManager:
         self._accounts_mtime: Optional[float] = None
         self._permissions_mtime: Optional[float] = None
 
-        self._date_config_path = (DATA_DIRECTORY / "date.json").resolve()
+        self._date_config_path = resolve_global_date_path()
         self._date_config_mtime: Optional[float] = None
         self._display_date_cache: Optional[date] = None
 

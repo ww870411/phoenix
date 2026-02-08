@@ -3,7 +3,7 @@
 数据看板渲染引擎（初版）
 
 职责：
-- 读取数据看板配置（backend_data/数据结构_数据看板.json）
+- 读取数据看板配置（backend_data/projects/<project_key>/config/数据结构_数据看板.json，兼容旧路径回退）
 - 解析 show_date / push_date，处理默认日期回退逻辑
 - 为 /dashboard API 提供统一的数据载体，后续可扩展数据库查询与指标计算
 
@@ -26,12 +26,13 @@ from backend.db.database_daily_report_25_26 import (
     TemperatureData,
     CoalInventoryData,
 )
+from backend.services.project_data_paths import resolve_project_config_path
+from backend.services.project_registry import get_default_project_key
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
 from sqlalchemy import select, text
 
 DATA_ROOT = Path(DATA_DIRECTORY)
-DASHBOARD_CONFIG_PATH = DATA_ROOT / "数据结构_数据看板.json"
-DATE_CONFIG_PATH = DATA_ROOT / "date.json"
+DEFAULT_PROJECT_KEY = get_default_project_key()
 EAST_8 = timezone(timedelta(hours=8))
 SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
 HEATING_SEASON_START = date(2025, 11, 1)
@@ -89,12 +90,21 @@ def normalize_show_date(value: Optional[str]) -> str:
     return parsed.isoformat()
 
 
-def load_default_push_date() -> str:
+def _resolve_date_config_path(project_key: str) -> Path:
+    return resolve_project_config_path(project_key, "date.json")
+
+
+def _resolve_dashboard_config_path(project_key: str) -> Path:
+    return resolve_project_config_path(project_key, "数据结构_数据看板.json")
+
+
+def load_default_push_date(project_key: str = DEFAULT_PROJECT_KEY) -> str:
     """从 date.json 中读取默认 push_date。"""
-    if not DATE_CONFIG_PATH.exists():
+    date_config_path = _resolve_date_config_path(project_key)
+    if not date_config_path.exists():
         raise HTTPException(status_code=500, detail="日期配置文件不存在")
     try:
-        payload = _read_json(DATE_CONFIG_PATH)
+        payload = _read_json(date_config_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
@@ -113,12 +123,13 @@ def load_default_push_date() -> str:
     return parsed.isoformat()
 
 
-def load_dashboard_config() -> Dict[str, Any]:
+def load_dashboard_config(project_key: str = DEFAULT_PROJECT_KEY) -> Dict[str, Any]:
     """读取数据看板配置。"""
-    if not DASHBOARD_CONFIG_PATH.exists():
+    dashboard_config_path = _resolve_dashboard_config_path(project_key)
+    if not dashboard_config_path.exists():
         raise HTTPException(status_code=404, detail="数据看板配置文件不存在")
     try:
-        payload = _read_json(DASHBOARD_CONFIG_PATH)
+        payload = _read_json(dashboard_config_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
@@ -502,8 +513,9 @@ def evaluate_dashboard(
 ) -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
-    push_date = normalized_show_date or load_default_push_date()
-    payload = load_dashboard_config()
+    push_date = normalized_show_date or load_default_push_date(project_key)
+    payload = load_dashboard_config(project_key)
+    dashboard_config_path = _resolve_dashboard_config_path(project_key)
 
     data = dict(payload)
     data["push_date"] = push_date
@@ -895,9 +907,9 @@ def evaluate_dashboard(
 
     generated_at = datetime.now(EAST_8).isoformat()
     source = (
-        str(DASHBOARD_CONFIG_PATH.relative_to(DATA_ROOT))
-        if DASHBOARD_CONFIG_PATH.exists()
-        else str(DASHBOARD_CONFIG_PATH)
+        str(dashboard_config_path.relative_to(DATA_ROOT))
+        if dashboard_config_path.exists()
+        else str(dashboard_config_path)
     )
 
     return DashboardResult(

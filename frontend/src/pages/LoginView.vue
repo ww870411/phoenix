@@ -42,10 +42,10 @@
 </template>
 
 <script setup>
-import '../styles/theme.css'
+import '../daily_report_25_26/styles/theme.css'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../store/auth'
+import { useAuthStore } from '../daily_report_25_26/store/auth'
 
 const auth = useAuthStore()
 const router = useRouter()

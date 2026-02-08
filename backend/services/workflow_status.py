@@ -1,7 +1,7 @@
 """
 审批与发布状态管理（持久化版）。
 
-状态以 (project_key, biz_date) 为维度，存储在 DATA_DIRECTORY/status.json。
+状态以 (project_key, biz_date) 为维度，存储在 shared/status.json（兼容旧路径）。
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set, Tuple
 
-from backend.config import DATA_DIRECTORY
 from backend.services.auth_manager import EAST_8, AuthSession
+from backend.services.project_data_paths import resolve_workflow_status_path
 
 
 @dataclass
@@ -58,7 +58,7 @@ class WorkflowStatusManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._storage: Dict[Tuple[str, datetime], WorkflowSnapshot] = {}
-        self._data_path: Path = (DATA_DIRECTORY / "status.json").resolve()
+        self._data_path: Path = resolve_workflow_status_path()
         self._loaded = False
         self._data_mtime: Optional[float] = None
 

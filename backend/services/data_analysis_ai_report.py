@@ -2,7 +2,7 @@
 数据分析 AI 报告生成服务。
 
 基于 Gemini SDK，负责：
-- 读取 backend_data/api_key.json 中的 gemini_api_key / gemini_model；
+- 读取 backend_data/projects/<project_key>/config/api_key.json 中的 gemini_api_key / gemini_model（兼容旧路径回退）；
 - 根据数据分析查询结果构造提示词；
 - 将任务提交至线程池并异步生成报告；
 - 以内存字典维护任务状态，供 API 查询。
@@ -28,9 +28,12 @@ import google.generativeai as genai
 
 from backend.config import DATA_DIRECTORY
 from backend.services.api_key_cipher import decrypt_api_key
+from backend.services.project_data_paths import resolve_project_config_path
+from backend.services.project_registry import get_default_project_key
 
 DATA_ROOT = Path(DATA_DIRECTORY)
-API_KEY_PATH = DATA_ROOT / "api_key.json"
+DEFAULT_PROJECT_KEY = get_default_project_key()
+API_KEY_PATH = resolve_project_config_path(DEFAULT_PROJECT_KEY, "api_key.json")
 PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。

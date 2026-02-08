@@ -4,17 +4,23 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from backend.config import DATA_DIRECTORY
+from backend.services.project_data_paths import (
+    bootstrap_project_files,
+    ensure_project_dirs,
+    get_project_file_status,
+    resolve_project_list_path,
+)
+from backend.services.project_modularization import resolve_project_modularization_files
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from backend.services.auth_manager import AuthSession, get_current_session
 from .auth import router as auth_router
-from .daily_report_25_26 import router as project_router, public_router as public_project_router
+from .project_router_registry import PROJECT_ROUTER_REGISTRY
 
 
 router = APIRouter()
-PROJECT_LIST_FILE = DATA_DIRECTORY / "项目列表.json"
+PROJECT_LIST_FILE = resolve_project_list_path()
 
 
 def _load_project_entries() -> Tuple[Dict[str, Dict[str, Any]], Optional[JSONResponse]]:
@@ -113,6 +119,12 @@ def _normalize_pages(project_entry: Dict[str, Any]) -> List[Dict[str, str]]:
     return pages
 
 
+def _ensure_system_admin(session: AuthSession) -> None:
+    group = (session.group or "").strip()
+    if group not in {"系统管理员", "Global_admin"}:
+        raise HTTPException(status_code=403, detail="仅系统管理员可执行项目目录化操作。")
+
+
 @router.get("/ping", summary="连通性测试", tags=["system"])
 def ping():
     """用于最基本的连通性测试。"""
@@ -187,9 +199,69 @@ def list_project_pages(
     }
 
 
+@router.get("/projects/{project_id}/modularization/status", summary="查看项目目录化迁移状态")
+def get_project_modularization_status(
+    project_id: str,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_system_admin(session)
+    entries, error = _load_project_entries()
+    if error:
+        return error
+    if project_id not in entries:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "message": f"项目 {project_id} 未配置"},
+        )
+    project_entry = entries.get(project_id) or {}
+    config_files, runtime_files = resolve_project_modularization_files(project_id, project_entry)
+    status = get_project_file_status(project_id, config_files, runtime_files)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "config_files": config_files,
+        "runtime_files": runtime_files,
+        "status": status,
+    }
+
+
+@router.post("/projects/{project_id}/modularization/bootstrap", summary="初始化项目目录并复制旧配置")
+def bootstrap_project_modularization(
+    project_id: str,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_system_admin(session)
+    entries, error = _load_project_entries()
+    if error:
+        return error
+    if project_id not in entries:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "message": f"项目 {project_id} 未配置"},
+        )
+    project_entry = entries.get(project_id) or {}
+    config_files, runtime_files = resolve_project_modularization_files(project_id, project_entry)
+    dirs = ensure_project_dirs(project_id)
+    bootstrap = bootstrap_project_files(project_id, config_files, runtime_files)
+    status = get_project_file_status(project_id, config_files, runtime_files)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "dirs": dirs,
+        "bootstrap": bootstrap,
+        "status": status,
+    }
+
+
 # 认证路由
 router.include_router(auth_router, prefix="/auth")
 
-# 统一项目前缀：/api/v1/projects/daily_report_25_26
-router.include_router(project_router, prefix="/projects/daily_report_25_26")
-router.include_router(public_project_router, prefix="/projects/daily_report_25_26")
+# 统一项目前缀：/api/v1/projects/<project_key>
+for project_key, routers in PROJECT_ROUTER_REGISTRY.items():
+    private_router = routers.get("router")
+    public_router = routers.get("public_router")
+    prefix = f"/projects/{project_key}"
+    if private_router is not None:
+        router.include_router(private_router, prefix=prefix)
+    if public_router is not None:
+        router.include_router(public_router, prefix=prefix)

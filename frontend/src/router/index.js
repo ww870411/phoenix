@@ -8,15 +8,19 @@ const routes = [
   },
   {
     path: '/login',
-    component: () => import('../daily_report_25_26/pages/LoginView.vue'),
+    component: () => import('../pages/LoginView.vue'),
   },
   {
     path: '/projects',
-    component: () => import('../daily_report_25_26/pages/ProjectSelectView.vue'),
+    component: () => import('../pages/ProjectSelectView.vue'),
   },
   {
     path: '/projects/:projectKey/pages',
     component: () => import('../daily_report_25_26/pages/PageSelectView.vue'),
+  },
+  {
+    path: '/projects/:projectKey/modularization',
+    component: () => import('../daily_report_25_26/pages/ProjectModularizationView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets',

@@ -3,7 +3,7 @@
 数据看板缓存管理。
 
 职责：
-- 统一管理 backend_data/dashboard_cache.json 的读写与结构约束；
+- 统一管理 backend_data/projects/<project_key>/runtime/dashboard_cache.json 的读写与结构约束（兼容旧路径回退）；
 - 为 API 层提供获取缓存、批量刷新、禁用等操作；
 - 基于 date.json 中的 set_biz_date 生成默认缓存窗口（set_biz_date 及前两日）。
 """
@@ -19,9 +19,11 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from backend.config import DATA_DIRECTORY
 from backend.services.dashboard_expression import load_default_push_date, normalize_show_date
+from backend.services.project_data_paths import resolve_project_runtime_path
+from backend.services.project_registry import get_default_project_key
 
 DATA_ROOT = Path(DATA_DIRECTORY)
-CACHE_FILE = DATA_ROOT / "dashboard_cache.json"
+DEFAULT_PROJECT_KEY = get_default_project_key()
 CACHE_LOCK = Lock()
 DEFAULT_CACHE_KEY = "__default__"
 EAST_8 = timezone(timedelta(hours=8))
@@ -53,11 +55,16 @@ def _sanitize_items(items: Any) -> Dict[str, Dict[str, Any]]:
     return sanitized
 
 
+def _resolve_cache_file(project_key: str) -> Path:
+    return resolve_project_runtime_path(project_key, "dashboard_cache.json")
+
+
 def _load_bundle(project_key: str) -> Dict[str, Any]:
-    if not CACHE_FILE.exists():
+    cache_file = _resolve_cache_file(project_key)
+    if not cache_file.exists():
         return _default_bundle(project_key)
     try:
-        raw = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        raw = json.loads(cache_file.read_text(encoding="utf-8"))
     except Exception:
         return _default_bundle(project_key)
 
@@ -75,14 +82,15 @@ def _load_bundle(project_key: str) -> Dict[str, Any]:
     return bundle
 
 
-def _write_bundle(bundle: Dict[str, Any]) -> None:
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = CACHE_FILE.with_suffix(".tmp")
+def _write_bundle(bundle: Dict[str, Any], project_key: str) -> None:
+    cache_file = _resolve_cache_file(project_key)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_file.with_suffix(".tmp")
     tmp_path.write_text(
         json.dumps(bundle, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    tmp_path.replace(CACHE_FILE)
+    tmp_path.replace(cache_file)
 
 
 def resolve_cache_key(show_date: str) -> str:
@@ -135,7 +143,7 @@ def update_cache_entry(project_key: str, cache_key: str, payload: Dict[str, Any]
         bundle["disabled"] = False
         bundle["items"][cache_key] = deepcopy(payload)
         bundle["updated_at"] = _now_iso()
-        _write_bundle(bundle)
+        _write_bundle(bundle, project_key)
     return {
         "disabled": False,
         "available_dates": sorted(
@@ -156,7 +164,7 @@ def replace_cache(project_key: str, entries: Dict[str, Dict[str, Any]], disabled
         bundle["disabled"] = bool(disabled)
         bundle["items"] = sanitized_entries if not bundle["disabled"] else {}
         bundle["updated_at"] = _now_iso()
-        _write_bundle(bundle)
+        _write_bundle(bundle, project_key)
     return get_cache_status(project_key)
 
 
@@ -164,11 +172,11 @@ def disable_cache(project_key: str) -> Dict[str, Any]:
     return replace_cache(project_key, {}, disabled=True)
 
 
-def default_publish_dates(window: int = 7) -> List[str]:
+def default_publish_dates(window: int = 7, project_key: str = DEFAULT_PROJECT_KEY) -> List[str]:
     """
     返回 set_biz_date 及其前 window-1 日（共 window 个日期），按时间升序排列。
     """
-    base_iso = load_default_push_date()
+    base_iso = load_default_push_date(project_key)
     base_date = date.fromisoformat(base_iso)
     offsets = list(range(window - 1, -1, -1))
     ordered = [(base_date - timedelta(days=offset)).isoformat() for offset in offsets]

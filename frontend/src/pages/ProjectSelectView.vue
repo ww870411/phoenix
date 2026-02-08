@@ -32,9 +32,9 @@
 </template>
 
 <script setup>
-import '../styles/theme.css'
-import AppHeader from '../components/AppHeader.vue'
-import Breadcrumbs from '../components/Breadcrumbs.vue'
+import '../daily_report_25_26/styles/theme.css'
+import AppHeader from '../daily_report_25_26/components/AppHeader.vue'
+import Breadcrumbs from '../daily_report_25_26/components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -42,7 +42,7 @@ import {
   projectsLoading,
   projectsError,
   ensureProjectsLoaded,
-} from '../composables/useProjects'
+} from '../daily_report_25_26/composables/useProjects'
 
 const router = useRouter()
 

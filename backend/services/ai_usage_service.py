@@ -5,7 +5,7 @@ AI 报告使用量统计与限制服务。
 - 记录每位用户每日生成的 AI 报告次数。
 - 限制普通用户每日最大生成次数（默认 5 次）。
 - 管理员（Group_admin 及以上）不限次数，但仍记录使用量。
-- 数据存储于 backend_data/ai_usage_stats.json，每日自动重置计数。
+- 数据存储于 shared/ai_usage_stats.json（兼容旧路径），每日自动重置计数。
 """
 
 import json
@@ -14,10 +14,10 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 
-from backend.config import DATA_DIRECTORY
+from backend.services.project_data_paths import resolve_ai_usage_stats_path
 
 # 数据文件路径
-USAGE_STATS_FILE = DATA_DIRECTORY / "ai_usage_stats.json"
+USAGE_STATS_FILE = resolve_ai_usage_stats_path()
 
 # 限制配置
 DAILY_LIMIT_DEFAULT = 5

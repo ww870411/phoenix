@@ -6,6 +6,9 @@
   - `DataEntryView.vue`：模板拉取、在线填报、提交与回填
   - `DataAnalysisView.vue`：多单位分析、同比/环比、AI 报告交互
   - `DashBoard.vue`：数据看板、趋势图、缓存与导出
+- 全局壳层页面目录：`frontend/src/pages/`
+  - `ProjectSelectView.vue`：项目列表入口
+  - `LoginView.vue`：全局登录页入口（已从项目目录迁出）
 - 核心组件目录：`frontend/src/daily_report_25_26/components/`
   - `UnitAnalysisLite.vue`：填报页内本单位轻量分析
   - 其他 RevoGrid/ECharts 相关展示组件
@@ -13,6 +16,8 @@
   - `frontend/src/daily_report_25_26/services/api.js` 对接后端 `/template`、`/submit`、`/query`、`/data_analysis/*`、`/dashboard` 等接口
 - 当前联调说明：
   - 后端已完成煤炭库存提交链路去重与模板 JSON 缓存优化，前端接口契约未变，无需改动请求参数即可继续使用。
+  - `frontend/jsconfig.json` 已补充 `compilerOptions.baseUrl = "."`，与 `vite.config.js` 中的 `@` 别名配置保持一致，避免编辑器路径映射报错。
+  - 项目模块化结构对照文档已落地：`configs/2.8项目模块化.md`（可用于核对旧/新目录和迁移关系）。
 
 ## 数据看板运维流程优化（2026-02-08）
 
@@ -22,6 +27,24 @@
 - 建议日常流程：
   - 当日导入气温后，优先使用 `1天` 发布，完成后再下载 PDF；
   - 仅在需要补历史缓存时再切到 `3天/7天`。
+
+## 项目模块化第一步协作说明（2026-02-08）
+
+- 本轮仅后端实施“配置路径项目化兼容层”，前端页面与路由结构暂未改动。
+- 现有前端仍按 `daily_report_25_26` 项目包运行；接口路径与参数保持兼容。
+- 后续若进入第二步（前端项目壳路由与动态项目包），将基于本轮后端路径能力继续推进。
+
+## 项目模块化第一步增强协作说明（2026-02-08）
+
+- 本轮继续增强后端：将项目列表与鉴权相关全局配置路径纳入 `shared` 兼容层；前端代码与调用协议保持不变。
+- 前端无新增改动点，仍可按现有流程访问项目列表、登录与页面路由。
+
+## 项目模块化过渡工具协作说明（2026-02-08）
+
+- 后端已新增“迁移状态查询/一键初始化”接口，面向系统管理员使用：
+  - `GET /projects/daily_report_25_26/project/modularization/status`
+  - `POST /projects/daily_report_25_26/project/modularization/bootstrap`
+- 前端暂未接入专用管理页面；现阶段可通过 API 调试工具调用。
 
 ## 会话小结（2026-01-03 数据分析净投诉量新口径说明）
 
@@ -1127,3 +1150,75 @@ docker compose up -d --build
 ## 会话小结（2026-01-10 数据分析环比缩放修正）
 
 - 后端修正了 `/data_analysis/query` 响应中 `ringCompare.prevTotals` 的百分比缩放问题。前端 `DataAnalysisView` 在渲染环比表格时，不再会出现“本期 85% vs 上期 0.85%”的量级冲突，所有百分比指标的“上期累计”列均已对齐至 0-100 量级。
+
+## 会话小结（2026-02-08 项目模块化管理页）
+
+- 新增页面：`frontend/src/daily_report_25_26/pages/ProjectModularizationView.vue`
+  - 功能：查看 `config/runtime` 文件迁移状态，执行“仅复制缺失文件”的初始化动作。
+  - 权限：仅系统管理员（`系统管理员` / `Global_admin`）可操作。
+- 路由新增：`/projects/:projectKey/modularization`（`src/router/index.js`）。
+- 页面入口：`PageSelectView.vue` 新增“项目模块化管理”卡片，仅系统管理员可见。
+- API 封装新增（`src/daily_report_25_26/services/api.js`）：
+  - `getProjectModularizationStatus(projectKey)`
+  - `bootstrapProjectModularization(projectKey)`
+- 对应后端接口：
+  - `GET /api/v1/projects/{project_id}/modularization/status`
+  - `POST /api/v1/projects/{project_id}/modularization/bootstrap`
+
+## 会话小结（2026-02-08 项目模块化配置驱动适配）
+
+- 前端模块化管理页无需改动交互；后端已将迁移文件清单切换为“项目配置驱动优先”。
+- 影响：同一页面可直接适配不同项目的迁移清单，不再要求后端为每个项目新增硬编码清单。
+- 建议：新增项目时在 `项目列表.json` 配置 `modularization` 字段，可让管理页展示更准确的文件状态。
+
+## 会话小结（2026-02-08 项目注册表统一默认值）
+
+- 本轮前端页面与交互无新增改动。
+- 后端已新增项目注册表并统一默认项目 key/迁移清单来源，前端模块化管理页继续复用现有接口即可正常工作。
+
+## 会话小结（2026-02-08 项目路由注册表）
+
+- 本轮前端代码无改动。
+- 后端路由接入改为“项目路由注册表 + 循环挂载”后，前端已有访问路径不变，现有页面与 API 调用保持兼容。
+
+## 会话小结（2026-02-08 模块化解析服务统一）
+
+- 本轮前端代码无改动。
+- 后端将模块化文件清单解析收敛为统一服务后，前端模块化管理页继续调用原有接口，无需调整。
+
+## 会话小结（2026-02-08 项目目录入口落地）
+
+- 本轮前端代码无改动。
+- 后端已将项目路由来源切换到 `backend/projects/daily_report_25_26/api/router.py` 入口（过渡层），前端访问路径与行为保持不变。
+
+## 会话小结（2026-02-08 模块化接口下沉到项目目录）
+
+- 本轮前端代码无改动。
+- 后端已将 `/project/modularization/*` 接口实现迁移到 `backend/projects/daily_report_25_26/api/modularization.py`，前端仍按原路径调用，无需调整。
+
+## 会话小结（2026-02-08 数据看板接口下沉到项目目录）
+
+- 本轮前端代码无改动。
+- 后端已将 `/dashboard*` 相关接口实现迁移到 `backend/projects/daily_report_25_26/api/dashboard.py`，前端现有调用路径保持兼容。
+
+## 会话小结（2026-02-08 日报核心实现文件归位）
+
+- 本轮前端代码无改动。
+- 后端已将 `daily_report_25_26` 核心实现文件整体迁入项目目录，旧路径仅保留兼容层；前端接口调用路径保持不变。
+
+## 会话小结（2026-02-08 backend_data 项目化归位）
+
+- 本轮前端代码无改动。
+- 后端数据挂载目录已迁移为 `shared + projects/daily_report_25_26` 结构，前端 API 路径保持不变。
+
+## 会话小结（2026-02-08 全局状态文件归位）
+
+- 本轮前端代码无改动。
+- 后端将审批状态与 AI 使用量统计统一归位到 `backend_data/shared/`，前端接口路径与交互不受影响。
+
+## 会话小结（2026-02-08 全局项目选择页目录归位）
+
+- `ProjectSelectView.vue` 已从项目目录迁移到全局目录：
+  - `frontend/src/pages/ProjectSelectView.vue`
+- 路由 `/projects` 已改为加载全局页面文件。
+- 页面功能不变，仅修正“全局页不应放在项目目录”这一结构问题。

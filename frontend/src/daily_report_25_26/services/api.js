@@ -106,6 +106,30 @@ export async function listPages(projectKey) {
   return response.json()
 }
 
+export async function getProjectModularizationStatus(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/modularization/status`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取目录化状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function bootstrapProjectModularization(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/modularization/bootstrap`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `执行目录化初始化失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await fetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {
