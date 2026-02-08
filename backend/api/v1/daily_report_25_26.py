@@ -1957,19 +1957,21 @@ def get_dashboard_date():
 
 @router.post(
     "/dashboard/cache/publish",
-    summary="批量发布数据看板缓存（set_biz_date 及前六日）",
+    summary="批量发布数据看板缓存（默认最近 7 日，可按 days 指定）",
     tags=["daily_report_25_26"],
 )
 def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
+    days: int = Query(default=7, ge=1, le=30, description="发布窗口天数（含 set_biz_date 当天）"),
 ):
     _ensure_cache_operator(session)
-    target_dates = list(reversed(dashboard_cache.default_publish_dates()))
+    target_dates = list(reversed(dashboard_cache.default_publish_dates(window=days)))
     schedule = target_dates
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
     return {
         "ok": True,
         "started": started,
+        "days": days,
         "job": snapshot,
     }
 

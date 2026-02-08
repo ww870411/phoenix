@@ -284,8 +284,10 @@ export async function getDashboardBizDate(projectKey) {
   return response.json()
 }
 
-export async function publishDashboardCache(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish`, {
+export async function publishDashboardCache(projectKey, params = {}) {
+  const rawDays = Number(params?.days)
+  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish?days=${days}`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),

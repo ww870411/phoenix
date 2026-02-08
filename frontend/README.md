@@ -14,6 +14,15 @@
 - 当前联调说明：
   - 后端已完成煤炭库存提交链路去重与模板 JSON 缓存优化，前端接口契约未变，无需改动请求参数即可继续使用。
 
+## 数据看板运维流程优化（2026-02-08）
+
+- `pages/DashBoard.vue` 的“发布缓存”区域新增“发布天数”选择（`1天 / 3天 / 7天`，默认 `1天`）。
+- 发布动作会调用 `publishDashboardCache(projectKey, { days })`，对应后端接口：
+  - `POST /dashboard/cache/publish?days=...`
+- 建议日常流程：
+  - 当日导入气温后，优先使用 `1天` 发布，完成后再下载 PDF；
+  - 仅在需要补历史缓存时再切到 `3天/7天`。
+
 ## 会话小结（2026-01-03 数据分析净投诉量新口径说明）
 
 - 后端 `analysis_company_sum/analysis_groups_sum` 的 `amount_daily_net_complaints_per_10k_m2` 现以终止日 `sum_season_total_net_complaints` 除 `amount_heating_fee_area` 计算，取代旧的“区间内当日净投诉量求和”算法。前端可直接沿用现有接口展示，数值含义自动更新为“终止日累计投诉折算面积”，无需额外处理。

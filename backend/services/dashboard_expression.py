@@ -498,6 +498,7 @@ def evaluate_dashboard(
     show_date: str = "",
     check_abort: Optional[Callable[[], bool]] = None,
     on_progress: Optional[Callable[[str], None]] = None,
+    shared_metrics_cache: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
     normalized_show_date = normalize_show_date(show_date)
@@ -532,18 +533,17 @@ def evaluate_dashboard(
                 return section
         return None
     
-    # 辅助：执行检查并释放 GIL
+    # 辅助：执行检查并播报进度
     def _tick(msg: str = ""):
         if check_abort and check_abort():
             raise InterruptedError("Dashboard evaluation aborted by user")
         if on_progress and msg:
             on_progress(msg)
-        import time
-        # 增加节流延时至 0.1s，降低 CPU 密集计算时的并发压力，防止低性能服务器卡死
-        time.sleep(0.1)
 
-    # 请求级缓存：避免同一请求中对 (table, company, date) 的重复查询
-    metrics_cache: Dict[str, Dict[str, Any]] = {}
+    # 查询缓存：默认请求级；发布任务可注入 shared_metrics_cache 跨日期复用
+    metrics_cache: Dict[str, Dict[str, Any]] = (
+        shared_metrics_cache if isinstance(shared_metrics_cache, dict) else {}
+    )
 
     def _get_metrics(session, table: str, company: str, date_str: str) -> Dict[str, Any]:
         key = f"{table}:{company}:{date_str}"
@@ -564,6 +564,13 @@ def evaluate_dashboard(
         temp_section = get_section_by_index("1", "1.逐小时气温")
         if isinstance(temp_section, dict):
             forecast_days = max(int(temp_section.get("预测天数", 0)), 0)
+            raw_lookback_days = temp_section.get("回溯天数", 7)
+            try:
+                lookback_days = int(raw_lookback_days)
+            except (TypeError, ValueError):
+                lookback_days = 7
+            # 限制回溯窗口，避免误配置导致每次发布全量扫历史
+            lookback_days = max(1, min(lookback_days, 31))
             main_bucket = temp_section.get("本期")
             peer_bucket = temp_section.get("同期")
             if isinstance(main_bucket, dict) and isinstance(peer_bucket, dict):
@@ -571,22 +578,16 @@ def evaluate_dashboard(
                     push_dt = date.fromisoformat(push_date)
                 except ValueError:
                     push_dt = date.today()
-                try:
-                    start_main = min(date.fromisoformat(k) for k in main_bucket.keys())
-                except ValueError:
-                    start_main = push_dt
-                    main_bucket[start_main.isoformat()] = []
-                if start_main > push_dt:
-                    start_main = push_dt
-                total_days = (push_dt - start_main).days + forecast_days + 1
-                if total_days < 1:
-                    total_days = 1
+                start_main = push_dt - timedelta(days=lookback_days - 1)
+                total_days = lookback_days + forecast_days
                 main_dates = [start_main + timedelta(days=i) for i in range(total_days)]
+                main_bucket.clear()
+                peer_bucket.clear()
                 for dt in main_dates:
-                    main_bucket.setdefault(dt.isoformat(), [])
+                    main_bucket[dt.isoformat()] = []
                 peer_dates = [dt - timedelta(days=365) for dt in main_dates]
                 for dt in peer_dates:
-                    peer_bucket.setdefault(dt.isoformat(), [])
+                    peer_bucket[dt.isoformat()] = []
                 _fill_temperature_block(session, main_bucket, main_dates)
                 _fill_temperature_block(session, peer_bucket, peer_dates)
 

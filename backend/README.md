@@ -16,6 +16,17 @@
   - 已清理煤炭库存提交链路的重复函数定义，统一到单一生效实现。
   - 已给模板 JSON 读取增加基于文件变更指纹的内存缓存（`mtime_ns + size`），降低重复读取成本。
 
+## 数据看板缓存发布优化（2026-02-08）
+
+- 发布接口支持窗口参数：
+  - `POST /dashboard/cache/publish?days=1..30`
+  - 默认 `days=7`，可按运维场景缩短为 1 天快速发布。
+- 发布任务执行优化：
+  - `backend/services/dashboard_cache_job.py` 在单次发布任务内引入 `shared_metrics_cache`，跨日期复用查询结果，减少重复访问 `groups/sum_basic_data` 视图。
+- 看板计算优化：
+  - `backend/services/dashboard_expression.py` 移除进度回调中的固定 `sleep(0.1)`，降低人为等待。
+  - “1.逐小时气温”改为回溯窗口模式：默认最近 7 天（可由配置 `回溯天数` 调整，范围 1~31）+ 预测天数，不再从历史起点全量扫描。
+
 ## 仪表盘缓存控制（2025-12-01）
 
 - 仪表盘缓存逻辑由 `dashboard_cache.py` 迁移至 `dashboard_cache_job.py`，改为后台任务模式以避免前端请求超时。

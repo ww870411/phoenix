@@ -88,6 +88,14 @@
         <button class="pdf-download-btn" @click="downloadPDF">下载PDF</button>
         <div v-if="canManageCache" class="dashboard-cache-controls">
           <div class="dashboard-cache-buttons">
+            <label class="cache-days-control" title="缓存发布窗口天数">
+              <span>发布天数</span>
+              <select v-model.number="cachePublishDays">
+                <option :value="1">1天</option>
+                <option :value="3">3天</option>
+                <option :value="7">7天</option>
+              </select>
+            </label>
             <button
               class="cache-btn"
               type="button"
@@ -1167,6 +1175,7 @@ const { canPublish } = storeToRefs(authStore)
 const canManageCache = computed(() => Boolean(canPublish.value))
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
+const cachePublishDays = ref(1)
 const temperatureImportBusy = ref(false)
 const temperatureImportDialogVisible = ref(false)
 const temperatureImportCommitBusy = ref(false)
@@ -1379,11 +1388,11 @@ async function handlePublishDashboardCache() {
   cacheActionBusy.value = true
   cacheActionMessage.value = ''
   try {
-    const payload = await publishDashboardCache(projectKey)
+    const payload = await publishDashboardCache(projectKey, { days: cachePublishDays.value })
     if (payload?.job) {
       handleCacheJobSnapshot(payload.job)
       if (payload.job.status === 'running') {
-        cacheActionMessage.value = '缓存发布任务已启动'
+        cacheActionMessage.value = `缓存发布任务已启动（${cachePublishDays.value} 天）`
         startCacheJobPolling()
       } else if (payload.job.status === 'completed') {
         cacheActionMessage.value = '缓存发布完成'
@@ -4614,6 +4623,27 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.cache-days-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.cache-days-control select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 2px 4px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
 }
 
 .cache-btn {

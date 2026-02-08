@@ -87,6 +87,9 @@ class CachePublishJobManager:
             return self._state.snapshot()
 
     def _run(self, project_key: str, schedule: List[str]) -> None:
+        # 任务级缓存：跨日期复用 (table, company, date) 查询结果，降低 7 日发布重复开销
+        shared_metrics_cache: Dict[str, Dict[str, Any]] = {}
+
         def check_abort() -> bool:
             return self._abort_requested
 
@@ -116,6 +119,7 @@ class CachePublishJobManager:
                     show_date=show_date,
                     check_abort=check_abort,
                     on_progress=update_progress,
+                    shared_metrics_cache=shared_metrics_cache,
                 )
                 payload = {"ok": True, **result.to_dict()}
                 cache_key = resolve_cache_key(show_date or "")
