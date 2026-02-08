@@ -8,6 +8,7 @@ daily_report_25_26 项目 v1 路由
 """
 
 import copy
+import functools
 import json
 import logging
 import re
@@ -240,6 +241,15 @@ def _iter_data_files() -> Iterable[SysPath]:
 
 def _read_json(path: SysPath) -> Any:
     """尝试多种常见编码读取 JSON。"""
+    stat = path.stat()
+    return _read_json_cached(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=64)
+def _read_json_cached(path_str: str, mtime_ns: int, size: int) -> Any:
+    """按文件路径与变更指纹缓存 JSON 读取结果。"""
+    _ = (mtime_ns, size)  # 参与缓存键，避免同路径内容变更后命中旧缓存
+    path = SysPath(path_str)
     for enc in ("utf-8", "utf-8-sig", "gbk", "gb2312"):
         try:
             with path.open("r", encoding=enc) as fh:
@@ -1277,129 +1287,6 @@ def _persist_constant_data(
         raise
     finally:
         session.close()
-
-
-def _flatten_records_for_coal(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    将煤炭库存表的宽表 payload 拆解为扁平化的数据库记录列表。
-    """
-    # 提取关键字典和日期
-    company_dict = payload.get("company_dict", {})
-    item_dict = payload.get("item_dict", {})  # 煤种字典
-    status_dict = payload.get("status_dict", {}) # 状态/库存类型字典
-    biz_date = payload.get("biz_date")
-    
-    # 创建反向查找字典，用于从中文名映射回 ID
-    rev_company_map = {v: k for k, v in company_dict.items()}
-    rev_item_map = {v: k for k, v in item_dict.items()}
-    rev_status_map = {v: k for k, v in status_dict.items()}
-
-    columns = payload.get("columns", [])
-    rows = payload.get("rows", [])
-    
-    # 定位数据列的索引和中文名
-    data_columns = []
-    for i, col_name in enumerate(columns):
-        # 数据列通常从第2列之后开始（第0列是单位，第1列是煤种）
-        if i > 1 and col_name in rev_status_map:
-            data_columns.append({"index": i, "name_cn": col_name})
-
-    flattened_records = []
-    operation_time = datetime.now(EAST_8_TZ)
-
-    # 遍历每一行数据
-    for row in rows:
-        if not isinstance(row, list) or len(row) < len(columns):
-            continue
-
-        company_cn = row[0]
-        item_cn = row[1] # 煤种中文名
-        unit_raw = row[2] if len(row) > 2 else ""
-        unit = str(unit_raw).strip() or None
-        
-        company_id = rev_company_map.get(company_cn)
-        item_id = rev_item_map.get(item_cn)
-
-        if not company_id or not item_id:
-            continue # 如果单位或煤种无法映射，则跳过此行
-
-        # 遍历该行中的每个数据列
-        for col_info in data_columns:
-            col_idx = col_info["index"]
-            storage_type_cn = col_info["name_cn"]
-            
-            raw_value = row[col_idx]
-            value_decimal = None
-            if raw_value is not None and str(raw_value).strip() != "":
-                value_decimal = _parse_decimal_value(raw_value)
-            storage_type_id = rev_status_map.get(storage_type_cn)
-
-            record = {
-                "company": company_id,
-                "company_cn": company_cn,
-                "coal_type": item_id,
-                "coal_type_cn": item_cn,
-                "storage_type": storage_type_id,
-                "storage_type_cn": storage_type_cn,
-                "value": value_decimal,
-                "unit": unit,
-                "note": None, # 备注字段暂时为空
-                "status": "submit",
-                "date": _parse_date_value(biz_date),
-                "operation_time": operation_time,
-            }
-            flattened_records.append(record)
-            
-    return flattened_records
-
-def _persist_coal_inventory(records: List[Dict[str, Any]]) -> int:
-    """
-    将拆解后的煤炭库存记录持久化到数据库。
-    """
-    if not records:
-        return 0
-
-    session = SessionLocal()
-    try:
-        # 幂等写入：删除当天所有数据
-        # 从第一条记录获取业务日期，并假设所有记录都是同一天
-        biz_date = records[0].get("date")
-        if biz_date:
-            session.execute(
-                delete(CoalInventoryData).where(CoalInventoryData.date == biz_date)
-            )
-
-        # 批量插入新数据
-        session.bulk_insert_mappings(CoalInventoryData, records)
-        session.commit()
-        return len(records)
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
-async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONResponse:
-    """
-    处理煤炭库存表的专用提交逻辑。
-    """
-    try:
-        flattened_records = _flatten_records_for_coal(payload)
-        inserted_count = _persist_coal_inventory(flattened_records)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "ok": True,
-                "message": "煤炭库存数据处理成功",
-                "flattened_records": len(flattened_records),
-                "inserted": inserted_count,
-            },
-        )
-    except Exception as exc:
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "message": "处理煤炭库存数据时发生错误", "error": str(exc)},
-        )
 
 
 def _is_constant_sheet(name: Optional[str]) -> bool:

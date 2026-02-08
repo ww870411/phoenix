@@ -1,5 +1,21 @@
 # daily_report_25_26 后端说明
 
+## 最新结构与状态（2026-02-08）
+
+- 核心接口主文件：`backend/api/v1/daily_report_25_26.py`
+  - 数据填报：`/data_entry/sheets/{sheet_key}/template`、`/submit`、`/query`
+  - 数据分析：`/data_analysis/query`、`/data_analysis/ai_report`、`/data_analysis/ai_settings`
+  - 仪表盘：`/dashboard`、缓存发布与取消接口
+- 目录职责：
+  - `backend/api/`：路由与请求编排
+  - `backend/services/`：仪表盘表达式、分析服务、认证、缓存任务、天气导入等业务能力
+  - `backend/db/`：ORM 模型与会话（`DailyBasicData`、`ConstantData`、`CoalInventoryData` 等）
+  - `backend/sql/`：分析视图与数据结构 SQL
+  - `backend/schemas/`：鉴权与接口数据模型
+- 本次优化状态：
+  - 已清理煤炭库存提交链路的重复函数定义，统一到单一生效实现。
+  - 已给模板 JSON 读取增加基于文件变更指纹的内存缓存（`mtime_ns + size`），降低重复读取成本。
+
 ## 仪表盘缓存控制（2025-12-01）
 
 - 仪表盘缓存逻辑由 `dashboard_cache.py` 迁移至 `dashboard_cache_job.py`，改为后台任务模式以避免前端请求超时。

@@ -1,5 +1,19 @@
 # 前端说明（Vue3 + Vite）
 
+## 最新结构与状态（2026-02-08）
+
+- 主要页面目录：`frontend/src/daily_report_25_26/pages/`
+  - `DataEntryView.vue`：模板拉取、在线填报、提交与回填
+  - `DataAnalysisView.vue`：多单位分析、同比/环比、AI 报告交互
+  - `DashBoard.vue`：数据看板、趋势图、缓存与导出
+- 核心组件目录：`frontend/src/daily_report_25_26/components/`
+  - `UnitAnalysisLite.vue`：填报页内本单位轻量分析
+  - 其他 RevoGrid/ECharts 相关展示组件
+- 服务层：
+  - `frontend/src/daily_report_25_26/services/api.js` 对接后端 `/template`、`/submit`、`/query`、`/data_analysis/*`、`/dashboard` 等接口
+- 当前联调说明：
+  - 后端已完成煤炭库存提交链路去重与模板 JSON 缓存优化，前端接口契约未变，无需改动请求参数即可继续使用。
+
 ## 会话小结（2026-01-03 数据分析净投诉量新口径说明）
 
 - 后端 `analysis_company_sum/analysis_groups_sum` 的 `amount_daily_net_complaints_per_10k_m2` 现以终止日 `sum_season_total_net_complaints` 除 `amount_heating_fee_area` 计算，取代旧的“区间内当日净投诉量求和”算法。前端可直接沿用现有接口展示，数值含义自动更新为“终止日累计投诉折算面积”，无需额外处理。
