@@ -101,6 +101,8 @@ const effectiveBizDate = ref('')
 const initialized = ref(false)
 const pendingAutoRefresh = ref(false)
 const AUTO_REFRESH_DELAY_MS = 400
+const EXPORT_EVAL_TIMEOUT_MS = 120000
+const EXPORT_RETRY_DELAY_MS = 1200
 let bizDateAutoRefreshTimer = null
 let suppressNextBizDateReaction = false
 
@@ -365,6 +367,41 @@ const formattedTrace = computed(() => {
 
 const isExporting = ref(false)
 
+function normalizeExportError(err) {
+  const raw = String(err?.message || err || '').trim()
+  if (!raw) return '未知错误'
+  if (/<\/?html/i.test(raw) || /cloudflare|gateway\\s*time-?out|error code\\s*504/i.test(raw)) {
+    return '网关超时（504），导出计算未及时返回，请稍后重试'
+  }
+  return raw
+}
+
+async function evalSpecForExport(payload) {
+  let lastError = null
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), EXPORT_EVAL_TIMEOUT_MS)
+    try {
+      return await evalSpec(projectKey.value, payload, { signal: controller.signal })
+    } catch (err) {
+      lastError = err
+      const message = String(err?.message || '')
+      const isAbort = err?.name === 'AbortError'
+      const isGatewayTimeout = /gateway\\s*time-?out|error code\\s*504|\\b504\\b/i.test(message)
+      if (!isAbort && !isGatewayTimeout) break
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, EXPORT_RETRY_DELAY_MS))
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  if (lastError?.name === 'AbortError') {
+    throw new Error(`导出请求超时（${Math.round(EXPORT_EVAL_TIMEOUT_MS / 1000)} 秒）`)
+  }
+  throw new Error(normalizeExportError(lastError))
+}
+
 async function exportToExcel() {
   isExporting.value = true
   errorMessage.value = ''
@@ -376,21 +413,24 @@ async function exportToExcel() {
     const origins = ['D3', 'C4', 'C3']
     const slicePoints = [3, 2, 2]
 
-    // 2. Fetch all data in parallel
-    const dataPromises = sheetKeys.map(key => evalSpec(projectKey.value, {
-      sheet_key: key,
-      project_key: 'daily_report_25_26',
-      config: configPath,
-      biz_date: bizDate.value ? bizDate.value : 'regular',
-      trace: false,
-    }));
-
+    // 2. 串行获取各展示表数据（降低超时概率）
     const templatePromise = fetch(templatePath).then(res => {
       if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`);
       return res.arrayBuffer();
     });
 
-    const [templateData, ...results] = await Promise.all([templatePromise, ...dataPromises]);
+    const results = [];
+    for (const key of sheetKeys) {
+      const res = await evalSpecForExport({
+        sheet_key: key,
+        project_key: 'daily_report_25_26',
+        config: configPath,
+        biz_date: bizDate.value ? bizDate.value : 'regular',
+        trace: false,
+      });
+      results.push(res);
+    }
+    const templateData = await templatePromise;
 
     // 3. Process and fill the workbook
     const workbook = XLSX.read(templateData, { type: 'array', cellStyles: true });
@@ -426,7 +466,7 @@ async function exportToExcel() {
 
   } catch (err) {
     console.error('导出Excel失败:', err);
-    errorMessage.value = `导出失败: ${err.message}`;
+    errorMessage.value = `导出失败: ${normalizeExportError(err)}`;
   } finally {
     isExporting.value = false;
   }

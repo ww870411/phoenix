@@ -942,3 +942,27 @@
   2. 易读性优化：通过卡片的实体背景色彻底解决了深色背景对 ECharts 图表的视觉干扰。
 - **Result:** 春节看板视觉质感大幅提升，实现了“喜庆氛围”与“专业数据展示”的平衡。
 - **Verify:** 执行 `frontend` 构建通过。
+
+## 2026-02-12（数据展示页导出 Excel 504 超时修复）
+
+- **User Request:** `daily_report_25_26` 数据展示页导出 Excel 近期经常卡住并失败，页面显示 Cloudflare 504 HTML。
+- **Agent Action:**
+  1. 定位调用链：
+     - 前端 `DisplayRuntimeView.vue` 的 `exportToExcel` 并发调用 3 次 `runtime/spec/eval`，失败时直接透传后端 HTML 错误文本；
+     - `api.js` 的 `evalSpec` 未支持 `AbortController`，导出阶段无超时控制。
+  2. 修复实现：
+     - `frontend/src/projects/daily_report_25_26/services/api.js`：`evalSpec` 新增 `options.signal`，支持请求中断；
+     - `frontend/src/projects/daily_report_25_26/pages/DisplayRuntimeView.vue`：
+       - 导出阶段 `runtime/spec/eval` 由并发改为串行，降低网关与后端瞬时压力；
+       - 增加单次 120 秒超时与 1 次重试（仅对超时/504类错误）；
+       - 增加错误归一化：Cloudflare/HTML/504 报错转换为可读中文提示，避免页面堆叠整段 HTML。
+- **Result:** 导出链路具备“串行执行 + 超时控制 + 重试 + 可读报错”能力，降低卡住与 504 导致的失败概率，并提升失败可诊断性。
+- **Verify:** `frontend` 执行 `npm run build` 通过。
+
+## 2026-02-12（修复 frontend/jsconfig.json 报错）
+
+- **User Request:** 修复 `frontend/jsconfig.json` 报错。
+- **Agent Action:**
+  1. 规范路径别名：`@/*` 由 `./src/*` 调整为 `src/*`；
+  2. 补充 `include` 范围，显式纳入 `js/jsx/vue/json` 与 `vite.config.*`，避免语言服务索引异常。
+- **Result:** `jsconfig.json` 已调整为稳定可识别结构，便于 Vue/JS 项目索引与别名解析。

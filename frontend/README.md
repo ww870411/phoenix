@@ -1615,3 +1615,23 @@ docker compose up -d --build
   - 细节优化：增加灯笼摇曳动画、朱砂红书法标题风格，并显著提升了图表在节日模式下的清晰度。
 - 验证结果：
   - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 数据展示页导出 Excel 504 超时修复）
+
+- 修改页面：`frontend/src/projects/daily_report_25_26/pages/DisplayRuntimeView.vue`
+- 修改服务：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 修复内容：
+  - 将导出阶段 3 个 `runtime/spec/eval` 由并发改为串行，降低瞬时计算压力；
+  - 增加 `AbortController` 超时控制（120 秒）与一次重试（仅超时/504）；
+  - 对 Cloudflare 504 HTML 错误做归一化提示，避免页面展示整段 HTML。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 修复 jsconfig 报错）
+
+- 修改文件：`frontend/jsconfig.json`
+- 调整内容：
+  - 路径别名 `@/*` 从 `./src/*` 统一为 `src/*`；
+  - 新增 `include`，显式覆盖 `src/**/*.js|jsx|vue|json` 及 `vite.config.*`。
+- 结果：
+  - 提升前端工程的路径解析稳定性，减少编辑器/语言服务误报。

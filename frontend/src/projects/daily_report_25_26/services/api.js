@@ -230,12 +230,13 @@ export function resetProjectCache() {
 }
 
 // 运行时表达式求值（审批渲染）
-export async function evalSpec(projectKey, body) {
+export async function evalSpec(projectKey, body, options = {}) {
   const url = normalized('/projects/daily_report_25_26/runtime/spec/eval')
   const response = await fetch(url, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(body || {}),
+    signal: options?.signal,
   })
   if (!response.ok) {
     const message = await response.text()
