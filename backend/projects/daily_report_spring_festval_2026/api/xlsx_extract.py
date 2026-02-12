@@ -13,16 +13,25 @@ from datetime import date, datetime
 import json
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from openpyxl import load_workbook
 from openpyxl.utils.datetime import from_excel
 from backend.services.project_data_paths import resolve_project_runtime_path
+from backend.services.auth_manager import AuthSession, get_current_session
 
 router = APIRouter(tags=["spring_festival"])
 PROJECT_KEY = "daily_report_spring_festval_2026"
 LATEST_EXTRACT_FILENAME = "spring_festival_latest_extract.json"
 
+def _ensure_global_admin(session: AuthSession) -> None:
+    if session.group != "Global_admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="抱歉，该操作目前仅限系统管理员（Global_admin）执行。"
+        )
+
 HEADER_LABELS = {"本期", "同期", "差异"}
+DIMENSION_HEADERS = {"统计主体", "指标", "计量单位"}
 DATE_TEXT_RE = re.compile(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$")
 PERCENT_RE = re.compile(r"^-?\d+(\.\d+)?%$")
 NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
@@ -268,6 +277,46 @@ def _find_header_row(matrix: List[List[Any]]) -> int:
     return -1
 
 
+def _normalize_header_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _find_dimension_columns(
+    matrix: List[List[Any]],
+    *,
+    date_row: int,
+    sub_header_row: int,
+) -> Dict[str, Optional[int]]:
+    target = {
+        "scope_col": "统计主体",
+        "metric_col": "指标",
+        "unit_col": "计量单位",
+    }
+    result: Dict[str, Optional[int]] = {key: None for key in target}
+    scan_rows: List[int] = []
+    if 0 <= date_row < len(matrix):
+        scan_rows.append(date_row)
+    if 0 <= sub_header_row < len(matrix) and sub_header_row not in scan_rows:
+        scan_rows.append(sub_header_row)
+    for row_index in range(min(len(matrix), 8)):
+        if row_index not in scan_rows:
+            scan_rows.append(row_index)
+
+    for row_index in scan_rows:
+        row = matrix[row_index]
+        normalized = [_normalize_header_text(item) for item in row]
+        for key, label in target.items():
+            if result[key] is not None:
+                continue
+            try:
+                result[key] = normalized.index(label)
+            except ValueError:
+                continue
+    return result
+
+
 def _set_metric(
     by_date: Dict[str, Dict[str, Dict[str, Any]]],
     date_key: str,
@@ -309,6 +358,49 @@ def _extract_bydate_payload(
     if date_row < 0:
         raise HTTPException(status_code=400, detail="表头上一行（日期行）不存在，表结构不符合预期。")
 
+    dimension_cols = _find_dimension_columns(
+        matrix,
+        date_row=date_row,
+        sub_header_row=sub_header_row,
+    )
+    scope_col = dimension_cols.get("scope_col")
+    metric_col = dimension_cols.get("metric_col")
+    unit_col = dimension_cols.get("unit_col")
+    standard_passed = scope_col == 0 and metric_col == 1 and unit_col == 2
+    auto_align_attempted = not standard_passed
+    auto_align_succeeded = all(index is not None for index in (scope_col, metric_col, unit_col))
+    validation_status = "passed" if standard_passed else ("aligned" if auto_align_succeeded else "failed")
+    validation_issues: List[str] = []
+    if not standard_passed:
+        validation_issues.append("标准模板列位置不匹配（统计主体/指标/计量单位未位于 A/B/C 列）。")
+    if auto_align_attempted and auto_align_succeeded:
+        validation_issues.append("已自动对齐关键列并继续提取。")
+    if not auto_align_succeeded:
+        missing = []
+        if scope_col is None:
+            missing.append("统计主体")
+        if metric_col is None:
+            missing.append("指标")
+        if unit_col is None:
+            missing.append("计量单位")
+        validation_issues.append(f"自动对齐失败，缺少关键字段：{', '.join(missing)}。")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "结构检校未通过，且自动对齐失败，无法提取 JSON。",
+                "validation": {
+                    "status": validation_status,
+                    "standardPassed": standard_passed,
+                    "autoAlignAttempted": auto_align_attempted,
+                    "autoAlignSucceeded": auto_align_succeeded,
+                    "scopeCol": (scope_col + 1) if scope_col is not None else None,
+                    "metricCol": (metric_col + 1) if metric_col is not None else None,
+                    "unitCol": (unit_col + 1) if unit_col is not None else None,
+                    "issues": validation_issues,
+                },
+            },
+        )
+
     header = matrix[sub_header_row]
     dates: List[str] = []
     groups: List[Dict[str, Any]] = []
@@ -342,9 +434,17 @@ def _extract_bydate_payload(
         if not has_any:
             continue
 
-        scope = str(row[0]).strip() if len(row) > 0 and row[0] is not None else ""
-        metric_raw = row[1] if len(row) > 1 else None
-        unit = str(row[2]).strip() if len(row) > 2 and row[2] is not None else None
+        scope = (
+            str(row[scope_col]).strip()
+            if scope_col is not None and scope_col < len(row) and row[scope_col] is not None
+            else ""
+        )
+        metric_raw = row[metric_col] if metric_col is not None and metric_col < len(row) else None
+        unit = (
+            str(row[unit_col]).strip()
+            if unit_col is not None and unit_col < len(row) and row[unit_col] is not None
+            else None
+        )
         if not scope or metric_raw is None or str(metric_raw).strip() == "":
             continue
 
@@ -415,6 +515,16 @@ def _extract_bydate_payload(
                 "dateRow": date_row,
                 "subHeaderRow": sub_header_row,
             },
+            "validation": {
+                "status": validation_status,
+                "standardPassed": standard_passed,
+                "autoAlignAttempted": auto_align_attempted,
+                "autoAlignSucceeded": auto_align_succeeded,
+                "scopeCol": (scope_col + 1) if scope_col is not None else None,
+                "metricCol": (metric_col + 1) if metric_col is not None else None,
+                "unitCol": (unit_col + 1) if unit_col is not None else None,
+                "issues": validation_issues,
+            },
         },
         "dates": dates,
         "byDate": by_date,
@@ -428,7 +538,9 @@ async def upload_and_extract_json(
     keep_diff_cell: Optional[str] = Form(default="true"),
     compute_diff: Optional[str] = Form(default="true"),
     normalize_metric: Optional[str] = Form(default="true"),
+    session: AuthSession = Depends(get_current_session),
 ):
+    _ensure_global_admin(session)
     filename = file.filename or ""
     if not filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx/.xlsm/.xltx/.xltm 文件。")
@@ -472,7 +584,8 @@ async def upload_and_extract_json(
 
 
 @router.get("/spring-festival/latest-json", summary="读取最近一次提取 JSON")
-def get_latest_extract_json():
+def get_latest_extract_json(session: AuthSession = Depends(get_current_session)):
+    _ensure_global_admin(session)
     runtime_file = resolve_project_runtime_path(PROJECT_KEY, LATEST_EXTRACT_FILENAME)
     if not runtime_file.exists():
         return {"ok": False, "message": "暂无最近提取数据"}

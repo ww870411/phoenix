@@ -7,7 +7,7 @@
   "groups": {
     "Global_admin": {
       "hierarchy": 100,
-      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "data_analysis", "placeholder"],
+      "page_access": ["dashboard", "data_show", "data_approval", "data_entry", "constant_data", "data_analysis", "mini_entry", "placeholder"],
       "sheet_rules": {
         "data_show": { "mode": "all" },
         "data_approval": { "mode": "all" },

@@ -41,6 +41,14 @@
               生成数据看板
             </button>
           </div>
+          <div v-if="validationInfo" class="validation-box" :class="validationInfo.statusClass">
+            <p class="validation-title">结构检校：{{ validationInfo.statusText }}</p>
+            <p v-if="validationInfo.alignText" class="validation-sub">{{ validationInfo.alignText }}</p>
+            <p v-if="validationInfo.columnText" class="validation-sub">{{ validationInfo.columnText }}</p>
+            <ul v-if="validationInfo.issues.length" class="validation-list">
+              <li v-for="(item, index) in validationInfo.issues" :key="`issue-${index}`">{{ item }}</li>
+            </ul>
+          </div>
           <p v-if="errorMessage" class="state error">{{ errorMessage }}</p>
           <p v-if="successMessage" class="state success">{{ successMessage }}</p>
         </div>
@@ -94,6 +102,31 @@ const jsonPreview = computed(() => {
   return JSON.stringify(parsedPayload.value, null, 2)
 })
 
+const validationInfo = computed(() => {
+  const validation = parsedPayload.value?.meta?.validation
+  if (!validation || typeof validation !== 'object') return null
+  const status = String(validation.status || '').trim().toLowerCase()
+  const standardPassed = Boolean(validation.standardPassed)
+  const autoAlignSucceeded = Boolean(validation.autoAlignSucceeded)
+  const autoAlignAttempted = Boolean(validation.autoAlignAttempted)
+  const statusText =
+    status === 'passed'
+      ? '通过'
+      : status === 'aligned'
+        ? '标准不通过，自动对齐成功'
+        : '不通过'
+  const alignText = autoAlignAttempted
+    ? (autoAlignSucceeded ? '自动对齐结果：成功' : '自动对齐结果：失败')
+    : '自动对齐结果：未触发（标准结构已通过）'
+  const scopeCol = validation.scopeCol ? `统计主体=第${validation.scopeCol}列` : ''
+  const metricCol = validation.metricCol ? `指标=第${validation.metricCol}列` : ''
+  const unitCol = validation.unitCol ? `计量单位=第${validation.unitCol}列` : ''
+  const columnText = [scopeCol, metricCol, unitCol].filter(Boolean).join('，')
+  const statusClass = standardPassed ? 'is-pass' : (autoAlignSucceeded ? 'is-aligned' : 'is-fail')
+  const issues = Array.isArray(validation.issues) ? validation.issues.map((item) => String(item)) : []
+  return { statusText, alignText, columnText, statusClass, issues }
+})
+
 watch(
   () => projectKey.value,
   (value) => {
@@ -111,6 +144,7 @@ function onFileChange(event) {
   selectedFile.value = files[0] || null
   errorMessage.value = ''
   successMessage.value = ''
+  parsedPayload.value = null
 }
 
 async function parseFile() {
@@ -138,7 +172,14 @@ async function parseFile() {
       `spring_festival_payload_${projectKey.value}`,
       JSON.stringify(payload),
     )
-    successMessage.value = '解析完成，已生成 JSON 预览。'
+    const validation = payload?.meta?.validation
+    if (validation?.status === 'passed') {
+      successMessage.value = '结构检校通过，已提取 JSON。'
+    } else if (validation?.status === 'aligned') {
+      successMessage.value = '标准检校未通过，自动对齐成功，已提取 JSON。'
+    } else {
+      successMessage.value = '解析完成，已生成 JSON 预览。'
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '解析失败，请重试'
@@ -224,6 +265,47 @@ function goToDashboard() {
   background: #f8fafc;
   border-radius: 8px;
   padding: 12px;
+  font-size: 12px;
+}
+
+.validation-box {
+  margin-top: 2px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.validation-box.is-pass {
+  border-color: #a7f3d0;
+  background: #ecfdf3;
+}
+
+.validation-box.is-aligned {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.validation-box.is-fail {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.validation-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.validation-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.validation-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
   font-size: 12px;
 }
 </style>

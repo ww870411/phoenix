@@ -123,7 +123,20 @@ export async function extractSpringFestivalJson(projectKey, file, options = {}) 
     body: formData,
   })
   if (!response.ok) {
-    const message = await response.text()
+    let message = ''
+    try {
+      const payload = await response.json()
+      const detail = payload?.detail
+      if (typeof detail === 'string') {
+        message = detail
+      } else if (detail && typeof detail === 'object') {
+        const base = detail.message || '解析 Excel 失败'
+        const issues = Array.isArray(detail?.validation?.issues) ? detail.validation.issues : []
+        message = issues.length ? `${base}：${issues.join('；')}` : base
+      }
+    } catch {
+      message = await response.text()
+    }
     throw new Error(message || `解析 Excel 失败: ${response.status}`)
   }
   return response.json()

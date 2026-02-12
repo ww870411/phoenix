@@ -910,6 +910,26 @@
   - `frontend` 执行 `npm run build` 通过；  
   - `python -m py_compile backend/projects/daily_report_25_26/api/router.py backend/api/v1/routes.py` 通过。
 
+## 2026-02-12（春节上传链路：结构检校 + 自动对齐 + 提取）
+
+- **User Request:** 上传后先按当前标准检校；不通过时自动对齐；显示是否对齐成功；成功后再提取 JSON。
+- **Agent Action:**
+  1. 后端 `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`：  
+     - 新增结构检校：检测“统计主体/指标/计量单位”是否在标准列（A/B/C）；  
+     - 不通过时触发自动对齐：在表头附近搜索关键列并重映射抽取；  
+     - 自动对齐失败时返回 400，并携带结构化失败原因；  
+     - 对齐成功或标准通过时继续提取，并在 `meta.validation` 回传状态（`passed/aligned/failed`）、列号与问题清单。  
+  2. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：  
+     - 解析后端结构化错误信息，优先展示可读错误与校验问题。  
+  3. 上传页 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`：  
+     - 新增“结构检校结果”可视化区块；  
+     - 显示通过/自动对齐成功/失败、对齐后的关键列位置、问题明细；  
+     - 成功文案按检校结果动态显示。  
+- **Result:** 上传流程已具备“标准检校→自动对齐→成功提取”闭环，并对失败原因可视化反馈。
+- **Verify:**  
+  - `frontend` 执行 `npm run build` 通过；  
+  - `python -m py_compile backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py` 通过。
+
 ## 2026-02-12（春节迷你看板：“金镶玉”主题重构）
 
 - **User Feedback:** 原春节主题不够美观且可能影响数据读取。
