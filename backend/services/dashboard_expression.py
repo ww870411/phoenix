@@ -206,44 +206,42 @@ def _to_float_or_none(value: Any) -> Optional[float]:
     return numeric
 
 
-def _fetch_temperature_series(
+def _fetch_daily_temperature_stats_map(
     session,
-    start: datetime,
-    end: datetime,
-) -> List[Optional[float]]:
-    """查询指定时间区间内的逐小时气温。"""
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=EAST_8)
-    else:
-        start = start.astimezone(EAST_8)
-    if end.tzinfo is None:
-        end = end.replace(tzinfo=EAST_8)
-    else:
-        end = end.astimezone(EAST_8)
-    stmt = (
-        select(TemperatureData.date_time, TemperatureData.value)
-        .where(TemperatureData.date_time >= start, TemperatureData.date_time < end)
-        .order_by(TemperatureData.date_time.asc())
-    )
-    rows = session.execute(stmt).all()
+    start_date: date,
+    end_date: date,
+) -> Dict[date, Dict[str, Optional[float]]]:
+    """从 calc_temperature_data 视图按日读取最高/最低/平均气温。"""
+    if start_date > end_date:
+        return {}
 
-    # 24 小时数组，缺失保持为 None 以便前端区分
-    values: List[Optional[float]] = [None] * 24
-    for row in rows:
-        dt = row[0]
-        value = row[1]
-        try:
-            if dt.tzinfo is not None:
-                local_dt = dt.astimezone(EAST_8)
-            else:
-                local_dt = dt
-            hour_index = local_dt.hour
-            if value is None or hour_index < 0 or hour_index > 23:
-                continue
-            values[hour_index] = _decimal_to_float(value)
-        except Exception:
+    stmt = text(
+        """
+        SELECT date, max_temp, min_temp, aver_temp
+          FROM calc_temperature_data
+         WHERE date BETWEEN :start_date AND :end_date
+         ORDER BY date
+        """,
+    )
+    rows = session.execute(
+        stmt,
+        {"start_date": start_date, "end_date": end_date},
+    ).all()
+
+    stats_map: Dict[date, Dict[str, Optional[float]]] = {}
+    for row_date, max_temp, min_temp, avg_temp in rows:
+        if row_date is None:
             continue
-    return values
+        try:
+            cast_date = row_date if isinstance(row_date, date) else date.fromisoformat(str(row_date))
+        except ValueError:
+            continue
+        stats_map[cast_date] = {
+            "max": _to_float_or_none(max_temp),
+            "min": _to_float_or_none(min_temp),
+            "avg": _to_float_or_none(avg_temp),
+        }
+    return stats_map
 
 
 def _fill_temperature_block(
@@ -251,12 +249,18 @@ def _fill_temperature_block(
     bucket: Dict[str, Any],
     dates: List[date],
 ) -> None:
-    """按照指定日期列表填充逐小时气温数据。"""
+    """按照指定日期列表填充日级气温数据（最高/最低/平均）。"""
+    if not dates:
+        return
+    stats_map = _fetch_daily_temperature_stats_map(session, min(dates), max(dates))
     for dt in dates:
         key = dt.isoformat()
-        start_dt = datetime.combine(dt, time.min)
-        end_dt = start_dt + timedelta(days=1)
-        bucket[key] = _fetch_temperature_series(session, start_dt.replace(tzinfo=EAST_8), end_dt.replace(tzinfo=EAST_8))
+        stats = stats_map.get(dt, {})
+        bucket[key] = {
+            "max": _to_float_or_none(stats.get("max")),
+            "min": _to_float_or_none(stats.get("min")),
+            "avg": _to_float_or_none(stats.get("avg")),
+        }
 
 
 def _resolve_company_codes(
@@ -578,9 +582,9 @@ def evaluate_dashboard(
         return data
 
     with SessionLocal() as session:
-        # 1. 逐小时气温
-        _tick("正在获取：逐小时气温...")
-        temp_section = get_section_by_index("1", "1.逐小时气温")
+        # 1. 日均气温（来源：calc_temperature_data 视图）
+        _tick("正在获取：日均气温...")
+        temp_section = get_section_by_index("1", "1.日均气温", "1.逐小时气温")
         if isinstance(temp_section, dict):
             forecast_days = max(int(temp_section.get("预测天数", 0)), 0)
             raw_lookback_days = temp_section.get("回溯天数", 7)

@@ -1565,13 +1565,32 @@ function resolveSection(index, ...legacyKeys) {
 }
 
 const temperatureSection = computed(() => {
-  const section = resolveSection('1', '1.逐小时气温')
+  const section = resolveSection('1', '1.日均气温', '1.逐小时气温')
   return section && typeof section === 'object' ? section : {}
 })
 
 const calcAverageFromList = (values) => {
+  if (typeof values === 'number' && Number.isFinite(values)) {
+    return Number(values.toFixed(2))
+  }
+  if (values && typeof values === 'object' && !Array.isArray(values)) {
+    const candidate = [values.avg, values.aver_temp, values.average, values.value]
+      .map((item) => Number(item))
+      .find((item) => Number.isFinite(item))
+    if (Number.isFinite(candidate)) {
+      return Number(candidate.toFixed(2))
+    }
+  }
   if (!Array.isArray(values) || !values.length) return null
-  const numbers = values.filter((item) => typeof item === 'number' && Number.isFinite(item))
+  const numbers = values
+    .map((item) => {
+      if (typeof item === 'number') return item
+      if (item && typeof item === 'object') {
+        return Number(item.avg ?? item.aver_temp ?? item.average ?? item.value)
+      }
+      return Number(item)
+    })
+    .filter((item) => Number.isFinite(item))
   if (!numbers.length) return null
   const sum = numbers.reduce((acc, item) => acc + item, 0)
   return Number((sum / numbers.length).toFixed(2))

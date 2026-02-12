@@ -27,10 +27,6 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/PageSelectView.vue'),
   },
   {
-    path: '/projects/:projectKey/modularization',
-    component: () => import('../projects/daily_report_25_26/pages/ProjectModularizationView.vue'),
-  },
-  {
     path: '/projects/:projectKey/pages/:pageKey/sheets',
     component: () => import('../projects/daily_report_25_26/pages/Sheets.vue'),
   },

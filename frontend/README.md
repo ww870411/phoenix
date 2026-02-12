@@ -1575,6 +1575,38 @@ docker compose up -d --build
 - 文案变更：
   - 页面主标题由“春节简化数据看板”调整为“春节数据看板”。
 
+## 会话小结（2026-02-12 主看板气温来源改为日视图兼容）
+
+- 修改页面：`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`
+- 兼容处理：
+  - `calcAverageFromList` 从“仅支持逐小时数组”扩展为支持日级对象（`avg/aver_temp/average/value`）与旧数组双格式；
+  - `temperatureSeries`、`averageTemp` 继续复用原调用链，自动消费后端返回的日级气温结构。
+- 口径结果：
+  - 页面上的当日平均气温与气温趋势计算不再依赖小时数组拆解，改为优先使用日级平均值。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 主看板第1节命名改为日均气温）
+
+- 修改页面：`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`
+- 兼容改动：
+  - 第1节 section 读取别名改为 `resolveSection('1', '1.日均气温', '1.逐小时气温')`；
+  - 兼容旧缓存键与新配置键并行，避免发布切换期显示异常。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 下线项目模块化管理页面）
+
+- 修改范围：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`、`frontend/src/router/index.js`、`frontend/src/projects/daily_report_25_26/services/api.js`
+- 清理内容：
+  - 移除“项目模块化管理”卡片与页面跳转逻辑；
+  - 移除 `/projects/:projectKey/modularization` 路由；
+  - 删除前端模块化状态/初始化 API 调用封装。
+- 删除文件：
+  - `frontend/src/projects/daily_report_25_26/pages/ProjectModularizationView.vue`
+- 验证结果：
+  - `npm run build` 已通过。
+
 ## 会话小结（2026-02-12 春节迷你看板“金镶玉”主题重构）
 
 - 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`

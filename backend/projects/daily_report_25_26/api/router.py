@@ -14,11 +14,9 @@ from .legacy_full import router as legacy_router
 
 from .dashboard import public_router as dashboard_public_router
 from .dashboard import router as dashboard_router
-from .modularization import router as modularization_router
 
 router = APIRouter()
 router.include_router(legacy_router)
-router.include_router(modularization_router)
 router.include_router(dashboard_router)
 
 public_router = APIRouter()

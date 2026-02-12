@@ -922,8 +922,17 @@ watch(() => themeMode.value, (v) => localStorage.setItem(THEME_STORAGE_KEY, v))
 }
 
 .festival-background-overlay {
-  position: fixed; inset: 0; opacity: 0.12; pointer-events: none; z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg width='160' height='100' viewBox='0 0 160 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 60c0-11 9-20 20-20s20 9 20 20h10c0-16.5-13.5-30-30-30S30 43.5 30 60h10zm0 10c0 5.5 4.5 10 10 10s10-4.5 10-10h10c0 11-9 20-20 20s-20-9-20-20h10z' fill='%23ffd700'/%3E%3C/svg%3E");
+  position: fixed;
+  inset: 0;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+  /* 使用真实图片素材 */
+  background-image: url("/images/festival-pattern.jpg");
+  background-repeat: repeat;
+  background-size: 360px; /* 适当放大以展示纹理细节 */
+  mix-blend-mode: overlay; /* 让纹理叠在红色背景上 */
+  filter: sepia(1) saturate(2) hue-rotate(5deg); /* 微调图片色调偏金 */
 }
 
 .festival-decorations { position: fixed; inset: 0; pointer-events: none; z-index: 10; }

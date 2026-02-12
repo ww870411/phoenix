@@ -60,8 +60,8 @@
             }
         }
     },
-    "1.逐小时气温":{
-        "数据来源":"temperature_data",
+    "1.日均气温":{
+        "数据来源":"calc_temperature_data",
         "查询结构":["biz_date","date","value"],
         "预测天数":3,
         "本期":{

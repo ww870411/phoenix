@@ -849,6 +849,67 @@
 - **Agent Action:** 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue` 页面主标题文案为“春节数据看板”。
 - **Result:** 页面标题已更新为“春节数据看板”。
 
+## 2026-02-12（数据看板缓存：逐小时气温链路改为日视图来源）
+
+- **User Request:** 列出并改造所有“逐小时气温”业务点，统一改为从 `calc_temperature_data` 视图读取；期间平均气温按“每日平均气温的平均值”处理。
+- **原业务点清单（逐小时链路）:**
+  1. 后端 `backend/services/dashboard_expression.py`  
+     - `_fetch_temperature_series`：从 `temperature_data` 按小时区间取 24 点数据；  
+     - `_fill_temperature_block`：按日期填充“本期/同期”逐小时数组；  
+     - `evaluate_dashboard` 第1节“逐小时气温”调用 `_fill_temperature_block`，发布缓存时也走这条链路。
+  2. 前端 `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`  
+     - `calcAverageFromList`：把逐小时数组计算为当日平均值；  
+     - `temperatureSeries`：对本期/同期日期桶逐日求平均后绘图；  
+     - `averageTemp`：读取当日逐小时数组后计算当日平均及同比差值。
+- **Agent Action:**
+  1. 后端改造（视图来源）：  
+     - 新增 `_fetch_daily_temperature_stats_map`，直接查询 `calc_temperature_data` 的 `max_temp/min_temp/aver_temp`；  
+     - 重写 `_fill_temperature_block`：按日期写入日级对象 `{max, min, avg}`，不再填充 24 点逐小时数组；  
+     - `evaluate_dashboard` 第1节保持调用路径不变，但底层数据已切换为视图日级来源。  
+  2. 前端兼容（统一日级口径）：  
+     - 增强 `calcAverageFromList`，兼容日级对象（`avg/aver_temp/average/value`）与旧数组格式；  
+     - 因此 `temperatureSeries` 与 `averageTemp` 无需改调用链即可消费视图日级数据。  
+  3. 期间平均口径校验：  
+     - 后端 `_fetch_average_temperature_between` 仍为 `AVG(aver_temp)`（即“每日平均气温再平均”），符合你的要求。
+- **Result:** 数据看板（含发布缓存路径）已不再依赖逐小时原始表计算日均值，第1节气温读取统一来自 `calc_temperature_data` 视图日级数据。
+- **Verify:**  
+  - `frontend` 执行 `npm run build` 通过；  
+  - `python -m py_compile backend/services/dashboard_expression.py` 通过。
+
+## 2026-02-12（主看板口径命名：逐小时气温 → 日均气温）
+
+- **User Request:** 将页面口径名称改为“日均气温”，并确保对应数据来源为 `calc_temperature_data` 视图。
+- **Agent Action:**
+  1. 修改后端：`backend/services/dashboard_expression.py`  
+     - 第1节处理注释与进度提示改为“日均气温”；  
+     - 第1节 section 解析改为 `get_section_by_index("1", "1.日均气温", "1.逐小时气温")`，兼容旧键。  
+  2. 修改配置：  
+     - `backend_data/projects/daily_report_25_26/config/数据结构_数据看板.json`：section 键改为 `1.日均气温`，`数据来源` 改为 `calc_temperature_data`；  
+     - `backend_data/projects/daily_report_25_26/config/dashboard_frontend_config.json`：第1节 `key/title/source_section/contract_notes/description` 同步改为“日均气温”与视图来源。  
+  3. 修改前端：`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`  
+     - 第1节读取别名改为 `resolveSection('1', '1.日均气温', '1.逐小时气温')`，兼容旧缓存键。
+- **Result:** 主看板第1节命名已切换为“日均气温”，且数据来源配置与后端读取路径均对齐至 `calc_temperature_data` 视图。
+- **Verify:**  
+  - `frontend` 执行 `npm run build` 通过；  
+  - `python -m py_compile backend/services/dashboard_expression.py` 通过。
+
+## 2026-02-12（下线“项目模块化管理”板块）
+
+- **User Request:** 清理掉“项目模块化管理”板块。
+- **Agent Action:**
+  1. 前端清理：
+     - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue` 移除“项目模块化管理”卡片与跳转逻辑；
+     - `frontend/src/router/index.js` 移除 `/projects/:projectKey/modularization` 路由；
+     - `frontend/src/projects/daily_report_25_26/services/api.js` 删除模块化状态/初始化接口方法；
+     - 删除页面文件 `frontend/src/projects/daily_report_25_26/pages/ProjectModularizationView.vue`。
+  2. 后端清理：
+     - `backend/projects/daily_report_25_26/api/router.py` 取消挂载 `modularization_router`；
+     - 删除接口文件 `backend/projects/daily_report_25_26/api/modularization.py`。
+- **Result:** 页面与路由层面已无“项目模块化管理”入口，项目专属模块化接口已下线。
+- **Verify:**  
+  - `frontend` 执行 `npm run build` 通过；  
+  - `python -m py_compile backend/projects/daily_report_25_26/api/router.py backend/api/v1/routes.py` 通过。
+
 ## 2026-02-12（春节迷你看板：“金镶玉”主题重构）
 
 - **User Feedback:** 原春节主题不够美观且可能影响数据读取。

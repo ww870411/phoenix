@@ -23,7 +23,7 @@
       "id": "temperature_hourly",
       "object": "temperature_data",
       "type": "table",
-      "description": "逐小时气温原始采集表；字段源自天气 API 入库脚本。",
+      "description": "日均气温聚合视图；字段源自 temperature_data 的日级聚合结果。",
       "key_fields": ["project_key", "biz_date", "date"],
       "value_fields": ["value"],
       "filters": {
@@ -34,7 +34,7 @@
         "peer": "biz_date - 1 year",
         "forecast_days": 3
       },
-      "contract_notes": "供 1.逐小时气温、当日平均气温 summary、累计卡片“供暖期平均气温”使用。",
+      "contract_notes": "供 1.日均气温、当日平均气温 summary、累计卡片“供暖期平均气温”使用。",
       "consumers": ["summary:avg_temp_today", "section:1", "headline:season_avg_temp"]
     },
     {
@@ -319,7 +319,7 @@
       {
         "id": "avg_temp_today",
         "title": "当日平均气温（及同比增量）",
-        "source_section": "1.逐小时气温",
+        "source_section": "1.日均气温",
         "calc": {
           "type": "highlight_average",
           "main_series": "本期",
@@ -402,8 +402,8 @@
   "sections": [
     {
       "index": "1",
-      "key": "1.逐小时气温",
-      "title": "逐小时气温",
+      "key": "1.日均气温",
+      "title": "日均气温",
       "layout": "span12",
       "data_mappings": [
         {

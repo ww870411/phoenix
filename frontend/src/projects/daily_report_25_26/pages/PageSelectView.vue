@@ -23,17 +23,6 @@
           </button>
         </div>
       </section>
-      <section v-if="isSystemAdmin" class="card elevated admin-block">
-        <header class="card-header">
-          <h3>项目模块化管理</h3>
-          <p class="page-subtitle">检查并初始化项目级配置目录（config/runtime）</p>
-        </header>
-        <div class="admin-actions">
-          <button class="btn primary" type="button" @click="openModularization">
-            进入模块化管理
-          </button>
-        </div>
-      </section>
       <section v-if="showWorkflowCard" class="card elevated status-block">
         <header class="card-header status-header">
           <div class="status-heading">
@@ -148,10 +137,6 @@ const workflow = ref(null)
 const workflowLoading = ref(false)
 const workflowError = ref('')
 const actionPending = ref(false)
-const isSystemAdmin = computed(() => {
-  const group = String(auth.user?.group || '').trim()
-  return group === '系统管理员' || group === 'Global_admin'
-})
 
 onMounted(async () => {
   await loadPages()
@@ -320,10 +305,6 @@ async function publishDaily() {
   }
 }
 
-function openModularization() {
-  router.push(`/projects/${encodeURIComponent(projectKey)}/modularization`)
-}
-
 function pageDescription(page) {
   if (!page) return '点击进入功能页面'
   const desc =
@@ -440,17 +421,6 @@ function openPage(page) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.admin-block {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-actions {
-  display: flex;
-  justify-content: flex-start;
 }
 
 .status-header {

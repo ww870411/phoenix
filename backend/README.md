@@ -424,6 +424,36 @@
 - 本轮后端接口与服务无新增改动。
 - 前端将 mini 看板主标题文案由“春节简化数据看板”调整为“春节数据看板”。
 
+## 结构同步（2026-02-12 主看板气温读取切换至日聚合视图）
+
+- 修改文件：`backend/services/dashboard_expression.py`
+- 核心调整：
+  - 将第1节气温填充由“查询 `temperature_data` 小时序列”切换为“查询 `calc_temperature_data` 日级统计”；
+  - 新增 `_fetch_daily_temperature_stats_map` 读取 `max_temp/min_temp/aver_temp`；
+  - `_fill_temperature_block` 改为按日期写入 `{max, min, avg}` 日级结构。
+- 口径说明：
+  - 某一时期平均气温仍按 `AVG(aver_temp)` 计算，即“每日平均气温的平均值”。
+- 验证结果：
+  - `python -m py_compile backend/services/dashboard_expression.py` 通过。
+
+## 结构同步（2026-02-12 主看板第1节命名切换为日均气温）
+
+- 修改文件：`backend/services/dashboard_expression.py`、`backend_data/projects/daily_report_25_26/config/数据结构_数据看板.json`、`backend_data/projects/daily_report_25_26/config/dashboard_frontend_config.json`
+- 调整内容：
+  - 第1节命名由“逐小时气温”改为“日均气温”；
+  - 配置中的 `key/title/source_section` 与 `数据来源` 已同步切到 `1.日均气温` + `calc_temperature_data`；
+  - 后端 section 解析保留旧键兼容（`1.逐小时气温`）以平滑过渡缓存。
+
+## 结构同步（2026-02-12 下线项目模块化管理接口）
+
+- 修改文件：`backend/projects/daily_report_25_26/api/router.py`
+- 删除文件：`backend/projects/daily_report_25_26/api/modularization.py`
+- 清理内容：
+  - `daily_report_25_26` 项目路由不再挂载 `modularization_router`；
+  - 项目专属 `/project/modularization/status` 与 `/project/modularization/bootstrap` 接口下线。
+- 验证结果：
+  - `python -m py_compile backend/projects/daily_report_25_26/api/router.py backend/api/v1/routes.py` 通过。
+
 ## 结构同步（2026-02-12 春节迷你看板“金镶玉”主题重构）
 
 - 本轮后端接口与服务无新增改动。
