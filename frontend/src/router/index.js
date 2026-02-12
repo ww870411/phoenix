@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '../daily_report_25_26/store/auth'
+import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
 
 const routes = [
   {
@@ -15,45 +15,53 @@ const routes = [
     component: () => import('../pages/ProjectSelectView.vue'),
   },
   {
+    path: '/projects/:projectKey',
+    component: () => import('../projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue'),
+  },
+  {
+    path: '/projects/:projectKey/spring-dashboard',
+    component: () => import('../projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages',
-    component: () => import('../daily_report_25_26/pages/PageSelectView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/PageSelectView.vue'),
   },
   {
     path: '/projects/:projectKey/modularization',
-    component: () => import('../daily_report_25_26/pages/ProjectModularizationView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/ProjectModularizationView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets',
-    component: () => import('../daily_report_25_26/pages/Sheets.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/Sheets.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/dashboard',
-    component: () => import('../daily_report_25_26/pages/DashBoard.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/DashBoard.vue'),
     alias: '/dashboard'
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',
-    component: () => import('../daily_report_25_26/pages/DataEntryView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/DataEntryView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/approval/:sheetKey',
-    component: () => import('../daily_report_25_26/pages/ApprovalView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/ApprovalView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/display',
-    component: () => import('../daily_report_25_26/pages/DisplayView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/DisplayView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/data-analysis',
-    component: () => import('../daily_report_25_26/pages/DataAnalysisView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/DataAnalysisView.vue'),
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/display/:sheetKey',
-    component: () => import('../daily_report_25_26/pages/DisplayRuntimeView.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/DisplayRuntimeView.vue'),
   },
   {
     path: '/debug/runtime-eval',
-    component: () => import('../daily_report_25_26/pages/RuntimeEvalDebug.vue'),
+    component: () => import('../projects/daily_report_25_26/pages/RuntimeEvalDebug.vue'),
   },
 ]
 

@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>春节值守日报（XLSX）→ byDate JSON</title>
+  <style>
+    :root { color-scheme: light; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:18px; color:#111;}
+    h2{margin:0 0 6px 0;}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    .card{border:1px solid #ddd; border-radius:12px; padding:12px; margin:12px 0;}
+    label{font-size:14px;}
+    select,input,button{font-size:14px; padding:8px 10px;}
+    button{cursor:pointer; border:1px solid #ccc; border-radius:10px; background:#fff;}
+    button:disabled{opacity:.5; cursor:not-allowed;}
+    pre{white-space:pre-wrap; word-break:break-all; background:#f7f7f7; padding:12px; border-radius:12px; max-height:55vh; overflow:auto;}
+    .muted{color:#666; font-size:12px; line-height:1.4;}
+    .ok{color:#0a7;}
+    .warn{color:#b60;}
+    .pill{display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #ddd; font-size:12px; color:#444; background:#fafafa;}
+    .spacer{flex:1;}
+    a{color:inherit;}
+  </style>
+</head>
+<body>
+  <h2>春节值守日报（XLSX）→ byDate JSON</h2>
+  <div class="muted">
+    纯前端解析：文件不会上传到任何服务器。<br/>
+    解析规则：自动识别包含“本期/同期/差异”的表头行；其上一行作为日期行；按 A列（统计主体）合并单元格补全口径分组；输出只包含 <span class="pill">dates</span> 与 <span class="pill">byDate</span>（按日期组织）。
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label>选择 XLSX：</label>
+      <input id="file" type="file" accept=".xlsx,.xls" />
+      <label>工作表：</label>
+      <select id="sheet"></select>
+      <button id="parse">解析 → 生成 JSON</button>
+      <button id="download" disabled>下载 JSON</button>
+      <span class="spacer"></span>
+      <span id="status" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label><input type="checkbox" id="keepDiffCell" checked /> 保留 diffCell（原表差异列内容/公式）</label>
+      <label><input type="checkbox" id="computeDiff" checked /> 计算 diff=(本期-同期)/同期</label>
+      <label><input type="checkbox" id="normalizeMetric" checked /> 规范化指标名称（去换行、合并空格）</label>
+    </div>
+    <div class="muted" style="margin-top:6px">
+      小提示：为避免 Excel 未重算导致“差异”不可信，默认以计算 diff 为准；同时保留 diffCell 便于对照。
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted">
+      输出预览（JSON）：
+      <span id="hint" class="muted"></span>
+    </div>
+    <pre id="out">{}</pre>
+  </div>
+
+  <div class="muted">
+    依赖：SheetJS（CDN）。如果你需要“离线版（不走 CDN）”，我也可以给你打包一个本地 js 的版本。
+  </div>
+
+  <!-- SheetJS（前端解析 xlsx） -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    let workbook = null;
+    let lastJson = null;
+
+    function setStatus(msg, cls="muted") {
+      const el = $("status");
+      el.className = cls;
+      el.textContent = msg;
+    }
+
+    // 将各种“像数字”的文本转成 number；否则原样返回
+    function toNumberMaybe(v) {
+      if (v === null || v === undefined) return null;
+      if (typeof v === "number") return isFinite(v) ? v : null;
+      if (v instanceof Date) return v; // 日期留给上层处理
+      if (typeof v !== "string") return v;
+
+      const s = v.trim();
+      if (!s) return null;
+
+      // 常见占位
+      if (s === "-" || s === "—" || s === "N/A") return null;
+
+      // 去掉千分位逗号
+      const cleaned = s.replace(/,/g, "");
+
+      // 百分号
+      if (/^-?\\d+(\\.\\d+)?%$/.test(cleaned)) {
+        const n = parseFloat(cleaned.replace("%", ""));
+        return isFinite(n) ? n / 100 : null;
+      }
+
+      // 普通数字
+      if (/^-?\\d+(\\.\\d+)?$/.test(cleaned)) {
+        const n = parseFloat(cleaned);
+        return isFinite(n) ? n : null;
+      }
+
+      return v;
+    }
+
+    // Excel 日期序列号 / Date / 文本 → ISO yyyy-mm-dd（尽量）
+    function toISODate(v) {
+      if (v === null || v === undefined) return null;
+
+      if (v instanceof Date) {
+        const y = v.getFullYear();
+        const m = String(v.getMonth()+1).padStart(2,"0");
+        const d = String(v.getDate()).padStart(2,"0");
+        return `${y}-${m}-${d}`;
+      }
+
+      // SheetJS 对日期序列号可用 SSF.parse_date_code
+      if (typeof v === "number" && isFinite(v)) {
+        const o = XLSX.SSF.parse_date_code(v);
+        if (o && o.y && o.m && o.d) {
+          const y = o.y;
+          const m = String(o.m).padStart(2,"0");
+          const d = String(o.d).padStart(2,"0");
+          return `${y}-${m}-${d}`;
+        }
+      }
+
+      // 文本日期（容错）
+      if (typeof v === "string") {
+        const s = v.trim();
+        // 支持 2026/2/14 或 2026-02-14
+        const m1 = s.match(/^(\\d{4})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})$/);
+        if (m1) {
+          const y = m1[1];
+          const m = String(parseInt(m1[2],10)).padStart(2,"0");
+          const d = String(parseInt(m1[3],10)).padStart(2,"0");
+          return `${y}-${m}-${d}`;
+        }
+        // 兜底：原样返回（例如 2/14）
+        return s;
+      }
+
+      return String(v);
+    }
+
+    // 规范化指标名称：去换行、合并空格
+    function normalizeMetricName(s) {
+      if (s === null || s === undefined) return null;
+      return String(s).replace(/\\s*\\n\\s*/g, " ").replace(/\\s+/g, " ").trim();
+    }
+
+    // AOA 填充合并单元格（把合并区域的值补齐到每个格子）
+    function fillMerges(ws, aoa) {
+      const merges = ws["!merges"] || [];
+      function ensureRC(r, c) {
+        while (aoa.length <= r) aoa.push([]);
+        while (aoa[r].length <= c) aoa[r].push(null);
+      }
+
+      merges.forEach(m => {
+        const sr = m.s.r, sc = m.s.c, er = m.e.r, ec = m.e.c;
+        ensureRC(sr, sc);
+        const topLeft = aoa[sr][sc];
+        for (let r = sr; r <= er; r++) {
+          for (let c = sc; c <= ec; c++) {
+            ensureRC(r, c);
+            if (aoa[r][c] === null || aoa[r][c] === undefined || aoa[r][c] === "") {
+              aoa[r][c] = topLeft;
+            }
+          }
+        }
+      });
+
+      return aoa;
+    }
+
+    // 找到表头行：包含“本期”“同期”“差异”并且重复出现
+    function findHeaderRow(aoa) {
+      for (let r = 0; r < Math.min(aoa.length, 80); r++) {
+        const row = aoa[r] || [];
+        let cnt = 0;
+        for (let c = 0; c < row.length; c++) {
+          const v = row[c];
+          if (v === "本期" || v === "同期" || v === "差异") cnt++;
+        }
+        if (cnt >= 6 && row.includes("本期") && row.includes("同期") && row.includes("差异")) {
+          return r;
+        }
+      }
+      return -1;
+    }
+
+    // ✅ 只输出 byDate（按日期组织）
+    function extract(ws) {
+      const aoa0 = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+      const aoa = fillMerges(ws, aoa0);
+
+      const subHeaderRow = findHeaderRow(aoa);
+      if (subHeaderRow < 0) throw new Error("找不到包含“本期/同期/差异”的表头行。");
+
+      const dateRow = subHeaderRow - 1;
+      if (dateRow < 0) throw new Error("表头上一行（日期行）不存在，表结构不符合预期。");
+
+      const hdr = aoa[subHeaderRow];
+      const dates = [];
+      const groups = []; // {date, c0}
+
+      for (let c = 0; c < hdr.length; c++) {
+        if (hdr[c] === "本期" && hdr[c+1] === "同期" && hdr[c+2] === "差异") {
+          const dRaw = (aoa[dateRow] || [])[c];
+          const dateISO = toISODate(dRaw);
+          dates.push(dateISO);
+          groups.push({ date: dateISO, c0: c });
+          c += 2;
+        }
+      }
+      if (!groups.length) throw new Error("没有识别到任何日期列组（本期/同期/差异）。");
+
+      const keepDiffCell = $("keepDiffCell").checked;
+      const computeDiff = $("computeDiff").checked;
+      const normalizeMetric = $("normalizeMetric").checked;
+
+      const byDate = {};
+      for (const d of dates) byDate[d] = {};
+
+      // 同口径同指标若重复：自动变成数组
+      function setMetric(date, scope, metric, payload) {
+        if (!byDate[date][scope]) byDate[date][scope] = {};
+        const cur = byDate[date][scope][metric];
+        if (cur === undefined) { byDate[date][scope][metric] = payload; return; }
+        if (Array.isArray(cur)) { cur.push(payload); return; }
+        byDate[date][scope][metric] = [cur, payload];
+      }
+
+      // 数据行从 subHeaderRow+1 开始
+      for (let r = subHeaderRow + 1; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+
+        const scope = row[0] != null ? String(row[0]).trim() : null;  // A列：统计主体
+        const metricRaw = row[1];                                     // B列：指标
+        const unit = row[2] != null ? String(row[2]).trim() : null;   // C列：单位
+
+        const hasAny = row.some(v => v !== null && v !== undefined && String(v).trim() !== "");
+        if (!hasAny) continue;
+        if (metricRaw == null || String(metricRaw).trim() === "") continue;
+        if (!scope) continue;
+
+        const metric = normalizeMetric ? normalizeMetricName(metricRaw) : String(metricRaw);
+
+        for (const g of groups) {
+          const c0 = g.c0;
+
+          const current = toNumberMaybe(row[c0]);
+          const prior   = toNumberMaybe(row[c0 + 1]);
+          const diffCell = row[c0 + 2];
+
+          let diff = null;
+          if (computeDiff && typeof current === "number" && typeof prior === "number" && isFinite(current) && isFinite(prior)) {
+            if (prior === 0) diff = (current === 0) ? 0 : null;
+            else diff = (current - prior) / prior;
+          }
+
+          const payload = {
+            unit,
+            current: (typeof current === "number" ? current : (current ?? null)),
+            prior:   (typeof prior === "number" ? prior : (prior ?? null)),
+            diff
+          };
+          if (keepDiffCell) payload.diffCell = diffCell;
+
+          const empty = (payload.current == null && payload.prior == null && payload.diff == null && (!keepDiffCell || payload.diffCell == null));
+          if (empty) continue;
+
+          setMetric(g.date, scope, metric, payload);
+        }
+      }
+
+      return {
+        meta: {
+          sheetName: $("sheet").value,
+          generatedAt: new Date().toISOString(),
+          header: { dateRow, subHeaderRow }
+        },
+        dates,
+        byDate
+      };
+    }
+
+    $("file").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+
+      setStatus("读取文件中…");
+      const buf = await f.arrayBuffer();
+
+      workbook = XLSX.read(buf, { type: "array", cellDates: true });
+      const sheetSel = $("sheet");
+      sheetSel.innerHTML = "";
+      workbook.SheetNames.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sheetSel.appendChild(opt);
+      });
+
+      setStatus(`已载入：${f.name}（${workbook.SheetNames.length} 张表）`, "ok");
+      $("download").disabled = true;
+      $("out").textContent = "{}";
+      $("hint").textContent = "";
+      lastJson = null;
+    });
+
+    $("parse").addEventListener("click", () => {
+      try {
+        if (!workbook) {
+          setStatus("请先选择 XLSX 文件。", "warn");
+          return;
+        }
+        const sheetName = $("sheet").value;
+        const ws = workbook.Sheets[sheetName];
+
+        const obj = extract(ws);
+        lastJson = obj;
+
+        $("out").textContent = JSON.stringify(obj, null, 2);
+        $("download").disabled = false;
+        setStatus("解析完成 ✅", "ok");
+        $("hint").textContent = `dates=${obj.dates.length}，byDate keys=${Object.keys(obj.byDate||{}).length}`;
+      } catch (err) {
+        console.error(err);
+        setStatus("解析失败：" + err.message, "warn");
+      }
+    });
+
+    $("download").addEventListener("click", () => {
+      if (!lastJson) return;
+      const blob = new Blob([JSON.stringify(lastJson, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "日报_byDate.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>

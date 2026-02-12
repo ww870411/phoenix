@@ -1,0 +1,3234 @@
+{
+  "meta": {
+    "sheetName": "Sheet1",
+    "generatedAt": "2026-02-11T14:45:56.333Z",
+    "header": {
+      "dateRow": 1,
+      "subHeaderRow": 2
+    }
+  },
+  "dates": [
+    "2026-02-13",
+    "2026-02-14",
+    "2026-02-15",
+    "2026-02-16",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-02-19",
+    "2026-02-20",
+    "2026-02-21",
+    "2026-02-22"
+  ],
+  "byDate": {
+    "2026-02-13": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": 3.3,
+          "prior": 4.2,
+          "diff": -0.21428571428571436,
+          "diffCell": -0.214285714285714
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 5727.72,
+          "prior": 5551.94,
+          "diff": 0.03166100498204243,
+          "diffCell": 0.0316610049820423
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 35,
+          "prior": 35,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 8,
+          "diff": 0.125,
+          "diffCell": 0.125
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 10,
+          "prior": 10,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4153,
+          "prior": 4049,
+          "diff": 0.025685354408495925,
+          "diffCell": 0.0256853544084959
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 24,
+          "prior": 25,
+          "diff": -0.04,
+          "diffCell": -0.04
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2036,
+          "prior": 1993,
+          "diff": 0.021575514300050176,
+          "diffCell": 0.0215755143000502
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2117,
+          "prior": 2056,
+          "diff": 0.029669260700389104,
+          "diffCell": 0.0296692607003891
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 839,
+          "prior": 793,
+          "diff": 0.058007566204287514,
+          "diffCell": 0.0580075662042875
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 3,
+          "diff": 0.3333333333333333,
+          "diffCell": 0.333333333333333
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 454.32,
+          "prior": 439.94,
+          "diff": 0.03268627540119106,
+          "diffCell": 0.0326862754011911
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 1,
+          "diff": 1,
+          "diffCell": 1
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 268,
+          "prior": 257,
+          "diff": 0.042801556420233464,
+          "diffCell": 0.0428015564202335
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 13.4,
+          "prior": 434.6,
+          "diff": -0.9691670501610677,
+          "diffCell": -0.969167050161068
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 13.4,
+          "prior": 13,
+          "diff": 0.030769230769230795,
+          "diffCell": 0.0307692307692308
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-14": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": 4.3,
+          "prior": 5.4,
+          "diff": -0.20370370370370378,
+          "diffCell": -0.203703703703704
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 5903.34,
+          "prior": 5655.58,
+          "diff": 0.04380806212625411,
+          "diffCell": 0.0438080621262541
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 31,
+          "prior": 32,
+          "diff": -0.03125,
+          "diffCell": -0.03125
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 10,
+          "prior": 10,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4410,
+          "prior": 4233,
+          "diff": 0.041814316087880936,
+          "diffCell": 0.0418143160878809
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 18,
+          "prior": 18,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1962,
+          "prior": 1867,
+          "diff": 0.05088377075522228,
+          "diffCell": 0.0508837707552223
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 525,
+          "prior": 514,
+          "diff": 0.021400778210116732,
+          "diffCell": 0.0214007782101167
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1923,
+          "prior": 1852,
+          "diff": 0.03833693304535637,
+          "diffCell": 0.0383369330453564
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 747,
+          "prior": 713,
+          "diff": 0.047685834502103785,
+          "diffCell": 0.0476858345021038
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 10,
+          "prior": 10,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 441.04,
+          "prior": 418.58,
+          "diff": 0.05365760428114109,
+          "diffCell": 0.0536576042811411
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 298,
+          "prior": 284,
+          "diff": 0.04929577464788732,
+          "diffCell": 0.0492957746478873
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 7.3,
+          "prior": 401.4,
+          "diff": -0.9818136522172396,
+          "diffCell": -0.98181365221724
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 7.3,
+          "prior": 7,
+          "diff": 0.04285714285714283,
+          "diffCell": 0.0428571428571428
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 4,
+          "diff": -0.25,
+          "diffCell": -0.25
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-15": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -0.9,
+          "prior": 1,
+          "diff": -1.9,
+          "diffCell": -1.9
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 5800.29,
+          "prior": 5605.3,
+          "diff": 0.034786719711701386,
+          "diffCell": 0.0347867197117014
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 28,
+          "prior": 27,
+          "diff": 0.037037037037037035,
+          "diffCell": 0.037037037037037
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 12,
+          "prior": 13,
+          "diff": -0.07692307692307693,
+          "diffCell": -0.0769230769230769
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 10,
+          "prior": 10,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4189,
+          "prior": 4064,
+          "diff": 0.030757874015748032,
+          "diffCell": 0.030757874015748
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1858,
+          "prior": 1817,
+          "diff": 0.022564667033571822,
+          "diffCell": 0.0225646670335718
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 507,
+          "prior": 494,
+          "diff": 0.02631578947368421,
+          "diffCell": 0.0263157894736842
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1824,
+          "prior": 1753,
+          "diff": 0.040501996577296064,
+          "diffCell": 0.0405019965772961
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 823,
+          "prior": 792,
+          "diff": 0.039141414141414144,
+          "diffCell": 0.0391414141414141
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 8,
+          "prior": 9,
+          "diff": -0.1111111111111111,
+          "diffCell": -0.111111111111111
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 469.39,
+          "prior": 444.8,
+          "diff": 0.055283273381294906,
+          "diffCell": 0.0552832733812949
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 2,
+          "diff": 0.5,
+          "diffCell": 0.5
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 0,
+          "diff": null,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 310,
+          "prior": 296,
+          "diff": 0.0472972972972973,
+          "diffCell": 0.0472972972972973
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 8.9,
+          "prior": 423.3,
+          "diff": -0.9789747224190881,
+          "diffCell": -0.978974722419088
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 8.9,
+          "prior": 8.5,
+          "diff": 0.047058823529411806,
+          "diffCell": 0.0470588235294118
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 4,
+          "diff": -0.25,
+          "diffCell": -0.25
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-16": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -3.3,
+          "prior": -1.4,
+          "diff": 1.3571428571428572,
+          "diffCell": 1.35714285714286
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6212.56,
+          "prior": 5963.72,
+          "diff": 0.041725634335616046,
+          "diffCell": 0.0417256343356159
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 44,
+          "prior": 44,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 17,
+          "prior": 17,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4407,
+          "prior": 4219,
+          "diff": 0.04456032235126807,
+          "diffCell": 0.0445603223512681
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 19,
+          "prior": 19,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1927,
+          "prior": 1826,
+          "diff": 0.055312157721796276,
+          "diffCell": 0.0553121577217963
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 602,
+          "prior": 577,
+          "diff": 0.043327556325823226,
+          "diffCell": 0.0433275563258232
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1878,
+          "prior": 1816,
+          "diff": 0.034140969162995596,
+          "diffCell": 0.0341409691629956
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1034,
+          "prior": 1001,
+          "diff": 0.03296703296703297,
+          "diffCell": 0.032967032967033
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 19,
+          "prior": 18,
+          "diff": 0.05555555555555555,
+          "diffCell": 0.0555555555555556
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 14,
+          "prior": 14,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 454.36,
+          "prior": 438.72,
+          "diff": 0.03564916119620711,
+          "diffCell": 0.0356491611962071
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 307,
+          "prior": 295,
+          "diff": 0.04067796610169491,
+          "diffCell": 0.0406779661016949
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 5,
+          "diff": -0.2,
+          "diffCell": -0.2
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 10.2,
+          "prior": 397.6,
+          "diff": -0.9743460764587526,
+          "diffCell": -0.974346076458753
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 10.2,
+          "prior": 10,
+          "diff": 0.019999999999999928,
+          "diffCell": 0.0199999999999999
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-17": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -4.1,
+          "prior": -2,
+          "diff": 1.0499999999999998,
+          "diffCell": 1.05
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6310.34,
+          "prior": 6044.25,
+          "diff": 0.04402365884931963,
+          "diffCell": 0.0440236588493195
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 77,
+          "prior": 75,
+          "diff": 0.02666666666666667,
+          "diffCell": 0.0266666666666667
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 18,
+          "prior": 19,
+          "diff": -0.05263157894736842,
+          "diffCell": -0.0526315789473684
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4511,
+          "prior": 4323,
+          "diff": 0.0434883182974786,
+          "diffCell": 0.0434883182974786
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 56,
+          "prior": 56,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1431,
+          "prior": 1395,
+          "diff": 0.025806451612903226,
+          "diffCell": 0.0258064516129032
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1066,
+          "prior": 1008,
+          "diff": 0.057539682539682536,
+          "diffCell": 0.0575396825396825
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2014,
+          "prior": 1920,
+          "diff": 0.04895833333333333,
+          "diffCell": 0.0489583333333333
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1049,
+          "prior": 1002,
+          "diff": 0.046906187624750496,
+          "diffCell": 0.0469061876247505
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 8,
+          "prior": 8,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 8,
+          "prior": 8,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 464.44,
+          "prior": 444.75,
+          "diff": 0.044272062956717255,
+          "diffCell": 0.0442720629567173
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 3,
+          "diff": -0.3333333333333333,
+          "diffCell": -0.333333333333333
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 276,
+          "prior": 265,
+          "diff": 0.04150943396226415,
+          "diffCell": 0.0415094339622641
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 0,
+          "diff": null,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 9.9,
+          "prior": 390.3,
+          "diff": -0.9746348962336665,
+          "diffCell": -0.974634896233667
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 9.9,
+          "prior": 9.5,
+          "diff": 0.04210526315789478,
+          "diffCell": 0.0421052631578948
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 8,
+          "diff": 0.125,
+          "diffCell": 0.125
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 8,
+          "prior": 8,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-18": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -2.4,
+          "prior": -1.4,
+          "diff": 0.7142857142857143,
+          "diffCell": 0.714285714285714
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6155.07,
+          "prior": 5916.68,
+          "diff": 0.04029117680861554,
+          "diffCell": 0.0402911768086155
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 90,
+          "prior": 91,
+          "diff": -0.01098901098901099,
+          "diffCell": -0.010989010989011
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 5,
+          "diff": -0.2,
+          "diffCell": -0.2
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4308,
+          "prior": 4131,
+          "diff": 0.042846768336964415,
+          "diffCell": 0.0428467683369644
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 84,
+          "prior": 85,
+          "diff": -0.011764705882352941,
+          "diffCell": -0.0117647058823529
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1381,
+          "prior": 1307,
+          "diff": 0.056618209640397855,
+          "diffCell": 0.0566182096403979
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1098,
+          "prior": 1065,
+          "diff": 0.030985915492957747,
+          "diffCell": 0.0309859154929577
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1829,
+          "prior": 1759,
+          "diff": 0.039795338260375214,
+          "diffCell": 0.0397953382603752
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1031,
+          "prior": 1004,
+          "diff": 0.026892430278884463,
+          "diffCell": 0.0268924302788845
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 3,
+          "diff": -0.3333333333333333,
+          "diffCell": -0.333333333333333
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 471.87,
+          "prior": 449.68,
+          "diff": 0.04934620174346201,
+          "diffCell": 0.049346201743462
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 336,
+          "prior": 324,
+          "diff": 0.037037037037037035,
+          "diffCell": 0.037037037037037
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 8.2,
+          "prior": 409.2,
+          "diff": -0.979960899315738,
+          "diffCell": -0.979960899315738
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 8.2,
+          "prior": 8,
+          "diff": 0.02499999999999991,
+          "diffCell": 0.0249999999999999
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-19": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -4.5,
+          "prior": -2.6,
+          "diff": 0.7307692307692307,
+          "diffCell": 0.730769230769231
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6278.39,
+          "prior": 5969.6,
+          "diff": 0.051727083891718026,
+          "diffCell": 0.051727083891718
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 107,
+          "prior": 106,
+          "diff": 0.009433962264150943,
+          "diffCell": 0.00943396226415094
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 6,
+          "prior": 8,
+          "diff": -0.25,
+          "diffCell": -0.25
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 4403,
+          "prior": 4175,
+          "diff": 0.054610778443113774,
+          "diffCell": 0.0546107784431138
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 95,
+          "prior": 96,
+          "diff": -0.010416666666666666,
+          "diffCell": -0.0104166666666667
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1568,
+          "prior": 1491,
+          "diff": 0.051643192488262914,
+          "diffCell": 0.0516431924882629
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 766,
+          "prior": 724,
+          "diff": 0.058011049723756904,
+          "diffCell": 0.0580110497237569
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2069,
+          "prior": 1960,
+          "diff": 0.055612244897959184,
+          "diffCell": 0.0556122448979592
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1090,
+          "prior": 1046,
+          "diff": 0.04206500956022945,
+          "diffCell": 0.0420650095602294
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 6,
+          "prior": 5,
+          "diff": 0.2,
+          "diffCell": 0.2
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 4,
+          "diff": -0.25,
+          "diffCell": -0.25
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 467.59,
+          "prior": 442.1,
+          "diff": 0.05765663876950905,
+          "diffCell": 0.057656638769509
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 2,
+          "diff": 0.5,
+          "diffCell": 0.5
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 1,
+          "diff": -1,
+          "diffCell": -1
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 309,
+          "prior": 298,
+          "diff": 0.03691275167785235,
+          "diffCell": 0.0369127516778524
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 8.8,
+          "prior": 392.7,
+          "diff": -0.9775910364145658,
+          "diffCell": -0.977591036414566
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 8.8,
+          "prior": 8.5,
+          "diff": 0.035294117647058906,
+          "diffCell": 0.0352941176470589
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-20": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -4.8,
+          "prior": -3,
+          "diff": 0.6,
+          "diffCell": 0.6
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6938,
+          "prior": 6687.5,
+          "diff": 0.03745794392523365,
+          "diffCell": 0.0374579439252336
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 122,
+          "prior": 122,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 11,
+          "diff": -0.18181818181818182,
+          "diffCell": -0.181818181818182
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 5050,
+          "prior": 4858,
+          "diff": 0.03952243721696171,
+          "diffCell": 0.0395224372169617
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 108,
+          "prior": 109,
+          "diff": -0.009174311926605505,
+          "diffCell": -0.00917431192660551
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2029,
+          "prior": 1930,
+          "diff": 0.05129533678756477,
+          "diffCell": 0.0512953367875648
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 935,
+          "prior": 889,
+          "diff": 0.05174353205849269,
+          "diffCell": 0.0517435320584927
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2086,
+          "prior": 2039,
+          "diff": 0.0230505149583129,
+          "diffCell": 0.0230505149583129
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1104,
+          "prior": 1066,
+          "diff": 0.03564727954971857,
+          "diffCell": 0.0356472795497186
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 8,
+          "prior": 8,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 7,
+          "prior": 8,
+          "diff": -0.125,
+          "diffCell": -0.125
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 464,
+          "prior": 452,
+          "diff": 0.02654867256637168,
+          "diffCell": 0.0265486725663717
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 2,
+          "diff": -0.5,
+          "diffCell": -0.5
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 308,
+          "prior": 300,
+          "diff": 0.02666666666666667,
+          "diffCell": 0.0266666666666667
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 0,
+          "diff": null,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 12,
+          "prior": 405.9,
+          "diff": -0.9704360679970436,
+          "diffCell": -0.970436067997044
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 12,
+          "prior": 11.5,
+          "diff": 0.043478260869565216,
+          "diffCell": 0.0434782608695652
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-21": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -4.5,
+          "prior": -3,
+          "diff": 0.5,
+          "diffCell": 0.5
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 7008.14,
+          "prior": 6765.21,
+          "diff": 0.035908715324431954,
+          "diffCell": 0.035908715324432
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 71,
+          "prior": 72,
+          "diff": -0.013888888888888888,
+          "diffCell": -0.0138888888888889
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 13,
+          "prior": 13,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 9,
+          "prior": 9,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 5115,
+          "prior": 4950,
+          "diff": 0.03333333333333333,
+          "diffCell": 0.0333333333333333
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 58,
+          "prior": 58,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 0,
+          "diff": null,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 6,
+          "prior": 6,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1975,
+          "prior": 1925,
+          "diff": 0.025974025974025976,
+          "diffCell": 0.025974025974026
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1047,
+          "prior": 1007,
+          "diff": 0.039721946375372394,
+          "diffCell": 0.0397219463753724
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2093,
+          "prior": 2018,
+          "diff": 0.037165510406342916,
+          "diffCell": 0.0371655104063429
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1052,
+          "prior": 1018,
+          "diff": 0.03339882121807466,
+          "diffCell": 0.0333988212180747
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 10,
+          "diff": -0.1,
+          "diffCell": -0.1
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 9,
+          "prior": 10,
+          "diff": -0.1,
+          "diffCell": -0.1
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 511.84,
+          "prior": 484.21,
+          "diff": 0.057062018545672326,
+          "diffCell": 0.0570620185456723
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 317,
+          "prior": 301,
+          "diff": 0.053156146179401995,
+          "diffCell": 0.053156146179402
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 12.3,
+          "prior": 433,
+          "diff": -0.9715935334872979,
+          "diffCell": -0.971593533487298
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 12.3,
+          "prior": 12,
+          "diff": 0.02500000000000006,
+          "diffCell": 0.0250000000000001
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    },
+    "2026-02-22": {
+      "全口径": {
+        "气温": {
+          "unit": "℃",
+          "current": -5.3,
+          "prior": -3.5,
+          "diff": 0.5142857142857142,
+          "diffCell": 0.514285714285714
+        },
+        "原煤消耗量\n（剔除庄河改造）": {
+          "unit": "吨",
+          "current": 6902.81,
+          "prior": 6571.24,
+          "diff": 0.050457752265934686,
+          "diffCell": 0.0504577522659345
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 62,
+          "prior": 63,
+          "diff": -0.015873015873015872,
+          "diffCell": -0.0158730158730159
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 14,
+          "prior": 15,
+          "diff": -0.06666666666666667,
+          "diffCell": -0.0666666666666667
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 10,
+          "prior": 10,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 8,
+          "prior": 8,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 22,
+          "prior": 22,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "主城区": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 5128,
+          "prior": 4867,
+          "diff": 0.05362646394082597,
+          "diffCell": 0.053626463940826
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 36,
+          "prior": 36,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 5,
+          "prior": 5,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 4,
+          "prior": 4,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海热电联产": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 2105,
+          "prior": 1996,
+          "diff": 0.05460921843687375,
+          "diffCell": 0.0546092184368737
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "北海水炉": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1362,
+          "prior": 1295,
+          "diff": 0.051737451737451735,
+          "diffCell": 0.0517374517374517
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "香海电厂": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 1661,
+          "prior": 1576,
+          "diff": 0.053934010152284266,
+          "diffCell": 0.0539340101522843
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金州热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 968,
+          "prior": 925,
+          "diff": 0.046486486486486484,
+          "diffCell": 0.0464864864864865
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 12,
+          "prior": 12,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行水炉数": {
+          "unit": "台",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        }
+      },
+      "北方热电": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 470.91,
+          "prior": 452.74,
+          "diff": 0.04013340990413927,
+          "diffCell": 0.0401334099041393
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 5,
+          "prior": 6,
+          "diff": -0.16666666666666666,
+          "diffCell": -0.166666666666667
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 1,
+          "diff": -1,
+          "diffCell": -1
+        },
+        "运行汽炉数": {
+          "unit": "台",
+          "current": 2,
+          "prior": 2,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行汽轮机数": {
+          "unit": "台",
+          "current": 1,
+          "prior": 1,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "金普公司": {
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 323,
+          "prior": 314,
+          "diff": 0.028662420382165606,
+          "diffCell": 0.0286624203821656
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 4,
+          "prior": 5,
+          "diff": -0.2,
+          "diffCell": -0.2
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 3,
+          "prior": 3,
+          "diff": 0,
+          "diffCell": 0
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      },
+      "庄河环海": {
+        "外购热量": {
+          "unit": "GJ",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "原煤消耗量": {
+          "unit": "吨",
+          "current": 12.9,
+          "prior": 392.899999999999,
+          "diff": -0.9671672181216594,
+          "diffCell": -0.967167218121659
+        },
+        "其中：\n张屯原煤消耗量": {
+          "unit": "吨",
+          "current": 12.9,
+          "prior": 12.5,
+          "diff": 0.03200000000000003,
+          "diffCell": 0.032
+        },
+        "当日总投诉量": {
+          "unit": "件",
+          "current": 5,
+          "prior": 4,
+          "diff": 0.25,
+          "diffCell": 0.25
+        },
+        "当日净投诉量": {
+          "unit": "件",
+          "current": 0,
+          "prior": 0,
+          "diff": 0,
+          "diffCell": "-"
+        },
+        "运行锅炉房锅炉数": {
+          "unit": "台",
+          "current": 11,
+          "prior": 11,
+          "diff": 0,
+          "diffCell": 0
+        }
+      }
+    }
+  }
+}

@@ -26,7 +26,11 @@ from backend.db.database_daily_report_25_26 import (
     TemperatureData,
     CoalInventoryData,
 )
-from backend.services.project_data_paths import resolve_project_config_path
+from backend.services.project_data_paths import (
+    get_project_config_dir,
+    resolve_global_date_path,
+    resolve_project_config_path,
+)
 from backend.services.project_registry import get_default_project_key
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
 from sqlalchemy import select, text
@@ -91,7 +95,10 @@ def normalize_show_date(value: Optional[str]) -> str:
 
 
 def _resolve_date_config_path(project_key: str) -> Path:
-    return resolve_project_config_path(project_key, "date.json")
+    project_date_path = (get_project_config_dir(project_key) / "date.json").resolve()
+    if project_date_path.exists():
+        return project_date_path
+    return resolve_global_date_path()
 
 
 def _resolve_dashboard_config_path(project_key: str) -> Path:

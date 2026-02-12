@@ -2,22 +2,41 @@
 
 ## 最新结构与状态（2026-02-08）
 
-- 主要页面目录：`frontend/src/daily_report_25_26/pages/`
+- 项目目录已统一：`frontend/src/projects/`
+  - `daily_report_25_26` 与 `daily_report_spring_festval_2026` 均已归位到该目录；
+  - 全局壳层页保留在 `frontend/src/pages/`（登录、项目选择）。
+- 项目入口页：`frontend/src/pages/ProjectSelectView.vue`
+  - 页面展示数据来自 `useProjects -> services/api.js -> GET /api/v1/projects`；
+  - 项目顺序与后端 `backend_data/shared/项目列表.json` 键顺序一致；
+  - 当前第二位项目为 `mini_project_demo`（迷你项目示例），仅保留单页面线性流程入口。
+- 新增春节项目直达页：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`
+  - 路由：`/projects/daily_report_spring_festval_2026`（不经过 `/pages` 选择页）；
+  - 功能：上传 xlsx、调用后端提取 JSON、页面预览，并通过“生成数据看板”跳转到迷你看板页；
+  - API：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js` 适配项目专属调用，底层复用共享请求函数。
+- 新增春节迷你看板页：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+  - 路由：`/projects/daily_report_spring_festval_2026/spring-dashboard`；
+  - 卡片：当日平均气温、当日集团标煤消耗、当日总投诉量、当日净投诉量；
+  - 图表：气温变化（含同期）、标煤消耗量对比、投诉量分项（图+表）；
+  - 数据来源：上传提取 JSON 负责煤耗/投诉；气温始终通过数据库接口（复用 `getDashboardData('daily_report_25_26')`）读取。
+  - 稳健性：看板页读取提取结果采用“内存缓存 + sessionStorage + localStorage”三级回退，避免路由跳转后图表空白。
+  - 进一步稳健化：提取接口会将结果同步保存到后端运行时文件，迷你看板支持从 `/spring-festival/latest-json` 回读，避免浏览器存储命中失败导致空白。
+- 主要页面目录：`frontend/src/projects/daily_report_25_26/pages/`
   - `DataEntryView.vue`：模板拉取、在线填报、提交与回填
   - `DataAnalysisView.vue`：多单位分析、同比/环比、AI 报告交互
   - `DashBoard.vue`：数据看板、趋势图、缓存与导出
 - 全局壳层页面目录：`frontend/src/pages/`
   - `ProjectSelectView.vue`：项目列表入口
   - `LoginView.vue`：全局登录页入口（已从项目目录迁出）
-- 核心组件目录：`frontend/src/daily_report_25_26/components/`
+- 核心组件目录：`frontend/src/projects/daily_report_25_26/components/`
   - `UnitAnalysisLite.vue`：填报页内本单位轻量分析
   - 其他 RevoGrid/ECharts 相关展示组件
 - 服务层：
-  - `frontend/src/daily_report_25_26/services/api.js` 对接后端 `/template`、`/submit`、`/query`、`/data_analysis/*`、`/dashboard` 等接口
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 对接后端 `/template`、`/submit`、`/query`、`/data_analysis/*`、`/dashboard` 等接口
 - 当前联调说明：
   - 后端已完成煤炭库存提交链路去重与模板 JSON 缓存优化，前端接口契约未变，无需改动请求参数即可继续使用。
   - `frontend/jsconfig.json` 已补充 `compilerOptions.baseUrl = "."`，与 `vite.config.js` 中的 `@` 别名配置保持一致，避免编辑器路径映射报错。
   - 项目模块化结构对照文档已落地：`configs/2.8项目模块化.md`（可用于核对旧/新目录和迁移关系）。
+  - 发布缓存链路已修复日期配置回退：`/dashboard/cache/publish` 在项目化目录场景会正确读取 `shared/date.json`，不再误报“日期配置文件不存在”。
 
 ## 数据看板运维流程优化（2026-02-08）
 
@@ -1222,3 +1241,112 @@ docker compose up -d --build
   - `frontend/src/pages/ProjectSelectView.vue`
 - 路由 `/projects` 已改为加载全局页面文件。
 - 页面功能不变，仅修正“全局页不应放在项目目录”这一结构问题。
+
+## 会话小结（2026-02-11 春节迷你看板空白定位与联调）
+
+- 本轮前端页面结构无新增迁移，继续使用：
+  - 入口页：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`
+  - 看板页：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 联调结论：
+  - 调试面板显示命中指标存在，但来自后端提取 JSON 的 `current/prior` 为公式字符串，导致图表无法按数值渲染。
+  - 已由后端提取器修复公式转数值，前端继续复用现有渲染逻辑即可。
+
+## 会话小结（2026-02-12 春节迷你看板气温链路与卡片样式）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 气温数据链路对齐：
+  - mini 看板的气温解析改为与 `daily_report_25_26` 主看板一致的 section 解析逻辑；
+  - 支持 `1/1.逐小时气温/逐小时气温/calc_temperature_data` 等键名回退，避免结构轻微变化导致空图。
+- 卡片视觉对齐：
+  - 前四张摘要卡片新增渐变背景类（蓝/橙/红），并同步白色文本与阴影样式，与主看板风格保持一致。
+- 验证结果：
+  - `npm run build` 已通过，`SpringFestivalDashboardView` 打包成功。
+
+## 会话小结（2026-02-12 春节迷你看板日期策略）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 日期选择默认值：
+  - 默认选中“北京时间当前日历日的前一日”；
+  - 若该日期不在下拉选项中，自动选中最接近的可用日期。
+- 气温图时间范围：
+  - X 轴改为固定显示“选定日期前 3 日 + 当日 + 后 3 日”共 7 天；
+  - 不足数据日期保留刻度并显示空值，便于按窗口观察。
+- 调试增强：
+  - 调试面板新增 `temperature.windowDates` 字段，直接展示当前图表窗口日期。
+
+## 会话小结（2026-02-12 春节迷你看板气温图读数增强）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 交互与标注增强：
+  - 气温曲线 tooltip 统一显示 2 位小数；
+  - 图中新增业务日期竖线标识（`markLine`）；
+  - 图中常驻显示业务日期的“本期/同期”点位温度值（`markPoint`，2 位小数）。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 春节迷你看板气温全标签显示）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 标注策略调整：
+  - 保留业务日期竖线，但取消顶端“业务日期”文字；
+  - 本期/同期曲线改为默认显示所有点位标签（2 位小数，单位 ℃）；
+  - 去除业务日期单点 `markPoint`，避免与全量标签重叠。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 春节迷你看板标签防碰撞与卡片口径）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 图表优化：
+  - 气温标签增加 `labelLayout` 防碰撞（隐藏重叠 + 纵向错位）；
+  - 业务日期虚线改为更浅的半透明蓝色。
+- 卡片口径优化：
+  - 顶部四卡改为“本期值（增减量）”展示，不再显示差异率；
+  - 增减量统一按绝对差计算（`current - prior` / `main - peer`）。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 春节迷你看板煤耗图与配色对齐）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 视觉与可读性：
+  - 气温图增加横轴边距与底部留白，缓解点位标签与横坐标重叠；
+  - 顶部四卡配色改为与主看板同样的蓝/绿/橙/红方案。
+- 煤耗图逻辑重构：
+  - 原“本期/同期按日期”对比改为“业务日期当日各口径耗原煤量”对比；
+  - 口径固定为：集团汇总、主城区、金州、北方、金普、庄河；
+  - 柱图默认显示数据标签（两位小数）。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 春节迷你看板煤耗图补齐同期）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 煤耗图更新：
+  - “当日各口径耗原煤量对比”改为双柱：本期 + 同期；
+  - tooltip 同步展示本期值与同期值；
+  - 计量单位保持“吨”，未做单位切换。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 春节迷你看板精度与庄河同期口径）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 精度规则：
+  - 顶部卡片：气温保留 1 位小数，其余卡片统一整数；
+  - 气温曲线图：tooltip 与点位标签统一 1 位小数；
+  - 原煤对比图：本期/同期 tooltip 与柱上标签统一整数。
+- 口径与可视化：
+  - 庄河口径的同期值优先取“剔除xxx”原煤指标；
+  - 原煤图颜色调整为深蓝（本期）+橙色（同期），并保留标签防重叠策略。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 庄河同期指标修正）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 规则修正：
+  - 庄河口径的同期值改为优先取“其中：张屯原煤消耗量”；
+  - 保留回退关键词匹配，兼容文本中空格差异。
+- 验证结果：
+  - `npm run build` 已通过。

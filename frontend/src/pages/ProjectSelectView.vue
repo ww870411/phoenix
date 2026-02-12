@@ -32,9 +32,9 @@
 </template>
 
 <script setup>
-import '../daily_report_25_26/styles/theme.css'
-import AppHeader from '../daily_report_25_26/components/AppHeader.vue'
-import Breadcrumbs from '../daily_report_25_26/components/Breadcrumbs.vue'
+import '../projects/daily_report_25_26/styles/theme.css'
+import AppHeader from '../projects/daily_report_25_26/components/AppHeader.vue'
+import Breadcrumbs from '../projects/daily_report_25_26/components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -42,16 +42,21 @@ import {
   projectsLoading,
   projectsError,
   ensureProjectsLoaded,
-} from '../daily_report_25_26/composables/useProjects'
-
+} from '../projects/daily_report_25_26/composables/useProjects'
 const router = useRouter()
 
 const projectList = computed(() => projects.value)
 const loading = computed(() => projectsLoading.value)
 const error = computed(() => (projectsError.value ? '无法加载项目列表，请稍后重试。' : ''))
+const DIRECT_ENTRY_PROJECTS = new Set(['daily_report_spring_festval_2026'])
 
 function enter(project) {
-  router.push(`/projects/${encodeURIComponent(project.project_id)}/pages`)
+  const projectId = String(project?.project_id || '')
+  if (DIRECT_ENTRY_PROJECTS.has(projectId)) {
+    router.push(`/projects/${encodeURIComponent(projectId)}`)
+    return
+  }
+  router.push(`/projects/${encodeURIComponent(projectId)}/pages`)
 }
 
 const breadcrumbItems = computed(() => [

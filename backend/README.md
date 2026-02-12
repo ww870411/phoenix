@@ -2,6 +2,26 @@
 
 ## 最新结构与状态（2026-02-08）
 
+- 项目列表来源：`backend_data/shared/项目列表.json`
+  - `GET /api/v1/projects` 由 `backend/api/v1/routes.py` 中 `list_projects` 返回项目卡片数据；
+  - 当前已增加第二个项目：`mini_project_demo`（迷你项目示例），并已精简为单页面最小配置（无审批、无常量指标配置清单）。
+- 新增春节简化日报项目模块：`backend/projects/daily_report_spring_festval_2026/`
+  - 路由入口：`api/router.py`；
+  - 首个接口：`POST /api/v1/projects/daily_report_spring_festval_2026/spring-festival/extract-json`；
+  - 功能：上传 xlsx 后提取 `byDate` JSON（按“本期/同期/差异”列组解析，含合并单元格补全逻辑）。
+- 前端目录规范化协同状态：
+  - 春节项目页面已迁移到独立目录 `frontend/src/projects/daily_report_spring_festval_2026/`；
+  - `daily_report_25_26` 前端模块已迁移至 `frontend/src/projects/daily_report_25_26/`，与春节项目同层管理；
+  - 后端接口路径与鉴权方式保持不变，无需调整调用协议。
+- 发布缓存日期配置修复（2026-02-11）：
+  - 修复 `dashboard_expression._resolve_date_config_path`，日期文件解析顺序改为：
+    1) `projects/<project_key>/config/date.json`；2) `shared/date.json`（全局回退）；
+  - 解决 `/dashboard/cache/publish` 在模块化目录下误报 `{\"detail\":\"日期配置文件不存在\"}` 的问题。
+- 春节迷你看板联调说明（2026-02-11）：
+  - 前端迷你看板页温度数据复用 `daily_report_25_26` 的 `/dashboard` 接口读取数据库气温；
+  - 春节项目上传解析接口仍为 `/projects/daily_report_spring_festval_2026/spring-festival/extract-json`；
+  - 解析接口会将最近一次结果写入 `runtime/spring_festival_latest_extract.json`，并可通过 `GET /spring-festival/latest-json` 回读；
+  - 本轮后端接口无新增变更，继续保持与前端迷你看板的数据契约。
 - 核心接口主文件：`backend/projects/daily_report_25_26/api/legacy_full.py`
   - 数据填报：`/data_entry/sheets/{sheet_key}/template`、`/submit`、`/query`
   - 数据分析：`/data_analysis/query`、`/data_analysis/ai_report`、`/data_analysis/ai_settings`
@@ -246,3 +266,57 @@
 ## 结构同步（2026-02-08）
 
 - 本轮后端代码无新增改动；主要变更发生在前端全局页面目录归属修复。
+
+## 结构同步（2026-02-11 春节迷你项目提取链路）
+
+- 春节迷你项目接口目录：`backend/projects/daily_report_spring_festval_2026/api/`
+  - `xlsx_extract.py`：上传 xlsx、提取 `byDate`、落盘 latest-json、读取 latest-json。
+- 本轮修复：
+  - `xlsx_extract.py` 新增“Excel 公式转数值”能力（单元格引用与四则运算），用于将 `current/prior` 从公式文本转换为可视化所需数值。
+- 结果：
+  - mini 看板后续消费的提取 JSON 将优先包含可计算数值，减少“有数据但图表空白”问题。
+
+## 结构同步（2026-02-12 春节迷你看板前端联调）
+
+- 本轮后端接口与服务无新增改动。
+- 前端已将 mini 看板气温解析逻辑对齐到主看板数据结构回退策略，以更稳定消费后端 `dashboard` 返回的气温 section（来源仍为 `calc_temperature_data` 视图链路）。
+
+## 结构同步（2026-02-12 春节迷你看板日期窗口调整）
+
+- 本轮后端接口与服务无新增改动。
+- 前端已实现北京时间“昨日优先”默认日期与气温图 `±3` 天窗口展示，继续复用现有后端 `dashboard` 数据接口。
+
+## 结构同步（2026-02-12 春节迷你看板气温图显示增强）
+
+- 本轮后端接口与服务无新增改动。
+- 前端新增气温图 tooltip 两位小数显示、业务日期竖线与业务日期本期/同期温度点位标注，数据来源仍沿用既有 `dashboard` 接口。
+
+## 结构同步（2026-02-12 春节迷你看板气温标签策略调整）
+
+- 本轮后端接口与服务无新增改动。
+- 前端将气温图改为“全点位标签默认显示 + 业务日期竖线无文字标签”，继续复用既有 `dashboard` 接口数据。
+
+## 结构同步（2026-02-12 春节迷你看板显示口径调整）
+
+- 本轮后端接口与服务无新增改动。
+- 前端新增气温标签防碰撞、浅色业务日期竖线，并将四卡差异展示口径调整为“绝对增减量”。
+
+## 结构同步（2026-02-12 春节迷你看板煤耗口径图重构）
+
+- 本轮后端接口与服务无新增改动。
+- 前端将煤耗图重构为“业务日期当日各口径耗原煤量对比”，并完成四卡配色与主看板风格对齐。
+
+## 结构同步（2026-02-12 春节迷你看板煤耗图同期补齐）
+
+- 本轮后端接口与服务无新增改动。
+- 前端煤耗图已从单柱扩展为“本期+同期”双柱对比，单位继续使用“吨”。
+
+## 结构同步（2026-02-12 春节迷你看板精度与庄河同期规则）
+
+- 本轮后端接口与服务无新增改动。
+- 前端补充“庄河同期优先取剔除指标”规则，并按业务要求统一卡片/图表精度与煤耗图配色。
+
+## 结构同步（2026-02-12 庄河同期来源修正）
+
+- 本轮后端接口与服务无新增改动。
+- 前端已将庄河口径同期来源从“剔除指标泛匹配”收敛为“其中：张屯原煤消耗量”优先匹配。

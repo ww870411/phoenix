@@ -1,3 +1,182 @@
+## 2026-02-11（新增迷你项目入口并固定在 projects 第二位）
+
+- **User Request:** 在 `http://localhost:5173/projects` 页面新增一个实现简单的迷你项目，并显示在第二位。
+- **前置说明:**
+  1. Serena 已完成接入校验：`activate_project` 与 `check_onboarding_performed` 均成功。
+  2. 本次未触发 Serena 编辑能力限制，采用最小范围配置改动；回滚方案为删除 `backend_data/shared/项目列表.json` 中新增的 `mini_project_demo` 条目。
+- **Agent Action:**
+  1. 定位项目入口链路：`frontend/src/pages/ProjectSelectView.vue` -> `frontend/src/daily_report_25_26/composables/useProjects.js` -> `frontend/src/daily_report_25_26/services/api.js` 的 `GET /api/v1/projects`。
+  2. 定位后端项目列表源：`backend/api/v1/routes.py` 的 `list_projects`，读取 `backend_data/shared/项目列表.json`。
+  3. 在 `backend_data/shared/项目列表.json` 新增项目键 `mini_project_demo`，并放置在 `daily_report_25_26` 后，确保前端卡片展示顺序为第二位。
+  4. 同步更新结构文档：
+     - `backend/README.md`：补充项目列表来源与迷你项目状态。
+     - `frontend/README.md`：补充 projects 页数据来源与排序机制。
+- **Result:**
+  1. `http://localhost:5173/projects` 将出现第二张项目卡片：`迷你项目（示例）`（`mini_project_demo`）。
+  2. 该项目点击后可进入项目页面路由，满足“先可见、可进入”的最小实现目标。
+
+## 2026-02-11（mini 项目配置再精简：单页面线性流程）
+
+- **User Request:** 已手动调整 `backend_data/shared/项目列表.json`，希望进一步简化新项目配置：仅保留单页面线性流程，不需要审批与常量指标等配置。
+- **前置说明:**
+  1. 本次为配置级最小改动，不涉及后端接口实现扩展；
+  2. 继续沿用 `GET /api/v1/projects` 读取 `backend_data/shared/项目列表.json` 的机制；
+  3. 回滚方式：将 `mini_project_demo` 恢复为原先带 `modularization` 字段的结构。
+- **Agent Action:**
+  1. 精简 `backend_data/shared/项目列表.json` 中 `mini_project_demo`：
+     - 保留单一页面 `mini_entry`；
+     - 页面名称改为“迷你业务页”；
+     - 页面描述改为“单页面线性流程（无审批、无常量指标配置）”；
+     - 移除 `modularization.config_files/runtime_files` 空清单字段。
+  2. 同步更新说明文档：
+     - `backend/README.md`：声明 mini 项目为单页面最小配置；
+     - `frontend/README.md`：声明 projects 页第二位 mini 项目仅保留单页面入口。
+- **Result:** mini 项目在项目列表中保持第二位，配置结构已进一步简化为“单页面最小可维护形态”。
+
+## 2026-02-11（春节简化日报：直达页面 + xlsx 提取 JSON 框架）
+
+- **User Request:** 以当前 `backend_data/shared/项目列表.json` 为准，为 `daily_report_spring_festval_2026` 提供直达功能页（不显示 pages 选择），并先实现“上传 xlsx 并提取为 JSON”的能力；后续再共建简化看板。
+- **前置说明:**
+  1. Serena 接入校验已完成（项目激活与 onboarding 状态正常）；
+  2. 本次实现聚焦“框架 + xlsx 提取 JSON”，暂不包含简化看板渲染与 PDF 生成；
+  3. 主要基于你提供的参考文件实现提取规则：
+     - `configs/2.11 xlsx_to_bydate.html`
+     - `configs/2.11 春节期间示例数据.json`
+- **Agent Action:**
+  1. 新增春节项目后端模块并注册：
+     - `backend/projects/daily_report_spring_festval_2026/api/router.py`
+     - `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`
+     - `backend/api/v1/project_router_registry.py` 注册 `daily_report_spring_festval_2026`。
+  2. 新增上传提取接口：
+     - `POST /api/v1/projects/daily_report_spring_festval_2026/spring-festival/extract-json`
+     - 支持 `sheet_name`、`keep_diff_cell`、`compute_diff`、`normalize_metric` 参数；
+     - 解析逻辑包含：表头识别（本期/同期/差异）、日期列组提取、合并单元格补全、指标规范化、diff 计算、按日期组织 `byDate`。
+  3. 新增前端直达功能页：
+     - `frontend/src/daily_report_25_26/pages/SpringFestivalEntryView.vue`
+     - 路由新增：`/projects/:projectKey`（春节项目进入该页，其他项目自动跳转回 `/pages`）。
+  4. 新增前端 API 封装：
+     - `frontend/src/daily_report_25_26/services/api.js` 新增 `extractSpringFestivalJson`。
+  5. 调整项目入口点击逻辑：
+     - `frontend/src/pages/ProjectSelectView.vue` 对 `daily_report_spring_festval_2026` 直达 `/projects/{projectKey}`，不再先进入 pages 选择。
+- **Result:**
+  1. 访问 `http://localhost:5173/projects/daily_report_spring_festval_2026` 将直接进入春节简化项目功能页；
+  2. 功能页已支持上传 xlsx 并生成与示例结构一致的 `byDate` JSON 预览与下载；
+  3. 已为后续“简化看板 + PDF 下载”阶段打通数据输入链路。
+
+## 2026-02-11（春节项目前端目录规范化迁移）
+
+- **User Request:** 新项目应保持独立边界，页面不应继续放在 `daily_report_25_26` 目录下。
+- **前置说明:**
+  1. 本次目标为“前端目录规范化”，不改变已上线的后端接口；
+  2. 回滚方式：将路由组件路径指回旧目录并恢复旧页面文件。
+- **Agent Action:**
+  1. 路由迁移：
+     - `frontend/src/router/index.js` 中 `/projects/:projectKey` 组件改为
+       `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`。
+  2. 新增春节项目前端独立目录与文件：
+     - `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`
+     - `frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+  3. 删除旧项目目录中的春节页面文件：
+     - `frontend/src/daily_report_25_26/pages/SpringFestivalEntryView.vue`
+  4. 保持接口链路不变：仍调用
+     `POST /api/v1/projects/daily_report_spring_festval_2026/spring-festival/extract-json`。
+- **Result:** 春节项目已完成前端目录独立化，结构边界与“新项目独立维护”诉求一致，同时不影响现有上传提取 JSON 功能。
+
+## 2026-02-11（前端项目目录统一：daily_report_25_26 迁入 projects）
+
+- **User Request:** 将 `daily_report_25_26` 也迁到 `frontend/src/projects/`，一次性修正全部引用路径与路由。
+- **前置说明:**
+  1. 目标为前端目录规范化，不改后端接口契约；
+  2. 迁移范围覆盖 `main/router/pages` 与春节项目对老项目模块的复用引用；
+  3. 回滚方式：将目录迁回 `frontend/src/daily_report_25_26` 并恢复导入路径。
+- **Agent Action:**
+  1. 迁移目录：
+     - `frontend/src/daily_report_25_26/*` -> `frontend/src/projects/daily_report_25_26/*`；
+     - 保持子目录结构不变（components/composables/constants/pages/services/store/styles）。
+  2. 全局引用修正：
+     - `frontend/src/main.js` 主题样式路径更新为 `./projects/daily_report_25_26/styles/theme.css`；
+     - `frontend/src/router/index.js` 中 `auth` 与各页面组件导入统一改为 `../projects/daily_report_25_26/...`；
+     - `frontend/src/pages/LoginView.vue`、`ProjectSelectView.vue` 相关导入改为 `../projects/daily_report_25_26/...`。
+  3. 春节项目复用路径修正：
+     - `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue` 改为从 `../../daily_report_25_26/...` 复用组件与 composable；
+     - `frontend/src/projects/daily_report_spring_festval_2026/services/api.js` 改为从 `../../daily_report_25_26/services/api` 复用请求封装。
+  4. 文档同步：
+     - `frontend/README.md`、`backend/README.md` 更新目录统一说明；
+     - `frontend/src/projects/daily_report_25_26/README.md` 修正 `main.js` 样式路径示例。
+- **Result:** `frontend/src` 下项目模块已统一到 `projects/` 目录，路由与导入链路可指向新路径，组织结构符合多项目并列规范。
+
+## 2026-02-11（发布缓存报错修复：日期配置文件不存在）
+
+- **User Request:** 在页面 `.../daily_report_25_26/pages/dashboard/dashboard` 点击“发布缓存”时报错 `{\"detail\":\"日期配置文件不存在\"}`，要求排查并修复项目化重组后的路径关联问题。
+- **前置说明:**
+  1. 问题聚焦后端看板发布链路；本次不改前端请求契约；
+  2. 回滚方式：恢复 `backend/services/dashboard_expression.py` 中 `_resolve_date_config_path` 的旧实现。
+- **Agent Action:**
+  1. 定位报错源：`backend/services/dashboard_expression.py` 的 `load_default_push_date` 在 `date_config_path` 不存在时抛出该错误。
+  2. 根因分析：`_resolve_date_config_path` 原先使用 `resolve_project_config_path(project_key, "date.json")`，回退仅到旧平铺 `DATA_DIRECTORY/date.json`，未优先覆盖已迁移到 `shared/date.json` 的全局日期文件。
+  3. 修复实现：
+     - 引入 `get_project_config_dir` 与 `resolve_global_date_path`；
+     - 路径解析顺序改为：
+       - `projects/<project_key>/config/date.json`（存在则用）；
+       - 否则回退 `shared/date.json`（再兼容旧 `date.json`）。
+  4. 同步文档：更新 `backend/README.md`、`frontend/README.md` 记录本次修复口径。
+- **Result:** 看板发布缓存在项目化目录结构下可正确解析日期配置，不再因 `shared/date.json` 未命中而报“日期配置文件不存在”。
+
+## 2026-02-11（春节迷你看板第一版：生成按钮 + 看板页）
+
+- **User Request:** 在春节项目中，将“下载 JSON”改为“生成数据看板”；点击后跳转看板页，并展示指定卡片与图表。煤耗/投诉来自上传提取 JSON，气温必须从数据库读取。
+- **前置说明:**
+  1. 本次优先完成“可用框架 + 指定卡片图表”；
+  2. 气温数据沿用现有数据库链路（通过看板接口读取），不使用上传 JSON 中的气温字段；
+  3. 回滚方式：移除新增路由与 `SpringFestivalDashboardView.vue`，并恢复入口页按钮逻辑。
+- **Agent Action:**
+  1. 路由新增：
+     - `frontend/src/router/index.js` 增加 `/projects/:projectKey/spring-dashboard`。
+  2. 入口页调整：
+     - `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue`
+       将“下载 JSON”按钮改为“生成数据看板”，点击后跳转新路由。
+  3. 新增迷你看板页：
+     - `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`，实现：
+       - 4 张卡片：当日平均气温、当日集团标煤消耗、当日总投诉量、当日净投诉量；
+       - 3 个图表：气温变化（向后预测3日，含同期）、标煤消耗量对比、投诉量分项（图+表）；
+       - 日期选择、上传数据缺失提示、返回上传页。
+  4. 数据来源拆分：
+     - JSON（localStorage）用于煤耗/投诉指标；
+     - 气温通过 `frontend/src/projects/daily_report_spring_festval_2026/services/api.js` 新增 `getTemperatureTrendByDate`，底层复用 `daily_report_25_26` 的 `getDashboardData`，从数据库加载“逐小时气温”后按日求均值。
+- **Result:** 春节项目已形成“上传 xlsx -> 提取 JSON -> 生成迷你看板”的首版闭环，且满足气温走数据库、煤耗/投诉走上传数据的口径要求。
+
+## 2026-02-11（春节迷你看板空白问题修复：数据回退链路增强）
+
+- **User Feedback:** mini 数据看板页面出现“图表空白”，但 xlsx 提取 JSON 已成功。
+- **前置说明:**
+  1. 当前优先修复“跳转后数据丢失导致空白”的高概率链路；
+  2. 本轮不改后端接口，仅增强前端数据持久与读取回退。
+- **Agent Action:**
+  1. `frontend/src/projects/daily_report_spring_festval_2026/services/api.js` 增加内存级缓存函数：
+     - `setLatestExtractedPayload`
+     - `getLatestExtractedPayload`
+  2. `SpringFestivalEntryView.vue` 在解析成功后同时写入：
+     - 内存缓存；
+     - `sessionStorage`；
+     - `localStorage`。
+  3. `SpringFestivalDashboardView.vue` 的 payload 读取改为三级回退：
+     - 内存缓存 -> `sessionStorage` -> `localStorage`；
+     并补充 `dates` 为空时由 `byDate` 键自动回推日期列表。
+  4. 增加图表库加载检测（`window.echarts`），未加载时给出明确提示，避免静默空白。
+- **Result:** 上传后跳转 mini 看板时的数据命中率显著提高，降低“已提取成功但看板空白”的问题概率，并增加可诊断提示。
+
+## 2026-02-11（mini 看板空白二次修复：后端落盘回读）
+
+- **User Feedback:** 仍出现“extract-json 成功，但 mini 看板无数据与图形”。
+- **Agent Action:**
+  1. 后端增强（`backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`）：
+     - `extract-json` 成功后将 payload 写入 `runtime/spring_festival_latest_extract.json`；
+     - 新增 `GET /spring-festival/latest-json` 返回最近一次提取结果。
+  2. 前端增强：
+     - `services/api.js` 新增 `getLatestExtractedJson(projectKey)`，并携带 Bearer Token；
+     - `SpringFestivalDashboardView.vue` 在本地缓存未命中时自动回读后端最新提取结果。
+- **Result:** mini 看板不再只依赖浏览器存储，提取成功后可通过后端回读兜底，提高数据可见性稳定性。
+
 ## 2025-12-09（仪表盘运行设备明细展示优化 - 零值隐藏）
 
 - **User Request:** 如果某个指标（本期和同期）都为零，则不显示其标签和数字，而是显示一个中性占位符。
@@ -310,3 +489,127 @@
      - 新项目落位规则与当前完成度结论。
   3. 同步更新 `backend/README.md` 与 `frontend/README.md`，增加该对照文档索引。
 - **Result:** 项目模块化改造已形成可追溯的“一页式结构对照文档”，后续扩展新项目时可直接按文档执行。
+
+## 2026-02-11（春节迷你看板空白问题：提取公式转数值修复）
+
+- **User Request:** 提供调试信息，定位“mini 数据看板有 JSON 但卡片/图表空白”的根因并修复。
+- **Agent Action:**
+  1. 分析 `configs/2.12 调试信息.md`，确认命中指标存在，但 `current/prior` 为 Excel 公式字符串（如 `=AE12+...`），导致前端无法按数值绘图。
+  2. 修复 `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`：
+     - 新增公式数值解析能力（支持单元格引用 + 四则运算 + 括号）；
+     - 对 `current/prior` 读取改为“数字优先 + 公式求值回退”；
+     - 保留 `diffCell` 原始文本，不破坏追溯能力。
+  3. 保持接口与路由不变：仍使用 `extract-json` / `latest-json`。
+- **Result:** 春节项目提取 JSON 的关键指标值可从公式解析为数值，mini 看板卡片与图表具备渲染前提。
+
+## 2026-02-12（春节迷你看板：气温取数链路对齐与卡片配色）
+
+- **User Request:** mini 看板气温图改为与 `daily_report_25_26` 看板同源（数据库 `calc_temperature_data` 链路），并给前四张卡片增加与主看板一致的背景色。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 气温加载改为“旧看板同款 section 解析策略”：支持 `data.sections`、`sections`、`data` 多种响应结构；
+     - 增加按序号/旧键名解析：`1`、`1.逐小时气温`、`逐小时气温`、`calc_temperature_data`；
+     - `buildDailyAverageMap` 支持数组、数值、对象（`avg/average/value`）三类值；
+     - 同期日期做“映射到本年 + 缺口回补”处理，减少日期错位导致的空图。
+  2. 修改同文件卡片样式：
+     - 前四张卡片分别接入 `summary-card--primary/warning/danger`；
+     - 增加与主看板一致风格的渐变背景、白色文字、阴影样式。
+- **Result:** mini 看板气温取数路径与主看板保持一致，且顶部四张卡片已具备可视化底色层级。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过，无语法/打包错误。
+
+## 2026-02-12（春节迷你看板：气温图时间窗与默认日期）
+
+- **User Request:** 气温图日期范围改为“选定日期的当日+前三日+后三日”；日期下拉默认选中“北京时间当前日历日的前一日”，若不存在则取下拉中最近日期。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 新增北京时间日期工具函数：`getBeijingYesterdayDateKey`；
+     - 新增默认日期选择函数：`pickDefaultSelectedDate`（昨日优先，不存在则最近日期）；
+     - 调整 `availableDates` 的标准化与排序逻辑；
+     - `temperatureTrendOption` 改为使用 `temperatureWindowDates`，固定显示 `selectedDate ±3` 共 7 天窗口。
+  2. 调试信息补充 `temperature.windowDates`，便于核对窗口是否符合预期。
+- **Result:** mini 看板气温图时间窗口已按“前3+当日+后3”渲染；首次进入时默认日期策略已切换为北京时间昨日优先。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：气温图标签与业务日期标识）
+
+- **User Request:** 鼠标悬浮曲线时数据标签保留 2 位小数；不悬浮时也要在图上标示业务日期位置及该日期本期/同期气温值。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - `temperatureTrendOption.tooltip.formatter` 改为统一输出 2 位小数（`xx.xx℃`）；
+     - 在“本期”序列增加业务日期竖向虚线（`markLine`，标签“业务日期”）；
+     - 在“本期/同期”序列分别增加业务日期点位标注（`markPoint`），常驻显示对应气温值（2 位小数）。
+  2. 保持原有 `±3` 天窗口逻辑不变，仅增强展示与交互信息密度。
+- **Result:** 气温图在悬浮与非悬浮状态下均可读到业务日期对应的本期/同期气温值，且显示精度统一为 2 位小数。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：气温全标签显示与业务日期线简化）
+
+- **User Request:** 去掉图顶端“业务日期”文字（避免与标签重叠）；默认显示所有气温点的数据标签。
+- **Agent Action:**
+  1. 调整 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 保留业务日期竖线（`markLine`）但关闭其文字标签（`label.show = false`）；
+     - 为“本期/同期”两条线开启全点位 `label.show`，分别放置在上/下方，格式统一为 `xx.xx℃`；
+     - 移除仅业务日期单点 `markPoint` 标注，避免与全量标签叠加。
+- **Result:** 气温图在默认状态下即可看到全部点位温度值，且顶端不再出现“业务日期”重叠文字。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：标签防碰撞与卡片增减量口径）
+
+- **User Request:** 气温图做标签防碰撞、业务日期虚线更浅；顶部四卡不显示差异率，改为本期值后括号显示增减量。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 气温图两条线增加 `labelLayout`（`hideOverlap + moveOverlap: shiftY`）实现标签防碰撞；
+     - 业务日期竖线颜色调整为半透明浅蓝（`rgba(37, 99, 235, 0.32)`）；
+     - 四张卡片改为“主值 + 括号增减量”显示，新增 `formatIncrement`，移除差异率文案。
+  2. 指标口径调整：
+     - 煤耗/投诉卡片的 `delta` 改为 `current - prior`；
+     - 气温卡片的 `delta` 改为 `main - peer`（绝对差）。
+- **Result:** 图表标签可读性提升，业务日期线视觉干扰降低；四卡口径已改为“本期值（增减量）”。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：轴标签避让、四卡配色对齐、煤耗口径图重构）
+
+- **User Request:** 处理数据标签与横坐标重叠；四卡颜色改为与 `daily_report_25_26` 顶部四卡一致；将“标煤消耗量对比”改为业务日期当日各口径耗原煤量对比并显示数据标签。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：\n     - 气温图增加横轴留白与标签边距（`grid.bottom`、`xAxis.axisLabel.margin`），降低标签与横轴重叠概率；\n     - 继续保留标签防碰撞策略（`labelLayout`）。
+  2. 四卡配色对齐主看板：\n     - 第二卡改为 `summary-card--success` 绿色渐变；\n     - 第三卡改为 `summary-card--warning` 橙色渐变；\n     - 第一/第四卡保持蓝/红，形成与主看板一致的四卡色阶。
+  3. 重构煤耗图：\n     - 图名改为“当日各口径耗原煤量对比”；\n     - 按业务日期 `selectedDate` 读取各口径“原煤消耗量”本期值；\n     - 展示口径：集团汇总、主城区、金州、北方、金普、庄河（含同义键回退）；\n     - 单序列柱图 + 顶部数据标签（两位小数）。
+- **Result:** mini 看板煤耗图已切换为“业务日口径对比”视图；四卡颜色与主看板风格一致；气温图标签与横轴重叠问题得到缓解。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：煤耗图补齐同期柱）
+
+- **User Feedback:** 原煤对比图缺少“同期值”。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - `coalScopeRows` 从仅返回 `current` 扩展为返回 `current + prior`；
+     - `coalTrendOption` 从单序列改为双序列柱图（`本期`、`同期`）；
+     - tooltip 改为同时显示本期与同期，单位保持 `吨` 不变；
+     - 两个序列均保留顶部数据标签（两位小数）。
+- **Result:** 当日各口径原煤图已可同时对比本期与同期值，满足“无需改计量单位”的要求。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：精度规范与庄河同期口径）
+
+- **User Request:** 顶部卡片除气温外均保留整数；气温曲线图保留 1 位小数；原煤对比图保留整数且本期/同期均显示标签并增强配色；庄河同期取“剔除xxx”指标，标签防重叠。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 卡片精度：煤耗卡改为整数显示（主值与增减量均四舍五入）；
+     - 气温图精度：tooltip 与点位标签统一 1 位小数；
+     - 原煤图精度：tooltip 与双柱标签统一为整数；
+     - 原煤图配色：本期深蓝、同期橙色，提升对比度；
+     - 庄河同期分支：优先使用“原煤消耗量 + 剔除”指标的 `prior` 值，回退到常规匹配。
+  2. 标签防重叠：
+     - 原煤图本期/同期标签继续使用 `labelLayout`（`hideOverlap + shiftY`）。
+- **Result:** 全页面数值精度符合新规范，庄河同期口径已按“剔除”指标处理，原煤图对比更清晰。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
+
+## 2026-02-12（春节迷你看板：庄河同期口径修正为张屯原煤）
+
+- **User Feedback:** 庄河口径同期值应选用“其中： 张屯原煤消耗量”。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 在庄河分支的 `prior` 指标匹配中，改为优先匹配“其中：张屯原煤消耗量”（兼容“其中 + 张屯原煤消耗量”关键词组合）。
+  2. 其余口径与单位保持不变。
+- **Result:** 庄河口径的同期值来源已切换为“其中：张屯原煤消耗量”。
+- **Verify:** 执行 `frontend` 构建（`npm run build`）通过。
