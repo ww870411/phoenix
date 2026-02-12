@@ -1,12 +1,17 @@
 <template>
-  <div class="spring-dashboard-page">
+  <div :class="['spring-dashboard-page', `spring-dashboard-page--${themeMode}`]">
     <AppHeader />
-    <main class="container spring-dashboard-main">
+    <div v-if="themeMode === 'festival'" class="festival-ornaments" aria-hidden="true">
+      <span class="festival-lantern festival-lantern--left">🏮</span>
+      <span class="festival-title-mark">福启新岁</span>
+      <span class="festival-lantern festival-lantern--right">🏮</span>
+    </div>
+    <main ref="dashboardCaptureRef" class="container spring-dashboard-main">
       <Breadcrumbs :items="breadcrumbItems" />
 
       <section class="card elevated">
         <header class="card-header">
-          <h2>春节简化数据看板</h2>
+          <h2>春节数据看板</h2>
           <p class="sub">数据来源：上传 xlsx 提取 JSON + 数据库气温</p>
         </header>
         <div v-if="errorMessage" class="state error">{{ errorMessage }}</div>
@@ -21,8 +26,18 @@
               <option v-for="item in availableDates" :key="item" :value="item">{{ item }}</option>
             </select>
           </label>
+          <label class="toolbar-label">
+            风格：
+            <select v-model="themeMode" class="theme-select">
+              <option value="default">默认风格</option>
+              <option value="festival">春节氛围</option>
+            </select>
+          </label>
           <button class="btn" type="button" @click="debugVisible = !debugVisible">
             {{ debugVisible ? '隐藏调试信息' : '显示调试信息' }}
+          </button>
+          <button class="btn" type="button" :disabled="downloadingPdf" @click="downloadDashboardPdf">
+            {{ downloadingPdf ? '正在生成PDF…' : '下载PDF' }}
           </button>
           <button class="btn" type="button" @click="goBackToEntry">返回上传页</button>
         </div>
@@ -80,34 +95,156 @@
             <h3>当日各口径耗原煤量对比</h3>
           </header>
           <EChart :option="coalTrendOption" :height="320" />
+          <div class="table-scroll">
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">日期</th>
+                  <th rowspan="2">气温</th>
+                  <th colspan="2">集团汇总</th>
+                  <th colspan="2">主城区</th>
+                  <th colspan="2">金州</th>
+                  <th colspan="2">北方</th>
+                  <th colspan="2">金普</th>
+                  <th colspan="2">庄河</th>
+                </tr>
+                <tr>
+                  <th>本期</th>
+                  <th>同期</th>
+                  <th>本期</th>
+                  <th>同期</th>
+                  <th>本期</th>
+                  <th>同期</th>
+                  <th>本期</th>
+                  <th>同期</th>
+                  <th>本期</th>
+                  <th>同期</th>
+                  <th>本期</th>
+                  <th>同期</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in coalVisibleRows" :key="row.date">
+                  <td>{{ row.date }}</td>
+                  <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
+                  <td>{{ formatMetric(row.groupCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.groupPrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.mainCityCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.mainCityPrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.jinzhouCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.jinzhouPrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.beifangCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.beifangPrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.jinpuCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.jinpuPrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.zhuangheCurrent, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.zhuanghePrior, '吨', 0) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section class="card elevated">
           <header class="card-header">
             <h3>投诉量分项（图与表）</h3>
           </header>
-          <EChart :option="complaintTrendOption" :height="320" />
+          <div class="complaint-dual-charts">
+            <section class="complaint-chart-panel">
+              <header class="complaint-chart-panel__title">本日总投诉量（本期/同期）+ 本期气温</header>
+              <EChart :option="complaintTotalTrendOption" :height="280" />
+            </section>
+            <section class="complaint-chart-panel">
+              <header class="complaint-chart-panel__title">本日净投诉量（本期/同期）+ 本期气温</header>
+              <EChart :option="complaintNetTrendOption" :height="280" />
+            </section>
+          </div>
           <table class="mini-table">
             <thead>
               <tr>
                 <th>日期</th>
-                <th>总投诉量</th>
-                <th>净投诉量</th>
-                <th>同期总投诉量</th>
-                <th>同期净投诉量</th>
+                <th>气温</th>
+                <th>总投诉量（本期）</th>
+                <th>总投诉量（同期）</th>
+                <th>净投诉量（本期）</th>
+                <th>净投诉量（同期）</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in complaintRows" :key="row.date">
+              <tr v-for="row in complaintVisibleRows" :key="row.date">
                 <td>{{ row.date }}</td>
+                <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
                 <td>{{ formatMetric(row.totalCurrent, '件', 0) }}</td>
-                <td>{{ formatMetric(row.netCurrent, '件', 0) }}</td>
                 <td>{{ formatMetric(row.totalPrior, '件', 0) }}</td>
+                <td>{{ formatMetric(row.netCurrent, '件', 0) }}</td>
                 <td>{{ formatMetric(row.netPrior, '件', 0) }}</td>
               </tr>
             </tbody>
           </table>
         </section>
+      </section>
+
+      <section v-if="hasPayload" class="card elevated">
+        <header class="card-header">
+          <h3>各单位运行设备数量明细表</h3>
+          <p class="sub">仅显示业务日期数据，单位：台</p>
+        </header>
+        <div class="table-scroll">
+          <table class="mini-table">
+            <thead>
+              <tr>
+                <th>口径</th>
+                <th>炉机组态</th>
+                <th>调峰水炉</th>
+                <th>燃煤锅炉</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in deviceStatusRows" :key="row.scope">
+                <td>{{ row.scope }}</td>
+                <td>
+                  <div v-if="row.steamGroup.length" class="device-combo-cell">
+                    <div v-for="item in row.steamGroup" :key="item.label" class="combo-item">
+                      <span class="combo-label" :style="{ color: item.color, backgroundColor: `${item.color}20` }">{{ item.label }}</span>
+                      <span class="combo-value">
+                        <span :style="{ color: item.color }">{{ item.current }}</span>
+                        <span class="combo-sep">/</span>
+                        <span :style="{ color: item.color }">{{ item.prior }}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else>—</span>
+                </td>
+                <td>
+                  <div v-if="row.waterGroup.length" class="device-combo-cell">
+                    <div v-for="item in row.waterGroup" :key="item.label" class="combo-item">
+                      <span class="combo-label" :style="{ color: item.color, backgroundColor: `${item.color}20` }">{{ item.label }}</span>
+                      <span class="combo-value">
+                        <span :style="{ color: item.color }">{{ item.current }}</span>
+                        <span class="combo-sep">/</span>
+                        <span :style="{ color: item.color }">{{ item.prior }}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else>—</span>
+                </td>
+                <td>
+                  <div v-if="row.houseGroup.length" class="device-combo-cell">
+                    <div v-for="item in row.houseGroup" :key="item.label" class="combo-item">
+                      <span class="combo-label" :style="{ color: item.color, backgroundColor: `${item.color}20` }">{{ item.label }}</span>
+                      <span class="combo-value">
+                        <span :style="{ color: item.color }">{{ item.current }}</span>
+                        <span class="combo-sep">/</span>
+                        <span :style="{ color: item.color }">{{ item.prior }}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else>—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   </div>
@@ -124,17 +261,21 @@ import { getLatestExtractedJson, getLatestExtractedPayload, getTemperatureTrendB
 const route = useRoute()
 const router = useRouter()
 const TARGET_PROJECT_KEY = 'daily_report_spring_festval_2026'
+const THEME_STORAGE_KEY = 'spring_festival_dashboard_theme_mode'
 const projectKey = computed(() => String(route.params.projectKey || ''))
 const storageKey = computed(() => `spring_festival_payload_${projectKey.value}`)
 
 const loading = ref(false)
 const errorMessage = ref('')
+const downloadingPdf = ref(false)
 const chartLibraryReady = ref(true)
 const debugVisible = ref(false)
 const extractedPayload = ref(null)
 const selectedDate = ref('')
+const themeMode = ref('default')
 const temperatureMainMap = ref({})
 const temperaturePeerMap = ref({})
+const dashboardCaptureRef = ref(null)
 
 const EChart = defineComponent({
   name: 'SpringFestivalEChart',
@@ -275,6 +416,30 @@ function computeIncrement(current, prior) {
   return Number(current) - Number(prior)
 }
 
+const COAL_SCOPE_CONFIGS = [
+  { key: 'group', label: '集团汇总', candidates: ['集团汇总', '全口径', '集团全口径', '集团', '全集团'] },
+  { key: 'mainCity', label: '主城区', candidates: ['主城区'] },
+  { key: 'jinzhou', label: '金州', candidates: ['金州', '金州热电'] },
+  { key: 'beifang', label: '北方', candidates: ['北方', '北方热电'] },
+  { key: 'jinpu', label: '金普', candidates: ['金普', '金普公司'] },
+  { key: 'zhuanghe', label: '庄河', candidates: ['庄河', '庄河环海'], useZhangtunPrior: true },
+]
+
+const DEVICE_SCOPE_CONFIGS = [
+  {
+    label: '北海电厂（含北海水炉）',
+    aggregateCandidates: [
+      ['北海热电联产', '北海电厂', '北海热电厂'],
+      ['北海水炉'],
+    ],
+  },
+  { label: '香海电厂', candidates: ['香海电厂', '香海热电厂'] },
+  { label: '金州', candidates: ['金州', '金州热电'] },
+  { label: '北方', candidates: ['北方', '北方热电'] },
+  { label: '金普', candidates: ['金普', '金普公司', '金普热电'] },
+  { label: '庄河', candidates: ['庄河', '庄河环海'] },
+]
+
 const coalCard = computed(() => {
   const matched = findMetricMatchAcrossScopes(
     selectedDateBucket.value,
@@ -346,15 +511,7 @@ const temperatureWindowDates = computed(() => {
 
 const coalScopeRows = computed(() => {
   const dateBucket = selectedDateBucket.value || {}
-  const scopeConfigs = [
-    { label: '集团汇总', candidates: ['集团汇总', '全口径', '集团全口径', '集团', '全集团'] },
-    { label: '主城区', candidates: ['主城区'] },
-    { label: '金州', candidates: ['金州', '金州热电'] },
-    { label: '北方', candidates: ['北方', '北方热电'] },
-    { label: '金普', candidates: ['金普', '金普公司'] },
-    { label: '庄河', candidates: ['庄河', '庄河环海'] },
-  ]
-  return scopeConfigs.map((scope) => {
+  return COAL_SCOPE_CONFIGS.map((scope) => {
     const scopeBucket = pickScopeBucket(dateBucket, scope.candidates)
     const matchedCurrent = findMetricPayload(
       scopeBucket,
@@ -376,6 +533,53 @@ const coalScopeRows = computed(() => {
     }
   })
 })
+
+function resolveCoalMetricByScope(dateBucket, scopeConfig) {
+  const scopeBucket = pickScopeBucket(dateBucket, scopeConfig.candidates || [])
+  const matchedCurrent = findMetricPayload(scopeBucket, (name) => name.includes('原煤消耗量'))
+  const matchedPrior =
+    scopeConfig.useZhangtunPrior
+      ? (findMetricPayload(
+          scopeBucket,
+          (name) => name.includes('其中：张屯原煤消耗量') || (name.includes('其中') && name.includes('张屯原煤消耗量')),
+        ) || matchedCurrent)
+      : matchedCurrent
+  return {
+    current: safeNumber(matchedCurrent?.payload?.current),
+    prior: safeNumber(matchedPrior?.payload?.prior),
+  }
+}
+
+const coalRows = computed(() =>
+  availableDates.value.map((date) => {
+    const normalizedDate = normalizeDateLabel(date)
+    const dateBucket = extractedPayload.value?.byDate?.[normalizedDate] || extractedPayload.value?.byDate?.[date] || {}
+    const metricMap = {}
+    COAL_SCOPE_CONFIGS.forEach((scope) => {
+      metricMap[scope.key] = resolveCoalMetricByScope(dateBucket, scope)
+    })
+    return {
+      date: normalizedDate,
+      temperature: safeNumber(temperatureMainMap.value?.[normalizedDate]),
+      groupCurrent: metricMap.group?.current ?? null,
+      groupPrior: metricMap.group?.prior ?? null,
+      mainCityCurrent: metricMap.mainCity?.current ?? null,
+      mainCityPrior: metricMap.mainCity?.prior ?? null,
+      jinzhouCurrent: metricMap.jinzhou?.current ?? null,
+      jinzhouPrior: metricMap.jinzhou?.prior ?? null,
+      beifangCurrent: metricMap.beifang?.current ?? null,
+      beifangPrior: metricMap.beifang?.prior ?? null,
+      jinpuCurrent: metricMap.jinpu?.current ?? null,
+      jinpuPrior: metricMap.jinpu?.prior ?? null,
+      zhuangheCurrent: metricMap.zhuanghe?.current ?? null,
+      zhuanghePrior: metricMap.zhuanghe?.prior ?? null,
+    }
+  }),
+)
+
+const coalVisibleRows = computed(() =>
+  coalRows.value.filter((row) => shouldShowActualByBizDate(row.date)),
+)
 
 const coalTrendOption = computed(() => ({
   tooltip: {
@@ -451,8 +655,10 @@ const complaintRows = computed(() =>
     const bucket = extractedPayload.value?.byDate?.[date] || {}
     const total = findMetricMatchAcrossScopes(bucket, (name) => name.includes('总投诉量')).payload || {}
     const net = findMetricMatchAcrossScopes(bucket, (name) => name.includes('净投诉量')).payload || {}
+    const temperature = safeNumber(temperatureMainMap.value?.[normalizeDateLabel(date)])
     return {
       date,
+      temperature,
       totalCurrent: safeNumber(total?.current),
       netCurrent: safeNumber(net?.current),
       totalPrior: safeNumber(total?.prior),
@@ -461,24 +667,232 @@ const complaintRows = computed(() =>
   }),
 )
 
-const complaintTrendOption = computed(() => ({
+function sumFiniteNumbers(values) {
+  const numbers = values.filter((item) => Number.isFinite(item))
+  if (!numbers.length) return null
+  return numbers.reduce((sum, item) => sum + Number(item), 0)
+}
+
+function resolveScopeMetricValuesByConfig(dateBucket, scopeConfig, metricMatcher) {
+  if (Array.isArray(scopeConfig.aggregateCandidates) && scopeConfig.aggregateCandidates.length) {
+    const currentValues = []
+    const priorValues = []
+    scopeConfig.aggregateCandidates.forEach((groupCandidates) => {
+      const scopeBucket = pickScopeBucket(dateBucket, groupCandidates || [])
+      const matched = findMetricPayload(scopeBucket, metricMatcher)
+      currentValues.push(safeNumber(matched?.payload?.current))
+      priorValues.push(safeNumber(matched?.payload?.prior))
+    })
+    return {
+      current: sumFiniteNumbers(currentValues),
+      prior: sumFiniteNumbers(priorValues),
+    }
+  }
+  const scopeBucket = pickScopeBucket(dateBucket, scopeConfig.candidates || [])
+  const matched = findMetricPayload(scopeBucket, metricMatcher)
+  return {
+    current: safeNumber(matched?.payload?.current),
+    prior: safeNumber(matched?.payload?.prior),
+  }
+}
+
+const deviceStatusRows = computed(() => {
+  const dateBucket = selectedDateBucket.value || {}
+  const buildComboItem = (label, color, current, prior) => ({
+    label,
+    color,
+    current: Number.isFinite(current) ? current : 0,
+    prior: Number.isFinite(prior) ? prior : 0,
+  })
+  const keepActiveItems = (items) =>
+    items.filter((item) => !(Number(item.current) <= 0 && Number(item.prior) <= 0))
+
+  return DEVICE_SCOPE_CONFIGS.map((scopeConfig) => {
+    const steamBoiler = resolveScopeMetricValuesByConfig(dateBucket, scopeConfig, (name) => name.includes('运行汽炉数'))
+    const turbine = resolveScopeMetricValuesByConfig(dateBucket, scopeConfig, (name) => name.includes('运行汽轮机数'))
+    const waterBoiler = resolveScopeMetricValuesByConfig(dateBucket, scopeConfig, (name) => name.includes('运行水炉数'))
+    const houseBoiler = resolveScopeMetricValuesByConfig(
+      dateBucket,
+      scopeConfig,
+      (name) => name.includes('运行锅炉房锅炉数') || name.includes('运行燃煤锅炉房锅炉数'),
+    )
+    return {
+      scope: scopeConfig.label,
+      steamGroup: keepActiveItems([
+        buildComboItem('炉', '#f97316', steamBoiler.current, steamBoiler.prior),
+        buildComboItem('机', '#3b82f6', turbine.current, turbine.prior),
+      ]),
+      waterGroup: keepActiveItems([
+        buildComboItem('水', '#06b6d4', waterBoiler.current, waterBoiler.prior),
+      ]),
+      houseGroup: keepActiveItems([
+        buildComboItem('锅', '#8b5cf6', houseBoiler.current, houseBoiler.prior),
+      ]),
+    }
+  })
+})
+
+function shouldShowActualByBizDate(dateText) {
+  const rowDate = parseDateKey(dateText)
+  const bizDate = parseDateKey(selectedDate.value)
+  if (!rowDate || !bizDate) return true
+  return rowDate.getTime() <= bizDate.getTime()
+}
+
+const complaintVisibleRows = computed(() =>
+  complaintRows.value.filter((row) => shouldShowActualByBizDate(row.date)),
+)
+
+const complaintRowsByDate = computed(() => {
+  const map = {}
+  complaintRows.value.forEach((row) => {
+    map[normalizeDateLabel(row.date)] = row
+  })
+  return map
+})
+
+const complaintChartAxisDates = computed(() => {
+  const base = Array.isArray(availableDates.value) && availableDates.value.length
+    ? availableDates.value
+    : complaintRows.value.map((row) => row.date)
+  return [...new Set(base.map((item) => normalizeDateLabel(item)))].sort()
+})
+
+function formatAxisMonthDay(dateText) {
+  const normalized = normalizeDateLabel(dateText)
+  const parts = normalized.split('-')
+  if (parts.length !== 3) return normalized
+  return `${parts[1]}-${parts[2]}`
+}
+
+const complaintTotalTrendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  legend: { top: 0 },
-  grid: { left: 40, right: 20, bottom: 40, top: 40 },
-  xAxis: { type: 'category', data: availableDates.value },
-  yAxis: { type: 'value', name: '件' },
+  legend: { top: 0, type: 'scroll', textStyle: { fontSize: 11 } },
+  grid: { left: 40, right: 36, bottom: 40, top: 44 },
+  xAxis: {
+    type: 'category',
+    data: complaintChartAxisDates.value,
+    axisTick: { show: false },
+    axisLabel: {
+      hideOverlap: true,
+      margin: 10,
+      formatter(value) {
+        return formatAxisMonthDay(value)
+      },
+    },
+  },
+  yAxis: [
+    { type: 'value', name: '件', splitLine: { show: false } },
+    { type: 'value', name: '℃', splitLine: { show: false } },
+  ],
   series: [
     {
-      name: '总投诉量',
-      type: 'line',
-      smooth: true,
-      data: complaintRows.value.map((row) => row.totalCurrent),
+      name: '总投诉量（本期）',
+      type: 'bar',
+      itemStyle: { color: '#60a5fa' },
+      barMaxWidth: 22,
+      barCategoryGap: '42%',
+      barGap: '28%',
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.totalCurrent
+      }),
+      label: { show: true, position: 'top' },
+      labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
     },
     {
-      name: '净投诉量',
+      name: '总投诉量（同期）',
+      type: 'bar',
+      itemStyle: { color: '#fbbf24' },
+      barMaxWidth: 22,
+      barCategoryGap: '42%',
+      barGap: '28%',
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.totalPrior
+      }),
+      label: { show: true, position: 'top' },
+      labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
+    },
+    {
+      name: '本期气温',
       type: 'line',
+      yAxisIndex: 1,
       smooth: true,
-      data: complaintRows.value.map((row) => row.netCurrent),
+      itemStyle: { color: '#22c55e' },
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.temperature
+      }),
+    },
+  ],
+}))
+
+const complaintNetTrendOption = computed(() => ({
+  tooltip: { trigger: 'axis' },
+  legend: { top: 0, type: 'scroll', textStyle: { fontSize: 11 } },
+  grid: { left: 40, right: 36, bottom: 40, top: 44 },
+  xAxis: {
+    type: 'category',
+    data: complaintChartAxisDates.value,
+    axisTick: { show: false },
+    axisLabel: {
+      hideOverlap: true,
+      margin: 10,
+      formatter(value) {
+        return formatAxisMonthDay(value)
+      },
+    },
+  },
+  yAxis: [
+    { type: 'value', name: '件', splitLine: { show: false } },
+    { type: 'value', name: '℃', splitLine: { show: false } },
+  ],
+  series: [
+    {
+      name: '净投诉量（本期）',
+      type: 'bar',
+      itemStyle: { color: '#60a5fa' },
+      barMaxWidth: 22,
+      barCategoryGap: '42%',
+      barGap: '28%',
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.netCurrent
+      }),
+      label: { show: true, position: 'top' },
+      labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
+    },
+    {
+      name: '净投诉量（同期）',
+      type: 'bar',
+      itemStyle: { color: '#fbbf24' },
+      barMaxWidth: 22,
+      barCategoryGap: '42%',
+      barGap: '28%',
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.netPrior
+      }),
+      label: { show: true, position: 'top' },
+      labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
+    },
+    {
+      name: '本期气温',
+      type: 'line',
+      yAxisIndex: 1,
+      smooth: true,
+      itemStyle: { color: '#22c55e' },
+      data: complaintChartAxisDates.value.map((date) => {
+        const row = complaintRowsByDate.value[date]
+        if (!row || !shouldShowActualByBizDate(date)) return null
+        return row.temperature
+      }),
     },
   ],
 }))
@@ -598,8 +1012,9 @@ function formatMetric(value, unit, digits = 2) {
 function formatIncrement(value, unit = '', digits = 2) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '(—)'
   const number = Number(value)
-  const sign = number > 0 ? '+' : ''
-  return `(${sign}${number.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit ? unit : ''})`
+  const normalizedNumber = Object.is(number, -0) ? 0 : number
+  const sign = normalizedNumber >= 0 ? '+' : ''
+  return `(${sign}${normalizedNumber.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit ? unit : ''})`
 }
 
 function buildDailyAverageMap(bucket) {
@@ -839,6 +1254,13 @@ function loadPayloadFromStorage() {
   }
 }
 
+function loadThemeModeFromStorage() {
+  const cached = localStorage.getItem(THEME_STORAGE_KEY)
+  if (cached === 'default' || cached === 'festival') {
+    themeMode.value = cached
+  }
+}
+
 async function loadPayloadFromBackend() {
   try {
     const response = await getLatestExtractedJson(projectKey.value)
@@ -864,6 +1286,56 @@ function isValidByDatePayload(payload) {
 
 function goBackToEntry() {
   router.push(`/projects/${encodeURIComponent(projectKey.value)}`)
+}
+
+async function downloadDashboardPdf() {
+  if (downloadingPdf.value) return
+  const target = dashboardCaptureRef.value
+  if (!target) {
+    errorMessage.value = '未找到可导出的看板区域，请刷新页面后重试。'
+    return
+  }
+  const html2canvasLib = window.html2canvas
+  const jsPdfLib = window.jspdf?.jsPDF
+  if (!html2canvasLib || !jsPdfLib) {
+    errorMessage.value = 'PDF 导出依赖未加载完成，请刷新页面后重试。'
+    return
+  }
+  downloadingPdf.value = true
+  errorMessage.value = ''
+  try {
+    const canvas = await html2canvasLib(target, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: '#f5f7fb',
+      onclone: (clonedDocument) => {
+        const buttons = Array.from(clonedDocument.querySelectorAll('.toolbar .btn'))
+        const downloadBtn = buttons.find((item) => item.textContent?.includes('下载PDF'))
+        if (downloadBtn) downloadBtn.style.display = 'none'
+      },
+    })
+    const imageData = canvas.toDataURL('image/jpeg', 0.95)
+    const imageWidth = canvas.width
+    const imageHeight = canvas.height
+    const pdfWidth = 210
+    const pagePadding = 6
+    const contentWidth = pdfWidth - pagePadding * 2
+    const contentHeight = (imageHeight * contentWidth) / imageWidth
+    const pdfHeight = contentHeight + pagePadding * 2
+    const pdf = new jsPdfLib({
+      orientation: 'p',
+      unit: 'mm',
+      format: [pdfWidth, pdfHeight],
+    })
+    pdf.addImage(imageData, 'JPEG', pagePadding, pagePadding, contentWidth, contentHeight)
+    const datePart = selectedDate.value || new Date().toISOString().slice(0, 10)
+    pdf.save(`春节简化数据看板_${datePart}.pdf`)
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : 'PDF 生成失败，请稍后重试。'
+  } finally {
+    downloadingPdf.value = false
+  }
 }
 
 watch(
@@ -912,6 +1384,7 @@ onMounted(async () => {
   }
   chartLibraryReady.value = Boolean(window.echarts)
   await ensureProjectsLoaded().catch(() => {})
+  loadThemeModeFromStorage()
   loadPayloadFromStorage()
   if (!hasPayload.value) {
     await loadPayloadFromBackend()
@@ -926,6 +1399,14 @@ onMounted(async () => {
     errorMessage.value = '图表库未加载，请刷新页面后重试。'
   }
 })
+
+watch(
+  () => themeMode.value,
+  (value) => {
+    if (value !== 'default' && value !== 'festival') return
+    localStorage.setItem(THEME_STORAGE_KEY, value)
+  },
+)
 </script>
 
 <style scoped>
@@ -934,6 +1415,73 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
   padding: 20px 0 24px;
+}
+
+.spring-dashboard-page--default {
+  background: #f3f6fb;
+}
+
+.spring-dashboard-page--festival {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(255, 234, 186, 0.42), transparent 24%),
+    radial-gradient(circle at 86% 18%, rgba(255, 213, 128, 0.3), transparent 20%),
+    radial-gradient(circle at 80% 80%, rgba(249, 115, 22, 0.18), transparent 22%),
+    linear-gradient(165deg, #7f1d1d 0%, #9f1239 42%, #b91c1c 100%);
+}
+
+.spring-dashboard-page--festival .spring-dashboard-main {
+  padding-bottom: 30px;
+}
+
+.festival-ornaments {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.festival-title-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  height: 30px;
+  border-radius: 16px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 100%);
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(127, 29, 29, 0.28);
+}
+
+.festival-lantern {
+  font-size: 20px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 6px rgba(127, 29, 29, 0.36));
+}
+
+.spring-dashboard-page--festival .spring-dashboard-main::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px;
+}
+
+.spring-dashboard-page--festival .spring-dashboard-main > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sub {
@@ -967,6 +1515,25 @@ onMounted(async () => {
   padding: 6px 8px;
   border: 1px solid #d0d7de;
   border-radius: 8px;
+}
+
+.theme-select {
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+}
+
+.spring-dashboard-page--festival .toolbar .btn {
+  border-color: rgba(254, 243, 199, 0.55);
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.95), rgba(253, 230, 138, 0.93));
+  color: #7c2d12;
+}
+
+.spring-dashboard-page--festival .date-select,
+.spring-dashboard-page--festival .theme-select {
+  border-color: rgba(254, 243, 199, 0.72);
+  background: rgba(255, 251, 235, 0.95);
+  color: #7c2d12;
 }
 
 .summary-grid {
@@ -1028,10 +1595,75 @@ onMounted(async () => {
   gap: 14px;
 }
 
+.complaint-dual-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.complaint-chart-panel {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  padding: 10px 10px 4px;
+}
+
+.complaint-chart-panel__title {
+  font-size: 13px;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
 .mini-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 10px;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.device-combo-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.combo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 56px;
+  line-height: 1;
+}
+
+.combo-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.combo-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.combo-sep {
+  color: #64748b;
 }
 
 .mini-table th,
@@ -1046,6 +1678,62 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
+.spring-dashboard-page--festival .card:not(.summary-card) {
+  background: rgba(255, 252, 242, 0.95);
+  border: 1px solid rgba(254, 215, 170, 0.55);
+  box-shadow: 0 10px 24px rgba(69, 10, 10, 0.2);
+}
+
+.spring-dashboard-page--festival .card-header h2,
+.spring-dashboard-page--festival .card-header h3 {
+  color: #7f1d1d;
+}
+
+.spring-dashboard-page--festival .sub,
+.spring-dashboard-page--festival .toolbar-label {
+  color: #7c2d12;
+}
+
+.spring-dashboard-page--festival .mini-table th {
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  color: #7c2d12;
+}
+
+.spring-dashboard-page--festival .mini-table td {
+  background: rgba(255, 251, 235, 0.86);
+}
+
+.spring-dashboard-page--festival .summary-card {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 24px rgba(69, 10, 10, 0.26);
+}
+
+.spring-dashboard-page--festival .summary-card--primary {
+  background: linear-gradient(135deg, #1d4ed8, #60a5fa);
+}
+
+.spring-dashboard-page--festival .summary-card--success {
+  background: linear-gradient(135deg, #059669, #34d399);
+}
+
+.spring-dashboard-page--festival .summary-card--warning {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+}
+
+.spring-dashboard-page--festival .summary-card--danger {
+  background: linear-gradient(135deg, #dc2626, #fb7185);
+}
+
+.spring-dashboard-page--festival .summary-card__label {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.spring-dashboard-page--festival .summary-card__value,
+.spring-dashboard-page--festival .summary-card__delta-inline {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+}
+
 @media (max-width: 1440px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1053,7 +1741,27 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .festival-ornaments {
+    top: 66px;
+    gap: 8px;
+  }
+
+  .festival-title-mark {
+    min-width: 80px;
+    height: 26px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+
+  .festival-lantern {
+    font-size: 18px;
+  }
+
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .complaint-dual-charts {
     grid-template-columns: 1fr;
   }
 }

@@ -1350,3 +1350,227 @@ docker compose up -d --build
   - 保留回退关键词匹配，兼容文本中空格差异。
 - 验证结果：
   - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉量分项双图重构）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 结构调整：
+  - “投诉量分项（图与表）”改为两张图：
+    - 本日总投诉量（本期/同期）+ 本期气温曲线；
+    - 本日净投诉量（本期/同期）+ 本期气温曲线。
+- 表格调整：
+  - 新增最左侧“气温”字段；
+  - “总投诉量（本期/同期）”与“净投诉量（本期/同期）”按相邻列呈现。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉分项双图半屏清新风格）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 布局调整：
+  - 投诉区域改为双图并排（各占半屏）+ 下方整表；
+  - 移动端自动切换为单列。
+- 风格调整：
+  - 两图改为浅色面板样式；
+  - 关闭 y 轴横向网格线；
+  - 采用更清新的柱线配色（浅蓝/浅橙/绿色）。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉图气温线截断到业务日期）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 逻辑调整：
+  - 投诉双图中的“本期气温”曲线改为仅显示到业务日期；
+  - 业务日期后的点位按 `null` 处理，不再绘制。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉量柱同样截断到业务日期）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 逻辑调整：
+  - 投诉双图中的总/净、本期/同期柱，统一按“业务日期后置空”处理；
+  - 与本期气温线采用同一业务日期截断判断函数。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉区图表与表统一业务日期截断）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 一致性调整：
+  - 投诉双图与下方表格统一仅展示到业务日期；
+  - 投诉双图改为以 `complaintVisibleRows` 驱动 x 轴与序列；
+  - 本期气温线移除数值标签。
+- 防重叠增强：
+  - 图例启用滚动模式；
+  - x 轴标签启用重叠隐藏。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉图横轴标签与早日期观感优化）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 横轴格式：
+  - 投诉双图横轴标签改为 `MM-DD`（去掉年份）。
+- 观感优化：
+  - 双图改为固定窗口日期轴并在业务日期后置空数据；
+  - 调整柱宽与柱间距，缓解业务日期靠前时“柱形撑满整图”的视觉问题。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 投诉图完整业务日期轴修正）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 逻辑修正：
+  - 投诉双图横轴改为完整业务日期范围（起始到最后业务日）；
+  - 业务日期后继续置空数据，形成右侧留白，而非压缩图面。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 顶部PDF导出按钮）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 交互新增：
+  - 工具栏新增“下载PDF”按钮；
+  - 点击触发浏览器打印流程，可直接“另存为 PDF”。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板PDF直出与差值+0修正）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 导出能力升级：
+  - 由浏览器打印流改为 `html2canvas + jsPDF` 直出下载；
+  - 支持按 A4 自动分页保存，文件名包含业务日期；
+  - 导出中按钮禁用并显示“正在生成PDF…”。
+- 差值显示修正：
+  - `formatIncrement` 对 `-0` 做归一化处理；
+  - 差值 `0` 场景统一显示为带正号的 `+0`（按既定精度格式化）。
+- 依赖更新：
+  - 新增 `html2canvas`、`jspdf`（见 `frontend/package.json`）。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板PDF导出链路对齐主看板）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 导出链路修复：
+  - mini 看板 PDF 导出由本地模块导入方式改为 `window.html2canvas + window.jspdf.jsPDF`；
+  - 与 `daily_report_25_26` 的 `downloadPDF` 机制保持一致；
+  - 导出格式改为 210mm 宽的长页等比导出，更贴近“所见即所得”。
+- 依赖回滚：
+  - 移除本轮新增的 `html2canvas`、`jspdf` 本地依赖，统一使用 `index.html` 中的 CDN 全局脚本。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板PDF边距留白优化）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 导出视觉优化：
+  - `downloadDashboardPdf` 新增 `6mm` 页边距；
+  - 导出内容按可用宽度等比缩放，页面高度同步补齐上下边距；
+  - 图片在 PDF 中从 `(padding, padding)` 位置开始绘制，避免左右贴边裁切。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板原煤/设备明细表扩展）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 原煤明细扩展：
+  - 在“当日各口径耗原煤量对比”图下新增每日明细表；
+  - 列包含：日期、气温、集团汇总/主城区/金州/北方/金普/庄河 的本期与同期；
+  - 数据源来自 `byDate`，并统一仅显示到业务日期。
+- 设备明细扩展：
+  - 页面底部新增“各单位运行设备数量明细表”（业务日期）；
+  - 行口径：北海电厂（含北海水炉）、香海电厂、金州、北方、金普、庄河；
+  - 指标列：运行汽炉数、运行汽轮机数、运行水炉数、运行锅炉房锅炉数（均含本期/同期）；
+  - 北海口径按“北海热电联产 + 北海水炉”聚合。
+- 样式补充：
+  - 新增 `table-scroll` 容器以支持宽表横向滚动。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板设备明细表样式对齐参考表）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 结构修正：
+  - 底部设备表由“多指标本期/同期平铺列”改为分组列：`炉机组态`、`调峰水炉`、`燃煤锅炉`；
+  - 组内采用“标签 + 本期/同期”组合单元格展示（如 `炉 3/3`），对齐 `daily_report_25_26` 参考样式。
+- 规则修正：
+  - 设备项本期与同期均为 0 时自动隐藏；
+  - 组内全部隐藏时显示 `—`，避免冗余字段堆叠。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板设备组合项换行）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 样式调整：
+  - 设备组合单元格从横向换行改为纵向逐行展示；
+  - `combo-item` 增加最小宽度和两端对齐，确保“炉/机”本期/同期在视觉上更容易左右对应。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板原煤明细表列结构调整）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 表结构调整：
+  - 原煤明细表由“每口径拆分本期/同期两列”改为“每口径单列”；
+  - 单元格统一展示为 `本期/同期` 格式，提升横向可读性。
+- 实现补充：
+  - 新增 `formatCurrentPrior` 格式化函数，处理空值与统一精度输出。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板原煤明细表分级表头）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 结构调整：
+  - 原煤明细表改为两级表头；
+  - 父级为各口径（集团汇总、主城区、金州、北方、金普、庄河），子级统一为“本期/同期”。
+- 数据展示：
+  - 行内按口径子列分别展示本期与同期值，不再采用单元格拼接字符串。
+- 清理：
+  - 删除不再使用的 `formatCurrentPrior` 函数。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板风格切换与春节主题）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 交互新增：
+  - 工具栏增加“风格”开关（默认风格 / 春节氛围）；
+  - 主题状态 `themeMode` 支持本地持久化（`localStorage`），刷新后保持上次选择。
+- 视觉实现：
+  - 新增春节主题背景层（暖色渐变、光斑、轻纹理）；
+  - 卡片、按钮、下拉框、表头与表格切换至春节暖色系；
+  - 默认主题保留原视觉，不影响现有布局与交互。
+
+## 会话小结（2026-02-12 mini看板春节主题可读性优化）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 可读性修复：
+  - 春节主题卡片皮肤改为仅作用于 `.card:not(.summary-card)`，避免覆盖顶部四卡；
+  - 顶部四卡在春节主题下单独恢复渐变底色与高对比文字，解决“背景消失/文字不见”。
+- 喜庆增强：
+  - 新增轻量节庆装饰层（左右灯笼 + “福启新岁”徽标），并保持 `pointer-events: none`，不影响操作。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板PDF清晰度提升）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 导出质量调整：
+  - 将 `downloadDashboardPdf` 中 `html2canvas` 的渲染倍率由 `2` 提升至 `3`；
+  - 相比原配置导出像素密度提升约 `1.5x`，改善 PDF 细节与文字清晰度。
+- 兼容性说明：
+  - 现有边距和长页导出比例保持不变，仅提高渲染分辨率。
+- 验证结果：
+  - `npm run build` 已通过。
+
+## 会话小结（2026-02-12 mini看板标题文案调整）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 文案变更：
+  - 页面主标题由“春节简化数据看板”调整为“春节数据看板”。
