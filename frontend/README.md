@@ -1574,3 +1574,12 @@ docker compose up -d --build
 - 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
 - 文案变更：
   - 页面主标题由“春节简化数据看板”调整为“春节数据看板”。
+
+## 会话小结（2026-02-12 春节迷你看板“金镶玉”主题重构）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 视觉重构：
+  - “春节氛围”模式升级为“金镶玉”风格：深红质感背景 + 暖白宣纸底色卡片 + 2px 金色边框；
+  - 细节优化：增加灯笼摇曳动画、朱砂红书法标题风格，并显著提升了图表在节日模式下的清晰度。
+- 验证结果：
+  - `npm run build` 已通过。

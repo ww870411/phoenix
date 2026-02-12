@@ -848,3 +848,16 @@
 - **User Request:** 页面中的“春节简化数据看板”去掉“简化”二字。
 - **Agent Action:** 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue` 页面主标题文案为“春节数据看板”。
 - **Result:** 页面标题已更新为“春节数据看板”。
+
+## 2026-02-12（春节迷你看板：“金镶玉”主题重构）
+
+- **User Feedback:** 原春节主题不够美观且可能影响数据读取。
+- **Agent Action:**
+  1. 重构 `SpringFestivalDashboardView.vue` 的节日样式：
+     - 背景升级为深宫红渐变并叠加传统暗纹；
+     - 卡片引入“金镶玉”设计：暖白宣纸色背景 + 2px 精致金色边框 (`#d4af37`)；
+     - 标题采用朱砂红并配以金色装饰底纹；
+     - 为灯笼挂饰添加 `lantern-sway` 物理摇曳动画。
+  2. 易读性优化：通过卡片的实体背景色彻底解决了深色背景对 ECharts 图表的视觉干扰。
+- **Result:** 春节看板视觉质感大幅提升，实现了“喜庆氛围”与“专业数据展示”的平衡。
+- **Verify:** 执行 `frontend` 构建通过。
