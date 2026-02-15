@@ -1635,3 +1635,154 @@ docker compose up -d --build
   - 新增 `include`，显式覆盖 `src/**/*.js|jsx|vue|json` 及 `vite.config.*`。
 - 结果：
   - 提升前端工程的路径解析稳定性，减少编辑器/语言服务误报。
+
+## 会话小结（2026-02-12 登录“账户信息文件缺失”排障）
+
+- 本轮前端代码无改动。
+- 后端已增加账户/权限文件多路径兜底与缺失路径明细报错，用于修复服务器部署目录差异导致的登录失败。
+
+## 会话小结（2026-02-15 春节看板卡片文案修正）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 顶部摘要卡片文案由“当日集团标煤消耗（剔除庄河改造锅炉房）”改为“当日集团原煤消耗（剔除庄河改造锅炉房）”。
+- 实现链路说明：
+  - 文案位于模板区 `summary-grid` 的第二张卡片 `summary-card__label`；
+  - 数值展示仍由同文件内 `coalCard` 计算属性与 `formatMetric/formatIncrement` 负责，业务计算逻辑未改动。
+
+## 会话小结（2026-02-15 春节看板原煤图标题补充口径）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 图表卡片标题由“当日各口径耗原煤量对比”改为“当日各口径耗原煤量对比（剔除庄河改造锅炉房）”。
+- 实现链路说明：
+  - 标题位于原煤对比图所在卡片的 `<header class="card-header">` 下 `h3` 节点；
+  - 图表配置仍由 `coalTrendOption`、`coalScopeRows`、`coalVisibleRows` 驱动，本次未改数据处理逻辑。
+
+## 会话小结（2026-02-15 春节看板两张表新增合计行）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 新增 `sumRowsByField(rows, field)` 作为表格数值列汇总函数；
+  - 新增 `coalRowsWithTotal`，在 `coalVisibleRows` 末尾追加“合计”行；
+  - 新增 `complaintRowsWithTotal`，在 `complaintVisibleRows` 末尾追加“合计”行；
+  - 表格循环分别改为 `v-for="row in coalRowsWithTotal"` 与 `v-for="row in complaintRowsWithTotal"`；
+  - “投诉量分项”表格中“净投诉量（本期/同期）”在合计行固定显示 `-`（不参与求和）。
+- 实现链路说明：
+  - 原煤表仍由 `coalRows -> coalVisibleRows` 过滤业务日期后进入 `coalRowsWithTotal` 汇总输出；
+  - 投诉表仍由 `complaintRows -> complaintVisibleRows` 过滤业务日期后进入 `complaintRowsWithTotal` 汇总输出；
+  - `formatMetric` 继续负责普通行数值格式化，净投诉量合计例外由模板条件渲染为 `-`。
+
+## 会话小结（2026-02-15 春节看板两张表去除非气温单位）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 原煤表格中各口径本期/同期列由 `formatMetric(value, '吨', 0)` 改为 `formatMetric(value, '', 0)`；
+  - 投诉表格中总投诉量与净投诉量列由 `formatMetric(value, '件', 0)` 改为 `formatMetric(value, '', 0)`；
+  - 气温列仍保持 `formatMetric(value, '℃', 1)` 不变。
+- 实现链路说明：
+  - 仅修改模板展示层单位参数，不影响 `coalRowsWithTotal` 与 `complaintRowsWithTotal` 的计算结果与合计逻辑。
+
+## 会话小结（2026-02-15 春节看板气温取数项目键修复）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 修改服务：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+- 调整内容：
+  - `getTemperatureTrendByDate` 从固定请求 `daily_report_25_26` 改为接收 `projectKey` 参数并按当前项目请求；
+  - `loadTemperatureFromDatabase` 调用更新为 `getTemperatureTrendByDate(projectKey.value, selectedDate.value)`。
+- 实现链路说明：
+  - 页面监听 `selectedDate` 后触发 `loadTemperatureFromDatabase`；
+  - 后者通过项目看板接口读取第1节气温数据，构造 `temperatureMainMap/temperaturePeerMap`；
+  - 本次修复确保该链路使用当前 `spring` 项目，而非错误地拉取 `daily_report_25_26` 数据包。
+
+## 会话小结（2026-02-15 春节看板气温空白修复：轻量接口）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 修改服务：
+  - `frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- 调整内容：
+  - 新增轻量调用 `getDashboardTemperatureTrend`，避免拉取全量 dashboard 包；
+  - 春节项目 `getTemperatureTrendByDate` 改为调用 `daily_report_25_26` 的轻量温度接口；
+  - `loadTemperatureFromDatabase` 按“可见日期范围 + 选中日±3天”请求温度，并保留旧 sections 解析回退。
+- 实现链路说明：
+  - `selectedDate` 变化 -> `loadTemperatureFromDatabase` -> 轻量温度接口 -> 生成 `temperatureMainMap/temperaturePeerMap` -> `temperatureTrendOption` 绘图；
+  - 接口返回仅含温度映射，减少网络体积并修复空白问题。
+
+## 会话小结（2026-02-15 春节气温接口路由归位到 spring 项目）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 修改服务：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+- 调整内容：
+  - `getTemperatureTrendByDate` 改为请求当前项目路径：`/api/v1/projects/{projectKey}/spring-dashboard/temperature/trend`；
+  - 页面调用改为显式传入 `projectKey.value`，避免跨项目路径耦合。
+- 实现链路说明：
+  - 春节页面温度链路现在完全在 spring 项目 API 命名空间内闭环，符合项目模块化边界。
+
+## 会话小结（2026-02-15 春节气温图空白兜底修复）
+
+- 本轮前端页面与交互代码无新增变更。
+- 后端 `spring-dashboard/temperature/trend` 已增加 `temperature_data` 聚合兜底，前端现有调用链可直接受益，避免视图空数据导致曲线空白。
+
+## 会话小结（2026-02-15 春节气温接口前端自动回退）
+
+- 修改服务：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+- 调整内容：
+  - `getTemperatureTrendByDate` 改为“主路径 + 回退路径”调用；
+  - 先请求 spring 项目接口 `/spring-dashboard/temperature/trend`；
+  - 若请求异常（如后端未热重载导致 404），自动回退到 `daily_report_25_26` 的轻量温度接口。
+- 实现链路说明：
+  - 在保证模块化主路径优先的前提下，增加运行时降级，避免接口切换窗口期出现温度图空白。
+
+## 会话小结（2026-02-15 春节气温链路增加老接口最终兜底）
+
+- 修改服务：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+- 调整内容：
+  - `getTemperatureTrendByDate` 增加第3层回退：当两个轻量接口均异常时，回退调用 `getDashboardData('daily_report_25_26')`；
+  - 该回退复用历史稳定接口，兼容后端未重载新增路由的运行环境。
+- 实现链路说明：
+  - 取数优先级：`spring 轻量接口` -> `daily 轻量接口` -> `daily /dashboard 全量接口`；
+  - 前端已有 `sections` 解析回退逻辑，因此可直接消费最终兜底返回结构恢复曲线。
+
+## 会话小结（2026-02-15 页面临时调试增强：气温链路可视化）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 修改服务：`frontend/src/projects/daily_report_spring_festval_2026/services/api.js`
+- 调整内容：
+  - 调试开关默认开启（`debugVisible = true`）；
+  - 气温图下新增临时调试面板，输出：
+    - 请求参数（项目键、selectedDate、start/end、窗口日期）；
+    - 接口命中来源（`spring_light / daily_light / daily_dashboard_full`）；
+    - 每层尝试日志（成功/失败、URL、状态码、错误）；
+    - 返回主键、`main/peer` 原始条数、映射后条数、样例点；
+    - 图表7天窗口逐日 `main/peer` 值与可见点数量。
+  - `getTemperatureTrendByDate` 返回 `_debug` 元信息，供页面调试面板直接展示。
+
+## 会话小结（2026-02-15 温度图渲染强制可视化调试）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 温度图 `temperatureTrendOption` 增加显式渲染参数：固定配色、线宽、符号点、`animation=false`、`connectNulls=false`；
+  - 温度图 `yAxis` 增加动态 `min/max`，确保当前窗口数据始终落在坐标范围内；
+  - 调试输出新增 `echartsPayload`，展示最终送入图表的 `xAxisData/mainSeries/peerSeries`。
+- 目的：
+  - 在“数据有值但图空白”场景下，区分是数据映射问题还是纯渲染问题。
+
+## 会话小结（2026-02-15 EChart 组件渲染稳态修复）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 内嵌 `EChart` 组件增强：`setOption` 后强制 `resize`、初始化改为 `nextTick` 应用、增加 `ResizeObserver` 监听容器尺寸；
+  - 温度调试输出新增 `chartLibraryReady` 与 `hasWindowEcharts` 状态字段。
+- 目标：
+  - 解决“数据与 series 均正常但图表空白”的实例渲染时序问题。
+
+## 会话小结（2026-02-15 温度图样式回退）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 温度图 `temperatureTrendOption` 的视觉参数回退到既定样式（恢复平滑线与原标签格式）；  
+  - 去除排障期间加入的强制渲染样式参数（固定颜色、symbol、动态坐标范围等）；  
+  - 调试开关默认值恢复为关闭（`debugVisible=false`）。
+- 保留项：
+  - EChart 组件层的渲染稳态修复（`nextTick + resize + ResizeObserver`）继续保留。

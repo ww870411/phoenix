@@ -179,7 +179,10 @@ class AuthManager:
 
     def _load_accounts(self) -> Dict[str, UserRecord]:
         if not self._accounts_path.exists():
-            raise HTTPException(status_code=500, detail="账户信息文件缺失")
+            raise HTTPException(
+                status_code=500,
+                detail=f"账户信息文件缺失: {self._accounts_path}",
+            )
         try:
             raw = json.loads(self._accounts_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
@@ -209,7 +212,10 @@ class AuthManager:
 
     def _load_permissions(self) -> tuple[Dict[str, GroupPermissions], int]:
         if not self._permissions_path.exists():
-            raise HTTPException(status_code=500, detail="权限配置文件缺失")
+            raise HTTPException(
+                status_code=500,
+                detail=f"权限配置文件缺失: {self._permissions_path}",
+            )
         try:
             raw = json.loads(self._permissions_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:

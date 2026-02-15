@@ -468,3 +468,98 @@
 
 - 本轮后端接口与服务无新增改动。
 - 前端 `frontend/jsconfig.json` 完成路径别名与 `include` 范围修正，用于提升工程索引与模块解析稳定性。
+
+## 结构同步（2026-02-12 登录“账户信息文件缺失”部署兼容修复）
+
+- 修改文件：`backend/services/project_data_paths.py`、`backend/services/auth_manager.py`
+- 调整内容：
+  - `resolve_accounts_path` 增加多路径候选（含 `accounts.json`）；
+  - `resolve_permissions_path` 增加兼容候选路径；
+  - 账户/权限文件缺失时报错中附带实际解析路径，提升线上排障效率。
+- 验证结果：
+  - `python -m py_compile backend/services/project_data_paths.py backend/services/auth_manager.py` 通过。
+
+## 结构同步（2026-02-15 春节看板卡片文案修正）
+
+- 本轮后端接口与服务无新增改动。
+- 前端将春节看板顶部卡片文案从“当日集团标煤消耗（剔除庄河改造锅炉房）”调整为“当日集团原煤消耗（剔除庄河改造锅炉房）”，不涉及后端数据口径变更。
+
+## 结构同步（2026-02-15 春节看板原煤图标题补充口径）
+
+- 本轮后端接口与服务无新增改动。
+- 前端将原煤对比图标题从“当日各口径耗原煤量对比”调整为“当日各口径耗原煤量对比（剔除庄河改造锅炉房）”，仅为展示文案更新。
+
+## 结构同步（2026-02-15 春节看板两张表新增合计行）
+
+- 本轮后端接口与服务无新增改动。
+- 前端在春节看板页面为“当日各口径耗原煤量对比（剔除庄河改造锅炉房）”和“投诉量分项”两张表新增末尾“合计”行展示；其中“净投诉量（本期/同期）”合计单元格固定显示 `-`，不做汇总。
+
+## 结构同步（2026-02-15 春节看板两张表去除非气温单位）
+
+- 本轮后端接口与服务无新增改动。
+- 前端将春节看板两张表中的原煤消耗量/投诉量列调整为纯数字展示（不带“吨/件”单位），气温列仍保留“℃”。
+
+## 结构同步（2026-02-15 春节看板气温取数项目键修复）
+
+- 本轮后端接口与服务无新增改动。
+- 前端修复春节看板气温接口调用的项目键传参：不再固定请求 `daily_report_25_26`，改为按当前页面 `projectKey` 请求对应项目看板数据，减少无关数据包加载并修复跨项目取数偏差。
+
+## 结构同步（2026-02-15 春节看板气温空白修复：新增轻量温度接口）
+
+- 修改文件：`backend/projects/daily_report_25_26/api/dashboard.py`
+- 新增接口：`GET /api/v1/projects/daily_report_25_26/dashboard/temperature/trend`
+- 能力说明：
+  - 按 `show_date/start_date/end_date` 查询 `calc_temperature_data`，返回本期 `main` 与同期 `peer` 的日均气温映射；
+  - 用于春节看板气温曲线，避免前端再请求全量 `/dashboard` 数据包。
+- 兼容说明：
+  - 既有 `/dashboard`、`/dashboard/date` 等接口行为不变；新增接口为向后兼容扩展。
+
+## 结构同步（2026-02-15 春节气温接口路由归位到 spring 项目）
+
+- 新增文件：`backend/projects/daily_report_spring_festval_2026/api/temperature_trend.py`
+- 修改文件：`backend/projects/daily_report_spring_festval_2026/api/router.py`
+- 调整内容：
+  - 在 spring 项目下新增公开接口：`GET /api/v1/projects/daily_report_spring_festval_2026/spring-dashboard/temperature/trend`；
+  - spring 项目 `public_router` 已挂载该接口，前端可在项目内路径直接访问。
+- 结果：
+  - 春节看板温度接口职责与路由归属回归到 spring 模块边界，避免前端跨项目 API 路径耦合。
+
+## 结构同步（2026-02-15 春节气温接口增加温度原表兜底）
+
+- 修改文件：`backend/projects/daily_report_spring_festval_2026/api/temperature_trend.py`
+- 调整内容：
+  - `spring-dashboard/temperature/trend` 的日均温度查询增加兜底逻辑：  
+    - 优先查 `calc_temperature_data`；  
+    - 若为空，回退查 `temperature_data` 按天 `AVG(value)` 聚合。  
+- 结果：
+  - 避免因温度聚合视图未刷新导致接口返回空集，提升气温曲线可用性。
+
+## 结构同步（2026-02-15 春节气温接口前端自动回退）
+
+- 本轮后端接口与服务无新增改动。
+- 前端为 spring 气温取数增加“主路径失败自动回退”机制：优先调用 spring 项目温度接口，异常时临时回退到 `daily_report_25_26` 轻量温度接口，降低发布切换窗口期空白风险。
+
+## 结构同步（2026-02-15 春节气温链路增加老 dashboard 最终兜底）
+
+- 本轮后端接口与服务无新增改动。
+- 前端在现有回退机制上新增第3层兜底：当轻量温度接口不可用时，回退到历史 `daily_report_25_26` 的 `/dashboard` 接口，确保无需后端重启也能恢复气温曲线。
+
+## 结构同步（2026-02-15 页面临时调试增强）
+
+- 本轮后端接口与服务无新增改动。
+- 前端新增温度链路调试可视化（默认开启），用于直接定位接口命中层级与数据映射状态，不影响后端协议。
+
+## 结构同步（2026-02-15 温度图渲染强制可视化调试）
+
+- 本轮后端接口与服务无新增改动。
+- 前端温度图增加显式渲染参数与 ECharts 入参回显（`echartsPayload`），用于排查“数据存在但曲线不显示”的前端渲染异常。
+
+## 结构同步（2026-02-15 EChart 组件渲染稳态修复）
+
+- 本轮后端接口与服务无新增改动。
+- 前端增强 EChart 组件初始化与尺寸监听（`nextTick` 应用 option + `ResizeObserver` + 强制 resize），用于提升温度图在布局切换场景下的可见性稳定性。
+
+## 结构同步（2026-02-15 温度图样式回退）
+
+- 本轮后端接口与服务无新增改动。
+- 前端已将温度图视觉配置回退至既定展示样式，仅保留图表组件层稳定性修复。

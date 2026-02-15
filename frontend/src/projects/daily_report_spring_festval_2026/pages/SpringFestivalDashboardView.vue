@@ -73,7 +73,7 @@
           </div>
         </article>
         <article class="summary-card summary-card--success card elevated">
-          <div class="summary-card__label">当日集团标煤消耗（剔除庄河改造锅炉房）</div>
+          <div class="summary-card__label">当日集团原煤消耗（剔除庄河改造锅炉房）</div>
           <div class="summary-card__value">
             {{ formatMetric(coalCard.current, '吨', 0) }}
             <span class="summary-card__delta-inline">{{ formatIncrement(coalCard.delta, '吨', 0) }}</span>
@@ -102,11 +102,14 @@
             <h3>气温变化情况（向后预测3日，含同期）</h3>
           </header>
           <EChart :option="temperatureTrendOption" :height="320" />
+          <div v-if="debugVisible" class="temp-debug-box">
+            <pre class="json-preview">{{ temperatureDebugText }}</pre>
+          </div>
         </section>
 
         <section class="card elevated">
           <header class="card-header">
-            <h3>当日各口径耗原煤量对比</h3>
+            <h3>当日各口径耗原煤量对比（剔除庄河改造锅炉房）</h3>
           </header>
           <EChart :option="coalTrendOption" :height="320" />
           <div class="table-scroll">
@@ -138,21 +141,21 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in coalVisibleRows" :key="row.date">
+                <tr v-for="row in coalRowsWithTotal" :key="row.date">
                   <td>{{ row.date }}</td>
                   <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
-                  <td>{{ formatMetric(row.groupCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.groupPrior, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.mainCityCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.mainCityPrior, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.jinzhouCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.jinzhouPrior, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.beifangCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.beifangPrior, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.jinpuCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.jinpuPrior, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.zhuangheCurrent, '吨', 0) }}</td>
-                  <td>{{ formatMetric(row.zhuanghePrior, '吨', 0) }}</td>
+                  <td>{{ formatMetric(row.groupCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.groupPrior, '', 0) }}</td>
+                  <td>{{ formatMetric(row.mainCityCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.mainCityPrior, '', 0) }}</td>
+                  <td>{{ formatMetric(row.jinzhouCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.jinzhouPrior, '', 0) }}</td>
+                  <td>{{ formatMetric(row.beifangCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.beifangPrior, '', 0) }}</td>
+                  <td>{{ formatMetric(row.jinpuCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.jinpuPrior, '', 0) }}</td>
+                  <td>{{ formatMetric(row.zhuangheCurrent, '', 0) }}</td>
+                  <td>{{ formatMetric(row.zhuanghePrior, '', 0) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -185,13 +188,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in complaintVisibleRows" :key="row.date">
+              <tr v-for="row in complaintRowsWithTotal" :key="row.date">
                 <td>{{ row.date }}</td>
                 <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
-                <td>{{ formatMetric(row.totalCurrent, '件', 0) }}</td>
-                <td>{{ formatMetric(row.totalPrior, '件', 0) }}</td>
-                <td>{{ formatMetric(row.netCurrent, '件', 0) }}</td>
-                <td>{{ formatMetric(row.netPrior, '件', 0) }}</td>
+                <td>{{ formatMetric(row.totalCurrent, '', 0) }}</td>
+                <td>{{ formatMetric(row.totalPrior, '', 0) }}</td>
+                <td>{{ row.isTotal ? '-' : formatMetric(row.netCurrent, '', 0) }}</td>
+                <td>{{ row.isTotal ? '-' : formatMetric(row.netPrior, '', 0) }}</td>
               </tr>
             </tbody>
           </table>
@@ -266,7 +269,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
@@ -290,6 +293,7 @@ const selectedDate = ref('')
 const themeMode = ref('default')
 const temperatureMainMap = ref({})
 const temperaturePeerMap = ref({})
+const temperatureDebugInfo = ref({})
 const dashboardCaptureRef = ref(null)
 
 const EChart = defineComponent({
@@ -302,22 +306,35 @@ const EChart = defineComponent({
     const container = ref(null)
     const latestOption = shallowRef(null)
     let chart = null
+    let resizeObserver = null
     const applyOption = () => {
       if (!chart || !latestOption.value) return
-      chart.setOption(latestOption.value, { notMerge: true, lazyUpdate: true })
+      chart.setOption(latestOption.value, { notMerge: true, lazyUpdate: true, silent: true })
+      requestAnimationFrame(() => chart?.resize())
     }
     const ensureChart = () => {
       if (!container.value || !window.echarts) return
       if (!chart) chart = window.echarts.init(container.value)
-      applyOption()
+      nextTick(() => {
+        applyOption()
+        chart?.resize()
+      })
     }
     const resize = () => chart?.resize()
     onMounted(() => {
       ensureChart()
       window.addEventListener('resize', resize)
+      if (typeof ResizeObserver !== 'undefined' && container.value) {
+        resizeObserver = new ResizeObserver(() => chart?.resize())
+        resizeObserver.observe(container.value)
+      }
     })
     onBeforeUnmount(() => {
       window.removeEventListener('resize', resize)
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+      }
       if (chart) {
         chart.dispose()
         chart = null
@@ -523,6 +540,40 @@ const coalRows = computed(() =>
 
 const coalVisibleRows = computed(() => coalRows.value.filter(r => shouldShowActualByBizDate(r.date)))
 
+function sumRowsByField(rows, field) {
+  let hasValue = false
+  const total = rows.reduce((acc, row) => {
+    const num = safeNumber(row?.[field])
+    if (num === null) return acc
+    hasValue = true
+    return acc + num
+  }, 0)
+  return hasValue ? total : null
+}
+
+const coalRowsWithTotal = computed(() => {
+  const rows = coalVisibleRows.value
+  if (!rows.length) return rows
+  const totalRow = {
+    date: '合计',
+    isTotal: true,
+    temperature: sumRowsByField(rows, 'temperature'),
+    groupCurrent: sumRowsByField(rows, 'groupCurrent'),
+    groupPrior: sumRowsByField(rows, 'groupPrior'),
+    mainCityCurrent: sumRowsByField(rows, 'mainCityCurrent'),
+    mainCityPrior: sumRowsByField(rows, 'mainCityPrior'),
+    jinzhouCurrent: sumRowsByField(rows, 'jinzhouCurrent'),
+    jinzhouPrior: sumRowsByField(rows, 'jinzhouPrior'),
+    beifangCurrent: sumRowsByField(rows, 'beifangCurrent'),
+    beifangPrior: sumRowsByField(rows, 'beifangPrior'),
+    jinpuCurrent: sumRowsByField(rows, 'jinpuCurrent'),
+    jinpuPrior: sumRowsByField(rows, 'jinpuPrior'),
+    zhuangheCurrent: sumRowsByField(rows, 'zhuangheCurrent'),
+    zhuanghePrior: sumRowsByField(rows, 'zhuanghePrior'),
+  }
+  return [...rows, totalRow]
+})
+
 const coalTrendOption = computed(() => ({
   tooltip: { 
     trigger: 'axis',
@@ -575,6 +626,21 @@ const complaintRows = computed(() =>
 )
 
 const complaintVisibleRows = computed(() => complaintRows.value.filter(r => shouldShowActualByBizDate(r.date)))
+
+const complaintRowsWithTotal = computed(() => {
+  const rows = complaintVisibleRows.value
+  if (!rows.length) return rows
+  const totalRow = {
+    date: '合计',
+    isTotal: true,
+    temperature: sumRowsByField(rows, 'temperature'),
+    totalCurrent: sumRowsByField(rows, 'totalCurrent'),
+    totalPrior: sumRowsByField(rows, 'totalPrior'),
+    netCurrent: null,
+    netPrior: null,
+  }
+  return [...rows, totalRow]
+})
 
 function resolveDeviceMetric(dateBucket, scopeConfig, metricMatcher) {
   if (Array.isArray(scopeConfig.aggregateCandidates)) {
@@ -718,7 +784,41 @@ const temperatureTrendOption = computed(() => {
   }
 })
 
-const debugInfoText = computed(() => JSON.stringify({ projectKey: projectKey.value, selectedDate: selectedDate.value, availableDates: availableDates.value, temperature: { windowDates: temperatureWindowDates.value } }, null, 2))
+const temperatureDebugText = computed(() => {
+  const labels = temperatureWindowDates.value
+  const seriesPreview = labels.map((d) => ({
+    date: d,
+    main: temperatureMainMap.value?.[d] ?? null,
+    peer: temperaturePeerMap.value?.[d] ?? null,
+  }))
+  const visibleMainPoints = seriesPreview.filter((i) => Number.isFinite(i.main)).length
+  const visiblePeerPoints = seriesPreview.filter((i) => Number.isFinite(i.peer)).length
+  return JSON.stringify(
+    {
+      ...temperatureDebugInfo.value,
+      chartWindow: {
+        labels,
+        visibleMainPoints,
+        visiblePeerPoints,
+        seriesPreview,
+      },
+      echartsPayload: {
+        xAxisData: labels,
+        mainSeries: labels.map((d) => safeNumber(temperatureMainMap.value[d])),
+        peerSeries: labels.map((d) => safeNumber(temperaturePeerMap.value[d])),
+      },
+    },
+    null,
+    2,
+  )
+})
+
+const debugInfoText = computed(() => JSON.stringify({
+  projectKey: projectKey.value,
+  selectedDate: selectedDate.value,
+  availableDates: availableDates.value,
+  temperature: JSON.parse(temperatureDebugText.value || '{}'),
+}, null, 2))
 
 function formatMetric(v, u, d = 2) {
   if (v === null || v === undefined || Number.isNaN(Number(v))) return '—'
@@ -752,15 +852,60 @@ function resolveSectionByIndex(s, idx, ...keys) {
 
 async function loadTemperatureFromDatabase() {
   if (!selectedDate.value) return
-  const p = await getTemperatureTrendByDate(selectedDate.value)
-  const sec = resolveSectionByIndex(p?.data?.sections || p?.sections || p?.data || {}, '1', '逐小时气温')
-  temperatureMainMap.value = normalizeMapKeys(buildDailyAverageMap(sec['本期']))
-  const peerRaw = normalizeMapKeys(buildDailyAverageMap(sec['同期']))
+  const normalizedDates = [...new Set(availableDates.value.map(normalizeDateLabel))].sort()
+  const selected = parseDateKey(selectedDate.value)
+  const windowStart = selected ? formatDateKey(addDays(selected, -3)) : ''
+  const windowEnd = selected ? formatDateKey(addDays(selected, 3)) : ''
+  const startDate = normalizedDates.length ? (normalizedDates[0] < windowStart || !windowStart ? normalizedDates[0] : windowStart) : windowStart
+  const endDate = normalizedDates.length ? (normalizedDates[normalizedDates.length - 1] > windowEnd ? normalizedDates[normalizedDates.length - 1] : windowEnd) : windowEnd
+
+  const p = await getTemperatureTrendByDate(projectKey.value, selectedDate.value, { startDate, endDate })
+  const lightMain = normalizeMapKeys(buildDailyAverageMap(p?.main || {}))
+  const lightPeer = normalizeMapKeys(buildDailyAverageMap(p?.peer || {}))
+  const payloadSections = p?.data?.sections || p?.sections || p?.data || {}
+
+  if (Object.keys(lightMain).length || Object.keys(lightPeer).length) {
+    temperatureMainMap.value = lightMain
+  } else {
+    const sec = resolveSectionByIndex(payloadSections, '1', '逐小时气温', '日均气温')
+    temperatureMainMap.value = normalizeMapKeys(buildDailyAverageMap(sec['本期']))
+  }
+
+  const peerRaw = Object.keys(lightPeer).length
+    ? lightPeer
+    : normalizeMapKeys(buildDailyAverageMap(resolveSectionByIndex(payloadSections, '1', '逐小时气温', '日均气温')['同期']))
   const mapped = {}
   Object.entries(peerRaw).forEach(([d, v]) => {
     const dt = new Date(d); if (!Number.isNaN(dt.getTime())) { dt.setFullYear(dt.getFullYear() + 1); mapped[normalizeDateLabel(dt)] = v }
   })
   temperaturePeerMap.value = mapped
+
+  temperatureDebugInfo.value = {
+    request: {
+      projectKey: projectKey.value,
+      selectedDate: selectedDate.value,
+      startDate,
+      endDate,
+      availableDatesCount: availableDates.value.length,
+      windowDates: temperatureWindowDates.value,
+    },
+    response: {
+      chartLibraryReady: chartLibraryReady.value,
+      hasWindowEcharts: Boolean(window?.echarts),
+      topLevelKeys: Object.keys(p || {}),
+      source: p?._debug?.source || 'unknown',
+      attempts: p?._debug?.attempts || [],
+      mainRawCount: Object.keys(p?.main || {}).length,
+      peerRawCount: Object.keys(p?.peer || {}).length,
+      payloadSectionsKeys: Object.keys(payloadSections || {}),
+    },
+    mapped: {
+      mainCount: Object.keys(temperatureMainMap.value || {}).length,
+      peerCount: Object.keys(temperaturePeerMap.value || {}).length,
+      mainSample: Object.entries(temperatureMainMap.value || {}).slice(0, 12),
+      peerSample: Object.entries(temperaturePeerMap.value || {}).slice(0, 12),
+    },
+  }
 }
 
 function normalizeDateLabel(t) { const d = new Date(String(t || '').trim()); if (Number.isNaN(d.getTime())) return String(t || ''); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -898,6 +1043,20 @@ watch(() => themeMode.value, (v) => localStorage.setItem(THEME_STORAGE_KEY, v))
 .toolbar { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
 .toolbar-label { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; }
 .date-select, .theme-select { padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 8px; }
+.json-preview {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #0b1020;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.temp-debug-box { margin-top: 10px; }
 
 /* 业务组件通用样式 */
 .device-combo-cell { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }

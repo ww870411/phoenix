@@ -310,6 +310,29 @@ export async function getDashboardData(projectKey, params = {}) {
   return response.json()
 }
 
+export async function getDashboardTemperatureTrend(projectKey, params = {}) {
+  const showDate =
+    typeof params.showDate === 'string' ? params.showDate : ''
+  const startDate =
+    typeof params.startDate === 'string' ? params.startDate : ''
+  const endDate =
+    typeof params.endDate === 'string' ? params.endDate : ''
+  const search = new URLSearchParams({
+    show_date: showDate,
+    start_date: startDate,
+    end_date: endDate,
+  })
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/trend?${search.toString()}`, {
+    headers: attachAuthHeaders(),
+    signal: params.signal,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取气温趋势失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getDashboardBizDate(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/dashboard/date`, {
     headers: attachAuthHeaders(),

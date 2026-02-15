@@ -70,13 +70,25 @@ def resolve_project_list_path() -> Path:
 def resolve_accounts_path() -> Path:
     """
     解析账户信息文件：
-    1) DATA_DIRECTORY/shared/auth/账户信息.json
-    2) DATA_DIRECTORY/账户信息.json（兼容旧路径）
+    1) DATA_DIRECTORY/shared/auth/账户信息.json（当前标准）
+    2) DATA_DIRECTORY/shared/auth/accounts.json（ASCII 兼容）
+    3) DATA_DIRECTORY/shared/账户信息.json
+    4) DATA_DIRECTORY/auth/账户信息.json
+    5) DATA_DIRECTORY/账户信息.json（兼容旧路径）
+    6) DATA_DIRECTORY/accounts.json（ASCII 兼容）
     """
-    shared_path = (DATA_DIRECTORY / "shared" / "auth" / "账户信息.json").resolve()
-    if shared_path.exists():
-        return shared_path
-    return (DATA_DIRECTORY / "账户信息.json").resolve()
+    candidates = [
+        (DATA_DIRECTORY / "shared" / "auth" / "账户信息.json").resolve(),
+        (DATA_DIRECTORY / "shared" / "auth" / "accounts.json").resolve(),
+        (DATA_DIRECTORY / "shared" / "账户信息.json").resolve(),
+        (DATA_DIRECTORY / "auth" / "账户信息.json").resolve(),
+        (DATA_DIRECTORY / "账户信息.json").resolve(),
+        (DATA_DIRECTORY / "accounts.json").resolve(),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def resolve_permissions_path() -> Path:
@@ -84,11 +96,19 @@ def resolve_permissions_path() -> Path:
     解析权限文件：
     1) DATA_DIRECTORY/shared/auth/permissions.json
     2) DATA_DIRECTORY/auth/permissions.json（兼容旧路径）
+    3) DATA_DIRECTORY/shared/permissions.json（兼容路径）
+    4) DATA_DIRECTORY/permissions.json（兼容路径）
     """
-    shared_path = (DATA_DIRECTORY / "shared" / "auth" / "permissions.json").resolve()
-    if shared_path.exists():
-        return shared_path
-    return (DATA_DIRECTORY / "auth" / "permissions.json").resolve()
+    candidates = [
+        (DATA_DIRECTORY / "shared" / "auth" / "permissions.json").resolve(),
+        (DATA_DIRECTORY / "auth" / "permissions.json").resolve(),
+        (DATA_DIRECTORY / "shared" / "permissions.json").resolve(),
+        (DATA_DIRECTORY / "permissions.json").resolve(),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def resolve_global_date_path() -> Path:
