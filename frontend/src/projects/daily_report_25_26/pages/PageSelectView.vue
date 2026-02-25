@@ -127,8 +127,8 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_analysis: '数据自由组合提取',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
-const canApproveUnit = auth.canApproveUnit
-const canRevokeUnit = auth.canRevokeUnit
+const canApproveUnit = (unit) => auth.canApproveUnit(unit, projectKey)
+const canRevokeUnit = (unit) => auth.canRevokeUnit(unit, projectKey)
 const rawPages = ref([])
 const pages = ref([])
 const loading = ref(false)
@@ -150,7 +150,7 @@ async function loadPages() {
     await ensureProjectsLoaded()
     const response = await listPages(projectKey)
     rawPages.value = Array.isArray(response?.pages) ? response.pages : []
-    pages.value = auth.filterPages(rawPages.value)
+    pages.value = auth.filterPages(projectKey, rawPages.value)
     if (!pages.value.length) {
       errorMessage.value = '暂无可访问的页面，请联系管理员确认权限。'
     }
@@ -179,7 +179,7 @@ async function refreshWorkflow() {
 watch(
   () => auth.permissions,
   () => {
-    pages.value = auth.filterPages(rawPages.value)
+    pages.value = auth.filterPages(projectKey, rawPages.value)
     if (!pages.value.length && rawPages.value.length) {
       errorMessage.value = '当前账号无可访问页面，请联系管理员。'
     } else if (pages.value.length) {
@@ -208,8 +208,13 @@ const workflowBizDate = computed(() => workflow.value?.biz_date || '')
 const workflowDisplayDate = computed(() => workflow.value?.display_date || '')
 const workflowBizDateText = computed(() => formatDate(workflowBizDate.value))
 const workflowDisplayDateText = computed(() => formatDate(workflowDisplayDate.value))
-const actionsColumnVisible = computed(() => auth.canApprove || auth.canRevoke)
-const publishButtonVisible = computed(() => auth.canPublish)
+const canApproveCurrentProject = computed(() => auth.canApproveFor(projectKey))
+const canRevokeCurrentProject = computed(() => auth.canRevokeFor(projectKey))
+const canPublishCurrentProject = computed(() => auth.canPublishFor(projectKey))
+const actionsColumnVisible = computed(
+  () => canApproveCurrentProject.value || canRevokeCurrentProject.value,
+)
+const publishButtonVisible = computed(() => canPublishCurrentProject.value)
 const publishDisabled = computed(
   () => publishStatus.value?.status === 'published' || workflowLoading.value,
 )
@@ -219,9 +224,9 @@ const showWorkflowCard = computed(() => {
     workflowLoading.value ||
     Boolean(workflowError.value) ||
     workflowUnits.value.length > 0 ||
-    auth.canApprove ||
-    auth.canRevoke ||
-    auth.canPublish
+    canApproveCurrentProject.value ||
+    canRevokeCurrentProject.value ||
+    canPublishCurrentProject.value
   )
 })
 

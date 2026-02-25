@@ -1,7 +1,7 @@
 {
   "meta": {
     "sheetName": "Sheet1",
-    "generatedAt": "2026-02-15T20:27:54Z",
+    "generatedAt": "2026-02-16T01:35:39Z",
     "header": {
       "dateRow": 1,
       "subHeaderRow": 2
@@ -16,7 +16,7 @@
       "unitCol": 3,
       "issues": []
     },
-    "fileName": "春节期间生产日报 2.14.xlsx",
+    "fileName": "春节期间生产日报 2.15.xlsx",
     "sheetCandidates": [
       "Sheet1"
     ]
@@ -38,9 +38,9 @@
       "全口径": {
         "平均气温": {
           "unit": "℃",
-          "current": null,
+          "current": 5.4,
           "prior": 4.2,
-          "diff": null,
+          "diff": 0.28571428571428575,
           "diffCell": "=IF(D4=\"\",\"-\",IFERROR((D4-E4)/E4,\"-\"))"
         },
         "原煤消耗量 （剔除庄河改造）": {
@@ -359,206 +359,206 @@
       "全口径": {
         "平均气温": {
           "unit": "℃",
-          "current": null,
+          "current": 0.4,
           "prior": 5.4,
-          "diff": null,
+          "diff": -0.9259259259259258,
           "diffCell": "=IF(G4=\"\",\"-\",IFERROR((G4-H4)/H4,\"-\"))"
         },
         "原煤消耗量 （剔除庄河改造）": {
           "unit": "吨",
-          "current": 0.0,
+          "current": 6523.42,
           "prior": 5655.58,
-          "diff": -1.0,
+          "diff": 0.15344845267859356,
           "diffCell": "=IF(G5=\"\",\"-\",IFERROR((G5-H5)/H5,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": 0.0,
+          "current": 22.0,
           "prior": 32.0,
-          "diff": -1.0,
+          "diff": -0.3125,
           "diffCell": "=IF(G6=\"\",\"-\",IFERROR((G6-H6)/H6,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": 0.0,
+          "current": 9.0,
           "prior": 9.0,
-          "diff": -1.0,
+          "diff": 0.0,
           "diffCell": "=IF(G7=\"\",\"-\",IFERROR((G7-H7)/H7,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 11.0,
           "prior": 11.0,
-          "diff": -1.0,
+          "diff": 0.0,
           "diffCell": "=IF(G8=\"\",\"-\",IFERROR((G8-H8)/H8,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 10.0,
           "prior": 10.0,
-          "diff": -1.0,
+          "diff": 0.0,
           "diffCell": "=IF(G9=\"\",\"-\",IFERROR((G9-H9)/H9,\"-\"))"
         },
         "运行水炉数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 2.0,
           "prior": 1.0,
-          "diff": -1.0,
+          "diff": 1.0,
           "diffCell": "=IF(G10=\"\",\"-\",IFERROR((G10-H10)/H10,\"-\"))"
         },
         "运行锅炉房锅炉数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 12.0,
           "prior": 22.0,
-          "diff": -1.0,
+          "diff": -0.45454545454545453,
           "diffCell": "=IF(G11=\"\",\"-\",IFERROR((G11-H11)/H11,\"-\"))"
         }
       },
       "主城区": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": 0.0,
+          "current": 4993.0,
           "prior": 4233.0,
-          "diff": -1.0,
+          "diff": 0.17954169619655092,
           "diffCell": "=IF(G12=\"\",\"-\",IFERROR((G12-H12)/H12,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 12.0,
           "prior": 18.0,
-          "diff": null,
+          "diff": -0.3333333333333333,
           "diffCell": "=IF(G13=\"\",\"-\",IFERROR((G13-H13)/H13,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 0.0,
           "prior": 0.0,
-          "diff": null,
+          "diff": 0,
           "diffCell": "=IF(G14=\"\",\"-\",IFERROR((G14-H14)/H14,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 7.0,
           "prior": 6.0,
-          "diff": -1.0,
+          "diff": 0.16666666666666666,
           "diffCell": "=IF(G15=\"\",\"-\",IFERROR((G15-H15)/H15,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 6.0,
           "prior": 6.0,
-          "diff": -1.0,
+          "diff": 0.0,
           "diffCell": "=IF(G16=\"\",\"-\",IFERROR((G16-H16)/H16,\"-\"))"
         },
         "运行水炉数": {
           "unit": "台",
-          "current": 0.0,
+          "current": 1.0,
           "prior": 1.0,
-          "diff": -1.0,
+          "diff": 0.0,
           "diffCell": "=IF(G17=\"\",\"-\",IFERROR((G17-H17)/H17,\"-\"))"
         }
       },
       "北海热电联产": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 2768.0,
           "prior": 1867.0,
-          "diff": null,
+          "diff": 0.4825923942153187,
           "diffCell": "=IF(G18=\"\",\"-\",IFERROR((G18-H18)/H18,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": null,
+          "current": 4.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": 0.3333333333333333,
           "diffCell": "=IF(G19=\"\",\"-\",IFERROR((G19-H19)/H19,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": null,
+          "current": 3.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G20=\"\",\"-\",IFERROR((G20-H20)/H20,\"-\"))"
         }
       },
       "北海水炉": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 456.0,
           "prior": 514.0,
-          "diff": null,
+          "diff": -0.11284046692607004,
           "diffCell": "=IF(G21=\"\",\"-\",IFERROR((G21-H21)/H21,\"-\"))"
         },
         "运行水炉数": {
           "unit": "台",
-          "current": null,
+          "current": 1.0,
           "prior": 1.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G22=\"\",\"-\",IFERROR((G22-H22)/H22,\"-\"))"
         }
       },
       "香海电厂": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 1769.0,
           "prior": 1852.0,
-          "diff": null,
+          "diff": -0.044816414686825054,
           "diffCell": "=IF(G23=\"\",\"-\",IFERROR((G23-H23)/H23,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": null,
+          "current": 3.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G24=\"\",\"-\",IFERROR((G24-H24)/H24,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": null,
+          "current": 3.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G25=\"\",\"-\",IFERROR((G25-H25)/H25,\"-\"))"
         }
       },
       "金州热电": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 867.0,
           "prior": 713.0,
-          "diff": null,
+          "diff": 0.21598877980364656,
           "diffCell": "=IF(G26=\"\",\"-\",IFERROR((G26-H26)/H26,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 9.0,
           "prior": 10.0,
-          "diff": null,
+          "diff": -0.1,
           "diffCell": "=IF(G27=\"\",\"-\",IFERROR((G27-H27)/H27,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 8.0,
           "prior": 9.0,
-          "diff": null,
+          "diff": -0.1111111111111111,
           "diffCell": "=IF(G28=\"\",\"-\",IFERROR((G28-H28)/H28,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": null,
+          "current": 2.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": -0.3333333333333333,
           "diffCell": "=IF(G29=\"\",\"-\",IFERROR((G29-H29)/H29,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": null,
+          "current": 3.0,
           "prior": 3.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G30=\"\",\"-\",IFERROR((G30-H30)/H30,\"-\"))"
         },
         "运行水炉数": {
           "unit": "台",
-          "current": null,
+          "current": 1.0,
           "prior": 0.0,
           "diff": null,
           "diffCell": "=IF(G31=\"\",\"-\",IFERROR((G31-H31)/H31,\"-\"))"
@@ -567,111 +567,111 @@
       "北方热电": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 331.42,
           "prior": 418.58,
-          "diff": null,
+          "diff": -0.20822781786038505,
           "diffCell": "=IF(G32=\"\",\"-\",IFERROR((G32-H32)/H32,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 0.0,
           "prior": 0.0,
-          "diff": null,
+          "diff": 0,
           "diffCell": "=IF(G33=\"\",\"-\",IFERROR((G33-H33)/H33,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 0.0,
           "prior": 0.0,
-          "diff": null,
+          "diff": 0,
           "diffCell": "=IF(G34=\"\",\"-\",IFERROR((G34-H34)/H34,\"-\"))"
         },
         "运行汽炉数": {
           "unit": "台",
-          "current": null,
+          "current": 2.0,
           "prior": 2.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G35=\"\",\"-\",IFERROR((G35-H35)/H35,\"-\"))"
         },
         "运行汽轮机数": {
           "unit": "台",
-          "current": null,
+          "current": 1.0,
           "prior": 1.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G36=\"\",\"-\",IFERROR((G36-H36)/H36,\"-\"))"
         }
       },
       "金普公司": {
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 317.0,
           "prior": 284.0,
-          "diff": null,
+          "diff": 0.11619718309859155,
           "diffCell": "=IF(G37=\"\",\"-\",IFERROR((G37-H37)/H37,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 1.0,
           "prior": 0.0,
           "diff": null,
           "diffCell": "=IF(G38=\"\",\"-\",IFERROR((G38-H38)/H38,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 1.0,
           "prior": 0.0,
           "diff": null,
           "diffCell": "=IF(G39=\"\",\"-\",IFERROR((G39-H39)/H39,\"-\"))"
         },
         "运行锅炉房锅炉数": {
           "unit": "台",
-          "current": null,
+          "current": 11.0,
           "prior": 11.0,
-          "diff": null,
+          "diff": 0.0,
           "diffCell": "=IF(G40=\"\",\"-\",IFERROR((G40-H40)/H40,\"-\"))"
         }
       },
       "庄河环海": {
         "外购热量": {
           "unit": "GJ",
-          "current": null,
+          "current": 6678.0,
           "prior": 0.0,
           "diff": null,
           "diffCell": "=IF(G41=\"\",\"-\",IFERROR((G41-H41)/H41,\"-\"))"
         },
         "原煤消耗量": {
           "unit": "吨",
-          "current": null,
+          "current": 15.0,
           "prior": 401.4,
-          "diff": null,
+          "diff": -0.9626307922272048,
           "diffCell": "=IF(G42=\"\",\"-\",IFERROR((G42-H42)/H42,\"-\"))"
         },
         "其中： 张屯原煤消耗量": {
           "unit": "吨",
-          "current": 0.0,
+          "current": 15.0,
           "prior": 7.0,
-          "diff": -1.0,
+          "diff": 1.1428571428571428,
           "diffCell": "=IF(G43=\"\",\"-\",IFERROR((G43-H43)/H43,\"-\"))"
         },
         "当日总投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 0.0,
           "prior": 4.0,
-          "diff": null,
+          "diff": -1.0,
           "diffCell": "=IF(G44=\"\",\"-\",IFERROR((G44-H44)/H44,\"-\"))"
         },
         "当日净投诉量": {
           "unit": "件",
-          "current": null,
+          "current": 0.0,
           "prior": 0.0,
-          "diff": null,
+          "diff": 0,
           "diffCell": "=IF(G45=\"\",\"-\",IFERROR((G45-H45)/H45,\"-\"))"
         },
         "运行锅炉房锅炉数": {
           "unit": "台",
-          "current": null,
+          "current": 1.0,
           "prior": 11.0,
-          "diff": null,
+          "diff": -0.9090909090909091,
           "diffCell": "=IF(G46=\"\",\"-\",IFERROR((G46-H46)/H46,\"-\"))"
         }
       }

@@ -3,7 +3,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from backend.services.project_data_paths import (
     bootstrap_project_files,
     ensure_project_dirs,
@@ -119,10 +119,64 @@ def _normalize_pages(project_entry: Dict[str, Any]) -> List[Dict[str, str]]:
     return pages
 
 
-def _ensure_system_admin(session: AuthSession) -> None:
-    group = (session.group or "").strip()
-    if group not in {"系统管理员", "Global_admin"}:
-        raise HTTPException(status_code=403, detail="仅系统管理员可执行项目目录化操作。")
+def _is_project_enabled_for_group(project_entry: Dict[str, Any], group_name: str) -> bool:
+    availability = project_entry.get("availability", True)
+
+    if isinstance(availability, bool):
+        return availability
+
+    normalized_group = str(group_name or "").strip()
+    if isinstance(availability, str):
+        return normalized_group == availability.strip()
+
+    if isinstance(availability, list):
+        allowed_groups = {
+            str(item).strip()
+            for item in availability
+            if isinstance(item, str) and str(item).strip()
+        }
+        return normalized_group in allowed_groups
+
+    return bool(availability)
+
+
+def _extract_json_response_message(error: JSONResponse, fallback: str) -> str:
+    try:
+        payload = json.loads(error.body.decode("utf-8"))
+    except Exception:
+        return fallback
+    return str(payload.get("message") or fallback)
+
+
+def _ensure_project_visible_and_accessible(
+    project_id: str,
+    project_entry: Dict[str, Any],
+    session: AuthSession,
+) -> None:
+    if not _is_project_enabled_for_group(project_entry, session.group):
+        raise HTTPException(status_code=403, detail=f"项目 {project_id} 当前不可用")
+    if not session.has_project_access(project_id):
+        raise HTTPException(status_code=403, detail=f"当前账号无项目 {project_id} 的访问权限")
+
+
+def _build_project_access_dependency(project_id: str) -> Callable[..., None]:
+    def _project_access_guard(session: AuthSession = Depends(get_current_session)) -> None:
+        entries, error = _load_project_entries()
+        if error:
+            message = _extract_json_response_message(error, "项目列表不可用")
+            raise HTTPException(status_code=error.status_code, detail=message)
+        target = entries.get(project_id)
+        if not isinstance(target, dict):
+            raise HTTPException(status_code=404, detail=f"项目 {project_id} 未配置")
+        _ensure_project_visible_and_accessible(project_id, target, session)
+
+    return _project_access_guard
+
+
+def _ensure_project_modularization_permission(session: AuthSession, project_id: str) -> None:
+    action_flags = session.get_project_action_flags(project_id)
+    if not action_flags.can_manage_modularization:
+        raise HTTPException(status_code=403, detail="当前账号无项目目录化操作权限。")
 
 
 @router.get("/ping", summary="连通性测试", tags=["system"])
@@ -132,7 +186,7 @@ def ping():
 
 
 @router.get("/projects", summary="获取项目列表")
-def list_projects():
+def list_projects(session: AuthSession = Depends(get_current_session)):
     entries, error = _load_project_entries()
     if error:
         return error
@@ -141,6 +195,8 @@ def list_projects():
     for project_id, cfg in entries.items():
         if not isinstance(project_id, str) or not isinstance(cfg, dict):
             continue
+        if not _is_project_enabled_for_group(cfg, session.group):
+            continue
         # 允许多种命名回落
         project_name = (
             cfg.get("project_name")
@@ -148,7 +204,8 @@ def list_projects():
             or cfg.get("名称")
             or project_id
         )
-        projects.append({"project_id": project_id, "project_name": project_name})
+        if session.has_project_access(project_id):
+            projects.append({"project_id": project_id, "project_name": project_name})
 
     if not projects:
         return JSONResponse(
@@ -174,6 +231,7 @@ def list_project_pages(
             status_code=404,
             content={"ok": False, "message": f"项目 {project_id} 未配置"},
         )
+    _ensure_project_visible_and_accessible(project_id, target, session)
 
     pages = _normalize_pages(target)
     if not pages:
@@ -182,8 +240,11 @@ def list_project_pages(
             content={"ok": False, "message": f"项目 {project_id} 未配置页面"},
         )
 
-    allowed_pages = session.permissions.page_access
-    if allowed_pages:
+    allowed_pages = session.get_project_page_access(project_id)
+    has_project_override = project_id in session.permissions.projects
+    if has_project_override and not allowed_pages:
+        pages = []
+    elif allowed_pages:
         pages = [page for page in pages if page.get("page_key") in allowed_pages]
 
     project_name = (
@@ -204,7 +265,6 @@ def get_project_modularization_status(
     project_id: str,
     session: AuthSession = Depends(get_current_session),
 ):
-    _ensure_system_admin(session)
     entries, error = _load_project_entries()
     if error:
         return error
@@ -213,6 +273,8 @@ def get_project_modularization_status(
             status_code=404,
             content={"ok": False, "message": f"项目 {project_id} 未配置"},
         )
+    _ensure_project_visible_and_accessible(project_id, entries[project_id], session)
+    _ensure_project_modularization_permission(session, project_id)
     project_entry = entries.get(project_id) or {}
     config_files, runtime_files = resolve_project_modularization_files(project_id, project_entry)
     status = get_project_file_status(project_id, config_files, runtime_files)
@@ -230,7 +292,6 @@ def bootstrap_project_modularization(
     project_id: str,
     session: AuthSession = Depends(get_current_session),
 ):
-    _ensure_system_admin(session)
     entries, error = _load_project_entries()
     if error:
         return error
@@ -239,6 +300,8 @@ def bootstrap_project_modularization(
             status_code=404,
             content={"ok": False, "message": f"项目 {project_id} 未配置"},
         )
+    _ensure_project_visible_and_accessible(project_id, entries[project_id], session)
+    _ensure_project_modularization_permission(session, project_id)
     project_entry = entries.get(project_id) or {}
     config_files, runtime_files = resolve_project_modularization_files(project_id, project_entry)
     dirs = ensure_project_dirs(project_id)
@@ -261,7 +324,8 @@ for project_key, routers in PROJECT_ROUTER_REGISTRY.items():
     private_router = routers.get("router")
     public_router = routers.get("public_router")
     prefix = f"/projects/{project_key}"
+    dependency = _build_project_access_dependency(project_key)
     if private_router is not None:
-        router.include_router(private_router, prefix=prefix)
+        router.include_router(private_router, prefix=prefix, dependencies=[Depends(dependency)])
     if public_router is not None:
-        router.include_router(public_router, prefix=prefix)
+        router.include_router(public_router, prefix=prefix, dependencies=[Depends(dependency)])

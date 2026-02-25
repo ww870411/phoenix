@@ -445,7 +445,7 @@ const blockingValidationIssues = computed(() => {
 
 const hasBlockingValidation = computed(() => blockingValidationIssues.value.length > 0);
 const shouldShowSheetValidationToggle = computed(() => sheetKey !== 'Coal_inventory_Sheet');
-const canToggleSheetValidation = computed(() => auth.user?.group === 'Global_admin');
+const canToggleSheetValidation = computed(() => auth.canManageValidationFor(projectKey));
 const sheetValidationToggleDisabled = computed(
   () =>
     !shouldShowSheetValidationToggle.value ||

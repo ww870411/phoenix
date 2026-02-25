@@ -141,7 +141,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in coalRowsWithTotal" :key="row.date">
+                <tr v-for="row in coalRowsWithTotal" :key="row.date" :class="{ 'mini-table-total-row': row.isTotal }">
                   <td>{{ row.date }}</td>
                   <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
                   <td>{{ formatMetric(row.groupCurrent, '', 0) }}</td>
@@ -188,7 +188,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in complaintRowsWithTotal" :key="row.date">
+              <tr v-for="row in complaintRowsWithTotal" :key="row.date" :class="{ 'mini-table-total-row': row.isTotal }">
                 <td>{{ row.date }}</td>
                 <td>{{ formatMetric(row.temperature, '℃', 1) }}</td>
                 <td>{{ formatMetric(row.totalCurrent, '', 0) }}</td>
@@ -551,13 +551,22 @@ function sumRowsByField(rows, field) {
   return hasValue ? total : null
 }
 
+function averageRowsByField(rows, field) {
+  const values = rows
+    .map((row) => safeNumber(row?.[field]))
+    .filter((num) => num !== null)
+  if (!values.length) return null
+  const total = values.reduce((acc, num) => acc + num, 0)
+  return total / values.length
+}
+
 const coalRowsWithTotal = computed(() => {
   const rows = coalVisibleRows.value
   if (!rows.length) return rows
   const totalRow = {
     date: '合计',
     isTotal: true,
-    temperature: sumRowsByField(rows, 'temperature'),
+    temperature: averageRowsByField(rows, 'temperature'),
     groupCurrent: sumRowsByField(rows, 'groupCurrent'),
     groupPrior: sumRowsByField(rows, 'groupPrior'),
     mainCityCurrent: sumRowsByField(rows, 'mainCityCurrent'),
@@ -633,7 +642,7 @@ const complaintRowsWithTotal = computed(() => {
   const totalRow = {
     date: '合计',
     isTotal: true,
-    temperature: sumRowsByField(rows, 'temperature'),
+    temperature: averageRowsByField(rows, 'temperature'),
     totalCurrent: sumRowsByField(rows, 'totalCurrent'),
     totalPrior: sumRowsByField(rows, 'totalPrior'),
     netCurrent: null,
@@ -1039,6 +1048,7 @@ watch(() => themeMode.value, (v) => localStorage.setItem(THEME_STORAGE_KEY, v))
 }
 
 .mini-table th { background: #f8fafc; }
+.mini-table .mini-table-total-row td { font-weight: 700; }
 
 .toolbar { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
 .toolbar-label { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; }

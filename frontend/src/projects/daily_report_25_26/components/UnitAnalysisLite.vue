@@ -452,9 +452,8 @@ const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
 const aiFeatureAccessible = computed(() => {
   // 1. 优先使用 props 传入的权限
   if (props.aiFeatureAccessible) return true
-  // 2. 检查当前用户是否为 Global_admin
-  const isGlobalAdmin = (auth.user?.group || '').trim() === 'Global_admin'
-  if (isGlobalAdmin) return true
+  // 2. 检查当前用户是否具备 AI 配置管理权限
+  if (auth.canManageAiSettingsFor(props.projectKey)) return true
   // 3. 检查 schema 配置是否允许非管理员访问
   const schemaFlags = analysisSchema.value?.ai_report_flags || {}
   if (schemaFlags.allow_non_admin) return true

@@ -13,6 +13,8 @@ const API_BASE = (() => {
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 let authToken = null
+let cachedProjects = null
+let cachedProjectsToken = null
 
 function attachAuthHeaders(baseHeaders = {}, skipAuth = false) {
   const headers = { ...(baseHeaders || {}) }
@@ -23,7 +25,12 @@ function attachAuthHeaders(baseHeaders = {}, skipAuth = false) {
 }
 
 export function setAuthToken(token) {
-  authToken = token || null
+  const normalized = token || null
+  const changed = normalized !== authToken
+  authToken = normalized
+  if (changed) {
+    resetProjectCache()
+  }
 }
 
 export function getAuthToken() {
@@ -38,8 +45,6 @@ export function clearAuthToken() {
 const normalized = (path) => `${API_BASE}${path}`
 
 const projectPath = (projectKey) => normalized(`/projects/${encodeURIComponent(projectKey)}`)
-
-let cachedProjects = null
 
 export async function login(credentials) {
   const response = await fetch(normalized('/auth/login'), {
@@ -78,7 +83,7 @@ export async function logout() {
 }
 
 export async function listProjects(force = false) {
-  if (!force && Array.isArray(cachedProjects)) {
+  if (!force && Array.isArray(cachedProjects) && cachedProjectsToken === authToken) {
     return cachedProjects
   }
 
@@ -86,13 +91,14 @@ export async function listProjects(force = false) {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
-    cachedProjects = null
+    resetProjectCache()
     throw new Error(`加载项目列表失败: ${response.status}`)
   }
 
   const payload = await response.json()
   const list = Array.isArray(payload?.projects) ? payload.projects : []
   cachedProjects = list
+  cachedProjectsToken = authToken
   return list
 }
 
@@ -227,6 +233,7 @@ export async function queryData(projectKey, sheetKey, payload, options = {}) {
 
 export function resetProjectCache() {
   cachedProjects = null
+  cachedProjectsToken = null
 }
 
 // 运行时表达式求值（审批渲染）

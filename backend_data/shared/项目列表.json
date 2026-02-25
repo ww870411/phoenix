@@ -1,6 +1,7 @@
 {
   "daily_report_25_26":
   {
+    "availability": true,
     "project_name": "2025-2026供暖期生产日报",
     "pages":{
       "dashboard":
@@ -64,6 +65,9 @@
   },
   "daily_report_spring_festval_2026":
   {
+    "availability": [
+      "Global_admin"
+    ],
     "project_name": "（春节期间）生产日报",
     "pages": {
       "mini_entry": {

@@ -5,6 +5,12 @@ export const projects = ref([]);
 export const projectsLoading = ref(false);
 export const projectsError = ref(null);
 
+export function resetProjectsState() {
+  projects.value = [];
+  projectsLoading.value = false;
+  projectsError.value = null;
+}
+
 export async function ensureProjectsLoaded(force = false) {
   if (projectsLoading.value) return;
   if (!force && projects.value.length) return;

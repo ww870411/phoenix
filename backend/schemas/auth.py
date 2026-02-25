@@ -18,6 +18,19 @@ class ActionFlagsModel(BaseModel):
     can_approve: bool = False
     can_revoke: bool = False
     can_publish: bool = False
+    can_manage_modularization: bool = False
+    can_manage_validation: bool = False
+    can_manage_ai_settings: bool = False
+    can_manage_ai_sheet_switch: bool = False
+    can_extract_xlsx: bool = False
+    can_unlimited_ai_usage: bool = False
+
+
+class ProjectPermissionsModel(BaseModel):
+    page_access: List[str] = Field(default_factory=list)
+    sheet_rules: Dict[str, SheetRuleModel] = Field(default_factory=dict)
+    units_access: List[str] = Field(default_factory=list)
+    actions: ActionFlagsModel = Field(default_factory=ActionFlagsModel)
 
 
 class PermissionsModel(BaseModel):
@@ -25,6 +38,7 @@ class PermissionsModel(BaseModel):
     sheet_rules: Dict[str, SheetRuleModel] = Field(default_factory=dict)
     units_access: List[str] = Field(default_factory=list)
     actions: ActionFlagsModel = Field(default_factory=ActionFlagsModel)
+    projects: Dict[str, ProjectPermissionsModel] = Field(default_factory=dict)
 
 
 class UserInfo(BaseModel):

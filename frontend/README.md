@@ -1786,3 +1786,181 @@ docker compose up -d --build
   - 调试开关默认值恢复为关闭（`debugVisible=false`）。
 - 保留项：
   - EChart 组件层的渲染稳态修复（`nextTick + resize + ResizeObserver`）继续保留。
+
+## 会话小结（2026-02-16 春节看板合计行强调与气温合计算法修正）
+
+- 修改页面：`frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`
+- 调整内容：
+  - 为“原煤分项表”“投诉分项表”的合计行增加样式类 `mini-table-total-row`，并设置加粗展示；
+  - 新增 `averageRowsByField(rows, field)`；
+  - 两张表的 `temperature` 合计计算由 `sumRowsByField` 改为 `averageRowsByField`；
+  - 其它指标列仍沿用 `sumRowsByField` 汇总，净投诉量合计保持 `-`。
+- 实现链路说明：
+  - 原煤表：`coalRows -> coalVisibleRows -> coalRowsWithTotal`，其中合计行 `temperature` 取算术平均；
+  - 投诉表：`complaintRows -> complaintVisibleRows -> complaintRowsWithTotal`，其中合计行 `temperature` 取算术平均；
+  - 模板层通过 `row.isTotal` 命中样式类，使“合计”行整行加粗。
+
+## 会话小结（2026-02-25 项目列表配置功能确认）
+
+- 本轮前端代码无改动。
+- 已确认前端项目/页面选择链路依赖后端读取 `backend_data/shared/项目列表.json`：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 的 `listProjects()` 调用 `GET /api/v1/projects`；
+  - 项目页面入口通过 `GET /api/v1/projects/{project_id}/pages` 获取页面名、路由段与描述；
+  - 页面显示顺序受 `项目列表.json` 顶层键顺序影响。
+
+## 会话小结（2026-02-25 项目入口权限能力核对）
+
+- 本轮前端核心逻辑无改动。
+- 现状确认：
+  - 项目卡片是否出现由后端 `GET /api/v1/projects` 返回结果决定；
+  - 通用权限体系为页面级，不是项目级；
+  - 存在单项目前端硬编码拦截示例：`ProjectSelectView.vue` 对 `daily_report_spring_festval_2026` 仅允许 `Global_admin` 点击进入。
+
+## 会话小结（2026-02-25 用户分组与权限系统核对）
+
+- 本轮前端业务逻辑无改动。
+- 现状确认：
+  - 前端登录态存储在 `store/auth.js`，持久化到 `localStorage/sessionStorage`；
+  - 登录后保存后端返回的 `permissions`，并派生 `canSubmit/canApprove/canRevoke/canPublish`；
+  - 页面列表通过 `filterPages` 基于 `page_access` 过滤；
+  - 表格列表通过 `filterSheetsByRule` 按 `sheet_rules.mode`（`all/explicit/by_unit`）过滤；
+  - 审批与发布按钮按动作权限与单位范围联动显示，并在调用前再做前端拦截。
+
+## 会话小结（2026-02-25 权限模型“项目>页面”改造方案）
+
+- 本轮前端代码无改动，完成适配点梳理。
+- 计划中的前端改造点：
+  - `store/auth.js` 的过滤函数改为携带 `projectKey`（如 `filterPages(projectKey, pages)`）；
+  - 页面访问、表单过滤与动作按钮判断切换到项目维度读取；
+  - 保留旧版平铺权限字段兜底，保证后端未切换时前端仍可运行。
+
+## 会话小结（2026-02-25 权限文件模块化已落地）
+
+- 本轮前端改造已完成：
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`
+    - 新增项目权限解析 `resolveProjectPermission(projectKey)`；
+    - `filterPages`、`filterSheetsByRule` 改为支持项目参数，兼容旧签名；
+    - 新增 `canSubmitFor/canApproveFor/canRevokeFor/canPublishFor`；
+    - `canApproveUnit/canRevokeUnit` 增加项目维度单位范围判断。
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+    - 页面卡片过滤、审批/撤销按钮列显示、发布按钮显示改为按当前 `projectKey` 判断。
+  - `frontend/src/projects/daily_report_25_26/pages/Sheets.vue`
+    - 表格可见性过滤改为 `auth.filterSheetsByRule(projectKey, pageKey, rawSheets)`。
+- 结果：
+  - 前端权限消费已可按“项目 > 页面”生效，同时仍兼容旧平铺权限结构。
+
+## 会话小结（2026-02-25 权限配置去重）
+
+- 本轮前端代码无改动。
+- 配置侧调整：
+  - 权限文件改为仅保留 `projects` 子树，移除组级重复平铺字段；
+  - 前端继续通过项目维度权限读取逻辑生效（`resolveProjectPermission(projectKey)`）。
+
+## 会话小结（2026-02-25 unit_filler 煤炭库存表权限修复）
+
+- 本轮前端代码无改动。
+- 配置侧修复：
+  - 通过账号分组拆分，将 `shoudian_filler` 单独归组；
+  - 仅该组保留 `Coal_inventory_Sheet` 显式授权；
+  - `unit_filler` 组改为纯 `by_unit` 规则，不再包含该表显式授权。
+
+## 会话小结（2026-02-25 硬编码权限分支核对）
+
+- 本轮前端代码无改动。
+- 核对结果：
+  - 项目入口处仍有一处春节项目的前端硬编码角色拦截（`Global_admin`），其余页面权限主要已走配置化链路。
+
+## 会话小结（2026-02-25 前端角色硬编码已改为动作位）
+
+- 本轮前端改造：
+  - `frontend/src/pages/ProjectSelectView.vue`
+    - 删除春节项目入口 `Global_admin` 硬编码拦截，统一依赖后端项目可见性返回；
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`
+    - 新增项目动作位读取函数：
+      - `canManageValidationFor(projectKey)`
+      - `canManageAiSettingsFor(projectKey)`
+      - `canExtractXlsxFor(projectKey)`
+  - `frontend/src/projects/daily_report_25_26/pages/Sheets.vue`
+    - 校验总开关按钮权限改为 `canManageValidationFor(projectKey)`；
+  - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`
+    - 表级校验开关权限改为 `canManageValidationFor(projectKey)`；
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - AI 配置入口权限改为 `canManageAiSettingsFor(projectKey)`；
+  - `frontend/src/projects/daily_report_25_26/components/UnitAnalysisLite.vue`
+    - AI 功能管理员判断改为 `canManageAiSettingsFor(props.projectKey)`。
+- 结果：
+  - 前端角色名硬编码权限判断已统一迁移到 `permissions.json` 动作位。
+
+## 会话小结（2026-02-25 项目列表缓存按账号隔离）
+
+- 修改文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 调整内容：
+  - 新增 `cachedProjectsToken`，将项目列表缓存与当前 `authToken` 绑定；
+  - `listProjects()` 缓存命中条件改为“缓存存在且 token 一致”；
+  - `setAuthToken()` 在 token 变化时自动清空项目缓存；
+  - `resetProjectCache()` 同时清空 `cachedProjects` 与 `cachedProjectsToken`。
+- 结果：
+  - 切换账号后项目列表会重新请求后端，避免复用上个账号权限结果。
+
+## 会话小结（2026-02-25 项目可用性最高优先级开关联动）
+
+- 本轮前端代码无改动。
+- 后端联动行为更新：
+  - 项目卡片来源接口 `GET /api/v1/projects` 现已先经过项目可用性总闸；
+  - 项目页面接口与项目下路由统一受项目可用性限制；
+  - 当项目在 `项目列表.json` 中配置为 `false` 或当前用户组不在白名单时：
+    - 前端不会拿到该项目卡片；
+    - 即使直连项目接口也会收到 `403`。
+
+## 会话小结（2026-02-25 availability 命名修正）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 项目列表配置键从“项目可用性”统一为 `availability`；
+  - 前端交互行为不变，仍由后端 `GET /api/v1/projects` 与项目接口鉴权结果驱动；
+  - 单一白名单组也继续使用数组格式（如 `["Global_admin"]`）。
+
+## 会话小结（2026-02-25 availability 旧键兼容移除）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已不再识别旧键 `project_availability`/`项目可用性`；
+  - 前端行为保持不变，继续以后端返回的项目列表与接口鉴权结果为准。
+
+## 会话小结（2026-02-25 切换账号项目列表残留修复）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/composables/useProjects.js`
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`
+- 调整内容：
+  - 在 `useProjects` 新增 `resetProjectsState()`，用于统一清空项目列表状态；
+  - 在 `auth.clearSession()` 调用 `resetProjectsState()`，会话清理即清空项目卡片；
+  - 在 `auth.login()` 成功后调用 `resetProjectsState()`，账号切换先清空旧列表再加载新列表。
+- 结果：
+  - 切换账号后不再显示上一个账号的项目卡片残留（无需手工刷新页面）。
+
+## 会话小结（2026-02-25 切号修复方案调整，降低对白屏风险）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`
+  - `frontend/src/pages/ProjectSelectView.vue`
+- 调整内容：
+  - 移除 `auth.js` 对 `useProjects` 的直接依赖与状态重置调用；
+  - 在 `ProjectSelectView` 进入时执行：
+    - `resetProjectsState()` 清空旧项目状态；
+    - `ensureProjectsLoaded(true)` 强制按当前会话重拉项目列表。
+- 验证：
+  - `npm run build` 通过。
+- 结果：
+  - 保留“切号即刷新项目列表”的效果，同时减少 `auth store` 级联依赖对其他页面（如 `DataAnalysisView`）的潜在干扰。
+
+## 会话小结（2026-02-25 数据分析页白屏修复：isGlobalAdmin 未定义）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+- 问题原因：
+  - `aiFeatureAccessible` 计算属性仍引用已移除变量 `isGlobalAdmin`，触发运行时 `ReferenceError`，导致页面白屏。
+- 修复内容：
+  - 将 `isGlobalAdmin.value` 替换为 `canConfigureAiSettings.value`，与当前权限动作位实现保持一致。
+- 验证：
+  - `npm run build` 通过。

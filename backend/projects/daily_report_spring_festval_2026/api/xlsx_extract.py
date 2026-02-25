@@ -24,10 +24,11 @@ PROJECT_KEY = "daily_report_spring_festval_2026"
 LATEST_EXTRACT_FILENAME = "spring_festival_latest_extract.json"
 
 def _ensure_global_admin(session: AuthSession) -> None:
-    if session.group != "Global_admin":
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_extract_xlsx:
         raise HTTPException(
             status_code=403, 
-            detail="抱歉，该操作目前仅限系统管理员（Global_admin）执行。"
+            detail="抱歉，当前账号无春节提取权限。"
         )
 
 HEADER_LABELS = {"本期", "同期", "差异"}

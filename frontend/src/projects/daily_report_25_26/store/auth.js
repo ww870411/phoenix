@@ -13,6 +13,7 @@ import {
 } from '../services/api'
 
 const STORAGE_KEY = 'phoenix_auth'
+const DEFAULT_PERMISSION_PROJECT = 'daily_report_25_26'
 
 function detectStorage(type) {
   if (typeof window === 'undefined') return null
@@ -188,18 +189,60 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   }
 
   const isAuthenticated = computed(() => Boolean(token.value))
-  const pageAccess = computed(() => new Set(permissions.value?.page_access || []))
-  const sheetRuleMap = computed(() => permissions.value?.sheet_rules || {})
-  const actionFlags = computed(() => permissions.value?.actions || {})
-  const allowedUnits = computed(() => new Set(permissions.value?.units_access || []))
-
-  function hasPageAccess(pageKey) {
-    return pageAccess.value.has(pageKey)
+  function normalizeProjectKey(projectKey) {
+    return typeof projectKey === 'string' ? projectKey.trim() : ''
   }
 
-  function filterPages(pages) {
+  function resolveProjectPermission(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    const normalizedProjectKey = normalizeProjectKey(projectKey)
+    const projectMap =
+      permissions.value && typeof permissions.value.projects === 'object'
+        ? permissions.value.projects
+        : {}
+    const scoped = normalizedProjectKey ? projectMap?.[normalizedProjectKey] : null
+    if (scoped && typeof scoped === 'object') {
+      return scoped
+    }
+    return {
+      page_access: permissions.value?.page_access || [],
+      sheet_rules: permissions.value?.sheet_rules || {},
+      actions: permissions.value?.actions || {},
+      units_access: permissions.value?.units_access || [],
+    }
+  }
+
+  function getPageAccessSet(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return new Set(resolveProjectPermission(projectKey)?.page_access || [])
+  }
+
+  function getSheetRuleMap(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return resolveProjectPermission(projectKey)?.sheet_rules || {}
+  }
+
+  function getActionFlags(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return resolveProjectPermission(projectKey)?.actions || {}
+  }
+
+  function getAllowedUnitsSet(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return new Set(resolveProjectPermission(projectKey)?.units_access || [])
+  }
+
+  const allowedUnits = computed(() => getAllowedUnitsSet(DEFAULT_PERMISSION_PROJECT))
+
+  function hasPageAccess(projectKey, pageKey) {
+    if (pageKey === undefined) {
+      return getPageAccessSet(DEFAULT_PERMISSION_PROJECT).has(projectKey)
+    }
+    return getPageAccessSet(projectKey).has(pageKey)
+  }
+
+  function filterPages(projectKey, pages) {
+    // 兼容旧签名：filterPages(pages)
+    if (Array.isArray(projectKey) && pages === undefined) {
+      return filterPages(DEFAULT_PERMISSION_PROJECT, projectKey)
+    }
     if (!Array.isArray(pages)) return []
-    return pages.filter((page) => hasPageAccess(page.page_key))
+    return pages.filter((page) => hasPageAccess(projectKey, page.page_key))
   }
 
   function sheetMatchesUnit(sheet, unit) {
@@ -211,8 +254,12 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     return unitName.includes(normalizedUnit)
   }
 
-  function filterSheetsByRule(pageKey, sheets) {
-    const rule = sheetRuleMap.value?.[pageKey]
+  function filterSheetsByRule(projectKey, pageKey, sheets) {
+    // 兼容旧签名：filterSheetsByRule(pageKey, sheets)
+    if (Array.isArray(pageKey) && sheets === undefined) {
+      return filterSheetsByRule(DEFAULT_PERMISSION_PROJECT, projectKey, pageKey)
+    }
+    const rule = getSheetRuleMap(projectKey)?.[pageKey]
     if (!rule || rule.mode === 'all') {
       return sheets
     }
@@ -231,21 +278,51 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     return sheets
   }
 
-  const canSubmit = computed(() => Boolean(actionFlags.value.can_submit))
-  const canApprove = computed(() => Boolean(actionFlags.value.can_approve))
-  const canRevoke = computed(() => Boolean(actionFlags.value.can_revoke))
-  const canPublish = computed(() => Boolean(actionFlags.value.can_publish))
-
-  function canApproveUnit(unit) {
-    if (!canApprove.value) return false
-    if (!allowedUnits.value.size) return true
-    return allowedUnits.value.has(unit)
+  function canSubmitFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_submit)
   }
 
-  function canRevokeUnit(unit) {
-    if (!canRevoke.value) return false
-    if (!allowedUnits.value.size) return true
-    return allowedUnits.value.has(unit)
+  function canApproveFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_approve)
+  }
+
+  function canRevokeFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_revoke)
+  }
+
+  function canPublishFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_publish)
+  }
+
+  function canManageValidationFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_manage_validation)
+  }
+
+  function canManageAiSettingsFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_manage_ai_settings)
+  }
+
+  function canExtractXlsxFor(projectKey = DEFAULT_PERMISSION_PROJECT) {
+    return Boolean(getActionFlags(projectKey).can_extract_xlsx)
+  }
+
+  const canSubmit = computed(() => canSubmitFor(DEFAULT_PERMISSION_PROJECT))
+  const canApprove = computed(() => canApproveFor(DEFAULT_PERMISSION_PROJECT))
+  const canRevoke = computed(() => canRevokeFor(DEFAULT_PERMISSION_PROJECT))
+  const canPublish = computed(() => canPublishFor(DEFAULT_PERMISSION_PROJECT))
+
+  function canApproveUnit(unit, projectKey = DEFAULT_PERMISSION_PROJECT) {
+    if (!canApproveFor(projectKey)) return false
+    const scopedUnits = getAllowedUnitsSet(projectKey)
+    if (!scopedUnits.size) return true
+    return scopedUnits.has(unit)
+  }
+
+  function canRevokeUnit(unit, projectKey = DEFAULT_PERMISSION_PROJECT) {
+    if (!canRevokeFor(projectKey)) return false
+    const scopedUnits = getAllowedUnitsSet(projectKey)
+    if (!scopedUnits.size) return true
+    return scopedUnits.has(unit)
   }
 
   async function loadWorkflowStatus(projectKey) {
@@ -253,21 +330,21 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   }
 
   async function approveUnit(projectKey, unit) {
-    if (!canApproveUnit(unit)) {
+    if (!canApproveUnit(unit, projectKey)) {
       throw new Error('当前账号无权审批该单位')
     }
     return approveWorkflow(projectKey, { unit })
   }
 
   async function revokeUnit(projectKey, unit) {
-    if (!canRevokeUnit(unit)) {
+    if (!canRevokeUnit(unit, projectKey)) {
       throw new Error('当前账号无权取消该单位审批')
     }
     return revokeWorkflow(projectKey, { unit })
   }
 
   async function publish(projectKey) {
-    if (!canPublish.value) {
+    if (!canPublishFor(projectKey)) {
       throw new Error('当前账号无发布权限')
     }
     return publishWorkflow(projectKey)
@@ -293,6 +370,13 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     filterPages,
     filterSheetsByRule,
     hasPageAccess,
+    canSubmitFor,
+    canApproveFor,
+    canRevokeFor,
+    canPublishFor,
+    canManageValidationFor,
+    canManageAiSettingsFor,
+    canExtractXlsxFor,
     canApproveUnit,
     canRevokeUnit,
     loadWorkflowStatus,

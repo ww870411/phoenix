@@ -124,7 +124,7 @@ const validationMasterSaving = ref(false)
 const validationMasterError = ref('')
 
 const projectName = computed(() => getProjectNameById(projectKey.value) ?? projectKey.value)
-const canToggleValidation = computed(() => auth.user?.group === 'Global_admin')
+const canToggleValidation = computed(() => auth.canManageValidationFor(projectKey.value))
 const validationToggleDisabled = computed(
   () => validationMasterLoading.value || validationMasterSaving.value || !canToggleValidation.value,
 )
@@ -216,7 +216,7 @@ onMounted(() => {
   loadValidationMasterSwitch()
 })
 function applySheetFilter() {
-  sheets.value = auth.filterSheetsByRule(pageKey.value, rawSheets.value)
+  sheets.value = auth.filterSheetsByRule(projectKey.value, pageKey.value, rawSheets.value)
   if (!sheets.value.length && rawSheets.value.length) {
     errorMessage.value = '当前账号无权访问该页面下的表格，请联系管理员调整权限。'
   }

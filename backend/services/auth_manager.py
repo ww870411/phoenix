@@ -47,6 +47,12 @@ class ActionFlags:
     can_approve: bool = False
     can_revoke: bool = False
     can_publish: bool = False
+    can_manage_modularization: bool = False
+    can_manage_validation: bool = False
+    can_manage_ai_settings: bool = False
+    can_manage_ai_sheet_switch: bool = False
+    can_extract_xlsx: bool = False
+    can_unlimited_ai_usage: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,34 @@ class SheetRule:
 
 
 @dataclass(frozen=True)
+class ProjectPermissions:
+    project_key: str
+    page_access: Set[str]
+    sheet_rules: Dict[str, SheetRule]
+    units_access: List[str]
+    actions: ActionFlags
+
+    def serialize(self) -> Dict[str, object]:
+        return {
+            "page_access": sorted(self.page_access),
+            "sheet_rules": {page_key: rule.serialize() for page_key, rule in self.sheet_rules.items()},
+            "units_access": list(self.units_access),
+            "actions": {
+                "can_submit": self.actions.can_submit,
+                "can_approve": self.actions.can_approve,
+                "can_revoke": self.actions.can_revoke,
+                "can_publish": self.actions.can_publish,
+                "can_manage_modularization": self.actions.can_manage_modularization,
+                "can_manage_validation": self.actions.can_manage_validation,
+                "can_manage_ai_settings": self.actions.can_manage_ai_settings,
+                "can_manage_ai_sheet_switch": self.actions.can_manage_ai_sheet_switch,
+                "can_extract_xlsx": self.actions.can_extract_xlsx,
+                "can_unlimited_ai_usage": self.actions.can_unlimited_ai_usage,
+            },
+        }
+
+
+@dataclass(frozen=True)
 class GroupPermissions:
     name: str
     hierarchy: int
@@ -69,6 +103,7 @@ class GroupPermissions:
     sheet_rules: Dict[str, SheetRule]
     units_access: List[str]
     actions: ActionFlags
+    projects: Dict[str, ProjectPermissions] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -91,6 +126,7 @@ class AuthSession:
     issued_at: datetime
     expires_at: Optional[datetime] = None
     persistent: bool = False
+    allowed_units_by_project: Dict[str, Set[str]] = field(default_factory=dict)
 
     def to_user_payload(self) -> Dict[str, object]:
         return {
@@ -104,6 +140,13 @@ class AuthSession:
         sheet_rules = {
             page_key: rule.serialize() for page_key, rule in self.permissions.sheet_rules.items()
         }
+        projects_payload: Dict[str, Dict[str, object]] = {}
+        for project_key, project_permissions in self.permissions.projects.items():
+            project_payload = project_permissions.serialize()
+            project_payload["units_access"] = sorted(
+                self.allowed_units_by_project.get(project_key, set())
+            )
+            projects_payload[project_key] = project_payload
         return {
             "page_access": sorted(self.permissions.page_access),
             "sheet_rules": sheet_rules,
@@ -113,8 +156,49 @@ class AuthSession:
                 "can_approve": self.permissions.actions.can_approve,
                 "can_revoke": self.permissions.actions.can_revoke,
                 "can_publish": self.permissions.actions.can_publish,
+                "can_manage_modularization": self.permissions.actions.can_manage_modularization,
+                "can_manage_validation": self.permissions.actions.can_manage_validation,
+                "can_manage_ai_settings": self.permissions.actions.can_manage_ai_settings,
+                "can_manage_ai_sheet_switch": self.permissions.actions.can_manage_ai_sheet_switch,
+                "can_extract_xlsx": self.permissions.actions.can_extract_xlsx,
+                "can_unlimited_ai_usage": self.permissions.actions.can_unlimited_ai_usage,
             },
+            "projects": projects_payload,
         }
+
+    def resolve_project_permissions(self, project_key: Optional[str]) -> ProjectPermissions:
+        normalized_project_key = str(project_key or "").strip()
+        project_permissions = self.permissions.projects.get(normalized_project_key)
+        if project_permissions:
+            return project_permissions
+        return ProjectPermissions(
+            project_key=normalized_project_key,
+            page_access=set(self.permissions.page_access),
+            sheet_rules=dict(self.permissions.sheet_rules),
+            units_access=list(self.permissions.units_access),
+            actions=self.permissions.actions,
+        )
+
+    def get_project_page_access(self, project_key: Optional[str]) -> Set[str]:
+        return set(self.resolve_project_permissions(project_key).page_access)
+
+    def get_project_action_flags(self, project_key: Optional[str]) -> ActionFlags:
+        return self.resolve_project_permissions(project_key).actions
+
+    def resolve_allowed_units(self, project_key: Optional[str]) -> Set[str]:
+        normalized_project_key = str(project_key or "").strip()
+        if normalized_project_key and normalized_project_key in self.allowed_units_by_project:
+            return set(self.allowed_units_by_project.get(normalized_project_key) or set())
+        return set(self.allowed_units)
+
+    def has_project_access(self, project_key: Optional[str]) -> bool:
+        normalized_project_key = str(project_key or "").strip()
+        if not normalized_project_key:
+            return False
+        if normalized_project_key in self.permissions.projects:
+            project_permissions = self.permissions.projects.get(normalized_project_key)
+            return bool(project_permissions and project_permissions.page_access)
+        return bool(self.permissions.page_access)
 
 
 class AuthManager:
@@ -210,6 +294,51 @@ class AuthManager:
             raise HTTPException(status_code=500, detail="账户信息为空")
         return users
 
+    @staticmethod
+    def _parse_action_flags(actions_cfg: object, fallback: Optional[ActionFlags] = None) -> ActionFlags:
+        base = fallback or ActionFlags()
+        if not isinstance(actions_cfg, dict):
+            return base
+        return ActionFlags(
+            can_submit=bool(actions_cfg.get("can_submit", base.can_submit)),
+            can_approve=bool(actions_cfg.get("can_approve", base.can_approve)),
+            can_revoke=bool(actions_cfg.get("can_revoke", base.can_revoke)),
+            can_publish=bool(actions_cfg.get("can_publish", base.can_publish)),
+            can_manage_modularization=bool(
+                actions_cfg.get("can_manage_modularization", base.can_manage_modularization)
+            ),
+            can_manage_validation=bool(
+                actions_cfg.get("can_manage_validation", base.can_manage_validation)
+            ),
+            can_manage_ai_settings=bool(
+                actions_cfg.get("can_manage_ai_settings", base.can_manage_ai_settings)
+            ),
+            can_manage_ai_sheet_switch=bool(
+                actions_cfg.get("can_manage_ai_sheet_switch", base.can_manage_ai_sheet_switch)
+            ),
+            can_extract_xlsx=bool(
+                actions_cfg.get("can_extract_xlsx", base.can_extract_xlsx)
+            ),
+            can_unlimited_ai_usage=bool(
+                actions_cfg.get("can_unlimited_ai_usage", base.can_unlimited_ai_usage)
+            ),
+        )
+
+    @staticmethod
+    def _parse_sheet_rules(sheet_rules_raw: object, page_access: Set[str]) -> Dict[str, SheetRule]:
+        sheet_rules: Dict[str, SheetRule] = {}
+        if isinstance(sheet_rules_raw, dict):
+            for page_key, rule_cfg in sheet_rules_raw.items():
+                if not isinstance(rule_cfg, dict):
+                    continue
+                mode = str(rule_cfg.get("mode", "all")).strip().lower() or "all"
+                sheets_list = rule_cfg.get("sheets") or []
+                sheets = {str(s).strip() for s in sheets_list if str(s).strip()}
+                sheet_rules[str(page_key).strip()] = SheetRule(mode=mode, sheets=sheets)
+        for page_key in page_access:
+            sheet_rules.setdefault(page_key, SheetRule(mode="all"))
+        return sheet_rules
+
     def _load_permissions(self) -> tuple[Dict[str, GroupPermissions], int]:
         if not self._permissions_path.exists():
             raise HTTPException(
@@ -241,29 +370,59 @@ class AuthManager:
             page_access = {str(page).strip() for page in page_access_raw if str(page).strip()}
 
             sheet_rules_raw = cfg.get("sheet_rules") or {}
-            sheet_rules: Dict[str, SheetRule] = {}
-            for page_key, rule_cfg in sheet_rules_raw.items():
-                if not isinstance(rule_cfg, dict):
-                    continue
-                mode = str(rule_cfg.get("mode", "all")).strip().lower() or "all"
-                sheets_list = rule_cfg.get("sheets") or []
-                sheets = {str(s).strip() for s in sheets_list if str(s).strip()}
-                sheet_rules[str(page_key).strip()] = SheetRule(mode=mode, sheets=sheets)
-
-            # 未显式配置的 page 使用默认 rule
-            for page_key in page_access:
-                sheet_rules.setdefault(page_key, SheetRule(mode="all"))
+            sheet_rules = self._parse_sheet_rules(sheet_rules_raw, page_access)
 
             units_access_raw = cfg.get("units_access") or []
             units_access = [str(unit).strip() for unit in units_access_raw if str(unit).strip()]
 
-            actions_cfg = cfg.get("actions") or {}
-            actions = ActionFlags(
-                can_submit=bool(actions_cfg.get("can_submit")),
-                can_approve=bool(actions_cfg.get("can_approve")),
-                can_revoke=bool(actions_cfg.get("can_revoke")),
-                can_publish=bool(actions_cfg.get("can_publish")),
-            )
+            actions = self._parse_action_flags(cfg.get("actions") or {})
+
+            project_permissions: Dict[str, ProjectPermissions] = {}
+            projects_raw = cfg.get("projects")
+            if isinstance(projects_raw, dict):
+                for project_key, project_cfg in projects_raw.items():
+                    normalized_project_key = str(project_key).strip()
+                    if not normalized_project_key or not isinstance(project_cfg, dict):
+                        continue
+
+                    if "page_access" in project_cfg:
+                        project_page_access_raw = project_cfg.get("page_access") or []
+                        project_page_access = {
+                            str(page).strip()
+                            for page in project_page_access_raw
+                            if str(page).strip()
+                        }
+                    else:
+                        project_page_access = set(page_access)
+
+                    if "sheet_rules" in project_cfg:
+                        project_sheet_rules = self._parse_sheet_rules(
+                            project_cfg.get("sheet_rules") or {},
+                            project_page_access,
+                        )
+                    else:
+                        project_sheet_rules = dict(sheet_rules)
+
+                    if "units_access" in project_cfg:
+                        project_units_raw = project_cfg.get("units_access") or []
+                        project_units_access = [
+                            str(unit).strip() for unit in project_units_raw if str(unit).strip()
+                        ]
+                    else:
+                        project_units_access = list(units_access)
+
+                    project_actions = self._parse_action_flags(
+                        project_cfg.get("actions"),
+                        fallback=actions,
+                    )
+
+                    project_permissions[normalized_project_key] = ProjectPermissions(
+                        project_key=normalized_project_key,
+                        page_access=project_page_access,
+                        sheet_rules=project_sheet_rules,
+                        units_access=project_units_access,
+                        actions=project_actions,
+                    )
 
             groups[group_name] = GroupPermissions(
                 name=group_name,
@@ -272,6 +431,7 @@ class AuthManager:
                 sheet_rules=sheet_rules,
                 units_access=units_access,
                 actions=actions,
+                projects=project_permissions,
             )
 
         if not groups:
@@ -306,6 +466,10 @@ class AuthManager:
         expires_at = self._compute_expiry(issued_at, persistent)
         token = secrets.token_urlsafe(32)
         allowed_units = self._resolve_units(group_permissions.units_access, record.unit)
+        allowed_units_by_project = {
+            project_key: self._resolve_units(project_permissions.units_access, record.unit)
+            for project_key, project_permissions in group_permissions.projects.items()
+        }
 
         session = AuthSession(
             username=record.username,
@@ -314,6 +478,7 @@ class AuthManager:
             hierarchy=group_permissions.hierarchy,
             permissions=group_permissions,
             allowed_units=allowed_units,
+            allowed_units_by_project=allowed_units_by_project,
             token=token,
             issued_at=issued_at,
             expires_at=expires_at,
@@ -506,6 +671,10 @@ class AuthManager:
         except json.JSONDecodeError:
             allowed_units_list = []
         allowed_units = {str(unit) for unit in (allowed_units_list or [])}
+        allowed_units_by_project = {
+            project_key: self._resolve_units(project_permissions.units_access, record.unit)
+            for project_key, project_permissions in group_permissions.projects.items()
+        }
         session = AuthSession(
             username=row["username"],
             group=row["user_group"],
@@ -513,6 +682,7 @@ class AuthManager:
             hierarchy=row["hierarchy"],
             permissions=group_permissions,
             allowed_units=allowed_units or self._resolve_units(group_permissions.units_access, record.unit),
+            allowed_units_by_project=allowed_units_by_project,
             token=row["token"],
             issued_at=row["issued_at"],
             expires_at=expires_at,

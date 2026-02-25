@@ -1183,3 +1183,292 @@
      - 线条恢复 `smooth: true`；  
      - 标签格式继续使用原 `toFixed(1)` 规则。  
 - **Result:** 温度图视觉与标签样式恢复到既定展示标准，同时保留“可显示”稳定性修复。
+
+## 2026-02-16（春节看板两张表合计行加粗 + 气温合计改平均值）
+
+- **User Request:** `spring-dashboard` 页面两张新增“合计”行需要加粗；气温字段合计由求和改为算术平均。
+- **前置说明:**
+  1. 本次仅调整前端展示与表格汇总算法，不改后端接口与数据库；
+  2. 回滚方式：还原 `SpringFestivalDashboardView.vue` 中本次新增的 `averageRowsByField`、行类名绑定与样式。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue`：
+     - 两张表的 `tr` 增加 `:class="{ 'mini-table-total-row': row.isTotal }"`；
+     - 新增 `averageRowsByField(rows, field)`；
+     - `coalRowsWithTotal` 与 `complaintRowsWithTotal` 的 `temperature` 改为平均值计算；
+     - 新增样式 `.mini-table .mini-table-total-row td { font-weight: 700; }`。
+- **Result:** 两张表“合计”行文字已统一加粗；气温“合计”按可见日期的算术平均值展示，其它数值列仍保持求和逻辑。
+
+## 2026-02-25（配置说明确认：backend_data/shared/项目列表.json）
+
+- **User Request:** 询问 `backend_data/shared/项目列表.json` 当前功能。
+- **前置说明:**
+  1. 本次仅进行代码与配置链路核对，不修改业务代码；
+  2. Serena 已完成 `activate_project` 与 `check_onboarding_performed`；
+  3. 回滚方式：本次仅文档追加，如需回退可删除本节记录。
+- **Agent Action:**
+  1. 读取 `backend_data/shared/项目列表.json` 当前内容，确认包含项目名、页面配置、数据源路径、目录化文件清单；
+  2. 核对后端入口：`backend/api/v1/routes.py` 中 `list_projects` 与 `list_project_pages` 通过 `_load_project_entries` 读取该文件；
+  3. 核对路径解析：`backend/services/project_data_paths.py` 中 `resolve_project_list_path` 优先使用 `shared/项目列表.json`；
+  4. 核对扩展用途：`backend/services/project_modularization.py` 与 `backend/projects/daily_report_25_26/api/legacy_full.py` 也会消费该文件的 `pages` / `modularization` 信息。
+- **Result:** 已确认该文件是“全局项目注册表 + 页面元数据源 + 部分后端配置推断输入”，不仅用于项目列表展示。
+
+## 2026-02-25（项目入口可见性/可访问性能力核对）
+
+- **User Request:** 确认 `backend_data/shared/项目列表.json` 是否可配置项目显示、可见人群、可点击访问人群。
+- **前置说明:**
+  1. 本次仅核对现状能力，不做业务逻辑改造；
+  2. 回滚方式：本次仅追加记录，删除本节即可回退。
+- **Agent Action:**
+  1. 核对后端项目列表接口 `backend/api/v1/routes.py::list_projects`，确认当前只按配置文件遍历返回项目，不含按用户过滤；
+  2. 核对权限模型 `backend/schemas/auth.py` 与 `backend/services/auth_manager.py`，确认现有权限核心为 `page_access/sheet_rules/units_access/actions`，无 `project_access`；
+  3. 核对前端项目入口 `frontend/src/pages/ProjectSelectView.vue`，确认存在春节项目的前端硬编码点击拦截（仅 `Global_admin`）。
+- **Result:** 当前 `项目列表.json` 仅直接支持“是否显示”（通过是否存在项目条目）；“哪些用户可见/可访问”未在该文件形成通用配置能力，现状主要依赖权限系统的页面级控制与个别前端硬编码规则。
+
+## 2026-02-25（用户分组与权限系统现状说明）
+
+- **User Request:** 说明当前应用“用户分组及其权限”的设定体系与生效方式。
+- **前置说明:**
+  1. 本次仅做现状核对与说明，不修改鉴权逻辑；
+  2. Serena 已完成项目激活与 onboarding 检查；
+  3. 回滚方式：删除本节记录即可。
+- **Agent Action:**
+  1. 核对账号源：`backend_data/shared/auth/账户信息.json`；
+  2. 核对权限矩阵：`backend_data/shared/auth/permissions.json`；
+  3. 核对后端鉴权核心：`backend/services/auth_manager.py`、`backend/api/v1/auth.py`；
+  4. 核对前端权限消费：`frontend/src/projects/daily_report_25_26/store/auth.js`、`PageSelectView.vue`。
+- **Result:** 当前为“账号归组 + 组权限模板 + 会话令牌 + 前后端双侧校验”的 RBAC 变体：组定义页面访问、表单过滤、单位范围和动作权限；后端做最终鉴权，前端做展示过滤与交互拦截。
+
+## 2026-02-25（权限文件按“项目>页面”组织可行性评估）
+
+- **User Request:** 希望将 `backend_data/shared/auth/permissions.json` 从“全局页面平铺”改为“项目 > 页面”组织。
+- **前置说明:**
+  1. 本次输出为改造方案，不直接修改鉴权代码；
+  2. 目标是保持现网兼容，先支持新结构，再平滑迁移旧结构；
+  3. 回滚方式：若实施后异常，可暂时切回旧版平铺 `page_access/sheet_rules` 并沿用现有解析逻辑。
+- **Agent Action:**
+  1. 评估了当前权限生效链路：`auth_manager.py`（加载/会话）、`routes.py`（项目页面过滤）、前端 `store/auth.js`（页面和表单过滤）；
+  2. 给出兼容改造路线：新增 `projects` 节点，解析层双栈兼容，接口透出项目维度权限，前后端过滤函数改为携带 `project_key`。
+- **Result:** 该改造可行，且可采用“兼容旧结构 -> 灰度切换 -> 清理旧字段”的低风险实施路径。
+
+## 2026-02-25（权限文件模块化实施：项目 > 页面）
+
+- **User Request:** 直接实施权限文件模块化，允许同步修改相关程序代码，重点要求改动有序、链路完整。
+- **前置说明:**
+  1. Serena 已完成 `activate_project` 与 `check_onboarding_performed`；
+  2. 本次采用“代码先兼容 + 配置迁移到新结构”的实施方式；
+  3. 回滚方式：`permissions.json` 删除 `projects` 节点并沿用旧平铺字段；代码层保留兼容逻辑可直接承接回滚。
+- **Agent Action:**
+  1. 后端权限模型扩展（`backend/services/auth_manager.py`）：
+     - 新增 `ProjectPermissions` 数据结构；
+     - `GroupPermissions` 增加 `projects`；
+     - `AuthSession` 增加 `allowed_units_by_project` 与项目维度方法：
+       - `resolve_project_permissions(project_key)`
+       - `get_project_page_access(project_key)`
+       - `get_project_action_flags(project_key)`
+       - `resolve_allowed_units(project_key)`
+     - `_load_permissions` 支持读取 `groups.*.projects.*`，并兼容旧结构字段回退。
+  2. 后端接口生效链路改造：
+     - `backend/api/v1/routes.py::list_project_pages` 改为按 `project_id` 取项目页面权限；
+     - `backend/projects/daily_report_25_26/api/dashboard.py` 的缓存权限校验改为项目维度动作权限；
+     - `backend/projects/daily_report_25_26/api/legacy_full.py` 中审批/撤销/发布及单位过滤统一改为项目维度权限读取。
+  3. 后端响应模型扩展：
+     - `backend/schemas/auth.py::PermissionsModel` 新增 `projects` 字段，确保 `/auth/login` 与 `/auth/me` 返回项目化权限数据。
+  4. 前端权限消费改造（`frontend/src/projects/daily_report_25_26/store/auth.js`）：
+     - 新增项目维度解析逻辑：`resolveProjectPermission(projectKey)`；
+     - `filterPages`、`filterSheetsByRule` 改为支持 `projectKey`，并兼容旧签名；
+     - 新增 `canSubmitFor/canApproveFor/canRevokeFor/canPublishFor`；
+     - `canApproveUnit/canRevokeUnit` 支持项目维度单位范围判断。
+  5. 前端调用点对齐：
+     - `PageSelectView.vue` 页面过滤与审批按钮显示改为按当前 `projectKey`；
+     - `Sheets.vue` 表格过滤改为 `auth.filterSheetsByRule(projectKey, pageKey, sheets)`。
+  6. 权限配置迁移：
+     - `backend_data/shared/auth/permissions.json` 已新增 `groups.*.projects` 结构；
+     - 当前将各组 `daily_report_25_26` 权限显式迁入，并为 `Global_admin` 增加 `daily_report_spring_festval_2026` 的 `mini_entry` 项目权限。
+- **Result:** 应用权限体系已从“全局页面平铺”升级为“项目 > 页面”组织，并保持旧结构兼容，可继续按项目独立扩展权限而不互相干扰。
+
+## 2026-02-25（权限配置去重：仅保留 projects 子树）
+
+- **User Request:** `permissions.json` 存在平铺字段与项目字段重复，要求删除重复项，仅保留项目及其下属权限。
+- **前置说明:**
+  1. 代码层已具备兼容解析，允许配置文件只保留 `projects`；
+  2. 本次仅调整权限配置文件，不修改业务代码；
+  3. 回滚方式：将各组平铺字段 `page_access/sheet_rules/units_access/actions` 补回即可。
+- **Agent Action:**
+  1. 重建 `backend_data/shared/auth/permissions.json`；
+  2. 各组仅保留 `hierarchy` + `projects`；
+  3. 每个项目节点保留完整 `page_access/sheet_rules/units_access/actions`。
+- **Result:** 权限配置去重完成，结构更清晰，避免同一组内双份权限定义带来的维护歧义。
+
+## 2026-02-25（修复 unit_filler 误见 Coal_inventory_Sheet）
+
+- **User Request:** 当前所有 `unit_filler` 都能看到 `Coal_inventory_Sheet`，应仅 `shoudian_filler` 可见。
+- **前置说明:**
+  1. 采用“分组拆分 + 权限收敛”方式修复，避免写死用户名判断；
+  2. 本次仅修改账号分组与权限配置，不改业务代码；
+  3. 回滚方式：将 `shoudian_filler` 并回 `unit_filler`，并恢复 `unit_filler` 的 `Coal_inventory_Sheet` 显式授权。
+- **Agent Action:**
+  1. `backend_data/shared/auth/账户信息.json`：把 `shoudian_filler` 从 `unit_filler` 拆到新组 `shoudian_filler`；
+  2. `backend_data/shared/auth/permissions.json`：
+     - `unit_filler` 的 `data_entry` 规则改为仅 `mode: by_unit`（移除 `Coal_inventory_Sheet` 显式授权）；
+     - 新增 `shoudian_filler` 组，在 `data_entry` 的 `sheets` 中保留 `Coal_inventory_Sheet` 显式授权。
+- **Result:** 普通 `unit_filler` 不再继承煤炭库存表显式权限，`Coal_inventory_Sheet` 仅对 `shoudian_filler` 生效。
+
+## 2026-02-25（硬编码权限拦截清单核对）
+
+- **User Request:** 说明当前系统中“少量硬编码拦截”具体是哪些。
+- **前置说明:**
+  1. 本次仅做现状核对，不修改代码；
+  2. 回滚方式：本节为文档记录，无代码回滚需求。
+- **Agent Action:** 扫描前后端中按 `projectKey/group` 写死的权限判断分支。
+- **Result:** 已识别出项目入口拦截（前端）与若干操作级角色判断（前后端），并给出文件定位用于后续统一到权限文件。
+
+## 2026-02-25（三类硬编码权限统一迁移到 permissions.json）
+
+- **User Request:** 将此前识别的三类硬编码权限（项目入口、后端角色白名单、前端角色判断）统一迁移到 `permissions.json`。
+- **前置说明:**
+  1. 本次实施包含后端鉴权与前端显隐逻辑联动改造；
+  2. 新增项目动作位用于替代角色名硬编码；
+  3. 回滚方式：恢复相关硬编码判断，或在 `permissions.json` 回填对应动作位后按旧行为运行。
+- **Agent Action:**
+  1. 后端动作位扩展：
+     - `ActionFlags` / `ActionFlagsModel` 增加：
+       - `can_manage_modularization`
+       - `can_manage_validation`
+       - `can_manage_ai_settings`
+       - `can_manage_ai_sheet_switch`
+       - `can_extract_xlsx`
+       - `can_unlimited_ai_usage`
+  2. 后端硬编码替换：
+     - `backend/api/v1/routes.py`：
+       - `GET /projects` 增加登录态依赖并按项目权限过滤；
+       - 项目目录化接口改为校验 `can_manage_modularization`；
+     - `backend/projects/daily_report_25_26/api/legacy_full.py`：
+       - 校验总开关改为 `can_manage_validation`；
+       - AI 设置改为 `can_manage_ai_settings`；
+       - 表级 AI 开关改为 `can_manage_ai_sheet_switch`；
+     - `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`：
+       - 提取接口改为 `can_extract_xlsx`；
+     - `backend/services/ai_usage_service.py`：
+       - 去除组名白名单，改为读取 `can_unlimited_ai_usage`。
+  3. 前端硬编码替换：
+     - `frontend/src/pages/ProjectSelectView.vue` 删除春节项目 `Global_admin` 硬编码拦截；
+     - `frontend/src/projects/daily_report_25_26/store/auth.js` 增加项目动作位读取函数：
+       - `canManageValidationFor`
+       - `canManageAiSettingsFor`
+       - `canExtractXlsxFor`
+     - `Sheets.vue` / `DataEntryView.vue` 校验开关按钮改用 `canManageValidationFor(projectKey)`；
+     - `DataAnalysisView.vue` 与 `UnitAnalysisLite.vue` 的 `Global_admin` 判断改为 `canManageAiSettingsFor(projectKey)`。
+  4. 权限配置补齐：
+     - `backend_data/shared/auth/permissions.json` 为相关项目配置上述动作位（Global_admin 与 Group_admin 按原业务口径赋值）。
+- **Result:** 三类权限控制已统一收敛到 `permissions.json`，代码层不再依赖组名硬编码进行权限决策。
+
+## 2026-02-25（修复项目列表跨账号缓存串权限）
+
+- **User Feedback:** `daily_report_spring_festval_2026` 对非授权账号仍可见可进，与权限配置不符。
+- **前置说明:**
+  1. 根因定位为前端项目列表缓存未按账号隔离，而非后端权限判定失效；
+  2. 本次修复仅改前端 API 缓存策略，不改后端权限规则；
+  3. 回滚方式：恢复 `services/api.js` 中原先单一 `cachedProjects` 逻辑。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - 新增 `cachedProjectsToken`；
+     - `listProjects()` 仅在 `cachedProjectsToken === authToken` 时命中缓存；
+     - `setAuthToken()` 在 token 变化时自动 `resetProjectCache()`；
+     - `resetProjectCache()` 同时清空 `cachedProjects` 与 `cachedProjectsToken`。
+- **Result:** 切换账号后项目列表会强制按当前 token 重新拉取，项目可见性与 `permissions.json` 保持一致，不再出现跨账号串权限显示。
+
+## 2026-02-25（新增项目可用性最高优先级开关）
+
+- **User Request:** 在 `backend_data/shared/项目列表.json` 为每个项目增加“项目可用性”开关，支持 `true/false/[用户组列表]`，并作为高于 `permissions.json` 的项目入口总闸。
+- **前置说明:**
+  1. 本次采用“配置 + 后端统一鉴权”落地，不新增前端硬编码判断；
+  2. 项目访问判定顺序调整为：`项目可用性` → `permissions.json`；
+  3. 回滚方式：移除 `项目可用性` 字段并回退 `backend/api/v1/routes.py` 本次新增的可用性判定与项目路由依赖。
+- **Agent Action:**
+  1. 配置更新：`backend_data/shared/项目列表.json`
+     - `daily_report_25_26` 增加 `"项目可用性": true`；
+     - `daily_report_spring_festval_2026` 增加 `"项目可用性": ["Global_admin"]`。
+  2. 后端统一判定：`backend/api/v1/routes.py`
+     - 新增 `_is_project_enabled_for_group()`，解析 `项目可用性/project_availability`；
+     - 新增 `_ensure_project_visible_and_accessible()`，统一执行“可用性总闸 + 既有权限判定”；
+     - `GET /api/v1/projects` 增加按项目可用性过滤；
+     - `GET /api/v1/projects/{project_id}/pages` 增加项目总闸校验；
+     - 项目目录化接口（status/bootstrap）增加项目总闸校验；
+     - 为注册到 `/api/v1/projects/{project_key}` 下的 `router/public_router` 统一挂载项目访问依赖，阻断绕过页面列表的直连访问。
+- **Result:** 项目入口实现“不可见即不可访问”的统一规则；当项目可用性为 `false` 或当前组不在白名单时，项目不会出现在项目列表，且项目下接口访问会返回 `403`。
+
+## 2026-02-25（可用性字段命名修正为 availability）
+
+- **User Request:** 不再使用“项目可用性”命名，改为 `availability`；用户组即使只有一个也使用列表形式。
+- **前置说明:**
+  1. 本次仅做命名与兼容层调整，不改变权限语义；
+  2. 回滚方式：将 `availability` 改回旧键，并回退 `routes.py` 中读取优先级调整。
+- **Agent Action:**
+  1. 配置更新：`backend_data/shared/项目列表.json`
+     - 将项目级键由 `项目可用性` 改为 `availability`；
+     - 春节项目继续使用列表白名单格式：`\"availability\": [\"Global_admin\"]`。
+  2. 后端更新：`backend/api/v1/routes.py`
+     - `_is_project_enabled_for_group()` 改为优先读取 `availability`；
+     - 保留 `project_availability` 与 `项目可用性` 回退兼容，确保历史配置不立即失效。
+- **Result:** 配置主键已统一为 `availability`，且白名单组保持列表格式；系统行为与上一版一致。
+
+## 2026-02-25（移除 availability 旧键兼容）
+
+- **User Request:** 不需要兼容旧键，仅保留 `availability`。
+- **前置说明:**
+  1. 本次为不兼容清理，旧键将不再生效；
+  2. 回滚方式：恢复 `routes.py` 中旧键回退读取逻辑。
+- **Agent Action:**
+  1. 修改 `backend/api/v1/routes.py`：
+     - `_is_project_enabled_for_group()` 改为仅读取 `availability`（缺省按 `true` 处理）；
+     - 删除 `project_availability` 与 `项目可用性` 的回退读取。
+- **Result:** 项目可用性配置已完成单键收敛，后续仅接受 `availability` 作为有效配置入口。
+
+## 2026-02-25（修复切换账号后项目列表短暂显示旧账号数据）
+
+- **User Feedback:** 切换账号后，在刷新前项目卡片仍显示原账号结果。
+- **前置说明:**
+  1. 根因在前端全局项目状态未随会话切换同步清空；
+  2. 本次仅改前端状态管理，不改后端接口；
+  3. 回滚方式：恢复 `useProjects.js` 与 `store/auth.js` 本次变更。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/composables/useProjects.js`：
+     - 新增 `resetProjectsState()`，统一清空 `projects/projectsLoading/projectsError`。
+  2. 修改 `frontend/src/projects/daily_report_25_26/store/auth.js`：
+     - 引入 `resetProjectsState`；
+     - 在 `clearSession()` 中调用，确保登出/会话失效时立即清空项目列表；
+     - 在 `login()` 成功后立即调用，确保账号切换时先清空旧项目，再拉取新项目。
+- **Result:** 账号切换后不再残留旧账号项目卡片；页面会先进入空/加载态，再展示当前账号项目列表。
+
+## 2026-02-25（项目列表切号修复方案调整：移除 auth 对 useProjects 的直接耦合）
+
+- **User Feedback:** 数据分析页出现白屏，需降低切号修复对其它页面的副作用风险。
+- **前置说明:**
+  1. 调整为“项目选择页进入时重置并强制重拉”方案；
+  2. 移除 `auth store` 对 `useProjects` 的直接依赖；
+  3. 回滚方式：恢复 `auth.js` 中 `resetProjectsState` 调用，并回退 `ProjectSelectView.vue` 本次改动。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/store/auth.js`：
+     - 删除 `resetProjectsState` 引入与调用，解除 `auth -> useProjects` 直接耦合。
+  2. 修改 `frontend/src/pages/ProjectSelectView.vue`：
+     - 进入页面时先 `resetProjectsState()`；
+     - 再调用 `ensureProjectsLoaded(true)` 强制按当前会话重拉项目列表。
+  3. 本地验证：
+     - 执行 `frontend` 构建（`npm run build`）通过。
+- **Result:** 切号后项目列表仍能立即按当前账号刷新，同时降低对非项目选择页面（如数据分析页）的潜在影响面。
+
+## 2026-02-25（修复数据分析页白屏：isGlobalAdmin 未定义）
+
+- **User Feedback:** 数据分析页面白屏，控制台报错 `ReferenceError: isGlobalAdmin is not defined`。
+- **前置说明:**
+  1. 本次为前端变量引用修复，不涉及后端接口；
+  2. 回滚方式：恢复 `DataAnalysisView.vue` 对 `aiFeatureAccessible` 的旧计算表达式。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`：
+     - 将
+       `const aiFeatureAccessible = computed(() => isGlobalAdmin.value || allowNonAdminAiReport.value)`
+       改为
+       `const aiFeatureAccessible = computed(() => canConfigureAiSettings.value || allowNonAdminAiReport.value)`。
+  2. 本地验证：
+     - 执行 `frontend` 构建（`npm run build`）通过。
+- **Result:** 消除未定义变量异常，数据分析页恢复可渲染。

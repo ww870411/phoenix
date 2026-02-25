@@ -4,7 +4,7 @@ AI 报告使用量统计与限制服务。
 功能：
 - 记录每位用户每日生成的 AI 报告次数。
 - 限制普通用户每日最大生成次数（默认 5 次）。
-- 管理员（Group_admin 及以上）不限次数，但仍记录使用量。
+- 是否不限次数由 permissions.json 的动作位 `can_unlimited_ai_usage` 决定。
 - 数据存储于 shared/ai_usage_stats.json（兼容旧路径），每日自动重置计数。
 """
 
@@ -14,14 +14,14 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 
-from backend.services.project_data_paths import resolve_ai_usage_stats_path
+from backend.services.project_data_paths import resolve_ai_usage_stats_path, resolve_permissions_path
 
 # 数据文件路径
 USAGE_STATS_FILE = resolve_ai_usage_stats_path()
 
 # 限制配置
 DAILY_LIMIT_DEFAULT = 5
-UNLIMITED_GROUPS = {"Global_admin", "Group_admin", "系统管理员"}
+DEFAULT_PROJECT_KEY = "daily_report_25_26"
 
 # 东八区时区
 EAST_8 = timezone(timedelta(hours=8))
@@ -50,6 +50,42 @@ def _load_stats() -> Dict[str, Any]:
         return {"date": _get_today_str(), "usage": {}}
 
 
+def _load_permissions() -> Dict[str, Any]:
+    path = resolve_permissions_path()
+    if not path.exists():
+        return {}
+    try:
+        content = path.read_text(encoding="utf-8")
+        data = json.loads(content)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _is_unlimited_group(user_group: str, project_key: str) -> bool:
+    permissions = _load_permissions()
+    groups = permissions.get("groups")
+    if not isinstance(groups, dict):
+        return False
+    group_cfg = groups.get(user_group)
+    if not isinstance(group_cfg, dict):
+        return False
+
+    projects = group_cfg.get("projects")
+    if isinstance(projects, dict):
+        project_cfg = projects.get(project_key)
+        if isinstance(project_cfg, dict):
+            project_actions = project_cfg.get("actions")
+            if isinstance(project_actions, dict):
+                return bool(project_actions.get("can_unlimited_ai_usage", False))
+
+    # 兼容旧结构（若仍存在）
+    legacy_actions = group_cfg.get("actions")
+    if isinstance(legacy_actions, dict):
+        return bool(legacy_actions.get("can_unlimited_ai_usage", False))
+    return False
+
+
 def _save_stats(data: Dict[str, Any]) -> None:
     """原子性写入统计文件。"""
     temp_file = USAGE_STATS_FILE.with_suffix(".tmp")
@@ -63,7 +99,11 @@ def _save_stats(data: Dict[str, Any]) -> None:
         raise e
 
 
-def check_and_increment_usage(username: str, user_group: str) -> Tuple[bool, str]:
+def check_and_increment_usage(
+    username: str,
+    user_group: str,
+    project_key: str = DEFAULT_PROJECT_KEY,
+) -> Tuple[bool, str]:
     """
     检查用户今日是否还可以生成报告，并增加计数。
     
@@ -75,7 +115,8 @@ def check_and_increment_usage(username: str, user_group: str) -> Tuple[bool, str
 
     today = _get_today_str()
     group = (user_group or "").strip()
-    is_unlimited = group in UNLIMITED_GROUPS
+    normalized_project_key = (project_key or DEFAULT_PROJECT_KEY).strip() or DEFAULT_PROJECT_KEY
+    is_unlimited = _is_unlimited_group(group, normalized_project_key)
 
     with _lock:
         stats = _load_stats()

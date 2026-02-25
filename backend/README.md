@@ -563,3 +563,187 @@
 
 - 本轮后端接口与服务无新增改动。
 - 前端已将温度图视觉配置回退至既定展示样式，仅保留图表组件层稳定性修复。
+
+## 结构同步（2026-02-16 春节看板合计行样式与气温合计修正）
+
+- 本轮后端接口与服务无新增改动。
+- 前端在 `spring-dashboard` 页面完成两项调整：
+  - 两张明细表“合计”行加粗显示；
+  - 气温合计改为算术平均值（不再求和）。
+
+## 结构同步（2026-02-25 项目列表配置功能确认）
+
+- 本轮后端代码与接口无改动。
+- 已确认 `backend_data/shared/项目列表.json` 的当前职责：
+  - 作为 `GET /api/v1/projects` 的项目清单来源；
+  - 作为 `GET /api/v1/projects/{project_id}/pages` 的页面元数据来源；
+  - 作为项目目录化迁移文件清单推断输入（`modularization/config_files/runtime_files`）；
+  - 作为历史数据文件候选路径收集输入（根据 `pages[*].数据源` 推断）。
+
+## 结构同步（2026-02-25 项目入口可见性/访问性核对）
+
+- 本轮后端代码与接口无改动。
+- 现状确认：
+  - `list_projects` 当前不按用户权限过滤项目（仅按配置文件返回）；
+  - 权限模型当前无项目级 `project_access` 字段，仅有 `page_access/sheet_rules/units_access/actions`；
+  - 因此 `项目列表.json` 暂不具备“按用户组配置项目可见/可访问”的通用能力。
+
+## 结构同步（2026-02-25 用户分组与权限系统核对）
+
+- 本轮后端代码与接口无改动。
+- 现状确认：
+  - 账号文件：`backend_data/shared/auth/账户信息.json`（用户按组归类，含 `username/password/unit`）；
+  - 权限文件：`backend_data/shared/auth/permissions.json`（组维度定义 `hierarchy/page_access/sheet_rules/units_access/actions`）；
+  - 鉴权核心：`backend/services/auth_manager.py` 负责加载配置、签发与校验会话、解析可见单位与动作权限；
+  - API 返回：`/api/v1/auth/login` 与 `/api/v1/auth/me` 返回 `permissions`，供前端展示过滤与操作按钮控制；
+  - 强制校验仍以后端为准（如审批/撤销/发布接口中的 action 与单位范围检查）。
+
+## 结构同步（2026-02-25 权限模型“项目>页面”改造方案确认）
+
+- 本轮后端代码无改动，完成可行性与迁移路线评估。
+- 计划中的后端改造点：
+  - `permissions.json` 增加 `projects.{project_key}.page_access/sheet_rules/(可选 actions/units_access)`；
+  - `auth_manager.py` 解析层兼容“旧平铺 + 新项目化”两种结构；
+  - `routes.py::list_project_pages` 按 `project_id` 获取对应项目权限进行过滤；
+  - 项目内关键接口逐步补齐项目维度动作权限读取，保留旧字段兜底。
+
+## 结构同步（2026-02-25 权限文件模块化已落地）
+
+- 本轮已完成后端代码改造：
+  - `backend/services/auth_manager.py`
+    - 新增 `ProjectPermissions`；
+    - `GroupPermissions` 增加 `projects`；
+    - `AuthSession` 增加项目维度权限解析与单位范围解析方法；
+    - `_load_permissions` 支持 `groups.*.projects.*`，并兼容旧平铺字段回退。
+  - `backend/schemas/auth.py`
+    - `PermissionsModel` 新增 `projects`；
+  - `backend/api/v1/routes.py`
+    - `list_project_pages` 改为按 `project_id` 读取项目维度页面权限；
+  - `backend/projects/daily_report_25_26/api/dashboard.py`
+    - 缓存操作权限改为项目维度 `actions.can_publish`；
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+    - 审批/撤销/发布与单位过滤统一切换为项目维度权限读取。
+- 配置侧变更：
+  - `backend_data/shared/auth/permissions.json` 已增加 `projects` 分层，完成“项目 > 页面”组织。
+
+## 结构同步（2026-02-25 权限配置去重）
+
+- 本轮后端代码无改动，仅更新配置文件：
+  - `backend_data/shared/auth/permissions.json` 删除组级平铺字段：
+    - `page_access`
+    - `sheet_rules`
+    - `units_access`
+    - `actions`
+  - 各组仅保留 `hierarchy` 与 `projects.*` 项目化权限定义。
+- 结果：
+  - 权限数据源保持“单一真相来源”（项目节点），减少重复配置与漂移风险。
+
+## 结构同步（2026-02-25 unit_filler 煤炭库存表权限修复）
+
+- 本轮后端代码无改动，配置调整如下：
+  - `backend_data/shared/auth/账户信息.json`
+    - `shoudian_filler` 账号从 `unit_filler` 拆分到独立组 `shoudian_filler`；
+  - `backend_data/shared/auth/permissions.json`
+    - `unit_filler` 组移除 `Coal_inventory_Sheet` 显式授权；
+    - 新增 `shoudian_filler` 组并保留 `Coal_inventory_Sheet` 显式授权。
+- 结果：
+  - `Coal_inventory_Sheet` 的显式可见性从“所有填报员”收敛为“仅 shoudian_filler”。
+
+## 结构同步（2026-02-25 硬编码权限分支核对）
+
+- 本轮后端代码无改动。
+- 核对结果：
+  - 仍存在少量按角色名写死的操作权限分支（如系统管理员接口、春节提取接口、AI 使用量无限制组），后续可按需要统一收敛到权限配置。
+
+## 结构同步（2026-02-25 硬编码权限已统一收敛到配置）
+
+- 本轮后端改造：
+  - `backend/services/auth_manager.py`
+    - `ActionFlags` 增加项目动作位：
+      - `can_manage_modularization`
+      - `can_manage_validation`
+      - `can_manage_ai_settings`
+      - `can_manage_ai_sheet_switch`
+      - `can_extract_xlsx`
+      - `can_unlimited_ai_usage`
+    - 会话权限序列化与解析已支持新动作位；
+    - 新增 `has_project_access(project_key)` 供项目列表可见性控制。
+  - `backend/schemas/auth.py`
+    - `ActionFlagsModel` 同步新增上述动作位。
+  - `backend/api/v1/routes.py`
+    - `GET /projects` 增加鉴权依赖并按项目权限过滤返回；
+    - 目录化接口权限改为 `can_manage_modularization`。
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+    - 校验开关权限改为 `can_manage_validation`；
+    - AI 设置权限改为 `can_manage_ai_settings`；
+    - 表级 AI 开关权限改为 `can_manage_ai_sheet_switch`。
+  - `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py`
+    - 提取接口权限改为 `can_extract_xlsx`。
+  - `backend/services/ai_usage_service.py`
+    - 不限次数逻辑改为 `can_unlimited_ai_usage`，移除组名白名单判断。
+- 配置同步：
+  - `backend_data/shared/auth/permissions.json` 已补齐对应动作位。
+
+## 结构同步（2026-02-25 项目可见性串权限问题修复）
+
+- 本轮后端代码无改动。
+- 问题归因：前端项目列表缓存未按账号 token 隔离，导致切换账号后沿用旧缓存列表。
+- 修复方式：在前端 API 层将项目列表缓存绑定当前 token，并在 token 变更时自动失效。
+
+## 结构同步（2026-02-25 项目可用性最高优先级开关）
+
+- 本轮后端改造：  
+  - `backend/api/v1/routes.py`
+    - 新增项目可用性解析函数 `_is_project_enabled_for_group(project_entry, group_name)`，支持：
+      - `项目可用性: false` -> 全部拒绝；
+      - `项目可用性: true` -> 继续走 `permissions.json`；
+      - `项目可用性: [组列表]` -> 仅白名单组继续走 `permissions.json`；
+    - 新增统一校验 `_ensure_project_visible_and_accessible(...)`；
+    - `GET /api/v1/projects` 先按项目可用性过滤，再按会话项目权限过滤；
+    - `GET /api/v1/projects/{project_id}/pages` 增加项目级总闸校验；
+    - `modularization/status` 与 `modularization/bootstrap` 增加项目级总闸校验；
+    - 项目路由注册时为 `router/public_router` 统一挂载项目访问依赖，避免绕过项目列表直连接口。
+- 配置同步：  
+  - `backend_data/shared/项目列表.json`
+    - `daily_report_25_26`：`"项目可用性": true`；
+    - `daily_report_spring_festval_2026`：`"项目可用性": ["Global_admin"]`。
+- 结果：  
+  - 项目访问链路统一为“项目可用性（最高优先级）→ permissions.json（项目/页面权限）”，实现不可见即不可访问。
+
+## 结构同步（2026-02-25 可用性字段命名修正）
+
+- 本轮后端改造：
+  - `backend/api/v1/routes.py`
+    - 项目可用性读取键优先级调整为：`availability` → `project_availability` → `项目可用性`；
+    - 权限行为不变，仍为项目入口最高优先级总闸。
+- 配置同步：
+  - `backend_data/shared/项目列表.json`
+    - 全部项目由 `项目可用性` 改为 `availability`；
+    - 白名单用户组继续采用数组格式（即使单组也为列表）。
+
+## 结构同步（2026-02-25 availability 兼容回退移除）
+
+- 本轮后端改造：
+  - `backend/api/v1/routes.py`
+    - `_is_project_enabled_for_group()` 仅保留 `availability` 读取；
+    - 移除 `project_availability` 与 `项目可用性` 的兼容回退逻辑。
+- 结果：
+  - 项目可用性配置入口单一化，避免多键并存带来的配置歧义。
+
+## 结构同步（2026-02-25 切换账号项目残留显示问题）
+
+- 本轮后端代码无改动。
+- 问题定位：
+  - 属于前端状态一致性问题（全局项目列表状态未在会话切换时清空），并非后端权限过滤异常。
+
+## 结构同步（2026-02-25 数据分析页白屏排查联动）
+
+- 本轮后端代码无改动。
+- 联动结论：
+  - 将前端“切号清空项目列表”从 `auth store` 耦合方式改为“项目选择页进入时重置并强制重拉”，后端接口契约不受影响。
+
+## 结构同步（2026-02-25 数据分析页白屏修复联动）
+
+- 本轮后端代码无改动。
+- 联动结论：
+  - 白屏根因是前端 `DataAnalysisView` 变量引用错误（`isGlobalAdmin` 未定义），与后端权限接口无关。

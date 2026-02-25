@@ -1567,23 +1567,26 @@ class AiSettingsPayload(BaseModel):
     allow_non_admin_report: bool = False
 
 
-def _ensure_system_admin(session: AuthSession) -> None:
-    group = (session.group or "").strip()
-    allowed = {"系统管理员", "Global_admin"}
-    if group not in allowed:
-        raise HTTPException(status_code=403, detail="仅系统管理员可修改校验总开关。")
+def _ensure_manage_validation_permission(session: AuthSession) -> None:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_manage_validation:
+        raise HTTPException(status_code=403, detail="当前账号无校验开关管理权限。")
 
 
-def _is_global_admin(session: AuthSession) -> bool:
-    group = (session.group or "").strip()
-    return group == "Global_admin" or group == "系统管理员"
+def _can_manage_ai_settings(session: AuthSession) -> bool:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    return bool(action_flags.can_manage_ai_settings)
 
 
-def _ensure_group_admin_or_higher(session: AuthSession) -> None:
-    group = (session.group or "").strip()
-    allowed = {"系统管理员", "Global_admin", "Group_admin"}
-    if group not in allowed:
-        raise HTTPException(status_code=403, detail="仅集团管理员及以上角色可执行此操作。")
+def _ensure_manage_ai_settings_permission(session: AuthSession) -> None:
+    if not _can_manage_ai_settings(session):
+        raise HTTPException(status_code=403, detail="当前账号无 AI 配置管理权限。")
+
+
+def _ensure_manage_ai_sheet_switch_permission(session: AuthSession) -> None:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_manage_ai_sheet_switch:
+        raise HTTPException(status_code=403, detail="当前账号无 AI 报告开关管理权限。")
 
 
 def _coerce_bool(value: Any, default: bool = False) -> bool:
@@ -1762,7 +1765,7 @@ def _build_workflow_response(session: AuthSession) -> WorkflowStatusResponse:
     biz_datetime = _current_biz_datetime()
     display_date = auth_manager.current_display_date()
     seed_units = _collect_seed_units()
-    visible_units = session.allowed_units or set(seed_units)
+    visible_units = session.resolve_allowed_units(PROJECT_KEY) or set(seed_units)
     snapshot = workflow_status_manager.get_snapshot(
         project_key=project_key,
         biz_date=biz_datetime,
@@ -1812,10 +1815,11 @@ def approve_unit_workflow(
     payload: WorkflowApproveRequest,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
-    if not session.permissions.actions.can_approve:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_approve:
         raise HTTPException(status_code=403, detail="当前账号无审批权限")
     target_unit = payload.unit
-    allowed_units = session.allowed_units or set(_collect_seed_units())
+    allowed_units = session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权审批该单位")
     workflow_status_manager.mark_approved(
@@ -1836,10 +1840,11 @@ def revoke_unit_workflow(
     payload: WorkflowRevokeRequest,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
-    if not session.permissions.actions.can_revoke:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_revoke:
         raise HTTPException(status_code=403, detail="当前账号无取消批准权限")
     target_unit = payload.unit
-    allowed_units = session.allowed_units or set(_collect_seed_units())
+    allowed_units = session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权取消该单位审批")
     workflow_status_manager.mark_pending(
@@ -1860,7 +1865,8 @@ def publish_daily_report(
     payload: WorkflowPublishRequest,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
-    if not session.permissions.actions.can_publish:
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_publish:
         raise HTTPException(status_code=403, detail="当前账号无发布权限")
     if not payload.confirm:
         raise HTTPException(status_code=400, detail="请确认后再发布")
@@ -1897,7 +1903,7 @@ def update_validation_master_switch(
     payload: ValidationMasterSwitchPayload,
     session: AuthSession = Depends(get_current_session),
 ):
-    _ensure_system_admin(session)
+    _ensure_manage_validation_permission(session)
     updated = _persist_master_validation_switch(payload.validation_enabled)
     return {"ok": True, "validation_enabled": updated}
 
@@ -1907,7 +1913,7 @@ def update_validation_master_switch(
     summary="读取 AI 智能体配置",
 )
 async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_session)):
-    _ensure_system_admin(session)
+    _ensure_manage_ai_settings_permission(session)
     data = _read_ai_settings()
     return {
         "ok": True,
@@ -1927,7 +1933,7 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
 async def update_ai_settings_endpoint(
     payload: AiSettingsPayload, session: AuthSession = Depends(get_current_session)
 ):
-    _ensure_system_admin(session)
+    _ensure_manage_ai_settings_permission(session)
     result = _persist_ai_settings(
         payload.api_keys,
         payload.model.strip(),
@@ -1986,7 +1992,7 @@ def update_sheet_validation_switch(
     payload: ValidationMasterSwitchPayload = ...,
     session: AuthSession = Depends(get_current_session),
 ):
-    _ensure_system_admin(session)
+    _ensure_manage_validation_permission(session)
     preferred_path = None
     if config:
         preferred_path = _resolve_data_file(config)
@@ -2034,7 +2040,7 @@ def update_sheet_ai_switch(
     payload: AiReportSwitchPayload = ...,
     session: AuthSession = Depends(get_current_session),
 ):
-    _ensure_group_admin_or_higher(session)
+    _ensure_manage_ai_sheet_switch_permission(session)
     preferred_path = None
     if config:
         preferred_path = _resolve_data_file(config)
@@ -2913,7 +2919,7 @@ def get_sheets_submission_status(
     # 这里我们查询所有 allowed_units 的数据总和，或者按 sheet 聚合。
     # 对于填报页面，用户通常只关心“我所在的单位有没有填”。
     
-    units = session.allowed_units
+    units = session.resolve_allowed_units(PROJECT_KEY)
     if not units:
          return {"ok": True, "status": {}}
 
@@ -3303,7 +3309,7 @@ def get_data_analysis_schema(
             content={"ok": False, "message": "无法生成数据分析配置"},
         )
 
-    allowed_units = session.allowed_units
+    allowed_units = session.resolve_allowed_units(PROJECT_KEY)
     if "*" not in allowed_units:
         if "unit_dict" in content and isinstance(content["unit_dict"], dict):
             content["unit_dict"] = {
@@ -3527,7 +3533,11 @@ def _execute_data_analysis_query_legacy(
     if getattr(payload, "request_ai_report", False):
         username = session.username if session else "anonymous"
         user_group = session.group if session else ""
-        allowed, message = ai_usage_service.check_and_increment_usage(username, user_group)
+        allowed, message = ai_usage_service.check_and_increment_usage(
+            username,
+            user_group,
+            project_key=PROJECT_KEY,
+        )
         if not allowed:
             payload.request_ai_report = False
             ai_limit_warning = message

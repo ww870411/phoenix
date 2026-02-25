@@ -79,7 +79,8 @@ def _query_temperature_daily_avg_map(db_session, start_date: date, end_date: dat
 
 
 def _ensure_cache_operator(session: AuthSession) -> None:
-    can_publish = getattr(session.permissions.actions, "can_publish", False)
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    can_publish = getattr(action_flags, "can_publish", False)
     if not can_publish:
         raise HTTPException(status_code=403, detail="当前账号无权操作数据看板缓存。")
 

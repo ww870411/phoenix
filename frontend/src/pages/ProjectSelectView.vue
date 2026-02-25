@@ -37,15 +37,14 @@ import AppHeader from '../projects/daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../projects/daily_report_25_26/components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
 import {
   projects,
   projectsLoading,
   projectsError,
   ensureProjectsLoaded,
+  resetProjectsState,
 } from '../projects/daily_report_25_26/composables/useProjects'
 const router = useRouter()
-const authStore = useAuthStore()
 
 const projectList = computed(() => projects.value)
 const loading = computed(() => projectsLoading.value)
@@ -54,20 +53,6 @@ const DIRECT_ENTRY_PROJECTS = new Set(['daily_report_spring_festval_2026'])
 
 function enter(project) {
   const projectId = String(project?.project_id || '')
-  
-  // 针对春节项目的特殊权限控制
-  if (projectId === 'daily_report_spring_festval_2026') {
-    const userGroup = authStore.user?.group
-    console.group('[ProjectAccessCheck]')
-    console.log('Target Project:', projectId)
-    console.log('User Group:', userGroup)
-    console.groupEnd()
-
-    if (userGroup !== 'Global_admin') {
-      alert(`抱歉，该项目目前仅限系统管理员进入操作（当前角色：${userGroup || '未登录'}）。`)
-      return
-    }
-  }
 
   if (DIRECT_ENTRY_PROJECTS.has(projectId)) {
     router.push(`/projects/${encodeURIComponent(projectId)}`)
@@ -81,7 +66,8 @@ const breadcrumbItems = computed(() => [
 ])
 
 onMounted(() => {
-  ensureProjectsLoaded().catch(() => {
+  resetProjectsState()
+  ensureProjectsLoaded(true).catch(() => {
     /* 错误信息已在 projectsError 中记录 */
   })
 })

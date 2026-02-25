@@ -688,7 +688,7 @@
                   :disabled="aiSettingsSaving"
                   @change="aiSettingsForm.allowNonAdmin = $event.target.checked"
                 />
-                <span>允许非 Global_admin 启用智能报告</span>
+                <span>允许非管理员启用智能报告</span>
               </label>
               <p class="ai-settings-dialog__hint">保存后将同步更新 backend_data/api_key.json。</p>
             </template>
@@ -836,8 +836,7 @@ const breadcrumbItems = computed(() => [
 const loading = ref(false)
 const errorMessage = ref('')
 const schema = ref(null)
-const isGlobalAdmin = computed(() => (auth.user?.group || '').trim() === 'Global_admin')
-const canConfigureAiSettings = computed(() => isGlobalAdmin.value)
+const canConfigureAiSettings = computed(() => auth.canManageAiSettingsFor(projectKey.value))
 const aiSchemaFlags = computed(() => schema.value?.ai_report_flags || {})
 const allowNonAdminAiReport = computed(() => Boolean(aiSchemaFlags.value.allow_non_admin))
 const aiSettingsDialogVisible = ref(false)
@@ -1103,7 +1102,9 @@ const aiReportStatus = ref('idle')
 const aiReportContent = ref('')
 const aiReportStatusMessage = ref('')
 const aiReportStage = ref('')
-const aiFeatureAccessible = computed(() => isGlobalAdmin.value || allowNonAdminAiReport.value)
+const aiFeatureAccessible = computed(
+  () => canConfigureAiSettings.value || allowNonAdminAiReport.value,
+)
 watch(
   () => aiFeatureAccessible.value,
   (allowed) => {
