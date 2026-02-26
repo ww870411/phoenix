@@ -7,6 +7,13 @@
         <span class="brand-sub">数据填报平台</span>
       </div>
       <nav class="nav">
+        <button
+          v-if="auth.canAccessAdminConsole"
+          class="btn btn-admin"
+          @click="goAdminConsole"
+        >
+          进入后台
+        </button>
         <span v-if="userLabel" class="user-info">{{ userLabel }}</span>
         <button class="btn" @click="logout">退出</button>
       </nav>
@@ -24,6 +31,10 @@ const auth = useAuthStore()
 
 function goHome() {
   router.push('/projects')
+}
+
+function goAdminConsole() {
+  router.push('/admin-console')
 }
 
 const userLabel = computed(() => {

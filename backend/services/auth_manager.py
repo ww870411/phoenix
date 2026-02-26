@@ -53,6 +53,7 @@ class ActionFlags:
     can_manage_ai_sheet_switch: bool = False
     can_extract_xlsx: bool = False
     can_unlimited_ai_usage: bool = False
+    can_access_admin_console: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ class ProjectPermissions:
                 "can_manage_ai_sheet_switch": self.actions.can_manage_ai_sheet_switch,
                 "can_extract_xlsx": self.actions.can_extract_xlsx,
                 "can_unlimited_ai_usage": self.actions.can_unlimited_ai_usage,
+                "can_access_admin_console": self.actions.can_access_admin_console,
             },
         }
 
@@ -162,6 +164,7 @@ class AuthSession:
                 "can_manage_ai_sheet_switch": self.permissions.actions.can_manage_ai_sheet_switch,
                 "can_extract_xlsx": self.permissions.actions.can_extract_xlsx,
                 "can_unlimited_ai_usage": self.permissions.actions.can_unlimited_ai_usage,
+                "can_access_admin_console": self.permissions.actions.can_access_admin_console,
             },
             "projects": projects_payload,
         }
@@ -321,6 +324,9 @@ class AuthManager:
             ),
             can_unlimited_ai_usage=bool(
                 actions_cfg.get("can_unlimited_ai_usage", base.can_unlimited_ai_usage)
+            ),
+            can_access_admin_console=bool(
+                actions_cfg.get("can_access_admin_console", base.can_access_admin_console)
             ),
         )
 

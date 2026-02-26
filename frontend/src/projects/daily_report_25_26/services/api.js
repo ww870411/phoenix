@@ -630,3 +630,197 @@ export async function setSheetAiSwitch(projectKey, sheetKey, enabled, options = 
   }
   return response.json()
 }
+
+export async function getAdminOverview(projectKey = 'daily_report_25_26') {
+  const search = `?project_key=${encodeURIComponent(projectKey)}`
+  const response = await fetch(normalized(`/admin/overview${search}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取管理后台概览失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function listAdminProjects() {
+  const response = await fetch(normalized('/admin/projects'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取项目列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function listAdminFileDirectories() {
+  const response = await fetch(normalized('/admin/files/directories'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取目录列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function listAdminFiles(directory) {
+  const search = `?directory=${encodeURIComponent(directory || '')}`
+  const response = await fetch(normalized(`/admin/files${search}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取文件列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function readAdminFile(path) {
+  const search = `?path=${encodeURIComponent(path || '')}`
+  const response = await fetch(normalized(`/admin/files/content${search}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveAdminFile(path, content) {
+  const response = await fetch(normalized('/admin/files/content'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ path, content }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminValidationMasterSwitch() {
+  const response = await fetch(normalized('/admin/validation/master-switch'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取全局校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setAdminValidationMasterSwitch(enabled) {
+  const response = await fetch(normalized('/admin/validation/master-switch'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ validation_enabled: Boolean(enabled) }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新全局校验状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminAiSettings() {
+  const response = await fetch(normalized('/admin/ai-settings'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取 AI 设置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateAdminAiSettings(payload) {
+  const response = await fetch(normalized('/admin/ai-settings'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
+      model: payload?.model ?? '',
+      instruction: payload?.instruction ?? '',
+      report_mode: payload?.report_mode ?? 'full',
+      enable_validation: payload?.enable_validation ?? true,
+      allow_non_admin_report: payload?.allow_non_admin_report ?? false,
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存 AI 设置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function publishAdminDashboardCache(params = {}) {
+  const rawDays = Number(params?.days)
+  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
+  const response = await fetch(normalized(`/admin/cache/publish?days=${days}`), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `发布缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminCachePublishStatus() {
+  const response = await fetch(normalized('/admin/cache/publish/status'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取缓存任务状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function cancelAdminCachePublishJob() {
+  const response = await fetch(normalized('/admin/cache/publish/cancel'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `停止缓存任务失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function disableAdminCache() {
+  const response = await fetch(normalized('/admin/cache'), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `禁用缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function refreshAdminCache(params = {}) {
+  const showDate = typeof params?.showDate === 'string' ? params.showDate : ''
+  const response = await fetch(
+    normalized(`/admin/cache/refresh?show_date=${encodeURIComponent(showDate)}`),
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify({}),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `刷新缓存失败: ${response.status}`)
+  }
+  return response.json()
+}

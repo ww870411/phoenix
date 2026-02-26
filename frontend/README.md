@@ -1964,3 +1964,54 @@ docker compose up -d --build
   - 将 `isGlobalAdmin.value` 替换为 `canConfigureAiSettings.value`，与当前权限动作位实现保持一致。
 - 验证：
   - `npm run build` 通过。
+
+## 会话小结（2026-02-26 管理后台一期）
+
+- 新增页面：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 新增路由：
+  - `/projects/:projectKey/pages/:pageKey/admin-console`
+- 页面入口接入：
+  - `PageSelectView.vue` 已支持 `admin_console` 页面描述与跳转。
+- 管理后台能力：
+  - 概览：读取 `getAdminOverview(projectKey)`；
+  - 校验管理：切换 `data_entry/validation/master-switch`；
+  - AI 管理：读取/保存 `data_analysis/ai_settings`；
+  - 缓存管理：发布、刷新、停止任务、禁用缓存。
+- API 封装新增：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 增加 `getAdminOverview(projectKey)`。
+
+## 会话小结（2026-02-26 管理后台入口与权限调整）
+
+- 入口位置改造：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+  - 在用户信息左侧新增“进入后台”按钮，跳转 `/admin-console`。
+- 全局路由化：
+  - `frontend/src/router/index.js` 管理后台路由调整为 `/admin-console`（不再走项目页参数路由）。
+- 页面调用改造：
+  - `AdminConsoleView.vue` 改为调用全局 `/api/v1/admin/*` 接口，不再依赖 `projectKey`。
+- 权限联动：
+  - `store/auth.js` 增加 `canAccessAdminConsole`；
+  - 按 `permissions.actions.can_access_admin_console` 控制按钮可见与页面准入；
+  - 当前仅 `Global_admin` 在配置中开启该权限。
+
+## 会话小结（2026-02-26 管理后台页面完善）
+
+- 页面重构文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 新增板块：
+  1. 后台文件编辑：
+     - 左侧列出 `backend_data` 子目录；
+     - 中间显示选中目录下文件；
+     - 右侧在线编辑文件并提交保存。
+  2. 项目后台设定：
+     - 顶部显示项目切换按钮（项目中文名 + key）；
+     - 仅在选中 `daily_report_25_26` 时显示当前“校验/AI/缓存”设定模块；
+     - 其他项目显示“暂未接入”提示。
+- API 扩展（`services/api.js`）：
+  - `listAdminProjects`
+  - `listAdminFileDirectories`
+  - `listAdminFiles`
+  - `readAdminFile`
+  - `saveAdminFile`
+  - `getAdminOverview(projectKey)`（新增项目参数）

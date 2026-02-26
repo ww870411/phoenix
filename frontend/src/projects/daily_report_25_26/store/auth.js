@@ -310,6 +310,9 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   const canApprove = computed(() => canApproveFor(DEFAULT_PERMISSION_PROJECT))
   const canRevoke = computed(() => canRevokeFor(DEFAULT_PERMISSION_PROJECT))
   const canPublish = computed(() => canPublishFor(DEFAULT_PERMISSION_PROJECT))
+  const canAccessAdminConsole = computed(
+    () => Boolean(permissions.value?.actions?.can_access_admin_console),
+  )
 
   function canApproveUnit(unit, projectKey = DEFAULT_PERMISSION_PROJECT) {
     if (!canApproveFor(projectKey)) return false
@@ -363,6 +366,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     canApprove,
     canRevoke,
     canPublish,
+    canAccessAdminConsole,
     allowedUnits,
     bootstrap,
     login,

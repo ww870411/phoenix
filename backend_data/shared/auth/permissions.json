@@ -55,6 +55,9 @@
             "can_unlimited_ai_usage": false
           }
         }
+      },
+      "actions": {
+        "can_access_admin_console": true
       }
     },
     "Group_admin": {

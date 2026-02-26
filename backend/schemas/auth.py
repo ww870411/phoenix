@@ -24,6 +24,7 @@ class ActionFlagsModel(BaseModel):
     can_manage_ai_sheet_switch: bool = False
     can_extract_xlsx: bool = False
     can_unlimited_ai_usage: bool = False
+    can_access_admin_console: bool = False
 
 
 class ProjectPermissionsModel(BaseModel):

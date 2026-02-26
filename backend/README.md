@@ -747,3 +747,47 @@
 - 本轮后端代码无改动。
 - 联动结论：
   - 白屏根因是前端 `DataAnalysisView` 变量引用错误（`isGlobalAdmin` 未定义），与后端权限接口无关。
+
+## 结构同步（2026-02-26 管理后台一期）
+
+- 新增项目管理后台聚合接口模块：
+  - `backend/projects/daily_report_25_26/api/admin_console.py`
+  - `GET /api/v1/projects/daily_report_25_26/admin/overview`
+- 接口职责：
+  - 汇总当前会话在本项目的管理动作位（校验/AI/缓存）；
+  - 返回校验总开关状态（复用现有校验配置读取链路）；
+  - 返回 AI 配置摘要（仅掩码 key 与统计，不返回明文）；
+  - 返回看板缓存状态与缓存发布任务快照。
+- 路由挂载：
+  - `backend/projects/daily_report_25_26/api/router.py` 已合并 `admin_console_router`。
+
+## 结构同步（2026-02-26 管理后台全局化）
+
+- 后端新增全局管理路由模块：
+  - `backend/api/v1/admin_console.py`
+  - 对外路径统一为 `/api/v1/admin/*`（不再属于项目路由）。
+- 全局后台权限：
+  - 新动作位：`can_access_admin_console`；
+  - 仅当会话具备该动作位才允许访问全局后台接口。
+- 路由组织调整：
+  - `backend/api/v1/routes.py` 已挂载 `admin_console_router`；
+  - `backend/projects/daily_report_25_26/api/router.py` 已移除后台路由挂载；
+  - 删除项目内旧文件：`backend/projects/daily_report_25_26/api/admin_console.py`。
+
+## 结构同步（2026-02-26 管理后台扩展：文件编辑与项目分流）
+
+- 后端全局后台模块扩展（`backend/api/v1/admin_console.py`）：
+  - 文件编辑接口：
+    - `GET /api/v1/admin/files/directories`
+    - `GET /api/v1/admin/files`
+    - `GET /api/v1/admin/files/content`
+    - `POST /api/v1/admin/files/content`
+  - 项目设定列表接口：
+    - `GET /api/v1/admin/projects`
+  - 项目化概览：
+    - `GET /api/v1/admin/overview?project_key=...`
+    - 当前仅 `daily_report_25_26` 返回 `supported=true`，其他项目返回 `supported=false`。
+- 安全约束：
+  - 文件路径仅允许 `backend_data` 根目录下相对路径；
+  - 拒绝越界访问与绝对路径；
+  - 单文件在线编辑大小上限 2MB。

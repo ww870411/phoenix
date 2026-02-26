@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from backend.services.auth_manager import AuthSession, get_current_session
 from .auth import router as auth_router
+from .admin_console import router as admin_console_router
 from .project_router_registry import PROJECT_ROUTER_REGISTRY
 
 
@@ -318,6 +319,7 @@ def bootstrap_project_modularization(
 
 # 认证路由
 router.include_router(auth_router, prefix="/auth")
+router.include_router(admin_console_router)
 
 # 统一项目前缀：/api/v1/projects/<project_key>
 for project_key, routers in PROJECT_ROUTER_REGISTRY.items():

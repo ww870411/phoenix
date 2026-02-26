@@ -943,6 +943,117 @@
 - **Result:** 春节看板视觉质感大幅提升，实现了“喜庆氛围”与“专业数据展示”的平衡。
 - **Verify:** 执行 `frontend` 构建通过。
 
+## 2026-02-26（管理后台一期：聚合总览 + 独立页面入口）
+
+- **User Request:** 在已完成项目化与权限模块化的基础上，开始构建应用管理后台。
+- **前置说明:**
+  1. Serena 接入校验已完成：`activate_project` 成功，`check_onboarding_performed` 为已完成状态；
+  2. 本轮未触发 Serena 编辑受阻，无降级到 shell 写文件；全部改动通过 `apply_patch` 落地；
+  3. 本轮先交付“管理后台一期骨架”，目标是把已有管理能力统一到一个入口，不改动现有核心业务链路。
+- **Agent Action:**
+  1. 新增后端管理后台聚合接口：
+     - 文件：`backend/projects/daily_report_25_26/api/admin_console.py`
+     - 新接口：`GET /api/v1/projects/daily_report_25_26/admin/overview`
+     - 关键结构/函数：
+       - `get_admin_overview`：按当前会话动作位聚合管理态信息；
+       - `_collect_ai_settings_summary`：读取 AI 设置摘要并屏蔽 key（掩码）；
+       - 复用 `dashboard_cache.get_cache_status` 与 `cache_publish_job_manager.snapshot` 输出缓存运行状态。
+  2. 项目路由挂载管理后台模块：
+     - 文件：`backend/projects/daily_report_25_26/api/router.py`
+     - 行为：将 `admin_console_router` 合并到项目私有路由。
+  3. 新增前端管理后台页面：
+     - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+     - 页面模块与作用：
+       - 总览卡：展示校验/AI/缓存管理授权状态；
+       - 校验总开关卡：调用 `setValidationMasterSwitch` 直接切换；
+       - AI 设置卡：调用 `getAiSettings`、`updateAiSettings` 维护模型、指令、key 与策略开关；
+       - 缓存任务卡：调用 `publishDashboardCache`、`refreshDashboardCache`、`cancelCachePublishJob`、`disableDashboardCache`。
+  4. 接入前端 API 与路由：
+     - `frontend/src/projects/daily_report_25_26/services/api.js` 新增 `getAdminOverview(projectKey)`；
+     - `frontend/src/router/index.js` 新增路由
+       `/projects/:projectKey/pages/:pageKey/admin-console`；
+     - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+       增加 `admin_console` 描述与跳转分支。
+  5. 更新页面配置与权限：
+     - `backend_data/shared/项目列表.json` 新增页面 `admin_console`；
+     - `backend_data/shared/auth/permissions.json` 为 `Global_admin` 与 `Group_admin` 增加该页面访问权限。
+- **Result:**
+  1. 项目页选择界面新增“管理后台”入口；
+  2. 管理后台可统一操作和查看“校验开关 / AI 设置 / 看板缓存任务”；
+  3. 后端新增聚合总览接口作为后台首页数据源，前后端权限链路继续遵循项目化动作位控制。
+
+## 2026-02-26（管理后台入口位置与权限模型调整）
+
+- **User Request:** 管理后台入口改到页头 `ww870411｜系统管理` 左侧，文案“进入后台”；仅 `Global_admin` 可见可访问；后台为全局公共页面，不属于任一项目模块。
+- **前置说明:**
+  1. 本次为上一次“管理后台一期”的结构调整，不新增业务域能力；
+  2. 继续通过 `apply_patch` 进行文件改写；
+  3. 权限改为 `permissions.json` 明确声明，后端接口与前端展示双重校验。
+- **Agent Action:**
+  1. 后端权限模型扩展：
+     - `backend/services/auth_manager.py`、`backend/schemas/auth.py`
+     - 新增动作位：`can_access_admin_console`（组级动作位）。
+  2. 后端路由全局化：
+     - 新增 `backend/api/v1/admin_console.py`，统一暴露 `/api/v1/admin/*` 接口：
+       - `/admin/overview`
+       - `/admin/validation/master-switch`
+       - `/admin/ai-settings`
+       - `/admin/cache/publish|status|cancel|refresh`
+       - `/admin/cache`（DELETE）
+     - `backend/api/v1/routes.py` 挂载 `admin_console_router`；
+     - 移除项目级后台挂载：`backend/projects/daily_report_25_26/api/router.py` 不再包含后台路由；
+     - 删除项目内旧文件：`backend/projects/daily_report_25_26/api/admin_console.py`。
+  3. 前端入口位置调整：
+     - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+       在用户信息左侧新增按钮“进入后台”，点击跳转 `/admin-console`。
+  4. 前端页面全局化：
+     - 路由改为全局 `frontend/src/router/index.js`：`/admin-console`；
+     - `AdminConsoleView.vue` 改为调用全局管理 API（不依赖 `projectKey` 路由参数）；
+     - `store/auth.js` 新增 `canAccessAdminConsole` 供页头按钮与页面准入判断。
+  5. 配置收口：
+     - `backend_data/shared/auth/permissions.json`
+       - 仅 `Global_admin` 增加组级动作：
+         - `actions.can_access_admin_console = true`
+       - 移除此前加入项目页面列表的 `admin_console`；
+     - `backend_data/shared/项目列表.json` 删除 `admin_console` 页面项。
+- **Result:**
+  1. 管理后台已从“项目内页面”切换为“全局公共后台页面”；
+  2. 入口位置符合要求：位于页头用户信息左侧，按钮名为“进入后台”；
+  3. 仅 `Global_admin` 可见且可访问（前后端双重拦截）。
+
+## 2026-02-26（管理后台页面完善：后台文件编辑 + 项目后台设定分流）
+
+- **User Request:** 在管理后台新增两个板块：
+  1) “后台文件编辑”：列出 `backend_data` 子目录，点目录看文件列表，点文件在线编辑并提交；
+  2) “项目后台设定”：按项目维度切换，仅当选中 `daily_report_25_26` 时显示当前已有设置内容。
+- **前置说明:**
+  1. 本次在现有全局后台基础上扩展，不改变入口与权限原则（仍仅 `Global_admin`）；
+  2. 文件编辑能力限定在 `backend_data` 目录内，并做路径越界拦截；
+  3. 继续使用 `apply_patch` 完成改动并留痕。
+- **Agent Action:**
+  1. 后端新增全局后台文件接口（`backend/api/v1/admin_console.py`）：
+     - `GET /api/v1/admin/files/directories`：列出 `backend_data` 一级子目录；
+     - `GET /api/v1/admin/files?directory=...`：列出目录下文件；
+     - `GET /api/v1/admin/files/content?path=...`：读取文本文件内容；
+     - `POST /api/v1/admin/files/content`：保存文件内容；
+     - 安全策略：仅允许相对路径、仅允许 `backend_data` 目录内、限制文件大小（2MB）。
+  2. 后端新增项目设定列表接口：
+     - `GET /api/v1/admin/projects`：读取 `shared/项目列表.json` 并返回 `project_key/project_name`。
+  3. 后端调整后台概览接口：
+     - `GET /api/v1/admin/overview?project_key=...`；
+     - 若非 `daily_report_25_26` 返回 `supported=false`，前端据此做“未接入”提示。
+  4. 前端 API 扩展（`frontend/src/projects/daily_report_25_26/services/api.js`）：
+     - 新增 `listAdminProjects/listAdminFileDirectories/listAdminFiles/readAdminFile/saveAdminFile`；
+     - `getAdminOverview` 支持 `projectKey` 参数。
+  5. 前端后台页重构（`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`）：
+     - 新增“后台文件编辑”三栏（目录/文件/编辑器+提交）；
+     - 新增“项目后台设定”项目切换区；
+     - 仅在 `selectedProjectKey === daily_report_25_26` 时显示原有“校验/AI/缓存”设定模块，其它项目显示“暂未接入”。
+- **Result:**
+  1. 管理后台已具备在线文件编辑能力（受限于 `backend_data`）；
+  2. 项目后台设定实现项目切换分流，当前配置模块只在 `daily_report_25_26` 下展示；
+  3. 页面结构符合“文件编辑 + 项目设定”两大板块目标。
+
 ## 2026-02-12（数据展示页导出 Excel 504 超时修复）
 
 - **User Request:** `daily_report_25_26` 数据展示页导出 Excel 近期经常卡住并失败，页面显示 Cloudflare 504 HTML。
