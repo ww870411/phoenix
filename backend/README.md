@@ -791,3 +791,189 @@
   - 文件路径仅允许 `backend_data` 根目录下相对路径；
   - 拒绝越界访问与绝对路径；
   - 单文件在线编辑大小上限 2MB。
+
+## 结构同步（2026-02-26 管理后台文件编辑可用性优化）
+
+- 文件列表过滤策略已收敛（`backend/api/v1/admin_console.py`）：
+  - 仅返回可编辑文本扩展名：`json/md/txt/yaml/yml/ini/toml/py/js/ts/vue/css/sql/csv`；
+  - 自动跳过超过 2MB 的文件；
+  - 目的：降低二进制/超大文件进入前端编辑器导致的性能与误操作风险。
+
+## 结构同步（2026-02-26 树形文件浏览前端联动）
+
+- 本轮后端接口无新增；继续复用：
+  - `GET /api/v1/admin/files/directories`
+  - `GET /api/v1/admin/files`
+  - `GET /api/v1/admin/files/content`
+  - `POST /api/v1/admin/files/content`
+- 前端已将文件列表消费方式改为树形展示与弹窗编辑，接口契约保持兼容。
+
+## 结构同步（2026-02-26 新窗口编辑器联动）
+
+- 本轮后端接口无新增改动；
+- 前端新增独立编辑窗口路由 `/admin-file-editor`，仍复用现有 `admin/files/content` 读写接口；
+- 主窗口与编辑窗口通过浏览器 `postMessage` 做保存结果通知，后端无感知变更。
+
+## 结构同步（2026-02-26 管理后台设定项来源盘点）
+
+- 本轮后端代码无新增改动，完成“设定项来源梳理”：
+  - 全局后台聚合接口：`backend/api/v1/admin_console.py`
+  - 项目内能力来源：`backend/projects/daily_report_25_26/api/legacy_full.py`、`dashboard.py`
+- 关键来源映射：
+  - 校验总开关：`/admin/validation/master-switch` -> 项目 `data_entry/validation/master-switch` -> `数据结构_基本指标表.json` 全局配置；
+  - AI 设置：`/admin/ai-settings` -> 项目 `data_analysis/ai_settings` -> `projects/daily_report_25_26/config/api_key.json`；
+  - 缓存发布：`/admin/cache/*` -> 看板缓存服务 -> `projects/daily_report_25_26/runtime/dashboard_cache.json`；
+  - 项目列表：`/admin/projects` -> `backend_data/shared/项目列表.json`；
+- 全局后台访问动作位：`can_access_admin_console` -> `backend_data/shared/auth/permissions.json`。
+
+## 结构同步（2026-02-26 项目列表与审批状态迁移到项目目录）
+
+- 文件迁移：
+  - `backend_data/shared/项目列表.json` -> `backend_data/projects/daily_report_25_26/config/项目列表.json`
+  - `backend_data/shared/status.json` -> `backend_data/projects/daily_report_25_26/runtime/status.json`
+- 路径解析更新：
+  - `backend/services/project_data_paths.py`
+    - `resolve_project_list_path()` 优先项目路径；
+    - `resolve_workflow_status_path()` 优先项目路径；
+    - 旧路径保留回退兼容（`shared` 与历史根目录路径）。
+- 相关服务联动：
+  - `routes.py`、`admin_console.py`、`project_modularization.py`、`legacy_full.py`、`workflow_status.py` 通过统一解析函数读取，无需单独改业务逻辑。
+
+## 结构同步（2026-02-26 迁移更正：项目列表与 date 文件位置纠偏）
+
+- 文件位置更正：
+  - `项目列表.json` 回到 `backend_data/shared/项目列表.json`；
+  - `date.json` 迁到 `backend_data/projects/daily_report_25_26/runtime/date.json`。
+- 路径解析更正（`backend/services/project_data_paths.py`）：
+  - `resolve_project_list_path()`：`shared` 路径为首选，项目内路径为兼容回退；
+  - `resolve_global_date_path()`：项目内 runtime 路径为首选，`shared/date.json` 为回退。
+
+## 结构同步（2026-02-26 后台文件树 UI 调整联动）
+
+- 本轮后端接口无改动。
+- 前端将后台文件编辑改为“目录+文件统一树”，继续复用既有接口：
+  - `GET /api/v1/admin/files/directories`
+  - `GET /api/v1/admin/files`
+  - `GET /api/v1/admin/files/content`
+  - `POST /api/v1/admin/files/content`
+
+## 结构同步（2026-02-26 后台 JSON 编辑器联动）
+
+- 本轮后端接口无改动。
+- 前端在新窗口编辑器中新增 JSON 语法校验与格式化能力，仍复用既有读写接口：
+  - `GET /api/v1/admin/files/content`
+  - `POST /api/v1/admin/files/content`
+
+## 结构同步（2026-02-26 JSON 错误定位增强联动）
+
+- 本轮后端接口无改动。
+- 前端 JSON 编辑器在报错时新增行列与错误行定位展示，仍复用既有 `admin/files/content` 读写接口。
+
+## 结构同步（2026-02-26 JSON 光标定位联动）
+
+- 本轮后端接口无改动。
+- 前端在 JSON 错误场景新增“光标自动跳转到错误位置”能力，仍复用既有读写接口。
+
+## 结构同步（2026-02-26 管理后台系统监控接口）
+
+- 新增全局后台监控接口：
+  - `GET /api/v1/admin/system/metrics`
+  - 文件：`backend/api/v1/admin_console.py`
+- 指标内容：
+  - CPU、内存、磁盘、进程级指标（PID/CPU/RSS/线程/OpenFiles）、平台与 Python 版本、服务运行时长。
+- 采集策略：
+  - 优先使用 `psutil`；
+  - 异常情况下返回基础占位字段（不抛出 500）。
+- 依赖更新：
+  - `backend/requirements.txt` 增加 `psutil>=5.9.8`。
+
+## 结构同步（2026-02-26 系统监控图形化联动）
+
+- 本轮后端接口无新增改动。
+- 前端图形化基于既有 `/api/v1/admin/system/metrics` 轮询结果做可视化，不新增后端历史曲线接口。
+
+## 结构同步（2026-02-26 系统监控时间显示联动）
+
+- 本轮后端接口无改动。
+- 前端将“最近刷新”时间按东八区格式化展示（去除 `+08:00` 后缀），不影响接口返回结构。
+
+
+## 结构同步（2026-02-26 系统后台操作日志与分类统计）
+
+- 新增审计日志服务：`backend/services/audit_log.py`
+  - 日志落盘目录：`backend_data/shared/log`
+  - 存储格式：按日 `audit-YYYY-MM-DD.ndjson`
+  - 能力：事件写入、筛选查询、分类统计聚合。
+- 扩展全局后台接口：`backend/api/v1/admin_console.py`
+  - `POST /api/v1/audit/events`：接收前端事件上报（登录态用户）
+  - `GET /api/v1/admin/audit/events`：日志列表查询
+  - `GET /api/v1/admin/audit/stats`：分类统计（category/action/user/page）
+- 权限口径：
+  - 查询接口继续复用全局后台访问动作位 `can_access_admin_console`。
+
+
+## 结构同步（2026-02-26 超级管理员控制台）
+
+- 扩展全局后台接口：`backend/api/v1/admin_console.py`
+  - 超级管理员登录：`POST /api/v1/admin/super/login`
+  - 命令执行：`POST /api/v1/admin/super/terminal/exec`
+  - 文件管理：
+    - `GET /api/v1/admin/super/files/list`
+    - `GET /api/v1/admin/super/files/read`
+    - `POST /api/v1/admin/super/files/write`
+    - `POST /api/v1/admin/super/files/mkdir`
+    - `POST /api/v1/admin/super/files/move`
+    - `DELETE /api/v1/admin/super/files`
+- 二次鉴权：
+  - 通过 `X-Super-Admin-Token` 进行超级管理员令牌校验。
+- 超级管理员凭据来源：
+  - 优先 `backend_data/shared/auth/super_admin.json`
+  - 未配置时默认 `root / root123456`。
+
+
+## 结构同步（2026-02-26 超级控制台前端交互增强联动）
+
+- 本轮后端接口无新增改动。
+- 前端已为超级管理员控制台补充：
+  - 运维命令预设下拉（含 `cd /home/ww870411/25-26` 与 docker compose down/pull/up -d）；
+  - 资源管理器式目录树（左树右列表）浏览交互。
+
+
+## 结构同步（2026-02-26 超级控制台可靠性修复联动）
+
+- 本轮后端接口无新增改动。
+- 前端已修复超级控制台的目录树深层渲染、目录树刷新一致性与超级管理员令牌 401 失效处理。
+
+
+## 结构同步（2026-02-26 超级文件管理器右键菜单联动）
+
+- 本轮后端接口无新增改动。
+- 前端在既有超级文件管理接口之上新增右键菜单交互（进入/新建/重命名/删除/复制路径/刷新）。
+
+
+## 结构同步（2026-02-26 超级文件管理器批量与上传联动）
+
+- 后端接口（`backend/api/v1/admin_console.py`）：
+  - `POST /api/v1/admin/super/files/upload`
+  - 说明：支持 multipart 多文件上传到 `target_dir`（超级管理员令牌鉴权）。
+- 联动说明：
+  - 前端已基于既有 `list/move/delete` 与新增 `upload` 接口实现多选批量删除、批量移动与拖拽上传；
+  - 本轮后端无需新增其他文件管理接口。
+
+
+## 结构同步（2026-02-26 超级管理员退出登录联动）
+
+- 本轮后端接口无新增改动。
+- 前端新增“退出管理员登录”按钮，仅执行前端超级管理员令牌与会话清理，不影响既有后端鉴权接口。
+
+
+## 结构同步（2026-02-26 超级管理员登录区单行布局联动）
+
+- 本轮后端接口无新增改动。
+- 前端仅调整登录区展示布局（用户名/密码/登录/退出同一行），不影响后端鉴权逻辑与接口契约。
+
+
+## 结构同步（2026-02-26 页签文案调整联动）
+
+- 本轮后端接口无新增改动。
+- 前端将后台页签文案“系统监控”调整为“服务器管理”，不影响接口和鉴权逻辑。

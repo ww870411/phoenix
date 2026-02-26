@@ -56,6 +56,10 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },
   {
+    path: '/admin-file-editor',
+    component: () => import('../projects/daily_report_25_26/pages/AdminFileEditorWindow.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages/:pageKey/display/:sheetKey',
     component: () => import('../projects/daily_report_25_26/pages/DisplayRuntimeView.vue'),
   },

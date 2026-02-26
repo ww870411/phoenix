@@ -13,6 +13,7 @@ const API_BASE = (() => {
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 let authToken = null
+let superAdminToken = null
 let cachedProjects = null
 let cachedProjectsToken = null
 
@@ -20,6 +21,9 @@ function attachAuthHeaders(baseHeaders = {}, skipAuth = false) {
   const headers = { ...(baseHeaders || {}) }
   if (!skipAuth && authToken) {
     headers.Authorization = `Bearer ${authToken}`
+  }
+  if (superAdminToken) {
+    headers['X-Super-Admin-Token'] = superAdminToken
   }
   return headers
 }
@@ -40,6 +44,20 @@ export function getAuthToken() {
 export function clearAuthToken() {
   authToken = null
   resetProjectCache()
+}
+
+export function setSuperAdminToken(token) {
+  superAdminToken = token ? String(token) : null
+}
+
+async function ensureSuperResponseOk(response, fallbackMessage) {
+  if (response.ok) return
+  if (response.status === 401) {
+    setSuperAdminToken(null)
+    throw new Error('超级管理员会话已失效，请重新登录')
+  }
+  const message = await response.text()
+  throw new Error(message || fallbackMessage)
 }
 
 const normalized = (path) => `${API_BASE}${path}`
@@ -822,5 +840,163 @@ export async function refreshAdminCache(params = {}) {
     const message = await response.text()
     throw new Error(message || `刷新缓存失败: ${response.status}`)
   }
+  return response.json()
+}
+
+export async function getAdminSystemMetrics() {
+  const response = await fetch(normalized('/admin/system/metrics'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取系统指标失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function postAdminAuditEvents(events = []) {
+  const response = await fetch(normalized('/audit/events'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ events: Array.isArray(events) ? events : [] }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `上报审计日志失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminAuditEvents(params = {}) {
+  const search = new URLSearchParams()
+  if (params.days != null) search.set('days', String(params.days))
+  if (params.username) search.set('username', String(params.username))
+  if (params.category) search.set('category', String(params.category))
+  if (params.action) search.set('action', String(params.action))
+  if (params.keyword) search.set('keyword', String(params.keyword))
+  if (params.limit != null) search.set('limit', String(params.limit))
+  const response = await fetch(normalized(`/admin/audit/events?${search.toString()}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取审计日志失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminAuditStats(params = {}) {
+  const search = new URLSearchParams()
+  if (params.days != null) search.set('days', String(params.days))
+  const response = await fetch(normalized(`/admin/audit/stats?${search.toString()}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取审计统计失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function loginSuperAdmin(username, password) {
+  const response = await fetch(normalized('/admin/super/login'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ username, password }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `超级管理员登录失败: ${response.status}`)
+  }
+  const payload = await response.json()
+  if (payload?.token) {
+    setSuperAdminToken(payload.token)
+  }
+  return payload
+}
+
+export async function execSuperCommand(payload) {
+  const response = await fetch(normalized('/admin/super/terminal/exec'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      command: payload?.command || '',
+      cwd: payload?.cwd || '',
+      timeout_seconds: payload?.timeout_seconds ?? 20,
+    }),
+  })
+  await ensureSuperResponseOk(response, `命令执行失败: ${response.status}`)
+  return response.json()
+}
+
+export async function listSuperFiles(path) {
+  const response = await fetch(normalized(`/admin/super/files/list?path=${encodeURIComponent(path || '')}`), {
+    headers: attachAuthHeaders(),
+  })
+  await ensureSuperResponseOk(response, `目录读取失败: ${response.status}`)
+  return response.json()
+}
+
+export async function readSuperFile(path) {
+  const response = await fetch(normalized(`/admin/super/files/read?path=${encodeURIComponent(path || '')}`), {
+    headers: attachAuthHeaders(),
+  })
+  await ensureSuperResponseOk(response, `文件读取失败: ${response.status}`)
+  return response.json()
+}
+
+export async function writeSuperFile(path, content) {
+  const response = await fetch(normalized('/admin/super/files/write'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ path, content }),
+  })
+  await ensureSuperResponseOk(response, `文件写入失败: ${response.status}`)
+  return response.json()
+}
+
+export async function makeSuperDirectory(path) {
+  const response = await fetch(normalized('/admin/super/files/mkdir'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ path }),
+  })
+  await ensureSuperResponseOk(response, `创建目录失败: ${response.status}`)
+  return response.json()
+}
+
+export async function moveSuperPath(source, destination) {
+  const response = await fetch(normalized('/admin/super/files/move'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ source, destination }),
+  })
+  await ensureSuperResponseOk(response, `移动失败: ${response.status}`)
+  return response.json()
+}
+
+export async function deleteSuperPath(path) {
+  const response = await fetch(normalized(`/admin/super/files?path=${encodeURIComponent(path || '')}`), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  await ensureSuperResponseOk(response, `删除失败: ${response.status}`)
+  return response.json()
+}
+
+export async function uploadSuperFiles(targetDir, files = []) {
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file)
+  }
+  const response = await fetch(
+    normalized(`/admin/super/files/upload?target_dir=${encodeURIComponent(targetDir || '')}`),
+    {
+      method: 'POST',
+      headers: attachAuthHeaders({}, false),
+      body: formData,
+    },
+  )
+  await ensureSuperResponseOk(response, `上传失败: ${response.status}`)
   return response.json()
 }

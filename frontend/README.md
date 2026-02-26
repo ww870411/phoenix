@@ -2015,3 +2015,250 @@ docker compose up -d --build
   - `readAdminFile`
   - `saveAdminFile`
   - `getAdminOverview(projectKey)`（新增项目参数）
+
+## 会话小结（2026-02-26 管理后台体验重构）
+
+- 页面文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 结构调整：
+  - 改为双标签页：`后台文件编辑` / `项目后台设定`；
+  - 文件编辑区重排为“目录选择 + 文件搜索 + 文件列表 + 编辑器”。
+- 交互增强：
+  - 未保存改动标记；
+  - 切换文件前二次确认；
+  - 支持 `Ctrl/Cmd + S` 快捷保存；
+  - 展示字数与保存反馈。
+- 入口样式：
+  - `AppHeader.vue` 的“进入后台”按钮增加独立视觉样式，提升识别度。
+
+## 会话小结（2026-02-26 树形文件浏览与弹窗编辑）
+
+- 页面文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 文件编辑区升级：
+  - 将文件列表改为树形结构（目录可展开/收起，文件可点击）；
+  - 支持关键字过滤后按树形层级展示。
+- 编辑流程升级：
+  - 点击文件后在独立弹窗中编辑；
+  - 弹窗支持“保存并关闭”“不保存关闭”；
+  - 未保存改动关闭确认；
+  - `Ctrl/Cmd + S` 快捷保存（弹窗打开时）。
+- 交互反馈：
+  - 显示当前文件路径、字数、未保存标记与保存结果提示。
+
+## 会话小结（2026-02-26 新窗口编辑器与树形美化）
+
+- 新增文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue`
+- 新增路由：
+  - `/admin-file-editor`（通过 query 参数传递 `path`）
+- 编辑流程调整：
+  - 后台文件树点击文件后，不再在主页面弹层编辑；
+  - 改为 `window.open` 打开独立新窗口编辑；
+  - 支持“保存并关闭 / 不保存关闭”，并在未保存时确认；
+  - 支持 `Ctrl/Cmd + S` 快捷保存。
+- 主页面联动：
+  - `AdminConsoleView.vue` 监听 `postMessage` 的 `admin-file-saved` 回执并提示保存成功。
+
+## 会话小结（2026-02-26 管理后台设定项来源盘点）
+
+- 本轮前端代码无功能改动，完成管理后台“当前内容来源”核对：
+  - 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 接口封装：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 已确认当前“项目后台设定”模块来源：
+  - 设定概览：`getAdminOverview(projectKey)`；
+  - 校验总开关：`getAdminValidationMasterSwitch/setAdminValidationMasterSwitch`；
+  - AI 设置：`getAdminAiSettings/updateAdminAiSettings`；
+  - 缓存任务：`publishAdminDashboardCache/getAdminCachePublishStatus/cancelAdminCachePublishJob/disableAdminCache/refreshAdminCache`。
+- 已补齐“分散设定项”前端触点清单（供后续统一并入后台）：
+  - `DataEntryView.vue`：表级校验开关、表级 AI 开关、本单位分析开关；
+  - `DataAnalysisView.vue`：AI 设置弹窗、分析 schema 驱动参数；
+  - `DashBoard.vue`：缓存发布窗口天数、缓存任务状态、气温导入/写库；
+  - `PageSelectView.vue`：审批/撤销/发布状态与业务日期展示。
+
+## 会话小结（2026-02-26 项目列表与审批状态文件迁移联动）
+
+- 本轮前端代码无改动。
+- 后端数据文件位置变更：
+  - 项目列表改为 `projects/daily_report_25_26/config/项目列表.json`
+  - 审批状态改为 `projects/daily_report_25_26/runtime/status.json`
+- 前端影响评估：
+  - 前端仍通过既有 API 获取项目列表/审批状态，不直接读取上述 JSON 文件，接口契约保持不变。
+
+## 会话小结（2026-02-26 迁移更正联动）
+
+- 本轮前端代码无改动。
+- 后端文件位置更正为：
+  - 项目列表：`backend_data/shared/项目列表.json`
+  - 业务日期：`backend_data/projects/daily_report_25_26/runtime/date.json`
+- 前端影响评估：
+  - 前端仍走 API，不直接依赖这两个 JSON 的物理路径，因此无需前端代码调整。
+
+## 会话小结（2026-02-26 后台文件树去掉独立“目录”控件）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整内容：
+  - 删除后台文件编辑区的“目录”下拉；
+  - 树形结构升级为“目录 + 文件”统一节点，目录直接作为可展开节点显示；
+  - `loadDirectories()` 调整为批量拉取所有目录文件并合并成单棵树；
+  - 保留现有新窗口编辑器流程（点击文件后 `window.open`）。
+- 用户可见结果：
+  - 页面中不再出现与树重复的目录选择器；
+  - 操作从“先选目录再选文件”变为“直接在树中导航并编辑”。
+
+## 会话小结（2026-02-26 后台新窗口 JSON 专用编辑器）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue`
+- 新增能力（仅 `.json` 文件）：
+  - 自动进入 JSON 专用模式并显示模式提示；
+  - 实时语法校验，展示错误信息与行列位置（基于 `position` 计算）；
+  - JSON 非法时禁用“保存并关闭”，避免错误写回；
+  - 新增“一键格式化 JSON”按钮（2 空格缩进）。
+- 非 JSON 文件行为：
+  - 继续沿用原文本编辑模式，不受本次改动影响。
+
+## 会话小结（2026-02-26 JSON 错误定位增强）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue`
+- 增强内容：
+  - JSON 非法时新增错误面板；
+  - 显示行列、错误信息、出错行文本与 `^` 指针定位；
+  - 便于直接在窗口内修复格式问题，而不是仅看到通用报错。
+
+## 会话小结（2026-02-26 JSON 光标定位）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue`
+- 新增能力：
+  - 错误面板增加“定位到错误位置”按钮；
+  - 通过 `line/column -> absolute index` 计算后，调用 `textarea.setSelectionRange` 自动将光标跳转到错误点；
+  - 点击保存时若 JSON 非法，会自动执行一次定位并阻止保存。
+- 实现方式：
+  - 纯前端原生实现（Vue + textarea），未引入第三方 JSON 编辑器包。
+
+## 会话小结（2026-02-26 管理后台新增系统监控页）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- 新增内容：
+  - 管理后台顶部新增 `系统监控` 标签页；
+  - 接入 `getAdminSystemMetrics()` 调用 `/api/v1/admin/system/metrics`；
+  - 展示 CPU/内存/磁盘/进程/运行时长/平台/Python 版本；
+  - 支持“立即刷新”与“自动刷新（5秒）”轮询开关。
+
+## 会话小结（2026-02-26 系统监控图形化）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 图形化内容：
+  - 在系统监控页新增 4 条实时趋势折线（SVG sparkline）：
+    - CPU 使用率
+    - 内存使用率
+    - 磁盘使用率
+    - 进程 CPU
+  - 前端维护最近 `60` 次轮询样本并绘图，无需新增后端历史接口。
+
+## 会话小结（2026-02-26 系统监控时间显示调整）
+
+- 修改文件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整内容：
+  - “最近刷新”时间改为固定按东八区（`Asia/Shanghai`）格式化；
+  - 展示格式统一为 `YYYY-MM-DD HH:mm:ss`，不再显示 `+08:00` 后缀。
+
+
+## 结构同步（2026-02-26 系统后台操作日志页与分类统计）
+
+- 新增前端审计埋点模块：`frontend/src/projects/daily_report_25_26/services/audit.js`
+  - 自动记录路由打开事件（`page_open`）
+  - 自动记录可点击元素点击事件（`click`）
+  - 采用批量缓冲 + 定时上报策略。
+- 入口接入：`frontend/src/main.js`
+  - 应用启动时初始化审计跟踪。
+- 后台页面扩展：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 新增“操作日志”页签（在系统后台内）
+  - 支持按时间范围/用户/分类/动作/关键字筛选
+  - 支持分类统计展示与日志明细表展示。
+- API 扩展：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `postAdminAuditEvents`
+  - `getAdminAuditEvents`
+  - `getAdminAuditStats`
+
+
+## 结构同步（2026-02-26 系统监控页新增超级管理员控制台）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 在“系统监控”下方新增“超级管理员控制台”板块；
+  - 提供用户名/密码登录区，登录后可执行命令与进行任意路径文件管理。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增超级管理员登录、命令执行、文件管理方法；
+  - 新增 `setSuperAdminToken`，后续请求自动携带 `X-Super-Admin-Token`。
+- 功能覆盖：
+  - 终端命令：command/cwd/timeout + stdout/stderr 展示；
+  - 文件管理：目录浏览、文本读取编辑保存、创建目录、移动重命名、删除。
+
+
+## 结构同步（2026-02-26 超级控制台交互增强）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 命令执行区新增默认命令预设（包含 `cd /home/ww870411/25-26` 与 docker compose down/pull/up -d）；
+  - 文件管理区改为资源管理器式布局（左侧目录树 + 右侧目录项列表），支持点选目录后查看并操作文件。
+
+
+## 结构同步（2026-02-26 超级控制台可靠性修复）
+
+- `AdminConsoleView.vue` 已完成三项修复：
+  1) 目录树支持无限层级渲染；
+  2) 文件操作后自动刷新目录树并保持当前路径；
+  3) 超级管理员令牌过期（401）时自动清理前端 token 并提示重新登录。
+
+
+## 结构同步（2026-02-26 超级文件管理器右键菜单）
+
+- `AdminConsoleView.vue` 的超级文件管理区新增右键菜单操作：
+  - 进入/打开
+  - 新建子目录
+  - 重命名
+  - 删除
+  - 复制路径
+  - 刷新
+- 目录树与列表均支持右键触发，交互更接近资源管理器。
+
+
+## 结构同步（2026-02-26 超级文件管理器批量与上传）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 文件列表新增多选列与全选；
+  - 新增批量操作区（批量删除、批量移动到目标目录）；
+  - 新增拖拽上传区与“选择文件上传”入口；
+  - 列表新增选中态高亮与上传拖拽高亮样式。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `uploadSuperFiles(targetDir, files)` 封装；
+  - 上传请求走 `multipart/form-data`，沿用超级管理员令牌鉴权。
+- 行为优化：
+  - 批量删除/批量移动改为批量执行后统一刷新，减少逐项刷新导致的性能与状态抖动。
+
+
+## 结构同步（2026-02-26 超级管理员退出登录）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 超级管理员登录区新增“退出管理员登录”按钮；
+  - 新增 `handleSuperLogout()`，用于主动清理超级管理员令牌与本地会话缓存（`sessionStorage`）。
+- 交互结果：
+  - 退出后即失去超级管理员态，命令执行与服务器文件管理等高权限操作需重新登录。
+
+
+## 结构同步（2026-02-26 超级管理员登录区单行布局）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 超级管理员登录区改为单行布局：用户名、密码、登录、退出同一行展示；
+  - 布局实现为 `flex + nowrap`，窄屏时可横向滚动，避免自动折行破坏结构。
+
+
+## 结构同步（2026-02-26 页签文案：服务器管理）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 顶部页签文案由“系统监控”调整为“服务器管理”；
+  - 仅文案调整，`activeTab` 内部键值保持 `system`，不影响现有逻辑与路由。

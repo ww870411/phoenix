@@ -1,7 +1,8 @@
 """
 审批与发布状态管理（持久化版）。
 
-状态以 (project_key, biz_date) 为维度，存储在 shared/status.json（兼容旧路径）。
+状态以 (project_key, biz_date) 为维度，存储在
+projects/daily_report_25_26/runtime/status.json（兼容旧路径回退）。
 """
 
 from __future__ import annotations

@@ -58,12 +58,16 @@ def resolve_project_runtime_path(project_key: str, filename: str) -> Path:
 def resolve_project_list_path() -> Path:
     """
     解析项目列表文件：
-    1) DATA_DIRECTORY/shared/项目列表.json
-    2) DATA_DIRECTORY/项目列表.json（兼容旧路径）
+    1) DATA_DIRECTORY/shared/项目列表.json（当前标准）
+    2) DATA_DIRECTORY/projects/daily_report_25_26/config/项目列表.json（兼容回退）
+    3) DATA_DIRECTORY/项目列表.json（兼容旧路径）
     """
     shared_path = (DATA_DIRECTORY / "shared" / "项目列表.json").resolve()
     if shared_path.exists():
         return shared_path
+    project_path = (get_project_config_dir("daily_report_25_26") / "项目列表.json").resolve()
+    if project_path.exists():
+        return project_path
     return (DATA_DIRECTORY / "项目列表.json").resolve()
 
 
@@ -113,10 +117,14 @@ def resolve_permissions_path() -> Path:
 
 def resolve_global_date_path() -> Path:
     """
-    解析全局日期文件（认证等全局逻辑使用）：
-    1) DATA_DIRECTORY/shared/date.json
-    2) DATA_DIRECTORY/date.json（兼容旧路径）
+    解析业务日期文件（当前按 daily_report_25_26 项目内路径管理）：
+    1) DATA_DIRECTORY/projects/daily_report_25_26/runtime/date.json
+    2) DATA_DIRECTORY/shared/date.json（兼容旧路径）
+    3) DATA_DIRECTORY/date.json（兼容旧路径）
     """
+    project_path = (get_project_runtime_dir("daily_report_25_26") / "date.json").resolve()
+    if project_path.exists():
+        return project_path
     shared_path = (DATA_DIRECTORY / "shared" / "date.json").resolve()
     if shared_path.exists():
         return shared_path
@@ -125,10 +133,14 @@ def resolve_global_date_path() -> Path:
 
 def resolve_workflow_status_path() -> Path:
     """
-    解析审批状态文件（全局）：
-    1) DATA_DIRECTORY/shared/status.json
-    2) DATA_DIRECTORY/status.json（兼容旧路径）
+    解析审批状态文件（当前按 daily_report_25_26 项目内路径管理）：
+    1) DATA_DIRECTORY/projects/daily_report_25_26/runtime/status.json
+    2) DATA_DIRECTORY/shared/status.json（兼容旧路径）
+    3) DATA_DIRECTORY/status.json（兼容旧路径）
     """
+    project_path = (get_project_runtime_dir("daily_report_25_26") / "status.json").resolve()
+    if project_path.exists():
+        return project_path
     shared_path = (DATA_DIRECTORY / "shared" / "status.json").resolve()
     if shared_path.exists():
         return shared_path

@@ -87,4 +87,12 @@ async function logout() {
   backdrop-filter: blur(4px);
 }
 .btn:hover { background: rgba(255,255,255,.16); }
+.btn-admin {
+  border-color: rgba(251, 191, 36, 0.75);
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+}
+.btn-admin:hover {
+  background: rgba(251, 191, 36, 0.28);
+}
 </style>

@@ -10,3 +10,4 @@ openpyxl
 psycopg2-binary
 httpx
 google-generativeai>=0.7.0
+psutil>=5.9.8
