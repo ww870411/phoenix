@@ -1,5 +1,40 @@
 # daily_report_25_26 后端说明
 
+## 最新结构与状态（2026-02-28）
+
+- 结构同步说明：本轮仅调整 `monthly_data_pull` 前端页面头部样式（补回统一 banner），后端接口与模块无新增改动。
+- 已修复登录跨域预检问题：`backend/main.py` 的 CORS 默认策略改为显式来源白名单（`localhost/127.0.0.1` 常见端口），避免 `allow_credentials=True` 与 `*` 组合导致浏览器拦截。
+- 已追加 CORS 二次加固：增加 `allow_origin_regex=^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$`，覆盖本机调试端口变化场景。
+- 已定位并规避本地端口冲突：外部导表程序占用 `127.0.0.1:8000` 时，Phoenix 通过 `docker-compose.yml` 改为对外 `8001:8000`。
+- 已完成外部导表程序接入评估：`外部待导入-导表程序` 为独立 FastAPI + `xlwings` 工具，核心处理链在 `app/core/engine.py`。
+- 关键结论：当前后端容器基于 Linux `python:3.12-slim`，不具备 Windows Excel COM 环境，外部程序不可直接按原样上线。
+- 可行接入方向（建议）：
+  - 保留“映射解析 -> 源值提取 -> 目标写入 -> 差异报告”的业务流程；
+  - 将执行内核从 `xlwings` 迁移为容器可运行的 `openpyxl`/纯 Python 链路；
+  - 在 `backend/projects/daily_report_25_26/api/` 新增导表路由模块并接入现有项目路由与权限体系（不改现有 `/template` `/submit` `/query` 主链）。
+- 现有主链确认：数据填报主逻辑仍在 `backend/projects/daily_report_25_26/api/legacy_full.py`，且 `Coal_inventory_Sheet` 继续走独立提交/查询分支。
+- 月报导表新项目骨架已创建：`backend/projects/monthly_data_pull/`。
+  - 路由入口：`backend/projects/monthly_data_pull/api/router.py`
+  - 初始接口：`GET /api/v1/projects/monthly_data_pull/monthly-data-pull/ping`
+  - 目录接口：`GET /api/v1/projects/monthly_data_pull/monthly-data-pull/workspace`
+  - 文件工作台接口：
+    - `GET /api/v1/projects/monthly_data_pull/monthly-data-pull/files?bucket=...`
+    - `POST /api/v1/projects/monthly_data_pull/monthly-data-pull/files/upload?bucket=...`
+  - 导表执行接口：
+    - `POST /api/v1/projects/monthly_data_pull/monthly-data-pull/analyze-mapping`
+    - `POST /api/v1/projects/monthly_data_pull/monthly-data-pull/get-sheets?bucket=...`
+    - `POST /api/v1/projects/monthly_data_pull/monthly-data-pull/execute`
+    - `GET /api/v1/projects/monthly_data_pull/monthly-data-pull/download/{filename}`
+  - 执行引擎：`backend/projects/monthly_data_pull/services/engine.py`（openpyxl 版）
+  - 默认目录：`backend_data/projects/monthly_data_pull/{mapping_rules,source_reports,target_templates,outputs}`
+
+## 结构补充（2026-02-28，导表引擎调研）
+
+- 已完成对 LibreOffice Headless 的可行性研判：在当前 Linux 容器体系下可作为 `xlwings` 替代方向。
+- 后端接入建议（待实现）：
+  - 采用“持久化 UNO 服务（建议 `unoserver`）+ 任务队列”模式进行公式重算与另存；
+  - 保持现有数据填报主链不变，新增导表专用 API 模块承接月报导入流程。
+
 ## 最新结构与状态（2026-02-08）
 
 - 项目列表来源：`backend_data/shared/项目列表.json`
@@ -1025,3 +1060,186 @@
 - 鉴权口径：
   - 取消 `X-Super-Admin-Token` 二次鉴权；
   - 保留原有应用登录权限校验（`can_access_admin_console`），系统级权限由服务进程所在操作系统负责。
+
+## 结构同步（2026-02-28 Phoenix 结构复盘：导表模块迁移评估）
+
+- 本轮后端代码与接口无改动。
+- 结构确认结论：
+  - 后端主入口：`backend/main.py`，统一挂载 `/api/v1`；
+  - 项目路由注册：`backend/api/v1/project_router_registry.py`；
+  - 项目总路由装配：`backend/api/v1/routes.py`，统一前缀 `/api/v1/projects/{project_key}`；
+  - 项目数据路径：`backend/services/project_data_paths.py`（`backend_data/projects/<project_key>/{config|runtime}` + 兼容回退）。
+- 可复用接入模板：
+  - 参考 `backend/projects/daily_report_spring_festval_2026/api/xlsx_extract.py` 的“上传 xlsx -> 提取 json -> runtime 落盘 -> latest 查询”模式，可用于导表模块一期接入。
+
+## 结构同步（2026-02-28 monthly_data_pull 映射显示规则修正联动）
+
+- 本轮后端接口与导表执行逻辑无改动。
+- 联动说明：
+  - 前端对映射键名仅做展示归一（去括号/去扩展名），不改变提交给后端的原始键值；
+  - `monthly_data_pull` 的文件匹配与执行仍使用原始映射键，接口契约保持不变。
+
+## 结构同步（2026-02-28 项目数据目录归位修正）
+
+- 文件：`backend/projects/monthly_data_pull/api/workspace.py`
+  - `monthly_data_pull` 工作目录根路径已从 `DATA_DIRECTORY / PROJECT_KEY` 改为 `get_project_root(PROJECT_KEY)`；
+  - 导表模块统一落盘到 `backend_data/projects/monthly_data_pull/`。
+- 数据目录迁移：
+  - `backend_data/monthly_data_pull/` 已整体迁移至 `backend_data/projects/monthly_data_pull/`；
+  - `workspace_settings.json` 中默认目录路径已同步更新为 `backend_data/projects/monthly_data_pull/...`。
+- 同类目录治理：
+  - `backend_data/spring_festival_latest_extract.json` 已迁移到
+    `backend_data/projects/daily_report_spring_festval_2026/runtime/spring_festival_latest_extract.json`；
+  - 迁移后 `backend_data` 根目录仅保留全局共享与数据库文件，不再平铺项目业务目录。
+
+## 结构同步（2026-02-28 monthly_data_pull 清空目录与打包下载）
+
+- 文件：`backend/projects/monthly_data_pull/api/workspace.py`
+- 新增接口：
+  - `POST /api/v1/projects/monthly_data_pull/monthly-data-pull/clear-workspace`
+    - 清空 `mapping_rules/source_reports/target_templates/outputs` 四个目录内文件；
+    - 保留 `.gitkeep`，避免目录骨架被删除。
+  - `GET /api/v1/projects/monthly_data_pull/monthly-data-pull/download-outputs-zip`
+    - 将 `outputs` 目录下文件打包为 zip 并下载返回；
+    - 使用临时 zip 文件 + 响应后自动清理。
+- 兼容说明：
+  - 不改变既有导表执行接口与参数；
+  - 仅新增目录运维与批量导出能力。
+
+## 结构同步（2026-02-28 monthly_data_pull 批量上传智能归位联动）
+
+- 本轮后端接口无新增改动。
+- 联动说明：
+  - 前端批量上传功能复用既有 `POST /monthly-data-pull/get-sheets` 上传解析接口逐个处理文件；
+  - 文件名智能归位逻辑在前端执行，仅影响槽位预填充，不改变后端执行契约。
+
+## 结构同步（2026-02-28 monthly_data_pull 批量识别预览联动）
+
+- 本轮后端接口无新增改动。
+- 联动说明：
+  - 前端已将批量归位流程升级为“识别预览 -> 用户确认 -> 执行上传”；
+  - 后端继续复用现有 `get-sheets` 接口处理确认后的文件上传与 sheet 读取。
+
+## 结构同步（2026-02-28 monthly_data_pull 源文件 .xls 兼容修复）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 新增 `.xls` 适配读取：
+    - `get_sheet_names` 支持通过 `xlrd` 读取 `.xls` 的 sheet 列表；
+    - 源工作簿加载改为按后缀分流：`.xls` 使用 `xlrd` 适配器，其他继续 `openpyxl`。
+  - 保持目标工作簿写入链路不变（仍使用 `openpyxl` 输出目标副本）。
+- 依赖更新：
+  - `backend/requirements.txt` 新增 `xlrd>=2.0.1`。
+- 修复效果：
+  - 解决源文件为 `.xls` 时批量确认阶段失败的问题。
+
+## 结构同步（2026-02-28 紧急修复：xlrd 缺失不再影响全局路由）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - `xlrd` 改为可选导入，避免依赖缺失时在模块导入阶段抛错；
+  - 仅在读取 `.xls` 时检查依赖并返回明确错误提示。
+- 修复目标：
+  - 防止 `monthly_data_pull` 依赖问题影响 `api/v1` 全局路由挂载；
+  - 确保 `POST /api/v1/auth/login` 等基础接口可正常访问。
+
+## 结构同步（2026-02-28 口径收敛：monthly_data_pull 仅支持 xlsx）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 已移除 `.xls/xlrd` 兼容分支，源文件与映射读取统一为 `openpyxl`；
+  - 保持既有导表执行流程不变。
+- 依赖：`backend/requirements.txt`
+  - 已移除 `xlrd` 依赖。
+- 最终口径：
+  - `monthly_data_pull` 当前仅支持 `xlsx` 相关格式上传与处理。
+
+## 结构同步（2026-02-28 monthly_data_pull 导表稳定性修复）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 源工作簿读取切换为 `data_only=True`，避免公式文本跨表写入导致 `#REF!`；
+  - 累计写入逻辑新增“公式保留”：目标累计单元格若已有公式则不覆盖；
+  - 每次执行新增导表日志 `execution_log_<timestamp>.json`（记录行级状态与错误）。
+- 文件：`backend/projects/monthly_data_pull/api/workspace.py`
+  - 上传与解析接口统一校验扩展名，仅允许 `xlsx/xlsm/xltx/xltm`。
+- 修复效果：
+  - 导表异常可追踪；
+  - 全年累计公式可保留；
+  - 后端上传口径与“仅 xlsx”要求一致。
+
+## 结构同步（2026-02-28 monthly_data_pull 累计值对照日志）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 累计处理新增对照日志：
+    - 行级字段：`acc_compare_status`、`acc_compare_diff`、`tgt_acc_before`；
+    - 状态值：`ok` / `mismatch` / `skipped_target_formula` / `non_numeric`。
+  - 执行日志新增汇总统计：`acc_compare_stats`。
+- 说明：
+  - 该能力用于“对照与追踪”，不阻断导表执行；
+  - 目标累计单元格若为公式会按“保留公式”策略标记为 `skipped_target_formula`。
+
+## 结构同步（2026-02-28 monthly_data_pull 异常清单联动）
+
+- 本轮后端接口无新增改动。
+- 联动说明：
+  - 前端异常清单区域基于 `execution_log_*.json` 渲染；
+  - 日志字段来源于导表引擎既有输出（`status`、`acc_compare_status`、`acc_compare_diff`、`acc_compare_stats`）。
+
+## 结构同步（2026-02-28 累计表达式与空源单元格异常）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 累计源 `src_acc` 新增表达式支持：非单坐标时按公式表达式求值（如 `H30+H62`）；
+  - 新增源单元格为空检测并记录：
+    - `empty_source_refs_month`
+    - `empty_source_refs_acc`
+    - 状态 `warn_source_empty`；
+  - 无法计算的表达式记录：
+    - `warn_month_expr_invalid`
+    - `warn_acc_expr_invalid`。
+- 结果：
+  - 映射中的“合计算式”可直接执行；
+  - 源单元格为空会进入执行日志并在前端异常清单可见。
+
+## 结构同步（2026-02-28 执行日志增加指标名称）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 执行日志行对象新增 `indicator_name`；
+  - 来源列按优先顺序提取：`指标名称` -> `指标` -> `项目名称` -> `项目`。
+- 联动说明：
+  - 前端异常清单已新增“指标名称”列读取该字段。
+
+## 结构同步（2026-02-28 指标名称字段来源修正）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 指标名称提取改为固定读取映射列 `子公司月报表指标名称`；
+  - 增加列名空格差异兜底匹配，避免因列名格式差异导致空值。
+- 结果：
+  - 执行日志中的 `indicator_name` 与映射规则字段来源一致。
+
+## 结构同步（2026-02-28 异常行号对齐映射表）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 执行日志 `row_index` 起始值由 `1` 调整为 `2`；
+  - 行号口径改为映射文件可见行号（第1行为表头，数据行从第2行开始）。
+
+## 结构同步（2026-02-28 累计一致性核对补强）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 目标累计单元格为公式时，新增公式求值比对逻辑；
+  - `acc_compare_status` 新增 `formula_not_verifiable`；
+  - 可计算公式将输出 `ok/mismatch`，不再统一视为“跳过校验”。
+
+## 结构同步（2026-02-28 跨子工作表公式核验支持）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 表达式求值新增跨 sheet 引用解析：
+    - `Sheet!Cell`
+    - `'Sheet Name'!Cell`
+  - 月值/累计表达式与空源单元格检测均支持上述跨 sheet 写法；
+  - 目标累计公式核验可对跨 sheet 引用进行求值比对。
+
+## 结构同步（2026-02-28 递归公式求值修复）
+
+- 文件：`backend/projects/monthly_data_pull/services/engine.py`
+  - 单元格数值提取新增递归公式求值（支持公式引用公式）；
+  - 增加递归深度上限与循环引用保护；
+  - 用于累计核验时避免将二级公式误判为 0。
+- 修复效果：
+  - 链式累计公式可被正确展开，累计不一致可稳定检出。

@@ -40,16 +40,24 @@ def create_app() -> FastAPI:
     def healthz():
         return {"ok": True, "app": APP_NAME, "version": API_VERSION, "data_directory": data_dir}
 
-    # CORS：统一本地/容器跨域访问（默认允许 localhost/127.0.0.1）
+    # CORS：统一本地/容器跨域访问（默认允许本机常用前端端口）
     cors_origins_env = os.getenv("PHOENIX_CORS_ORIGINS", "")
     if cors_origins_env:
         allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
     else:
-        # 默认放宽为全部来源，避免本地前端与后端端口不一致导致跨域失败
-        allowed_origins = ["*"]
+        # 注意：allow_credentials=True 时不能使用 "*"
+        allowed_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

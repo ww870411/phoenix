@@ -76,5 +76,19 @@
         "页面描述": "上传文件并生成数据看板"
       }
     }
+  },
+  "monthly_data_pull":
+  {
+    "availability": [
+      "Global_admin"
+    ],
+    "project_name": "月报导表工作台",
+    "pages": {
+      "workspace": {
+        "页面名称": "月报导表主页",
+        "数据源": "",
+        "页面描述": "用于月报映射导入、预检、执行与下载"
+      }
+    }
   }
 }

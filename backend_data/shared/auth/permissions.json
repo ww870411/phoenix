@@ -54,6 +54,23 @@
             "can_extract_xlsx": true,
             "can_unlimited_ai_usage": false
           }
+        },
+        "monthly_data_pull": {
+          "page_access": ["workspace"],
+          "sheet_rules": {},
+          "units_access": ["*"],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
         }
       },
       "actions": {

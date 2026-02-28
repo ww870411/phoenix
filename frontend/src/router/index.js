@@ -16,7 +16,7 @@ const routes = [
   },
   {
     path: '/projects/:projectKey',
-    component: () => import('../projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue'),
+    component: () => import('../pages/ProjectEntryView.vue'),
   },
   {
     path: '/projects/:projectKey/spring-dashboard',

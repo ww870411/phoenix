@@ -1,0 +1,7 @@
+{
+  "project_key": "monthly_data_pull",
+  "mapping_rules_dir": "backend_data/projects/monthly_data_pull/mapping_rules",
+  "source_reports_dir": "backend_data/projects/monthly_data_pull/source_reports",
+  "target_templates_dir": "backend_data/projects/monthly_data_pull/target_templates",
+  "outputs_dir": "backend_data/projects/monthly_data_pull/outputs"
+}

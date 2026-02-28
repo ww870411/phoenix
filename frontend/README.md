@@ -1,5 +1,35 @@
 # 前端说明（Vue3 + Vite）
 
+## 最新结构与状态（2026-02-28）
+
+- 已联调修复登录跨域阻断：后端 CORS 默认允许 `localhost/127.0.0.1` 的常见开发端口，前端登录页无需改动接口路径即可通过预检。
+- 已联调追加 CORS 兼容加固：后端新增 `localhost/127.0.0.1` 任意端口正则匹配，降低本地端口切换导致的预检失败概率。
+- 已规避本地端口冲突：开发环境 API 基础地址调整为 `http://127.0.0.1:8001`（对应 compose 后端映射 `8001:8000`），避免与外部导表程序默认 `8000` 冲突。
+- 已完成“外部导表程序”在线化可行性调研，结论为：前端可承接该流程，但后端执行内核需先从 `xlwings` 解耦后再接入线上容器。
+- 现有可复用前端能力：
+  - 项目级路由与权限链路已稳定，可新增“月报导表”页面并复用登录态与项目访问控制；
+  - 现有文件上传、任务状态反馈、结果下载等交互模式可直接复用到导表流程。
+- 建议前端接入形态（待实现）：
+  - 在 `frontend/src/projects/daily_report_25_26/pages/` 新增导表页面；
+  - 页面流程建议固定为“上传映射表/源表/底表 -> 预检 -> 执行 -> 下载结果/差异报告”；
+  - 与后端新导表 API 解耦对接，不改现有数据填报页 `DataEntryView.vue` 的在线填报主流程。
+- 已新增导表项目入口骨架：
+  - 入口分发页：`frontend/src/pages/ProjectEntryView.vue`
+  - 新项目页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 项目选择页已将 `monthly_data_pull` 设为直达入口项目。
+- `monthly_data_pull` 页面现已升级为三步导表流程：
+  - 步骤1：上传映射并解析关系分组；
+  - 步骤2：按分组完成“源文件 ↔ 目标底表”匹配与 sheet 选择；
+  - 步骤3：执行导表并下载输出文件。
+- `monthly_data_pull` 页面视觉已与主项目对齐：
+  - 顶部统一使用 `AppHeader`；
+  - 页面内补充 `Breadcrumbs` 导航（项目选择 -> 月报导表工作台）。
+
+## 结构补充（2026-02-28，导表引擎调研）
+
+- 导表在线化后端候选引擎已补充 LibreOffice Headless 路线评估。
+- 前端侧结论：页面交互形态无需因引擎切换而重构，可继续沿用“上传 -> 执行 -> 下载”前后端分离模式。
+
 ## 最新结构与状态（2026-02-08）
 
 - 项目目录已统一：`frontend/src/projects/`
@@ -2310,3 +2340,167 @@ docker compose up -d --build
   - 移除 `X-Super-Admin-Token` 注入；
   - 删除 `setSuperAdminToken` 与 `loginSuperAdmin`；
   - `/admin/super/*` 接口保留原路径，错误提示改为通用后端消息透传。
+
+## 结构同步（2026-02-28 Phoenix 结构复盘：导表模块迁移评估）
+
+- 本轮前端代码、路由与 API 封装无改动。
+- 结构确认结论：
+  - 全局壳层路由：`frontend/src/router/index.js`；
+  - 项目选择入口：`frontend/src/pages/ProjectSelectView.vue`，项目卡片来自 `GET /api/v1/projects`；
+  - 项目页面目录：`frontend/src/projects/<project_key>/...`（当前已含 `daily_report_25_26` 与 `daily_report_spring_festval_2026`）。
+- 可复用接入模板：
+  - 参考春节项目入口页与 service（`frontend/src/projects/daily_report_spring_festval_2026/`）可快速接入导表模块页面与 API 调用，保持现有项目化路由风格一致。
+
+## 结构同步（2026-02-28 monthly_data_pull 映射显示规则修正）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 新增 `normalizeReferenceName(name)`，用于映射键名展示归一：
+    - 去文件扩展名；
+    - 去中英文括号及括号内内容（`()`、`（）`、`[]`、`【】`）；
+    - 去除多余空白。
+  - 源文件/目标底表槽位标题由原始 `key` 改为归一化后的参考名展示。
+  - 槽位下方文件名保持实际上传文件名显示（`fileState.*[key]?.name`）。
+- 用户可见行为：
+  - 映射规则里的“参考文件名”不再携带年月括号；
+  - 上传实际文件后，显示的就是该实际文件名，不受映射示例名干扰。
+
+## 结构同步（2026-02-28 项目数据目录归位修正联动）
+
+- 本轮前端页面与 API 调用代码无改动。
+- 联动说明：
+  - 后端 `monthly_data_pull` 工作目录已统一迁移到 `backend_data/projects/monthly_data_pull/`；
+  - 前端仍按既有接口读取后端返回的 `workspace.paths`，无需改动即可展示新目录路径。
+
+## 结构同步（2026-02-28 monthly_data_pull 新增清空目录与打包下载按钮）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 顶部操作区新增两个按钮：
+    - `清空目录`：调用后端清空 4 个工作目录文件（带二次确认）；
+    - `打包下载`：调用后端打包 `outputs` 并触发浏览器保存 zip。
+  - 新增状态：`clearing`、`downloading`，用于防重复点击与按钮文案状态反馈。
+  - 清空成功后重置页面状态到步骤 1，避免界面残留旧文件关联。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `clearMonthlyDataPullWorkspace(projectKey)`；
+  - 新增 `downloadMonthlyDataPullOutputsZip(projectKey)`（返回 `blob + filename`）。
+
+## 结构同步（2026-02-28 monthly_data_pull 批量上传与智能归位）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 步骤 2 新增两个批量按钮：
+    - `批量上传源文件并识别`
+    - `批量上传底表并识别`
+  - 新增隐藏多选文件输入框（`multiple`），并在按钮点击时触发选择。
+  - 新增匹配逻辑：
+    - `normalizeMatchToken(name)`：文件名归一化（去扩展名、去括号内容、去符号）；
+    - `findBestSlotKey(filename, keys)`：对槽位键进行打分匹配，避免并列冲突误匹配；
+    - `applyUploadedFile(...)`：复用单文件上传后状态写入与 sheet 自动映射。
+  - 批量处理后弹窗反馈：已匹配条目与未匹配文件列表。
+- 交互行为：
+  - 自动匹配只做预填充，不改变你后续手动调整能力；
+  - 对无法确定归属的文件，不会强行自动归位。
+
+## 结构同步（2026-02-28 monthly_data_pull 批量识别预览与确认）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 批量上传新增“识别预览表”，展示 `文件名 -> 识别槽位/未匹配`；
+  - 新增预览操作按钮：
+    - `确认应用`：确认后才执行逐文件上传并写入槽位；
+    - `取消`：放弃本次批量识别结果。
+  - 匹配策略升级为一对一占位分配，避免多个文件自动覆盖同一槽位。
+- 在“重新解析映射”或“清空目录”后，自动清理旧预览状态，避免跨批次残留。
+
+## 结构同步（2026-02-28 monthly_data_pull 批量确认错误可见性修复）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 在步骤2区域新增 `errorMessage` 展示，批量确认失败可直接看到错误；
+  - `applyBatchPreview` 异常分支新增 `alert`，避免用户感知为“无响应”。
+- 联动说明：
+  - 配合后端 `.xls` 兼容修复，源文件批量确认链路可观测、可定位。
+
+## 结构同步（2026-02-28 登录 404 后端导入链路修复联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已将 `xlrd` 调整为可选导入，避免依赖缺失影响 `/api/v1/auth/login` 路由挂载；
+  - 前端登录调用链路保持不变。
+
+## 结构同步（2026-02-28 xlsx 口径收敛联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已按需求收敛为仅支持 `xlsx`；
+  - 前端现有上传 accept 与交互逻辑可继续使用（建议仅选择 xlsx 文件）。
+
+## 结构同步（2026-02-28 monthly_data_pull 结果文件下载鉴权修复）
+
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `downloadMonthlyDataPullOutputFile(projectKey, filename)`，使用鉴权请求下载单文件 blob。
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 步骤3结果列表由匿名超链接改为鉴权下载按钮；
+  - 解决“点击结果文件提示缺少认证信息”问题；
+  - 上传控件 `accept` 收敛为 `xlsx/xlsm/xltx/xltm`。
+
+## 结构同步（2026-02-28 研究院源 sheet 自动匹配完善）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 新增 `pickBestSheetName(ruleSheet, actualSheets)`；
+  - 源文件上传后，规则 sheet 到实际 sheet 的默认映射改为“按名称归一化智能匹配”，不再统一默认第一张；
+  - 仍保留手动下拉改选能力。
+
+## 结构同步（2026-02-28 monthly_data_pull 异常清单区域）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 步骤3新增“异常清单”区域，自动读取本次执行产生的 `execution_log_*.json`；
+  - 展示累计对照汇总（总行数、累计一致、不一致、保留公式）；
+  - 表格展示异常行（错误行、累计不一致、源公式文本告警）；
+  - 在重新解析映射与清空目录时会自动重置异常面板。
+
+## 结构同步（2026-02-28 异常清单展示细化）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 异常清单标题改为固定“异常清单”（不再显示日志文件名）；
+  - 源键/目标键列改为去括号后的简化展示（如“金州”）；
+  - 异常筛选新增：
+    - `warn_source_empty`（源单元格为空）；
+    - `warn_month_expr_invalid` / `warn_acc_expr_invalid`（表达式无效）。
+
+## 结构同步（2026-02-28 异常清单新增指标名称列）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 异常清单表格新增“指标名称”列；
+  - 展示字段来自执行日志 `indicator_name`。
+
+## 结构同步（2026-02-28 指标名称来源修正联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已将 `indicator_name` 字段来源锁定为映射列“子公司月报表指标名称”；
+  - 前端异常清单继续直接展示该字段。
+
+## 结构同步（2026-02-28 异常行号口径修正联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端执行日志 `row_index` 已按映射表可见行号输出（数据行起始为第2行）；
+  - 前端异常清单按该行号直接展示。
+
+## 结构同步（2026-02-28 累计一致性异常展示补强）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 异常清单汇总新增“公式未校验”计数；
+  - 异常筛选新增 `acc_compare_status=formula_not_verifiable`；
+  - 异常说明新增“累计公式无法校验”提示。
+
+## 结构同步（2026-02-28 跨子工作表公式核验联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端累计公式核验已支持跨 sheet 引用（`Sheet!Cell` / `'Sheet Name'!Cell`）；
+  - 前端异常清单继续按 `mismatch/formula_not_verifiable` 展示核验结果。
+
+## 结构同步（2026-02-28 递归公式核验联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端累计核验已支持“公式引用公式”的递归求值；
+  - 前端异常清单将直接体现新的 `mismatch` 检出结果。

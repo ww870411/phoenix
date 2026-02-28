@@ -154,6 +154,151 @@ export async function extractSpringFestivalJson(projectKey, file, options = {}) 
   return response.json()
 }
 
+export async function getMonthlyDataPullWorkspace(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/workspace`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取导表工作目录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function listMonthlyDataPullFiles(projectKey, bucket) {
+  const response = await fetch(
+    `${projectPath(projectKey)}/monthly-data-pull/files?bucket=${encodeURIComponent(bucket || '')}`,
+    { headers: attachAuthHeaders() },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取目录文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function uploadMonthlyDataPullFiles(projectKey, bucket, files = []) {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error('请先选择要上传的文件')
+  }
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file)
+  }
+  const response = await fetch(
+    `${projectPath(projectKey)}/monthly-data-pull/files/upload?bucket=${encodeURIComponent(bucket || '')}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders({}, false),
+      body: formData,
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `上传文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function analyzeMonthlyDataPullMapping(projectKey, file) {
+  if (!file) throw new Error('请先选择映射文件')
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/analyze-mapping`, {
+    method: 'POST',
+    headers: attachAuthHeaders({}, false),
+    body: formData,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `解析映射失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getMonthlyDataPullSheets(projectKey, bucket, file) {
+  if (!file) throw new Error('请先选择文件')
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await fetch(
+    `${projectPath(projectKey)}/monthly-data-pull/get-sheets?bucket=${encodeURIComponent(bucket || '')}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders({}, false),
+      body: formData,
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取工作表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function executeMonthlyDataPull(projectKey, payload) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/execute`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `执行导表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function clearMonthlyDataPullWorkspace(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/clear-workspace`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `清空目录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function downloadMonthlyDataPullOutputsZip(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/download-outputs-zip`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `打包下载失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') || ''
+  const matched = disposition.match(/filename="?([^"]+)"?/i)
+  return {
+    blob,
+    filename: matched?.[1] || 'monthly_data_pull_outputs.zip',
+  }
+}
+
+export function buildMonthlyDataPullDownloadUrl(projectKey, filename) {
+  return `${projectPath(projectKey)}/monthly-data-pull/download/${encodeURIComponent(filename || '')}`
+}
+
+export async function downloadMonthlyDataPullOutputFile(projectKey, filename) {
+  const response = await fetch(buildMonthlyDataPullDownloadUrl(projectKey, filename), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `下载文件失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') || ''
+  const matched = disposition.match(/filename="?([^"]+)"?/i)
+  return {
+    blob,
+    filename: matched?.[1] || filename || 'download.bin',
+  }
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await fetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {

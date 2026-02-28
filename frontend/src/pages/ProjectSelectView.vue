@@ -49,7 +49,7 @@ const router = useRouter()
 const projectList = computed(() => projects.value)
 const loading = computed(() => projectsLoading.value)
 const error = computed(() => (projectsError.value ? '无法加载项目列表，请稍后重试。' : ''))
-const DIRECT_ENTRY_PROJECTS = new Set(['daily_report_spring_festval_2026'])
+const DIRECT_ENTRY_PROJECTS = new Set(['daily_report_spring_festval_2026', 'monthly_data_pull'])
 
 function enter(project) {
   const projectId = String(project?.project_id || '')
