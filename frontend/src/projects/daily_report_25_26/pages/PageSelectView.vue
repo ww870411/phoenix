@@ -23,7 +23,7 @@
           </button>
         </div>
       </section>
-      <section v-if="showWorkflowCard" class="card elevated status-block">
+      <section v-if="showWorkflowCardForProject" class="card elevated status-block">
         <header class="card-header status-header">
           <div class="status-heading">
             <h3>审批进度</h3>
@@ -140,7 +140,9 @@ const actionPending = ref(false)
 
 onMounted(async () => {
   await loadPages()
-  await refreshWorkflow()
+  if (!isMonthlyDataShowProject.value) {
+    await refreshWorkflow()
+  }
 })
 
 async function loadPages() {
@@ -190,6 +192,7 @@ watch(
 )
 
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
+const isMonthlyDataShowProject = computed(() => projectKey === 'monthly_data_show')
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -219,7 +222,8 @@ const publishDisabled = computed(
   () => publishStatus.value?.status === 'published' || workflowLoading.value,
 )
 
-const showWorkflowCard = computed(() => {
+const showWorkflowCardForProject = computed(() => {
+  if (isMonthlyDataShowProject.value) return false
   return (
     workflowLoading.value ||
     Boolean(workflowError.value) ||
@@ -399,6 +403,11 @@ function openPage(page) {
 }
 
 .page-card {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  appearance: none;
   text-align: left;
   cursor: pointer;
   display: flex;
@@ -412,14 +421,14 @@ function openPage(page) {
 }
 
 .page-card-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--primary-700);
 }
 
 .page-card-desc {
-  font-size: 14px;
-  color: var(--neutral-500);
+  font-size: 13px;
+  color: #666;
 }
 
 .status-block {

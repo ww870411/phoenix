@@ -1243,3 +1243,144 @@
   - 用于累计核验时避免将二级公式误判为 0。
 - 修复效果：
   - 链式累计公式可被正确展开，累计不一致可稳定检出。
+
+## 结构同步（2026-02-28 monthly_data_show 预研）
+
+- 本轮后端代码无改动（仅调研与接入点梳理）。
+- 已确认后续新增 `monthly_data_show` 时的主接入位：
+  - 项目路由注册：`backend/api/v1/project_router_registry.py`
+  - 项目模块目录：`backend/projects/monthly_data_show/`
+  - 项目可见性与页面配置：`backend_data/shared/项目列表.json`
+  - 角色权限：`backend_data/shared/auth/permissions.json`
+- 需求来源：
+  - `外部导入项目-月报表导入数据库/2.28 月报数据库化配置文件.txt`
+  - `外部导入项目-月报表导入数据库/综合表26.1.xlsx`
+
+## 结构同步（2026-02-28 monthly_data_pull 中文名调整）
+
+- 文件：`backend_data/shared/项目列表.json`
+  - `monthly_data_pull.project_name`：`月报导表工作台` -> `月报拉取工作台`
+  - `monthly_data_pull.pages.workspace.页面名称`：`月报导表主页` -> `月报拉取主页`
+- 说明：
+  - 本次仅调整展示命名，不涉及后端接口、项目键名或权限结构变更。
+
+## 结构同步（2026-02-28 monthly_data_show 第一阶段：CSV 提取工作台）
+
+- 新增项目模块：`backend/projects/monthly_data_show/`
+  - 路由入口：`backend/projects/monthly_data_show/api/router.py`
+  - 工作台接口：`backend/projects/monthly_data_show/api/workspace.py`
+  - 提取服务：`backend/projects/monthly_data_show/services/extractor.py`
+- 路由注册：
+  - 更新 `backend/api/v1/project_router_registry.py`，注册 `monthly_data_show`。
+- 新增接口：
+  - `POST /api/v1/projects/monthly_data_show/monthly-data-show/inspect`
+  - `POST /api/v1/projects/monthly_data_show/monthly-data-show/extract-csv`
+- 提取口径（首版）：
+  - 输出字段：`company,item,unit,value,date,period,type`
+  - 自动剔除口径：`恒流`、`天然气炉`、`中水`
+  - 支持指标清洗/重命名、剔除指标过滤、计算指标过滤、单位清洗与 `千瓦时 -> 万千瓦时` 转换
+  - 按文件名 `yy.m` 推导日期口径（如 `26.1 -> 2026-01`）
+
+## 结构同步（2026-02-28 monthly_data_show 源字段复选提取）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `inspect` 响应新增 `source_columns`、`default_selected_source_columns`
+  - `extract-csv` 新增表单参数 `source_columns`
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+  - `extract_rows` 新增 `selected_source_columns` 入参
+  - 仅提取被勾选的源字段（`本年计划/本月计划/本月实际/上年同期`）
+
+## 结构同步（2026-02-28 monthly_data_show 步骤2常驻展示联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将步骤2调整为常驻显示，仅优化页面交互表现，不影响现有提取接口与参数。
+
+## 结构同步（2026-02-28 monthly_data_show 常量注入配置）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+  - 新增默认常量规则（发电设备容量/锅炉设备容量）
+  - 新增常量规则标准化函数
+  - 提取主流程新增常量注入能力（可按键覆盖同口径同周期行）
+  - 支持按 `source_column` 决定写入 period/type/date
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `inspect` 响应新增：
+    - `constants_enabled_default`
+    - `constant_rules`
+  - `extract-csv` 入参新增：
+    - `constants_enabled`
+    - `constant_rules_json`
+
+## 结构同步（2026-02-28 monthly_data_show 常量写入口径多选）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+  - 常量规则写入口径由 `source_column` 升级为 `source_columns`（列表）
+  - 常量注入按多选口径逐一写入（每个口径生成对应周期行）
+  - 兼容旧配置：单字段 `source_column` 会自动转换为列表
+
+## 结构同步（2026-02-28 monthly_data_show 常量默认策略联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将常量注入默认开启，并将常量默认写入口径对齐为“源字段（计划/实际口径）”默认选中集合。
+
+## 结构同步（2026-02-28 monthly_data_show 常量源字段选项一致性联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将常量注入区域的源字段可选项，改为实时跟随“源字段（计划/实际口径）”当前勾选集合。
+
+## 结构同步（2026-02-28 monthly_data_show 常量源字段显示策略修正联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端改为“常量源字段选项固定全量显示，勾选状态与上方源字段联动同步（取消即全取消，重选即全重选）”。
+
+## 结构同步（2026-02-28 monthly_data_show 名称与权限调整）
+
+- 文件：`backend_data/shared/项目列表.json`
+  - `monthly_data_show.project_name`：`月报入库工作台` -> `月报导入与查询`
+  - `monthly_data_show.availability`：新增 `Group_admin`
+  - `monthly_data_show.pages.workspace.页面名称`：`月报入库主页` -> `月报导入与查询主页`
+- 文件：`backend_data/shared/auth/permissions.json`
+  - `Group_admin.projects` 新增 `monthly_data_show`（`page_access: ["workspace"]`）
+
+## 结构同步（2026-02-28 monthly_data_show 双子页面与页面级权限）
+
+- 文件：`backend_data/shared/项目列表.json`
+  - `monthly_data_show.pages` 拆分为：\n    - `/projects/monthly_data_show/import-workspace`（月报导入工作台）\n    - `/projects/monthly_data_show/query-tool`（月报数据查询工具）
+- 文件：`backend_data/shared/auth/permissions.json`
+  - `Global_admin.monthly_data_show.page_access`：\n    - `projects_monthly_data_show_import_workspace`\n    - `projects_monthly_data_show_query_tool`
+  - `Group_admin.monthly_data_show.page_access`：\n    - `projects_monthly_data_show_query_tool`（仅查询页）
+
+## 结构同步（2026-02-28 项目页审批进度模块移除联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端项目页面选择页已移除“审批进度”展示与操作区，不再调用对应审批进度交互链路。
+
+## 结构同步（2026-02-28 页面卡片字体样式对齐联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已修正项目子页面卡片的字体继承与按钮默认样式差异，统一视觉风格。
+
+## 结构同步（2026-02-28 审批进度模块按项目定向显示联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将“审批进度”改为项目级条件显示：
+    - `monthly_data_show` 项目页隐藏；
+    - 其他项目继续保留审批进度展示与审批操作入口。
+
+## 结构同步（2026-02-28 子页面卡片标题颜色统一联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将项目子页面卡片大标题颜色改为继承页面标题色系，实现与“请选择功能页面”一致的视觉效果。
+
+## 结构同步（2026-02-28 子页面卡片标题蓝色一致性修正联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将子页面卡片大标题颜色明确设为 `var(--primary-700)`，确保与“请选择功能页面”标题蓝色一致。

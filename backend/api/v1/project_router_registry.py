@@ -16,6 +16,10 @@ from backend.projects.monthly_data_pull.api.router import (
     public_router as monthly_data_pull_public_router,
     router as monthly_data_pull_router,
 )
+from backend.projects.monthly_data_show.api.router import (
+    public_router as monthly_data_show_public_router,
+    router as monthly_data_show_router,
+)
 
 
 PROJECT_ROUTER_REGISTRY: Dict[str, Dict[str, Optional[object]]] = {
@@ -30,5 +34,9 @@ PROJECT_ROUTER_REGISTRY: Dict[str, Dict[str, Optional[object]]] = {
     "monthly_data_pull": {
         "router": monthly_data_pull_router,
         "public_router": monthly_data_pull_public_router,
+    },
+    "monthly_data_show": {
+        "router": monthly_data_show_router,
+        "public_router": monthly_data_show_public_router,
     },
 }

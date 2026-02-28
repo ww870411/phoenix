@@ -5,7 +5,7 @@
       <Breadcrumbs :items="breadcrumbItems" />
       <header class="topbar">
         <div>
-          <h2>月报导表工作台</h2>
+          <h2>月报拉取工作台</h2>
           <p class="sub">导入映射规则后，按“源文件 ↔ 目标底表”关系完成匹配并执行导表。</p>
         </div>
         <div class="topbar-actions">
@@ -218,7 +218,7 @@ const router = useRouter()
 const projectKey = computed(() => String(route.params.projectKey || 'monthly_data_pull'))
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '月报导表工作台', to: null },
+  { label: '月报拉取工作台', to: null },
 ])
 
 const step = ref(1)

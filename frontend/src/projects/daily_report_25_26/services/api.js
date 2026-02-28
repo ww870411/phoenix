@@ -299,6 +299,63 @@ export async function downloadMonthlyDataPullOutputFile(projectKey, filename) {
   }
 }
 
+export async function inspectMonthlyDataShowFile(projectKey, file) {
+  if (!file) throw new Error('请先选择文件')
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/inspect`, {
+    method: 'POST',
+    headers: attachAuthHeaders({}, false),
+    body: formData,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取可选项失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function extractMonthlyDataShowCsv(
+  projectKey,
+  file,
+  companies = [],
+  fields = [],
+  sourceColumns = [],
+  constantsEnabled = false,
+  constantRules = [],
+) {
+  if (!file) throw new Error('请先选择文件')
+  const formData = new FormData()
+  formData.append('file', file)
+  for (const company of companies || []) {
+    formData.append('companies', company)
+  }
+  for (const field of fields || []) {
+    formData.append('fields', field)
+  }
+  for (const sourceColumn of sourceColumns || []) {
+    formData.append('source_columns', sourceColumn)
+  }
+  formData.append('constants_enabled', String(Boolean(constantsEnabled)))
+  formData.append('constant_rules_json', JSON.stringify(Array.isArray(constantRules) ? constantRules : []))
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/extract-csv`, {
+    method: 'POST',
+    headers: attachAuthHeaders({}, false),
+    body: formData,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `提取 CSV 失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') || ''
+  const matched = disposition.match(/filename=\"?([^\"]+)\"?/i)
+  return {
+    blob,
+    filename: matched?.[1] || 'monthly_data_show_extract.csv',
+  }
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await fetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {

@@ -2504,3 +2504,158 @@ docker compose up -d --build
 - 联动说明：
   - 后端累计核验已支持“公式引用公式”的递归求值；
   - 前端异常清单将直接体现新的 `mismatch` 检出结果。
+
+## 结构同步（2026-02-28 monthly_data_show 预研）
+
+- 本轮前端代码无改动（仅调研与接入点梳理）。
+- 已确认后续新增 `monthly_data_show` 时的主接入位：
+  - 项目入口分发：`frontend/src/pages/ProjectEntryView.vue`
+  - 项目选择直达逻辑：`frontend/src/pages/ProjectSelectView.vue`
+  - 新模块页面目录：`frontend/src/projects/monthly_data_show/pages/`
+  - API 复用入口：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 需求来源：
+  - `外部导入项目-月报表导入数据库/2.28 月报数据库化配置文件.txt`
+  - `外部导入项目-月报表导入数据库/综合表26.1.xlsx`
+
+## 结构同步（2026-02-28 monthly_data_pull 中文名调整）
+
+- 页面：`frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - 页面标题：`月报导表工作台` -> `月报拉取工作台`
+  - 面包屑末级：`月报导表工作台` -> `月报拉取工作台`
+- 联动说明：
+  - 项目列表展示名由后端配置同步为“月报拉取工作台”（见 `backend_data/shared/项目列表.json`）。
+
+## 结构同步（2026-02-28 monthly_data_show 第一阶段：CSV 提取页面）
+
+- 新增页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 页面名称：月报入库工作台
+  - 交互流程：上传文件 -> 读取可选口径/字段 -> 复选 -> 提取并下载 CSV
+  - 提供口径与字段的全选/全不选操作
+- 入口接线：
+  - `frontend/src/pages/ProjectEntryView.vue`：新增 `monthly_data_show` 入口映射
+  - `frontend/src/pages/ProjectSelectView.vue`：将 `monthly_data_show` 加入直达项目
+- API 封装：
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - `inspectMonthlyDataShowFile(projectKey, file)`
+    - `extractMonthlyDataShowCsv(projectKey, file, companies, fields)`
+
+## 结构同步（2026-02-28 monthly_data_show 步骤2新增源字段复选）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 步骤2新增“源字段（计划/实际口径）”复选区
+  - 支持源字段全选/全不选
+  - 提取前新增校验：至少选择 1 个源字段
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `extractMonthlyDataShowCsv` 新增 `sourceColumns` 参数并传递 `source_columns` 表单字段
+
+## 结构同步（2026-02-28 monthly_data_show 步骤2常驻展示）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 步骤2改为页面初始常驻显示（移除上传后才显示的条件）
+  - 未读取文件时显示引导文案与空态提示（暂无可选源字段/口径/字段）
+  - 各“全选/全不选”按钮在无可选项时自动禁用
+- 结果：
+  - 首页进入即显示完整 1-2-3 流程，视觉更连贯，交互预期更稳定。
+
+## 结构同步（2026-02-28 monthly_data_show 常量注入设定栏）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 步骤2新增“常量注入设定”面板
+  - 支持开关控制“是否启用常量注入”
+  - 支持逐条编辑默认常量值
+  - 支持逐条选择写入源字段（本年计划/本月计划/本月实际/上年同期）
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `extractMonthlyDataShowCsv` 新增：
+    - `constantsEnabled`
+    - `constantRules`
+
+## 结构同步（2026-02-28 monthly_data_show 常量写入口径多选）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 常量表格中“写入源字段”由单选下拉改为多选复选组
+  - 支持单条常量同时勾选多个源字段
+- 交互效果：
+  - 提取时将多选口径随 `constant_rules_json` 一并提交后端，生成对应多周期记录
+
+## 结构同步（2026-02-28 monthly_data_show 常量默认与布局调整）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 常量注入面板位置下移至“源字段（计划/实际口径）”面板下方
+  - 常量注入开关默认启用
+  - 常量规则默认 `source_columns` 与“源字段”默认选中集合保持一致
+
+## 结构同步（2026-02-28 monthly_data_show 常量源字段选项与源字段复选一致）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 常量注入表格中的源字段选项改为实时使用 `selectedSourceColumns`
+  - 上方源字段取消勾选后，常量规则中的对应 `source_columns` 会自动移除
+  - 当源字段为空时，常量表格显示“请先在上方源字段中选择可用项”提示
+
+## 结构同步（2026-02-28 monthly_data_show 常量源字段显示策略修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 常量源字段选项恢复为全量显示（不因上方取消勾选而消失）
+  - 上方“源字段”取消某项时，常量区所有规则同步取消该项
+  - 上方“源字段”重新勾选某项时，常量区所有规则同步勾选该项
+
+## 结构同步（2026-02-28 monthly_data_show 项目文案更新）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 页面主标题：`月报入库工作台` -> `月报导入与查询`
+  - 面包屑末级：`月报入库工作台` -> `月报导入与查询`
+- 联动说明：
+  - 项目列表名称由后端配置同步为“月报导入与查询”。
+
+## 结构同步（2026-02-28 monthly_data_show 双子页面路由拆分）
+
+- 页面：
+  - 导入页：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`\n    - 页面标题调整为“月报导入工作台”
+  - 查询页：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`（新增）
+- 路由：`frontend/src/router/index.js`
+  - 新增：`/projects/monthly_data_show/import-workspace`
+  - 新增：`/projects/monthly_data_show/query-tool`
+- 入口：
+  - `frontend/src/pages/ProjectSelectView.vue` 移除 `monthly_data_show` 直达入口（改为先进入页面选择）
+  - `frontend/src/pages/ProjectEntryView.vue` 移除 `monthly_data_show` 直达组件映射
+
+## 结构同步（2026-02-28 移除项目页审批进度模块）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - 删除“审批进度”卡片区域
+  - 删除审批状态加载与审批/撤销/发布操作逻辑
+  - 删除相关样式定义
+- 结果：
+  - 项目页仅保留功能页面卡片选择，界面更简洁。
+
+## 结构同步（2026-02-28 项目子页面卡片字体样式对齐）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - `.page-card` 增加字体继承与 `appearance: none`
+  - `.page-card-title` / `.page-card-desc` 字号与颜色对齐到项目卡片风格
+- 结果：
+  - `monthly_data_show/pages` 的子页面卡片字体观感与其他项目卡片一致。
+
+## 结构同步（2026-02-28 审批进度模块按项目定向显示修正）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - 恢复审批进度模块 UI 与审批链路脚本（审批、取消批准、发布、状态读取）
+  - 新增项目级判断：`projectKey === "monthly_data_show"` 时隐藏审批进度模块
+  - 在 `monthly_data_show` 下不触发审批状态请求；其他项目保持原行为
+- 结果：
+  - 仅 `monthly_data_show` 页不显示审批进度，其他项目审批模块恢复可用。
+
+## 结构同步（2026-02-28 项目子页面卡片标题颜色统一）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - `.page-card-title` 颜色改为 `color: inherit`
+  - 统一跟随页面标题色系，避免卡片标题与“请选择功能页面”颜色不一致
+- 结果：
+  - 各项目子页面卡片大标题颜色一致，视觉规范统一。
+
+## 结构同步（2026-02-28 项目子页面卡片标题蓝色一致性修正）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - `.page-card-title` 颜色由 `inherit` 调整为 `var(--primary-700)`
+  - 直接对齐“请选择功能页面”使用的蓝色标题体系
+- 结果：
+  - “数据看板”“数据展示页面”等子页面卡片大标题为同样蓝色。

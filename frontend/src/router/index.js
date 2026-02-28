@@ -19,6 +19,14 @@ const routes = [
     component: () => import('../pages/ProjectEntryView.vue'),
   },
   {
+    path: '/projects/monthly_data_show/import-workspace',
+    component: () => import('../projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue'),
+  },
+  {
+    path: '/projects/monthly_data_show/query-tool',
+    component: () => import('../projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue'),
+  },
+  {
     path: '/projects/:projectKey/spring-dashboard',
     component: () => import('../projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue'),
   },

@@ -1,0 +1,472 @@
+<template>
+  <div class="monthly-show-page">
+    <AppHeader />
+    <main class="monthly-show-main">
+      <Breadcrumbs :items="breadcrumbItems" />
+      <section class="topbar">
+        <div>
+          <h2>月报导入工作台</h2>
+          <p class="sub">上传月报文件，按口径与字段提取入库 CSV。</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>步骤 1：上传并读取可选项</h3>
+        <div class="upload-row">
+          <input ref="fileInputRef" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" @change="onFileChange" />
+          <button class="btn primary" type="button" :disabled="inspecting || !selectedFile" @click="inspectFile">
+            {{ inspecting ? '读取中...' : '读取口径与字段' }}
+          </button>
+        </div>
+        <p class="hint" v-if="selectedFile">当前文件：{{ selectedFile.name }}</p>
+      </section>
+
+      <section class="card">
+        <h3>步骤 2：复选提取范围</h3>
+        <p v-if="!sourceColumns.length && !companies.length && !fields.length" class="hint">
+          请先在步骤 1 上传文件并点击“读取口径与字段”，然后在此处进行复选。
+        </p>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h4>源字段（计划/实际口径）</h4>
+            <div class="actions">
+              <button class="btn small" type="button" :disabled="!sourceColumns.length" @click="toggleAllSourceColumns(true)">全选</button>
+              <button class="btn small" type="button" :disabled="!sourceColumns.length" @click="toggleAllSourceColumns(false)">全不选</button>
+            </div>
+          </div>
+          <div class="checkbox-grid">
+            <label v-for="col in sourceColumns" :key="col" class="check-item">
+              <input type="checkbox" :value="col" v-model="selectedSourceColumns" />
+              <span>{{ col }}</span>
+            </label>
+          </div>
+          <p v-if="!sourceColumns.length" class="hint">暂无可选源字段</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h4>常量注入设定</h4>
+            <label class="check-item">
+              <input type="checkbox" v-model="constantsEnabled" :disabled="!constantRules.length" />
+              <span>启用常量注入</span>
+            </label>
+          </div>
+          <p class="hint">默认值已按你提供的规则预置，可直接修改数值，并设置写入源字段。</p>
+          <div class="table-wrap" v-if="constantRules.length">
+            <table class="constant-table">
+              <thead>
+                <tr>
+                  <th>口径</th>
+                  <th>指标</th>
+                  <th>单位</th>
+                  <th>值</th>
+                  <th>写入源字段</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(rule, idx) in constantRules" :key="`${rule.company}-${rule.item}-${idx}`">
+                  <td>{{ rule.company }}</td>
+                  <td>{{ rule.item }}</td>
+                  <td>{{ rule.unit }}</td>
+                  <td>
+                    <input
+                      class="num-input"
+                      type="number"
+                      step="0.0001"
+                      v-model.number="rule.value"
+                      :disabled="!constantsEnabled"
+                    />
+                  </td>
+                  <td>
+                    <div class="inline-checks">
+                      <label class="check-item compact" v-for="col in sourceColumns" :key="`${idx}-${col}`">
+                        <input
+                          type="checkbox"
+                          :value="col"
+                          :disabled="!constantsEnabled"
+                          :checked="Array.isArray(rule.source_columns) && rule.source_columns.includes(col)"
+                          @change="toggleRuleSourceColumn(idx, col, $event.target?.checked)"
+                        />
+                        <span>{{ col }}</span>
+                      </label>
+                    </div>
+                    <p class="hint" v-if="!sourceColumns.length">暂无可用源字段</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="hint">暂无常量规则</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h4>口径（子工作表）</h4>
+            <div class="actions">
+              <button class="btn small" type="button" :disabled="!companies.length" @click="toggleAllCompanies(true)">全选</button>
+              <button class="btn small" type="button" :disabled="!companies.length" @click="toggleAllCompanies(false)">全不选</button>
+            </div>
+          </div>
+          <div class="checkbox-grid">
+            <label v-for="company in companies" :key="company" class="check-item">
+              <input type="checkbox" :value="company" v-model="selectedCompanies" />
+              <span>{{ company }}</span>
+            </label>
+          </div>
+          <p v-if="!companies.length" class="hint">暂无可选口径</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h4>字段</h4>
+            <div class="actions">
+              <button class="btn small" type="button" :disabled="!fields.length" @click="toggleAllFields(true)">全选</button>
+              <button class="btn small" type="button" :disabled="!fields.length" @click="toggleAllFields(false)">全不选</button>
+            </div>
+          </div>
+          <div class="checkbox-grid">
+            <label v-for="field in fields" :key="field" class="check-item">
+              <input type="checkbox" :value="field" v-model="selectedFields" />
+              <span>{{ field }}</span>
+            </label>
+          </div>
+          <p v-if="!fields.length" class="hint">暂无可选字段</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>步骤 3：导出 CSV</h3>
+        <div class="upload-row">
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="extracting || !selectedFile || !selectedCompanies.length || !selectedFields.length || !selectedSourceColumns.length"
+            @click="extractCsv"
+          >
+            {{ extracting ? '提取中...' : '提取并下载 CSV' }}
+          </button>
+        </div>
+        <p class="hint">默认已忽略口径：恒流、天然气炉、中水。</p>
+      </section>
+
+      <p class="error" v-if="errorMessage">{{ errorMessage }}</p>
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
+import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
+import { extractMonthlyDataShowCsv, inspectMonthlyDataShowFile } from '../../daily_report_25_26/services/api'
+
+const route = useRoute()
+const projectKey = computed(() => String(route.params.projectKey || 'monthly_data_show'))
+const breadcrumbItems = computed(() => [
+  { label: '项目选择', to: '/projects' },
+  { label: '月报导入与查询', to: '/projects/monthly_data_show/pages' },
+  { label: '月报导入工作台', to: null },
+])
+
+const fileInputRef = ref(null)
+const selectedFile = ref(null)
+const inspecting = ref(false)
+const extracting = ref(false)
+const errorMessage = ref('')
+
+const companies = ref([])
+const fields = ref([])
+const sourceColumns = ref([])
+const selectedCompanies = ref([])
+const selectedFields = ref([])
+const selectedSourceColumns = ref([])
+const constantsEnabled = ref(true)
+const constantRules = ref([])
+
+function onFileChange(event) {
+  const file = event?.target?.files?.[0] || null
+  selectedFile.value = file
+  errorMessage.value = ''
+  companies.value = []
+  fields.value = []
+  selectedCompanies.value = []
+  selectedFields.value = []
+  sourceColumns.value = []
+  selectedSourceColumns.value = []
+  constantsEnabled.value = true
+  constantRules.value = []
+}
+
+function toggleAllCompanies(checked) {
+  selectedCompanies.value = checked ? [...companies.value] : []
+}
+
+function toggleAllFields(checked) {
+  selectedFields.value = checked ? [...fields.value] : []
+}
+
+function toggleAllSourceColumns(checked) {
+  selectedSourceColumns.value = checked ? [...sourceColumns.value] : []
+}
+
+async function inspectFile() {
+  if (!selectedFile.value || inspecting.value) return
+  inspecting.value = true
+  errorMessage.value = ''
+  try {
+    const payload = await inspectMonthlyDataShowFile(projectKey.value, selectedFile.value)
+    companies.value = Array.isArray(payload?.companies) ? payload.companies : []
+    fields.value = Array.isArray(payload?.fields) ? payload.fields : []
+    sourceColumns.value = Array.isArray(payload?.source_columns) ? payload.source_columns : []
+    selectedCompanies.value = [...companies.value]
+    selectedFields.value = Array.isArray(payload?.default_selected_fields) && payload.default_selected_fields.length
+      ? payload.default_selected_fields.filter((field) => fields.value.includes(field))
+      : [...fields.value]
+    selectedSourceColumns.value = Array.isArray(payload?.default_selected_source_columns) && payload.default_selected_source_columns.length
+      ? payload.default_selected_source_columns.filter((col) => sourceColumns.value.includes(col))
+      : [...sourceColumns.value]
+    constantsEnabled.value = payload?.constants_enabled_default === undefined
+      ? true
+      : Boolean(payload?.constants_enabled_default)
+    const defaultSourceCols = Array.isArray(payload?.default_selected_source_columns) && payload.default_selected_source_columns.length
+      ? payload.default_selected_source_columns.filter((col) => sourceColumns.value.includes(col))
+      : [...sourceColumns.value]
+    constantRules.value = Array.isArray(payload?.constant_rules)
+      ? payload.constant_rules.map((rule) => ({
+        company: String(rule?.company || ''),
+        item: String(rule?.item || ''),
+        unit: String(rule?.unit || ''),
+        value: Number(rule?.value ?? 0),
+        source_columns: [...defaultSourceCols],
+      }))
+      : []
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : '读取可选项失败'
+  } finally {
+    inspecting.value = false
+  }
+}
+
+async function extractCsv() {
+  if (!selectedFile.value || extracting.value) return
+  extracting.value = true
+  errorMessage.value = ''
+  try {
+    const constantSourceColumns = constantsEnabled.value
+      ? constantRules.value.flatMap((rule) => (Array.isArray(rule?.source_columns) ? rule.source_columns : []))
+      : []
+    const effectiveSourceColumns = Array.from(new Set([...selectedSourceColumns.value, ...constantSourceColumns]))
+    const { blob, filename } = await extractMonthlyDataShowCsv(
+      projectKey.value,
+      selectedFile.value,
+      selectedCompanies.value,
+      selectedFields.value,
+      effectiveSourceColumns,
+      constantsEnabled.value,
+      constantRules.value,
+    )
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || 'monthly_data_show_extract.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : '提取 CSV 失败'
+  } finally {
+    extracting.value = false
+  }
+}
+
+function toggleRuleSourceColumn(index, column, checked) {
+  const rule = constantRules.value[index]
+  if (!rule) return
+  const next = Array.isArray(rule.source_columns) ? [...rule.source_columns] : []
+  if (checked) {
+    if (!next.includes(column)) next.push(column)
+  } else {
+    const pos = next.indexOf(column)
+    if (pos >= 0) next.splice(pos, 1)
+  }
+  rule.source_columns = next
+}
+
+watch(
+  selectedSourceColumns,
+  (newCols, oldCols) => {
+    const nextSet = new Set(newCols || [])
+    const prevSet = new Set(oldCols || [])
+    const added = [...nextSet].filter((col) => !prevSet.has(col))
+    const removed = [...prevSet].filter((col) => !nextSet.has(col))
+    if (!added.length && !removed.length) return
+    for (const rule of constantRules.value) {
+      const current = Array.isArray(rule.source_columns) ? [...rule.source_columns] : []
+      const currentSet = new Set(current)
+      for (const col of removed) {
+        currentSet.delete(col)
+      }
+      for (const col of added) {
+        currentSet.add(col)
+      }
+      rule.source_columns = sourceColumns.value.filter((col) => currentSet.has(col))
+    }
+  },
+  { deep: true },
+)
+</script>
+
+<style scoped>
+.monthly-show-page {
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.monthly-show-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 18px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.topbar h2 {
+  margin: 0;
+}
+
+.sub {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.upload-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 10px;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.constant-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.constant-table th,
+.constant-table td {
+  border: 1px solid #dbeafe;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.num-input {
+  width: 120px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.inline-checks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.check-item.compact {
+  font-size: 12px;
+}
+
+.hint {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.error {
+  margin-top: 8px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.btn {
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.btn.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+</style>

@@ -82,12 +82,32 @@
     "availability": [
       "Global_admin"
     ],
-    "project_name": "月报导表工作台",
+    "project_name": "月报拉取工作台",
     "pages": {
       "workspace": {
-        "页面名称": "月报导表主页",
+        "页面名称": "月报拉取主页",
         "数据源": "",
         "页面描述": "用于月报映射导入、预检、执行与下载"
+      }
+    }
+  },
+  "monthly_data_show":
+  {
+    "availability": [
+      "Global_admin",
+      "Group_admin"
+    ],
+    "project_name": "月报导入与查询",
+    "pages": {
+      "/projects/monthly_data_show/import-workspace": {
+        "页面名称": "月报导入工作台",
+        "数据源": "",
+        "页面描述": "用于上传月报并按口径/字段提取入库 CSV"
+      },
+      "/projects/monthly_data_show/query-tool": {
+        "页面名称": "月报数据查询工具",
+        "数据源": "",
+        "页面描述": "用于按时间、口径和指标查询月报数据并开展分析"
       }
     }
   }

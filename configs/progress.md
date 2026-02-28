@@ -2597,3 +2597,260 @@
 - **Result:**
   1. 类似“26.2 累计 = 26.1 累计 + 26.2 本月”的链式公式可参与真实比对；
   2. 不一致将落为 `acc_compare_status=mismatch` 并进入异常清单。
+
+## 2026-02-28（monthly_data_show 需求预研与接入点梳理）
+
+- **User Request:** 在已上线 `monthly_data_pull` 后，新增项目模块 `monthly_data_show`；需求与待导入文件位于 `外部导入项目-月报表导入数据库`，先完成“了解情况”。
+- **前置说明:**
+  1. Serena 接入校验已执行：`activate_project(D:\编程项目\phoenix)` 成功，`check_onboarding_performed` 为已完成状态；
+  2. 本轮仅做调研与结构梳理，不改动业务代码；
+  3. 未触发 Serena 编辑受阻，无降级到 shell 的场景。
+- **Agent Action:**
+  1. 读取外部需求文件 `外部导入项目-月报表导入数据库/2.28 月报数据库化配置文件.txt`，确认规则域：
+     - 指标清洗与重命名；
+     - 基础/半计算/计算指标分层；
+     - 多月聚合与“多口径聚合”要求；
+     - 特殊聚合指标与 `year+plan` 不聚合口径。
+  2. 读取样例文件 `外部导入项目-月报表导入数据库/综合表26.1.xlsx`（含 17 个子表）并抽样确认列结构：
+     - 主列为“项目/计量单位/本年计划/本月计划/上年同期/本月实际/本年累计/同比环比”；
+     - 口径覆盖“全口径、主城区、北海、金普、庄河、研究院”等；
+     - 需剔除子表：`恒流/天然气炉/中水`。
+  3. 梳理现有 `monthly_data_pull` 挂载与复用点：
+     - 前端入口：`ProjectSelectView` + `ProjectEntryView`；
+     - 后端入口：`project_router_registry` + `backend/projects/monthly_data_pull/*`；
+     - 权限与项目列表：`backend_data/shared/项目列表.json`、`backend_data/shared/auth/permissions.json`。
+- **Result:**
+  1. 已明确 `monthly_data_show` 可沿用当前“项目化挂载 + 权限矩阵 + 项目入口分发”路径；
+  2. 已提炼该模块首批落地的核心数据规则与展示口径；
+  3. 当前仓库状态为“完成预研，待进入模块创建与接口实现阶段”。
+
+## 2026-02-28（项目中文名确认：monthly_data_pull -> 月报拉取工作台）
+
+- **User Request:** 先敲定中文名：`monthly_data_pull` 对应“月报拉取工作台”；新项目 `monthly_data_show` 对应“月报入库工作台”。
+- **前置说明:**
+  1. 本轮仅处理已存在项目 `monthly_data_pull` 的实际展示名称；
+  2. `monthly_data_show` 尚未创建，名称先作为后续创建时的固定命名约束。
+- **Agent Action:**
+  1. 更新项目配置 `backend_data/shared/项目列表.json`：
+     - `monthly_data_pull.project_name`：`月报导表工作台` -> `月报拉取工作台`；
+     - `monthly_data_pull.pages.workspace.页面名称`：`月报导表主页` -> `月报拉取主页`。
+  2. 更新页面展示 `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+     - 页面标题与面包屑文案统一改为“月报拉取工作台”。
+- **Result:**
+  1. 项目列表与项目内页文案已统一为“月报拉取工作台”；
+  2. 后续创建 `monthly_data_show` 时将使用“月报入库工作台”作为项目中文名。
+
+## 2026-02-28（monthly_data_show 第一阶段：上传月报并提取入库 CSV）
+
+- **User Request:** 先实现 `monthly_data_show`：上传表格文件后，按规则提取 CSV（字段风格对应数据库入库表）；提取时提供口径/字段复选；不复用 `monthly_data_pull`；后续再做查询分析页。
+- **前置说明:**
+  1. 本轮按“先提取 CSV、后查询分析”的顺序实现；
+  2. `monthly_data_show` 为独立模块，未复用 `monthly_data_pull` 代码路径；
+  3. 当前仅实现“上传并下载 CSV”闭环，后续可在此基础上对接数据库入库与分析页面。
+- **Agent Action:**
+  1. 项目注册与权限：
+     - 更新 `backend_data/shared/项目列表.json`：新增项目 `monthly_data_show`，中文名“月报入库工作台”，页面键 `workspace`；
+     - 更新 `backend_data/shared/auth/permissions.json`：为 `Global_admin` 增加 `monthly_data_show` 页面访问权限。
+  2. 后端独立模块（新增）：
+     - `backend/projects/monthly_data_show/api/router.py`
+     - `backend/projects/monthly_data_show/api/workspace.py`
+     - `backend/projects/monthly_data_show/services/extractor.py`
+     - 并在 `backend/api/v1/project_router_registry.py` 注册项目路由。
+  3. 后端接口：
+     - `POST /api/v1/projects/monthly_data_show/monthly-data-show/inspect`
+       - 上传文件后返回可选口径（自动剔除：恒流/天然气炉/中水）与可选字段；
+     - `POST /api/v1/projects/monthly_data_show/monthly-data-show/extract-csv`
+       - 按所选口径和字段提取并下载 CSV。
+  4. 提取规则（第一阶段已实现）：
+     - 指标名清洗：去空格、去“其中：”、按规则重命名；
+     - 指标剔除：按你提供的“剔除指标”列表过滤；
+     - 计算指标不入库：按“计算指标”列表过滤；
+     - 单位清洗：`米2/米² -> 平方米`；
+     - 单位转换：`千瓦时 -> 万千瓦时` 且数值除以 10000；
+     - 字段生成：`company,item,unit,value,date,period,type`；
+     - 日期口径：依据文件名中的 `yy.m` 推导（示例 `26.1 -> 2026-01`）。
+  5. 前端页面（新增）：
+     - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+       - 步骤化页面：上传 -> 复选口径/字段 -> 提取并下载 CSV；
+       - 提供口径与字段的全选/全不选操作。
+  6. 前端接线：
+     - `frontend/src/pages/ProjectEntryView.vue`：新增 `monthly_data_show` 入口分发；
+     - `frontend/src/pages/ProjectSelectView.vue`：加入直达项目集合；
+     - `frontend/src/projects/daily_report_25_26/services/api.js`：新增 `inspectMonthlyDataShowFile`、`extractMonthlyDataShowCsv`。
+  7. 数据目录初始化：
+     - 新增 `backend_data/projects/monthly_data_show/` 及 `uploads/`、`outputs/`；
+     - 新增 `workspace_settings.json` 与目录 `README.md`。
+- **Result:**
+  1. 你现在可以进入 `http://localhost:5173/projects/monthly_data_show`；
+  2. 上传月报后可按复选条件直接下载入库 CSV；
+  3. 模块已具备后续“CSV 入库 + 查询分析页”的扩展基础。
+
+## 2026-02-28（monthly_data_show 提取范围增强：新增“源字段”复选）
+
+- **User Feedback:** 在“步骤 2：复选提取范围”中，还需要选择是否提取 `本年计划/本月计划/本月实际/上年同期` 这些源字段。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `inspect` 响应新增 `source_columns` 与 `default_selected_source_columns`；
+     - `extract-csv` 新增表单参数 `source_columns`。
+  2. 后端 `backend/projects/monthly_data_show/services/extractor.py`：
+     - `extract_rows` 新增 `selected_source_columns` 入参；
+     - 仅对被勾选的源字段执行提取，未勾选字段不生成记录。
+  3. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 步骤2新增“源字段（计划/实际口径）”复选区；
+     - 新增全选/全不选按钮；
+     - 提取按钮新增校验：必须至少选择 1 个源字段。
+  4. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - `extractMonthlyDataShowCsv` 新增 `sourceColumns` 参数并回传到 `source_columns`。
+- **Result:** 现在可以按“口径 + 字段 + 源字段”三层条件控制 CSV 提取范围。
+
+## 2026-02-28（monthly_data_show 页面体验优化：步骤2常驻展示）
+
+- **User Feedback:** 页面初始仅显示步骤1和步骤3，步骤2需上传后才出现，视觉不连贯。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`；
+  2. 将“步骤 2：复选提取范围”改为常驻显示（移除条件渲染）；
+  3. 未读取文件前展示引导文案与空态提示；
+  4. 步骤2内各“全选/全不选”按钮在无可选项时自动禁用，避免误操作。
+- **Result:** 页面首次进入即可看到完整的 1-2-3 流程，结构更稳定、视觉更一致。
+
+## 2026-02-28（monthly_data_show 常量注入设定栏）
+
+- **User Request:** 增加常量注入设定栏，使用已给定常量值作为默认值；允许修改，并可指定写入到哪一个源字段。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/services/extractor.py`：
+     - 新增默认常量规则（发电设备容量/锅炉设备容量）；
+     - 新增 `get_default_constant_rules` 与 `normalize_constant_rules`；
+     - `extract_rows` 支持 `constants_enabled` + `constant_rules`，按规则注入/覆盖行数据；
+     - 每条常量支持 `source_column`（本年计划/本月计划/本月实际/上年同期）决定写入 period/type/date。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `inspect` 返回 `constants_enabled_default` 与 `constant_rules`；
+     - `extract-csv` 新增参数：
+       - `constants_enabled`
+       - `constant_rules_json`。
+  3. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 步骤2新增“常量注入设定”面板；
+     - 支持启用/关闭常量注入；
+     - 支持逐条修改常量值与写入源字段。
+  4. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - `extractMonthlyDataShowCsv` 新增 `constantsEnabled` 与 `constantRules` 参数并上传。
+- **Result:** 现在可在页面直接配置常量注入策略，不必改代码即可调整默认常量与写入口径。
+
+## 2026-02-28（monthly_data_show 常量注入增强：源字段支持多选）
+
+- **User Feedback:** 常量指标的“写入源字段”应支持多选，而非单选。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/services/extractor.py`：
+     - 常量规则字段由 `source_column` 升级为 `source_columns`（列表）；
+     - 规则标准化兼容旧字段并统一转换为列表；
+     - 常量注入时对每个被勾选源字段分别写入对应 period/type/date 行。
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 常量设定表“写入源字段”由下拉单选改为复选组；
+     - 支持每条常量独立勾选多个源字段。
+  3. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - `constant_rules_json` 传输结构已兼容 `source_columns` 数组。
+- **Result:** 每条常量可同时写入多个源字段口径（如本月实际 + 本月计划），提取 CSV 时自动生成对应多条周期记录。
+
+## 2026-02-28（monthly_data_show 常量注入默认与布局优化）
+
+- **User Request:** 常量注入默认选中；位置放在“源字段（计划/实际口径）”下方；常量注入默认选中源字段与“源字段”默认一致。
+- **Agent Action:**
+  1. 调整页面布局：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+     - 将“常量注入设定”面板移动到“源字段（计划/实际口径）”面板下方。
+  2. 调整默认状态：
+     - `constantsEnabled` 默认值改为启用（`true`）；
+     - `inspect` 后若后端未显式返回默认开关，也默认启用。
+  3. 调整常量默认写入口径：
+     - 初始化常量规则时，不再使用规则内置默认字段；
+     - 统一使用“源字段（计划/实际口径）”的当前默认选择作为每条常量的默认 `source_columns`。
+- **Result:** 页面默认交互顺序与选中策略已按要求一致化。
+
+## 2026-02-28（monthly_data_show 常量源字段选项与源字段复选完全一致）
+
+- **User Clarification:** 常量注入里的“源字段选项”应与“源字段（计划/实际口径）”当前选项保持一致，不是仅默认值一致。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 常量注入表格中的源字段复选项改为 `constantSourceColumnOptions`；
+     - `constantSourceColumnOptions` 直接取 `selectedSourceColumns`（上方源字段当前勾选）；
+     - 当上方源字段变更时，自动裁剪每条常量的 `source_columns`，移除不再可选项；
+     - 若当前无可选源字段，在常量列中显示提示文案。
+- **Result:** 常量注入区域的源字段可选项与上方源字段复选实现了实时一致。
+
+## 2026-02-28（monthly_data_show 常量源字段显示策略修正）
+
+- **User Clarification:** 常量注入“写入源字段”选项应始终显示全部字段；不因上方取消勾选而消失。上方取消则常量区对应字段全取消，上方重选则常量区对应字段全重选。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 常量注入表格的源字段选项恢复为 `sourceColumns` 全量展示；
+     - 监听 `selectedSourceColumns` 变化，按增量差异同步所有常量规则：
+       - 上方取消某字段 -> 所有常量规则取消该字段；
+       - 上方重新勾选某字段 -> 所有常量规则重新勾选该字段。
+- **Result:** 现在常量注入区字段“选项固定显示，勾选状态联动同步”。
+
+## 2026-02-28（monthly_data_show 项目名称与访问权限调整）
+
+- **User Request:** 将 `monthly_data_show` 项目名称改为“月报导入与查询”，并设置 `Global_admin` 与 `Group_admin` 可访问。
+- **Agent Action:**
+  1. 修改 `backend_data/shared/项目列表.json`：
+     - `monthly_data_show.project_name`：`月报入库工作台` -> `月报导入与查询`
+     - `availability`：`[Global_admin]` -> `[Global_admin, Group_admin]`
+     - 页面名：`月报入库主页` -> `月报导入与查询主页`
+  2. 修改 `backend_data/shared/auth/permissions.json`：
+     - 在 `Group_admin.projects` 中新增 `monthly_data_show`（`page_access: ["workspace"]`）。
+  3. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 页面主标题与面包屑统一为“月报导入与查询”。
+- **Result:** `Global_admin` 与 `Group_admin` 现在都可在项目列表访问 `monthly_data_show`，并看到新名称“月报导入与查询”。
+
+## 2026-02-28（monthly_data_show 拆分为导入/查询双子页面并按页授权）
+
+- **User Request:** `monthly_data_show` 拆分为两个子页面：\n  1) “月报导入工作台”（仅 `Global_admin`）\n  2) “月报数据查询工具”（`Global_admin` + `Group_admin`）。
+- **Agent Action:**
+  1. 修改 `backend_data/shared/项目列表.json`：\n     - `monthly_data_show.pages` 改为两个页面项：\n       - `/projects/monthly_data_show/import-workspace`（月报导入工作台）\n       - `/projects/monthly_data_show/query-tool`（月报数据查询工具）。
+  2. 修改 `backend_data/shared/auth/permissions.json`：\n     - `Global_admin.monthly_data_show.page_access`：导入页 + 查询页；\n     - `Group_admin.monthly_data_show.page_access`：仅查询页。
+  3. 前端路由与入口：\n     - 新增路由：\n       - `/projects/monthly_data_show/import-workspace`\n       - `/projects/monthly_data_show/query-tool`\n     - `ProjectSelectView` 移除 `monthly_data_show` 直达入口，改为先进入页面选择；\n     - `ProjectEntryView` 移除 `monthly_data_show` 直达组件映射。
+  4. 页面层：\n     - 现有导入页 `MonthlyDataShowEntryView.vue` 标题调整为“月报导入工作台”；\n     - 新增查询页 `MonthlyDataShowQueryToolView.vue`（先提供查询工具占位与能力说明）。
+- **Result:** `monthly_data_show` 现已具备“项目页 -> 子页面卡片 -> 页面级权限控制”的结构，满足导入/查询分治与分权访问需求。
+
+## 2026-02-28（移除项目页“审批进度”模块）
+
+- **User Feedback:** “审批进度”模块没有必要。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
+  2. 删除“审批进度”整块 UI；
+  3. 删除审批状态加载与审批/撤销/发布相关脚本逻辑；
+  4. 删除对应样式，保留纯“页面卡片选择”结构。
+- **Result:** 项目页面选择页仅保留功能页面卡片，不再展示审批进度模块。
+
+## 2026-02-28（项目子页面卡片字体样式对齐修复）
+
+- **User Feedback:** `http://localhost:5173/projects/monthly_data_show/pages` 的页面卡片字体观感与其他项目卡片不一致。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
+  2. 为 `.page-card` 增加 `font-family/font-size/line-height: inherit` 与 `appearance: none`，消除 `button` 默认字体差异；
+  3. 将 `.page-card-title` 与 `.page-card-desc` 的字号与颜色对齐到项目卡片风格（标题 16、描述 13）。
+- **Result:** 子页面卡片字体与项目列表卡片风格已对齐。
+
+## 2026-02-28（审批进度模块按项目定向显示修正）
+
+- **User Correction:** 仅 `http://localhost:5173/projects/monthly_data_show/pages` 不需要“审批进度”模块；其他原有项目应保留。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
+  2. 恢复审批进度模块完整逻辑与界面（状态加载、审批/取消批准、发布操作）；
+  3. 增加项目级条件：当 `projectKey === "monthly_data_show"` 时隐藏审批进度模块并跳过审批状态加载；
+  4. 其他项目保持原有审批进度展示与交互行为。
+- **Result:** 现在仅 `monthly_data_show` 项目的页面选择页不显示审批进度，其他项目审批模块已恢复，不再被全局移除。
+
+## 2026-02-28（项目子页面卡片大标题颜色统一）
+
+- **User Request:** 子页面卡片大标题颜色应与“请选择功能页面”标题颜色一致（以 `daily_report_25_26/pages` 为例）。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
+  2. 将 `.page-card-title` 的颜色从固定变量改为 `color: inherit`，统一继承页面标题色系。
+- **Result:** 所有项目子页面卡片的大标题颜色已统一，与“请选择功能页面”视觉一致。
+
+## 2026-02-28（项目子页面卡片大标题蓝色一致性修正）
+
+- **User Feedback:** 卡片大标题仍未达到与“请选择功能页面”一致的蓝色效果。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
+  2. 将 `.page-card-title` 颜色由 `inherit` 改为 `var(--primary-700)`（与页面标题使用的卡片标题蓝色体系一致）。
+- **Result:** “数据看板”“数据展示页面”等子页面卡片大标题已统一为与“请选择功能页面”同样的蓝色。
