@@ -4,7 +4,7 @@ monthly_data_show 月报入库提取服务。
 
 第一阶段目标：
 - 从上传的月报 Excel 中提取基础入库字段：
-  company,item,unit,value,date,period,type
+  company,item,unit,value,date,period,type,report_month
 - 支持按口径（子工作表）与字段复选导出 CSV。
 """
 
@@ -18,7 +18,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from openpyxl import load_workbook
 
 BLOCKED_COMPANIES = {"恒流", "天然气炉", "中水"}
-ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type")
+ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type", "report_month")
 DEFAULT_SOURCE_COLUMNS = ("本年计划", "本月计划", "本月实际", "上年同期")
 
 ITEM_EXCLUDE_SET = {
@@ -185,6 +185,10 @@ def _build_period_meta(report_year: int, report_month: int, src_col: str) -> Dic
     }
 
 
+def _build_report_month_text(report_year: int, report_month: int) -> str:
+    return f"{report_year}-{report_month:02d}-01"
+
+
 def parse_report_period_from_filename(filename: str) -> Tuple[int, int]:
     text = str(filename or "")
     matched = re.search(r"(\d{2})\.(\d{1,2})", text)
@@ -280,8 +284,17 @@ def extract_rows(
     selected_source_columns: Optional[Sequence[str]] = None,
     constants_enabled: bool = False,
     constant_rules: Optional[Sequence[Dict[str, object]]] = None,
+    report_year: Optional[int] = None,
+    report_month: Optional[int] = None,
 ) -> Tuple[List[Dict[str, object]], Dict[str, object]]:
-    report_year, report_month = parse_report_period_from_filename(filename)
+    parsed_year, parsed_month = parse_report_period_from_filename(filename)
+    if report_year is None:
+        report_year = parsed_year
+    if report_month is None:
+        report_month = parsed_month
+    report_month = max(1, min(12, int(report_month)))
+    report_year = int(report_year)
+    report_month_text = _build_report_month_text(report_year, report_month)
     workbook = load_workbook(filename=BytesIO(file_bytes), data_only=True, read_only=True)
     rows: List[Dict[str, object]] = []
     per_company_count: Dict[str, int] = {}
@@ -319,6 +332,7 @@ def extract_rows(
                             "date": meta["date"],
                             "period": meta["period"],
                             "type": meta["type"],
+                            "report_month": report_month_text,
                         }
                     )
             per_company_count[company] = len(rows) - count_before
@@ -367,6 +381,7 @@ def extract_rows(
                     "date": meta["date"],
                     "period": meta["period"],
                     "type": meta["type"],
+                    "report_month": report_month_text,
                 }
                 key = (new_row["company"], new_row["item"], new_row["date"], new_row["period"], new_row["type"])
                 old_idx = row_index_by_key.get(key)

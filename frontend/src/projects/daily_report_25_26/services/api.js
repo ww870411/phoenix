@@ -321,6 +321,8 @@ export async function extractMonthlyDataShowCsv(
   companies = [],
   fields = [],
   sourceColumns = [],
+  reportYear = null,
+  reportMonth = null,
   constantsEnabled = false,
   constantRules = [],
 ) {
@@ -335,6 +337,12 @@ export async function extractMonthlyDataShowCsv(
   }
   for (const sourceColumn of sourceColumns || []) {
     formData.append('source_columns', sourceColumn)
+  }
+  if (Number.isInteger(reportYear)) {
+    formData.append('report_year', String(reportYear))
+  }
+  if (Number.isInteger(reportMonth)) {
+    formData.append('report_month', String(reportMonth))
   }
   formData.append('constants_enabled', String(Boolean(constantsEnabled)))
   formData.append('constant_rules_json', JSON.stringify(Array.isArray(constantRules) ? constantRules : []))
@@ -354,6 +362,59 @@ export async function extractMonthlyDataShowCsv(
     blob,
     filename: matched?.[1] || 'monthly_data_show_extract.csv',
   }
+}
+
+export async function importMonthlyDataShowCsv(projectKey, file) {
+  if (!file) throw new Error('请先选择 CSV 文件')
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/import-csv`, {
+    method: 'POST',
+    headers: attachAuthHeaders({}, false),
+    body: formData,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `CSV 入库失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getMonthlyDataShowQueryOptions(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query-options`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取查询筛选项失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function queryMonthlyDataShow(projectKey, payload = {}) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `查询月报数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function queryMonthlyDataShowComparison(projectKey, payload = {}) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query-comparison`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `查询月报同比环比失败: ${response.status}`)
+  }
+  return response.json()
 }
 
 export async function listSheets(projectKey, configFile) {

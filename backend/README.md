@@ -1384,3 +1384,319 @@
 - 本轮后端代码无改动。
 - 联动说明：
   - 前端已将子页面卡片大标题颜色明确设为 `var(--primary-700)`，确保与“请选择功能页面”标题蓝色一致。
+
+## 结构同步（2026-02-28 monthly_data_show 新增 report_month 字段）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+  - `ALLOWED_FIELDS` 新增 `report_month`
+  - 新增 `_build_report_month_text` 统一生成来源月份（`YYYY-MM-01`）
+  - 普通提取与常量注入两条路径均写入 `report_month`
+- 结果：
+  - `monthly_data_show` 导出 CSV 支持来源月份字段，示例 `26.2 -> 2026-02-01`。
+
+## 结构同步（2026-02-28 monthly_data_show 报告月份自动识别与手工覆盖）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `inspect` 响应新增：
+    - `inferred_report_year`
+    - `inferred_report_month`
+    - `inferred_report_month_date`
+  - `extract-csv` 新增表单参数：
+    - `report_year`
+    - `report_month`
+  - 新增输入校验：
+    - `report_year` 范围 2000-2099
+    - `report_month` 范围 1-12
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+  - `extract_rows` 支持接收 `report_year/report_month` 覆盖值
+  - 未提供覆盖值时，仍按文件名自动解析年月
+  - 覆盖后的年月统一用于 `date`、`period/type` 映射及 `report_month` 字段写入
+
+## 结构同步（2026-02-28 monthly_data_show 第4步 CSV 入库）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增接口：`POST /monthly-data-show/import-csv`
+  - 新增响应模型：`ImportCsvResponse`
+  - 新增 CSV 解析与字段校验逻辑：
+    - 必要字段：`company,item,unit,value,date,period,type,report_month`
+    - 日期格式：`YYYY-MM-DD`
+  - 入库策略：UPSERT 写入 `month_data_show`
+    - 冲突键：`(company, item, date, period, type)`
+    - 冲突更新：`unit,value,report_month,operation_time`
+
+## 结构同步（2026-02-28 monthly_data_show CSV 空值入库兼容）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `value` 字段支持空值标记自动转 `NULL`：
+    - `none/null/nan/--/#DIV/0!/无/空/空字符串`
+  - `import-csv` 响应新增 `null_value_rows`，返回本次按空值入库条数
+
+## 结构同步（2026-02-28 monthly_data_show 查询接口）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增 `GET /monthly-data-show/query-options`
+    - 返回筛选维度：`companies/items/periods/types`
+  - 新增 `POST /monthly-data-show/query`
+    - 支持筛选：`report_month/date` 区间、`companies/items/periods/types`
+    - 支持分页：`limit/offset`
+    - 返回字段：`rows + total + summary`
+    - `summary` 包含：`total_rows/value_non_null_rows/value_null_rows/value_sum`
+
+## 结构同步（2026-02-28 monthly_data_show 查询排序层次与口径聚合）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryRequest` 新增：
+    - `order_mode`（`company_first` / `item_first`）
+    - `aggregate_companies`（是否聚合口径）
+  - 查询行为扩展：
+    - `order_mode` 控制结果层次顺序（先口径后指标或先指标后口径）
+    - `aggregate_companies=true` 时按 `item,unit,date,period,type,report_month` 聚合，返回 `company='聚合口径'`
+    - 聚合模式下 `total` 与 `summary` 按聚合结果计算
+
+## 结构同步（2026-02-28 查询页勾选顺序数字标注联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已在口径/指标勾选项上增加顺序数字标注（1,2,3...），用于表达选择先后顺序。
+
+## 结构同步（2026-02-28 查询筛选项顺序整理）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `query-options` 接口中 `items` 返回顺序调整为 `ORDER BY MIN(id)`（首次入库出现顺序）
+  - 用于配合前端“指标有序勾选”展示，避免仅按字母序带来的阅读割裂
+
+## 结构同步（2026-02-28 指标业务排序规则联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已在查询页按业务规则重排指标：
+    - 基础/半计算在前，19个计算指标在后；
+    - 前半区按产量、销售量、消耗量（煤优先）、其他排序；
+    - 相似指标中“总”优先。
+
+## 结构同步（2026-02-28 指标三栏分段展示联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将指标选择区拆分为三段：
+    - 当前指标
+    - 常量指标
+    - 计算指标
+  - 解决“计算指标/常量指标不易识别”的展示问题。
+
+## 结构同步（2026-02-28 查询页分栏样式展开联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将口径/指标筛选区域改为整行展开布局，并提升复选列宽与换行表现，修复“内容挤在一起”的问题。
+
+## 结构同步（2026-02-28 查询页指标分组结构修正联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将指标分组调整为：
+    - 当前指标（尾部含常量指标）
+    - 计算指标（19项固定展示）
+  - 取消“常量指标单独成栏”方案，避免与用户预期不一致。
+
+## 结构同步（2026-02-28 查询页选择区滚动条修复联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已修复口径/指标选择区滚动条与高度约束，确保长列表可完整浏览。
+
+## 结构同步（2026-02-28 查询页按月筛选与顺序调整联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端筛选控件已改为按月选择，并按“业务月份优先、来源月份其次”的顺序展示；
+  - 前端会将月份自动转换为月初/月末日期后调用现有查询接口。
+
+## 结构同步（2026-02-28 查询层次顺序动态排序）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryRequest` 新增 `order_fields`（可选值：`company/item/period/type`）
+  - 新增安全排序构造函数 `_build_order_sql`
+    - 白名单校验
+    - 去重与默认兜底
+    - 聚合口径模式下自动忽略 `company`
+  - 查询结果排序支持按前端“有序勾选层次”动态生效
+
+## 结构同步（2026-02-28 查询页排版密度二次优化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已对查询页筛选与结果区做统一密度优化，缓解“部分过松、部分过紧”的排版问题。
+
+## 结构同步（2026-02-28 查询页口径/指标整行占满联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将“口径（可多选）”与“指标（可多选）”区域调整为整行占满展示。
+
+## 结构同步（2026-02-28 口径选择区紧凑化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已对“口径（可多选）”内部列表做独立紧凑化样式调整。
+
+## 结构同步（2026-02-28 指标两栏显示不全修复联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已提升指标分段容器可视高度，并为分段内容增加独立滚动，修复显示不全问题。
+
+## 结构同步（2026-02-28 四筛选模块同一行布局联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将“期间/类型/层次顺序/是否聚合口径”四模块重排为同一行并列布局。
+
+## 结构同步（2026-02-28 查询空选不提取保护）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 查询入口新增保护：
+    - 当 `periods` 为空或 `types` 为空时，直接返回空结果与空汇总
+  - 避免“无期间/无类型”条件下误查全量数据
+
+## 结构同步（2026-02-28 查询页初始不自动查询联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端查询页已改为仅加载筛选项，不在页面初始化阶段自动发起查询。
+
+## 结构同步（2026-02-28 期间月份聚合开关）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryRequest` 新增 `aggregate_months`
+  - 查询逻辑支持“月份区间聚合”：
+    - `aggregate_months=false`：逐月列出
+    - `aggregate_months=true`：按区间聚合（不按 date/report_month 分组）
+  - 可与 `aggregate_companies` 叠加使用
+
+## 结构同步（2026-02-28 聚合口径开关文案微调联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将聚合口径关闭态文案更新为“不聚合口径（逐口径列出）”。
+
+## 结构同步（2026-02-28 查询前置条件扩展）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 查询空选保护从“期间/类型”扩展为“四项必选”：
+    - `companies`
+    - `items`
+    - `periods`
+    - `types`
+  - 任一为空时返回空结果
+
+## 结构同步（2026-02-28 汇总信息去除数值合计联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端查询页“汇总信息”已移除“数值合计”卡片。
+
+## 结构同步（2026-02-28 类型顺序 real 优先联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端查询页“类型”筛选顺序已调整为 `real` 优先展示。
+
+## 结构同步（2026-02-28 monthly_data_show 一键入库联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已支持将第3步导出的 CSV 结果直接复用到第4步入库调用（免手动重新选文件）。
+
+## 结构同步（2026-02-28 monthly_data_show 第3步提取与下载分离联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将第3步拆分为“提取 CSV”和“下载 CSV”两个按钮；
+  - 后端提取接口保持不变，继续返回 CSV 文件流供前端缓存与下载。
+
+## 结构同步（2026-02-28 新增 month_data_show 建表脚本）
+
+- 文件：`backend/sql/month_data_show.sql`
+  - 新增表：`month_data_show`
+  - 字段：
+    - `company, item, unit, value, date, period, type, report_month`
+    - `id, operation_time`
+  - 索引：
+    - 唯一索引：`(company, item, date, period, type)`
+    - 查询索引：`(date, company)`、`(report_month)`
+
+## 结构同步（2026-02-28 monthly_data_show 查询接入“平均气温”）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增派生指标常量：
+    - `AVERAGE_TEMPERATURE_ITEM = "平均气温"`
+    - `AVERAGE_TEMPERATURE_UNIT = "℃"`
+  - `GET /monthly-data-show/query-options`：
+    - 对 `items` 列表追加兜底项“平均气温”（不存在时追加）
+  - `POST /monthly-data-show/query`：
+    - 新增温度派生行构建逻辑：`_build_average_temperature_rows(...)`
+    - 数据源：`calc_temperature_data.aver_temp`
+    - 规则：
+      - 仅在已选择指标“平均气温”且 `period=month`、`type=real` 时参与结果
+      - 非 `aggregate_months`：按月聚合当月每日温度算术平均
+      - `aggregate_months=true`：对整段日期区间做算术平均
+    - 主表查询结果与温度派生结果合并后，统一排序、分页与汇总返回
+
+## 结构同步（2026-02-28 monthly_data_show 平均气温纠偏）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 修正温度日期范围推断：
+    - 当仅给出单个月份边界（如仅 `date_from`）时，自动扩展为该月完整日期区间
+  - 查询主流程调整：
+    - 将“平均气温”从主表 `month_data_show` 项中过滤，防止同名历史行干扰
+    - 若仅选择“平均气温”，则跳过主表查询，只返回 `calc_temperature_data` 派生结果
+  - 效果：平均气温按“月内每日 `aver_temp` 算术平均”稳定输出
+
+## 结构同步（2026-02-28 查询页同比/分析/XLSX 导出联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端查询页新增“同比/环比对比”“专业分析要点”“XLSX 导出”能力；
+  - 对比与分析基于查询接口返回结果在前端计算生成；
+  - 导出文件包含查询结果、对比结果、分析结论三个工作表。
+
+## 结构同步（2026-02-28 monthly_data_show 后端实时同比/环比接口）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增接口：`POST /monthly-data-show/query-comparison`
+  - 对比窗口规则：
+    - 当前窗口：优先 `date_from/date_to`，回退 `report_month_from/report_month_to`
+    - 同比窗口：当前窗口向前平移一年
+    - 环比窗口：当前窗口前一个等长时间段
+  - 维度对齐：
+    - `company + item + period + type + unit`
+    - 支持 `aggregate_companies`
+  - 返回字段：
+    - `current_value / yoy_value / yoy_rate / mom_value / mom_rate`
+    - 同时返回三段窗口标签，供前端展示
+
+## 结构同步（2026-02-28 可视化总览联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端新增“同比/环比热力图 + TopN 条形图”；
+  - 图形数据全部复用后端 `query-comparison` 接口，保证口径与表格一致。
+
+## 结构同步（2026-02-28 同比/环比配色语义联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将同比/环比颜色语义统一调整为“正值红、负值绿”，仅表现层变更，不影响接口与计算逻辑。
+
+## 结构同步（2026-02-28 热力图标题换行联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端热力图标题改为“纵轴=指标，横轴=口径”并设置不换行，属于展示文案修正，不影响后端接口与数据计算。
+
+## 结构同步（2026-02-28 热力图网格错位联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将热力图列布局由 `auto-fill` 改为按口径数固定列数，并在小屏采用横向滚动，属于展示层修复，不影响后端数据接口。

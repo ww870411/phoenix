@@ -2659,3 +2659,367 @@ docker compose up -d --build
   - 直接对齐“请选择功能页面”使用的蓝色标题体系
 - 结果：
   - “数据看板”“数据展示页面”等子页面卡片大标题为同样蓝色。
+
+## 结构同步（2026-02-28 monthly_data_show 新增 report_month 字段联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端 `monthly_data_show` 已新增 `report_month` 导出字段；
+  - 前端字段列表来自 `inspect` 动态返回，读取后可直接勾选并导出该字段。
+
+## 结构同步（2026-02-28 monthly_data_show 报告月份设定栏）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 在“步骤 2：复选提取范围”顶部新增“报告月份设定（自动识别，可修改）”面板
+  - 增加年份/月份输入控件与 `YYYY-MM-01` 预览
+  - `inspect` 后自动填入后端识别出的年月
+  - 提取前进行年月合法性校验并随接口提交
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `extractMonthlyDataShowCsv` 新增 `reportYear/reportMonth` 参数
+  - 向后端 `extract-csv` 传递 `report_year/report_month` 表单字段
+
+## 结构同步（2026-02-28 month_data_show 建表脚本联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端新增 `backend/sql/month_data_show.sql`，用于承接 `monthly_data_show` 导出数据后续入库。
+
+## 结构同步（2026-02-28 month_data_show 唯一性口径确认联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已确认 `month_data_show` 核心唯一性按 `date, period, type, company, item` 执行；
+  - `report_month` 保留为参考字段并提供单列查询索引。
+
+## 结构同步（2026-02-28 monthly_data_show 第4步 CSV 入库）
+
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `importMonthlyDataShowCsv(projectKey, file)`，调用后端 `/monthly-data-show/import-csv`
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 新增“步骤 4：CSV 入库（写入 month_data_show）”
+  - 支持 CSV 文件选择、上传入库触发与成功条数提示
+
+## 结构同步（2026-02-28 monthly_data_show 第3步结果一键入库）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 第3步导出完成后，自动缓存导出的 CSV 到内存文件对象
+  - 第4步新增按钮“使用第3步结果一键入库”
+  - 保留“手动选择 CSV 再入库”作为并行入口
+- 结果：
+  - 导出后可直接点击一键入库，减少重复操作。
+
+## 结构同步（2026-02-28 monthly_data_show 第3步按钮拆分）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 第3步由“提取并下载 CSV”拆分为两个按钮：
+    - `提取 CSV`（仅提取并缓存）
+    - `下载 CSV`（下载已缓存结果）
+  - 新增提取完成提示文案，显示缓存文件名
+  - 与第4步联动保持不变：提取后仍可直接一键入库
+
+## 结构同步（2026-02-28 monthly_data_show 入库空值统计提示）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 第4步入库成功提示新增空值入库统计：
+    - `入库成功：共处理 X 条记录（空值入库 Y 条）`
+
+## 结构同步（2026-02-28 monthly_data_show #DIV/0! 空值入库联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已将 `#DIV/0!` 纳入空值标记集合，入库时按 `NULL` 处理。
+
+## 结构同步（2026-02-28 monthly_data_show 查询页面第一阶段）
+
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `getMonthlyDataShowQueryOptions(projectKey)`
+  - 新增 `queryMonthlyDataShow(projectKey, payload)`
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 由占位页升级为可用查询页
+  - 新增筛选区：
+    - 来源月份起止、业务日期起止
+    - 公司/指标/期间/类型多选
+  - 新增汇总卡片：
+    - 总记录数、数值非空、数值空值、数值合计
+  - 新增结果表与分页：
+    - 字段展示：`company,item,unit,value,date,period,type,report_month,operation_time`
+    - 上一页/下一页翻页
+
+## 结构同步（2026-02-28 查询页筛选交互重构与开关联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “公司（可多选）”改为“口径（可多选）”
+  - 口径与指标改为有序复选列表（支持全选/全不选）
+  - 新增开关：
+    - `先口径后指标 / 先指标后口径`
+    - `是否聚合口径`
+  - 移动端下列表布局自适应
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 查询请求新增透传：
+    - `order_mode`
+    - `aggregate_companies`
+
+## 结构同步（2026-02-28 查询页勾选顺序数字标注）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 在“口径（可多选）”和“指标（可多选）”勾选项旁增加顺序数字徽标
+  - 编号按勾选先后显示为 `1,2,3...`，取消后自动重排
+
+## 结构同步（2026-02-28 查询页口径固定顺序）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 口径列表改为固定顺序展示：\n    全口径、主城区、集团本部、股份本部、北海、北海水炉、香海、供热公司、金州、北方、金普、庄河、研究院、主城区电锅炉
+  - 固定清单之外的口径自动追加到列表末尾
+  - “口径全选”按固定顺序写入选择数组
+- 联动：\n  - 指标列表使用后端 `query-options` 返回顺序（后端已调整为首次出现顺序）
+
+## 结构同步（2026-02-28 查询页指标业务排序规则）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增 19 个计算指标集合，统一后置显示
+  - 指标排序规则：
+    - 基础/半计算指标在前
+    - 计算指标在后
+    - 前半区按：产量 -> 销售量 -> 消耗量（煤/油/水/电/气优先级）-> 其他
+    - 相似指标中“总”优先
+  - 结果：指标勾选列表更贴合业务阅读与分析路径
+
+## 结构同步（2026-02-28 查询页指标三栏分段）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 指标选择区拆分为三段：
+    - 当前指标
+    - 常量指标
+    - 计算指标
+  - 常量指标固定优先顺序：
+    - 发电设备容量
+    - 锅炉设备容量
+  - 计算指标使用固定顺序清单展示
+  - 三段内均保留勾选顺序数字标注
+
+## 结构同步（2026-02-28 查询页分栏样式展开修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 口径/指标/开关筛选区改为整行展开（`span-full`）
+  - 复选网格列宽提升到 `minmax(220px, 1fr)`，并增大可视高度
+  - 勾选项文本支持换行，移动端自动切换单列
+- 结果：
+  - 解决“分栏缩在一起”的视觉拥挤问题。
+
+## 结构同步（2026-02-28 查询页紧凑化与指标分组修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 布局从“过度展开”回调为“紧凑有序”：
+    - 关键筛选区改为 `span-2`
+    - 复选网格列宽由 220 调整为 170
+    - 减小分段间距与网格间距
+  - 指标分组调整为两段：
+    - 当前指标（尾部含常量指标）
+    - 计算指标（19项固定展示）
+  - 常量指标不再单独成栏，改为附着在当前指标末尾
+
+## 结构同步（2026-02-28 查询页选择区滚动条修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 口径复选区 `check-list` 增加纵向滚动（`overflow-y: auto`）与高度约束
+  - 指标分段区 `check-list.sections` 增加纵向滚动
+  - 各分段内部 `section-items` 增加独立纵向滚动
+- 结果：
+  - 选项超出可视范围时可滚动查看，不再出现“显示不全且无滚动条”。
+
+## 结构同步（2026-02-28 查询页按月筛选与布局适中化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 时间筛选输入改为 `type=\"month\"`，并按顺序调整为：
+    - 业务月份起/止
+    - 来源月份起/止
+  - 查询参数转换：
+    - 月份起 -> 月初日期
+    - 月份止 -> 月末日期
+  - 布局密度优化：
+    - 复选网格列宽 170 -> 190
+    - 分段/列表高度与间距适度上调
+- 结果：
+  - 页面不再“过紧”，同时满足“先业务后来源”的按月筛选习惯。
+
+## 结构同步（2026-02-28 查询页期间/类型勾选化与层次顺序勾选）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “期间”“类型”由多选下拉改为复选列表（含全选/全不选）
+  - 期间/类型选项支持顺序数字标注（1,2,3...）
+  - 新增“数据层次顺序（有序勾选）”：
+    - 口径、指标、期间、类型
+    - 支持勾选顺序数字与“重置默认”
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 查询请求新增透传 `order_fields`
+
+## 结构同步（2026-02-28 查询页排版密度二次优化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 主内容区宽度与卡片内边距统一上调
+  - 筛选网格列宽、列表高度、段落间距统一标尺
+  - 指标分段取消段内二级滚动，改为外层统一滚动
+  - 汇总卡、按钮、标题间距统一微调
+- 结果：
+  - 页面密度更均衡，避免“有的太空、有的太挤”。
+
+## 结构同步（2026-02-28 查询页口径/指标整行占满）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “口径（可多选）”区域改为 `span-full`，整行占满
+  - “指标（可多选）”两栏分段区域改为 `span-full`，整行占满
+  - 增加 `span-full` 样式与移动端适配规则
+
+## 结构同步（2026-02-28 口径选择区内部紧凑化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 口径列表增加 `company-list` 独立样式
+  - 列宽、间距、内边距、条目行高下调，提升口径区信息密度
+  - 指标区样式保持不变
+
+## 结构同步（2026-02-28 指标两栏显示不全修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 指标分段容器高度上调（`check-list.sections.compact`）
+  - 分段块增加 `flex: 0 0 auto`，避免被压缩
+  - 分段内容区 `section-items` 增加独立纵向滚动
+- 结果：
+  - 两栏指标都可完整查看，不再截断。
+
+## 结构同步（2026-02-28 四筛选模块同一行布局）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “期间”“类型”“数据层次顺序”“是否聚合口径”重排为同一行四列（`inline-four`）
+  - 每列采用统一小卡片样式
+  - 响应式下自动切换两列/一列
+- 结果：
+  - 四个模块同域展示，交互链路更连贯。
+
+## 结构同步（2026-02-28 期间/类型默认值与空选规则）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 期间默认值：`month`
+  - 类型默认值：`real`
+  - 重置筛选时同样回到 `month/real`
+  - 当期间或类型为空时：
+    - 查询按钮禁用
+    - 展示“为空不提取”提示
+    - 前端本地返回空结果
+
+## 结构同步（2026-02-28 查询页取消默认自动查询）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 初始化仅加载筛选项，不自动执行查询
+  - 新增 `hasSearched` 控制首屏文案：
+    - 未查询前提示“请先设置筛选条件并点击查询”
+    - 查询后再展示结果/空结果状态
+  - 重置筛选改为清空结果，不自动触发查询
+
+## 结构同步（2026-02-28 聚合开关栏新增“期间月份聚合”）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 在“聚合开关”栏新增 `aggregateMonths` 开关
+  - 开启后表示区间聚合月份；关闭则逐月展示
+  - 重置时恢复默认不聚合
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 查询请求新增透传 `aggregate_months`
+
+## 结构同步（2026-02-28 聚合口径关闭态文案调整）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 聚合口径开关关闭态文案调整为：
+    - `不聚合口径（逐口径列出）`
+
+## 结构同步（2026-02-28 查询按钮四项必选约束）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询按钮禁用条件扩展为：
+    - 口径/指标/期间/类型任一为空即禁用
+  - 提示文案同步为“四项至少各选一项”
+
+## 结构同步（2026-02-28 汇总信息移除数值合计）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 删除“数值合计”汇总卡片
+  - 汇总区保留：总记录数、数值非空、数值空值
+
+## 结构同步（2026-02-28 类型筛选顺序 real 优先）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增 `orderedTypes` 计算顺序
+  - “类型”选项列表与全选逻辑改为 `real` 置顶
+
+## 结构同步（2026-02-28 指标区更名与“平均气温”追加）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 指标分段标题由“当前指标（尾部含常量指标）”调整为“基本指标”
+  - 新增 `AVERAGE_TEMPERATURE_ITEM = '平均气温'`
+  - “基本指标”分段中：
+    - 常规指标在前
+    - 常量指标随后
+    - “平均气温”固定在尾部
+  - `loadOptions()` 增加兜底：若接口未返回“平均气温”，前端自动补入选项
+
+## 结构同步（2026-02-28 查询结果隐藏 operation_time）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询结果表格移除 `operation_time` 列（表头与行数据同步删除）
+  - 保留字段：`company/item/unit/value/date/period/type/report_month`
+
+## 结构同步（2026-02-28 查询结果同比/环比分析 + XLSX 导出）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询结果头部新增 `导出 XLSX` 按钮
+  - 新增“同比与环比（基于最新月份）”对比表
+  - 新增“专业分析要点”列表（同比分布、波动最大项、温度相关性、空值提示）
+  - 新增本地导出逻辑（`xlsx`）：
+    - Sheet1 `查询结果`
+    - Sheet2 `同比环比对比`
+    - Sheet3 `专业分析`
+  - 新增样式：
+    - 分析模块卡片样式
+    - 同比/环比涨跌颜色（绿/红）
+    - 结果头部动作区布局
+
+## 结构同步（2026-02-28 同比/环比改为后端实时补查）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询时并行调用主查询与对比查询接口
+  - 对比表数据来源改为后端 `query-comparison` 返回
+  - 同比/环比窗口标签由后端返回并展示
+  - XLSX 导出中的“同比环比对比”sheet 同步采用后端实时数据
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 `queryMonthlyDataShowComparison(projectKey, payload)` 封装
+
+## 结构同步（2026-02-28 同比/环比可视化总览）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增可视化控制：
+    - 视角切换：同比 / 环比
+    - TopN 指标数量：10/15/20/30
+  - 新增图形区：
+    - 热力图（指标 × 口径）：按涨跌幅着色
+    - 波动 TopN 条形图：按绝对涨跌幅排序
+  - 保留并强化对比表与专业分析要点，数据统一来源于后端实时对比接口
+
+## 结构同步（2026-02-28 同比/环比配色语义调整）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 同比/环比配色统一为：正值红色、负值绿色
+  - 影响范围：
+    - 对比表百分比列（`delta-up/delta-down`）
+    - 热力图色阶
+    - TopN 条形图填充色
+
+## 结构同步（2026-02-28 热力图标题换行修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 热力图标题改为：`热力图（纵轴=指标，横轴=口径）`
+  - 新增 `viz-title-nowrap`，防止标题换行导致轴向语义误读
+
+## 结构同步（2026-02-28 热力图网格错位修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 热力图网格改为“固定列数=口径数量”（由 `heatmapGridStyle` 动态注入）
+  - 移除 `auto-fill` 列策略，避免指标标签行错位
+  - 小屏下改为最小宽度 + 横向滚动，保持矩阵结构稳定

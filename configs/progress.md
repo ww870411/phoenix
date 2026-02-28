@@ -2854,3 +2854,537 @@
   1. 修改 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`；
   2. 将 `.page-card-title` 颜色由 `inherit` 改为 `var(--primary-700)`（与页面标题使用的卡片标题蓝色体系一致）。
 - **Result:** “数据看板”“数据展示页面”等子页面卡片大标题已统一为与“请选择功能页面”同样的蓝色。
+
+## 2026-02-28（monthly_data_show 新增 report_month 导出字段）
+
+- **User Request:** 新增 `report_month` 字段，表示月报数据来源月份；例如 `26.2` 应写为 `2026-02-01`。
+- **Agent Action:**
+  1. 修改 `backend/projects/monthly_data_show/services/extractor.py`；
+  2. 将 `ALLOWED_FIELDS` 扩展为：`company,item,unit,value,date,period,type,report_month`；
+  3. 新增 `_build_report_month_text(report_year, report_month)`，统一生成 `YYYY-MM-01`；
+  4. 普通提取行与常量注入行均增加 `report_month` 字段，并写入同一来源月份值。
+- **Result:** 导出 CSV 现可包含 `report_month`，且按文件名解析月份输出标准日期（如 `2026-02-01`）。
+
+## 2026-02-28（monthly_data_show 新增“报告月份设定”区域：自动识别可修改）
+
+- **User Request:** 在“步骤 2：复选提取范围”最上方新增一块选择区域；程序按文件名自动判断年月，但允许用户手动修改。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 在步骤2顶部新增“报告月份设定（自动识别，可修改）”面板；
+     - 增加“年份/月份”输入框与预览文案（`YYYY-MM-01`）；
+     - `inspect` 后自动填入后端识别出的年月；
+     - 提取前校验年份（2000-2099）与月份（1-12），并把值随请求提交。
+  2. 修改 `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - `extractMonthlyDataShowCsv` 新增 `reportYear/reportMonth` 参数并提交 `report_year/report_month` 表单字段。
+  3. 修改 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `inspect` 响应新增：`inferred_report_year`、`inferred_report_month`、`inferred_report_month_date`；
+     - `extract-csv` 接口新增：`report_year`、`report_month` 入参，并做合法性校验。
+  4. 修改 `backend/projects/monthly_data_show/services/extractor.py`：
+     - `extract_rows` 新增可选覆盖参数 `report_year/report_month`；
+     - 未传时沿用文件名自动解析；传入时以用户值覆盖；
+     - 覆盖后的年月参与 `date/period/type` 计算及 `report_month` 字段生成。
+- **Result:** 步骤2现已提供“自动识别 + 手工修正”的来源月份控制能力，满足提取前人工确认与修订场景。
+
+## 2026-02-28（新增 month_data_show 数据库建表 SQL）
+
+- **User Request:** 在 `D:\编程项目\phoenix\backend\sql` 生成新 SQL 文件，建立数据库表 `month_data_show`。
+- **Agent Action:**
+  1. 新建 `backend/sql/month_data_show.sql`；
+  2. 建表字段与 `monthly_data_show` 当前导出结构对齐：
+     - `company, item, unit, value, date, period, type, report_month`
+     - 以及 `id, operation_time`；
+  3. 增加唯一索引 `idx_month_data_show_unique`，防止同来源月份下重复写入；
+  4. 增加常用查询索引（`report_month+company`、`date`）。
+- **Result:** `month_data_show` 建表脚本已就位，可直接在数据库执行创建表与索引。
+
+## 2026-02-28（month_data_show 唯一性口径确认与索引说明修正）
+
+- **User Clarification:** 来源月份 `report_month` 仅作参考，核心唯一性以 `date, period, type, company, item` 为准。
+- **Agent Action:**
+  1. 修改 `backend/sql/month_data_show.sql`；
+  2. 保持唯一索引为 `(company, item, date, period, type)`；
+  3. 修正唯一索引注释描述；
+  4. 将 `(date, company)` 索引名称修正为语义一致的 `idx_month_data_show_date_company`；
+  5. 增加 `report_month` 单列索引 `idx_month_data_show_report_month`（参考查询用途）。
+- **Result:** 表约束已与业务口径一致，查询索引命名和用途更清晰。
+
+## 2026-02-28（monthly_data_show 新增第4步：CSV 入库）
+
+- **User Request:** 在现有流程中新增“第4步”，完成 CSV 文件入库数据库。
+- **Agent Action:**
+  1. 后端新增接口：`POST /api/v1/projects/monthly_data_show/monthly-data-show/import-csv`
+     - 文件：`backend/projects/monthly_data_show/api/workspace.py`
+     - 仅接收 `.csv`，编码要求 UTF-8（可带 BOM）；
+     - 校验必要字段：`company,item,unit,value,date,period,type,report_month`；
+     - 使用 UPSERT 写入 `month_data_show`（冲突键：`company,item,date,period,type`）；
+     - 返回 `imported_rows` 统计。
+  2. 前端新增入库调用：
+     - 文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+     - 新增 `importMonthlyDataShowCsv(projectKey, file)`。
+  3. 前端页面新增“步骤 4：CSV 入库（写入 month_data_show）”：
+     - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+     - 支持选择 CSV、触发入库、展示“入库成功处理条数”反馈。
+- **Result:** 现在 `monthly_data_show` 已形成“上传读取 -> 复选提取 -> 导出 CSV -> CSV 入库”的完整四步链路。
+
+## 2026-02-28（monthly_data_show 第3步结果一键入库）
+
+- **User Request:** 需要“第3步导出结果”可直接一键入库，无需再手动选择 CSV。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`；
+  2. 第3步导出成功后，将返回 `blob` 封装为内存 `File` 并缓存为 `lastExtractedCsvFile`；
+  3. 第4步新增按钮“使用第3步结果一键入库”；\n     - 点击后直接调用现有入库流程；\n     - 同时保留“手动选择 CSV 再入库”能力。
+- **Result:** 导出与入库实现无缝衔接，常用路径可一键完成。
+
+## 2026-02-28（monthly_data_show 第3步按钮拆分：提取与下载分离）
+
+- **User Request:** 第3步将 CSV“提取”和“下载”拆成两个按钮。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`；
+  2. 第3步按钮改为：
+     - `提取 CSV`：仅调用后端提取并缓存结果，不自动下载；
+     - `下载 CSV`：下载已缓存的提取结果；
+  3. 新增提取状态提示文案，显示当前已缓存文件名；
+  4. 保持与第4步联动：提取后仍可直接一键入库。
+- **Result:** 第3步操作语义更清晰，满足“先提取、再决定是否下载/入库”的流程需求。
+
+## 2026-02-28（monthly_data_show value 空值标记入库兼容）
+
+- **User Feedback:** 提取后 `value` 为 `none` 的记录无法入库。
+- **Decision:** 将 `none/null/nan/--/无/空/空字符串` 统一视为缺失值并按 `NULL` 入库，不强制转 `0`。
+- **Agent Action:**
+  1. 修改 `backend/projects/monthly_data_show/api/workspace.py`：
+     - CSV 解析阶段新增空值标记识别集合 `NULL_VALUE_TOKENS`；
+     - `value` 命中空值标记时写入 `None`；
+     - 入库响应新增 `null_value_rows`（本次按空值入库的记录数）。
+  2. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：
+     - 第4步入库成功提示新增空值统计展示。
+- **Result:** `value` 为 `none` 等空值标记时可正常入库，且可看到空值入库条数反馈。
+
+## 2026-02-28（monthly_data_show 新增 #DIV/0! 空值兼容）
+
+- **User Request:** 将 `#DIV/0!` 也按 `NULL` 写库。
+- **Agent Action:**
+  1. 修改 `backend/projects/monthly_data_show/api/workspace.py`；
+  2. 在 `NULL_VALUE_TOKENS` 中新增 `#div/0!` 标记（解析时统一小写比较）。
+- **Result:** CSV 入库时 `#DIV/0!` 将不再触发数值解析报错，而是按空值 `NULL` 入库。
+
+## 2026-02-28（monthly_data_show 查询页面第一阶段落地）
+
+- **User Request:** 已完成入库后，开始构建“月报数据查询工具”页面。
+- **Agent Action:**
+  1. 后端新增查询能力（`backend/projects/monthly_data_show/api/workspace.py`）：
+     - `GET /monthly-data-show/query-options`：返回筛选项（公司/指标/期间/类型）；
+     - `POST /monthly-data-show/query`：支持按来源月份、业务日期、公司、指标、期间、类型筛选；
+     - 支持分页（`limit/offset`）；
+     - 返回汇总统计（总条数、value 非空条数、空值条数、value 合计）。
+  2. 前端 API 新增封装（`frontend/src/projects/daily_report_25_26/services/api.js`）：
+     - `getMonthlyDataShowQueryOptions`
+     - `queryMonthlyDataShow`
+  3. 查询页面由占位改为可用工具（`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`）：
+     - 筛选区：来源月份/业务日期区间 + 公司/指标/期间/类型多选；
+     - 汇总区：总记录、非空数值、空值数值、数值合计；
+     - 结果区：表格展示 + 上下页分页。
+- **Result:** `月报数据查询工具` 已具备可用的基础查询分析能力，可直接查询 `month_data_show` 入库数据。
+
+## 2026-02-28（查询页筛选交互重构：口径/指标勾选 + 层次与聚合开关）
+
+- **User Request:**\n  1) “公司（可多选）”改为“口径（可多选）”，并使用勾选方式且有序；\n  2) 指标同样改为勾选方式且有序；\n  3) 增加开关：先指标后公司/先公司后指标（控制结果层次顺序）；\n  4) 增加开关：是否聚合口径（逐口径展示或聚合为新口径）。
+- **Agent Action:**
+  1. 前端页面重构（`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`）：
+     - “公司”文案改为“口径（可多选）”；
+     - 口径与指标改为有序复选列表（含全选/全不选）；
+     - 新增两个开关：
+       - `先口径后指标 / 先指标后口径`
+       - `是否聚合口径`
+  2. 后端查询能力扩展（`backend/projects/monthly_data_show/api/workspace.py`）：
+     - `QueryRequest` 新增 `order_mode` 与 `aggregate_companies`；
+     - `order_mode` 控制排序层次（`company_first` / `item_first`）；
+     - `aggregate_companies=true` 时按 `item,unit,date,period,type,report_month` 聚合并返回 `company='聚合口径'`；
+     - 分页总数与汇总统计在聚合模式下同步按聚合结果计算。
+  3. 前端查询 API 参数联动（`frontend/src/projects/daily_report_25_26/services/api.js`）：
+     - 将 `order_mode`、`aggregate_companies` 透传到查询接口。
+- **Result:** 查询页面已满足“勾选式有序筛选 + 顺序层次开关 + 口径聚合开关”的新需求，且后端结果真实按开关生效。
+
+## 2026-02-28（查询页勾选顺序数字标注）
+
+- **User Request:** 选择次序需要用数字标注。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 在“口径（可多选）”与“指标（可多选）”的每个已选项右侧显示顺序编号（1,2,3...）；
+  3. 编号按勾选先后自动更新，取消某项后剩余编号自动重排。
+- **Result:** 勾选顺序可视化完成，便于确认“先选谁、后选谁”的层次意图。
+
+## 2026-02-28（查询页口径固定顺序与指标顺序整理）
+
+- **User Request:** 口径与指标顺序需整理；口径按以下固定次序：\n  全口径、主城区、集团本部、股份本部、北海、北海水炉、香海、供热公司、金州、北方、金普、庄河、研究院、主城区电锅炉。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 新增口径固定顺序常量并用于列表展示；
+     - 未在固定清单中的口径自动追加到末尾；
+     - “全选口径”改为按该固定顺序勾选。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `query-options` 的 `items` 顺序由字母序改为按 `MIN(id)` 返回（即按入库首次出现顺序），使指标顺序更稳定、更贴近数据来源结构。
+- **Result:** 口径顺序已严格按你指定顺序展示，指标顺序也已从“字母序”调整为“数据出现顺序”。
+
+## 2026-02-28（查询页指标排序规则升级）
+
+- **User Request:** 指标排序需按业务结构：\n  基本指标+半计算指标在前，19个计算指标整体放后；前者按“产量→销售量→消耗量（煤优先）→其他”，相似指标中“总”在前。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 新增 `CALCULATED_ITEM_SET`（19个计算指标）并作为“后置分组”；
+  3. 新增指标排序函数：
+     - 一级：是否计算指标（基础/半计算在前，计算指标在后）；
+     - 二级：产量 > 销售量 > 消耗量 > 其他；
+     - 三级（消耗量内）：煤 > 油 > 水 > 电 > 气 > 其他；
+     - 四级：相似项中“总”优先（如“总X”排在“X”前）；
+     - 五级：保持稳定顺序（回退到原始顺序索引）。
+- **Result:** 指标列表展示已切换为业务导向排序，更符合查询使用习惯。
+
+## 2026-02-28（查询页指标改为三栏分段展示）
+
+- **User Feedback:** 需明确区分“当前指标 / 常量指标 / 计算指标”，而非单列表混排。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 指标区域改为三段结构：
+     - 当前指标（前置）
+     - 常量指标（置于末尾前段）
+     - 计算指标（最后一段）
+  3. 常量指标采用固定优先顺序：`发电设备容量`、`锅炉设备容量`；
+  4. 计算指标采用固定顺序表；
+  5. 保留每项的勾选顺序数字标注（1,2,3...）。
+- **Result:** 指标选择区已按“当前 -> 常量 -> 计算”分栏展示，结构更清晰，可避免“计算指标不见了”的感知问题。
+
+## 2026-02-28（查询页分栏样式展开修正）
+
+- **User Feedback:** 指标分栏“都缩在一起”，阅读与勾选体验不佳。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 将口径/指标/开关区域改为整行占位（`span-full`）；
+  3. 提升复选网格列宽（`minmax(220px, 1fr)`）与可视高度；
+  4. 增加文本换行与行高，移动端下改为单列展示。
+- **Result:** 查询筛选区由“拥挤”改为“展开式”布局，分栏可读性明显提升。
+
+## 2026-02-28（查询页紧凑化回调 + 指标分组结构修正）
+
+- **User Feedback:** 页面“展得太开”；且需求不是单独常量栏，而是“常量指标放在当前指标尾部”；计算指标 19 项需明确展示，不应为空栏。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 布局紧凑化：
+     - 口径/指标/开关由整行改回双列跨度（`span-2`）；
+     - 复选网格列宽由 `220` 调整为 `170`，并降低间距与高度，减少留白。
+  3. 指标分组修正为两段：
+     - `当前指标（尾部含常量指标）`
+     - `计算指标（19项）`
+  4. 常量指标处理：
+     - 不再单独成栏；
+     - 在“当前指标”末尾按固定顺序追加（发电设备容量、锅炉设备容量）。
+  5. 计算指标处理：
+     - 固定 19 项始终展示在“计算指标（19项）”段，即使数据库当前无记录也可见可选。
+- **Result:** 页面由“过度展开”回调为“紧凑有序”；指标分组与展示口径已与最新要求一致。
+
+## 2026-02-28（查询页口径/指标选择区滚动条修复）
+
+- **User Feedback:** 指标两个选择栏没有滚动条，内容显示不全。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 为口径复选区 `check-list` 增加明确的纵向滚动与高度约束；
+  3. 为指标分段区 `check-list.sections` 增加纵向滚动；
+  4. 为每个分段内的 `section-items` 增加独立纵向滚动，避免段内溢出。
+- **Result:** 口径与指标选择区域在内容较多时均可滚动，显示完整可选项。
+
+## 2026-02-28（查询页布局适中化 + 月份选择器与筛选顺序调整）
+
+- **User Feedback:** 页面仍偏紧凑；希望日历改为“按月选择”，并且先选业务日期，再选来源月份。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 时间筛选控件改为 `type=\"month\"`：
+     - 业务月份起/止（前置）
+     - 来源月份起/止（后置）
+  3. 前端查询参数转换：
+     - `YYYY-MM` -> 月初 `YYYY-MM-01`（from）
+     - `YYYY-MM` -> 月末 `YYYY-MM-DD`（to）
+     - 映射到后端 `date_from/date_to` 与 `report_month_from/report_month_to`
+  4. 样式从“过紧”回调为“适中”：
+     - 复选列宽由 170 调整为 190
+     - 列表与分段最大高度适度提升，间距略增
+- **Result:** 筛选交互改为“先业务后来源”的按月筛选，页面密度更均衡。
+
+## 2026-02-28（查询页期间/类型改为勾选 + 数据层次顺序有序勾选）
+
+- **User Request:**\n  1) “期间”“类型”改为勾选框，并支持顺序数字；\n  2) “数据层次顺序”改为勾选框，维度为“口径/指标/期间/类型”，按有序选择表示展示层次。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 期间/类型由下拉多选改为复选列表（含全选/全不选）；
+     - 期间/类型已选项显示顺序数字徽标；
+     - 新增“数据层次顺序（有序勾选）”区，支持四维顺序选择与默认重置。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `QueryRequest` 新增 `order_fields`；
+     - 查询排序改为按 `order_fields` 动态生成（并做白名单约束）；
+     - 聚合模式下自动忽略 `company` 层次维度。
+  3. 前端 API 联动：
+     - 查询请求透传 `order_fields` 到后端。
+- **Result:** 期间/类型筛选方式与口径/指标一致，数据展示层次可通过“有序勾选”精确控制。
+
+## 2026-02-28（查询页排版密度二次优化）
+
+- **User Feedback:** 目前排版密度不均，有的区域留白过大，有的区域过于紧凑。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`（仅样式层）；
+  2. 统一密度标尺：
+     - 主内容区宽度、卡片内边距、区块间距统一上调；
+     - 筛选网格列宽与间距统一；
+     - 复选区高度与最小高度统一；
+     - 指标分段取消“段内再滚动”，避免双滚动造成拥挤观感；
+     - 按钮、汇总卡、标题间距统一调整。
+- **Result:** 页面从“松紧不一”调整为“紧凑且有呼吸感”的均衡排版。
+
+## 2026-02-28（查询页口径与指标区域改为整行占满）
+
+- **User Request:** “口径（可多选）”占满整行；“指标”两栏分段也占满整行。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 将“口径（可多选）”与“指标（可多选）”容器从 `span-2` 调整为 `span-full`；
+  3. 新增 `span-full` 样式（`grid-column: 1 / -1`），并补充移动端回退规则。
+- **Result:** 口径与指标区域已整行展开，视觉层级更清晰。
+
+## 2026-02-28（口径选择区内部紧凑化）
+
+- **User Request:** “口径（可多选）”内部内容再紧凑一些。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 为口径列表单独增加 `company-list` 样式：
+     - 缩小列宽（`minmax(160px, 1fr)`）；
+     - 缩小网格间距与内边距；
+     - 降低条目最小高度与行内间距。
+- **Result:** 仅口径区内容密度提升，指标区维持当前可读性。
+
+## 2026-02-28（指标两栏显示不全修复）
+
+- **User Feedback:** 两栏指标内容显示不全。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 提升指标分段容器高度（`check-list.sections.compact`）；
+  3. 为每个分段块增加 `flex: 0 0 auto`，避免 flex 压缩；
+  4. 为 `section-items` 增加独立纵向滚动与高度上限，确保每栏可完整浏览。
+- **Result:** 指标两栏均可完整查看，不再出现被截断显示不全的问题。
+
+## 2026-02-28（期间/类型/层次/聚合同一行布局）
+
+- **User Request:** “期间、类型、层次、是否聚合口径”放在同一行。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 将这四块重构为同一行四列容器（`inline-four`）；
+  3. 每列统一为独立小卡片，保持勾选与顺序数字逻辑不变；
+  4. 增加响应式规则：中屏两列、小屏一列自动换行。
+- **Result:** 四个筛选模块已在同一行展示，结构更集中，操作链路更连贯。
+
+## 2026-02-28（期间/类型默认值与空选不提取规则）
+
+- **User Request:** 期间默认选 `month`，类型默认选 `real`；当没有任何选择时不提取任何数据。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 初始化与重置时：
+       - `periods` 默认 `month`
+       - `types` 默认 `real`
+       - 若目标值不存在则回退首项
+     - 当期间或类型为空时：
+       - 查询按钮禁用
+       - 页面提示“为空不提取”
+       - 本地查询逻辑直接返回空结果
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - 查询入口增加保护：`periods` 或 `types` 为空时，直接返回空数据与空汇总。
+- **Result:** 默认筛选已对齐 `month/real`，并实现“空选不提取”。
+
+## 2026-02-28（查询页取消默认自动查询）
+
+- **User Feedback:** 查询页面进入后会默认显示一套查询结果，不符合预期。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 页面初始化改为仅加载筛选项，不自动触发查询；
+  3. 新增 `hasSearched` 状态：
+     - 未查询前显示提示“请先设置筛选条件并点击查询”；
+     - 查询后再展示“暂无数据/结果表”；
+  4. 重置筛选时改为清空结果，不自动重新查询。
+- **Result:** 查询页初始状态不再自动出结果，改为“用户显式查询”驱动。
+
+## 2026-02-28（新增“是否聚合期间月份”开关）
+
+- **User Request:** 在“是否聚合口径”同栏新增一个开关，用于控制月份区间是逐月列出还是聚合求值；不选则不聚合。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 在“聚合开关”栏新增 `aggregateMonths` 开关；
+     - 文案：
+       - 开：`已聚合期间月份（区间汇总）`
+       - 关：`不聚合期间月份（逐月列出）`
+     - 查询参数透传 `aggregate_months`；
+     - 重置时恢复默认 `false`。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - `QueryRequest` 新增 `aggregate_months`；
+     - 查询分组逻辑扩展：
+       - 开启时按区间聚合月份（不再按 `date/report_month` 分组）；
+       - 关闭时保持逐月明细；
+       - 与“聚合口径”可叠加使用。
+- **Result:** 用户可自主决定月份区间结果是“逐月列出”还是“区间聚合”。
+
+## 2026-02-28（聚合口径开关文案微调）
+
+- **User Request:** 第一个名字改为“不聚合口径（逐口径列出）”。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 聚合口径开关关闭态文案由“不聚合（逐口径列出）”调整为“不聚合口径（逐口径列出）”。
+- **Result:** 开关文案已按指定更新。
+
+## 2026-02-28（查询前置条件收紧：口径/指标为空禁查）
+
+- **User Request:** 口径都不选，或者指标都不选时，不能点击查询。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 查询按钮禁用条件扩展为：口径/指标/期间/类型任一为空即禁用；
+     - 提示文案同步更新为“四项均需至少选择1项”。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - 查询入口新增同等保护：口径或指标为空时直接返回空结果。
+- **Result:** 前后端均已防止“口径/指标为空”触发查询。
+
+## 2026-02-28（查询页汇总信息移除“数值合计”）
+
+- **User Request:** 汇总信息栏去掉“数值合计”。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 删除“数值合计”汇总卡片，仅保留“总记录数/数值非空/数值空值”。
+- **Result:** 汇总信息更简洁，聚焦记录量与空值情况。
+
+## 2026-02-28（查询页类型顺序调整：real 优先）
+
+- **User Request:** 在“类型”筛选中将 `real` 放在第一个。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  2. 新增 `orderedTypes` 计算排序：`real` 固定置顶，其他项顺序不变；
+  3. “类型”列表展示与“全选”逻辑统一改用 `orderedTypes`。
+- **Result:** 类型筛选中 `real` 始终位于首位。
+
+## 2026-02-28（monthly_data_show 指标区更名与“平均气温”接入）
+
+- **User Request:** 将“当前指标（尾部含常量指标）”改为“基本指标”；在该栏尾部新增“平均气温”，并按所选月份从 `calc_temperature_data` 视图读取每日数据做算术平均显示。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 指标栏标题改为“基本指标”；
+     - 新增常量 `AVERAGE_TEMPERATURE_ITEM = '平均气温'`；
+     - 将“平均气温”固定放在“基本指标”列表末尾；
+     - 加载筛选项时兜底追加“平均气温”选项。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - 查询筛选项接口 `query-options` 兜底返回“平均气温”指标；
+     - 查询接口新增派生指标逻辑：
+       - 在 `items` 包含“平均气温”且 `periods` 含 `month`、`types` 含 `real` 时生效；
+       - 从 `calc_temperature_data` 按日期区间读取 `aver_temp`；
+       - 非聚合月份：按月对每日 `aver_temp` 做算术平均；
+       - 聚合月份：对区间内每日 `aver_temp` 做算术平均；
+       - 与主查询结果合并后统一排序、分页与汇总。
+- **Result:** 查询页可在“基本指标”中勾选“平均气温”，并按月份区间显示来自 `calc_temperature_data` 的月均温结果。
+
+## 2026-02-28（查询结果隐藏 operation_time + 平均气温修正）
+
+- **User Feedback:**  
+  1) `operation_time` 不需要显示；  
+  2) “平均气温”显示成了当月首日值，而不是全月平均。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 查询结果表头与行渲染中移除 `operation_time` 列。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：
+     - 修正温度日期范围规则：当仅选单个月份边界时，按该月完整自然月计算（不再退化为单日）；
+     - 查询时将“平均气温”从主表项中过滤，避免主表同名指标干扰；
+     - 当仅选“平均气温”时跳过主表查询，仅返回派生温度结果；
+     - 继续按 `calc_temperature_data` 每日 `aver_temp` 做月内/区间算术平均。
+- **Result:** 页面不再显示 `operation_time`；“平均气温”按月口径正确展示为整月日均值算术平均。
+
+## 2026-02-28（查询结果栏目新增同比/环比分析与 XLSX 导出）
+
+- **User Request:** 参考数据分析页面风格，在查询结果栏目增加同比对比、专业分析，并支持 xlsx 导出。
+- **Agent Action:**
+  1. 页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+     - 查询结果头部新增 `导出 XLSX` 按钮；
+     - 在查询结果下方新增“同比与环比（基于最新月份）”对比表；
+     - 新增“专业分析要点”模块，自动生成结构化结论；
+     - 增加涨跌配色、分析卡片等样式，保持与现有页面视觉一致。
+  2. 计算逻辑（前端本地）：
+     - 依据 `report_month/date` 识别月份序列；
+     - 以最新月份为“本期”，自动匹配“同比（月-12）”和“环比（月-1）”；
+     - 按 `company+item+period+type+unit` 聚合比较；
+     - 自动生成专业要点：同比/环比上升下降分布、波动最大项、温度相关性观察（皮尔逊系数）与空值质量提示。
+  3. XLSX 导出内容：
+     - Sheet1：查询结果；
+     - Sheet2：同比环比对比；
+     - Sheet3：专业分析结论。
+- **Result:** 查询结果卡片现已具备“可看、可比、可导出”的分析能力，可直接用于月报研判与汇报。
+
+## 2026-02-28（同比/环比逻辑修正为后端实时窗口补查）
+
+- **User Feedback:** 当前同比值存在但显示为 `NULL`；同比应取“上一年度同一时期、同 type、同口径、同指标”，环比应取“上一个同样长度时期”。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py` 新增接口：
+     - `POST /monthly-data-show/query-comparison`
+     - 入参复用查询页 `QueryRequest`。
+  2. 对比窗口定义：
+     - 当前窗口：优先使用 `date_from/date_to`；若缺失则回退 `report_month_from/report_month_to`；
+     - 同比窗口：当前窗口整体向前平移 1 年（按自然日安全平移）；
+     - 环比窗口：紧邻当前窗口之前、且长度与当前窗口相同的时间段。
+  3. 查询维度与聚合规则：
+     - 严格按 `company + item + period + type + unit` 匹配；
+     - 保留口径聚合开关 `aggregate_companies`；
+     - 当前/同比/环比分别实时补查数据库并生成 `current_value/yoy_value/mom_value` 与涨跌率。
+  4. 前端 `MonthlyDataShowQueryToolView.vue`：
+     - 取消“仅基于当前页 rows 的本地同比推导”；
+     - 查询时并行调用：
+       - `/monthly-data-show/query`
+       - `/monthly-data-show/query-comparison`
+     - 对比表与分析要点改为使用后端实时对比结果；
+     - 导出 XLSX 的“同比环比对比”sheet 同步使用实时对比数据。
+  5. API 服务 `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - 新增 `queryMonthlyDataShowComparison` 调用封装。
+- **Result:** 同比/环比不再受分页与前端样本截断影响，改为按数据库实时窗口补查；存在历史值时将正确显示，不再误判 `NULL`。
+
+## 2026-02-28（新增同比/环比可视化总览：热力图 + TopN）
+
+- **User Request:** 增加一个图，一目了然展示各指标同比/环比情况，并兼顾指标过多时的可读性。
+- **Agent Action:**
+  1. 页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 新增可视化模块：
+     - 视角切换：`同比/环比`
+     - 容量控制：`TopN 指标（10/15/20/30）`
+  2. 图形设计：
+     - 热力图（指标 × 口径）：颜色深浅表示涨跌幅绝对值，绿色为上升、红色为下降；
+     - 波动 TopN 条形图：按绝对涨跌幅排序，突出最值得关注序列。
+  3. 数据来源：
+     - 复用后端 `query-comparison` 的实时对比结果；
+     - 不再依赖当前分页结果推导，避免样本截断造成图形偏差。
+  4. 导出联动：
+     - XLSX 导出继续包含“同比环比对比”sheet，使用实时对比数据。
+- **Result:** 已形成“总览（热力）+聚焦（TopN）”组合，指标数量较多时也可快速定位异常项。
+
+## 2026-02-28（同比/环比颜色语义调整）
+
+- **User Request:** 同比/环比百分比在表格、热力图等处统一为“正数红色，负数绿色”。  
+- **Agent Action:**  
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 百分比样式类颜色反转：`delta-up` 改为红色，`delta-down` 改为绿色；  
+     - 热力图着色逻辑反转：正值红色系、负值绿色系；  
+     - TopN 条形图填充色同步反转。  
+- **Result:** 页面内同比/环比颜色语义已完全统一为“红涨绿跌（正红负绿）”。
+
+## 2026-02-28（热力图标题换行与轴向语义修正）
+
+- **User Feedback:** 热力图“指标/口径”描述疑似因换行导致理解歧义。  
+- **Agent Action:**  
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 标题改为：`热力图（纵轴=指标，横轴=口径）`；  
+     - 增加 `viz-title-nowrap` 样式，标题不换行显示。  
+- **Result:** 标题表达与轴向语义更清晰，避免“指标 口径”断行误读。
+
+## 2026-02-28（热力图网格错位修复：指标行串到口径列）
+
+- **User Feedback:** 热力图里“指标名称显示在口径一行里”，出现行列错位。  
+- **Agent Action:**  
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 热力图容器从 `auto-fill` 动态列改为“固定列数=口径数量”；  
+     - 新增 `heatmapGridStyle` 计算属性，动态设置：`220px + N个口径列`；  
+     - 移除 `grid-template-columns: repeat(auto-fill, ...)`，避免浏览器自动换列；  
+     - 小屏下改为最小宽度 + 横向滚动，不再压缩换列。  
+- **Result:** 每一行严格保持“1个指标标签 + N个口径单元格”，不再出现指标文本串到口径列的错位问题。

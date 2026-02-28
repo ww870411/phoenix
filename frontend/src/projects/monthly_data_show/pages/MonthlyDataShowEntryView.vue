@@ -29,6 +29,23 @@
 
         <div class="panel">
           <div class="panel-head">
+            <h4>报告月份设定（自动识别，可修改）</h4>
+          </div>
+          <div class="month-config-row">
+            <label class="month-field">
+              <span>年份</span>
+              <input class="num-input" type="number" min="2000" max="2099" step="1" v-model.number="reportYearInput" />
+            </label>
+            <label class="month-field">
+              <span>月份</span>
+              <input class="num-input" type="number" min="1" max="12" step="1" v-model.number="reportMonthInput" />
+            </label>
+            <span class="hint">来源月份将写入：{{ reportMonthDatePreview }}</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
             <h4>源字段（计划/实际口径）</h4>
             <div class="actions">
               <button class="btn small" type="button" :disabled="!sourceColumns.length" @click="toggleAllSourceColumns(true)">全选</button>
@@ -144,10 +161,35 @@
             :disabled="extracting || !selectedFile || !selectedCompanies.length || !selectedFields.length || !selectedSourceColumns.length"
             @click="extractCsv"
           >
-            {{ extracting ? '提取中...' : '提取并下载 CSV' }}
+            {{ extracting ? '提取中...' : '提取 CSV' }}
+          </button>
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="extracting || !lastExtractedCsvFile"
+            @click="downloadExtractedCsv"
+          >
+            下载 CSV
           </button>
         </div>
+        <p class="hint" v-if="extractMessage">{{ extractMessage }}</p>
         <p class="hint">默认已忽略口径：恒流、天然气炉、中水。</p>
+      </section>
+
+      <section class="card">
+        <h3>步骤 4：CSV 入库（写入 month_data_show）</h3>
+        <div class="upload-row">
+          <input type="file" accept=".csv" @change="onCsvFileChange" />
+          <button class="btn primary" type="button" :disabled="importing || !lastExtractedCsvFile" @click="importLastExtractedCsv">
+            {{ importing ? '入库中...' : '使用第3步结果一键入库' }}
+          </button>
+          <button class="btn primary" type="button" :disabled="importing || !selectedCsvFile" @click="importCsvToDatabase">
+            {{ importing ? '入库中...' : '上传 CSV 并入库' }}
+          </button>
+        </div>
+        <p class="hint" v-if="lastExtractedCsvFile">第3步已缓存：{{ lastExtractedCsvFile.name }}</p>
+        <p class="hint" v-if="selectedCsvFile">当前 CSV：{{ selectedCsvFile.name }}</p>
+        <p class="hint" v-if="importMessage">{{ importMessage }}</p>
       </section>
 
       <p class="error" v-if="errorMessage">{{ errorMessage }}</p>
@@ -160,7 +202,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
-import { extractMonthlyDataShowCsv, inspectMonthlyDataShowFile } from '../../daily_report_25_26/services/api'
+import { extractMonthlyDataShowCsv, importMonthlyDataShowCsv, inspectMonthlyDataShowFile } from '../../daily_report_25_26/services/api'
 
 const route = useRoute()
 const projectKey = computed(() => String(route.params.projectKey || 'monthly_data_show'))
@@ -174,7 +216,12 @@ const fileInputRef = ref(null)
 const selectedFile = ref(null)
 const inspecting = ref(false)
 const extracting = ref(false)
+const importing = ref(false)
 const errorMessage = ref('')
+const extractMessage = ref('')
+const importMessage = ref('')
+const selectedCsvFile = ref(null)
+const lastExtractedCsvFile = ref(null)
 
 const companies = ref([])
 const fields = ref([])
@@ -184,6 +231,16 @@ const selectedFields = ref([])
 const selectedSourceColumns = ref([])
 const constantsEnabled = ref(true)
 const constantRules = ref([])
+const reportYearInput = ref(null)
+const reportMonthInput = ref(null)
+
+const reportMonthDatePreview = computed(() => {
+  const year = Number(reportYearInput.value)
+  const month = Number(reportMonthInput.value)
+  if (!Number.isInteger(year) || !Number.isInteger(month)) return '—'
+  if (year < 2000 || year > 2099 || month < 1 || month > 12) return '—'
+  return `${year}-${String(month).padStart(2, '0')}-01`
+})
 
 function onFileChange(event) {
   const file = event?.target?.files?.[0] || null
@@ -197,6 +254,18 @@ function onFileChange(event) {
   selectedSourceColumns.value = []
   constantsEnabled.value = true
   constantRules.value = []
+  reportYearInput.value = null
+  reportMonthInput.value = null
+  lastExtractedCsvFile.value = null
+  selectedCsvFile.value = null
+  extractMessage.value = ''
+  importMessage.value = ''
+}
+
+function onCsvFileChange(event) {
+  selectedCsvFile.value = event?.target?.files?.[0] || null
+  errorMessage.value = ''
+  importMessage.value = ''
 }
 
 function toggleAllCompanies(checked) {
@@ -242,6 +311,12 @@ async function inspectFile() {
         source_columns: [...defaultSourceCols],
       }))
       : []
+    reportYearInput.value = Number.isInteger(payload?.inferred_report_year)
+      ? payload.inferred_report_year
+      : null
+    reportMonthInput.value = Number.isInteger(payload?.inferred_report_month)
+      ? payload.inferred_report_month
+      : null
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '读取可选项失败'
@@ -254,7 +329,18 @@ async function extractCsv() {
   if (!selectedFile.value || extracting.value) return
   extracting.value = true
   errorMessage.value = ''
+  extractMessage.value = ''
   try {
+    const reportYear = Number(reportYearInput.value)
+    const reportMonth = Number(reportMonthInput.value)
+    if (!Number.isInteger(reportYear) || reportYear < 2000 || reportYear > 2099) {
+      errorMessage.value = '请填写有效年份（2000-2099）'
+      return
+    }
+    if (!Number.isInteger(reportMonth) || reportMonth < 1 || reportMonth > 12) {
+      errorMessage.value = '请填写有效月份（1-12）'
+      return
+    }
     const constantSourceColumns = constantsEnabled.value
       ? constantRules.value.flatMap((rule) => (Array.isArray(rule?.source_columns) ? rule.source_columns : []))
       : []
@@ -265,23 +351,57 @@ async function extractCsv() {
       selectedCompanies.value,
       selectedFields.value,
       effectiveSourceColumns,
+      reportYear,
+      reportMonth,
       constantsEnabled.value,
       constantRules.value,
     )
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename || 'monthly_data_show_extract.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const cachedFile = new File([blob], filename || 'monthly_data_show_extract.csv', { type: 'text/csv' })
+    lastExtractedCsvFile.value = cachedFile
+    selectedCsvFile.value = cachedFile
+    extractMessage.value = `提取完成：${cachedFile.name}（可下载或一键入库）`
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '提取 CSV 失败'
   } finally {
     extracting.value = false
   }
+}
+
+function downloadExtractedCsv() {
+  if (!lastExtractedCsvFile.value) return
+  const url = URL.createObjectURL(lastExtractedCsvFile.value)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+async function importCsvToDatabase() {
+  if (!selectedCsvFile.value || importing.value) return
+  importing.value = true
+  errorMessage.value = ''
+  importMessage.value = ''
+  try {
+    const result = await importMonthlyDataShowCsv(projectKey.value, selectedCsvFile.value)
+    const importedRows = Number(result?.imported_rows || 0)
+    const nullValueRows = Number(result?.null_value_rows || 0)
+    importMessage.value = `入库成功：共处理 ${importedRows} 条记录（空值入库 ${nullValueRows} 条）`
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : 'CSV 入库失败'
+  } finally {
+    importing.value = false
+  }
+}
+
+async function importLastExtractedCsv() {
+  if (!lastExtractedCsvFile.value || importing.value) return
+  selectedCsvFile.value = lastExtractedCsvFile.value
+  await importCsvToDatabase()
 }
 
 function toggleRuleSourceColumn(index, column, checked) {
@@ -378,6 +498,20 @@ watch(
 .panel-head h4 {
   margin: 0;
   font-size: 14px;
+}
+
+.month-config-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.month-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .actions {
