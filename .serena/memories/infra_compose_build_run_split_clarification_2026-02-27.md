@@ -1,0 +1,1 @@
+时间：2026-02-27。结论：构建镜像使用的 compose 文件与运行容器使用的 compose 文件可以不同。构建文件可聚焦 build 上下文、dockerfile、build args；运行文件可聚焦 image、env、volumes、ports、depends_on、restart。当前仓库中 lo1_new_server.ps1 调用 docker-compose.server_new_server.yml 用于 build；服务器执行 lo1_new_server.yml up -d 用于运行，其中 db 通过 ports: 5432:5432 对外暴露。

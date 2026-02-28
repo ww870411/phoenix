@@ -2262,3 +2262,51 @@ docker compose up -d --build
 - 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
   - 顶部页签文案由“系统监控”调整为“服务器管理”；
   - 仅文案调整，`activeTab` 内部键值保持 `system`，不影响现有逻辑与路由。
+
+
+## 结构同步（2026-02-26 服务器管理改为 SSH 账号登录）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 登录区新增 `主机/端口` 输入；
+  - 登录参数从“页面内超管凭据”调整为“SSH 服务器账号”（host/port/username/password）；
+  - 文案统一为“服务器管理员登录/会话”，避免与应用内权限混淆。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `loginSuperAdmin` 改为对象入参（`{ host, port, username, password }`）；
+  - 401 失效提示改为“服务器管理员会话已失效”。
+- 用户可见行为：
+  - 只有 SSH 登录成功后，命令执行与服务器文件管理才可继续使用。
+
+
+## 结构同步（2026-02-26 服务器管理白屏修复）
+
+- 文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 修复内容：
+  - `loginSuperAdmin` 中入参与响应变量重名导致的语法错误；
+  - 入参变量改为 `loginPayload`，响应变量改为 `data`。
+- 结果：
+  - 修复 `Identifier 'payload' has already been declared`，页面不再白屏。
+
+## 结构同步（2026-02-27 部署问答留痕）
+
+- 本轮前端代码、路由与 API 封装无改动。
+- 与部署相关的链路确认：
+  - 数据库 5432 暴露由服务器运行编排控制（`lo1_new_server.yml`），非前端或构建脚本逻辑；
+  - 构建编排与运行编排可分离，前端联调接口基址策略不受该分离方式影响。
+
+## 结构同步（2026-02-27 部署遗留文件核查）
+
+- 本轮前端代码、路由与 API 封装无改动。
+- 仅完成部署遗留文件有效性核查：
+  - 当前主流程为 `lo1_new_server.ps1` + `lo1_new_server.yml`；
+  - `ww*` 与旧 compose/certbot 文件属于历史部署链路，是否删除取决于是否仍需旧证书与旧部署方案回滚。
+
+## 结构同步（2026-02-28 服务器管理取消页面内登录）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 删除服务器管理中的登录输入区（主机/端口/用户名/密码/登录/退出）；
+  - 命令执行、目录刷新、文件读写、批量操作、上传等功能不再受 `superTokenReady` 门槛限制；
+  - 页面加载后直接初始化目录树并读取文件列表。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 移除 `X-Super-Admin-Token` 注入；
+  - 删除 `setSuperAdminToken` 与 `loginSuperAdmin`；
+  - `/admin/super/*` 接口保留原路径，错误提示改为通用后端消息透传。

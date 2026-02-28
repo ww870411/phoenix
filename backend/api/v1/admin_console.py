@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import platform
-import secrets
 import shutil
 import subprocess
 import time
@@ -13,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from backend.config import DATA_DIRECTORY
@@ -86,11 +85,6 @@ class AuditEventPayload(BaseModel):
 
 class AuditBatchPayload(BaseModel):
     events: List[AuditEventPayload] = Field(default_factory=list)
-
-
-class SuperLoginPayload(BaseModel):
-    username: str
-    password: str
 
 
 class SuperExecPayload(BaseModel):
@@ -246,70 +240,57 @@ def _collect_system_metrics() -> Dict[str, Any]:
     return result
 
 
-SUPER_SESSION_TTL_SECONDS = 12 * 60 * 60
-SUPER_TOKEN_STORE: Dict[str, Dict[str, Any]] = {}
-
-
-def _get_super_credential_path() -> Path:
-    return (DATA_ROOT / "shared" / "auth" / "super_admin.json").resolve()
-
-
-def _load_super_credentials() -> Dict[str, str]:
-    path = _get_super_credential_path()
-    if path.exists():
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                username = str(payload.get("username") or "").strip()
-                password = str(payload.get("password") or "").strip()
-                if username and password:
-                    return {"username": username, "password": password}
-        except Exception:
-            pass
-    return {"username": "root", "password": "root123456"}
-
-
-def _prune_super_tokens() -> None:
-    now = int(time.time())
-    expired = [
-        token
-        for token, meta in SUPER_TOKEN_STORE.items()
-        if int(meta.get("expires_at") or 0) <= now
-    ]
-    for token in expired:
-        SUPER_TOKEN_STORE.pop(token, None)
-
-
-def _issue_super_token(username: str) -> str:
-    _prune_super_tokens()
-    token = secrets.token_urlsafe(32)
-    now = int(time.time())
-    SUPER_TOKEN_STORE[token] = {
-        "username": username,
-        "issued_at": now,
-        "expires_at": now + SUPER_SESSION_TTL_SECONDS,
-    }
-    return token
-
-
-def _require_super_token(
-    x_super_admin_token: str = Header(default="", alias="X-Super-Admin-Token"),
-) -> Dict[str, Any]:
-    _prune_super_tokens()
-    token = str(x_super_admin_token or "").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="缺少超级管理员令牌。")
-    meta = SUPER_TOKEN_STORE.get(token)
-    if not meta:
-        raise HTTPException(status_code=401, detail="超级管理员令牌无效或已过期。")
-    return meta
-
-
-def _resolve_super_path(path: str) -> Path:
+def _normalize_local_path(path: str) -> Path:
     raw = str(path or "").strip()
     if not raw:
         raise HTTPException(status_code=400, detail="缺少路径参数。")
-    return Path(raw).expanduser().resolve()
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = (Path.cwd() / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    return candidate
+
+
+def _render_local_path(path_obj: Path) -> str:
+    return str(path_obj)
+
+
+def _exec_local_command(command: str, cwd: str, timeout_seconds: int) -> Dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=(str(_normalize_local_path(cwd)) if str(cwd or "").strip() else None),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+        )
+        return {
+            "ok": True,
+            "timeout": False,
+            "stdout": completed.stdout or "",
+            "stderr": completed.stderr or "",
+            "returncode": int(completed.returncode),
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "ok": False,
+            "timeout": True,
+            "stdout": str(exc.stdout or ""),
+            "stderr": str(exc.stderr or ""),
+            "returncode": None,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "timeout": False,
+            "stdout": "",
+            "stderr": str(exc),
+            "returncode": None,
+        }
 
 
 @router.get("/admin/overview", summary="获取全局管理后台概览")
@@ -624,23 +605,14 @@ def get_audit_stats(
     return {"ok": True, "stats": stats}
 
 
-@router.post("/admin/super/login", summary="超级管理员登录")
-def super_admin_login(
-    payload: SuperLoginPayload,
-    session: AuthSession = Depends(get_current_session),
-):
+@router.post("/admin/super/login", summary="服务器管理员登录（兼容占位）")
+def super_admin_login(session: AuthSession = Depends(get_current_session)):
     _ensure_admin_console_access(session)
-    credential = _load_super_credentials()
-    username = str(payload.username or "").strip()
-    password = str(payload.password or "").strip()
-    if username != credential["username"] or password != credential["password"]:
-        raise HTTPException(status_code=401, detail="超级管理员用户名或密码错误。")
-    token = _issue_super_token(username)
     return {
         "ok": True,
-        "token": token,
-        "expires_in": SUPER_SESSION_TTL_SECONDS,
-        "username": username,
+        "token": "",
+        "expires_in": 0,
+        "message": "当前版本无需页面内服务器管理员登录，直接使用当前服务进程权限执行。",
     }
 
 
@@ -648,7 +620,6 @@ def super_admin_login(
 def super_exec_command(
     payload: SuperExecPayload,
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
 ):
     _ensure_admin_console_access(session)
     command = str(payload.command or "").strip()
@@ -656,148 +627,130 @@ def super_exec_command(
         raise HTTPException(status_code=400, detail="命令不能为空。")
     timeout_seconds = int(payload.timeout_seconds or 20)
     timeout_seconds = max(1, min(timeout_seconds, 180))
-    cwd = _resolve_super_path(payload.cwd) if str(payload.cwd or "").strip() else None
-    if cwd is not None and not cwd.exists():
-        raise HTTPException(status_code=400, detail="cwd 不存在。")
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "ok": False,
-            "timeout": True,
-            "stdout": str(exc.stdout or ""),
-            "stderr": str(exc.stderr or ""),
-            "returncode": None,
-        }
-    return {
-        "ok": True,
-        "timeout": False,
-        "stdout": result.stdout or "",
-        "stderr": result.stderr or "",
-        "returncode": result.returncode,
-    }
+    return _exec_local_command(command, str(payload.cwd or ""), timeout_seconds)
 
 
 @router.get("/admin/super/files/list", summary="列出文件/目录")
 def super_list_files(
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
     path: str = Query(default="/"),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(path)
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="路径不存在。")
-    if not target.is_dir():
-        raise HTTPException(status_code=400, detail="目标路径不是目录。")
-    items: List[Dict[str, Any]] = []
-    for child in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-        try:
-            size = child.stat().st_size if child.is_file() else None
-        except Exception:
-            size = None
-        items.append(
-            {
-                "name": child.name,
-                "path": str(child),
-                "is_dir": child.is_dir(),
-                "size": size,
-            }
-        )
-    return {"ok": True, "path": str(target), "items": items}
+    target = _normalize_local_path(path)
+    try:
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="路径不存在。")
+        if not target.is_dir():
+            raise HTTPException(status_code=400, detail="目标路径不是目录。")
+        items: List[Dict[str, Any]] = []
+        children = sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        for child in children:
+            items.append(
+                {
+                    "name": child.name,
+                    "path": _render_local_path(child),
+                    "is_dir": child.is_dir(),
+                    "size": None if child.is_dir() else int(child.stat().st_size),
+                }
+            )
+        return {"ok": True, "path": _render_local_path(target), "items": items}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="路径不存在。") from exc
 
 
 @router.get("/admin/super/files/read", summary="读取文本文件")
 def super_read_file(
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
     path: str = Query(...),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(path)
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="文件不存在。")
+    target = _normalize_local_path(path)
     try:
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="文件不存在。")
+        if target.is_dir():
+            raise HTTPException(status_code=400, detail="目标路径是目录，不能读取文本。")
         content = target.read_text(encoding="utf-8")
+        return {"ok": True, "path": _render_local_path(target), "content": content}
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=400, detail="该文件不是 UTF-8 文本。") from exc
-    return {"ok": True, "path": str(target), "content": content}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在。") from exc
 
 
 @router.post("/admin/super/files/write", summary="写入文本文件")
 def super_write_file(
     payload: SuperFileWritePayload,
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(payload.path)
+    target = _normalize_local_path(payload.path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(payload.content, encoding="utf-8")
-    return {"ok": True, "path": str(target), "size": len(payload.content.encode("utf-8"))}
+    encoded = payload.content.encode("utf-8")
+    target.write_bytes(encoded)
+    return {"ok": True, "path": _render_local_path(target), "size": len(encoded)}
 
 
 @router.post("/admin/super/files/mkdir", summary="创建目录")
 def super_make_dir(
     payload: SuperMkdirPayload,
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(payload.path)
+    target = _normalize_local_path(payload.path)
     target.mkdir(parents=True, exist_ok=True)
-    return {"ok": True, "path": str(target)}
+    return {"ok": True, "path": _render_local_path(target)}
 
 
 @router.post("/admin/super/files/move", summary="移动或重命名")
 def super_move_path(
     payload: SuperMovePayload,
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
 ):
     _ensure_admin_console_access(session)
-    source = _resolve_super_path(payload.source)
-    destination = _resolve_super_path(payload.destination)
-    if not source.exists():
-        raise HTTPException(status_code=404, detail="源路径不存在。")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(source), str(destination))
-    return {"ok": True, "source": str(source), "destination": str(destination)}
+    source = _normalize_local_path(payload.source)
+    destination = _normalize_local_path(payload.destination)
+    try:
+        if not source.exists():
+            raise FileNotFoundError(str(source))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(destination)
+        return {
+            "ok": True,
+            "source": _render_local_path(source),
+            "destination": _render_local_path(destination),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="源路径不存在。") from exc
 
 
 @router.delete("/admin/super/files", summary="删除文件或目录")
 def super_delete_path(
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
     path: str = Query(...),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(path)
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="目标路径不存在。")
-    if target.is_dir():
-        shutil.rmtree(target)
-    else:
-        target.unlink()
-    return {"ok": True, "path": str(target)}
+    target = _normalize_local_path(path)
+    try:
+        if not target.exists():
+            raise FileNotFoundError(str(target))
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+        return {"ok": True, "path": _render_local_path(target)}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="目标路径不存在。") from exc
 
 
 @router.post("/admin/super/files/upload", summary="上传文件到指定目录")
 async def super_upload_files(
     session: AuthSession = Depends(get_current_session),
-    _super: Dict[str, Any] = Depends(_require_super_token),
     target_dir: str = Query(...),
     files: List[UploadFile] = File(...),
 ):
     _ensure_admin_console_access(session)
-    target = _resolve_super_path(target_dir)
+    target = _normalize_local_path(target_dir)
     target.mkdir(parents=True, exist_ok=True)
     if not target.is_dir():
         raise HTTPException(status_code=400, detail="target_dir 不是目录。")
@@ -812,8 +765,13 @@ async def super_upload_files(
         written.append(
             {
                 "name": filename,
-                "path": str(destination),
+                "path": _render_local_path(destination),
                 "size": len(content),
             }
         )
-    return {"ok": True, "target_dir": str(target), "files": written, "count": len(written)}
+    return {
+        "ok": True,
+        "target_dir": _render_local_path(target),
+        "files": written,
+        "count": len(written),
+    }

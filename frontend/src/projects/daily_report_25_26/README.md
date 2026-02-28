@@ -146,3 +146,13 @@
   - `deviceStatusMeta` 能够识别并汇总所有唯一的本期和同期指标，并计算所有数据的最大值用于进度条缩放。
   - `deviceStatusColumns` 为每个指标生成“本期”和“同期”两列，实现本期/同期对比的双层表头。
   - `deviceStatusTableData` 相应地从后端返回的本期/同期数据桶中提取数据，并包装成带有颜色和百分比的 `device-bar` 类型，用于渲染彩色进度条。
+
+## 结构同步（2026-02-28 服务器管理取消页面内登录）
+
+- 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 删除服务器管理中的 SSH 登录表单（主机/端口/用户名/密码/登录/退出）。
+  - 命令执行与文件管理不再依赖 `superTokenReady` 前置门槛，页面进入后直接可用（仍受应用登录权限约束）。
+  - 页面初始化时直接加载目录树与当前目录文件列表。
+- 文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 移除超级管理员 token 注入与 `loginSuperAdmin/setSuperAdminToken` 逻辑；
+  - `/admin/super/*` 请求保留原路径，错误处理统一按后端返回信息展示。

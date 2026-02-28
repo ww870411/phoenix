@@ -977,3 +977,51 @@
 
 - 本轮后端接口无新增改动。
 - 前端将后台页签文案“系统监控”调整为“服务器管理”，不影响接口和鉴权逻辑。
+
+
+## 结构同步（2026-02-26 服务器管理认证切换为 SSH 账号）
+
+- 文件：`backend/api/v1/admin_console.py`
+- 认证语义调整：
+  - `POST /api/v1/admin/super/login` 从“应用内固定凭据”切换为“SSH 服务器账号认证”；
+  - 登录参数新增 `host/port`，使用 `username/password` 进行 SSH 登录验证。
+- 执行路径调整：
+  - `POST /api/v1/admin/super/terminal/exec` 改为 SSH 远程命令执行；
+  - `GET/POST/DELETE /api/v1/admin/super/files*` 改为基于 SFTP 的远程文件管理。
+- 新增依赖：
+  - `backend/requirements.txt` 增加 `paramiko>=3.4.0`。
+- 兼容说明：
+  - 接口路径保持不变，前端仅需调整登录参数与文案即可完成切换。
+
+
+## 结构同步（2026-02-26 服务器管理白屏修复联动）
+
+- 本轮后端接口无新增改动。
+- 前端修复 `api.js` 中 `loginSuperAdmin` 变量重名语法错误，后端无需调整。
+
+## 结构同步（2026-02-27 部署问答留痕）
+
+- 本轮后端代码与接口无改动。
+- 部署链路结论确认：
+  - `lo1_new_server.ps1` 仅负责镜像构建、打标签、推送；
+  - 数据库 5432 对外暴露来自服务器运行编排 `lo1_new_server.yml` 的 `db.ports` 配置；
+  - 构建编排与运行编排可以分离维护，运行编排以最小运行参数为主。
+
+## 结构同步（2026-02-27 部署遗留文件核查）
+
+- 本轮后端代码与接口无改动。
+- 仅完成部署遗留文件有效性核查：
+  - 当前主流程为 `lo1_new_server.ps1` + `lo1_new_server.yml`；
+  - `docker-compose.server.yml` 等旧编排文件仍被历史脚本/文档引用，但不在当前主流程内。
+
+## 结构同步（2026-02-28 服务器管理取消页面内登录）
+
+- 文件：`backend/api/v1/admin_console.py`
+- 管理后台“服务器管理”能力改为本地执行模式：
+  - `POST /api/v1/admin/super/terminal/exec`：使用后端进程本地 `subprocess.run` 执行命令；
+  - `GET/POST/DELETE /api/v1/admin/super/files*`：使用本地文件系统实现列目录、读写、移动、删除、上传。
+- 登录接口兼容：
+  - `POST /api/v1/admin/super/login` 保留为兼容占位接口，返回“无需页面内登录”的提示，不再发放 token。
+- 鉴权口径：
+  - 取消 `X-Super-Admin-Token` 二次鉴权；
+  - 保留原有应用登录权限校验（`can_access_admin_console`），系统级权限由服务进程所在操作系统负责。

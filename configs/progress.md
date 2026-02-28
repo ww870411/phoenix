@@ -998,6 +998,20 @@
        - `/admin/overview`
        - `/admin/validation/master-switch`
        - `/admin/ai-settings`
+
+## 2026-02-27（部署链路问答：db 端口来源与 compose 职责边界）
+
+- **User Question:** 已能通过 5432 单独访问数据库，但脚本里没看到 db 对外端口配置；并追问构建 yml 与运行 yml 是否可不同、构建 yml 是否可简化。
+- **前置说明:**
+  1. Serena 接入校验已完成：`activate_project` 与 `check_onboarding_performed` 均成功；
+  2. 本次仅做文件检索与结论说明，无代码逻辑改动；
+  3. 已写入 Serena 记忆：`infra_db_port_mapping_lo1_new_server_2026-02-27`。
+- **Agent Action:**
+  1. 检索并比对 `docker-compose*.yml`、`lo1_new_server.yml`、`lo1_new_server.ps1`；
+  2. 确认端口暴露位置在服务器运行文件 `lo1_new_server.yml` 的 `db.ports: "5432:5432"`；
+  3. 说明职责边界：`lo1_new_server.ps1` 仅负责构建/打标签/推送镜像，不负责容器端口映射；
+  4. 回答 compose 分工：构建文件与运行文件可不同，运行文件可以更精简地只保留 `image`、`env`、`volumes`、`ports`、`depends_on` 等运行期字段。
+- **Result:** 已定位 5432 暴露来源并澄清“构建 yml 与运行 yml 可分离”的实践原则；本仓库文件未改动业务代码。
        - `/admin/cache/publish|status|cancel|refresh`
        - `/admin/cache`（DELETE）
      - `backend/api/v1/routes.py` 挂载 `admin_console_router`；
@@ -1986,3 +2000,83 @@
   1. 修改 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`；
   2. 将顶部页签文案由“系统监控”改为“服务器管理”；
 - **Result:** 后台顶部导航中该页面统一显示为“服务器管理”。
+
+
+## 2026-02-26（服务器管理认证机制切换为 SSH 服务器账号）
+
+- **User Request:** “服务器管理”中的登录应当是服务器账号登录，而不是页面内部账号；登录后才允许命令执行与文件管理。
+- **前置说明:**
+  1. Serena 项目已激活并完成 onboarding 校验；
+  2. 本次属于认证机制替换，保持现有接口路径不变，仅调整认证语义与实现；
+  3. 按仓库规范使用文件级补丁修改并留痕。
+- **Agent Action:**
+  1. 后端 `backend/api/v1/admin_console.py`：
+     - `POST /api/v1/admin/super/login` 改为 SSH 认证（host/port/username/password）；
+     - 登录成功后发放会话 token，并在内存会话中保存 SSH 目标与账号；
+     - 命令执行改为 SSH `exec_command`；
+     - 文件管理（list/read/write/mkdir/move/delete/upload）改为 SFTP 操作；
+     - 新增 SSH/SFTP 辅助函数（远程路径规范化、递归建目录、递归删除目录）。
+  2. 后端依赖 `backend/requirements.txt`：
+     - 新增 `paramiko>=3.4.0`。
+  3. 前端 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：
+     - 登录区新增主机与端口输入项；
+     - 登录请求改为提交 `{ host, port, username, password }`；
+     - 文案统一为“服务器管理员登录/会话”。
+  4. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - `loginSuperAdmin` 入参改为对象；
+     - 401 提示改为“服务器管理员会话已失效”。
+- **Result:**
+  1. 服务器管理区认证已切换为真实 SSH 账号认证；
+  2. 未登录或会话失效时，命令与文件管理不可继续执行；
+  3. 登录后所有高权限操作基于 SSH/SFTP 在目标服务器执行。
+
+
+## 2026-02-26（服务器管理白屏修复：api.js 变量重名）
+
+- **User Feedback:** 页面白屏，报错 `Identifier 'payload' has already been declared`（`api.js`）。
+- **Agent Action:**
+  1. 修改 `frontend/src/projects/daily_report_25_26/services/api.js`；
+  2. 将 `loginSuperAdmin` 的参数变量与响应变量去重：
+     - 入参 `payload` -> `loginPayload`
+     - 响应 `payload` -> `data`
+- **Result:** 消除语法错误，页面可恢复正常加载。
+
+## 2026-02-27（无效文件核查：ww* 与旧 compose 文件）
+
+- **User Request:** 评估以下文件是否可清理：`ww.ps1`、`ww.yml`、`ww2.ps1`、`docker-compose copy.yml`、`docker-compose.server.yml`、`ww.bash`、`ww-renew.yml`、`ww-http-only.yml`、`ww-certbot.yml`。
+- **前置说明:**
+  1. Serena 已完成项目激活与 onboarding 校验；
+  2. 本次仅做“是否仍在使用”的核查与建议分级，不执行删除；
+  3. 依据当前已确认主流程：`lo1_new_server.ps1` + `lo1_new_server.yml`。
+- **Agent Action:**
+  1. 读取 9 个目标文件内容，识别各自职责（构建推送/部署编排/certbot）；  
+  2. 全仓检索文件名引用，确认仍存在历史文档与少量脚本引用（如 `lo1.ps1`、`init-certbot.sh` 对 `docker-compose.server.yml` 的引用）；  
+  3. 输出“当前流程下可删”与“有条件保留”结论。
+- **Result:**  
+  - 在你当前部署路径下（新服务器 + NPM + lo1_new_server），这 9 个文件整体可视作历史链路文件；  
+  - 若不再使用旧证书流程与旧部署脚本，建议统一归档或删除并同步修正文档引用。
+
+## 2026-02-28（服务器管理去除页面内登录）
+
+- **User Request:** “服务器管理”页面不需要管理员账号登录，页面已运行在服务器上；仅在命令行需要权限时由系统环境控制。
+- **前置说明:**
+  1. Serena 已完成项目激活与 onboarding 校验；
+  2. 本次按用户指令执行，移除页面内 SSH 登录门槛，改为直接使用后端进程本地权限；
+  3. 文件改动通过仓库内补丁方式完成，未使用仓库外写入。
+- **Agent Action:**
+  1. 后端 `backend/api/v1/admin_console.py`：
+     - 移除超级管理员 token 会话与 SSH/SFTP 依赖链路；
+     - `POST /api/v1/admin/super/login` 改为兼容占位接口（无需登录）；
+     - `POST /api/v1/admin/super/terminal/exec` 改为本地 `subprocess.run` 执行；
+     - `GET/POST/DELETE /api/v1/admin/super/files*` 改为本地文件系统读写/移动/删除/上传。
+  2. 前端 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：
+     - 删除“主机/端口/用户名/密码/登录/退出”区域与相关状态函数；
+     - 去掉命令执行、文件管理、上传等操作对 `superTokenReady` 的禁用门槛；
+     - 页面加载时直接初始化目录树并读取当前目录。
+  3. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：
+     - 移除 `X-Super-Admin-Token` 注入与 `setSuperAdminToken/loginSuperAdmin` 逻辑；
+     - 保留 `/admin/super/*` 接口路径，错误处理改为通用后端消息。
+- **Result:**
+  1. “服务器管理”已不再要求页面内再次登录；
+  2. 命令执行与文件管理直接基于后端服务进程所在机器权限运行；
+  3. 权限控制回归到应用登录权限 + 操作系统权限本身。

@@ -255,23 +255,7 @@
               <h3>超级管理员控制台</h3>
             </header>
 
-            <div class="super-login-grid">
-              <label>
-                <span>用户名</span>
-                <input v-model.trim="superForm.username" type="text" placeholder="root" />
-              </label>
-              <label>
-                <span>密码</span>
-                <input v-model="superForm.password" type="password" placeholder="请输入超级管理员密码" />
-              </label>
-              <button class="btn danger" type="button" :disabled="superPending" @click="handleSuperLogin">
-                {{ superPending ? '认证中…' : (superTokenReady ? '重新认证' : '超级管理员登录') }}
-              </button>
-              <button class="btn ghost" type="button" :disabled="!superTokenReady || superPending" @click="handleSuperLogout">
-                退出管理员登录
-              </button>
-            </div>
-            <p class="subtext">默认凭据（首次未配置时）：`root / root123456`；可通过 `backend_data/shared/auth/super_admin.json` 覆盖。</p>
+            <p class="subtext">本页不再提供服务器管理员账号登录，命令与文件操作直接使用当前后端服务进程所在机器的权限执行。</p>
             <p v-if="superMessage" class="message">{{ superMessage }}</p>
 
             <div class="super-split">
@@ -280,14 +264,14 @@
                 <div class="super-preset-row">
                   <label class="field grow">
                     <span>默认命令</span>
-                    <select v-model="selectedCommandPreset" :disabled="terminalRunning || !superTokenReady">
+                    <select v-model="selectedCommandPreset" :disabled="terminalRunning">
                       <option value="">请选择预设命令</option>
                       <option v-for="item in SUPER_COMMAND_PRESETS" :key="item.label" :value="item.label">
                         {{ item.label }}
                       </option>
                     </select>
                   </label>
-                  <button class="btn ghost" type="button" :disabled="!selectedCommandPreset || terminalRunning || !superTokenReady" @click="applySelectedCommandPreset">
+                  <button class="btn ghost" type="button" :disabled="!selectedCommandPreset || terminalRunning" @click="applySelectedCommandPreset">
                     填充
                   </button>
                 </div>
@@ -304,7 +288,7 @@
                   <input v-model.number="terminalTimeout" type="number" min="1" max="180" />
                 </label>
                 <div class="super-terminal-actions">
-                  <button class="btn primary" type="button" :disabled="terminalRunning || !superTokenReady" @click="runTerminalCommand">
+                  <button class="btn primary" type="button" :disabled="terminalRunning" @click="runTerminalCommand">
                     {{ terminalRunning ? '执行中…' : '执行命令' }}
                   </button>
                   <button class="btn ghost" type="button" :disabled="!terminalResult" @click="clearTerminalOutput">清屏</button>
@@ -320,7 +304,7 @@
                     <span>当前目录</span>
                     <input v-model.trim="fileManagerPath" type="text" placeholder="/" />
                   </label>
-                  <button class="btn ghost" type="button" :disabled="fileManagerLoading || !superTokenReady" @click="loadSuperFiles">刷新目录</button>
+                  <button class="btn ghost" type="button" :disabled="fileManagerLoading" @click="loadSuperFiles">刷新目录</button>
                 </div>
 
                 <div class="toolbar">
@@ -328,7 +312,7 @@
                     <span>创建目录</span>
                     <input v-model.trim="mkdirPath" type="text" placeholder="输入目录绝对路径" />
                   </label>
-                  <button class="btn ghost" type="button" :disabled="!superTokenReady" @click="createSuperDirectory">创建</button>
+                  <button class="btn ghost" type="button" @click="createSuperDirectory">创建</button>
                 </div>
 
                 <div class="toolbar">
@@ -340,7 +324,7 @@
                     <span>目标路径</span>
                     <input v-model.trim="moveDestinationPath" type="text" placeholder="目标路径" />
                   </label>
-                  <button class="btn ghost" type="button" :disabled="!superTokenReady" @click="moveSuperItem">移动/重命名</button>
+                  <button class="btn ghost" type="button" @click="moveSuperItem">移动/重命名</button>
                 </div>
 
                 <div class="super-batch-toolbar">
@@ -348,7 +332,7 @@
                   <button
                     class="btn danger"
                     type="button"
-                    :disabled="!superTokenReady || !selectedSuperCount || fileManagerLoading"
+                    :disabled="!selectedSuperCount || fileManagerLoading"
                     @click="batchDeleteSuperItems"
                   >
                     批量删除
@@ -360,7 +344,7 @@
                   <button
                     class="btn ghost"
                     type="button"
-                    :disabled="!superTokenReady || !selectedSuperCount || !batchMoveDestination || fileManagerLoading"
+                    :disabled="!selectedSuperCount || !batchMoveDestination || fileManagerLoading"
                     @click="batchMoveSuperItems"
                   >
                     批量移动
@@ -376,7 +360,7 @@
                 >
                   <div class="super-upload-title">拖拽文件到此处上传到当前目录</div>
                   <div class="super-upload-actions">
-                    <button class="btn ghost" type="button" :disabled="!superTokenReady || fileManagerLoading" @click="triggerUploadPicker">
+                    <button class="btn ghost" type="button" :disabled="fileManagerLoading" @click="triggerUploadPicker">
                       选择文件上传
                     </button>
                     <span class="subtext">目标目录：{{ fileManagerPath }}</span>
@@ -442,10 +426,10 @@
                           <td>{{ item.is_dir ? '目录' : '文件' }}</td>
                           <td>{{ item.is_dir ? '—' : formatBytes(item.size) }}</td>
                           <td class="super-file-actions">
-                            <button class="btn ghost" type="button" :disabled="!superTokenReady" @click="openSuperPath(item)">
+                            <button class="btn ghost" type="button" @click="openSuperPath(item)">
                               {{ item.is_dir ? '进入' : '打开' }}
                             </button>
-                            <button class="btn danger" type="button" :disabled="!superTokenReady" @click="deleteSuperItem(item.path)">删除</button>
+                            <button class="btn danger" type="button" @click="deleteSuperItem(item.path)">删除</button>
                           </td>
                         </tr>
                         <tr v-if="!fileManagerItems.length && !fileManagerLoading">
@@ -492,7 +476,7 @@
                     @input="onSuperFileEditorInput"
                   />
                   <div class="super-editor-actions">
-                    <button class="btn primary" type="button" :disabled="!superTokenReady || !openedSuperFilePath || fileEditorLoading" @click="saveOpenedSuperFile">
+                    <button class="btn primary" type="button" :disabled="!openedSuperFilePath || fileEditorLoading" @click="saveOpenedSuperFile">
                       {{ fileEditorLoading ? '保存中…' : '保存文件' }}
                     </button>
                     <span class="subtext">{{ fileEditorDirty ? '有未保存修改' : '已保存' }}</span>
@@ -624,11 +608,9 @@ import {
   getAdminOverview,
   getAdminValidationMasterSwitch,
   listSuperFiles,
-  loginSuperAdmin,
   makeSuperDirectory,
   moveSuperPath,
   readSuperFile,
-  setSuperAdminToken,
   listAdminFileDirectories,
   listAdminFiles,
   listAdminProjects,
@@ -703,13 +685,7 @@ const metricHistory = reactive({
   processCpu: [],
 })
 let systemTimer = null
-const superForm = reactive({
-  username: 'root',
-  password: '',
-})
-const superTokenReady = ref(false)
 const superMessage = ref('')
-const superPending = ref(false)
 const terminalCommand = ref('')
 const terminalCwd = ref('')
 const terminalTimeout = ref(20)
@@ -1117,53 +1093,7 @@ async function loadSystemMetrics() {
   }
 }
 
-async function handleSuperLogin() {
-  superPending.value = true
-  superMessage.value = ''
-  try {
-    const payload = await loginSuperAdmin(superForm.username, superForm.password)
-    const token = String(payload?.token || '')
-    if (!token) throw new Error('未返回超级管理员令牌')
-    setSuperAdminToken(token)
-    try {
-      window.sessionStorage.setItem('phoenix_super_admin_token', token)
-    } catch (err) {
-      console.warn('写入 sessionStorage 失败', err)
-    }
-    superTokenReady.value = true
-    superMessage.value = '超级管理员认证成功'
-    await refreshSuperTree(fileManagerPath.value)
-    await loadSuperFiles()
-  } catch (err) {
-    console.error(err)
-    superMessage.value = err instanceof Error ? err.message : '超级管理员认证失败'
-    superTokenReady.value = false
-  } finally {
-    superPending.value = false
-  }
-}
-
-function handleSuperLogout() {
-  superTokenReady.value = false
-  setSuperAdminToken(null)
-  try {
-    window.sessionStorage.removeItem('phoenix_super_admin_token')
-  } catch (err) {
-    console.warn('清理超级管理员令牌失败', err)
-  }
-  superMessage.value = '已退出超级管理员登录'
-  fileManagerItems.value = []
-  openedSuperFilePath.value = ''
-  openedSuperFileContent.value = ''
-  fileEditorDirty.value = false
-  selectedSuperPaths.value = []
-}
-
 async function runTerminalCommand() {
-  if (!superTokenReady.value) {
-    superMessage.value = '请先进行超级管理员认证'
-    return
-  }
   const cmd = String(terminalCommand.value || '').trim()
   if (!cmd) {
     superMessage.value = '请输入要执行的命令'
@@ -1187,7 +1117,6 @@ async function runTerminalCommand() {
     appendTerminalOutput(output)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     appendTerminalOutput(err instanceof Error ? err.message : '命令执行失败')
   } finally {
     terminalRunning.value = false
@@ -1208,20 +1137,6 @@ function appendTerminalOutput(block) {
 
 function clearTerminalOutput() {
   terminalResult.value = ''
-}
-
-function handleSuperAuthError(err) {
-  const message = err instanceof Error ? err.message : String(err || '')
-  if (!message.includes('超级管理员会话已失效')) return false
-  superTokenReady.value = false
-  setSuperAdminToken(null)
-  try {
-    window.sessionStorage.removeItem('phoenix_super_admin_token')
-  } catch (storageErr) {
-    console.warn('清理超级管理员令牌失败', storageErr)
-  }
-  superMessage.value = message
-  return true
 }
 
 function applySelectedCommandPreset() {
@@ -1258,7 +1173,6 @@ async function loadNodeChildren(node) {
     node.loaded = true
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '目录树加载失败'
     node.children = []
     node.loaded = false
@@ -1358,7 +1272,6 @@ async function selectSuperDir(node) {
 }
 
 async function loadSuperFiles() {
-  if (!superTokenReady.value) return
   fileManagerLoading.value = true
   fileManagerMessage.value = ''
   try {
@@ -1370,7 +1283,6 @@ async function loadSuperFiles() {
     await ensureTreePath(fileManagerPath.value)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '目录读取失败'
     fileManagerItems.value = []
   } finally {
@@ -1394,7 +1306,6 @@ async function openSuperPath(item) {
     fileEditorDirty.value = false
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '读取文件失败'
   } finally {
     fileEditorLoading.value = false
@@ -1411,7 +1322,6 @@ async function saveOpenedSuperFile() {
     await loadSuperFiles()
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '保存失败'
   } finally {
     fileEditorLoading.value = false
@@ -1449,7 +1359,6 @@ async function deleteSuperItem(path) {
     await refreshSuperTree(fileManagerPath.value)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '删除失败'
   }
 }
@@ -1483,7 +1392,6 @@ function getItemName(path) {
 }
 
 function openSuperContextMenu(event, scope, item) {
-  if (!superTokenReady.value) return
   const payload = {
     path: String(item?.path || ''),
     name: String(item?.name || getItemName(item?.path)),
@@ -1595,7 +1503,6 @@ async function createSuperDirectoryFromPath(target) {
     await refreshSuperTree(fileManagerPath.value)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '创建目录失败'
   }
 }
@@ -1614,7 +1521,6 @@ async function moveSuperItemByPath(source, destination) {
     await refreshSuperTree(fileManagerPath.value)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '移动失败'
   }
 }
@@ -1639,7 +1545,6 @@ async function batchDeleteSuperItems() {
       }
     } catch (err) {
       console.error(err)
-      if (handleSuperAuthError(err)) return
       failed.push(target)
     }
   }
@@ -1675,7 +1580,6 @@ async function batchMoveSuperItems() {
       }
     } catch (err) {
       console.error(err)
-      if (handleSuperAuthError(err)) return
       failed.push(source)
     }
   }
@@ -1705,7 +1609,6 @@ async function uploadSuperFileList(fileList) {
     await refreshSuperTree(fileManagerPath.value)
   } catch (err) {
     console.error(err)
-    if (handleSuperAuthError(err)) return
     fileManagerMessage.value = err instanceof Error ? err.message : '上传失败'
   }
 }
@@ -1894,16 +1797,8 @@ onMounted(async () => {
     return
   }
   window.addEventListener('message', onMessage)
-  try {
-    const cached = window.sessionStorage.getItem('phoenix_super_admin_token')
-    if (cached) {
-      setSuperAdminToken(cached)
-      superTokenReady.value = true
-      refreshSuperTree(fileManagerPath.value).catch((err) => console.error(err))
-    }
-  } catch (err) {
-    console.warn('读取超级管理员令牌失败', err)
-  }
+  await refreshSuperTree(fileManagerPath.value)
+  await loadSuperFiles()
   await loadProjects()
   await loadDirectories()
   await selectProject(TARGET_PROJECT_KEY)
@@ -1915,7 +1810,7 @@ watch(
     if (tab === 'system') {
       await loadSystemMetrics()
       ensureSystemTimer()
-      if (superTokenReady.value && !fileManagerItems.value.length) {
+      if (!fileManagerItems.value.length) {
         await refreshSuperTree(fileManagerPath.value)
         await loadSuperFiles()
       }
@@ -2268,27 +2163,6 @@ onBeforeUnmount(() => {
   margin-top: 12px;
   border-color: #fca5a5;
   background: linear-gradient(180deg, #fff7f7 0%, #ffffff 100%);
-}
-
-.super-login-grid {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-end;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.super-login-grid label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-  min-width: 220px;
-  flex: 0 0 220px;
-}
-
-.super-login-grid > .btn {
-  flex: 0 0 auto;
 }
 
 .super-split {

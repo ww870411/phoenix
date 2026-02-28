@@ -13,7 +13,6 @@ const API_BASE = (() => {
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 let authToken = null
-let superAdminToken = null
 let cachedProjects = null
 let cachedProjectsToken = null
 
@@ -21,9 +20,6 @@ function attachAuthHeaders(baseHeaders = {}, skipAuth = false) {
   const headers = { ...(baseHeaders || {}) }
   if (!skipAuth && authToken) {
     headers.Authorization = `Bearer ${authToken}`
-  }
-  if (superAdminToken) {
-    headers['X-Super-Admin-Token'] = superAdminToken
   }
   return headers
 }
@@ -46,16 +42,8 @@ export function clearAuthToken() {
   resetProjectCache()
 }
 
-export function setSuperAdminToken(token) {
-  superAdminToken = token ? String(token) : null
-}
-
 async function ensureSuperResponseOk(response, fallbackMessage) {
   if (response.ok) return
-  if (response.status === 401) {
-    setSuperAdminToken(null)
-    throw new Error('超级管理员会话已失效，请重新登录')
-  }
   const message = await response.text()
   throw new Error(message || fallbackMessage)
 }
@@ -896,23 +884,6 @@ export async function getAdminAuditStats(params = {}) {
     throw new Error(message || `获取审计统计失败: ${response.status}`)
   }
   return response.json()
-}
-
-export async function loginSuperAdmin(username, password) {
-  const response = await fetch(normalized('/admin/super/login'), {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS),
-    body: JSON.stringify({ username, password }),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `超级管理员登录失败: ${response.status}`)
-  }
-  const payload = await response.json()
-  if (payload?.token) {
-    setSuperAdminToken(payload.token)
-  }
-  return payload
 }
 
 export async function execSuperCommand(payload) {
