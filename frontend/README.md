@@ -3023,3 +3023,537 @@ docker compose up -d --build
   - 热力图网格改为“固定列数=口径数量”（由 `heatmapGridStyle` 动态注入）
   - 移除 `auto-fill` 列策略，避免指标标签行错位
   - 小屏下改为最小宽度 + 横向滚动，保持矩阵结构稳定
+
+## 结构同步（2026-03-01 monthly_data_show 排查会话）
+
+- 本轮前端代码无改动。
+- 排查范围：
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `frontend/src/router/index.js`
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+- 排查结论：
+  - 路由与 API 调用链已打通；
+  - 待用户提供具体 BUG 复现步骤后执行定向修复与功能完善。
+
+## 结构同步（2026-03-01 monthly_data_show 计算指标公式弹窗）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 在“计算指标（19项）”标题右侧新增 `查看公式` 按钮
+  - 新增 `calculatedFormulaRows`，维护 19 项计算指标的公式与单位
+  - 新增公式弹窗（遮罩层 + 表格）：点击按钮展示，支持关闭
+  - 新增样式：
+    - `section-title-row`（标题行与按钮布局）
+    - `formula-dialog-*`（弹窗布局与滚动）
+    - `formula-table`（公式列可换行）
+- 联动说明：
+  - 计算指标数据由后端实时计算；前端弹窗用于展示计算口径与公式说明。
+
+## 结构同步（2026-03-01 查询连通性排查）
+
+- 本轮前端代码无新增改动。
+- 排查结论：
+  - 前端 API 地址配置为 `http://127.0.0.1:8001`，与容器映射一致；
+  - 页面报错 `ERR_CONNECTION_REFUSED` 属于后端不可达，需先恢复后端服务。
+
+## 结构同步（2026-03-01 查询页数值展示规则统一）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增 `formatValue(value, unit)`：
+    - 当 `unit === '%'` 时按百分比展示（`value * 100` 后拼接 `%`）。
+  - 调整 `formatNumber`：
+    - 整数显示为整数；
+    - 非整数统一保留 2 位小数。
+  - 应用范围：
+    - 主查询结果表 `value` 列；
+    - 同比/环比对比表中的 `当前值/同比值/环比值`。
+- 效果：
+  - 百分比指标显示从比例值改为业务可读百分数（例如 `0.65 -> 65%`）；
+  - 全表数值小数位规则统一。
+
+## 结构同步（2026-03-01 北海水耗率问题联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 北海 `发电水耗率/供热水耗率` 偏差修复发生在后端计算依赖取值层（指标别名兜底），前端展示逻辑保持不变。
+
+## 结构同步（2026-03-01 水耗率公式文案同步）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 公式弹窗中以下两项更新为最新口径：
+    - `发电水耗率 = (耗水量-供汽量-热网耗水量) * (1-热分摊比) / 发电量`
+    - `供热水耗率 = ((耗水量-供汽量-热网耗水量) * 热分摊比 + 供汽量 + 热网耗水量) / 供热量`
+- 联动说明：
+  - 页面公式说明已与后端实时计算逻辑保持一致。
+
+## 结构同步（2026-03-01 查询结果隐藏 report_month）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询结果表格移除 `report_month` 列（表头与行数据同步删除）。
+- 联动说明：
+  - 后端仍保留该字段用于内部排序/计算，不再在查询结果表中展示。
+
+## 结构同步（2026-03-01 XLSX 导出字段与命名简化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 导出 sheet“查询结果”移除 `report_month` 列，保持与页面一致。
+  - 导出文件名改为：`月报查询分析_YYYY-MM.xlsx`（优先从当前筛选月份推断）。
+- 效果：
+  - 页面展示与导出列完全一致；
+  - 文件名更短，更便于归档与检索。
+
+## 结构同步（2026-03-01 查询页新增计划比）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 对比口径下拉新增 `计划比` 选项。
+  - 对比表新增列：
+    - `计划值`
+    - `计划比`
+  - 窗口提示新增 `计划窗口` 标签。
+  - 热力图与 TopN 复用逻辑扩展支持计划比视图。
+  - 专业分析要点加入计划比统计与偏差最大项。
+  - XLSX 导出的“同比环比对比”sheet 增加 `plan_value`、`plan_rate` 列。
+- 效果：
+  - 查询页形成同比/环比/计划比三口径统一查看与导出能力。
+
+## 结构同步（2026-03-01 热力图与TopN统一口径切换开关）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 可视化工具栏新增统一切换按钮组：`同比 / 环比 / 计划比`。
+  - 新增 `comparisonModeLabel` 计算属性，统一驱动热力图与 TopN 标题文案。
+  - 热力图标题改为：`{{ comparisonModeLabel }}热力图（纵轴=指标，横轴=口径）`。
+  - TopN 标题改为：`{{ comparisonModeLabel }}波动 TopN（绝对值）`。
+  - 新增按钮组样式：`mode-switch-group`、`mode-switch-btn`、`active`。
+- 效果：
+  - 热力图与 TopN 切换口径统一，用户一次切换可同步观察两类图表。
+
+## 结构同步（2026-03-01 对比结果排序与筛选顺序一致性修复）
+
+- 本轮前端代码无新增改动。
+- 联动说明：
+  - 下方“同比/环比/计划比（实时窗口）”的排序一致性由后端 `query-comparison` 排序规则修复；
+  - 前端继续按返回顺序渲染对比表、热力图与 TopN 列表。
+
+## 结构同步（2026-03-01 专业分析增强与平均气温折叠区）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “专业分析要点”增强：
+    - 按“数据层次顺序（orderFields）”进行分组；
+    - 输出分组级同比/环比/计划比差值与差异率；
+    - 补充当前口径 Top 波动、异常阈值计数与空值风险提示。
+  - 新增“平均气温区间分析（默认折叠）”模块（仅在勾选“平均气温”时展示）：
+    - 本期与同期平均气温卡片（含同比差值、同比差异率）；
+    - 本期/同期每日气温对照表；
+    - 本期与同期曲线图（SVG 折线）。
+  - XLSX 导出扩展为多子工作表：
+    - `汇总信息`
+    - `查询结果`
+    - `对比明细`
+    - `${当前口径}热力图`
+    - `${当前口径}TopN`
+    - `专业分析`
+    - `气温日序同比`（有气温数据时）
+    - `气温汇总`（有气温数据时）
+- 效果：
+  - 页面展示与导出均形成“查询结果 + 对比可视化 + 文字解读 + 气温专题”的一体化分析结构。
+
+## 结构同步（2026-03-01 XLSX导出样式优化与子表收敛）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 导出新增 `finalizeSheet(...)`：
+    - 统一设置列宽；
+    - 统一设置表头自动筛选。
+  - 导出表头改为中文业务列名，提升阅读体验。
+  - 导出值统一按页面格式输出（百分比、差值符号、两位小数规则）。
+  - 移除导出子表：
+    - `${当前口径}热力图`
+    - `${当前口径}TopN`
+  - 保留并优化子表：
+    - `汇总信息`
+    - `查询结果`
+    - `对比明细`
+    - `专业分析`
+    - `气温日序同比`（有气温数据时）
+    - `气温汇总`（有气温数据时）
+- 效果：
+  - 导出内容更聚焦，表格版式更清晰，便于业务直接阅读和汇报使用。
+
+## 结构同步（2026-03-01 平均气温口径改为common并前置显示）
+
+- 本轮前端代码无新增改动。
+- 联动说明：
+  - “平均气温”口径归属与排序优先级由后端接口统一控制；
+  - 前端查询结果/对比结果继续按接口返回顺序渲染，因此会直接显示为 `company=common` 且排在前部。
+
+## 结构同步（2026-03-01 差异率分母绝对值规则确认）
+
+- 本轮前端代码无新增改动。
+- 规则确认：
+  - 前端分组分析差异率使用 `calcRate(current, base)`；
+  - 计算式为 `(current - base) / Math.abs(base)`，与后端口径一致。
+
+## 结构同步（2026-03-01 筛选项简化与简要分析报告化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 筛选区第一行移除：
+    - `来源月份起`
+    - `来源月份止`
+  - 请求构造调整：
+    - `report_month_from/report_month_to` 固定传 `null`。
+  - 分析区改版：
+    - 标题从“专业分析要点”调整为“简要分析”；
+    - 分析内容改为报告体顺序行文（“一、二、三...”），不再输出“分组1（口径=...）”样式。
+- 效果：
+  - 筛选操作更聚焦；
+  - 分析阅读更贴近正式报告表达。
+
+## 结构同步（2026-03-01 简要分析层次化逐项叙述）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `analysisInsights` 改为按 `orderFields` 动态分层输出（如口径 > 指标 > 期间 > 类型）。
+  - 每个末级条目输出完整叙述：
+    - 本期值；
+    - 同期值、同比增加/减少、差值、差异率；
+    - 上期值、环比增加/减少、差值、差异率；
+    - 计划值、较计划增加/减少、差值、差异率。
+  - 保留“风险提示”“数据完整性”作为报告结尾段。
+- 效果：
+  - 分析文本从“技术分组摘要”升级为“分层逐项报告体”。
+
+## 结构同步（2026-03-01 隐藏期间/类型筛选并固定月度实绩）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 隐藏筛选项：
+    - `期间（可多选）`
+    - `类型（可多选）`
+  - 查询校验调整为仅检查：
+    - `口径` 至少选择 1 项
+    - `指标` 至少选择 1 项
+  - 查询参数固定：
+    - `periods = ['month']`
+    - `types = ['real']`
+  - 初始化与重置时同步固定：
+    - `filters.periods = ['month']`
+    - `filters.types = ['real']`
+- 效果：
+  - 筛选区更简洁，查询口径固定为“month + real”。
+
+## 结构同步（2026-03-01 层次顺序与聚合开关布局优化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 布局容器由 `inline-four` 调整为 `inline-layout`（双栏）。
+  - 左栏：`order-col`（数据层次顺序）；右栏：`aggregate-col`（聚合开关）。
+  - 聚合开关卡片增加 `aggregate-switch`，统一行高与间距。
+  - 响应式策略：
+    - `<=900px`：双栏并排；
+    - `<=640px`：单栏堆叠。
+- 效果：
+  - 该区域结构更紧凑，信息分区更明确。
+
+## 结构同步（2026-03-01 层次顺序仅保留口径/指标并同排展示）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `数据层次顺序` 仅保留：
+    - `口径`
+    - `指标`
+  - 默认与重置值统一：
+    - `filters.orderFields = ['company', 'item']`
+  - 查询提交时 `order_fields` 仅提交 `company/item`。
+  - 布局改造：
+    - 层次顺序项使用 `order-inline` 同排显示；
+    - 聚合开关项使用 `aggregate-inline` 同排显示两项。
+- 效果：
+  - 层次顺序选择更聚焦，聚合区表达更紧凑，整体阅读路径更清晰。
+
+## 结构同步（2026-03-01 层次顺序与聚合开关视觉对齐）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 双栏容器 `inline-layout` 增加等高拉伸。
+  - 两栏卡片统一最小高度与头部高度。
+  - 内容容器：
+    - `order-inline`
+    - `aggregate-inline`
+    统一最小高度、垂直居中与可拉伸特性。
+  - 行内项统一行高，文字基线更一致。
+- 效果：
+  - “数据层次顺序”与“聚合开关”在视觉上更对齐，整体更美观。
+
+## 结构同步（2026-03-01 业务月份筛选器体验优化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “业务月份起/止”输入区样式升级：
+    - 卡片化背景
+    - 聚焦态高亮
+    - 控件尺寸统一
+  - 快捷按钮：
+    - 起月：`本月`、`上月`
+    - 止月：`本月`、`同起月`
+  - 快捷区间：
+    - `近3个月`、`近6个月`、`近12个月`、`本年`
+  - 新增月份范围顺序校正逻辑，避免起止颠倒。
+- 效果：
+  - 月份筛选更直观，常见区间设置更高效。
+
+## 结构同步（2026-03-01 简要分析分层文本排版）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 分析渲染结构由 `ul/li` 改为段落流。
+  - 新增 `analysisLineClass(...)` 按行文前缀识别层级并附加样式类。
+  - 样式升级：
+    - 移除圆点；
+    - 一级标题加粗；
+    - 二级/三级内容按层级缩进。
+- 效果：
+  - “简要分析”层次更清晰，阅读更接近报告正文。
+
+## 结构同步（2026-03-01 简要分析指标层文案精简）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 分层分析输出中，`item` 层级不再显示“指标：”前缀。
+  - 示例：
+    - 由 `指标：耗标煤总量` 调整为 `耗标煤总量`。
+- 效果：
+  - 文案更简洁，减少重复标签干扰。
+
+## 结构同步（2026-03-01 简要分析指标圆点与描述缩进）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 指标层标题从纯文本改为带圆点：`•指标名`。
+  - 指标下比较描述行前增加两个空格缩进。
+  - 样式支持：
+    - `insight-line` 使用 `white-space: pre-wrap` 保留前导空格；
+    - `item-title` 指标行加粗以增强层次。
+- 效果：
+  - 指标标题与描述层级更清晰，阅读分段更自然。
+
+## 结构同步（2026-03-01 简要分析数值附加计量单位）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增 `formatValueWithUnit(value, unit)`。
+  - 简要分析中本期/同期/上期/计划值统一使用“值+单位”表达。
+  - `%` 指标保持百分比样式，不重复拼接单位。
+- 效果：
+  - 报告正文中的数值语义更完整，避免单位歧义。
+
+## 结构同步（2026-03-01 缺失上期值时省略环比段）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 简要分析末级描述由固定模板改为“分段动态拼接”。
+  - 当 `momValue` 缺失时，不输出“上期...环比...”段落。
+  - 仍保留本期、同比、计划比段落。
+- 效果：
+  - 避免无效环比文案，分析内容更符合实际数据可比性。
+
+## 结构同步（2026-03-01 对比列表隐藏期间/类型）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “同比/环比/计划比（实时窗口）”对比表移除列：
+    - `期间`
+    - `类型`
+  - 同步移除行渲染中的对应字段。
+  - 表格最小宽度从 `1080px` 调整为 `860px`。
+- 效果：
+  - 对比表更紧凑，信息焦点集中在口径、指标与对比值。
+
+## 结构同步（2026-03-01 对比字段命名调整）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 对比表字段重命名：
+    - `当前值` → `本期值`
+    - `同比值` → `同期值`
+    - `环比值` → `上期值`
+  - 导出“对比明细”工作表表头同步调整。
+- 效果：
+  - 页面与导出字段命名一致，表达更贴近业务语义。
+
+## 结构同步（2026-03-01 简要分析全零指标过滤）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 简要分析新增全零过滤规则：
+    - 当 `本期/同期/上期/计划值` 均为 `0` 时，跳过该指标分析行。
+  - 分层输出同步过滤空分组，避免出现无正文的指标标题。
+- 效果：
+  - 分析文本更聚焦，减少无效冗余信息。
+
+## 结构同步（2026-03-01 简要分析口径标题高亮）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 分析分层识别新增口径专属类：`company-title`。
+  - 口径行样式强化：
+    - 字号更大
+    - 字重加粗
+    - 左侧色条
+    - 浅色背景高亮
+    - 主色文字
+- 效果：
+  - 各口径在简要分析中更显眼，阅读层级更清晰。
+
+## 结构同步（2026-03-01 查询结果字段与月份控件优化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 查询结果表移除字段：
+    - `period`
+    - `type`
+  - 导出“查询结果”工作表同步移除“期间/类型”列。
+  - 月份控件交互：
+    - 按钮区域保持左右排列（含窄屏）；
+    - 起始月份默认设为上个月。
+- 效果：
+  - 查询表更简洁；月份筛选操作更顺手，默认值更符合业务习惯。
+
+## 结构同步（2026-03-01 日期快捷按钮右侧固定）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `month-input-wrap` 改为单行不换行。
+  - `month-quick-actions` 改为单行不换行，并通过 `margin-left: auto` 固定到输入框右侧。
+- 效果：
+  - 日期输入框与快捷按钮左右对齐，不再上下错位。
+
+## 结构同步（2026-03-01 按钮横排与标题视觉强化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 日期快捷按钮文本强制横排：
+    - `writing-mode: horizontal-tb`
+    - `white-space: nowrap`
+  - 按钮文案：
+    - `同起月` → `同起始月`
+  - 筛选标题增强（新增 `panel-title`）：
+    - `口径（可多选）`
+    - `指标（可多选）`
+    - `数据层次顺序`
+    - `聚合开关`
+  - 移除“重置默认”按钮。
+- 效果：
+  - 日期按钮可读性恢复正常；筛选区标题更醒目且布局更简洁。
+
+## 结构同步（2026-03-01 按钮横排样式加固）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 日期快捷按钮增加“强制横排”样式：
+    - `writing-mode: horizontal-tb !important`
+    - `white-space: nowrap !important`
+    - `text-orientation: mixed`
+    - `inline-flex` 居中对齐
+  - 筛选标题 `panel-title` 字号提升至 `14px`，在原有加粗与高对比色基础上进一步增强可见性。
+- 效果：
+  - 按钮文本在全局样式影响下仍稳定横排；
+  - 标题层级辨识度进一步提升。
+
+## 结构同步（2026-03-01 月份行防重叠布局修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 月份输入区布局改为两列网格：
+    - 左侧：月份输入框（自适应宽度）
+    - 右侧：快捷按钮区（横排、右对齐）
+  - 关键样式调整：
+    - `month-input-wrap`：`grid-template-columns: minmax(0, 1fr) auto`
+    - `month-input`：`width: 100%` + `min-width: 0`
+    - `month-quick-actions`：`min-width: max-content` + `justify-content: flex-end`
+    - 快捷按钮 `min-width` 下调到 `56px`
+- 效果：
+  - 月份行不再出现输入框与按钮叠压；
+  - 按钮仍保持横排并固定在输入框右侧。
+
+## 结构同步（2026-03-01 移除月份行小按钮）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 移除“业务月份起/业务月份止”中的快捷按钮：
+    - `本月`
+    - `上月`
+    - `同起始月`
+  - 删除对应方法与样式（`month-quick-actions`）。
+  - 月份输入区域回归纯输入框布局，避免额外控件挤占空间。
+- 效果：
+  - 月份行更宽敞；
+  - 不再出现按钮压住日期选框的问题。
+
+## 结构同步（2026-03-01 移除快捷区间）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 删除月份区域“快捷区间”及其按钮：
+    - `近3个月`
+    - `近6个月`
+    - `近12个月`
+    - `本年`
+  - 删除对应方法：
+    - `setBusinessMonthRangeRecent`
+    - `setBusinessMonthRangeCurrentYear`
+  - 清理对应样式与响应式样式。
+- 效果：
+  - 月份筛选区域只保留起止月份输入框，空间更充足、交互更直接。
+
+## 结构同步（2026-03-01 业务月份止默认上个月）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 默认月份策略更新：
+    - `loadOptions()`：`dateMonthFrom/dateMonthTo` 均默认为上个月
+    - `resetFilters()`：起止月份都重置为上个月
+- 效果：
+  - 页面初始化与重置后，月份起止默认一致，均为上个月。
+
+## 结构同步（2026-03-01 业务月份止改为非必选）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 月份标题文案更新：
+    - `业务月份止` → `业务月份止（非必选）`
+  - 默认值策略调整：
+    - `loadOptions()`：`dateMonthFrom` 默认为上个月，`dateMonthTo` 默认空
+    - `resetFilters()`：同样仅重置 `dateMonthFrom` 为上个月，`dateMonthTo` 为空
+- 效果：
+  - 月份止字段语义更明确，且保持可选不填。
+
+## 结构同步（2026-03-01 指标配置驱动化）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 指标两块区域改为读取后端 `query-options` 返回的 `indicator_config`：
+    - `basic_section_title/basic_items`
+    - `calculated_section_title/calculated_items`
+  - 公式弹窗数据源改为配置下发（不再前端硬编码公式数组）。
+  - 指标排序改为“配置顺序优先，未配置项后置”。
+  - 基本指标区新增分类标签展示（来自 `basic_items[].category`，当前为占位值）。
+- 效果：
+  - 前端不再硬编码计算指标集合与公式；
+  - 调整指标顺序与公式时，只需改后端配置文件即可生效。
+
+## 结构同步（2026-03-01 计算指标标题默认态兜底）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 默认标题由 `计算指标（0项）` 调整为 `计算指标`。
+  - 标题渲染增加兜底逻辑：若配置标题为空或为 `0项`，按当前列表动态生成为 `计算指标（N项）`。
+- 效果：
+  - 在配置未返回或旧接口场景下，不再出现误导性的“0项”显示。
+
+## 结构同步（2026-03-01 基本指标分组展示）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 基本指标区域改为分组结构渲染：
+    - 分组标题（如“主要指标”“消耗指标”）
+    - 分组内指标复选项
+  - 取消“每个指标后方分类标签”展示方式。
+  - 支持后端下发 `indicator_config.basic_groups`，并在未分组项存在时自动归入“未分组”。
+- 效果：
+  - 基本指标结构更清晰，后续可通过配置直接调整分组与顺序。
+
+## 结构同步（2026-03-01 itemSections 变量重名编译修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 修复 `itemSections` 计算属性中的重复变量声明：
+    - 删除重复的 `const current = []`。
+- 效果：
+  - 消除 `Identifier 'current' has already been declared` 编译错误。
+
+## 结构同步（2026-03-01 其它指标配置补全联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 无新增代码变更（继续按 `basic_groups` 渲染）。
+- 联动说明：
+  - 已在配置文件 `indicator_config.json` 的 `【其他指标】` 分组补入更多指标；
+  - 前端读取同一配置后，未分组项会进一步减少。
+
+## 结构同步（2026-03-01 指标配置路径修复联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端改为优先读取容器挂载路径 `/app/data/...` 的配置文件；
+  - 前端继续通过 `query-options.indicator_config` 渲染，分组名称与顺序将与最新配置一致。

@@ -3388,3 +3388,703 @@
      - 移除 `grid-template-columns: repeat(auto-fill, ...)`，避免浏览器自动换列；  
      - 小屏下改为最小宽度 + 横向滚动，不再压缩换列。  
 - **Result:** 每一行严格保持“1个指标标签 + N个口径单元格”，不再出现指标文本串到口径列的错位问题。
+
+## 2026-03-01（monthly_data_show 页面故障排查会话）
+
+- **User Context:** 用户反馈 `http://localhost:5173/projects/monthly_data_show/pages` 相关页面仍有若干 BUG 与待完善功能。
+- **Agent Action:**
+  1. 完成 Serena 会话校验：
+     - `serena__activate_project`：已激活 `D:\编程项目\phoenix`
+     - `serena__check_onboarding_performed`：已完成 onboarding
+  2. 代码与配置排查范围：
+     - 前端页面：
+       - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+       - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+       - `frontend/src/router/index.js`
+       - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+     - 后端接口：
+       - `backend/projects/monthly_data_show/api/workspace.py`
+       - `frontend/src/projects/daily_report_25_26/services/api.js`（调用封装对齐）
+     - 项目与权限配置：
+       - `backend_data/shared/项目列表.json`
+       - `backend_data/shared/auth/permissions.json`
+  3. 结论：
+     - 页面路由链路已存在：`/projects/monthly_data_show/pages` → 子页 → `/import-workspace` 与 `/query-tool`
+     - 当前未收到可复现步骤/报错截图，暂无法针对性下补丁；待用户补充 BUG 清单后逐项修复。
+- **Code Changes:** 本轮未修改业务代码，仅进行排查与留痕同步。
+
+## 2026-03-01（monthly_data_show 计算指标实时查询修复 + 公式弹窗）
+
+- **User Feedback:**  
+  1) 月报数据查询页中“计算指标（19项）”无法查询显示；  
+  2) 希望在“计算指标（19项）”标题右侧增加按钮，点击后弹出每个计算指标的公式说明。
+- **Root Cause:**  
+  - 导入链路 `extractor.py` 会过滤 19 项计算指标，不会写入 `month_data_show`；  
+  - 查询接口此前仅查表，不做实时计算，因此计算指标始终为空。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增计算指标元数据：  
+       - `CALCULATED_ITEM_SET`（19项）  
+       - `CALCULATED_ITEM_UNITS`（单位映射）  
+       - `CALCULATED_DEPENDENCY_MAP`（依赖指标映射）  
+     - 新增实时计算能力：  
+       - `_collect_required_base_items`：按已选计算指标递归收集所需基础指标；  
+       - `_compute_calculated_indicator`：按公式计算单个指标；  
+       - `_build_calculated_rows`：按口径/期间/类型（及月份）分组生成计算指标结果行；  
+       - 缺失指标按 0、分母为 0 按 0（与配置文件规则一致）。  
+     - 查询主接口 `POST /monthly-data-show/query` 调整：  
+       - 主查询不再只按用户选择项直接查表；若选了计算指标，会自动补查其依赖基础指标；  
+       - 在数据库结果基础上实时计算 19 项，再与基础指标/平均气温结果合并排序分页返回。  
+     - 对比接口 `_fetch_compare_map` 同步支持计算指标：  
+       - 当前/同比/环比窗口下均可实时计算计算指标，确保对比分析与主查询口径一致。
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在“计算指标（19项）”标题行右侧新增 `查看公式` 按钮；  
+     - 新增公式弹窗（遮罩+表格），展示 19 项指标对应公式与单位；  
+     - 新增 `calculatedFormulaRows` 配置与弹窗样式。
+- **Result:**  
+  - 计算指标可在查询页实时计算并正常显示；  
+  - 对比分析（同比/环比）同样可覆盖计算指标；  
+  - 页面支持一键查看 19 项公式说明，便于校核与解释。
+
+## 2026-03-01（查询失败排查：ERR_CONNECTION_REFUSED）
+
+- **User Feedback:** 查询页点击“查询”后，`/monthly-data-show/query`、`/query-comparison` 及 `/audit/events` 全部 `ERR_CONNECTION_REFUSED`。
+- **Agent Action:**
+  1. 核对前端 API 基址：`frontend/.env.development` 为 `VITE_API_BASE=http://127.0.0.1:8001`；
+  2. 核对容器端口映射：`docker-compose.yml` 中 backend 为 `8001:8000`；
+  3. 结论：请求地址与映射一致，问题不在页面查询逻辑，属于后端服务当前不可达（未启动或启动后异常退出）。
+- **Result:** 已明确本次报错为服务连通性问题，需优先恢复 backend 监听后再验证查询逻辑。
+
+## 2026-03-01（计算指标展示规则与两轮计算增强）
+
+- **User Request:**  
+  1) 单位为 `%` 的值按百分数展示（如 `0.65` 显示 `65%`）；  
+  2) 所有数据若小数部分不为 0，统一保留 2 位小数；  
+  3) 计算指标存在依赖链，要求连续两轮计算后展示。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增 `_compute_calculated_two_pass(...)`，固定执行两轮计算；  
+     - `query` 与 `query-comparison` 两条链路均改为调用两轮计算结果；  
+     - `val(...)` 取值顺序优化：优先当前缓存，再读上轮已写入的计算指标值，最后回退递归计算。
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 新增 `formatValue(value, unit)`：单位为 `%` 时按 `value*100 + '%'` 展示；  
+     - `formatNumber` 规则统一：  
+       - 整数显示为整数；  
+       - 非整数四舍五入后固定 2 位小数；  
+     - 查询结果表与同比/环比表的数值渲染切换为 `formatValue(...)`。
+- **Result:**  
+  - 百分比类指标显示符合业务习惯；  
+  - 数值小数位展示统一为“非整值两位”；  
+  - 计算指标依赖链按两轮计算输出，最终展示更稳定。
+
+## 2026-03-01（北海发电水耗率/供热水耗率计算偏差修复）
+
+- **User Feedback:** `company=北海` 下，`发电水耗率`、`供热水耗率` 计算不正确。
+- **Root Cause:**  
+  - 两个指标依赖 `热分摊比`；`热分摊比` 又依赖 `耗标煤总量`。  
+  - 实际数据中存在同义指标命名（如 `标煤耗量`、`煤折标煤量`），若仅按单一指标名取值，会出现依赖缺失并导致结果偏差。
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py` 新增 `METRIC_ALIAS_MAP`；  
+  2. `_collect_required_base_items` 增强：计算依赖补查时同时补查别名指标；  
+  3. `_compute_calculated_indicator` 的 `val(...)` 增强：主指标为 0/缺失时按别名顺序回退取值。
+- **Result:**  
+  - `发电水耗率`、`供热水耗率` 的上游依赖在命名不一致场景下可正确命中，北海口径计算结果与业务口径更一致。
+
+## 2026-03-01（水耗率公式口径修订）
+
+- **User Request:** 修订以下两个计算指标公式：  
+  1) `发电水耗率 = (耗水量-供汽量-热网耗水量) * (1-热分摊比) / 发电量`  
+  2) `供热水耗率 = ((耗水量-供汽量-热网耗水量) * 热分摊比 + 供汽量 + 热网耗水量) / 供热量`
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 更新 `发电水耗率`、`供热水耗率` 计算表达式；  
+     - 依赖映射 `CALCULATED_DEPENDENCY_MAP` 同步加入 `热网耗水量`。
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 公式弹窗中的两条公式文案同步更新。
+- **Result:** 查询结果计算逻辑与页面公式说明均已切换到你最新给定口径。
+
+## 2026-03-01（查询结果字段与排序修复）
+
+- **User Feedback:**  
+  1) 查询结果表不应显示 `report_month` 字段；  
+  2) 指标显示顺序未完全按用户选择次序排序。
+- **Agent Action:**
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 查询结果表头与行渲染中移除 `report_month` 列。
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增 `_build_rank_map(...)`；  
+     - 排序函数 `_merge_and_sort_rows(...)` 增加 `rank_maps` 入参；  
+     - `query` 返回前排序改为：按 `company/item/period/type` 的“用户勾选顺序”优先，再按文本兜底；  
+     - 其中 `item` 顺序直接使用前端提交的 `filters.items` 顺序。
+- **Result:**  
+  - 查询结果页不再显示 `report_month`；  
+  - 指标与维度行顺序优先遵循用户勾选次序，展示更符合操作预期。
+
+## 2026-03-01（XLSX 导出与页面字段保持一致 + 文件名简化）
+
+- **User Request:**  
+  1) 导出文件与查询结果展示保持一致（不包含 `report_month`）；  
+  2) 导出文件名简化为 `月报查询分析_YYYY-MM.xlsx`。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `downloadXlsx()` 中查询结果 sheet 移除 `report_month` 列；  
+     - 新增 `resolveExportMonthTag()`：按筛选条件/窗口标签推断月份；  
+     - 文件名从长区间+时间戳改为 `月报查询分析_${monthTag}.xlsx`。  
+- **Result:**  
+  - 导出字段与页面字段一致；  
+  - 文件名更简洁，符合 `月报查询分析_2026-01.xlsx` 风格。
+
+## 2026-03-01（新增计划比：与当月 plan 对比）
+
+- **User Request:** 在现有同比/环比基础上新增“计划比”，与当月 `plan` 值进行对比。
+- **Agent Action:**
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `QueryComparisonRow` 新增：`plan_value`、`plan_rate`；  
+     - `QueryComparisonResponse` 新增：`plan_window_label`；  
+     - 新增 `_fetch_plan_value_map(...)`：在当前窗口内按 `type='plan'` 取计划值；  
+     - 计划值支持基础指标与计算指标（复用计算引擎），并适配口径聚合；  
+     - `query-comparison` 返回 `current` 相对 `plan` 的偏差率。
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 展示口径下拉新增 `计划比`；  
+     - 对比表新增 `计划值`、`计划比` 两列；  
+     - 计划窗口标签接入显示；  
+     - 热力图与 TopN 条形图复用 `rateValue`，支持计划比视角；  
+     - 专业分析要点新增计划比统计与偏差 Top 项；  
+     - XLSX 导出对比 sheet 新增 `plan_value`、`plan_rate`。
+- **Result:**  
+  - 页面现支持“同比/环比/计划比”三种对比口径，可统一查看、可视化与导出。
+
+## 2026-03-01（热力图与波动 TopN 统一切换开关）
+
+- **User Request:** 为“热力图”和“波动 TopN（绝对值）”增加统一切换开关，用于切换 `同比/环比/计划比`。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在可视化工具栏新增统一按钮组（同比/环比/计划比）；  
+     - 新增 `comparisonModeLabel` 计算属性，统一驱动可视化标题；  
+     - 热力图与 TopN 标题改为动态显示当前口径；  
+     - 补充按钮组样式（激活态高亮、分段边框）。
+- **Result:**  
+  - 热力图与 TopN 使用同一个口径开关，切换行为一致；  
+  - 页面不再依赖下拉切换，交互更直观。
+
+## 2026-03-01（同比/环比/计划比结果排序与筛选顺序对齐）
+
+- **User Feedback:** 下方“同比/环比/计划比（实时窗口）”中的口径/指标排序未与上方勾选顺序一致。
+- **Root Cause:**  
+  - `query-comparison` 接口原先按 `sorted(current_map.keys())` 字典序输出，未应用与主查询一致的 rank 排序规则。
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增 `_sort_comparison_rows(...)`，支持按 `order_fields` + `rank_maps` 排序；  
+     - `query_month_data_show_comparison(...)` 中补充 `order_mode` 校验与 `resolved_order_fields` 解析；  
+     - 按用户勾选顺序构建 `company/item/period/type` rank map；  
+     - 返回前统一调用 `_sort_comparison_rows(...)` 排序。
+- **Result:**  
+  - 下方同比/环比/计划比结果已按上方选择顺序排序，口径与指标展示顺序一致。
+
+## 2026-03-01（专业分析增强 + 平均气温折叠区 + 全量XLSX子工作表）
+
+- **User Request:**  
+  1) 丰富“专业分析要点”，并依据“数据层次顺序”分组输出同比/环比/计划比差值与差异率；  
+  2) 当选择“平均气温”指标时，新增默认折叠区，展示区间每日气温、同比值、平均气温同比及本期/同期曲线；  
+  3) 页面上所有数据与分析均纳入 XLSX 不同子工作表。
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `QueryComparisonResponse` 新增 `temperature_comparison`；  
+     - 新增模型：`TemperatureDailyComparisonRow`、`TemperatureComparisonSummary`、`TemperatureComparisonPayload`；  
+     - 新增 `_build_temperature_comparison_payload(...)`：从 `calc_temperature_data` 生成“当前区间逐日 vs 同期逐日”明细与均值同比。  
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - “专业分析要点”改为按 `filters.orderFields` 分组解说；  
+     - 输出每个分组的同比/环比/计划比差值与差异率，并补充 Top 波动与风险条目；  
+     - 新增“平均气温区间分析（默认折叠）”模块：  
+       - 每日气温同比表；  
+       - 本期/同期平均气温及同比；  
+       - 本期与同期曲线图（SVG）；  
+     - 扩展 XLSX 导出为多工作表：`汇总信息`、`查询结果`、`对比明细`、`热力图`、`TopN`、`专业分析`、`气温日序同比`、`气温汇总`（按数据存在情况追加）。  
+- **Result:**  
+  - 页面分析可读性与业务解释深度显著增强；  
+  - 平均气温指标具备“日序+同比+曲线+均值同比”的完整分析闭环；  
+  - 导出文件覆盖页面主要数据与分析结果，便于归档复盘。
+
+## 2026-03-01（XLSX导出样式优化 + 移除热力图/TopN子表）
+
+- **User Request:**  
+  - 导出表格样式可读性太差；  
+  - 不需要“热力图”和“TopN”两个子表。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 新增 `finalizeSheet(...)`，统一为各工作表设置列宽与表头筛选；  
+     - 导出列头统一改为中文业务列名；  
+     - 导出值统一改为页面同款格式（百分比、差值符号、小数位）；  
+     - 明确移除 `${当前口径}热力图` 与 `${当前口径}TopN` 两个工作表；  
+     - 保留并优化其余工作表（汇总/查询/对比/专业分析/气温明细/气温汇总）。
+- **Result:**  
+  - 导出文件可读性明显提升；  
+  - 工作表数量收敛到业务需要的内容，不再包含热力图与TopN子表。
+
+## 2026-03-01（平均气温口径固定为 common + 查询结果置顶）
+
+- **User Request:**  
+  - “平均气温”指标口径固定为 `common`（不归属现存实际口径）；  
+  - 查询结果显示时，该指标置于最上方。
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增常量 `AVERAGE_TEMPERATURE_COMPANY = "common"`；  
+     - `_build_average_temperature_rows(...)` 改为只生成 `company=common` 的温度行；  
+     - `_fetch_compare_map(...)` 中平均气温对比行改为固定 `company=common`；  
+     - `_merge_and_sort_rows(...)` 与 `_sort_comparison_rows(...)` 增加“平均气温优先”排序前缀。  
+- **Result:**  
+  - 平均气温在查询/对比输出中统一以 `common` 口径显示；  
+  - 查询结果中该指标优先显示在顶部。
+
+## 2026-03-01（差异率分母统一按绝对值确认）
+
+- **User Request:** 所有同比/环比/计划比差异率的分母统一按绝对值计算。
+- **Agent Check:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `_calc_rate(current, base)` 已使用 `(current - base) / abs(base)`。  
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `calcRate(current, base)` 已使用 `(current - base) / Math.abs(base)`；  
+     - 专业分析分组差异率复用该函数。  
+- **Result:**  
+  - 查询对比、专业分析、气温同比相关差异率均满足“绝对值分母”规则，无需额外逻辑改动。
+
+## 2026-03-01（筛选项简化 + 简要分析报告化改写）
+
+- **User Request:**  
+  1) 去掉筛选第一行中的“来源月份起止”；  
+  2) 将“专业分析要点”改为“简要分析”，并将内容改写为报告式顺序行文，不使用“分组1（...）”技术表达。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 移除“来源月份起/来源月份止”两个筛选控件；  
+     - `filters` 去除 `reportMonthFrom/reportMonthTo`；  
+     - `buildPayload()` 中 `report_month_from/report_month_to` 固定传 `null`；  
+     - `resetFilters()` 同步移除来源月份重置逻辑；  
+     - 分析标题由“专业分析要点”改为“简要分析”；  
+     - `analysisInsights` 重写为报告式结构（“一、二、三...”），按总体、结构、同比重点、环比重点、计划执行、当前关注、风险提示、数据完整性顺序输出。  
+- **Result:**  
+  - 筛选区第一行更简洁；  
+  - 分析文案更接近业务报告写法，阅读体验更符合汇报场景。
+
+## 2026-03-01（简要分析改为层次驱动的逐项报告结构）
+
+- **User Clarification:**  
+  - 除总体情况外，需按“数据层次顺序”逐层展开（如：口径 > 指标 > 期间 > 类型）；  
+  - 在末级逐项输出：本期、同期同比、上期环比、计划比的差值与差异率，采用“增加/减少/持平”叙述。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 重写 `analysisInsights` 生成逻辑；  
+     - 根据 `filters.orderFields` 动态构建层次树并按顺序遍历输出；  
+     - 末级行文统一为：  
+       - 本期值；  
+       - 同期值 + 同比增减 + 差值 + 差异率；  
+       - 上期值 + 环比增减 + 差值 + 差异率；  
+       - 计划值 + 较计划增减 + 差值 + 差异率；  
+     - 保留风险提示与数据完整性总结。\n+- **Result:**  
+  - “简要分析”由概览型改为可直接阅读的分层逐项分析，更贴近报告正文结构。
+
+## 2026-03-01（隐藏期间/类型筛选并固定 month+real）
+
+- **User Request:** 隐藏“期间”“类型”筛选器，默认固定 `month` 与 `real`。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 移除筛选区中的“期间（可多选）”“类型（可多选）”；  
+     - 查询按钮校验改为仅依赖“口径 + 指标”；  
+     - `buildPayload()` 固定传 `periods: ['month']`、`types: ['real']`；  
+     - `loadOptions()` 与 `resetFilters()` 固定初始化 `filters.periods=['month']`、`filters.types=['real']`。  
+- **Result:**  
+  - 页面不再暴露期间/类型选择，查询固定为月度实绩（month + real）。
+
+## 2026-03-01（数据层次顺序与聚合开关布局优化）
+
+- **User Request:** 调整“数据层次顺序”及其后方“聚合”框体布局。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 将该区域容器从 `inline-four` 重构为 `inline-layout` 双栏布局；  
+     - 左栏为“数据层次顺序”（`order-col`），右栏为“聚合开关”（`aggregate-col`）；  
+     - 聚合开关卡片增加 `aggregate-switch`，统一高度与间距；  
+     - 响应式调整：  
+       - ≤900px 双栏并排；  
+       - ≤640px 单栏堆叠。  
+- **Result:**  
+  - “数据层次顺序”与“聚合开关”在桌面端对齐更清晰，移动端折叠更自然。
+
+## 2026-03-01（层次顺序仅保留口径/指标并与聚合同排）
+
+- **User Request:**  
+  - 数据层次顺序中去掉“期间”“类型”，只保留“口径”“指标”，并同一行显示；  
+  - 聚合框体中的两项内容也同一行显示。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `layerOptions` 仅保留 `company/item`；  
+     - `filters.orderFields` 默认值与重置值改为 `['company','item']`；  
+     - 请求 `order_fields` 仅提交 `company/item`；  
+     - “数据层次顺序”区域由纵向列表改为 `order-inline` 单行显示；  
+     - “聚合开关”区域改为 `aggregate-inline` 单行放置两个开关项；  
+     - 响应式补充：窄屏可自动换行避免溢出。  
+- **Result:**  
+  - 层次顺序只展示“口径/指标”；  
+  - 层次顺序与聚合开关内部均为同排展示，结构更紧凑直观。
+
+## 2026-03-01（层次顺序与聚合开关视觉对齐微调）
+
+- **User Request:** “数据层次顺序”和“聚合开关”整体高度与文字竖直位置保持一致，整体排布更美观。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `inline-layout` 增加 `align-items: stretch`，保证双栏等高；  
+     - `inline-col` 统一 `min-height` 与 `gap`；  
+     - 两栏头部 `field-head` 统一最小高度；  
+     - `order-inline` 与 `aggregate-inline` 统一最小高度并开启 `flex: 1`；  
+     - `order-inline .check-item` 与 `aggregate-item` 统一行高与垂直居中。  
+- **Result:**  
+  - 两块区域高度与文字基线更加一致，视觉上更整齐。
+
+## 2026-03-01（业务月份筛选器样式与易用性优化）
+
+- **User Feedback:** “业务月份起”日期选框不美观且操作不便利。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 对“业务月份起/止”输入区做组件化样式优化（卡片背景、聚焦高亮、控件尺寸统一）；  
+     - 为“业务月份起”增加快捷按钮：`本月`、`上月`；  
+     - 为“业务月份止”增加快捷按钮：`本月`、`同起月`；  
+     - 新增“快捷区间”按钮：`近3个月`、`近6个月`、`近12个月`、`本年`；  
+     - 增加月份范围顺序保护（起月晚于止月时自动纠正）。  
+- **Result:**  
+  - 月份选择交互显著简化，常用区间可一键设置，输入框视觉一致性提升。
+
+## 2026-03-01（简要分析去圆点并强化层次排版）
+
+- **User Request:** “简要分析”不要每行圆点开头，需要更清晰的结构层次。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 分析区从 `ul/li` 改为段落流式渲染；  
+     - 新增 `analysisLineClass(...)`，按文本前缀识别层次：  
+       - 一级：`一、二、三...`  
+       - 二级：`口径：/指标：/期间：/类型：`  
+       - 三级：明细句  
+     - 样式改为分层缩进与字重区分，移除默认圆点。  
+- **Result:**  
+  - 分析内容从“点列”变为“分层文本”，结构更易读。
+
+## 2026-03-01（简要分析指标层前缀精简）
+
+- **User Request:** “指标：耗标煤总量”这类写法改为仅显示“耗标煤总量”。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在分层分析生成逻辑中，对 `item` 层级改为仅输出指标名；  
+     - 其余层级（如口径）仍保留前缀标签，维持结构可读性。  
+- **Result:**  
+  - 简要分析文本更简洁，指标行更贴近自然表述。
+
+## 2026-03-01（简要分析指标圆点与描述缩进）
+
+- **User Request:**  
+  - 每个指标名前加小圆点；  
+  - 指标下方比较描述前空两格。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 指标层文本改为 `•指标名`；  
+     - 比较描述行文前增加两个空格前缀；  
+     - `analysisLineClass` 增加 `item-title` 识别；  
+     - 分析行样式增加 `white-space: pre-wrap`，保证空格缩进可见。  
+- **Result:**  
+  - 简要分析中“指标标题”和“指标说明”层次更清晰，排版更符合阅读习惯。
+
+## 2026-03-01（简要分析数值补充计量单位）
+
+- **User Request:** 每个指标的本期值/同期值/计划值需要带计量单位。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 新增 `formatValueWithUnit(value, unit)`；  
+     - 在简要分析末级描述中，将本期/同期/上期/计划值统一改为“数值 + 单位”输出；  
+     - `%` 单位保持百分比展示，不重复追加单位文本。  
+- **Result:**  
+  - 简要分析中的核心对比值具备单位语义，阅读更准确。
+
+## 2026-03-01（缺失上期值时省略环比段）
+
+- **User Request:** 若缺少“上期值”，则简要分析中整段环比描述不应显示。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 末级分析句改为分段动态拼接；  
+     - 当 `momValue == null` 时，不拼接“上期...环比...”整段；  
+     - 其余（本期/同比/计划）段落保持正常输出。  
+- **Result:**  
+  - 不再出现“上期—，环比0，差异率—”这类无意义句段，分析文本更自然。
+
+## 2026-03-01（对比列表隐藏期间/类型字段）
+
+- **User Request:** “同比/环比/计划比（实时窗口）”列表中隐藏“期间”“类型”字段。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 对比表移除“期间”“类型”表头与对应单元格；  
+     - 对比表最小宽度从 `1080px` 调整为 `860px`，减少无效横向留白。  
+- **Result:**  
+  - 对比列表聚焦核心字段（口径、指标、值与比率），展示更简洁。
+
+## 2026-03-01（对比列表字段命名业务化）
+
+- **User Request:**  
+  - “当前值”改为“本期值”；  
+  - “同比值”改为“同期值”；  
+  - “环比值”改为“上期值”。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 对比表表头替换为 `本期值/同期值/上期值`；  
+     - XLSX 导出“对比明细”子表表头同步替换，保证页面与导出一致。  
+- **Result:**  
+  - 文案更符合业务语义，用户理解成本更低。
+
+## 2026-03-01（四值全零指标跳过分析）
+
+- **User Request:** 若某口径下某指标的本期/同期/上期/计划值全为 0，则跳过该指标的分析内容。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在简要分析生成中新增 `shouldSkipAnalysisRow(...)`；  
+     - 当 `current/yoy/mom/plan` 四值均为 0 时，末级描述不输出；  
+     - 同步在分组阶段过滤该类行，避免出现仅有标题无正文的空指标块。  
+- **Result:**  
+  - 简要分析中不再输出“全零指标”的冗余内容，文本更聚焦。
+
+## 2026-03-01（简要分析口径标题视觉强化）
+
+- **User Request:** 在“简要分析”中，各口径的字体更大、加粗标色、更显眼。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `analysisLineClass(...)` 增加口径专属类别：`company-title`；  
+     - 新增样式 `.insight-line.level-2.company-title`：  
+       - 字号提升（14px）  
+       - 加粗（700）  
+       - 左侧强调线  
+       - 浅蓝底色高亮  
+       - 主色文字（深蓝）。  
+- **Result:**  
+  - 口径层级在分析正文中更醒目，层次识别更快。
+
+## 2026-03-01（查询结果字段精简 + 月份控件交互优化）
+
+- **User Request:**  
+  1) 查询结果表中不再显示 `period/type`；  
+  2) 月份选择按钮改为左右排列；  
+  3) 起始月份默认值设为上个月（当前时间下为 `2026-02`）。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 查询结果表移除 `period/type` 列（表头与行渲染同步删除）；  
+     - 导出“查询结果”工作表同步移除 `期间/类型` 字段，保证一致；  
+     - `month-input-wrap` 调整为横向排列并支持换行，不再小屏纵向堆叠；  
+     - `loadOptions()` 与 `resetFilters()` 中将 `dateMonthFrom` 默认设为上个月。  
+- **Result:**  
+  - 查询结果字段更聚焦；  
+  - 月份操作区交互更顺手；  
+  - 起始月份默认满足“上个月”业务习惯。
+
+## 2026-03-01（日期按钮固定在选框右侧）
+
+- **User Feedback:** 日期快捷按钮希望固定在日期选框右侧，不要掉到下方。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `month-input-wrap` 调整为 `nowrap`；  
+     - `month-quick-actions` 调整为 `nowrap` 并设置 `margin-left: auto`，固定靠右。  
+- **Result:**  
+  - 日期输入与快捷按钮保持同一行，按钮固定在右侧。
+
+## 2026-03-01（按钮横排修正 + 标题显眼度提升 + 去重置默认）
+
+- **User Feedback:**  
+  - 日期按钮文字出现竖排，需恢复横排；  
+  - “同起月”改为“同起始月”；  
+  - 筛选标题“口径/指标/数据层次顺序/聚合开关”需更显眼；  
+  - 去掉“重置默认”按钮。
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `month-quick-actions .btn` 与 `.btn.ghost` 强制横排文本（`writing-mode: horizontal-tb` + `nowrap`）；  
+     - 按钮文案改为“同起始月”；  
+     - 上述四个标题新增 `panel-title` 样式（加粗、提亮）；  
+     - 移除“重置默认”按钮与对应函数。  
+- **Result:**  
+  - 日期按钮文本恢复正常横排；  
+  - 标题层级更醒目；  
+  - 控件区更简洁。
+
+## 2026-03-01（按钮横排样式加固 + 标题再增强）
+
+- **User Feedback:**  
+  - 日期快捷按钮文字仍出现异常排版，需确保始终横排；  
+  - 各筛选标题再略微显眼一点。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `month-quick-actions .btn` 增加强制横排样式：  
+       - `writing-mode: horizontal-tb !important`  
+       - `white-space: nowrap !important`  
+       - `text-orientation: mixed`  
+       - `inline-flex` 对齐；  
+     - `panel-title` 字号由默认提升至 `14px`（保持加粗与高对比色）。  
+- **Result:**  
+  - 日期按钮在全局样式干扰下也保持横排可读；  
+  - “口径（可多选）/指标（可多选）/数据层次顺序/聚合开关”标题更清晰醒目。  
+
+## 2026-03-01（月份行防重叠布局修复）
+
+- **User Feedback:** 月份筛选行中的选区控件出现叠在一起的问题。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `month-input-wrap` 从 `flex` 改为两列 `grid`（输入区 + 按钮区），避免挤压重叠；  
+     - `month-input` 设为 `width: 100%` 且 `min-width: 0`，在网格内自适应缩放；  
+     - `month-quick-actions` 右对齐并设置 `min-width: max-content`，保持按钮不塌陷；  
+     - 按钮最小宽度微调为 `56px`，减少横向拥挤。  
+- **Result:**  
+  - 月份行输入框与快捷按钮不再重叠；  
+  - 保持按钮横排且位于输入框右侧。  
+
+## 2026-03-01（移除月份行小按钮，避免控件挤压）
+
+- **User Feedback:** 月份行仍出现“本月”等按钮压住日期选框，希望直接去掉这些小按钮。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 移除“业务月份起/业务月份止”中的小按钮区：`本月/上月/同起始月`；  
+     - 删除对应方法：`setBusinessMonthFromCurrent`、`setBusinessMonthFromPrevious`、`setBusinessMonthToCurrent`、`syncBusinessMonthToFrom`；  
+     - 清理 `month-quick-actions` 相关样式，月份输入区改为纯输入布局。  
+- **Result:**  
+  - 月份行空间显著变宽，不再出现按钮压住日期框的问题。  
+
+## 2026-03-01（移除“快捷区间”）
+
+- **User Request:** 去掉月份区域中的“快捷区间”。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 删除“快捷区间”区块（近3个月/近6个月/近12个月/本年）；  
+     - 删除对应方法：`setBusinessMonthRangeRecent`、`setBusinessMonthRangeCurrentYear`；  
+     - 删除 `month-preset-field`、`month-presets` 及其响应式样式。  
+- **Result:**  
+  - 月份筛选区仅保留“业务月份起/业务月份止”输入框，界面更简洁宽敞。  
+
+## 2026-03-01（业务月份止默认上个月）
+
+- **User Request:** “业务月份止”默认也选择当前的上个月。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在 `loadOptions()` 中统一设置默认月份：`dateMonthFrom/dateMonthTo` 均为上个月；  
+     - 在 `resetFilters()` 中同样将起止月份都重置为上个月。  
+- **Result:**  
+  - 页面初始加载与点击重置后，业务月份起止均默认为上个月（例如当前为 2026-03 时默认 `2026-02`）。  
+
+## 2026-03-01（业务月份止改为非必选且默认不选）
+
+- **User Request:**  
+  - “业务月份止”默认不选；  
+  - 标题改为“业务月份止（非必选）”。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 标题文案更新为“业务月份止（非必选）”；  
+     - `loadOptions()` 中 `dateMonthTo` 默认值改回空字符串；  
+     - `resetFilters()` 中 `dateMonthTo` 重置值改回空字符串。  
+- **Result:**  
+  - 页面初始与重置后仅默认选中“业务月份起=上个月”；  
+  - “业务月份止”明确为可不选字段。  
+
+## 2026-03-01（指标硬编码改为配置驱动）
+
+- **User Request:**  
+  - 将“基本指标/计算指标”两块从硬编码改为读取 `backend_data/projects/monthly_data_show` 下 JSON 配置；  
+  - 计算指标公式也改为读取配置并执行；  
+  - 基本指标增加“分类”占位，后续可直接改配置调整顺序与公式；  
+  - 保持现有页面逻辑与功能不变。  
+- **Agent Action:**  
+  1. 新增配置文件：`backend_data/projects/monthly_data_show/indicator_config.json`  
+     - 包含 `basic_items`（含 `category` 占位字段）与 `calculated_items`（含 `unit/formula`）；  
+     - 计算公式使用 `{{指标名}}` 占位（支持 `{{天数}}`）。  
+  2. 新增后端配置服务：`backend/projects/monthly_data_show/services/indicator_config.py`  
+     - 负责加载配置、生成有序指标清单、提取依赖、输出前端配置载荷；  
+     - 提供安全表达式求值器（分母为 0 返回 0，异常兜底为 0）。  
+  3. 后端接口改造：`backend/projects/monthly_data_show/api/workspace.py`  
+     - 查询选项接口新增 `indicator_config` 返回；  
+     - 计算指标集合/单位/依赖/公式改为运行时从配置刷新读取；  
+     - 计算执行改为按配置公式求值（保留两轮计算逻辑）；  
+     - `query-options` 的指标顺序改为优先按配置顺序输出。  
+  4. 提取服务改造：`backend/projects/monthly_data_show/services/extractor.py`  
+     - 入库提取时“跳过计算指标”改为读取配置中的计算指标集合，不再硬编码。  
+  5. 前端页面改造：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`  
+     - 加载 `query-options` 时接收 `indicator_config`；  
+     - 两块指标区域与公式弹窗改为配置驱动渲染；  
+     - 基本指标项展示分类标签（占位），便于后续你只改 JSON 生效。  
+  6. 最小校验：  
+     - `python -m py_compile` 校验通过（`workspace.py`/`extractor.py`/`indicator_config.py`）。  
+- **Result:**  
+  - 指标顺序与计算公式已从代码硬编码迁移至配置文件；  
+  - 后续你可通过修改 `indicator_config.json` 完成顺序调整、公式修订与分类维护。  
+
+## 2026-03-01（计算指标标题默认态兜底）
+
+- **User Feedback:** 页面出现“计算指标（0项）”。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 默认标题从“计算指标（0项）”改为“计算指标”；  
+     - 渲染标题时增加兜底：若标题为“0项”则按当前可用列表动态生成。  
+- **Result:**  
+  - 配置未加载/旧接口场景下，不再先显示误导性的“0项”标题。  
+
+## 2026-03-01（基本指标改为“分组展示”结构）
+
+- **User Request:** 基本指标不要“每项后面挂分类标签”，而是按分类分组展示（例如“主要指标”下挂多个指标）。  
+- **Agent Action:**  
+  1. 配置结构升级：`backend_data/projects/monthly_data_show/indicator_config.json`  
+     - 新增 `basic_groups` 结构：`[{ name, items: [{name}] }]`；  
+     - 预置示例分组与占位分组，便于后续直接编辑。  
+  2. 后端配置加载升级：`backend/projects/monthly_data_show/services/indicator_config.py`  
+     - 新增 `basic_groups` 解析与归一化；  
+     - 保持向后兼容：若无 `basic_groups`，仍可读取旧 `basic_items`。  
+  3. 前端渲染升级：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`  
+     - 基本指标区改为按分组标题 + 分组内指标复选展示；  
+     - 取消单项分类标签显示。  
+  4. 校验：  
+     - `python -m py_compile` 通过（配置加载/查询/提取模块）。  
+- **Result:**  
+  - 你现在可仅通过修改 `indicator_config.json` 的 `basic_groups` 来控制“基本指标”的分组、顺序与内容。  
+
+## 2026-03-01（前端编译报错修复：变量重名）
+
+- **User Feedback:** 前端报错 `Identifier 'current' has already been declared`。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 在 `itemSections` 计算属性中删除重复的 `const current = []` 声明，保留后续有效声明。  
+- **Result:**  
+  - 修复重复声明导致的 SFC 编译错误。  
+
+## 2026-03-01（补全未分组指标到【其他指标】）
+
+- **User Request:** 读取当前配置后，将页面“未分组”中配置未提到的指标写入配置文件 `【其他指标】` 分组。  
+- **Agent Action:**  
+  1. 读取当前配置：`backend_data/projects/monthly_data_show/indicator_config.json`；  
+  2. 通过 `phoenix_backend` 容器查询 `month_data_show` 的指标全集；  
+  3. 将缺失项补充到 `basic_groups -> 【其他指标】 -> items`。  
+- **Result:**  
+  - 配置覆盖范围扩大，减少页面落入“未分组”的基础指标。  
+
+## 2026-03-01（修复容器读取配置路径，确保按最新配置渲染）
+
+- **User Feedback:** 页面分类名称与顺序未完全按最新配置生效。  
+- **Root Cause:**  
+  - 后端配置加载默认读取 `/app/backend_data/...`；  
+  - 容器实际挂载目录为 `/app/data/...`，导致读取到旧配置副本。  
+- **Agent Action:**  
+  1. `backend/projects/monthly_data_show/services/indicator_config.py`：  
+     - 配置路径改为候选优先级读取：  
+       - `/app/data/projects/monthly_data_show/indicator_config.json`（优先）  
+       - `/app/backend_data/projects/monthly_data_show/indicator_config.json`（兼容回退）  
+  2. 容器内验证：  
+     - 已读取到你最新分组：`主要产销指标/主要消耗指标/其它消耗指标/面积与能力/【其他指标】`；  
+     - 基础指标覆盖校验差集 `missing=0`。  
+- **Result:**  
+  - 页面分组名称、顺序与指标项可按你编辑的配置文件一致生效。  
+
+## 2026-03-01（基础指标单位纳入配置文件）
+
+- **User Request:** 将指标的计量单位加入配置文件。  
+- **Agent Action:**  
+  1. 后端配置解析升级：`backend/projects/monthly_data_show/services/indicator_config.py`  
+     - 支持读取 `basic_groups.items[].unit`（并兼容旧结构）；  
+  2. 配置文件补齐单位：`backend_data/projects/monthly_data_show/indicator_config.json`  
+     - 为当前基础指标分组项补全 `unit` 字段；  
+  3. 容器内验证：  
+     - 配置加载后 `basic_items` 的单位字段已全部可读（`unit_count=67`）。  
+- **Result:**  
+  - 基础指标与计算指标都可在配置文件中统一维护计量单位。  

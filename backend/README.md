@@ -1700,3 +1700,413 @@
 - 本轮后端代码无改动。
 - 联动说明：
   - 前端将热力图列布局由 `auto-fill` 改为按口径数固定列数，并在小屏采用横向滚动，属于展示层修复，不影响后端数据接口。
+
+## 结构同步（2026-03-01 monthly_data_show 排查会话）
+
+- 本轮后端代码无改动。
+- 排查结论：
+  - `backend/projects/monthly_data_show/api/workspace.py` 查询与对比接口定义完整，前端调用入口已对齐；
+  - 待用户提供可复现 BUG 现象后执行针对性修复。
+
+## 结构同步（2026-03-01 monthly_data_show 计算指标实时查询修复）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增计算指标元数据：
+    - `CALCULATED_ITEM_SET`（19 项）
+    - `CALCULATED_ITEM_UNITS`（单位映射）
+    - `CALCULATED_DEPENDENCY_MAP`（计算依赖关系）
+  - 新增核心函数：
+    - `_collect_required_base_items`：递归收集计算指标依赖的基础指标
+    - `_compute_calculated_indicator`：按公式计算单个指标（缺失按 0、分母 0 按 0）
+    - `_build_calculated_rows`：按查询维度分组生成计算指标结果行
+  - 查询接口增强：
+    - `POST /monthly-data-show/query` 支持“基础指标补查 + 实时计算 + 合并输出”
+    - `POST /monthly-data-show/query-comparison` 所依赖的 `_fetch_compare_map` 同步支持计算指标窗口计算
+- 效果：
+  - 计算指标不依赖落库，可在查询与同比/环比中实时显示。
+
+## 结构同步（2026-03-01 查询连通性排查）
+
+- 本轮后端代码无新增改动。
+- 运行排查结论：
+  - 前端 `VITE_API_BASE` 与 `docker-compose` 端口映射一致（`127.0.0.1:8001`）；
+  - `ERR_CONNECTION_REFUSED` 指向后端服务未监听（未启动或异常退出），非接口路径错误。
+
+## 结构同步（2026-03-01 计算指标两轮计算）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增 `_compute_calculated_two_pass(...)`，固定两轮计算计算指标。
+  - `POST /monthly-data-show/query` 与 `query-comparison` 的 `_fetch_compare_map` 统一切换到两轮计算结果。
+  - 依赖取值顺序优化：
+    - 先取本轮缓存；
+    - 再取上一轮已计算值；
+    - 最后回退递归计算。
+- 效果：
+  - 计算指标依赖计算指标的场景展示更稳定，满足“两轮计算后显示”要求。
+
+## 结构同步（2026-03-01 计算指标别名兜底）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增 `METRIC_ALIAS_MAP`（同义指标映射），例如：
+    - `耗标煤总量` ↔ `标煤耗量` / `煤折标煤量`
+    - `供热耗标煤量` ↔ `供热标准煤耗量`
+    - `发电耗标煤量` ↔ `发电标准煤耗量`
+  - `_collect_required_base_items` 改为主指标+别名一并补查。
+  - `_compute_calculated_indicator` 取值逻辑新增别名回退。
+- 效果：
+  - 在底层指标命名不一致时，计算链依赖仍可命中，提升 `发电水耗率/供热水耗率` 等指标准确性。
+
+## 结构同步（2026-03-01 水耗率公式修订）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 公式更新：
+    - `发电水耗率 = (耗水量-供汽量-热网耗水量) * (1-热分摊比) / 发电量`
+    - `供热水耗率 = ((耗水量-供汽量-热网耗水量) * 热分摊比 + 供汽量 + 热网耗水量) / 供热量`
+  - 依赖更新：
+    - 两指标依赖项均新增 `热网耗水量`。
+- 效果：
+  - 后端实时计算与最新业务口径一致。
+
+## 结构同步（2026-03-01 查询排序按用户选择顺序）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增 `_build_rank_map(...)` 构建用户选择顺序索引。
+  - `_merge_and_sort_rows(...)` 新增 `rank_maps` 参数，排序时优先使用用户选择顺序。
+  - `query` 结果排序改为：
+    - 维度层级仍按 `order_fields`；
+    - 同一层级内按用户勾选顺序（`companies/items/periods/types`）排序，文本顺序作为兜底。
+- 效果：
+  - 指标与口径展示顺序可与勾选次序对齐。
+
+## 结构同步（2026-03-01 导出文件名与列同步联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 导出 XLSX 列与命名规则调整发生在前端页面层；
+  - 后端接口返回结构保持不变。
+
+## 结构同步（2026-03-01 query-comparison 新增计划比）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryComparisonRow` 新增字段：`plan_value`、`plan_rate`。
+  - `QueryComparisonResponse` 新增字段：`plan_window_label`。
+  - 新增 `_fetch_plan_value_map(...)`：
+    - 在当前对比窗口内，以 `type='plan'` 查询计划值；
+    - 同时支持基础指标与计算指标（复用计算引擎）。
+  - `query-comparison` 组装结果时新增：
+    - `plan_value`（计划值）
+    - `plan_rate = (current - plan) / |plan|`
+- 效果：
+  - 对比接口支持同比/环比/计划比三种口径统一返回。
+
+## 结构同步（2026-03-01 热力图与TopN统一口径切换开关联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 统一切换开关改动发生在前端查询页可视化层；
+  - 后端 `query-comparison` 已提供 `yoy_rate/mom_rate/plan_rate` 三类速率字段，前端切换仅切换展示口径，不改变接口契约。
+
+## 结构同步（2026-03-01 query-comparison 排序对齐筛选顺序）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增 `_sort_comparison_rows(...)`，对 `QueryComparisonRow` 按 `order_fields` + 用户选择 rank 进行排序。
+  - `query_month_data_show_comparison(...)` 增强：
+    - 校验 `order_mode`；
+    - 解析 `resolved_order_fields`；
+    - 基于 `companies/items/periods/types` 构建 `rank_maps`；
+    - 返回前调用 `_sort_comparison_rows(...)` 统一排序。
+- 效果：
+  - 同比/环比/计划比结果的口径与指标顺序与上方筛选选择顺序保持一致。
+
+## 结构同步（2026-03-01 query-comparison 增加气温同比明细）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryComparisonResponse` 新增字段：`temperature_comparison`。
+  - 新增模型：
+    - `TemperatureDailyComparisonRow`
+    - `TemperatureComparisonSummary`
+    - `TemperatureComparisonPayload`
+  - 新增 `_build_temperature_comparison_payload(...)`：
+    - 从 `calc_temperature_data` 查询当前窗口与同比窗口逐日温度；
+    - 输出逐日明细（本期日期/本期温度/同期日期/同期温度/同比差值/同比率）；
+    - 计算并返回本期平均温度、同期平均温度及同比差值/差异率。
+- 效果：
+  - 当前端选择“平均气温”时，可直接获取该区间的逐日温度同比明细与均值对比数据。
+
+## 结构同步（2026-03-01 XLSX导出样式优化与子表调整联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 导出样式优化与“移除热力图/TopN子表”均发生在前端导出层；
+  - 后端接口返回结构未新增变化，保持与前端既有导出数据源兼容。
+
+## 结构同步（2026-03-01 平均气温口径固定 common 并置顶）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增常量：`AVERAGE_TEMPERATURE_COMPANY = "common"`。
+  - 平均气温数据生成调整：
+    - `_build_average_temperature_rows(...)` 不再按实际口径复制，统一输出 `company=common`。
+    - `_fetch_compare_map(...)` 中平均气温对比键统一为 `common|平均气温|month|real|℃`。
+  - 排序调整：
+    - `_merge_and_sort_rows(...)` 与 `_sort_comparison_rows(...)` 增加“平均气温优先”排序键，使其在结果中前置显示。
+- 效果：
+  - “平均气温”指标从业务口径上与实际单位解耦，固定归入 `common`；
+  - 查询结果与对比结果均可优先看到该指标。
+
+## 结构同步（2026-03-01 差异率分母绝对值规则确认）
+
+- 本轮后端代码无新增改动。
+- 规则确认：
+  - `query-comparison` 使用 `_calc_rate(current, base)` 统一计算同比/环比/计划比差异率；
+  - 计算式为 `(current - base) / abs(base)`，分母固定取绝对值。
+
+## 结构同步（2026-03-01 筛选项简化与简要分析文案改版联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “来源月份起止”筛选去除与“简要分析”报告化表达均在前端实现；
+  - 后端接口契约保持兼容，允许 `report_month_from/report_month_to` 为空。
+
+## 结构同步（2026-03-01 简要分析层次化逐项叙述联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 分层逐项报告由前端基于 `query-comparison` 返回数据和 `order_fields` 动态组织；
+  - 后端继续提供同比/环比/计划比基础数据，无需新增接口字段。
+
+## 结构同步（2026-03-01 隐藏期间/类型筛选联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端已将 `periods/types` 固定传为 `['month']/['real']`；
+  - 后端接口继续按传入筛选处理，兼容固定值场景。
+
+## 结构同步（2026-03-01 层次顺序与聚合开关布局优化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “数据层次顺序 + 聚合开关”布局优化仅发生在前端页面样式与结构层；
+  - 后端接口与数据契约保持不变。
+
+## 结构同步（2026-03-01 层次顺序仅保留口径/指标联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端 `order_fields` 改为仅提交 `company/item`；
+  - 后端排序解析仍兼容，未提交维度将按既有兜底逻辑处理。
+
+## 结构同步（2026-03-01 层次顺序与聚合开关视觉对齐联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 本次为前端样式层微调，后端接口与排序逻辑不变。
+
+## 结构同步（2026-03-01 业务月份筛选器体验优化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 月份筛选体验优化发生在前端控件层；
+  - 后端继续接收 `date_from/date_to` 范围参数，接口契约不变。
+
+## 结构同步（2026-03-01 简要分析分层文本排版联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 分析区去圆点与层次排版属于前端呈现层改造；
+  - 后端数据接口不受影响。
+
+## 结构同步（2026-03-01 简要分析指标层文案精简联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “指标：”前缀去除为前端文案层调整，接口结构不变。
+
+## 结构同步（2026-03-01 简要分析指标圆点与缩进联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 指标圆点与描述缩进属于前端排版层改造；
+  - 后端接口不受影响。
+
+## 结构同步（2026-03-01 简要分析数值单位展示联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 分析文本中“值+单位”展示为前端文案层改造；
+  - 后端仍按原结构返回 `value` 与 `unit` 字段。
+
+## 结构同步（2026-03-01 缺失上期值时省略环比段联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 环比段显示规则为前端文案拼接逻辑调整；
+  - 后端继续返回 `mom_value/mom_rate`，由前端按可用性决定是否渲染。
+
+## 结构同步（2026-03-01 对比列表隐藏期间/类型联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 对比表“期间/类型”隐藏为前端展示层调整；
+  - 后端仍返回 `period/type` 字段，保持接口兼容性。
+
+## 结构同步（2026-03-01 对比字段命名调整联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “本期值/同期值/上期值”命名调整为前端展示与导出表头改造；
+  - 后端接口字段保持 `current_value/yoy_value/mom_value` 不变。
+
+## 结构同步（2026-03-01 简要分析全零指标过滤联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 全零指标跳过规则为前端分析文案层逻辑；
+  - 后端仍按原样返回对比数据。
+
+## 结构同步（2026-03-01 简要分析口径标题高亮联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 口径标题加粗标色属于前端样式层增强；
+  - 后端数据接口不受影响。
+
+## 结构同步（2026-03-01 查询结果字段精简与月份控件优化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 查询结果隐藏 `period/type` 与月份控件交互优化均为前端展示层调整；
+  - 后端返回字段保持兼容。
+
+## 结构同步（2026-03-01 日期快捷按钮右侧固定联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 日期按钮位置调整为前端样式层变更；
+  - 后端接口不受影响。
+
+## 结构同步（2026-03-01 按钮横排与标题强化联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 按钮横排修正、标题显眼度调整与“重置默认”移除均为前端展示层改造；
+  - 后端接口契约保持不变。
+
+## 结构同步（2026-03-01 按钮横排样式加固联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 日期快捷按钮“强制横排”与筛选标题再次增强为前端样式层优化；
+  - 后端查询与对比接口保持不变。
+
+## 结构同步（2026-03-01 月份行防重叠布局修复联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 月份行防重叠属于前端布局层调整；
+  - 后端接口与查询逻辑不受影响。
+
+## 结构同步（2026-03-01 移除月份行小按钮联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 移除月份行“本月/上月/同起始月”按钮为前端交互层调整；
+  - 后端接口与默认月份逻辑保持不变。
+
+## 结构同步（2026-03-01 移除快捷区间联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 去除“快捷区间”属于前端展示层精简；
+  - 后端查询接口与默认值逻辑不受影响。
+
+## 结构同步（2026-03-01 业务月份止默认上个月联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “业务月份止默认上个月”在前端默认值与重置逻辑中实现；
+  - 后端接口契约不变。
+
+## 结构同步（2026-03-01 业务月份止非必选联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “业务月份止（非必选）”文案与默认空值策略在前端实现；
+  - 后端查询接口继续支持仅传起始月份。
+
+## 结构同步（2026-03-01 monthly_data_show 指标配置驱动）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/indicator_config.py`（新增）
+  - `backend/projects/monthly_data_show/api/workspace.py`
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend_data/projects/monthly_data_show/indicator_config.json`（新增）
+- 变更点：
+  - 新增指标配置加载服务，统一提供：
+    - 计算指标集合
+    - 指标单位
+    - 公式依赖
+    - 公式执行（安全表达式求值）
+    - 前端渲染配置载荷
+  - `query-options` 新增返回 `indicator_config`，并按配置顺序输出指标。
+  - 查询与同比环比计算改为“运行时刷新配置 + 按配置公式计算”。
+  - 入库提取阶段“跳过计算指标”改为读取配置集合，不再硬编码。
+- 联动说明：
+  - 前端指标分区、顺序、公式弹窗已切换到配置下发；
+  - 后续仅改 `indicator_config.json` 即可调整次序、公式和分类。
+
+## 结构同步（2026-03-01 计算指标标题默认态兜底联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - “计算指标（0项）”默认文案兜底为前端展示层调整；
+  - 后端仍通过 `query-options.indicator_config` 提供正式指标配置。
+
+## 结构同步（2026-03-01 指标配置增加基本分组结构）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/indicator_config.py`
+  - `backend_data/projects/monthly_data_show/indicator_config.json`
+- 变更点：
+  - 配置新增 `basic_groups`（分组名 + 指标列表）；
+  - 配置加载支持 `basic_groups` 优先解析，并向后兼容旧 `basic_items`；
+  - `query-options.indicator_config` 同步下发 `basic_groups` 给前端。
+- 联动说明：
+  - 前端已改为按分组展示基本指标，后续分组调整仅需改 JSON 配置。
+
+## 结构同步（2026-03-01 前端变量重名编译修复联动）
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - `Identifier 'current' has already been declared` 为前端脚本声明冲突；
+  - 后端接口与配置结构保持不变。
+
+## 结构同步（2026-03-01 其它指标分组补全）
+
+- 文件：`backend_data/projects/monthly_data_show/indicator_config.json`
+- 变更点：
+  - 在 `basic_groups` 的 `【其他指标】` 下补充了配置缺失的基础指标条目。
+- 联动说明：
+  - 后端配置读取逻辑不变；
+  - 前端按配置渲染后，未分组指标将进一步收敛。
+
+## 结构同步（2026-03-01 指标配置路径修复）
+
+- 文件：`backend/projects/monthly_data_show/services/indicator_config.py`
+- 变更点：
+  - 配置文件读取路径改为候选优先级：
+    - `/app/data/projects/monthly_data_show/indicator_config.json`（容器挂载主路径）
+    - `/app/backend_data/projects/monthly_data_show/indicator_config.json`（兼容回退）
+- 效果：
+  - 容器环境与本地开发环境均可读取到最新配置；
+  - 分类名称、分组顺序与指标顺序可按用户配置即时生效。
+
+## 结构同步（2026-03-01 基础指标单位配置化）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/indicator_config.py`
+  - `backend_data/projects/monthly_data_show/indicator_config.json`
+- 变更点：
+  - 配置解析支持 `basic_groups.items[].unit`；
+  - 当前基础指标分组项已补齐 `unit` 字段。
+- 效果：
+  - 基础指标单位可通过配置文件统一维护（与计算指标单位维护方式一致）。

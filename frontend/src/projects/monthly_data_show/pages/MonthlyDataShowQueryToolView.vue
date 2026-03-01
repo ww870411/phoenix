@@ -11,25 +11,21 @@
       <section class="card">
         <h3>筛选条件</h3>
         <div class="filter-grid">
-          <label class="field">
+          <label class="field month-field">
             <span>业务月份起</span>
-            <input type="month" v-model="filters.dateMonthFrom" />
+            <div class="month-input-wrap">
+              <input class="month-input" type="month" v-model="filters.dateMonthFrom" />
+            </div>
           </label>
-          <label class="field">
-            <span>业务月份止</span>
-            <input type="month" v-model="filters.dateMonthTo" />
-          </label>
-          <label class="field">
-            <span>来源月份起</span>
-            <input type="month" v-model="filters.reportMonthFrom" />
-          </label>
-          <label class="field">
-            <span>来源月份止</span>
-            <input type="month" v-model="filters.reportMonthTo" />
+          <label class="field month-field">
+            <span>业务月份止（非必选）</span>
+            <div class="month-input-wrap">
+              <input class="month-input" type="month" v-model="filters.dateMonthTo" />
+            </div>
           </label>
           <div class="field span-full">
             <div class="field-head">
-              <span>口径（可多选）</span>
+              <span class="panel-title">口径（可多选）</span>
               <div class="inline-actions">
                 <button class="btn mini" type="button" @click="toggleAllCompanies(true)">全选</button>
                 <button class="btn mini" type="button" @click="toggleAllCompanies(false)">全不选</button>
@@ -47,7 +43,7 @@
           </div>
           <div class="field span-full">
             <div class="field-head">
-              <span>指标（可多选）</span>
+              <span class="panel-title">指标（可多选）</span>
               <div class="inline-actions">
                 <button class="btn mini" type="button" @click="toggleAllItems(true)">全选</button>
                 <button class="btn mini" type="button" @click="toggleAllItems(false)">全不选</button>
@@ -55,8 +51,32 @@
             </div>
             <div class="check-list sections compact">
               <div class="section-block" v-for="section in itemSections" :key="section.key">
-                <div class="section-title">{{ section.title }}</div>
-                <div class="section-items">
+                <div class="section-title-row">
+                  <div class="section-title">{{ section.title }}</div>
+                  <button
+                    v-if="section.key === 'calculated'"
+                    class="btn mini formula-btn"
+                    type="button"
+                    @click.stop="showFormulaDialog = true"
+                  >
+                    查看公式
+                  </button>
+                </div>
+                <div class="section-items grouped" v-if="section.key === 'current' && section.groups && section.groups.length">
+                  <div class="basic-group-block" v-for="group in section.groups" :key="`${section.key}-${group.name}`">
+                    <div class="basic-group-title">{{ group.name }}</div>
+                    <div class="basic-group-items">
+                      <label class="check-item" v-for="value in group.items" :key="`${section.key}-${group.name}-${value}`">
+                        <input type="checkbox" :value="value" v-model="filters.items" />
+                        <span>{{ value }}</span>
+                        <span v-if="getSelectionOrder(filters.items, value) > 0" class="order-badge">
+                          {{ getSelectionOrder(filters.items, value) }}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="section-items" v-else>
                   <label class="check-item" v-for="value in section.items" :key="`${section.key}-${value}`">
                     <input type="checkbox" :value="value" v-model="filters.items" />
                     <span>{{ value }}</span>
@@ -70,51 +90,12 @@
             </div>
           </div>
           <div class="field span-full">
-            <div class="inline-four">
-              <div class="inline-col">
+            <div class="inline-layout">
+              <div class="inline-col order-col">
                 <div class="field-head">
-                  <span>期间（可多选）</span>
-                  <div class="inline-actions">
-                    <button class="btn mini" type="button" @click="toggleAllPeriods(true)">全选</button>
-                    <button class="btn mini" type="button" @click="toggleAllPeriods(false)">全不选</button>
-                  </div>
+                  <span class="panel-title">数据层次顺序</span>
                 </div>
-                <div class="check-list slim">
-                  <label class="check-item" v-for="value in options.periods" :key="value">
-                    <input type="checkbox" :value="value" v-model="filters.periods" />
-                    <span>{{ value }}</span>
-                    <span v-if="getSelectionOrder(filters.periods, value) > 0" class="order-badge">
-                      {{ getSelectionOrder(filters.periods, value) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-              <div class="inline-col">
-                <div class="field-head">
-                  <span>类型（可多选）</span>
-                  <div class="inline-actions">
-                    <button class="btn mini" type="button" @click="toggleAllTypes(true)">全选</button>
-                    <button class="btn mini" type="button" @click="toggleAllTypes(false)">全不选</button>
-                  </div>
-                </div>
-                <div class="check-list slim">
-                  <label class="check-item" v-for="value in orderedTypes" :key="value">
-                    <input type="checkbox" :value="value" v-model="filters.types" />
-                    <span>{{ value }}</span>
-                    <span v-if="getSelectionOrder(filters.types, value) > 0" class="order-badge">
-                      {{ getSelectionOrder(filters.types, value) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-              <div class="inline-col">
-                <div class="field-head">
-                  <span>数据层次顺序</span>
-                  <div class="inline-actions">
-                    <button class="btn mini" type="button" @click="resetOrderFields">重置默认</button>
-                  </div>
-                </div>
-                <div class="check-list slim">
+                <div class="order-inline">
                   <label class="check-item" v-for="layer in layerOptions" :key="layer.value">
                     <input type="checkbox" :value="layer.value" v-model="filters.orderFields" />
                     <span>{{ layer.label }}</span>
@@ -124,31 +105,29 @@
                   </label>
                 </div>
               </div>
-              <div class="inline-col">
+              <div class="inline-col aggregate-col">
                 <div class="field-head">
-                  <span>聚合开关</span>
+                  <span class="panel-title">聚合开关</span>
                 </div>
-                <div class="switch-row switch-full">
-                  <label class="switch-item">
+                <div class="aggregate-inline">
+                  <label class="switch-item aggregate-item">
                     <input type="checkbox" v-model="filters.aggregateCompanies" />
-                    <span>{{ filters.aggregateCompanies ? '已聚合（显示聚合口径）' : '不聚合口径（逐口径列出）' }}</span>
+                    <span>{{ filters.aggregateCompanies ? '已聚合口径' : '逐口径列出' }}</span>
                   </label>
-                </div>
-                <div class="switch-row switch-full">
-                  <label class="switch-item">
+                  <label class="switch-item aggregate-item">
                     <input type="checkbox" v-model="filters.aggregateMonths" />
-                    <span>{{ filters.aggregateMonths ? '已聚合期间月份（区间汇总）' : '不聚合期间月份（逐月列出）' }}</span>
+                    <span>{{ filters.aggregateMonths ? '已聚合期间月份' : '逐月列出' }}</span>
                   </label>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <p class="sub" v-if="!filters.companies.length || !filters.items.length || !filters.periods.length || !filters.types.length">
-          口径、指标、期间、类型均需至少各选 1 项；若任一为空将不提取任何数据。
+        <p class="sub" v-if="!filters.companies.length || !filters.items.length">
+          口径、指标均需至少各选 1 项；若任一为空将不提取任何数据。
         </p>
         <div class="actions">
-          <button class="btn primary" type="button" :disabled="loading || !filters.companies.length || !filters.items.length || !filters.periods.length || !filters.types.length" @click="runQuery(true)">
+          <button class="btn primary" type="button" :disabled="loading || !filters.companies.length || !filters.items.length" @click="runQuery(true)">
             {{ loading ? '查询中...' : '查询' }}
           </button>
           <button class="btn" type="button" :disabled="loading" @click="resetFilters">重置</button>
@@ -201,9 +180,6 @@
                 <th>unit</th>
                 <th>value</th>
                 <th>date</th>
-                <th>period</th>
-                <th>type</th>
-                <th>report_month</th>
               </tr>
             </thead>
             <tbody>
@@ -211,28 +187,47 @@
                 <td>{{ row.company }}</td>
                 <td>{{ row.item }}</td>
                 <td>{{ row.unit || '—' }}</td>
-                <td>{{ row.value == null ? 'NULL' : formatNumber(row.value) }}</td>
+                <td>{{ row.value == null ? 'NULL' : formatValue(row.value, row.unit) }}</td>
                 <td>{{ row.date || '—' }}</td>
-                <td>{{ row.period || '—' }}</td>
-                <td>{{ row.type || '—' }}</td>
-                <td>{{ row.report_month || '—' }}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div v-if="hasSearched && comparisonRows.length" class="analysis-section">
-          <h4>同比与环比（实时窗口）</h4>
+          <h4>同比/环比/计划比（实时窗口）</h4>
           <p class="sub">
-            当前月份：{{ comparisonLatestMonthLabel }}；同比月份：{{ comparisonYoYMonthLabel || '无' }}；环比月份：{{ comparisonMoMMonthLabel || '无' }}
+            当前月份：{{ comparisonLatestMonthLabel }}；同比月份：{{ comparisonYoYMonthLabel || '无' }}；环比月份：{{ comparisonMoMMonthLabel || '无' }}；计划窗口：{{ comparisonPlanMonthLabel || '无' }}
           </p>
           <div class="viz-toolbar">
-            <label class="viz-field">
-              <span>展示口径</span>
-              <select v-model="comparisonViewMode">
-                <option value="yoy">同比</option>
-                <option value="mom">环比</option>
-              </select>
-            </label>
+            <div class="viz-field viz-switch-field">
+              <span>图表口径</span>
+              <div class="mode-switch-group">
+                <button
+                  type="button"
+                  class="mode-switch-btn"
+                  :class="{ active: comparisonViewMode === 'yoy' }"
+                  @click="comparisonViewMode = 'yoy'"
+                >
+                  同比
+                </button>
+                <button
+                  type="button"
+                  class="mode-switch-btn"
+                  :class="{ active: comparisonViewMode === 'mom' }"
+                  @click="comparisonViewMode = 'mom'"
+                >
+                  环比
+                </button>
+                <button
+                  type="button"
+                  class="mode-switch-btn"
+                  :class="{ active: comparisonViewMode === 'plan' }"
+                  @click="comparisonViewMode = 'plan'"
+                >
+                  计划比
+                </button>
+              </div>
+            </div>
             <label class="viz-field">
               <span>TopN 指标</span>
               <select v-model.number="comparisonTopN">
@@ -245,7 +240,7 @@
           </div>
           <div class="viz-grid">
             <div class="viz-card">
-              <h5 class="viz-title-nowrap">热力图（纵轴=指标，横轴=口径）</h5>
+              <h5 class="viz-title-nowrap">{{ comparisonModeLabel }}热力图（纵轴=指标，横轴=口径）</h5>
               <div
                 class="heatmap-grid"
                 v-if="heatmapItems.length && heatmapCompanies.length"
@@ -269,7 +264,7 @@
               <p v-else class="sub">暂无可视化样本</p>
             </div>
             <div class="viz-card">
-              <h5>波动 TopN（绝对值）</h5>
+              <h5>{{ comparisonModeLabel }}波动 TopN（绝对值）</h5>
               <div v-if="topChangeRows.length" class="bars-wrap">
                 <div class="bar-row" v-for="row in topChangeRows" :key="`bar-${row.key}`">
                   <div class="bar-label">{{ row.company }} / {{ row.item }}</div>
@@ -288,39 +283,156 @@
                 <tr>
                   <th>口径</th>
                   <th>指标</th>
-                  <th>期间</th>
-                  <th>类型</th>
-                  <th>当前值</th>
-                  <th>同比值</th>
+                  <th>本期值</th>
+                  <th>同期值</th>
                   <th>同比</th>
-                  <th>环比值</th>
+                  <th>上期值</th>
                   <th>环比</th>
+                  <th>计划值</th>
+                  <th>计划比</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="entry in comparisonRows" :key="entry.key">
                   <td>{{ entry.company }}</td>
                   <td>{{ entry.item }}</td>
-                  <td>{{ entry.period }}</td>
-                  <td>{{ entry.type }}</td>
-                  <td>{{ entry.currentValue == null ? 'NULL' : formatNumber(entry.currentValue) }}</td>
-                  <td>{{ entry.yoyValue == null ? 'NULL' : formatNumber(entry.yoyValue) }}</td>
+                  <td>{{ entry.currentValue == null ? 'NULL' : formatValue(entry.currentValue, entry.unit) }}</td>
+                  <td>{{ entry.yoyValue == null ? 'NULL' : formatValue(entry.yoyValue, entry.unit) }}</td>
                   <td :class="deltaClass(entry.yoyRate)">{{ formatRate(entry.yoyRate) }}</td>
-                  <td>{{ entry.momValue == null ? 'NULL' : formatNumber(entry.momValue) }}</td>
+                  <td>{{ entry.momValue == null ? 'NULL' : formatValue(entry.momValue, entry.unit) }}</td>
                   <td :class="deltaClass(entry.momRate)">{{ formatRate(entry.momRate) }}</td>
+                  <td>{{ entry.planValue == null ? 'NULL' : formatValue(entry.planValue, entry.unit) }}</td>
+                  <td :class="deltaClass(entry.planRate)">{{ formatRate(entry.planRate) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
         <div v-if="hasSearched && analysisInsights.length" class="analysis-section">
-          <h4>专业分析要点</h4>
-          <ul class="insight-list">
-            <li v-for="(line, idx) in analysisInsights" :key="`insight-${idx}`">{{ line }}</li>
-          </ul>
+          <h4>简要分析</h4>
+          <div class="insight-list">
+            <p
+              v-for="(line, idx) in analysisInsights"
+              :key="`insight-${idx}`"
+              class="insight-line"
+              :class="analysisLineClass(line)"
+            >
+              {{ line }}
+            </p>
+          </div>
+        </div>
+        <div v-if="hasSearched && showTemperaturePanel" class="analysis-section temperature-section">
+          <div class="temperature-head">
+            <h4>平均气温区间分析（默认折叠）</h4>
+            <button class="btn mini" type="button" @click="temperatureExpanded = !temperatureExpanded">
+              {{ temperatureExpanded ? '收起' : '展开' }}
+            </button>
+          </div>
+          <p class="sub">
+            当前窗口：{{ comparisonLatestMonthLabel }}；同比窗口：{{ comparisonYoYMonthLabel || '无' }}。
+          </p>
+          <div v-if="temperatureExpanded">
+            <div class="summary-grid temp-summary-grid">
+              <div class="summary-item">
+                <div class="label">本期平均气温</div>
+                <div class="value">{{ formatTemperature(temperatureSummary.currentAvgTemp) }}</div>
+              </div>
+              <div class="summary-item">
+                <div class="label">同期平均气温</div>
+                <div class="value">{{ formatTemperature(temperatureSummary.yoyAvgTemp) }}</div>
+              </div>
+              <div class="summary-item">
+                <div class="label">同比差值</div>
+                <div class="value" :class="deltaClass(temperatureSummary.yoyAvgDiff)">{{ formatSignedNumber(temperatureSummary.yoyAvgDiff) }}</div>
+              </div>
+              <div class="summary-item">
+                <div class="label">同比差异率</div>
+                <div class="value" :class="deltaClass(temperatureSummary.yoyAvgRate)">{{ formatRate(temperatureSummary.yoyAvgRate) }}</div>
+              </div>
+            </div>
+            <div class="temp-chart-wrap">
+              <h5>本期与同期每日气温曲线</h5>
+              <div v-if="temperatureChart.hasData" class="temp-chart-container">
+                <svg class="temp-chart-svg" :viewBox="temperatureChart.viewBox" preserveAspectRatio="none">
+                  <line
+                    :x1="temperatureChart.pad"
+                    :y1="temperatureChart.height - temperatureChart.pad"
+                    :x2="temperatureChart.width - temperatureChart.pad"
+                    :y2="temperatureChart.height - temperatureChart.pad"
+                    class="temp-axis"
+                  />
+                  <line
+                    :x1="temperatureChart.pad"
+                    :y1="temperatureChart.pad"
+                    :x2="temperatureChart.pad"
+                    :y2="temperatureChart.height - temperatureChart.pad"
+                    class="temp-axis"
+                  />
+                  <path v-if="temperatureChart.currentPath" :d="temperatureChart.currentPath" class="temp-line current" />
+                  <path v-if="temperatureChart.yoyPath" :d="temperatureChart.yoyPath" class="temp-line yoy" />
+                </svg>
+                <div class="temp-legend">
+                  <span class="legend-item"><i class="legend-dot current"></i>本期</span>
+                  <span class="legend-item"><i class="legend-dot yoy"></i>同期</span>
+                </div>
+              </div>
+              <p v-else class="sub">该区间暂无可用气温曲线数据。</p>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>本期日期</th>
+                    <th>本期气温(℃)</th>
+                    <th>同期日期</th>
+                    <th>同期气温(℃)</th>
+                    <th>同比差值(℃)</th>
+                    <th>同比差异率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in temperatureDailyRows" :key="`temp-${row.currentDate}`">
+                    <td>{{ row.currentDate }}</td>
+                    <td>{{ formatTemperature(row.currentTemp) }}</td>
+                    <td>{{ row.yoyDate }}</td>
+                    <td>{{ formatTemperature(row.yoyTemp) }}</td>
+                    <td :class="deltaClass(row.yoyDiff)">{{ formatSignedNumber(row.yoyDiff) }}</td>
+                    <td :class="deltaClass(row.yoyRate)">{{ formatRate(row.yoyRate) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
     </main>
+    <div v-if="showFormulaDialog" class="formula-dialog-mask" @click.self="showFormulaDialog = false">
+      <section class="formula-dialog">
+        <div class="formula-dialog-head">
+          <h4>计算指标公式说明</h4>
+          <button class="btn mini" type="button" @click="showFormulaDialog = false">关闭</button>
+        </div>
+        <p class="sub">缺失指标按 0 处理；分母为 0 时结果按 0 处理。比例类指标以小数存储，展示时按百分比格式显示。</p>
+        <div class="table-wrap">
+          <table class="data-table formula-table">
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>公式</th>
+                <th>单位</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="entry in calculatedFormulaRows" :key="entry.item">
+                <td>{{ entry.item }}</td>
+                <td>{{ entry.formula }}</td>
+                <td>{{ entry.unit }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -363,22 +475,18 @@ const options = reactive({
 const filters = reactive({
   dateMonthFrom: '',
   dateMonthTo: '',
-  reportMonthFrom: '',
-  reportMonthTo: '',
   companies: [],
   items: [],
   periods: ['month'],
   types: ['real'],
   orderMode: 'company_first',
-  orderFields: ['company', 'item', 'period', 'type'],
+  orderFields: ['company', 'item'],
   aggregateCompanies: false,
   aggregateMonths: false,
 })
 const layerOptions = [
   { value: 'company', label: '口径' },
   { value: 'item', label: '指标' },
-  { value: 'period', label: '期间' },
-  { value: 'type', label: '类型' },
 ]
 
 const pageNumber = computed(() => Math.floor(offset.value / limit) + 1)
@@ -400,51 +508,19 @@ const COMPANY_ORDER = [
   '研究院',
   '主城区电锅炉',
 ]
-const CALCULATED_ITEM_SET = new Set([
-  '综合厂用电率',
-  '发电标准煤耗率',
-  '供电标准煤耗率',
-  '供热标准煤耗率',
-  '发电水耗率',
-  '供热水耗率',
-  '供暖热耗率',
-  '供暖水耗率',
-  '供暖电耗率',
-  '发电设备利用率',
-  '供热设备利用率',
-  '入炉煤低位发热量',
-  '发电厂用电率',
-  '供热厂用电率',
-  '全厂热效率',
-  '热电比',
-  '热分摊比',
-  '供热用电率',
-  '供暖标准煤耗率',
-])
 const AVERAGE_TEMPERATURE_ITEM = '平均气温'
-const CONSTANT_ITEM_ORDER = ['发电设备容量', '锅炉设备容量']
-const CONSTANT_ITEM_SET = new Set(CONSTANT_ITEM_ORDER)
-const CALCULATED_ITEM_ORDER = [
-  '综合厂用电率',
-  '发电标准煤耗率',
-  '供电标准煤耗率',
-  '供热标准煤耗率',
-  '发电水耗率',
-  '供热水耗率',
-  '供暖热耗率',
-  '供暖水耗率',
-  '供暖电耗率',
-  '发电设备利用率',
-  '供热设备利用率',
-  '入炉煤低位发热量',
-  '发电厂用电率',
-  '供热厂用电率',
-  '全厂热效率',
-  '热电比',
-  '热分摊比',
-  '供热用电率',
-  '供暖标准煤耗率',
-]
+const indicatorConfig = reactive({
+  basicSectionTitle: '基本指标',
+  calculatedSectionTitle: '计算指标',
+  categoryPlaceholder: '【待配置分类】',
+  basicGroups: [],
+  basicItems: [],
+  calculatedItems: [],
+})
+const calculatedItemSet = computed(() => {
+  const names = (indicatorConfig.calculatedItems || []).map((x) => String(x?.name || '').trim()).filter(Boolean)
+  return new Set(names)
+})
 const orderedCompanies = computed(() => {
   const orderMap = new Map(COMPANY_ORDER.map((name, idx) => [name, idx]))
   const input = Array.isArray(options.companies) ? options.companies : []
@@ -456,10 +532,20 @@ const orderedCompanies = computed(() => {
   })
 })
 const orderedItems = computed(() => {
+  const configuredNames = [
+    ...(indicatorConfig.basicItems || []).map((x) => String(x?.name || '').trim()),
+    ...(indicatorConfig.calculatedItems || []).map((x) => String(x?.name || '').trim()),
+  ].filter(Boolean)
+  const configuredRank = new Map(configuredNames.map((name, idx) => [name, idx]))
   const input = Array.isArray(options.items) ? [...options.items] : []
   return input
     .map((name, index) => ({ name, index, key: buildItemOrderKey(name, index) }))
-    .sort((a, b) => compareItemOrderKey(a.key, b.key))
+    .sort((a, b) => {
+      const ar = configuredRank.has(a.name) ? configuredRank.get(a.name) : Number.MAX_SAFE_INTEGER
+      const br = configuredRank.has(b.name) ? configuredRank.get(b.name) : Number.MAX_SAFE_INTEGER
+      if (ar !== br) return ar - br
+      return compareItemOrderKey(a.key, b.key)
+    })
     .map((x) => x.name)
 })
 const orderedTypes = computed(() => {
@@ -473,56 +559,101 @@ const orderedTypes = computed(() => {
   })
 })
 const itemSections = computed(() => {
-  const currentBase = []
-  const currentConstants = []
-  const currentTail = []
   const sourceSet = new Set(orderedItems.value)
-  for (const item of orderedItems.value) {
-    if (CALCULATED_ITEM_SET.has(item)) continue
-    if (item === AVERAGE_TEMPERATURE_ITEM) {
-      currentTail.push(item)
-      continue
-    }
-    if (CONSTANT_ITEM_SET.has(item)) {
-      currentConstants.push(item)
-    } else {
-      currentBase.push(item)
+  const calcSet = calculatedItemSet.value
+  const fallbackBasic = []
+  const configuredBasic = (indicatorConfig.basicItems || [])
+    .map((x) => String(x?.name || '').trim())
+    .filter(Boolean)
+  const configuredCalculated = (indicatorConfig.calculatedItems || [])
+    .map((x) => String(x?.name || '').trim())
+    .filter(Boolean)
+  for (const item of configuredBasic) {
+    if (item && sourceSet.has(item) && !calcSet.has(item)) {
+      fallbackBasic.push(item)
     }
   }
-  const constantOrderMap = new Map(CONSTANT_ITEM_ORDER.map((name, idx) => [name, idx]))
-  const calculatedOrderMap = new Map(CALCULATED_ITEM_ORDER.map((name, idx) => [name, idx]))
-  currentConstants.sort((a, b) => {
-    const ai = constantOrderMap.has(a) ? constantOrderMap.get(a) : Number.MAX_SAFE_INTEGER
-    const bi = constantOrderMap.has(b) ? constantOrderMap.get(b) : Number.MAX_SAFE_INTEGER
-    if (ai !== bi) return ai - bi
-    return String(a).localeCompare(String(b), 'zh-CN')
-  })
-  const calculated = [...CALCULATED_ITEM_ORDER]
-  calculated.sort((a, b) => {
-    const ai = calculatedOrderMap.has(a) ? calculatedOrderMap.get(a) : Number.MAX_SAFE_INTEGER
-    const bi = calculatedOrderMap.has(b) ? calculatedOrderMap.get(b) : Number.MAX_SAFE_INTEGER
-    if (ai !== bi) return ai - bi
-    return String(a).localeCompare(String(b), 'zh-CN')
-  })
-  const current = [...currentBase, ...currentConstants, ...currentTail]
-  const mergedCalculated = calculated.map((name) => (sourceSet.has(name) ? name : name))
+  for (const item of orderedItems.value) {
+    if (calcSet.has(item)) continue
+    if (!fallbackBasic.includes(item)) {
+      fallbackBasic.push(item)
+    }
+  }
+  const configuredBasicGroups = Array.isArray(indicatorConfig.basicGroups) ? indicatorConfig.basicGroups : []
+  const groupSeen = new Set()
+  const grouped = []
+  for (const group of configuredBasicGroups) {
+    const groupName = String(group?.name || '').trim() || '未命名分组'
+    const groupItemsRaw = Array.isArray(group?.items) ? group.items : []
+    const groupItems = []
+    for (const row of groupItemsRaw) {
+      const itemName = String(row?.name || row || '').trim()
+      if (!itemName || groupSeen.has(itemName) || !sourceSet.has(itemName) || calcSet.has(itemName)) continue
+      groupSeen.add(itemName)
+      groupItems.push(itemName)
+    }
+    if (groupItems.length) {
+      grouped.push({ name: groupName, items: groupItems })
+    }
+  }
+  const ungrouped = fallbackBasic.filter((x) => !groupSeen.has(x))
+  if (ungrouped.length) {
+    grouped.push({ name: '未分组', items: ungrouped })
+  }
+  const current = grouped.flatMap((x) => x.items)
+  const mergedCalculated = configuredCalculated.length ? configuredCalculated : orderedItems.value.filter((x) => calculatedItemSet.value.has(x))
+  const calcTitleText = String(indicatorConfig.calculatedSectionTitle || '').trim()
+  const calcTitle = calcTitleText && !/（0项）$/.test(calcTitleText)
+    ? calcTitleText
+    : `计算指标（${mergedCalculated.length}项）`
   return [
-    { key: 'current', title: '基本指标', items: current },
-    { key: 'calculated', title: '计算指标（19项）', items: mergedCalculated },
+    { key: 'current', title: indicatorConfig.basicSectionTitle || '基本指标', items: current, groups: grouped },
+    { key: 'calculated', title: calcTitle, items: mergedCalculated },
   ]
 })
 
 const comparisonRows = ref([])
+const showFormulaDialog = ref(false)
+const temperatureExpanded = ref(false)
+const temperatureDailyRows = ref([])
+const temperatureSummary = reactive({
+  currentAvgTemp: null,
+  yoyAvgTemp: null,
+  yoyAvgDiff: null,
+  yoyAvgRate: null,
+})
+const calculatedFormulaRows = computed(() => (indicatorConfig.calculatedItems || []).map((x) => ({
+  item: String(x?.name || ''),
+  formula: String(x?.formula || ''),
+  unit: String(x?.unit || ''),
+})))
 const comparisonViewMode = ref('yoy')
 const comparisonTopN = ref(15)
 const comparisonMeta = reactive({
   currentWindowLabel: '',
   yoyWindowLabel: '',
   momWindowLabel: '',
+  planWindowLabel: '',
 })
 const comparisonLatestMonthLabel = computed(() => comparisonMeta.currentWindowLabel || '—')
 const comparisonYoYMonthLabel = computed(() => comparisonMeta.yoyWindowLabel || '—')
 const comparisonMoMMonthLabel = computed(() => comparisonMeta.momWindowLabel || '—')
+const comparisonPlanMonthLabel = computed(() => comparisonMeta.planWindowLabel || '—')
+const comparisonModeLabel = computed(() => {
+  if (comparisonViewMode.value === 'mom') return '环比'
+  if (comparisonViewMode.value === 'plan') return '计划比'
+  return '同比'
+})
+const showTemperaturePanel = computed(() => {
+  if (!filters.items.includes(AVERAGE_TEMPERATURE_ITEM)) return false
+  if (temperatureDailyRows.value.length > 0) return true
+  return (
+    temperatureSummary.currentAvgTemp != null
+    || temperatureSummary.yoyAvgTemp != null
+    || temperatureSummary.yoyAvgDiff != null
+    || temperatureSummary.yoyAvgRate != null
+  )
+})
 
 const heatmapCompanies = computed(() => {
   const all = [...new Set(comparisonRows.value.map((row) => String(row.company || '')))].filter(Boolean)
@@ -579,38 +710,138 @@ const topChangeRows = computed(() => {
   return withRate.slice(0, Math.max(1, Number(comparisonTopN.value || 15)))
 })
 
+const temperatureChart = computed(() => {
+  const labels = temperatureDailyRows.value.map((row) => String(row.currentDate || '').slice(5))
+  const currentValues = temperatureDailyRows.value.map((row) => toFiniteOrNull(row.currentTemp))
+  const yoyValues = temperatureDailyRows.value.map((row) => toFiniteOrNull(row.yoyTemp))
+  const merged = [...currentValues, ...yoyValues].filter((v) => v != null)
+  if (!merged.length) {
+    return {
+      hasData: false,
+      width: 960,
+      height: 320,
+      pad: 32,
+      viewBox: '0 0 960 320',
+      currentPath: '',
+      yoyPath: '',
+      labels,
+    }
+  }
+  const min = Math.min(...merged)
+  const max = Math.max(...merged)
+  const paddingValue = Math.max(1, (max - min) * 0.1)
+  const yMin = min - paddingValue
+  const yMax = max + paddingValue
+  const width = 960
+  const height = 320
+  const pad = 32
+  return {
+    hasData: true,
+    width,
+    height,
+    pad,
+    viewBox: `0 0 ${width} ${height}`,
+    currentPath: buildLinePath(currentValues, yMin, yMax, width, height, pad),
+    yoyPath: buildLinePath(yoyValues, yMin, yMax, width, height, pad),
+    labels,
+  }
+})
+
 const analysisInsights = computed(() => {
   if (!comparisonRows.value.length) return []
+  const orderFields = (Array.isArray(filters.orderFields) ? filters.orderFields : [])
+    .map((x) => String(x || '').trim())
+    .filter((x) => ['company', 'item'].includes(x))
+  const resolvedFields = orderFields.length ? orderFields : ['company', 'item']
+  const fieldLabels = {
+    company: '口径',
+    item: '指标',
+  }
   const yoyReady = comparisonRows.value.filter((x) => x.yoyRate != null)
   const momReady = comparisonRows.value.filter((x) => x.momRate != null)
-  const yoyUp = yoyReady.filter((x) => x.yoyRate > 0).length
-  const yoyDown = yoyReady.filter((x) => x.yoyRate < 0).length
-  const yoyFlat = yoyReady.length - yoyUp - yoyDown
-  const momUp = momReady.filter((x) => x.momRate > 0).length
-  const momDown = momReady.filter((x) => x.momRate < 0).length
+  const planReady = comparisonRows.value.filter((x) => x.planRate != null)
   const lines = [
-    `当前窗口 ${comparisonMeta.currentWindowLabel || '—'} 共 ${comparisonRows.value.length} 个对比序列；可同比 ${yoyReady.length} 个（上升 ${yoyUp}、下降 ${yoyDown}、持平 ${yoyFlat}），可环比 ${momReady.length} 个（上升 ${momUp}、下降 ${momDown}）。`,
+    `一、总体情况：本期窗口为 ${comparisonMeta.currentWindowLabel || '—'}，共纳入 ${comparisonRows.value.length} 条有效对比序列；同比可比 ${yoyReady.length} 条，环比可比 ${momReady.length} 条，计划可比 ${planReady.length} 条。`,
   ]
-  const topAbsYoy = [...yoyReady]
-    .sort((a, b) => Math.abs(b.yoyRate) - Math.abs(a.yoyRate))
-    .slice(0, 3)
-  if (topAbsYoy.length) {
-    lines.push(`同比波动最大项：${topAbsYoy.map((x) => `${x.company}/${x.item} ${formatRate(x.yoyRate)}`).join('；')}。`)
+  lines.push(`二、分层分析：以下按“${resolvedFields.map((f) => fieldLabels[f]).join(' > ')}”顺序展开。`)
+  const MAX_DETAIL_LINES = 180
+  let detailCount = 0
+  const shouldSkipAnalysisRow = (row) => {
+    const values = [
+      toFiniteOrNull(row?.currentValue),
+      toFiniteOrNull(row?.yoyValue),
+      toFiniteOrNull(row?.momValue),
+      toFiniteOrNull(row?.planValue),
+    ]
+    return values.every((v) => v === 0)
   }
-  const topAbsMom = [...momReady]
-    .sort((a, b) => Math.abs(b.momRate) - Math.abs(a.momRate))
-    .slice(0, 3)
-  if (topAbsMom.length) {
-    lines.push(`环比波动最大项：${topAbsMom.map((x) => `${x.company}/${x.item} ${formatRate(x.momRate)}`).join('；')}。`)
+  const hasEffectiveRows = (rows) => Array.isArray(rows) && rows.some((row) => !shouldSkipAnalysisRow(row))
+  const appendByLevel = (rows, level) => {
+    if (detailCount >= MAX_DETAIL_LINES) return
+    if (level >= resolvedFields.length) {
+      for (const row of rows) {
+        if (detailCount >= MAX_DETAIL_LINES) break
+        if (shouldSkipAnalysisRow(row)) continue
+        const yoyDiff = row.currentValue == null || row.yoyValue == null ? null : row.currentValue - row.yoyValue
+        const momDiff = row.currentValue == null || row.momValue == null ? null : row.currentValue - row.momValue
+        const planDiff = row.currentValue == null || row.planValue == null ? null : row.currentValue - row.planValue
+        const yoyTrend = yoyDiff == null ? '—' : yoyDiff > 0 ? '增加' : yoyDiff < 0 ? '减少' : '持平'
+        const momTrend = momDiff == null ? '—' : momDiff > 0 ? '增加' : momDiff < 0 ? '减少' : '持平'
+        const planTrend = planDiff == null ? '—' : planDiff > 0 ? '增加' : planDiff < 0 ? '减少' : '持平'
+        const segments = [
+          `本期 ${formatValueWithUnit(row.currentValue, row.unit)}`,
+          `同期 ${formatValueWithUnit(row.yoyValue, row.unit)}，同比${yoyTrend}${formatSignedNumber(yoyDiff)}，差异率 ${formatRate(row.yoyRate)}`,
+        ]
+        if (row.momValue != null) {
+          segments.push(`上期 ${formatValueWithUnit(row.momValue, row.unit)}，环比${momTrend}${formatSignedNumber(momDiff)}，差异率 ${formatRate(row.momRate)}`)
+        }
+        segments.push(`本期计划值 ${formatValueWithUnit(row.planValue, row.unit)}，较计划${planTrend}${formatSignedNumber(planDiff)}，差异率 ${formatRate(row.planRate)}`)
+        lines.push(`  ${segments.join('；')}。`)
+        detailCount += 1
+      }
+      return
+    }
+    const field = resolvedFields[level]
+    const groups = []
+    const groupMap = new Map()
+    for (const row of rows) {
+      const key = String(row[field] ?? '—')
+      if (!groupMap.has(key)) {
+        const bucket = { key, rows: [] }
+        groupMap.set(key, bucket)
+        groups.push(bucket)
+      }
+      groupMap.get(key).rows.push(row)
+    }
+    for (const group of groups) {
+      if (detailCount >= MAX_DETAIL_LINES) break
+      if (!hasEffectiveRows(group.rows)) continue
+      if (field === 'item') {
+        lines.push(`•${group.key}`)
+      } else {
+        lines.push(`${fieldLabels[field]}：${group.key}`)
+      }
+      appendByLevel(group.rows, level + 1)
+    }
   }
+  appendByLevel(comparisonRows.value, 0)
+  if (detailCount >= MAX_DETAIL_LINES) {
+    lines.push(`说明：分层明细较多，已按前 ${MAX_DETAIL_LINES} 条展示。`)
+  }
+
+  const highRiskCount = comparisonRows.value.filter((row) => {
+    const r = rateValue(row)
+    return r != null && Math.abs(r) >= 0.2
+  }).length
+  lines.push(`四、风险提示：|差异率| ≥ 20% 的序列共 ${highRiskCount} 条，建议优先核查源数据质量、口径一致性与计划设定合理性。`)
   const nullRate = summary.totalRows > 0 ? summary.valueNullRows / summary.totalRows : 0
-  lines.push(`查询结果空值占比 ${formatPercent(nullRate)}，建议优先核查空值较多序列的上报完整性。`)
+  lines.push(`五、数据完整性：查询结果空值占比 ${formatPercent(nullRate)}，建议持续完善缺失值填报并复核关键指标。`)
   return lines
 })
 
 function buildItemOrderKey(name, fallbackIndex) {
   const text = String(name || '').trim()
-  const isCalculated = CALCULATED_ITEM_SET.has(text) ? 1 : 0
+  const isCalculated = calculatedItemSet.value.has(text) ? 1 : 0
   const mainGroup = getItemMainGroup(text)
   const consumeSubGroup = getConsumeSubGroup(text)
   const baseName = text.replace(/^总/, '')
@@ -647,12 +878,62 @@ function getConsumeSubGroup(text) {
 function formatNumber(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '0'
-  return num.toLocaleString('zh-CN', { maximumFractionDigits: 8 })
+  const rounded = Math.round(num * 100) / 100
+  const isIntegerLike = Math.abs(rounded - Math.trunc(rounded)) < 1e-9
+  if (isIntegerLike) {
+    return rounded.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+  }
+  return rounded.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function toFiniteOrNull(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
+function calcRate(currentValue, baseValue) {
+  const current = toFiniteOrNull(currentValue)
+  const base = toFiniteOrNull(baseValue)
+  if (current == null || base == null || base === 0) return null
+  return (current - base) / Math.abs(base)
+}
+
+function formatValue(value, unit) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '0'
+  const normalizedUnit = String(unit || '').trim()
+  if (normalizedUnit === '%') {
+    return `${formatNumber(num * 100)}%`
+  }
+  return formatNumber(num)
+}
+
+function formatValueWithUnit(value, unit) {
+  if (value == null) return '—'
+  const base = formatValue(value, unit)
+  const normalizedUnit = String(unit || '').trim()
+  if (!normalizedUnit || normalizedUnit === '%') return base
+  return `${base} ${normalizedUnit}`
 }
 
 function formatRate(rate) {
   if (rate == null || !Number.isFinite(rate)) return '—'
   return `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(2)}%`
+}
+
+function formatSignedNumber(value) {
+  const num = toFiniteOrNull(value)
+  if (num == null) return '—'
+  const absText = formatNumber(Math.abs(num))
+  if (num > 0) return `+${absText}`
+  if (num < 0) return `-${absText}`
+  return absText
+}
+
+function formatTemperature(value) {
+  const num = toFiniteOrNull(value)
+  if (num == null) return '—'
+  return `${formatNumber(num)}℃`
 }
 
 function formatPercent(value) {
@@ -661,9 +942,21 @@ function formatPercent(value) {
   return `${(num * 100).toFixed(2)}%`
 }
 
+function analysisLineClass(line) {
+  const text = String(line || '').trim()
+  if (!text) return ''
+  if (/^[一二三四五六七八九十]+、/.test(text)) return 'level-1'
+  if (/^口径：/.test(text)) return 'level-2 company-title'
+  if (/^•/.test(text)) return 'level-2 item-title'
+  if (/^(口径|指标|期间|类型)：/.test(text)) return 'level-2'
+  return 'level-3'
+}
+
 function rateValue(row) {
   if (!row) return null
-  return comparisonViewMode.value === 'mom' ? row.momRate : row.yoyRate
+  if (comparisonViewMode.value === 'mom') return row.momRate
+  if (comparisonViewMode.value === 'plan') return row.planRate
+  return row.yoyRate
 }
 
 function deltaClass(rate) {
@@ -694,7 +987,12 @@ function heatmapCellText(item, company) {
 
 function heatmapCellTitle(item, company) {
   const rate = heatmapValueMap.value.get(`${item}|${company}`)
-  return `${company} / ${item} / ${comparisonViewMode.value === 'mom' ? '环比' : '同比'}：${formatRate(rate)}`
+  const modeLabel = comparisonViewMode.value === 'mom'
+    ? '环比'
+    : comparisonViewMode.value === 'plan'
+      ? '计划比'
+      : '同比'
+  return `${company} / ${item} / ${modeLabel}：${formatRate(rate)}`
 }
 
 function barWidth(rate) {
@@ -702,68 +1000,196 @@ function barWidth(rate) {
   return clamp(Math.abs(rate) / 0.5, 0, 1) * 100
 }
 
+function buildLinePath(values, minValue, maxValue, width, height, pad) {
+  if (!Array.isArray(values) || !values.length) return ''
+  const innerWidth = Math.max(1, width - pad * 2)
+  const innerHeight = Math.max(1, height - pad * 2)
+  const range = Math.max(1e-9, maxValue - minValue)
+  const points = []
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i]
+    if (value == null || !Number.isFinite(value)) continue
+    const x = pad + (innerWidth * i) / Math.max(1, values.length - 1)
+    const y = pad + ((maxValue - value) / range) * innerHeight
+    points.push([x, y])
+  }
+  if (!points.length) return ''
+  return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point[0]} ${point[1]}`).join(' ')
+}
+
 function sanitizeSheetName(name) {
   if (!name) return 'Sheet'
   return String(name).replace(/[\\/?*\[\]:]/g, '_').slice(0, 31) || 'Sheet'
 }
 
+function formatMonthTag(year, month) {
+  const y = Number(year)
+  const m = Number(month)
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) return ''
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`
+}
+
+function resolveExportMonthTag() {
+  const fromDate = String(filters.dateMonthFrom || '').trim()
+  const toDate = String(filters.dateMonthTo || '').trim()
+  const monthRe = /^(\d{4})-(\d{2})$/
+
+  if (monthRe.test(fromDate) && (!toDate || fromDate === toDate)) {
+    return fromDate
+  }
+
+  const windowLabel = String(comparisonMeta.currentWindowLabel || '').trim()
+  const rangeMatch = windowLabel.match(/^(\d{4})-(\d{2})-\d{2}\s*~\s*(\d{4})-(\d{2})-\d{2}$/)
+  if (rangeMatch) {
+    const y1 = Number(rangeMatch[1])
+    const m1 = Number(rangeMatch[2])
+    const y2 = Number(rangeMatch[3])
+    const m2 = Number(rangeMatch[4])
+    if (y1 === y2 && m1 === m2) {
+      const tag = formatMonthTag(y1, m1)
+      if (tag) return tag
+    }
+  }
+  const singleMatch = windowLabel.match(/^(\d{4})-(\d{2})-\d{2}$/)
+  if (singleMatch) {
+    const tag = formatMonthTag(Number(singleMatch[1]), Number(singleMatch[2]))
+    if (tag) return tag
+  }
+
+  const sample = rows.value.find((row) => row?.report_month || row?.date)
+  if (sample) {
+    const dateText = String(sample.report_month || sample.date || '')
+    const matched = dateText.match(/^(\d{4})-(\d{2})-\d{2}$/)
+    if (matched) {
+      const tag = formatMonthTag(Number(matched[1]), Number(matched[2]))
+      if (tag) return tag
+    }
+  }
+
+  const now = new Date()
+  return formatMonthTag(now.getFullYear(), now.getMonth() + 1) || 'unknown'
+}
+
+function finalizeSheet(sheet, columnWidths = []) {
+  if (!sheet) return
+  if (columnWidths.length) {
+    sheet['!cols'] = columnWidths.map((wch) => ({ wch }))
+  }
+  const ref = sheet['!ref']
+  if (!ref) return
+  const range = XLSX.utils.decode_range(ref)
+  if (range.e.c >= range.s.c) {
+    const headerRef = XLSX.utils.encode_range({
+      s: { r: 0, c: range.s.c },
+      e: { r: 0, c: range.e.c },
+    })
+    sheet['!autofilter'] = { ref: headerRef }
+  }
+}
+
 function downloadXlsx() {
   if (!rows.value.length) return
   const wb = XLSX.utils.book_new()
-  const resultHeader = ['company', 'item', 'unit', 'value', 'date', 'period', 'type', 'report_month']
+  const summarySheet = XLSX.utils.aoa_to_sheet([
+    ['字段', '内容'],
+    ['总记录数', summary.totalRows],
+    ['数值非空条数', summary.valueNonNullRows],
+    ['数值空值条数', summary.valueNullRows],
+    ['查询窗口', comparisonMeta.currentWindowLabel || ''],
+    ['同比窗口', comparisonMeta.yoyWindowLabel || ''],
+    ['环比窗口', comparisonMeta.momWindowLabel || ''],
+    ['计划窗口', comparisonMeta.planWindowLabel || ''],
+    ['当前图表口径', comparisonModeLabel.value],
+    ['导出时间', new Date().toLocaleString('zh-CN')],
+  ])
+  finalizeSheet(summarySheet, [18, 50])
+  XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName('汇总信息'))
+
+  const resultHeader = ['口径', '指标', '单位', '数值', '业务日期']
   const resultData = rows.value.map((row) => [
     row.company ?? '',
     row.item ?? '',
     row.unit ?? '',
-    row.value == null ? '' : row.value,
+    row.value == null ? '' : formatValue(row.value, row.unit),
     row.date ?? '',
-    row.period ?? '',
-    row.type ?? '',
-    row.report_month ?? '',
   ])
   const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
+  finalizeSheet(resultSheet, [12, 26, 10, 14, 14])
   XLSX.utils.book_append_sheet(wb, resultSheet, sanitizeSheetName('查询结果'))
 
   if (comparisonRows.value.length) {
-    const compareHeader = ['company', 'item', 'period', 'type', 'current_value', 'yoy_value', 'yoy_rate', 'mom_value', 'mom_rate']
+    const compareHeader = ['口径', '指标', '期间', '类型', '本期值', '同期值', '同比差值', '同比差异率', '上期值', '环比差值', '环比差异率', '计划值', '计划差值', '计划差异率']
     const compareData = comparisonRows.value.map((x) => [
       x.company,
       x.item,
       x.period,
       x.type,
-      x.currentValue,
-      x.yoyValue == null ? '' : x.yoyValue,
-      x.yoyRate == null ? '' : x.yoyRate,
-      x.momValue == null ? '' : x.momValue,
-      x.momRate == null ? '' : x.momRate,
+      x.currentValue == null ? '' : formatValue(x.currentValue, x.unit),
+      x.yoyValue == null ? '' : formatValue(x.yoyValue, x.unit),
+      x.currentValue == null || x.yoyValue == null ? '' : formatSignedNumber(x.currentValue - x.yoyValue),
+      formatRate(x.yoyRate),
+      x.momValue == null ? '' : formatValue(x.momValue, x.unit),
+      x.currentValue == null || x.momValue == null ? '' : formatSignedNumber(x.currentValue - x.momValue),
+      formatRate(x.momRate),
+      x.planValue == null ? '' : formatValue(x.planValue, x.unit),
+      x.currentValue == null || x.planValue == null ? '' : formatSignedNumber(x.currentValue - x.planValue),
+      formatRate(x.planRate),
     ])
     const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
-    XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('同比环比对比'))
+    finalizeSheet(compareSheet, [12, 24, 10, 10, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12])
+    XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('对比明细'))
   }
 
   if (analysisInsights.value.length) {
     const insightData = analysisInsights.value.map((line, idx) => [`要点${idx + 1}`, line])
     const insightSheet = XLSX.utils.aoa_to_sheet([['序号', '分析结论'], ...insightData])
+    finalizeSheet(insightSheet, [12, 120])
     XLSX.utils.book_append_sheet(wb, insightSheet, sanitizeSheetName('专业分析'))
   }
 
-  const latest = (comparisonMeta.currentWindowLabel || 'unknown').replace(/\s+/g, '_')
-  const filename = `月报查询分析_${latest}_${Date.now()}.xlsx`
+  if (temperatureDailyRows.value.length) {
+    const tempRows = temperatureDailyRows.value.map((row) => [
+      row.currentDate,
+      formatTemperature(row.currentTemp),
+      row.yoyDate,
+      formatTemperature(row.yoyTemp),
+      formatSignedNumber(row.yoyDiff),
+      formatRate(row.yoyRate),
+    ])
+    const tempSheet = XLSX.utils.aoa_to_sheet([
+      ['本期日期', '本期气温', '同期日期', '同期气温', '同比差值', '同比差异率'],
+      ...tempRows,
+    ])
+    finalizeSheet(tempSheet, [14, 12, 14, 12, 12, 12])
+    XLSX.utils.book_append_sheet(wb, tempSheet, sanitizeSheetName('气温日序同比'))
+    const tempSummarySheet = XLSX.utils.aoa_to_sheet([
+      ['字段', '内容'],
+      ['本期平均气温', formatTemperature(temperatureSummary.currentAvgTemp)],
+      ['同期平均气温', formatTemperature(temperatureSummary.yoyAvgTemp)],
+      ['同比差值', formatSignedNumber(temperatureSummary.yoyAvgDiff)],
+      ['同比差异率', formatRate(temperatureSummary.yoyAvgRate)],
+    ])
+    finalizeSheet(tempSummarySheet, [18, 24])
+    XLSX.utils.book_append_sheet(wb, tempSummarySheet, sanitizeSheetName('气温汇总'))
+  }
+
+  const monthTag = resolveExportMonthTag()
+  const filename = `月报查询分析_${monthTag}.xlsx`
   XLSX.writeFile(wb, filename)
 }
 
 function buildPayload() {
   return {
-    report_month_from: toMonthStartDate(filters.reportMonthFrom),
-    report_month_to: toMonthEndDate(filters.reportMonthTo),
+    report_month_from: null,
+    report_month_to: null,
     date_from: toMonthStartDate(filters.dateMonthFrom),
     date_to: toMonthEndDate(filters.dateMonthTo),
     companies: [...filters.companies],
     items: [...filters.items],
-    periods: [...filters.periods],
-    types: [...filters.types],
+    periods: ['month'],
+    types: ['real'],
     order_mode: filters.orderMode,
-    order_fields: [...filters.orderFields],
+    order_fields: [...filters.orderFields].filter((x) => x === 'company' || x === 'item'),
     aggregate_companies: Boolean(filters.aggregateCompanies),
     aggregate_months: Boolean(filters.aggregateMonths),
     limit,
@@ -794,6 +1220,33 @@ function toMonthEndDate(monthText) {
   return `${y}-${m}-${d}`
 }
 
+function formatMonthInputValue(year, month) {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`
+}
+
+function currentMonthText() {
+  const now = new Date()
+  return formatMonthInputValue(now.getFullYear(), now.getMonth() + 1)
+}
+
+function shiftMonthText(monthText, delta) {
+  const text = String(monthText || '').trim()
+  const matched = text.match(/^(\d{4})-(\d{2})$/)
+  const base = matched
+    ? new Date(Number(matched[1]), Number(matched[2]) - 1, 1)
+    : new Date()
+  base.setMonth(base.getMonth() + Number(delta || 0))
+  return formatMonthInputValue(base.getFullYear(), base.getMonth() + 1)
+}
+
+function ensureBusinessMonthRangeOrder() {
+  const from = String(filters.dateMonthFrom || '').trim()
+  const to = String(filters.dateMonthTo || '').trim()
+  if (!from || !to) return
+  if (from <= to) return
+  filters.dateMonthTo = from
+}
+
 function toggleAllCompanies(checked) {
   filters.companies = checked ? [...orderedCompanies.value] : []
 }
@@ -820,10 +1273,6 @@ function toggleAllTypes(checked) {
   filters.types = checked ? [...orderedTypes.value] : []
 }
 
-function resetOrderFields() {
-  filters.orderFields = ['company', 'item', 'period', 'type']
-}
-
 function getSelectionOrder(selectedList, value) {
   const idx = Array.isArray(selectedList) ? selectedList.indexOf(value) : -1
   return idx >= 0 ? idx + 1 : 0
@@ -833,29 +1282,42 @@ async function loadOptions() {
   const payload = await getMonthlyDataShowQueryOptions('monthly_data_show')
   options.companies = Array.isArray(payload?.companies) ? payload.companies : []
   options.items = Array.isArray(payload?.items) ? payload.items : []
+  const indicatorPayload = payload?.indicator_config || {}
+  indicatorConfig.basicSectionTitle = String(indicatorPayload.basic_section_title || '基本指标')
+  indicatorConfig.calculatedSectionTitle = String(indicatorPayload.calculated_section_title || '计算指标')
+  indicatorConfig.categoryPlaceholder = String(indicatorPayload.category_placeholder || '【待配置分类】')
+  indicatorConfig.basicGroups = Array.isArray(indicatorPayload.basic_groups) ? indicatorPayload.basic_groups : []
+  indicatorConfig.basicItems = Array.isArray(indicatorPayload.basic_items) ? indicatorPayload.basic_items : []
+  indicatorConfig.calculatedItems = Array.isArray(indicatorPayload.calculated_items) ? indicatorPayload.calculated_items : []
   if (!options.items.includes(AVERAGE_TEMPERATURE_ITEM)) {
     options.items.push(AVERAGE_TEMPERATURE_ITEM)
   }
   options.periods = Array.isArray(payload?.periods) ? payload.periods : []
   options.types = Array.isArray(payload?.types) ? payload.types : []
-  filters.periods = options.periods.includes('month')
-    ? ['month']
-    : (options.periods[0] ? [options.periods[0]] : [])
-  filters.types = orderedTypes.value.includes('real')
-    ? ['real']
-    : (orderedTypes.value[0] ? [orderedTypes.value[0]] : [])
+  filters.periods = ['month']
+  filters.types = ['real']
+  const previousMonth = shiftMonthText(currentMonthText(), -1)
+  filters.dateMonthFrom = previousMonth
+  filters.dateMonthTo = ''
 }
 
 async function runQuery(resetOffset = false) {
   hasSearched.value = true
   if (resetOffset) offset.value = 0
-  if (!filters.companies.length || !filters.items.length || !filters.periods.length || !filters.types.length) {
+  if (!filters.companies.length || !filters.items.length) {
     rows.value = []
     total.value = 0
     comparisonRows.value = []
+    temperatureDailyRows.value = []
+    temperatureSummary.currentAvgTemp = null
+    temperatureSummary.yoyAvgTemp = null
+    temperatureSummary.yoyAvgDiff = null
+    temperatureSummary.yoyAvgRate = null
+    temperatureExpanded.value = false
     comparisonMeta.currentWindowLabel = ''
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
+    comparisonMeta.planWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0
@@ -891,20 +1353,46 @@ async function runQuery(resetOffset = false) {
           yoyRate: row.yoy_rate,
           momValue: row.mom_value,
           momRate: row.mom_rate,
+          planValue: row.plan_value,
+          planRate: row.plan_rate,
         }))
       : []
+    const tempPayload = comparePayload?.temperature_comparison
+    temperatureDailyRows.value = Array.isArray(tempPayload?.rows)
+      ? tempPayload.rows.map((row) => ({
+          currentDate: String(row.current_date || ''),
+          currentTemp: row.current_temp == null ? null : Number(row.current_temp),
+          yoyDate: String(row.yoy_date || ''),
+          yoyTemp: row.yoy_temp == null ? null : Number(row.yoy_temp),
+          yoyDiff: row.yoy_diff == null ? null : Number(row.yoy_diff),
+          yoyRate: row.yoy_rate == null ? null : Number(row.yoy_rate),
+        }))
+      : []
+    temperatureSummary.currentAvgTemp = tempPayload?.summary?.current_avg_temp == null ? null : Number(tempPayload.summary.current_avg_temp)
+    temperatureSummary.yoyAvgTemp = tempPayload?.summary?.yoy_avg_temp == null ? null : Number(tempPayload.summary.yoy_avg_temp)
+    temperatureSummary.yoyAvgDiff = tempPayload?.summary?.yoy_avg_diff == null ? null : Number(tempPayload.summary.yoy_avg_diff)
+    temperatureSummary.yoyAvgRate = tempPayload?.summary?.yoy_avg_rate == null ? null : Number(tempPayload.summary.yoy_avg_rate)
+    temperatureExpanded.value = false
     comparisonMeta.currentWindowLabel = String(comparePayload?.current_window_label || '')
     comparisonMeta.yoyWindowLabel = String(comparePayload?.yoy_window_label || '')
     comparisonMeta.momWindowLabel = String(comparePayload?.mom_window_label || '')
+    comparisonMeta.planWindowLabel = String(comparePayload?.plan_window_label || '')
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '查询失败'
     rows.value = []
     total.value = 0
     comparisonRows.value = []
+    temperatureDailyRows.value = []
+    temperatureSummary.currentAvgTemp = null
+    temperatureSummary.yoyAvgTemp = null
+    temperatureSummary.yoyAvgDiff = null
+    temperatureSummary.yoyAvgRate = null
+    temperatureExpanded.value = false
     comparisonMeta.currentWindowLabel = ''
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
+    comparisonMeta.planWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0
@@ -915,29 +1403,31 @@ async function runQuery(resetOffset = false) {
 }
 
 async function resetFilters() {
-  filters.dateMonthFrom = ''
+  const previousMonth = shiftMonthText(currentMonthText(), -1)
+  filters.dateMonthFrom = previousMonth
   filters.dateMonthTo = ''
-  filters.reportMonthFrom = ''
-  filters.reportMonthTo = ''
   filters.companies = []
   filters.items = []
-  filters.periods = options.periods.includes('month')
-    ? ['month']
-    : (options.periods[0] ? [options.periods[0]] : [])
-  filters.types = orderedTypes.value.includes('real')
-    ? ['real']
-    : (orderedTypes.value[0] ? [orderedTypes.value[0]] : [])
+  filters.periods = ['month']
+  filters.types = ['real']
   filters.orderMode = 'company_first'
-  filters.orderFields = ['company', 'item', 'period', 'type']
+  filters.orderFields = ['company', 'item']
   filters.aggregateCompanies = false
   filters.aggregateMonths = false
   hasSearched.value = false
   rows.value = []
   total.value = 0
   comparisonRows.value = []
+  temperatureDailyRows.value = []
+  temperatureSummary.currentAvgTemp = null
+  temperatureSummary.yoyAvgTemp = null
+  temperatureSummary.yoyAvgDiff = null
+  temperatureSummary.yoyAvgRate = null
+  temperatureExpanded.value = false
   comparisonMeta.currentWindowLabel = ''
   comparisonMeta.yoyWindowLabel = ''
   comparisonMeta.momWindowLabel = ''
+  comparisonMeta.planWindowLabel = ''
   summary.totalRows = 0
   summary.valueNonNullRows = 0
   summary.valueNullRows = 0
@@ -966,9 +1456,16 @@ onMounted(async () => {
     rows.value = []
     total.value = 0
     comparisonRows.value = []
+    temperatureDailyRows.value = []
+    temperatureSummary.currentAvgTemp = null
+    temperatureSummary.yoyAvgTemp = null
+    temperatureSummary.yoyAvgDiff = null
+    temperatureSummary.yoyAvgRate = null
+    temperatureExpanded.value = false
     comparisonMeta.currentWindowLabel = ''
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
+    comparisonMeta.planWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0
@@ -1045,6 +1542,32 @@ onMounted(async () => {
   min-height: 100px;
 }
 
+.month-field {
+  background: linear-gradient(180deg, #f8fbff 0%, #f1f7ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.month-input-wrap {
+  display: block;
+  min-width: 0;
+}
+
+.month-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border-color: #93c5fd !important;
+  background: #fff;
+}
+
+.month-input:focus {
+  outline: none;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 .field-head {
   display: flex;
   align-items: center;
@@ -1052,15 +1575,23 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.panel-title {
+  font-weight: 700;
+  color: #1f3a8a;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+}
+
 .inline-actions {
   display: flex;
   gap: 8px;
 }
 
-.inline-four {
+.inline-layout {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(320px, 1.25fr) minmax(360px, 1fr);
   gap: 10px;
+  align-items: stretch;
 }
 
 .inline-col {
@@ -1070,7 +1601,61 @@ onMounted(async () => {
   background: #f8fbff;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-height: 126px;
+}
+
+.inline-col .field-head {
+  min-height: 28px;
+  align-items: center;
+}
+
+.order-col,
+.aggregate-col {
+  justify-content: space-between;
+}
+
+.order-col .check-list.slim {
+  min-height: 124px;
+}
+
+.order-inline {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  min-height: 66px;
+  flex: 1;
+}
+
+.order-inline .check-item {
+  min-height: 22px;
+  white-space: nowrap;
+}
+
+.aggregate-col {
+  justify-content: flex-start;
+}
+
+.aggregate-inline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  min-height: 66px;
+  flex: 1;
+}
+
+.aggregate-item {
+  min-height: 22px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .check-list {
@@ -1139,6 +1724,26 @@ onMounted(async () => {
   border-bottom: 1px solid #dbeafe;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #dbeafe;
+  background: #eff6ff;
+  padding: 0 10px 0 0;
+}
+
+.section-title-row .section-title {
+  border-bottom: 0;
+  background: transparent;
+  padding-left: 0;
+}
+
+.formula-btn {
+  white-space: nowrap;
+}
+
 .section-items {
   padding: 10px;
   display: grid;
@@ -1147,6 +1752,32 @@ onMounted(async () => {
   max-height: 220px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.section-items.grouped {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-height: 260px;
+}
+
+.basic-group-block {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px;
+}
+
+.basic-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 6px;
+}
+
+.basic-group-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 12px;
 }
 
 .section-empty {
@@ -1273,7 +1904,7 @@ onMounted(async () => {
 }
 
 .compare-table {
-  min-width: 1080px;
+  min-width: 860px;
 }
 
 .delta-up {
@@ -1288,10 +1919,139 @@ onMounted(async () => {
 
 .insight-list {
   margin: 10px 0 0;
-  padding-left: 18px;
   color: #334155;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.insight-line {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.insight-line + .insight-line {
+  margin-top: 4px;
+}
+
+.insight-line.level-1 {
+  font-weight: 600;
+  color: #0f172a;
+  margin-top: 8px;
+}
+
+.insight-line.level-2 {
+  padding-left: 14px;
+  color: #1f2937;
+}
+
+.insight-line.level-2.company-title {
+  margin-top: 10px;
+  padding: 4px 10px;
+  border-left: 4px solid #2563eb;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 6px;
+}
+
+.insight-line.level-2.item-title {
+  font-weight: 600;
+}
+
+.insight-line.level-3 {
+  padding-left: 28px;
+  color: #334155;
+}
+
+.temperature-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.temperature-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.temp-summary-grid {
+  margin-top: 4px;
+}
+
+.temp-chart-wrap {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.temp-chart-wrap h5 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #1d4ed8;
+}
+
+.temp-chart-container {
+  width: 100%;
+}
+
+.temp-chart-svg {
+  width: 100%;
+  height: 220px;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.temp-axis {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+
+.temp-line {
+  fill: none;
+  stroke-width: 2.4;
+}
+
+.temp-line.current {
+  stroke: #2563eb;
+}
+
+.temp-line.yoy {
+  stroke: #16a34a;
+  stroke-dasharray: 5 4;
+}
+
+.temp-legend {
+  margin-top: 6px;
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.current {
+  background: #2563eb;
+}
+
+.legend-dot.yoy {
+  background: #16a34a;
 }
 
 .viz-toolbar {
@@ -1314,6 +2074,38 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 4px 8px;
   background: #fff;
+}
+
+.viz-switch-field {
+  align-items: center;
+}
+
+.mode-switch-group {
+  display: inline-flex;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #eff6ff;
+}
+
+.mode-switch-btn {
+  border: 0;
+  background: transparent;
+  color: #1e3a8a;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.mode-switch-btn + .mode-switch-btn {
+  border-left: 1px solid #bfdbfe;
+}
+
+.mode-switch-btn.active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
 }
 
 .viz-grid {
@@ -1482,14 +2274,64 @@ onMounted(async () => {
   font-size: 12px;
 }
 
+.btn.ghost {
+  border-color: #bfdbfe;
+  color: #1e40af;
+  background: #eff6ff;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
+.formula-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.formula-dialog {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  padding: 14px;
+}
+
+.formula-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.formula-dialog-head h4 {
+  margin: 0;
+}
+
+.formula-table td:nth-child(2) {
+  white-space: normal;
+  line-height: 1.45;
+}
+
 @media (max-width: 900px) {
-  .inline-four {
+  .inline-layout {
     grid-template-columns: 1fr 1fr;
+  }
+  .order-inline,
+  .aggregate-inline {
+    flex-wrap: wrap;
+    row-gap: 8px;
   }
   .span-2 {
     grid-column: span 1;
@@ -1510,7 +2352,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 640px) {
-  .inline-four {
+  .inline-layout {
     grid-template-columns: 1fr;
   }
 }

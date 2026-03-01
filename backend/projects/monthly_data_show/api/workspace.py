@@ -9,11 +9,12 @@ import csv
 import json
 import tempfile
 import calendar
+import math
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -32,6 +33,12 @@ from backend.projects.monthly_data_show.services.extractor import (
     get_company_options,
     normalize_constant_rules,
     parse_report_period_from_filename,
+)
+from backend.projects.monthly_data_show.services.indicator_config import (
+    build_indicator_config_payload,
+    evaluate_formula,
+    load_indicator_runtime_config,
+    order_items_by_config,
 )
 
 PROJECT_KEY = "monthly_data_show"
@@ -66,6 +73,36 @@ class ImportCsvResponse(BaseModel):
 NULL_VALUE_TOKENS = {"", "none", "null", "nan", "--", "无", "空", "#div/0!"}
 AVERAGE_TEMPERATURE_ITEM = "平均气温"
 AVERAGE_TEMPERATURE_UNIT = "℃"
+AVERAGE_TEMPERATURE_COMPANY = "common"
+INDICATOR_RUNTIME_CFG = load_indicator_runtime_config()
+CALCULATED_ITEM_SET = set(INDICATOR_RUNTIME_CFG.get("calculated_item_set") or set())
+CALCULATED_ITEM_UNITS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_units") or {})
+CALCULATED_DEPENDENCY_MAP = {
+    str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
+}
+CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+
+
+def _refresh_indicator_runtime() -> None:
+    global INDICATOR_RUNTIME_CFG
+    global CALCULATED_ITEM_SET
+    global CALCULATED_ITEM_UNITS
+    global CALCULATED_DEPENDENCY_MAP
+    global CALCULATED_ITEM_FORMULAS
+    INDICATOR_RUNTIME_CFG = load_indicator_runtime_config()
+    CALCULATED_ITEM_SET = set(INDICATOR_RUNTIME_CFG.get("calculated_item_set") or set())
+    CALCULATED_ITEM_UNITS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_units") or {})
+    CALCULATED_DEPENDENCY_MAP = {
+        str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
+    }
+    CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+METRIC_ALIAS_MAP = {
+    "耗标煤总量": ["标煤耗量", "煤折标煤量"],
+    "供热耗标煤量": ["供热标准煤耗量"],
+    "发电耗标煤量": ["发电标准煤耗量"],
+    "生产耗原煤量": ["原煤耗量"],
+    "耗水量": ["电厂耗水量"],
+}
 
 
 class QueryRequest(BaseModel):
@@ -109,6 +146,7 @@ class QueryOptionsResponse(BaseModel):
     items: List[str]
     periods: List[str]
     types: List[str]
+    indicator_config: dict = {}
 
 
 class QueryComparisonRow(BaseModel):
@@ -122,6 +160,29 @@ class QueryComparisonRow(BaseModel):
     yoy_rate: Optional[float] = None
     mom_value: Optional[float] = None
     mom_rate: Optional[float] = None
+    plan_value: Optional[float] = None
+    plan_rate: Optional[float] = None
+
+
+class TemperatureDailyComparisonRow(BaseModel):
+    current_date: str
+    current_temp: Optional[float] = None
+    yoy_date: str
+    yoy_temp: Optional[float] = None
+    yoy_diff: Optional[float] = None
+    yoy_rate: Optional[float] = None
+
+
+class TemperatureComparisonSummary(BaseModel):
+    current_avg_temp: Optional[float] = None
+    yoy_avg_temp: Optional[float] = None
+    yoy_avg_diff: Optional[float] = None
+    yoy_avg_rate: Optional[float] = None
+
+
+class TemperatureComparisonPayload(BaseModel):
+    rows: List[TemperatureDailyComparisonRow] = []
+    summary: Optional[TemperatureComparisonSummary] = None
 
 
 class QueryComparisonResponse(BaseModel):
@@ -130,7 +191,9 @@ class QueryComparisonResponse(BaseModel):
     current_window_label: str
     yoy_window_label: str
     mom_window_label: str
+    plan_window_label: str
     rows: List[QueryComparisonRow]
+    temperature_comparison: Optional[TemperatureComparisonPayload] = None
 
 
 def _ensure_allowed_excel_file(filename: str) -> None:
@@ -187,6 +250,202 @@ def _to_float(value: object) -> float:
         return float(value)
     except Exception:
         return 0.0
+
+
+def _to_optional_float(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _safe_div(numerator: float, denominator: float) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _normalize_calc_value(value: float) -> float:
+    if not math.isfinite(value):
+        return 0.0
+    return float(round(value, 8))
+
+
+def _collect_required_base_items(calc_items: List[str]) -> List[str]:
+    required: Set[str] = set()
+    visited: Set[str] = set()
+
+    def walk(item_name: str):
+        if item_name in visited:
+            return
+        visited.add(item_name)
+        for dep in CALCULATED_DEPENDENCY_MAP.get(item_name, set()):
+            if dep == "天数":
+                continue
+            if dep in CALCULATED_ITEM_SET:
+                walk(dep)
+            else:
+                required.add(dep)
+                for alias in METRIC_ALIAS_MAP.get(dep, []):
+                    required.add(alias)
+
+    for item in calc_items:
+        walk(item)
+    return sorted(required)
+
+
+def _resolve_day_count(request: QueryRequest) -> int:
+    start_date, end_date = _pick_temperature_date_range(request)
+    if start_date is None or end_date is None:
+        return 30
+    if start_date > end_date:
+        return 0
+    return (end_date - start_date).days + 1
+
+
+def _resolve_group_day_count(
+    request: QueryRequest,
+    row_date: Optional[str],
+    row_report_month: Optional[str],
+    aggregate_months: bool,
+) -> int:
+    if aggregate_months:
+        return _resolve_day_count(request)
+    for raw in (row_report_month, row_date):
+        if not raw:
+            continue
+        try:
+            dt = date.fromisoformat(raw)
+            return calendar.monthrange(dt.year, dt.month)[1]
+        except Exception:
+            continue
+    return _resolve_day_count(request)
+
+
+def _compute_calculated_indicator(
+    indicator: str,
+    metric_values: Dict[str, float],
+    cache: Dict[str, float],
+    day_count: int,
+) -> float:
+    if indicator in cache:
+        return cache[indicator]
+
+    def val(item_name: str) -> float:
+        if item_name in CALCULATED_ITEM_SET:
+            if item_name in cache:
+                return _to_float(cache.get(item_name))
+            if item_name in metric_values:
+                return _to_float(metric_values.get(item_name))
+            return _compute_calculated_indicator(item_name, metric_values, cache, day_count)
+        direct = _to_float(metric_values.get(item_name))
+        if direct != 0:
+            return direct
+        for alias in METRIC_ALIAS_MAP.get(item_name, []):
+            alias_value = _to_float(metric_values.get(alias))
+            if alias_value != 0:
+                return alias_value
+        return direct
+    formula = str(CALCULATED_ITEM_FORMULAS.get(indicator) or "").strip()
+    if not formula:
+        computed = 0.0
+    else:
+        context: Dict[str, float] = {"天数": float(max(0, int(day_count or 0)))}
+        dependencies = CALCULATED_DEPENDENCY_MAP.get(indicator, set())
+        for dep in dependencies:
+            context[str(dep)] = val(str(dep))
+        computed = evaluate_formula(formula, context)
+
+    cache[indicator] = _normalize_calc_value(computed)
+    return cache[indicator]
+
+
+def _compute_calculated_two_pass(
+    metric_values: Dict[str, float],
+    selected_calc_items: List[str],
+    day_count: int,
+) -> Dict[str, float]:
+    if not selected_calc_items:
+        return {}
+    working_metrics: Dict[str, float] = dict(metric_values)
+    result: Dict[str, float] = {}
+    # 固定执行两轮，确保“计算指标依赖计算指标”场景可稳定收敛。
+    for _ in range(2):
+        pass_cache: Dict[str, float] = {}
+        for indicator in selected_calc_items:
+            result[indicator] = _compute_calculated_indicator(indicator, working_metrics, pass_cache, day_count)
+        working_metrics.update(result)
+    return result
+
+
+def _build_calculated_rows(
+    base_rows: List[dict],
+    request: QueryRequest,
+    selected_calc_items: List[str],
+    aggregate_months: bool,
+) -> List[dict]:
+    if not base_rows or not selected_calc_items:
+        return []
+
+    grouped_metrics: Dict[Tuple[str, str, str, Optional[str], Optional[str]], Dict[str, float]] = {}
+    grouped_meta: Dict[Tuple[str, str, str, Optional[str], Optional[str]], dict] = {}
+    for row in base_rows:
+        key = (
+            _safe_str(row.get("company")),
+            _safe_str(row.get("period")),
+            _safe_str(row.get("type")),
+            row.get("date"),
+            row.get("report_month"),
+        )
+        metrics = grouped_metrics.setdefault(key, {})
+        metric_name = _safe_str(row.get("item"))
+        metric_value = row.get("value")
+        if metric_name:
+            metrics[metric_name] = _to_float(metrics.get(metric_name)) + _to_float(metric_value)
+        grouped_meta.setdefault(
+            key,
+            {
+                "company": row.get("company"),
+                "period": row.get("period"),
+                "type": row.get("type"),
+                "date": row.get("date"),
+                "report_month": row.get("report_month"),
+                "operation_time": row.get("operation_time"),
+            },
+        )
+
+    calculated_rows: List[dict] = []
+    for key, metric_values in grouped_metrics.items():
+        meta = grouped_meta.get(key, {})
+        day_count = _resolve_group_day_count(
+            request=request,
+            row_date=meta.get("date"),
+            row_report_month=meta.get("report_month"),
+            aggregate_months=aggregate_months,
+        )
+        calc_values = _compute_calculated_two_pass(
+            metric_values=metric_values,
+            selected_calc_items=selected_calc_items,
+            day_count=day_count,
+        )
+        for indicator in selected_calc_items:
+            value = _to_float(calc_values.get(indicator))
+            calculated_rows.append(
+                {
+                    "company": meta.get("company"),
+                    "item": indicator,
+                    "unit": CALCULATED_ITEM_UNITS.get(indicator, ""),
+                    "value": value,
+                    "date": meta.get("date"),
+                    "period": meta.get("period"),
+                    "type": meta.get("type"),
+                    "report_month": meta.get("report_month"),
+                    "operation_time": meta.get("operation_time"),
+                }
+            )
+    return calculated_rows
 
 
 def _parse_import_csv_rows(content: bytes) -> Tuple[List[dict], int]:
@@ -355,11 +614,23 @@ def _safe_str(value: object) -> str:
     return str(value or "").strip()
 
 
+def _build_rank_map(values: List[str]) -> Dict[str, int]:
+    rank_map: Dict[str, int] = {}
+    for idx, value in enumerate(values or []):
+        key = _safe_str(value)
+        if key and key not in rank_map:
+            rank_map[key] = idx
+    return rank_map
+
+
 def _merge_and_sort_rows(
     rows: List[dict],
     order_fields: List[str],
     aggregate_months: bool,
+    rank_maps: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> List[dict]:
+    rank_maps = rank_maps or {}
+
     def _date_desc_key(v: Optional[str]):
         if not v:
             return (1, 0)
@@ -368,14 +639,47 @@ def _merge_and_sort_rows(
         except Exception:
             return (0, 0)
 
+    def _rank_key(field: str, value: object):
+        txt = _safe_str(value)
+        rank_map = rank_maps.get(field) or {}
+        if txt in rank_map:
+            return (0, rank_map[txt], txt)
+        return (1, 10**9, txt)
+
     def _row_key(row: dict):
         key_parts: List[object] = []
+        is_avg_temp = 0 if _safe_str(row.get("item")) == AVERAGE_TEMPERATURE_ITEM else 1
+        key_parts.append(is_avg_temp)
         if not aggregate_months:
             key_parts.append(_date_desc_key(row.get("report_month")))
             key_parts.append(_date_desc_key(row.get("date")))
         for field in order_fields:
-            key_parts.append(_safe_str(row.get(field)))
+            key_parts.append(_rank_key(field, row.get(field)))
         key_parts.append(_safe_str(row.get("unit")))
+        return tuple(key_parts)
+
+    return sorted(rows, key=_row_key)
+
+
+def _sort_comparison_rows(
+    rows: List[QueryComparisonRow],
+    order_fields: List[str],
+    rank_maps: Dict[str, Dict[str, int]],
+) -> List[QueryComparisonRow]:
+    def _rank_key(field: str, value: object):
+        txt = _safe_str(value)
+        rank_map = rank_maps.get(field) or {}
+        if txt in rank_map:
+            return (0, rank_map[txt], txt)
+        return (1, 10**9, txt)
+
+    def _row_key(row: QueryComparisonRow):
+        key_parts: List[object] = []
+        is_avg_temp = 0 if _safe_str(getattr(row, "item", "")) == AVERAGE_TEMPERATURE_ITEM else 1
+        key_parts.append(is_avg_temp)
+        for field in order_fields:
+            key_parts.append(_rank_key(field, getattr(row, field, "")))
+        key_parts.append(_safe_str(row.unit))
         return tuple(key_parts)
 
     return sorted(rows, key=_row_key)
@@ -438,16 +742,20 @@ def _fetch_compare_map(
     types = _normalize_text_list(request.types)
     aggregate_companies = bool(request.aggregate_companies)
     include_avg_temp = AVERAGE_TEMPERATURE_ITEM in items
-    base_items = [x for x in items if x != AVERAGE_TEMPERATURE_ITEM]
+    selected_calc_items = [x for x in items if x in CALCULATED_ITEM_SET]
+    selected_base_items = [x for x in items if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
+    required_base_items = _collect_required_base_items(selected_calc_items)
+    query_base_items = sorted(set(selected_base_items + required_base_items))
 
     result_map: dict = {}
-    if companies and periods and types and base_items:
+    base_rows: List[dict] = []
+    if companies and periods and types and query_base_items:
         where_parts = ["date BETWEEN :date_from AND :date_to"]
         params = {
             "date_from": start_date,
             "date_to": end_date,
             "companies": companies,
-            "items": base_items,
+            "items": query_base_items,
             "periods": periods,
             "types": types,
         }
@@ -487,7 +795,7 @@ def _fetch_compare_map(
             key = f"{company}|{item}|{period}|{type_value}|{unit}"
             raw_value = row.get("value")
             value = _to_float(raw_value) if raw_value is not None else None
-            result_map[key] = {
+            base_row = {
                 "company": company,
                 "item": item,
                 "period": period,
@@ -495,6 +803,38 @@ def _fetch_compare_map(
                 "unit": unit,
                 "value": value,
             }
+            base_rows.append(base_row)
+            if item in selected_base_items:
+                result_map[key] = dict(base_row)
+
+    if selected_calc_items and base_rows:
+        day_count = (end_date - start_date).days + 1
+        if day_count <= 0:
+            day_count = 0
+        grouped_metrics: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+        for row in base_rows:
+            group_key = (_safe_str(row.get("company")), _safe_str(row.get("period")), _safe_str(row.get("type")))
+            metrics = grouped_metrics.setdefault(group_key, {})
+            item = _safe_str(row.get("item"))
+            metrics[item] = _to_float(metrics.get(item)) + _to_float(row.get("value"))
+        for group_key, metrics in grouped_metrics.items():
+            company, period, type_value = group_key
+            calc_values = _compute_calculated_two_pass(
+                metric_values=metrics,
+                selected_calc_items=selected_calc_items,
+                day_count=day_count,
+            )
+            for indicator in selected_calc_items:
+                calc_value = _to_float(calc_values.get(indicator))
+                key = f"{company}|{indicator}|{period}|{type_value}|{CALCULATED_ITEM_UNITS.get(indicator, '')}"
+                result_map[key] = {
+                    "company": company,
+                    "item": indicator,
+                    "period": period,
+                    "type": type_value,
+                    "unit": CALCULATED_ITEM_UNITS.get(indicator, ""),
+                    "value": calc_value,
+                }
 
     if include_avg_temp and companies and ("month" in {x.lower() for x in periods}) and ("real" in {x.lower() for x in types}):
         avg_stmt = text(
@@ -507,19 +847,190 @@ def _fetch_compare_map(
         raw_avg = session.execute(avg_stmt, {"date_from": start_date, "date_to": end_date}).scalar()
         avg_value = _to_float(raw_avg) if raw_avg is not None else None
         if avg_value is not None:
-            temp_companies = ["聚合口径"] if aggregate_companies else companies
-            for company in temp_companies:
-                key = f"{company}|{AVERAGE_TEMPERATURE_ITEM}|month|real|{AVERAGE_TEMPERATURE_UNIT}"
-                result_map[key] = {
-                    "company": company,
-                    "item": AVERAGE_TEMPERATURE_ITEM,
-                    "period": "month",
-                    "type": "real",
-                    "unit": AVERAGE_TEMPERATURE_UNIT,
-                    "value": avg_value,
-                }
+            key = f"{AVERAGE_TEMPERATURE_COMPANY}|{AVERAGE_TEMPERATURE_ITEM}|month|real|{AVERAGE_TEMPERATURE_UNIT}"
+            result_map[key] = {
+                "company": AVERAGE_TEMPERATURE_COMPANY,
+                "item": AVERAGE_TEMPERATURE_ITEM,
+                "period": "month",
+                "type": "real",
+                "unit": AVERAGE_TEMPERATURE_UNIT,
+                "value": avg_value,
+            }
 
     return result_map
+
+
+def _fetch_plan_value_map(
+    session,
+    request: QueryRequest,
+    start_date: date,
+    end_date: date,
+) -> Dict[Tuple[str, str, str, str], Optional[float]]:
+    companies = _normalize_text_list(request.companies)
+    items = _normalize_text_list(request.items)
+    periods = _normalize_text_list(request.periods)
+    aggregate_companies = bool(request.aggregate_companies)
+    selected_calc_items = [x for x in items if x in CALCULATED_ITEM_SET]
+    selected_base_items = [x for x in items if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
+    required_base_items = _collect_required_base_items(selected_calc_items)
+    query_base_items = sorted(set(selected_base_items + required_base_items))
+
+    result_map: Dict[Tuple[str, str, str, str], Optional[float]] = {}
+    base_rows: List[dict] = []
+    if companies and periods and query_base_items:
+        where_sql = "date BETWEEN :date_from AND :date_to AND company IN :companies AND item IN :items AND period IN :periods AND type = 'plan'"
+        params = {
+            "date_from": start_date,
+            "date_to": end_date,
+            "companies": companies,
+            "items": query_base_items,
+            "periods": periods,
+        }
+        select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
+        group_by_sql = "item, period, unit" if aggregate_companies else "company, item, period, unit"
+        stmt = text(
+            f"""
+            SELECT
+                {select_company_sql},
+                item,
+                period,
+                unit,
+                CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END AS value
+            FROM month_data_show
+            WHERE {where_sql}
+            GROUP BY {group_by_sql}
+            """
+        ).bindparams(
+            bindparam("companies", expanding=True),
+            bindparam("items", expanding=True),
+            bindparam("periods", expanding=True),
+        )
+        rows = session.execute(stmt, params).mappings().all()
+        selected_base_set = set(selected_base_items)
+        for row in rows:
+            company = str(row.get("company") or "")
+            item = str(row.get("item") or "")
+            period = str(row.get("period") or "")
+            unit = str(row.get("unit") or "")
+            value_raw = row.get("value")
+            value = _to_float(value_raw) if value_raw is not None else None
+            base_rows.append(
+                {
+                    "company": company,
+                    "item": item,
+                    "period": period,
+                    "unit": unit,
+                    "value": value,
+                }
+            )
+            if item in selected_base_set:
+                result_map[(company, item, period, unit)] = value
+
+    if selected_calc_items and base_rows:
+        day_count = (end_date - start_date).days + 1
+        if day_count <= 0:
+            day_count = 0
+        grouped_metrics: Dict[Tuple[str, str], Dict[str, float]] = {}
+        for row in base_rows:
+            group_key = (_safe_str(row.get("company")), _safe_str(row.get("period")))
+            metrics = grouped_metrics.setdefault(group_key, {})
+            item = _safe_str(row.get("item"))
+            metrics[item] = _to_float(metrics.get(item)) + _to_float(row.get("value"))
+        for (company, period), metrics in grouped_metrics.items():
+            calc_values = _compute_calculated_two_pass(
+                metric_values=metrics,
+                selected_calc_items=selected_calc_items,
+                day_count=day_count,
+            )
+            for indicator in selected_calc_items:
+                unit = CALCULATED_ITEM_UNITS.get(indicator, "")
+                result_map[(company, indicator, period, unit)] = _to_float(calc_values.get(indicator))
+    return result_map
+
+
+def _build_temperature_comparison_payload(
+    session,
+    current_start: date,
+    current_end: date,
+    yoy_start: date,
+    yoy_end: date,
+) -> TemperatureComparisonPayload:
+    current_stmt = text(
+        """
+        SELECT date, aver_temp
+        FROM calc_temperature_data
+        WHERE date BETWEEN :date_from AND :date_to
+        ORDER BY date
+        """
+    )
+    yoy_stmt = text(
+        """
+        SELECT date, aver_temp
+        FROM calc_temperature_data
+        WHERE date BETWEEN :date_from AND :date_to
+        ORDER BY date
+        """
+    )
+    current_rows = session.execute(
+        current_stmt,
+        {"date_from": current_start, "date_to": current_end},
+    ).mappings().all()
+    yoy_rows = session.execute(
+        yoy_stmt,
+        {"date_from": yoy_start, "date_to": yoy_end},
+    ).mappings().all()
+
+    current_map: Dict[date, Optional[float]] = {}
+    yoy_map: Dict[date, Optional[float]] = {}
+    for row in current_rows:
+        dt = row.get("date")
+        if isinstance(dt, date):
+            current_map[dt] = _to_optional_float(row.get("aver_temp"))
+    for row in yoy_rows:
+        dt = row.get("date")
+        if isinstance(dt, date):
+            yoy_map[dt] = _to_optional_float(row.get("aver_temp"))
+
+    rows: List[TemperatureDailyComparisonRow] = []
+    cursor = current_start
+    current_values: List[float] = []
+    yoy_values: List[float] = []
+    while cursor <= current_end:
+        current_temp = current_map.get(cursor)
+        yoy_date = _shift_year_safe(cursor, -1)
+        yoy_temp = yoy_map.get(yoy_date)
+        yoy_diff = None
+        if current_temp is not None and yoy_temp is not None:
+            yoy_diff = current_temp - yoy_temp
+        yoy_rate = _calc_rate(current_temp, yoy_temp)
+        if current_temp is not None:
+            current_values.append(current_temp)
+        if yoy_temp is not None:
+            yoy_values.append(yoy_temp)
+        rows.append(
+            TemperatureDailyComparisonRow(
+                current_date=cursor.isoformat(),
+                current_temp=current_temp,
+                yoy_date=yoy_date.isoformat(),
+                yoy_temp=yoy_temp,
+                yoy_diff=yoy_diff,
+                yoy_rate=yoy_rate,
+            )
+        )
+        cursor += timedelta(days=1)
+
+    current_avg = sum(current_values) / len(current_values) if current_values else None
+    yoy_avg = sum(yoy_values) / len(yoy_values) if yoy_values else None
+    avg_diff = None
+    if current_avg is not None and yoy_avg is not None:
+        avg_diff = current_avg - yoy_avg
+    summary = TemperatureComparisonSummary(
+        current_avg_temp=current_avg,
+        yoy_avg_temp=yoy_avg,
+        yoy_avg_diff=avg_diff,
+        yoy_avg_rate=_calc_rate(current_avg, yoy_avg),
+    )
+    return TemperatureComparisonPayload(rows=rows, summary=summary)
 
 
 def _build_average_temperature_rows(
@@ -545,7 +1056,7 @@ def _build_average_temperature_rows(
     if range_start > range_end:
         return []
 
-    target_companies = ["聚合口径"] if aggregate_companies else companies_selected
+    target_companies = [AVERAGE_TEMPERATURE_COMPANY]
     rows: List[dict] = []
 
     if aggregate_months:
@@ -773,6 +1284,7 @@ async def import_monthly_data_show_csv(file: UploadFile = File(...)):
 
 @router.get("/monthly-data-show/query-options", response_model=QueryOptionsResponse, summary="月报查询筛选项")
 def get_monthly_data_show_query_options():
+    _refresh_indicator_runtime()
     sql = text(
         """
         SELECT
@@ -793,7 +1305,12 @@ def get_monthly_data_show_query_options():
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"读取查询筛选项失败：{exc}") from exc
 
-    items = [str(x) for x in (row.get("items") or []) if str(x).strip()]
+    items_from_db = [str(x) for x in (row.get("items") or []) if str(x).strip()]
+    items = order_items_by_config(items_from_db, INDICATOR_RUNTIME_CFG)
+    for calc_name in INDICATOR_RUNTIME_CFG.get("calculated_item_names") or []:
+        text_name = str(calc_name or "").strip()
+        if text_name and text_name not in items:
+            items.append(text_name)
     if AVERAGE_TEMPERATURE_ITEM not in items:
         items.append(AVERAGE_TEMPERATURE_ITEM)
 
@@ -804,11 +1321,13 @@ def get_monthly_data_show_query_options():
         items=items,
         periods=[str(x) for x in (row.get("periods") or []) if str(x).strip()],
         types=[str(x) for x in (row.get("types") or []) if str(x).strip()],
+        indicator_config=build_indicator_config_payload(INDICATOR_RUNTIME_CFG),
     )
 
 
 @router.post("/monthly-data-show/query", response_model=QueryResponse, summary="月报数据查询")
 def query_month_data_show(request: QueryRequest):
+    _refresh_indicator_runtime()
     limit = max(1, min(1000, int(request.limit or 200)))
     offset = max(0, int(request.offset or 0))
     companies_selected = _normalize_text_list(request.companies)
@@ -831,10 +1350,13 @@ def query_month_data_show(request: QueryRequest):
             ),
         )
     include_average_temperature = AVERAGE_TEMPERATURE_ITEM in items_selected
-    base_items_selected = [x for x in items_selected if x != AVERAGE_TEMPERATURE_ITEM]
-    run_base_query = bool(base_items_selected)
+    selected_calc_items = [x for x in items_selected if x in CALCULATED_ITEM_SET]
+    selected_base_items = [x for x in items_selected if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
+    required_base_items = _collect_required_base_items(selected_calc_items)
+    query_base_items = sorted(set(selected_base_items + required_base_items))
+    run_base_query = bool(query_base_items)
     if run_base_query:
-        base_request = request.model_copy(update={"items": base_items_selected})
+        base_request = request.model_copy(update={"items": query_base_items})
         where_clause, params, bind_params = _build_query_sql_parts(base_request)
         where_sql = f"WHERE {where_clause}" if where_clause else ""
     else:
@@ -902,9 +1424,9 @@ def query_month_data_show(request: QueryRequest):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"查询月报数据失败：{exc}") from exc
 
-    all_rows: List[dict] = []
+    base_rows_all: List[dict] = []
     for row in row_mappings:
-        all_rows.append(
+        base_rows_all.append(
             {
                 "company": row.get("company"),
                 "item": row.get("item"),
@@ -918,8 +1440,25 @@ def query_month_data_show(request: QueryRequest):
             }
         )
 
+    calculated_rows = _build_calculated_rows(
+        base_rows=base_rows_all,
+        request=request,
+        selected_calc_items=selected_calc_items,
+        aggregate_months=aggregate_months,
+    )
+    selected_base_set = set(selected_base_items)
+    output_base_rows = [row for row in base_rows_all if _safe_str(row.get("item")) in selected_base_set]
+    rank_maps = {
+        "company": _build_rank_map(companies_selected),
+        "item": _build_rank_map(items_selected),
+        "period": _build_rank_map(periods_selected),
+        "type": _build_rank_map(types_selected),
+    }
+    all_rows: List[dict] = []
+    all_rows.extend(output_base_rows)
+    all_rows.extend(calculated_rows)
     all_rows.extend(temp_rows)
-    all_rows = _merge_and_sort_rows(all_rows, resolved_order_fields, aggregate_months)
+    all_rows = _merge_and_sort_rows(all_rows, resolved_order_fields, aggregate_months, rank_maps=rank_maps)
     total_count = len(all_rows)
     page_rows = all_rows[offset : offset + limit]
     value_non_null_rows = sum(1 for row in all_rows if row.get("value") is not None)
@@ -945,10 +1484,23 @@ def query_month_data_show(request: QueryRequest):
 
 @router.post("/monthly-data-show/query-comparison", response_model=QueryComparisonResponse, summary="月报数据同比/环比查询")
 def query_month_data_show_comparison(request: QueryRequest):
+    _refresh_indicator_runtime()
     companies_selected = _normalize_text_list(request.companies)
     items_selected = _normalize_text_list(request.items)
     periods_selected = _normalize_text_list(request.periods)
     types_selected = _normalize_text_list(request.types)
+    order_mode = str(request.order_mode or "company_first").strip().lower()
+    if order_mode not in {"company_first", "item_first"}:
+        raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
+    aggregate_companies = bool(request.aggregate_companies)
+    resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
+    rank_maps = {
+        "company": _build_rank_map(companies_selected),
+        "item": _build_rank_map(items_selected),
+        "period": _build_rank_map(periods_selected),
+        "type": _build_rank_map(types_selected),
+    }
+    include_temperature_comparison = AVERAGE_TEMPERATURE_ITEM in set(items_selected)
     if not companies_selected or not items_selected or not periods_selected or not types_selected:
         return QueryComparisonResponse(
             ok=True,
@@ -956,7 +1508,9 @@ def query_month_data_show_comparison(request: QueryRequest):
             current_window_label="",
             yoy_window_label="",
             mom_window_label="",
+            plan_window_label="",
             rows=[],
+            temperature_comparison=None,
         )
 
     current_start, current_end = _resolve_compare_window(request)
@@ -967,7 +1521,9 @@ def query_month_data_show_comparison(request: QueryRequest):
             current_window_label="",
             yoy_window_label="",
             mom_window_label="",
+            plan_window_label="",
             rows=[],
+            temperature_comparison=None,
         )
     if current_start > current_end:
         raise HTTPException(status_code=422, detail="对比窗口无效：开始日期晚于结束日期")
@@ -983,15 +1539,24 @@ def query_month_data_show_comparison(request: QueryRequest):
             current_map = _fetch_compare_map(session, request, current_start, current_end)
             yoy_map = _fetch_compare_map(session, request, yoy_start, yoy_end)
             mom_map = _fetch_compare_map(session, request, mom_start, mom_end)
+            plan_map = _fetch_plan_value_map(session, request, current_start, current_end)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"查询同比环比失败：{exc}") from exc
 
     rows: List[QueryComparisonRow] = []
-    for key in sorted(current_map.keys()):
+    for key in current_map.keys():
         base = current_map.get(key) or {}
         current_value = base.get("value")
         yoy_value = (yoy_map.get(key) or {}).get("value")
         mom_value = (mom_map.get(key) or {}).get("value")
+        plan_value = plan_map.get(
+            (
+                str(base.get("company") or ""),
+                str(base.get("item") or ""),
+                str(base.get("period") or ""),
+                str(base.get("unit") or ""),
+            )
+        )
         rows.append(
             QueryComparisonRow(
                 company=str(base.get("company") or ""),
@@ -1004,8 +1569,24 @@ def query_month_data_show_comparison(request: QueryRequest):
                 yoy_rate=_calc_rate(current_value, yoy_value),
                 mom_value=mom_value,
                 mom_rate=_calc_rate(current_value, mom_value),
+                plan_value=plan_value,
+                plan_rate=_calc_rate(current_value, plan_value),
             )
         )
+    rows = _sort_comparison_rows(rows, resolved_order_fields, rank_maps)
+    temperature_comparison: Optional[TemperatureComparisonPayload] = None
+    if include_temperature_comparison:
+        try:
+            with SessionLocal() as session:
+                temperature_comparison = _build_temperature_comparison_payload(
+                    session=session,
+                    current_start=current_start,
+                    current_end=current_end,
+                    yoy_start=yoy_start,
+                    yoy_end=yoy_end,
+                )
+        except Exception:
+            temperature_comparison = TemperatureComparisonPayload(rows=[], summary=None)
 
     return QueryComparisonResponse(
         ok=True,
@@ -1013,5 +1594,7 @@ def query_month_data_show_comparison(request: QueryRequest):
         current_window_label=_format_window_label(current_start, current_end),
         yoy_window_label=_format_window_label(yoy_start, yoy_end),
         mom_window_label=_format_window_label(mom_start, mom_end),
+        plan_window_label=_format_window_label(current_start, current_end),
         rows=rows,
+        temperature_comparison=temperature_comparison,
     )

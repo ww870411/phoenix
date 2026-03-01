@@ -17,6 +17,8 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 
+from backend.projects.monthly_data_show.services.indicator_config import load_indicator_runtime_config
+
 BLOCKED_COMPANIES = {"恒流", "天然气炉", "中水"}
 ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type", "report_month")
 DEFAULT_SOURCE_COLUMNS = ("本年计划", "本月计划", "本月实际", "上年同期")
@@ -64,28 +66,6 @@ ITEM_RENAME_MAP = {
     "供热煤耗率": "供热标准煤耗率",
     "供热标准煤耗量": "供热耗标煤量",
     "发电标准煤耗量": "发电耗标煤量",
-}
-
-CALCULATED_ITEM_SET = {
-    "综合厂用电率",
-    "发电标准煤耗率",
-    "供电标准煤耗率",
-    "供热标准煤耗率",
-    "发电水耗率",
-    "供热水耗率",
-    "供暖热耗率",
-    "供暖水耗率",
-    "供暖电耗率",
-    "发电设备利用率",
-    "供热设备利用率",
-    "入炉煤低位发热量",
-    "发电厂用电率",
-    "供热厂用电率",
-    "全厂热效率",
-    "热电比",
-    "热分摊比",
-    "供热用电率",
-    "供暖标准煤耗率",
 }
 
 DEFAULT_CONSTANT_RULES = [
@@ -287,6 +267,8 @@ def extract_rows(
     report_year: Optional[int] = None,
     report_month: Optional[int] = None,
 ) -> Tuple[List[Dict[str, object]], Dict[str, object]]:
+    runtime_cfg = load_indicator_runtime_config()
+    calculated_item_set = set(runtime_cfg.get("calculated_item_set") or set())
     parsed_year, parsed_month = parse_report_period_from_filename(filename)
     if report_year is None:
         report_year = parsed_year
@@ -317,7 +299,7 @@ def extract_rows(
                     continue
                 if item in ITEM_EXCLUDE_SET:
                     continue
-                if item in CALCULATED_ITEM_SET:
+                if item in calculated_item_set:
                     continue
                 for src_col in source_columns:
                     value_cell = sheet.cell(row=row_idx, column=col_map[src_col]).value
