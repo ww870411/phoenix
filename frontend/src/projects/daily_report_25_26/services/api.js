@@ -321,6 +321,7 @@ export async function extractMonthlyDataShowCsv(
   companies = [],
   fields = [],
   sourceColumns = [],
+  extractionRuleIds = [],
   reportYear = null,
   reportMonth = null,
   constantsEnabled = false,
@@ -337,6 +338,9 @@ export async function extractMonthlyDataShowCsv(
   }
   for (const sourceColumn of sourceColumns || []) {
     formData.append('source_columns', sourceColumn)
+  }
+  for (const ruleId of extractionRuleIds || []) {
+    formData.append('extraction_rule_ids', ruleId)
   }
   if (Number.isInteger(reportYear)) {
     formData.append('report_year', String(reportYear))
@@ -358,9 +362,27 @@ export async function extractMonthlyDataShowCsv(
   const blob = await response.blob()
   const disposition = response.headers.get('content-disposition') || ''
   const matched = disposition.match(/filename=\"?([^\"]+)\"?/i)
+  const semiCalculatedCompleted = Number.parseInt(response.headers.get('x-monthly-semi-calculated-completed') || '0', 10)
+  const jinpuHeatingAreaAdjusted = Number.parseInt(response.headers.get('x-monthly-jinpu-heating-area-adjusted') || '0', 10)
+  const extractedTotalRows = Number.parseInt(response.headers.get('x-monthly-extracted-total-rows') || '0', 10)
+  let ruleDetails = null
+  const encodedRuleDetails = response.headers.get('x-monthly-rule-details') || ''
+  if (encodedRuleDetails) {
+    try {
+      ruleDetails = JSON.parse(decodeURIComponent(encodedRuleDetails))
+    } catch (_error) {
+      ruleDetails = null
+    }
+  }
   return {
     blob,
     filename: matched?.[1] || 'monthly_data_show_extract.csv',
+    stats: {
+      semiCalculatedCompleted: Number.isFinite(semiCalculatedCompleted) ? semiCalculatedCompleted : 0,
+      jinpuHeatingAreaAdjusted: Number.isFinite(jinpuHeatingAreaAdjusted) ? jinpuHeatingAreaAdjusted : 0,
+      extractedTotalRows: Number.isFinite(extractedTotalRows) ? extractedTotalRows : 0,
+      ruleDetails,
+    },
   }
 }
 

@@ -2110,3 +2110,183 @@
   - 当前基础指标分组项已补齐 `unit` 字段。
 - 效果：
   - 基础指标单位可通过配置文件统一维护（与计算指标单位维护方式一致）。
+
+## 结构同步（2026-03-01 指标选区隐藏单位（前端展示层））
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 后端仍按配置文件下发指标单位字段（`indicator_config`）；
+  - 前端仅调整为“不在指标选择区显示单位”，单位继续用于查询结果和分析文本展示。
+
+## 结构同步（2026-03-01 导入指标映射新增“锅炉耗柴油量”）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - `ITEM_RENAME_MAP` 新增映射：`"锅炉耗柴油量" -> "耗油量"`。
+- 效果：
+  - 月报导入工作台在提取阶段可将“锅炉耗柴油量”统一归一到“耗油量”，避免同义指标分裂。
+
+## 结构同步（2026-03-01 金普期末供暖收费面积扣减规则）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - 新增规则函数 `_apply_jinpu_heating_area_adjustment(rows)`；
+  - 在 `extract_rows` 中接入：对 `company=金普` 的同窗口数据执行  
+    `期末供暖收费面积 = 期末供暖收费面积 - 高温水面积`；
+  - 结果单位统一为 `平方米`，并输出统计字段 `jinpu_heating_area_adjusted`。
+- 效果：
+  - 月报导入提取阶段可稳定执行该专属业务规则，后续入库与查询结果一致。
+
+## 结构同步（2026-03-01 金普面积扣减规则命中增强）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - 金普口径匹配由精确匹配升级为包含匹配（公司名含“金普”即命中）；
+  - 规则指标名增加同义兼容：
+    - 目标项：`期末供暖收费面积/期末供热面积/期末供暖面积`
+    - 扣减项：`高温水面积/高温水供暖面积/高温水供热面积`
+  - 同窗口多目标行逐条扣减。
+- 效果：
+  - 导入提取对不同月报文本写法更稳健，CSV 中金普面积值更符合业务规则。
+
+## 结构同步（2026-03-01 查询页三项指标4位小数（前端展示层））
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端查询页新增按指标控制小数位展示规则：`供暖热耗率/供暖水耗率/供暖电耗率` 默认 4 位小数；
+  - 后端仍按原值下发，不改变存储与计算精度。
+
+## 结构同步（2026-03-01 查询页三项指标差值4位小数（前端展示层））
+
+- 本轮后端代码无改动。
+- 联动说明：
+  - 前端将三项指标的同比/环比/计划差值展示也统一为 4 位小数；
+  - 后端数据接口与计算逻辑保持不变。
+
+## 结构同步（2026-03-01 半计算补齐规则落地到提取链路）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - 新增 `_apply_semicalculated_completion_rules(rows)`，按口径+同窗口（date/period/type/report_month）重写半计算指标；
+  - 补齐“四、补充指标”中此前未落地项：`煤折标煤量`、`供热耗标煤量`、`耗电量`、`耗水量`、`热网耗水量`、`热网耗电量`、`供暖耗热量`；
+  - 在 `extract_rows` 接入执行，新增统计字段 `semi_calculated_completed`；
+  - 保留并继续执行规则5（金普期末供暖收费面积扣减）。
+- 效果：
+  - `extract-csv` 导出阶段直接生成补齐后的半计算指标，后续入库与查询链路使用同一结果基线。
+
+## 结构同步（2026-03-01 extract-csv 规则命中统计下发）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - `extract-csv` 接口读取 `extract_rows` 的统计并写入响应头：
+    - `X-Monthly-Semi-Calculated-Completed`
+    - `X-Monthly-Jinpu-Heating-Area-Adjusted`
+    - `X-Monthly-Extracted-Total-Rows`
+  - 增加 `Access-Control-Expose-Headers`，保证跨域场景前端可读取统计头。
+- 效果：
+  - 前端导入页可直接展示提取规则命中条数与总提取行数。
+
+## 结构同步（2026-03-01 规则命中明细下发）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 半计算补齐函数改为返回逐项命中明细字典；
+  - `extract-csv` 在响应头新增 `X-Monthly-Rule-Details`（URL 编码 JSON）；
+  - 暴露头部字段，确保前端可读取明细。
+- 效果：
+  - 前端可弹窗展示每条规则的命中明细，而不只是总计数字。
+
+## 结构同步（2026-03-01 import-csv 返回新增/更新统计）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - `import-csv` 的 UPSERT 增加 `RETURNING (xmax = 0) AS inserted`；
+  - 统计并返回：
+    - `inserted_rows`（新增）
+    - `updated_rows`（更新）
+  - `ImportCsvResponse` 模型同步新增字段。
+- 效果：
+  - 前端可区分“新增写入”与“同主键更新覆盖”，避免误判未入库。
+
+## 结构同步（2026-03-01 import-csv 批量 RETURNING 兼容修复）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 修复 `executemany + RETURNING` 导致结果集关闭异常；
+  - 改为逐行执行 UPSERT 并读取返回标志统计新增/更新。
+- 效果：
+  - 消除 `This result object does not return rows` 报错，入库流程恢复稳定。
+
+## 结构同步（2026-03-01 金普面积扣减规则临时关闭）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - 新增开关 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = False`；
+  - `extract_rows` 中仅开关开启时执行金普面积扣减规则。
+- 效果：
+  - 当前提取链路不再执行“金普期末供暖收费面积扣减”。
+
+## 结构同步（2026-03-01 供暖耗热量规则调整：金普=供热量）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - 半计算补齐规则中，“供暖耗热量”改为：
+    - `金州/北方 = 供热量 - 高温水销售量`；
+    - `金普/庄河/研究院/主城区电锅炉 = 供热量`。
+- 效果：
+  - 金普口径下“供暖耗热量”不再扣减高温水销售量，改为直接取供热量。
+
+## 结构同步（2026-03-01 提取规则改为 monthly_data_pull 配置驱动）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend_data/projects/monthly_data_pull/mapping_rules/monthly_data_show_extraction_rules.json`
+- 变更点：
+  - 新增提取规则配置文件（剔除、重命名、默认源字段、常量、半计算规则、开关）；
+  - 提取服务新增配置加载/刷新机制，接口执行时优先按配置运行，缺失时回退内置默认；
+  - 半计算补齐改为通用规则引擎（`copy/sum/subtract`）按 `semi_calculated_rules` 执行。
+- 效果：
+  - 后续规则调整可直接改 JSON，无需改后端代码。
+
+## 结构同步（2026-03-01 提取规则配置目录更正为 monthly_data_show）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`
+- 变更点：
+  - 将提取规则配置文件从 `monthly_data_pull` 目录迁移到 `monthly_data_show` 目录；
+  - 同步修正后端候选读取路径（容器与本地）到新位置。
+- 效果：
+  - 规则维护路径与项目归属一致，避免跨项目目录混淆。
+
+## 结构同步（2026-03-01 提取规则可选执行）
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - `inspect` 接口新增返回 `extraction_rules`（规则清单）；
+  - `extract-csv` 新增入参 `extraction_rule_ids`，按所选规则执行提取；
+  - 支持规则粒度：指标剔除、指标重命名、半计算规则子项、金普面积扣减；
+  - 提取统计新增：`item_exclude_hits`、`item_rename_hits`、`selected_rule_ids`，并随详情头回传。
+- 效果：
+  - 后端可按前端勾选子集执行规则，且可追踪本次实际命中情况。
+
+## 结构同步（2026-03-01 规则清单描述增强）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - `get_extraction_rule_options()` 为规则下发补充可读描述；
+  - 半计算规则描述可自动生成（口径、目标指标、计算表达式、单位）。
+- 效果：
+  - 前端规则选择弹窗可展示更完整的规则说明，便于人工核对。
+
+## 结构同步（2026-03-01 已禁用规则不再下发到弹窗）
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 变更点：
+  - `get_extraction_rule_options()` 仅在 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT=True` 时下发“金普面积扣减”规则。
+- 效果：
+  - 已取消的金普面积扣减规则不会出现在前端规则弹窗中。

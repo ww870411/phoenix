@@ -10,10 +10,12 @@ monthly_data_show 月报入库提取服务。
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 
@@ -22,6 +24,7 @@ from backend.projects.monthly_data_show.services.indicator_config import load_in
 BLOCKED_COMPANIES = {"恒流", "天然气炉", "中水"}
 ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type", "report_month")
 DEFAULT_SOURCE_COLUMNS = ("本年计划", "本月计划", "本月实际", "上年同期")
+ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = False
 
 ITEM_EXCLUDE_SET = {
     "本期平均供暖面积",
@@ -60,6 +63,7 @@ ITEM_RENAME_MAP = {
     "锅炉热效率": "全厂热效率",
     "总热效率": "全厂热效率",
     "炉耗油量": "耗油量",
+    "锅炉耗柴油量": "耗油量",
     "装机总容量": "锅炉设备容量",
     "发电煤耗率": "发电标准煤耗率",
     "供电煤耗率": "供电标准煤耗率",
@@ -79,27 +83,243 @@ DEFAULT_CONSTANT_RULES = [
     {"company": "北方", "item": "锅炉设备容量", "unit": "兆瓦", "value": 130.0, "source_columns": ["本月实际"]},
 ]
 
+DEFAULT_SEMI_CALCULATED_RULES = [
+    {
+        "name": "煤折标煤量补齐",
+        "companies": ["金普", "庄河"],
+        "target_item": "煤折标煤量",
+        "target_unit": "吨",
+        "operation": "copy",
+        "sources": ["耗标煤总量"],
+    },
+    {
+        "name": "供热耗标煤量补齐",
+        "companies": ["北海水炉", "金普", "庄河"],
+        "target_item": "供热耗标煤量",
+        "target_unit": "吨",
+        "operation": "copy",
+        "sources": ["耗标煤总量"],
+    },
+    {
+        "name": "耗电量补齐",
+        "companies": ["北海", "香海"],
+        "target_item": "耗电量",
+        "target_unit": "万千瓦时",
+        "operation": "sum",
+        "sources": ["综合厂用电量", "外购电量"],
+        "require_any_source": True,
+    },
+    {
+        "name": "耗电量补齐",
+        "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"],
+        "target_item": "耗电量",
+        "target_unit": "万千瓦时",
+        "operation": "copy",
+        "sources": ["外购电量"],
+    },
+    {
+        "name": "耗水量补齐",
+        "companies": ["北海", "北海水炉", "香海"],
+        "target_item": "耗水量",
+        "target_unit": "吨",
+        "operation": "copy",
+        "sources": ["电厂耗水量"],
+    },
+    {
+        "name": "热网耗水量补齐",
+        "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"],
+        "target_item": "热网耗水量",
+        "target_unit": "吨",
+        "operation": "copy",
+        "sources": ["耗水量"],
+    },
+    {
+        "name": "热网耗电量补齐",
+        "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"],
+        "target_item": "热网耗电量",
+        "target_unit": "万千瓦时",
+        "operation": "copy",
+        "sources": ["外购电量"],
+    },
+    {
+        "name": "供暖耗热量补齐",
+        "companies": ["供热公司"],
+        "target_item": "供暖耗热量",
+        "target_unit": "吉焦",
+        "operation": "copy",
+        "sources": ["各热力站耗热量"],
+    },
+    {
+        "name": "供暖耗热量补齐",
+        "companies": ["金州", "北方"],
+        "target_item": "供暖耗热量",
+        "target_unit": "吉焦",
+        "operation": "subtract",
+        "sources": ["供热量", "高温水销售量"],
+        "allow_missing_subtrahend_as_zero": True,
+    },
+    {
+        "name": "供暖耗热量补齐",
+        "companies": ["金普", "庄河", "研究院", "主城区电锅炉"],
+        "target_item": "供暖耗热量",
+        "target_unit": "吉焦",
+        "operation": "copy",
+        "sources": ["供热量"],
+    },
+]
+
+RULES_CONFIG_CANDIDATES = [
+    Path("/app/data/projects/monthly_data_show/monthly_data_show_extraction_rules.json"),
+    Path("/app/backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json"),
+]
+try:
+    _PROJECT_ROOT = Path(__file__).resolve().parents[4]
+    RULES_CONFIG_CANDIDATES.append(
+        _PROJECT_ROOT / "backend_data" / "projects" / "monthly_data_show" / "monthly_data_show_extraction_rules.json"
+    )
+except Exception:
+    pass
+
+_BASE_RULES_SNAPSHOT = {
+    "blocked_companies": sorted(BLOCKED_COMPANIES),
+    "default_source_columns": list(DEFAULT_SOURCE_COLUMNS),
+    "enable_jinpu_heating_area_adjustment": bool(ENABLE_JINPU_HEATING_AREA_ADJUSTMENT),
+    "item_exclude_set": sorted(ITEM_EXCLUDE_SET),
+    "item_rename_map": dict(ITEM_RENAME_MAP),
+    "default_constant_rules": [dict(x) for x in DEFAULT_CONSTANT_RULES],
+    "semi_calculated_rules": [dict(x) for x in DEFAULT_SEMI_CALCULATED_RULES],
+}
+SEMI_CALCULATED_RULES = [dict(x) for x in DEFAULT_SEMI_CALCULATED_RULES]
+
+
+def _load_extraction_rules_from_config() -> Dict[str, Any]:
+    for path in RULES_CONFIG_CANDIDATES:
+        try:
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            continue
+    return {}
+
+
+def _refresh_extraction_rules() -> None:
+    global BLOCKED_COMPANIES
+    global DEFAULT_SOURCE_COLUMNS
+    global ENABLE_JINPU_HEATING_AREA_ADJUSTMENT
+    global ITEM_EXCLUDE_SET
+    global ITEM_RENAME_MAP
+    global DEFAULT_CONSTANT_RULES
+    global SEMI_CALCULATED_RULES
+
+    cfg = _load_extraction_rules_from_config()
+    BLOCKED_COMPANIES = set(cfg.get("blocked_companies") or _BASE_RULES_SNAPSHOT["blocked_companies"])
+    DEFAULT_SOURCE_COLUMNS = tuple(cfg.get("default_source_columns") or _BASE_RULES_SNAPSHOT["default_source_columns"])
+    ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = bool(
+        cfg.get("enable_jinpu_heating_area_adjustment", _BASE_RULES_SNAPSHOT["enable_jinpu_heating_area_adjustment"])
+    )
+    ITEM_EXCLUDE_SET = set(cfg.get("item_exclude_set") or _BASE_RULES_SNAPSHOT["item_exclude_set"])
+    ITEM_RENAME_MAP = dict(cfg.get("item_rename_map") or _BASE_RULES_SNAPSHOT["item_rename_map"])
+    raw_constants = cfg.get("default_constant_rules") or _BASE_RULES_SNAPSHOT["default_constant_rules"]
+    DEFAULT_CONSTANT_RULES = [dict(x) for x in raw_constants if isinstance(x, dict)]
+    raw_semi = cfg.get("semi_calculated_rules") or _BASE_RULES_SNAPSHOT["semi_calculated_rules"]
+    normalized_semi: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(raw_semi):
+        if not isinstance(raw, dict):
+            continue
+        row = dict(raw)
+        rule_id = str(row.get("id") or "").strip() or f"semi_rule_{idx + 1}"
+        row["id"] = rule_id
+        row["name"] = str(row.get("name") or "").strip() or rule_id
+        normalized_semi.append(row)
+    SEMI_CALCULATED_RULES = normalized_semi
+
+
+def get_extraction_rule_options() -> List[Dict[str, Any]]:
+    _refresh_extraction_rules()
+    rules: List[Dict[str, Any]] = [
+        {
+            "id": "item_exclude",
+            "name": "指标剔除",
+            "description": "按剔除清单过滤不入库指标（如本月平均气温、高压电量等）",
+            "enabled_default": True,
+        },
+        {
+            "id": "item_rename",
+            "name": "指标重命名",
+            "description": "按重命名映射统一指标名称（如锅炉耗柴油量→耗油量）",
+            "enabled_default": True,
+        },
+    ]
+    def _describe_rule(rule: Dict[str, Any]) -> str:
+        companies = [str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()]
+        target_item = str(rule.get("target_item") or "").strip()
+        target_unit = str(rule.get("target_unit") or "").strip()
+        operation = str(rule.get("operation") or "").strip().lower()
+        sources = [str(x).strip() for x in (rule.get("sources") or []) if str(x).strip()]
+        company_text = f"口径={ '/'.join(companies) if companies else '全部' }"
+        if operation == "copy" and sources:
+            expr = sources[0]
+        elif operation == "sum" and sources:
+            expr = " + ".join(sources)
+        elif operation == "subtract" and sources:
+            expr = " - ".join(sources)
+        else:
+            expr = "按配置规则计算"
+        if target_item:
+            return f"{company_text}，{target_item} = {expr}，单位={target_unit or '按配置'}"
+        return f"{company_text}，规则表达式={expr}"
+    for rule in SEMI_CALCULATED_RULES:
+        rules.append(
+            {
+                "id": str(rule.get("id") or ""),
+                "name": str(rule.get("name") or ""),
+                "description": str(rule.get("description") or _describe_rule(rule)),
+                "enabled_default": True,
+            }
+        )
+    if ENABLE_JINPU_HEATING_AREA_ADJUSTMENT:
+        rules.append(
+            {
+                "id": "jinpu_area_adjust",
+                "name": "金普面积扣减",
+                "description": "期末供暖收费面积=期末供暖收费面积-高温水面积",
+                "enabled_default": True,
+            }
+        )
+    return rules
+
 
 def _clean_text(value: object) -> str:
     text = str(value or "").strip()
     return re.sub(r"\s+", "", text)
 
 
-def _normalize_item(value: object) -> str:
+def _normalize_item(value: object, use_rename: bool = True) -> Tuple[str, bool]:
     raw = _clean_text(value)
     if not raw:
-        return ""
+        return "", False
     normalized = raw.replace("其中：", "")
-    normalized = ITEM_RENAME_MAP.get(normalized, normalized)
-    if normalized == raw:
-        token = (
-            normalized.replace("、", "")
-            .replace("，", "")
-            .replace(",", "")
-            .replace("/", "")
-        )
-        normalized = ITEM_RENAME_MAP.get(token, normalized)
-    return normalized
+    changed = False
+    if use_rename:
+        mapped = ITEM_RENAME_MAP.get(normalized, normalized)
+        if mapped != normalized:
+            normalized = mapped
+            changed = True
+        else:
+            token = (
+                normalized.replace("、", "")
+                .replace("，", "")
+                .replace(",", "")
+                .replace("/", "")
+            )
+            mapped_token = ITEM_RENAME_MAP.get(token, normalized)
+            if mapped_token != normalized:
+                normalized = mapped_token
+                changed = True
+    return normalized, changed
 
 
 def _normalize_unit(value: object) -> str:
@@ -169,6 +389,200 @@ def _build_report_month_text(report_year: int, report_month: int) -> str:
     return f"{report_year}-{report_month:02d}-01"
 
 
+def _apply_semicalculated_completion_rules(
+    rows: List[Dict[str, object]],
+    enabled_rule_ids: Optional[set[str]] = None,
+) -> Dict[str, int]:
+    """
+    按“2.28 月报数据库化配置文件”第四部分补齐半计算指标。
+    规则原则：
+    - 仅覆盖规则中明确指定的口径；
+    - 未指定口径沿用原值；
+    - 同一口径、同一时期下若命中规则，则以规则结果重写目标指标。
+    """
+
+    def _window_key(row: Dict[str, object]) -> Tuple[str, str, str, str]:
+        return (
+            str(row.get("date") or "").strip(),
+            str(row.get("period") or "").strip(),
+            str(row.get("type") or "").strip(),
+            str(row.get("report_month") or "").strip(),
+        )
+
+    def _row_key(row: Dict[str, object]) -> Tuple[str, str, str, str, str, str]:
+        return (
+            str(row.get("company") or "").strip(),
+            str(row.get("item") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("period") or "").strip(),
+            str(row.get("type") or "").strip(),
+            str(row.get("report_month") or "").strip(),
+        )
+
+    # company+window -> item -> numeric value
+    company_window_values: Dict[Tuple[str, Tuple[str, str, str, str]], Dict[str, float]] = {}
+    row_index_by_key: Dict[Tuple[str, str, str, str, str, str], int] = {}
+    for idx, row in enumerate(rows):
+        company = str(row.get("company") or "").strip()
+        item = str(row.get("item") or "").strip()
+        win = _window_key(row)
+        row_index_by_key[_row_key(row)] = idx
+        numeric = _coerce_number(row.get("value"))
+        if not company or not item or numeric is None:
+            continue
+        slot = company_window_values.setdefault((company, win), {})
+        slot[item] = float(numeric)
+
+    def _value_of(company: str, win: Tuple[str, str, str, str], item: str) -> Optional[float]:
+        return company_window_values.get((company, win), {}).get(item)
+
+    def _upsert_value(
+        company: str,
+        win: Tuple[str, str, str, str],
+        item: str,
+        unit: str,
+        value: float,
+    ) -> None:
+        new_row = {
+            "company": company,
+            "item": item,
+            "unit": unit,
+            "value": round(float(value), 8),
+            "date": win[0],
+            "period": win[1],
+            "type": win[2],
+            "report_month": win[3],
+        }
+        key = (
+            company,
+            item,
+            win[0],
+            win[1],
+            win[2],
+            win[3],
+        )
+        old_idx = row_index_by_key.get(key)
+        if old_idx is None:
+            row_index_by_key[key] = len(rows)
+            rows.append(new_row)
+        else:
+            rows[old_idx] = new_row
+        company_window_values.setdefault((company, win), {})[item] = float(value)
+
+    details: Dict[str, int] = {}
+    rule_name_map: Dict[str, str] = {}
+    for rule in SEMI_CALCULATED_RULES:
+        rule_id = str(rule.get("id") or "").strip()
+        rule_name = str(rule.get("name") or "").strip() or rule_id or "未命名规则"
+        if not rule_id:
+            continue
+        details.setdefault(rule_id, 0)
+        rule_name_map[rule_id] = rule_name
+    # 仅在该窗口存在原始数据时应用规则，避免凭空生成窗口。
+    all_company_windows = list(company_window_values.keys())
+
+    for company, win in all_company_windows:
+        for rule in SEMI_CALCULATED_RULES:
+            rule_id = str(rule.get("id") or "").strip()
+            if not rule_id or (enabled_rule_ids is not None and rule_id not in enabled_rule_ids):
+                continue
+            companies = {str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()}
+            if companies and company not in companies:
+                continue
+            target_item = str(rule.get("target_item") or "").strip()
+            target_unit = str(rule.get("target_unit") or "").strip()
+            operation = str(rule.get("operation") or "").strip().lower()
+            sources = [str(x).strip() for x in (rule.get("sources") or []) if str(x).strip()]
+            if not target_item or not target_unit or not operation or not sources:
+                continue
+
+            value: Optional[float] = None
+            if operation == "copy":
+                value = _value_of(company, win, sources[0])
+            elif operation == "sum":
+                require_any = bool(rule.get("require_any_source", False))
+                parts = [_value_of(company, win, src) for src in sources]
+                if require_any and not any(v is not None for v in parts):
+                    continue
+                if (not require_any) and any(v is None for v in parts):
+                    continue
+                value = float(sum(float(v or 0.0) for v in parts))
+            elif operation == "subtract":
+                minuend = _value_of(company, win, sources[0])
+                if minuend is None:
+                    continue
+                remainder = float(minuend)
+                allow_missing_sub = bool(rule.get("allow_missing_subtrahend_as_zero", True))
+                for src in sources[1:]:
+                    sub = _value_of(company, win, src)
+                    if sub is None and not allow_missing_sub:
+                        remainder = None
+                        break
+                    remainder -= float(sub or 0.0)
+                value = remainder
+            if value is None:
+                continue
+            _upsert_value(company, win, target_item, target_unit, float(value))
+            details[rule_id] = int(details.get(rule_id, 0)) + 1
+
+    # 返回给前端时改为名称键，便于阅读
+    named_details: Dict[str, int] = {}
+    for rule_id, count in details.items():
+        rule_name = rule_name_map.get(rule_id, rule_id)
+        named_details[rule_name] = int(named_details.get(rule_name, 0)) + int(count)
+    return named_details
+
+
+def _apply_jinpu_heating_area_adjustment(rows: List[Dict[str, object]]) -> int:
+    """
+    规则：
+    口径=金普，指标=期末供暖收费面积
+    指标值 = 期末供暖收费面积 - 高温水面积
+    """
+    def _to_area_role(item_name: str) -> str:
+        if item_name in ("期末供暖收费面积", "期末供热面积", "期末供暖面积"):
+            return "target"
+        if item_name in ("高温水面积", "高温水供暖面积", "高温水供热面积"):
+            return "sub"
+        return ""
+
+    grouped: Dict[Tuple[str, str, str, str], Dict[str, List[int]]] = {}
+    for idx, row in enumerate(rows):
+        company = str(row.get("company") or "").strip()
+        if "金普" not in company:
+            continue
+        item = str(row.get("item") or "").strip()
+        role = _to_area_role(item)
+        if not role:
+            continue
+        key = (
+            str(row.get("date") or "").strip(),
+            str(row.get("period") or "").strip(),
+            str(row.get("type") or "").strip(),
+            str(row.get("report_month") or "").strip(),
+        )
+        slot = grouped.setdefault(key, {})
+        slot.setdefault(role, []).append(idx)
+
+    adjusted_count = 0
+    for indexes in grouped.values():
+        target_indexes = indexes.get("target") or []
+        sub_indexes = indexes.get("sub") or []
+        if not target_indexes or not sub_indexes:
+            continue
+        sub_num = _coerce_number(rows[sub_indexes[-1]].get("value"))
+        if sub_num is None:
+            continue
+        for target_idx in target_indexes:
+            target_num = _coerce_number(rows[target_idx].get("value"))
+            if target_num is None:
+                continue
+            rows[target_idx]["value"] = round(float(target_num) - float(sub_num), 8)
+            rows[target_idx]["unit"] = "平方米"
+            adjusted_count += 1
+    return adjusted_count
+
+
 def parse_report_period_from_filename(filename: str) -> Tuple[int, int]:
     text = str(filename or "")
     matched = re.search(r"(\d{2})\.(\d{1,2})", text)
@@ -182,16 +596,18 @@ def parse_report_period_from_filename(filename: str) -> Tuple[int, int]:
 
 
 def get_default_constant_rules() -> List[Dict[str, object]]:
+    _refresh_extraction_rules()
     return [dict(item) for item in DEFAULT_CONSTANT_RULES]
 
 
 def normalize_constant_rules(raw_rules: Optional[Sequence[Dict[str, object]]]) -> List[Dict[str, object]]:
+    _refresh_extraction_rules()
     rules: List[Dict[str, object]] = []
     for raw in raw_rules or []:
         if not isinstance(raw, dict):
             continue
         company = str(raw.get("company") or "").strip()
-        item = _normalize_item(raw.get("item"))
+        item, _ = _normalize_item(raw.get("item"), use_rename=True)
         unit = _normalize_unit(raw.get("unit"))
         if not company or not item:
             continue
@@ -251,6 +667,7 @@ def _iter_valid_sheets(workbook, selected_companies: Optional[Sequence[str]] = N
 
 
 def get_company_options(file_bytes: bytes) -> List[str]:
+    _refresh_extraction_rules()
     workbook = load_workbook(filename=BytesIO(file_bytes), data_only=True, read_only=True)
     companies = [name for name in workbook.sheetnames if str(name).strip() and str(name).strip() not in BLOCKED_COMPANIES]
     workbook.close()
@@ -262,11 +679,13 @@ def extract_rows(
     filename: str,
     selected_companies: Optional[Sequence[str]] = None,
     selected_source_columns: Optional[Sequence[str]] = None,
+    selected_rule_ids: Optional[Sequence[str]] = None,
     constants_enabled: bool = False,
     constant_rules: Optional[Sequence[Dict[str, object]]] = None,
     report_year: Optional[int] = None,
     report_month: Optional[int] = None,
 ) -> Tuple[List[Dict[str, object]], Dict[str, object]]:
+    _refresh_extraction_rules()
     runtime_cfg = load_indicator_runtime_config()
     calculated_item_set = set(runtime_cfg.get("calculated_item_set") or set())
     parsed_year, parsed_month = parse_report_period_from_filename(filename)
@@ -280,6 +699,13 @@ def extract_rows(
     workbook = load_workbook(filename=BytesIO(file_bytes), data_only=True, read_only=True)
     rows: List[Dict[str, object]] = []
     per_company_count: Dict[str, int] = {}
+    selected_rules = {str(x).strip() for x in (selected_rule_ids or []) if str(x).strip()}
+    if not selected_rules:
+        selected_rules = {str(rule.get("id") or "").strip() for rule in get_extraction_rule_options() if str(rule.get("id") or "").strip()}
+    use_item_exclude = "item_exclude" in selected_rules
+    use_item_rename = "item_rename" in selected_rules
+    rename_hit_count = 0
+    exclude_hit_count = 0
 
     source_columns = tuple(DEFAULT_SOURCE_COLUMNS)
     selected_col_set = {str(x).strip() for x in (selected_source_columns or []) if str(x).strip()}
@@ -293,12 +719,15 @@ def extract_rows(
             for row_idx in range(header_row + 1, sheet.max_row + 1):
                 item_raw = sheet.cell(row=row_idx, column=col_map["项目"]).value
                 unit_raw = sheet.cell(row=row_idx, column=col_map["计量单位"]).value
-                item = _normalize_item(item_raw)
+                item, renamed = _normalize_item(item_raw, use_rename=use_item_rename)
                 unit = _normalize_unit(unit_raw)
                 if not item:
                     continue
-                if item in ITEM_EXCLUDE_SET:
+                if use_item_exclude and item in ITEM_EXCLUDE_SET:
+                    exclude_hit_count += 1
                     continue
+                if renamed:
+                    rename_hit_count += 1
                 if item in calculated_item_set:
                     continue
                 for src_col in source_columns:
@@ -326,7 +755,18 @@ def extract_rows(
         "report_month": report_month,
         "total_rows": len(rows),
         "company_rows": per_company_count,
+        "item_exclude_hits": exclude_hit_count,
+        "item_rename_hits": rename_hit_count,
+        "selected_rule_ids": sorted(selected_rules),
     }
+    semi_details = _apply_semicalculated_completion_rules(rows, enabled_rule_ids=selected_rules)
+    stats["semi_calculated_details"] = semi_details
+    stats["semi_calculated_completed"] = int(sum(semi_details.values()))
+    stats["jinpu_heating_area_adjusted"] = (
+        _apply_jinpu_heating_area_adjustment(rows)
+        if (ENABLE_JINPU_HEATING_AREA_ADJUSTMENT and "jinpu_area_adjust" in selected_rules)
+        else 0
+    )
 
     if constants_enabled:
         normalized_rules = normalize_constant_rules(constant_rules)

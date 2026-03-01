@@ -4088,3 +4088,248 @@
      - 配置加载后 `basic_items` 的单位字段已全部可读（`unit_count=67`）。  
 - **Result:**  
   - 基础指标与计算指标都可在配置文件中统一维护计量单位。  
+
+## 2026-03-01（指标选择区隐藏计量单位，仅在结果/分析使用）
+
+- **User Request:** 指标选择区域不要显示每个指标的计量单位；单位仅用于查询结果表格与简要分析文本。  
+- **Agent Action:**  
+  1. 前端页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 移除“指标（可多选）”中基本分组与计算分组项后的单位标签渲染；  
+     - 删除选择区单位映射计算 `itemUnitMap`；  
+     - 删除对应样式 `.unit-tag`。  
+- **Result:**  
+  - 指标选区恢复为纯指标名展示；  
+  - 计量单位仍由配置文件维护，并继续在查询结果/简要分析等结果呈现链路中使用。  
+
+## 2026-03-01（导入映射新增：锅炉耗柴油量 -> 耗油量）
+
+- **User Request:** 在月报导入工作台的指标名称转换规则中新增 `"锅炉耗柴油量" -> "耗油量"`。  
+- **Agent Action:**  
+  1. 后端导入提取映射 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 在 `ITEM_RENAME_MAP` 新增条目：`"锅炉耗柴油量": "耗油量"`。  
+- **Result:**  
+  - 导入时若识别到源指标名“锅炉耗柴油量”，将统一归并为“耗油量”入库/后续计算。  
+
+## 2026-03-01（金普期末供暖收费面积扣减规则补齐）
+
+- **User Feedback:** 月报导入提取时，规则“金普 期末供暖收费面积 = 期末供暖收费面积 - 高温水面积”疑似未执行。  
+- **Agent Action:**  
+  1. 检查导入提取服务 `backend/projects/monthly_data_show/services/extractor.py`，确认该规则此前未落地；  
+  2. 新增 `_apply_jinpu_heating_area_adjustment(rows)`：  
+     - 按 `company=金普` + `date/period/type/report_month` 同窗口匹配两项指标；  
+     - 命中时执行扣减：`期末供暖收费面积 -= 高温水面积`；  
+     - 将结果单位统一为 `平方米`；  
+  3. 在 `extract_rows` 中接入该规则，并新增统计字段 `jinpu_heating_area_adjusted`。  
+- **Result:**  
+  - 月报导入提取阶段将自动应用该业务规则，避免后续查询/分析使用未扣减值。  
+
+## 2026-03-01（金普面积扣减规则鲁棒性增强）
+
+- **User Feedback:** 仍观察到导出 CSV 中“金普-期末供暖收费面积”是原值，未扣减“高温水面积”。  
+- **Root Cause（推断）:**  
+  - 旧规则命中条件过于严格（仅 `company == 金普` 且仅匹配固定两项名称），实际月报可能出现同义写法。  
+- **Agent Action:**  
+  1. `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 公司匹配从精确值改为包含匹配：`"金普" in company`；  
+     - 指标名称增加同义兼容：  
+       - 目标项：`期末供暖收费面积/期末供热面积/期末供暖面积`；  
+       - 扣减项：`高温水面积/高温水供暖面积/高温水供热面积`；  
+     - 支持同窗口下多条目标项逐条扣减。  
+- **Result:**  
+  - 金普面积扣减规则命中率提高，导出 CSV 更稳定反映“原始期末供暖收费面积 - 高温水面积”的结果。  
+
+## 2026-03-01（月报查询三项指标默认4位小数）
+
+- **User Request:** 在月报数据查询页面中，将 `供暖热耗率`、`供暖水耗率`、`供暖电耗率` 默认显示为 4 位小数。  
+- **Agent Action:**  
+  1. 前端页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 新增按指标控制小数位规则：  
+       - `FOUR_DECIMAL_ITEMS = {供暖热耗率, 供暖水耗率, 供暖电耗率}`；  
+       - 其余指标保持 2 位小数。  
+     - `formatValue/formatValueWithUnit` 增加 `item` 入参并按指标选择小数位。  
+     - 更新查询结果表、同比/环比/计划比列表、简要分析与导出数据调用，统一传入 `item`。  
+- **Result:**  
+  - 三项指定指标在查询页相关展示链路默认 4 位小数；其他指标展示规则不变。  
+
+## 2026-03-01（月报查询三项指标差值也改为4位小数）
+
+- **User Request:** 对上述三项指标的同比/环比/计划比“差值”也统一 4 位小数。  
+- **Agent Action:**  
+  1. 前端页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - `formatSignedNumber` 增加 `item` 参数，并按指标规则决定小数位；  
+     - 简要分析文本中的 `yoyDiff/momDiff/planDiff` 改为传入 `row.item`；  
+     - 导出对比明细中的三类差值格式化改为传入 `x.item`。  
+- **Result:**  
+  - `供暖热耗率/供暖水耗率/供暖电耗率` 的同比差值、环比差值、计划差值统一为 4 位小数；其余指标保持原规则。  
+
+## 2026-03-01（补齐“四、补充指标”半计算规则写入）
+
+- **User Request:** 将 `2.28 月报数据库化配置文件` 中“四、因部分口径数据不完备，补充以下指标”未落地部分补齐为实际提取规则。  
+- **Agent Action:**  
+  1. 后端提取服务 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 新增 `_apply_semicalculated_completion_rules(rows)`，在提取阶段按口径+同窗口（date/period/type/report_month）重写/补齐半计算指标；  
+     - 覆盖落地规则：  
+       - 3) `煤折标煤量`：金普/庄河 = `耗标煤总量`；  
+       - 4) `供热耗标煤量`：北海水炉/金普/庄河 = `耗标煤总量`；  
+       - 6) `耗电量`：  
+         - 北海/香海 = `综合厂用电量 + 外购电量`；  
+         - 供热公司/金普/庄河/研究院/主城区电锅炉 = `外购电量`；  
+       - 7) `耗水量`：北海/北海水炉/香海 = `电厂耗水量`；  
+       - 8) `热网耗水量`：供热公司/金普/庄河/研究院/主城区电锅炉 = `耗水量`；  
+       - 9) `热网耗电量`：供热公司/金普/庄河/研究院/主城区电锅炉 = `外购电量`；  
+       - 10) `供暖耗热量`：  
+         - 供热公司 = `各热力站耗热量`；  
+         - 金州/北方/金普 = `供热量 - 高温水销售量`；  
+         - 庄河/研究院/主城区电锅炉 = `供热量`。  
+     - 在 `extract_rows` 中接入执行，并新增统计字段 `semi_calculated_completed`。  
+  2. 已保留原有规则：  
+     - 金普 `期末供暖收费面积 = 期末供暖收费面积 - 高温水面积`（规则5）。  
+- **Result:**  
+  - 导出 CSV 时将直接包含补齐后的半计算指标结果，且按指定口径覆盖重写，未指定口径沿用原值。  
+
+## 2026-03-01（导入页展示提取规则命中统计）
+
+- **User Request:** 在导入页提取后展示规则命中情况。  
+- **Agent Action:**  
+  1. 后端 `extract-csv` 接口 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 读取 `extract_rows` 返回统计并通过响应头下发：  
+       - `X-Monthly-Semi-Calculated-Completed`  
+       - `X-Monthly-Jinpu-Heating-Area-Adjusted`  
+       - `X-Monthly-Extracted-Total-Rows`  
+     - 增加 `Access-Control-Expose-Headers`，确保前端可读。  
+  2. 前端 API 封装 `frontend/src/projects/daily_report_25_26/services/api.js`：  
+     - 解析上述响应头并返回 `stats` 对象。  
+  3. 导入页 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：  
+     - 提取成功提示追加显示：补齐规则命中数、金普面积扣减命中数、提取总行数。  
+- **Result:**  
+  - 你现在每次提取后可直接看到规则实际命中统计，无需再人工推断。  
+
+## 2026-03-01（规则命中详情弹窗）
+
+- **User Request:** 增加按钮，点击后弹窗列出每一项规则处理情况细节。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 半计算补齐规则函数改为返回逐项命中明细（如“煤折标煤量补齐”“供暖耗热量补齐”等）。  
+  2. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `extract-csv` 响应头新增 `X-Monthly-Rule-Details`（URL 编码 JSON），并加入 `Access-Control-Expose-Headers`。  
+  3. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：  
+     - 读取并解析 `X-Monthly-Rule-Details` 为 `stats.ruleDetails`。  
+  4. 前端页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：  
+     - 提取成功后显示“查看规则命中详情”按钮；  
+     - 点击弹出详情框，逐项展示命中统计（半计算各子项、金普面积扣减、常量注入、总行数）。  
+- **Result:**  
+  - 导入工作台支持一键查看规则执行明细，定位规则是否生效更直接。  
+
+## 2026-03-01（入库结果新增“新增/更新”明细）
+
+- **User Feedback:** 第四步点击入库后，体感像未写入数据库。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `import-csv` 的 UPSERT SQL 增加 `RETURNING (xmax = 0) AS inserted`；  
+     - 统计并返回 `inserted_rows`、`updated_rows`。  
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`：  
+     - 入库成功提示改为显示：总处理/新增/更新/空值入库。  
+- **Result:**  
+  - 入库后可直接判断是“新增写入”还是“同主键更新覆盖”，避免误判“没入库”。  
+
+## 2026-03-01（修复 import-csv 返回结果集关闭错误）
+
+- **User Feedback:** 入库报错：`CSV 入库失败：This result object does not return rows. It has been closed automatically.`  
+- **Root Cause:**  
+  - `executemany + RETURNING` 在当前驱动场景下，批量结果集不可直接 `fetchall`。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 将 `import-csv` 的 UPSERT 统计改为逐行执行并读取 `RETURNING` 标志，避免批量结果集关闭问题。  
+- **Result:**  
+  - 解决入库报错；  
+  - 保留 `inserted_rows/updated_rows` 统计能力。  
+
+## 2026-03-01（临时作废金普面积扣减规则）
+
+- **User Request:** 暂时作废规则：`金普 期末供暖收费面积 = 期末供暖收费面积 - 高温水面积`。  
+- **Agent Action:**  
+  1. 后端提取服务 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 新增开关 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = False`；  
+     - 在 `extract_rows` 中仅当开关开启时才执行该规则，当前默认关闭。  
+- **Result:**  
+  - 提取 CSV 时不再执行金普面积扣减；  
+  - 相关统计 `jinpu_heating_area_adjusted` 将保持为 0。  
+
+## 2026-03-01（刷新供暖耗热量规则：金普=供热量）
+
+- **User Request:** 将“10.供暖耗热量”中的金普规则调整为：`口径=金普，指标值=供热量，计量单位=吉焦`。  
+- **Agent Action:**  
+  1. 后端提取服务 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - 半计算补齐逻辑中，`供暖耗热量` 规则改为：  
+       - `金州/北方 = 供热量 - 高温水销售量`（保持不变）；  
+       - `金普/庄河/研究院/主城区电锅炉 = 供热量`。  
+- **Result:**  
+  - 金普口径下“供暖耗热量”提取值已改为直接等于“供热量”。  
+
+## 2026-03-01（提取规则配置化：读取 monthly_data_pull 配置文件）
+
+- **User Request:** 在 `backend_data/projects/monthly_data_pull` 生成配置文件，并让页面执行时按配置规则处理提取。  
+- **Agent Action:**  
+  1. 新增配置文件：  
+     - `backend_data/projects/monthly_data_pull/mapping_rules/monthly_data_show_extraction_rules.json`  
+     - 含规则项：剔除指标、指标重命名、默认源字段、常量注入、半计算补齐规则、金普面积扣减开关。  
+  2. 后端提取服务配置驱动：`backend/projects/monthly_data_show/services/extractor.py`  
+     - 新增配置加载与刷新机制（优先读取 `monthly_data_pull/mapping_rules/...`，失败回退内置默认）；  
+     - `get_company_options / get_default_constant_rules / normalize_constant_rules / extract_rows` 全链路按配置刷新后执行；  
+     - 半计算补齐规则改为通用规则引擎（`copy/sum/subtract`），由 JSON `semi_calculated_rules` 驱动。  
+- **Result:**  
+  - 你后续可直接改 JSON 文件来调整提取规则，代码无需再硬编码修改。  
+
+## 2026-03-01（提取规则配置文件路径更正到 monthly_data_show）
+
+- **User Feedback:** 配置文件放错目录，应放在 `backend_data/projects/monthly_data_show`。  
+- **Agent Action:**  
+  1. 文件迁移：  
+     - `backend_data/projects/monthly_data_pull/mapping_rules/monthly_data_show_extraction_rules.json`  
+       -> `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`  
+  2. 后端读取路径修正：`backend/projects/monthly_data_show/services/extractor.py`  
+     - 容器与本地候选路径统一改为 `monthly_data_show` 目录。  
+- **Result:**  
+  - 提取规则配置已在正确目录生效，后续维护按 `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json` 进行。  
+
+## 2026-03-01（导入页支持手动勾选执行规则，并回显实际命中）
+
+- **User Request:** 在月报导入工作页可手动勾选执行哪些规则（默认全选），执行后显示哪些规则被实际执行。  
+- **Agent Action:**  
+  1. 后端规则清单下发：  
+     - `backend/projects/monthly_data_show/services/extractor.py` 新增 `get_extraction_rule_options()`；  
+     - `inspect` 接口返回 `extraction_rules`。  
+  2. 提取接口支持规则子集执行：  
+     - `backend/projects/monthly_data_show/api/workspace.py` 的 `extract-csv` 新增表单参数 `extraction_rule_ids`；  
+     - 提取服务 `extract_rows` 新增 `selected_rule_ids`，支持按选择子集执行：指标剔除、指标重命名、半计算各规则、金普面积扣减。  
+  3. 前端勾选与展示：  
+     - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 新增“规则执行选择”面板，默认全选；  
+     - 提取按钮在未选规则时禁用；  
+     - “规则命中详情”弹窗新增显示：剔除命中、重命名命中、半计算各项命中、金普面积扣减、常量注入、总行数、本次选中规则。  
+  4. API 透传：  
+     - `frontend/src/projects/daily_report_25_26/services/api.js` 在 `extractMonthlyDataShowCsv` 中附带 `extraction_rule_ids`。  
+- **Result:**  
+  - 规则执行由“固定全量”改为“可勾选子集执行（默认全选）”；  
+  - 提取后可看到实际命中细节并核对本次执行范围。  
+
+## 2026-03-01（规则执行选择改为弹窗并展示详细规则）
+
+- **User Request:** “规则执行选择”模块过于简略，改为弹窗方式，列出具体规则。  
+- **Agent Action:**  
+  1. 后端规则描述增强：`backend/projects/monthly_data_show/services/extractor.py`  
+     - `get_extraction_rule_options()` 为规则生成更具体的 `description`（口径、指标表达式、单位）。  
+  2. 前端交互改造：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`  
+     - 将内联规则复选改为“打开规则列表”弹窗；  
+     - 弹窗内支持全选/全不选/完成，逐条展示规则名称与说明并勾选；  
+     - 主面板显示“已选数量 + 当前规则摘要”。  
+- **Result:**  
+  - 规则选择更清晰，能够在同一界面完整查看每条规则再决定是否执行。  
+
+## 2026-03-01（金普面积扣减规则从弹窗清单隐藏）
+
+- **User Feedback:** 金普面积扣减规则已取消，但弹窗仍显示该规则。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/services/extractor.py`：  
+     - `get_extraction_rule_options()` 调整为仅当 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT=True` 时才下发该规则。  
+- **Result:**  
+  - 当前开关为关闭状态时，规则弹窗不再显示“金普面积扣减”。  

@@ -150,6 +150,18 @@
           </div>
           <p v-if="!fields.length" class="hint">暂无可选字段</p>
         </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h4>规则执行选择</h4>
+            <div class="actions">
+              <button class="btn small" type="button" :disabled="!extractionRules.length" @click="showRulePickerDialog = true">打开规则列表</button>
+            </div>
+          </div>
+          <p class="hint" v-if="extractionRules.length">已选择 {{ selectedExtractionRuleIds.length }} / {{ extractionRules.length }} 项规则</p>
+          <p class="hint" v-if="selectedRuleSummaryText">当前规则：{{ selectedRuleSummaryText }}</p>
+          <p class="hint" v-if="!extractionRules.length">暂无可选规则</p>
+        </div>
       </section>
 
       <section class="card">
@@ -158,7 +170,7 @@
           <button
             class="btn primary"
             type="button"
-            :disabled="extracting || !selectedFile || !selectedCompanies.length || !selectedFields.length || !selectedSourceColumns.length"
+            :disabled="extracting || !selectedFile || !selectedCompanies.length || !selectedFields.length || !selectedSourceColumns.length || !selectedExtractionRuleIds.length"
             @click="extractCsv"
           >
             {{ extracting ? '提取中...' : '提取 CSV' }}
@@ -173,6 +185,9 @@
           </button>
         </div>
         <p class="hint" v-if="extractMessage">{{ extractMessage }}</p>
+        <div class="actions" v-if="extractRuleDetailLines.length">
+          <button class="btn small" type="button" @click="showRuleDetailDialog = true">查看规则命中详情</button>
+        </div>
         <p class="hint">默认已忽略口径：恒流、天然气炉、中水。</p>
       </section>
 
@@ -194,6 +209,39 @@
 
       <p class="error" v-if="errorMessage">{{ errorMessage }}</p>
     </main>
+
+    <div class="dialog-mask" v-if="showRuleDetailDialog" @click.self="showRuleDetailDialog = false">
+      <div class="dialog-card">
+        <div class="dialog-head">
+          <h4>规则命中详情</h4>
+          <button class="btn small" type="button" @click="showRuleDetailDialog = false">关闭</button>
+        </div>
+        <div class="dialog-body">
+          <div class="rule-line" v-for="(line, idx) in extractRuleDetailLines" :key="`rule-${idx}`">{{ line }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-mask" v-if="showRulePickerDialog" @click.self="showRulePickerDialog = false">
+      <div class="dialog-card">
+        <div class="dialog-head">
+          <h4>规则执行选择</h4>
+          <div class="actions">
+            <button class="btn small" type="button" :disabled="!extractionRules.length" @click="toggleAllExtractionRules(true)">全选</button>
+            <button class="btn small" type="button" :disabled="!extractionRules.length" @click="toggleAllExtractionRules(false)">全不选</button>
+            <button class="btn small" type="button" @click="showRulePickerDialog = false">完成</button>
+          </div>
+        </div>
+        <div class="dialog-body">
+          <label class="rule-row" v-for="rule in extractionRules" :key="`picker-${rule.id}`">
+            <input type="checkbox" :value="rule.id" v-model="selectedExtractionRuleIds" />
+            <div class="rule-text">
+              <div class="rule-name">{{ rule.name }}</div>
+              <div class="rule-desc" v-if="rule.description">{{ rule.description }}</div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -222,6 +270,9 @@ const extractMessage = ref('')
 const importMessage = ref('')
 const selectedCsvFile = ref(null)
 const lastExtractedCsvFile = ref(null)
+const showRuleDetailDialog = ref(false)
+const showRulePickerDialog = ref(false)
+const extractRuleDetails = ref(null)
 
 const companies = ref([])
 const fields = ref([])
@@ -229,6 +280,8 @@ const sourceColumns = ref([])
 const selectedCompanies = ref([])
 const selectedFields = ref([])
 const selectedSourceColumns = ref([])
+const extractionRules = ref([])
+const selectedExtractionRuleIds = ref([])
 const constantsEnabled = ref(true)
 const constantRules = ref([])
 const reportYearInput = ref(null)
@@ -254,11 +307,16 @@ function onFileChange(event) {
   selectedSourceColumns.value = []
   constantsEnabled.value = true
   constantRules.value = []
+  extractionRules.value = []
+  selectedExtractionRuleIds.value = []
   reportYearInput.value = null
   reportMonthInput.value = null
   lastExtractedCsvFile.value = null
   selectedCsvFile.value = null
   extractMessage.value = ''
+  extractRuleDetails.value = null
+  showRuleDetailDialog.value = false
+  showRulePickerDialog.value = false
   importMessage.value = ''
 }
 
@@ -279,6 +337,21 @@ function toggleAllFields(checked) {
 function toggleAllSourceColumns(checked) {
   selectedSourceColumns.value = checked ? [...sourceColumns.value] : []
 }
+
+function toggleAllExtractionRules(checked) {
+  selectedExtractionRuleIds.value = checked
+    ? extractionRules.value.map((x) => String(x?.id || '')).filter(Boolean)
+    : []
+}
+
+const selectedRuleSummaryText = computed(() => {
+  if (!selectedExtractionRuleIds.value.length) return ''
+  const picked = new Set(selectedExtractionRuleIds.value.map((x) => String(x)))
+  return extractionRules.value
+    .filter((rule) => picked.has(rule.id))
+    .map((rule) => rule.name)
+    .join('、')
+})
 
 async function inspectFile() {
   if (!selectedFile.value || inspecting.value) return
@@ -311,6 +384,14 @@ async function inspectFile() {
         source_columns: [...defaultSourceCols],
       }))
       : []
+    extractionRules.value = Array.isArray(payload?.extraction_rules)
+      ? payload.extraction_rules.map((rule) => ({
+        id: String(rule?.id || ''),
+        name: String(rule?.name || ''),
+        description: String(rule?.description || ''),
+      })).filter((rule) => rule.id && rule.name)
+      : []
+    selectedExtractionRuleIds.value = extractionRules.value.map((rule) => rule.id)
     reportYearInput.value = Number.isInteger(payload?.inferred_report_year)
       ? payload.inferred_report_year
       : null
@@ -330,6 +411,9 @@ async function extractCsv() {
   extracting.value = true
   errorMessage.value = ''
   extractMessage.value = ''
+  extractRuleDetails.value = null
+  showRuleDetailDialog.value = false
+  showRulePickerDialog.value = false
   try {
     const reportYear = Number(reportYearInput.value)
     const reportMonth = Number(reportMonthInput.value)
@@ -345,12 +429,13 @@ async function extractCsv() {
       ? constantRules.value.flatMap((rule) => (Array.isArray(rule?.source_columns) ? rule.source_columns : []))
       : []
     const effectiveSourceColumns = Array.from(new Set([...selectedSourceColumns.value, ...constantSourceColumns]))
-    const { blob, filename } = await extractMonthlyDataShowCsv(
+    const { blob, filename, stats } = await extractMonthlyDataShowCsv(
       projectKey.value,
       selectedFile.value,
       selectedCompanies.value,
       selectedFields.value,
       effectiveSourceColumns,
+      selectedExtractionRuleIds.value,
       reportYear,
       reportMonth,
       constantsEnabled.value,
@@ -359,7 +444,11 @@ async function extractCsv() {
     const cachedFile = new File([blob], filename || 'monthly_data_show_extract.csv', { type: 'text/csv' })
     lastExtractedCsvFile.value = cachedFile
     selectedCsvFile.value = cachedFile
-    extractMessage.value = `提取完成：${cachedFile.name}（可下载或一键入库）`
+    const semiCount = Number(stats?.semiCalculatedCompleted || 0)
+    const jinpuCount = Number(stats?.jinpuHeatingAreaAdjusted || 0)
+    const totalRows = Number(stats?.extractedTotalRows || 0)
+    extractRuleDetails.value = stats?.ruleDetails || null
+    extractMessage.value = `提取完成：${cachedFile.name}（可下载或一键入库）｜补齐规则命中 ${semiCount} 条｜金普面积扣减 ${jinpuCount} 条｜提取总行数 ${totalRows} 条`
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '提取 CSV 失败'
@@ -367,6 +456,32 @@ async function extractCsv() {
     extracting.value = false
   }
 }
+
+const extractRuleDetailLines = computed(() => {
+  const details = extractRuleDetails.value
+  if (!details || typeof details !== 'object') return []
+  const lines = []
+  const semiDetailMap = details.semi_calculated_details && typeof details.semi_calculated_details === 'object'
+    ? details.semi_calculated_details
+    : {}
+  const selectedRuleSet = new Set(Array.isArray(details.selected_rule_ids) ? details.selected_rule_ids.map((x) => String(x || '')) : [])
+  lines.push(`半计算补齐总命中：${Number(details.semi_calculated_completed || 0)} 条`)
+  lines.push(`指标剔除命中：${Number(details.item_exclude_hits || 0)} 条`)
+  lines.push(`指标重命名命中：${Number(details.item_rename_hits || 0)} 条`)
+  for (const [name, count] of Object.entries(semiDetailMap)) {
+    lines.push(`${name}：${Number(count || 0)} 条`)
+  }
+  lines.push(`金普面积扣减命中：${Number(details.jinpu_heating_area_adjusted || 0)} 条`)
+  lines.push(`常量注入命中：${Number(details.constants_injected || 0)} 条`)
+  lines.push(`提取总行数：${Number(details.extracted_total_rows || 0)} 条`)
+  if (extractionRules.value.length) {
+    const selectedNames = extractionRules.value
+      .filter((rule) => selectedRuleSet.has(rule.id))
+      .map((rule) => rule.name)
+    lines.push(`本次选中规则：${selectedNames.join('、') || '无'}`)
+  }
+  return lines
+})
 
 function downloadExtractedCsv() {
   if (!lastExtractedCsvFile.value) return
@@ -389,7 +504,9 @@ async function importCsvToDatabase() {
     const result = await importMonthlyDataShowCsv(projectKey.value, selectedCsvFile.value)
     const importedRows = Number(result?.imported_rows || 0)
     const nullValueRows = Number(result?.null_value_rows || 0)
-    importMessage.value = `入库成功：共处理 ${importedRows} 条记录（空值入库 ${nullValueRows} 条）`
+    const insertedRows = Number(result?.inserted_rows || 0)
+    const updatedRows = Number(result?.updated_rows || 0)
+    importMessage.value = `入库成功：共处理 ${importedRows} 条（新增 ${insertedRows} 条，更新 ${updatedRows} 条，空值入库 ${nullValueRows} 条）`
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : 'CSV 入库失败'
@@ -602,5 +719,77 @@ watch(
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1100;
+}
+
+.dialog-card {
+  width: min(720px, 96vw);
+  max-height: 78vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dialog-head h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rule-line {
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.rule-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rule-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.rule-desc {
+  font-size: 12px;
+  color: #475569;
 }
 </style>

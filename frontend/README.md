@@ -3557,3 +3557,146 @@ docker compose up -d --build
 - 联动说明：
   - 后端改为优先读取容器挂载路径 `/app/data/...` 的配置文件；
   - 前端继续通过 `query-options.indicator_config` 渲染，分组名称与顺序将与最新配置一致。
+
+## 结构同步（2026-03-01 指标选区隐藏计量单位）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 移除指标选择区域（基本指标分组/计算指标分组）中每项后的单位标签展示；
+  - 清理选区专用单位映射计算与样式定义。
+- 效果：
+  - 选区更简洁，仅显示指标名称与选择顺序；
+  - 计量单位继续用于查询结果表格与简要分析内容，不影响结果口径。
+
+## 结构同步（2026-03-01 导入映射新增联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowImportWorkspace.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端导入规则新增 `锅炉耗柴油量 -> 耗油量` 后，前端上传同名指标时将自动按新规则归并处理。
+
+## 结构同步（2026-03-01 金普面积扣减规则联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowImportWorkspace.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端导入提取新增金普口径面积扣减规则后，前端工作台预览/导入同一文件时将得到扣减后的“期末供暖收费面积”结果。
+
+## 结构同步（2026-03-01 金普面积扣减规则命中增强联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowImportWorkspace.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端已增强金普口径与指标同义词匹配，前端导入工作台在提取/导出 CSV 时会直接体现增强后的扣减结果。
+
+## 结构同步（2026-03-01 查询页三项指标4位小数）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增按指标定制小数位规则：
+    - `供暖热耗率/供暖水耗率/供暖电耗率` 默认 4 位小数；
+    - 其他指标保持 2 位小数。
+  - `formatValue`、`formatValueWithUnit` 新增 `item` 参数；
+  - 查询结果表、对比列表、简要分析与导出数据格式化调用统一传入 `item`。
+- 效果：
+  - 指定三项指标在查询页面显示更精细，且前后展示链路口径一致。
+
+## 结构同步（2026-03-01 查询页三项指标差值4位小数）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `formatSignedNumber` 增加按 `item` 控制小数位；
+  - 简要分析与导出对比明细中的 `同比/环比/计划` 差值格式化统一传入指标名。
+- 效果：
+  - `供暖热耗率/供暖水耗率/供暖电耗率` 的三类差值也按 4 位小数展示。
+
+## 结构同步（2026-03-01 半计算补齐规则联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端 `extract-csv` 已补齐半计算指标规则，前端导入工作台在同样操作下会直接获取补齐后的 CSV 数据。
+
+## 结构同步（2026-03-01 导入页显示提取命中统计）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 提取完成提示新增统计信息：
+    - 半计算补齐命中条数
+    - 金普面积扣减命中条数
+    - 提取总行数
+- API 封装：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 从 `extract-csv` 响应头读取统计并返回 `stats`。
+- 效果：
+  - 导入页可直观看到规则是否实际生效与命中规模。
+
+## 结构同步（2026-03-01 规则命中详情弹窗）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 新增“查看规则命中详情”按钮（提取成功后显示）；
+  - 新增弹窗展示逐项统计明细（半计算子规则、金普面积扣减、常量注入、总行数）。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 读取 `X-Monthly-Rule-Details` 并解析为 `stats.ruleDetails`。
+- 效果：
+  - 可直接核对“每一项处理”的命中情况细节，无需手工排查。
+
+## 结构同步（2026-03-01 入库成功提示显示新增/更新）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 入库成功提示新增显示：总处理条数、新增条数、更新条数、空值入库条数。
+- 联动说明：
+  - 后端 `import-csv` 已返回 `inserted_rows/updated_rows`，用于判断本次是新增还是覆盖更新。
+
+## 结构同步（2026-03-01 import-csv 结果集异常修复联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端已修复批量 RETURNING 兼容问题，第四步入库报错已消除，前端可继续展示新增/更新统计。
+
+## 结构同步（2026-03-01 金普面积扣减规则临时关闭联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端已临时关闭“金普期末供暖收费面积扣减”规则，导入页规则统计中的该项将不再增长。
+
+## 结构同步（2026-03-01 供暖耗热量规则调整联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端已将金普口径“供暖耗热量”改为直接取“供热量”；导入工作台提取结果会直接体现该规则。
+
+## 结构同步（2026-03-01 提取规则配置化联动）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端提取规则已改为读取 `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`；
+  - 导入工作台提取/入库行为将随该配置文件调整而变化。
+
+## 结构同步（2026-03-01 导入页规则勾选执行）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 新增“规则执行选择”面板，支持全选/全不选；
+  - 默认勾选全部规则；
+  - 提取时将勾选规则 ID 传给后端；
+  - 详情弹窗新增“本次选中规则”及命中明细展示。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `extractMonthlyDataShowCsv` 新增参数 `extractionRuleIds` 并上传 `extraction_rule_ids`。
+- 效果：
+  - 用户可手动控制本次提取执行哪些规则，并在结果中看到实际命中反馈。
+
+## 结构同步（2026-03-01 规则选择改为弹窗）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - “规则执行选择”改为弹窗交互：
+    - 主面板仅显示已选数量与摘要；
+    - 点击“打开规则列表”进入弹窗勾选；
+    - 弹窗中逐条显示规则名称与详细说明，并支持全选/全不选。
+- 效果：
+  - 规则信息可读性提升，避免主页面拥挤且便于核对后再执行。
+
+## 结构同步（2026-03-01 已取消规则不在弹窗展示）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 本轮前端代码无改动。
+- 联动说明：
+  - 后端已调整规则清单下发逻辑，已禁用的“金普面积扣减”规则不会在弹窗中出现。

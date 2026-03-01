@@ -10,6 +10,7 @@ import json
 import tempfile
 import calendar
 import math
+from urllib.parse import quote
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
@@ -30,6 +31,7 @@ from backend.projects.monthly_data_show.services.extractor import (
     extract_rows,
     filter_fields,
     get_default_constant_rules,
+    get_extraction_rule_options,
     get_company_options,
     normalize_constant_rules,
     parse_report_period_from_filename,
@@ -62,12 +64,15 @@ class InspectResponse(BaseModel):
     inferred_report_month_date: str
     constants_enabled_default: bool
     constant_rules: List[dict]
+    extraction_rules: List[dict]
 
 class ImportCsvResponse(BaseModel):
     ok: bool
     project_key: str
     imported_rows: int
     null_value_rows: int
+    inserted_rows: int = 0
+    updated_rows: int = 0
 
 
 NULL_VALUE_TOKENS = {"", "none", "null", "nan", "--", "无", "空", "#div/0!"}
@@ -1170,6 +1175,7 @@ async def inspect_monthly_data_show_file(file: UploadFile = File(...)):
         inferred_report_month_date=f"{inferred_year}-{inferred_month:02d}-01",
         constants_enabled_default=True,
         constant_rules=get_default_constant_rules(),
+        extraction_rules=get_extraction_rule_options(),
     )
 
 
@@ -1179,6 +1185,7 @@ async def extract_monthly_data_show_csv(
     companies: List[str] = Form(default=[]),
     fields: List[str] = Form(default=[]),
     source_columns: List[str] = Form(default=[]),
+    extraction_rule_ids: List[str] = Form(default=[]),
     report_year: Optional[int] = Form(default=None),
     report_month: Optional[int] = Form(default=None),
     constants_enabled: bool = Form(default=False),
@@ -1203,11 +1210,12 @@ async def extract_monthly_data_show_csv(
         raise HTTPException(status_code=422, detail="report_month 必须在 1-12 之间")
 
     try:
-        extracted_rows, _stats = extract_rows(
+        extracted_rows, stats = extract_rows(
             file_bytes=content,
             filename=file.filename,
             selected_companies=companies or None,
             selected_source_columns=source_columns or None,
+            selected_rule_ids=extraction_rule_ids or None,
             constants_enabled=bool(constants_enabled),
             constant_rules=normalized_rules,
             report_year=report_year,
@@ -1229,10 +1237,37 @@ async def extract_monthly_data_show_csv(
         csv_path = tmp.name
 
     download_name = f"monthly_data_show_extract_{timestamp}.csv"
+    semi_count = int((stats or {}).get("semi_calculated_completed") or 0)
+    jinpu_count = int((stats or {}).get("jinpu_heating_area_adjusted") or 0)
+    total_rows = int((stats or {}).get("total_rows") or len(extracted_rows))
+    rule_details = {
+        "semi_calculated_details": (stats or {}).get("semi_calculated_details") or {},
+        "semi_calculated_completed": semi_count,
+        "jinpu_heating_area_adjusted": jinpu_count,
+        "item_exclude_hits": int((stats or {}).get("item_exclude_hits") or 0),
+        "item_rename_hits": int((stats or {}).get("item_rename_hits") or 0),
+        "selected_rule_ids": list((stats or {}).get("selected_rule_ids") or []),
+        "constants_injected": int((stats or {}).get("constants_injected") or 0),
+        "extracted_total_rows": total_rows,
+    }
+    encoded_rule_details = quote(json.dumps(rule_details, ensure_ascii=False, separators=(",", ":")))
     return FileResponse(
         path=csv_path,
         media_type="text/csv; charset=utf-8",
         filename=download_name,
+        headers={
+            "X-Monthly-Semi-Calculated-Completed": str(semi_count),
+            "X-Monthly-Jinpu-Heating-Area-Adjusted": str(jinpu_count),
+            "X-Monthly-Extracted-Total-Rows": str(total_rows),
+            "X-Monthly-Rule-Details": encoded_rule_details,
+            "Access-Control-Expose-Headers": (
+                "Content-Disposition, "
+                "X-Monthly-Semi-Calculated-Completed, "
+                "X-Monthly-Jinpu-Heating-Area-Adjusted, "
+                "X-Monthly-Extracted-Total-Rows, "
+                "X-Monthly-Rule-Details"
+            ),
+        },
         background=BackgroundTask(_cleanup_file, csv_path),
     )
 
@@ -1265,11 +1300,21 @@ async def import_monthly_data_show_csv(file: UploadFile = File(...)):
             value = EXCLUDED.value,
             report_month = EXCLUDED.report_month,
             operation_time = CURRENT_TIMESTAMP
+        RETURNING (xmax = 0) AS inserted
         """
     )
+    inserted_rows = 0
+    updated_rows = 0
     try:
         with SessionLocal() as session:
-            session.execute(upsert_sql, rows)
+            # 注意：部分驱动/批量执行场景下，executemany + RETURNING 结果集不可直接 fetchall。
+            # 这里改为逐行执行，确保入库稳定且可统计新增/更新。
+            for payload in rows:
+                flag = session.execute(upsert_sql, payload).scalar_one_or_none()
+                if bool(flag):
+                    inserted_rows += 1
+                else:
+                    updated_rows += 1
             session.commit()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"CSV 入库失败：{exc}") from exc
@@ -1279,6 +1324,8 @@ async def import_monthly_data_show_csv(file: UploadFile = File(...)):
         project_key=PROJECT_KEY,
         imported_rows=len(rows),
         null_value_rows=null_value_rows,
+        inserted_rows=inserted_rows,
+        updated_rows=updated_rows,
     )
 
 

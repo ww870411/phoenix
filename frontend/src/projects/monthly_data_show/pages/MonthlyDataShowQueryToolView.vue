@@ -187,7 +187,7 @@
                 <td>{{ row.company }}</td>
                 <td>{{ row.item }}</td>
                 <td>{{ row.unit || '—' }}</td>
-                <td>{{ row.value == null ? 'NULL' : formatValue(row.value, row.unit) }}</td>
+                <td>{{ row.value == null ? 'NULL' : formatValue(row.value, row.unit, row.item) }}</td>
                 <td>{{ row.date || '—' }}</td>
               </tr>
             </tbody>
@@ -296,12 +296,12 @@
                 <tr v-for="entry in comparisonRows" :key="entry.key">
                   <td>{{ entry.company }}</td>
                   <td>{{ entry.item }}</td>
-                  <td>{{ entry.currentValue == null ? 'NULL' : formatValue(entry.currentValue, entry.unit) }}</td>
-                  <td>{{ entry.yoyValue == null ? 'NULL' : formatValue(entry.yoyValue, entry.unit) }}</td>
+                  <td>{{ entry.currentValue == null ? 'NULL' : formatValue(entry.currentValue, entry.unit, entry.item) }}</td>
+                  <td>{{ entry.yoyValue == null ? 'NULL' : formatValue(entry.yoyValue, entry.unit, entry.item) }}</td>
                   <td :class="deltaClass(entry.yoyRate)">{{ formatRate(entry.yoyRate) }}</td>
-                  <td>{{ entry.momValue == null ? 'NULL' : formatValue(entry.momValue, entry.unit) }}</td>
+                  <td>{{ entry.momValue == null ? 'NULL' : formatValue(entry.momValue, entry.unit, entry.item) }}</td>
                   <td :class="deltaClass(entry.momRate)">{{ formatRate(entry.momRate) }}</td>
-                  <td>{{ entry.planValue == null ? 'NULL' : formatValue(entry.planValue, entry.unit) }}</td>
+                  <td>{{ entry.planValue == null ? 'NULL' : formatValue(entry.planValue, entry.unit, entry.item) }}</td>
                   <td :class="deltaClass(entry.planRate)">{{ formatRate(entry.planRate) }}</td>
                 </tr>
               </tbody>
@@ -789,13 +789,13 @@ const analysisInsights = computed(() => {
         const momTrend = momDiff == null ? '—' : momDiff > 0 ? '增加' : momDiff < 0 ? '减少' : '持平'
         const planTrend = planDiff == null ? '—' : planDiff > 0 ? '增加' : planDiff < 0 ? '减少' : '持平'
         const segments = [
-          `本期 ${formatValueWithUnit(row.currentValue, row.unit)}`,
-          `同期 ${formatValueWithUnit(row.yoyValue, row.unit)}，同比${yoyTrend}${formatSignedNumber(yoyDiff)}，差异率 ${formatRate(row.yoyRate)}`,
+          `本期 ${formatValueWithUnit(row.currentValue, row.unit, row.item)}`,
+          `同期 ${formatValueWithUnit(row.yoyValue, row.unit, row.item)}，同比${yoyTrend}${formatSignedNumber(yoyDiff, row.item)}，差异率 ${formatRate(row.yoyRate)}`,
         ]
         if (row.momValue != null) {
-          segments.push(`上期 ${formatValueWithUnit(row.momValue, row.unit)}，环比${momTrend}${formatSignedNumber(momDiff)}，差异率 ${formatRate(row.momRate)}`)
+          segments.push(`上期 ${formatValueWithUnit(row.momValue, row.unit, row.item)}，环比${momTrend}${formatSignedNumber(momDiff, row.item)}，差异率 ${formatRate(row.momRate)}`)
         }
-        segments.push(`本期计划值 ${formatValueWithUnit(row.planValue, row.unit)}，较计划${planTrend}${formatSignedNumber(planDiff)}，差异率 ${formatRate(row.planRate)}`)
+        segments.push(`本期计划值 ${formatValueWithUnit(row.planValue, row.unit, row.item)}，较计划${planTrend}${formatSignedNumber(planDiff, row.item)}，差异率 ${formatRate(row.planRate)}`)
         lines.push(`  ${segments.join('；')}。`)
         detailCount += 1
       }
@@ -875,15 +875,27 @@ function getConsumeSubGroup(text) {
   return 5
 }
 
-function formatNumber(value) {
+const FOUR_DECIMAL_ITEMS = new Set(['供暖热耗率', '供暖水耗率', '供暖电耗率'])
+
+function valueDecimalDigitsByItem(item) {
+  const normalized = String(item || '').trim()
+  return FOUR_DECIMAL_ITEMS.has(normalized) ? 4 : 2
+}
+
+function formatNumber(value, fractionDigits = 2) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '0'
-  const rounded = Math.round(num * 100) / 100
+  const safeDigits = Number.isInteger(fractionDigits) && fractionDigits >= 0 ? fractionDigits : 2
+  const base = 10 ** safeDigits
+  const rounded = Math.round(num * base) / base
   const isIntegerLike = Math.abs(rounded - Math.trunc(rounded)) < 1e-9
   if (isIntegerLike) {
     return rounded.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
   }
-  return rounded.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return rounded.toLocaleString('zh-CN', {
+    minimumFractionDigits: safeDigits,
+    maximumFractionDigits: safeDigits,
+  })
 }
 
 function toFiniteOrNull(value) {
@@ -898,19 +910,20 @@ function calcRate(currentValue, baseValue) {
   return (current - base) / Math.abs(base)
 }
 
-function formatValue(value, unit) {
+function formatValue(value, unit, item) {
   const num = Number(value)
   if (!Number.isFinite(num)) return '0'
   const normalizedUnit = String(unit || '').trim()
+  const fractionDigits = valueDecimalDigitsByItem(item)
   if (normalizedUnit === '%') {
-    return `${formatNumber(num * 100)}%`
+    return `${formatNumber(num * 100, fractionDigits)}%`
   }
-  return formatNumber(num)
+  return formatNumber(num, fractionDigits)
 }
 
-function formatValueWithUnit(value, unit) {
+function formatValueWithUnit(value, unit, item) {
   if (value == null) return '—'
-  const base = formatValue(value, unit)
+  const base = formatValue(value, unit, item)
   const normalizedUnit = String(unit || '').trim()
   if (!normalizedUnit || normalizedUnit === '%') return base
   return `${base} ${normalizedUnit}`
@@ -921,10 +934,10 @@ function formatRate(rate) {
   return `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(2)}%`
 }
 
-function formatSignedNumber(value) {
+function formatSignedNumber(value, item) {
   const num = toFiniteOrNull(value)
   if (num == null) return '—'
-  const absText = formatNumber(Math.abs(num))
+  const absText = formatNumber(Math.abs(num), valueDecimalDigitsByItem(item))
   if (num > 0) return `+${absText}`
   if (num < 0) return `-${absText}`
   return absText
@@ -1110,7 +1123,7 @@ function downloadXlsx() {
     row.company ?? '',
     row.item ?? '',
     row.unit ?? '',
-    row.value == null ? '' : formatValue(row.value, row.unit),
+    row.value == null ? '' : formatValue(row.value, row.unit, row.item),
     row.date ?? '',
   ])
   const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
@@ -1124,15 +1137,15 @@ function downloadXlsx() {
       x.item,
       x.period,
       x.type,
-      x.currentValue == null ? '' : formatValue(x.currentValue, x.unit),
-      x.yoyValue == null ? '' : formatValue(x.yoyValue, x.unit),
-      x.currentValue == null || x.yoyValue == null ? '' : formatSignedNumber(x.currentValue - x.yoyValue),
+      x.currentValue == null ? '' : formatValue(x.currentValue, x.unit, x.item),
+      x.yoyValue == null ? '' : formatValue(x.yoyValue, x.unit, x.item),
+      x.currentValue == null || x.yoyValue == null ? '' : formatSignedNumber(x.currentValue - x.yoyValue, x.item),
       formatRate(x.yoyRate),
-      x.momValue == null ? '' : formatValue(x.momValue, x.unit),
-      x.currentValue == null || x.momValue == null ? '' : formatSignedNumber(x.currentValue - x.momValue),
+      x.momValue == null ? '' : formatValue(x.momValue, x.unit, x.item),
+      x.currentValue == null || x.momValue == null ? '' : formatSignedNumber(x.currentValue - x.momValue, x.item),
       formatRate(x.momRate),
-      x.planValue == null ? '' : formatValue(x.planValue, x.unit),
-      x.currentValue == null || x.planValue == null ? '' : formatSignedNumber(x.currentValue - x.planValue),
+      x.planValue == null ? '' : formatValue(x.planValue, x.unit, x.item),
+      x.currentValue == null || x.planValue == null ? '' : formatSignedNumber(x.currentValue - x.planValue, x.item),
       formatRate(x.planRate),
     ])
     const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
