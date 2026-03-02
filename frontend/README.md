@@ -3793,3 +3793,146 @@ docker compose up -d --build
     - `.month-input`
 - 效果：
   - “业务月份起/止”外层框体与日期输入框宽度对齐，右侧不再出现未包裹完整的视觉缺口。
+
+## 结构同步（2026-03-02 日报分析页 AI 附加提示词输入）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+  - 在“智能报告生成（BETA）”开启且有权限时，新增“本次分析要求（可选）”输入框；
+  - `runAnalysis` 请求体新增：
+    - `ai_mode_id`（当前默认 `daily_analysis_v1`）
+    - `ai_user_prompt`（用户附加提示词）
+  - 样式补充：`form-actions` 允许换行，新增 `ai-user-prompt-field` 组件样式。
+- 联动：
+  - 后端 AI 报告引擎已支持模式化与用户附加提示词透传。
+
+## 结构同步（2026-03-02 月报查询页接入 AI 智能报告）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增 AI 工具栏：智能报告开关、生成按钮、下载按钮；
+  - 新增“本次分析要求（可选）”输入框（最多 2000 字）；
+  - 新增任务状态轮询与提示文案；
+  - 查询结果刷新/筛选重置时自动清理旧任务状态，避免串任务。
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增：
+    - `startMonthlyDataShowAiReport(projectKey, payload)`
+    - `getMonthlyDataShowAiReport(projectKey, jobId)`
+- 默认模式：
+  - 月报查询页固定透传 `ai_mode_id=monthly_analysis_v1`，并支持 `ai_user_prompt`。
+
+## 结构同步（2026-03-02 AI 提示词拆分联动）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`、`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 本轮前端代码无新增改动。
+- 联动说明：
+  - 后端已将 `daily_analysis_v1` 与 `monthly_analysis_v1` 的预设提示词彻底分离；
+  - 前端继续按既有方式透传 `ai_mode_id`，即可命中对应项目模式提示词。
+
+## 结构同步（2026-03-02 AI 配置共享路径文案同步）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+- 变更点：
+  - AI 设置弹窗中的提示文案由 `backend_data/api_key.json` 更新为 `backend_data/shared/ai_settings.json`。
+- 效果：
+  - 前端页面提示与后端实际配置落盘路径一致，减少运维误操作。
+
+## 结构同步（2026-03-02 月报默认提示词更新联动）
+
+- 本轮前端代码无功能改动。
+- 联动说明：
+  - 月报默认提示词已在后端共享配置 `backend_data/shared/ai_settings.json` 的 `instruction_monthly` 更新；
+  - 前端继续透传 `ai_mode_id=monthly_analysis_v1` 时将命中新模板。
+
+## 结构同步（2026-03-02 AI 共享配置合并联动）
+
+- 本轮前端代码无功能改动。
+- 联动说明：
+  - 后端 `backend_data/shared/ai_settings.json` 已合并日报与月报提示词及 AI 运行参数；
+  - 前端既有 AI 设置与报告调用链无需改动，读取结果将统一来自 shared 主配置。
+
+## 结构同步（2026-03-02 AI 设置弹窗双提示词折叠编辑）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 变更点：
+  - AI 设置弹窗提示词区域改为两段折叠编辑（默认收起）：
+    - `instruction_daily`（日报）
+    - `instruction_monthly`（月报）
+  - 保存请求字段由旧 `instruction` 切换为 `instruction_daily`，并新增 `instruction_monthly` 透传；
+  - 样式新增折叠块视觉样式，保持弹窗布局稳定。
+- 效果：
+  - 提示词编辑更清晰，默认界面更简洁；
+  - 与后端字段标准化保持一致。
+
+## 结构同步（2026-03-02 AI 设置字段改名与防误覆盖）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+- API：`frontend/src/projects/daily_report_25_26/services/api.js`
+- 变更点：
+  - 保存参数从 `instruction` 切换为 `instruction_daily`；
+  - 透传 `instruction_monthly`；
+  - 当调用方未提供某提示词字段时，API 层不主动写空，避免覆盖既有配置。
+- 效果：
+  - 配置编辑行为更安全，减少误清空提示词风险。
+
+## 结构同步（2026-03-02 月报4段式报告后端联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 月报 AI 报告已在后端切换为独立4段式结构渲染；
+  - 前端无需调整调用参数，继续透传 `ai_mode_id=monthly_analysis_v1` 即可命中新逻辑。
+
+## 结构同步（2026-03-02 月报查询页 AI 设置弹窗与宽度修复）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 变更点：
+  - 在月报查询页 AI 工具栏新增“智能体设定”入口，仅 `global_admin` 可见；
+  - 新增 AI 设置弹窗，支持全局配置读写（日报+月报共用）：
+    - `instruction_daily`
+    - `instruction_monthly`
+    - `report_mode`
+    - `enable_validation`
+  - 折叠提示词编辑块样式修复：展开后改为全宽显示，不再出现“内容区过窄”。
+- 效果：
+  - 月报页可直接维护全局 AI 参数；
+  - 提示词折叠编辑体验与日报页一致且布局正常。
+
+## 结构同步（2026-03-02 日报/月报 AI 设置弹窗组件通用化）
+
+- 新增组件：`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`
+  - 统一承载 AI 设置弹窗 UI 与交互：
+    - API Keys 列表管理；
+    - 模型输入；
+    - `instruction_daily` / `instruction_monthly` 折叠编辑；
+    - `report_mode` / `enable_validation` / `allow_non_admin_report`。
+- 页面接入：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 重构结果：
+  - 两个页面移除各自内联弹窗模板、重复状态与样式，改为统一组件；
+  - 日报继续通过 `getAiSettings/updateAiSettings(projectKey, payload)` 读写；
+  - 月报继续通过 `getAdminAiSettings/updateAdminAiSettings(payload)` 读写；
+  - 样式与交互一致，后续维护只需修改一处组件。
+
+## 结构同步（2026-03-02 AI 设置 API 输入框宽度优化）
+
+- 文件：`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`
+- 变更点：
+  - 为 API Key 输入框增加弹性布局：`.api-key-item input { flex: 1 1 auto; min-width: 0; }`；
+  - 新增移动端适配：小屏下 API 行可换行，输入框宽度强制 `100%`。
+- 效果：
+  - 智能体设定中 API 输入框不再被压缩过窄；
+  - 日报与月报页面（共享组件）同步生效。
+
+## 结构同步（2026-03-02 AI 报告限流优化后端联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端 AI 报告链路新增 429 自动退避重试与提示数据瘦身；
+  - 前端无需改参数，原有“生成智能报告”流程即可受益。  
+
+## 结构同步（2026-03-02 月报报告样式独立后端联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 后端已将月报 AI 报告改为独立版式渲染；
+  - 前端仍透传 `ai_mode_id=monthly_analysis_v1`，无需额外参数即可得到新月报样式。  

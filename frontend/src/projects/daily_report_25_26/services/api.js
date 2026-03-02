@@ -439,6 +439,34 @@ export async function queryMonthlyDataShowComparison(projectKey, payload = {}) {
   return response.json()
 }
 
+export async function startMonthlyDataShowAiReport(projectKey, payload = {}) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/ai-report/start`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `启动月报 AI 报告失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getMonthlyDataShowAiReport(projectKey, jobId) {
+  if (!jobId) throw new Error('缺少月报 AI 报告任务 ID')
+  const response = await fetch(
+    `${projectPath(projectKey)}/monthly-data-show/ai-report/${encodeURIComponent(jobId)}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取月报 AI 报告失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await fetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {
@@ -801,7 +829,8 @@ export async function updateAiSettings(projectKey, payload) {
     body: JSON.stringify({
       api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
-      instruction: payload?.instruction ?? '',
+      instruction_daily: payload?.instruction_daily ?? payload?.instruction,
+      instruction_monthly: payload?.instruction_monthly,
       report_mode: payload?.report_mode ?? 'full',
       enable_validation: payload?.enable_validation ?? true,
       allow_non_admin_report: payload?.allow_non_admin_report ?? false,
@@ -1083,7 +1112,8 @@ export async function updateAdminAiSettings(payload) {
     body: JSON.stringify({
       api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
-      instruction: payload?.instruction ?? '',
+      instruction_daily: payload?.instruction_daily ?? payload?.instruction,
+      instruction_monthly: payload?.instruction_monthly,
       report_mode: payload?.report_mode ?? 'full',
       enable_validation: payload?.enable_validation ?? true,
       allow_non_admin_report: payload?.allow_non_admin_report ?? false,

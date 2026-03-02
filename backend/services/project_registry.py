@@ -21,7 +21,6 @@ DEFAULT_PROJECT_CONFIG_FILES: List[str] = [
     "数据结构_数据分析表.json",
     "数据结构_数据看板.json",
     "date.json",
-    "api_key.json",
 ]
 DEFAULT_PROJECT_RUNTIME_FILES: List[str] = [
     "dashboard_cache.json",

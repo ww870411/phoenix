@@ -726,9 +726,13 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
 
     if getattr(payload, "request_ai_report", False):
         try:
+            ai_payload_mode = str(getattr(payload, "ai_mode_id", "") or "daily_analysis_v1")
+            ai_payload_prompt = str(getattr(payload, "ai_user_prompt", "") or "").strip()
             # 准备 ring comparison 数据
             # 逻辑复刻自 DataAnalysisView.vue: computePreviousRangeForRing
             ai_payload = copy.deepcopy(response_payload)
+            ai_payload["ai_mode_id"] = ai_payload_mode
+            ai_payload["ai_user_prompt"] = ai_payload_prompt
             
             if analysis_mode_value == "range" and start_date and end_date:
                 prev_start_date = None

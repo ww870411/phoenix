@@ -4548,3 +4548,289 @@
      - 为 `.month-input` 增加 `box-sizing: border-box`。  
 - **Result:**  
   - 月份外框与日期输入框宽度对齐，右侧不再出现“露出/短边”问题。  
+
+## 2026-03-02（AI 报告模块第一阶段通用化：模式化 + 用户附加提示词）
+
+- **User Request:** 将 AI 智能报告能力通用化，保留日报模式，同时为月报预置独立模式，并支持用户实时输入附加提示词。  
+- **Agent Action:**  
+  1. 后端 AI 核心 `backend/services/data_analysis_ai_report.py`：  
+     - 新增模式标识：`daily_analysis_v1`、`monthly_analysis_v1`；  
+     - 新增模式模板注册表 `AI_MODE_TEMPLATE_REGISTRY`；  
+     - 将提示词构建改为支持 `mode template + user_prompt`；  
+     - 新增 `ai_user_prompt` 清洗（长度限制）与注入逻辑；  
+     - 任务快照中记录 `ai_mode_id`。  
+  2. 调用链透传：  
+     - `backend/projects/daily_report_25_26/api/legacy_full.py` 的 `DataAnalysisQueryPayload` 新增：  
+       `ai_mode_id`、`ai_user_prompt`；  
+     - 触发 AI 任务前将这两个字段注入任务 payload；  
+     - `backend/services/data_analysis.py` 的服务化执行链也同步透传。  
+  3. 前端日报分析页 `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`：  
+     - 新增“本次分析要求（可选）”输入框（仅在开启智能报告且有权限时显示）；  
+     - 查询请求新增 `ai_mode_id`（默认日报模式）与 `ai_user_prompt` 透传；  
+     - 补充样式确保布局稳定。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/services/data_analysis_ai_report.py backend/services/data_analysis.py backend/projects/daily_report_25_26/api/legacy_full.py`，通过。  
+- **Result:**  
+  - AI 模块已具备“模式化 + 用户附加要求”能力；  
+  - 报页默认走 `daily_analysis_v1`，行为保持兼容；  
+  - `monthly_analysis_v1` 已在引擎预置，可在月报页面接入时直接调用。  
+
+## 2026-03-02（月报查询页面接入 AI 智能报告）
+
+- **User Request:** 在月报查询页面启用 AI 智能报告能力，使用通用 AI 引擎并默认调用月报模式。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增接口：  
+       - `POST /monthly-data-show/ai-report/start`（启动任务）  
+       - `GET /monthly-data-show/ai-report/{job_id}`（查询任务）  
+     - 新增月报 AI payload 组装逻辑：将查询对比数据映射为通用 AI 引擎输入结构；  
+     - 默认透传 `ai_mode_id=monthly_analysis_v1`，支持 `ai_user_prompt`。  
+  2. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：  
+     - 新增 `startMonthlyDataShowAiReport`、`getMonthlyDataShowAiReport`。  
+  3. 前端页面 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 新增“智能报告生成（BETA）”开关、附加提示词输入框；  
+     - 新增“生成智能报告”“下载智能报告”按钮；  
+     - 新增任务轮询与状态提示逻辑；  
+     - 查询条件变化/重置时自动清理旧任务状态。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，通过。  
+- **Result:**  
+  - 月报查询页已可直接生成并下载 AI 报告（HTML），默认使用月报模式模板。  
+
+## 2026-03-02（AI 预设提示词分离：日报保持原样，月报独立模板）
+
+- **User Request:** 两个项目预设提示词拆分：日报保持当前提示词，月报单设独立提示词模式。  
+- **Agent Action:**  
+  1. 后端 `backend/services/data_analysis_ai_report.py`：  
+     - 保持 `daily_analysis_v1` 的原有模板不变；  
+     - 为 `monthly_analysis_v1` 新增独立模板链：  
+       - `MONTHLY_CONTENT_PROMPT_TEMPLATE`  
+       - `MONTHLY_VALIDATION_PROMPT_TEMPLATE`  
+       - `MONTHLY_REVISION_PROMPT_TEMPLATE`  
+       - `MONTHLY_FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE`  
+       - `MONTHLY_FAST_VALIDATION_PROMPT_TEMPLATE`  
+     - 将 `AI_MODE_TEMPLATE_REGISTRY` 的月报模式映射切换为上述独立模板。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/services/data_analysis_ai_report.py`，通过。  
+- **Result:**  
+  - 日报与月报提示词体系已完全分离：日报沿用当前方案，月报使用独立预设。  
+
+## 2026-03-02（AI 配置跨项目抽离 + 月报专用 instruction）
+
+- **User Request:** 将 `backend_data/projects/daily_report_25_26/config/api_key.json` 抽离为跨项目配置，并新增月报查询专用提示词 instruction。  
+- **Agent Action:**  
+  1. 新增全局路径解析：  
+     - 文件：`backend/services/project_data_paths.py`  
+     - 新增函数：`resolve_global_ai_settings_path()`  
+     - 路径策略：`backend_data/shared/ai_settings.json` 优先，兼容回退日报旧路径。  
+  2. AI 报告服务切换到全局配置并做兼容合并：  
+     - 文件：`backend/services/data_analysis_ai_report.py`  
+     - 新增配置合并逻辑：先读日报旧配置，再叠加 shared 配置；  
+     - `_load_instruction_text(mode_id)` 按模式读取：  
+       - 日报：`instruction`（兼容 `instruction_daily`）  
+       - 月报：`instruction_monthly`。  
+  3. 管理端读写支持新字段：  
+     - 文件：`backend/projects/daily_report_25_26/api/legacy_full.py`  
+       - `AiSettingsPayload` 与 `_read_ai_settings/_persist_ai_settings` 新增 `instruction_monthly`；  
+       - AI 设置读写改为全局路径，并兼容旧路径合并读取。  
+     - 文件：`backend/api/v1/admin_console.py`  
+       - 管理后台 AI 设置 payload 与保存流程新增 `instruction_monthly`。  
+  4. 新建共享配置文件：  
+     - 文件：`backend_data/shared/ai_settings.json`  
+     - 新增 `instruction_monthly`（月报专用提示词）；  
+     - 日报原有 `instruction` 继续由旧配置回退保障，避免行为突变。  
+  5. 前端提示文案同步：  
+     - 文件：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`  
+     - AI 设置弹窗提示路径更新为 `backend_data/shared/ai_settings.json`。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/services/project_data_paths.py backend/services/data_analysis_ai_report.py backend/projects/daily_report_25_26/api/legacy_full.py backend/api/v1/admin_console.py`，通过。  
+- **Result:**  
+  - AI 配置已支持跨项目共享；  
+  - 月报已具备独立 instruction 入口；  
+  - 日报旧提示词保持兼容可用。  
+
+## 2026-03-02（月报默认提示词替换为用户指定版本）
+
+- **User Request:** 将指定的大段提示词写入月报默认 instruction。  
+- **Agent Action:**  
+  1. 更新文件：`backend_data/shared/ai_settings.json`。  
+  2. 将 `instruction_monthly` 全量替换为用户提供的“系统指令/执行逻辑/五段式报告结构”版本。  
+- **Verify:**  
+  - 通过文件回读确认 `instruction_monthly` 已写入完整文本。  
+- **Result:**  
+  - 月报 AI 默认提示词已切换到用户指定模板。  
+
+## 2026-03-02（合并日报 api_key 配置到 shared/ai_settings）
+
+- **User Request:** 将 `backend_data/projects/daily_report_25_26/config/api_key.json` 合并至 `backend_data/shared/ai_settings.json`。  
+- **Agent Action:**  
+  1. 读取两个配置文件并执行字段并集合并。  
+  2. 在 `backend_data/shared/ai_settings.json` 中保留并整合以下字段：  
+     - `gemini_model`  
+     - `gemini_api_keys`  
+     - `instruction`（日报提示词）  
+     - `instruction_monthly`（月报提示词）  
+     - `report_mode`  
+     - `enable_validation`  
+     - `allow_non_admin_report`  
+  3. 不删除原日报 `api_key.json`（兼容回退路径仍可用）。  
+- **Verify:**  
+  - 回读 `backend_data/shared/ai_settings.json`，确认字段与内容已合并。  
+- **Result:**  
+  - shared AI 配置已包含日报与月报两套提示词及运行参数，可作为统一跨项目配置使用。  
+
+## 2026-03-02（下线日报 api_key + 指令字段改名 + 弹窗折叠编辑）
+
+- **User Request:**  
+  1. 下线 `backend_data/projects/daily_report_25_26/config/api_key.json`，全部转向 `backend_data/shared/ai_settings.json`；  
+  2. 将 `instruction` 重命名为 `instruction_daily`；  
+  3. AI 设置弹窗中日报/月报提示词默认折叠，可展开修改并保存。  
+- **Agent Action:**  
+  1. 删除旧配置文件：`backend_data/projects/daily_report_25_26/config/api_key.json`。  
+  2. 后端统一路径：  
+     - `backend/services/project_data_paths.py` 的 `resolve_global_ai_settings_path()` 改为只返回 shared 路径；  
+     - `backend/services/data_analysis_ai_report.py` 移除旧路径回退合并，仅读 shared。  
+  3. 字段改名：  
+     - `backend_data/shared/ai_settings.json` 中 `instruction` 更名为 `instruction_daily`；  
+     - `legacy_full.py`、`admin_console.py` 的 AI 设置读写改为 `instruction_daily` + `instruction_monthly`；  
+     - 读写接口保留对旧前端 `instruction` 入参的兼容接收（仅作为保存时回退来源）。  
+  4. 前端弹窗：  
+     - `DataAnalysisView.vue` 将提示词编辑区改为两个 `<details>` 折叠块（日报/月报），默认收起；  
+     - 表单字段与保存参数改为 `instruction_daily`、`instruction_monthly`；  
+     - `api.js` 的 `get/updateAiSettings` 与 `get/updateAdminAiSettings` 请求体同步字段改名。  
+- **Verify:**  
+  - `python -m py_compile backend/services/project_data_paths.py backend/services/data_analysis_ai_report.py backend/projects/daily_report_25_26/api/legacy_full.py backend/api/v1/admin_console.py` 通过；  
+  - `python -m json.tool backend_data/shared/ai_settings.json` 通过。  
+- **Result:**  
+  - AI 配置已完全收口到 shared；  
+  - 字段标准化为 `instruction_daily` / `instruction_monthly`；  
+  - 页面上两段提示词默认折叠并可单独展开编辑保存。  
+
+## 2026-03-02（最终收口：移除回退并删除旧 api_key 文件）
+
+- **User Request:** 旧 `api_key.json` 直接下线，全部转向 shared；`instruction` 改为 `instruction_daily`；提示词编辑默认折叠。  
+- **Agent Action:**  
+  1. 删除文件：`backend_data/projects/daily_report_25_26/config/api_key.json`。  
+  2. 移除后端回退：  
+     - `project_data_paths.resolve_global_ai_settings_path()` 改为固定 shared 路径；  
+     - `data_analysis_ai_report` 不再合并旧路径，只读 shared；  
+     - 日报提示词读取键固定为 `instruction_daily`（月报为 `instruction_monthly`）。  
+  3. shared 配置键更名：`instruction -> instruction_daily`。  
+  4. 前端设置弹窗（DataAnalysisView）改为日报/月报两个 `<details>` 折叠块，默认收起，可展开编辑并保存。  
+  5. API 透传修正：`instruction_daily`/`instruction_monthly` 未传时不强制写空，避免误覆盖。  
+- **Verify:**  
+  - Python 编译检查通过；  
+  - `shared/ai_settings.json` JSON 校验通过；  
+  - 文件存在性检查确认旧 `api_key.json` 已删除。  
+- **Result:**  
+  - AI 配置源单一化（shared）；  
+  - 字段命名统一；  
+  - 设置弹窗满足“默认折叠、可展开修改保存”。  
+
+## 2026-03-02（月报 AI 报告改为独立4段式结构）
+
+- **User Request:** `data_analysis_ai_report.py` 的硬性章节划分仅用于日报；月报需按 `instruction_monthly` 走专门4段式结构，并支持图文并茂展示。  
+- **Agent Action:**  
+  1. 月报提示词模板重构：  
+     - 更新 `MONTHLY_LAYOUT_PROMPT_TEMPLATE` 与 `MONTHLY_CONTENT_PROMPT_TEMPLATE`，将章节固定为4段：  
+       - `overview`  
+       - `coal_completion`  
+       - `profit_cost_breakdown`  
+       - `efficiency_and_actions`  
+     - 同步更新月报极速模板中的 section id 示例。  
+  2. 报告渲染逻辑分流：  
+     - 新增 `_normalize_sections_for_mode()`，仅在月报模式强制4段章节骨架与顺序；  
+     - `mode_id != monthly`（日报）保留原有硬性块：同比/环比/计划/逐日明细；  
+     - `mode_id == monthly`（月报）不再复用日报硬性块，新增“月度关键对比图表”区（同比/环比/计划三表）并结合趋势图与4段正文，形成图文并茂报告。  
+- **Verify:**  
+  - 本轮未执行命令行编译验证（按当前会话约束，采用静态改造+回读核对）。  
+- **Result:**  
+  - 日报与月报报告结构彻底解耦；  
+  - 月报报告输出稳定为4段式分析结构，且保留关键图表展示能力。  
+
+## 2026-03-02（月报页面增加智能体设定入口与折叠框宽度修复）
+
+- **User Request:**  
+  1) 月报查询页增加“智能体设定”入口，且仅 `global_admin` 可点击；  
+  2) 修复折叠提示词编辑框展开后过窄；  
+  3) 明确“完整模式/快速模式”“检查核实”对月报是否生效。  
+- **Agent Action:**  
+  1. 月报页面新增全局 AI 设置弹窗：  
+     - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；  
+     - 在 AI 工具栏增加“智能体设定”按钮，`v-if="isGlobalAdmin"`；  
+     - 接入 `getAdminAiSettings/updateAdminAiSettings`，可编辑并保存：  
+       - API Keys、模型、`instruction_daily`、`instruction_monthly`、`report_mode`、`enable_validation`、`allow_non_admin_report`。  
+  2. 折叠框宽度修复：  
+     - 月报弹窗与日报弹窗统一为 `prompt-collapse` 全宽；  
+     - 为折叠内 textarea 增加 `display:block;width:100%;box-sizing:border-box`。  
+  3. 适用范围文案明确：  
+     - 在设置项标题中新增“全局，日报+月报共用”说明；  
+     - 检查核实项文案改为“全局，日报+月报第4阶段”。  
+- **Verify:**  
+  - 本轮主要为前端模板与样式改造，未执行前端构建命令。  
+- **Result:**  
+  - 月报页已具备仅 `global_admin` 可见的智能体设定入口；  
+  - 折叠提示词编辑区展开宽度恢复正常；  
+  - 模式与核实开关对月报的适用范围在界面上已明确。  
+
+## 2026-03-02（日报/月报智能体设定组件通用化）
+
+- **User Request:** 日报、月报页面上的智能体设定希望内容与样式一致，并尽可能通用复用。  
+- **Agent Action:**  
+  1. 新增并复用统一组件：`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`。  
+  2. 日报页面 `DataAnalysisView.vue` 改为接入共享组件，移除页面内重复弹窗模板、状态变量、保存逻辑与相关样式。  
+  3. 月报页面 `MonthlyDataShowQueryToolView.vue` 同步接入共享组件，移除页面内重复弹窗模板、状态变量、保存逻辑与相关样式。  
+  4. 双页面保持原有接口职责不变：  
+     - 日报：`getAiSettings/updateAiSettings(projectKey, payload)`；  
+     - 月报：`getAdminAiSettings/updateAdminAiSettings(payload)`。  
+- **Verify:**  
+  - 执行 `npm run build`（frontend）成功，Vite 构建通过，无编译错误。  
+- **Result:**  
+  - 日报/月报“智能体设定”实现同一组件驱动，交互与样式完全一致；  
+  - 后续新增字段或样式只需维护一处，维护成本显著降低。  
+
+## 2026-03-02（智能体设定 API 输入框宽度修正）
+
+- **User Request:** 智能体设定中的 API 输入框过窄，要求修正。  
+- **Agent Action:**  
+  1. 修改共享组件 `frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`：  
+     - 为 `.api-key-item input` 增加 `flex: 1 1 auto; min-width: 0;`，确保输入框占满剩余空间；  
+     - 增加移动端规则，API 行可换行且输入框宽度为 100%。  
+- **Verify:**  
+  - 执行 `npm run build`（frontend）通过。  
+- **Result:**  
+  - 日报和月报页的智能体设定弹窗中，API 输入框宽度已显著改善并自适应。  
+
+## 2026-03-02（AI 报告限流重试与提示数据瘦身）
+
+- **User Request:** 优化 AI 报告流程，先不做 key 轮换，重点缓解 429/配额超限问题。  
+- **Agent Action:**  
+  1. 在 `backend/services/data_analysis_ai_report.py` 增加限流自恢复：  
+     - 新增 429/Quota 错误识别；  
+     - 解析 Gemini 错误中的 `retry in ...s` / `retry_delay { seconds: ... }`；  
+     - 调用失败时按“至少 20 秒”自动等待并重试（默认最多 3 次）。  
+  2. 增加 Prompt 输入瘦身策略：  
+     - 对 `processed_data` 按重要性裁剪指标数量、时间序列长度、对比表项；  
+     - 分级尝试压缩，确保传给模型的 JSON 体积受控（目标上限约 120000 字符）。  
+  3. 保持现有 key 使用方式不变（未启用 key 轮换）。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/services/data_analysis_ai_report.py` 通过。  
+- **Result:**  
+  - 大查询窗口下触发 429 后可自动等待重试；  
+  - 单次输入体积显著下降，降低触发免费层输入 token 限流概率。  
+
+## 2026-03-02（月报 AI 报告版式与日报彻底分离）
+
+- **User Request:** 月报报告当前样式看起来和日报一致，希望改为正式月报风格（参考 `configs/3.2 2月运行情况.pdf`）。  
+- **Agent Action:**  
+  1. 在 `backend/services/data_analysis_ai_report.py` 新增月报专用渲染函数 `_generate_monthly_report_html(...)`：  
+     - 正式简报版式（纸面风格）与章节化正文；  
+     - 输出“核心指标同比概览”+四段正文；  
+     - 将环比/计划比作为附表；  
+     - 保留智能核对结果区。  
+  2. 在 `_generate_report_html(...)` 中增加模式分流：  
+     - `mode_id == monthly_analysis_v1` 时直接走月报专用渲染，不再共享日报卡片+趋势图模板。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/services/data_analysis_ai_report.py` 通过。  
+- **Result:**  
+  - 月报报告视觉与结构已与日报明显区隔，避免“看起来一样”。  

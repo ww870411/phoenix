@@ -1,0 +1,1 @@
+2026-03-02：按用户要求将 data_analysis_ai_report.py 的报告结构按模式分流。1) 日报模式保留原有硬性块（同比/环比/计划/逐日明细）。2) 月报模式改为独立4段式：overview、coal_completion、profit_cost_breakdown、efficiency_and_actions。3) 新增 _normalize_sections_for_mode 保证月报章节顺序与标题骨架。4) 月报新增“月度关键对比图表”块（同比/环比/计划三表），形成图文并茂报告。5) 更新 configs/progress.md、backend/README.md、frontend/README.md 留痕。

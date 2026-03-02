@@ -1148,7 +1148,7 @@ async function loadAiConfig() {
     const payload = await getAdminAiSettings()
     aiForm.apiKeysText = Array.isArray(payload?.api_keys) ? payload.api_keys.join('\n') : ''
     aiForm.model = String(payload?.model || '')
-    aiForm.instruction = String(payload?.instruction || '')
+    aiForm.instruction = String(payload?.instruction_daily || payload?.instruction || '')
     aiForm.reportMode = String(payload?.report_mode || 'full')
     aiForm.enableValidation = Boolean(payload?.enable_validation ?? true)
     aiForm.allowNonAdminReport = Boolean(payload?.allow_non_admin_report ?? false)

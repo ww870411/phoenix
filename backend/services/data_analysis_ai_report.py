@@ -2,7 +2,7 @@
 数据分析 AI 报告生成服务。
 
 基于 Gemini SDK，负责：
-- 读取 backend_data/projects/<project_key>/config/api_key.json 中的 gemini_api_key / gemini_model（兼容旧路径回退）；
+- 读取 backend_data/shared/ai_settings.json 中的 gemini_api_keys / gemini_model（兼容旧路径回退）；
 - 根据数据分析查询结果构造提示词；
 - 将任务提交至线程池并异步生成报告；
 - 以内存字典维护任务状态，供 API 查询。
@@ -13,7 +13,9 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import re
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -28,13 +30,16 @@ import google.generativeai as genai
 
 from backend.config import DATA_DIRECTORY
 from backend.services.api_key_cipher import decrypt_api_key
-from backend.services.project_data_paths import resolve_project_config_path
-from backend.services.project_registry import get_default_project_key
+from backend.services.project_data_paths import (
+    resolve_global_ai_settings_path,
+)
 
 DATA_ROOT = Path(DATA_DIRECTORY)
-DEFAULT_PROJECT_KEY = get_default_project_key()
-API_KEY_PATH = resolve_project_config_path(DEFAULT_PROJECT_KEY, "api_key.json")
+GLOBAL_AI_SETTINGS_PATH = resolve_global_ai_settings_path()
 PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
+AI_MODE_DAILY = "daily_analysis_v1"
+AI_MODE_MONTHLY = "monthly_analysis_v1"
+PROMPT_DATA_MAX_CHARS = 120000
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
@@ -219,6 +224,198 @@ FAST_VALIDATION_PROMPT_TEMPLATE = """快速核查报告中引用的关键数值�
 - 若无明显问题，status 设为 pass，issues 为空。
 """
 
+MONTHLY_INSIGHT_PROMPT_TEMPLATE = """你是一名供热集团月报分析专家。请阅读给定 JSON 数据（已包含多口径、多指标、同比/环比/计划比及趋势信息），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
+
+输出 JSON 结构：
+{
+  "headline": "一句话概括本月整体运行结论",
+  "key_findings": [
+    {
+      "metric": "口径/指标名称",
+      "status": "up | down | stable",
+      "evidence": "引用本期、同期、上期或计划值说明依据",
+      "risk_level": "low | medium | high"
+    }
+  ],
+  "temperature_effect": "若存在气温指标说明联动关系，否则写 \"无显著气温影响\"",
+  "risks": ["列出至少 1 条风险点"],
+  "recommendations": ["列出至少 1 条经营或调度建议"],
+  "notable_metrics": ["按重要性列出 3~5 个指标 key 或标签"]
+}
+
+要求：
+- 必须使用中文；
+- key_findings 至少 2 条；
+- 必须包含同比/环比/计划至少两类证据；
+- 禁止编造数据。
+"""
+
+MONTHLY_LAYOUT_PROMPT_TEMPLATE = """你是月报经营分析报告编辑。请根据洞察结果规划月报结构，仅输出 JSON。
+
+输出 JSON 结构：
+{
+  "sections": [
+    {
+      "id": "overview",
+      "title": "章节标题",
+      "purpose": "章节目的",
+      "bullets": ["章节要点"],
+      "metrics": ["本章重点指标 key 列表，可为空"]
+    }
+  ],
+  "chart_plan": {
+    "primary_metric": "建议主图指标 key",
+    "temperature_metric": "若有气温则指定 key，否则 null",
+    "narrative": "图表叙事主线"
+  },
+  "callouts": [
+    {
+      "title": "提示标题",
+      "body": "提示内容",
+      "level": "info | warning | danger"
+    }
+  ]
+}
+
+要求：
+- sections 必须且仅能为 4 个，且按以下顺序输出：
+  1) overview
+  2) coal_completion
+  3) profit_cost_breakdown
+  4) efficiency_and_actions
+- 必须在各章节体现“同比/环比/计划”对比；
+- callouts 至少 1 条。
+"""
+
+MONTHLY_CONTENT_PROMPT_TEMPLATE = """你现在的任务是“月报内容撰写”。请根据洞察（Insight）与结构规划（Layout）生成月报正文，仅输出 JSON。
+
+输出 JSON 结构：
+{
+  "section_contents": {
+    "overview": "章节正文 HTML",
+    "coal_completion": "章节正文 HTML",
+    "profit_cost_breakdown": "章节正文 HTML",
+    "efficiency_and_actions": "章节正文 HTML"
+  },
+  "callouts": [
+    {
+      "title": "提示标题",
+      "body": "提示内容",
+      "level": "info | warning | danger"
+    }
+  ]
+}
+
+要求：
+- 必须使用中文；
+- 必须明确写出“本期值、同期值、上期值、计划值”中的至少两类对比证据；
+- 使用 HTML 片段标签（如 <p><ul><li><strong>），不要输出完整 HTML 文档；
+- `section_contents` 的 key 必须且仅能是：
+  - overview
+  - coal_completion
+  - profit_cost_breakdown
+  - efficiency_and_actions
+- 禁止编造数据，缺失数据要明确写“暂无”。
+"""
+
+MONTHLY_VALIDATION_PROMPT_TEMPLATE = """你是一名月报数据核查员。请核查报告内容与月报数据的一致性，仅输出 JSON。
+
+核查重点：
+1. 本期/同期/上期/计划值引用是否正确；
+2. 同比/环比/计划差异率口径是否自洽（尤其分母绝对值口径）；
+3. 是否存在“文字结论与数值方向相反”的问题；
+4. 单位是否正确，是否混淆口径与指标。
+
+输出 JSON：
+{
+  "status": "pass | warning | fail",
+  "issues": [
+    {
+      "section": "章节或指标",
+      "description": "问题描述（需含证据）",
+      "severity": "info | warning | error",
+      "suggestion": "修复建议，可为空"
+    }
+  ],
+  "notes": "核查结论"
+}
+"""
+
+MONTHLY_REVISION_PROMPT_TEMPLATE = """你是一名月报报告复核负责人。请根据核查问题修订正文，保持 JSON 输出结构不变。
+
+要求：
+- 逐条处理 validation.issues，不得忽略；
+- 保持 `section_contents` 键集合与 layout.sections[].id 完全一致；
+- 修订时优先保留“口径 -> 指标 -> 对比结论”的叙述结构；
+- 禁止编造数据，若数据不足须显式说明；
+- callouts 至少保留 1 条。
+
+输出：
+{
+  "section_contents": {...},
+  "callouts": [...]
+}
+"""
+
+MONTHLY_FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE = """你是一名供热集团月报分析师。请基于月报 JSON 数据一次性输出“洞察+结构规划”，仅输出 JSON。
+
+输出 JSON：
+{
+  "insight": {
+    "headline": "一句话月报结论",
+    "key_findings": [
+      {"metric": "口径/指标", "status": "up|down|stable", "evidence": "证据", "risk_level": "low|medium|high"}
+    ],
+    "temperature_effect": "气温影响结论或无显著影响",
+    "risks": ["至少1条"],
+    "recommendations": ["至少1条"]
+  },
+  "layout": {
+    "sections": [
+      {"id": "overview", "title": "标题", "purpose": "目的", "bullets": ["要点"], "metrics": []}
+    ],
+    "chart_plan": {"primary_metric": "指标key", "temperature_metric": null, "narrative": "图表叙事"},
+    "callouts": [{"title": "提示", "body": "内容", "level": "info|warning|danger"}]
+  }
+}
+"""
+
+MONTHLY_FAST_VALIDATION_PROMPT_TEMPLATE = """快速核查月报正文与关键对比数据是否一致，仅输出 JSON。
+
+重点只检查：
+1. 同比/环比/计划比方向是否正确；
+2. 关键值是否引用错误；
+3. 单位是否明显错误。
+
+输出 JSON：
+{
+  "status": "pass | warning",
+  "issues": [{"section": "位置", "description": "问题", "severity": "info|warning"}],
+  "notes": "结论"
+}
+"""
+
+AI_MODE_TEMPLATE_REGISTRY = {
+    AI_MODE_DAILY: {
+        "insight": INSIGHT_PROMPT_TEMPLATE,
+        "layout": LAYOUT_PROMPT_TEMPLATE,
+        "content": CONTENT_PROMPT_TEMPLATE,
+        "validation": VALIDATION_PROMPT_TEMPLATE,
+        "revision": REVISION_PROMPT_TEMPLATE,
+        "fast_insight_layout": FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE,
+        "fast_validation": FAST_VALIDATION_PROMPT_TEMPLATE,
+    },
+    AI_MODE_MONTHLY: {
+        "insight": MONTHLY_INSIGHT_PROMPT_TEMPLATE,
+        "layout": MONTHLY_LAYOUT_PROMPT_TEMPLATE,
+        "content": MONTHLY_CONTENT_PROMPT_TEMPLATE,
+        "validation": MONTHLY_VALIDATION_PROMPT_TEMPLATE,
+        "revision": MONTHLY_REVISION_PROMPT_TEMPLATE,
+        "fast_insight_layout": MONTHLY_FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE,
+        "fast_validation": MONTHLY_FAST_VALIDATION_PROMPT_TEMPLATE,
+    },
+}
+
 _logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -235,13 +432,26 @@ def reset_gemini_client() -> None:
     _model_name = None
 
 
-def _load_gemini_settings() -> Dict[str, str]:
-    if not API_KEY_PATH.exists():
-        raise RuntimeError(f"API Key 配置不存在：{API_KEY_PATH}")
+def _safe_read_settings_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
     try:
-        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        raise RuntimeError(f"API Key 配置解析失败：{API_KEY_PATH}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _load_effective_ai_settings() -> Dict[str, Any]:
+    return _safe_read_settings_json(GLOBAL_AI_SETTINGS_PATH)
+
+
+def _load_gemini_settings() -> Dict[str, str]:
+    data = _load_effective_ai_settings()
+    if not data:
+        raise RuntimeError(f"API Key 配置不存在：{GLOBAL_AI_SETTINGS_PATH}")
 
     # 优先尝试读取 gemini_api_keys 列表
     raw_keys = data.get("gemini_api_keys")
@@ -266,26 +476,29 @@ def _load_gemini_settings() -> Dict[str, str]:
     return {"api_key": api_key, "model": model}
 
 
-def _load_instruction_text() -> str:
-    if not API_KEY_PATH.exists():
+def _load_instruction_text(mode_id: str = AI_MODE_DAILY) -> str:
+    data = _load_effective_ai_settings()
+    if not data:
         return ""
-    try:
-        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return ""
-    instruction = data.get("instruction")
-    if isinstance(instruction, str):
-        return instruction.strip()
+    normalized_mode = _normalize_ai_mode(mode_id)
+    candidates: List[str]
+    if normalized_mode == AI_MODE_MONTHLY:
+        candidates = ["instruction_monthly"]
+    else:
+        candidates = ["instruction_daily"]
+    for key in candidates:
+        instruction = data.get(key)
+        if isinstance(instruction, str):
+            text = instruction.strip()
+            if text:
+                return text
     return ""
 
 
 def _load_ai_runtime_flags() -> Dict[str, Any]:
     defaults = {"enable_validation": True, "allow_non_admin_report": False, "report_mode": "full"}
-    if not API_KEY_PATH.exists():
-        return defaults
-    try:
-        data = json.loads(API_KEY_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    data = _load_effective_ai_settings()
+    if not data:
         return defaults
     flags = defaults.copy()
     if isinstance(data, dict):
@@ -307,6 +520,149 @@ def _safe_json_dumps(payload: Dict[str, Any]) -> str:
         return value
 
     return json.dumps(payload, ensure_ascii=False, default=_convert)
+
+
+def _to_score(value: Any) -> float:
+    numeric = _to_float_or_none(value)
+    return abs(numeric) if numeric is not None else 0.0
+
+
+def _trim_processed_data_for_prompt(
+    processed_data: Dict[str, Any],
+    metric_limit: int,
+    timeline_limit: int,
+    include_timeline_matrix: bool = True,
+) -> Dict[str, Any]:
+    data = copy.deepcopy(processed_data or {})
+    metrics_raw = data.get("metrics")
+    metrics: List[Dict[str, Any]] = metrics_raw if isinstance(metrics_raw, list) else []
+    ranked = []
+    for idx, metric in enumerate(metrics):
+        ranked.append(
+            (
+                (
+                    1000.0 if metric.get("is_temperature") else 0.0
+                )
+                + _to_score(metric.get("delta"))
+                + _to_score(metric.get("ring"))
+                + _to_score(metric.get("value")),
+                idx,
+                metric,
+            )
+        )
+    ranked.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+    kept_metrics = [item[2] for item in ranked[: max(1, metric_limit)]]
+    keep_keys = set()
+    keep_labels = set()
+    for metric in kept_metrics:
+        key = str(metric.get("key") or "").strip()
+        label = str(metric.get("label") or "").strip()
+        if key:
+            keep_keys.add(key)
+        if label:
+            keep_labels.add(label)
+        metric.pop("timeline_json", None)
+        timeline_entries = metric.get("timeline_entries")
+        if isinstance(timeline_entries, list):
+            metric["timeline_entries"] = timeline_entries[-max(1, timeline_limit) :]
+    data["metrics"] = kept_metrics
+
+    ring_compare = data.get("ring_compare")
+    if isinstance(ring_compare, dict):
+        entries = ring_compare.get("entries")
+        if isinstance(entries, list):
+            ring_compare["entries"] = [
+                entry
+                for entry in entries
+                if str(entry.get("key") or "").strip() in keep_keys
+                or str(entry.get("label") or "").strip() in keep_labels
+            ]
+
+    plan_compare = data.get("plan_compare")
+    if isinstance(plan_compare, dict):
+        entries = plan_compare.get("entries")
+        if isinstance(entries, list):
+            plan_compare["entries"] = [
+                entry
+                for entry in entries
+                if str(entry.get("key") or "").strip() in keep_keys
+                or str(entry.get("label") or "").strip() in keep_labels
+            ]
+
+    timeline_matrix = data.get("timeline_matrix")
+    if include_timeline_matrix and isinstance(timeline_matrix, dict):
+        trimmed_matrix: Dict[str, Any] = {}
+        for key, entries in timeline_matrix.items():
+            key_text = str(key or "").strip()
+            if key_text not in keep_keys and key_text not in keep_labels:
+                continue
+            if isinstance(entries, list):
+                trimmed_matrix[key_text] = entries[-max(1, timeline_limit) :]
+            else:
+                trimmed_matrix[key_text] = entries
+        data["timeline_matrix"] = trimmed_matrix
+    elif not include_timeline_matrix:
+        data.pop("timeline_matrix", None)
+
+    warnings = data.get("raw_warnings")
+    if isinstance(warnings, list) and len(warnings) > 20:
+        data["raw_warnings"] = warnings[:20]
+    return data
+
+
+def _serialize_prompt_processed_data(processed_data: Dict[str, Any]) -> str:
+    candidates = [
+        (100, 31, True),
+        (80, 20, True),
+        (60, 12, True),
+        (45, 8, False),
+        (30, 5, False),
+    ]
+    last_json = "{}"
+    last_payload: Dict[str, Any] = {}
+    for metric_limit, timeline_limit, include_matrix in candidates:
+        payload = _trim_processed_data_for_prompt(
+            processed_data,
+            metric_limit=metric_limit,
+            timeline_limit=timeline_limit,
+            include_timeline_matrix=include_matrix,
+        )
+        data_json = _safe_json_dumps(payload)
+        last_json = data_json
+        last_payload = payload
+        if len(data_json) <= PROMPT_DATA_MAX_CHARS:
+            if metric_limit < 100 or timeline_limit < 31 or not include_matrix:
+                meta = payload.get("meta")
+                if isinstance(meta, dict):
+                    meta["prompt_compaction"] = (
+                        f"metrics<= {metric_limit}, timeline<= {timeline_limit}, "
+                        f"timeline_matrix={'on' if include_matrix else 'off'}"
+                    )
+            return _safe_json_dumps(payload)
+    if isinstance(last_payload.get("meta"), dict):
+        last_payload["meta"]["prompt_compaction"] = "max_compaction_applied"
+    return _safe_json_dumps(last_payload) if last_payload else last_json
+
+
+def _normalize_ai_mode(mode_id: Any) -> str:
+    raw = str(mode_id or "").strip()
+    if raw in AI_MODE_TEMPLATE_REGISTRY:
+        return raw
+    return AI_MODE_DAILY
+
+
+def _resolve_mode_templates(mode_id: str) -> Dict[str, str]:
+    normalized = _normalize_ai_mode(mode_id)
+    return AI_MODE_TEMPLATE_REGISTRY.get(normalized, AI_MODE_TEMPLATE_REGISTRY[AI_MODE_DAILY])
+
+
+def _sanitize_user_prompt(user_prompt: Any, max_len: int = 2000) -> str:
+    text = str(user_prompt or "").strip()
+    if not text:
+        return ""
+    if len(text) > max_len:
+        return text[:max_len]
+    return text
 
 
 def _to_float_or_none(value: Any) -> Optional[float]:
@@ -587,11 +943,43 @@ def _parse_json_response(raw: str, stage: str) -> Dict[str, Any]:
         raise ValueError(f"{stage} 阶段 JSON 解析失败: {exc}")
 
 
-def _call_model(prompt: str) -> str:
-    model = _get_model()
-    response = model.generate_content(prompt)
+def _extract_retry_delay_seconds(error_text: str) -> int:
+    if not error_text:
+        return 20
+    candidates: List[int] = []
+    match_retry_in = re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", error_text, flags=re.IGNORECASE)
+    if match_retry_in:
+        try:
+            candidates.append(int(math.ceil(float(match_retry_in.group(1)))))
+        except (TypeError, ValueError):
+            pass
+    match_retry_block = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", error_text, flags=re.IGNORECASE)
+    if match_retry_block:
+        try:
+            candidates.append(int(match_retry_block.group(1)))
+        except (TypeError, ValueError):
+            pass
+    return max([20, *candidates])
+
+
+def _is_quota_or_rate_error(exc: Exception) -> bool:
+    text = str(exc or "").lower()
+    if "429" in text:
+        return True
+    keywords = [
+        "quota exceeded",
+        "rate limit",
+        "resource has been exhausted",
+        "generatecontentinputtokenspermodelperminute",
+    ]
+    return any(word in text for word in keywords)
+
+
+def _extract_response_text(response: Any) -> str:
     text = (response.text or "").strip() if response else ""
-    if not text and response and getattr(response, "candidates", None):
+    if text:
+        return text
+    if response and getattr(response, "candidates", None):
         parts = []
         for candidate in response.candidates:
             for part in getattr(candidate, "content", {}).parts or []:
@@ -599,9 +987,34 @@ def _call_model(prompt: str) -> str:
                 if part_text:
                     parts.append(part_text)
         text = "\n".join(parts).strip()
-    if not text:
-        raise RuntimeError("模型未返回内容")
     return text
+
+
+def _call_model(prompt: str, retries: int = 3) -> str:
+    model = _get_model()
+    last_error: Optional[Exception] = None
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            response = model.generate_content(prompt)
+            text = _extract_response_text(response)
+            if not text:
+                raise RuntimeError("模型未返回内容")
+            return text
+        except Exception as exc:  # pylint: disable=broad-except
+            last_error = exc
+            if _is_quota_or_rate_error(exc) and attempt < retries:
+                delay_seconds = _extract_retry_delay_seconds(str(exc))
+                _logger.warning(
+                    "Gemini 限流/配额触发，第 %s/%s 次调用失败，%s 秒后自动重试：%s",
+                    attempt,
+                    retries,
+                    delay_seconds,
+                    exc,
+                )
+                time.sleep(delay_seconds)
+                continue
+            raise
+    raise RuntimeError(f"模型调用失败: {last_error}")
 
 
 def _run_json_stage(stage: str, prompt: str, retries: int = 2) -> Dict[str, Any]:
@@ -637,7 +1050,7 @@ def _get_model() -> genai.GenerativeModel:
     return _model
 
 
-def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _preprocess_payload(payload: Dict[str, Any], mode_id: str = AI_MODE_DAILY) -> Dict[str, Any]:
     """
     预处理 API 返回的原始 payload，为 Prompt 和 HTML 渲染准备数据。
     """
@@ -765,6 +1178,7 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "meta": meta,
+        "mode_id": _normalize_ai_mode(mode_id),
         "metrics": processed_metrics,
         "ring_compare": ring_compare,
         "plan_compare": plan_compare,
@@ -773,76 +1187,105 @@ def _preprocess_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _prepend_instruction_block(prompt: str, instruction: str) -> str:
+def _prepend_instruction_block(prompt: str, instruction: str, user_prompt: str = "") -> str:
+    blocks: List[str] = []
     extra = (instruction or "").strip()
-    if not extra:
+    if extra:
+        blocks.append(f"### AI 指令（最高优先级）\n{extra}")
+    user_text = _sanitize_user_prompt(user_prompt)
+    if user_text:
+        blocks.append(
+            "### 用户本次附加要求（在不破坏 JSON 输出结构和数据真实性前提下尽量满足）\n"
+            f"{user_text}"
+        )
+    if not blocks:
         return prompt
-    return f"### AI 指令（最高优先级）\n{extra}\n\n{prompt}"
+    return "\n\n".join(blocks + [prompt])
 
 
-def _build_insight_prompt(processed_data: Dict[str, Any], instruction: str = "") -> str:
-    data_json = _safe_json_dumps(processed_data)
-    base = f"{INSIGHT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
-    return _prepend_instruction_block(base, instruction)
+def _build_insight_prompt(
+    processed_data: Dict[str, Any],
+    instruction: str = "",
+    user_prompt: str = "",
+    template: str = INSIGHT_PROMPT_TEMPLATE,
+) -> str:
+    data_json = _serialize_prompt_processed_data(processed_data)
+    base = f"{template}\n\n### 数据\n{data_json}"
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
-def _build_fast_insight_layout_prompt(processed_data: Dict[str, Any], instruction: str = "") -> str:
+def _build_fast_insight_layout_prompt(
+    processed_data: Dict[str, Any],
+    instruction: str = "",
+    user_prompt: str = "",
+    template: str = FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE,
+) -> str:
     """极速模式：合并洞察分析和结构规划为一个阶段"""
-    data_json = _safe_json_dumps(processed_data)
-    base = f"{FAST_INSIGHT_LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}"
-    return _prepend_instruction_block(base, instruction)
+    data_json = _serialize_prompt_processed_data(processed_data)
+    base = f"{template}\n\n### 数据\n{data_json}"
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
 def _build_fast_validation_prompt(
     processed_data: Dict[str, Any],
     content_data: Dict[str, Any],
     instruction: str = "",
+    user_prompt: str = "",
+    template: str = FAST_VALIDATION_PROMPT_TEMPLATE,
 ) -> str:
     """极速模式：轻量验证 Prompt"""
-    data_json = _safe_json_dumps(processed_data)
+    data_json = _serialize_prompt_processed_data(processed_data)
     content_json = _safe_json_dumps(content_data)
     base = (
-        f"{FAST_VALIDATION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}"
+        f"{template}\n\n### 指标数据\n{data_json}"
         f"\n\n### 报告内容 JSON\n{content_json}\n"
     )
-    return _prepend_instruction_block(base, instruction)
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
 def _build_layout_prompt(
-    processed_data: Dict[str, Any], insight_data: Dict[str, Any], instruction: str = ""
+    processed_data: Dict[str, Any],
+    insight_data: Dict[str, Any],
+    instruction: str = "",
+    user_prompt: str = "",
+    template: str = LAYOUT_PROMPT_TEMPLATE,
 ) -> str:
-    data_json = _safe_json_dumps(processed_data)
+    data_json = _serialize_prompt_processed_data(processed_data)
     insight_json = _safe_json_dumps(insight_data)
-    base = f"{LAYOUT_PROMPT_TEMPLATE}\n\n### 数据\n{data_json}\n\n### 洞察\n{insight_json}"
-    return _prepend_instruction_block(base, instruction)
+    base = f"{template}\n\n### 数据\n{data_json}\n\n### 洞察\n{insight_json}"
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
 def _build_content_prompt(
     insight_data: Dict[str, Any],
     layout_data: Dict[str, Any],
     instruction: str = "",
+    user_prompt: str = "",
+    template: str = CONTENT_PROMPT_TEMPLATE,
 ) -> str:
     insight_json = _safe_json_dumps(insight_data)
     layout_json = _safe_json_dumps(layout_data)
     base = (
-        f"{CONTENT_PROMPT_TEMPLATE}\n\n### 洞察 JSON\n{insight_json}\n"
+        f"{template}\n\n### 洞察 JSON\n{insight_json}\n"
         f"\n### 版面规划 JSON\n{layout_json}\n"
     )
-    return _prepend_instruction_block(base, instruction)
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
 def _build_validation_prompt(
     processed_data: Dict[str, Any],
     content_data: Dict[str, Any],
     instruction: str = "",
+    user_prompt: str = "",
+    template: str = VALIDATION_PROMPT_TEMPLATE,
 ) -> str:
-    data_json = _safe_json_dumps(processed_data)
+    data_json = _serialize_prompt_processed_data(processed_data)
     content_json = _safe_json_dumps(content_data)
     base = (
-        f"{VALIDATION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}"
+        f"{template}\n\n### 指标数据\n{data_json}"
         f"\n\n### 报告内容 JSON\n{content_json}\n"
     )
-    return _prepend_instruction_block(base, instruction)
+    return _prepend_instruction_block(base, instruction, user_prompt)
 
 
 def _build_revision_prompt(
@@ -852,20 +1295,229 @@ def _build_revision_prompt(
     previous_content: Dict[str, Any],
     validation_result: Dict[str, Any],
     instruction: str = "",
+    user_prompt: str = "",
+    template: str = REVISION_PROMPT_TEMPLATE,
 ) -> str:
-    data_json = _safe_json_dumps(processed_data)
+    data_json = _serialize_prompt_processed_data(processed_data)
     insight_json = _safe_json_dumps(insight_data)
     layout_json = _safe_json_dumps(layout_data)
     content_json = _safe_json_dumps(previous_content)
     validation_json = _safe_json_dumps(validation_result)
     base = (
-        f"{REVISION_PROMPT_TEMPLATE}\n\n### 指标数据\n{data_json}\n"
+        f"{template}\n\n### 指标数据\n{data_json}\n"
         f"\n### 洞察 JSON\n{insight_json}\n"
         f"\n### 版面规划 JSON\n{layout_json}\n"
         f"\n### 现有正文 JSON\n{content_json}\n"
         f"\n### 核查问题 JSON\n{validation_json}\n"
     )
-    return _prepend_instruction_block(base, instruction)
+    return _prepend_instruction_block(base, instruction, user_prompt)
+
+
+def _normalize_sections_for_mode(
+    mode_id: str,
+    raw_sections: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    if mode_id != AI_MODE_MONTHLY:
+        return raw_sections or []
+    monthly_blueprint = [
+        ("overview", "一、基本概况"),
+        ("coal_completion", "二、标煤耗量完成情况"),
+        ("profit_cost_breakdown", "三、边际利润与收入成本拆解"),
+        ("efficiency_and_actions", "四、单耗诊断与下步建议"),
+    ]
+    section_map: Dict[str, Dict[str, Any]] = {}
+    for sec in raw_sections or []:
+        sec_id = str(sec.get("id") or "").strip()
+        if sec_id:
+            section_map[sec_id] = sec
+    normalized: List[Dict[str, Any]] = []
+    for sec_id, default_title in monthly_blueprint:
+        base = section_map.get(sec_id) or {}
+        normalized.append(
+            {
+                "id": sec_id,
+                "title": str(base.get("title") or default_title),
+                "purpose": str(base.get("purpose") or ""),
+                "bullets": base.get("bullets") or [],
+                "metrics": base.get("metrics") or [],
+            }
+        )
+    return normalized
+
+
+def _generate_monthly_report_html(
+    processed_data: Dict[str, Any],
+    insight_data: Dict[str, Any],
+    layout_data: Dict[str, Any],
+    content_data: Dict[str, Any],
+    validation_data: Optional[Dict[str, Any]] = None,
+) -> str:
+    meta = processed_data.get("meta") or {}
+    metrics = processed_data.get("metrics") or []
+    sections = _normalize_sections_for_mode(AI_MODE_MONTHLY, layout_data.get("sections") or [])
+    section_contents = content_data.get("section_contents") or {}
+    validation_block = validation_data or {}
+    report_title = "生产运行简报（智能生成）"
+    sub_title = str(insight_data.get("headline") or "月度经营分析")
+    yoy_entries = []
+    for metric in metrics:
+        current = metric.get("value")
+        peer_val = metric.get("peer_value")
+        delta = metric.get("delta")
+        if current is None and peer_val is None and delta is None:
+            continue
+        yoy_entries.append(
+            {
+                "label": metric.get("label"),
+                "unit": metric.get("unit") or "",
+                "current": current,
+                "peer": peer_val,
+                "delta": delta,
+                "decimals": metric.get("decimals", 2),
+            }
+        )
+    yoy_entries = yoy_entries[:40]
+    ring_data = processed_data.get("ring_compare") or {}
+    ring_entries = (ring_data.get("entries") or [])[:40]
+    plan_data = processed_data.get("plan_compare") or {}
+    plan_entries = (plan_data.get("entries") or [])[:40]
+
+    css = """
+        body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif; background: #f3f4f6; color: #1f2937; margin: 0; padding: 24px; }
+        .paper { max-width: 980px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 28px 32px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
+        .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 14px; margin-bottom: 18px; }
+        .header h1 { margin: 0; font-size: 30px; color: #0f172a; letter-spacing: 1px; }
+        .header .subtitle { margin: 10px 0 0; color: #334155; font-size: 16px; font-weight: 600; }
+        .meta { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; font-size: 13px; color: #475569; text-align: left; }
+        .meta span { display: block; }
+        .chapter { margin: 18px 0; }
+        .chapter h2 { margin: 0 0 10px; font-size: 20px; color: #0f172a; border-left: 5px solid #2563eb; padding-left: 10px; }
+        .chapter .content { font-size: 15px; line-height: 1.9; color: #1f2937; }
+        .chapter .content p { margin: 10px 0; }
+        .table-wrap { overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: center; }
+        th { background: #eff6ff; color: #1e3a8a; font-weight: 700; }
+        .unit { color: #64748b; margin-left: 4px; font-size: 12px; }
+        .delta-positive { color: #b91c1c; font-weight: 700; }
+        .delta-negative { color: #15803d; font-weight: 700; }
+        .delta-neutral { color: #334155; font-weight: 700; }
+        .delta-muted { color: #94a3b8; font-weight: 700; }
+        .review { margin-top: 22px; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
+        .review h3 { margin: 0 0 8px; color: #1e3a8a; font-size: 16px; }
+        .review ul { margin: 6px 0 0; padding-left: 18px; color: #334155; }
+        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #94a3b8; }
+    """
+
+    html_parts: List[str] = [
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        f"<style>{css}</style>",
+        "</head><body><div class='paper'>",
+        "<div class='header'>",
+        f"<h1>{report_title}</h1>",
+        f"<div class='subtitle'>{sub_title}</div>",
+        "<div class='meta'>",
+        f"<span>分析口径：{meta.get('unit_label') or '月报查询'}</span>",
+        f"<span>报告模式：{meta.get('analysis_mode_label') or '月报分析'}</span>",
+        f"<span>分析期间：{meta.get('start_date') or '—'} ~ {meta.get('end_date') or '—'}</span>",
+        f"<span>生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</span>",
+        "</div></div>",
+    ]
+
+    if yoy_entries:
+        html_parts.append("<div class='chapter'><h2>核心指标同比概览</h2><div class='table-wrap'>")
+        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>同期</th><th>同比</th></tr></thead><tbody>")
+        for entry in yoy_entries:
+            decimals = entry.get("decimals", 2)
+            unit = entry.get("unit") or ""
+            unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
+            delta_val = entry.get("delta")
+            delta_cls = _classify_delta(delta_val)
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry.get('label') or ''}</td>"
+                f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
+                f"<td>{_format_number(entry.get('peer'), decimals)}{unit_html}</td>"
+                f"<td class='{delta_cls}'>{_format_percent_text(delta_val)}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table></div></div>")
+
+    for section in sections:
+        sec_id = section.get("id")
+        sec_title = section.get("title") or ""
+        sec_html = section_contents.get(sec_id) or "<p>暂无内容。</p>"
+        html_parts.append(
+            "<div class='chapter'>"
+            f"<h2>{sec_title}</h2>"
+            f"<div class='content'>{sec_html}</div>"
+            "</div>"
+        )
+
+    if ring_entries:
+        html_parts.append("<div class='chapter'><h2>附表：环比对比</h2><div class='table-wrap'>")
+        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>上期</th><th>环比</th></tr></thead><tbody>")
+        for entry in ring_entries:
+            decimals = entry.get("decimals", 2)
+            unit = entry.get("unit") or ""
+            unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
+            rate_val = entry.get("rate")
+            rate_cls = _classify_delta(rate_val)
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry.get('label') or ''}</td>"
+                f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
+                f"<td>{_format_number(entry.get('previous'), decimals)}{unit_html}</td>"
+                f"<td class='{rate_cls}'>{_format_percent_text(rate_val)}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table></div></div>")
+
+    if plan_entries:
+        html_parts.append("<div class='chapter'><h2>附表：计划对比</h2><div class='table-wrap'>")
+        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>计划</th><th>完成率</th></tr></thead><tbody>")
+        for entry in plan_entries:
+            decimals = entry.get("decimals", 2)
+            unit = entry.get("unit") or ""
+            unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
+            completion = entry.get("completion_rate")
+            completion_cls = _classify_delta(completion)
+            html_parts.append(
+                "<tr>"
+                f"<td>{entry.get('label') or ''}</td>"
+                f"<td>{_format_number(entry.get('actual_value'), decimals)}{unit_html}</td>"
+                f"<td>{_format_number(entry.get('plan_value'), decimals)}{unit_html}</td>"
+                f"<td class='{completion_cls}'>{_format_percent_text(completion)}</td>"
+                "</tr>"
+            )
+        html_parts.append("</tbody></table></div></div>")
+
+    if validation_block:
+        status = (validation_block.get("status") or "pending").lower()
+        status_label_map = {
+            "pass": "核对通过",
+            "warning": "存在提示",
+            "fail": "发现异常",
+            "pending": "待核对",
+        }
+        status_label = status_label_map.get(status, "待核对")
+        html_parts.append("<div class='review'>")
+        html_parts.append("<h3>智能核对结果</h3>")
+        html_parts.append(f"<p><strong>结论：</strong>{status_label}</p>")
+        issues = validation_block.get("issues") or []
+        if issues:
+            html_parts.append("<ul>")
+            for issue in issues:
+                section = issue.get("section") or "未注明段落"
+                level = (issue.get("severity") or "info").lower()
+                desc = issue.get("description") or "无描述"
+                html_parts.append(f"<li>[{section}/{level}] {desc}</li>")
+            html_parts.append("</ul>")
+        html_parts.append("</div>")
+
+    html_parts.append("<div class='footer'>本报告由系统自动生成，仅供经营分析参考。</div>")
+    html_parts.append("</div></body></html>")
+    return "\n".join(html_parts)
 
 
 def _generate_report_html(
@@ -881,7 +1533,16 @@ def _generate_report_html(
     meta = processed_data.get("meta") or {}
     metrics = processed_data.get("metrics") or []
     timeline_matrix = processed_data.get("timeline_matrix") or {}
-    sections = layout_data.get("sections") or []
+    mode_id = _normalize_ai_mode(processed_data.get("mode_id"))
+    if mode_id == AI_MODE_MONTHLY:
+        return _generate_monthly_report_html(
+            processed_data=processed_data,
+            insight_data=insight_data,
+            layout_data=layout_data,
+            content_data=content_data,
+            validation_data=validation_data,
+        )
+    sections = _normalize_sections_for_mode(mode_id, layout_data.get("sections") or [])
     section_contents = content_data.get("section_contents") or {}
     callouts = content_data.get("callouts") or []
     validation_block = validation_data or {}
@@ -991,168 +1652,248 @@ def _generate_report_html(
             """)
     html_parts.append("</div>")
 
-    # 同比比较
-    yoy_entries = []
-    for m in metrics:
-        current = m.get("value")
-        peer_val = m.get("peer_value")
-        if current is None and peer_val is None:
-            continue
-        yoy_entries.append(
-            {
-                "label": m.get("label"),
-                "unit": m.get("unit") or "",
-                "current": current,
-                "peer": peer_val,
-                "delta": m.get("delta"),
-                "decimals": m.get("decimals", 2),
-            }
-        )
-    if yoy_entries:
-        html_parts.append("<div class='analysis-section'>")
-        html_parts.append("<h2>同比比较</h2>")
-        html_parts.append(
-            "<table class='ring-summary__table'><thead><tr>"
-            "<th>指标</th><th>本期累计</th><th>同期累计</th><th>同比</th>"
-            "</tr></thead><tbody>"
-        )
-        for entry in yoy_entries:
-            current_text = _format_number(entry["current"], entry["decimals"])
-            peer_text = _format_number(entry["peer"], entry["decimals"])
-            delta_text = _format_percent_text(entry.get("delta"))
-            unit_html = f"<span class='ring-unit'>{entry['unit']}</span>" if entry["unit"] else ""
+    if mode_id != AI_MODE_MONTHLY:
+        # 日报：保留既有硬性结构（同比/环比/计划/逐日明细）
+        yoy_entries = []
+        for m in metrics:
+            current = m.get("value")
+            peer_val = m.get("peer_value")
+            if current is None and peer_val is None:
+                continue
+            yoy_entries.append(
+                {
+                    "label": m.get("label"),
+                    "unit": m.get("unit") or "",
+                    "current": current,
+                    "peer": peer_val,
+                    "delta": m.get("delta"),
+                    "decimals": m.get("decimals", 2),
+                }
+            )
+        if yoy_entries:
+            html_parts.append("<div class='analysis-section'>")
+            html_parts.append("<h2>同比比较</h2>")
             html_parts.append(
-                "<tr>"
-                f"<td>{entry['label']}</td>"
-                f"<td>{current_text}{unit_html}</td>"
-                f"<td>{peer_text}{unit_html}</td>"
-                f"<td>{delta_text}</td>"
-                "</tr>"
+                "<table class='ring-summary__table'><thead><tr>"
+                "<th>指标</th><th>本期累计</th><th>同期累计</th><th>同比</th>"
+                "</tr></thead><tbody>"
             )
-        html_parts.append("</tbody></table></div>")
-        summary_phrases = []
-        for entry in yoy_entries:
-            unit_text = entry.get("unit") or ""
-            current_text = _format_number(entry["current"], entry["decimals"])
-            peer_text = _format_number(entry["peer"], entry["decimals"])
-            delta_text = _format_percent_text(entry.get("delta"))
-            summary_phrases.append(
-                f"{entry['label']} 本期 {current_text}{unit_text}，同期 {peer_text}{unit_text}，同比 {delta_text}"
-            )
-        for phrase in summary_phrases:
-            html_parts.append(f"<p class='ring-summary-line'>{phrase}</p>")
-    ring_data = processed_data.get("ring_compare") or {}
-    if ring_data and (ring_data.get("entries") or ring_data.get("note")):
-        html_parts.append("<div class='analysis-section'>")
-        html_parts.append("<h2>环比比较</h2>")
-        header_bits = []
-        if ring_data.get("current_range"):
-            header_bits.append(f"本期：{ring_data['current_range']}")
-        if ring_data.get("previous_range"):
-            header_bits.append(f"上期：{ring_data['previous_range']}")
-        if header_bits:
-            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(header_bits)}</p>")
-        entries = ring_data.get("entries") or []
-        if entries:
-            html_parts.append("<table class='ring-summary__table'>")
+            for entry in yoy_entries:
+                current_text = _format_number(entry["current"], entry["decimals"])
+                peer_text = _format_number(entry["peer"], entry["decimals"])
+                delta_text = _format_percent_text(entry.get("delta"))
+                unit_html = f"<span class='ring-unit'>{entry['unit']}</span>" if entry["unit"] else ""
+                html_parts.append(
+                    "<tr>"
+                    f"<td>{entry['label']}</td>"
+                    f"<td>{current_text}{unit_html}</td>"
+                    f"<td>{peer_text}{unit_html}</td>"
+                    f"<td>{delta_text}</td>"
+                    "</tr>"
+                )
+            html_parts.append("</tbody></table></div>")
+            summary_phrases = []
+            for entry in yoy_entries:
+                unit_text = entry.get("unit") or ""
+                current_text = _format_number(entry["current"], entry["decimals"])
+                peer_text = _format_number(entry["peer"], entry["decimals"])
+                delta_text = _format_percent_text(entry.get("delta"))
+                summary_phrases.append(
+                    f"{entry['label']} 本期 {current_text}{unit_text}，同期 {peer_text}{unit_text}，同比 {delta_text}"
+                )
+            for phrase in summary_phrases:
+                html_parts.append(f"<p class='ring-summary-line'>{phrase}</p>")
+        ring_data = processed_data.get("ring_compare") or {}
+        if ring_data and (ring_data.get("entries") or ring_data.get("note")):
+            html_parts.append("<div class='analysis-section'>")
+            html_parts.append("<h2>环比比较</h2>")
+            header_bits = []
+            if ring_data.get("current_range"):
+                header_bits.append(f"本期：{ring_data['current_range']}")
+            if ring_data.get("previous_range"):
+                header_bits.append(f"上期：{ring_data['previous_range']}")
+            if header_bits:
+                html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(header_bits)}</p>")
+            entries = ring_data.get("entries") or []
+            if entries:
+                html_parts.append("<table class='ring-summary__table'>")
+                html_parts.append(
+                    "<thead><tr><th>指标</th><th>本期累计</th><th>上期累计</th><th>环比</th></tr></thead><tbody>"
+                )
+                for entry in entries:
+                    decimals = entry.get("decimals", 2)
+                    current_text = _format_number(entry.get("current"), decimals)
+                    prev_text = _format_number(entry.get("previous"), decimals)
+                    rate_text = _format_percent_text(entry.get("rate"))
+                    unit = entry.get("unit") or ""
+                    unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+                    html_parts.append(
+                        "<tr>"
+                        f"<td>{entry.get('label')}</td>"
+                        f"<td>{current_text}{unit_html}</td>"
+                        f"<td>{prev_text}{unit_html}</td>"
+                        f"<td>{rate_text}</td>"
+                        "</tr>"
+                    )
+                html_parts.append("</tbody></table>")
+            elif ring_data.get("note"):
+                html_parts.append(f"<p class='ring-section__note'>{ring_data['note']}</p>")
+            if ring_data.get("summary_lines"):
+                for line in ring_data["summary_lines"]:
+                    html_parts.append(f"<p class='ring-summary-line'>{line}</p>")
+            html_parts.append("</div>")
+
+        plan_data = processed_data.get("plan_compare") or {}
+        plan_entries = plan_data.get("entries") or []
+        if plan_entries:
+            html_parts.append("<div class='analysis-section'>")
+            html_parts.append("<h2>计划比较</h2>")
+            note_bits = []
+            if plan_data.get("month_label"):
+                note_bits.append(f"计划月份：{plan_data['month_label']}")
+            if plan_data.get("period_text"):
+                note_bits.append(f"期间：{plan_data['period_text']}")
+            if note_bits:
+                html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(note_bits)}</p>")
             html_parts.append(
-                "<thead><tr><th>指标</th><th>本期累计</th><th>上期累计</th><th>环比</th></tr></thead><tbody>"
+                "<table class='ring-summary__table'><thead><tr>"
+                "<th>指标</th><th>截至本期末</th><th>月度计划</th><th>完成率</th>"
+                "</tr></thead><tbody>"
             )
-            for entry in entries:
+            for entry in plan_entries:
                 decimals = entry.get("decimals", 2)
-                current_text = _format_number(entry.get("current"), decimals)
-                prev_text = _format_number(entry.get("previous"), decimals)
-                rate_text = _format_percent_text(entry.get("rate"))
+                actual_text = _format_number(entry.get("actual_value"), decimals)
+                plan_text = _format_number(entry.get("plan_value"), decimals)
+                completion_text = _format_percent_text(entry.get("completion_rate"))
                 unit = entry.get("unit") or ""
                 unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
                 html_parts.append(
                     "<tr>"
                     f"<td>{entry.get('label')}</td>"
-                    f"<td>{current_text}{unit_html}</td>"
-                    f"<td>{prev_text}{unit_html}</td>"
-                    f"<td>{rate_text}</td>"
+                    f"<td>{actual_text}{unit_html}</td>"
+                    f"<td>{plan_text}{unit_html}</td>"
+                    f"<td>{completion_text}</td>"
                     "</tr>"
                 )
             html_parts.append("</tbody></table>")
-        elif ring_data.get("note"):
-            html_parts.append(f"<p class='ring-section__note'>{ring_data['note']}</p>")
-        if ring_data.get("summary_lines"):
-            for line in ring_data["summary_lines"]:
-                html_parts.append(f"<p class='ring-summary-line'>{line}</p>")
-        html_parts.append("</div>")
+            summary_lines = plan_data.get("summary_lines") or []
+            for line in summary_lines:
+                html_parts.append(f"<p class='ring-summary-line'>【计划】{line}</p>")
+            html_parts.append("</div>")
 
-    plan_data = processed_data.get("plan_compare") or {}
-    plan_entries = plan_data.get("entries") or []
-    if plan_entries:
-        html_parts.append("<div class='analysis-section'>")
-        html_parts.append("<h2>计划比较</h2>")
-        note_bits = []
-        if plan_data.get("month_label"):
-            note_bits.append(f"计划月份：{plan_data['month_label']}")
-        if plan_data.get("period_text"):
-            note_bits.append(f"期间：{plan_data['period_text']}")
-        if note_bits:
-            html_parts.append(f"<p class='ring-section__header'>{' ｜ '.join(note_bits)}</p>")
-        html_parts.append(
-            "<table class='ring-summary__table'><thead><tr>"
-            "<th>指标</th><th>截至本期末</th><th>月度计划</th><th>完成率</th>"
-            "</tr></thead><tbody>"
-        )
-        for entry in plan_entries:
-            decimals = entry.get("decimals", 2)
-            actual_text = _format_number(entry.get("actual_value"), decimals)
-            plan_text = _format_number(entry.get("plan_value"), decimals)
-            completion_text = _format_percent_text(entry.get("completion_rate"))
-            unit = entry.get("unit") or ""
-            unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
-            html_parts.append(
-                "<tr>"
-                f"<td>{entry.get('label')}</td>"
-                f"<td>{actual_text}{unit_html}</td>"
-                f"<td>{plan_text}{unit_html}</td>"
-                f"<td>{completion_text}</td>"
-                "</tr>"
-            )
-        html_parts.append("</tbody></table>")
-        summary_lines = plan_data.get("summary_lines") or []
-        for line in summary_lines:
-            html_parts.append(f"<p class='ring-summary-line'>【计划】{line}</p>")
-        html_parts.append("</div>")
-
-    # 区间明细（逐日）
-    timeline_metrics = timeline_matrix.get("metrics") or []
-    timeline_rows = timeline_matrix.get("rows") or []
-    if timeline_metrics and timeline_rows:
-        html_parts.append("<div class='analysis-section'>")
-        html_parts.append("<h2>区间明细（逐日）</h2>")
-        html_parts.append("<div class='timeline-table-wrap'>")
-        html_parts.append("<table class='timeline-table'>")
-        html_parts.append("<thead>")
-        html_parts.append("<tr><th rowspan='2'>日期</th>")
-        for metric in timeline_metrics:
-            unit_html = f"<span class='ring-unit'>{metric.get('unit')}</span>" if metric.get("unit") else ""
-            html_parts.append(f"<th colspan='3'>{metric.get('label')}{unit_html}</th>")
-        html_parts.append("</tr>")
-        html_parts.append("<tr class='sub-head'>")
-        for _ in timeline_metrics:
-            html_parts.append("<th>本期</th><th>同期</th><th>同比</th>")
-        html_parts.append("</tr></thead><tbody>")
-        for row in timeline_rows:
-            date_label = row.get("date") or ""
-            html_parts.append(f"<tr><td>{date_label}</td>")
+        timeline_metrics = timeline_matrix.get("metrics") or []
+        timeline_rows = timeline_matrix.get("rows") or []
+        if timeline_metrics and timeline_rows:
+            html_parts.append("<div class='analysis-section'>")
+            html_parts.append("<h2>区间明细（逐日）</h2>")
+            html_parts.append("<div class='timeline-table-wrap'>")
+            html_parts.append("<table class='timeline-table'>")
+            html_parts.append("<thead>")
+            html_parts.append("<tr><th rowspan='2'>日期</th>")
             for metric in timeline_metrics:
-                key = metric.get("key")
-                decimals = metric.get("decimals", 2)
-                current_val = _format_number(row.get(f"{key}__current"), decimals)
-                peer_val = _format_number(row.get(f"{key}__peer"), decimals)
-                delta_value = row.get(f"{key}__delta")
-                delta_text = _format_percent_text(delta_value)
-                delta_class = _classify_delta(delta_value)
-                html_parts.append(f"<td>{current_val}</td>")
-                html_parts.append(f"<td>{peer_val}</td>")
-                html_parts.append(f"<td class='{delta_class}'>{delta_text}</td>")
+                unit_html = f"<span class='ring-unit'>{metric.get('unit')}</span>" if metric.get("unit") else ""
+                html_parts.append(f"<th colspan='3'>{metric.get('label')}{unit_html}</th>")
             html_parts.append("</tr>")
-        html_parts.append("</tbody></table></div></div>")
+            html_parts.append("<tr class='sub-head'>")
+            for _ in timeline_metrics:
+                html_parts.append("<th>本期</th><th>同期</th><th>同比</th>")
+            html_parts.append("</tr></thead><tbody>")
+            for row in timeline_rows:
+                date_label = row.get("date") or ""
+                html_parts.append(f"<tr><td>{date_label}</td>")
+                for metric in timeline_metrics:
+                    key = metric.get("key")
+                    decimals = metric.get("decimals", 2)
+                    current_val = _format_number(row.get(f"{key}__current"), decimals)
+                    peer_val = _format_number(row.get(f"{key}__peer"), decimals)
+                    delta_value = row.get(f"{key}__delta")
+                    delta_text = _format_percent_text(delta_value)
+                    delta_class = _classify_delta(delta_value)
+                    html_parts.append(f"<td>{current_val}</td>")
+                    html_parts.append(f"<td>{peer_val}</td>")
+                    html_parts.append(f"<td class='{delta_class}'>{delta_text}</td>")
+                html_parts.append("</tr>")
+            html_parts.append("</tbody></table></div></div>")
+    else:
+        # 月报：图文并茂展示“同比/环比/计划”三类关键比较，不沿用日报硬性章节块
+        yoy_entries = []
+        for m in metrics:
+            current = m.get("value")
+            peer_val = m.get("peer_value")
+            if current is None and peer_val is None:
+                continue
+            yoy_entries.append(
+                {
+                    "label": m.get("label"),
+                    "unit": m.get("unit") or "",
+                    "current": current,
+                    "peer": peer_val,
+                    "delta": m.get("delta"),
+                    "decimals": m.get("decimals", 2),
+                }
+            )
+        ring_data = processed_data.get("ring_compare") or {}
+        ring_entries = ring_data.get("entries") or []
+        plan_data = processed_data.get("plan_compare") or {}
+        plan_entries = plan_data.get("entries") or []
+        if yoy_entries or ring_entries or plan_entries:
+            html_parts.append("<div class='analysis-section'>")
+            html_parts.append("<h2>月度关键对比图表</h2>")
+            if yoy_entries:
+                html_parts.append("<h3>同比对比</h3>")
+                html_parts.append(
+                    "<table class='ring-summary__table'><thead><tr><th>指标</th><th>本期</th><th>同期</th><th>同比</th></tr></thead><tbody>"
+                )
+                for entry in yoy_entries:
+                    decimals = entry.get("decimals", 2)
+                    unit = entry.get("unit") or ""
+                    unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+                    html_parts.append(
+                        "<tr>"
+                        f"<td>{entry.get('label')}</td>"
+                        f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_number(entry.get('peer'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_percent_text(entry.get('delta'))}</td>"
+                        "</tr>"
+                    )
+                html_parts.append("</tbody></table>")
+            if ring_entries:
+                html_parts.append("<h3>环比对比</h3>")
+                html_parts.append(
+                    "<table class='ring-summary__table'><thead><tr><th>指标</th><th>本期</th><th>上期</th><th>环比</th></tr></thead><tbody>"
+                )
+                for entry in ring_entries:
+                    decimals = entry.get("decimals", 2)
+                    unit = entry.get("unit") or ""
+                    unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+                    html_parts.append(
+                        "<tr>"
+                        f"<td>{entry.get('label')}</td>"
+                        f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_number(entry.get('previous'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_percent_text(entry.get('rate'))}</td>"
+                        "</tr>"
+                    )
+                html_parts.append("</tbody></table>")
+            if plan_entries:
+                html_parts.append("<h3>计划对比</h3>")
+                html_parts.append(
+                    "<table class='ring-summary__table'><thead><tr><th>指标</th><th>本期</th><th>计划</th><th>完成率</th></tr></thead><tbody>"
+                )
+                for entry in plan_entries:
+                    decimals = entry.get("decimals", 2)
+                    unit = entry.get("unit") or ""
+                    unit_html = f"<span class='ring-unit'>{unit}</span>" if unit else ""
+                    html_parts.append(
+                        "<tr>"
+                        f"<td>{entry.get('label')}</td>"
+                        f"<td>{_format_number(entry.get('actual_value'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_number(entry.get('plan_value'), decimals)}{unit_html}</td>"
+                        f"<td>{_format_percent_text(entry.get('completion_rate'))}</td>"
+                        "</tr>"
+                    )
+                html_parts.append("</tbody></table>")
+            html_parts.append("</div>")
 
     review_section: List[str] = []
     if validation_block:
@@ -1344,15 +2085,19 @@ def _generate_report_html(
 def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
     try:
         meta = payload.get("meta") or {}
+        mode_id = _normalize_ai_mode(payload.get("ai_mode_id"))
+        mode_templates = _resolve_mode_templates(mode_id)
+        user_prompt = _sanitize_user_prompt(payload.get("ai_user_prompt"))
         _logger.info(
-            "AI report job %s started (unit=%s, mode=%s, metrics=%s)",
+            "AI report job %s started (unit=%s, mode=%s, ai_mode=%s, metrics=%s)",
             job_id,
             meta.get("unit_key") or meta.get("unit_label"),
             meta.get("analysis_mode"),
+            mode_id,
             ",".join(payload.get("resolved_metrics") or []),
         )
-        processed_data = _preprocess_payload(payload)
-        extra_instruction = _load_instruction_text()
+        processed_data = _preprocess_payload(payload, mode_id=mode_id)
+        extra_instruction = _load_instruction_text(mode_id)
         feature_flags = _load_ai_runtime_flags()
         enable_validation_stage = feature_flags.get("enable_validation", True)
         report_mode = feature_flags.get("report_mode", "full")
@@ -1363,19 +2108,34 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
         if report_mode == "fast":
             # ========== 极速模式：合并 Insight + Layout ==========
             _logger.info("AI report job %s using FAST mode", job_id)
-            fast_prompt = _build_fast_insight_layout_prompt(processed_data, extra_instruction)
+            fast_prompt = _build_fast_insight_layout_prompt(
+                processed_data,
+                extra_instruction,
+                user_prompt,
+                mode_templates["fast_insight_layout"],
+            )
             combined_data = _run_json_stage("洞察+规划", fast_prompt)
             insight_data = combined_data.get("insight") or {}
             layout_data = combined_data.get("layout") or {}
             _update_job(job_id, stage="content", insight=insight_data, layout=layout_data)
 
-            content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
+            content_prompt = _build_content_prompt(
+                insight_data,
+                layout_data,
+                extra_instruction,
+                user_prompt,
+                mode_templates["content"],
+            )
             content_data = _run_json_stage("内容撰写", content_prompt)
 
             if enable_validation_stage:
                 _update_job(job_id, stage="review", content=content_data)
                 fast_validation_prompt = _build_fast_validation_prompt(
-                    processed_data, content_data, extra_instruction
+                    processed_data,
+                    content_data,
+                    extra_instruction,
+                    user_prompt,
+                    mode_templates["fast_validation"],
                 )
                 validation_data = _run_json_stage("快速核查", fast_validation_prompt)
                 _update_job(job_id, validation=validation_data)
@@ -1384,21 +2144,42 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
                 _update_job(job_id, stage="content", content=content_data)
         else:
             # ========== 完整模式：5 阶段流程 ==========
-            insight_prompt = _build_insight_prompt(processed_data, extra_instruction)
+            insight_prompt = _build_insight_prompt(
+                processed_data,
+                extra_instruction,
+                user_prompt,
+                mode_templates["insight"],
+            )
             insight_data = _run_json_stage("洞察分析", insight_prompt)
             _update_job(job_id, stage="layout", insight=insight_data)
 
-            layout_prompt = _build_layout_prompt(processed_data, insight_data, extra_instruction)
+            layout_prompt = _build_layout_prompt(
+                processed_data,
+                insight_data,
+                extra_instruction,
+                user_prompt,
+                mode_templates["layout"],
+            )
             layout_data = _run_json_stage("结构规划", layout_prompt)
             _update_job(job_id, stage="content", layout=layout_data)
 
-            content_prompt = _build_content_prompt(insight_data, layout_data, extra_instruction)
+            content_prompt = _build_content_prompt(
+                insight_data,
+                layout_data,
+                extra_instruction,
+                user_prompt,
+                mode_templates["content"],
+            )
             content_data = _run_json_stage("内容撰写", content_prompt)
 
             if enable_validation_stage:
                 _update_job(job_id, stage="review", content=content_data)
                 validation_prompt = _build_validation_prompt(
-                    processed_data, content_data, extra_instruction
+                    processed_data,
+                    content_data,
+                    extra_instruction,
+                    user_prompt,
+                    mode_templates["validation"],
                 )
                 validation_data = _run_json_stage("检查核实", validation_prompt)
                 _update_job(job_id, validation=validation_data)
@@ -1421,11 +2202,17 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
                         content_data,
                         validation_data,
                         extra_instruction,
+                        user_prompt,
+                        mode_templates["revision"],
                     )
                     content_data = _run_json_stage("内容修订", revision_prompt)
                     _update_job(job_id, stage="revision_content", content=content_data)
                     validation_prompt = _build_validation_prompt(
-                        processed_data, content_data, extra_instruction
+                        processed_data,
+                        content_data,
+                        extra_instruction,
+                        user_prompt,
+                        mode_templates["validation"],
                     )
                     validation_data = _run_json_stage("复核检查", validation_prompt)
                     _update_job(job_id, stage="review", validation=validation_data)
@@ -1446,6 +2233,7 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
             stage="ready",
             report=html_report,
             model=_model_name,
+            ai_mode_id=mode_id,
             finished_at=_current_time_iso(),
         )
         _logger.info("AI report job %s finished successfully", job_id)
@@ -1470,6 +2258,7 @@ def enqueue_ai_report_job(payload: Dict[str, Any]) -> str:
         "job_id": job_id,
         "status": "pending",
         "stage": "pending",
+        "ai_mode_id": _normalize_ai_mode(payload.get("ai_mode_id")),
         "created_at": _current_time_iso(),
         "started_at": None,
         "report": None,

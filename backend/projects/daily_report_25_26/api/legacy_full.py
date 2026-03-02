@@ -51,6 +51,7 @@ from backend.services import data_analysis_ai_report
 from backend.services import ai_usage_service
 from backend.services.api_key_cipher import decrypt_api_key, encrypt_api_key
 from backend.services.project_data_paths import (
+    resolve_global_ai_settings_path,
     resolve_project_list_path,
     resolve_project_config_path,
     resolve_project_runtime_path,
@@ -65,7 +66,7 @@ BASIC_TEMPLATE_PATH = resolve_project_config_path(PROJECT_KEY, "数据结构_基
 DATA_ANALYSIS_SCHEMA_PATH = resolve_project_config_path(PROJECT_KEY, "数据结构_数据分析表.json")
 APPROVAL_STRUCTURE_PATH = resolve_project_config_path(PROJECT_KEY, "数据结构_审批用表.json")
 CONSTANT_STRUCTURE_PATH = resolve_project_config_path(PROJECT_KEY, "数据结构_常量指标表.json")
-AI_SETTINGS_PATH = resolve_project_config_path(PROJECT_KEY, "api_key.json")
+AI_SETTINGS_PATH = resolve_global_ai_settings_path()
 COAL_STORAGE_NAME_MAP = {
     "在途煤炭": ("coal_in_transit", "在途煤炭"),
     "港口存煤": ("coal_at_port", "港口存煤"),
@@ -1556,12 +1557,16 @@ class DataAnalysisQueryPayload(BaseModel):
     scope_key: Optional[str] = None
     schema_unit_key: Optional[str] = None
     request_ai_report: bool = False
+    ai_mode_id: Optional[str] = "daily_analysis_v1"
+    ai_user_prompt: Optional[str] = ""
 
 
 class AiSettingsPayload(BaseModel):
     api_keys: List[str]
     model: str
-    instruction: str = ""
+    instruction_daily: Optional[str] = None
+    instruction: Optional[str] = None
+    instruction_monthly: Optional[str] = None
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
@@ -1600,24 +1605,22 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
 
 
 def _read_ai_settings() -> Dict[str, Any]:
-    if not AI_SETTINGS_PATH.exists():
+    shared_data: Dict[str, Any] = {}
+    if AI_SETTINGS_PATH.exists():
+        try:
+            shared_data = json.loads(AI_SETTINGS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=500, detail=f"AI 配置解析失败: {exc}") from exc
+    if not isinstance(shared_data, dict):
+        shared_data = {}
+    data = dict(shared_data)
+
+    if not data:
         return {
             "api_keys": [],
             "model": "",
-            "instruction": "",
-            "report_mode": "full",
-            "enable_validation": True,
-            "allow_non_admin_report": False,
-        }
-    try:
-        data = json.loads(AI_SETTINGS_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail=f"AI 配置解析失败: {exc}") from exc
-    if not isinstance(data, dict):
-        return {
-            "api_keys": [],
-            "model": "",
-            "instruction": "",
+            "instruction_daily": "",
+            "instruction_monthly": "",
             "report_mode": "full",
             "enable_validation": True,
             "allow_non_admin_report": False,
@@ -1634,7 +1637,8 @@ def _read_ai_settings() -> Dict[str, Any]:
     return {
         "api_keys": decrypted_keys,
         "model": str(data.get("gemini_model") or ""),
-        "instruction": str(data.get("instruction") or ""),
+        "instruction_daily": str(data.get("instruction_daily") or ""),
+        "instruction_monthly": str(data.get("instruction_monthly") or ""),
         "report_mode": str(data.get("report_mode") or "full"),
         "enable_validation": _coerce_bool(data.get("enable_validation"), True),
         "allow_non_admin_report": _coerce_bool(
@@ -1650,7 +1654,8 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
         return {
             "api_keys": [],
             "model": "",
-            "instruction": "",
+            "instruction_daily": "",
+            "instruction_monthly": "",
             "enable_validation": True,
             "allow_non_admin_report": False,
         }
@@ -1659,7 +1664,8 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
 def _persist_ai_settings(
     api_keys: List[str],
     model: str,
-    instruction: str,
+    instruction_daily: Optional[str],
+    instruction_monthly: Optional[str],
     report_mode: str,
     enable_validation: bool,
     allow_non_admin_report: bool,
@@ -1680,7 +1686,12 @@ def _persist_ai_settings(
         del payload["gemini_api_key"]
 
     payload["gemini_model"] = model
-    payload["instruction"] = instruction
+    if instruction_daily is not None:
+        payload["instruction_daily"] = instruction_daily
+    if "instruction" in payload:
+        del payload["instruction"]
+    if instruction_monthly is not None:
+        payload["instruction_monthly"] = instruction_monthly
     payload["report_mode"] = report_mode
     payload["enable_validation"] = bool(enable_validation)
     payload["allow_non_admin_report"] = bool(allow_non_admin_report)
@@ -1689,7 +1700,8 @@ def _persist_ai_settings(
     return {
         "api_keys": api_keys,
         "model": model,
-        "instruction": instruction,
+        "instruction_daily": str(payload.get("instruction_daily") or ""),
+        "instruction_monthly": str(payload.get("instruction_monthly") or ""),
         "report_mode": report_mode,
         "enable_validation": bool(enable_validation),
         "allow_non_admin_report": bool(allow_non_admin_report),
@@ -1919,7 +1931,8 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
         "ok": True,
         "api_keys": data["api_keys"],
         "model": data["model"],
-        "instruction": data["instruction"],
+        "instruction_daily": data["instruction_daily"],
+        "instruction_monthly": data["instruction_monthly"],
         "report_mode": data["report_mode"],
         "enable_validation": data["enable_validation"],
         "allow_non_admin_report": data["allow_non_admin_report"],
@@ -1937,7 +1950,12 @@ async def update_ai_settings_endpoint(
     result = _persist_ai_settings(
         payload.api_keys,
         payload.model.strip(),
-        (payload.instruction or "").strip(),
+        payload.instruction_daily.strip()
+        if isinstance(payload.instruction_daily, str)
+        else (payload.instruction.strip() if isinstance(payload.instruction, str) else None),
+        payload.instruction_monthly.strip()
+        if isinstance(payload.instruction_monthly, str)
+        else None,
         payload.report_mode or "full",
         payload.enable_validation,
         payload.allow_non_admin_report,
@@ -1947,7 +1965,8 @@ async def update_ai_settings_endpoint(
         "ok": True,
         "api_keys": result["api_keys"],
         "model": result["model"],
-        "instruction": result["instruction"],
+        "instruction_daily": result["instruction_daily"],
+        "instruction_monthly": result["instruction_monthly"],
         "report_mode": result["report_mode"],
         "enable_validation": result["enable_validation"],
         "allow_non_admin_report": result["allow_non_admin_report"],
@@ -4116,6 +4135,8 @@ def _execute_data_analysis_query_legacy(
         }
     if payload.request_ai_report:
         try:
+            response_payload["ai_mode_id"] = str(payload.ai_mode_id or "daily_analysis_v1")
+            response_payload["ai_user_prompt"] = str(payload.ai_user_prompt or "").strip()
             job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("触发 AI 报告生成失败: %s", exc)

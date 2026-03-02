@@ -12,7 +12,7 @@ import time
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -83,7 +83,9 @@ class ValidationSwitchPayload(BaseModel):
 class AiSettingsPayload(BaseModel):
     api_keys: List[str]
     model: str
-    instruction: str = ""
+    instruction_daily: Optional[str] = None
+    instruction: Optional[str] = None
+    instruction_monthly: Optional[str] = None
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
@@ -808,7 +810,12 @@ def update_ai_settings(
     saved = _persist_ai_settings(
         payload.api_keys,
         payload.model.strip(),
-        payload.instruction,
+        payload.instruction_daily.strip()
+        if isinstance(payload.instruction_daily, str)
+        else (payload.instruction.strip() if isinstance(payload.instruction, str) else None),
+        payload.instruction_monthly.strip()
+        if isinstance(payload.instruction_monthly, str)
+        else None,
         payload.report_mode,
         payload.enable_validation,
         payload.allow_non_admin_report,

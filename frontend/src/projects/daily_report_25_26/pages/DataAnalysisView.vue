@@ -192,12 +192,22 @@
                 v-if="canConfigureAiSettings"
                 type="button"
                 class="btn ghost ai-settings-btn"
-                :disabled="aiSettingsLoading || aiSettingsSaving"
+                :disabled="!canConfigureAiSettings"
                 @click="openAiSettingsDialog"
               >
                 智能体设定
               </button>
             </div>
+            <label v-if="aiReportEnabled && aiFeatureAccessible" class="ai-user-prompt-field">
+              <span>本次分析要求（可选）</span>
+              <textarea
+                v-model="aiUserPrompt"
+                :disabled="queryLoading"
+                rows="3"
+                maxlength="2000"
+                placeholder="例如：更关注供热侧异常，输出三条最关键风险并给出可执行建议。"
+              ></textarea>
+            </label>
           </div>
         </template>
       </section>
@@ -548,181 +558,12 @@
         </div>
       </section>
     </main>
-    <transition name="fade">
-      <div
-        v-if="aiSettingsDialogVisible"
-        class="ai-settings-dialog__backdrop"
-        role="dialog"
-        aria-modal="true"
-        aria-label="智能体设定"
-      >
-        <div class="ai-settings-dialog__panel">
-          <header class="ai-settings-dialog__header">
-            <div>
-              <h4>智能体设定</h4>
-              <p>配置智能报告使用的 API Key 与模型。</p>
-            </div>
-            <button
-              type="button"
-              class="ai-settings-dialog__close"
-              :disabled="aiSettingsSaving"
-              aria-label="关闭智能体设定"
-              @click="closeAiSettingsDialog"
-            >
-              ×
-            </button>
-          </header>
-          <div class="ai-settings-dialog__body">
-            <div v-if="aiSettingsLoading" class="ai-settings-dialog__loading">配置读取中，请稍候…</div>
-            <template v-else>
-              <div class="ai-settings-dialog__field">
-                <span>API Keys（首个为当前使用的 Key）</span>
-                <div class="api-key-list">
-                  <div
-                    v-for="(key, index) in aiSettingsForm.apiKeys"
-                    :key="index"
-                    class="api-key-item"
-                  >
-                    <span class="api-key-index">
-                      <span v-if="index === 0" class="api-key-badge">使用中</span>
-                      <span v-else>{{ index + 1 }}.</span>
-                    </span>
-                    <input
-                      type="text"
-                      v-model="aiSettingsForm.apiKeys[index]"
-                      :disabled="aiSettingsSaving"
-                      autocomplete="off"
-                      placeholder="输入 API Key"
-                    />
-                    <button
-                      v-if="index > 0"
-                      type="button"
-                      class="btn ghost xs"
-                      :disabled="aiSettingsSaving"
-                      @click="setApiKeyActive(index)"
-                      title="设为当前使用"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      class="btn ghost xs"
-                      :disabled="aiSettingsSaving"
-                      @click="removeApiKey(index)"
-                      title="删除"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn ghost xs add-key-btn"
-                    :disabled="aiSettingsSaving"
-                    @click="addApiKey"
-                  >
-                    + 添加 API Key
-                  </button>
-                </div>
-              </div>
-              <label class="ai-settings-dialog__field">
-                <span>模型</span>
-                <input
-                  type="text"
-                  v-model="aiSettingsForm.model"
-                  :disabled="aiSettingsSaving"
-                  autocomplete="off"
-                />
-              </label>
-              <label class="ai-settings-dialog__field">
-                <span>智能体提示词（instruction）</span>
-                <textarea
-                  rows="5"
-                  v-model="aiSettingsForm.instruction"
-                  :disabled="aiSettingsSaving"
-                  placeholder="可填写多条指引，用于追加到提示词末尾。"
-                ></textarea>
-              </label>
-              <div class="ai-settings-dialog__field">
-                <span>报告生成模式</span>
-                <div class="report-mode-options">
-                  <label class="report-mode-option">
-                    <input
-                      type="radio"
-                      name="reportMode"
-                      value="full"
-                      v-model="aiSettingsForm.reportMode"
-                      :disabled="aiSettingsSaving"
-                    />
-                    <div class="report-mode-content">
-                      <span class="report-mode-label">完整模式</span>
-                      <span class="report-mode-desc">5 阶段深度分析，包含验证与修订（约 60-120 秒）</span>
-                    </div>
-                  </label>
-                  <label class="report-mode-option">
-                    <input
-                      type="radio"
-                      name="reportMode"
-                      value="fast"
-                      v-model="aiSettingsForm.reportMode"
-                      :disabled="aiSettingsSaving"
-                    />
-                    <div class="report-mode-content">
-                      <span class="report-mode-label">极速模式</span>
-                      <span class="report-mode-desc">2 阶段快速生成，适合免费 API（约 25-50 秒）</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-              <label class="ai-settings-dialog__toggle">
-                <input
-                  type="checkbox"
-                  v-model="aiSettingsForm.validationEnabled"
-                  :disabled="aiSettingsSaving"
-                />
-                <span>启用检查核实（第 4 阶段自检）</span>
-              </label>
-              <label class="ai-settings-dialog__toggle">
-                <input
-                  type="checkbox"
-                  :checked="aiSettingsForm.allowNonAdmin"
-                  :disabled="aiSettingsSaving"
-                  @change="aiSettingsForm.allowNonAdmin = $event.target.checked"
-                />
-                <span>允许非管理员启用智能报告</span>
-              </label>
-              <p class="ai-settings-dialog__hint">保存后将同步更新 backend_data/api_key.json。</p>
-            </template>
-            <p v-if="aiSettingsError" class="ai-settings-dialog__alert ai-settings-dialog__alert--error">
-              {{ aiSettingsError }}
-            </p>
-            <p
-              v-else-if="aiSettingsSuccess"
-              class="ai-settings-dialog__alert ai-settings-dialog__alert--success"
-            >
-              {{ aiSettingsSuccess }}
-            </p>
-          </div>
-          <footer class="ai-settings-dialog__actions">
-            <button
-              type="button"
-              class="btn ghost"
-              :disabled="aiSettingsSaving"
-              @click="closeAiSettingsDialog"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="aiSettingsLoading || aiSettingsSaving"
-              @click="handleAiSettingsSave"
-            >
-              {{ aiSettingsSaving ? '保存中…' : '保存' }}
-            </button>
-          </footer>
-        </div>
-      </div>
-    </transition>
+    <AiAgentSettingsDialog
+      v-model="aiSettingsDialogVisible"
+      :can-manage="canConfigureAiSettings"
+      :load-settings="loadAiSettingsPayload"
+      :save-settings="saveAiSettingsPayload"
+    />
   </div>
 </template>
 
@@ -732,6 +573,7 @@ import { useRoute } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
+import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
 import {
@@ -840,103 +682,13 @@ const canConfigureAiSettings = computed(() => auth.canManageAiSettingsFor(projec
 const aiSchemaFlags = computed(() => schema.value?.ai_report_flags || {})
 const allowNonAdminAiReport = computed(() => Boolean(aiSchemaFlags.value.allow_non_admin))
 const aiSettingsDialogVisible = ref(false)
-const aiSettingsLoading = ref(false)
-const aiSettingsSaving = ref(false)
-const aiSettingsError = ref('')
-const aiSettingsSuccess = ref('')
-const aiSettingsForm = reactive({
-  apiKeys: [],
-  model: '',
-  instruction: '',
-  reportMode: 'full',
-  validationEnabled: true,
-  allowNonAdmin: false,
-})
-
-function addApiKey() {
-  aiSettingsForm.apiKeys.push('')
-}
-
-function setApiKeyActive(index) {
-  if (index <= 0 || index >= aiSettingsForm.apiKeys.length) return
-  const item = aiSettingsForm.apiKeys[index]
-  aiSettingsForm.apiKeys.splice(index, 1)
-  aiSettingsForm.apiKeys.unshift(item)
-}
-
-function removeApiKey(index) {
-  if (index >= 0 && index < aiSettingsForm.apiKeys.length) {
-    aiSettingsForm.apiKeys.splice(index, 1)
-  }
-}
-
-function applyAiSettingsPayload(payload) {
-  if (Array.isArray(payload?.api_keys)) {
-    aiSettingsForm.apiKeys = [...payload.api_keys]
-  } else {
-    // 兼容旧格式
-    const oldKey = payload?.api_key || ''
-    aiSettingsForm.apiKeys = oldKey ? [oldKey] : []
-  }
-
-  aiSettingsForm.model = payload?.model ?? ''
-  aiSettingsForm.instruction = payload?.instruction ?? ''
-  aiSettingsForm.reportMode = payload?.report_mode ?? 'full'
-  aiSettingsForm.validationEnabled =
-    payload?.enable_validation !== undefined ? Boolean(payload.enable_validation) : true
-  aiSettingsForm.allowNonAdmin =
-    payload?.allow_non_admin_report !== undefined
-      ? Boolean(payload.allow_non_admin_report)
-      : false
-}
-
-function closeAiSettingsDialog() {
-  if (aiSettingsSaving.value) return
-  aiSettingsDialogVisible.value = false
-}
-
-async function openAiSettingsDialog() {
-  if (!canConfigureAiSettings.value || !projectKey.value) return
+function openAiSettingsDialog() {
+  if (!canConfigureAiSettings.value) return
   aiSettingsDialogVisible.value = true
-  aiSettingsLoading.value = true
-  aiSettingsError.value = ''
-  aiSettingsSuccess.value = ''
-  try {
-    const payload = await getAiSettings(projectKey.value)
-    applyAiSettingsPayload(payload)
-  } catch (err) {
-    aiSettingsError.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    aiSettingsLoading.value = false
-  }
 }
 
-async function handleAiSettingsSave() {
-  if (!canConfigureAiSettings.value || !projectKey.value) return
-  if (aiSettingsLoading.value || aiSettingsSaving.value) return
-  aiSettingsSaving.value = true
-  aiSettingsError.value = ''
-  aiSettingsSuccess.value = ''
-  try {
-    // 过滤掉空 key
-    const validKeys = aiSettingsForm.apiKeys.map(k => k.trim()).filter(k => k)
-    
-    const payload = await updateAiSettings(projectKey.value, {
-      api_keys: validKeys,
-      model: aiSettingsForm.model || '',
-      instruction: aiSettingsForm.instruction || '',
-      report_mode: aiSettingsForm.reportMode || 'full',
-      enable_validation: Boolean(aiSettingsForm.validationEnabled),
-      allow_non_admin_report: Boolean(aiSettingsForm.allowNonAdmin),
-    })
-    applyAiSettingsPayload(payload)
-    aiSettingsSuccess.value = '智能体配置已保存'
-  } catch (err) {
-    aiSettingsError.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    aiSettingsSaving.value = false
-  }
-}
+const loadAiSettingsPayload = () => getAiSettings(projectKey.value)
+const saveAiSettingsPayload = (payload) => updateAiSettings(projectKey.value, payload)
 
 function resolveUnitOptions(payload) {
   if (!payload) return []
@@ -1097,6 +849,8 @@ const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
 const queryLoading = ref(false)
 const aiReportEnabled = ref(false)
+const aiModeId = ref('daily_analysis_v1')
+const aiUserPrompt = ref('')
 const aiReportJobId = ref('')
 const aiReportStatus = ref('idle')
 const aiReportContent = ref('')
@@ -2304,6 +2058,8 @@ async function runAnalysis() {
     start_date: startDate.value,
     end_date: endDate.value,
     request_ai_report: aiReportEnabled.value && aiFeatureAccessible.value,
+    ai_mode_id: aiModeId.value,
+    ai_user_prompt: aiUserPrompt.value.trim(),
   }
   if (aiReportEnabled.value && aiFeatureAccessible.value) {
     aiReportStatus.value = 'pending'
@@ -3469,6 +3225,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .ai-report-controls {
@@ -3500,6 +3257,29 @@ onBeforeUnmount(() => {
 .ai-settings-btn {
   font-size: 13px;
   padding: 6px 12px;
+}
+
+.ai-user-prompt-field {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ai-user-prompt-field span {
+  font-size: 12px;
+  color: var(--neutral-600);
+}
+
+.ai-user-prompt-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .result-header-actions {
@@ -3564,230 +3344,6 @@ onBeforeUnmount(() => {
 .result-table .value-number {
   text-align: center;
   display: inline-block;
-}
-
-.ai-settings-dialog__backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 2000;
-}
-
-.ai-settings-dialog__panel {
-  width: 100%;
-  max-width: 420px;
-  max-height: 90vh;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.3);
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.ai-settings-dialog__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.ai-settings-dialog__header h4 {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-
-.ai-settings-dialog__header p {
-  margin: 0;
-  color: var(--neutral-500);
-  font-size: 13px;
-}
-
-.ai-settings-dialog__close {
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--neutral-500);
-  padding: 2px 6px;
-}
-
-.ai-settings-dialog__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.ai-settings-dialog__loading {
-  padding: 12px 0;
-  font-size: 14px;
-  color: var(--neutral-600);
-}
-
-.ai-settings-dialog__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--neutral-600);
-}
-
-.api-key-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.api-key-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.api-key-index {
-  font-weight: 600;
-  color: var(--neutral-500);
-  min-width: 24px;
-  text-align: right;
-  display: inline-flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-.api-key-badge {
-  font-size: 10px;
-  background: var(--success-50, #ecfdf5);
-  color: var(--success-700, #047857);
-  padding: 1px 4px;
-  border-radius: 4px;
-  border: 1px solid var(--success-200, #a7f3d0);
-  white-space: nowrap;
-}
-
-.api-key-item input {
-  flex: 1;
-}
-
-.add-key-btn {
-  align-self: flex-start;
-  margin-left: 28px; /* Align with input */
-}
-
-.ai-settings-dialog__field input {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 10px;
-  font-size: 14px;
-}
-
-.ai-settings-dialog__field textarea {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 10px;
-  font-size: 14px;
-  resize: vertical;
-  min-height: 120px;
-  line-height: 1.5;
-}
-
-.ai-settings-dialog__hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--neutral-500);
-}
-
-.ai-settings-dialog__alert {
-  margin: 4px 0 0;
-  font-size: 13px;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-}
-
-.ai-settings-dialog__alert--error {
-  background: rgba(248, 113, 113, 0.1);
-  color: #b91c1c;
-}
-
-.ai-settings-dialog__alert--success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-}
-
-.ai-settings-dialog__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--neutral-600);
-}
-
-.ai-settings-dialog__toggle input {
-  width: 16px;
-  height: 16px;
-}
-
-.report-mode-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.report-mode-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.report-mode-option:hover {
-  border-color: var(--primary);
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.report-mode-option input[type="radio"] {
-  margin-top: 2px;
-  cursor: pointer;
-}
-
-.report-mode-option input[type="radio"]:checked ~ .report-mode-content {
-  color: var(--primary);
-}
-
-.report-mode-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.report-mode-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--neutral-700);
-}
-
-.report-mode-desc {
-  font-size: 12px;
-  color: var(--neutral-500);
-  line-height: 1.4;
-}
-
-.ai-settings-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .plan-progress {

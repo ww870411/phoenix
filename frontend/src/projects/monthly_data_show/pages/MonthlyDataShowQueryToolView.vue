@@ -166,6 +166,48 @@
             <button class="btn" type="button" :disabled="loading || !hasNextPage" @click="nextPage">下一页</button>
           </div>
         </div>
+        <div class="ai-toolbar">
+          <label class="switch-item">
+            <input type="checkbox" v-model="aiReportEnabled" />
+            <span>智能报告生成（BETA）</span>
+          </label>
+          <button
+            v-if="isGlobalAdmin"
+            class="btn ghost"
+            type="button"
+            :disabled="!isGlobalAdmin"
+            @click="openAiSettingsDialog"
+          >
+            智能体设定
+          </button>
+          <button
+            class="btn ghost"
+            type="button"
+            :disabled="!aiReportEnabled || loading || !comparisonRows.length || aiReportStatus === 'running' || aiReportStatus === 'pending'"
+            @click="triggerAiReport"
+          >
+            {{ aiReportStatus === 'running' || aiReportStatus === 'pending' ? '生成中…' : '生成智能报告' }}
+          </button>
+          <button
+            class="btn ghost"
+            type="button"
+            :disabled="!aiReportContent"
+            @click="downloadAiReport"
+          >
+            下载智能报告
+          </button>
+        </div>
+        <label v-if="aiReportEnabled" class="ai-prompt-field">
+          <span>本次分析要求（可选）</span>
+          <textarea
+            v-model="aiUserPrompt"
+            rows="3"
+            maxlength="2000"
+            :disabled="aiReportStatus === 'running' || aiReportStatus === 'pending'"
+            placeholder="例如：优先关注水耗率异常口径，并给出3条可执行优化建议。"
+          ></textarea>
+        </label>
+        <p v-if="aiReportStatusMessage" class="sub ai-status">{{ aiReportStatusMessage }}</p>
         <p class="sub">共 {{ total }} 条，当前显示 {{ rows.length }} 条（每页 {{ limit }} 条）。</p>
         <div v-if="loading" class="empty">数据加载中...</div>
         <div v-else-if="errorMessage" class="empty error">{{ errorMessage }}</div>
@@ -398,6 +440,12 @@
         </div>
       </section>
     </main>
+    <AiAgentSettingsDialog
+      v-model="aiSettingsDialogVisible"
+      :can-manage="isGlobalAdmin"
+      :load-settings="loadAiSettingsPayload"
+      :save-settings="saveAiSettingsPayload"
+    />
     <div v-if="showFormulaDialog" class="formula-dialog-mask" @click.self="showFormulaDialog = false">
       <section class="formula-dialog">
         <div class="formula-dialog-head">
@@ -429,21 +477,30 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as XLSX from 'xlsx'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
+import AiAgentSettingsDialog from '../../daily_report_25_26/components/AiAgentSettingsDialog.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import {
+  getAdminAiSettings,
   getMonthlyDataShowQueryOptions,
+  getMonthlyDataShowAiReport,
   queryMonthlyDataShow,
   queryMonthlyDataShowComparison,
+  startMonthlyDataShowAiReport,
+  updateAdminAiSettings,
 } from '../../daily_report_25_26/services/api'
+import { useAuthStore } from '../../daily_report_25_26/store/auth'
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: '月报导入与查询', to: '/projects/monthly_data_show/pages' },
   { label: '月报数据查询工具', to: null },
 ])
+const auth = useAuthStore()
+const normalizedGroup = computed(() => String(auth.user?.group || '').toLowerCase())
+const isGlobalAdmin = computed(() => normalizedGroup.value === 'global_admin')
 
 const limit = 200
 const offset = ref(0)
@@ -632,6 +689,15 @@ const resultColumns = computed(() => [
 ])
 
 const comparisonRows = ref([])
+const aiReportEnabled = ref(false)
+const aiModeId = ref('monthly_analysis_v1')
+const aiUserPrompt = ref('')
+const aiReportJobId = ref('')
+const aiReportStatus = ref('idle')
+const aiReportContent = ref('')
+const aiReportStatusMessage = ref('')
+const aiSettingsDialogVisible = ref(false)
+let aiReportPollTimer = null
 const showFormulaDialog = ref(false)
 const temperatureExpanded = ref(false)
 const temperatureDailyRows = ref([])
@@ -1249,6 +1315,104 @@ function downloadXlsx() {
   XLSX.writeFile(wb, filename)
 }
 
+function resetAiReportState() {
+  aiReportJobId.value = ''
+  aiReportStatus.value = 'idle'
+  aiReportContent.value = ''
+  aiReportStatusMessage.value = ''
+}
+
+function stopAiReportPolling() {
+  if (aiReportPollTimer) {
+    clearTimeout(aiReportPollTimer)
+    aiReportPollTimer = null
+  }
+}
+
+async function pollAiReport(jobId) {
+  if (!jobId) return
+  try {
+    const payload = await getMonthlyDataShowAiReport('monthly_data_show', jobId)
+    if (aiReportJobId.value !== jobId) return
+    const status = String(payload?.status || 'pending')
+    aiReportStatus.value = status
+    if (status === 'ready') {
+      aiReportContent.value = String(payload?.report || '')
+      aiReportStatusMessage.value = aiReportContent.value ? '智能报告生成完成，可下载。' : '智能报告生成完成，但内容为空。'
+      stopAiReportPolling()
+      return
+    }
+    if (status === 'failed') {
+      aiReportStatusMessage.value = String(payload?.error || '智能报告生成失败')
+      stopAiReportPolling()
+      return
+    }
+    aiReportStatusMessage.value = '智能报告生成中，请稍候…'
+    stopAiReportPolling()
+    aiReportPollTimer = setTimeout(() => {
+      pollAiReport(jobId).catch((err) => console.error(err))
+    }, 2000)
+  } catch (err) {
+    if (aiReportJobId.value !== jobId) return
+    aiReportStatusMessage.value = err instanceof Error ? err.message : '获取智能报告状态失败'
+    stopAiReportPolling()
+  }
+}
+
+async function triggerAiReport() {
+  if (!aiReportEnabled.value || !comparisonRows.value.length) return
+  stopAiReportPolling()
+  aiReportStatus.value = 'pending'
+  aiReportStatusMessage.value = '已提交生成请求，正在启动任务…'
+  aiReportContent.value = ''
+  try {
+    const payload = await startMonthlyDataShowAiReport('monthly_data_show', {
+      rows: rows.value,
+      comparison_rows: comparisonRows.value,
+      current_window_label: comparisonMeta.currentWindowLabel || '',
+      yoy_window_label: comparisonMeta.yoyWindowLabel || '',
+      mom_window_label: comparisonMeta.momWindowLabel || '',
+      plan_window_label: comparisonMeta.planWindowLabel || '',
+      ai_mode_id: aiModeId.value,
+      ai_user_prompt: aiUserPrompt.value.trim(),
+    })
+    const jobId = String(payload?.ai_report_job_id || '')
+    if (!jobId) {
+      aiReportStatus.value = 'failed'
+      aiReportStatusMessage.value = '智能报告任务未返回 job_id'
+      return
+    }
+    aiReportJobId.value = jobId
+    aiReportStatus.value = 'running'
+    aiReportStatusMessage.value = '智能报告生成中，请稍候…'
+    await pollAiReport(jobId)
+  } catch (err) {
+    aiReportStatus.value = 'failed'
+    aiReportStatusMessage.value = err instanceof Error ? err.message : '启动智能报告失败'
+  }
+}
+
+function downloadAiReport() {
+  if (!aiReportContent.value) return
+  const blob = new Blob([aiReportContent.value], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `月报智能报告_${resolveExportMonthTag()}.html`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function openAiSettingsDialog() {
+  if (!isGlobalAdmin.value) return
+  aiSettingsDialogVisible.value = true
+}
+
+const loadAiSettingsPayload = () => getAdminAiSettings()
+const saveAiSettingsPayload = (payload) => updateAdminAiSettings(payload)
+
 function buildPayload() {
   const normalizedDateFrom = toMonthStartDate(filters.dateMonthFrom)
   const normalizedDateTo = (() => {
@@ -1383,6 +1547,8 @@ async function runQuery(resetOffset = false) {
   hasSearched.value = true
   if (resetOffset) offset.value = 0
   if (!filters.companies.length || !filters.items.length) {
+    stopAiReportPolling()
+    resetAiReportState()
     rows.value = []
     total.value = 0
     comparisonRows.value = []
@@ -1455,8 +1621,12 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = String(comparePayload?.yoy_window_label || '')
     comparisonMeta.momWindowLabel = String(comparePayload?.mom_window_label || '')
     comparisonMeta.planWindowLabel = String(comparePayload?.plan_window_label || '')
+    stopAiReportPolling()
+    resetAiReportState()
   } catch (error) {
     console.error(error)
+    stopAiReportPolling()
+    resetAiReportState()
     errorMessage.value = error instanceof Error ? error.message : '查询失败'
     rows.value = []
     total.value = 0
@@ -1481,6 +1651,8 @@ async function runQuery(resetOffset = false) {
 }
 
 async function resetFilters() {
+  stopAiReportPolling()
+  resetAiReportState()
   const previousMonth = shiftMonthText(currentMonthText(), -1)
   filters.dateMonthFrom = previousMonth
   filters.dateMonthTo = ''
@@ -1554,6 +1726,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onBeforeUnmount(() => {
+  stopAiReportPolling()
 })
 </script>
 
@@ -1968,6 +2144,41 @@ onMounted(async () => {
   gap: 8px;
   font-size: 12px;
   color: #475569;
+}
+
+.ai-toolbar {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ai-prompt-field span {
+  font-size: 12px;
+  color: #475569;
+}
+
+.ai-prompt-field textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.ai-status {
+  margin-top: 6px;
 }
 
 .analysis-section {

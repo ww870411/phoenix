@@ -159,6 +159,14 @@ def resolve_ai_usage_stats_path() -> Path:
     return (DATA_DIRECTORY / "ai_usage_stats.json").resolve()
 
 
+def resolve_global_ai_settings_path() -> Path:
+    """
+    解析全局 AI 配置文件（跨项目共享）：
+    - DATA_DIRECTORY/shared/ai_settings.json
+    """
+    return (DATA_DIRECTORY / "shared" / "ai_settings.json").resolve()
+
+
 def ensure_project_dirs(project_key: str) -> Dict[str, str]:
     """
     创建项目目录骨架（若不存在则创建）。

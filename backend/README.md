@@ -2395,3 +2395,181 @@
   - 本轮后端无代码改动。
 - 联动说明：
   - 月份选择框体包裹问题为前端样式修复，不影响后端接口与查询逻辑。
+
+## 结构同步（2026-03-02 AI 报告模式化与用户附加提示词）
+
+- 文件：
+  - `backend/services/data_analysis_ai_report.py`
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+  - `backend/services/data_analysis.py`
+- 变更点：
+  - AI 报告核心新增模式注册机制：`daily_analysis_v1`、`monthly_analysis_v1`；
+  - 提示词构建支持 `ai_mode_id` 选择模板，并支持 `ai_user_prompt` 作为本次附加要求；
+  - 日报分析查询入参新增 `ai_mode_id`、`ai_user_prompt`，并在触发任务时透传；
+  - 任务快照增加 `ai_mode_id` 字段，便于排查与审计。
+- 效果：
+  - 现有日报智能报告默认模式保持兼容；
+  - 月报可后续按 `monthly_analysis_v1` 无缝接入同一套 AI 引擎。
+
+## 结构同步（2026-03-02 月报查询页 AI 报告接口接入）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 新增月报 AI 接口：
+    - `POST /monthly-data-show/ai-report/start`
+    - `GET /monthly-data-show/ai-report/{job_id}`
+  - 新增月报数据 -> 通用 AI payload 适配函数：
+    - 将 `comparison_rows` 映射为统一 `rows` 结构；
+    - 注入环比 `ringCompare` 与计划比较 `plan_comparison` 数据；
+    - 默认 `ai_mode_id=monthly_analysis_v1`，支持 `ai_user_prompt`。
+- 效果：
+  - 月报查询页面可复用通用 AI 引擎异步生成报告，无需复制日报专用逻辑。
+
+## 结构同步（2026-03-02 AI 模式提示词拆分：日报/月报独立）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 保持 `daily_analysis_v1` 原有提示词模板不变；
+  - 为 `monthly_analysis_v1` 新增独立的内容/核查/修订/极速模式提示词模板；
+  - `AI_MODE_TEMPLATE_REGISTRY` 中月报模式不再复用日报模板。
+- 效果：
+  - 日报与月报报告生成语义彻底解耦，后续可独立迭代两套提示词策略。
+
+## 结构同步（2026-03-02 AI 配置跨项目共享与月报提示词）
+
+- 文件：
+  - `backend/services/project_data_paths.py`
+  - `backend/services/data_analysis_ai_report.py`
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+  - `backend/api/v1/admin_console.py`
+  - `backend_data/shared/ai_settings.json`
+- 变更点：
+  - 新增全局 AI 配置解析函数 `resolve_global_ai_settings_path()`，标准路径切换为 `backend_data/shared/ai_settings.json`；
+  - AI 报告服务读取配置改为“shared 优先 + 日报旧配置回退”，避免一次迁移导致功能中断；
+  - AI 设置新增 `instruction_monthly` 字段，支持月报专用预设提示词；
+  - 管理后台 AI 设置读写链路已兼容新字段并写入全局配置。
+- 效果：
+  - AI 配置从“日报项目内”升级为“跨项目共享”；
+  - 日报既有 instruction 保持兼容，月报可独立维护提示词。
+
+## 结构同步（2026-03-02 月报默认提示词内容更新）
+
+- 文件：`backend_data/shared/ai_settings.json`
+- 变更点：
+  - `instruction_monthly` 更新为新的月报分析系统提示词（含对比逻辑、归因逻辑、结构化呈现、五模块报告框架）。
+- 效果：
+  - 月报 AI 报告生成将默认使用新的管理会计导向提示词模板。
+
+## 结构同步（2026-03-02 shared AI 配置合并日报参数）
+
+- 文件：`backend_data/shared/ai_settings.json`
+- 变更点：
+  - 将日报项目配置 `backend_data/projects/daily_report_25_26/config/api_key.json` 的关键字段合并至 shared：
+    - `gemini_model`
+    - `gemini_api_keys`
+    - `instruction`（日报）
+    - `report_mode`
+    - `enable_validation`
+    - `allow_non_admin_report`
+  - 保留 `instruction_monthly`（月报）不变，实现双提示词共存。
+- 效果：
+  - `shared/ai_settings.json` 成为统一主配置，满足跨项目读取需求。
+
+## 结构同步（2026-03-02 AI 配置收口与字段标准化）
+
+- 文件：
+  - `backend/services/project_data_paths.py`
+  - `backend/services/data_analysis_ai_report.py`
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+  - `backend/api/v1/admin_console.py`
+  - `backend_data/shared/ai_settings.json`
+  - `backend_data/projects/daily_report_25_26/config/api_key.json`（已删除）
+- 变更点：
+  - 全局 AI 配置路径统一为 `backend_data/shared/ai_settings.json`，不再回退日报项目内 `api_key.json`；
+  - 提示词字段标准化为：
+    - `instruction_daily`
+    - `instruction_monthly`
+  - AI 设置接口读写同步为新字段，并保留旧 `instruction` 入参的兼容接收；
+  - shared 配置中旧键 `instruction` 已改名为 `instruction_daily`。
+- 效果：
+  - 配置源唯一化，跨项目配置管理更稳定；
+  - 日报/月报提示词边界清晰，便于独立维护。
+
+## 结构同步（2026-03-02 旧 api_key 正式下线）
+
+- 文件：
+  - `backend_data/projects/daily_report_25_26/config/api_key.json`（已删除）
+  - `backend_data/shared/ai_settings.json`
+  - `backend/services/project_data_paths.py`
+  - `backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 删除日报项目内旧 AI 配置文件；
+  - 全局路径解析不再回退旧路径，统一指向 shared；
+  - 日报提示词读取与存储键固定为 `instruction_daily`。
+- 效果：
+  - 彻底消除双配置源并发风险，配置行为可预期。
+
+## 结构同步（2026-03-02 月报 AI 报告4段式独立结构）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 月报模板章节固定为4段（`overview` / `coal_completion` / `profit_cost_breakdown` / `efficiency_and_actions`）；
+  - 新增 `_normalize_sections_for_mode()`，月报模式下强制章节顺序与标题骨架；
+  - 报告 HTML 渲染按模式分流：
+    - 日报保留同比/环比/计划/逐日明细等硬性块；
+    - 月报改为“月度关键对比图表”+ 4段正文，不再复用日报硬性块。
+- 效果：
+  - 日报与月报分析结构解耦；
+  - 月报更贴合经营简报写法，形成图文并茂的4段式报告输出。
+
+## 结构同步（2026-03-02 月报页 AI 设置入口联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 月报页面新增“智能体设定”入口，继续调用既有全局 AI 设置接口：
+    - `GET/POST /admin/ai-settings`
+  - 权限仍由后端统一校验（需具备 AI 设置管理权限）。
+
+## 结构同步（2026-03-02 前端 AI 设置弹窗通用化联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 日报与月报页面已统一复用同一 AI 设置组件；
+  - 组件仍分别调用既有接口：
+    - 日报：`GET/POST /projects/{project_key}/data_analysis/ai-settings`
+    - 月报管理：`GET/POST /admin/ai-settings`
+  - 后端鉴权与配置落盘路径（`backend_data/shared/ai_settings.json`）保持不变。
+
+## 结构同步（2026-03-02 AI 设置输入框宽度前端优化联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 前端共享组件调整了 API Key 输入框布局与响应式宽度；
+  - 后端接口与数据结构保持不变，无需迁移。
+
+## 结构同步（2026-03-02 AI 报告限流重试与输入瘦身）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - Gemini 调用链新增 429/Quota 自动重试：
+    - 识别限流/配额错误；
+    - 读取错误文本中的 `retry_delay` 或 `retry in` 秒数；
+    - 采用“至少 20 秒”退避后重试（最多 3 次）。
+  - Prompt 数据新增分级压缩：
+    - 裁剪指标数量、timeline 长度与对比明细；
+    - 必要时移除 `timeline_matrix`；
+    - 控制传模 JSON 大小，降低输入 token 超限风险。
+- 效果：
+  - 无需 key 轮换即可缓解高并发/大窗口下的 429 中断；
+  - 报告生成流程稳定性提升。  
+
+## 结构同步（2026-03-02 月报报告版式独立渲染）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 新增 `_generate_monthly_report_html(...)` 月报专用 HTML 渲染；
+  - `_generate_report_html(...)` 按 `ai_mode_id` 分流：月报模式直接使用独立版式；
+  - 月报不再沿用日报的卡片+趋势图主模板，改为正式简报风格（章节正文 + 对比附表）。
+- 效果：
+  - 日报/月报报告样式与结构彻底分离；
+  - 月报输出更贴近经营简报阅读习惯。  

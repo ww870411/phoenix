@@ -15,7 +15,7 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -42,6 +42,7 @@ from backend.projects.monthly_data_show.services.indicator_config import (
     load_indicator_runtime_config,
     order_items_by_config,
 )
+from backend.services import data_analysis_ai_report
 
 PROJECT_KEY = "monthly_data_show"
 ALLOWED_EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xltx", ".xltm"}
@@ -221,6 +222,24 @@ class QueryComparisonResponse(BaseModel):
     plan_window_label: str
     rows: List[QueryComparisonRow]
     temperature_comparison: Optional[TemperatureComparisonPayload] = None
+
+
+class MonthlyAiReportStartPayload(BaseModel):
+    rows: List[dict] = []
+    comparison_rows: List[dict] = []
+    current_window_label: str = ""
+    yoy_window_label: str = ""
+    mom_window_label: str = ""
+    plan_window_label: str = ""
+    ai_mode_id: str = "monthly_analysis_v1"
+    ai_user_prompt: str = ""
+
+
+class MonthlyAiReportStartResponse(BaseModel):
+    ok: bool
+    project_key: str
+    ai_report_job_id: str
+    ai_mode_id: str
 
 
 def _ensure_allowed_excel_file(filename: str) -> None:
@@ -806,6 +825,103 @@ def _calc_rate(current_value: Optional[float], base_value: Optional[float]) -> O
     if base_value == 0:
         return None
     return (current_value - base_value) / abs(base_value)
+
+
+def _parse_window_label_dates(label: str) -> Tuple[Optional[str], Optional[str]]:
+    text_label = str(label or "").strip()
+    if not text_label:
+        return None, None
+    if "~" in text_label:
+        parts = [x.strip() for x in text_label.split("~", 1)]
+        if len(parts) == 2:
+            return parts[0], parts[1]
+    return text_label, text_label
+
+
+def _build_monthly_ai_payload(payload: MonthlyAiReportStartPayload) -> Dict[str, Any]:
+    compare_rows = payload.comparison_rows if isinstance(payload.comparison_rows, list) else []
+    rows: List[Dict[str, Any]] = []
+    ring_prev_totals: Dict[str, float] = {}
+    plan_entries: List[Dict[str, Any]] = []
+    for row in compare_rows:
+        if not isinstance(row, dict):
+            continue
+        company = _safe_str(row.get("company"))
+        item = _safe_str(row.get("item"))
+        if not company or not item:
+            continue
+        unit = _safe_str(row.get("unit"))
+        key = f"{company}|{item}"
+        label = f"{company} / {item}"
+        current_value = _to_optional_float(row.get("currentValue"))
+        yoy_value = _to_optional_float(row.get("yoyValue"))
+        mom_value = _to_optional_float(row.get("momValue"))
+        plan_value = _to_optional_float(row.get("planValue"))
+        yoy_rate = _to_optional_float(row.get("yoyRate"))
+        mom_rate = _to_optional_float(row.get("momRate"))
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "unit": unit,
+                "value_type": "analysis",
+                "current": current_value,
+                "peer": yoy_value,
+                "total_current": current_value,
+                "total_peer": yoy_value,
+                "delta": yoy_rate * 100 if yoy_rate is not None else None,
+                "total_delta": yoy_rate * 100 if yoy_rate is not None else None,
+                "ring_ratio": mom_rate * 100 if mom_rate is not None else None,
+                "decimals": 2,
+                "timeline": [],
+            }
+        )
+        if mom_value is not None:
+            ring_prev_totals[key] = mom_value
+        if plan_value is not None:
+            completion_rate = (current_value / plan_value * 100) if (current_value is not None and plan_value != 0) else None
+            plan_entries.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "unit": unit,
+                    "actual_value": current_value,
+                    "plan_value": plan_value,
+                    "completion_rate": completion_rate,
+                }
+            )
+
+    start_date, end_date = _parse_window_label_dates(payload.current_window_label)
+    meta = {
+        "unit_label": "月报查询",
+        "analysis_mode": "month",
+        "analysis_mode_label": "月报分析",
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    ai_payload: Dict[str, Any] = {
+        "meta": meta,
+        "rows": rows,
+        "warnings": [],
+        "ringCompare": {
+            "range": {
+                "start": _parse_window_label_dates(payload.mom_window_label)[0],
+                "end": _parse_window_label_dates(payload.mom_window_label)[1],
+            },
+            "prevTotals": ring_prev_totals,
+            "note": "" if ring_prev_totals else "当前窗口缺少可用环比数据",
+        },
+        "plan_comparison": {
+            "period_start": start_date,
+            "period_end": end_date,
+            "month_label": str(payload.plan_window_label or "")[:7],
+            "entries": plan_entries,
+        },
+        "resolved_metrics": [row.get("key") for row in rows if row.get("key")],
+        "ai_mode_id": str(payload.ai_mode_id or "monthly_analysis_v1"),
+        "ai_user_prompt": str(payload.ai_user_prompt or "").strip(),
+    }
+    return ai_payload
 
 
 def _fetch_compare_map(
@@ -1719,3 +1835,35 @@ def query_month_data_show_comparison(request: QueryRequest):
         rows=rows,
         temperature_comparison=temperature_comparison,
     )
+
+
+@router.post(
+    "/monthly-data-show/ai-report/start",
+    response_model=MonthlyAiReportStartResponse,
+    summary="启动月报智能分析报告任务",
+)
+def start_monthly_ai_report(payload: MonthlyAiReportStartPayload):
+    ai_payload = _build_monthly_ai_payload(payload)
+    try:
+        job_id = data_analysis_ai_report.enqueue_ai_report_job(ai_payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"启动月报 AI 报告失败：{exc}") from exc
+    return MonthlyAiReportStartResponse(
+        ok=True,
+        project_key=PROJECT_KEY,
+        ai_report_job_id=job_id,
+        ai_mode_id=str(ai_payload.get("ai_mode_id") or "monthly_analysis_v1"),
+    )
+
+
+@router.get(
+    "/monthly-data-show/ai-report/{job_id}",
+    summary="查询月报智能分析报告任务状态",
+)
+def get_monthly_ai_report(job_id: str):
+    job_payload = data_analysis_ai_report.get_report_job(job_id)
+    if not job_payload:
+        raise HTTPException(status_code=404, detail="报告不存在或已过期")
+    response = {"ok": True, "project_key": PROJECT_KEY}
+    response.update(job_payload)
+    return response
