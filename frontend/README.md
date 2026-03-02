@@ -3774,3 +3774,22 @@ docker compose up -d --build
   - 保存修改逻辑保持不变：按主键字段锁定行，非主键字段可编辑并批量保存。
 - API 联动：`frontend/src/projects/daily_report_25_26/services/api.js`
   - `queryAdminDbTable` 增加入参透传：`search/filters/order_by/order_dir`。
+
+## 结构同步（2026-03-02 月报查询单月默认范围修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `buildPayload()` 调整日期组装规则：
+    - 当仅填写“业务月份起”且“业务月份止”为空时，`date_to` 自动取“业务月份起”的月末；
+    - 从而形成“当月起-当月止”的单月查询窗口。
+- 效果：
+  - 单月查询无需再填写“业务月份止”，避免误查跨月数据。
+
+## 结构同步（2026-03-02 月份筛选框体包裹样式修正）
+
+- 页面：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 月份筛选相关样式增加 `box-sizing: border-box`：
+    - `.field input/.field select`
+    - `.month-field`
+    - `.month-input`
+- 效果：
+  - “业务月份起/止”外层框体与日期输入框宽度对齐，右侧不再出现未包裹完整的视觉缺口。

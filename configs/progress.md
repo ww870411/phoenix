@@ -4525,3 +4525,26 @@
 - **Result:**  
   - 管理后台数据库编辑已独立成页，且具备可用的查询筛选与排序能力；  
   - 当前仍保持“无主键表不可保存更新”的保护约束。  
+
+## 2026-03-02（月报查询单月默认范围修正）
+
+- **User Request:** 当仅填写“业务月份起”且“业务月份止”为空时，只查询起始月份当月数据，不要默认扩展到当前上个月。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 调整 `buildPayload()`：  
+       - `date_from` 仍取起始月月初；  
+       - 若 `dateMonthTo` 为空且 `dateMonthFrom` 有值，则 `date_to` 自动回填为起始月月末；  
+       - 若起止都为空则保持空值。  
+- **Result:**  
+  - 现在“只选业务月份起”会稳定查询该月，不再跨月拉取。  
+
+## 2026-03-02（月报查询月份框体包裹样式修正）
+
+- **User Feedback:** “业务月份起/止”外层框体右侧未完整包住日期选择框，视觉上短一截。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 为 `.field input/.field select` 增加 `box-sizing: border-box`；  
+     - 为 `.month-field` 增加 `box-sizing: border-box`；  
+     - 为 `.month-input` 增加 `box-sizing: border-box`。  
+- **Result:**  
+  - 月份外框与日期输入框宽度对齐，右侧不再出现“露出/短边”问题。  

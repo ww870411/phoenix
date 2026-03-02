@@ -1250,11 +1250,18 @@ function downloadXlsx() {
 }
 
 function buildPayload() {
+  const normalizedDateFrom = toMonthStartDate(filters.dateMonthFrom)
+  const normalizedDateTo = (() => {
+    const explicitTo = toMonthEndDate(filters.dateMonthTo)
+    if (explicitTo) return explicitTo
+    if (normalizedDateFrom) return toMonthEndDate(filters.dateMonthFrom)
+    return null
+  })()
   return {
     report_month_from: null,
     report_month_to: null,
-    date_from: toMonthStartDate(filters.dateMonthFrom),
-    date_to: toMonthEndDate(filters.dateMonthTo),
+    date_from: normalizedDateFrom,
+    date_to: normalizedDateTo,
     companies: [...filters.companies],
     items: [...filters.items],
     periods: ['month'],
@@ -1607,6 +1614,7 @@ onMounted(async () => {
   padding: 6px 8px;
   font-size: 13px;
   background: #fff;
+  box-sizing: border-box;
 }
 
 .field select[multiple] {
@@ -1618,6 +1626,7 @@ onMounted(async () => {
   border: 1px solid #dbeafe;
   border-radius: 10px;
   padding: 8px 10px;
+  box-sizing: border-box;
 }
 
 .month-input-wrap {
@@ -1631,6 +1640,7 @@ onMounted(async () => {
   height: 34px;
   border-color: #93c5fd !important;
   background: #fff;
+  box-sizing: border-box;
 }
 
 .month-input:focus {
