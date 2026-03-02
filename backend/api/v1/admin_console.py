@@ -5,17 +5,21 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import shutil
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from backend.config import DATA_DIRECTORY
+from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import audit_log
 from backend.services import dashboard_cache
 from backend.services.auth_manager import AuthSession, get_current_session
@@ -54,6 +58,18 @@ EDITABLE_EXTENSIONS = {
     ".sql",
     ".csv",
 }
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+class DbTableQueryPayload(BaseModel):
+    table: str
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class DbTableBatchUpdatePayload(BaseModel):
+    table: str
+    updates: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ValidationSwitchPayload(BaseModel):
@@ -105,6 +121,79 @@ class SuperMkdirPayload(BaseModel):
 class SuperMovePayload(BaseModel):
     source: str
     destination: str
+
+
+def _is_safe_identifier(name: str) -> bool:
+    return bool(IDENTIFIER_PATTERN.fullmatch(str(name or "").strip()))
+
+
+def _quote_identifier(name: str) -> str:
+    raw = str(name or "").strip()
+    if not _is_safe_identifier(raw):
+        raise HTTPException(status_code=400, detail=f"非法标识符：{raw}")
+    return f"\"{raw}\""
+
+
+def _to_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _load_table_meta(db, table: str) -> Dict[str, Any]:
+    safe_table = str(table or "").strip()
+    if not _is_safe_identifier(safe_table):
+        raise HTTPException(status_code=400, detail="表名不合法。")
+
+    columns_sql = text(
+        """
+        SELECT
+            c.column_name,
+            c.data_type
+        FROM information_schema.columns c
+        WHERE c.table_schema = 'public'
+          AND c.table_name = :table
+        ORDER BY c.ordinal_position
+        """
+    )
+    columns_rows = db.execute(columns_sql, {"table": safe_table}).mappings().all()
+    if not columns_rows:
+        raise HTTPException(status_code=404, detail="数据表不存在或无字段。")
+    columns = [
+        {"name": str(row.get("column_name") or ""), "data_type": str(row.get("data_type") or "")}
+        for row in columns_rows
+    ]
+    column_names = [col["name"] for col in columns if col["name"]]
+
+    pk_sql = text(
+        """
+        SELECT a.attname AS column_name
+        FROM pg_index i
+        JOIN pg_class t ON t.oid = i.indrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
+        WHERE n.nspname = 'public'
+          AND t.relname = :table
+          AND i.indisprimary
+        ORDER BY array_position(i.indkey, a.attnum)
+        """
+    )
+    pk_rows = db.execute(pk_sql, {"table": safe_table}).mappings().all()
+    pk_columns = [str(row.get("column_name") or "") for row in pk_rows if row.get("column_name")]
+    return {
+        "table": safe_table,
+        "columns": columns,
+        "column_names": column_names,
+        "pk_columns": pk_columns,
+    }
 
 
 def _ensure_admin_console_access(session: AuthSession) -> None:
@@ -432,6 +521,163 @@ def save_backend_file_content(
         raise HTTPException(status_code=400, detail="文件内容过大，拒绝保存。")
     target.write_text(payload.content, encoding="utf-8")
     return {"ok": True, "path": target.relative_to(DATA_ROOT).as_posix(), "size": len(encoded)}
+
+
+@router.get("/admin/db/tables", summary="获取可编辑数据库表清单")
+def list_database_tables(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    with SessionLocal() as db:
+        stmt = text(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        )
+        rows = db.execute(stmt).mappings().all()
+    tables = [str(row.get("table_name") or "") for row in rows if row.get("table_name")]
+    return {"ok": True, "tables": tables}
+
+
+@router.post("/admin/db/table/query", summary="查询数据表内容")
+def query_database_table(
+    payload: DbTableQueryPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    with SessionLocal() as db:
+        meta = _load_table_meta(db, payload.table)
+        table_ident = _quote_identifier(meta["table"])
+        column_names = list(meta["column_names"])
+        if not column_names:
+            return {
+                "ok": True,
+                "table": meta["table"],
+                "columns": meta["columns"],
+                "pk_columns": meta["pk_columns"],
+                "total": 0,
+                "rows": [],
+            }
+
+        select_cols = ", ".join(_quote_identifier(name) for name in column_names)
+        order_cols = meta["pk_columns"] or column_names[:1]
+        order_sql = ", ".join(_quote_identifier(name) for name in order_cols)
+        query_stmt = text(
+            f"""
+            SELECT {select_cols}
+            FROM {table_ident}
+            ORDER BY {order_sql}
+            LIMIT :limit OFFSET :offset
+            """
+        )
+        count_stmt = text(f"SELECT COUNT(*) AS total FROM {table_ident}")
+        raw_rows = db.execute(
+            query_stmt,
+            {"limit": int(payload.limit), "offset": int(payload.offset)},
+        ).mappings().all()
+        total = int(db.execute(count_stmt).scalar() or 0)
+
+    rows: List[Dict[str, Any]] = []
+    for row in raw_rows:
+        normalized: Dict[str, Any] = {}
+        for col in column_names:
+            normalized[col] = _to_json_value(row.get(col))
+        rows.append(normalized)
+
+    return {
+        "ok": True,
+        "table": meta["table"],
+        "columns": meta["columns"],
+        "pk_columns": meta["pk_columns"],
+        "total": total,
+        "limit": int(payload.limit),
+        "offset": int(payload.offset),
+        "rows": rows,
+    }
+
+
+@router.post("/admin/db/table/batch-update", summary="批量保存数据表修改")
+def batch_update_database_table(
+    payload: DbTableBatchUpdatePayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    updates = payload.updates if isinstance(payload.updates, list) else []
+    if not updates:
+        return {"ok": True, "updated": 0, "matched": 0, "skipped": 0, "failed": []}
+
+    with SessionLocal() as db:
+        meta = _load_table_meta(db, payload.table)
+        table_ident = _quote_identifier(meta["table"])
+        pk_columns = list(meta["pk_columns"])
+        if not pk_columns:
+            raise HTTPException(status_code=400, detail="该表没有主键，暂不支持在线保存修改。")
+        all_columns = set(meta["column_names"])
+
+        updated = 0
+        matched = 0
+        skipped = 0
+        failed: List[Dict[str, Any]] = []
+
+        for idx, item in enumerate(updates):
+            key = item.get("key") if isinstance(item, dict) else None
+            changes = item.get("changes") if isinstance(item, dict) else None
+            if not isinstance(key, dict) or not isinstance(changes, dict):
+                failed.append({"index": idx, "reason": "key/changes 结构错误"})
+                continue
+            missing_pk = [col for col in pk_columns if col not in key]
+            if missing_pk:
+                failed.append({"index": idx, "reason": f"主键缺失: {', '.join(missing_pk)}"})
+                continue
+
+            effective_changes: Dict[str, Any] = {}
+            for col_name, value in changes.items():
+                if col_name in pk_columns:
+                    continue
+                if col_name not in all_columns:
+                    continue
+                effective_changes[col_name] = value
+            if not effective_changes:
+                skipped += 1
+                continue
+
+            set_parts = []
+            where_parts = []
+            params: Dict[str, Any] = {}
+            for col_name, value in effective_changes.items():
+                param_name = f"set_{col_name}"
+                set_parts.append(f"{_quote_identifier(col_name)} = :{param_name}")
+                params[param_name] = value
+            for pk_name in pk_columns:
+                param_name = f"pk_{pk_name}"
+                where_parts.append(f"{_quote_identifier(pk_name)} = :{param_name}")
+                params[param_name] = key.get(pk_name)
+
+            stmt = text(
+                f"""
+                UPDATE {table_ident}
+                SET {', '.join(set_parts)}
+                WHERE {' AND '.join(where_parts)}
+                """
+            )
+            result = db.execute(stmt, params)
+            affected = int(result.rowcount or 0)
+            matched += affected
+            if affected > 0:
+                updated += 1
+
+        db.commit()
+
+    return {
+        "ok": True,
+        "table": meta["table"],
+        "updated": updated,
+        "matched": matched,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
 @router.get("/admin/validation/master-switch", summary="获取全局校验总开关")

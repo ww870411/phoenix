@@ -5,7 +5,7 @@
       <Breadcrumbs :items="breadcrumbItems" />
       <section class="card">
         <h2>月报数据查询工具</h2>
-        <p class="sub">按来源月份、业务日期、口径与指标查询 month_data_show 表，并查看基础汇总。</p>
+        <p class="sub">按来源月份、业务日期、口径与指标查询 monthly_data_show 表，并查看基础汇总。</p>
       </section>
 
       <section class="card">
@@ -175,20 +175,12 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>company</th>
-                <th>item</th>
-                <th>unit</th>
-                <th>value</th>
-                <th>date</th>
+                <th v-for="col in resultColumns" :key="`head-${col.field}`">{{ col.label }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(row, idx) in rows" :key="`${row.company}-${row.item}-${row.date}-${row.period}-${row.type}-${idx}`">
-                <td>{{ row.company }}</td>
-                <td>{{ row.item }}</td>
-                <td>{{ row.unit || '—' }}</td>
-                <td>{{ row.value == null ? 'NULL' : formatValue(row.value, row.unit, row.item) }}</td>
-                <td>{{ row.date || '—' }}</td>
+                <td v-for="col in resultColumns" :key="`cell-${col.field}-${idx}`">{{ getResultCellValue(row, col.field) }}</td>
               </tr>
             </tbody>
           </table>
@@ -480,14 +472,23 @@ const filters = reactive({
   periods: ['month'],
   types: ['real'],
   orderMode: 'company_first',
-  orderFields: ['company', 'item'],
+  orderFields: ['time', 'company', 'item'],
   aggregateCompanies: false,
   aggregateMonths: false,
 })
 const layerOptions = [
+  { value: 'time', label: '时间' },
   { value: 'company', label: '口径' },
   { value: 'item', label: '指标' },
 ]
+const RESULT_DIMENSION_FIELDS = ['time', 'company', 'item']
+const RESULT_COLUMN_LABELS = {
+  time: '时间',
+  company: '口径',
+  item: '指标名',
+  value: '值',
+  unit: '计量单位',
+}
 
 const pageNumber = computed(() => Math.floor(offset.value / limit) + 1)
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / limit)))
@@ -611,6 +612,24 @@ const itemSections = computed(() => {
     { key: 'calculated', title: calcTitle, items: mergedCalculated },
   ]
 })
+const resultDimensionFields = computed(() => {
+  const selected = (Array.isArray(filters.orderFields) ? filters.orderFields : [])
+    .map((x) => String(x || '').trim())
+    .filter((x) => RESULT_DIMENSION_FIELDS.includes(x))
+  const merged = []
+  for (const field of selected) {
+    if (!merged.includes(field)) merged.push(field)
+  }
+  for (const field of RESULT_DIMENSION_FIELDS) {
+    if (!merged.includes(field)) merged.push(field)
+  }
+  return merged
+})
+const resultColumns = computed(() => [
+  ...resultDimensionFields.value.map((field) => ({ field, label: RESULT_COLUMN_LABELS[field] })),
+  { field: 'value', label: RESULT_COLUMN_LABELS.value },
+  { field: 'unit', label: RESULT_COLUMN_LABELS.unit },
+])
 
 const comparisonRows = ref([])
 const showFormulaDialog = ref(false)
@@ -751,9 +770,10 @@ const analysisInsights = computed(() => {
   if (!comparisonRows.value.length) return []
   const orderFields = (Array.isArray(filters.orderFields) ? filters.orderFields : [])
     .map((x) => String(x || '').trim())
-    .filter((x) => ['company', 'item'].includes(x))
-  const resolvedFields = orderFields.length ? orderFields : ['company', 'item']
+    .filter((x) => ['time', 'company', 'item'].includes(x))
+  const resolvedFields = orderFields.length ? orderFields : ['time', 'company', 'item']
   const fieldLabels = {
+    time: '时间',
     company: '口径',
     item: '指标',
   }
@@ -805,7 +825,9 @@ const analysisInsights = computed(() => {
     const groups = []
     const groupMap = new Map()
     for (const row of rows) {
-      const key = String(row[field] ?? '—')
+      const key = field === 'time'
+        ? String(comparisonMeta.currentWindowLabel || '当前窗口')
+        : String(row[field] ?? '—')
       if (!groupMap.has(key)) {
         const bucket = { key, rows: [] }
         groupMap.set(key, bucket)
@@ -1042,13 +1064,46 @@ function formatMonthTag(year, month) {
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`
 }
 
+function formatResultMonth(dateText) {
+  const text = String(dateText || '').trim()
+  if (!text) return '—'
+  const matched = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (!matched) return text
+  return `${matched[1]}年${Number(matched[2])}月`
+}
+
+function getResultCellValue(row, field) {
+  if (field === 'time') {
+    return formatResultMonth(row?.report_month || row?.date || '')
+  }
+  if (field === 'company') {
+    return row?.company || '—'
+  }
+  if (field === 'item') {
+    return row?.item || '—'
+  }
+  if (field === 'value') {
+    return row?.value == null ? 'NULL' : formatValue(row.value, row.unit, row.item)
+  }
+  if (field === 'unit') {
+    return row?.unit || '—'
+  }
+  return '—'
+}
+
 function resolveExportMonthTag() {
   const fromDate = String(filters.dateMonthFrom || '').trim()
   const toDate = String(filters.dateMonthTo || '').trim()
   const monthRe = /^(\d{4})-(\d{2})$/
 
+  if (monthRe.test(fromDate) && monthRe.test(toDate) && fromDate !== toDate) {
+    return `${fromDate}_~_${toDate}`
+  }
   if (monthRe.test(fromDate) && (!toDate || fromDate === toDate)) {
     return fromDate
+  }
+  if (!fromDate && monthRe.test(toDate)) {
+    return toDate
   }
 
   const windowLabel = String(comparisonMeta.currentWindowLabel || '').trim()
@@ -1058,9 +1113,10 @@ function resolveExportMonthTag() {
     const m1 = Number(rangeMatch[2])
     const y2 = Number(rangeMatch[3])
     const m2 = Number(rangeMatch[4])
-    if (y1 === y2 && m1 === m2) {
-      const tag = formatMonthTag(y1, m1)
-      if (tag) return tag
+    const startTag = formatMonthTag(y1, m1)
+    const endTag = formatMonthTag(y2, m2)
+    if (startTag && endTag) {
+      return startTag === endTag ? startTag : `${startTag}_~_${endTag}`
     }
   }
   const singleMatch = windowLabel.match(/^(\d{4})-(\d{2})-\d{2}$/)
@@ -1069,14 +1125,14 @@ function resolveExportMonthTag() {
     if (tag) return tag
   }
 
-  const sample = rows.value.find((row) => row?.report_month || row?.date)
-  if (sample) {
-    const dateText = String(sample.report_month || sample.date || '')
-    const matched = dateText.match(/^(\d{4})-(\d{2})-\d{2}$/)
-    if (matched) {
-      const tag = formatMonthTag(Number(matched[1]), Number(matched[2]))
-      if (tag) return tag
-    }
+  const monthTags = [...new Set(
+    rows.value
+      .map((row) => String(row?.report_month || row?.date || '').slice(0, 7))
+      .filter((x) => monthRe.test(x))
+  )].sort()
+  if (monthTags.length === 1) return monthTags[0]
+  if (monthTags.length > 1) {
+    return `${monthTags[0]}_~_${monthTags[monthTags.length - 1]}`
   }
 
   const now = new Date()
@@ -1118,16 +1174,18 @@ function downloadXlsx() {
   finalizeSheet(summarySheet, [18, 50])
   XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName('汇总信息'))
 
-  const resultHeader = ['口径', '指标', '单位', '数值', '业务日期']
-  const resultData = rows.value.map((row) => [
-    row.company ?? '',
-    row.item ?? '',
-    row.unit ?? '',
-    row.value == null ? '' : formatValue(row.value, row.unit, row.item),
-    row.date ?? '',
-  ])
+  const resultHeader = resultColumns.value.map((col) => col.label)
+  const resultData = rows.value.map((row) => resultColumns.value.map((col) => getResultCellValue(row, col.field)))
+  const resultColWidths = resultColumns.value.map((col) => {
+    if (col.field === 'company') return 12
+    if (col.field === 'item') return 26
+    if (col.field === 'time') return 14
+    if (col.field === 'value') return 14
+    if (col.field === 'unit') return 12
+    return 12
+  })
   const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
-  finalizeSheet(resultSheet, [12, 26, 10, 14, 14])
+  finalizeSheet(resultSheet, resultColWidths)
   XLSX.utils.book_append_sheet(wb, resultSheet, sanitizeSheetName('查询结果'))
 
   if (comparisonRows.value.length) {
@@ -1163,14 +1221,14 @@ function downloadXlsx() {
   if (temperatureDailyRows.value.length) {
     const tempRows = temperatureDailyRows.value.map((row) => [
       row.currentDate,
-      formatTemperature(row.currentTemp),
+      toFiniteOrNull(row.currentTemp),
       row.yoyDate,
-      formatTemperature(row.yoyTemp),
+      toFiniteOrNull(row.yoyTemp),
       formatSignedNumber(row.yoyDiff),
       formatRate(row.yoyRate),
     ])
     const tempSheet = XLSX.utils.aoa_to_sheet([
-      ['本期日期', '本期气温', '同期日期', '同期气温', '同比差值', '同比差异率'],
+      ['本期日期', '本期气温(℃)', '同期日期', '同期气温(℃)', '同比差值', '同比差异率'],
       ...tempRows,
     ])
     finalizeSheet(tempSheet, [14, 12, 14, 12, 12, 12])
@@ -1202,7 +1260,7 @@ function buildPayload() {
     periods: ['month'],
     types: ['real'],
     order_mode: filters.orderMode,
-    order_fields: [...filters.orderFields].filter((x) => x === 'company' || x === 'item'),
+    order_fields: [...filters.orderFields].filter((x) => x === 'time' || x === 'company' || x === 'item'),
     aggregate_companies: Boolean(filters.aggregateCompanies),
     aggregate_months: Boolean(filters.aggregateMonths),
     limit,
@@ -1424,7 +1482,7 @@ async function resetFilters() {
   filters.periods = ['month']
   filters.types = ['real']
   filters.orderMode = 'company_first'
-  filters.orderFields = ['company', 'item']
+  filters.orderFields = ['time', 'company', 'item']
   filters.aggregateCompanies = false
   filters.aggregateMonths = false
   hasSearched.value = false

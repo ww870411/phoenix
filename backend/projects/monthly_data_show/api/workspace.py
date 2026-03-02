@@ -75,7 +75,7 @@ class ImportCsvResponse(BaseModel):
     updated_rows: int = 0
 
 
-NULL_VALUE_TOKENS = {"", "none", "null", "nan", "--", "无", "空", "#div/0!"}
+NULL_VALUE_TOKENS = {"", "none", "null", "nan", "-", "--", "无", "空", "#div/0!"}
 AVERAGE_TEMPERATURE_ITEM = "平均气温"
 AVERAGE_TEMPERATURE_UNIT = "℃"
 AVERAGE_TEMPERATURE_COMPANY = "common"
@@ -86,6 +86,14 @@ CALCULATED_DEPENDENCY_MAP = {
     str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
 }
 CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+LATEST_VALUE_ITEMS = {
+    "期末供暖收费面积",
+    "期末库存煤量",
+    "库存煤量",
+    "发电设备容量",
+    "锅炉设备容量",
+    "供热设备容量",
+}
 
 
 def _refresh_indicator_runtime() -> None:
@@ -101,6 +109,20 @@ def _refresh_indicator_runtime() -> None:
         str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
     }
     CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+
+
+def _build_value_aggregate_sql(*, apply_latest_for_state_items: bool) -> str:
+    sum_expr = "CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END"
+    if not apply_latest_for_state_items:
+        return sum_expr
+    if not LATEST_VALUE_ITEMS:
+        return sum_expr
+    items_literal = ", ".join("'" + x.replace("'", "''") + "'" for x in sorted(LATEST_VALUE_ITEMS))
+    latest_expr = (
+        "(ARRAY_AGG(value ORDER BY COALESCE(report_month, date) DESC NULLS LAST, "
+        "date DESC NULLS LAST, operation_time DESC NULLS LAST))[1]"
+    )
+    return f"CASE WHEN item IN ({items_literal}) THEN {latest_expr} ELSE {sum_expr} END"
 METRIC_ALIAS_MAP = {
     "耗标煤总量": ["标煤耗量", "煤折标煤量"],
     "供热耗标煤量": ["供热标准煤耗量"],
@@ -548,21 +570,21 @@ def _build_query_sql_parts(request: QueryRequest):
 
 
 def _resolve_order_fields(order_mode: str, order_fields: List[str], aggregate_companies: bool) -> List[str]:
-    allowed = {"company", "item", "period", "type"}
+    allowed = {"time", "company", "item", "period", "type"}
     requested = []
     for value in order_fields or []:
         key = str(value or "").strip().lower()
         if key in allowed and key not in requested:
             requested.append(key)
     if not requested:
-        requested = ["item", "company"] if order_mode == "item_first" else ["company", "item"]
+        requested = ["time", "item", "company"] if order_mode == "item_first" else ["time", "company", "item"]
     final_fields: List[str] = []
     for key in requested:
         if aggregate_companies and key == "company":
             continue
         if key not in final_fields:
             final_fields.append(key)
-    for key in ("company", "item", "period", "type"):
+    for key in ("time", "company", "item", "period", "type"):
         if aggregate_companies and key == "company":
             continue
         if key not in final_fields:
@@ -644,6 +666,19 @@ def _merge_and_sort_rows(
         except Exception:
             return (0, 0)
 
+    def _date_asc_key(v: Optional[str]):
+        if not v:
+            return (1, 0)
+        try:
+            return (0, date.fromisoformat(v).toordinal())
+        except Exception:
+            return (0, 0)
+
+    def _time_key(row: dict):
+        # 月报主场景下以 report_month 为主，缺失时回退 date。
+        raw = row.get("report_month") or row.get("date")
+        return _date_asc_key(raw)
+
     def _rank_key(field: str, value: object):
         txt = _safe_str(value)
         rank_map = rank_maps.get(field) or {}
@@ -655,11 +690,19 @@ def _merge_and_sort_rows(
         key_parts: List[object] = []
         is_avg_temp = 0 if _safe_str(row.get("item")) == AVERAGE_TEMPERATURE_ITEM else 1
         key_parts.append(is_avg_temp)
-        if not aggregate_months:
+        for field in order_fields:
+            if field == "time":
+                if aggregate_months:
+                    # 月份已聚合时，时间维度无实际排序意义，放固定占位保持稳定排序。
+                    key_parts.append((1, 0))
+                else:
+                    key_parts.append(_time_key(row))
+                continue
+            key_parts.append(_rank_key(field, row.get(field)))
+        # 若用户未显式选择 time，则保持历史行为：时间降序优先（最新月份在前）。
+        if (not aggregate_months) and ("time" not in order_fields):
             key_parts.append(_date_desc_key(row.get("report_month")))
             key_parts.append(_date_desc_key(row.get("date")))
-        for field in order_fields:
-            key_parts.append(_rank_key(field, row.get(field)))
         key_parts.append(_safe_str(row.get("unit")))
         return tuple(key_parts)
 
@@ -683,6 +726,8 @@ def _sort_comparison_rows(
         is_avg_temp = 0 if _safe_str(getattr(row, "item", "")) == AVERAGE_TEMPERATURE_ITEM else 1
         key_parts.append(is_avg_temp)
         for field in order_fields:
+            if field == "time":
+                continue
             key_parts.append(_rank_key(field, getattr(row, field, "")))
         key_parts.append(_safe_str(row.unit))
         return tuple(key_parts)
@@ -700,6 +745,34 @@ def _shift_year_safe(src: date, years: int) -> date:
     target_year = src.year + years
     last_day = calendar.monthrange(target_year, src.month)[1]
     return date(target_year, src.month, min(src.day, last_day))
+
+
+def _resolve_mom_window(current_start: date, current_end: date) -> Tuple[date, date]:
+    """
+    环比窗口规则：
+    - 若当前窗口为“连续自然月区间”（从月初到某月月末），则环比取“紧邻向前、等月数”的自然月区间；
+      例如 2026-01-01~2026-02-28 -> 2025-11-01~2025-12-31；
+    - 否则按原滚动窗口（向前平移同天数）计算。
+    """
+    current_end_month_last = calendar.monthrange(current_end.year, current_end.month)[1]
+    is_natural_month_span = (
+        current_start.day == 1
+        and current_end.day == current_end_month_last
+    )
+    if is_natural_month_span:
+        month_count = (current_end.year - current_start.year) * 12 + (current_end.month - current_start.month) + 1
+        prev_month_end = current_start - timedelta(days=1)
+        prev_start_year = prev_month_end.year
+        prev_start_month = prev_month_end.month - (month_count - 1)
+        while prev_start_month <= 0:
+            prev_start_month += 12
+            prev_start_year -= 1
+        prev_month_start = date(prev_start_year, prev_start_month, 1)
+        return prev_month_start, prev_month_end
+    window_days = (current_end - current_start).days + 1
+    mom_end = current_start - timedelta(days=1)
+    mom_start = mom_end - timedelta(days=window_days - 1)
+    return mom_start, mom_end
 
 
 def _resolve_compare_window(request: QueryRequest) -> Tuple[Optional[date], Optional[date]]:
@@ -771,6 +844,7 @@ def _fetch_compare_map(
         where_sql = " AND ".join(where_parts)
         select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
         group_by_sql = "item, period, type, unit" if aggregate_companies else "company, item, period, type, unit"
+        value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=True)
         stmt = text(
             f"""
             SELECT
@@ -779,8 +853,8 @@ def _fetch_compare_map(
                 period,
                 type,
                 unit,
-                CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END AS value
-            FROM month_data_show
+                {value_agg_sql} AS value
+            FROM monthly_data_show
             WHERE {where_sql}
             GROUP BY {group_by_sql}
             """
@@ -893,6 +967,7 @@ def _fetch_plan_value_map(
         }
         select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
         group_by_sql = "item, period, unit" if aggregate_companies else "company, item, period, unit"
+        value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=True)
         stmt = text(
             f"""
             SELECT
@@ -900,8 +975,8 @@ def _fetch_plan_value_map(
                 item,
                 period,
                 unit,
-                CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END AS value
-            FROM month_data_show
+                {value_agg_sql} AS value
+            FROM monthly_data_show
             WHERE {where_sql}
             GROUP BY {group_by_sql}
             """
@@ -1272,7 +1347,7 @@ async def extract_monthly_data_show_csv(
     )
 
 
-@router.post("/monthly-data-show/import-csv", response_model=ImportCsvResponse, summary="上传 CSV 并写入 month_data_show")
+@router.post("/monthly-data-show/import-csv", response_model=ImportCsvResponse, summary="上传 CSV 并写入 monthly_data_show")
 async def import_monthly_data_show_csv(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=422, detail="文件名为空")
@@ -1289,7 +1364,7 @@ async def import_monthly_data_show_csv(file: UploadFile = File(...)):
 
     upsert_sql = text(
         """
-        INSERT INTO month_data_show (
+        INSERT INTO monthly_data_show (
             company, item, unit, value, date, period, type, report_month
         ) VALUES (
             :company, :item, :unit, :value, :date, :period, :type, :report_month
@@ -1335,15 +1410,15 @@ def get_monthly_data_show_query_options():
     sql = text(
         """
         SELECT
-            ARRAY(SELECT DISTINCT company FROM month_data_show ORDER BY company) AS companies,
+            ARRAY(SELECT DISTINCT company FROM monthly_data_show ORDER BY company) AS companies,
             ARRAY(
                 SELECT item
-                FROM month_data_show
+                FROM monthly_data_show
                 GROUP BY item
                 ORDER BY MIN(id)
             ) AS items,
-            ARRAY(SELECT DISTINCT period FROM month_data_show ORDER BY period) AS periods,
-            ARRAY(SELECT DISTINCT type FROM month_data_show ORDER BY type) AS types
+            ARRAY(SELECT DISTINCT period FROM monthly_data_show ORDER BY period) AS periods,
+            ARRAY(SELECT DISTINCT type FROM monthly_data_show ORDER BY type) AS types
         """
     )
     try:
@@ -1417,6 +1492,7 @@ def query_month_data_show(request: QueryRequest):
     resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
 
     if run_base_query and (aggregate_companies or aggregate_months):
+        value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=aggregate_months)
         group_fields: List[str] = []
         if not aggregate_companies:
             group_fields.append("company")
@@ -1431,13 +1507,13 @@ def query_month_data_show(request: QueryRequest):
                 {'\'聚合口径\'::TEXT AS company' if aggregate_companies else 'company'},
                 item,
                 unit,
-                CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END AS value,
+                {value_agg_sql} AS value,
                 {'NULL::DATE AS date' if aggregate_months else 'date'},
                 period,
                 type,
                 {'NULL::DATE AS report_month' if aggregate_months else 'report_month'},
                 MAX(operation_time) AS operation_time
-            FROM month_data_show
+            FROM monthly_data_show
             {where_sql}
             GROUP BY {group_by_sql}
             """
@@ -1447,7 +1523,7 @@ def query_month_data_show(request: QueryRequest):
             f"""
             SELECT
                 company, item, unit, value, date, period, type, report_month, operation_time
-            FROM month_data_show
+            FROM monthly_data_show
             {where_sql}
             """
         )
@@ -1577,9 +1653,7 @@ def query_month_data_show_comparison(request: QueryRequest):
 
     yoy_start = _shift_year_safe(current_start, -1)
     yoy_end = _shift_year_safe(current_end, -1)
-    window_days = (current_end - current_start).days + 1
-    mom_end = current_start - timedelta(days=1)
-    mom_start = mom_end - timedelta(days=window_days - 1)
+    mom_start, mom_end = _resolve_mom_window(current_start, current_end)
 
     try:
         with SessionLocal() as session:

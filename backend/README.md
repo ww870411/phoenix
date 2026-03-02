@@ -2,6 +2,26 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 月报查询排序修复（2026-03-02）：
+  - `_merge_and_sort_rows` 已改为严格按 `order_fields` 生成排序键；
+  - 自定义“口径/指标/时间”层次顺序会直接反映到查询结果显示顺序。
+- 月报查询排序能力增强（2026-03-02）：
+  - `monthly_data_show` 查询的 `order_fields` 新增 `time`；
+  - 默认排序改为 `time -> company -> item`；
+  - 当选择 `time` 时按 `report_month/date` 升序分组（先旧月后新月），满足跨月连续阅读。
+- 已完成月报查询表名纠偏（2026-03-02）：
+  - `monthly_data_show` 项目运行时 SQL 已从 `month_data_show` 统一切换到 `monthly_data_show`；
+  - 导入、查询、对比与筛选项接口均使用新表名；
+  - 建表脚本 `backend/sql/month_data_show.sql` 已同步更新为创建 `monthly_data_show`。
+- 全局管理后台新增数据库表在线编辑接口（2026-03-01）：
+  - `GET /api/v1/admin/db/tables`：读取可用表清单；
+  - `POST /api/v1/admin/db/table/query`：分页读取表数据（字段/主键/总数）；
+  - `POST /api/v1/admin/db/table/batch-update`：按主键批量保存修改。
+  - 实现位置：`backend/api/v1/admin_console.py`（复用 `SessionLocal` 直连业务库）。
+- 已修复 `monthly_data_show` 环比窗口错位（2026-03-01）：
+  - 原逻辑按“天数平移”计算环比窗口，导致自然月查询（如 2 月）错位到 `1月4日~1月31日`；
+  - 新增 `_resolve_mom_window` 后，若当前窗口为自然整月，则环比窗口固定为“上月整月”（如 `2026-01-01~2026-01-31`）；
+  - 非整月窗口保持原“同天数平移”规则，兼容已有查询习惯。
 - 结构同步说明：本轮仅调整 `monthly_data_pull` 前端页面头部样式（补回统一 banner），后端接口与模块无新增改动。
 - 已修复登录跨域预检问题：`backend/main.py` 的 CORS 默认策略改为显式来源白名单（`localhost/127.0.0.1` 常见端口），避免 `allow_credentials=True` 与 `*` 组合导致浏览器拦截。
 - 已追加 CORS 二次加固：增加 `allow_origin_regex=^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$`，覆盖本机调试端口变化场景。
@@ -2290,3 +2310,59 @@
   - `get_extraction_rule_options()` 仅在 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT=True` 时下发“金普面积扣减”规则。
 - 效果：
   - 已取消的金普面积扣减规则不会出现在前端规则弹窗中。
+
+## 结构同步（2026-03-01 CSV 空值 token 增加“-”）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - `NULL_VALUE_TOKENS` 增加单个 `-`。
+- 效果：
+  - 导入 CSV 时 `value='-'` 会按空值写入（NULL），并计入空值统计。
+
+## 结构同步（2026-03-01 多月聚合状态值按最后一期）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 新增状态值集合 `LATEST_VALUE_ITEMS`（含 `期末供暖收费面积`、`发电设备容量`、`锅炉设备容量` 等）；  
+  - 聚合 SQL 增加分支：状态值取最后一期，其他指标继续求和；  
+  - 应用范围：查询页多月聚合、同比/环比窗口聚合、计划窗口聚合。
+- 效果：
+  - 状态值指标不会因跨月而被累计求和，结果符合“取最后一期”的业务口径。
+
+## 结构同步（2026-03-01 环比窗口自然月对齐修复）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 新增 `_resolve_mom_window(current_start, current_end)`；
+  - 当当前窗口是自然整月时，环比窗口改为上月整月（而非同天数滚动）；
+  - 非整月窗口继续使用滚动窗口。
+- 效果：
+  - 月报按月首日记账场景下，26.2 查询可正确命中 26.1 环比数据。
+
+## 结构同步（2026-03-02 查询结果中文列头与列序联动）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 本轮后端接口与排序逻辑无新增代码改动（延续上一轮“数据层次顺序真实生效”修复）。
+- 联动说明：
+  - 前端已基于 `order_fields` 动态重排查询结果列，并将 `date/report_month` 转为“YYYY年M月”显示；
+  - 后端继续提供 `company/item/date/value/unit` 原始字段，供前端按层次顺序重组展示与导出。
+
+## 结构同步（2026-03-02 环比窗口支持多月等长回溯）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 调整 `_resolve_mom_window(current_start, current_end)`：
+    - 当当前窗口是“连续自然月区间”（月初到月末）时，环比窗口改为“向前紧邻、等月数”的自然月区间；
+    - 例如：`2026-01-01~2026-02-28` 对应环比 `2025-11-01~2025-12-31`；
+    - 非自然月区间继续使用滚动天数窗口逻辑。
+- 效果：
+  - 多月窗口查询时，环比值不再只取前一单月，改为与当前窗口长度一致的上期自然月区间。
+
+## 结构同步（2026-03-02 导出文件名区间化联动）
+
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更点：
+  - 本轮后端无代码改动。
+- 联动说明：
+  - 导出文件名区间化由前端 `MonthlyDataShowQueryToolView.vue` 处理，不影响后端查询/对比接口协议。

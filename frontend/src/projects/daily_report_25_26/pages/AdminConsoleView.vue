@@ -56,6 +56,64 @@
             <p class="subtext">点击文件后将在新窗口中打开编辑器。</p>
             <p v-if="fileMessage" class="message">{{ fileMessage }}</p>
           </div>
+
+          <section class="inner-card db-editor-card">
+            <header class="section-header">
+              <h3>数据库表在线编辑</h3>
+              <div class="system-actions">
+                <button class="btn ghost" type="button" :disabled="dbLoading || dbSaving" @click="loadDbTables">刷新表清单</button>
+                <button class="btn primary" type="button" :disabled="dbLoading || dbSaving || !dbSelectedTable" @click="loadDbRows">
+                  {{ dbLoading ? '加载中…' : '加载数据' }}
+                </button>
+                <button class="btn primary" type="button" :disabled="dbSaving || dbDirtyStats.dirtyRows === 0" @click="saveDbRows">
+                  {{ dbSaving ? '保存中…' : `保存修改（${dbDirtyStats.dirtyRows}行）` }}
+                </button>
+              </div>
+            </header>
+            <div class="toolbar">
+              <label class="field">
+                <span>数据表</span>
+                <select v-model="dbSelectedTable">
+                  <option v-for="name in dbTables" :key="name" :value="name">{{ name }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>每页行数</span>
+                <input v-model.number="dbLimit" type="number" min="1" max="1000" />
+              </label>
+              <label class="field">
+                <span>偏移量</span>
+                <input v-model.number="dbOffset" type="number" min="0" />
+              </label>
+            </div>
+            <p class="subtext">主键字段只读。当前支持优先编辑含主键的数据表（如 `monthly_data_show`）。</p>
+            <p v-if="dbMessage" class="message">{{ dbMessage }}</p>
+            <div v-if="dbRowsDraft.length" class="db-table-wrap">
+              <table class="audit-table db-edit-table">
+                <thead>
+                  <tr>
+                    <th v-for="col in dbColumns" :key="`h-${col.name}`">
+                      {{ col.name }}
+                      <span v-if="isDbPkColumn(col.name)" class="db-pk-tag">PK</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, rowIndex) in dbRowsDraft" :key="buildDbRowKey(row, rowIndex)">
+                    <td v-for="col in dbColumns" :key="`c-${rowIndex}-${col.name}`">
+                      <input
+                        v-model="row[col.name]"
+                        :disabled="isDbPkColumn(col.name)"
+                        type="text"
+                        class="db-cell-input"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="panel-state">暂无数据，点击“加载数据”开始查看。</div>
+          </section>
         </section>
 
         <section v-else-if="activeTab === 'project'" class="content-block">
@@ -597,6 +655,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useAuthStore } from '../store/auth'
 import {
+  batchUpdateAdminDbTable,
   cancelAdminCachePublishJob,
   deleteSuperPath,
   disableAdminCache,
@@ -607,13 +666,15 @@ import {
   getAdminSystemMetrics,
   getAdminOverview,
   getAdminValidationMasterSwitch,
-  listSuperFiles,
-  makeSuperDirectory,
-  moveSuperPath,
-  readSuperFile,
+  listAdminDbTables,
   listAdminFileDirectories,
   listAdminFiles,
   listAdminProjects,
+  listSuperFiles,
+  makeSuperDirectory,
+  moveSuperPath,
+  queryAdminDbTable,
+  readSuperFile,
   publishAdminDashboardCache,
   refreshAdminCache,
   setAdminValidationMasterSwitch,
@@ -653,6 +714,18 @@ const fileListLoading = ref(false)
 const fileMessage = ref('')
 const expandedFolderKeys = ref(new Set())
 const popupWindowRef = ref(null)
+const dbTables = ref([])
+const dbSelectedTable = ref('monthly_data_show')
+const dbColumns = ref([])
+const dbPkColumns = ref([])
+const dbRowsOriginal = ref([])
+const dbRowsDraft = ref([])
+const dbLimit = ref(200)
+const dbOffset = ref(0)
+const dbTotal = ref(0)
+const dbLoading = ref(false)
+const dbSaving = ref(false)
+const dbMessage = ref('')
 
 const projects = ref([])
 const selectedProjectKey = ref(TARGET_PROJECT_KEY)
@@ -861,6 +934,20 @@ const cacheJobStatus = computed(() => {
   const total = Number(overview.value?.cache_publish_job?.total || 0)
   const processed = Number(overview.value?.cache_publish_job?.processed || 0)
   return `${status}（${processed}/${total}）`
+})
+const dbPkSet = computed(() => new Set((dbPkColumns.value || []).map((x) => String(x || ''))))
+const dbColumnTypeMap = computed(() => {
+  const map = {}
+  for (const col of dbColumns.value || []) {
+    const name = String(col?.name || '')
+    if (!name) continue
+    map[name] = String(col?.data_type || '').toLowerCase()
+  }
+  return map
+})
+const dbDirtyStats = computed(() => {
+  const updates = collectDbUpdates()
+  return { dirtyRows: updates.length, updates }
 })
 
 function asTopList(record, limit = 5) {
@@ -1074,6 +1161,157 @@ async function loadDirectories() {
     fileMessage.value = err instanceof Error ? err.message : '目录读取失败'
   } finally {
     fileListLoading.value = false
+  }
+}
+
+function isDbPkColumn(columnName) {
+  return dbPkSet.value.has(String(columnName || ''))
+}
+
+function buildDbRowKey(row, fallbackIndex = 0) {
+  const pkCols = dbPkColumns.value || []
+  if (!pkCols.length) {
+    return `row:${fallbackIndex}`
+  }
+  return pkCols.map((col) => `${col}=${JSON.stringify(row?.[col] ?? null)}`).join('|')
+}
+
+function normalizeDbDraftValue(rawValue, dataType) {
+  const type = String(dataType || '').toLowerCase()
+  if (rawValue === null || rawValue === undefined) return null
+  if (typeof rawValue !== 'string') return rawValue
+  const text = rawValue.trim()
+  if (!text) {
+    if (type.includes('char') || type.includes('text')) return ''
+    return null
+  }
+  if (type.includes('int') || type.includes('numeric') || type.includes('double') || type.includes('real') || type.includes('decimal')) {
+    const value = Number(text)
+    return Number.isFinite(value) ? value : rawValue
+  }
+  if (type.includes('bool')) {
+    const lowered = text.toLowerCase()
+    if (['true', 't', '1', 'yes', 'y'].includes(lowered)) return true
+    if (['false', 'f', '0', 'no', 'n'].includes(lowered)) return false
+    return rawValue
+  }
+  if (type.includes('json')) {
+    try {
+      return JSON.parse(text)
+    } catch (_error) {
+      return rawValue
+    }
+  }
+  return rawValue
+}
+
+function collectDbUpdates() {
+  const originalRows = dbRowsOriginal.value || []
+  const draftRows = dbRowsDraft.value || []
+  const updates = []
+  const maxLen = Math.min(originalRows.length, draftRows.length)
+  for (let idx = 0; idx < maxLen; idx += 1) {
+    const original = originalRows[idx] || {}
+    const draft = draftRows[idx] || {}
+    const key = {}
+    let keyValid = true
+    for (const pk of dbPkColumns.value || []) {
+      if (!(pk in original)) {
+        keyValid = false
+        break
+      }
+      key[pk] = original[pk]
+    }
+    if (!keyValid) continue
+    const changes = {}
+    for (const col of dbColumns.value || []) {
+      const colName = String(col?.name || '')
+      if (!colName || isDbPkColumn(colName)) continue
+      const oldValue = original[colName]
+      const newValue = normalizeDbDraftValue(draft[colName], col?.data_type)
+      if (JSON.stringify(oldValue) === JSON.stringify(newValue)) continue
+      changes[colName] = newValue
+    }
+    if (Object.keys(changes).length > 0) {
+      updates.push({ key, changes })
+    }
+  }
+  return updates
+}
+
+async function loadDbTables() {
+  dbMessage.value = ''
+  try {
+    const payload = await listAdminDbTables()
+    const tables = Array.isArray(payload?.tables) ? payload.tables : []
+    dbTables.value = tables
+    if (tables.length === 0) {
+      dbSelectedTable.value = ''
+      return
+    }
+    if (!tables.includes(dbSelectedTable.value)) {
+      dbSelectedTable.value = tables.includes('monthly_data_show') ? 'monthly_data_show' : tables[0]
+    }
+  } catch (err) {
+    console.error(err)
+    dbMessage.value = err instanceof Error ? err.message : '加载数据库表失败'
+  }
+}
+
+async function loadDbRows() {
+  if (!dbSelectedTable.value) {
+    dbMessage.value = '请先选择数据表'
+    return
+  }
+  dbLoading.value = true
+  dbMessage.value = ''
+  try {
+    const payload = await queryAdminDbTable({
+      table: dbSelectedTable.value,
+      limit: dbLimit.value,
+      offset: dbOffset.value,
+    })
+    dbColumns.value = Array.isArray(payload?.columns) ? payload.columns : []
+    dbPkColumns.value = Array.isArray(payload?.pk_columns) ? payload.pk_columns : []
+    const rows = Array.isArray(payload?.rows) ? payload.rows : []
+    dbRowsOriginal.value = rows
+    dbRowsDraft.value = rows.map((row) => ({ ...row }))
+    dbTotal.value = Number(payload?.total || 0)
+    dbMessage.value = `已加载 ${rows.length} 行（总计 ${dbTotal.value}）`
+  } catch (err) {
+    console.error(err)
+    dbRowsOriginal.value = []
+    dbRowsDraft.value = []
+    dbColumns.value = []
+    dbPkColumns.value = []
+    dbTotal.value = 0
+    dbMessage.value = err instanceof Error ? err.message : '读取表数据失败'
+  } finally {
+    dbLoading.value = false
+  }
+}
+
+async function saveDbRows() {
+  if (!dbSelectedTable.value) return
+  const updates = collectDbUpdates()
+  if (!updates.length) {
+    dbMessage.value = '没有可保存的修改'
+    return
+  }
+  dbSaving.value = true
+  try {
+    const payload = await batchUpdateAdminDbTable({
+      table: dbSelectedTable.value,
+      updates,
+    })
+    const failedCount = Array.isArray(payload?.failed) ? payload.failed.length : 0
+    dbMessage.value = `保存完成：更新 ${Number(payload?.updated || 0)} 行，命中 ${Number(payload?.matched || 0)} 条记录${failedCount ? `，失败 ${failedCount} 项` : ''}`
+    await loadDbRows()
+  } catch (err) {
+    console.error(err)
+    dbMessage.value = err instanceof Error ? err.message : '保存表数据失败'
+  } finally {
+    dbSaving.value = false
   }
 }
 
@@ -1801,12 +2039,21 @@ onMounted(async () => {
   await loadSuperFiles()
   await loadProjects()
   await loadDirectories()
+  await loadDbTables()
+  await loadDbRows()
   await selectProject(TARGET_PROJECT_KEY)
 })
 
 watch(
   () => activeTab.value,
   async (tab) => {
+    if (tab === 'files') {
+      stopSystemTimer()
+      if (!dbTables.value.length) {
+        await loadDbTables()
+      }
+      return
+    }
     if (tab === 'system') {
       await loadSystemMetrics()
       ensureSystemTimer()
@@ -2157,6 +2404,50 @@ onBeforeUnmount(() => {
   border: 1px solid var(--primary-200);
   background: transparent;
   color: var(--primary-600);
+}
+
+.db-editor-card {
+  margin-top: 12px;
+}
+
+.db-table-wrap {
+  margin-top: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.db-edit-table {
+  min-width: 980px;
+}
+
+.db-pk-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.db-cell-input {
+  width: 100%;
+  min-width: 120px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  background: #ffffff;
+}
+
+.db-cell-input:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .super-card {

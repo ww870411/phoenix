@@ -993,6 +993,50 @@ export async function saveAdminFile(path, content) {
   return response.json()
 }
 
+export async function listAdminDbTables() {
+  const response = await fetch(normalized('/admin/db/tables'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取数据库表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function queryAdminDbTable(payload = {}) {
+  const response = await fetch(normalized('/admin/db/table/query'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      table: payload?.table || '',
+      limit: payload?.limit ?? 200,
+      offset: payload?.offset ?? 0,
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `查询数据表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function batchUpdateAdminDbTable(payload = {}) {
+  const response = await fetch(normalized('/admin/db/table/batch-update'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      table: payload?.table || '',
+      updates: Array.isArray(payload?.updates) ? payload.updates : [],
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存数据表修改失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getAdminValidationMasterSwitch() {
   const response = await fetch(normalized('/admin/validation/master-switch'), {
     headers: attachAuthHeaders(),

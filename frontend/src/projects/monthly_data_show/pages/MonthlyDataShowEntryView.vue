@@ -192,7 +192,7 @@
       </section>
 
       <section class="card">
-        <h3>步骤 4：CSV 入库（写入 month_data_show）</h3>
+        <h3>步骤 4：CSV 入库（写入 monthly_data_show）</h3>
         <div class="upload-row">
           <input type="file" accept=".csv" @change="onCsvFileChange" />
           <button class="btn primary" type="button" :disabled="importing || !lastExtractedCsvFile" @click="importLastExtractedCsv">

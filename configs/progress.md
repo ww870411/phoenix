@@ -4333,3 +4333,172 @@
      - `get_extraction_rule_options()` 调整为仅当 `ENABLE_JINPU_HEATING_AREA_ADJUSTMENT=True` 时才下发该规则。  
 - **Result:**  
   - 当前开关为关闭状态时，规则弹窗不再显示“金普面积扣减”。  
+
+## 2026-03-01（CSV 导入空值规则新增“-”）
+
+- **User Request:** 导入 CSV 时，单个 `-` 也按空值处理。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - `NULL_VALUE_TOKENS` 增加 `"-"`。  
+- **Result:**  
+  - CSV 中 `value` 为 `-` 时，将按 `NULL` 入库并计入 `null_value_rows`。  
+
+## 2026-03-01（多月聚合状态值改为取最后一期）
+
+- **User Feedback:** 查询两个月数据时，`期末供暖收费面积`、常量容量指标（如`发电设备容量`、`锅炉设备容量`）被错误求和。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增状态值指标集合 `LATEST_VALUE_ITEMS`；  
+     - 新增聚合表达式构造 `_build_value_aggregate_sql()`；  
+     - 在多月聚合与对比窗口聚合 SQL 中：  
+       - 状态值指标按 `report_month/date` 倒序取最后一期值；  
+       - 非状态值指标保持 `SUM(value)`。  
+- **Result:**  
+  - 多月查询时，状态值指标不再累加，改为最后一期口径值；  
+  - 同比/环比/计划比窗口中的状态值也按最后一期处理。  
+
+## 2026-03-01（环比窗口修复：自然月按上月整月对比）
+
+- **User Feedback:** 已导入 26.1 和 26.2，查询 26.2 未出现环比值。  
+- **Root Cause:**  
+  - 旧逻辑按“同天数滚动窗口”计算环比：`2026-02-01~2026-02-28` -> `2026-01-04~2026-01-31`；  
+  - 月报数据按月首日记账（`2026-01-01`），导致 1 月数据被窗口排除。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 新增 `_resolve_mom_window()`：  
+       - 当前窗口若为自然整月（月初到月末），环比窗口改为“上月自然整月”；  
+       - 非整月窗口保持原滚动逻辑。  
+     - `query-comparison` 中改用该函数生成 `mom_start/mom_end`。  
+- **Result:**  
+  - 以 26.2 为当前月查询时，环比窗口将对齐到 26.1 整月，环比值可正常命中。  
+
+## 2026-03-01（环比修复补充留痕：前后端 README 同步）
+
+- **Agent Action:**  
+  1. 更新 `backend/README.md`：补充“环比窗口错位修复”说明（自然月 -> 上月整月，非整月保持滚动窗口）。  
+  2. 更新 `frontend/README.md`：补充“26.2 查询将命中 26.1 环比”的联动说明。  
+- **Result:**  
+  - 本轮修复的实现逻辑与前端联动行为已在 README 留痕，便于后续排查与交接。  
+
+## 2026-03-01（全局管理后台新增数据库表在线编辑）
+
+- **User Request:** 在“全局管理后台 -> 后台文件编辑”中增加数据库表在线编辑与保存能力，先支持 `monthly_data_show`，并可扩展到其他表。  
+- **Agent Action:**  
+  1. 后端 `backend/api/v1/admin_console.py` 新增数据库编辑接口：  
+     - `GET /api/v1/admin/db/tables`：列出 `public` schema 下基础表；  
+     - `POST /api/v1/admin/db/table/query`：按表名分页读取数据（返回字段、主键、总数、行数据）；  
+     - `POST /api/v1/admin/db/table/batch-update`：按主键批量保存行修改。  
+  2. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js` 新增：  
+     - `listAdminDbTables`、`queryAdminDbTable`、`batchUpdateAdminDbTable`。  
+  3. 前端页面 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：  
+     - 在“后台文件编辑”页新增“数据库表在线编辑”模块；  
+     - 支持表选择、分页参数（limit/offset）、加载数据、行内编辑、批量保存；  
+     - 主键字段只读并标记 `PK`，保存时仅提交变更字段。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/api/v1/admin_console.py`，通过。  
+- **Result:**  
+  - 现在可在后台直接对 `monthly_data_show` 等含主键表进行小幅临时修改并保存。  
+
+## 2026-03-02（monthly_data_show 表名纠偏）
+
+- **User Request:** 数据表已改名为 `monthly_data_show`，程序内仍有 `month_data_show` 依赖，要求统一修正。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 查询、筛选项读取、CSV 入库 UPSERT 的表名统一改为 `monthly_data_show`；  
+     - 接口 summary 文案同步更新。  
+  2. 建表脚本 `backend/sql/month_data_show.sql`：  
+     - `CREATE TABLE` 目标表改为 `monthly_data_show`；  
+     - 索引名改为 `idx_monthly_data_show_*` 并绑定新表名。  
+  3. 前端页面文案同步：  
+     - `MonthlyDataShowEntryView.vue`、`MonthlyDataShowQueryToolView.vue` 中表名展示改为 `monthly_data_show`。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，通过。  
+- **Result:**  
+  - 月报导入/查询链路已切换为新表名 `monthly_data_show`，不再依赖旧表名。  
+
+## 2026-03-02（月报查询数据层次顺序新增“时间”并默认第一位）
+
+- **User Request:** 在“数据层次顺序”中增加“时间”，默认第一位；跨月查询按时间先后分组展示（如 26.1 全部口径/指标在前，26.2 在后）。  
+- **Agent Action:**  
+  1. 前端 `MonthlyDataShowQueryToolView.vue`：  
+     - `layerOptions` 增加 `time`；  
+     - 默认 `filters.orderFields` 调整为 `['time', 'company', 'item']`；  
+     - `buildPayload` 放行 `time` 到 `order_fields`；  
+     - `resetFilters` 默认值同步更新。  
+  2. 后端 `workspace.py`：  
+     - `_resolve_order_fields` 支持 `time`，默认排序字段改为时间优先；  
+     - `_merge_and_sort_rows` 在选择 `time` 时按 `report_month/date` 升序排序；未选择 `time` 时保留原有降序行为；  
+     - `_sort_comparison_rows` 对 `time` 字段做忽略处理（对比数据本身无月维度分列）。  
+  3. 前端“简要分析”分层文案：  
+     - 当层次包含 `time` 时，按当前窗口标签显示时间分组标题，避免出现空分组。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，通过。  
+- **Result:**  
+  - 查询结果可按“时间 -> 口径 -> 指标”顺序展示，满足跨月先后分组阅读需求。  
+
+## 2026-03-02（月报查询层次顺序修复：自定义顺序真实生效）
+
+- **User Feedback:** 默认排序正常，但手动调整“数据层次顺序”后，查询结果仍像默认时间优先。  
+- **Root Cause:**  
+  - 后端 `_merge_and_sort_rows` 在排序键中预置了时间优先键，导致自定义层次顺序无法覆盖。  
+- **Agent Action:**  
+  1. 修改 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 移除固定前置时间键；  
+     - 改为按 `order_fields` 顺序逐层生成排序键；  
+     - 当 `time` 在层次中时，仅在对应位置参与排序（按 `report_month/date` 升序）；  
+     - 仅当未选择 `time` 时，保留历史“时间降序兜底”行为。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，通过。  
+- **Result:**  
+  - “口径 -> 指标 -> 时间”等自定义层次顺序现在会真实影响查询结果排列。  
+
+## 2026-03-02（查询结果字段名中文化与列顺序联动）
+
+- **User Request:**  
+  - 查询结果字段名改为中文：`company=口径`、`item=指标名`、`unit=计量单位`、`value=值`、`date=时间`；  
+  - 时间值由 `YYYY-MM-DD` 显示为 `YYYY年M月`；  
+  - `company/item/date(time)` 列顺序需与“数据层次顺序”一致，且后置 `值、计量单位`。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 查询结果表头改为 `resultColumns` 动态渲染；  
+     - 表体改为按动态列取值；  
+     - 新增 `formatResultMonth()`，将日期格式化为 `YYYY年M月`；  
+     - 新增 `resultDimensionFields/resultColumns/getResultCellValue`，按层次顺序拼接维度列并固定尾部 `值、计量单位`。  
+  2. 导出联动：  
+     - `downloadXlsx()` 的“查询结果”子表改为与页面同一列顺序、同一中文列头、同一时间格式。  
+- **Result:**  
+  - 页面与导出文件的“查询结果”列头/列序保持一致，并可随“数据层次顺序”实时变化。  
+
+## 2026-03-02（环比窗口修正为多月等长回溯 + 气温导出纯数）
+
+- **User Feedback:**  
+  1. 选择 `2026-01 ~ 2026-02` 时，环比上期仅命中 `2025-12`，应为 `2025-11 ~ 2025-12`；  
+  2. 导出 XLSX 子表“气温日序同比”中本期/同期气温带单位文本，不便二次处理。  
+- **Agent Action:**  
+  1. 后端 `backend/projects/monthly_data_show/api/workspace.py`：  
+     - 调整 `_resolve_mom_window()`：  
+       - 当前窗口若为“连续自然月区间（起始月月初到结束月月末）”，环比窗口改为“紧邻向前、等月数”的自然月区间；  
+       - 示例：`2026-01-01~2026-02-28 -> 2025-11-01~2025-12-31`。  
+       - 非自然月区间仍按滚动天数窗口。  
+  2. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 导出“气温日序同比”子表中：`本期气温/同期气温` 改为纯数值（不拼接 `℃`）；  
+     - 列名改为 `本期气温(℃)`、`同期气温(℃)`。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，通过。  
+- **Result:**  
+  - 多月查询环比窗口与业务预期一致；  
+  - 气温导出列更适合筛选、排序和数值计算。  
+
+## 2026-03-02（导出文件名按查询月份区间命名）
+
+- **User Request:** 导出文件名使用本次查询的月份区间名。  
+- **Agent Action:**  
+  1. 前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：  
+     - 调整 `resolveExportMonthTag()` 规则：  
+       - 若筛选为多月（`dateMonthFrom` 与 `dateMonthTo` 不同）-> `YYYY-MM_~_YYYY-MM`；  
+       - 若单月 -> `YYYY-MM`；  
+       - 若结束月为空则使用起始月；  
+       - 若筛选为空则回退当前窗口/结果数据推断。  
+  2. 文件名继续使用 `月报查询分析_${monthTag}.xlsx`，其中 `monthTag` 已支持区间。  
+- **Result:**  
+  - 导出文件名会随查询区间变化，例如：`月报查询分析_2026-01_~_2026-02.xlsx`。  

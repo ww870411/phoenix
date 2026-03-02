@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "blocked_companies": ["恒流", "天然气炉", "中水"],
+  "blocked_companies": ["说明","恒流", "天然气炉", "中水","临海"],
   "default_source_columns": ["本年计划", "本月计划", "本月实际", "上年同期"],
   "enable_jinpu_heating_area_adjustment": false,
   "item_exclude_set": [
