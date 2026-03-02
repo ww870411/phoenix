@@ -1012,6 +1012,10 @@ export async function queryAdminDbTable(payload = {}) {
       table: payload?.table || '',
       limit: payload?.limit ?? 200,
       offset: payload?.offset ?? 0,
+      search: payload?.search ?? '',
+      filters: Array.isArray(payload?.filters) ? payload.filters : [],
+      order_by: payload?.order_by ?? '',
+      order_dir: payload?.order_dir ?? 'asc',
     }),
   })
   if (!response.ok) {

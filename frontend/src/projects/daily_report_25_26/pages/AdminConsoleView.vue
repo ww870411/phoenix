@@ -12,6 +12,7 @@
           </div>
           <div class="tab-group">
             <button class="tab-btn" :class="{ active: activeTab === 'files' }" type="button" @click="activeTab = 'files'">后台文件编辑</button>
+            <button class="tab-btn" :class="{ active: activeTab === 'database' }" type="button" @click="activeTab = 'database'">数据库表编辑</button>
             <button class="tab-btn" :class="{ active: activeTab === 'project' }" type="button" @click="activeTab = 'project'">项目后台设定</button>
             <button class="tab-btn" :class="{ active: activeTab === 'system' }" type="button" @click="activeTab = 'system'">服务器管理</button>
             <button class="tab-btn" :class="{ active: activeTab === 'audit' }" type="button" @click="activeTab = 'audit'">操作日志</button>
@@ -56,25 +57,45 @@
             <p class="subtext">点击文件后将在新窗口中打开编辑器。</p>
             <p v-if="fileMessage" class="message">{{ fileMessage }}</p>
           </div>
+        </section>
 
+        <section v-else-if="activeTab === 'database'" class="content-block">
           <section class="inner-card db-editor-card">
             <header class="section-header">
               <h3>数据库表在线编辑</h3>
               <div class="system-actions">
                 <button class="btn ghost" type="button" :disabled="dbLoading || dbSaving" @click="loadDbTables">刷新表清单</button>
                 <button class="btn primary" type="button" :disabled="dbLoading || dbSaving || !dbSelectedTable" @click="loadDbRows">
-                  {{ dbLoading ? '加载中…' : '加载数据' }}
+                  {{ dbLoading ? '加载中…' : '查询数据' }}
                 </button>
                 <button class="btn primary" type="button" :disabled="dbSaving || dbDirtyStats.dirtyRows === 0" @click="saveDbRows">
                   {{ dbSaving ? '保存中…' : `保存修改（${dbDirtyStats.dirtyRows}行）` }}
                 </button>
               </div>
             </header>
-            <div class="toolbar">
+            <div class="toolbar db-toolbar">
               <label class="field">
                 <span>数据表</span>
                 <select v-model="dbSelectedTable">
                   <option v-for="name in dbTables" :key="name" :value="name">{{ name }}</option>
+                </select>
+              </label>
+              <label class="field grow">
+                <span>关键字检索</span>
+                <input v-model.trim="dbSearchText" type="text" placeholder="在全字段文本中模糊匹配" />
+              </label>
+              <label class="field">
+                <span>排序字段</span>
+                <select v-model="dbOrderBy">
+                  <option value="">主键默认</option>
+                  <option v-for="col in dbColumns" :key="`sort-${col.name}`" :value="col.name">{{ col.name }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>排序方向</span>
+                <select v-model="dbOrderDir">
+                  <option value="asc">升序</option>
+                  <option value="desc">降序</option>
                 </select>
               </label>
               <label class="field">
@@ -86,7 +107,44 @@
                 <input v-model.number="dbOffset" type="number" min="0" />
               </label>
             </div>
-            <p class="subtext">主键字段只读。当前支持优先编辑含主键的数据表（如 `monthly_data_show`）。</p>
+            <div class="db-filter-wrap">
+              <div class="db-filter-head">
+                <span>字段筛选（AND）</span>
+                <div class="inline-actions">
+                  <button class="btn ghost" type="button" @click="addDbFilterRow">新增条件</button>
+                  <button class="btn ghost" type="button" @click="resetDbFilters">清空条件</button>
+                </div>
+              </div>
+              <div class="db-filter-list">
+                <div v-for="(flt, idx) in dbFilters" :key="`flt-${idx}`" class="db-filter-item">
+                  <select v-model="flt.column">
+                    <option value="">选择字段</option>
+                    <option v-for="col in dbColumns" :key="`flt-col-${idx}-${col.name}`" :value="col.name">{{ col.name }}</option>
+                  </select>
+                  <select v-model="flt.op">
+                    <option value="contains">包含</option>
+                    <option value="eq">等于</option>
+                    <option value="ne">不等于</option>
+                    <option value="starts_with">前缀</option>
+                    <option value="ends_with">后缀</option>
+                    <option value="gt">大于</option>
+                    <option value="gte">大于等于</option>
+                    <option value="lt">小于</option>
+                    <option value="lte">小于等于</option>
+                    <option value="is_null">为空</option>
+                    <option value="not_null">非空</option>
+                  </select>
+                  <input
+                    v-model="flt.value"
+                    :disabled="flt.op === 'is_null' || flt.op === 'not_null'"
+                    type="text"
+                    placeholder="筛选值"
+                  />
+                  <button class="btn danger" type="button" @click="removeDbFilterRow(idx)">删除</button>
+                </div>
+              </div>
+            </div>
+            <p class="subtext">支持全部数据表查询；保存修改仍要求目标表存在主键。主键字段只读。</p>
             <p v-if="dbMessage" class="message">{{ dbMessage }}</p>
             <div v-if="dbRowsDraft.length" class="db-table-wrap">
               <table class="audit-table db-edit-table">
@@ -112,7 +170,7 @@
                 </tbody>
               </table>
             </div>
-            <div v-else class="panel-state">暂无数据，点击“加载数据”开始查看。</div>
+            <div v-else class="panel-state">暂无数据，请先设置条件后点击“查询数据”。</div>
           </section>
         </section>
 
@@ -726,6 +784,11 @@ const dbTotal = ref(0)
 const dbLoading = ref(false)
 const dbSaving = ref(false)
 const dbMessage = ref('')
+const dbSearchText = ref('')
+const dbOrderBy = ref('')
+const dbOrderDir = ref('asc')
+const dbFilters = ref([])
+dbFilters.value = [{ column: '', op: 'contains', value: '' }]
 
 const projects = ref([])
 const selectedProjectKey = ref(TARGET_PROJECT_KEY)
@@ -1205,6 +1268,38 @@ function normalizeDbDraftValue(rawValue, dataType) {
   return rawValue
 }
 
+function createDbFilterItem() {
+  return { column: '', op: 'contains', value: '' }
+}
+
+function normalizeDbQueryFilters() {
+  const normalized = []
+  for (const raw of dbFilters.value || []) {
+    const column = String(raw?.column || '').trim()
+    const op = String(raw?.op || '').trim()
+    const value = raw?.value ?? ''
+    if (!column || !op) continue
+    if (op !== 'is_null' && op !== 'not_null' && String(value).trim() === '') continue
+    normalized.push({ column, op, value })
+  }
+  return normalized
+}
+
+function addDbFilterRow() {
+  dbFilters.value = [...(dbFilters.value || []), createDbFilterItem()]
+}
+
+function removeDbFilterRow(index) {
+  const rows = [...(dbFilters.value || [])]
+  if (index < 0 || index >= rows.length) return
+  rows.splice(index, 1)
+  dbFilters.value = rows.length ? rows : [createDbFilterItem()]
+}
+
+function resetDbFilters() {
+  dbFilters.value = [createDbFilterItem()]
+}
+
 function collectDbUpdates() {
   const originalRows = dbRowsOriginal.value || []
   const draftRows = dbRowsDraft.value || []
@@ -1270,9 +1365,17 @@ async function loadDbRows() {
       table: dbSelectedTable.value,
       limit: dbLimit.value,
       offset: dbOffset.value,
+      search: dbSearchText.value,
+      filters: normalizeDbQueryFilters(),
+      order_by: dbOrderBy.value,
+      order_dir: dbOrderDir.value,
     })
     dbColumns.value = Array.isArray(payload?.columns) ? payload.columns : []
     dbPkColumns.value = Array.isArray(payload?.pk_columns) ? payload.pk_columns : []
+    const validColumns = new Set(dbColumns.value.map((x) => String(x?.name || '')))
+    if (dbOrderBy.value && !validColumns.has(dbOrderBy.value)) {
+      dbOrderBy.value = ''
+    }
     const rows = Array.isArray(payload?.rows) ? payload.rows : []
     dbRowsOriginal.value = rows
     dbRowsDraft.value = rows.map((row) => ({ ...row }))
@@ -2049,8 +2152,15 @@ watch(
   async (tab) => {
     if (tab === 'files') {
       stopSystemTimer()
+      return
+    }
+    if (tab === 'database') {
+      stopSystemTimer()
       if (!dbTables.value.length) {
         await loadDbTables()
+      }
+      if (!dbRowsDraft.value.length && dbSelectedTable.value) {
+        await loadDbRows()
       }
       return
     }
@@ -2078,6 +2188,15 @@ watch(
     if (activeTab.value === 'audit') {
       reloadAuditData().catch((err) => console.error(err))
     }
+  },
+)
+
+watch(
+  () => dbSelectedTable.value,
+  () => {
+    dbOffset.value = 0
+    dbOrderBy.value = ''
+    resetDbFilters()
   },
 )
 
@@ -2408,6 +2527,46 @@ onBeforeUnmount(() => {
 
 .db-editor-card {
   margin-top: 12px;
+}
+
+.db-toolbar {
+  flex-wrap: wrap;
+}
+
+.db-filter-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+  margin-bottom: 10px;
+}
+
+.db-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.db-filter-list {
+  display: grid;
+  gap: 8px;
+}
+
+.db-filter-item {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(220px, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.db-filter-item select,
+.db-filter-item input {
+  width: 100%;
 }
 
 .db-table-wrap {
@@ -2794,6 +2953,10 @@ onBeforeUnmount(() => {
   }
 
   .super-explorer {
+    grid-template-columns: 1fr;
+  }
+
+  .db-filter-item {
     grid-template-columns: 1fr;
   }
 }

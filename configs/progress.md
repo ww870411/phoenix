@@ -4502,3 +4502,26 @@
   2. 文件名继续使用 `月报查询分析_${monthTag}.xlsx`，其中 `monthTag` 已支持区间。  
 - **Result:**  
   - 导出文件名会随查询区间变化，例如：`月报查询分析_2026-01_~_2026-02.xlsx`。  
+
+## 2026-03-02（管理后台数据库编辑增强：独立页面 + 查询筛选）
+
+- **User Request:**  
+  1. 数据库编辑能力增强（不仅是基础分页查看）；  
+  2. 不要放在“后台文件编辑”里，新增独立页面并排在其后。  
+- **Agent Action:**  
+  1. 前端页面 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：  
+     - 顶部标签新增“数据库表编辑”，并放在“后台文件编辑”之后；  
+     - 将原“数据库表在线编辑”模块从文件页移出，迁移到独立标签页；  
+     - 新增查询能力：全字段关键字检索、字段筛选条件（AND）、排序字段/方向、分页参数；  
+     - 保留批量保存修改能力（按主键更新）。  
+  2. 后端接口 `backend/api/v1/admin_console.py`：  
+     - `POST /admin/db/table/query` 新增入参：`search`、`filters`、`order_by`、`order_dir`；  
+     - 支持筛选操作：`eq/ne/contains/starts_with/ends_with/gt/gte/lt/lte/is_null/not_null`；  
+     - 支持排序方向 `asc/desc`，并保留主键默认排序兜底。  
+  3. 前端 API `frontend/src/projects/daily_report_25_26/services/api.js`：  
+     - `queryAdminDbTable` 同步透传上述查询参数。  
+- **Verify:**  
+  - 执行 `python -m py_compile backend/api/v1/admin_console.py`，通过。  
+- **Result:**  
+  - 管理后台数据库编辑已独立成页，且具备可用的查询筛选与排序能力；  
+  - 当前仍保持“无主键表不可保存更新”的保护约束。  

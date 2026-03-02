@@ -3760,3 +3760,17 @@ docker compose up -d --build
   - 最终导出文件名：`月报查询分析_${monthTag}.xlsx`。
 - 效果：
   - 文件名与查询月份区间一致，便于归档与检索。
+
+## 结构同步（2026-03-02 管理后台新增独立“数据库表编辑”页）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 顶部标签新增“数据库表编辑”（位于“后台文件编辑”之后）；
+  - 原文件编辑页内的数据库编辑模块已迁移至该独立标签页；
+  - 数据库查询新增交互：
+    - 关键字检索（全字段文本匹配）
+    - 字段筛选条件（AND，可增删）
+    - 排序字段与排序方向
+    - 分页参数（limit/offset）
+  - 保存修改逻辑保持不变：按主键字段锁定行，非主键字段可编辑并批量保存。
+- API 联动：`frontend/src/projects/daily_report_25_26/services/api.js`
+  - `queryAdminDbTable` 增加入参透传：`search/filters/order_by/order_dir`。

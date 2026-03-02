@@ -65,6 +65,10 @@ class DbTableQueryPayload(BaseModel):
     table: str
     limit: int = Field(default=200, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
+    search: str = ""
+    filters: List[Dict[str, Any]] = Field(default_factory=list)
+    order_by: str = ""
+    order_dir: str = "asc"
 
 
 class DbTableBatchUpdatePayload(BaseModel):
@@ -562,22 +566,106 @@ def query_database_table(
             }
 
         select_cols = ", ".join(_quote_identifier(name) for name in column_names)
-        order_cols = meta["pk_columns"] or column_names[:1]
-        order_sql = ", ".join(_quote_identifier(name) for name in order_cols)
+        where_clauses: List[str] = []
+        query_params: Dict[str, Any] = {"limit": int(payload.limit), "offset": int(payload.offset)}
+
+        search_text = str(payload.search or "").strip()
+        if search_text:
+            search_param = f"%{search_text}%"
+            search_parts: List[str] = []
+            for idx, col in enumerate(column_names):
+                param_name = f"search_{idx}"
+                search_parts.append(f"CAST({_quote_identifier(col)} AS TEXT) ILIKE :{param_name}")
+                query_params[param_name] = search_param
+            if search_parts:
+                where_clauses.append("(" + " OR ".join(search_parts) + ")")
+
+        allowed_ops = {
+            "eq",
+            "ne",
+            "contains",
+            "starts_with",
+            "ends_with",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "is_null",
+            "not_null",
+        }
+        for idx, item in enumerate(payload.filters or []):
+            if not isinstance(item, dict):
+                continue
+            col_name = str(item.get("column") or "").strip()
+            op = str(item.get("op") or "").strip().lower()
+            raw_value = item.get("value")
+            if not col_name or col_name not in column_names or op not in allowed_ops:
+                continue
+            ident = _quote_identifier(col_name)
+            param_name = f"flt_{idx}"
+            if op == "is_null":
+                where_clauses.append(f"{ident} IS NULL")
+                continue
+            if op == "not_null":
+                where_clauses.append(f"{ident} IS NOT NULL")
+                continue
+            if op == "eq":
+                where_clauses.append(f"{ident} = :{param_name}")
+                query_params[param_name] = raw_value
+                continue
+            if op == "ne":
+                where_clauses.append(f"{ident} <> :{param_name}")
+                query_params[param_name] = raw_value
+                continue
+            if op == "contains":
+                where_clauses.append(f"CAST({ident} AS TEXT) ILIKE :{param_name}")
+                query_params[param_name] = f"%{'' if raw_value is None else str(raw_value)}%"
+                continue
+            if op == "starts_with":
+                where_clauses.append(f"CAST({ident} AS TEXT) ILIKE :{param_name}")
+                query_params[param_name] = f"{'' if raw_value is None else str(raw_value)}%"
+                continue
+            if op == "ends_with":
+                where_clauses.append(f"CAST({ident} AS TEXT) ILIKE :{param_name}")
+                query_params[param_name] = f"%{'' if raw_value is None else str(raw_value)}"
+                continue
+            if op == "gt":
+                where_clauses.append(f"{ident} > :{param_name}")
+                query_params[param_name] = raw_value
+                continue
+            if op == "gte":
+                where_clauses.append(f"{ident} >= :{param_name}")
+                query_params[param_name] = raw_value
+                continue
+            if op == "lt":
+                where_clauses.append(f"{ident} < :{param_name}")
+                query_params[param_name] = raw_value
+                continue
+            if op == "lte":
+                where_clauses.append(f"{ident} <= :{param_name}")
+                query_params[param_name] = raw_value
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        order_by = str(payload.order_by or "").strip()
+        order_dir = str(payload.order_dir or "asc").strip().lower()
+        if order_by and order_by in column_names:
+            order_cols = [order_by]
+        else:
+            order_cols = meta["pk_columns"] or column_names[:1]
+        safe_order_dir = "DESC" if order_dir == "desc" else "ASC"
+        order_sql = ", ".join(f"{_quote_identifier(name)} {safe_order_dir}" for name in order_cols)
         query_stmt = text(
             f"""
             SELECT {select_cols}
             FROM {table_ident}
+            {where_sql}
             ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset
             """
         )
-        count_stmt = text(f"SELECT COUNT(*) AS total FROM {table_ident}")
-        raw_rows = db.execute(
-            query_stmt,
-            {"limit": int(payload.limit), "offset": int(payload.offset)},
-        ).mappings().all()
-        total = int(db.execute(count_stmt).scalar() or 0)
+        count_stmt = text(f"SELECT COUNT(*) AS total FROM {table_ident} {where_sql}")
+        raw_rows = db.execute(query_stmt, query_params).mappings().all()
+        total = int(db.execute(count_stmt, query_params).scalar() or 0)
 
     rows: List[Dict[str, Any]] = []
     for row in raw_rows:
@@ -595,6 +683,9 @@ def query_database_table(
         "limit": int(payload.limit),
         "offset": int(payload.offset),
         "rows": rows,
+        "search": search_text,
+        "order_by": order_by,
+        "order_dir": safe_order_dir.lower(),
     }
 
 

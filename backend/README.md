@@ -2366,3 +2366,16 @@
   - 本轮后端无代码改动。
 - 联动说明：
   - 导出文件名区间化由前端 `MonthlyDataShowQueryToolView.vue` 处理，不影响后端查询/对比接口协议。
+
+## 结构同步（2026-03-02 管理后台数据表查询增强）
+
+- 文件：`backend/api/v1/admin_console.py`
+- 变更点：
+  - `DbTableQueryPayload` 新增参数：`search`、`filters`、`order_by`、`order_dir`；
+  - `POST /admin/db/table/query` 增强：
+    - 支持全字段关键字模糊检索（`ILIKE`）；
+    - 支持字段级筛选（`eq/ne/contains/starts_with/ends_with/gt/gte/lt/lte/is_null/not_null`）；
+    - 支持指定字段升降序排序（非法字段回退主键/首列排序）；
+    - 计数查询与分页查询共享同一筛选条件，返回 `total` 与当前页数据一致。
+- 效果：
+  - 数据库在线编辑页具备实际可用的查询筛选能力，不再仅限“无条件分页浏览”。
