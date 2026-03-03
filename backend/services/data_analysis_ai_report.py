@@ -1,8 +1,8 @@
 """
 数据分析 AI 报告生成服务。
 
-基于 Gemini SDK，负责：
-- 读取 backend_data/shared/ai_settings.json 中的 gemini_api_keys / gemini_model（兼容旧路径回退）；
+支持 gemini/newapi 双 provider，负责：
+- 读取 backend_data/shared/ai_settings.json 中的 AI 配置；
 - 根据数据分析查询结果构造提示词；
 - 将任务提交至线程池并异步生成报告；
 - 以内存字典维护任务状态，供 API 查询。
@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Optional
 
 import math
 import statistics
+import urllib.error
+import urllib.request
 
 import google.generativeai as genai
 
@@ -40,6 +42,7 @@ PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency"}
 AI_MODE_DAILY = "daily_analysis_v1"
 AI_MODE_MONTHLY = "monthly_analysis_v1"
 PROMPT_DATA_MAX_CHARS = 120000
+PROMPT_DATA_MAX_CHARS_NEWAPI = 36000
 
 INSIGHT_PROMPT_TEMPLATE = """你是一名热电联产/城市集中供热行业的数据分析师。请阅读给定的 JSON 数据（已包含指标的同比/环比/趋势/温度相关性结果），仅输出结构化 JSON，不要出现 Markdown 或解释文字。
 
@@ -420,16 +423,18 @@ _logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
 _jobs: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
-_model: Optional[genai.GenerativeModel] = None
-_model_name: Optional[str] = None
+_runtime_client: Optional[Dict[str, Any]] = None
+_runtime_signature: Optional[str] = None
+_runtime_model_name: Optional[str] = None
 
 
 def reset_gemini_client() -> None:
-    """清空已缓存的 Gemini 客户端实例，确保下次调用重新读取配置。"""
+    """清空已缓存的 AI 客户端实例，确保下次调用重新读取配置。"""
 
-    global _model, _model_name
-    _model = None
-    _model_name = None
+    global _runtime_client, _runtime_signature, _runtime_model_name
+    _runtime_client = None
+    _runtime_signature = None
+    _runtime_model_name = None
 
 
 def _safe_read_settings_json(path: Path) -> Dict[str, Any]:
@@ -448,8 +453,59 @@ def _load_effective_ai_settings() -> Dict[str, Any]:
     return _safe_read_settings_json(GLOBAL_AI_SETTINGS_PATH)
 
 
-def _load_gemini_settings() -> Dict[str, str]:
-    data = _load_effective_ai_settings()
+def _normalize_provider(value: Any) -> str:
+    provider = str(value or "gemini").strip().lower()
+    return provider if provider in {"gemini", "newapi"} else "gemini"
+
+
+def _decode_api_key(raw_value: Any) -> str:
+    text = str(raw_value or "").strip()
+    if not text:
+        return ""
+    decoded = decrypt_api_key(text)
+    if text.startswith("sk-") and not decoded.startswith("sk-"):
+        return text
+    if text.startswith("AIza") and not decoded.startswith("AIza"):
+        return text
+    return decoded
+
+
+def _resolve_active_provider_record(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    providers_raw = data.get("providers")
+    if not isinstance(providers_raw, list) or not providers_raw:
+        return None
+    records: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(providers_raw):
+        if not isinstance(raw, dict):
+            continue
+        kind = _normalize_provider(raw.get("kind") or raw.get("provider"))
+        provider_id = str(raw.get("id") or "").strip() or f"provider_{idx + 1}"
+        api_keys_raw = raw.get("api_keys")
+        encrypted_keys = api_keys_raw if isinstance(api_keys_raw, list) else []
+        keys = [_decode_api_key(k) for k in encrypted_keys if str(k or "").strip()]
+        records.append(
+            {
+                "id": provider_id,
+                "name": str(raw.get("name") or "").strip(),
+                "kind": kind,
+                "base_url": str(raw.get("base_url") or "").strip(),
+                "model": str(raw.get("model") or "").strip(),
+                "api_keys": keys,
+            }
+        )
+    if not records:
+        return None
+    active_id = str(data.get("active_provider_id") or "").strip()
+    if active_id:
+        hit = next((r for r in records if str(r.get("id") or "") == active_id), None)
+        if hit:
+            return hit
+    return records[0]
+
+
+def _load_gemini_settings(data: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    if data is None:
+        data = _load_effective_ai_settings()
     if not data:
         raise RuntimeError(f"API Key 配置不存在：{GLOBAL_AI_SETTINGS_PATH}")
 
@@ -460,13 +516,13 @@ def _load_gemini_settings() -> Dict[str, str]:
         # 取第一个 Key 并解密
         first_raw = str(raw_keys[0] or "")
         if first_raw:
-            api_key = decrypt_api_key(first_raw)
+            api_key = _decode_api_key(first_raw)
     
     # 回退：尝试读取旧的 gemini_api_key
     if not api_key:
         raw_single_key = data.get("gemini_api_key")
         if raw_single_key:
-            api_key = decrypt_api_key(str(raw_single_key))
+            api_key = _decode_api_key(str(raw_single_key))
 
     model = data.get("gemini_model")
     if not api_key or not isinstance(api_key, str):
@@ -474,6 +530,92 @@ def _load_gemini_settings() -> Dict[str, str]:
     if not model or not isinstance(model, str):
         raise RuntimeError("缺少 gemini_model 配置")
     return {"api_key": api_key, "model": model}
+
+
+def _load_newapi_settings(data: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    if data is None:
+        data = _load_effective_ai_settings()
+    if not data:
+        raise RuntimeError(f"API Key 配置不存在：{GLOBAL_AI_SETTINGS_PATH}")
+
+    base_url = str(data.get("newapi_base_url") or "").strip()
+    if not base_url:
+        raise RuntimeError("缺少 newapi_base_url 配置")
+    model = str(data.get("newapi_model") or "").strip()
+    if not model:
+        raise RuntimeError("缺少 newapi_model 配置")
+
+    raw_keys = data.get("newapi_api_keys")
+    api_key = ""
+    if isinstance(raw_keys, list) and raw_keys:
+        first_raw = str(raw_keys[0] or "")
+        if first_raw:
+            api_key = _decode_api_key(first_raw)
+
+    if not api_key:
+        raw_single_key = data.get("newapi_api_key")
+        if raw_single_key:
+            api_key = _decode_api_key(str(raw_single_key))
+    if not api_key:
+        raise RuntimeError("缺少有效的 newapi_api_key 配置 (请检查 newapi_api_keys 列表)")
+    return {"api_key": api_key, "model": model, "base_url": base_url}
+
+
+def _load_ai_provider_settings() -> Dict[str, Any]:
+    data = _load_effective_ai_settings()
+    if not data:
+        raise RuntimeError(f"API Key 配置不存在：{GLOBAL_AI_SETTINGS_PATH}")
+    active_record = _resolve_active_provider_record(data)
+    if active_record is not None:
+        provider = _normalize_provider(active_record.get("kind"))
+        api_keys = active_record.get("api_keys") or []
+        api_key = str(api_keys[0] or "").strip() if isinstance(api_keys, list) and api_keys else ""
+        model = str(active_record.get("model") or "").strip()
+        if not api_key:
+            raise RuntimeError("当前生效 Provider 缺少 API Key")
+        if not model:
+            raise RuntimeError("当前生效 Provider 缺少模型名")
+        if provider == "newapi":
+            base_url = str(active_record.get("base_url") or "").strip()
+            if not base_url:
+                raise RuntimeError("当前生效 New API Provider 缺少 Base URL")
+            return {
+                "provider": "newapi",
+                "api_key": api_key,
+                "model": model,
+                "base_url": base_url,
+            }
+        return {
+            "provider": "gemini",
+            "api_key": api_key,
+            "model": model,
+        }
+
+    provider = _normalize_provider(data.get("provider"))
+    settings: Dict[str, Any]
+    if provider == "newapi":
+        settings = _load_newapi_settings(data)
+    else:
+        settings = _load_gemini_settings(data)
+    settings["provider"] = provider
+    return settings
+
+
+def _current_provider() -> str:
+    try:
+        data = _load_effective_ai_settings()
+        active_record = _resolve_active_provider_record(data)
+        if active_record is not None:
+            return _normalize_provider(active_record.get("kind"))
+        return _normalize_provider(data.get("provider"))
+    except Exception:  # pylint: disable=broad-except
+        return "gemini"
+
+
+def _resolve_prompt_data_char_limit() -> int:
+    if _current_provider() == "newapi":
+        return PROMPT_DATA_MAX_CHARS_NEWAPI
+    return PROMPT_DATA_MAX_CHARS
 
 
 def _load_instruction_text(mode_id: str = AI_MODE_DAILY) -> str:
@@ -611,6 +753,7 @@ def _trim_processed_data_for_prompt(
 
 
 def _serialize_prompt_processed_data(processed_data: Dict[str, Any]) -> str:
+    char_limit = _resolve_prompt_data_char_limit()
     candidates = [
         (100, 31, True),
         (80, 20, True),
@@ -630,7 +773,7 @@ def _serialize_prompt_processed_data(processed_data: Dict[str, Any]) -> str:
         data_json = _safe_json_dumps(payload)
         last_json = data_json
         last_payload = payload
-        if len(data_json) <= PROMPT_DATA_MAX_CHARS:
+        if len(data_json) <= char_limit:
             if metric_limit < 100 or timeline_limit < 31 or not include_matrix:
                 meta = payload.get("meta")
                 if isinstance(meta, dict):
@@ -975,6 +1118,21 @@ def _is_quota_or_rate_error(exc: Exception) -> bool:
     return any(word in text for word in keywords)
 
 
+def _is_transient_gateway_error(exc: Exception) -> bool:
+    text = str(exc or "").lower()
+    transient_tokens = [
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "gateway time-out",
+        "gateway timeout",
+        "timed out",
+        "connection reset",
+    ]
+    return any(token in text for token in transient_tokens)
+
+
 def _extract_response_text(response: Any) -> str:
     text = (response.text or "").strip() if response else ""
     if text:
@@ -990,13 +1148,175 @@ def _extract_response_text(response: Any) -> str:
     return text
 
 
+def _extract_newapi_response_text(payload: Dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        message = first.get("message") if isinstance(first, dict) else {}
+        content = message.get("content") if isinstance(message, dict) else ""
+        if isinstance(content, str):
+            text = content.strip()
+            if text:
+                return text
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    part_text = item.get("text")
+                    if isinstance(part_text, str):
+                        parts.append(part_text)
+            text = "\n".join(part for part in parts if part).strip()
+            if text:
+                return text
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str):
+        text = output_text.strip()
+        if text:
+            return text
+    return ""
+
+
+def _build_newapi_chat_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if not normalized:
+        raise RuntimeError("newapi_base_url 不能为空")
+    lower = normalized.lower()
+    if lower.endswith("/chat/completions"):
+        return normalized
+    return f"{normalized}/chat/completions"
+
+
+def _call_newapi_chat(prompt: str, settings: Dict[str, Any], timeout_seconds: int = 120) -> str:
+    url = _build_newapi_chat_url(str(settings.get("base_url") or ""))
+    request_body = {
+        "model": str(settings.get("model") or ""),
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    request_data = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url=url,
+        data=request_data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Phoenix-AI-Client/1.0",
+            "Authorization": f"Bearer {str(settings.get('api_key') or '')}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            detail = str(exc)
+        if exc.code == 403 and "1010" in detail:
+            raise RuntimeError(
+                "New API 调用失败: HTTP 403 error code 1010（网关拒绝）。"
+                f"请检查 base_url 是否为 API 域名与接口路径，当前请求地址: {url}。"
+                "若该服务有防火墙/来源限制，请放行服务端请求。"
+            ) from exc
+        raise RuntimeError(f"New API 调用失败: HTTP {exc.code} {detail} (url={url})") from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise RuntimeError(f"New API 调用失败: {exc}") from exc
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"New API 返回内容不是有效 JSON: {raw_text[:300]}") from exc
+    text = _extract_newapi_response_text(payload if isinstance(payload, dict) else {})
+    if not text:
+        raise RuntimeError("New API 未返回有效文本内容")
+    return text
+
+
+def _test_gemini_connection(api_key: str, model: str) -> Dict[str, Any]:
+    if not api_key:
+        raise RuntimeError("Gemini API Key 不能为空")
+    if not model:
+        raise RuntimeError("Gemini 模型不能为空")
+    genai.configure(api_key=api_key)
+    runtime_model = genai.GenerativeModel(model)
+    response = runtime_model.generate_content("请仅回复: ok")
+    text = _extract_response_text(response)
+    if not text:
+        raise RuntimeError("Gemini 测试调用成功但未返回文本")
+    return {"provider": "gemini", "model": model, "message": text[:120]}
+
+
+def _test_newapi_connection(base_url: str, api_key: str, model: str) -> Dict[str, Any]:
+    if not base_url:
+        raise RuntimeError("New API Base URL 不能为空")
+    if not api_key:
+        raise RuntimeError("New API Key 不能为空")
+    if not model:
+        raise RuntimeError("New API 模型不能为空")
+    text = _call_newapi_chat(
+        "请仅回复: ok",
+        {"base_url": base_url, "api_key": api_key, "model": model},
+        timeout_seconds=60,
+    )
+    return {"provider": "newapi", "model": model, "message": text[:120]}
+
+
+def run_ai_connection_test(payload: Dict[str, Any]) -> Dict[str, Any]:
+    active_record = _resolve_active_provider_record(payload if isinstance(payload, dict) else {})
+    if active_record is not None:
+        provider = _normalize_provider(active_record.get("kind"))
+        keys = active_record.get("api_keys") or []
+        first_key = str(keys[0] or "").strip() if isinstance(keys, list) and keys else ""
+        model = str(active_record.get("model") or "").strip()
+        if provider == "newapi":
+            return _test_newapi_connection(
+                str(active_record.get("base_url") or "").strip(),
+                first_key,
+                model,
+            )
+        return _test_gemini_connection(first_key, model)
+
+    provider = _normalize_provider(payload.get("provider"))
+    if provider == "newapi":
+        newapi_keys = payload.get("newapi_api_keys")
+        first_key = ""
+        if isinstance(newapi_keys, list) and newapi_keys:
+            first_key = str(newapi_keys[0] or "").strip()
+        return _test_newapi_connection(
+            str(payload.get("newapi_base_url") or "").strip(),
+            first_key,
+            str(payload.get("newapi_model") or "").strip(),
+        )
+    gemini_keys = payload.get("api_keys")
+    first_key = ""
+    if isinstance(gemini_keys, list) and gemini_keys:
+        first_key = str(gemini_keys[0] or "").strip()
+    return _test_gemini_connection(
+        first_key,
+        str(payload.get("model") or "").strip(),
+    )
+
+
+def _current_runtime_model_name() -> str:
+    return str(_runtime_model_name or "")
+
+
 def _call_model(prompt: str, retries: int = 3) -> str:
-    model = _get_model()
+    runtime = _get_runtime_client()
+    provider = str(runtime.get("provider") or "gemini")
     last_error: Optional[Exception] = None
     for attempt in range(1, max(1, retries) + 1):
         try:
-            response = model.generate_content(prompt)
-            text = _extract_response_text(response)
+            if provider == "newapi":
+                text = _call_newapi_chat(prompt, runtime)
+            else:
+                model = runtime.get("client")
+                response = model.generate_content(prompt)
+                text = _extract_response_text(response)
             if not text:
                 raise RuntimeError("模型未返回内容")
             return text
@@ -1005,13 +1325,24 @@ def _call_model(prompt: str, retries: int = 3) -> str:
             if _is_quota_or_rate_error(exc) and attempt < retries:
                 delay_seconds = _extract_retry_delay_seconds(str(exc))
                 _logger.warning(
-                    "Gemini 限流/配额触发，第 %s/%s 次调用失败，%s 秒后自动重试：%s",
+                    "%s 限流/配额触发，第 %s/%s 次调用失败，%s 秒后自动重试：%s",
+                    provider,
                     attempt,
                     retries,
                     delay_seconds,
                     exc,
                 )
                 time.sleep(delay_seconds)
+                continue
+            if _is_transient_gateway_error(exc) and attempt < retries:
+                _logger.warning(
+                    "%s 网关/超时错误，第 %s/%s 次调用失败，2 秒后重试：%s",
+                    provider,
+                    attempt,
+                    retries,
+                    exc,
+                )
+                time.sleep(2)
                 continue
             raise
     raise RuntimeError(f"模型调用失败: {last_error}")
@@ -1040,14 +1371,37 @@ def _update_job(job_id: str, **kwargs: Any) -> None:
             _jobs[job_id].update(kwargs)
 
 
-def _get_model() -> genai.GenerativeModel:
-    global _model, _model_name
-    if _model is None:
-        settings = _load_gemini_settings()
-        genai.configure(api_key=settings["api_key"])
-        _model_name = settings["model"]
-        _model = genai.GenerativeModel(_model_name)
-    return _model
+def _get_runtime_client() -> Dict[str, Any]:
+    global _runtime_client, _runtime_signature, _runtime_model_name
+    settings = _load_ai_provider_settings()
+    provider = str(settings.get("provider") or "gemini")
+    signature_parts = [provider, str(settings.get("model") or "")]
+    if provider == "newapi":
+        signature_parts.append(str(settings.get("base_url") or ""))
+    signature_parts.append(str(settings.get("api_key") or "")[:12])
+    signature = "|".join(signature_parts)
+    if _runtime_client is not None and _runtime_signature == signature:
+        return _runtime_client
+
+    if provider == "newapi":
+        _runtime_client = {
+            "provider": "newapi",
+            "api_key": str(settings.get("api_key") or ""),
+            "base_url": str(settings.get("base_url") or ""),
+            "model": str(settings.get("model") or ""),
+        }
+        _runtime_model_name = str(settings.get("model") or "")
+    else:
+        genai.configure(api_key=str(settings.get("api_key") or ""))
+        model_name = str(settings.get("model") or "")
+        _runtime_client = {
+            "provider": "gemini",
+            "model": model_name,
+            "client": genai.GenerativeModel(model_name),
+        }
+        _runtime_model_name = model_name
+    _runtime_signature = signature
+    return _runtime_client
 
 
 def _preprocess_payload(payload: Dict[str, Any], mode_id: str = AI_MODE_DAILY) -> Dict[str, Any]:
@@ -1357,8 +1711,64 @@ def _generate_monthly_report_html(
     sections = _normalize_sections_for_mode(AI_MODE_MONTHLY, layout_data.get("sections") or [])
     section_contents = content_data.get("section_contents") or {}
     validation_block = validation_data or {}
-    report_title = "生产运行简报（智能生成）"
-    sub_title = str(insight_data.get("headline") or "月度经营分析")
+
+    css = """
+        body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif; background: #f5f7fb; color: #0f172a; margin: 0; padding: 28px; }
+        .paper { max-width: 980px; margin: 0 auto; background: #fff; border: 1px solid #dbe2ef; border-radius: 6px; padding: 34px 42px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08); }
+        .report-title { text-align: center; margin: 0; font-size: 30px; letter-spacing: 1px; }
+        .report-subtitle { text-align: center; margin: 10px 0 2px; font-size: 16px; color: #334155; }
+        .report-meta { margin-top: 16px; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; padding: 10px 0; font-size: 13px; color: #475569; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .chapter { margin-top: 20px; }
+        .chapter h2 { margin: 0 0 10px; font-size: 21px; color: #0f172a; font-weight: 700; }
+        .chapter .content { font-size: 16px; line-height: 2.0; color: #1f2937; text-indent: 2em; }
+        .chapter .content p { margin: 8px 0; text-indent: 2em; }
+        .chapter .content ul, .chapter .content ol { margin: 8px 0 8px 24px; padding: 0; text-indent: 0; }
+        .chapter .content li { margin: 4px 0; text-indent: 0; }
+        .appendix { margin-top: 24px; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
+        .appendix h3 { margin: 0 0 10px; font-size: 17px; color: #1e3a8a; }
+        .chart-section { margin-top: 24px; }
+        .chart-section h3 { margin: 0 0 10px; font-size: 17px; color: #1e3a8a; }
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .chart-card { border: 1px solid #dbe2ef; border-radius: 6px; padding: 10px; background: #fff; }
+        .chart-card h4 { margin: 0 0 8px; font-size: 14px; color: #334155; }
+        .chart-box { width: 100%; height: 340px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: center; }
+        th { background: #f1f5f9; color: #1e3a8a; font-weight: 700; }
+        .unit { color: #64748b; margin-left: 4px; font-size: 12px; }
+        .delta-positive { color: #b91c1c; font-weight: 700; }
+        .delta-negative { color: #15803d; font-weight: 700; }
+        .delta-neutral { color: #334155; font-weight: 700; }
+        .delta-muted { color: #94a3b8; font-weight: 700; }
+        .review { margin-top: 18px; font-size: 14px; color: #334155; }
+        .footer { margin-top: 28px; text-align: center; color: #94a3b8; font-size: 12px; }
+    """
+
+    html_parts: List[str] = [
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        f"<style>{css}</style>",
+        "<script src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js'></script>",
+        "</head><body><div class='paper'>",
+        "<h1 class='report-title'>生产运行简报</h1>",
+        f"<p class='report-subtitle'>{str(insight_data.get('headline') or '月度经营分析')}</p>",
+        "<div class='report-meta'>",
+        f"<span>分析口径：{meta.get('unit_label') or '月报查询'}</span>",
+        f"<span>分析期间：{meta.get('start_date') or '—'} ~ {meta.get('end_date') or '—'}</span>",
+        f"<span>生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</span>",
+        "</div>",
+    ]
+
+    for section in sections:
+        sec_id = section.get("id")
+        sec_title = section.get("title") or ""
+        sec_html = section_contents.get(sec_id) or "<p>暂无内容。</p>"
+        html_parts.append(
+            "<section class='chapter'>"
+            f"<h2>{sec_title}</h2>"
+            f"<div class='content'>{sec_html}</div>"
+            "</section>"
+        )
+
     yoy_entries = []
     for metric in metrics:
         current = metric.get("value")
@@ -1376,147 +1786,97 @@ def _generate_monthly_report_html(
                 "decimals": metric.get("decimals", 2),
             }
         )
-    yoy_entries = yoy_entries[:40]
-    ring_data = processed_data.get("ring_compare") or {}
-    ring_entries = (ring_data.get("entries") or [])[:40]
-    plan_data = processed_data.get("plan_compare") or {}
-    plan_entries = (plan_data.get("entries") or [])[:40]
+    yoy_entries = yoy_entries[:30]
 
-    css = """
-        body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif; background: #f3f4f6; color: #1f2937; margin: 0; padding: 24px; }
-        .paper { max-width: 980px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 28px 32px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
-        .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 14px; margin-bottom: 18px; }
-        .header h1 { margin: 0; font-size: 30px; color: #0f172a; letter-spacing: 1px; }
-        .header .subtitle { margin: 10px 0 0; color: #334155; font-size: 16px; font-weight: 600; }
-        .meta { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; font-size: 13px; color: #475569; text-align: left; }
-        .meta span { display: block; }
-        .chapter { margin: 18px 0; }
-        .chapter h2 { margin: 0 0 10px; font-size: 20px; color: #0f172a; border-left: 5px solid #2563eb; padding-left: 10px; }
-        .chapter .content { font-size: 15px; line-height: 1.9; color: #1f2937; }
-        .chapter .content p { margin: 10px 0; }
-        .table-wrap { overflow-x: auto; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: center; }
-        th { background: #eff6ff; color: #1e3a8a; font-weight: 700; }
-        .unit { color: #64748b; margin-left: 4px; font-size: 12px; }
-        .delta-positive { color: #b91c1c; font-weight: 700; }
-        .delta-negative { color: #15803d; font-weight: 700; }
-        .delta-neutral { color: #334155; font-weight: 700; }
-        .delta-muted { color: #94a3b8; font-weight: 700; }
-        .review { margin-top: 22px; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
-        .review h3 { margin: 0 0 8px; color: #1e3a8a; font-size: 16px; }
-        .review ul { margin: 6px 0 0; padding-left: 18px; color: #334155; }
-        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #94a3b8; }
-    """
-
-    html_parts: List[str] = [
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
-        f"<style>{css}</style>",
-        "</head><body><div class='paper'>",
-        "<div class='header'>",
-        f"<h1>{report_title}</h1>",
-        f"<div class='subtitle'>{sub_title}</div>",
-        "<div class='meta'>",
-        f"<span>分析口径：{meta.get('unit_label') or '月报查询'}</span>",
-        f"<span>报告模式：{meta.get('analysis_mode_label') or '月报分析'}</span>",
-        f"<span>分析期间：{meta.get('start_date') or '—'} ~ {meta.get('end_date') or '—'}</span>",
-        f"<span>生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</span>",
-        "</div></div>",
-    ]
+    chart_rows: List[Dict[str, Any]] = []
+    for row in yoy_entries:
+        current_numeric = _to_float_or_none(row.get("current"))
+        delta_numeric = _to_float_or_none(row.get("delta"))
+        if current_numeric is None and delta_numeric is None:
+            continue
+        chart_rows.append(
+            {
+                "label": str(row.get("label") or ""),
+                "current": current_numeric,
+                "delta": delta_numeric,
+            }
+        )
+    if chart_rows:
+        top_delta = sorted(
+            [x for x in chart_rows if x.get("delta") is not None],
+            key=lambda x: abs(float(x.get("delta") or 0.0)),
+            reverse=True,
+        )[:10]
+        top_current = sorted(
+            [x for x in chart_rows if x.get("current") is not None],
+            key=lambda x: abs(float(x.get("current") or 0.0)),
+            reverse=True,
+        )[:10]
+        top_delta.reverse()
+        top_current.reverse()
+        top_delta_json = json.dumps(top_delta, ensure_ascii=False)
+        top_current_json = json.dumps(top_current, ensure_ascii=False)
+        html_parts.append(
+            "<section class='chart-section'>"
+            "<h3>附图：关键指标可视化</h3>"
+            "<div class='chart-grid'>"
+            "<div class='chart-card'><h4>图1：同比差异率 Top10（绝对值）</h4><div id='monthlyChartDelta' class='chart-box'></div></div>"
+            "<div class='chart-card'><h4>图2：本期值 Top10（绝对值）</h4><div id='monthlyChartCurrent' class='chart-box'></div></div>"
+            "</div>"
+            "<script>"
+            f"const __deltaData = {top_delta_json};"
+            f"const __currentData = {top_current_json};"
+            "const __dEl = document.getElementById('monthlyChartDelta');"
+            "const __cEl = document.getElementById('monthlyChartCurrent');"
+            "if (window.echarts && __dEl && __deltaData.length) {"
+            "  const c1 = window.echarts.init(__dEl);"
+            "  c1.setOption({"
+            "    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},"
+            "    grid:{left:140,right:20,top:30,bottom:24},"
+            "    xAxis:{type:'value',axisLabel:{formatter:'{value}%'}},"
+            "    yAxis:{type:'category',data:__deltaData.map(x=>x.label),axisLabel:{width:120,overflow:'truncate'}},"
+            "    series:[{type:'bar',data:__deltaData.map(x=>x.delta),itemStyle:{color:(p)=> (p.value||0)>=0 ? '#b91c1c' : '#15803d'}}]"
+            "  });"
+            "  window.addEventListener('resize', ()=>c1.resize());"
+            "}"
+            "if (window.echarts && __cEl && __currentData.length) {"
+            "  const c2 = window.echarts.init(__cEl);"
+            "  c2.setOption({"
+            "    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},"
+            "    grid:{left:140,right:20,top:30,bottom:24},"
+            "    xAxis:{type:'value'},"
+            "    yAxis:{type:'category',data:__currentData.map(x=>x.label),axisLabel:{width:120,overflow:'truncate'}},"
+            "    series:[{type:'bar',data:__currentData.map(x=>x.current),itemStyle:{color:'#1d4ed8'}}]"
+            "  });"
+            "  window.addEventListener('resize', ()=>c2.resize());"
+            "}"
+            "</script>"
+            "</section>"
+        )
 
     if yoy_entries:
-        html_parts.append("<div class='chapter'><h2>核心指标同比概览</h2><div class='table-wrap'>")
-        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>同期</th><th>同比</th></tr></thead><tbody>")
+        html_parts.append("<section class='appendix'><h3>附：关键指标同比数据表</h3><table><thead><tr><th>指标</th><th>本期值</th><th>同期值</th><th>同比差异率</th></tr></thead><tbody>")
         for entry in yoy_entries:
             decimals = entry.get("decimals", 2)
             unit = entry.get("unit") or ""
             unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
             delta_val = entry.get("delta")
-            delta_cls = _classify_delta(delta_val)
             html_parts.append(
                 "<tr>"
                 f"<td>{entry.get('label') or ''}</td>"
                 f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
                 f"<td>{_format_number(entry.get('peer'), decimals)}{unit_html}</td>"
-                f"<td class='{delta_cls}'>{_format_percent_text(delta_val)}</td>"
+                f"<td class='{_classify_delta(delta_val)}'>{_format_percent_text(delta_val)}</td>"
                 "</tr>"
             )
-        html_parts.append("</tbody></table></div></div>")
-
-    for section in sections:
-        sec_id = section.get("id")
-        sec_title = section.get("title") or ""
-        sec_html = section_contents.get(sec_id) or "<p>暂无内容。</p>"
-        html_parts.append(
-            "<div class='chapter'>"
-            f"<h2>{sec_title}</h2>"
-            f"<div class='content'>{sec_html}</div>"
-            "</div>"
-        )
-
-    if ring_entries:
-        html_parts.append("<div class='chapter'><h2>附表：环比对比</h2><div class='table-wrap'>")
-        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>上期</th><th>环比</th></tr></thead><tbody>")
-        for entry in ring_entries:
-            decimals = entry.get("decimals", 2)
-            unit = entry.get("unit") or ""
-            unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
-            rate_val = entry.get("rate")
-            rate_cls = _classify_delta(rate_val)
-            html_parts.append(
-                "<tr>"
-                f"<td>{entry.get('label') or ''}</td>"
-                f"<td>{_format_number(entry.get('current'), decimals)}{unit_html}</td>"
-                f"<td>{_format_number(entry.get('previous'), decimals)}{unit_html}</td>"
-                f"<td class='{rate_cls}'>{_format_percent_text(rate_val)}</td>"
-                "</tr>"
-            )
-        html_parts.append("</tbody></table></div></div>")
-
-    if plan_entries:
-        html_parts.append("<div class='chapter'><h2>附表：计划对比</h2><div class='table-wrap'>")
-        html_parts.append("<table><thead><tr><th>指标</th><th>本期</th><th>计划</th><th>完成率</th></tr></thead><tbody>")
-        for entry in plan_entries:
-            decimals = entry.get("decimals", 2)
-            unit = entry.get("unit") or ""
-            unit_html = f"<span class='unit'>{unit}</span>" if unit else ""
-            completion = entry.get("completion_rate")
-            completion_cls = _classify_delta(completion)
-            html_parts.append(
-                "<tr>"
-                f"<td>{entry.get('label') or ''}</td>"
-                f"<td>{_format_number(entry.get('actual_value'), decimals)}{unit_html}</td>"
-                f"<td>{_format_number(entry.get('plan_value'), decimals)}{unit_html}</td>"
-                f"<td class='{completion_cls}'>{_format_percent_text(completion)}</td>"
-                "</tr>"
-            )
-        html_parts.append("</tbody></table></div></div>")
+        html_parts.append("</tbody></table></section>")
 
     if validation_block:
         status = (validation_block.get("status") or "pending").lower()
-        status_label_map = {
-            "pass": "核对通过",
-            "warning": "存在提示",
-            "fail": "发现异常",
-            "pending": "待核对",
-        }
-        status_label = status_label_map.get(status, "待核对")
-        html_parts.append("<div class='review'>")
-        html_parts.append("<h3>智能核对结果</h3>")
-        html_parts.append(f"<p><strong>结论：</strong>{status_label}</p>")
-        issues = validation_block.get("issues") or []
-        if issues:
-            html_parts.append("<ul>")
-            for issue in issues:
-                section = issue.get("section") or "未注明段落"
-                level = (issue.get("severity") or "info").lower()
-                desc = issue.get("description") or "无描述"
-                html_parts.append(f"<li>[{section}/{level}] {desc}</li>")
-            html_parts.append("</ul>")
-        html_parts.append("</div>")
+        status_label = {"pass": "核对通过", "warning": "存在提示", "fail": "发现异常"}.get(status, "待核对")
+        html_parts.append(f"<section class='review'><p><strong>智能核对：</strong>{status_label}</p></section>")
 
-    html_parts.append("<div class='footer'>本报告由系统自动生成，仅供经营分析参考。</div>")
-    html_parts.append("</div></body></html>")
+    html_parts.append("<div class='footer'>本报告由系统自动生成，仅供经营分析参考。</div></div></body></html>")
     return "\n".join(html_parts)
 
 
@@ -2232,7 +2592,7 @@ def _generate_report(job_id: str, payload: Dict[str, Any]) -> None:
             status="ready",
             stage="ready",
             report=html_report,
-            model=_model_name,
+            model=_current_runtime_model_name(),
             ai_mode_id=mode_id,
             finished_at=_current_time_iso(),
         )

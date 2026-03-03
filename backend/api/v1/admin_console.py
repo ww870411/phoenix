@@ -21,6 +21,7 @@ from sqlalchemy import text
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import audit_log
+from backend.services import data_analysis_ai_report
 from backend.services import dashboard_cache
 from backend.services.auth_manager import AuthSession, get_current_session
 from backend.services.dashboard_cache_job import cache_publish_job_manager
@@ -81,14 +82,31 @@ class ValidationSwitchPayload(BaseModel):
 
 
 class AiSettingsPayload(BaseModel):
-    api_keys: List[str]
-    model: str
+    api_keys: List[str] = Field(default_factory=list)
+    model: str = ""
+    provider: Optional[str] = "gemini"
+    newapi_base_url: Optional[str] = None
+    newapi_api_keys: Optional[List[str]] = None
+    newapi_model: Optional[str] = None
+    providers: Optional[List[Dict[str, Any]]] = None
+    active_provider_id: Optional[str] = None
     instruction_daily: Optional[str] = None
     instruction: Optional[str] = None
     instruction_monthly: Optional[str] = None
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
+
+
+class AiSettingsConnectionTestPayload(BaseModel):
+    provider: Optional[str] = "gemini"
+    api_keys: Optional[List[str]] = None
+    model: Optional[str] = None
+    newapi_base_url: Optional[str] = None
+    newapi_api_keys: Optional[List[str]] = None
+    newapi_model: Optional[str] = None
+    providers: Optional[List[Dict[str, Any]]] = None
+    active_provider_id: Optional[str] = None
 
 
 class FileSavePayload(BaseModel):
@@ -258,13 +276,36 @@ def _collect_ai_settings_summary() -> Dict[str, Any]:
     settings = _safe_read_ai_settings()
     raw_keys = settings.get("api_keys")
     api_keys: List[str] = raw_keys if isinstance(raw_keys, list) else []
+    raw_newapi_keys = settings.get("newapi_api_keys")
+    newapi_api_keys: List[str] = raw_newapi_keys if isinstance(raw_newapi_keys, list) else []
+    provider = str(settings.get("provider") or "gemini").strip().lower()
+    if provider not in {"gemini", "newapi"}:
+        provider = "gemini"
+    providers_raw = settings.get("providers")
+    providers = providers_raw if isinstance(providers_raw, list) else []
+    active_provider_id = str(settings.get("active_provider_id") or "").strip()
+    active_provider = None
+    for item in providers:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") == active_provider_id:
+            active_provider = item
+            break
     return {
+        "provider": provider,
+        "providers_count": len([p for p in providers if isinstance(p, dict)]),
+        "active_provider_id": active_provider_id,
+        "active_provider_name": str((active_provider or {}).get("name") or ""),
         "model": str(settings.get("model") or ""),
+        "newapi_model": str(settings.get("newapi_model") or ""),
+        "newapi_base_url": str(settings.get("newapi_base_url") or ""),
         "report_mode": str(settings.get("report_mode") or "full"),
         "enable_validation": bool(settings.get("enable_validation", True)),
         "allow_non_admin_report": bool(settings.get("allow_non_admin_report", False)),
         "api_key_count": len([item for item in api_keys if str(item or "").strip()]),
+        "newapi_api_key_count": len([item for item in newapi_api_keys if str(item or "").strip()]),
         "api_keys_masked": [_mask_api_key(item) for item in api_keys[:3]],
+        "newapi_api_keys_masked": [_mask_api_key(item) for item in newapi_api_keys[:3]],
     }
 
 
@@ -810,6 +851,12 @@ def update_ai_settings(
     saved = _persist_ai_settings(
         payload.api_keys,
         payload.model.strip(),
+        payload.provider,
+        payload.newapi_base_url,
+        payload.newapi_api_keys or [],
+        payload.newapi_model,
+        payload.providers,
+        payload.active_provider_id,
         payload.instruction_daily.strip()
         if isinstance(payload.instruction_daily, str)
         else (payload.instruction.strip() if isinstance(payload.instruction, str) else None),
@@ -821,6 +868,31 @@ def update_ai_settings(
         payload.allow_non_admin_report,
     )
     return {"ok": True, **saved}
+
+
+@router.post("/admin/ai-settings/test", summary="测试全局 AI 连接")
+def test_admin_ai_settings(
+    payload: AiSettingsConnectionTestPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    _ensure_manage_ai_settings_permission(session)
+    try:
+        result = data_analysis_ai_report.run_ai_connection_test(
+            {
+                "provider": payload.provider,
+                "api_keys": payload.api_keys or [],
+                "model": str(payload.model or ""),
+                "newapi_base_url": str(payload.newapi_base_url or ""),
+                "newapi_api_keys": payload.newapi_api_keys or [],
+                "newapi_model": str(payload.newapi_model or ""),
+                "providers": payload.providers or [],
+                "active_provider_id": str(payload.active_provider_id or ""),
+            }
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **result}
 
 
 @router.post("/admin/cache/publish", summary="发布看板缓存")

@@ -1,3 +1,109 @@
+## 2026-03-03（智能体设定升级：多 Provider + 折叠分组布局）
+
+- **User Request:** 在各处“智能体设定”中支持多个 provider（每个 provider 独立 `base_url/api_key/model`），可选择当前使用的 provider；同时优化布局，分组折叠，降低页面高度占用；底部按钮改为“保存并退出”。
+- **Agent Action:**
+  1. 后端配置协议升级（兼容旧字段）：
+     - 新增结构：`providers[]` + `active_provider_id`；
+     - 每个 provider 包含：`id/name/kind/base_url/model/api_keys`；
+     - 写入时保留并同步旧字段（`provider/gemini_*/newapi_*`）用于平滑兼容。
+  2. 运行时选择逻辑升级：
+     - `data_analysis_ai_report` 优先读取 `providers + active_provider_id` 决定当前通道；
+     - 若不存在则回退旧字段；
+     - 连通性测试也支持按多 provider 结构测试当前生效 provider。
+  3. API 接口扩展：
+     - 项目级与全局 AI 设置保存/测试接口均支持 `providers/active_provider_id` 入参；
+     - 获取 AI 设置接口返回 `providers/active_provider_id`，供前端渲染。
+  4. 前端智能体设定组件重构：
+     - 组件文件：`AiAgentSettingsDialog.vue`；
+     - 新增折叠分组：基础设置、Provider 管理、提示词设置、运行策略；
+     - 支持新增/删除 provider、切换当前生效 provider、每个 provider 独立维护 keys/model/base_url；
+     - 底部主按钮文案改为“保存并退出”。
+  5. 前端 API 透传升级：
+     - `updateAiSettings/updateAdminAiSettings/testAiSettings/testAdminAiSettings` 增加 `providers/active_provider_id` 字段透传。
+  6. 配置文件样例更新：
+     - `backend_data/shared/ai_settings.json` 增加 `providers` 与 `active_provider_id` 示例。
+- **Result:** 现在可在一个弹窗中维护多 provider 并指定当前使用者，布局改为分组折叠，整体更紧凑。
+
+## 2026-03-03（New API 报告生成 504 超时优化）
+
+- **User Feedback:** 连通性测试可通过，但完整报告生成阶段反复报 `HTTP 504 Gateway time-out`（Cloudflare 页面）。
+- **Agent Action:**
+  1. 在 `backend/services/data_analysis_ai_report.py` 增加瞬时网关错误识别 `_is_transient_gateway_error`；
+  2. 模型调用层新增 5xx/超时自动退避重试（2 秒，最多一次额外重试）；
+  3. 对 New API 启用更严格的 Prompt 数据压缩上限：
+     - `PROMPT_DATA_MAX_CHARS_NEWAPI = 36000`；
+     - `_serialize_prompt_processed_data` 改为按 provider 动态限长（Gemini 保持原上限，New API 走更小上限）。
+- **Result:** New API 在长上下文场景下更不容易触发上游超时；即便出现瞬时 504，也会自动退避重试。
+
+## 2026-03-03（AI 设置新增“测试连接”按钮与后端连通性接口）
+
+- **User Request:** 增加“测试连接”能力，避免每次都跑完整报告才知道 provider/base_url/key/model 是否可用。
+- **Agent Action:**
+  1. 后端新增最小化连通性测试能力：
+     - `backend/services/data_analysis_ai_report.py` 增加 `run_ai_connection_test(payload)`；
+     - `gemini` 测试：最小 prompt 调用官方 SDK；
+     - `newapi` 测试：最小 prompt 调用 `/chat/completions`。
+  2. 新增项目级测试接口：
+     - `POST /api/v1/projects/{project_key}/data_analysis/ai_settings/test`
+     - 实现文件：`backend/projects/daily_report_25_26/api/legacy_full.py`
+  3. 新增管理后台测试接口：
+     - `POST /api/v1/admin/ai-settings/test`
+     - 实现文件：`backend/api/v1/admin_console.py`
+  4. 前端统一弹窗新增“测试连接”按钮：
+     - 文件：`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`
+     - 按当前表单输入发起测试，成功后显示“连接测试成功”。
+  5. 页面接入测试函数（共用弹窗）：
+     - 日报分析页：`DataAnalysisView.vue`（项目级测试）
+     - 月报查询页：`MonthlyDataShowQueryToolView.vue`（管理后台测试）
+     - 全局后台页：`AdminConsoleView.vue`（管理后台测试）
+  6. API 封装新增：
+     - `testAiSettings(projectKey, payload)`
+     - `testAdminAiSettings(payload)`
+     - 文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+- **Result:** 现在可在智能体设定弹窗中先做通道连通性验证，再决定保存/生成报告。
+
+## 2026-03-03（New API 403/1010 网关拒绝兼容优化）
+
+- **User Feedback:** New API 已配置 provider，但调用持续报错 `New API 调用失败: HTTP 403 error code: 1010`。
+- **Agent Action:**
+  1. 调整 `backend/services/data_analysis_ai_report.py` 的 New API 请求头：
+     - 新增 `Accept: application/json`
+     - 新增 `User-Agent: Phoenix-AI-Client/1.0`
+  2. 增强 HTTP 错误提示：
+     - 对 `403 + 1010` 给出专项诊断信息（提示检查 API 域名/路径与网关放行）；
+     - 报错中附带实际请求 URL，便于快速定位 base_url 配置错误。
+- **Result:** 该类错误可更快定位；同时提高了与部分网关策略的兼容性。
+
+## 2026-03-03（AI 服务双通道扩展：Gemini / New API 可切换）
+
+- **User Request:** 当前 Google 官方免费额度有限，希望 AI 智能服务支持 New API 格式接入，可配置 `base_url/api_key/model`，并能在 New API 与 Gemini 官方 API 之间切换。
+- **前置说明:**
+  1. 本轮为兼容性增强，不改变日报/月报 AI 报告主流程与现有提示词机制；
+  2. 采用配置驱动方式扩展，保持对旧 `gemini_*` 配置的向后兼容；
+  3. 全局管理后台、日报页、月报页继续共用同一个“智能体设定”组件与同一份配置文件。
+- **Agent Action:**
+  1. 后端配置读写层扩展（`legacy_full.py` / `admin_console.py`）：
+     - 新增字段：`provider`、`newapi_base_url`、`newapi_api_keys`、`newapi_model`；
+     - 保留既有 `api_keys/model`（Gemini）语义；
+     - 持久化到 `backend_data/shared/ai_settings.json`，并继续兼容旧单 key 字段回退。
+  2. AI 调用核心扩展（`backend/services/data_analysis_ai_report.py`）：
+     - 新增 provider 分流：`gemini` / `newapi`；
+     - `gemini` 继续走 `google.generativeai`；
+     - `newapi` 新增 OpenAI-compatible `POST /chat/completions` 调用链；
+     - 统一复用现有重试与限流退避框架，任务返回模型名改为运行时 provider 对应模型。
+  3. 前端统一设置弹窗扩展（`AiAgentSettingsDialog.vue`）：
+     - 新增“AI 服务商”切换；
+     - 增加 New API `Base URL / API Keys / 模型` 输入区；
+     - 保存时统一提交双通道字段，三处页面自动同步生效。
+  4. API 封装扩展（`frontend/.../services/api.js`）：
+     - 项目级与管理后台 AI 设置保存接口均补充 provider/newapi 字段透传。
+  5. 共享配置扩展（`backend_data/shared/ai_settings.json`）：
+     - 增加默认键：`provider/newapi_base_url/newapi_model/newapi_api_keys`。
+- **Result:**
+  1. 现在可在同一配置面板中维护 Gemini 与 New API 两套接入参数；
+  2. 通过 `provider` 一键切换后，AI 报告链路会按所选通道调用；
+  3. 旧 Gemini 配置与日报/月报现有模式保持兼容。
+
 ## 2026-02-28（登录 CORS 预检失败修复）
 
 - **User Feedback:** 前端登录请求 `http://127.0.0.1:8000/api/v1/auth/login` 被浏览器拦截，报错 `No 'Access-Control-Allow-Origin' header`。
@@ -4834,3 +4940,91 @@
   - 执行 `python -m py_compile backend/services/data_analysis_ai_report.py` 通过。  
 - **Result:**  
   - 月报报告视觉与结构已与日报明显区隔，避免“看起来一样”。  
+
+## 2026-03-03（月报简报行文收敛 + 管理后台 AI 设置统一）
+
+- **User Request:**  
+  1) 月报 AI 报告行文与文章结构尽量对齐参考 PDF；  
+  2) 管理后台的 AI 配置也改为与日报/月报查询页一致的“智能体设定”模式。  
+- **Agent Action:**  
+  1. 管理后台统一 AI 设置入口：  
+     - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`；  
+     - 移除后台原有内嵌 `AI 设置` 表单（模型/APIKey/提示词等旧字段）；  
+     - 接入共享组件 `AiAgentSettingsDialog`，并使用 `getAdminAiSettings/updateAdminAiSettings`；  
+     - 与日报查询页、月报查询页共同指向 `backend_data/shared/ai_settings.json`。  
+  2. 月报报告版式再收敛：  
+     - 文件：`backend/services/data_analysis_ai_report.py`；  
+     - 重写 `_generate_monthly_report_html` 为“公文简报式”排版：标题、元信息、章节正文（四段主结构）、附关键同比表；  
+     - 明显弱化日报风格元素（卡片看板感/趋势看板感）。  
+- **Verify:**  
+  - `python -m py_compile backend/services/data_analysis_ai_report.py` 通过；  
+  - `npm run build`（frontend）通过。  
+- **Result:**  
+  - 三处 AI 设置入口（日报查询/月报查询/管理后台）已统一为同一交互与配置源；  
+  - 月报报告已进一步贴近正式简报阅读样式。  
+
+## 2026-03-03（月报报告补充两张图表）
+
+- **User Request:** 月报报告需“至少两张图”。  
+- **Agent Action:**  
+  1. 在 `backend/services/data_analysis_ai_report.py` 的 `_generate_monthly_report_html` 中新增图表区；  
+  2. 引入 ECharts CDN，并新增图表样式（双列图卡）；  
+  3. 增加两张图：  
+     - 图1：同比差异率 Top10（绝对值）柱图；  
+     - 图2：本期值 Top10（绝对值）柱图。  
+- **Verify:**  
+  - `python -m py_compile backend/services/data_analysis_ai_report.py` 通过。  
+- **Result:**  
+  - 月报报告现已固定包含至少两张图，满足图文并茂要求。  
+
+## 2026-03-03（登录 404 修复：v1 路由导入失败）
+
+- **User Request:** 无法登录，`POST /api/v1/auth/login` 返回 `404 Not Found`。  
+- **Agent Action:**  
+  1. 检查后端路由挂载链路（`backend/main.py` → `backend/api/v1/routes.py`）；  
+  2. 读取容器日志定位根因：`legacy_full.py` 使用 `Field(...)` 但未导入，导致 `v1_router` 导入失败并未挂载；  
+  3. 修复导入：`backend/projects/daily_report_25_26/api/legacy_full.py` 增加 `Field`。  
+- **Verify:**  
+  - 本地接口校验：`POST /api/v1/auth/login` 从 `404` 变为 `422`（空请求体触发参数校验，说明路由已恢复）。  
+- **Result:**  
+  - 登录接口已恢复可用；  
+  - `/api/v1/*` 不再因该异常整体失效。  
+
+## 2026-03-03（智能体设定新增“不保存退出”按钮）
+
+- **User Request:** 智能体设定弹窗除“保存并退出”外，增加“不保存直接退出”按钮。  
+- **Agent Action:**  
+  1. 修改共享组件 `frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`；  
+  2. 在底部动作区新增按钮“退出（不保存）”，点击执行 `closeDialog`，不触发保存。  
+- **Verify:**  
+  - 该组件被日报查询页、月报查询页、管理后台共同复用，三处同步生效。  
+- **Result:**  
+  - 用户可直接关闭弹窗，不影响已保存配置。  
+
+## 2026-03-03（AI 报告生成进度展示）
+
+- **User Request:** 生成智能报告时，增加进度展示。  
+- **Agent Action:**  
+  1. 日报页面 `DataAnalysisView.vue` 增加进度可视化：进度条、百分比、阶段节点（洞察分析/结构规划/内容撰写/检查核实）；  
+  2. 月报页面 `MonthlyDataShowQueryToolView.vue` 同步增加同款进度展示；  
+  3. 月报轮询逻辑补充 `stage` 状态接收与映射（含 `revision_pending`、`revision_content` 别名阶段处理）。  
+- **Verify:**  
+  - 执行 `npm run build`（frontend）通过。  
+- **Result:**  
+  - AI 报告从提交到完成（或失败）均可看到阶段化进度反馈，不再只有单行提示文本。  
+
+## 2026-03-03（月报查询导出 XLSX 数值类型修复）
+
+- **User Request:** 月报查询导出的 Excel 中，指标值不要是文本；普通指标应为数值格式，百分比指标应为百分比格式，小数位按页面规则。  
+- **Agent Action:**  
+  1. 修改 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的 `downloadXlsx` 逻辑；  
+  2. 为“查询结果”“对比明细”“气温日序同比”“气温汇总”写入真实数值单元格（`t: 'n'`）；  
+  3. 按指标单位与页面小数位规则设置 Excel 格式：  
+     - 普通数值：`#,##0.00` / `#,##0.0000`（按指标）  
+     - 百分比：`0.00%` / `0.0000%`（按指标）  
+  4. 新增导出格式辅助函数：`isPercentUnit`、`buildDecimalFormat`、`buildExcelValueFormat`、`setSheetNumericCell`。  
+- **Verify:**  
+  - 执行 `npm run build`（frontend）通过。  
+- **Result:**  
+  - 导出文件中的数值列可直接用于 Excel 计算/筛选/图表；  
+  - 百分比列不再是字符串。  

@@ -829,6 +829,12 @@ export async function updateAiSettings(projectKey, payload) {
     body: JSON.stringify({
       api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
+      provider: payload?.provider ?? 'gemini',
+      newapi_base_url: payload?.newapi_base_url ?? '',
+      newapi_api_keys: Array.isArray(payload?.newapi_api_keys) ? payload.newapi_api_keys : [],
+      newapi_model: payload?.newapi_model ?? '',
+      providers: Array.isArray(payload?.providers) ? payload.providers : [],
+      active_provider_id: payload?.active_provider_id ?? '',
       instruction_daily: payload?.instruction_daily ?? payload?.instruction,
       instruction_monthly: payload?.instruction_monthly,
       report_mode: payload?.report_mode ?? 'full',
@@ -839,6 +845,28 @@ export async function updateAiSettings(projectKey, payload) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `保存智能体配置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function testAiSettings(projectKey, payload) {
+  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings/test`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      provider: payload?.provider ?? 'gemini',
+      api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
+      model: payload?.model ?? '',
+      newapi_base_url: payload?.newapi_base_url ?? '',
+      newapi_api_keys: Array.isArray(payload?.newapi_api_keys) ? payload.newapi_api_keys : [],
+      newapi_model: payload?.newapi_model ?? '',
+      providers: Array.isArray(payload?.providers) ? payload.providers : [],
+      active_provider_id: payload?.active_provider_id ?? '',
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `测试智能体配置失败: ${response.status}`)
   }
   return response.json()
 }
@@ -1112,6 +1140,12 @@ export async function updateAdminAiSettings(payload) {
     body: JSON.stringify({
       api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
       model: payload?.model ?? '',
+      provider: payload?.provider ?? 'gemini',
+      newapi_base_url: payload?.newapi_base_url ?? '',
+      newapi_api_keys: Array.isArray(payload?.newapi_api_keys) ? payload.newapi_api_keys : [],
+      newapi_model: payload?.newapi_model ?? '',
+      providers: Array.isArray(payload?.providers) ? payload.providers : [],
+      active_provider_id: payload?.active_provider_id ?? '',
       instruction_daily: payload?.instruction_daily ?? payload?.instruction,
       instruction_monthly: payload?.instruction_monthly,
       report_mode: payload?.report_mode ?? 'full',
@@ -1122,6 +1156,28 @@ export async function updateAdminAiSettings(payload) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `保存 AI 设置失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function testAdminAiSettings(payload) {
+  const response = await fetch(normalized('/admin/ai-settings/test'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      provider: payload?.provider ?? 'gemini',
+      api_keys: Array.isArray(payload?.api_keys) ? payload.api_keys : [],
+      model: payload?.model ?? '',
+      newapi_base_url: payload?.newapi_base_url ?? '',
+      newapi_api_keys: Array.isArray(payload?.newapi_api_keys) ? payload.newapi_api_keys : [],
+      newapi_model: payload?.newapi_model ?? '',
+      providers: Array.isArray(payload?.providers) ? payload.providers : [],
+      active_provider_id: payload?.active_provider_id ?? '',
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `测试 AI 设置失败: ${response.status}`)
   }
   return response.json()
 }

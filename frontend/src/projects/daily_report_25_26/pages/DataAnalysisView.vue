@@ -256,6 +256,25 @@
           </div>
         </header>
         <p v-if="aiReportStatusMessage" class="ai-report-status">{{ aiReportStatusMessage }}</p>
+        <div v-if="showAiReportProgress" class="ai-progress">
+          <div class="ai-progress__bar">
+            <span class="ai-progress__fill" :style="{ width: `${aiReportProgressPercent}%` }"></span>
+          </div>
+          <div class="ai-progress__meta">
+            <span>进度 {{ aiReportProgressPercent }}%</span>
+            <span>{{ aiReportProgressLabel }}</span>
+          </div>
+          <div class="ai-progress__steps">
+            <span
+              v-for="step in AI_REPORT_STAGE_STEPS"
+              :key="`daily-ai-step-${step.key}`"
+              class="ai-progress__step"
+              :class="{ active: aiReportProgressOrder >= step.order }"
+            >
+              {{ step.order }}.{{ step.label }}
+            </span>
+          </div>
+        </div>
 
         <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
         <div v-else-if="!previewRows.length" class="page-state muted">
@@ -563,6 +582,7 @@
       :can-manage="canConfigureAiSettings"
       :load-settings="loadAiSettingsPayload"
       :save-settings="saveAiSettingsPayload"
+      :test-settings="testAiSettingsPayload"
     />
   </div>
 </template>
@@ -582,6 +602,7 @@ import {
   runDataAnalysis,
   getDataAnalysisAiReport,
   getAiSettings,
+  testAiSettings,
   updateAiSettings,
 } from '../services/api'
 import { useAuthStore } from '../store/auth'
@@ -689,6 +710,7 @@ function openAiSettingsDialog() {
 
 const loadAiSettingsPayload = () => getAiSettings(projectKey.value)
 const saveAiSettingsPayload = (payload) => updateAiSettings(projectKey.value, payload)
+const testAiSettingsPayload = (payload) => testAiSettings(projectKey.value, payload)
 
 function resolveUnitOptions(payload) {
   if (!payload) return []
@@ -880,6 +902,44 @@ const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
   acc[step.key] = step
   return acc
 }, {})
+const AI_STAGE_ALIAS_ORDER = {
+  revision_pending: 3,
+  revision_content: 3,
+}
+
+const aiReportProgressOrder = computed(() => {
+  if (aiReportStatus.value === 'ready') return AI_REPORT_STAGE_TOTAL
+  const step = AI_REPORT_STAGE_LOOKUP[aiReportStage.value]
+  if (step?.order) return step.order
+  if (AI_STAGE_ALIAS_ORDER[aiReportStage.value]) return AI_STAGE_ALIAS_ORDER[aiReportStage.value]
+  return 0
+})
+
+const aiReportProgressPercent = computed(() => {
+  if (aiReportStatus.value === 'ready') return 100
+  const ratio = aiReportProgressOrder.value > 0
+    ? Math.round((aiReportProgressOrder.value / AI_REPORT_STAGE_TOTAL) * 100)
+    : 8
+  if (aiReportStatus.value === 'failed') return Math.max(10, ratio)
+  return Math.min(95, Math.max(8, ratio))
+})
+
+const aiReportProgressLabel = computed(() => {
+  if (aiReportStatus.value === 'ready') return '报告生成完成'
+  if (aiReportStatus.value === 'failed') return '报告生成失败'
+  if (aiReportStage.value === 'pending' || !aiReportStage.value) return '任务排队中'
+  const step = AI_REPORT_STAGE_LOOKUP[aiReportStage.value]
+  if (step?.label) return `当前阶段：${step.label}`
+  return '正在处理中'
+})
+
+const showAiReportProgress = computed(() => (
+  aiReportEnabled.value
+  && (aiReportStatus.value === 'pending'
+    || aiReportStatus.value === 'running'
+    || aiReportStatus.value === 'ready'
+    || aiReportStatus.value === 'failed')
+))
 
 function formatAiReportProgress(stageKey) {
   if (stageKey === 'ready') {
@@ -3292,6 +3352,56 @@ onBeforeUnmount(() => {
   color: var(--neutral-500);
   margin: -8px 0 8px;
   text-align: right;
+}
+
+.ai-progress {
+  margin: -4px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--neutral-200, #e2e8f0);
+  border-radius: 10px;
+  background: var(--neutral-50, #f8fafc);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-progress__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.ai-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  transition: width 0.3s ease;
+}
+
+.ai-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--neutral-600, #475569);
+}
+
+.ai-progress__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-progress__step {
+  font-size: 12px;
+  color: var(--neutral-400, #94a3b8);
+}
+
+.ai-progress__step.active {
+  color: #1d4ed8;
+  font-weight: 600;
 }
 
 .result-block {

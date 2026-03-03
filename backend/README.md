@@ -2,6 +2,25 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- AI 设置多 Provider 升级（2026-03-03）：
+  - 配置结构新增 `providers[] + active_provider_id`，支持多通道并存与切换；
+  - 运行时调用与连接测试均可按当前生效 provider 执行；
+  - 同时保留 `provider/gemini_*/newapi_*` 旧字段兼容。
+- New API 504 超时优化（2026-03-03）：
+  - AI 调用层新增 5xx/超时自动退避重试（2 秒，最多一次）；
+  - New API 场景下 Prompt 数据上限单独收紧（降低上游超时概率）。
+- AI 设置新增连通性测试接口（2026-03-03）：
+  - 项目级：`POST /api/v1/projects/{project_key}/data_analysis/ai_settings/test`；
+  - 全局后台：`POST /api/v1/admin/ai-settings/test`；
+  - 两接口均支持 `gemini/newapi` 按当前输入参数执行最小请求测试。
+- New API 网关兼容优化（2026-03-03）：
+  - `data_analysis_ai_report.py` 的 New API 请求已补充 `Accept` 与 `User-Agent`；
+  - 对 `HTTP 403 + error code 1010` 增加专项报错提示，并输出请求 URL 便于诊断 base_url 配置与网关放行问题。
+- AI 服务通道扩展（2026-03-03）：
+  - AI 配置新增 `provider`（`gemini/newapi`）；
+  - 新增 New API 配置项：`newapi_base_url`、`newapi_api_keys`、`newapi_model`；
+  - `backend/services/data_analysis_ai_report.py` 已支持按 provider 分流调用（Gemini SDK / OpenAI-compatible Chat Completions）；
+  - 项目级与管理后台 AI 设置接口均已支持读写上述字段并落盘 `backend_data/shared/ai_settings.json`。
 - 月报查询排序修复（2026-03-02）：
   - `_merge_and_sort_rows` 已改为严格按 `order_fields` 生成排序键；
   - 自定义“口径/指标/时间”层次顺序会直接反映到查询结果显示顺序。
@@ -2573,3 +2592,58 @@
 - 效果：
   - 日报/月报报告样式与结构彻底分离；
   - 月报输出更贴近经营简报阅读习惯。  
+
+## 结构同步（2026-03-03 月报简报式排版增强）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 重写月报渲染函数 `_generate_monthly_report_html(...)`，进一步收敛为公文简报式结构：
+    - 标题 + 元信息；
+    - 四段章节正文（按月报模式章节）；
+    - 附关键指标同比表；
+    - 智能核对结果简表。
+  - 继续保持与日报渲染链路分离，不回退到日报看板风格。
+- 效果：
+  - 月报报告在行文观感与版式上更接近正式运行简报。  
+
+## 结构同步（2026-03-03 月报报告双图补齐）
+
+- 文件：`backend/services/data_analysis_ai_report.py`
+- 变更点：
+  - 在月报专用渲染函数中新增 ECharts 图表区；
+  - 增加两张图：
+    - 同比差异率 Top10（绝对值）；
+    - 本期值 Top10（绝对值）。
+- 效果：
+  - 月报报告不再仅有文字和表格，满足“至少两张图”的展示要求。  
+
+## 结构同步（2026-03-03 登录 404 修复）
+
+- 文件：`backend/projects/daily_report_25_26/api/legacy_full.py`
+- 变更点：
+  - 修复 `AiSettingsPayload` 的 `Field(...)` 使用未导入问题；
+  - `from pydantic import BaseModel, ValidationError` 调整为 `from pydantic import BaseModel, Field, ValidationError`。
+- 影响链路：
+  - 该异常会阻断 `backend/api/v1/routes.py` 导入，导致 `backend/main.py` 不挂载 `/api/v1` 路由；
+  - 修复后 `POST /api/v1/auth/login` 恢复可访问（空体返回 422，非 404）。
+
+## 结构同步（2026-03-03 智能体设定不保存退出前端联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 前端共享智能体设定组件新增“退出（不保存）”按钮；
+  - 后端 AI 设置读写接口与数据结构保持不变，无需迁移。
+
+## 结构同步（2026-03-03 AI 报告进度展示前端联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 前端在日报/月报页面新增 AI 报告进度可视化；
+  - 继续复用后端任务状态字段 `status` 与 `stage`，无需新增接口。
+
+## 结构同步（2026-03-03 月报导出数值格式前端联动）
+
+- 本轮后端代码无新增改动。
+- 联动说明：
+  - 月报查询页导出 XLSX 已改为前端写入数值单元格与格式化规则；
+  - 后端仍返回原始数值/单位字段，无需调整接口。

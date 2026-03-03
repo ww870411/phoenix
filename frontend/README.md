@@ -2,6 +2,24 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 智能体设定 UI 升级（2026-03-03）：
+  - 新增多 Provider 管理（每项独立 `base_url/api_keys/model`）；
+  - 新增“当前生效 Provider”选择；
+  - 页面改为折叠分组布局（基础设置/Provider 管理/提示词设置/运行策略）；
+  - 主按钮改为“保存并退出”。
+- New API 报告超时兼容优化（2026-03-03）：
+  - 后端已增加 504/5xx 自动退避重试与 New API 提示词压缩，前端无需改操作即可受益。
+- AI 设置弹窗新增“测试连接”（2026-03-03）：
+  - 统一组件 `AiAgentSettingsDialog.vue` 新增测试按钮；
+  - 日报分析页/月报查询页/管理后台均已接入；
+  - 支持在保存前按当前 provider 参数执行连通性测试。
+- New API 调用诊断增强（2026-03-03）：
+  - 后端对 `403/1010` 返回更明确错误信息（含请求 URL），前端可直接据此检查 provider 的 base_url 与网关限制。
+- AI 设置弹窗双通道扩展（2026-03-03）：
+  - 统一组件 `AiAgentSettingsDialog.vue` 新增 `provider` 切换（Gemini / New API）；
+  - 新增 New API 字段输入：`Base URL / API Keys / 模型`；
+  - 日报页、月报页、全局管理后台继续共用同一弹窗与同一份后端配置；
+  - 前端 API 封装 `updateAiSettings / updateAdminAiSettings` 已支持 provider/newapi 字段透传。
 - 月报查询层次顺序生效修复（2026-03-02）：
   - 调整“数据层次顺序”（如“口径 -> 指标 -> 时间”）后，查询结果将按该顺序真实分层展示；
   - 不再固定按默认时间优先排序。
@@ -3936,3 +3954,61 @@ docker compose up -d --build
 - 联动说明：
   - 后端已将月报 AI 报告改为独立版式渲染；
   - 前端仍透传 `ai_mode_id=monthly_analysis_v1`，无需额外参数即可得到新月报样式。  
+
+## 结构同步（2026-03-03 管理后台 AI 设置入口统一）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 变更点：
+  - 移除管理后台旧版内嵌 AI 表单；
+  - 接入共享组件 `AiAgentSettingsDialog`；
+  - 管理后台与日报查询页、月报查询页统一使用同一套“智能体设定”样式与交互。
+- 联动接口：
+  - 通过 `getAdminAiSettings/updateAdminAiSettings` 读写全局配置；
+  - 配置源保持 `backend_data/shared/ai_settings.json`。
+
+## 结构同步（2026-03-03 月报双图能力后端联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 月报 AI 报告由后端新增两张 ECharts 图（同比差异率 Top10、本期值 Top10）；
+  - 前端维持原有报告获取流程，无需新增参数。  
+
+## 结构同步（2026-03-03 登录 404 修复后端联动）
+
+- 本轮前端代码无改动。
+- 联动说明：
+  - 登录失败根因在后端 `/api/v1` 路由未挂载（导入异常）；
+  - 后端修复后，前端继续使用原有登录接口 `POST /api/v1/auth/login` 即可恢复登录流程。  
+
+## 结构同步（2026-03-03 智能体设定新增不保存退出）
+
+- 文件：`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`
+- 变更点：
+  - 在弹窗底部动作区新增按钮“退出（不保存）”；
+  - 点击后仅关闭弹窗，不调用保存接口；
+  - 现有“保存并退出”与“测试连接”逻辑不变。
+- 影响范围：
+  - 日报查询页、月报查询页、管理后台（均复用该组件）同步生效。
+
+## 结构同步（2026-03-03 AI 报告进度可视化）
+
+- 文件：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 变更点：
+  - 在 AI 报告状态文本下新增可视化进度区：进度条、百分比、阶段节点；
+  - 阶段统一为：`洞察分析 → 结构规划 → 内容撰写 → 检查核实`；
+  - 月报页面补充 `stage` 跟踪与别名阶段（`revision_pending`、`revision_content`）映射，进度显示更准确。
+- 结果：
+  - 用户可直观看到报告生成进展，不再仅依赖“生成中/完成/失败”文案。
+
+## 结构同步（2026-03-03 月报导出 XLSX 数值格式修复）
+
+- 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 变更点：
+  - 调整 `downloadXlsx` 导出逻辑，将关键数值列写为 Excel 数值单元格（不再写入格式化文本）；
+  - 新增数值格式辅助函数：`isPercentUnit`、`buildDecimalFormat`、`buildExcelValueFormat`、`setSheetNumericCell`；
+  - “查询结果”“对比明细”“气温日序同比”“气温汇总”四个子表的数值列统一设置 `numFmt`；
+  - 百分比指标使用 `%` 格式，普通指标使用数值格式；小数位与页面规则保持一致。
+- 结果：
+  - 导出 XLSX 的数值列可直接进行排序、筛选、函数计算和图表绘制。

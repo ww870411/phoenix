@@ -208,6 +208,25 @@
           ></textarea>
         </label>
         <p v-if="aiReportStatusMessage" class="sub ai-status">{{ aiReportStatusMessage }}</p>
+        <div v-if="showAiReportProgress" class="ai-progress">
+          <div class="ai-progress__bar">
+            <span class="ai-progress__fill" :style="{ width: `${aiReportProgressPercent}%` }"></span>
+          </div>
+          <div class="ai-progress__meta">
+            <span>进度 {{ aiReportProgressPercent }}%</span>
+            <span>{{ aiReportProgressLabel }}</span>
+          </div>
+          <div class="ai-progress__steps">
+            <span
+              v-for="step in AI_REPORT_STAGE_STEPS"
+              :key="`monthly-ai-step-${step.key}`"
+              class="ai-progress__step"
+              :class="{ active: aiReportProgressOrder >= step.order }"
+            >
+              {{ step.order }}.{{ step.label }}
+            </span>
+          </div>
+        </div>
         <p class="sub">共 {{ total }} 条，当前显示 {{ rows.length }} 条（每页 {{ limit }} 条）。</p>
         <div v-if="loading" class="empty">数据加载中...</div>
         <div v-else-if="errorMessage" class="empty error">{{ errorMessage }}</div>
@@ -445,6 +464,7 @@
       :can-manage="isGlobalAdmin"
       :load-settings="loadAiSettingsPayload"
       :save-settings="saveAiSettingsPayload"
+      :test-settings="testAiSettingsPayload"
     />
     <div v-if="showFormulaDialog" class="formula-dialog-mask" @click.self="showFormulaDialog = false">
       <section class="formula-dialog">
@@ -484,6 +504,7 @@ import AiAgentSettingsDialog from '../../daily_report_25_26/components/AiAgentSe
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import {
   getAdminAiSettings,
+  testAdminAiSettings,
   getMonthlyDataShowQueryOptions,
   getMonthlyDataShowAiReport,
   queryMonthlyDataShow,
@@ -696,6 +717,7 @@ const aiReportJobId = ref('')
 const aiReportStatus = ref('idle')
 const aiReportContent = ref('')
 const aiReportStatusMessage = ref('')
+const aiReportStage = ref('')
 const aiSettingsDialogVisible = ref(false)
 let aiReportPollTimer = null
 const showFormulaDialog = ref(false)
@@ -729,6 +751,51 @@ const comparisonModeLabel = computed(() => {
   if (comparisonViewMode.value === 'plan') return '计划比'
   return '同比'
 })
+const AI_REPORT_STAGE_STEPS = [
+  { key: 'insight', order: 1, label: '洞察分析' },
+  { key: 'layout', order: 2, label: '结构规划' },
+  { key: 'content', order: 3, label: '内容撰写' },
+  { key: 'review', order: 4, label: '检查核实' },
+]
+const AI_REPORT_STAGE_TOTAL = AI_REPORT_STAGE_STEPS.length
+const AI_REPORT_STAGE_LOOKUP = AI_REPORT_STAGE_STEPS.reduce((acc, step) => {
+  acc[step.key] = step
+  return acc
+}, {})
+const AI_STAGE_ALIAS_ORDER = {
+  revision_pending: 3,
+  revision_content: 3,
+}
+const aiReportProgressOrder = computed(() => {
+  if (aiReportStatus.value === 'ready') return AI_REPORT_STAGE_TOTAL
+  const step = AI_REPORT_STAGE_LOOKUP[aiReportStage.value]
+  if (step?.order) return step.order
+  if (AI_STAGE_ALIAS_ORDER[aiReportStage.value]) return AI_STAGE_ALIAS_ORDER[aiReportStage.value]
+  return 0
+})
+const aiReportProgressPercent = computed(() => {
+  if (aiReportStatus.value === 'ready') return 100
+  const ratio = aiReportProgressOrder.value > 0
+    ? Math.round((aiReportProgressOrder.value / AI_REPORT_STAGE_TOTAL) * 100)
+    : 8
+  if (aiReportStatus.value === 'failed') return Math.max(10, ratio)
+  return Math.min(95, Math.max(8, ratio))
+})
+const aiReportProgressLabel = computed(() => {
+  if (aiReportStatus.value === 'ready') return '报告生成完成'
+  if (aiReportStatus.value === 'failed') return '报告生成失败'
+  if (aiReportStage.value === 'pending' || !aiReportStage.value) return '任务排队中'
+  const step = AI_REPORT_STAGE_LOOKUP[aiReportStage.value]
+  if (step?.label) return `当前阶段：${step.label}`
+  return '正在处理中'
+})
+const showAiReportProgress = computed(() => (
+  aiReportEnabled.value
+  && (aiReportStatus.value === 'pending'
+    || aiReportStatus.value === 'running'
+    || aiReportStatus.value === 'ready'
+    || aiReportStatus.value === 'failed')
+))
 const showTemperaturePanel = computed(() => {
   if (!filters.items.includes(AVERAGE_TEMPERATURE_ITEM)) return false
   if (temperatureDailyRows.value.length > 0) return true
@@ -1138,6 +1205,32 @@ function formatResultMonth(dateText) {
   return `${matched[1]}年${Number(matched[2])}月`
 }
 
+function isPercentUnit(unit) {
+  return String(unit || '').trim() === '%'
+}
+
+function buildDecimalFormat(decimals = 2) {
+  const safe = Number.isInteger(decimals) && decimals >= 0 ? decimals : 2
+  if (safe <= 0) return '#,##0'
+  return `#,##0.${'0'.repeat(safe)}`
+}
+
+function buildExcelValueFormat(unit, item) {
+  const digits = valueDecimalDigitsByItem(item)
+  if (isPercentUnit(unit)) {
+    if (digits <= 0) return '0%'
+    return `0.${'0'.repeat(digits)}%`
+  }
+  return buildDecimalFormat(digits)
+}
+
+function setSheetNumericCell(sheet, rowIndex, colIndex, value, numFmt) {
+  const num = toFiniteOrNull(value)
+  if (num == null) return
+  const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex })
+  sheet[address] = { t: 'n', v: num, z: numFmt || '#,##0.00' }
+}
+
 function getResultCellValue(row, field) {
   if (field === 'time') {
     return formatResultMonth(row?.report_month || row?.date || '')
@@ -1241,7 +1334,10 @@ function downloadXlsx() {
   XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName('汇总信息'))
 
   const resultHeader = resultColumns.value.map((col) => col.label)
-  const resultData = rows.value.map((row) => resultColumns.value.map((col) => getResultCellValue(row, col.field)))
+  const resultData = rows.value.map((row) => resultColumns.value.map((col) => {
+    if (col.field === 'value') return row?.value == null ? '' : toFiniteOrNull(row.value)
+    return getResultCellValue(row, col.field)
+  }))
   const resultColWidths = resultColumns.value.map((col) => {
     if (col.field === 'company') return 12
     if (col.field === 'item') return 26
@@ -1251,6 +1347,18 @@ function downloadXlsx() {
     return 12
   })
   const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
+  const resultValueCol = resultColumns.value.findIndex((col) => col.field === 'value')
+  if (resultValueCol >= 0) {
+    rows.value.forEach((row, index) => {
+      setSheetNumericCell(
+        resultSheet,
+        index + 1,
+        resultValueCol,
+        row?.value,
+        buildExcelValueFormat(row?.unit, row?.item),
+      )
+    })
+  }
   finalizeSheet(resultSheet, resultColWidths)
   XLSX.utils.book_append_sheet(wb, resultSheet, sanitizeSheetName('查询结果'))
 
@@ -1261,18 +1369,50 @@ function downloadXlsx() {
       x.item,
       x.period,
       x.type,
-      x.currentValue == null ? '' : formatValue(x.currentValue, x.unit, x.item),
-      x.yoyValue == null ? '' : formatValue(x.yoyValue, x.unit, x.item),
-      x.currentValue == null || x.yoyValue == null ? '' : formatSignedNumber(x.currentValue - x.yoyValue, x.item),
-      formatRate(x.yoyRate),
-      x.momValue == null ? '' : formatValue(x.momValue, x.unit, x.item),
-      x.currentValue == null || x.momValue == null ? '' : formatSignedNumber(x.currentValue - x.momValue, x.item),
-      formatRate(x.momRate),
-      x.planValue == null ? '' : formatValue(x.planValue, x.unit, x.item),
-      x.currentValue == null || x.planValue == null ? '' : formatSignedNumber(x.currentValue - x.planValue, x.item),
-      formatRate(x.planRate),
+      x.currentValue == null ? '' : toFiniteOrNull(x.currentValue),
+      x.yoyValue == null ? '' : toFiniteOrNull(x.yoyValue),
+      x.currentValue == null || x.yoyValue == null ? '' : toFiniteOrNull(x.currentValue - x.yoyValue),
+      x.yoyRate == null ? '' : toFiniteOrNull(x.yoyRate),
+      x.momValue == null ? '' : toFiniteOrNull(x.momValue),
+      x.currentValue == null || x.momValue == null ? '' : toFiniteOrNull(x.currentValue - x.momValue),
+      x.momRate == null ? '' : toFiniteOrNull(x.momRate),
+      x.planValue == null ? '' : toFiniteOrNull(x.planValue),
+      x.currentValue == null || x.planValue == null ? '' : toFiniteOrNull(x.currentValue - x.planValue),
+      x.planRate == null ? '' : toFiniteOrNull(x.planRate),
     ])
     const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
+    comparisonRows.value.forEach((x, index) => {
+      const rowIndex = index + 1
+      const valueFormat = buildExcelValueFormat(x.unit, x.item)
+      setSheetNumericCell(compareSheet, rowIndex, 4, x.currentValue, valueFormat)
+      setSheetNumericCell(compareSheet, rowIndex, 5, x.yoyValue, valueFormat)
+      setSheetNumericCell(
+        compareSheet,
+        rowIndex,
+        6,
+        x.currentValue == null || x.yoyValue == null ? null : x.currentValue - x.yoyValue,
+        valueFormat,
+      )
+      setSheetNumericCell(compareSheet, rowIndex, 7, x.yoyRate, '0.00%')
+      setSheetNumericCell(compareSheet, rowIndex, 8, x.momValue, valueFormat)
+      setSheetNumericCell(
+        compareSheet,
+        rowIndex,
+        9,
+        x.currentValue == null || x.momValue == null ? null : x.currentValue - x.momValue,
+        valueFormat,
+      )
+      setSheetNumericCell(compareSheet, rowIndex, 10, x.momRate, '0.00%')
+      setSheetNumericCell(compareSheet, rowIndex, 11, x.planValue, valueFormat)
+      setSheetNumericCell(
+        compareSheet,
+        rowIndex,
+        12,
+        x.currentValue == null || x.planValue == null ? null : x.currentValue - x.planValue,
+        valueFormat,
+      )
+      setSheetNumericCell(compareSheet, rowIndex, 13, x.planRate, '0.00%')
+    })
     finalizeSheet(compareSheet, [12, 24, 10, 10, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12])
     XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('对比明细'))
   }
@@ -1290,22 +1430,33 @@ function downloadXlsx() {
       toFiniteOrNull(row.currentTemp),
       row.yoyDate,
       toFiniteOrNull(row.yoyTemp),
-      formatSignedNumber(row.yoyDiff),
-      formatRate(row.yoyRate),
+      toFiniteOrNull(row.yoyDiff),
+      toFiniteOrNull(row.yoyRate),
     ])
     const tempSheet = XLSX.utils.aoa_to_sheet([
       ['本期日期', '本期气温(℃)', '同期日期', '同期气温(℃)', '同比差值', '同比差异率'],
       ...tempRows,
     ])
+    temperatureDailyRows.value.forEach((row, index) => {
+      const rowIndex = index + 1
+      setSheetNumericCell(tempSheet, rowIndex, 1, row.currentTemp, buildDecimalFormat(2))
+      setSheetNumericCell(tempSheet, rowIndex, 3, row.yoyTemp, buildDecimalFormat(2))
+      setSheetNumericCell(tempSheet, rowIndex, 4, row.yoyDiff, buildDecimalFormat(2))
+      setSheetNumericCell(tempSheet, rowIndex, 5, row.yoyRate, '0.00%')
+    })
     finalizeSheet(tempSheet, [14, 12, 14, 12, 12, 12])
     XLSX.utils.book_append_sheet(wb, tempSheet, sanitizeSheetName('气温日序同比'))
     const tempSummarySheet = XLSX.utils.aoa_to_sheet([
       ['字段', '内容'],
-      ['本期平均气温', formatTemperature(temperatureSummary.currentAvgTemp)],
-      ['同期平均气温', formatTemperature(temperatureSummary.yoyAvgTemp)],
-      ['同比差值', formatSignedNumber(temperatureSummary.yoyAvgDiff)],
-      ['同比差异率', formatRate(temperatureSummary.yoyAvgRate)],
+      ['本期平均气温', toFiniteOrNull(temperatureSummary.currentAvgTemp)],
+      ['同期平均气温', toFiniteOrNull(temperatureSummary.yoyAvgTemp)],
+      ['同比差值', toFiniteOrNull(temperatureSummary.yoyAvgDiff)],
+      ['同比差异率', toFiniteOrNull(temperatureSummary.yoyAvgRate)],
     ])
+    setSheetNumericCell(tempSummarySheet, 1, 1, temperatureSummary.currentAvgTemp, buildDecimalFormat(2))
+    setSheetNumericCell(tempSummarySheet, 2, 1, temperatureSummary.yoyAvgTemp, buildDecimalFormat(2))
+    setSheetNumericCell(tempSummarySheet, 3, 1, temperatureSummary.yoyAvgDiff, buildDecimalFormat(2))
+    setSheetNumericCell(tempSummarySheet, 4, 1, temperatureSummary.yoyAvgRate, '0.00%')
     finalizeSheet(tempSummarySheet, [18, 24])
     XLSX.utils.book_append_sheet(wb, tempSummarySheet, sanitizeSheetName('气温汇总'))
   }
@@ -1320,6 +1471,7 @@ function resetAiReportState() {
   aiReportStatus.value = 'idle'
   aiReportContent.value = ''
   aiReportStatusMessage.value = ''
+  aiReportStage.value = ''
 }
 
 function stopAiReportPolling() {
@@ -1335,14 +1487,17 @@ async function pollAiReport(jobId) {
     const payload = await getMonthlyDataShowAiReport('monthly_data_show', jobId)
     if (aiReportJobId.value !== jobId) return
     const status = String(payload?.status || 'pending')
+    aiReportStage.value = String(payload?.stage || aiReportStage.value || 'pending')
     aiReportStatus.value = status
     if (status === 'ready') {
+      aiReportStage.value = 'ready'
       aiReportContent.value = String(payload?.report || '')
       aiReportStatusMessage.value = aiReportContent.value ? '智能报告生成完成，可下载。' : '智能报告生成完成，但内容为空。'
       stopAiReportPolling()
       return
     }
     if (status === 'failed') {
+      aiReportStage.value = 'failed'
       aiReportStatusMessage.value = String(payload?.error || '智能报告生成失败')
       stopAiReportPolling()
       return
@@ -1363,6 +1518,7 @@ async function triggerAiReport() {
   if (!aiReportEnabled.value || !comparisonRows.value.length) return
   stopAiReportPolling()
   aiReportStatus.value = 'pending'
+  aiReportStage.value = 'pending'
   aiReportStatusMessage.value = '已提交生成请求，正在启动任务…'
   aiReportContent.value = ''
   try {
@@ -1384,10 +1540,12 @@ async function triggerAiReport() {
     }
     aiReportJobId.value = jobId
     aiReportStatus.value = 'running'
+    aiReportStage.value = 'pending'
     aiReportStatusMessage.value = '智能报告生成中，请稍候…'
     await pollAiReport(jobId)
   } catch (err) {
     aiReportStatus.value = 'failed'
+    aiReportStage.value = 'failed'
     aiReportStatusMessage.value = err instanceof Error ? err.message : '启动智能报告失败'
   }
 }
@@ -1412,6 +1570,7 @@ function openAiSettingsDialog() {
 
 const loadAiSettingsPayload = () => getAdminAiSettings()
 const saveAiSettingsPayload = (payload) => updateAdminAiSettings(payload)
+const testAiSettingsPayload = (payload) => testAdminAiSettings(payload)
 
 function buildPayload() {
   const normalizedDateFrom = toMonthStartDate(filters.dateMonthFrom)
@@ -2179,6 +2338,56 @@ onBeforeUnmount(() => {
 
 .ai-status {
   margin-top: 6px;
+}
+
+.ai-progress {
+  margin: 8px 0 6px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-progress__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  overflow: hidden;
+}
+
+.ai-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  transition: width 0.3s ease;
+}
+
+.ai-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.ai-progress__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-progress__step {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.ai-progress__step.active {
+  color: #1d4ed8;
+  font-weight: 600;
 }
 
 .analysis-section {

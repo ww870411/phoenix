@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Un
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import bindparam, delete, text, or_, and_
 
 from backend.config import DATA_DIRECTORY
@@ -1562,14 +1562,31 @@ class DataAnalysisQueryPayload(BaseModel):
 
 
 class AiSettingsPayload(BaseModel):
-    api_keys: List[str]
-    model: str
+    api_keys: List[str] = Field(default_factory=list)
+    model: str = ""
+    provider: Optional[str] = "gemini"
+    newapi_base_url: Optional[str] = None
+    newapi_api_keys: Optional[List[str]] = None
+    newapi_model: Optional[str] = None
+    providers: Optional[List[Dict[str, Any]]] = None
+    active_provider_id: Optional[str] = None
     instruction_daily: Optional[str] = None
     instruction: Optional[str] = None
     instruction_monthly: Optional[str] = None
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
+
+
+class AiSettingsConnectionTestPayload(BaseModel):
+    provider: Optional[str] = "gemini"
+    api_keys: Optional[List[str]] = None
+    model: Optional[str] = None
+    newapi_base_url: Optional[str] = None
+    newapi_api_keys: Optional[List[str]] = None
+    newapi_model: Optional[str] = None
+    providers: Optional[List[Dict[str, Any]]] = None
+    active_provider_id: Optional[str] = None
 
 
 def _ensure_manage_validation_permission(session: AuthSession) -> None:
@@ -1604,6 +1621,89 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _normalize_provider_kind(value: Any) -> str:
+    kind = str(value or "gemini").strip().lower()
+    return kind if kind in {"gemini", "newapi"} else "gemini"
+
+
+def _decode_api_key(raw_value: Any) -> str:
+    text = str(raw_value or "").strip()
+    if not text:
+        return ""
+    decoded = decrypt_api_key(text)
+    if text.startswith("sk-") and not decoded.startswith("sk-"):
+        return text
+    if text.startswith("AIza") and not decoded.startswith("AIza"):
+        return text
+    return decoded
+
+
+def _ensure_provider_id(value: Any, fallback: str) -> str:
+    raw = str(value or "").strip()
+    return raw or fallback
+
+
+def _normalize_provider_record(raw: Any, index: int) -> Dict[str, Any]:
+    obj = raw if isinstance(raw, dict) else {}
+    kind = _normalize_provider_kind(obj.get("kind") or obj.get("provider"))
+    fallback_id = f"provider_{index + 1}"
+    provider_id = _ensure_provider_id(obj.get("id"), fallback_id)
+    name = str(obj.get("name") or "").strip() or ("Gemini" if kind == "gemini" else "New API")
+    model = str(obj.get("model") or "").strip()
+    base_url = str(obj.get("base_url") or "").strip()
+    api_keys_raw = obj.get("api_keys")
+    api_keys = [str(k or "").strip() for k in (api_keys_raw if isinstance(api_keys_raw, list) else [])]
+    api_keys = [k for k in api_keys if k]
+    return {
+        "id": provider_id,
+        "name": name,
+        "kind": kind,
+        "base_url": base_url,
+        "model": model,
+        "api_keys": api_keys,
+    }
+
+
+def _build_providers_from_legacy_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    providers: List[Dict[str, Any]] = []
+    gemini_keys_raw = data.get("gemini_api_keys")
+    gemini_keys = [_decode_api_key(k) for k in (gemini_keys_raw if isinstance(gemini_keys_raw, list) else []) if k]
+    if not gemini_keys and data.get("gemini_api_key"):
+        gemini_keys = [_decode_api_key(data.get("gemini_api_key"))]
+    providers.append(
+        {
+            "id": "gemini_default",
+            "name": "Gemini 官方",
+            "kind": "gemini",
+            "base_url": "",
+            "model": str(data.get("gemini_model") or "").strip(),
+            "api_keys": [k for k in gemini_keys if k],
+        }
+    )
+
+    newapi_keys_raw = data.get("newapi_api_keys")
+    newapi_keys = [_decode_api_key(k) for k in (newapi_keys_raw if isinstance(newapi_keys_raw, list) else []) if k]
+    if not newapi_keys and data.get("newapi_api_key"):
+        newapi_keys = [_decode_api_key(data.get("newapi_api_key"))]
+    if str(data.get("newapi_base_url") or "").strip() or str(data.get("newapi_model") or "").strip() or newapi_keys:
+        providers.append(
+            {
+                "id": "newapi_default",
+                "name": "New API 默认",
+                "kind": "newapi",
+                "base_url": str(data.get("newapi_base_url") or "").strip(),
+                "model": str(data.get("newapi_model") or "").strip(),
+                "api_keys": [k for k in newapi_keys if k],
+            }
+        )
+
+    active_provider_id = str(data.get("active_provider_id") or "").strip()
+    if not active_provider_id:
+        active_kind = _normalize_provider_kind(data.get("provider"))
+        active_provider_id = "newapi_default" if active_kind == "newapi" and len(providers) > 1 else "gemini_default"
+    return {"providers": providers, "active_provider_id": active_provider_id}
+
+
 def _read_ai_settings() -> Dict[str, Any]:
     shared_data: Dict[str, Any] = {}
     if AI_SETTINGS_PATH.exists():
@@ -1616,9 +1716,25 @@ def _read_ai_settings() -> Dict[str, Any]:
     data = dict(shared_data)
 
     if not data:
+        providers = [
+            {
+                "id": "gemini_default",
+                "name": "Gemini 官方",
+                "kind": "gemini",
+                "base_url": "",
+                "model": "",
+                "api_keys": [],
+            }
+        ]
         return {
+            "provider": "gemini",
             "api_keys": [],
             "model": "",
+            "newapi_base_url": "",
+            "newapi_api_keys": [],
+            "newapi_model": "",
+            "providers": providers,
+            "active_provider_id": "gemini_default",
             "instruction_daily": "",
             "instruction_monthly": "",
             "report_mode": "full",
@@ -1626,17 +1742,46 @@ def _read_ai_settings() -> Dict[str, Any]:
             "allow_non_admin_report": False,
         }
 
-    # 读取多 Key 列表，若无则尝试迁移旧单 Key
-    raw_keys = data.get("gemini_api_keys")
-    if not isinstance(raw_keys, list):
-        old_key = str(data.get("gemini_api_key") or "").strip()
-        raw_keys = [old_key] if old_key else []
+    providers_raw = data.get("providers")
+    providers: List[Dict[str, Any]] = []
+    if isinstance(providers_raw, list):
+        for idx, raw in enumerate(providers_raw):
+            if not isinstance(raw, dict):
+                continue
+            normalized = _normalize_provider_record(raw, idx)
+            encrypted_keys = raw.get("api_keys")
+            keys_raw = encrypted_keys if isinstance(encrypted_keys, list) else []
+            normalized["api_keys"] = [_decode_api_key(k) for k in keys_raw if str(k or "").strip()]
+            providers.append(normalized)
+    if not providers:
+        legacy = _build_providers_from_legacy_fields(data)
+        providers = legacy["providers"]
+        active_provider_id = legacy["active_provider_id"]
+    else:
+        active_provider_id = str(data.get("active_provider_id") or "").strip()
+        if not active_provider_id:
+            active_provider_id = providers[0]["id"]
+        id_set = {str(p.get("id") or "") for p in providers}
+        if active_provider_id not in id_set:
+            active_provider_id = providers[0]["id"]
 
-    decrypted_keys = [decrypt_api_key(str(k)) for k in raw_keys if k]
+    active = next((p for p in providers if p.get("id") == active_provider_id), providers[0])
+    provider_kind = _normalize_provider_kind(active.get("kind"))
+
+    gemini_provider = next((p for p in providers if _normalize_provider_kind(p.get("kind")) == "gemini"), None)
+    newapi_provider = next((p for p in providers if _normalize_provider_kind(p.get("kind")) == "newapi"), None)
+    gemini_keys = list(gemini_provider.get("api_keys") or []) if gemini_provider else []
+    newapi_keys = list(newapi_provider.get("api_keys") or []) if newapi_provider else []
 
     return {
-        "api_keys": decrypted_keys,
-        "model": str(data.get("gemini_model") or ""),
+        "provider": provider_kind,
+        "api_keys": gemini_keys,
+        "model": str((gemini_provider or {}).get("model") or ""),
+        "newapi_base_url": str((newapi_provider or {}).get("base_url") or ""),
+        "newapi_api_keys": newapi_keys,
+        "newapi_model": str((newapi_provider or {}).get("model") or ""),
+        "providers": providers,
+        "active_provider_id": active_provider_id,
         "instruction_daily": str(data.get("instruction_daily") or ""),
         "instruction_monthly": str(data.get("instruction_monthly") or ""),
         "report_mode": str(data.get("report_mode") or "full"),
@@ -1651,9 +1796,25 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
     try:
         return _read_ai_settings()
     except HTTPException:
+        providers = [
+            {
+                "id": "gemini_default",
+                "name": "Gemini 官方",
+                "kind": "gemini",
+                "base_url": "",
+                "model": "",
+                "api_keys": [],
+            }
+        ]
         return {
+            "provider": "gemini",
             "api_keys": [],
             "model": "",
+            "newapi_base_url": "",
+            "newapi_api_keys": [],
+            "newapi_model": "",
+            "providers": providers,
+            "active_provider_id": "gemini_default",
             "instruction_daily": "",
             "instruction_monthly": "",
             "enable_validation": True,
@@ -1664,6 +1825,12 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
 def _persist_ai_settings(
     api_keys: List[str],
     model: str,
+    provider: Optional[str],
+    newapi_base_url: Optional[str],
+    newapi_api_keys: Optional[List[str]],
+    newapi_model: Optional[str],
+    providers: Optional[List[Dict[str, Any]]],
+    active_provider_id: Optional[str],
     instruction_daily: Optional[str],
     instruction_monthly: Optional[str],
     report_mode: str,
@@ -1679,13 +1846,78 @@ def _persist_ai_settings(
     if not isinstance(payload, dict):
         payload = {}
 
-    encrypted_keys = [encrypt_api_key(k) for k in api_keys if k.strip()]
-    payload["gemini_api_keys"] = encrypted_keys
-    # 清理旧字段以避免混淆
+    normalized_provider = _normalize_provider_kind(provider)
+    provider_records: List[Dict[str, Any]] = []
+    if isinstance(providers, list) and providers:
+        for idx, raw in enumerate(providers):
+            if not isinstance(raw, dict):
+                continue
+            normalized = _normalize_provider_record(raw, idx)
+            provider_records.append(normalized)
+    if not provider_records:
+        provider_records = [
+            {
+                "id": "gemini_default",
+                "name": "Gemini 官方",
+                "kind": "gemini",
+                "base_url": "",
+                "model": str(model or "").strip(),
+                "api_keys": [str(k).strip() for k in (api_keys or []) if isinstance(k, str) and str(k).strip()],
+            }
+        ]
+        has_newapi = bool(str(newapi_base_url or "").strip() or str(newapi_model or "").strip() or (newapi_api_keys or []))
+        if has_newapi:
+            provider_records.append(
+                {
+                    "id": "newapi_default",
+                    "name": "New API 默认",
+                    "kind": "newapi",
+                    "base_url": str(newapi_base_url or "").strip(),
+                    "model": str(newapi_model or "").strip(),
+                    "api_keys": [str(k).strip() for k in (newapi_api_keys or []) if isinstance(k, str) and str(k).strip()],
+                }
+            )
+
+    active_id = str(active_provider_id or "").strip()
+    if not active_id:
+        active_id = provider_records[0]["id"]
+    available_ids = {str(p.get("id") or "") for p in provider_records}
+    if active_id not in available_ids:
+        active_id = provider_records[0]["id"]
+
+    providers_for_store: List[Dict[str, Any]] = []
+    for record in provider_records:
+        keys = [str(k).strip() for k in (record.get("api_keys") or []) if isinstance(k, str) and str(k).strip()]
+        providers_for_store.append(
+            {
+                "id": str(record.get("id") or ""),
+                "name": str(record.get("name") or ""),
+                "kind": _normalize_provider_kind(record.get("kind")),
+                "base_url": str(record.get("base_url") or "").strip(),
+                "model": str(record.get("model") or "").strip(),
+                "api_keys": [encrypt_api_key(k) for k in keys],
+            }
+        )
+
+    payload["providers"] = providers_for_store
+    payload["active_provider_id"] = active_id
+
+    active_record = next((p for p in provider_records if p.get("id") == active_id), provider_records[0])
+    payload["provider"] = _normalize_provider_kind(active_record.get("kind"))
+
+    gemini_record = next((p for p in provider_records if _normalize_provider_kind(p.get("kind")) == "gemini"), None)
+    newapi_record = next((p for p in provider_records if _normalize_provider_kind(p.get("kind")) == "newapi"), None)
+    gemini_plain_keys = [str(k).strip() for k in ((gemini_record or {}).get("api_keys") or []) if str(k).strip()]
+    newapi_plain_keys = [str(k).strip() for k in ((newapi_record or {}).get("api_keys") or []) if str(k).strip()]
+    payload["gemini_api_keys"] = [encrypt_api_key(k) for k in gemini_plain_keys]
+    payload["gemini_model"] = str((gemini_record or {}).get("model") or "")
+    payload["newapi_api_keys"] = [encrypt_api_key(k) for k in newapi_plain_keys]
+    payload["newapi_base_url"] = str((newapi_record or {}).get("base_url") or "")
+    payload["newapi_model"] = str((newapi_record or {}).get("model") or "")
     if "gemini_api_key" in payload:
         del payload["gemini_api_key"]
-
-    payload["gemini_model"] = model
+    if "newapi_api_key" in payload:
+        del payload["newapi_api_key"]
     if instruction_daily is not None:
         payload["instruction_daily"] = instruction_daily
     if "instruction" in payload:
@@ -1697,9 +1929,31 @@ def _persist_ai_settings(
     payload["allow_non_admin_report"] = bool(allow_non_admin_report)
     AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     AI_SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    providers_plain = []
+    for item in providers_for_store:
+        providers_plain.append(
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "kind": item.get("kind"),
+                "base_url": item.get("base_url"),
+                "model": item.get("model"),
+                "api_keys": [_decode_api_key(k) for k in (item.get("api_keys") or []) if str(k).strip()],
+            }
+        )
+    active_plain = next((p for p in providers_plain if p.get("id") == active_id), providers_plain[0])
+    gemini_plain = next((p for p in providers_plain if _normalize_provider_kind(p.get("kind")) == "gemini"), None)
+    newapi_plain = next((p for p in providers_plain if _normalize_provider_kind(p.get("kind")) == "newapi"), None)
+
     return {
-        "api_keys": api_keys,
-        "model": model,
+        "provider": _normalize_provider_kind(active_plain.get("kind")),
+        "api_keys": list((gemini_plain or {}).get("api_keys") or []),
+        "model": str((gemini_plain or {}).get("model") or ""),
+        "newapi_base_url": str((newapi_plain or {}).get("base_url") or ""),
+        "newapi_api_keys": list((newapi_plain or {}).get("api_keys") or []),
+        "newapi_model": str((newapi_plain or {}).get("model") or ""),
+        "providers": providers_plain,
+        "active_provider_id": active_id,
         "instruction_daily": str(payload.get("instruction_daily") or ""),
         "instruction_monthly": str(payload.get("instruction_monthly") or ""),
         "report_mode": report_mode,
@@ -1929,8 +2183,14 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
     data = _read_ai_settings()
     return {
         "ok": True,
+        "provider": data["provider"],
+        "providers": data["providers"],
+        "active_provider_id": data["active_provider_id"],
         "api_keys": data["api_keys"],
         "model": data["model"],
+        "newapi_base_url": data["newapi_base_url"],
+        "newapi_api_keys": data["newapi_api_keys"],
+        "newapi_model": data["newapi_model"],
         "instruction_daily": data["instruction_daily"],
         "instruction_monthly": data["instruction_monthly"],
         "report_mode": data["report_mode"],
@@ -1950,6 +2210,12 @@ async def update_ai_settings_endpoint(
     result = _persist_ai_settings(
         payload.api_keys,
         payload.model.strip(),
+        payload.provider,
+        payload.newapi_base_url,
+        payload.newapi_api_keys or [],
+        payload.newapi_model,
+        payload.providers,
+        payload.active_provider_id,
         payload.instruction_daily.strip()
         if isinstance(payload.instruction_daily, str)
         else (payload.instruction.strip() if isinstance(payload.instruction, str) else None),
@@ -1963,14 +2229,47 @@ async def update_ai_settings_endpoint(
     data_analysis_ai_report.reset_gemini_client()
     return {
         "ok": True,
+        "provider": result["provider"],
+        "providers": result["providers"],
+        "active_provider_id": result["active_provider_id"],
         "api_keys": result["api_keys"],
         "model": result["model"],
+        "newapi_base_url": result["newapi_base_url"],
+        "newapi_api_keys": result["newapi_api_keys"],
+        "newapi_model": result["newapi_model"],
         "instruction_daily": result["instruction_daily"],
         "instruction_monthly": result["instruction_monthly"],
         "report_mode": result["report_mode"],
         "enable_validation": result["enable_validation"],
         "allow_non_admin_report": result["allow_non_admin_report"],
     }
+
+
+@router.post(
+    "/data_analysis/ai_settings/test",
+    summary="测试 AI 智能体连接",
+)
+async def test_ai_settings_endpoint(
+    payload: AiSettingsConnectionTestPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_manage_ai_settings_permission(session)
+    try:
+        result = data_analysis_ai_report.run_ai_connection_test(
+            {
+                "provider": payload.provider,
+                "api_keys": payload.api_keys or [],
+                "model": str(payload.model or ""),
+                "newapi_base_url": str(payload.newapi_base_url or ""),
+                "newapi_api_keys": payload.newapi_api_keys or [],
+                "newapi_model": str(payload.newapi_model or ""),
+                "providers": payload.providers or [],
+                "active_provider_id": str(payload.active_provider_id or ""),
+            }
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **result}
 
 
 @router.get(

@@ -228,39 +228,11 @@
             <section class="inner-card">
               <header class="section-header">
                 <h3>AI 设置</h3>
-                <button class="btn primary" type="button" :disabled="!canManageAiSettings || aiPending" @click="saveAiConfig">
-                  {{ aiPending ? '保存中…' : '保存设置' }}
+                <button class="btn primary" type="button" :disabled="!canManageAiSettings" @click="openAiSettingsDialog">
+                  智能体设定
                 </button>
               </header>
-              <div class="form-grid">
-                <label>
-                  <span>模型</span>
-                  <input v-model="aiForm.model" :disabled="!canManageAiSettings" type="text" />
-                </label>
-                <label>
-                  <span>报告模式</span>
-                  <select v-model="aiForm.reportMode" :disabled="!canManageAiSettings">
-                    <option value="full">full</option>
-                    <option value="summary">summary</option>
-                  </select>
-                </label>
-                <label class="span-2">
-                  <span>API Key（每行一个）</span>
-                  <textarea v-model="aiForm.apiKeysText" :disabled="!canManageAiSettings" rows="4" />
-                </label>
-                <label class="span-2">
-                  <span>提示词补充</span>
-                  <textarea v-model="aiForm.instruction" :disabled="!canManageAiSettings" rows="5" />
-                </label>
-                <label class="switch-row">
-                  <input v-model="aiForm.enableValidation" :disabled="!canManageAiSettings" type="checkbox" />
-                  <span>启用报告校验</span>
-                </label>
-                <label class="switch-row">
-                  <input v-model="aiForm.allowNonAdminReport" :disabled="!canManageAiSettings" type="checkbox" />
-                  <span>允许非管理员使用 AI 报告</span>
-                </label>
-              </div>
+              <p class="subtext">与日报查询页、月报查询页共用同一套智能体配置（shared/ai_settings.json）。</p>
             </section>
 
             <section class="inner-card">
@@ -703,6 +675,13 @@
         </section>
       </section>
     </main>
+    <AiAgentSettingsDialog
+      v-model="aiSettingsDialogVisible"
+      :can-manage="canManageAiSettings"
+      :load-settings="loadAiSettingsPayload"
+      :save-settings="saveAiSettingsPayload"
+      :test-settings="testAiSettingsPayload"
+    />
   </div>
 </template>
 
@@ -710,6 +689,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
+import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useAuthStore } from '../store/auth'
 import {
@@ -719,6 +699,7 @@ import {
   disableAdminCache,
   execSuperCommand,
   getAdminAiSettings,
+  testAdminAiSettings,
   getAdminAuditEvents,
   getAdminAuditStats,
   getAdminSystemMetrics,
@@ -759,7 +740,7 @@ const errorMessage = ref('')
 const overview = ref(null)
 const validationMasterEnabled = ref(true)
 const validationPending = ref(false)
-const aiPending = ref(false)
+const aiSettingsDialogVisible = ref(false)
 const cachePending = ref(false)
 const publishDays = ref(1)
 const refreshDate = ref('')
@@ -897,15 +878,6 @@ const isAllCurrentSelected = computed(() => {
   return items.every((item) => selectedSuperPathSet.value.has(String(item?.path || '')))
 })
 
-const aiForm = reactive({
-  apiKeysText: '',
-  model: '',
-  instruction: '',
-  reportMode: 'full',
-  enableValidation: true,
-  allowNonAdminReport: false,
-})
-
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: '管理后台', to: null },
@@ -914,6 +886,9 @@ const breadcrumbItems = computed(() => [
 const canManageValidation = computed(() => auth.canManageValidationFor(TARGET_PROJECT_KEY))
 const canManageAiSettings = computed(() => auth.canManageAiSettingsFor(TARGET_PROJECT_KEY))
 const canManageCache = computed(() => auth.canPublishFor(TARGET_PROJECT_KEY))
+const loadAiSettingsPayload = () => getAdminAiSettings()
+const saveAiSettingsPayload = (payload) => updateAdminAiSettings(payload)
+const testAiSettingsPayload = (payload) => testAdminAiSettings(payload)
 
 const filteredFiles = computed(() => {
   const keyword = fileSearch.value.trim().toLowerCase()
@@ -1142,21 +1117,6 @@ async function loadProjectSettings() {
   }
 }
 
-async function loadAiConfig() {
-  if (!canManageAiSettings.value || selectedProjectKey.value !== TARGET_PROJECT_KEY) return
-  try {
-    const payload = await getAdminAiSettings()
-    aiForm.apiKeysText = Array.isArray(payload?.api_keys) ? payload.api_keys.join('\n') : ''
-    aiForm.model = String(payload?.model || '')
-    aiForm.instruction = String(payload?.instruction_daily || payload?.instruction || '')
-    aiForm.reportMode = String(payload?.report_mode || 'full')
-    aiForm.enableValidation = Boolean(payload?.enable_validation ?? true)
-    aiForm.allowNonAdminReport = Boolean(payload?.allow_non_admin_report ?? false)
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 async function selectProject(projectKey) {
   selectedProjectKey.value = String(projectKey || '')
   if (selectedProjectKey.value === TARGET_PROJECT_KEY) {
@@ -1165,8 +1125,12 @@ async function selectProject(projectKey) {
       const payload = await getAdminValidationMasterSwitch()
       validationMasterEnabled.value = Boolean(payload?.validation_enabled)
     }
-    await loadAiConfig()
   }
+}
+
+function openAiSettingsDialog() {
+  if (!canManageAiSettings.value) return
+  aiSettingsDialogVisible.value = true
 }
 
 async function loadProjects() {
@@ -2055,25 +2019,6 @@ async function toggleValidationMaster() {
     await loadProjectSettings()
   } finally {
     validationPending.value = false
-  }
-}
-
-async function saveAiConfig() {
-  if (!canManageAiSettings.value) return
-  aiPending.value = true
-  try {
-    const apiKeys = aiForm.apiKeysText.split('\n').map((item) => item.trim()).filter(Boolean)
-    await updateAdminAiSettings({
-      api_keys: apiKeys,
-      model: aiForm.model.trim(),
-      instruction: aiForm.instruction,
-      report_mode: aiForm.reportMode,
-      enable_validation: aiForm.enableValidation,
-      allow_non_admin_report: aiForm.allowNonAdminReport,
-    })
-    await loadProjectSettings()
-  } finally {
-    aiPending.value = false
   }
 }
 
