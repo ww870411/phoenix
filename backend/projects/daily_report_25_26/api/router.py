@@ -14,10 +14,12 @@ from .legacy_full import router as legacy_router
 
 from .dashboard import public_router as dashboard_public_router
 from .dashboard import router as dashboard_router
+from .template_designer import router as template_designer_router
 
 router = APIRouter()
 router.include_router(legacy_router)
 router.include_router(dashboard_router)
+router.include_router(template_designer_router)
 
 public_router = APIRouter()
 public_router.include_router(legacy_public_router)

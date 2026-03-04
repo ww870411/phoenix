@@ -2,6 +2,15 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 模板设计器（新表）第一期骨架（2026-03-04）：
+  - 新增页面：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`。
+  - 新增路由：`/projects/:projectKey/pages/:pageKey/template-designer`。
+  - 页面入口联动：`PageSelectView.vue` 增加 `template_designer` 的描述与跳转分支。
+  - 新增 API 封装：模板列表/详情/创建/更新/发布（`services/api.js`）。
+  - 当前能力：管理员可在项目内创建与维护“新表模板”，并发布模板版本；既有日报页面不受影响。
+- AGENTS 协作规范升级联动（2026-03-04）：
+  - 仓库根 `AGENTS.md` 已更新为多项目现行规范，前端侧目录口径明确为 `src/projects/*`（不再沿用旧的单项目路径描述）。
+  - 协作要求继续保持：每轮改动后同步 `configs/progress.md` 与前后端 README，并在交付中说明模块/函数/流程/结果。
 - 数据看板 PDF 图标导出修复（2026-03-04）：
   - 文件：`src/projects/daily_report_25_26/pages/DashBoard.vue`。
   - 根因：顶部四个摘要卡片图标使用 `::before + mask-image(data:svg)`，`html2canvas` 导出截图时对该渲染方式兼容不稳定，导致 PDF 图标空白。
@@ -4020,3 +4029,61 @@ docker compose up -d --build
   - 百分比指标使用 `%` 格式，普通指标使用数值格式；小数位与页面规则保持一致。
 - 结果：
   - 导出 XLSX 的数值列可直接进行排序、筛选、函数计算和图表绘制。
+## 结构同步（2026-03-04 模板设计器第一期收尾）
+
+- 已确认并保持以下链路一致：
+  - 页面路由：`/projects/:projectKey/pages/:pageKey/template-designer`
+  - 页面文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+  - 页面入口跳转：`src/projects/daily_report_25_26/pages/PageSelectView.vue` 中 `template_designer` 分支
+  - API 封装：`src/projects/daily_report_25_26/services/api.js` 中模板列表/详情/创建/更新/发布函数
+## 结构同步（2026-03-04 模板设计器入口可见性联动）
+
+- 本次未改前端路由与页面代码；
+- 入口不可见问题由后端 `list_project_pages` 过滤策略修复，前端继续复用既有 `PageSelectView` 渲染逻辑；
+- 用户刷新页面后，具备模块化管理能力的账号应可看到“模板设计器（新表）”入口。
+## 结构同步（2026-03-04 模板设计器入口迁移）
+
+- 入口位置调整：
+  - 从页面选择页迁移到管理后台 `AdminConsoleView` 顶部按钮；
+  - 按钮点击后进入 `/projects/daily_report_25_26/pages/template_designer/template-designer`。
+- 页面选择行为调整：
+  - `PageSelectView` 中隐藏 `template_designer` 页面卡片；
+  - 移除该页面在 `openPage` 中的专门跳转逻辑，避免入口重复。
+## 结构同步（2026-03-04 模板设计器拖拽版）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 升级内容：
+  - 列定义支持拖拽排序；
+  - 行定义支持拖拽排序；
+  - 新增可视化行编辑与预览网格（单元格初始值编辑）；
+  - 保留 JSON 兼容编辑并支持“应用 JSON 到可视编辑”。
+- 保存与发布：
+  - 继续调用 `services/api.js` 中模板设计器既有接口，保持后端协议不变。
+## 结构同步（2026-03-04 模板设计器页面壳层统一）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 同步内容：
+  - 新增顶部 `AppHeader`；
+  - 新增 `Breadcrumbs` 导航；
+  - 主体改为统一的 `card elevated` 容器样式，与现有页面风格对齐。
+## 结构同步（2026-03-04 模板设计器标签闭合修复）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 修复：
+  - 将 `template-editor-panel` 的错误闭合标签 `</section>` 更正为 `</div>`；
+  - 解决 Vite 编译报错 `Element is missing end tag`。
+## 结构同步（2026-03-04 模板设计器动态导入 500 修复）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 修复：
+  - 补齐外层 `section.card` 的闭合标签，解决动态导入返回 500 的编译失败问题。
+- 验证：
+  - `npm run build` 已通过。
+## 结构同步（2026-03-04 模板设计器固定字段可选）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 新增能力：
+  - 固定字段（`row_label`、`unit`）启用开关；
+  - 固定字段默认值配置；
+  - 行编辑表与预览网格按固定字段配置动态渲染；
+  - 保存时将配置写入模板 `meta.fixed_fields/default_values`。

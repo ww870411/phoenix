@@ -3,9 +3,18 @@
 ## 最新结构与状态（2026-02-28）
 
 - AI 设置多 Provider 升级（2026-03-03）：
+ - 模板设计器（新表）第一期骨架（2026-03-04）：
+   - 新增后端模块 `projects/daily_report_25_26/api/template_designer.py`，提供模板列表、详情、创建、更新、发布接口；
+   - 新增项目内模板存储文件 `backend_data/projects/daily_report_25_26/config/template_designer_templates.json`（不存在时自动初始化）；
+   - 在 `projects/daily_report_25_26/api/router.py` 挂载模板设计器路由，路径前缀为 `/template_designer`；
+   - 接口访问沿用项目权限体系，校验 `page_access.template_designer` 或动作权限 `can_manage_modularization`；
+   - 该能力仅面向未来新增报表模板，不影响既有填报表与既有数据写入链路。
   - 配置结构新增 `providers[] + active_provider_id`，支持多通道并存与切换；
   - 运行时调用与连接测试均可按当前生效 provider 执行；
   - 同时保留 `provider/gemini_*/newapi_*` 旧字段兼容。
+- AGENTS 协作规范升级联动（2026-03-04）：
+  - 根目录 `AGENTS.md` 已更新为多项目现行规范，后端目录口径明确为 `backend/projects/*` 并行维护；
+  - 协作要求继续保持：每轮改动同步 `configs/progress.md`、`frontend/README.md`、`backend/README.md`，并在交付中说明模块/函数/流程/结果。
 - 数据看板 PDF 图标导出修复联动（2026-03-04）：
   - 本轮后端代码无新增改动；
   - 前端 `DashBoard.vue` 在导出链路中改为向克隆文档注入内联 SVG 图标，以规避 `html2canvas` 对 `mask-image` 兼容问题；
@@ -2654,3 +2663,46 @@
 - 联动说明：
   - 月报查询页导出 XLSX 已改为前端写入数值单元格与格式化规则；
   - 后端仍返回原始数值/单位字段，无需调整接口。
+## 结构同步（2026-03-04 模板设计器第一期收尾）
+
+- 已确认并保持以下链路一致：
+  - 路由挂载：`projects/daily_report_25_26/api/router.py` 引入并 `include_router(template_designer_router)`
+  - 接口实现：`projects/daily_report_25_26/api/template_designer.py`（列表/详情/创建/更新/发布）
+  - 模板存储：`backend_data/projects/daily_report_25_26/config/template_designer_templates.json`
+  - 权限入口：`backend_data/shared/auth/permissions.json` 中 `template_designer` 页面权限
+## 结构同步（2026-03-04 模板设计器入口可见性修复）
+
+- 文件：`api/v1/routes.py`
+- 调整：在 `list_project_pages` 过滤页面列表前，增加模板设计器入口兜底逻辑。
+- 规则：当账号在项目下 `actions.can_manage_modularization=true` 且项目配置存在 `template_designer` 页面时，即使 `page_access` 漏配，也保留该入口。
+- 目的：避免“功能已上线但页面入口不可见”的权限配置错配问题。
+## 结构同步（2026-03-04 模板设计器入口迁移联动）
+
+- 本次需求为入口位置调整，主要发生在前端：
+  - 管理后台新增“模板设计器（新表）”入口按钮；
+  - 页面选择页隐藏 `template_designer` 卡片。
+- 后端接口与模板存储链路保持不变，仍由 `template_designer` API 负责。
+## 结构同步（2026-03-04 模板设计器拖拽版前端联动）
+
+- 本轮拖拽设计能力仅涉及前端页面重构：
+  - `TemplateDesignerView` 新增行列拖拽、预览网格与 JSON 兼容编辑。
+- 后端保持不变：
+  - 继续使用 `template_designer` 既有接口（列表/详情/创建/更新/发布）；
+  - 不涉及数据库结构与后端路由变更。
+## 结构同步（2026-03-04 模板设计器页面壳层统一前端联动）
+
+- 本轮仅调整模板设计器前端页面壳层与导航组件接入：
+  - 补齐 `AppHeader` 与 `Breadcrumbs`；
+  - 对齐统一页面容器样式。
+- 后端接口与权限逻辑不变。
+## 结构同步（2026-03-04 模板设计器标签闭合修复前端联动）
+
+- 本次为前端模板页面标签闭合修复，后端接口与逻辑无变更。
+## 结构同步（2026-03-04 模板设计器动态导入 500 修复前端联动）
+
+- 本次修复为前端模板页面标签闭合补齐，后端无改动。
+## 结构同步（2026-03-04 模板设计器固定字段可选前端联动）
+
+- 本次实现为前端模板设计器交互增强：
+  - 固定字段可选与默认值配置写入模板 `meta`；
+  - 后端接口协议不变，继续透传 `meta` 字段。

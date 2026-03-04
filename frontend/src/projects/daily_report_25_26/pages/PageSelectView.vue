@@ -127,6 +127,13 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_analysis: '数据自由组合提取',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
+const HIDDEN_PAGE_KEYS = new Set(['template_designer'])
+function filterVisiblePages(list) {
+  return (Array.isArray(list) ? list : []).filter((page) => {
+    const key = String(page?.page_key || '').trim().toLowerCase()
+    return key && !HIDDEN_PAGE_KEYS.has(key)
+  })
+}
 const canApproveUnit = (unit) => auth.canApproveUnit(unit, projectKey)
 const canRevokeUnit = (unit) => auth.canRevokeUnit(unit, projectKey)
 const rawPages = ref([])
@@ -152,7 +159,7 @@ async function loadPages() {
     await ensureProjectsLoaded()
     const response = await listPages(projectKey)
     rawPages.value = Array.isArray(response?.pages) ? response.pages : []
-    pages.value = auth.filterPages(projectKey, rawPages.value)
+    pages.value = filterVisiblePages(auth.filterPages(projectKey, rawPages.value))
     if (!pages.value.length) {
       errorMessage.value = '暂无可访问的页面，请联系管理员确认权限。'
     }
@@ -181,7 +188,7 @@ async function refreshWorkflow() {
 watch(
   () => auth.permissions,
   () => {
-    pages.value = auth.filterPages(projectKey, rawPages.value)
+    pages.value = filterVisiblePages(auth.filterPages(projectKey, rawPages.value))
     if (!pages.value.length && rawPages.value.length) {
       errorMessage.value = '当前账号无可访问页面，请联系管理员。'
     } else if (pages.value.length) {

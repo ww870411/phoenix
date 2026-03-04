@@ -17,6 +17,11 @@
             <button class="tab-btn" :class="{ active: activeTab === 'system' }" type="button" @click="activeTab = 'system'">服务器管理</button>
             <button class="tab-btn" :class="{ active: activeTab === 'audit' }" type="button" @click="activeTab = 'audit'">操作日志</button>
           </div>
+          <div class="top-actions">
+            <button class="btn primary" type="button" :disabled="selectedProjectKey !== TARGET_PROJECT_KEY" @click="openTemplateDesigner">
+              模板设计器（新表）
+            </button>
+          </div>
         </header>
 
         <section v-if="activeTab === 'files'" class="content-block">
@@ -1133,6 +1138,11 @@ function openAiSettingsDialog() {
   aiSettingsDialogVisible.value = true
 }
 
+function openTemplateDesigner() {
+  const path = `/projects/${encodeURIComponent(TARGET_PROJECT_KEY)}/pages/template_designer/template-designer`
+  router.push(path)
+}
+
 async function loadProjects() {
   try {
     const payload = await listAdminProjects()
@@ -2189,6 +2199,12 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   padding: 4px;
   gap: 4px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .tab-btn {

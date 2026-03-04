@@ -1,3 +1,71 @@
+## 2026-03-04（模板设计器第一期骨架：新表专用）
+
+- 需求背景：
+  - 用户确认新增“模板设计器（新表）”能力，明确“不改当前已有表格”，仅面向未来新表。
+- 本轮交付范围（第一期）：
+  - 新增项目内页面入口：`template_designer`；
+  - 新增后端模板管理接口（列表/详情/创建/更新/发布）；
+  - 新增前端模板设计器页面（基础表单 + 列定义 + 行定义 JSON）；
+  - 完成菜单配置与权限配置联动。
+- 后端实现：
+  - 文件：`backend/projects/daily_report_25_26/api/template_designer.py`
+  - 新增接口：
+    - `GET /api/v1/projects/daily_report_25_26/template_designer/templates`
+    - `GET /api/v1/projects/daily_report_25_26/template_designer/templates/{template_key}`
+    - `POST /api/v1/projects/daily_report_25_26/template_designer/templates`
+    - `PUT /api/v1/projects/daily_report_25_26/template_designer/templates/{template_key}`
+    - `POST /api/v1/projects/daily_report_25_26/template_designer/templates/{template_key}/publish`
+  - 存储文件：
+    - `backend_data/projects/daily_report_25_26/config/template_designer_templates.json`（不存在时自动初始化）
+  - 路由挂载：
+    - `backend/projects/daily_report_25_26/api/router.py` 已 `include_router(template_designer_router)`。
+- 前端实现：
+  - 新页面：
+    - `frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+  - 路由：
+    - `frontend/src/router/index.js` 新增
+      - `/projects/:projectKey/pages/:pageKey/template-designer`
+  - 页面跳转：
+    - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+    - 新增 `template_designer` 描述映射与跳转分支。
+  - API 封装：
+    - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - 新增模板设计器列表/详情/创建/更新/发布请求函数。
+- 配置联动：
+  - 页面配置：
+    - `backend_data/shared/项目列表.json` 新增 `template_designer` 页面项。
+  - 权限配置：
+    - `backend_data/shared/auth/permissions.json`
+    - 为 `Global_admin`、`Group_admin` 的 `daily_report_25_26.page_access` 增加 `template_designer`。
+- 当前结果：
+  - 你现在可以在项目页面看到“模板设计器（新表）”，并完成新模板草稿创建、更新和发布；
+  - 该链路不会影响既有日报填报表与历史模板。
+- 下一步（第二期建议）：
+  - 把“行定义 JSON”升级为可视化拖拽编辑；
+  - 增加字段级校验规则编辑器；
+  - 增加模板版本回滚与差异比对。
+
+## 2026-03-04（AGENTS.md 升级为多项目现行协作规范）
+
+- 背景：
+  - 原 `AGENTS.md` 为项目初期版本，内容以单项目 `daily_report_25_26` 为主，目录与当前仓库结构已脱节。
+- 本轮目标：
+  - 保留用户对 Codex 的系统性执行要求；
+  - 将“项目结构、模块现状、协作风格、改动范围”更新为当前版本。
+- 实施：
+  - 重写 `AGENTS.md`，核心更新包括：
+    - 明确“强制保留”的执行规则：原生文件工具编辑、每轮同步 `progress.md + frontend/README.md + backend/README.md`、交付需说明模块/函数/流程/结果；
+    - 项目结构更新为多项目并行（前端 `frontend/src/projects/*`、后端 `backend/projects/*`）；
+    - 更新可改/禁改范围与当前协作风格要求；
+    - 增加质量安全底线与 Codex 快速执行清单。
+- 结果：
+  - `AGENTS.md` 已从“历史方案说明书”升级为“当前可执行协作规范”，可直接指导后续多项目开发。
+- 涉及文件：
+  - `AGENTS.md`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+
 ## 2026-03-04（数据看板 PDF 导出图标空白修复）
 
 - 背景：
@@ -5053,3 +5121,111 @@
 - **Result:**  
   - 导出文件中的数值列可直接用于 Excel 计算/筛选/图表；  
   - 百分比列不再是字符串。  
+## 2026-03-04（模板设计器第一期骨架：续做收尾）
+
+- 对话目标：
+  - 用户在断线后要求继续推进“模板设计器（新表）”实现并完成收尾。
+- 本轮改动：
+  - 补齐 `backend/README.md` 中缺失的“模板设计器（新表）第一期骨架”结构同步说明；
+  - 对前后端与配置链路做一致性检查：
+    - 后端路由挂载：`backend/projects/daily_report_25_26/api/router.py`
+    - 后端接口定义：`backend/projects/daily_report_25_26/api/template_designer.py`
+    - 前端路由：`frontend/src/router/index.js`
+    - 页面跳转：`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+    - 前端 API：`frontend/src/projects/daily_report_25_26/services/api.js`
+    - 页面配置：`backend_data/shared/项目列表.json`
+    - 权限配置：`backend_data/shared/auth/permissions.json`
+- 结果：
+  - 模板设计器第一期骨架相关文件与文档已对齐，页面入口、权限、接口与前端调用链路一致。
+## 2026-03-04（模板设计器入口不可见修复）
+
+- 问题反馈：
+  - 用户反馈“已实现模板设计器，但页面中找不到入口”。
+- 根因分析：
+  - 项目页面列表接口会按 `page_access` 过滤；
+  - 当账号具备 `can_manage_modularization` 但权限配置遗漏 `template_designer` 时，入口会被过滤隐藏。
+- 代码修复：
+  - 修改 `backend/api/v1/routes.py` 的 `list_project_pages`：
+    - 在页面过滤前读取项目动作权限；
+    - 若 `can_manage_modularization=true` 且项目已配置 `template_designer` 页面，则将其加入 `allowed_pages` 兜底保留。
+- 结果：
+  - 对具备模块化管理能力的账号，模板设计器入口不再因 `page_access` 漏配而消失。
+## 2026-03-04（模板设计器入口迁移到管理后台）
+
+- 用户反馈：
+  - 模板设计器不应放在页面选择区，而应放在管理后台入口。
+- 本轮前端改动：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+    - 在管理后台顶部新增“模板设计器（新表）”按钮；
+    - 新增 `openTemplateDesigner()`，跳转到
+      `/projects/daily_report_25_26/pages/template_designer/template-designer`。
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+    - 移除 `template_designer` 的专用跳转分支；
+    - 新增隐藏键过滤（`HIDDEN_PAGE_KEYS`），在页面选择页隐藏该卡片，避免入口重复与误导。
+- 结果：
+  - 模板设计器入口统一归位于管理后台，页面选择页不再显示该入口。
+## 2026-03-04（模板设计器第二期：拖拽设计表格）
+
+- 用户目标：
+  - 继续实现模板设计器，支持拖拽设计表格。
+- 本轮实现：
+  - 重构 `frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue` 为可视化拖拽设计版；
+  - 新增列定义拖拽排序（HTML5 Drag & Drop）；
+  - 新增行定义拖拽排序（HTML5 Drag & Drop）；
+  - 新增行编辑表（`row_key / row_label / unit`）与“新增行/删除行”；
+  - 新增预览网格，可按行列直接编辑单元格初始值（`row.cells`）；
+  - 保留 JSON 兼容编辑区，并新增“应用 JSON 到可视编辑”按钮；
+  - 保存/发布沿用既有后端 API，不改接口路径与发布流程。
+- 兼容策略：
+  - `rowsJson` 与可视编辑双向兼容；
+  - 提交前会按当前列键过滤无效单元格键，避免历史脏键写入。
+## 2026-03-04（模板设计器页面壳层统一）
+
+- 用户反馈：
+  - 模板设计器页面样式与站内其他页面不一致，缺少顶部 banner 与导航。
+- 本轮修复：
+  - 修改 `frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`：
+    - 接入 `AppHeader` 顶部栏；
+    - 接入 `Breadcrumbs` 面包屑导航；
+    - 页面主体改为 `page-main / page-content / card elevated` 结构；
+    - 标题区样式对齐其它页面的 `card-header` 形态。
+- 结果：
+  - 模板设计器页面在视觉结构与导航体验上已与项目现有页面对齐。
+## 2026-03-04（模板设计器页面标签闭合修复）
+
+- 问题：
+  - Vite 报错：`Element is missing end tag`，定位到 `TemplateDesignerView.vue`。
+- 根因：
+  - `template-editor-panel` 的结束标签误写为 `</section>`，应为 `</div>`。
+- 修复：
+  - 文件 `frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`：
+    - 将错误闭合标签改为 `</div>`，恢复合法 DOM 层级。
+## 2026-03-04（模板设计器动态导入 500 修复）
+
+- 现象：
+  - 访问模板设计器路由时报错 `Failed to fetch dynamically imported module`，请求 `TemplateDesignerView.vue` 返回 500。
+- 根因：
+  - `TemplateDesignerView.vue` 模板第 6 行开启的外层 `<section class="card elevated template-shell">` 缺失闭合标签，导致 Vue 编译失败。
+- 修复：
+  - 在模板尾部补齐缺失的 `</section>`。
+- 验证：
+  - 本地执行 `npm run build`（frontend）通过，Vite 编译成功。
+## 2026-03-04（模板设计器：固定字段可选与默认值）
+
+- 用户诉求：
+  - `单位` 不应作为默认硬编码字段；是否启用应可配置，并可设默认值。
+- 本轮实现：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+  - 新增“固定字段配置”区：
+    - `row_label`（行标题）启用开关 + 默认值；
+    - `unit`（单位）启用开关 + 默认值。
+  - 行编辑区联动：
+    - 根据固定字段开关动态显示/隐藏“行标题”“单位”列。
+  - 预览网格联动：
+    - 根据固定字段开关动态显示/隐藏“项目”“单位”列。
+  - 数据结构联动：
+    - 配置写入 `form.meta.fixed_fields` 与 `form.meta.default_values`；
+    - 新增行时自动应用默认值；
+    - 关闭字段后在提交 payload 前自动清空对应字段值。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。

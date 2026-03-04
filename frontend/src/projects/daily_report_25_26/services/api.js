@@ -118,6 +118,75 @@ export async function listPages(projectKey) {
   return response.json()
 }
 
+export async function listTemplateDesignerTemplates(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/template_designer/templates`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `加载模板列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTemplateDesignerTemplate(projectKey, templateKey) {
+  const response = await fetch(
+    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}`,
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `加载模板详情失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createTemplateDesignerTemplate(projectKey, payload) {
+  const response = await fetch(`${projectPath(projectKey)}/template_designer/templates`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS, true),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `创建模板失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateTemplateDesignerTemplate(projectKey, templateKey, payload) {
+  const response = await fetch(
+    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}`,
+    {
+      method: 'PUT',
+      headers: attachAuthHeaders(JSON_HEADERS, true),
+      body: JSON.stringify(payload),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新模板失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function publishTemplateDesignerTemplate(projectKey, templateKey) {
+  const response = await fetch(
+    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}/publish`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `发布模板失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function extractSpringFestivalJson(projectKey, file, options = {}) {
   if (!file) {
     throw new Error('请先选择 xlsx 文件')

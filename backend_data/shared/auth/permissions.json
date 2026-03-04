@@ -14,9 +14,10 @@
             "data_show",
             "data_approval",
             "data_entry",
-            "constant_data",
-            "data_analysis",
-            "placeholder"
+          "constant_data",
+          "data_analysis",
+          "template_designer",
+          "placeholder"
           ],
           "sheet_rules": {
             "data_show": { "mode": "all" },
@@ -106,9 +107,10 @@
             "data_show",
             "data_approval",
             "data_entry",
-            "constant_data",
-            "data_analysis",
-            "placeholder"
+          "constant_data",
+          "data_analysis",
+          "template_designer",
+          "placeholder"
           ],
           "sheet_rules": {
             "data_show": { "mode": "all" },

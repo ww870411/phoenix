@@ -242,6 +242,18 @@ def list_project_pages(
         )
 
     allowed_pages = session.get_project_page_access(project_id)
+    available_page_keys = {
+        str(page.get("page_key") or "").strip()
+        for page in pages
+        if isinstance(page, dict)
+    }
+    project_actions = session.get_project_action_flags(project_id)
+    if (
+        project_actions.can_manage_modularization
+        and "template_designer" in available_page_keys
+    ):
+        allowed_pages = set(allowed_pages)
+        allowed_pages.add("template_designer")
     has_project_override = project_id in session.permissions.projects
     if has_project_override and not allowed_pages:
         pages = []

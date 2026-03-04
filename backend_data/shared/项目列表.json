@@ -40,6 +40,12 @@
         "数据源":"projects/daily_report_25_26/config/数据结构_数据分析表.json",
         "页面描述":"数据自由组合提取"
       },
+      "template_designer":
+      {
+        "页面名称":"模板设计器（新表）",
+        "数据源":"projects/daily_report_25_26/config/template_designer_templates.json",
+        "页面描述":"设计并发布新表模板（不影响既有表）"
+      },
       "/debug/runtime-eval":
       {
         "页面名称":"运行时表达式求值（调试）",
