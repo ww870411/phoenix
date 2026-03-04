@@ -1,3 +1,28 @@
+## 2026-03-04（数据看板 PDF 导出图标空白修复）
+
+- 背景：
+  - 用户反馈 `http://localhost:5173/projects/daily_report_25_26/pages/dashboard/dashboard?...` 顶部四个摘要卡片（当日平均气温、边际利润、原煤消耗、净投诉量）在页面可见图标，但下载 PDF 后图标区域空白。
+- 根因：
+  - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue` 的图标采用 `::before + mask-image(data:image/svg+xml)` 渲染；
+  - 导出链路 `downloadPDF -> html2canvas -> jsPDF` 对该 `mask-image` 方案兼容性不足，导致截图阶段丢失图形。
+- 实施：
+  - 在 `DashBoard.vue` 新增 `SUMMARY_CARD_ICON_PATHS`、`createSummaryIconSvgElement`、`injectPdfSafeSummaryIcons`；
+  - 在 `downloadPDF` 的 `onclone` 回调中调用 `injectPdfSafeSummaryIcons(clonedDocument)`；
+  - 导出克隆文档内：
+    - 对四类图标（`sunrise/profit/coal/complaint`）注入内联 SVG；
+    - 注入导出专用样式禁用 `::before`，确保 `html2canvas` 捕获稳定；
+  - 页面实时渲染逻辑不变，仅 PDF 导出链路生效。
+- 结果：
+  - 导出 PDF 时顶部四个卡片图标可正常显示，不再出现空白。
+  - 二次修复：导出图标曾出现“全黑”现象，已将内联 SVG 的 `path fill` 从 `currentColor` 改为克隆 DOM 实际计算色值（`getComputedStyle(iconEl).color`），避免 `html2canvas` 对 `currentColor` 解析偏差导致发黑。
+  - 三次修复：部分环境下克隆 DOM 计算色值仍可能退化为黑色，已将导出图标 `fill` 固定为 `#ffffff`，确保四张彩色摘要卡片上的图标稳定为白色。
+  - 四次修复：用户反馈图标背景出现“小方框”，定位为 `.summary-card__icon` 容器的 `box-shadow/backdrop-filter` 在导出截图中的伪影；已在导出克隆样式中禁用容器背景、阴影、边框与滤镜，仅保留 SVG 图形本体。
+- 涉及文件：
+  - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+
 ## 2026-03-03（智能体设定升级：多 Provider + 折叠分组布局）
 
 - **User Request:** 在各处“智能体设定”中支持多个 provider（每个 provider 独立 `base_url/api_key/model`），可选择当前使用的 provider；同时优化布局，分组折叠，降低页面高度占用；底部按钮改为“保存并退出”。

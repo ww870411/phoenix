@@ -2,6 +2,14 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 数据看板 PDF 图标导出修复（2026-03-04）：
+  - 文件：`src/projects/daily_report_25_26/pages/DashBoard.vue`。
+  - 根因：顶部四个摘要卡片图标使用 `::before + mask-image(data:svg)`，`html2canvas` 导出截图时对该渲染方式兼容不稳定，导致 PDF 图标空白。
+  - 实现：在 `downloadPDF` 的 `onclone` 阶段调用 `injectPdfSafeSummaryIcons`，向克隆文档注入内联 SVG 图标，并以导出专用样式禁用 `::before`，保证 `html2canvas` 可稳定捕获。
+  - 二次修复：将导出内联 SVG 的 `path fill` 由 `currentColor` 调整为克隆 DOM 实际计算色值，修复 PDF 中图标发黑问题。
+  - 三次修复：为彻底规避克隆态颜色计算漂移，导出图标填充色固定为 `#ffffff`，确保顶部四卡在 PDF 中视觉稳定。
+  - 四次修复：在导出克隆样式中关闭 `.summary-card__icon` 的背景/阴影/滤镜/边框，去除 PDF 中图标周围“小方框”伪影。
+  - 影响：仅作用于 PDF 导出克隆 DOM，页面实时样式与交互不变。
 - 智能体设定 UI 升级（2026-03-03）：
   - 新增多 Provider 管理（每项独立 `base_url/api_keys/model`）；
   - 新增“当前生效 Provider”选择；

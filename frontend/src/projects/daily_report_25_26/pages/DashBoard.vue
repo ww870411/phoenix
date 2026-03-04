@@ -4398,6 +4398,76 @@ const ensureCumulativeTableVisibleForExport = async () => {
   }
 }
 
+const SUMMARY_CARD_ICON_PATHS = {
+  sunrise: 'M11 8V2h2v6Zm6.36 1.64L20.5 6.5l1.41 1.41l-3.13 3.15ZM4 13h16v2H4Zm-.91-4.09L4.5 6.5l3.15 3.14L6.24 10.5ZM12 18a5 5 0 0 1-5-5h10a5 5 0 0 1-5 5Zm-6 3h12v2H6Z',
+  profit: 'M5 3h14v2H5Zm0 4h10v2H5Zm0 4h7v2H5Zm0 4h4v2H5Zm0 4h7v2H5Zm10.5-5q-1.4 0-2.7.75t-1.9 2.1l1.85.75q.35-1.05 1.23-1.65T15.5 15q1.75 0 2.88 1.1Q19.5 17.25 19.5 19q0 1.75-1.12 2.88Q17.25 23 15.5 23q-1.35 0-2.27-.65T11.35 20h-2q.35 1.95 1.82 3.225Q12.65 24.5 15.5 24.5q2.3 0 3.9-1.6t1.6-3.9q0-2.3-1.6-3.9t-3.9-1.6Z',
+  coal: 'm13 22-10-2l2-4l-2-4l10-2l10 2l-2 4l2 4l-10 2Zm0-2.15L18.15 18L19 16l-1.85-1.85L13 13.15l-4.15 1L7 16l1.85 1.85Z',
+  complaint: 'M12 12q-.825 0-1.412-.587T10 10t.588-1.413T12 8t1.413.587T14 10t-.587 1.413T12 12Zm0 8.5q1.35 0 2.612-.387t2.301-1.088l2.087.538l-.55-2.05q.9-1.05 1.4-2.35T20.85 12q0-3.2-2.3-5.5T13.05 4.3L12 2l-1.05 2.3q-3.2.2-5.5 2.5T3.15 12q0 1.625.5 2.937T5.05 17l-.55 2.05l2.087-.538q1.05.7 2.312 1.088T12 20.5Z'
+}
+const PDF_SUMMARY_ICON_FILL = '#ffffff'
+
+const createSummaryIconSvgElement = (doc, iconType, fillColor = PDF_SUMMARY_ICON_FILL) => {
+  const pathD = SUMMARY_CARD_ICON_PATHS[iconType]
+  if (!pathD) {
+    return null
+  }
+  const svgNs = 'http://www.w3.org/2000/svg'
+  const svg = doc.createElementNS(svgNs, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('focusable', 'false')
+  svg.classList.add('summary-card__icon-svg')
+
+  const path = doc.createElementNS(svgNs, 'path')
+  path.setAttribute('d', pathD)
+  path.setAttribute('fill', fillColor)
+  svg.appendChild(path)
+  return svg
+}
+
+const injectPdfSafeSummaryIcons = (clonedDocument) => {
+  const styleId = 'pdf-summary-card-icon-fallback'
+  if (!clonedDocument.getElementById(styleId)) {
+    const styleEl = clonedDocument.createElement('style')
+    styleEl.id = styleId
+    styleEl.textContent = `
+      .summary-card__icon {
+        background: transparent !important;
+        box-shadow: none !important;
+        border: 0 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      .summary-card__icon::before {
+        content: none !important;
+      }
+      .summary-card__icon-svg {
+        width: 32px;
+        height: 32px;
+        display: block;
+      }
+    `
+    clonedDocument.head?.appendChild(styleEl)
+  }
+
+  const iconElements = clonedDocument.querySelectorAll('.summary-card__icon')
+  iconElements.forEach((iconEl) => {
+    let iconType = null
+    if (iconEl.classList.contains('summary-card__icon--sunrise')) iconType = 'sunrise'
+    if (iconEl.classList.contains('summary-card__icon--profit')) iconType = 'profit'
+    if (iconEl.classList.contains('summary-card__icon--coal')) iconType = 'coal'
+    if (iconEl.classList.contains('summary-card__icon--complaint')) iconType = 'complaint'
+    if (!iconType) {
+      return
+    }
+    const svg = createSummaryIconSvgElement(clonedDocument, iconType, PDF_SUMMARY_ICON_FILL)
+    if (!svg) {
+      return
+    }
+    iconEl.replaceChildren(svg)
+  })
+}
+
 const downloadPDF = async () => {
   const { jsPDF } = window.jspdf;
   const dashboard = document.querySelector('.dashboard-page');
@@ -4416,6 +4486,7 @@ const downloadPDF = async () => {
         if (btn) {
           btn.style.display = 'none';
         }
+        injectPdfSafeSummaryIcons(clonedDocument)
       },
     });
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
