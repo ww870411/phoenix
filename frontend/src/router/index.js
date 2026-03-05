@@ -60,10 +60,6 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/DataAnalysisView.vue'),
   },
   {
-    path: '/projects/:projectKey/pages/:pageKey/template-designer',
-    component: () => import('../projects/daily_report_25_26/pages/TemplateDesignerView.vue'),
-  },
-  {
     path: '/admin-console',
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },

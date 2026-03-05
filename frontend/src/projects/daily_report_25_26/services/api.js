@@ -118,75 +118,6 @@ export async function listPages(projectKey) {
   return response.json()
 }
 
-export async function listTemplateDesignerTemplates(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/template_designer/templates`, {
-    headers: attachAuthHeaders(),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `加载模板列表失败: ${response.status}`)
-  }
-  return response.json()
-}
-
-export async function getTemplateDesignerTemplate(projectKey, templateKey) {
-  const response = await fetch(
-    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}`,
-    {
-      headers: attachAuthHeaders(),
-    },
-  )
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `加载模板详情失败: ${response.status}`)
-  }
-  return response.json()
-}
-
-export async function createTemplateDesignerTemplate(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/template_designer/templates`, {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS, true),
-    body: JSON.stringify(payload),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `创建模板失败: ${response.status}`)
-  }
-  return response.json()
-}
-
-export async function updateTemplateDesignerTemplate(projectKey, templateKey, payload) {
-  const response = await fetch(
-    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}`,
-    {
-      method: 'PUT',
-      headers: attachAuthHeaders(JSON_HEADERS, true),
-      body: JSON.stringify(payload),
-    },
-  )
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `更新模板失败: ${response.status}`)
-  }
-  return response.json()
-}
-
-export async function publishTemplateDesignerTemplate(projectKey, templateKey) {
-  const response = await fetch(
-    `${projectPath(projectKey)}/template_designer/templates/${encodeURIComponent(templateKey)}/publish`,
-    {
-      method: 'POST',
-      headers: attachAuthHeaders(),
-    },
-  )
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `发布模板失败: ${response.status}`)
-  }
-  return response.json()
-}
-
 export async function extractSpringFestivalJson(projectKey, file, options = {}) {
   if (!file) {
     throw new Error('请先选择 xlsx 文件')
@@ -504,6 +435,19 @@ export async function queryMonthlyDataShowComparison(projectKey, payload = {}) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `查询月报同比环比失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function queryMonthlyDataShowAiChat(projectKey, payload = {}) {
+  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/ai-chat/query`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `月报对话查询失败: ${response.status}`)
   }
   return response.json()
 }
@@ -1315,6 +1259,43 @@ export async function refreshAdminCache(params = {}) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `刷新缓存失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getProjectDashboardBizDate(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/date`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取业务日期失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function importProjectTemperatureData(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取气温数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function commitProjectTemperatureData(projectKey) {
+  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `写入气温数据失败: ${response.status}`)
   }
   return response.json()
 }

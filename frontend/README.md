@@ -2,6 +2,27 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 月报查询页临时隐藏“对话查询助手”入口（2026-03-05）：
+  - 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  - 处理：通过样式规则隐藏包含 `.chat-panel` 的卡片区块；
+  - 说明：仅隐藏 UI，未删除原有对话逻辑与接口调用代码，后续可快速恢复。
+
+- 月报查询页对话助手升级为“连续会话 + 联网来源可视化”（2026-03-05）：
+  - 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  - 新增：`chatSessionId`、`chatWebSources` 状态，发送消息自动携带 `session_id` 维持连续上下文；
+  - 新增：“新会话”按钮，可一键清空当前会话上下文并重新开始；
+  - 新增：联网检索来源列表展示（标题 + 链接），便于追溯外部信息来源；
+  - 对后端响应的 `web_sources`、`session_id` 做兼容处理，不影响原有查询页主流程。
+
+- 月报查询页新增“对话查询助手（BETA）”（2026-03-05）：
+  - 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
+  - 能力：用户以自然语言提问后，前端调用新接口执行受控查询，并显示 AI 结论与数据预览；
+  - 请求会携带当前筛选上下文（时间范围/口径/指标/排序层次/聚合开关），避免对话与页面筛选脱节；
+  - 原有“查询按钮 + 智能报告生成”流程保持不变。
+- 月报对话 API 封装新增（2026-03-05）：
+  - 文件：`src/projects/daily_report_25_26/services/api.js`；
+  - 新函数：`queryMonthlyDataShowAiChat(projectKey, payload)`；
+  - 路径：`POST /projects/{projectKey}/monthly-data-show/ai-chat/query`。
 - 模板设计器（新表）第一期骨架（2026-03-04）：
   - 新增页面：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`。
   - 新增路由：`/projects/:projectKey/pages/:pageKey/template-designer`。
@@ -4087,3 +4108,126 @@ docker compose up -d --build
   - 固定字段默认值配置；
   - 行编辑表与预览网格按固定字段配置动态渲染；
   - 保存时将配置写入模板 `meta.fixed_fields/default_values`。
+## 结构同步（2026-03-04 模板设计器类 Excel 画布增强）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 关键增强：
+  - 画布网格支持直接拖拽行列；
+  - 画布列头支持就地删除，工具条支持新增行/新增列；
+  - 列定义新增列宽字段并在画布渲染；
+  - 新增连接配置区并写入 `meta.binding`；
+  - 新增布局预留 `meta.layout.frozen_columns`。
+- 兼容性：
+  - 继续兼容既有模板保存/发布接口与 rows JSON 结构。
+## 结构同步（2026-03-04 模板设计器拖拽手柄化修复）
+
+- 文件：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 修复点：
+  - 将拖拽从整行/整列表头切换为“手柄触发拖拽”；
+  - 解决输入框难以聚焦、删除按钮点击被拖拽干扰的问题。
+- 验证：
+  - `npm run build` 通过。
+
+## 结构同步（2026-03-05 模板设计器入口并列标签化）
+
+- 页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整：
+  - 将“模板设计器（新表）”入口从顶部右侧独立按钮迁移到 `tab-group`；
+  - 入口展示形式改为与其他后台子页面并列的标签按钮；
+  - 保留原 `openTemplateDesigner` 跳转行为，避免影响既有模板设计器路由与页面实现。
+- 清理：
+  - 移除无引用样式 `.top-actions`。
+
+## 结构同步（2026-03-05 长表设计器方案评审）
+
+- 本轮无前端代码改动，仅完成长表设计器成熟方案评审与落地路径定义。
+- 评审方向：
+  - 设计器从单页“列/行 JSON 编辑”升级为向导式流程：
+    - 业务范围（单位/日期粒度/口径）
+    - 字段模型（维度/指标/固定字段）
+    - 计算与校验（依赖图）
+    - 入库映射（长表）
+    - 预览回归与发布
+  - 保持“存储长表、展示透视”原则，避免交叉表直接绑定入库。
+
+## 结构同步（2026-03-05 下线模板设计器页面）
+
+- 删除页面：`src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+- 删除路由：`/projects/:projectKey/pages/:pageKey/template-designer`（`src/router/index.js`）
+- 删除入口：
+  - `AdminConsoleView.vue` 顶部“模板设计器（新表）”标签；
+  - 对应跳转函数 `openTemplateDesigner`。
+- 接口清理：
+  - `src/projects/daily_report_25_26/services/api.js` 中模板设计器相关函数已删除（列表/详情/创建/更新/发布）。
+- 现状：
+  - 前端已不再提供模板设计器入口与访问路径。
+
+## 结构同步（2026-03-05 管理后台“看板功能设置”升级）
+
+- 页面：`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整：
+  - “看板缓存任务”更名为“看板功能设置”；
+  - 新增业务日期自动读取能力：通过看板日期接口读取 `set_biz_date`，并同步到“刷新日期”；
+  - 新增气温相关操作按钮：`导入气温（预览）`、`提交气温入库`；
+  - 保留并整合缓存操作按钮：`发布缓存`、`刷新单日`、`停止任务`、`禁用缓存`。
+- API 封装新增：
+  - `getProjectDashboardBizDate`
+  - `importProjectTemperatureData`
+  - `commitProjectTemperatureData`
+  - 文件：`src/projects/daily_report_25_26/services/api.js`
+
+## 结构同步（2026-03-05 管理后台气温按钮反馈增强）
+
+- 页面：`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 优化：
+  - “导入气温（预览）/提交气温入库”点击后立即显示进行中提示；
+  - 结果提示改为基于后端真实字段：
+    - 预览：`summary.total_hours`、`overlap`、`differences.length`、`dates`；
+    - 入库：`write_result.inserted`、`write_result.replaced`；
+  - 提示区域由普通 `subtext` 改为 `panel-state`，提升可见性。
+
+## 结构同步（2026-03-05 管理后台气温导入弹框确认）
+
+- 页面：`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 交互调整：
+  - 点击“导入气温（预览）”后，先弹出“气温导入确认”弹框；
+  - 弹框展示预览摘要（获取时间、涉及日期、重合区间、差异小时）；
+  - 用户在弹框中点击“确认入库”后才执行写库；
+  - 取消外层“提交气温入库”按钮，统一为弹框内确认流程。
+
+## 结构同步（2026-03-05 管理后台气温弹框逐小时一致性）
+
+- 页面：`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 增强：
+  - 弹框新增逐小时一致性列表（时间、接口值、数据库值、一致/不一致）；
+  - 差异项红色高亮；
+  - 数据映射接入 `overlap_records`，重合小时数读取 `overlap.hours`。
+
+## 结构同步（2026-03-05 项目后台页面移除日志统计区块）
+
+- 页面：`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整：
+  - 在“项目后台设定”视图中移除“操作日志与分类统计”整块内容；
+  - 不影响同页面其他设定功能。
+
+## 结构同步（2026-03-05 月报查询页指标分组全选/取消）
+
+- 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：
+  - 在“指标（可多选）”的每个基础指标分组标题右侧新增“全选/取消”按钮；
+  - 新增 `toggleGroupItems(groupItems, checked)`，仅对当前分组内指标生效；
+  - 保留原全局“全选/全不选”能力不变。
+
+## 结构同步（2026-03-05 月报查询页全选改单按钮切换）
+
+- 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：
+  - 口径与指标顶部的“全选/全不选”改为单按钮“全选/取消”切换；
+  - 指标各大类标题（含“计算指标”）新增单按钮“全选/取消”切换；
+  - 基础指标分组级按钮继续保留。
+
+## 结构同步（2026-03-05 月报查询页子分类单按钮切换）
+
+- 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：
+  - 基础指标子分类（如主要产销指标、主要消耗指标）按钮改为单按钮“全选/取消”切换。

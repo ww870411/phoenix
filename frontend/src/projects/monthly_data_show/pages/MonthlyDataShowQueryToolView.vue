@@ -27,8 +27,9 @@
             <div class="field-head">
               <span class="panel-title">口径（可多选）</span>
               <div class="inline-actions">
-                <button class="btn mini" type="button" @click="toggleAllCompanies(true)">全选</button>
-                <button class="btn mini" type="button" @click="toggleAllCompanies(false)">全不选</button>
+                <button class="btn mini" type="button" @click="toggleAllCompanies()">
+                  {{ isAllCompaniesSelected ? '取消' : '全选' }}
+                </button>
               </div>
             </div>
             <div class="check-list company-list">
@@ -45,26 +46,39 @@
             <div class="field-head">
               <span class="panel-title">指标（可多选）</span>
               <div class="inline-actions">
-                <button class="btn mini" type="button" @click="toggleAllItems(true)">全选</button>
-                <button class="btn mini" type="button" @click="toggleAllItems(false)">全不选</button>
+                <button class="btn mini" type="button" @click="toggleAllItems()">
+                  {{ isAllItemsSelected ? '取消' : '全选' }}
+                </button>
               </div>
             </div>
             <div class="check-list sections compact">
               <div class="section-block" v-for="section in itemSections" :key="section.key">
                 <div class="section-title-row">
                   <div class="section-title">{{ section.title }}</div>
-                  <button
-                    v-if="section.key === 'calculated'"
-                    class="btn mini formula-btn"
-                    type="button"
-                    @click.stop="showFormulaDialog = true"
-                  >
-                    查看公式
-                  </button>
+                  <div class="section-actions">
+                    <button class="btn mini" type="button" @click="toggleSectionItems(section.items)">
+                      {{ isSectionItemsAllSelected(section.items) ? '取消' : '全选' }}
+                    </button>
+                    <button
+                      v-if="section.key === 'calculated'"
+                      class="btn mini formula-btn"
+                      type="button"
+                      @click.stop="showFormulaDialog = true"
+                    >
+                      查看公式
+                    </button>
+                  </div>
                 </div>
                 <div class="section-items grouped" v-if="section.key === 'current' && section.groups && section.groups.length">
                   <div class="basic-group-block" v-for="group in section.groups" :key="`${section.key}-${group.name}`">
-                    <div class="basic-group-title">{{ group.name }}</div>
+                    <div class="basic-group-title-row">
+                      <div class="basic-group-title">{{ group.name }}</div>
+                      <div class="basic-group-actions">
+                        <button class="btn mini" type="button" @click="toggleSectionItems(group.items)">
+                          {{ isSectionItemsAllSelected(group.items) ? '取消' : '全选' }}
+                        </button>
+                      </div>
+                    </div>
                     <div class="basic-group-items">
                       <label class="check-item" v-for="value in group.items" :key="`${section.key}-${group.name}-${value}`">
                         <input type="checkbox" :value="value" v-model="filters.items" />
@@ -131,6 +145,66 @@
             {{ loading ? '查询中...' : '查询' }}
           </button>
           <button class="btn" type="button" :disabled="loading" @click="resetFilters">重置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="result-head">
+          <h3>对话查询助手（BETA）</h3>
+        </div>
+        <p class="sub">助手会根据你的问题调用受控查询工具，并结合当前筛选条件返回分析结论。</p>
+        <div class="chat-panel">
+          <div class="chat-messages">
+            <div
+              v-for="(msg, idx) in chatMessages"
+              :key="`chat-${idx}`"
+              class="chat-message"
+              :class="msg.role === 'user' ? 'chat-user' : 'chat-assistant'"
+            >
+              <div class="chat-role">{{ msg.role === 'user' ? '你' : '助手' }}</div>
+              <pre class="chat-content">{{ msg.content }}</pre>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <textarea
+              v-model="chatInput"
+              class="chat-input"
+              rows="3"
+              maxlength="1200"
+              :disabled="chatLoading"
+              placeholder="例如：查主城区2026-01到2026-03的水耗率，并说明同比变化。"
+            ></textarea>
+            <button class="btn primary" type="button" :disabled="chatLoading || !chatInput.trim()" @click="sendChatMessage">
+              {{ chatLoading ? '处理中...' : '发送' }}
+            </button>
+            <button class="btn" type="button" :disabled="chatLoading" @click="resetChatConversation">
+              新会话
+            </button>
+          </div>
+          <p v-if="chatError" class="sub error-text">{{ chatError }}</p>
+          <p v-if="chatSessionId" class="sub">当前会话：{{ chatSessionId }}</p>
+          <div v-if="chatWebSources.length" class="chat-sources">
+            <div class="sub">联网来源：</div>
+            <ul>
+              <li v-for="(source, idx) in chatWebSources" :key="`chat-source-${idx}`">
+                <a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title || source.url }}</a>
+              </li>
+            </ul>
+          </div>
+          <div v-if="chatPreviewRows.length" class="table-wrap chat-preview">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th v-for="(value, key) in chatPreviewRows[0]" :key="`chat-head-${key}`">{{ key }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, rowIdx) in chatPreviewRows" :key="`chat-row-${rowIdx}`">
+                  <td v-for="(value, key) in row" :key="`chat-cell-${rowIdx}-${key}`">{{ value == null ? 'NULL' : value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -508,6 +582,7 @@ import {
   getMonthlyDataShowQueryOptions,
   getMonthlyDataShowAiReport,
   queryMonthlyDataShow,
+  queryMonthlyDataShowAiChat,
   queryMonthlyDataShowComparison,
   startMonthlyDataShowAiReport,
   updateAdminAiSettings,
@@ -723,6 +798,16 @@ let aiReportPollTimer = null
 const showFormulaDialog = ref(false)
 const temperatureExpanded = ref(false)
 const temperatureDailyRows = ref([])
+const chatMessages = ref([
+  { role: 'assistant', content: '已接入月报对话助手。你可以直接提问，例如：“查主城区2026-01到2026-03的水耗率，并给出同比变化”。' },
+])
+const chatInput = ref('')
+const chatLoading = ref(false)
+const chatError = ref('')
+const chatPreviewRows = ref([])
+const chatSessionId = ref('')
+const chatWebSources = ref([])
+const CHAT_HISTORY_MAX = 10
 const temperatureSummary = reactive({
   currentAvgTemp: null,
   yoyAvgTemp: null,
@@ -1598,6 +1683,72 @@ function buildPayload() {
   }
 }
 
+function buildChatContextPayload() {
+  const payload = buildPayload()
+  return {
+    ...payload,
+    offset: 0,
+    limit: Math.max(50, Math.min(500, Number(payload.limit || 200))),
+  }
+}
+
+function resetChatConversation() {
+  chatSessionId.value = ''
+  chatWebSources.value = []
+  chatPreviewRows.value = []
+  chatError.value = ''
+  chatMessages.value = [
+    { role: 'assistant', content: '已开启新会话。你可以继续提问，例如“查主城区近三个月水耗率并给出同比变化”。' },
+  ]
+}
+
+async function sendChatMessage() {
+  const text = String(chatInput.value || '').trim()
+  if (!text || chatLoading.value) return
+  chatLoading.value = true
+  chatError.value = ''
+  chatWebSources.value = []
+  const userMessage = { role: 'user', content: text }
+  chatMessages.value = [...chatMessages.value, userMessage]
+  chatInput.value = ''
+  try {
+    const history = chatMessages.value
+      .slice(-CHAT_HISTORY_MAX)
+      .map((row) => ({ role: String(row.role || 'user'), content: String(row.content || '') }))
+    const payload = await queryMonthlyDataShowAiChat('monthly_data_show', {
+      message: text,
+      history,
+      session_id: chatSessionId.value || undefined,
+      context: buildChatContextPayload(),
+      enable_web_search: true,
+      top_n: 12,
+      limit: 200,
+    })
+    const answer = String(payload?.answer || '').trim() || '已执行查询，但未返回可读结论。'
+    const toolLines = Array.isArray(payload?.tool_calls)
+      ? payload.tool_calls
+        .filter(Boolean)
+        .map((tool) => {
+          const name = String(tool?.tool || 'unknown')
+          const summary = String(tool?.summary || '')
+          const totalRows = Number(tool?.total_rows || 0)
+          return `工具：${name}；命中 ${totalRows} 条。${summary}`
+        })
+      : []
+    chatPreviewRows.value = Array.isArray(payload?.preview_rows) ? payload.preview_rows : []
+    chatWebSources.value = Array.isArray(payload?.web_sources) ? payload.web_sources : []
+    chatSessionId.value = String(payload?.session_id || chatSessionId.value || '')
+    const assistantContent = toolLines.length ? `${answer}\n\n${toolLines.join('\n')}` : answer
+    chatMessages.value = [...chatMessages.value, { role: 'assistant', content: assistantContent }]
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '对话查询失败'
+    chatError.value = message
+    chatMessages.value = [...chatMessages.value, { role: 'assistant', content: `执行失败：${message}` }]
+  } finally {
+    chatLoading.value = false
+  }
+}
+
 function toMonthStartDate(monthText) {
   const text = String(monthText || '').trim()
   if (!text) return null
@@ -1648,22 +1799,57 @@ function ensureBusinessMonthRangeOrder() {
   filters.dateMonthTo = from
 }
 
-function toggleAllCompanies(checked) {
-  filters.companies = checked ? [...orderedCompanies.value] : []
+function areAllSelected(selectedList, candidateList) {
+  const selected = Array.isArray(selectedList) ? selectedList : []
+  const source = Array.isArray(candidateList) ? candidateList.filter(Boolean) : []
+  if (!source.length) return false
+  const selectedSet = new Set(selected)
+  return source.every((item) => selectedSet.has(item))
 }
 
-function toggleAllItems(checked) {
-  if (!checked) {
-    filters.items = []
-    return
-  }
+const allIndicatorItems = computed(() => {
   const merged = []
-  for (const section of itemSections.value) {
-    for (const item of section.items) {
+  for (const section of itemSections.value || []) {
+    for (const item of section.items || []) {
       if (!merged.includes(item)) merged.push(item)
     }
   }
-  filters.items = merged
+  return merged
+})
+
+const isAllCompaniesSelected = computed(() => areAllSelected(filters.companies, orderedCompanies.value))
+const isAllItemsSelected = computed(() => areAllSelected(filters.items, allIndicatorItems.value))
+
+function toggleAllCompanies() {
+  filters.companies = isAllCompaniesSelected.value ? [] : [...orderedCompanies.value]
+}
+
+function toggleAllItems() {
+  filters.items = isAllItemsSelected.value ? [] : [...allIndicatorItems.value]
+}
+
+function toggleGroupItems(groupItems, checked) {
+  const source = Array.isArray(groupItems) ? groupItems.filter(Boolean) : []
+  if (!source.length) return
+  if (checked) {
+    const next = Array.isArray(filters.items) ? [...filters.items] : []
+    for (const item of source) {
+      if (!next.includes(item)) next.push(item)
+    }
+    filters.items = next
+    return
+  }
+  const removeSet = new Set(source)
+  filters.items = (Array.isArray(filters.items) ? filters.items : []).filter((item) => !removeSet.has(item))
+}
+
+function isSectionItemsAllSelected(sectionItems) {
+  return areAllSelected(filters.items, sectionItems)
+}
+
+function toggleSectionItems(sectionItems) {
+  const checked = !isSectionItemsAllSelected(sectionItems)
+  toggleGroupItems(sectionItems, checked)
 }
 
 function toggleAllPeriods(checked) {
@@ -2150,6 +2336,12 @@ onBeforeUnmount(() => {
   padding: 0 10px 0 0;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .section-title-row .section-title {
   border-bottom: 0;
   background: transparent;
@@ -2188,6 +2380,19 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: #1e3a8a;
   margin-bottom: 6px;
+}
+
+.basic-group-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.basic-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .basic-group-items {
@@ -2825,6 +3030,91 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 
+.chat-panel {
+  display: grid;
+  gap: 12px;
+}
+
+/* 临时隐藏对话工具区：保留实现，不对外展示 */
+.card:has(> .chat-panel) {
+  display: none;
+}
+
+.chat-messages {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #dbe3f1;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.chat-message {
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.chat-user {
+  background: #dbeafe;
+}
+
+.chat-assistant {
+  background: #eef2ff;
+}
+
+.chat-role {
+  font-size: 12px;
+  color: #334155;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.chat-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.chat-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.chat-input {
+  width: 100%;
+  min-height: 84px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+.chat-preview {
+  margin-top: 4px;
+}
+
+.chat-sources {
+  margin: 4px 0 8px;
+}
+
+.chat-sources ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.chat-sources a {
+  color: #1864ab;
+}
+
 @media (max-width: 900px) {
   .inline-layout {
     grid-template-columns: 1fr 1fr;
@@ -2849,6 +3139,9 @@ onBeforeUnmount(() => {
   }
   .heatmap-grid {
     min-width: 720px;
+  }
+  .chat-input-row {
+    grid-template-columns: 1fr;
   }
 }
 

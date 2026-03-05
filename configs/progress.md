@@ -1,3 +1,90 @@
+## 2026-03-05（monthly_data_show 临时隐藏 query-tool 对话助手）
+
+- 需求背景：
+  - 用户反馈当前对话工具可用性仍不足，先隐藏入口，避免影响页面主流程。
+- 实现策略：
+  - 仅隐藏前端展示，不删除既有实现与后端接口，便于后续灰度恢复；
+  - 在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 增加样式规则：
+    - `.card:has(> .chat-panel) { display: none; }`
+  - 结果：query-tool 页面不再展示“对话查询助手（BETA）”卡片，其余查询能力保持不变。
+- 前置说明（偏差留痕）：
+  - 本次为 `.vue` 文件调整，采用 `apply_patch` 降级编辑；
+  - 回滚方式：删除上述样式块即可恢复对话工具显示。
+- 验证结果：
+  - `npm run build`（`frontend/`）通过。
+
+## 2026-03-05（monthly_data_show 对话助手：会话上下文 + 数据处理 + 联网检索）
+
+- 需求背景：
+  - 在 `query-tool` 页面将上一轮“单次问答”升级为“有上下文的连续对话”；
+  - 增强助手的数据处理能力（聚合/TopN/分组摘要）；
+  - 在用户明确表达“联网/搜索/最新”等意图时，允许助手执行公开网络检索并返回来源。
+- 前置说明（偏差留痕）：
+  - Serena 已完成项目激活与 on-boarding 检查；Python 文件采用 Serena 符号级工具修改；
+  - `.vue` 与 Markdown 文件仍采用 `apply_patch` 降级（Serena 对该类文件不提供稳定符号编辑），影响范围限定在 `monthly_data_show` 查询页及文档；
+  - 回滚方式：仅回退本次改动文件中的新增段落/函数与前端会话区块即可恢复上一版行为。
+- 后端实现（`backend/projects/monthly_data_show/api/workspace.py`）：
+  - 对话请求/响应模型扩展：新增 `session_id`、`enable_web_search`、`web_sources`、`tool_calls.details`；
+  - 新增服务端会话存储（TTL 30 分钟，最多保留 20 条消息），支持连续追问继承上下文；
+  - 新增 `_chat_summarize_rows`，对查询结果做数值字段统计、公司维度摘要、TopN 行提取；
+  - 新增 `_chat_execute_web_search`（公开搜索接口），在用户触发联网意图时走 `search_web_public` 工具分支；
+  - 路由 `POST /monthly-data-show/ai-chat/query` 改为多工具链路：`query_month_data_show` / `query_month_data_show_comparison` / `aggregate_rows` / `search_web_public`。
+- 前端实现（`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`）：
+  - 新增会话态：`chatSessionId`、`chatWebSources`；
+  - 发送对话时携带 `session_id` 与 `enable_web_search`；
+  - 新增“新会话”按钮，允许用户主动清空上下文并重建会话；
+  - 新增“当前会话”与“联网来源”展示区域。
+- 验证结果：
+  - `python -m py_compile backend/projects/monthly_data_show/api/workspace.py` 通过；
+  - `npm run build`（`frontend/`）通过。
+- 风险与后续：
+  - 会话存储当前为进程内内存，服务重启后会话丢失；如需跨实例/持久化，应迁移至 Redis 或数据库；
+  - 联网检索依赖外部公开接口可用性，失败时会回退为“无来源命中”并继续本地数据能力。
+
+## 2026-03-05（monthly_data_show 对话查询助手：受控工具调用版）
+
+- 需求背景：
+  - 在 `query-tool` 页面保留现有“AI 报告”能力的同时，新增“可对话查询”能力；
+  - 用户可用自然语言提出查询意图，由 AI 模块调度受控查询工具获取数据库结果并生成解释。
+- 前置说明（偏差留痕）：
+  - 本轮对 `.vue` 文件的符号级编辑在 Serena 不可用（Serena 当前仅对 Python 提供符号解析），因此前端页面修改采用 `apply_patch` 降级；
+  - 影响范围限定为：`monthly_data_show` 查询页与共享 API 封装，不改现有日报主流程；
+  - 回滚方式：回退以下文件本次改动块即可恢复旧行为（见“涉及文件”）。
+- 后端实现：
+  - 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 新增接口：
+    - `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/query`
+  - 新增能力：
+    - 对话请求模型与响应模型（含 `tool_calls`、`preview_rows`、`applied_query`）；
+    - 月份、口径、指标的自然语言提取与上下文合并（复用现有 `QueryRequest`）；
+    - 工具路由：
+      - 普通查询：`query_month_data_show`
+      - 对比查询：`query_month_data_show_comparison`
+    - AI 总结：基于工具执行结果调用现有 AI 运行时生成中文结论；失败时返回保守兜底结论。
+  - 受控边界：
+    - 不开放任意 SQL；
+    - 仅复用现有白名单查询链路与参数模型。
+- 前端实现：
+  - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 新增“对话查询助手（BETA）”面板：
+    - 消息流展示（用户/助手）；
+    - 文本输入与发送；
+    - 对话失败提示；
+    - 工具返回预览表格展示。
+  - 对话请求会附带当前筛选上下文（时间、口径、指标、排序与聚合开关）。
+  - 文件：`frontend/src/projects/daily_report_25_26/services/api.js`
+    - 新增 API 封装：`queryMonthlyDataShowAiChat(projectKey, payload)`。
+- 当前结果：
+  - `query-tool` 页面已具备“自然语言提问 -> 工具查询 -> AI解释”的端到端闭环；
+  - 原有“查询按钮 + AI 报告生成”功能保持不变，可并行使用。
+- 涉及文件：
+  - `backend/projects/monthly_data_show/api/workspace.py`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+
 ## 2026-03-04（模板设计器第一期骨架：新表专用）
 
 - 需求背景：
@@ -5227,5 +5314,210 @@
     - 配置写入 `form.meta.fixed_fields` 与 `form.meta.default_values`；
     - 新增行时自动应用默认值；
     - 关闭字段后在提交 payload 前自动清空对应字段值。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+## 2026-03-04（模板设计器第三期：类 Excel 画布增强）
+
+- 用户目标：
+  - 希望像 Excel 一样在表格中直接拖拽行列，并考虑后续接库连接能力。
+- 本轮增强：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+  - 画布交互：
+    - 在“画布网格”中支持列头直接拖拽重排；
+    - 在“画布网格”中支持行直接拖拽重排；
+    - 列头支持就地删除；
+    - 画布工具条支持新增行/新增列。
+  - 列能力：
+    - 列定义新增 `width`（列宽）字段并可编辑；
+    - 预览网格按列宽渲染。
+  - 后续接库预留：
+    - 新增“连接配置（为后续接库预留）”区；
+    - 配置写入 `meta.binding`（`target_table / write_mode / id_strategy`）；
+    - 新增 `meta.layout.frozen_columns`（冻结列预留）。
+- 数据兼容：
+  - 仍沿用现有模板创建/更新/发布 API；
+  - `meta` 扩展为结构化配置，不破坏既有模板读取。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+## 2026-03-04（模板设计器交互修复：输入与删除不可用）
+
+- 用户反馈：
+  - 部分区域无法输入，删除操作不稳定。
+- 根因：
+  - 行/列整行设置 `draggable=true` 会干扰输入框聚焦与按钮点击（尤其在画布区域）。
+- 修复：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`
+  - 将拖拽触发改为“仅拖拽手柄可拖”：
+    - 行拖拽、列拖拽均移除整行/整列表头 `draggable`；
+    - 拖拽事件绑定到手柄元素 `span.drag-handle`。
+  - 删除按钮保持普通点击事件，不再与拖拽抢占。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（模板设计器入口改为管理后台并列标签）
+
+- 用户诉求：
+  - 模板设计器不应作为单独按钮，而应与管理后台其他子页面入口并列展示。
+- 前端改动：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 将“模板设计器（新表）”从右侧 `top-actions` 独立按钮迁移到顶部 `tab-group`，与“后台文件编辑/数据库表编辑/项目后台设定/服务器管理/操作日志”并列；
+  - 保持既有 `openTemplateDesigner` 跳转逻辑不变，避免影响当前模板设计器页面与路由链路；
+  - 删除已无引用的 `.top-actions` 样式，清理死代码。
+- 结果：
+  - 管理后台入口形态统一为并列标签，模板设计器不再以独立按钮呈现。
+
+## 2026-03-05（长表设计器成熟方案评审稿）
+
+- 背景：
+  - 用户明确要求停止“最小化临时方案”，改为可长期维护的成熟长表设计器方案；
+  - 结合现状：`backend_data/projects/daily_report_25_26/config` 已有多份“数据结构_*.json”，但语义分散且规则表达能力有限。
+- 现状核对：
+  - 当前数据库 `daily_basic_data` 已是长表结构（`company/sheet_name/item/value/date`），并有唯一索引 `(company, sheet_name, item, date)`；
+  - 当前模板设计器接口仅提供 `template_key/template_name/table_type/columns/rows/meta` 通用壳，尚缺“字段契约 + 计算图 + 校验图 + 发布契约”。
+- 方案结论（本轮仅评审，不落代码）：
+  - 存储统一长表、展示按需透视；
+  - 设计器升级为“数据契约层 + 采集编排层 + 展示层”三层模型；
+  - 先落地长表设计器，再把交叉展示放到查询层，不再直接驱动入库结构。
+- 下一步：
+  - 待用户确认评审稿后，按“模板 JSON 升级 + 后端校验发布 + 前端向导式设计器”分阶段实施。
+
+## 2026-03-05（下线模板设计器页面）
+
+- 用户指令：
+  - 直接去掉当前“表格模板设计页面”。
+- 实施范围：
+  1. 前端页面与入口下线：
+     - 删除 `frontend/src/projects/daily_report_25_26/pages/TemplateDesignerView.vue`；
+     - 删除路由 `'/projects/:projectKey/pages/:pageKey/template-designer'`（`frontend/src/router/index.js`）；
+     - 删除管理后台 `AdminConsoleView.vue` 顶部“模板设计器（新表）”标签与跳转函数；
+     - 删除 `services/api.js` 中模板设计器相关接口函数（列表/详情/创建/更新/发布）。
+  2. 后端与配置联动清理：
+     - 删除项目路由中 `template_designer` 子路由挂载（`backend/projects/daily_report_25_26/api/router.py`）；
+     - 删除后端接口文件 `backend/projects/daily_report_25_26/api/template_designer.py`；
+     - 删除项目页面清单中的 `template_designer` 配置（`backend_data/shared/项目列表.json`）；
+     - 删除权限文件中的 `template_designer` 页面键（`backend_data/shared/auth/permissions.json`）；
+     - 移除 `/api/v1/projects/{project_id}/pages` 中对 `template_designer` 的可见性兜底逻辑（`backend/api/v1/routes.py`）。
+- 结果：
+  - 模板设计器页面及其入口、路由与后端 API 已完全下线，不再对用户可见或可访问。
+
+## 2026-03-05（管理后台看板区升级为“看板功能设置”）
+
+- 用户诉求：
+  - 将 `admin-console` 中“看板缓存任务”改为“看板功能设置”；
+  - 增加业务日期自动读取；
+  - 增加气温导入等数据看板页面相关功能按钮。
+- 前端改动：
+  1) `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+     - 标题从“看板缓存任务”改为“看板功能设置”；
+     - 新增“业务日期（自动读取）”输入框与“读取业务日期”按钮（调用看板日期接口并同步到刷新日期）；
+     - 保留并继续支持缓存能力按钮：发布缓存、刷新单日、停止任务、禁用缓存；
+     - 新增气温能力按钮：导入气温（预览）、提交气温入库；
+     - 新增状态提示：业务日期同步结果、气温预览/入库结果。
+  2) `frontend/src/projects/daily_report_25_26/services/api.js`
+     - 新增 `getProjectDashboardBizDate(projectKey)`；
+     - 新增 `importProjectTemperatureData(projectKey)`；
+     - 新增 `commitProjectTemperatureData(projectKey)`。
+- 结果：
+  - 管理后台“看板功能设置”已覆盖数据看板页的核心运维操作（业务日期读取、缓存控制、气温导入与入库）。
+
+## 2026-03-05（管理后台气温按钮反馈增强）
+
+- 用户反馈：
+  - 点击“导入气温（预览）”后没有明显提示。
+- 根因：
+  - 前端提示文案读取字段与后端真实返回不完全匹配（后端为 `summary.total_hours`、`write_result.inserted/replaced`）；
+  - 提示区域使用普通 `subtext`，可见性不强。
+- 修复：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 导入预览提示改为基于真实返回字段：总小时数、重叠小时数、差异小时数、日期范围；
+  - 入库提示改为基于 `write_result.inserted/replaced`；
+  - 点击按钮后先显示“正在导入/正在提交”；
+  - 提示展示容器改为更醒目的 `panel-state`。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（管理后台气温导入改为弹框确认流程）
+
+- 用户诉求：
+  - 参考数据看板逻辑，点击“导入气温”后先弹提示框，再让用户选择是否导入入库。
+- 改动：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - “导入气温（预览）”点击后：
+    - 先请求预览数据；
+    - 打开“气温导入确认”弹框，展示获取时间、涉及日期、重合区间、差异小时；
+    - 在弹框内点击“确认入库”才执行写库；
+  - 移除外层独立“提交气温入库”按钮，避免双入口冲突。
+- 修正：
+  - 预览统计改为读取后端真实字段（`summary.total_hours`、`overlap.hours`、`differences`）。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（管理后台气温弹框补齐逐小时一致性明细）
+
+- 用户诉求：
+  - 弹窗中需显示逐小时气温，并标示数据一致性，行为对齐数据看板。
+- 改动：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 弹框新增“逐小时一致性”列表，逐条展示：
+    - 时间
+    - 接口气温
+    - 数据库气温（未命中显示 `—`）
+    - 一致性状态（`一致/不一致`）
+  - 差异项使用红色高亮（`temp-import-modal__diff-item--different`）；
+  - 预览数据映射补齐 `overlap_records`，并修正重合小时读取为 `overlap.hours`。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（项目后台页面移除“操作日志与分类统计”区块）
+
+- 用户诉求：
+  - 在“项目后台页面”中不再显示“操作日志与分类统计”部分。
+- 改动：
+  - 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 删除“操作日志与分类统计”整块 UI（筛选栏、分类统计、日志表格）；
+  - 保留项目后台设定中其他模块（设定概览、校验开关、AI 设置、看板功能设置）。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（月报查询页指标分组新增“全选/取消”）
+
+- 用户诉求：
+  - 在月报查询页“指标（可多选）”中，为“主要产销指标”“主要消耗指标”等每个分类增加“全选/取消”按钮，仅作用于本分类。
+- 改动：
+  - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 在每个基础指标分组标题右侧新增分组级按钮：
+    - `全选`：仅勾选该分组内指标（保留其他分组已选项）；
+    - `取消`：仅取消该分组内指标（不影响其他分组已选项）。
+  - 新增方法 `toggleGroupItems(groupItems, checked)` 实现分组粒度选择控制；
+  - 新增样式：`basic-group-title-row`、`basic-group-actions`。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（月报查询页全选按钮改为单按钮切换，并覆盖计算指标）
+
+- 用户诉求：
+  - 页面上的“全选/全不选”改为单按钮切换；
+  - “计算指标”也应支持同样能力。
+- 改动：
+  - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 口径与指标顶部按钮改为单按钮：`全选/取消` 自动切换；
+  - 在每个指标大类（含“计算指标”）标题右侧新增单按钮切换；
+  - 新增状态判断与方法：
+    - `isAllCompaniesSelected` / `isAllItemsSelected`
+    - `isSectionItemsAllSelected(section.items)`
+    - `toggleSectionItems(section.items)`
+  - 保留分组级（基础指标分组）“全选/取消”能力。
+- 验证：
+  - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-05（月报查询页子分类按钮改为单按钮切换）
+
+- 用户反馈：
+  - 子分类指标按钮仍是双按钮，需改为单按钮切换。
+- 改动：
+  - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 基础指标子分类按钮由“全选/取消”双按钮改为单按钮自动切换：
+    - 全部已选时显示“取消”；
+    - 否则显示“全选”。
 - 验证：
   - `frontend` 执行 `npm run build` 通过。

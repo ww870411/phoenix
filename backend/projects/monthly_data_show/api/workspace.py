@@ -10,7 +10,12 @@ import json
 import tempfile
 import calendar
 import math
-from urllib.parse import quote
+import re
+import threading
+import uuid
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
@@ -45,6 +50,11 @@ from backend.projects.monthly_data_show.services.indicator_config import (
 from backend.services import data_analysis_ai_report
 
 PROJECT_KEY = "monthly_data_show"
+CHAT_SESSION_TTL_SECONDS = 30 * 60
+CHAT_SESSION_MAX_TURNS = 20
+CHAT_WEB_SEARCH_LIMIT = 5
+_CHAT_SESSION_LOCK = threading.Lock()
+_CHAT_SESSION_STORE: Dict[str, Dict[str, Any]] = {}
 ALLOWED_EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xltx", ".xltm"}
 
 router = APIRouter(tags=["monthly_data_show"])
@@ -240,6 +250,34 @@ class MonthlyAiReportStartResponse(BaseModel):
     project_key: str
     ai_report_job_id: str
     ai_mode_id: str
+
+
+class MonthlyAiChatToolCall(BaseModel):
+    tool: str
+    summary: str
+    total_rows: int = 0
+    details: Dict[str, Any] = {}
+
+
+class MonthlyAiChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    history: List[dict] = []
+    context: Optional[QueryRequest] = None
+    enable_web_search: bool = True
+    limit: int = 200
+    top_n: int = 12
+
+
+class MonthlyAiChatResponse(BaseModel):
+    ok: bool
+    project_key: str
+    session_id: str
+    answer: str
+    tool_calls: List[MonthlyAiChatToolCall] = []
+    preview_rows: List[dict] = []
+    web_sources: List[dict] = []
+    applied_query: Dict[str, Any] = {}
 
 
 def _ensure_allowed_excel_file(filename: str) -> None:
@@ -922,6 +960,386 @@ def _build_monthly_ai_payload(payload: MonthlyAiReportStartPayload) -> Dict[str,
         "ai_user_prompt": str(payload.ai_user_prompt or "").strip(),
     }
     return ai_payload
+
+
+def _chat_now_ts() -> float:
+    return datetime.utcnow().timestamp()
+
+
+def _chat_cleanup_sessions(now_ts: Optional[float] = None) -> None:
+    now_value = float(now_ts or _chat_now_ts())
+    expired: List[str] = []
+    for sid, payload in list(_CHAT_SESSION_STORE.items()):
+        updated_at = float(payload.get("updated_at") or 0)
+        if now_value - updated_at > CHAT_SESSION_TTL_SECONDS:
+            expired.append(sid)
+    for sid in expired:
+        _CHAT_SESSION_STORE.pop(sid, None)
+
+
+def _chat_get_or_create_session(session_id: Optional[str]) -> str:
+    candidate = str(session_id or "").strip()
+    sid = candidate if candidate else f"mds-{uuid.uuid4().hex}"
+    now_ts = _chat_now_ts()
+    with _CHAT_SESSION_LOCK:
+        _chat_cleanup_sessions(now_ts)
+        payload = _CHAT_SESSION_STORE.get(sid)
+        if not payload:
+            _CHAT_SESSION_STORE[sid] = {"history": [], "updated_at": now_ts}
+        else:
+            payload["updated_at"] = now_ts
+    return sid
+
+
+def _chat_get_session_history(session_id: str, history: List[dict], max_turns: int = CHAT_SESSION_MAX_TURNS) -> List[dict]:
+    safe_history = history if isinstance(history, list) else []
+    with _CHAT_SESSION_LOCK:
+        payload = _CHAT_SESSION_STORE.get(session_id) or {}
+        session_history = payload.get("history") if isinstance(payload.get("history"), list) else []
+    merged: List[dict] = []
+    for row in session_history + safe_history:
+        if not isinstance(row, dict):
+            continue
+        role = str(row.get("role") or "").strip()
+        content = str(row.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        merged.append({"role": role, "content": content})
+    return merged[-max(1, int(max_turns or CHAT_SESSION_MAX_TURNS)) :]
+
+
+def _chat_append_session_history(session_id: str, user_message: str, assistant_message: str) -> None:
+    user_text = str(user_message or "").strip()
+    assistant_text = str(assistant_message or "").strip()
+    if not user_text and not assistant_text:
+        return
+    now_ts = _chat_now_ts()
+    with _CHAT_SESSION_LOCK:
+        payload = _CHAT_SESSION_STORE.get(session_id)
+        if not payload:
+            payload = {"history": [], "updated_at": now_ts}
+            _CHAT_SESSION_STORE[session_id] = payload
+        history = payload.get("history") if isinstance(payload.get("history"), list) else []
+        if user_text:
+            history.append({"role": "user", "content": user_text})
+        if assistant_text:
+            history.append({"role": "assistant", "content": assistant_text})
+        payload["history"] = history[-CHAT_SESSION_MAX_TURNS:]
+        payload["updated_at"] = now_ts
+
+
+def _chat_use_web_search_tool(message: str) -> bool:
+    text = str(message or "")
+    keywords = ["联网", "网络", "搜索", "新闻", "政策", "标准", "最新", "外部"]
+    return any(word in text for word in keywords)
+
+
+def _chat_parse_top_n(message: str, default_top_n: int = 12, max_top_n: int = 30) -> int:
+    default_value = max(1, min(max_top_n, int(default_top_n or 12)))
+    text = str(message or "")
+    matched = re.search(r"(?:top|TOP|前)\s*(\d{1,2})", text)
+    if not matched:
+        return default_value
+    return max(1, min(max_top_n, int(matched.group(1))))
+
+
+def _chat_summarize_rows(rows: List[dict], top_n: int = 8) -> Dict[str, Any]:
+    safe_rows = [row for row in rows if isinstance(row, dict)]
+    if not safe_rows:
+        return {
+            "row_count": 0,
+            "numeric_metrics": {},
+            "group_summary": [],
+            "top_rows": [],
+            "summary": "未命中可分析的数据行。",
+        }
+
+    metric_map: Dict[str, Dict[str, Any]] = {}
+    for row in safe_rows:
+        for key, value in row.items():
+            numeric = _to_optional_float(value)
+            if numeric is None:
+                continue
+            bucket = metric_map.setdefault(key, {"count": 0, "sum": 0.0, "min": numeric, "max": numeric})
+            bucket["count"] += 1
+            bucket["sum"] += numeric
+            bucket["min"] = min(float(bucket["min"]), numeric)
+            bucket["max"] = max(float(bucket["max"]), numeric)
+
+    numeric_metrics: Dict[str, Dict[str, float]] = {}
+    for key, agg in metric_map.items():
+        count = int(agg.get("count") or 0)
+        if count <= 0:
+            continue
+        total = float(agg.get("sum") or 0.0)
+        numeric_metrics[key] = {
+            "count": count,
+            "avg": total / count,
+            "min": float(agg.get("min") or 0.0),
+            "max": float(agg.get("max") or 0.0),
+        }
+
+    value_key = "value" if "value" in numeric_metrics else None
+    value_key = value_key or ("yoy_ratio" if "yoy_ratio" in numeric_metrics else None)
+    value_key = value_key or ("mom_ratio" if "mom_ratio" in numeric_metrics else None)
+
+    group_summary: List[Dict[str, Any]] = []
+    if value_key and any("company" in row for row in safe_rows):
+        company_map: Dict[str, Dict[str, float]] = {}
+        for row in safe_rows:
+            company = str(row.get("company") or "未标注公司")
+            numeric = _to_optional_float(row.get(value_key))
+            if numeric is None:
+                continue
+            slot = company_map.setdefault(company, {"sum": 0.0, "count": 0.0})
+            slot["sum"] += numeric
+            slot["count"] += 1.0
+        for company, agg in company_map.items():
+            count = float(agg.get("count") or 0.0)
+            if count <= 0:
+                continue
+            group_summary.append(
+                {
+                    "company": company,
+                    "metric": value_key,
+                    "avg": float(agg.get("sum") or 0.0) / count,
+                    "count": int(count),
+                }
+            )
+        group_summary.sort(key=lambda row: abs(float(row.get("avg") or 0.0)), reverse=True)
+        group_summary = group_summary[: max(1, min(10, top_n))]
+
+    top_rows: List[dict] = []
+    if value_key:
+        sortable_rows = [row for row in safe_rows if _to_optional_float(row.get(value_key)) is not None]
+        sortable_rows.sort(key=lambda row: abs(float(_to_optional_float(row.get(value_key)) or 0.0)), reverse=True)
+        top_rows = sortable_rows[: max(1, min(10, top_n))]
+
+    key_metrics = [key for key in ["value", "yoy_ratio", "mom_ratio", "plan_ratio"] if key in numeric_metrics]
+    metrics_text = "，".join(key_metrics[:4]) if key_metrics else "无核心数值字段"
+    summary = f"共 {len(safe_rows)} 行；识别到数值字段 {len(numeric_metrics)} 个（{metrics_text}）。"
+    if top_rows and value_key:
+        summary += f" 已提取 {len(top_rows)} 条 {value_key} 绝对值最高记录。"
+
+    return {
+        "row_count": len(safe_rows),
+        "numeric_metrics": numeric_metrics,
+        "group_summary": group_summary,
+        "top_rows": top_rows,
+        "summary": summary,
+    }
+
+
+def _chat_execute_web_search(message: str, limit: int = CHAT_WEB_SEARCH_LIMIT) -> List[dict]:
+    query = str(message or "").strip()
+    if not query:
+        return []
+
+    safe_limit = max(1, min(8, int(limit or CHAT_WEB_SEARCH_LIMIT)))
+    params = urlencode(
+        {
+            "q": query,
+            "format": "json",
+            "no_redirect": 1,
+            "no_html": 1,
+            "skip_disambig": 1,
+        }
+    )
+    url = f"https://api.duckduckgo.com/?{params}"
+    req = Request(url, headers={"User-Agent": "phoenix-monthly-data-show/1.0"})
+
+    try:
+        with urlopen(req, timeout=8) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        return []
+    except Exception:
+        return []
+
+    sources: List[dict] = []
+    abstract_text = str(payload.get("AbstractText") or "").strip()
+    abstract_url = str(payload.get("AbstractURL") or "").strip()
+    heading = str(payload.get("Heading") or "").strip() or "摘要"
+    if abstract_text and abstract_url:
+        sources.append({"title": heading, "url": abstract_url, "snippet": abstract_text})
+
+    def walk_topics(rows: List[Any]) -> None:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if isinstance(row.get("Topics"), list):
+                walk_topics(row.get("Topics") or [])
+                if len(sources) >= safe_limit:
+                    return
+            text_value = str(row.get("Text") or "").strip()
+            url_value = str(row.get("FirstURL") or "").strip()
+            if text_value and url_value:
+                title = text_value.split(" - ")[0].strip() or "搜索结果"
+                sources.append({"title": title, "url": url_value, "snippet": text_value})
+                if len(sources) >= safe_limit:
+                    return
+
+    related_topics = payload.get("RelatedTopics") if isinstance(payload.get("RelatedTopics"), list) else []
+    walk_topics(related_topics)
+
+    dedup: List[dict] = []
+    seen_urls: Set[str] = set()
+    for row in sources:
+        url_value = str(row.get("url") or "").strip()
+        if not url_value or url_value in seen_urls:
+            continue
+        seen_urls.add(url_value)
+        dedup.append(
+            {
+                "title": str(row.get("title") or "搜索结果").strip(),
+                "url": url_value,
+                "snippet": str(row.get("snippet") or "").strip(),
+            }
+        )
+        if len(dedup) >= safe_limit:
+            break
+    return dedup
+
+def _chat_to_month_start_iso(month_text: str) -> Optional[str]:
+    matched = re.match(r"^\s*(20\d{2})[-/年](0?[1-9]|1[0-2])\s*$", str(month_text or ""))
+    if not matched:
+        return None
+    year = int(matched.group(1))
+    month = int(matched.group(2))
+    return date(year, month, 1).isoformat()
+
+
+def _chat_to_month_end_iso(month_text: str) -> Optional[str]:
+    matched = re.match(r"^\s*(20\d{2})[-/年](0?[1-9]|1[0-2])\s*$", str(month_text or ""))
+    if not matched:
+        return None
+    year = int(matched.group(1))
+    month = int(matched.group(2))
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, last_day).isoformat()
+
+
+def _chat_extract_month_tokens(message: str) -> List[str]:
+    tokens: List[str] = []
+    for year, month in re.findall(r"(20\d{2})\s*[-/年]\s*(0?[1-9]|1[0-2])", str(message or "")):
+        token = f"{year}-{str(int(month)).zfill(2)}"
+        if token not in tokens:
+            tokens.append(token)
+    return tokens
+
+
+def _chat_pick_contains_candidates(message: str, candidates: List[str], max_count: int = 8) -> List[str]:
+    text = str(message or "").strip()
+    picked: List[str] = []
+    for candidate in candidates or []:
+        name = str(candidate or "").strip()
+        if not name:
+            continue
+        if name in text and name not in picked:
+            picked.append(name)
+        if len(picked) >= max(1, max_count):
+            break
+    return picked
+
+
+def _chat_build_query_request(payload: MonthlyAiChatRequest) -> QueryRequest:
+    base = payload.context.model_copy(deep=True) if payload.context else QueryRequest()
+    options_payload = get_monthly_data_show_query_options()
+
+    base.companies = _normalize_text_list(base.companies)
+    base.items = _normalize_text_list(base.items)
+    base.periods = _normalize_text_list(base.periods) or ["month"]
+    base.types = _normalize_text_list(base.types) or ["real"]
+    base.limit = max(1, min(500, int(payload.limit or base.limit or 200)))
+    base.offset = 0
+
+    month_tokens = _chat_extract_month_tokens(payload.message)
+    if month_tokens:
+        start_iso = _chat_to_month_start_iso(month_tokens[0])
+        end_iso = _chat_to_month_end_iso(month_tokens[1] if len(month_tokens) >= 2 else month_tokens[0])
+        base.date_from = start_iso
+        base.date_to = end_iso
+        base.report_month_from = None
+        base.report_month_to = None
+
+    matched_companies = _chat_pick_contains_candidates(payload.message, options_payload.companies, max_count=6)
+    if matched_companies:
+        base.companies = matched_companies
+    if not base.companies:
+        base.companies = (options_payload.companies or [])[: min(3, len(options_payload.companies or []))]
+
+    matched_items = _chat_pick_contains_candidates(payload.message, options_payload.items, max_count=10)
+    if matched_items:
+        base.items = matched_items
+    if not base.items:
+        base.items = (options_payload.items or [])[: min(8, len(options_payload.items or []))]
+
+    return base
+
+
+def _chat_build_history_text(history: List[dict], max_turns: int = 6) -> str:
+    turns = history[-max(0, max_turns) :] if isinstance(history, list) else []
+    lines: List[str] = []
+    for row in turns:
+        if not isinstance(row, dict):
+            continue
+        role = str(row.get("role") or "").strip() or "user"
+        content = str(row.get("content") or "").strip()
+        if not content:
+            continue
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _chat_use_comparison_tool(message: str) -> bool:
+    text = str(message or "")
+    keywords = ["同比", "环比", "计划比", "趋势", "波动", "变化率", "对比"]
+    return any(word in text for word in keywords)
+
+
+def _chat_build_answer_fallback(
+    *,
+    tool_name: str,
+    total_rows: int,
+    user_message: str,
+    preview_rows: List[dict],
+) -> str:
+    if not preview_rows:
+        return f"已按你的问题执行 {tool_name} 查询，但未命中数据。请尝试缩小或调整时间、口径、指标条件。"
+    return (
+        f"已按你的问题执行 {tool_name} 查询，共命中 {total_rows} 条。"
+        f"当前返回前 {len(preview_rows)} 条预览，可继续追问“按口径汇总”或“只看 TopN 波动”。"
+    )
+
+
+def _chat_generate_answer_by_model(
+    *,
+    payload: MonthlyAiChatRequest,
+    tool_name: str,
+    tool_summary: str,
+    total_rows: int,
+    preview_rows: List[dict],
+    history: List[dict],
+    query_request: QueryRequest,
+    extra_context: str = "",
+) -> str:
+    prompt = (
+        "你是月报数据分析助手。请基于已执行的工具结果，用中文给出简洁、可执行的分析结论。\n"
+        "要求：\n"
+        "1) 先给结论，再给证据；\n"
+        "2) 明确本次查询条件；\n"
+        "3) 不编造数据，未命中时直接说明；\n"
+        "4) 若使用联网信息，必须在结论后附“来源”清单。\n\n"
+        f"用户问题：{str(payload.message or '').strip()}\n"
+        f"历史对话：\n{_chat_build_history_text(history)}\n\n"
+        f"已执行工具：{tool_name}\n"
+        f"工具摘要：{tool_summary}\n"
+        f"命中总条数：{total_rows}\n"
+        f"查询条件(JSON)：{json.dumps(query_request.model_dump(mode='json'), ensure_ascii=False)}\n"
+        f"结果预览(JSON)：{json.dumps(preview_rows, ensure_ascii=False)}\n"
+        f"补充信息：{extra_context or '无'}\n"
+    )
+    return str(data_analysis_ai_report._call_model(prompt, retries=2) or "").strip()
 
 
 def _fetch_compare_map(
@@ -1867,3 +2285,131 @@ def get_monthly_ai_report(job_id: str):
     response = {"ok": True, "project_key": PROJECT_KEY}
     response.update(job_payload)
     return response
+
+
+@router.post(
+    "/monthly-data-show/ai-chat/query",
+    response_model=MonthlyAiChatResponse,
+    summary="月报查询对话助手（受控工具调用）",
+)
+def chat_monthly_data_show_query(payload: MonthlyAiChatRequest):
+    user_message = str(payload.message or "").strip()
+    if not user_message:
+        raise HTTPException(status_code=422, detail="message 不能为空")
+
+    session_id = _chat_get_or_create_session(payload.session_id)
+    merged_history = _chat_get_session_history(session_id, payload.history)
+    query_request = _chat_build_query_request(payload)
+    preview_limit = max(1, min(50, _chat_parse_top_n(user_message, payload.top_n or 12, 50)))
+
+    tool_calls: List[MonthlyAiChatToolCall] = []
+    web_sources: List[dict] = []
+    preview_rows: List[dict] = []
+    total_rows = 0
+    tool_name = "query_month_data_show"
+    tool_summary = ""
+    extra_context = ""
+
+    use_web_search = bool(payload.enable_web_search) and _chat_use_web_search_tool(user_message)
+    if use_web_search:
+        tool_name = "search_web_public"
+        web_sources = _chat_execute_web_search(user_message, CHAT_WEB_SEARCH_LIMIT)
+        total_rows = len(web_sources)
+        preview_rows = web_sources[:preview_limit]
+        if web_sources:
+            tool_summary = f"联网检索命中 {total_rows} 条公开结果。"
+            extra_context = f"联网来源：{json.dumps(web_sources, ensure_ascii=False)}"
+        else:
+            tool_summary = "已尝试联网检索，但未命中可用公开结果。"
+
+        tool_calls.append(
+            MonthlyAiChatToolCall(
+                tool=tool_name,
+                summary=tool_summary,
+                total_rows=total_rows,
+                details={"limit": CHAT_WEB_SEARCH_LIMIT},
+            )
+        )
+    else:
+        use_comparison = _chat_use_comparison_tool(user_message)
+
+        if use_comparison:
+            tool_name = "query_month_data_show_comparison"
+            compare_payload = query_month_data_show_comparison(query_request)
+            compare_rows = [row.model_dump(mode="json") for row in compare_payload.rows]
+            total_rows = len(compare_rows)
+            preview_rows = compare_rows[:preview_limit]
+            tool_summary = (
+                f"对比窗口={compare_payload.current_window_label or '未识别'}，"
+                f"同比窗口={compare_payload.yoy_window_label or '未识别'}，"
+                f"环比窗口={compare_payload.mom_window_label or '未识别'}，"
+                f"计划窗口={compare_payload.plan_window_label or '未识别'}。"
+            )
+            data_summary = _chat_summarize_rows(compare_rows, top_n=preview_limit)
+        else:
+            tool_name = "query_month_data_show"
+            query_payload = query_month_data_show(query_request)
+            all_rows = list(query_payload.rows or [])
+            total_rows = int(query_payload.total or 0)
+            preview_rows = all_rows[:preview_limit]
+            tool_summary = f"分页={query_payload.offset}-{query_payload.offset + len(all_rows)}，总条数={query_payload.total}。"
+            data_summary = _chat_summarize_rows(all_rows, top_n=preview_limit)
+
+        tool_calls.append(
+            MonthlyAiChatToolCall(
+                tool=tool_name,
+                summary=tool_summary,
+                total_rows=total_rows,
+                details={
+                    "aggregate_months": bool(query_request.aggregate_months),
+                    "aggregate_companies": bool(query_request.aggregate_companies),
+                },
+            )
+        )
+
+        if int(data_summary.get("row_count") or 0) > 0:
+            tool_calls.append(
+                MonthlyAiChatToolCall(
+                    tool="aggregate_rows",
+                    summary=str(data_summary.get("summary") or "已完成结果聚合。"),
+                    total_rows=int(data_summary.get("row_count") or 0),
+                    details={
+                        "group_summary": list(data_summary.get("group_summary") or []),
+                        "top_rows": list(data_summary.get("top_rows") or []),
+                    },
+                )
+            )
+            extra_context = json.dumps(data_summary, ensure_ascii=False)
+
+    try:
+        answer = _chat_generate_answer_by_model(
+            payload=payload,
+            tool_name=tool_name,
+            tool_summary=tool_summary,
+            total_rows=total_rows,
+            preview_rows=preview_rows,
+            history=merged_history,
+            query_request=query_request,
+            extra_context=extra_context,
+        )
+    except Exception:
+        answer = _chat_build_answer_fallback(
+            tool_name=tool_name,
+            total_rows=total_rows,
+            user_message=user_message,
+            preview_rows=preview_rows,
+        )
+
+    final_answer = answer or "已执行查询，但暂未生成可用分析结论。"
+    _chat_append_session_history(session_id, user_message, final_answer)
+
+    return MonthlyAiChatResponse(
+        ok=True,
+        project_key=PROJECT_KEY,
+        session_id=session_id,
+        answer=final_answer,
+        tool_calls=tool_calls,
+        preview_rows=preview_rows,
+        web_sources=web_sources,
+        applied_query=query_request.model_dump(mode="json"),
+    )

@@ -127,11 +127,10 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_analysis: '数据自由组合提取',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
-const HIDDEN_PAGE_KEYS = new Set(['template_designer'])
 function filterVisiblePages(list) {
   return (Array.isArray(list) ? list : []).filter((page) => {
     const key = String(page?.page_key || '').trim().toLowerCase()
-    return key && !HIDDEN_PAGE_KEYS.has(key)
+    return key
   })
 }
 const canApproveUnit = (unit) => auth.canApproveUnit(unit, projectKey)

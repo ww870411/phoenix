@@ -2,6 +2,29 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- monthly_data_show 对话能力当前为“后端保留、前端隐藏入口”（2026-03-05）：
+  - 后端接口 `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/query` 保留；
+  - 本轮未改动后端逻辑，仅在前端 query-tool 页面暂时隐藏对话卡片；
+  - 便于后续修复体验问题后直接恢复展示，无需重新接线后端。
+
+- monthly_data_show 对话查询接口升级为“会话化 + 多工具增强”（2026-03-05）：
+  - 文件：`backend/projects/monthly_data_show/api/workspace.py`；
+  - 路径：`POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/query`；
+  - 请求新增：`session_id`（可选）、`enable_web_search`（默认 true）；
+  - 响应新增：`session_id`、`web_sources`、`tool_calls.details`；
+  - 后端新增会话缓存（TTL 30 分钟），连续轮次会自动继承上下文；
+  - 查询结果新增 `aggregate_rows` 聚合工具，输出分组摘要与 TopN 记录；
+  - 支持 `search_web_public` 公开联网检索分支，供“最新/政策/搜索”等诉求使用。
+
+- monthly_data_show 新增对话查询接口（2026-03-05）：
+  - 文件：`backend/projects/monthly_data_show/api/workspace.py`；
+  - 路径：`POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/query`；
+  - 能力：接收自然语言问题，合并前端上下文后调度受控工具查询（普通查询/同比环比查询），再调用 AI 生成中文分析结论；
+  - 返回字段：`answer`、`tool_calls`、`preview_rows`、`applied_query`，便于前端展示与审计。
+- 对话工具调用边界（2026-03-05）：
+  - 仅允许复用现有白名单查询函数：`query_month_data_show`、`query_month_data_show_comparison`；
+  - 不开放任意 SQL 执行，避免越权查询与不可控输出；
+  - 模型调用失败时返回保守兜底文案，保证接口稳定可用。
 - AI 设置多 Provider 升级（2026-03-03）：
  - 模板设计器（新表）第一期骨架（2026-03-04）：
    - 新增后端模块 `projects/daily_report_25_26/api/template_designer.py`，提供模板列表、详情、创建、更新、发布接口；
@@ -2706,3 +2729,84 @@
 - 本次实现为前端模板设计器交互增强：
   - 固定字段可选与默认值配置写入模板 `meta`；
   - 后端接口协议不变，继续透传 `meta` 字段。
+## 结构同步（2026-03-04 模板设计器类 Excel 画布增强前端联动）
+
+- 本轮为前端模板设计器交互能力增强：
+  - 行列拖拽、列宽与连接配置写入 `meta`。
+- 后端接口保持不变：
+  - 通过既有模板创建/更新/发布接口透传扩展后的 `meta` 结构。
+## 结构同步（2026-03-04 模板设计器交互修复前端联动）
+
+- 本次为前端拖拽交互修复（手柄化拖拽），后端接口无改动。
+
+## 结构同步（2026-03-05 模板设计器入口并列标签化前端联动）
+
+- 本次改动为管理后台入口形态调整（独立按钮 -> 并列标签），仅涉及前端页面结构。
+- 后端模板设计器接口与权限逻辑无改动，继续沿用：
+  - `projects/daily_report_25_26/api/template_designer.py`
+  - `projects/daily_report_25_26/api/router.py` 中 `/template_designer` 路由挂载
+
+## 结构同步（2026-03-05 长表设计器方案评审联动）
+
+- 本轮后端代码无改动，完成“长表设计器成熟方案”评审与接口升级方向定义。
+- 现状基线：
+  - `daily_basic_data` 已为长表结构，并具唯一索引 `(company, sheet_name, item, date)`；
+  - 当前 `template_designer.py` 的 `columns/rows/meta` 为通用壳，缺少强约束语义。
+- 规划方向：
+  - 在保持现有接口可用的前提下，逐步强化 `meta`：引入字段契约、计算图、校验图、发布契约；
+  - 发布阶段增加模板静态检查与样例回放检查，避免把问题模板发布到生产填报链路。
+
+## 结构同步（2026-03-05 下线模板设计器页面联动）
+
+- 路由清理：
+  - `backend/projects/daily_report_25_26/api/router.py` 已移除 `template_designer` 子路由挂载。
+- 接口清理：
+  - 删除 `backend/projects/daily_report_25_26/api/template_designer.py`。
+- 页面可见性清理：
+  - `backend/api/v1/routes.py` 已移除对 `template_designer` 的页面可见性兜底逻辑。
+- 配置清理：
+  - `backend_data/shared/项目列表.json` 删除 `template_designer` 页面定义；
+  - `backend_data/shared/auth/permissions.json` 删除 `template_designer` 页面权限键。
+- 现状：
+  - 后端不再暴露模板设计器 API，项目页面列表与权限模型中也不再包含该页面。
+
+## 结构同步（2026-03-05 管理后台“看板功能设置”前端联动）
+
+- 本轮后端代码无改动，复用既有看板接口能力：
+  - `/dashboard/date`（读取 `set_biz_date`）
+  - `/dashboard/temperature/import`（气温导入预览）
+  - `/dashboard/temperature/import/commit`（气温写库）
+  - `/admin/cache/*`（缓存发布/刷新/停止/禁用）
+- 前端管理后台已将上述能力聚合到同一设置区，便于集中操作。
+
+## 结构同步（2026-03-05 管理后台气温按钮反馈增强前端联动）
+
+- 本轮后端无改动，前端提示逻辑已对齐后端返回字段：
+  - 预览接口：`summary.total_hours`、`overlap`、`differences`、`dates`
+  - 入库接口：`write_result.inserted`、`write_result.replaced`
+
+## 结构同步（2026-03-05 管理后台气温导入弹框确认前端联动）
+
+- 本轮后端无改动，前端将气温导入改为“预览 -> 弹框确认 -> 入库”流程：
+  - 预览接口：`/dashboard/temperature/import`
+  - 入库接口：`/dashboard/temperature/import/commit`
+
+## 结构同步（2026-03-05 管理后台气温弹框逐小时一致性前端联动）
+
+- 本轮后端无改动，前端在弹框中消费预览接口返回 `overlap_records`，展示逐小时接口值/数据库值与一致性状态。
+
+## 结构同步（2026-03-05 项目后台页面移除日志统计区块前端联动）
+
+- 本轮为前端页面展示收敛，后端接口无改动。
+
+## 结构同步（2026-03-05 月报查询页指标分组全选/取消前端联动）
+
+- 本轮为前端筛选交互增强，后端接口无改动。
+
+## 结构同步（2026-03-05 月报查询页全选改单按钮切换前端联动）
+
+- 本轮为前端交互调整，后端接口无改动。
+
+## 结构同步（2026-03-05 月报查询页子分类单按钮切换前端联动）
+
+- 本轮为前端交互细化，后端接口无改动。

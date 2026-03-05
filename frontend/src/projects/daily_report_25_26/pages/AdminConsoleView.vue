@@ -17,11 +17,6 @@
             <button class="tab-btn" :class="{ active: activeTab === 'system' }" type="button" @click="activeTab = 'system'">服务器管理</button>
             <button class="tab-btn" :class="{ active: activeTab === 'audit' }" type="button" @click="activeTab = 'audit'">操作日志</button>
           </div>
-          <div class="top-actions">
-            <button class="btn primary" type="button" :disabled="selectedProjectKey !== TARGET_PROJECT_KEY" @click="openTemplateDesigner">
-              模板设计器（新表）
-            </button>
-          </div>
         </header>
 
         <section v-if="activeTab === 'files'" class="content-block">
@@ -242,9 +237,16 @@
 
             <section class="inner-card">
               <header class="section-header">
-                <h3>看板缓存任务</h3>
+                <h3>看板功能设置</h3>
               </header>
               <div class="cache-actions">
+                <label>
+                  <span>业务日期（自动读取）</span>
+                  <input v-model="dashboardBizDate" :disabled="!canManageCache || cachePending || bizDateLoading" type="date" />
+                </label>
+                <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending || bizDateLoading" @click="syncDashboardBizDate">
+                  {{ bizDateLoading ? '读取中…' : '读取业务日期' }}
+                </button>
                 <label>
                   <span>发布天数</span>
                   <select v-model.number="publishDays" :disabled="!canManageCache || cachePending">
@@ -261,11 +263,52 @@
                 <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending" @click="refreshCache">刷新单日</button>
                 <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending" @click="cancelPublish">停止任务</button>
                 <button class="btn danger" type="button" :disabled="!canManageCache || cachePending" @click="disableCache">禁用缓存</button>
+                <button class="btn ghost" type="button" :disabled="!canManageCache || temperatureImportBusy || cachePending" @click="importTemperature">
+                  {{ temperatureImportBusy ? '导入中…' : '导入气温（预览）' }}
+                </button>
               </div>
               <p class="subtext">任务状态：{{ cacheJobStatus }}</p>
+              <div v-if="temperatureImportMessage" class="panel-state">{{ temperatureImportMessage }}</div>
             </section>
           </template>
         </section>
+
+        <div v-if="temperatureImportDialogVisible" class="temp-import-modal">
+          <div class="temp-import-modal__mask" @click="closeTemperatureImportDialog"></div>
+          <div class="temp-import-modal__card">
+            <header class="temp-import-modal__header">
+              <h3>气温导入确认</h3>
+              <button class="temp-import-modal__close" type="button" :disabled="temperatureImportCommitBusy" @click="closeTemperatureImportDialog">×</button>
+            </header>
+            <section class="temp-import-modal__body">
+              <p v-if="temperatureImportStatus.message">{{ temperatureImportStatus.message }}</p>
+              <p v-if="temperatureImportStatus.fetchedAt">获取时间：{{ temperatureImportStatus.fetchedAt }}</p>
+              <p v-if="temperatureImportStatus.dates.length">涉及日期：{{ temperatureImportStatus.dates.join('、') }}</p>
+              <p v-if="temperatureImportStatus.overlapHours">重合区间：{{ temperatureImportStatus.overlapRange }}（{{ temperatureImportStatus.overlapHours }} 小时）</p>
+              <p v-if="temperatureImportStatus.diffCount">差异小时：{{ temperatureImportStatus.diffCount }} 条</p>
+              <div v-if="temperatureImportStatus.overlapRecords.length" class="temp-import-modal__diffs">
+                <div class="temp-import-modal__diffs-title">逐小时一致性（红色为不一致，未命中数据库显示“—”）：</div>
+                <ul>
+                  <li
+                    v-for="item in temperatureImportStatus.overlapRecords"
+                    :key="item.time"
+                    :class="['temp-import-modal__diff-item', { 'temp-import-modal__diff-item--different': item.different }]"
+                  >
+                    {{ item.time }}：接口 {{ item.apiValue }}℃ / 数据库 {{ item.inDb ? (item.dbValue ?? '—') : '—' }}℃（{{ item.different ? '不一致' : '一致' }}）
+                  </li>
+                </ul>
+              </div>
+              <p class="temp-import-modal__hint">点击“确认入库”将覆盖重合时间段历史气温数据；点击“取消”仅保留预览。</p>
+              <p v-if="temperatureImportStatus.writeMessage" class="temp-import-modal__write">{{ temperatureImportStatus.writeMessage }}</p>
+            </section>
+            <footer class="temp-import-modal__footer">
+              <button class="btn primary" type="button" :disabled="temperatureImportCommitBusy" @click="commitTemperature">
+                {{ temperatureImportCommitBusy ? '写入中…' : '确认入库' }}
+              </button>
+              <button class="btn ghost" type="button" :disabled="temperatureImportCommitBusy" @click="closeTemperatureImportDialog">取消</button>
+            </footer>
+          </div>
+        </div>
 
         <section v-else-if="activeTab === 'system'" class="content-block">
           <section class="inner-card">
@@ -581,102 +624,6 @@
         </section>
 
         <section v-else class="content-block">
-          <section class="inner-card">
-            <header class="section-header">
-              <h3>操作日志与分类统计</h3>
-              <div class="system-actions">
-                <button class="btn ghost" type="button" :disabled="auditLoading" @click="reloadAuditData">刷新</button>
-              </div>
-            </header>
-
-            <div class="toolbar">
-              <label class="field">
-                <span>时间范围</span>
-                <select v-model.number="auditFilters.days">
-                  <option :value="1">近1天</option>
-                  <option :value="3">近3天</option>
-                  <option :value="7">近7天</option>
-                  <option :value="15">近15天</option>
-                  <option :value="30">近30天</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>用户</span>
-                <input v-model.trim="auditFilters.username" type="text" placeholder="用户名" />
-              </label>
-              <label class="field">
-                <span>分类</span>
-                <input v-model.trim="auditFilters.category" type="text" placeholder="如 navigation / ui" />
-              </label>
-              <label class="field">
-                <span>动作</span>
-                <input v-model.trim="auditFilters.action" type="text" placeholder="如 click / page_open" />
-              </label>
-              <label class="field grow">
-                <span>关键字</span>
-                <input v-model.trim="auditFilters.keyword" type="text" placeholder="按内容检索" />
-              </label>
-            </div>
-
-            <div v-if="auditError" class="panel-state error">{{ auditError }}</div>
-            <div v-else class="audit-grid">
-              <div class="overview-item">
-                <span class="label">总事件数（筛选窗口）</span>
-                <strong>{{ auditStats.total || 0 }}</strong>
-              </div>
-              <div class="overview-item">
-                <span class="label">分类统计</span>
-                <ul class="audit-list">
-                  <li v-for="item in topCategoryStats" :key="`c-${item.key}`">{{ item.key }}：{{ item.value }}</li>
-                  <li v-if="!topCategoryStats.length">暂无</li>
-                </ul>
-              </div>
-              <div class="overview-item">
-                <span class="label">动作统计</span>
-                <ul class="audit-list">
-                  <li v-for="item in topActionStats" :key="`a-${item.key}`">{{ item.key }}：{{ item.value }}</li>
-                  <li v-if="!topActionStats.length">暂无</li>
-                </ul>
-              </div>
-              <div class="overview-item">
-                <span class="label">用户统计</span>
-                <ul class="audit-list">
-                  <li v-for="item in topUserStats" :key="`u-${item.key}`">{{ item.key }}：{{ item.value }}</li>
-                  <li v-if="!topUserStats.length">暂无</li>
-                </ul>
-              </div>
-            </div>
-
-            <div class="audit-table-wrap">
-              <table class="audit-table">
-                <thead>
-                  <tr>
-                    <th class="col-time">时间(东八区)</th>
-                    <th class="col-user">用户</th>
-                    <th class="col-ip">IP</th>
-                    <th class="col-category">分类</th>
-                    <th class="col-action">动作</th>
-                    <th class="col-page">页面</th>
-                    <th class="col-target">目标</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, index) in auditEvents" :key="`${row.ts || 'x'}-${index}`">
-                    <td class="col-time">{{ formatEast8Time(row.ts_east8 || row.ts) }}</td>
-                    <td class="col-user">{{ row.username || '—' }}</td>
-                    <td class="col-ip">{{ row.client_ip || '—' }}</td>
-                    <td class="col-category">{{ row.category || '—' }}</td>
-                    <td class="col-action">{{ row.action || '—' }}</td>
-                    <td class="col-page">{{ row.page || '—' }}</td>
-                    <td class="col-target">{{ row.target || '—' }}</td>
-                  </tr>
-                  <tr v-if="!auditEvents.length">
-                    <td colspan="7" class="panel-state">暂无日志</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
         </section>
       </section>
     </main>
@@ -703,6 +650,7 @@ import {
   deleteSuperPath,
   disableAdminCache,
   execSuperCommand,
+  getProjectDashboardBizDate,
   getAdminAiSettings,
   testAdminAiSettings,
   getAdminAuditEvents,
@@ -721,6 +669,8 @@ import {
   readSuperFile,
   publishAdminDashboardCache,
   refreshAdminCache,
+  importProjectTemperatureData,
+  commitProjectTemperatureData,
   setAdminValidationMasterSwitch,
   updateAdminAiSettings,
   uploadSuperFiles,
@@ -749,6 +699,23 @@ const aiSettingsDialogVisible = ref(false)
 const cachePending = ref(false)
 const publishDays = ref(1)
 const refreshDate = ref('')
+const dashboardBizDate = ref('')
+const bizDateLoading = ref(false)
+const temperatureImportBusy = ref(false)
+const temperatureImportDialogVisible = ref(false)
+const temperatureImportCommitBusy = ref(false)
+const temperatureImportPreview = ref(null)
+const temperatureImportMessage = ref('')
+const temperatureImportStatus = reactive({
+  message: '',
+  fetchedAt: '',
+  dates: [],
+  overlapRange: '',
+  overlapHours: 0,
+  diffCount: 0,
+  overlapRecords: [],
+  writeMessage: '',
+})
 
 const directories = ref([])
 const files = ref([])
@@ -1114,11 +1081,31 @@ async function loadProjectSettings() {
     const payload = await getAdminOverview(TARGET_PROJECT_KEY)
     overview.value = payload
     validationMasterEnabled.value = Boolean(payload?.validation?.master_enabled)
+    await syncDashboardBizDate({ silent: true })
   } catch (err) {
     console.error(err)
     errorMessage.value = err instanceof Error ? err.message : '加载管理后台失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function syncDashboardBizDate(options = {}) {
+  if (!canManageCache.value) return
+  const silent = Boolean(options?.silent)
+  bizDateLoading.value = true
+  if (!silent) temperatureImportMessage.value = ''
+  try {
+    const payload = await getProjectDashboardBizDate(TARGET_PROJECT_KEY)
+    const next = typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
+    dashboardBizDate.value = next
+    refreshDate.value = next
+    if (!silent && next) temperatureImportMessage.value = `业务日期已同步：${next}`
+  } catch (err) {
+    console.error(err)
+    if (!silent) temperatureImportMessage.value = err instanceof Error ? err.message : '读取业务日期失败'
+  } finally {
+    bizDateLoading.value = false
   }
 }
 
@@ -1136,11 +1123,6 @@ async function selectProject(projectKey) {
 function openAiSettingsDialog() {
   if (!canManageAiSettings.value) return
   aiSettingsDialogVisible.value = true
-}
-
-function openTemplateDesigner() {
-  const path = `/projects/${encodeURIComponent(TARGET_PROJECT_KEY)}/pages/template_designer/template-designer`
-  router.push(path)
 }
 
 async function loadProjects() {
@@ -2076,6 +2058,81 @@ async function disableCache() {
   }
 }
 
+async function importTemperature() {
+  if (!canManageCache.value) return
+  temperatureImportBusy.value = true
+  temperatureImportMessage.value = '正在导入气温预览...'
+  temperatureImportStatus.writeMessage = ''
+  temperatureImportStatus.overlapRecords = []
+  try {
+    const payload = await importProjectTemperatureData(TARGET_PROJECT_KEY)
+    temperatureImportPreview.value = payload
+    const totalHours = Number(payload?.summary?.total_hours ?? 0)
+    const overlapHours = Number(payload?.overlap?.hours ?? 0)
+    const diffCount = Array.isArray(payload?.differences) ? payload.differences.length : 0
+    const dateSpan = Array.isArray(payload?.dates) && payload.dates.length
+      ? `${payload.dates[0]} ~ ${payload.dates[payload.dates.length - 1]}`
+      : ''
+    temperatureImportStatus.message = `气温预览完成：总计 ${totalHours} 条`
+    temperatureImportStatus.fetchedAt = String(payload?.fetched_at || '')
+    temperatureImportStatus.dates = Array.isArray(payload?.dates) ? payload.dates : []
+    temperatureImportStatus.overlapRange = String(payload?.overlap?.start && payload?.overlap?.end ? `${payload.overlap.start} ~ ${payload.overlap.end}` : '')
+    temperatureImportStatus.overlapHours = overlapHours
+    temperatureImportStatus.diffCount = diffCount
+    temperatureImportStatus.overlapRecords = Array.isArray(payload?.overlap_records)
+      ? payload.overlap_records.map((item) => ({
+          time: item?.time || '',
+          apiValue: typeof item?.api_value === 'number' ? item.api_value : item?.apiValue,
+          dbValue: typeof item?.db_value === 'number' ? item.db_value : item?.dbValue,
+          different: Boolean(item?.different),
+          inDb: Boolean(item?.in_db),
+        }))
+      : []
+    temperatureImportStatus.writeMessage = ''
+    temperatureImportDialogVisible.value = true
+    temperatureImportMessage.value = [
+      `气温预览完成：总计 ${totalHours} 条`,
+      dateSpan ? `覆盖日期 ${dateSpan}` : '',
+      `重叠小时 ${overlapHours} 条`,
+      `差异小时 ${diffCount} 条`,
+    ].filter(Boolean).join('；')
+  } catch (err) {
+    console.error(err)
+    temperatureImportMessage.value = err instanceof Error ? err.message : '导入气温失败'
+  } finally {
+    temperatureImportBusy.value = false
+  }
+}
+
+async function commitTemperature() {
+  if (!canManageCache.value) return
+  temperatureImportCommitBusy.value = true
+  temperatureImportMessage.value = '正在提交气温入库...'
+  temperatureImportStatus.writeMessage = ''
+  try {
+    const payload = await commitProjectTemperatureData(TARGET_PROJECT_KEY)
+    temperatureImportPreview.value = payload
+    const inserted = Number(payload?.write_result?.inserted ?? 0)
+    const replaced = Number(payload?.write_result?.replaced ?? 0)
+    const totalHours = Number(payload?.summary?.total_hours ?? 0)
+    temperatureImportMessage.value = `气温入库完成：写入 ${inserted} 条，覆盖旧数据 ${replaced} 条（抓取 ${totalHours} 小时）`
+    temperatureImportStatus.writeMessage = temperatureImportMessage.value
+    await loadProjectSettings()
+    temperatureImportDialogVisible.value = false
+  } catch (err) {
+    console.error(err)
+    temperatureImportMessage.value = err instanceof Error ? err.message : '提交气温入库失败'
+    temperatureImportStatus.writeMessage = temperatureImportMessage.value
+  } finally {
+    temperatureImportCommitBusy.value = false
+  }
+}
+
+function closeTemperatureImportDialog() {
+  if (temperatureImportCommitBusy.value) return
+  temperatureImportDialogVisible.value = false
+}
+
 function onMessage(event) {
   if (event.origin !== window.location.origin) return
   const payload = event.data || {}
@@ -2199,12 +2256,6 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   padding: 4px;
   gap: 4px;
-}
-
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .tab-btn {
@@ -2447,6 +2498,93 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
+  gap: 10px;
+}
+
+.temp-import-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.temp-import-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.temp-import-modal__card {
+  position: relative;
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+  padding: 16px 18px;
+}
+
+.temp-import-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.temp-import-modal__header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.temp-import-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.temp-import-modal__body p {
+  margin: 6px 0;
+  color: #334155;
+}
+
+.temp-import-modal__diffs-title {
+  margin-top: 8px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.temp-import-modal__diffs ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.temp-import-modal__diff-item--different {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.temp-import-modal__hint {
+  margin-top: 8px;
+  color: #888;
+}
+
+.temp-import-modal__write {
+  margin-top: 10px;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.temp-import-modal__footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
   gap: 10px;
 }
 
