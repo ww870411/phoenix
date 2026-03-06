@@ -50,23 +50,25 @@
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
         <div v-if="batchPreview" class="batch-preview">
           <h4>批量识别预览（{{ batchPreview.type === 'src' ? '源文件' : '目标底表' }}）</h4>
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th>文件名</th>
-                <th>识别结果</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in batchPreview.items" :key="item.filename">
-                <td>{{ item.filename }}</td>
-                <td>
-                  <span v-if="item.matchedKey">{{ normalizeReferenceName(item.matchedKey) || item.matchedKey }}</span>
-                  <span v-else class="unmatched">未匹配</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-wrap">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>识别结果</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in batchPreview.items" :key="item.filename">
+                  <td>{{ item.filename }}</td>
+                  <td>
+                    <span v-if="item.matchedKey">{{ normalizeReferenceName(item.matchedKey) || item.matchedKey }}</span>
+                    <span v-else class="unmatched">未匹配</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <div class="preview-actions">
             <button class="btn primary" type="button" :disabled="batchUploading || batchPreview.matchedCount === 0" @click="applyBatchPreview">
               {{ batchUploading ? '上传中...' : `确认应用（${batchPreview.matchedCount}）` }}
@@ -160,28 +162,30 @@
             <span>公式未校验：{{ exceptionSummary.acc_formula_not_verifiable || 0 }}</span>
           </div>
           <p v-if="!exceptionItems.length" class="hint">未发现异常行。</p>
-          <table v-else class="exception-table">
-            <thead>
-              <tr>
-                <th>行号</th>
-                <th>指标名称</th>
-                <th>源键</th>
-                <th>目标键</th>
-                <th>状态</th>
-                <th>说明</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in exceptionItems" :key="item.key">
-                <td>{{ item.row_index }}</td>
-                <td>{{ item.indicator_name || '-' }}</td>
-                <td>{{ normalizeReferenceName(item.src_key || '') || '-' }}</td>
-                <td>{{ normalizeReferenceName(item.tgt_key || '') || '-' }}</td>
-                <td>{{ item.status }}</td>
-                <td>{{ item.message }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-else class="table-wrap table-wrap--exception">
+            <table class="exception-table">
+              <thead>
+                <tr>
+                  <th>行号</th>
+                  <th>指标名称</th>
+                  <th>源键</th>
+                  <th>目标键</th>
+                  <th>状态</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in exceptionItems" :key="item.key">
+                  <td>{{ item.row_index }}</td>
+                  <td>{{ item.indicator_name || '-' }}</td>
+                  <td>{{ normalizeReferenceName(item.src_key || '') || '-' }}</td>
+                  <td>{{ normalizeReferenceName(item.tgt_key || '') || '-' }}</td>
+                  <td>{{ item.status }}</td>
+                  <td>{{ item.message }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -794,10 +798,16 @@ onMounted(() => {
   font-size: 14px;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .preview-table {
   width: 100%;
   border-collapse: collapse;
   background: #fff;
+  min-width: 420px;
 }
 
 .preview-table th,
@@ -925,6 +935,8 @@ select {
   padding: 0;
   text-decoration: underline;
   font-size: 13px;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .exception-section {
@@ -950,6 +962,7 @@ select {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  min-width: 860px;
 }
 
 .exception-table th,
@@ -958,6 +971,13 @@ select {
   padding: 6px 8px;
   text-align: left;
   vertical-align: top;
+}
+
+.exception-table th:last-child,
+.exception-table td:last-child {
+  min-width: 240px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .path-list {
@@ -1001,6 +1021,9 @@ select {
   padding: 8px 12px;
   cursor: pointer;
   background: #fff;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
 }
 
 .btn.primary {
@@ -1025,11 +1048,74 @@ select {
 }
 
 @media (max-width: 960px) {
+  .monthly-main {
+    padding: 14px 12px 20px;
+    gap: 12px;
+  }
+
+  .topbar-actions,
+  .preview-actions {
+    gap: 6px;
+  }
+
+  .topbar-actions .btn,
+  .preview-actions .btn {
+    flex: 1 1 140px;
+  }
+
+  .group-card {
+    padding: 12px;
+  }
+
+  .group-card h4 {
+    margin-bottom: 8px;
+  }
+
+  .slot-actions .btn {
+    width: 100%;
+  }
+
+  .table-wrap {
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+
+  .preview-table th,
+  .preview-table td,
+  .exception-table th,
+  .exception-table td {
+    font-size: 11px;
+    padding: 6px;
+  }
+
   .group-body {
     grid-template-columns: 1fr;
   }
   .path-list li {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .monthly-main {
+    padding: 12px 10px 18px;
+    gap: 10px;
+  }
+
+  .topbar-actions,
+  .preview-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .topbar-actions .btn,
+  .preview-actions .btn {
+    width: 100%;
+    flex: none;
+  }
+
+  .group-card {
+    padding: 10px;
   }
 }
 </style>

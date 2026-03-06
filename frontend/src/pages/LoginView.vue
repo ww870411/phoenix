@@ -355,24 +355,51 @@ async function onSubmit() {
 }
 
 @media (max-width: 640px) {
+  .login-page {
+    min-height: 100dvh;
+  }
+
+  .visual-panel {
+    min-height: 28vh;
+    padding: 28px 18px 8px;
+  }
+
   .login-form {
     padding: 32px 26px 36px;
+    border-radius: 24px 24px 0 0;
   }
 
   .form-panel {
-    padding: 32px 20px 48px;
+    padding: 0;
   }
 
   .visual-overlay {
-    padding: 32px 28px;
+    padding: 18px 10px 0;
   }
 
   .visual-title {
-    font-size: 26px;
+    font-size: 28px;
   }
 
   .visual-subtitle {
-    font-size: 18px;
+    font-size: 15px;
+  }
+
+  .visual-description {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+
+  .form-title {
+    font-size: 24px;
+  }
+
+  .field input {
+    min-height: 46px;
+  }
+
+  .login-button {
+    min-height: 48px;
   }
 }
 </style>

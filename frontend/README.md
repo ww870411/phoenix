@@ -2,6 +2,14 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 构建慢过程分析同步（2026-03-06）：
+  - 本轮为部署构建性能分析，不涉及前端代码改动；
+  - 结论已记录至 `configs/progress.md`，用于指导后续镜像构建优化；
+  - 前端模块、路由与页面行为保持不变。
+- 构建慢过程二次观察同步（2026-03-06）：
+  - 新日志已从“依赖回溯提示”转为“Installing collected packages”长耗时；
+  - 该现象属于后端镜像构建阶段，前端构建链路无新增异常。
+
 - 月报查询页临时隐藏“对话查询助手”入口（2026-03-05）：
   - 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`；
   - 处理：通过样式规则隐藏包含 `.chat-panel` 的卡片区块；
@@ -4231,3 +4239,77 @@ docker compose up -d --build
 - 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
 - 调整：
   - 基础指标子分类（如主要产销指标、主要消耗指标）按钮改为单按钮“全选/取消”切换。
+
+## 2026-03-06 本地开发环境排查补记
+- 本次仅排查 VS Code 在打开 `.py` 文件后自动重启集成终端并激活虚拟环境的现象。
+- 结论为当前仓库前端目录内未发现触发该行为的工作区级 VS Code 配置，属于编辑器/Python 扩展本地环境行为，不涉及前端模块代码变更。
+
+## 2026-03-06 本地环境补记
+- 进一步确认 `D:\编程项目\phoenix_project` 为仓库外独立目录，当前前端模块不依赖该目录内容。
+- 若清理该目录，需先在 VS Code 切走误绑定的 Python 解释器，避免打开 `.py` 文件时继续引用已删除环境。
+
+## 结构同步（2026-03-06 前端移动端表格与录入页优化第一轮）
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 为聊天预览表和查询结果表补充统一的 `table-wrap` 横向滑动容器；
+  - 在 `<=900px` 和 `<=640px` 断点下压缩表格字号与间距；
+  - 对对比表在手机宽度隐藏部分“原始对比值”列，只保留关键比率与当前值，提升可读性。
+- `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+  - 为批量识别预览表与异常表引入横向滚动容器；
+  - 为异常说明列补充自动换行和最小宽度控制，避免窄屏撑破布局。
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+  - 保留桌面端 RevoGrid 默认展示；
+  - 手机端新增横向滑动提示，并为表格容器和网格本体设置最小宽度与滚动能力。
+- 本轮策略：
+  - 桌面端视觉基线不改；
+  - 仅在窄屏断点触发表格压缩、横滑和局部列隐藏；
+  - 复杂录入表不强行压成单列，优先保证“能看清、能滑动、知道如何操作”。
+
+## 结构同步（2026-03-06 前端移动端表格与录入页优化第二轮）
+- `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`：
+  - 为同比、环比、计划比较三张结果表增加 `result-table-wrapper` 横向滚动容器；
+  - 为时间轴 `RevoGrid` 容器改为横向滚动，并补充移动端最小宽度；
+  - 在 `<=900px / <=640px` 断点下继续压缩表格字号、间距与时间轴高度。
+- `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`：
+  - 为焦点指标折叠表补充触摸滚动优化；
+  - 在平板和手机宽度下收紧列宽、字号与单元格 padding；
+  - 将中部卡片控制按钮在手机宽度改为纵向堆叠，降低按钮拥挤。
+- 浏览器实测补充：
+  - `DataAnalysisView` 结果表在 390px 宽度下已出现横滑容器；
+  - `DashBoard` 焦点指标折叠表在 390px 宽度下可横向滑动，不再强挤。
+
+## 结构同步（2026-03-06 前端移动端优化第三轮：入口页与文案收敛）
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+  - 删除显式的手机横滑提示文案，仅保留布局层面的滚动与最小宽度保护。
+- `frontend/src/pages/LoginView.vue`：
+  - 在手机宽度下收紧视觉区高度、标题字号、表单圆角与控件高度，使登录页更适合竖屏触控。
+- `frontend/src/pages/ProjectSelectView.vue`：
+  - 项目卡片在手机宽度下改为单列，整体更紧凑，减少留白和跳动感。
+- `frontend/src/pages/ProjectEntryView.vue`：
+  - 过渡加载态补充移动端的居中与行高优化。
+
+## 结构同步（2026-03-06 数据填报页顶部开关紧凑化修正）
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+  - 在手机断点下将 `topbar__status-row` 从纵向拉伸改回横向换行；
+  - 取消 `.unit-analysis-inline` 的整行宽度，恢复为内容自适应宽度；
+  - 保留 `submit-time` 占整行，其余开关恢复紧凑块状排列。
+
+## 结构同步（2026-03-06 月报查询页与拉取页顶部密度收敛）
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 手机断点下继续收紧主内容区、摘要卡片与查询按钮区；
+  - 降低多选区默认高度，使筛选区不再过度吃屏。
+- `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+  - 手机断点下收紧工作台主内容区与步骤卡片；
+  - 顶部按钮、批量预览确认按钮在窄屏下改为更紧凑或整行排列。
+
+## 结构同步（2026-03-06 Banner 与按钮文字换行规整修正）
+- `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`：
+  - 头部品牌名、副标题、用户信息与导航按钮统一限制为单行，避免窄屏下随机断行。
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 查询页按钮与分组操作按钮统一限制为单行文本，减少汉字拆行。
+- `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+  - 工作台按钮与结果下载链接统一限制为单行文本，避免出现不整齐的换行。
+
+## 结构同步（2026-03-06 项目选择页桌面卡片高度回退）
+- `frontend/src/pages/ProjectSelectView.vue`：
+  - 删除桌面端 `.card` 的固定最小高度，恢复 PC 端卡片原本的紧凑高度；
+  - 手机端单列卡片与紧凑样式保持不变。

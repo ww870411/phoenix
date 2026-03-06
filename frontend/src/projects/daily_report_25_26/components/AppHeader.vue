@@ -65,16 +65,18 @@ async function logout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
-.brand { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; }
+.brand { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; min-width: 0; }
 .brand-mark { width: 10px; height: 10px; border-radius: 50%; background: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,.25); }
-.brand-name { font-weight: 800; letter-spacing: .5px; }
-.brand-sub { opacity: .9; font-size: 12px; }
-.nav { display: flex; gap: 8px; }
+.brand-name { font-weight: 800; letter-spacing: .5px; white-space: nowrap; word-break: keep-all; }
+.brand-sub { opacity: .9; font-size: 12px; white-space: nowrap; word-break: keep-all; }
+.nav { display: flex; gap: 8px; flex-wrap: nowrap; }
 .user-info {
   font-size: 13px;
   opacity: .9;
   align-self: center;
+  white-space: nowrap;
 }
 .btn {
   height: 30px;
@@ -85,6 +87,9 @@ async function logout() {
   color: #fff;
   cursor: pointer;
   backdrop-filter: blur(4px);
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
 }
 .btn:hover { background: rgba(255,255,255,.16); }
 .btn-admin {
@@ -94,5 +99,27 @@ async function logout() {
 }
 .btn-admin:hover {
   background: rgba(251, 191, 36, 0.28);
+}
+@media (max-width: 640px) {
+  .app-header__inner {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .brand {
+    gap: 8px;
+  }
+  .brand-name {
+    font-size: 15px;
+  }
+  .brand-sub {
+    font-size: 11px;
+  }
+  .nav {
+    gap: 6px;
+  }
+  .btn {
+    padding: 0 10px;
+    font-size: 12px;
+  }
 }
 </style>

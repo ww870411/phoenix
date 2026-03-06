@@ -1,3 +1,23 @@
+## 2026-03-06（lo1_new_server 构建慢过程根因分析）
+
+- 现象：
+  - 执行 `lo1_new_server.ps1` 的 `docker-compose -f docker-compose.server_new_server.yml build` 时，`backend builder` 的 `pip install` 阶段出现约 20 分钟卡顿。
+  - 慢日志关键字：`pip is still looking at multiple versions of grpcio-status`。
+- 根因判断：
+  - 依赖解析回溯：`backend/requirements.txt` 中存在未锁定或范围依赖（如 `google-generativeai>=0.7.0`、`pydantic-settings`、`httpx` 等），触发 pip resolver 对 `grpcio-status` 及其关联依赖长时间求解。
+  - 架构因素放大耗时：`docker-compose.server_new_server.yml` 指定 `platform: linux/arm64`，日志也出现 `manylinux...aarch64` 包元数据，说明在 ARM64 目标架构下解析/下载，速度受网络与镜像源波动影响更明显。
+  - 每次全量构建触发安装：脚本使用 `docker-compose build`，当后端依赖层未命中缓存时，会重复进入慢解析流程。
+- 本轮结论：
+  - 该慢点不是单一“下载慢”，而是“依赖版本回溯 + ARM64 架构 + 缓存命中不稳定”叠加导致。
+  - 本轮未改业务代码，仅完成定位与优化建议输出。
+- 二次观察补充（同日）：
+  - 新日志显示 `backend builder 5/5` 达到 `949.9s`，当前主要输出为 `Installing collected packages`，已不再出现 `grpcio-status` 多版本回溯提示。
+  - 这说明慢点阶段已从“resolver 回溯”转为“多依赖实际下载与安装”。
+  - 在 `docker-compose.server_new_server.yml` 指定 `platform: linux/arm64` 的前提下，若本机构建机为 x86_64，会触发跨架构构建（QEMU 仿真），安装阶段通常显著放慢。
+  - 结合包清单（`grpcio`、`cryptography`、`paramiko`、`uvloop` 等），即使走 wheel，ARM64 下下载与解包/安装也更易拉长到 10~20 分钟区间。
+- 结论更新：
+  - 当前主要瓶颈是“ARM64 构建路径下的大规模依赖安装耗时”，版本解析问题已退居次要。
+
 ## 2026-03-05（monthly_data_show 临时隐藏 query-tool 对话助手）
 
 - 需求背景：
@@ -5521,3 +5541,124 @@
     - 否则显示“全选”。
 - 验证：
   - `frontend` 执行 `npm run build` 通过。
+
+## 2026-03-06 VS Code 终端自动激活排查
+- 现象：在 VS Code 中未打开 Python 文件前，集成终端保持普通目录提示符；打开 `.py` 文件后，终端出现 `& d:\编程项目\phoenix_project\.venv\Scripts\Activate.ps1` 并进入 `(.venv)`。
+- 结论：当前仓库内未发现 `.vscode/settings.json`、`.code-workspace`、`launch.json`、`tasks.json` 等工作区级配置；该行为更符合 VS Code Python 扩展在激活后自动为集成终端注入已选解释器的虚拟环境激活命令。
+- 补充：激活路径指向 `d:\编程项目\phoenix_project\.venv`，说明当前 VS Code 选中的 Python 解释器更可能绑定到了相邻项目的虚拟环境，而不是本仓库自身配置触发。
+- 影响：本次仅为本地开发环境行为解释，未修改前后端业务代码。
+
+## 2026-03-06 phoenix_project 目录删除风险补记
+- 排查到 `D:\编程项目\phoenix_project` 独立存在于 `D:\编程项目` 下，不属于当前 `phoenix` 仓库目录。
+- 目录内容主要为 `.venv`、`node_modules`、`package.json`、`package-lock.json` 与近乎空白的 `readme.md`。
+- `package.json` 仅显示依赖 `@google/gemini-cli`，未见当前业务项目源码结构，判断更接近独立临时目录或工具试验目录。
+- 结论：从当前仓库视角看，`phoenix_project` 不是运行本仓库所必需；但由于 VS Code 当前解释器误绑到该目录 `.venv`，删除前应先切换解释器，否则会继续触发终端激活报错。
+
+## 2026-03-06（前端移动端表格与录入页优化第一轮）
+- 目标：在不改变桌面端默认布局的前提下，优先改善手机访问时的表格可读性与录入页可操作性。
+- 前置说明：Serena 已完成项目激活；由于 Vue SFC 结构化编辑支持有限，本轮按仓库规范降级使用 `apply_patch` 对目标页面做最小补丁，变更范围限定在前端三个页面与文档同步，回滚方式为反向撤销对应补丁片段。
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 为聊天预览表与查询结果表补充 `table-wrap` 横向滑动容器；
+  - 在窄屏下压缩单元格间距与字号；
+  - 对对比表在 `<=640px` 时隐藏同期值、上期值、计划值三列，保留当前值与比率列，减少横向拥挤。
+- `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+  - 为批量识别预览表与异常表增加横向滚动容器；
+  - 为异常说明列补充自动换行与最小宽度，避免手机端整行被撑爆；
+  - 在 `<=960px` 时统一压缩表格字号与 padding。
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+  - 为 RevoGrid 外层补充横向滚动能力；
+  - 增加手机端提示文案，明确“横向滑动查看，编辑建议横屏或电脑端”；
+  - 为 RevoGrid 设置最小宽度，避免手机端被强行压扁。
+- 验证：
+  - 已执行 `frontend` 下 `npm run build`，2026-03-06 构建通过；
+  - 本轮未做真机或浏览器移动端手动回归，后续建议优先检查月报查询页、月报导入页与日报录入页在 390px/430px 宽度下的实际观感。
+
+## 2026-03-06（前端移动端表格与录入页优化第二轮）
+- 目标：继续覆盖 `DashBoard.vue` 与 `DataAnalysisView.vue`，补齐大屏/分析页在手机宽度下的横滑与窄屏密度控制。
+- 前置说明：沿用本轮已启用的 `apply_patch` 降级编辑方式，仅修改前端样式与模板容器，不涉及后端接口与数据结构。
+- `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`：
+  - 为同比、环比、计划比较三张结果表增加 `result-table-wrapper` 横向滚动容器；
+  - 为结果表设置最小宽度，防止手机端被强行挤压；
+  - 将时间轴 `RevoGrid` 的 `timeline-grid-wrapper` 从隐藏溢出改为横向滚动，并为网格设置移动端最小宽度；
+  - 在 `<=900px / <=640px` 下进一步压缩表格字号、padding，并降低时间轴高度。
+- `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`：
+  - 为 `summary-fold-table-wrapper` 增加触摸滚动优化；
+  - 在 `<=1023px / <=640px` 下收紧汇总折叠表的列宽、padding 与字号；
+  - 在手机宽度下将中部卡片控制按钮改为纵向堆叠，降低按钮拥挤与误触。
+- 浏览器手机视口实测（390x844，前端 mock 登录/数据注入）：
+  - `monthly_data_show/query-tool`：结果表容器 `clientWidth=373`、`scrollWidth=1005`、`canScroll=true`；
+  - `daily_report_25_26/pages/demo/sheets/demo`：RevoGrid 容器 `clientWidth=373`、`scrollWidth=1005`、`canScroll=true`，手机提示可见；
+  - `monthly_data_pull`：批量识别预览表容器 `clientWidth=310`、`scrollWidth=440`、`canScroll=true`；
+  - `daily_report_25_26/pages/demo/data-analysis`：结果表容器 `clientWidth=329`、`scrollWidth=480`、`canScroll=true`；
+  - `daily_report_25_26/pages/demo/dashboard`：焦点指标折叠表容器 `clientWidth=337`、`scrollWidth=481`、`canScroll=true`。
+- 验证：
+  - 第二轮补丁后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过；
+  - 目前验证方式为浏览器手机视口模拟 + 前端 mock 数据，尚未完成真机触摸回归。
+
+## 2026-03-06（前端移动端优化第三轮：入口页与文案收敛）
+- 目标：继续统一入口页手机观感，并去除显式“横向滑动查看模式”提示文案，避免界面说明感过强。
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+  - 删除手机端显式提示文案 `手机端已切换为横向滑动查看模式...`；
+  - 保留纯布局层面的横向滚动与最小宽度保护。
+- `frontend/src/pages/LoginView.vue`：
+  - 在 `<=640px` 下收紧视觉区高度、标题字号与描述字距；
+  - 让表单卡片在手机上更像底部承接面板，输入框与登录按钮提升可触达高度。
+- `frontend/src/pages/ProjectSelectView.vue`：
+  - 在手机宽度下将项目卡片改为单列排布；
+  - 收紧卡片高度、间距与文字密度，避免项目入口页空洞和按钮区过松。
+- `frontend/src/pages/ProjectEntryView.vue`：
+  - 为“正在进入项目工作台...”过渡态增加居中与手机端尺寸优化。
+- 验证：
+  - 第三轮补丁后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过；
+  - 浏览器手机视口复测确认 `DataEntryView` 中已不再出现该提示文案，DOM 查询结果 `hint=false`、`containsText=false`。
+
+## 2026-03-06（数据填报页顶部开关紧凑化修正）
+- 现象：手机断点下，数据填报页顶部“表级校验 / 本单位分析”等开关被拉成整行长条，明显占空间。
+- 原因：`@media (max-width: 768px)` 中将 `topbar__status-row` 改成纵向拉伸，同时把 `.unit-analysis-inline` 设为 `width: 100%`。
+- 修正：
+  - 保留 `topbar__action-row` 纵向堆叠；
+  - 将 `topbar__status-row` 改回紧凑的横向换行布局；
+  - 取消 `.unit-analysis-inline` 在手机端的 `width: 100%`，恢复为内容自适应宽度；
+  - `submit-time` 改为占整行但不强制其余开关拉满整宽。
+- 验证：
+  - 修正后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过；
+  - 浏览器手机视口复测中，顶部状态区已恢复为紧凑块状布局。
+
+## 2026-03-06（月报查询页与拉取页顶部密度收敛）
+- 目标：继续降低手机端“工具页”顶部筛选区、按钮区与摘要区的厚重感，使页面更接近掌上数据库的紧凑操作布局。
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 在 `<=900px / <=640px` 下收紧主内容区 `padding` 与区块间距；
+  - 将摘要卡片 `summary-grid` 改为更紧凑的 3 列 / 2 列布局；
+  - 缩小摘要卡片的 padding、label/value 字号；
+  - 将查询按钮区改为弹性排列，手机宽度下改成整行按钮；
+  - 下调多选区 `check-list.sections.compact` 的最小/最大高度，减少筛选区默认占屏。
+- `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
+  - 在 `<=960px / <=640px` 下收紧主内容区 `padding` 与区块间距；
+  - 将顶部操作按钮和预览确认按钮改为更紧凑的弹性排列，手机宽度下改成整行按钮；
+  - 收紧步骤卡片 `group-card` 的内边距和标题间距；
+  - `slot-actions` 下的按钮改为整行，减少局部碎片化。
+- 验证：
+  - 修改后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过。
+
+## 2026-03-06（Banner 与按钮文字换行规整修正）
+- 现象：部分页面顶部 banner 文字换行不整齐，部分按钮文字在窄屏下被拆成两行，视觉上较乱。
+- 修正范围：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+- 修正内容：
+  - 为头部品牌名、副标题、用户信息与导航按钮增加 `white-space: nowrap` / `word-break: keep-all`；
+  - 为月报查询页与月报拉取页的按钮统一增加单行文本约束，避免汉字被拆开；
+  - 收紧 `AppHeader` 手机断点下的字体与按钮内边距，减少头部换行概率；
+  - 为查询页分组操作按钮保持横向书写与更可控的弹性宽度。
+- 验证：
+  - 修正后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过。
+
+## 2026-03-06（项目选择页桌面卡片高度回退）
+- 现象：回到 PC 界面后，项目选择页卡片高度明显偏高，导致桌面端密度过松。
+- 原因：此前为项目选择页卡片添加了桌面端 `min-height: 136px`，本意是让手机卡片更稳定，但副作用影响了 PC 端展示。
+- 修正：
+  - 删除 `frontend/src/pages/ProjectSelectView.vue` 中桌面端 `.card` 的 `min-height: 136px`；
+  - 保留手机断点下的单列卡片和紧凑样式，不影响移动端优化结果。
+- 验证：
+  - 修正后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过。

@@ -2123,6 +2123,16 @@ onBeforeUnmount(() => {
   gap: 6px;
   margin-right: 8px;
 }
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap :deep(revo-grid) {
+  min-width: 980px;
+}
+
 .date-group input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .breadcrumb-spacing { margin-bottom: 12px; display: inline-block; }
 .submit-time { font-size: 13px; color: var(--muted); margin-right: auto; }
@@ -2184,22 +2194,41 @@ onBeforeUnmount(() => {
   .topbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .topbar__title-group {
+    flex: none;
+    gap: 4px;
   }
   .topbar__actions {
     align-items: stretch;
-    flex: 1 1 auto;
+    flex: none;
+    gap: 8px;
   }
   .topbar__status-row,
   .topbar__action-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: 8px;
   }
   .submit-time {
     margin-right: 0;
-    width: 100%;
+    width: auto;
+    flex: 1 1 100%;
   }
-  .unit-analysis-inline,
+  .topbar__status-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .unit-analysis-inline {
+    width: auto;
+    justify-content: flex-start;
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
   .topbar__date {
     width: 100%;
     justify-content: space-between;
@@ -2217,6 +2246,9 @@ onBeforeUnmount(() => {
   .table-wrap {
     margin: 0 -12px;
     padding: 0 12px;
+  }
+  .table-wrap.card {
+    border-radius: 0;
   }
 }
 

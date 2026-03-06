@@ -36,5 +36,16 @@ onMounted(() => {
   justify-content: center;
   color: #64748b;
   font-size: 14px;
+  padding: 24px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .entry-loading {
+    min-height: 32vh;
+    padding: 18px;
+    font-size: 13px;
+  }
 }
 </style>

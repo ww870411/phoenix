@@ -2,6 +2,14 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 构建慢过程分析同步（2026-03-06）：
+  - 本轮为 `lo1_new_server.ps1` 镜像构建性能分析，后端代码未改动；
+  - 已定位慢点集中在 `backend/Dockerfile.prod` 的依赖安装层（`pip install -r requirements.txt`）；
+  - 根因与建议详见 `configs/progress.md` 对应条目。
+- 构建慢过程二次观察同步（2026-03-06）：
+  - 新日志显示慢点当前主要位于 `Installing collected packages` 阶段；
+  - 结合 `platform: linux/arm64`，判断当前瓶颈以 ARM64 下依赖下载/安装耗时为主，版本回溯已非主导。
+
 - monthly_data_show 对话能力当前为“后端保留、前端隐藏入口”（2026-03-05）：
   - 后端接口 `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/query` 保留；
   - 本轮未改动后端逻辑，仅在前端 query-tool 页面暂时隐藏对话卡片；
@@ -2810,3 +2818,70 @@
 ## 结构同步（2026-03-05 月报查询页子分类单按钮切换前端联动）
 
 - 本轮为前端交互细化，后端接口无改动。
+
+## 2026-03-06 本地开发环境排查补记
+- 本次仅排查 VS Code 在打开 `.py` 文件后自动执行 `Activate.ps1` 的现象。
+- 仓库内未发现后端目录相关的 VS Code 工作区配置；结合终端输出，判断为 Python 扩展在识别到 Python 文件后自动激活已选解释器环境。
+- 激活目标为 `d:\编程项目\phoenix_project\.venv`，提示当前解释器选择可能落在相邻项目环境上，而不是本仓库专属环境。
+
+## 2026-03-06 本地环境补记
+- 进一步确认 `D:\编程项目\phoenix_project` 不属于当前后端仓库目录。
+- 该目录现存内容以 `.venv` 与 `@google/gemini-cli` 依赖为主，未见当前后端业务源码；从当前仓库运行角度看不是必需目录。
+- 但 VS Code 目前把 Python 解释器指向该目录 `.venv`，删除前应先改回正确解释器。
+
+## 结构同步（2026-03-06 前端移动端表格与录入页优化第一轮）
+- 本轮变更仅发生在前端展示层，后端接口、字段命名与数据返回结构未改。
+- 受影响前端页面：
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+  - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`
+- 联动结论：
+  - 手机端体验优化通过前端断点样式、横向滚动容器和局部列裁剪完成；
+  - 后端无需新增接口，也无需为移动端单独返回另一套数据结构；
+  - 现有查询、导入和录入链路保持兼容。
+
+## 结构同步（2026-03-06 前端移动端表格与录入页优化第二轮）
+- 第二轮继续扩展到：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+  - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`
+- 联动结论：
+  - 新增能力仍全部位于前端响应式容器与样式断点层；
+  - 后端查询、分析、看板接口无需改动；
+  - 当前移动端适配策略继续保持“桌面端默认不变，窄屏下局部横滑与密度收敛”。
+
+## 结构同步（2026-03-06 前端移动端优化第三轮：入口页与文案收敛）
+- 第三轮继续覆盖：
+  - `frontend/src/pages/LoginView.vue`
+  - `frontend/src/pages/ProjectSelectView.vue`
+  - `frontend/src/pages/ProjectEntryView.vue`
+  - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`
+- 联动结论：
+  - 本轮依旧没有新增后端接口需求；
+  - 调整重点在前端入口观感与交互文案收敛，保持现有接口完全兼容。
+
+## 结构同步（2026-03-06 数据填报页顶部开关紧凑化修正）
+- 本次修正仅涉及 `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue` 的移动端顶栏布局。
+- 后端接口与权限开关语义未改，仅前端手机断点下的排列方式调整为更紧凑的块状布局。
+
+## 结构同步（2026-03-06 月报查询页与拉取页顶部密度收敛）
+- 本次继续涉及：
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+- 联动结论：
+  - 调整仍全部位于前端响应式布局层；
+  - 后端查询、导表、权限和数据结构均无变化。
+
+## 结构同步（2026-03-06 Banner 与按钮文字换行规整修正）
+- 本次继续涉及前端样式层：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`
+- 联动结论：
+  - 仅调整文字换行与按钮排版规则；
+  - 后端接口与数据结构无变化。
+
+## 结构同步（2026-03-06 项目选择页桌面卡片高度回退）
+- 本次仅涉及 `frontend/src/pages/ProjectSelectView.vue` 的桌面端卡片高度回退。
+- 联动结论：
+  - 仅前端展示密度修正；
+  - 后端接口与数据结构无变化。

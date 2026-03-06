@@ -369,7 +369,8 @@
           </section>
           <div class="comparison-section" v-if="previewRows.length">
             <h3 class="comparison-title">同比比较</h3>
-            <table class="result-table result-table--centered">
+            <div class="result-table-wrapper">
+              <table class="result-table result-table--centered">
               <thead>
                 <tr>
                   <th>指标</th>
@@ -412,14 +413,16 @@
                   </td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
           <div class="comparison-section" v-if="ringComparisonEntries.length">
             <h3 class="comparison-title">环比比较</h3>
             <div class="panel-hint" v-if="ringPreviousRangeLabel">
               {{ ringCurrentRangeLabel }} vs {{ ringPreviousRangeLabel }}
             </div>
-            <table class="result-table result-table--centered">
+            <div class="result-table-wrapper">
+              <table class="result-table result-table--centered">
               <thead>
                 <tr>
                   <th>指标</th>
@@ -447,7 +450,8 @@
                   </td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
           <p v-else-if="ringComparisonNote" class="panel-hint warning">{{ ringComparisonNote }}</p>
           <div class="comparison-section" v-if="planComparisonEntries.length">
@@ -456,7 +460,8 @@
               计划月份：{{ planComparisonMonthLabel }}
               <span v-if="planComparisonPeriodText">（{{ planComparisonPeriodText }}）</span>
             </div>
-            <table class="result-table result-table--centered">
+            <div class="result-table-wrapper">
+              <table class="result-table result-table--centered">
               <thead>
                 <tr>
                   <th>指标</th>
@@ -494,7 +499,8 @@
                   </td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
           <p v-else-if="planComparisonNote" class="panel-hint warning">{{ planComparisonNote }}</p>
         </div>
@@ -3413,6 +3419,13 @@ onBeforeUnmount(() => {
 .result-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 520px;
+}
+
+.result-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .result-table th,
@@ -3581,11 +3594,17 @@ onBeforeUnmount(() => {
 
 .timeline-grid-wrapper {
   width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .timeline-grid {
   height: 420px;
+}
+
+.timeline-grid-wrapper :deep(revo-grid) {
+  min-width: 760px;
 }
 
 .comparison-section {
@@ -3796,5 +3815,50 @@ onBeforeUnmount(() => {
 .btn.xs {
   font-size: 12px;
   padding: 4px 10px;
+}
+@media (max-width: 900px) {
+  .result-table-wrapper,
+  .correlation-matrix__table-wrapper,
+  .timeline-grid-wrapper {
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+
+  .result-table th,
+  .result-table td {
+    padding: 8px 9px;
+    font-size: 12px;
+  }
+
+  .correlation-matrix__table th,
+  .correlation-matrix__table td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .result-table {
+    min-width: 460px;
+  }
+
+  .result-table th,
+  .result-table td {
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .result-table .metric-label,
+  .result-table .value-cell {
+    min-width: max-content;
+  }
+
+  .timeline-grid {
+    height: 360px;
+  }
+
+  .timeline-grid-wrapper :deep(revo-grid) {
+    min-width: 680px;
+  }
 }
 </style>

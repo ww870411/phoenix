@@ -5347,6 +5347,7 @@ onMounted(() => {
 .summary-fold-table-wrapper {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .summary-fold-table {
@@ -5809,6 +5810,79 @@ onMounted(() => {
 
   .center-card__table {
     max-height: none;
+  }
+
+  .summary-fold-table th,
+  .summary-fold-table td {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+
+  .summary-fold-table__col-metric {
+    width: 148px;
+  }
+
+  .summary-fold-table__col-value {
+    width: 96px;
+  }
+
+  .center-card__controls {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-fold-table-wrapper {
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+
+  .summary-fold-table {
+    min-width: 460px;
+    font-size: 12px;
+  }
+
+  .summary-fold-table th,
+  .summary-fold-table td {
+    padding: 6px 7px;
+  }
+
+  .summary-fold-table__col-metric {
+    width: 132px;
+  }
+
+  .summary-fold-table__col-phase {
+    width: 64px;
+  }
+
+  .summary-fold-table__col-value {
+    width: 88px;
+  }
+
+  .summary-fold-table__metric {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .center-card__controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .center-card__controls-label {
+    width: 100%;
+  }
+
+  .center-card__metric-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .center-card__table .dashboard-table th,
+  .center-card__table .dashboard-table td {
+    padding: 10px 12px;
+    font-size: 12px;
   }
 }
 

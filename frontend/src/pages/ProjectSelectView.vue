@@ -76,8 +76,48 @@ onMounted(() => {
 <style scoped>
 .topbar { margin-bottom: 16px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+}
+.card-header {
+  margin-bottom: 10px;
+}
 .name { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .desc { font-size: 13px; color: #666; }
 .placeholder { padding: 32px; color: var(--muted); text-align: center; border: 1px dashed #e2e8f0; border-radius: 12px; }
 .placeholder.error { color: var(--danger-600); border-color: var(--danger-200); }
+
+@media (max-width: 768px) {
+  .topbar {
+    margin-bottom: 12px;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .card {
+    min-height: auto;
+    padding: 16px 14px;
+    border-radius: 14px;
+  }
+
+  .name {
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .desc {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .placeholder {
+    padding: 24px 18px;
+  }
+}
 </style>

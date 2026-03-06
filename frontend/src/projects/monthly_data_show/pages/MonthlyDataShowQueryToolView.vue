@@ -192,18 +192,20 @@
             </ul>
           </div>
           <div v-if="chatPreviewRows.length" class="table-wrap chat-preview">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th v-for="(value, key) in chatPreviewRows[0]" :key="`chat-head-${key}`">{{ key }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, rowIdx) in chatPreviewRows" :key="`chat-row-${rowIdx}`">
-                  <td v-for="(value, key) in row" :key="`chat-cell-${rowIdx}-${key}`">{{ value == null ? 'NULL' : value }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th v-for="(value, key) in chatPreviewRows[0]" :key="`chat-head-${key}`">{{ key }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, rowIdx) in chatPreviewRows" :key="`chat-row-${rowIdx}`">
+                    <td v-for="(value, key) in row" :key="`chat-cell-${rowIdx}-${key}`">{{ value == null ? 'NULL' : value }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -307,18 +309,20 @@
         <div v-else-if="!hasSearched" class="empty">请先设置筛选条件并点击“查询”。</div>
         <div v-else-if="!rows.length" class="empty">暂无数据</div>
         <div v-else class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th v-for="col in resultColumns" :key="`head-${col.field}`">{{ col.label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, idx) in rows" :key="`${row.company}-${row.item}-${row.date}-${row.period}-${row.type}-${idx}`">
-                <td v-for="col in resultColumns" :key="`cell-${col.field}-${idx}`">{{ getResultCellValue(row, col.field) }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th v-for="col in resultColumns" :key="`head-${col.field}`">{{ col.label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in rows" :key="`${row.company}-${row.item}-${row.date}-${row.period}-${row.type}-${idx}`">
+                  <td v-for="col in resultColumns" :key="`cell-${col.field}-${idx}`">{{ getResultCellValue(row, col.field) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div v-if="hasSearched && comparisonRows.length" class="analysis-section">
           <h4>同比/环比/计划比（实时窗口）</h4>
@@ -2340,6 +2344,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .section-title-row .section-title {
@@ -2924,6 +2929,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -2967,6 +2973,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   padding: 7px 11px;
   cursor: pointer;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
 }
 
 .btn.primary {
@@ -3116,6 +3125,66 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
+  .monthly-query-main {
+    padding: 14px 14px 20px;
+    gap: 12px;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-item {
+    padding: 10px 8px;
+  }
+
+  .summary-item .label {
+    font-size: 11px;
+  }
+
+  .summary-item .value {
+    font-size: 18px;
+  }
+
+  .actions {
+    gap: 8px;
+  }
+
+  .actions .btn {
+    flex: 1 1 160px;
+  }
+
+  .check-list.sections.compact {
+    min-height: 180px;
+    max-height: 360px;
+  }
+
+  .section-title-row {
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .section-actions {
+    flex-wrap: wrap;
+  }
+
+  .table-wrap {
+    margin: 0 -12px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .data-table {
+    min-width: 760px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 7px 8px;
+  }
+
   .inline-layout {
     grid-template-columns: 1fr 1fr;
   }
@@ -3146,6 +3215,81 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .monthly-query-main {
+    padding: 12px 10px 18px;
+    gap: 10px;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .summary-item {
+    padding: 8px 7px;
+    border-radius: 8px;
+  }
+
+  .summary-item .label {
+    font-size: 10px;
+  }
+
+  .summary-item .value {
+    font-size: 16px;
+  }
+
+  .actions {
+    gap: 6px;
+  }
+
+  .actions .btn {
+    width: 100%;
+    flex: none;
+  }
+
+  .section-title-row {
+    flex-direction: column;
+  }
+
+  .section-actions {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .section-actions .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .check-list.sections.compact {
+    min-height: 140px;
+    max-height: 300px;
+  }
+
+  .table-wrap {
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+
+  .data-table {
+    min-width: 640px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  .compare-table th:nth-child(4),
+  .compare-table td:nth-child(4),
+  .compare-table th:nth-child(6),
+  .compare-table td:nth-child(6),
+  .compare-table th:nth-child(8),
+  .compare-table td:nth-child(8) {
+    display: none;
+  }
+
   .inline-layout {
     grid-template-columns: 1fr;
   }
