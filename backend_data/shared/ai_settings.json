@@ -41,12 +41,12 @@
       "name": "幸运",
       "kind": "newapi",
       "base_url": "https://ai.xingyungept.cn/v1",
-      "model": "gpt-5.4@xhigh",
+      "model": "gpt-5.4",
       "api_keys": [
         "sk-Lbwwznw25ZdfQ0sZYOaRtzpCIv0PQXoIJ9tCYz4kCTMrgYmecX"
       ],
       "backup_models": [
-        "gpt-5.4"
+        "gpt-5.4@xhigh"
       ]
     },
     {

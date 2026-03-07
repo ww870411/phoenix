@@ -275,6 +275,16 @@
             </span>
           </div>
         </div>
+        <AiChatWorkspace
+          title="数据分析页 AI 聊天"
+          free-description="自由聊天模式：不附加分析结果，直接连续对话。"
+          query-description="基于当前数据分析页最新结果，与模型连续追问。"
+          free-placeholder="例如：帮我想想这个分析页后续还能扩展哪些 AI 能力。"
+          query-placeholder="例如：基于当前结果，请先总结异常，再说明可能原因。"
+          :query-mode-enabled="hasDataAnalysisChatContext"
+          :build-query-context="buildDataAnalysisChatContext"
+          :send-chat="sendDataAnalysisDialogChat"
+        />
 
         <div v-if="queryLoading" class="page-state">正在生成分析结果，请稍候…</div>
         <div v-else-if="!previewRows.length" class="page-state muted">
@@ -600,6 +610,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
+import AiChatWorkspace from '../components/AiChatWorkspace.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
 import {
@@ -607,6 +618,7 @@ import {
   getDashboardBizDate,
   runDataAnalysis,
   getDataAnalysisAiReport,
+  runDataAnalysisDialogChat,
   getAiSettings,
   testAiSettings,
   updateAiSettings,
@@ -850,6 +862,7 @@ const selectedUnits = ref([])
 const activeUnit = ref('')
 const unitResults = ref({})
 const selectedMetrics = ref(new Set())
+const hasDataAnalysisChatContext = computed(() => previewRows.value.length > 0)
 const analysisMode = ref('daily')
 const MIN_ANALYSIS_DATE = '2025-11-01'
 const analysisModes = computed(() => {
@@ -875,6 +888,42 @@ const infoBanner = ref('')
 const formError = ref('')
 const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
+
+function buildDataAnalysisChatContext() {
+  if (!hasDataAnalysisChatContext.value) return null
+  const currentResult = activeUnit.value ? unitResults.value[activeUnit.value] : null
+  return {
+    title: 'daily_report_25_26 数据分析结果',
+    meta: {
+      ...(lastQueryMeta.value || {}),
+      active_unit: activeUnit.value || '',
+      active_unit_label: activeUnitLabel.value || '',
+      info_banner: infoBanner.value || '',
+    },
+    query: {
+      analysis_mode: analysisMode.value,
+      start_date: startDate.value,
+      end_date: endDate.value,
+      selected_metrics: Array.from(selectedMetrics.value || []),
+      target_units: Array.from(selectedUnits.value || []),
+    },
+    rows: previewRows.value,
+    comparison_rows: Array.isArray(currentResult?.planComparison?.entries)
+      ? currentResult.planComparison.entries
+      : [],
+    warnings: Array.isArray(queryWarnings.value) ? queryWarnings.value : [],
+    extras: {
+      timeline_columns: Array.isArray(timelineGrid.value?.columns) ? timelineGrid.value.columns : [],
+      timeline_rows: Array.isArray(timelineGrid.value?.rows) ? timelineGrid.value.rows.slice(0, 12) : [],
+      ring_compare: currentResult?.ringCompare || null,
+      plan_comparison: currentResult?.planComparison || null,
+    },
+  }
+}
+
+function sendDataAnalysisDialogChat(payload) {
+  return runDataAnalysisDialogChat(projectKey.value, payload)
+}
 const queryLoading = ref(false)
 const aiReportEnabled = ref(false)
 const aiModeId = ref('daily_analysis_v1')

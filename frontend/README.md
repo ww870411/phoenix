@@ -48,6 +48,55 @@
   - 三次修复：为彻底规避克隆态颜色计算漂移，导出图标填充色固定为 `#ffffff`，确保顶部四卡在 PDF 中视觉稳定。
   - 四次修复：在导出克隆样式中关闭 `.summary-card__icon` 的背景/阴影/滤镜/边框，去除 PDF 中图标周围“小方框”伪影。
   - 影响：仅作用于 PDF 导出克隆 DOM，页面实时样式与交互不变。
+- AI 聊天调试面板布局修复（2026-03-07）：
+  - 调试面板中的“最近错误 / 最近返回结果”已上移到顶部；
+  - 调试区新增独立滚动，发送消息后不会再轻易被内容挤出可视区域。
+
+- AI 聊天页面内调试面板（2026-03-07）：
+  - `AiChatWorkspace.vue` 现已内置“调试信息”面板；
+  - 可直接查看最近一次：
+    - 发送 payload
+    - 返回结果
+    - 错误信息
+    - 当前 mode / session_id
+  - 用于继续分段排查聊天链路问题。
+
+- AI 聊天链路排障（2026-03-07）：
+  - 后端新增聊天 debug 回显接口，用于分段确认“前端请求是否进入后端聊天模块”；
+  - 当前已确认日报聊天接口能够正确识别：
+    - `provider = newapi`
+    - `model = gpt-5.4`
+    - `base_url = https://ai.xingyungept.cn/v1`
+
+- AI 聊天器显示修复（2026-03-07）：
+  - `AiChatWorkspace.vue` 已修复长文本撑破弹窗的问题；
+  - 对超长连续字符串新增自动断行策略（`overflow-wrap: anywhere`），聊天消息会优先在弹窗内部换行。
+  - 聊天输入框补充 `box-sizing:border-box` 与宽度约束，不再超出悬浮弹窗。
+
+- AI 聊天器交互优化（2026-03-07）：
+  - `AiChatWorkspace.vue` 改为右下角悬浮图标展开式交互；
+  - 默认不显示欢迎语，第一轮对话由用户主动发起；
+  - 若浏览器侧出现 `Failed to fetch`，前端会提示优先检查后端是否已重启并加载新聊天接口；
+  - 开发环境已在 `frontend/vite.config.js` 中为 `/api` 配置代理到 `127.0.0.1:8001`；修改后需要重启 Vite 开发服务器生效；
+  - 日报分析页已移除单独聊天卡片，仅保留悬浮聊天入口。
+
+- AI 聊天器初版（2026-03-07）：
+  - 新增共享组件 `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`；
+  - 在月报查询页与日报分析页接入两种聊天模式：
+    - 自由聊天
+    - 基于当前查询数据包聊天
+  - 月报页上下文来自 `rows / comparisonRows / summary / temperatureSummary / buildPayload()`；
+  - 日报分析页上下文来自 `previewRows / lastQueryMeta / timelineGrid / ringCompare / planComparison`；
+  - 两个页面分别调用新的聊天接口，不再依赖旧报告服务私有函数。
+
+- **Docker 代理路径修正（2026-03-07）**：
+  - `vite.config.js` 的 `target` 修正为 `http://backend:8000`，解决了在容器环境下无法通过 `127.0.0.1:8001` 访问后端的问题。
+- AI 模块专家级重构与排障（2026-03-07）：
+  - **路径自适应**：后端已修复 `DATA_DIRECTORY` 硬编码问题，现在支持在本地开发环境下自动定位 `backend_data`，解决了配置文件加载失败导致的聊天中断。
+  - **结构化对话**：后端 `ai_runtime.py` 与 `ai_chat_service.py` 已全面升级为 `messages` 数组模式（System/User/Assistant），不再使用简单的字符串拼接。
+  - **回复质量提升**：通过 System Role 注入“凤凰计划助手”身份，AI 对话更专业、上下文连贯性更强。
+  - **兼容性**：前端调用接口路径与数据格式保持不变，无感升级。
+
 - 智能体设定增强（2026-03-07）：
   - `AiAgentSettingsDialog.vue` 修复 provider“标识 ID”输入失焦问题，列表稳定 key 改为内部 `uiKey`；
   - 新增“测试全部 New API”按钮，测试结果直接显示在各 provider 卡片内；

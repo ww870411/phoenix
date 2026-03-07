@@ -21,7 +21,7 @@ from sqlalchemy import text
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import audit_log
-from backend.services import data_analysis_ai_report
+from backend.services import ai_runtime
 from backend.services import dashboard_cache
 from backend.services.auth_manager import AuthSession, get_current_session
 from backend.services.dashboard_cache_job import cache_publish_job_manager
@@ -880,7 +880,7 @@ def test_admin_ai_settings(
     _ensure_admin_console_access(session)
     _ensure_manage_ai_settings_permission(session)
     try:
-        result = data_analysis_ai_report.run_ai_connection_test(
+        result = ai_runtime.run_ai_connection_test(
             {
                 "provider": payload.provider,
                 "api_keys": payload.api_keys or [],

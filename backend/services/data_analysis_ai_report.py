@@ -6,6 +6,11 @@
 - 根据数据分析查询结果构造提示词；
 - 将任务提交至线程池并异步生成报告；
 - 以内存字典维护任务状态，供 API 查询。
+
+说明：
+- 2026-03-07 起，通用 AI 运行时与日报/月报模式提示词已抽离至
+  `backend/services/ai_runtime.py` 与 `backend/services/ai_report_modes.py`；
+- 本文件保留“数据分析报告生成”职责，并作为兼容入口继续对外提供既有 API。
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from backend.services.api_key_cipher import decrypt_api_key
 from backend.services.project_data_paths import (
     resolve_global_ai_settings_path,
 )
+from backend.services import ai_report_modes, ai_runtime
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 GLOBAL_AI_SETTINGS_PATH = resolve_global_ai_settings_path()
@@ -2651,3 +2657,40 @@ def get_report_job(job_id: str) -> Optional[Dict[str, Any]]:
         if not job:
             return None
         return copy.deepcopy(job)
+
+
+# ========= 兼容层：通用 AI 能力已抽离，以下别名保持旧调用可用 =========
+AI_MODE_DAILY = ai_report_modes.AI_MODE_DAILY
+AI_MODE_MONTHLY = ai_report_modes.AI_MODE_MONTHLY
+PROMPT_DATA_MAX_CHARS = ai_report_modes.PROMPT_DATA_MAX_CHARS
+PROMPT_DATA_MAX_CHARS_NEWAPI = ai_report_modes.PROMPT_DATA_MAX_CHARS_NEWAPI
+AI_MODE_TEMPLATE_REGISTRY = ai_report_modes.AI_MODE_TEMPLATE_REGISTRY
+
+reset_gemini_client = ai_runtime.reset_runtime_client
+_safe_read_settings_json = ai_runtime.safe_read_settings_json
+_load_effective_ai_settings = ai_runtime.load_effective_ai_settings
+_normalize_provider = ai_runtime.normalize_provider
+_decode_api_key = ai_runtime.decode_api_key
+_resolve_active_provider_record = ai_runtime.resolve_active_provider_record
+_load_gemini_settings = ai_runtime.load_gemini_settings
+_load_newapi_settings = ai_runtime.load_newapi_settings
+_load_ai_provider_settings = ai_runtime.load_ai_provider_settings
+_current_provider = ai_runtime.current_provider
+_resolve_prompt_data_char_limit = ai_report_modes.resolve_prompt_data_char_limit
+_load_instruction_text = ai_report_modes.load_instruction_text
+_load_ai_runtime_flags = ai_report_modes.load_ai_runtime_flags
+_normalize_ai_mode = ai_report_modes.normalize_ai_mode
+_resolve_mode_templates = ai_report_modes.resolve_mode_templates
+_extract_retry_delay_seconds = ai_runtime.extract_retry_delay_seconds
+_is_quota_or_rate_error = ai_runtime.is_quota_or_rate_error
+_is_transient_gateway_error = ai_runtime.is_transient_gateway_error
+_extract_response_text = ai_runtime.extract_response_text
+_extract_newapi_response_text = ai_runtime.extract_newapi_response_text
+_build_newapi_chat_url = ai_runtime.build_newapi_chat_url
+_call_newapi_chat = ai_runtime.call_newapi_chat
+_test_gemini_connection = ai_runtime.test_gemini_connection
+_test_newapi_connection = ai_runtime.test_newapi_connection
+run_ai_connection_test = ai_runtime.run_ai_connection_test
+_current_runtime_model_name = ai_runtime.current_runtime_model_name
+_call_model = ai_runtime.call_model
+_get_runtime_client = ai_runtime.get_runtime_client

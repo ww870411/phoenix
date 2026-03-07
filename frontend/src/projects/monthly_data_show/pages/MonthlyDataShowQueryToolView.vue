@@ -153,61 +153,16 @@
           <h3>对话查询助手（BETA）</h3>
         </div>
         <p class="sub">助手会根据你的问题调用受控查询工具，并结合当前筛选条件返回分析结论。</p>
-        <div class="chat-panel">
-          <div class="chat-messages">
-            <div
-              v-for="(msg, idx) in chatMessages"
-              :key="`chat-${idx}`"
-              class="chat-message"
-              :class="msg.role === 'user' ? 'chat-user' : 'chat-assistant'"
-            >
-              <div class="chat-role">{{ msg.role === 'user' ? '你' : '助手' }}</div>
-              <pre class="chat-content">{{ msg.content }}</pre>
-            </div>
-          </div>
-          <div class="chat-input-row">
-            <textarea
-              v-model="chatInput"
-              class="chat-input"
-              rows="3"
-              maxlength="1200"
-              :disabled="chatLoading"
-              placeholder="例如：查主城区2026-01到2026-03的水耗率，并说明同比变化。"
-            ></textarea>
-            <button class="btn primary" type="button" :disabled="chatLoading || !chatInput.trim()" @click="sendChatMessage">
-              {{ chatLoading ? '处理中...' : '发送' }}
-            </button>
-            <button class="btn" type="button" :disabled="chatLoading" @click="resetChatConversation">
-              新会话
-            </button>
-          </div>
-          <p v-if="chatError" class="sub error-text">{{ chatError }}</p>
-          <p v-if="chatSessionId" class="sub">当前会话：{{ chatSessionId }}</p>
-          <div v-if="chatWebSources.length" class="chat-sources">
-            <div class="sub">联网来源：</div>
-            <ul>
-              <li v-for="(source, idx) in chatWebSources" :key="`chat-source-${idx}`">
-                <a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title || source.url }}</a>
-              </li>
-            </ul>
-          </div>
-          <div v-if="chatPreviewRows.length" class="table-wrap chat-preview">
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th v-for="(value, key) in chatPreviewRows[0]" :key="`chat-head-${key}`">{{ key }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, rowIdx) in chatPreviewRows" :key="`chat-row-${rowIdx}`">
-                    <td v-for="(value, key) in row" :key="`chat-cell-${rowIdx}-${key}`">{{ value == null ? 'NULL' : value }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <AiChatWorkspace
+          title="AI 聊天组件"
+          free-description="自由聊天模式：不附加查询数据，直接连续对话。"
+          query-description="基于当前月报查询页最新结果与你连续对话。"
+          free-placeholder="例如：帮我梳理一下这个月报系统接下来还能做哪些 AI 能力。"
+          query-placeholder="例如：基于当前查询结果，先总结异常项，再说可能原因。"
+          :query-mode-enabled="hasChatQueryContext"
+          :build-query-context="buildMonthlyChatContext"
+          :send-chat="sendMonthlyDialogChat"
+        />
       </section>
 
       <section class="card">
@@ -579,6 +534,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as XLSX from 'xlsx'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import AiAgentSettingsDialog from '../../daily_report_25_26/components/AiAgentSettingsDialog.vue'
+import AiChatWorkspace from '../../daily_report_25_26/components/AiChatWorkspace.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import {
   getAdminAiSettings,
@@ -586,7 +542,7 @@ import {
   getMonthlyDataShowQueryOptions,
   getMonthlyDataShowAiReport,
   queryMonthlyDataShow,
-  queryMonthlyDataShowAiChat,
+  queryMonthlyDataShowDialogChat,
   queryMonthlyDataShowComparison,
   startMonthlyDataShowAiReport,
   updateAdminAiSettings,
@@ -802,16 +758,6 @@ let aiReportPollTimer = null
 const showFormulaDialog = ref(false)
 const temperatureExpanded = ref(false)
 const temperatureDailyRows = ref([])
-const chatMessages = ref([
-  { role: 'assistant', content: '已接入月报对话助手。你可以直接提问，例如：“查主城区2026-01到2026-03的水耗率，并给出同比变化”。' },
-])
-const chatInput = ref('')
-const chatLoading = ref(false)
-const chatError = ref('')
-const chatPreviewRows = ref([])
-const chatSessionId = ref('')
-const chatWebSources = ref([])
-const CHAT_HISTORY_MAX = 10
 const temperatureSummary = reactive({
   currentAvgTemp: null,
   yoyAvgTemp: null,
@@ -1687,70 +1633,39 @@ function buildPayload() {
   }
 }
 
-function buildChatContextPayload() {
-  const payload = buildPayload()
+const hasChatQueryContext = computed(() => rows.value.length > 0 || comparisonRows.value.length > 0)
+
+function buildMonthlyChatContext() {
+  if (!hasChatQueryContext.value) return null
   return {
-    ...payload,
-    offset: 0,
-    limit: Math.max(50, Math.min(500, Number(payload.limit || 200))),
+    title: 'monthly_data_show 查询结果',
+    meta: {
+      total_rows: summary.totalRows,
+      value_non_null_rows: summary.valueNonNullRows,
+      value_null_rows: summary.valueNullRows,
+      value_sum: summary.valueSum,
+      comparison_window: comparisonMeta.currentWindowLabel,
+      yoy_window: comparisonMeta.yoyWindowLabel,
+      mom_window: comparisonMeta.momWindowLabel,
+      plan_window: comparisonMeta.planWindowLabel,
+      temperature_current_avg: temperatureSummary.currentAvgTemp,
+      temperature_yoy_avg: temperatureSummary.yoyAvgTemp,
+      temperature_diff: temperatureSummary.yoyAvgDiff,
+    },
+    query: buildPayload(),
+    rows: rows.value,
+    comparison_rows: comparisonRows.value,
+    warnings: [],
+    extras: {
+      temperature_daily_rows: Array.isArray(temperatureDailyRows.value) ? temperatureDailyRows.value.slice(0, 12) : [],
+      comparison_view_mode: comparisonViewMode.value,
+      comparison_top_n: comparisonTopN.value,
+    },
   }
 }
 
-function resetChatConversation() {
-  chatSessionId.value = ''
-  chatWebSources.value = []
-  chatPreviewRows.value = []
-  chatError.value = ''
-  chatMessages.value = [
-    { role: 'assistant', content: '已开启新会话。你可以继续提问，例如“查主城区近三个月水耗率并给出同比变化”。' },
-  ]
-}
-
-async function sendChatMessage() {
-  const text = String(chatInput.value || '').trim()
-  if (!text || chatLoading.value) return
-  chatLoading.value = true
-  chatError.value = ''
-  chatWebSources.value = []
-  const userMessage = { role: 'user', content: text }
-  chatMessages.value = [...chatMessages.value, userMessage]
-  chatInput.value = ''
-  try {
-    const history = chatMessages.value
-      .slice(-CHAT_HISTORY_MAX)
-      .map((row) => ({ role: String(row.role || 'user'), content: String(row.content || '') }))
-    const payload = await queryMonthlyDataShowAiChat('monthly_data_show', {
-      message: text,
-      history,
-      session_id: chatSessionId.value || undefined,
-      context: buildChatContextPayload(),
-      enable_web_search: true,
-      top_n: 12,
-      limit: 200,
-    })
-    const answer = String(payload?.answer || '').trim() || '已执行查询，但未返回可读结论。'
-    const toolLines = Array.isArray(payload?.tool_calls)
-      ? payload.tool_calls
-        .filter(Boolean)
-        .map((tool) => {
-          const name = String(tool?.tool || 'unknown')
-          const summary = String(tool?.summary || '')
-          const totalRows = Number(tool?.total_rows || 0)
-          return `工具：${name}；命中 ${totalRows} 条。${summary}`
-        })
-      : []
-    chatPreviewRows.value = Array.isArray(payload?.preview_rows) ? payload.preview_rows : []
-    chatWebSources.value = Array.isArray(payload?.web_sources) ? payload.web_sources : []
-    chatSessionId.value = String(payload?.session_id || chatSessionId.value || '')
-    const assistantContent = toolLines.length ? `${answer}\n\n${toolLines.join('\n')}` : answer
-    chatMessages.value = [...chatMessages.value, { role: 'assistant', content: assistantContent }]
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '对话查询失败'
-    chatError.value = message
-    chatMessages.value = [...chatMessages.value, { role: 'assistant', content: `执行失败：${message}` }]
-  } finally {
-    chatLoading.value = false
-  }
+function sendMonthlyDialogChat(payload) {
+  return queryMonthlyDataShowDialogChat('monthly_data_show', payload)
 }
 
 function toMonthStartDate(monthText) {
@@ -3039,90 +2954,6 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 
-.chat-panel {
-  display: grid;
-  gap: 12px;
-}
-
-/* 临时隐藏对话工具区：保留实现，不对外展示 */
-.card:has(> .chat-panel) {
-  display: none;
-}
-
-.chat-messages {
-  max-height: 320px;
-  overflow: auto;
-  border: 1px solid #dbe3f1;
-  border-radius: 10px;
-  background: #f8fafc;
-  padding: 10px;
-  display: grid;
-  gap: 8px;
-}
-
-.chat-message {
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.chat-user {
-  background: #dbeafe;
-}
-
-.chat-assistant {
-  background: #eef2ff;
-}
-
-.chat-role {
-  font-size: 12px;
-  color: #334155;
-  margin-bottom: 4px;
-  font-weight: 700;
-}
-
-.chat-content {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #0f172a;
-}
-
-.chat-input-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: end;
-}
-
-.chat-input {
-  width: 100%;
-  min-height: 84px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font: inherit;
-  resize: vertical;
-}
-
-.chat-preview {
-  margin-top: 4px;
-}
-
-.chat-sources {
-  margin: 4px 0 8px;
-}
-
-.chat-sources ul {
-  margin: 4px 0 0;
-  padding-left: 20px;
-}
-
-.chat-sources a {
-  color: #1864ab;
-}
 
 @media (max-width: 900px) {
   .monthly-query-main {
@@ -3208,9 +3039,6 @@ onBeforeUnmount(() => {
   }
   .heatmap-grid {
     min-width: 720px;
-  }
-  .chat-input-row {
-    grid-template-columns: 1fr;
   }
 }
 

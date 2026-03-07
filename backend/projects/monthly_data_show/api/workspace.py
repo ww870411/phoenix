@@ -47,7 +47,7 @@ from backend.projects.monthly_data_show.services.indicator_config import (
     load_indicator_runtime_config,
     order_items_by_config,
 )
-from backend.services import data_analysis_ai_report
+from backend.services import ai_chat_service, ai_runtime, data_analysis_ai_report
 
 PROJECT_KEY = "monthly_data_show"
 CHAT_SESSION_TTL_SECONDS = 30 * 60
@@ -1339,7 +1339,7 @@ def _chat_generate_answer_by_model(
         f"结果预览(JSON)：{json.dumps(preview_rows, ensure_ascii=False)}\n"
         f"补充信息：{extra_context or '无'}\n"
     )
-    return str(data_analysis_ai_report._call_model(prompt, retries=2) or "").strip()
+    return str(ai_runtime.call_model(prompt, retries=2) or "").strip()
 
 
 def _fetch_compare_map(
@@ -2413,3 +2413,39 @@ def chat_monthly_data_show_query(payload: MonthlyAiChatRequest):
         web_sources=web_sources,
         applied_query=query_request.model_dump(mode="json"),
     )
+
+
+@router.post(
+    "/monthly-data-show/ai-chat/dialog",
+    response_model=ai_chat_service.AiChatResponse,
+    summary="月报查询页通用 AI 聊天",
+)
+def chat_monthly_data_show_dialog(payload: ai_chat_service.AiChatRequest):
+    try:
+        return ai_chat_service.run_chat_turn(
+            project_key=PROJECT_KEY,
+            scope="monthly_data_show_dialog",
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/monthly-data-show/ai-chat/debug",
+    response_model=ai_chat_service.AiChatDebugResponse,
+    summary="月报查询页 AI 聊天调试回显",
+)
+def chat_monthly_data_show_debug(payload: ai_chat_service.AiChatRequest):
+    try:
+        return ai_chat_service.build_chat_debug_payload(
+            project_key=PROJECT_KEY,
+            scope="monthly_data_show_dialog_debug",
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

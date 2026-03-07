@@ -1,3 +1,193 @@
+## 2026-03-07（AI 聊天弹窗视觉重构：去除调试信息 + 现代气泡设计）
+
+- **功能精简:**
+  - 彻底移除了“调试信息”折叠面板及其关联的所有 Payload 回显逻辑。
+  - 删除了脚本中冗余的调试状态变量。
+- **视觉美化:**
+  - **气泡流**: 采用圆角气泡设计，通过颜色（蓝色/灰色）与对齐位置区分角色，移除显眼的文字标签。
+  - **输入区**: 重构为胶囊式 Composer，整合发送按钮，并支持 `Enter` 快捷发送。
+  - **反馈增强**: 增加打字机 Loading 动画、平滑置底滚动以及展开时的缩放过渡特效。
+- **结果:**
+  - AI 聊天窗口从“开发调试工具”转变为“正式产品级”的精致对话界面。
+
+## 2026-03-07（Docker 网络代理修复：前端 ECONNREFUSED 解决）
+
+- **故障诊断:**
+  - `phoenix_frontend` 日志显示：`Error: connect ECONNREFUSED 127.0.0.1:8001`。
+  - 根本原因：前端在容器内部访问 `127.0.0.1` 是访问自己，而非宿主机或后端。应通过 Docker 服务名访问。
+- **前端修复:**
+  - `frontend/vite.config.js`: 将 `proxy.target` 修改为 `http://backend:8000`。
+  - 说明：`backend` 是后端在 Docker 中的服务名，`8000` 是其内部端口。
+
+## 2026-03-07（AI 模块专家级重构：多轮对话结构化 + 路径兼容性修复）
+
+- **故障诊断与修复:**
+  - **路径问题:** 发现 `backend/config.py` 硬编码了容器路径 `/app/data`，导致 Windows 本地测试无法加载 AI 配置。已修复为“容器/本地自适应逻辑”，优先寻找项目根目录下的 `backend_data`。
+  - **链路问题:** 解决了 Codex 拆分模块后遗留的单一 Prompt 字符串问题。AI 现已支持标准的 `messages` 数组（System/User/Assistant）。
+- **重构细节:**
+  - `ai_runtime.py`: 引入 `call_chat_model`，支持结构化消息调用。适配 Gemini 和 New API (OpenAI) 两种底层格式。
+  - `ai_chat_service.py`: 重构对话拼装逻辑，由 `build_chat_messages` 代替字符串拼接，实现了真正的上下文连贯性。
+  - **System Role**: 注入全局身份定义，确保 AI 明确其作为“凤凰计划助手”的职责。
+- **验证结果:**
+  - `debug_ai_chat_expert_v2.py` 测试通过，多轮对话流畅，Session 自动追加，逻辑闭环。
+
+## 2026-03-07（AI 聊天调试面板布局修复）
+
+- 需求背景：
+  - 聊天发送后，调试面板中的“最近返回结果 / 最近错误”会被挤出可视区域，导致无法继续排障。
+- 前端实现：
+  - `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`
+    - 将“最近错误”“最近返回结果”调整到调试面板顶部；
+    - 为调试面板增加独立滚动区域；
+    - 适当压缩聊天消息区高度，给调试信息留出稳定可视空间。
+- 结果：
+  - 调试面板在发送消息后仍能直接查看最关键的错误与响应信息，方便继续分段排查。
+
+## 2026-03-07（AI 聊天链路排障 C：页面内调试信息面板）
+
+- 目标：
+  - 直接在聊天组件内展示调试信息，避免反复切换 Network 面板或手工复制请求内容。
+- 前端实现：
+  - `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`
+    - 新增“调试信息”折叠面板；
+    - 当前可直接显示：
+      - 当前模式
+      - 当前会话 ID
+      - 最近发送 Payload
+      - 最近返回结果
+      - 最近错误
+  - 目的：下一步直接根据页面内可见的请求/响应内容，继续排查聊天器剩余问题。
+
+## 2026-03-07（AI 聊天链路排障 A：后端调试回显接口）
+
+- 目标：
+  - 先只验证“前端/请求 → 后端聊天接口”是否打通，暂不关心模型回答质量。
+- 后端实现：
+  - `backend/services/ai_chat_service.py`
+    - 新增 `AiChatDebugResponse`；
+    - 新增 `build_chat_debug_payload(...)`，用于返回：
+      - 当前 mode
+      - session_id
+      - provider
+      - model
+      - base_url
+      - history_count
+      - context_applied
+      - context_summary
+  - 新增调试接口：
+    - 日报分析页：`POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/debug`
+    - 月报查询页：`POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/debug`
+- 当前验证结论：
+  - 已使用日报分析页 debug 接口实测返回 `200 OK`；
+  - 回显结果表明：
+    - `provider = newapi`
+    - `model = gpt-5.4`
+    - `base_url = https://ai.xingyungept.cn/v1`
+    - `mode = free`
+    - `context_applied = false`
+  - 说明 A 阶段“请求进入后端聊天模块，并成功识别当前 AI 通道”已确认打通。
+
+## 2026-03-07（AI 聊天器显示修复：超长内容不再撑破弹窗）
+
+- 需求背景：
+  - AI 聊天消息中存在超长文本/链接时，内容会超过悬浮弹窗宽度，影响阅读。
+- 前端实现：
+  - 调整 `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue` 样式：
+    - 为消息气泡补充 `min-width: 0`、`max-width: 100%`、`overflow: hidden`；
+    - 为消息内容补充 `overflow-wrap: anywhere`，保证超长连续字符串也能自动断行；
+    - 用户消息宽度改为 `width:min(88%, 100%)`，避免被长内容撑开。
+    - 聊天输入框补充 `box-sizing:border-box`、`max-width:100%` 与 `overflow-x:hidden`，修复输入区域超出弹窗宽度的问题；
+- 结果：
+  - 聊天框内的长文本、长链接、长 JSON 片段将优先在弹窗内部换行，不再撑破悬浮聊天框宽度。
+
+## 2026-03-07（AI 聊天器二轮：悬浮展开 + 首轮无欢迎语 + 请求失败提示优化）
+
+- 需求背景：
+  - 聊天器不希望占用页面固定区域，而是以悬浮图标形式出现，点击展开、可最小化回图标；
+  - 不需要默认欢迎语，第一轮应由用户发起；
+  - 目前用户测试聊天时出现 `执行失败：Failed to fetch`，而“智能体设定”的连接测试正常，需要改善定位与提示。
+- 前端实现：
+  - `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`
+    - 改为悬浮图标模式，默认仅显示右下角悬浮入口；
+    - 点击图标展开聊天框，点击“最小化”收回到图标；
+    - 删除默认欢迎语，聊天历史初始为空，首条消息由用户发起；
+    - 针对浏览器原生 `Failed to fetch` 错误，改为更明确提示：优先提示“后端服务可能未重启或新聊天接口未加载”。
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - 移除单独的聊天卡片容器，仅保留悬浮聊天组件挂载。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+    - 继续保留悬浮聊天组件挂载；
+    - 清理旧内嵌聊天区与对应样式。
+- 对 `Failed to fetch` 的当前判断：
+  - 该报错通常不是“模型连接失败”，而是“浏览器请求没有成功打到后端接口”；
+  - 由于“智能体设定”的测试接口是旧接口，而聊天接口是本轮新加接口，所以最常见原因是：前端已更新、后端还未重启加载新路由。
+  - 本地进一步排查确认：
+    - `127.0.0.1:8000` 当前无后端服务监听；
+    - `127.0.0.1:8001` 正在提供 Phoenix 后端；
+    - 月报聊天新接口在 `8001` 上可命中，并返回 `401 缺少认证信息`，说明路由本身已加载；
+  - 因此本轮在前端聊天 API 增加了开发环境端口回退：若聊天请求发生网络级 `Failed to fetch`，会自动改用 `127.0.0.1:8001` 重试。
+  - 同时在 `frontend/vite.config.js` 新增 `/api -> 127.0.0.1:8001` 的 dev proxy，聊天请求会优先走同源代理以避免跨域把真实后端错误吞掉；该变更需要重启前端开发服务器后才生效。
+- 验证结果：
+  - 后端 `py_compile` 通过；
+  - `frontend/` 下 `npm run build` 通过。
+
+## 2026-03-07（AI 聊天器初版：自由聊天 + 基于查询数据聊天）
+
+- 需求背景：
+  - 在 `monthly_data_show/query-tool` 与 `daily_report_25_26/data-analysis` 两个页面增加通用 AI 聊天组件；
+  - 需要支持两种模式：
+    1. 自由聊天：不附加业务数据包，连续对话；
+    2. 基于查询数据聊天：把当前页面最新查询结果打包后，作为上下文连续追问。
+- 后端实现：
+  - 新增 `backend/services/ai_chat_service.py`：
+    - 统一定义 `AiChatRequest` / `AiChatResponse`；
+    - 提供会话存储、历史拼接、查询数据包摘要裁剪、Prompt 组装与统一聊天执行；
+    - 复用 `backend/services/ai_runtime.py` 的 `call_model(...)`，不再依赖报告服务。
+  - 新增页面级聊天接口：
+    - 月报查询页：`POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/dialog`
+    - 日报分析页：`POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/dialog`
+- 前端实现：
+  - 新增共享组件 `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`：
+    - 内置“自由聊天 / 基于查询数据”模式切换；
+    - 每个模式独立保留会话与上下文连续性；
+    - 支持新会话重置、模式切换与基础错误提示。
+  - 月报查询页 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+    - 用共享组件替换旧的隐藏聊天区；
+    - 基于当前 `rows / comparisonRows / summary / temperatureSummary / buildPayload()` 组装查询数据上下文。
+  - 日报分析页 `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`：
+    - 新增 AI 聊天卡片；
+    - 基于当前 `previewRows / lastQueryMeta / timelineGrid / ringCompare / planComparison` 组装查询数据上下文。
+  - 前端 API 新增：
+    - `queryMonthlyDataShowDialogChat(...)`
+    - `runDataAnalysisDialogChat(...)`
+- 结果：
+  - 两个页面现在都具备通用聊天器初版；
+  - 聊天器已不依赖旧的“受控工具查询”逻辑，后续可直接在此基础上继续演进聊天器和 Agent。
+- 验证结果：
+  - 后端 `py_compile` 通过；
+  - `frontend/` 下 `npm run build` 通过。
+
+## 2026-03-07（AI 核心抽离：运行时层与报告模式层解耦）
+
+- 需求背景：
+  - 原 `backend/services/data_analysis_ai_report.py` 同时承担 provider 运行时、提示词模板、报告生成流程与任务队列，已不适合作为后续通用聊天器/Agent 能力的基础层；
+  - 目标是在不破坏现有日报/月报 AI 报告能力的前提下，把通用 AI 能力抽离出来，后续聊天器直接复用新通用层。
+- 实现策略：
+  - 保留 `backend/services/data_analysis_ai_report.py` 作为“数据分析报告专用服务 + 兼容入口”；
+  - 新增 `backend/services/ai_runtime.py`：抽离通用 Provider 配置读取、当前生效 Provider 解析、运行时客户端缓存、统一模型调用、统一连接测试；
+  - 新增 `backend/services/ai_report_modes.py`：抽离日报/月报 AI 模式常量、Prompt 模板注册表、运行时提示词/开关读取；
+  - 原 `data_analysis_ai_report.py` 末尾新增兼容别名层，让既有报告流水线继续工作，同时内部全局函数名实际指向新模块实现。
+- 外部调用迁移：
+  - `backend/api/v1/admin_console.py` 的 AI 连接测试改为直接调用 `ai_runtime.run_ai_connection_test(...)`；
+  - `backend/projects/daily_report_25_26/api/legacy_full.py` 的 AI 连接测试与运行时重置改为直接调用 `ai_runtime`；
+  - `backend/projects/monthly_data_show/api/workspace.py` 的通用模型调用改为直接调用 `ai_runtime.call_model(...)`，不再依赖 `data_analysis_ai_report._call_model` 私有函数。
+- 当前结构定位：
+  - `ai_runtime.py`：通用 AI 底层；
+  - `ai_report_modes.py`：日报/月报报告模式注册；
+  - `data_analysis_ai_report.py`：报告生成应用层；
+  - 后续聊天器应优先依赖 `ai_runtime.py`，而不是继续依赖 `data_analysis_ai_report.py`。
+- 验证结果：
+  - `python -m py_compile backend/services/ai_runtime.py backend/services/ai_report_modes.py backend/services/data_analysis_ai_report.py backend/api/v1/admin_console.py backend/projects/daily_report_25_26/api/legacy_full.py backend/projects/monthly_data_show/api/workspace.py` 通过。
+
 ## 2026-03-07（智能体设定：ID 输入失焦修复 + New API 批量测试 + 备选模型）
 
 - 需求背景：

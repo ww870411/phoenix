@@ -47,7 +47,7 @@ from backend.services.workflow_status import workflow_status_manager
 
 # Use统一的数据目录常量，默认指向容器内 /app/data
 from backend.services import data_analysis as data_analysis_service
-from backend.services import data_analysis_ai_report
+from backend.services import ai_chat_service, ai_runtime, data_analysis_ai_report
 from backend.services import ai_usage_service
 from backend.services.api_key_cipher import decrypt_api_key, encrypt_api_key
 from backend.services.project_data_paths import (
@@ -2258,7 +2258,7 @@ async def update_ai_settings_endpoint(
         payload.enable_validation,
         payload.allow_non_admin_report,
     )
-    data_analysis_ai_report.reset_gemini_client()
+    ai_runtime.reset_runtime_client()
     return {
         "ok": True,
         "provider": result["provider"],
@@ -2287,7 +2287,7 @@ async def test_ai_settings_endpoint(
 ):
     _ensure_manage_ai_settings_permission(session)
     try:
-        result = data_analysis_ai_report.run_ai_connection_test(
+        result = ai_runtime.run_ai_connection_test(
             {
                 "provider": payload.provider,
                 "api_keys": payload.api_keys or [],
@@ -2302,6 +2302,48 @@ async def test_ai_settings_endpoint(
     except Exception as exc:  # pylint: disable=broad-except
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, **result}
+
+
+@router.post(
+    "/data_analysis/ai-chat/dialog",
+    response_model=ai_chat_service.AiChatResponse,
+    summary="数据分析页通用 AI 聊天",
+)
+async def data_analysis_ai_chat_dialog(
+    payload: ai_chat_service.AiChatRequest,
+    session: AuthSession = Depends(get_current_session),
+):
+    try:
+        return ai_chat_service.run_chat_turn(
+            project_key=PROJECT_KEY,
+            scope="daily_report_data_analysis_dialog",
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/data_analysis/ai-chat/debug",
+    response_model=ai_chat_service.AiChatDebugResponse,
+    summary="数据分析页 AI 聊天调试回显",
+)
+async def data_analysis_ai_chat_debug(
+    payload: ai_chat_service.AiChatRequest,
+    session: AuthSession = Depends(get_current_session),
+):
+    try:
+        return ai_chat_service.build_chat_debug_payload(
+            project_key=PROJECT_KEY,
+            scope="daily_report_data_analysis_dialog_debug",
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(

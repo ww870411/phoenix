@@ -33,6 +33,57 @@
   - 仅允许复用现有白名单查询函数：`query_month_data_show`、`query_month_data_show_comparison`；
   - 不开放任意 SQL 执行，避免越权查询与不可控输出；
   - 模型调用失败时返回保守兜底文案，保证接口稳定可用。
+- AI 聊天调试面板布局修复（2026-03-07）：
+  - 本轮仅调整前端共享聊天组件的调试信息布局，后端接口无改动；
+  - 目标是确保发送消息后仍能直接查看最近错误与最近返回结果。
+
+- AI 聊天前端调试面板（2026-03-07）：
+  - 前端共享聊天组件已内置调试信息展示；
+  - 页面内可直接查看最近一次聊天请求 payload、响应结果与错误信息，便于和后端 debug 接口配合排查。
+
+- AI 聊天调试接口（2026-03-07）：
+  - 为便于分段排查聊天链路，新增 debug 回显接口：
+    - `POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/debug`
+    - `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/debug`
+  - 返回内容包含：
+    - 当前 `mode`
+    - `provider`
+    - `model`
+    - `base_url`
+    - `history_count`
+    - `context_applied`
+    - `context_summary`
+  - 用于先确认“请求是否进入后端聊天模块”，再继续排查“后端是否能成功调用 new api / gemini”。
+
+- AI 聊天器前端显示修复（2026-03-07）：
+  - 本轮仅调整前端共享聊天组件样式，后端接口无改动；
+  - 目的：避免超长消息内容撑破悬浮聊天框宽度。
+
+- AI 聊天接口说明补充（2026-03-07）：
+  - 新增聊天接口后，前端若出现 `Failed to fetch`，通常表示请求未成功命中新路由，而不是模型 Provider 连接失败；
+  - 由于“智能体设定”中的连接测试复用旧接口，即使其测试正常，也不能说明新聊天接口已经被运行中的后端进程加载；
+  - 前端开发环境现已优先通过 Vite `/api` 代理访问聊天接口，以便直接看到后端返回的真实错误；
+  - 本轮建议：修改后需重启后端服务，以便加载：
+    - `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/dialog`
+    - `POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/dialog`
+
+- 通用 AI 聊天服务（2026-03-07）：
+  - 新增 `backend/services/ai_chat_service.py`，提供：
+    - 通用聊天请求/响应模型；
+    - 自由聊天 / 基于查询数据聊天 两种模式；
+    - 会话存储、历史拼接、查询数据包摘要裁剪、统一 Prompt 组装；
+  - 新增页面级聊天接口：
+    - 月报查询页：`POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/dialog`
+    - 日报分析页：`POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/dialog`
+  - 该聊天服务底层复用 `backend/services/ai_runtime.py` 的 `call_chat_model(...)`，支持多轮对话结构化消息（System/User/Assistant）。
+
+- AI 架构抽离（2026-03-07）：
+  - 原 `backend/services/data_analysis_ai_report.py` 不再承担“通用 AI 核心”定位；
+  - 新增 `backend/services/ai_runtime.py`，承载 Provider 配置解析、路径自适应（Docker/本地）、运行时客户端缓存、结构化模型调用（call_chat_model）与连接测试；
+  - 新增 `backend/services/ai_report_modes.py`，承载日报/月报模式常量与 Prompt 模板注册表；
+  - `data_analysis_ai_report.py` 继续作为日报/月报 AI 报告生成服务存在，但已通过兼容别名层依赖新抽离模块；
+  - `monthly_data_show` 的通用模型调用已改为直连 `ai_runtime.call_chat_model(...)`，聊天器已全面基于结构化消息构建。
+
 - AI 设置 Provider 扩展（2026-03-07）：
   - `backend/projects/daily_report_25_26/api/legacy_full.py` 的 AI 设置读写链路新增 `backup_models` 持久化；
   - `AiSettingsPayload` / 全局后台 `admin_console.py` 同步支持 `newapi_backup_models`；

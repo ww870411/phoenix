@@ -52,6 +52,53 @@ const normalized = (path) => `${API_BASE}${path}`
 
 const projectPath = (projectKey) => normalized(`/projects/${encodeURIComponent(projectKey)}`)
 
+function buildDev8001FallbackUrl(url) {
+  const rawUrl = String(url || '')
+  if (!rawUrl) return ''
+  if (/^https?:\/\/127\.0\.0\.1:8001\//i.test(rawUrl) || /^https?:\/\/localhost:8001\//i.test(rawUrl)) {
+    return ''
+  }
+  if (rawUrl.startsWith('/api/')) {
+    return `http://127.0.0.1:8001${rawUrl}`
+  }
+  if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/api\//i.test(rawUrl)) {
+    return rawUrl.replace(/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i, 'http://127.0.0.1:8001')
+  }
+  return ''
+}
+
+function buildSameOriginApiUrl(url) {
+  const rawUrl = String(url || '')
+  if (!rawUrl) return ''
+  if (rawUrl.startsWith('/api/')) return rawUrl
+  const match = rawUrl.match(/^https?:\/\/[^/]+(\/api\/.*)$/i)
+  return match ? match[1] : ''
+}
+
+async function fetchWithDevChatFallback(url, options = {}) {
+  const sameOriginUrl = buildSameOriginApiUrl(url)
+  if (sameOriginUrl && typeof window !== 'undefined' && /localhost:5173|127\.0\.0\.1:5173/i.test(window.location.origin)) {
+    try {
+      return await fetch(sameOriginUrl, options)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/Failed to fetch/i.test(message || '')) {
+        throw error
+      }
+    }
+  }
+  try {
+    return await fetch(url, options)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const fallbackUrl = buildDev8001FallbackUrl(url)
+    if (!fallbackUrl || !/Failed to fetch/i.test(message || '')) {
+      throw error
+    }
+    return fetch(fallbackUrl, options)
+  }
+}
+
 export async function login(credentials) {
   const response = await fetch(normalized('/auth/login'), {
     method: 'POST',
@@ -452,6 +499,20 @@ export async function queryMonthlyDataShowAiChat(projectKey, payload = {}) {
   return response.json()
 }
 
+export async function queryMonthlyDataShowDialogChat(projectKey, payload = {}) {
+  const requestUrl = `${projectPath(projectKey)}/monthly-data-show/ai-chat/dialog`
+  const response = await fetchWithDevChatFallback(requestUrl, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `月报页面聊天失败: ${response.status} (${requestUrl})`)
+  }
+  return response.json()
+}
+
 export async function startMonthlyDataShowAiReport(projectKey, payload = {}) {
   const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/ai-report/start`, {
     method: 'POST',
@@ -820,6 +881,20 @@ export async function getDataAnalysisAiReport(projectKey, jobId) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `获取智能报告失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function runDataAnalysisDialogChat(projectKey, payload = {}) {
+  const requestUrl = `${projectPath(projectKey)}/data_analysis/ai-chat/dialog`
+  const response = await fetchWithDevChatFallback(requestUrl, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `数据分析聊天失败: ${response.status} (${requestUrl})`)
   }
   return response.json()
 }
