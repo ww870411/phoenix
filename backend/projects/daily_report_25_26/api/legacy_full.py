@@ -1568,6 +1568,7 @@ class AiSettingsPayload(BaseModel):
     newapi_base_url: Optional[str] = None
     newapi_api_keys: Optional[List[str]] = None
     newapi_model: Optional[str] = None
+    newapi_backup_models: Optional[List[str]] = None
     providers: Optional[List[Dict[str, Any]]] = None
     active_provider_id: Optional[str] = None
     instruction_daily: Optional[str] = None
@@ -1654,6 +1655,10 @@ def _normalize_provider_record(raw: Any, index: int) -> Dict[str, Any]:
     api_keys_raw = obj.get("api_keys")
     api_keys = [str(k or "").strip() for k in (api_keys_raw if isinstance(api_keys_raw, list) else [])]
     api_keys = [k for k in api_keys if k]
+    backup_models_raw = obj.get("backup_models")
+    backup_models = [str(item or "").strip() for item in (backup_models_raw if isinstance(backup_models_raw, list) else [])]
+    backup_models = [item for item in backup_models if item and item != model]
+    backup_models = list(dict.fromkeys(backup_models))
     return {
         "id": provider_id,
         "name": name,
@@ -1661,6 +1666,7 @@ def _normalize_provider_record(raw: Any, index: int) -> Dict[str, Any]:
         "base_url": base_url,
         "model": model,
         "api_keys": api_keys,
+        "backup_models": backup_models,
     }
 
 
@@ -1678,6 +1684,7 @@ def _build_providers_from_legacy_fields(data: Dict[str, Any]) -> Dict[str, Any]:
             "base_url": "",
             "model": str(data.get("gemini_model") or "").strip(),
             "api_keys": [k for k in gemini_keys if k],
+            "backup_models": [],
         }
     )
 
@@ -1694,6 +1701,14 @@ def _build_providers_from_legacy_fields(data: Dict[str, Any]) -> Dict[str, Any]:
                 "base_url": str(data.get("newapi_base_url") or "").strip(),
                 "model": str(data.get("newapi_model") or "").strip(),
                 "api_keys": [k for k in newapi_keys if k],
+                "backup_models": [
+                    item
+                    for item in [
+                        str(model_name or "").strip()
+                        for model_name in (data.get("newapi_backup_models") if isinstance(data.get("newapi_backup_models"), list) else [])
+                    ]
+                    if item and item != str(data.get("newapi_model") or "").strip()
+                ],
             }
         )
 
@@ -1724,6 +1739,7 @@ def _read_ai_settings() -> Dict[str, Any]:
                 "base_url": "",
                 "model": "",
                 "api_keys": [],
+                "backup_models": [],
             }
         ]
         return {
@@ -1733,6 +1749,7 @@ def _read_ai_settings() -> Dict[str, Any]:
             "newapi_base_url": "",
             "newapi_api_keys": [],
             "newapi_model": "",
+            "newapi_backup_models": [],
             "providers": providers,
             "active_provider_id": "gemini_default",
             "instruction_daily": "",
@@ -1780,6 +1797,7 @@ def _read_ai_settings() -> Dict[str, Any]:
         "newapi_base_url": str((newapi_provider or {}).get("base_url") or ""),
         "newapi_api_keys": newapi_keys,
         "newapi_model": str((newapi_provider or {}).get("model") or ""),
+        "newapi_backup_models": list((newapi_provider or {}).get("backup_models") or []),
         "providers": providers,
         "active_provider_id": active_provider_id,
         "instruction_daily": str(data.get("instruction_daily") or ""),
@@ -1804,6 +1822,7 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
                 "base_url": "",
                 "model": "",
                 "api_keys": [],
+                "backup_models": [],
             }
         ]
         return {
@@ -1813,6 +1832,7 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
             "newapi_base_url": "",
             "newapi_api_keys": [],
             "newapi_model": "",
+            "newapi_backup_models": [],
             "providers": providers,
             "active_provider_id": "gemini_default",
             "instruction_daily": "",
@@ -1829,6 +1849,7 @@ def _persist_ai_settings(
     newapi_base_url: Optional[str],
     newapi_api_keys: Optional[List[str]],
     newapi_model: Optional[str],
+    newapi_backup_models: Optional[List[str]],
     providers: Optional[List[Dict[str, Any]]],
     active_provider_id: Optional[str],
     instruction_daily: Optional[str],
@@ -1856,15 +1877,16 @@ def _persist_ai_settings(
             provider_records.append(normalized)
     if not provider_records:
         provider_records = [
-            {
-                "id": "gemini_default",
-                "name": "Gemini 官方",
-                "kind": "gemini",
-                "base_url": "",
-                "model": str(model or "").strip(),
-                "api_keys": [str(k).strip() for k in (api_keys or []) if isinstance(k, str) and str(k).strip()],
-            }
-        ]
+                {
+                    "id": "gemini_default",
+                    "name": "Gemini 官方",
+                    "kind": "gemini",
+                    "base_url": "",
+                    "model": str(model or "").strip(),
+                    "api_keys": [str(k).strip() for k in (api_keys or []) if isinstance(k, str) and str(k).strip()],
+                    "backup_models": [],
+                }
+            ]
         has_newapi = bool(str(newapi_base_url or "").strip() or str(newapi_model or "").strip() or (newapi_api_keys or []))
         if has_newapi:
             provider_records.append(
@@ -1875,6 +1897,11 @@ def _persist_ai_settings(
                     "base_url": str(newapi_base_url or "").strip(),
                     "model": str(newapi_model or "").strip(),
                     "api_keys": [str(k).strip() for k in (newapi_api_keys or []) if isinstance(k, str) and str(k).strip()],
+                    "backup_models": [
+                        item
+                        for item in [str(model_name or "").strip() for model_name in (newapi_backup_models or [])]
+                        if item and item != str(newapi_model or "").strip()
+                    ],
                 }
             )
 
@@ -1896,6 +1923,7 @@ def _persist_ai_settings(
                 "base_url": str(record.get("base_url") or "").strip(),
                 "model": str(record.get("model") or "").strip(),
                 "api_keys": [encrypt_api_key(k) for k in keys],
+                "backup_models": list(record.get("backup_models") or []),
             }
         )
 
@@ -1914,6 +1942,7 @@ def _persist_ai_settings(
     payload["newapi_api_keys"] = [encrypt_api_key(k) for k in newapi_plain_keys]
     payload["newapi_base_url"] = str((newapi_record or {}).get("base_url") or "")
     payload["newapi_model"] = str((newapi_record or {}).get("model") or "")
+    payload["newapi_backup_models"] = list((newapi_record or {}).get("backup_models") or [])
     if "gemini_api_key" in payload:
         del payload["gemini_api_key"]
     if "newapi_api_key" in payload:
@@ -1939,6 +1968,7 @@ def _persist_ai_settings(
                 "base_url": item.get("base_url"),
                 "model": item.get("model"),
                 "api_keys": [_decode_api_key(k) for k in (item.get("api_keys") or []) if str(k).strip()],
+                "backup_models": list(item.get("backup_models") or []),
             }
         )
     active_plain = next((p for p in providers_plain if p.get("id") == active_id), providers_plain[0])
@@ -1952,6 +1982,7 @@ def _persist_ai_settings(
         "newapi_base_url": str((newapi_plain or {}).get("base_url") or ""),
         "newapi_api_keys": list((newapi_plain or {}).get("api_keys") or []),
         "newapi_model": str((newapi_plain or {}).get("model") or ""),
+        "newapi_backup_models": list((newapi_plain or {}).get("backup_models") or []),
         "providers": providers_plain,
         "active_provider_id": active_id,
         "instruction_daily": str(payload.get("instruction_daily") or ""),
@@ -2214,6 +2245,7 @@ async def update_ai_settings_endpoint(
         payload.newapi_base_url,
         payload.newapi_api_keys or [],
         payload.newapi_model,
+        payload.newapi_backup_models or [],
         payload.providers,
         payload.active_provider_id,
         payload.instruction_daily.strip()

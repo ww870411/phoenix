@@ -1,6 +1,6 @@
 {
   "provider": "newapi",
-  "active_provider_id": "鱼汤",
+  "active_provider_id": "幸运",
   "providers": [
     {
       "id": "gemini_default",
@@ -11,17 +11,19 @@
       "api_keys": [
         "AIzaSwwyDZYp23xdqvJ6iOnxMpa1vnbaxmswNvKK8",
         "AIzaSwwyD_GTqiOY-nCO-tCWCyC-bdBq2nThLDZRo"
-      ]
+      ],
+      "backup_models": []
     },
     {
-      "id": "newapi_default",
-      "name": "New API 默认",
+      "id": "薄荷",
+      "name": "薄荷",
       "kind": "newapi",
       "base_url": "https://x666.me/v1",
       "model": "gpt-5.2",
       "api_keys": [
         "sk-94wwKxfybMapdKugdMG0j7XlQ7dmYRoBG5PHVREfB3Qm3pPWlN"
-      ]
+      ],
+      "backup_models": []
     },
     {
       "id": "鱼汤",
@@ -31,7 +33,43 @@
       "model": "gpt-5.2",
       "api_keys": [
         "sk-6WwwU3vgfPAUYGXBwkPfbfBII3UmzyVRi2fEy28lZbSaf1ILQ0"
+      ],
+      "backup_models": []
+    },
+    {
+      "id": "幸运",
+      "name": "幸运",
+      "kind": "newapi",
+      "base_url": "https://ai.xingyungept.cn/v1",
+      "model": "gpt-5.4@xhigh",
+      "api_keys": [
+        "sk-Lbwwznw25ZdfQ0sZYOaRtzpCIv0PQXoIJ9tCYz4kCTMrgYmecX"
+      ],
+      "backup_models": [
+        "gpt-5.4"
       ]
+    },
+    {
+      "id": "lEysiver",
+      "name": "lEysiver",
+      "kind": "newapi",
+      "base_url": "https://elysiver.h-e.top/v1",
+      "model": "gpt-5.4",
+      "api_keys": [
+        "sk-UywwGlMu3wOEoXyzpRBGRa1bRDsUnuZZOgryavUlwtcKKouu2F"
+      ],
+      "backup_models": []
+    },
+    {
+      "id": "DGB",
+      "name": "DGB",
+      "kind": "newapi",
+      "base_url": "https://freeapi.dgbmc.top/v1",
+      "model": "gpt-5.4",
+      "api_keys": [
+        "sk-a4wwhgLzxBOkSt2Eq73PALlhogr8HQ3yS7KzPIjY7387CIEUiR"
+      ],
+      "backup_models": []
     }
   ],
   "gemini_model": "gemini-3-flash-preview",
@@ -48,5 +86,6 @@
   "gemini_api_keys": [
     "AIzaSwwyDZYp23xdqvJ6iOnxMpa1vnbaxmswNvKK8",
     "AIzaSwwyD_GTqiOY-nCO-tCWCyC-bdBq2nThLDZRo"
-  ]
+  ],
+  "newapi_backup_models": []
 }

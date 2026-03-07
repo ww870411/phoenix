@@ -3,8 +3,10 @@
     <div class="app-header__inner">
       <div class="brand" @click="goHome">
         <span class="brand-mark"></span>
-        <span class="brand-name">大连洁净能源集团</span>
-        <span class="brand-sub">数据填报平台</span>
+        <div class="brand-text">
+          <span class="brand-name">大连洁净能源集团</span>
+          <span class="brand-sub">数据填报平台</span>
+        </div>
       </div>
       <nav class="nav">
         <button
@@ -67,11 +69,17 @@ async function logout() {
   justify-content: space-between;
   gap: 10px;
 }
-.brand { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; min-width: 0; }
 .brand-mark { width: 10px; height: 10px; border-radius: 50%; background: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,.25); }
-.brand-name { font-weight: 800; letter-spacing: .5px; white-space: nowrap; word-break: keep-all; }
-.brand-sub { opacity: .9; font-size: 12px; white-space: nowrap; word-break: keep-all; }
-.nav { display: flex; gap: 8px; flex-wrap: nowrap; }
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.brand-name { font-weight: 800; letter-spacing: .5px; white-space: nowrap; word-break: keep-all; line-height: 1.15; }
+.brand-sub { opacity: .9; font-size: 12px; white-space: nowrap; word-break: keep-all; line-height: 1.1; }
+.nav { display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
 .user-info {
   font-size: 13px;
   opacity: .9;
@@ -102,11 +110,14 @@ async function logout() {
 }
 @media (max-width: 640px) {
   .app-header__inner {
-    padding: 8px 10px;
+    padding: 8px 10px 10px;
     gap: 8px;
+    align-items: stretch;
+    flex-direction: column;
   }
   .brand {
     gap: 8px;
+    width: 100%;
   }
   .brand-name {
     font-size: 15px;
@@ -114,8 +125,20 @@ async function logout() {
   .brand-sub {
     font-size: 11px;
   }
+  .brand-text {
+    gap: 1px;
+  }
   .nav {
     gap: 6px;
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .user-info {
+    order: -1;
+    width: 100%;
+    font-size: 12px;
+    opacity: 0.82;
   }
   .btn {
     padding: 0 10px;

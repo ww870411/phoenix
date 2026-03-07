@@ -1,3 +1,70 @@
+## 2026-03-07（智能体设定：ID 输入失焦修复 + New API 批量测试 + 备选模型）
+
+- 需求背景：
+  - “智能体设定”中 provider 的“标识 ID”输入框每输入一个字符就丢失焦点；
+  - 希望增加“一键测试全部 New API Provider”的能力，并把结果展示在各 provider 设置区；
+  - 希望每个 provider 支持快捷打开站点根链接、维护备选模型列表，便于主模型异常时快速切换。
+- 前置说明（偏差留痕）：
+  - Serena 已完成项目激活与结构化检索；
+  - `.vue` 与 Markdown 文件不适合 Serena 符号级编辑，本轮使用 `apply_patch` 进行最小范围修改；
+  - 回滚方式：回退 `AiAgentSettingsDialog.vue`、`legacy_full.py`、`admin_console.py` 与三份文档中的本次新增段落。
+- 前端实现（`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`）：
+  - 修复失焦根因：provider 卡片列表的 `:key` 从可编辑的 `provider.id` 改为稳定的内部 `uiKey`，避免输入 ID 时节点被重建；
+  - 新增“测试全部 New API”按钮，串行测试所有 `kind === "newapi"` 的 provider，并在各 provider 卡片头部展示成功/失败状态；
+  - 新增“打开站点”按钮：从 `base_url` 自动提取站点根地址（如 `https://x666.me/v1` -> `https://x666.me`）并新窗口打开；
+  - 新增“备选模型”编辑区，支持逐条添加、删除，并可一键“设为当前”把备选模型提升为主模型。
+- 后端实现：
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+    - `AiSettingsPayload` 新增 `newapi_backup_models`；
+    - `_normalize_provider_record` / `_read_ai_settings` / `_persist_ai_settings` 全链路支持 `backup_models` 持久化与返回；
+    - 兼容旧配置回退时，为 provider 默认补齐空的 `backup_models`。
+  - `backend/api/v1/admin_console.py`
+    - 全局 AI 设置 payload 同步新增 `newapi_backup_models`，继续复用统一的底层持久化逻辑。
+- 结果：
+  - “标识 ID”输入现在可连续输入，不再每击键丢焦点；
+  - 可一次性检查全部 New API Provider 连通性，并在对应卡片内看到结果；
+  - 每个 provider 现在具备站点直达与备选模型管理能力，适合做快速切换。
+
+## 2026-03-07（智能体设定：单 Provider 测试 + 折叠卡片）
+
+- 需求背景：
+  - 希望每个 provider 都能单独测试当前连接；
+  - 希望每个 provider 的设置区域可折叠，默认收起，仅展示名称和模型，降低弹窗纵向占用。
+- 前端实现（`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`）：
+  - 在每个 provider 卡片头部新增“测试当前”按钮，复用既有连接测试接口，结果继续显示在当前卡片头部；
+  - provider 卡片默认折叠，头部显示序号、显示名称、当前模型名；
+  - 新增展开/收起切换按钮，点击后再展示完整字段区；
+  - 新增 provider 局部测试与全量 New API 测试的状态互斥，避免测试期间重复编辑或并发触发。
+- 结果：
+  - 现在既可以批量测试全部 New API，也可以针对单个 provider 快速验证；
+  - 弹窗默认更紧凑，多个 provider 共存时更容易浏览。
+
+## 2026-03-07（智能体设定：当前生效标记 + 一键切换 Provider）
+
+- 需求背景：
+  - 希望在 provider 卡片头部直接看出哪个是当前生效配置；
+  - 希望在多个 provider 间快速切换，无需手动改顶部“当前使用 Provider”下拉。
+- 前端实现（`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`）：
+  - provider 卡片头部新增“当前生效 / 备用”状态标签；
+  - 每个 provider 操作区新增“设为当前”按钮，点击后直接把 `activeProviderId` 切换为该 provider；
+  - 当前已生效的 provider 会自动禁用“设为当前”按钮，避免重复操作。
+- 结果：
+  - 现在在多 provider 场景下，可更快识别当前通道并完成切换；
+  - 顶部总选择器仍然保留，卡片级切换作为更直接的补充交互。
+
+## 2026-03-07（智能体设定：移除底部全局测试连接按钮）
+
+- 需求背景：
+  - 组件内已经具备“测试当前”和“测试全部 New API”两类更清晰的测试入口；
+  - 底部全局“测试连接”按钮语义重复，容易造成理解混淆。
+- 前端实现（`frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`）：
+  - 删除底部 `测试连接` 按钮；
+  - 移除对应的 `handleTestConnection` 逻辑；
+  - 保留卡片内“测试当前”与顶部“测试全部 New API”作为唯一测试入口。
+- 结果：
+  - 智能体设定弹窗的测试动作收敛为更明确的局部/批量两种模式；
+  - 底部操作区职责更单纯，仅保留退出与保存动作。
+
 ## 2026-03-06（lo1_new_server 构建慢过程根因分析）
 
 - 现象：
@@ -5654,6 +5721,44 @@
 - 验证：
   - 修正后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过。
 
+## 2026-03-07（月报查询页“重置”按钮手机端溢出修正）
+- 现象：月报查询页手机宽度下，“重置”按钮被挤出页面容器外。
+- 原因：`<=640px` 断点下，`.actions .btn` 被设为 `width: 100%`，但 `.actions` 本身仍保持横向 `flex`，导致第二个按钮横向溢出。
+- 修正：
+  - 在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的 `<=640px` 断点下，将 `.actions` 改为纵向排列。
+- 验证：
+  - 修正后执行 `frontend` 下 `npm run build`，2026-03-07 构建通过。
+
+## 2026-03-07（全局 AppHeader 手机端重排）
+- 目标：解决手机端顶部 banner 文字与按钮元素“全挤在一起”的问题，不再依赖简单 `nowrap` 硬压。
+- 变更文件：`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 修改内容：
+  - 将品牌区从单层横向排列改为 `brand-mark + brand-text` 结构；
+  - `brand-text` 内固定为上下两层：集团名 / 平台名；
+  - 在 `<=640px` 下将整个头部改为纵向分层：
+    - 第一层：品牌区
+    - 第二层：导航区（后台按钮、用户信息、退出）
+  - 导航区允许整体换层，但单个按钮与单个文案保持不拆字。
+- 结果：
+  - 手机端 banner 不再是“所有元素硬塞一行”，而是分层排布；
+  - 桌面端结构保持不变。
+- 验证：
+  - 修改后执行 `frontend` 下 `npm run build`，2026-03-07 构建通过。
+
+## 2026-03-07（Phoenix 手机页面优化 Skill 草案）
+- 目标：将近期多轮手机页面优化经验沉淀为可复用 skill，减少后续同类问题的重复判断成本。
+- 新增文件：
+  - `configs/skills/phoenix-mobile-layout/SKILL.md`
+- Skill 内容覆盖：
+  - 适用场景、项目约束、核心原则
+  - 入口页 / 查询页 / 工作台页 / 数据录入页 / 看板分析页 的分类处理方法
+  - 固定工作流、验证清单、浏览器复测建议
+  - 文档与 Serena 留痕要求
+  - 推荐入口文件与触发语句
+- 说明：
+  - 当前为仓库内 skill 草案，已可作为项目规范文档使用；
+  - 若需像系统 skills 一样被直接发现和调用，后续还需迁移或安装到 Codex 的全局 skills 目录。
+
 ## 2026-03-06（项目选择页桌面卡片高度回退）
 - 现象：回到 PC 界面后，项目选择页卡片高度明显偏高，导致桌面端密度过松。
 - 原因：此前为项目选择页卡片添加了桌面端 `min-height: 136px`，本意是让手机卡片更稳定，但副作用影响了 PC 端展示。
@@ -5662,3 +5767,41 @@
   - 保留手机断点下的单列卡片和紧凑样式，不影响移动端优化结果。
 - 验证：
   - 修正后再次执行 `frontend` 下 `npm run build`，2026-03-06 构建通过。
+
+## 2026-03-06（后端依赖版本锁定，减少 pip 回溯）
+- 目标：优先解决 `lo1_new_server.ps1` 构建链路中后端镜像 `pip install -r requirements.txt` 的依赖回溯慢点。
+- 变更文件：`backend/requirements.txt`
+- 处理方式：
+  - 将原先未锁定的直接依赖改为固定版本：
+    - `pydantic-settings==2.13.1`
+    - `passlib[bcrypt]==1.7.4`
+    - `python-jose[cryptography]==3.5.0`
+    - `python-multipart==0.0.22`
+    - `openpyxl==3.1.5`
+    - `psycopg2-binary==2.9.11`
+    - `httpx==0.28.1`
+    - `google-generativeai==0.8.6`
+    - `psutil==7.2.2`
+    - `paramiko==3.5.1`
+  - 额外显式锁定传递依赖：
+    - `grpcio==1.76.0`
+    - `grpcio-status==1.71.2`
+- 原因：
+  - 之前慢点分析已指向 `google-generativeai` 相关链路的 `grpcio-status` 多版本回溯；
+  - 显式锁定后，可显著降低 clean build 时的解析分支数量。
+- 验证：
+  - 本机执行 `python -m pip install --dry-run -r backend/requirements.txt` 成功；
+  - 解析结果未报冲突，输出为确定的安装集合。
+
+## 2026-03-06（后端 Docker 构建切换 pip 国内镜像源）
+- 目标：降低 `backend/Dockerfile.prod` 中 `pip install` 的下载等待时间，优先改善网络侧慢点。
+- 变更文件：`backend/Dockerfile.prod`
+- 修改内容：
+  - 在 builder 阶段的 `ENV` 中新增：
+    - `PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`
+    - `PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn`
+- 影响：
+  - Docker 构建时的 `pip install --prefix=/install -r requirements.txt` 将默认走清华 PyPI 镜像；
+  - 本轮未改 apt 源、未启用 BuildKit cache，也未调整脚本入口。
+- 验证：
+  - 本次为 Dockerfile 静态修改，未实际执行镜像构建；后续可直接通过 `./lo1_new_server.ps1` 观察 backend 依赖下载阶段耗时变化。

@@ -44,23 +44,87 @@
             <details class="block" open>
               <summary>Provider 管理</summary>
               <div class="block__content">
+                <div class="provider-toolbar">
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    :disabled="saving || testing || !hasNewApiProviders"
+                    @click="handleBatchTestNewApi"
+                  >
+                    {{ testingNewApiAll ? '测试全部 New API 中…' : '测试全部 New API' }}
+                  </button>
+                </div>
                 <div
                   v-for="(provider, index) in form.providers"
-                  :key="provider.id"
+                  :key="provider.uiKey"
                   class="provider-card"
                 >
                   <div class="provider-card__head">
-                    <strong>#{{ index + 1 }}</strong>
-                    <button
-                      type="button"
-                      class="btn ghost xs"
-                      :disabled="saving || testing || form.providers.length <= 1"
-                      @click="removeProvider(index)"
-                    >
-                      删除
-                    </button>
+                    <div class="provider-card__title">
+                      <button
+                        type="button"
+                        class="provider-card__toggle"
+                        :disabled="saving || testing"
+                        @click="toggleProviderExpanded(provider)"
+                      >
+                        <strong>#{{ index + 1 }}</strong>
+                        <span>{{ provider.name || '未命名 Provider' }}</span>
+                        <span
+                          class="provider-card__active-tag"
+                          :class="isActiveProvider(provider) ? 'provider-card__active-tag--active' : 'provider-card__active-tag--standby'"
+                        >
+                          {{ isActiveProvider(provider) ? '当前生效' : '备用' }}
+                        </span>
+                        <span class="provider-card__summary">
+                          {{ provider.model || '未设置模型' }}
+                        </span>
+                        <span class="provider-card__fold">{{ provider.expanded ? '收起' : '展开' }}</span>
+                      </button>
+                      <span
+                        v-if="providerTestResults[provider.uiKey]?.message"
+                        class="provider-card__status"
+                        :class="`provider-card__status--${providerTestResults[provider.uiKey]?.status || 'idle'}`"
+                      >
+                        {{ providerTestResults[provider.uiKey]?.message }}
+                      </span>
+                    </div>
+                    <div class="provider-card__actions">
+                      <button
+                        type="button"
+                        class="btn ghost xs"
+                        :disabled="saving || testing || isActiveProvider(provider)"
+                        @click="setActiveProvider(provider)"
+                      >
+                        设为当前
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ghost xs"
+                        :disabled="saving || testing || !canTest"
+                        @click="handleTestSingleProvider(provider, index)"
+                      >
+                        {{ providerTestResults[provider.uiKey]?.status === 'testing' ? '测试中…' : '测试当前' }}
+                      </button>
+                      <button
+                        v-if="provider.kind === 'newapi'"
+                        type="button"
+                        class="btn ghost xs"
+                        :disabled="saving || testing || !getProviderSiteUrl(provider)"
+                        @click="openProviderSite(provider)"
+                      >
+                        打开站点
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ghost xs"
+                        :disabled="saving || testing || form.providers.length <= 1"
+                        @click="removeProvider(index)"
+                      >
+                        删除
+                      </button>
+                    </div>
                   </div>
-                  <div class="provider-grid">
+                  <div v-if="provider.expanded" class="provider-grid">
                     <label class="field">
                       <span>标识 ID</span>
                       <input v-model="provider.id" :disabled="saving || testing" />
@@ -80,6 +144,46 @@
                       <span>模型名称</span>
                       <input v-model="provider.model" :disabled="saving || testing" />
                     </label>
+                    <div class="field field--full">
+                      <span>备选模型（可切换为当前模型）</span>
+                      <div class="keys">
+                        <div
+                          v-for="(backupModel, backupIndex) in provider.backup_models"
+                          :key="`${provider.uiKey}-backup-${backupIndex}`"
+                          class="keys__row"
+                        >
+                          <input
+                            v-model="provider.backup_models[backupIndex]"
+                            :disabled="saving || testing"
+                            placeholder="输入备选模型名称"
+                          />
+                          <button
+                            type="button"
+                            class="btn ghost xs"
+                            :disabled="saving || testing || !String(backupModel || '').trim()"
+                            @click="promoteBackupModel(provider, backupIndex)"
+                          >
+                            设为当前
+                          </button>
+                          <button
+                            type="button"
+                            class="btn ghost xs"
+                            :disabled="saving || testing"
+                            @click="removeBackupModel(provider, backupIndex)"
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn ghost xs"
+                          :disabled="saving || testing"
+                          @click="addBackupModel(provider)"
+                        >
+                          + 添加备选模型
+                        </button>
+                      </div>
+                    </div>
                     <label class="field field--full" v-if="provider.kind === 'newapi'">
                       <span>Base URL</span>
                       <input v-model="provider.base_url" :disabled="saving || testing" />
@@ -89,7 +193,7 @@
                       <div class="keys">
                         <div
                           v-for="(key, keyIndex) in provider.api_keys"
-                          :key="`${provider.id}-${keyIndex}`"
+                          :key="`${provider.uiKey}-key-${keyIndex}`"
                           class="keys__row"
                         >
                           <input
@@ -172,15 +276,6 @@
 
         <footer class="ai-settings-dialog__actions">
           <button
-            v-if="canTest"
-            type="button"
-            class="btn ghost"
-            :disabled="loading || saving || testing"
-            @click="handleTestConnection"
-          >
-            {{ testing ? '测试中…' : '测试连接' }}
-          </button>
-          <button
             type="button"
             class="btn ghost"
             :disabled="saving || testing"
@@ -217,8 +312,10 @@ const emit = defineEmits(['update:modelValue'])
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const testingNewApiAll = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
+const providerTestResults = reactive({})
 
 const form = reactive({
   providers: [],
@@ -231,19 +328,51 @@ const form = reactive({
 })
 
 const canTest = computed(() => typeof props.testSettings === 'function' && props.canManage)
+const hasNewApiProviders = computed(() => form.providers.some((provider) => provider.kind === 'newapi'))
+let providerUiSeed = 0
+
+function nextProviderUiKey() {
+  providerUiSeed += 1
+  return `provider_ui_${providerUiSeed}`
+}
+
+function normalizeStringList(values, exclude = '') {
+  const excludeValue = String(exclude || '').trim()
+  const seen = new Set()
+  return (Array.isArray(values) ? values : [])
+    .map((item) => String(item || '').trim())
+    .filter((item) => {
+      if (!item || item === excludeValue || seen.has(item)) return false
+      seen.add(item)
+      return true
+    })
+}
 
 function normalizeProvider(raw, index = 0) {
   const obj = raw && typeof raw === 'object' ? raw : {}
   const kind = obj.kind === 'newapi' ? 'newapi' : 'gemini'
   const id = String(obj.id || `provider_${index + 1}`).trim() || `provider_${index + 1}`
+  const model = String(obj.model || '').trim()
   return {
+    uiKey: String(obj.uiKey || obj.ui_key || '').trim() || nextProviderUiKey(),
+    expanded: Boolean(obj.expanded),
     id,
     name: String(obj.name || '').trim() || (kind === 'gemini' ? 'Gemini Provider' : 'New API Provider'),
     kind,
     base_url: String(obj.base_url || '').trim(),
-    model: String(obj.model || '').trim(),
+    model,
     api_keys: Array.isArray(obj.api_keys) ? obj.api_keys.map((k) => String(k || '').trim()).filter(Boolean) : [],
+    backup_models: normalizeStringList(obj.backup_models, model),
   }
+}
+
+function resetProviderTestResults(providers = []) {
+  Object.keys(providerTestResults).forEach((key) => {
+    delete providerTestResults[key]
+  })
+  providers.forEach((provider) => {
+    providerTestResults[provider.uiKey] = { status: 'idle', message: '' }
+  })
 }
 
 function fallbackProviders(payload) {
@@ -272,6 +401,7 @@ function fallbackProviders(payload) {
           base_url: payload?.newapi_base_url || '',
           model: payload?.newapi_model || '',
           api_keys: newapiKeys,
+          backup_models: Array.isArray(payload?.newapi_backup_models) ? payload.newapi_backup_models : [],
         },
         1,
       ),
@@ -284,6 +414,7 @@ function applyPayload(payload) {
   const rawProviders = Array.isArray(payload?.providers) ? payload.providers : []
   const nextProviders = rawProviders.length ? rawProviders.map((item, idx) => normalizeProvider(item, idx)) : fallbackProviders(payload)
   form.providers = nextProviders.length ? nextProviders : [normalizeProvider({}, 0)]
+  resetProviderTestResults(form.providers)
   const wantedActive = String(payload?.active_provider_id || '').trim()
   const hasWanted = form.providers.some((p) => p.id === wantedActive)
   form.activeProviderId = hasWanted ? wantedActive : form.providers[0].id
@@ -296,13 +427,18 @@ function applyPayload(payload) {
 
 function addProvider() {
   const index = form.providers.length + 1
-  form.providers.push(normalizeProvider({ id: `provider_${index}` }, index - 1))
+  const provider = normalizeProvider({ id: `provider_${index}`, expanded: false }, index - 1)
+  form.providers.push(provider)
+  providerTestResults[provider.uiKey] = { status: 'idle', message: '' }
 }
 
 function removeProvider(index) {
   if (form.providers.length <= 1) return
   const removed = form.providers[index]
   form.providers.splice(index, 1)
+  if (removed?.uiKey) {
+    delete providerTestResults[removed.uiKey]
+  }
   if (!form.providers.some((p) => p.id === form.activeProviderId)) {
     form.activeProviderId = form.providers[0]?.id || ''
   } else if (removed?.id === form.activeProviderId) {
@@ -325,12 +461,78 @@ function promoteApiKey(provider, index) {
   provider.api_keys.unshift(value)
 }
 
+function addBackupModel(provider) {
+  if (!Array.isArray(provider.backup_models)) {
+    provider.backup_models = []
+  }
+  provider.backup_models.push('')
+}
+
+function removeBackupModel(provider, index) {
+  if (!Array.isArray(provider.backup_models)) return
+  provider.backup_models.splice(index, 1)
+}
+
+function promoteBackupModel(provider, index) {
+  if (!Array.isArray(provider.backup_models) || index < 0 || index >= provider.backup_models.length) return
+  const nextPrimary = String(provider.backup_models[index] || '').trim()
+  if (!nextPrimary) return
+  const currentPrimary = String(provider.model || '').trim()
+  provider.model = nextPrimary
+  provider.backup_models.splice(index, 1)
+  if (currentPrimary && currentPrimary !== nextPrimary) {
+    provider.backup_models.unshift(currentPrimary)
+  }
+  provider.backup_models = normalizeStringList(provider.backup_models, provider.model)
+}
+
+function toggleProviderExpanded(provider) {
+  provider.expanded = !provider.expanded
+}
+
+function isActiveProvider(provider) {
+  return String(provider?.id || '').trim() !== '' && String(provider?.id || '').trim() === String(form.activeProviderId || '').trim()
+}
+
+function setActiveProvider(provider) {
+  const providerId = String(provider?.id || '').trim()
+  if (!providerId) return
+  form.activeProviderId = providerId
+  successMessage.value = `已切换当前 Provider：${provider.name || providerId}`
+  errorMessage.value = ''
+}
+
+function getProviderSiteUrl(provider) {
+  const raw = String(provider?.base_url || '').trim()
+  if (!raw) return ''
+  let candidate = raw
+  if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(candidate)) {
+    candidate = `https://${candidate.replace(/^\/+/, '')}`
+  }
+  try {
+    return new URL(candidate).origin
+  } catch {
+    return ''
+  }
+}
+
+function openProviderSite(provider) {
+  const siteUrl = getProviderSiteUrl(provider)
+  if (!siteUrl || typeof window === 'undefined') return
+  window.open(siteUrl, '_blank', 'noopener,noreferrer')
+}
+
 function buildSavePayload() {
   const providers = form.providers
     .map((item, idx) => normalizeProvider(item, idx))
     .map((item) => ({
-      ...item,
+      id: item.id,
+      name: item.name,
+      kind: item.kind,
+      base_url: item.base_url,
+      model: item.model,
       api_keys: item.api_keys.map((k) => k.trim()).filter(Boolean),
+      backup_models: normalizeStringList(item.backup_models, item.model),
     }))
   const active = providers.find((p) => p.id === form.activeProviderId) || providers[0]
   const gemini = providers.find((p) => p.kind === 'gemini')
@@ -344,6 +546,7 @@ function buildSavePayload() {
     newapi_base_url: newapi?.base_url || '',
     newapi_api_keys: newapi?.api_keys || [],
     newapi_model: newapi?.model || '',
+    newapi_backup_models: newapi?.backup_models || [],
     instruction_daily: form.instructionDaily || '',
     instruction_monthly: form.instructionMonthly || '',
     report_mode: form.reportMode || 'full',
@@ -395,17 +598,87 @@ async function handleSaveAndClose() {
   }
 }
 
-async function handleTestConnection() {
-  if (!canTest.value || loading.value || saving.value || testing.value) return
+function buildSingleProviderTestPayload(provider, index) {
+  const normalized = normalizeProvider(provider, index)
+  return {
+    provider: normalized.kind,
+    providers: [
+      {
+        id: normalized.id,
+        name: normalized.name,
+        kind: normalized.kind,
+        base_url: normalized.base_url,
+        model: normalized.model,
+        api_keys: normalized.api_keys.map((key) => key.trim()).filter(Boolean),
+        backup_models: normalizeStringList(normalized.backup_models, normalized.model),
+      },
+    ],
+    active_provider_id: normalized.id,
+    api_keys: normalized.kind === 'gemini' ? normalized.api_keys.map((key) => key.trim()).filter(Boolean) : [],
+    model: normalized.kind === 'gemini' ? normalized.model : '',
+    newapi_base_url: normalized.kind === 'newapi' ? normalized.base_url : '',
+    newapi_api_keys: normalized.kind === 'newapi' ? normalized.api_keys.map((key) => key.trim()).filter(Boolean) : [],
+    newapi_model: normalized.kind === 'newapi' ? normalized.model : '',
+  }
+}
+
+async function handleBatchTestNewApi() {
+  if (!canTest.value || loading.value || saving.value || testing.value || testingNewApiAll.value) return
+  const targets = form.providers
+    .map((provider, index) => ({ provider, index }))
+    .filter(({ provider }) => provider.kind === 'newapi')
+  if (!targets.length) return
+  testingNewApiAll.value = true
   testing.value = true
   errorMessage.value = ''
   successMessage.value = ''
   try {
-    const result = await props.testSettings(buildSavePayload())
-    const providerText = result?.provider === 'newapi' ? 'New API' : 'Gemini'
-    successMessage.value = `连接测试成功：${providerText}${result?.model ? `（${result.model}）` : ''}`
+    let successCount = 0
+    for (const { provider, index } of targets) {
+      providerTestResults[provider.uiKey] = { status: 'testing', message: '连接测试中…' }
+      try {
+        const result = await props.testSettings(buildSingleProviderTestPayload(provider, index))
+        providerTestResults[provider.uiKey] = {
+          status: 'success',
+          message: `测试成功${result?.model ? `：${result.model}` : ''}`,
+        }
+        successCount += 1
+      } catch (err) {
+        providerTestResults[provider.uiKey] = {
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        }
+      }
+    }
+    successMessage.value = `New API Provider 测试完成：成功 ${successCount} / ${targets.length}`
+  } finally {
+    testing.value = false
+    testingNewApiAll.value = false
+  }
+}
+
+async function handleTestSingleProvider(provider, index) {
+  if (!canTest.value || loading.value || saving.value || testing.value || testingNewApiAll.value) return
+  const uiKey = provider?.uiKey
+  if (!uiKey) return
+  testing.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  providerTestResults[uiKey] = { status: 'testing', message: '连接测试中…' }
+  try {
+    const result = await props.testSettings(buildSingleProviderTestPayload(provider, index))
+    providerTestResults[uiKey] = {
+      status: 'success',
+      message: `测试成功${result?.model ? `：${result.model}` : ''}`,
+    }
+    successMessage.value = `${provider.name || provider.id || '当前 Provider'} 测试成功`
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : String(err)
+    const message = err instanceof Error ? err.message : String(err)
+    providerTestResults[uiKey] = {
+      status: 'error',
+      message,
+    }
+    errorMessage.value = message
   } finally {
     testing.value = false
   }
@@ -431,8 +704,23 @@ async function handleTestConnection() {
 .field textarea { resize:vertical; min-height:120px; line-height:1.5; }
 .field--full { grid-column:1 / -1; }
 
+.provider-toolbar { display:flex; justify-content:flex-end; }
 .provider-card { border:1px solid #dbe5f0; border-radius:10px; padding:10px; background:#f8fafc; display:flex; flex-direction:column; gap:10px; }
-.provider-card__head { display:flex; align-items:center; justify-content:space-between; }
+.provider-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.provider-card__title { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.provider-card__toggle { border:none; background:transparent; padding:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; cursor:pointer; font:inherit; color:inherit; text-align:left; }
+.provider-card__toggle:disabled { cursor:not-allowed; opacity:.7; }
+.provider-card__active-tag { font-size:12px; padding:2px 8px; border-radius:999px; }
+.provider-card__active-tag--active { background:#dcfce7; color:#166534; }
+.provider-card__active-tag--standby { background:#f1f5f9; color:#475569; }
+.provider-card__summary { font-size:12px; color:#475569; background:#e2e8f0; padding:2px 8px; border-radius:999px; }
+.provider-card__fold { font-size:12px; color:#64748b; }
+.provider-card__actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.provider-card__status { font-size:12px; padding:2px 8px; border-radius:999px; }
+.provider-card__status--success { background:#dcfce7; color:#166534; }
+.provider-card__status--error { background:#fee2e2; color:#991b1b; }
+.provider-card__status--testing { background:#dbeafe; color:#1d4ed8; }
+.provider-card__status--idle { background:#e2e8f0; color:#475569; }
 .provider-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
 
 .keys { display:flex; flex-direction:column; gap:8px; }

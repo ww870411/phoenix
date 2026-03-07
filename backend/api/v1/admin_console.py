@@ -88,6 +88,7 @@ class AiSettingsPayload(BaseModel):
     newapi_base_url: Optional[str] = None
     newapi_api_keys: Optional[List[str]] = None
     newapi_model: Optional[str] = None
+    newapi_backup_models: Optional[List[str]] = None
     providers: Optional[List[Dict[str, Any]]] = None
     active_provider_id: Optional[str] = None
     instruction_daily: Optional[str] = None
@@ -855,6 +856,7 @@ def update_ai_settings(
         payload.newapi_base_url,
         payload.newapi_api_keys or [],
         payload.newapi_model,
+        payload.newapi_backup_models or [],
         payload.providers,
         payload.active_provider_id,
         payload.instruction_daily.strip()

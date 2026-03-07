@@ -3239,6 +3239,7 @@ onBeforeUnmount(() => {
   }
 
   .actions {
+    flex-direction: column;
     gap: 6px;
   }
 

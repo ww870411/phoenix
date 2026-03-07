@@ -48,6 +48,15 @@
   - 三次修复：为彻底规避克隆态颜色计算漂移，导出图标填充色固定为 `#ffffff`，确保顶部四卡在 PDF 中视觉稳定。
   - 四次修复：在导出克隆样式中关闭 `.summary-card__icon` 的背景/阴影/滤镜/边框，去除 PDF 中图标周围“小方框”伪影。
   - 影响：仅作用于 PDF 导出克隆 DOM，页面实时样式与交互不变。
+- 智能体设定增强（2026-03-07）：
+  - `AiAgentSettingsDialog.vue` 修复 provider“标识 ID”输入失焦问题，列表稳定 key 改为内部 `uiKey`；
+  - 新增“测试全部 New API”按钮，测试结果直接显示在各 provider 卡片内；
+  - New API provider 新增“打开站点”按钮，会从 `base_url` 推导站点根链接并新窗口打开；
+  - 每个 provider 新增“备选模型”编辑区，可一键把备选模型切换为当前主模型。
+  - 每个 provider 卡片新增“测试当前”按钮，并改为默认折叠，仅在头部显示名称与模型名，点击后展开详情。
+  - provider 卡片头部新增“当前生效 / 备用”标记，并支持一键“设为当前”切换生效 provider。
+  - 底部全局“测试连接”按钮已移除，测试入口统一收敛为“测试当前”与“测试全部 New API”。
+
 - 智能体设定 UI 升级（2026-03-03）：
   - 新增多 Provider 管理（每项独立 `base_url/api_keys/model`）；
   - 新增“当前生效 Provider”选择；
@@ -4309,7 +4318,35 @@ docker compose up -d --build
 - `frontend/src/projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue`：
   - 工作台按钮与结果下载链接统一限制为单行文本，避免出现不整齐的换行。
 
+## 结构同步（2026-03-07 月报查询页“重置”按钮手机端溢出修正）
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`：
+  - 在 `<=640px` 下将查询按钮区 `.actions` 改为纵向排列；
+  - 解决“查询 / 重置”两个整行按钮同时存在时第二个按钮被挤出容器的问题。
+
+## 结构同步（2026-03-07 全局 AppHeader 手机端重排）
+- `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`：
+  - 将品牌区改为固定两层文案结构，不再让品牌名和平台名自由混排；
+  - 在手机宽度下将头部改为纵向分层布局；
+  - 保持按钮单字不拆，但允许按钮区整体换层，避免“全挤在一行”。
+
+## 结构同步（2026-03-07 Phoenix 手机页面优化 Skill 草案）
+- 新增项目内 skill 草案：
+  - [configs/skills/phoenix-mobile-layout/SKILL.md](/D:/编程项目/phoenix/configs/skills/phoenix-mobile-layout/SKILL.md)
+- 内容已沉淀：
+  - 手机页面问题分类
+  - 固定优化顺序
+  - 表格 / 按钮 / Banner / 查询页 / 数据录入页的处理规则
+  - 构建验证与浏览器视口复测清单
+
 ## 结构同步（2026-03-06 项目选择页桌面卡片高度回退）
 - `frontend/src/pages/ProjectSelectView.vue`：
   - 删除桌面端 `.card` 的固定最小高度，恢复 PC 端卡片原本的紧凑高度；
   - 手机端单列卡片与紧凑样式保持不变。
+
+## 结构同步（2026-03-06 后端依赖版本锁定）
+- 本轮无前端代码逻辑改动。
+- 后端 `backend/requirements.txt` 已将原先未锁定的直接依赖与关键传递依赖（`grpcio` / `grpcio-status`）改为固定版本，以减少 Docker 构建时 `pip` 解析回溯。
+
+## 结构同步（2026-03-06 后端 Docker pip 镜像源切换）
+- 本轮无前端代码逻辑改动。
+- 后端 `backend/Dockerfile.prod` 已为 Docker 构建中的 `pip install` 配置清华 PyPI 镜像，用于改善镜像构建下载速度。

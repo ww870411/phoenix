@@ -33,6 +33,14 @@
   - 仅允许复用现有白名单查询函数：`query_month_data_show`、`query_month_data_show_comparison`；
   - 不开放任意 SQL 执行，避免越权查询与不可控输出；
   - 模型调用失败时返回保守兜底文案，保证接口稳定可用。
+- AI 设置 Provider 扩展（2026-03-07）：
+  - `backend/projects/daily_report_25_26/api/legacy_full.py` 的 AI 设置读写链路新增 `backup_models` 持久化；
+  - `AiSettingsPayload` / 全局后台 `admin_console.py` 同步支持 `newapi_backup_models`；
+  - 返回给前端的 `providers` 结构现在包含每个 provider 的 `backup_models`，用于“智能体设定”中的备选模型切换。
+  - 2026-03-07 后续前端交互补充了“测试当前 provider”和默认折叠卡片，后端接口无需变更，继续复用既有测试能力。
+  - 2026-03-07 再次补充 provider 头部“当前生效 / 备用”标记与一键切换，仍为前端交互增强，无需额外接口。
+  - 2026-03-07 移除底部全局“测试连接”按钮后，后端仍保留原测试接口，供卡片级测试与批量 New API 测试复用。
+
 - AI 设置多 Provider 升级（2026-03-03）：
  - 模板设计器（新表）第一期骨架（2026-03-04）：
    - 新增后端模块 `projects/daily_report_25_26/api/template_designer.py`，提供模板列表、详情、创建、更新、发布接口；
@@ -2880,8 +2888,42 @@
   - 仅调整文字换行与按钮排版规则；
   - 后端接口与数据结构无变化。
 
+## 结构同步（2026-03-07 月报查询页“重置”按钮手机端溢出修正）
+- 本次仅涉及 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的移动端按钮区布局。
+- 联动结论：
+  - 仅前端手机断点修正；
+  - 后端接口与数据结构无变化。
+
+## 结构同步（2026-03-07 全局 AppHeader 手机端重排）
+- 本次仅涉及 `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` 的前端头部布局。
+- 联动结论：
+  - 仅前端全局头部在手机端的分层重排；
+  - 后端接口与数据结构无变化。
+
+## 结构同步（2026-03-07 Phoenix 手机页面优化 Skill 草案）
+- 本次新增项目内 skill 文档：
+  - `configs/skills/phoenix-mobile-layout/SKILL.md`
+- 联动结论：
+  - 该 skill 为项目协作规范沉淀，不涉及后端接口与数据结构变更。
+
 ## 结构同步（2026-03-06 项目选择页桌面卡片高度回退）
 - 本次仅涉及 `frontend/src/pages/ProjectSelectView.vue` 的桌面端卡片高度回退。
 - 联动结论：
   - 仅前端展示密度修正；
   - 后端接口与数据结构无变化。
+
+## 结构同步（2026-03-06 后端依赖版本锁定）
+- `backend/requirements.txt` 中原先未锁定的直接依赖已改为固定版本。
+- 为减少 `google-generativeai` 链路导致的回溯，还额外显式锁定：
+  - `grpcio==1.76.0`
+  - `grpcio-status==1.71.2`
+- 验证：
+  - 本机执行 `python -m pip install --dry-run -r backend/requirements.txt` 成功，未出现版本冲突。
+
+## 结构同步（2026-03-06 后端 Docker pip 镜像源切换）
+- `backend/Dockerfile.prod` 的 builder 阶段已新增：
+  - `PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`
+  - `PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn`
+- 联动结论：
+  - 仅影响 Docker 构建时的 Python 依赖下载来源；
+  - 不影响运行期接口、数据结构与业务逻辑。
