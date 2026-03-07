@@ -176,29 +176,11 @@
               重置选择
             </button>
             <div class="ai-report-controls">
-              <label class="ai-report-toggle">
-                <input
-                  type="checkbox"
-                  v-model="aiReportEnabled"
-                  :disabled="queryLoading || !aiFeatureAccessible"
-                  :title="!aiFeatureAccessible ? '当前账号未被授权使用智能报告' : ''"
-                />
-                <span>智能报告生成（BETA）</span>
-              </label>
               <span v-if="!aiFeatureAccessible" class="ai-report-hint">
                 当前账号未开放智能报告
               </span>
-              <button
-                v-if="canConfigureAiSettings"
-                type="button"
-                class="btn ghost ai-settings-btn"
-                :disabled="!canConfigureAiSettings"
-                @click="openAiSettingsDialog"
-              >
-                智能体设定
-              </button>
             </div>
-            <label v-if="aiReportEnabled && aiFeatureAccessible" class="ai-user-prompt-field">
+            <label v-if="aiFeatureAccessible" class="ai-user-prompt-field">
               <span>本次分析要求（可选）</span>
               <textarea
                 v-model="aiUserPrompt"
@@ -245,13 +227,31 @@
             >
               下载 Excel
             </button>
+            <span class="ai-report-title">智能报告（BETA）</span>
             <button
               class="btn ghost"
               type="button"
-              :disabled="aiReportButtonDisabled"
+              :disabled="aiReportGenerateButtonDisabled"
+              @click="triggerAiReport"
+            >
+              {{ aiReportGenerateButtonLabel }}
+            </button>
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="aiReportDownloadButtonDisabled"
               @click="downloadAiReport"
             >
-              {{ aiReportButtonLabel }}
+              下载智能分析报告
+            </button>
+            <button
+              v-if="canConfigureAiSettings"
+              type="button"
+              class="btn ghost ai-settings-btn"
+              :disabled="!canConfigureAiSettings"
+              @click="openAiSettingsDialog"
+            >
+              智能体设定
             </button>
           </div>
         </header>
@@ -276,6 +276,7 @@
           </div>
         </div>
         <AiChatWorkspace
+          v-if="showChatBubble"
           title="数据分析页 AI 聊天"
           free-description="自由聊天模式：不附加分析结果，直接连续对话。"
           query-description="基于当前数据分析页最新结果，与模型连续追问。"
@@ -719,6 +720,17 @@ const errorMessage = ref('')
 const schema = ref(null)
 const canConfigureAiSettings = computed(() => auth.canManageAiSettingsFor(projectKey.value))
 const aiSchemaFlags = computed(() => schema.value?.ai_report_flags || {})
+const chatBubbleOverride = ref(null)
+const showChatBubble = computed(() => {
+  // 1. 优先使用用户手动切换或刚从设置同步过来的值
+  if (typeof chatBubbleOverride.value === 'boolean') return chatBubbleOverride.value
+  // 2. 其次使用 Schema 接口返回的标志（如果有）
+  if (typeof aiSchemaFlags.value?.show_chat_bubble === 'boolean') {
+    return aiSchemaFlags.value.show_chat_bubble
+  }
+  // 3. 默认不显示（防止刷新时的“一闪而过”），直到确认加载完成
+  return false
+})
 const allowNonAdminAiReport = computed(() => Boolean(aiSchemaFlags.value.allow_non_admin))
 const aiSettingsDialogVisible = ref(false)
 function openAiSettingsDialog() {
@@ -727,7 +739,36 @@ function openAiSettingsDialog() {
 }
 
 const loadAiSettingsPayload = () => getAiSettings(projectKey.value)
-const saveAiSettingsPayload = (payload) => updateAiSettings(projectKey.value, payload)
+const syncChatBubbleFromSettings = async () => {
+  try {
+    const payload = await loadAiSettingsPayload()
+    // 显式赋值给 override，确保其优先级高于 schema 的默认值
+    if (payload && typeof payload.show_chat_bubble === 'boolean') {
+      chatBubbleOverride.value = payload.show_chat_bubble
+    }
+  } catch (err) {
+    console.error('Failed to sync AI bubble setting:', err)
+  }
+}
+const saveAiSettingsPayload = async (payload) => {
+  const saved = await updateAiSettings(projectKey.value, payload)
+  const nextShowChatBubble = saved?.show_chat_bubble
+  if (typeof nextShowChatBubble === 'boolean') {
+    chatBubbleOverride.value = nextShowChatBubble
+    const prevFlags =
+      schema.value?.ai_report_flags && typeof schema.value.ai_report_flags === 'object'
+        ? schema.value.ai_report_flags
+        : {}
+    schema.value = {
+      ...(schema.value || {}),
+      ai_report_flags: {
+        ...prevFlags,
+        show_chat_bubble: nextShowChatBubble,
+      },
+    }
+  }
+  return saved
+}
 const testAiSettingsPayload = (payload) => testAiSettings(projectKey.value, payload)
 
 function resolveUnitOptions(payload) {
@@ -907,14 +948,14 @@ function buildDataAnalysisChatContext() {
       selected_metrics: Array.from(selectedMetrics.value || []),
       target_units: Array.from(selectedUnits.value || []),
     },
-    rows: previewRows.value,
+    rows: Array.isArray(currentResult?.rows) ? currentResult.rows : previewRows.value,
     comparison_rows: Array.isArray(currentResult?.planComparison?.entries)
       ? currentResult.planComparison.entries
       : [],
     warnings: Array.isArray(queryWarnings.value) ? queryWarnings.value : [],
     extras: {
       timeline_columns: Array.isArray(timelineGrid.value?.columns) ? timelineGrid.value.columns : [],
-      timeline_rows: Array.isArray(timelineGrid.value?.rows) ? timelineGrid.value.rows.slice(0, 12) : [],
+      timeline_rows: Array.isArray(timelineGrid.value?.rows) ? timelineGrid.value.rows : [],
       ring_compare: currentResult?.ringCompare || null,
       plan_comparison: currentResult?.planComparison || null,
     },
@@ -925,7 +966,6 @@ function sendDataAnalysisDialogChat(payload) {
   return runDataAnalysisDialogChat(projectKey.value, payload)
 }
 const queryLoading = ref(false)
-const aiReportEnabled = ref(false)
 const aiModeId = ref('daily_analysis_v1')
 const aiUserPrompt = ref('')
 const aiReportJobId = ref('')
@@ -935,15 +975,6 @@ const aiReportStatusMessage = ref('')
 const aiReportStage = ref('')
 const aiFeatureAccessible = computed(
   () => canConfigureAiSettings.value || allowNonAdminAiReport.value,
-)
-watch(
-  () => aiFeatureAccessible.value,
-  (allowed) => {
-    if (!allowed && aiReportEnabled.value) {
-      aiReportEnabled.value = false
-    }
-  },
-  { immediate: true },
 )
 
 const AI_REPORT_STAGE_STEPS = [
@@ -989,11 +1020,10 @@ const aiReportProgressLabel = computed(() => {
 })
 
 const showAiReportProgress = computed(() => (
-  aiReportEnabled.value
-  && (aiReportStatus.value === 'pending'
-    || aiReportStatus.value === 'running'
-    || aiReportStatus.value === 'ready'
-    || aiReportStatus.value === 'failed')
+  aiReportStatus.value === 'pending'
+  || aiReportStatus.value === 'running'
+  || aiReportStatus.value === 'ready'
+  || aiReportStatus.value === 'failed'
 ))
 
 function formatAiReportProgress(stageKey) {
@@ -1866,20 +1896,22 @@ const resultUnitKeys = computed(() => {
   return [...ordered, ...leftovers]
 })
 
-const aiReportButtonLabel = computed(() => {
-  if (aiReportEnabled.value && aiReportJobId.value && aiReportStatus.value !== 'ready') {
-    return '智能报告生成中'
-  }
-  return '下载智能分析报告'
-})
+const aiReportGenerateButtonLabel = computed(() =>
+  aiReportStatus.value === 'pending' || aiReportStatus.value === 'running' ? '生成中…' : '生成智能报告',
+)
 
-const aiReportButtonDisabled = computed(() => {
+const aiReportGenerateButtonDisabled = computed(() => {
   if (!aiFeatureAccessible.value) return true
-  if (!aiReportEnabled.value) return true
   if (!resultUnitKeys.value.length) return true
   if (queryLoading.value) return true
-  if (!aiReportJobId.value) return true
-  return aiReportStatus.value !== 'ready'
+  return aiReportStatus.value === 'pending' || aiReportStatus.value === 'running'
+})
+
+const aiReportDownloadButtonDisabled = computed(() => {
+  if (!aiFeatureAccessible.value) return true
+  if (queryLoading.value) return true
+  if (aiReportStatus.value === 'pending' || aiReportStatus.value === 'running') return true
+  return !aiReportContent.value && !aiReportJobId.value
 })
 
 const resolvedMetricGroups = computed(() => metricGroups.value)
@@ -1994,7 +2026,6 @@ function resetSelections() {
   selectedMetrics.value = defaultTempKey ? new Set([defaultTempKey]) : new Set()
   applyDateDefaults(schema.value?.date_defaults || {})
   formError.value = ''
-  aiReportEnabled.value = false
   clearPreviewState()
 }
 
@@ -2172,18 +2203,11 @@ async function runAnalysis() {
     analysis_mode: analysisMode.value,
     start_date: startDate.value,
     end_date: endDate.value,
-    request_ai_report: aiReportEnabled.value && aiFeatureAccessible.value,
+    request_ai_report: false,
     ai_mode_id: aiModeId.value,
     ai_user_prompt: aiUserPrompt.value.trim(),
   }
-  if (aiReportEnabled.value && aiFeatureAccessible.value) {
-    aiReportStatus.value = 'pending'
-    updateAiReportStage('pending')
-    setAiReportRunningMessage('pending')
-    aiReportContent.value = ''
-  } else {
-      resetAiReportState()
-    }
+  resetAiReportState()
     const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
     const aggregatedResults = {}
     const errors = []
@@ -2201,7 +2225,7 @@ async function runAnalysis() {
             }))
           : []
         const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
-        if (aiReportEnabled.value && aiJobId) {
+        if (aiJobId) {
           aiReportJobId.value = aiJobId
           startAiReportPolling(aiJobId)
         }
@@ -2328,28 +2352,24 @@ function applyActiveUnitResult(unitKey) {
   lastQueryMeta.value = result.meta
   timelineGrid.value = cloneTimelineGrid(result.timeline)
   activeUnit.value = unitKey
-  if (aiReportEnabled.value) {
-    const jobId = result.aiReportJobId || result.meta?.ai_report_job_id || aiReportJobId.value || ''
-    if (jobId) {
-      if (aiReportJobId.value !== jobId) {
-        aiReportJobId.value = jobId
-        aiReportContent.value = ''
-        startAiReportPolling(jobId)
-      } else if (
-        aiReportStatus.value === 'pending' &&
-        !aiReportContent.value &&
-        aiReportPollTimer === null
-      ) {
-        startAiReportPolling(jobId)
-      }
-    } else {
-      aiReportStatus.value = 'pending'
-      aiReportStatusMessage.value = '已提交生成请求，等待后台任务启动…'
-      updateAiReportStage('')
-      aiReportJobId.value = ''
+  const jobId = result.aiReportJobId || result.meta?.ai_report_job_id || aiReportJobId.value || ''
+  if (jobId) {
+    if (aiReportJobId.value !== jobId) {
+      aiReportJobId.value = jobId
+      aiReportContent.value = ''
+      startAiReportPolling(jobId)
+    } else if (
+      aiReportStatus.value === 'pending' &&
+      !aiReportContent.value &&
+      aiReportPollTimer === null
+    ) {
+      startAiReportPolling(jobId)
     }
   } else {
-    resetAiReportState()
+    aiReportStatus.value = 'idle'
+    aiReportStatusMessage.value = '当前单位尚未生成智能报告，可点击“生成智能报告”启动'
+    updateAiReportStage('')
+    aiReportJobId.value = ''
   }
 }
 
@@ -2806,8 +2826,75 @@ function downloadExcel() {
   XLSX.writeFile(wb, filename)
 }
 
+async function triggerAiReport() {
+  if (aiReportGenerateButtonDisabled.value) return
+  const unitKey = activeUnit.value || resultUnitKeys.value[0] || ''
+  const unitResult = unitResults.value[unitKey]
+  if (!unitKey || !unitResult) {
+    aiReportStatusMessage.value = '请先生成分析结果后再启动智能报告'
+    return
+  }
+  const meta = unitResult.meta || {}
+  const requestedMetrics = Array.isArray(meta.requested_metrics) && meta.requested_metrics.length
+    ? meta.requested_metrics
+    : Array.from(selectedMetrics.value || [])
+  if (!requestedMetrics.length) {
+    aiReportStatusMessage.value = '当前结果缺少指标信息，无法生成智能报告'
+    return
+  }
+  aiReportStatus.value = 'pending'
+  updateAiReportStage('pending')
+  aiReportStatusMessage.value = '已提交生成请求，正在启动任务…'
+  aiReportContent.value = ''
+  try {
+    const response = await runDataAnalysis(
+      projectKey.value,
+      {
+        metrics: requestedMetrics,
+        analysis_mode: meta.analysis_mode || analysisMode.value,
+        start_date: meta.start_date || startDate.value,
+        end_date: meta.end_date || endDate.value,
+        unit_key: unitKey,
+        request_ai_report: true,
+        ai_mode_id: aiModeId.value,
+        ai_user_prompt: aiUserPrompt.value.trim(),
+      },
+      { config: pageConfig.value },
+    )
+    if (!response?.ok) {
+      throw new Error(response?.message || '启动智能报告失败')
+    }
+    const jobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
+    if (!jobId) {
+      aiReportStatus.value = 'failed'
+      updateAiReportStage('failed')
+      aiReportStatusMessage.value = '智能报告任务未返回 job_id'
+      return
+    }
+    aiReportJobId.value = jobId
+    if (unitResults.value[unitKey]) {
+      unitResults.value[unitKey] = {
+        ...unitResults.value[unitKey],
+        aiReportJobId: jobId,
+        meta: {
+          ...(unitResults.value[unitKey].meta || {}),
+          ai_report_job_id: jobId,
+        },
+      }
+    }
+    aiReportStatus.value = 'running'
+    updateAiReportStage('pending')
+    setAiReportRunningMessage('pending')
+    startAiReportPolling(jobId)
+  } catch (err) {
+    aiReportStatus.value = 'failed'
+    updateAiReportStage('failed')
+    aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 async function downloadAiReport() {
-  if (aiReportButtonDisabled.value) return
+  if (aiReportDownloadButtonDisabled.value) return
   try {
     if (!aiReportContent.value && aiReportJobId.value) {
       const payload = await getDataAnalysisAiReport(projectKey.value, aiReportJobId.value)
@@ -2850,23 +2937,6 @@ async function downloadAiReport() {
     aiReportStatusMessage.value = err instanceof Error ? err.message : String(err)
   }
 }
-
-watch(
-  () => aiReportEnabled.value,
-  (enabled) => {
-    if (!enabled) {
-      resetAiReportState()
-      return
-    }
-    if (aiReportJobId.value) {
-      startAiReportPolling(aiReportJobId.value)
-    } else {
-      aiReportStatus.value = 'pending'
-      aiReportStatusMessage.value = '请生成分析结果后稍候，系统将自动获取智能报告'
-      updateAiReportStage('')
-    }
-  },
-)
 
 watch(
   () => analysisMode.value,
@@ -2942,8 +3012,9 @@ watch(
   { deep: true },
 )
 
-onMounted(() => {
-  loadSchema()
+onMounted(async () => {
+  await loadSchema()
+  await syncChatBubbleFromSettings()
 })
 
 onBeforeUnmount(() => {
@@ -3350,18 +3421,14 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.ai-report-toggle {
+.ai-report-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-height: 32px;
   font-size: 13px;
+  font-weight: 700;
   color: var(--neutral-600);
-  cursor: pointer;
-}
-
-.ai-report-toggle input {
-  width: 16px;
-  height: 16px;
+  white-space: nowrap;
 }
 
 .ai-report-hint {

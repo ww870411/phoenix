@@ -154,6 +154,7 @@
         </div>
         <p class="sub">助手会根据你的问题调用受控查询工具，并结合当前筛选条件返回分析结论。</p>
         <AiChatWorkspace
+          v-if="showChatBubble"
           title="AI 聊天组件"
           free-description="自由聊天模式：不附加查询数据，直接连续对话。"
           query-description="基于当前月报查询页最新结果与你连续对话。"
@@ -198,15 +199,12 @@
           </div>
         </div>
         <div class="ai-toolbar">
-          <label class="switch-item">
-            <input type="checkbox" v-model="aiReportEnabled" />
-            <span>智能报告生成（BETA）</span>
-          </label>
+          <span class="switch-item">智能报告生成（BETA）</span>
           <button
-            v-if="isGlobalAdmin"
+            v-if="canConfigureAiSettings"
             class="btn ghost"
             type="button"
-            :disabled="!isGlobalAdmin"
+            :disabled="!canConfigureAiSettings"
             @click="openAiSettingsDialog"
           >
             智能体设定
@@ -214,7 +212,7 @@
           <button
             class="btn ghost"
             type="button"
-            :disabled="!aiReportEnabled || loading || !comparisonRows.length || aiReportStatus === 'running' || aiReportStatus === 'pending'"
+            :disabled="loading || !comparisonRows.length || aiReportStatus === 'running' || aiReportStatus === 'pending'"
             @click="triggerAiReport"
           >
             {{ aiReportStatus === 'running' || aiReportStatus === 'pending' ? '生成中…' : '生成智能报告' }}
@@ -228,7 +226,7 @@
             下载智能报告
           </button>
         </div>
-        <label v-if="aiReportEnabled" class="ai-prompt-field">
+        <label class="ai-prompt-field">
           <span>本次分析要求（可选）</span>
           <textarea
             v-model="aiUserPrompt"
@@ -494,7 +492,7 @@
     </main>
     <AiAgentSettingsDialog
       v-model="aiSettingsDialogVisible"
-      :can-manage="isGlobalAdmin"
+      :can-manage="canConfigureAiSettings"
       :load-settings="loadAiSettingsPayload"
       :save-settings="saveAiSettingsPayload"
       :test-settings="testAiSettingsPayload"
@@ -555,8 +553,8 @@ const breadcrumbItems = computed(() => [
   { label: '月报数据查询工具', to: null },
 ])
 const auth = useAuthStore()
-const normalizedGroup = computed(() => String(auth.user?.group || '').toLowerCase())
-const isGlobalAdmin = computed(() => normalizedGroup.value === 'global_admin')
+const AI_SETTINGS_PROJECT_KEY = 'monthly_data_show'
+const canConfigureAiSettings = computed(() => auth.canManageAiSettingsFor(AI_SETTINGS_PROJECT_KEY))
 
 const limit = 200
 const offset = ref(0)
@@ -576,6 +574,18 @@ const options = reactive({
   items: [],
   periods: [],
   types: [],
+  aiChatFlags: {},
+})
+const chatBubbleOverride = ref(null)
+const showChatBubble = computed(() => {
+  // 1. 优先使用用户手动切换或刚从设置同步过来的值
+  if (typeof chatBubbleOverride.value === 'boolean') return chatBubbleOverride.value
+  // 2. 其次使用 Options 接口返回的标志（如果有）
+  if (typeof options.aiChatFlags?.show_chat_bubble === 'boolean') {
+    return options.aiChatFlags.show_chat_bubble
+  }
+  // 3. 默认不显示，直到确认加载完成
+  return false
 })
 const filters = reactive({
   dateMonthFrom: '',
@@ -745,7 +755,6 @@ const resultColumns = computed(() => [
 ])
 
 const comparisonRows = ref([])
-const aiReportEnabled = ref(false)
 const aiModeId = ref('monthly_analysis_v1')
 const aiUserPrompt = ref('')
 const aiReportJobId = ref('')
@@ -825,11 +834,10 @@ const aiReportProgressLabel = computed(() => {
   return '正在处理中'
 })
 const showAiReportProgress = computed(() => (
-  aiReportEnabled.value
-  && (aiReportStatus.value === 'pending'
-    || aiReportStatus.value === 'running'
-    || aiReportStatus.value === 'ready'
-    || aiReportStatus.value === 'failed')
+  aiReportStatus.value === 'pending'
+  || aiReportStatus.value === 'running'
+  || aiReportStatus.value === 'ready'
+  || aiReportStatus.value === 'failed'
 ))
 const showTemperaturePanel = computed(() => {
   if (!filters.items.includes(AVERAGE_TEMPERATURE_ITEM)) return false
@@ -1550,7 +1558,7 @@ async function pollAiReport(jobId) {
 }
 
 async function triggerAiReport() {
-  if (!aiReportEnabled.value || !comparisonRows.value.length) return
+  if (!comparisonRows.value.length) return
   stopAiReportPolling()
   aiReportStatus.value = 'pending'
   aiReportStage.value = 'pending'
@@ -1599,12 +1607,34 @@ function downloadAiReport() {
 }
 
 function openAiSettingsDialog() {
-  if (!isGlobalAdmin.value) return
+  if (!canConfigureAiSettings.value) return
   aiSettingsDialogVisible.value = true
 }
 
 const loadAiSettingsPayload = () => getAdminAiSettings()
-const saveAiSettingsPayload = (payload) => updateAdminAiSettings(payload)
+const syncChatBubbleFromSettings = async () => {
+  try {
+    const payload = await loadAiSettingsPayload()
+    // 显式赋值给 override，确保其优先级高于 options 接口的默认值
+    if (payload && typeof payload.show_chat_bubble === 'boolean') {
+      chatBubbleOverride.value = payload.show_chat_bubble
+    }
+  } catch (err) {
+    console.error('Failed to sync AI bubble setting:', err)
+  }
+}
+const saveAiSettingsPayload = async (payload) => {
+  const saved = await updateAdminAiSettings(payload)
+  const nextShowChatBubble = saved?.show_chat_bubble
+  if (typeof nextShowChatBubble === 'boolean') {
+    chatBubbleOverride.value = nextShowChatBubble
+    options.aiChatFlags = {
+      ...(options.aiChatFlags && typeof options.aiChatFlags === 'object' ? options.aiChatFlags : {}),
+      show_chat_bubble: nextShowChatBubble,
+    }
+  }
+  return saved
+}
 const testAiSettingsPayload = (payload) => testAdminAiSettings(payload)
 
 function buildPayload() {
@@ -1635,14 +1665,41 @@ function buildPayload() {
 
 const hasChatQueryContext = computed(() => rows.value.length > 0 || comparisonRows.value.length > 0)
 
-function buildMonthlyChatContext() {
+async function buildMonthlyChatContext() {
   if (!hasChatQueryContext.value) return null
+  let fullRows = Array.isArray(rows.value) ? rows.value : []
+  const totalRows = Number(summary.totalRows || 0)
+  
+  // 尽量抓取更多数据（最高 1000 条），确保 AI 分析的深度
+  if (totalRows > fullRows.length && fullRows.length < 1000) {
+    const fullPayload = {
+      ...buildPayload(),
+      offset: 0,
+      limit: Math.min(1000, totalRows),
+    }
+    try {
+      const fullResult = await queryMonthlyDataShow('monthly_data_show', fullPayload)
+      fullRows = Array.isArray(fullResult?.rows) ? fullResult.rows : fullRows
+    } catch (err) {
+      console.warn('AI context data fetch failed, using partial rows:', err)
+    }
+  }
+
+  // 数据清洗：仅保留业务核心字段，节省 Token 空间
+  const cleanRow = (r) => {
+    if (!r) return {}
+    const { id, project_key, sheet_key, biz_date, key, ...rest } = r
+    return rest
+  }
+
   return {
-    title: 'monthly_data_show 查询结果',
+    title: '月报查询分析上下文',
     meta: {
-      total_rows: summary.totalRows,
-      value_non_null_rows: summary.valueNonNullRows,
-      value_null_rows: summary.valueNullRows,
+      total_rows: totalRows,
+      returned_rows: fullRows.length,
+      companies_scope: filters.companies.join(', '),
+      items_scope: filters.items.join(', '),
+      date_range: `${filters.dateMonthFrom} 至 ${filters.dateMonthTo || '至今'}`,
       value_sum: summary.valueSum,
       comparison_window: comparisonMeta.currentWindowLabel,
       yoy_window: comparisonMeta.yoyWindowLabel,
@@ -1650,16 +1707,14 @@ function buildMonthlyChatContext() {
       plan_window: comparisonMeta.planWindowLabel,
       temperature_current_avg: temperatureSummary.currentAvgTemp,
       temperature_yoy_avg: temperatureSummary.yoyAvgTemp,
-      temperature_diff: temperatureSummary.yoyAvgDiff,
     },
     query: buildPayload(),
-    rows: rows.value,
-    comparison_rows: comparisonRows.value,
+    rows: fullRows.slice(0, 1000).map(cleanRow),
+    comparison_rows: (comparisonRows.value || []).slice(0, 500).map(cleanRow),
     warnings: [],
     extras: {
-      temperature_daily_rows: Array.isArray(temperatureDailyRows.value) ? temperatureDailyRows.value.slice(0, 12) : [],
+      temperature_summary: { ...temperatureSummary },
       comparison_view_mode: comparisonViewMode.value,
-      comparison_top_n: comparisonTopN.value,
     },
   }
 }
@@ -1788,6 +1843,7 @@ async function loadOptions() {
   const payload = await getMonthlyDataShowQueryOptions('monthly_data_show')
   options.companies = Array.isArray(payload?.companies) ? payload.companies : []
   options.items = Array.isArray(payload?.items) ? payload.items : []
+  options.aiChatFlags = payload?.ai_chat_flags && typeof payload.ai_chat_flags === 'object' ? payload.ai_chat_flags : {}
   const indicatorPayload = payload?.indicator_config || {}
   indicatorConfig.basicSectionTitle = String(indicatorPayload.basic_section_title || '基本指标')
   indicatorConfig.calculatedSectionTitle = String(indicatorPayload.calculated_section_title || '计算指标')
@@ -1966,6 +2022,7 @@ onMounted(async () => {
   errorMessage.value = ''
   try {
     await loadOptions()
+    await syncChatBubbleFromSettings()
     hasSearched.value = false
     rows.value = []
     total.value = 0

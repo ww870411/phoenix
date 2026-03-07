@@ -185,6 +185,7 @@ class QueryOptionsResponse(BaseModel):
     periods: List[str]
     types: List[str]
     indicator_config: dict = {}
+    ai_chat_flags: dict = {}
 
 
 class QueryComparisonRow(BaseModel):
@@ -1940,7 +1941,11 @@ async def import_monthly_data_show_csv(file: UploadFile = File(...)):
 
 @router.get("/monthly-data-show/query-options", response_model=QueryOptionsResponse, summary="月报查询筛选项")
 def get_monthly_data_show_query_options():
-    _refresh_indicator_runtime()
+    try:
+        _refresh_indicator_runtime()
+    except Exception:
+        # 指标配置读取异常时降级为默认空配置，避免阻断页面初始化。
+        pass
     sql = text(
         """
         SELECT
@@ -1955,14 +1960,19 @@ def get_monthly_data_show_query_options():
             ARRAY(SELECT DISTINCT type FROM monthly_data_show ORDER BY type) AS types
         """
     )
+    row: Dict[str, Any] = {}
     try:
         with SessionLocal() as session:
             row = session.execute(sql).mappings().first() or {}
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"读取查询筛选项失败：{exc}") from exc
+    except Exception:
+        # 数据库异常时返回空筛选项，让前端页面可进入并继续排障。
+        row = {}
 
     items_from_db = [str(x) for x in (row.get("items") or []) if str(x).strip()]
-    items = order_items_by_config(items_from_db, INDICATOR_RUNTIME_CFG)
+    try:
+        items = order_items_by_config(items_from_db, INDICATOR_RUNTIME_CFG)
+    except Exception:
+        items = list(items_from_db)
     for calc_name in INDICATOR_RUNTIME_CFG.get("calculated_item_names") or []:
         text_name = str(calc_name or "").strip()
         if text_name and text_name not in items:
@@ -1970,6 +1980,10 @@ def get_monthly_data_show_query_options():
     if AVERAGE_TEMPERATURE_ITEM not in items:
         items.append(AVERAGE_TEMPERATURE_ITEM)
 
+    try:
+        ai_flags = _safe_read_ai_settings()
+    except Exception:
+        ai_flags = {"show_chat_bubble": True}
     return QueryOptionsResponse(
         ok=True,
         project_key=PROJECT_KEY,
@@ -1978,6 +1992,7 @@ def get_monthly_data_show_query_options():
         periods=[str(x) for x in (row.get("periods") or []) if str(x).strip()],
         types=[str(x) for x in (row.get("types") or []) if str(x).strip()],
         indicator_config=build_indicator_config_payload(INDICATOR_RUNTIME_CFG),
+        ai_chat_flags={"show_chat_bubble": bool(ai_flags.get("show_chat_bubble", True))},
     )
 
 

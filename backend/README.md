@@ -2,6 +2,50 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 日报分析页智能报告触发逻辑改造联动（2026-03-08）：
+  - 本轮无后端接口新增，仅前端调用时机调整。
+  - 日报分析页现在在查询阶段固定传 `request_ai_report=false`，在用户点击“生成智能报告”时单独发起 `request_ai_report=true` 请求。
+  - 后端仍复用既有接口：`POST /api/v1/projects/daily_report_25_26/data_analysis/query`。
+
+- 月报查询页 query-options 500 修复（2026-03-08）：
+  - 文件：`backend/projects/monthly_data_show/api/workspace.py`
+  - 接口：`GET /api/v1/projects/monthly_data_show/monthly-data-show/query-options`
+  - 修复策略：
+    - 指标配置刷新异常时降级，不中断请求；
+    - 数据库读取异常时返回空筛选项；
+    - 指标排序异常时回退原始 items；
+    - AI 设置读取异常时回退 `show_chat_bubble=true`。
+  - 目标：将接口行为从“异常即 500”调整为“异常可降级返回”，保证前端页面可进入。
+
+- 月报查询页 CORS 问题前端侧规避联动（2026-03-08）：
+  - 本轮无后端代码改动。
+  - 前端已在本机开发环境下优先走同源 `/api/v1` 代理，避免浏览器直接跨域请求 `127.0.0.1:8001` 时触发 CORS 拦截。
+  - 后端接口契约不变。
+
+- AI 气泡开关刷新回弹兜底修复联动（2026-03-08）：
+  - 本轮无后端代码改动。
+  - 前端页面初始化已增加“主动读取 AI 设置并覆盖气泡开关”的兜底策略，确保刷新后显示状态以 `show_chat_bubble` 实时值为准。
+  - 目的：规避 `schema/query-options` 标志链路与全局 AI 设置链路可能短时不一致造成的回弹。
+
+- AI 气泡开关刷新后回弹修复联动（2026-03-08）：
+  - 本轮仍无后端代码改动。
+  - 前端已将配置读取接口调整为 `cache: 'no-store'`，避免刷新时读取到旧缓存导致 `show_chat_bubble` 视觉回弹。
+  - 后端接口契约不变，继续返回实时设置值。
+
+- AI 气泡显示开关即时生效修复联动（2026-03-08）：
+  - 本轮无后端代码改动，接口行为保持不变。
+  - 前端已在保存 AI 设置成功后，立即采用后端返回的 `show_chat_bubble` 回写当前页状态，因此无需刷新即可隐藏/显示聊天气泡。
+  - 相关接口：
+    - `POST /api/v1/projects/daily_report_25_26/data_analysis/ai_settings`
+    - `POST /api/v1/admin/ai-settings`
+
+- AI 自由对话气泡缺陷修复联动说明（2026-03-08）：
+  - 本次仅前端组件修复，无后端接口与数据结构变更。
+  - 现有对话接口保持不变，仍由前端传入 `mode/message/session_id/history/context`：
+    - `POST /api/v1/projects/monthly_data_show/monthly-data-show/ai-chat/dialog`
+    - `POST /api/v1/projects/daily_report_25_26/data_analysis/ai-chat/dialog`
+  - 风险提示：前端在“数据分析模式”新增了上下文构建异常兜底提示；后端无需改造即可兼容。
+
 - 构建慢过程分析同步（2026-03-06）：
   - 本轮为 `lo1_new_server.ps1` 镜像构建性能分析，后端代码未改动；
   - 已定位慢点集中在 `backend/Dockerfile.prod` 的依赖安装层（`pip install -r requirements.txt`）；
@@ -33,6 +77,13 @@
   - 仅允许复用现有白名单查询函数：`query_month_data_show`、`query_month_data_show_comparison`；
   - 不开放任意 SQL 执行，避免越权查询与不可控输出；
   - 模型调用失败时返回保守兜底文案，保证接口稳定可用。
+- AI 聊天上下文全量化与气泡开关（2026-03-07）：
+  - `ai_chat_service.py` 的 `query_context` 摘要改为优先保留全量查询结果，再按字符预算裁剪，不再固定只取前若干行；
+  - 聊天系统提示词改为固定业务文案，不再自动叠加 `instruction_monthly` / `instruction_daily`；
+  - 全局 AI 设置新增 `show_chat_bubble` 字段；
+  - 日报 `data_analysis/schema` 与月报 `query-options` 已分别暴露聊天气泡显示标志，供前端控制悬浮聊天入口。
+  - 后续修复确认：气泡开关“无法保存”的直接原因是前端保存接口 body 漏传 `show_chat_bubble`，后端持久化逻辑本身可正常处理该字段。
+
 - AI 聊天调试面板布局修复（2026-03-07）：
   - 本轮仅调整前端共享聊天组件的调试信息布局，后端接口无改动；
   - 目标是确保发送消息后仍能直接查看最近错误与最近返回结果。
@@ -2978,3 +3029,19 @@
 - 联动结论：
   - 仅影响 Docker 构建时的 Python 依赖下载来源；
   - 不影响运行期接口、数据结构与业务逻辑。
+
+## 2026-03-08 前端联动说明（DataAnalysis 按钮位置）
+- 本轮无后端接口、服务、模型或 SQL 变更。
+- 前端仅调整 `DataAnalysisView` 的智能报告相关按钮位置，后端调用链路保持不变。
+
+## 2026-03-08 前端联动说明（DataAnalysis 二次微调）
+- 本轮仍为前端展示层微调，无后端接口、服务或数据结构变更。
+- 仅调整 `DataAnalysisView` 的按钮顺序与标题对齐样式。
+
+## 2026-03-08 月报智能体设定权限前端对齐
+- 本轮无后端代码变更。
+- 月报前端已改为使用 `monthly_data_show` 项目动作权限 `can_manage_ai_settings`，与后端鉴权口径保持一致。
+
+## 2026-03-08 前端联动说明（AI 气泡文案）
+- 本轮无后端改动。
+- 前端仅调整 AI 气泡入口文案为“智能助手”。

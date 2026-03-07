@@ -23,6 +23,7 @@ CHAT_MODE_QUERY_CONTEXT = "query_context"
 CHAT_SESSION_TTL_SECONDS = 30 * 60
 CHAT_SESSION_MAX_TURNS = 20
 CHAT_MAX_HISTORY_ITEMS = 12
+QUERY_CONTEXT_SYSTEM_PROMPT = """你现在是一位资深的能源供热企业经济运行部数据分析专家。我们集团是一家热电联产企业，有多家热电厂和供暖锅炉房。不同口径代表含义如下：全口径是集团所有口径的汇总情况，主城区包括了主城区范围内的北海热电厂（包含两个部分，即北海和北海水炉，前者既发电又产热，后者只产热）、香海热电厂及其统一的供热公司（两个电厂只生产，供热公司只供暖并负责调度），另外，主城区电锅炉也是主城区内的一个独立口径。在主城区中，从股权的角度，还可以分为集团本部和股份本部，香海热电厂和供热公司属于集团本部，北海热电厂和主城区电锅炉属于股份本部，它们之间会有关联交易。金州热电北方热电是主城区外的两家兼具热电联产和供暖的企业。金普庄河是主城区外的两家锅炉房纯供暖企业，后者2025年11月份起部分接入了该市的热力主管网，实行购热供暖。研究院是主城区外的一家电锅炉供暖企业。"""
 
 _CHAT_SESSION_STORE: Dict[str, Dict[str, Any]] = {}
 _CHAT_SESSION_LOCK = threading.Lock()
@@ -166,16 +167,23 @@ def _trim_scalar(value: Any, max_len: int = 300) -> Any:
     return f"{text[:max_len]}…"
 
 
-def _trim_rows(rows: List[dict], max_rows: int, max_columns: int = 12) -> List[dict]:
+def _trim_rows(rows: List[dict], max_rows: int, max_columns: int = 32) -> List[dict]:
     safe_rows: List[dict] = []
     for row in (rows if isinstance(rows, list) else [])[:max_rows]:
         if not isinstance(row, dict):
             continue
         trimmed: Dict[str, Any] = {}
-        for idx, (key, value) in enumerate(row.items()):
-            if idx >= max_columns:
+        # 排除一些对 AI 无用的元数据字段，节省 Token
+        excluded_keys = {"id", "project_key", "sheet_key", "biz_date", "created_at", "updated_at"}
+        count = 0
+        for key, value in row.items():
+            k_str = str(key)
+            if k_str in excluded_keys:
+                continue
+            if count >= max_columns:
                 break
-            trimmed[str(key)] = _trim_scalar(value, 120)
+            trimmed[k_str] = _trim_scalar(value, 160)
+            count += 1
         safe_rows.append(trimmed)
     return safe_rows
 
@@ -186,34 +194,79 @@ def summarize_query_context(context: Optional[AiChatContextPayload]) -> Dict[str
         return {}
     summary = {
         "title": str(payload.title or "").strip(),
-        "meta": {str(key): _trim_scalar(value, 160) for key, value in (payload.meta or {}).items()},
-        "query": {str(key): _trim_scalar(value, 160) for key, value in (payload.query or {}).items()},
+        "meta": {str(key): _trim_scalar(value, 200) for key, value in (payload.meta or {}).items()},
+        "query": {str(key): _trim_scalar(value, 200) for key, value in (payload.query or {}).items()},
         "row_count": len(payload.rows or []),
         "comparison_row_count": len(payload.comparison_rows or []),
-        "rows_preview": _trim_rows(payload.rows or [], max_rows=12),
-        "comparison_rows_preview": _trim_rows(payload.comparison_rows or [], max_rows=8),
-        "warnings": [str(item or "").strip() for item in (payload.warnings or []) if str(item or "").strip()][:8],
-        "extras": {str(key): _trim_scalar(value, 240) for key, value in (payload.extras or {}).items()},
+        "rows_full": _trim_rows(payload.rows or [], max_rows=max(1, len(payload.rows or [])), max_columns=24),
+        "comparison_rows_full": _trim_rows(payload.comparison_rows or [], max_rows=max(1, len(payload.comparison_rows or [])), max_columns=24),
+        "warnings": [str(item or "").strip() for item in (payload.warnings or []) if str(item or "").strip()][:10],
+        "extras": {str(key): _trim_scalar(value, 300) for key, value in (payload.extras or {}).items()},
     }
     return summary
 
 
+def _rows_to_compact_table(rows: List[dict], label: str) -> str:
+    """将 JSON 列表转换为极致紧凑的类 CSV 表格格式。"""
+    if not rows:
+        return ""
+    # 提取所有出现的 key（保持顺序）
+    keys = []
+    for r in rows:
+        for k in r.keys():
+            if k not in keys:
+                keys.append(k)
+    
+    lines = [f"--- {label} (Headers: {', '.join(keys)}) ---"]
+    for r in rows:
+        values = [str(r.get(k, "")) for k in keys]
+        lines.append("|".join(values))
+    
+    return "\n".join(lines)
+
+
 def _serialize_context_summary(summary: Dict[str, Any]) -> str:
-    char_limit = max(8000, int(ai_report_modes.resolve_prompt_data_char_limit() * 0.45))
-    rows_limit = 12
-    compare_limit = 8
-    last_text = "{}"
-    while rows_limit >= 3:
-        candidate = dict(summary)
-        candidate["rows_preview"] = list((summary.get("rows_preview") or [])[:rows_limit])
-        candidate["comparison_rows_preview"] = list((summary.get("comparison_rows_preview") or [])[:compare_limit])
-        text = json.dumps(candidate, ensure_ascii=False)
-        last_text = text
-        if len(text) <= char_limit:
-            return text
-        rows_limit -= 3
-        compare_limit = max(2, compare_limit - 2)
-    return last_text[:char_limit]
+    """
+    将摘要序列化为紧凑字符串，优先使用表格格式以节省 Token。
+    """
+    # 提升上限到 24,000 字符，月报全量查询需要更大的胃口
+    char_limit = max(24000, int(ai_report_modes.resolve_prompt_data_char_limit() * 0.8))
+    
+    # 提取非行数据部分
+    base_info = {k: v for k, v in summary.items() if k not in ("rows_full", "comparison_rows_full")}
+    
+    rows_data = list(summary.get("rows_full") or [])
+    comp_data = list(summary.get("comparison_rows_full") or [])
+    
+    rows_limit = len(rows_data)
+    comp_limit = len(comp_data)
+
+    while rows_limit >= 0:
+        # 构造表格文本
+        rows_table = _rows_to_compact_table(rows_data[:rows_limit], "Primary Data")
+        comp_table = _rows_to_compact_table(comp_data[:comp_limit], "Comparison Data")
+        
+        # 组装最终文本
+        parts = [
+            "Metadata & Query Summary:",
+            json.dumps(base_info, ensure_ascii=False, indent=2),
+            rows_table,
+            comp_table
+        ]
+        final_text = "\n\n".join(p for p in parts if p)
+        
+        if len(final_text) <= char_limit:
+            return final_text
+            
+        # 逐步缩减行数
+        if rows_limit > 5:
+            rows_limit = int(rows_limit * 0.8)
+            comp_limit = int(comp_limit * 0.8)
+        else:
+            rows_limit -= 1
+            comp_limit = max(0, comp_limit - 1)
+            
+    return "Data too large to summarize."
 
 
 def _format_history_messages(history: List[dict]) -> List[Dict[str, str]]:
@@ -242,10 +295,11 @@ def build_chat_messages(
     system_content = "你是一个专业的在线数据填报与分析助手，正在凤凰计划 (Phoenix Plan) 应用中为用户提供服务。"
     if normalized_mode == CHAT_MODE_QUERY_CONTEXT:
         context_text = _serialize_context_summary(context_summary or {})
-        system_content += (
-            "\n当前处于“数据分析对话”模式。以下是页面最新的查询结果摘要（JSON格式）：\n"
+        system_content = (
+            f"{QUERY_CONTEXT_SYSTEM_PROMPT}\n"
+            "当前处于“基于查询数据的连续对话”模式。以下是页面最新查询结果的 JSON 摘要：\n"
             f"{context_text}\n"
-            "请优先基于上述数据回答。如果数据不足以支持结论，请明确告知用户，不要编造。"
+            "请严格基于上述数据回答；如果数据不足以支持结论，请明确告知用户，不要编造。"
         )
     else:
         system_content += "\n当前处于“自由对话”模式，请直接与用户进行自然、连贯的中文对话。"

@@ -2,6 +2,60 @@
 
 ## 最新结构与状态（2026-02-28）
 
+- 日报分析页智能报告触发逻辑改造（2026-03-08）：
+  - `src/projects/daily_report_25_26/pages/DataAnalysisView.vue` 已从“查询阶段自动触发报告”改为“查询后手动触发报告”。
+  - 交互调整：
+    - 查询按钮仅生成分析结果；
+    - 新增独立“生成智能报告”按钮；
+    - “下载智能分析报告”按钮仅用于下载已生成内容。
+  - 与月报查询页触发节奏对齐，支持先看结果再决定是否生成报告。
+
+- 月报查询页 500 异常联动修复（2026-03-08）：
+  - 针对 `GET /api/v1/projects/monthly_data_show/monthly-data-show/query-options` 初始化阶段 500，后端已增加异常降级返回策略。
+  - 前端表现：即使后端底层配置/数据库存在异常，页面不再因 500 直接白屏，可先进入页面并继续排障。
+  - 本轮前端源码无新增改动（仅联动记录）。
+
+- 月报查询页 CORS 修复（2026-03-08）：
+  - 调整 `src/projects/daily_report_25_26/services/api.js` 的 API 基址策略：
+    - 本机开发（`localhost/127.0.0.1`）且后端基址同为本机时，强制回落为同源 `'/api/v1'`；
+    - 通过前端同源代理转发，避免浏览器跨域拦截。
+  - 新增函数：`shouldPreferSameOriginProxy(base)`。
+  - 影响：`monthly_data_show/query-options` 等请求不再默认直连 `127.0.0.1:8001`，本机开发稳定性提升。
+
+- AI 气泡开关刷新回弹兜底修复（2026-03-08）：
+  - 日报分析页与月报查询页在页面初始化时，都会额外主动读取 AI 设置接口中的 `show_chat_bubble`，并覆盖本地显示开关。
+  - 新增覆盖状态 `chatBubbleOverride`，优先级高于 `schema/query-options` 内的气泡标记。
+  - 变更文件：
+    - `src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - `src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 效果：关闭并保存后，刷新页面仍保持隐藏（以 AI 设置实时值为准）。
+
+- AI 气泡开关刷新后回弹修复（2026-03-08）：
+  - 对配置类接口读取统一增加 `cache: 'no-store'`，避免浏览器/中间层返回旧值导致刷新后回弹。
+  - 变更函数（`src/projects/daily_report_25_26/services/api.js`）：
+    - `getDataAnalysisSchema`
+    - `getMonthlyDataShowQueryOptions`
+    - `getAiSettings`
+    - `getAdminAiSettings`
+  - 结果：关闭气泡并保存后，刷新页面仍保持隐藏状态。
+
+- AI 气泡显示开关即时生效修复（2026-03-08）：
+  - 关闭“显示 AI 聊天气泡”并保存后，日报分析页与月报查询页现在会立即同步隐藏气泡，无需手动刷新。
+  - 修复点：
+    - `src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - `src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 技术实现：`saveAiSettingsPayload` 改为异步，并将保存接口返回的 `show_chat_bubble` 回写到页面本地状态（`schema.ai_report_flags` / `options.aiChatFlags`）。
+
+- AI 自由对话气泡缺陷修复（2026-03-08）：
+  - 组件 `src/projects/daily_report_25_26/components/AiChatWorkspace.vue` 已修复父层文案参数不生效问题，支持页面传入：
+    - `free-description`
+    - `query-description`
+    - `free-placeholder`
+    - `query-placeholder`
+  - 输入框回车策略改为：`Enter` 发送、`Shift+Enter` 换行，避免此前手动追加换行导致的输入异常。
+  - 数据分析模式下 `buildQueryContext` 抛错时，组件会展示“构建查询上下文失败”提示，不再静默中断。
+  - 消息内容样式新增 `white-space: pre-wrap; word-break: break-word;`，多行/长文本显示更稳定。
+
 - 构建慢过程分析同步（2026-03-06）：
   - 本轮为部署构建性能分析，不涉及前端代码改动；
   - 结论已记录至 `configs/progress.md`，用于指导后续镜像构建优化；
@@ -48,6 +102,13 @@
   - 三次修复：为彻底规避克隆态颜色计算漂移，导出图标填充色固定为 `#ffffff`，确保顶部四卡在 PDF 中视觉稳定。
   - 四次修复：在导出克隆样式中关闭 `.summary-card__icon` 的背景/阴影/滤镜/边框，去除 PDF 中图标周围“小方框”伪影。
   - 影响：仅作用于 PDF 导出克隆 DOM，页面实时样式与交互不变。
+- AI 聊天上下文与气泡开关（2026-03-07）：
+  - 数据分析页“基于查询数据”聊天上下文已改为优先使用当前单位完整查询结果，而不是仅使用预览行；
+  - 月报页在聊天前会尽量补拉全量查询结果，避免只用默认 200 行分页数据；
+  - 智能体设定新增“显示 AI 聊天气泡”开关，日报页与月报页都会消费该配置决定是否显示悬浮聊天入口；
+  - 聊天 `query_context` 模式的系统提示词改为固定业务文案，不再额外叠加 `instruction_monthly` / `instruction_daily`。
+  - `show_chat_bubble` 保存链路已修复：前端 `updateAiSettings/updateAdminAiSettings` 现在会把该字段一并提交给后端。
+
 - AI 聊天调试面板布局修复（2026-03-07）：
   - 调试面板中的“最近错误 / 最近返回结果”已上移到顶部；
   - 调试区新增独立滚动，发送消息后不会再轻易被内容挤出可视区域。
@@ -4399,3 +4460,24 @@ docker compose up -d --build
 ## 结构同步（2026-03-06 后端 Docker pip 镜像源切换）
 - 本轮无前端代码逻辑改动。
 - 后端 `backend/Dockerfile.prod` 已为 Docker 构建中的 `pip install` 配置清华 PyPI 镜像，用于改善镜像构建下载速度。
+
+## 2026-03-08 DataAnalysis 页面按钮顺序调整
+- 页面：`daily_report_25_26` -> `DataAnalysisView`。
+- 调整内容：将“智能报告（BETA）”和“智能体设定”移动到结果区按钮组，并置于“生成智能报告”按钮之前。
+- 关键结构：`result-header-actions` 负责结果区顶部操作按钮排列。
+- 说明：查询区不再承载智能报告入口按钮，仅保留未开放账号提示。
+
+## 2026-03-08 DataAnalysis 智能报告行二次调整
+- 调整目标：优化“智能报告（BETA）”与按钮行垂直对齐，并将“智能体设定”置于该行末尾。
+- 页面结构：`result-header-actions` 内按钮顺序更新为 `下载 Excel -> 智能报告（BETA） -> 生成智能报告 -> 下载智能分析报告 -> 智能体设定`。
+- 样式实现：`.ai-report-title` 采用 `inline-flex` 垂直居中，避免与按钮基线错位。
+
+## 2026-03-08 月报智能体设定权限口径统一
+- 页面：`monthly_data_show` 查询页 `MonthlyDataShowQueryToolView`。
+- 变更：智能体设定按钮与弹窗管理权限由 `isGlobalAdmin` 改为项目动作权限 `auth.canManageAiSettingsFor('monthly_data_show')`。
+- 影响：权限口径与日报一致，统一按 `can_manage_ai_settings` 控制。
+
+## 2026-03-08 AI 气泡入口文案更新
+- 组件：`AiChatWorkspace`。
+- 调整：浮动气泡入口文字由“AI 助手”改为“智能助手”。
+- 影响：仅前端展示文案变化，无功能逻辑变更。

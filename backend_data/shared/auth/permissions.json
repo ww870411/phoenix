@@ -86,7 +86,7 @@
             "can_publish": false,
             "can_manage_modularization": false,
             "can_manage_validation": false,
-            "can_manage_ai_settings": false,
+            "can_manage_ai_settings": true,
             "can_manage_ai_sheet_switch": false,
             "can_extract_xlsx": false,
             "can_unlimited_ai_usage": false

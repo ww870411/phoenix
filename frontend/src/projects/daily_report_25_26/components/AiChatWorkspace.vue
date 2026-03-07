@@ -9,7 +9,7 @@
         :aria-label="title"
       >
         <span class="ai-chat-floating__launcher-icon">✨</span>
-        <span class="ai-chat-floating__launcher-text">AI 助手</span>
+        <span class="ai-chat-floating__launcher-text">智能助手</span>
       </button>
 
       <div v-else class="ai-chat-workspace">
@@ -43,7 +43,7 @@
         <div class="ai-chat-workspace__messages" ref="messageContainer">
           <div v-if="currentMessages.length === 0" class="ai-chat-workspace__empty">
             <div class="empty-icon">🤖</div>
-            <p>{{ activeMode === 'free' ? '你好！我是 Phoenix AI，有什么可以帮你的？' : '已准备好，请围绕当前查询结果提问。' }}</p>
+            <p>{{ activeMode === 'free' ? freeDescription : queryDescription }}</p>
           </div>
           
           <div
@@ -75,8 +75,8 @@
               rows="1"
               maxlength="2000"
               :disabled="isLoading"
-              :placeholder="activeMode === 'free' ? '问点什么...' : '分析一下这份数据...'"
-              @keydown.enter.prevent="handleEnter"
+              :placeholder="activeMode === 'free' ? freePlaceholder : queryPlaceholder"
+              @keydown.enter="handleEnter"
             ></textarea>
             <button 
               type="button" 
@@ -103,6 +103,10 @@ import { computed, reactive, ref, nextTick, watch } from 'vue'
 
 const props = defineProps({
   title: { type: String, default: 'Phoenix AI' },
+  freeDescription: { type: String, default: '你好！我是 Phoenix AI，有什么可以帮你的？' },
+  queryDescription: { type: String, default: '已准备好，请围绕当前查询结果提问。' },
+  freePlaceholder: { type: String, default: '问点什么...' },
+  queryPlaceholder: { type: String, default: '分析一下这份数据...' },
   queryModeEnabled: { type: Boolean, default: false },
   buildQueryContext: { type: Function, default: null },
   sendChat: { type: Function, required: true },
@@ -149,11 +153,9 @@ function resetCurrentConversation() {
 }
 
 function handleEnter(e) {
-  if (e.shiftKey) {
-    inputText.value += '\n'
-  } else {
-    sendMessage()
-  }
+  if (e.shiftKey) return
+  e.preventDefault()
+  sendMessage()
 }
 
 async function sendMessage() {
@@ -164,7 +166,13 @@ async function sendMessage() {
   let contextPayload = null
   
   if (activeMode.value === 'query_context') {
-    contextPayload = props.buildQueryContext?.()
+    try {
+      contextPayload = await Promise.resolve(props.buildQueryContext?.())
+    } catch (error) {
+      const msg = error?.message || String(error)
+      target.error = `构建查询上下文失败：${msg}`
+      return
+    }
     if (!contextPayload) {
       target.error = '请先执行数据查询后再进行分析。'
       return
@@ -257,6 +265,7 @@ async function sendMessage() {
   max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.5;
   box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
+.ai-chat-workspace__content { white-space: pre-wrap; word-break: break-word; }
 .is-user .ai-chat-workspace__bubble { 
   background: #2563eb; color: #ffffff; border-bottom-right-radius: 4px;
 }

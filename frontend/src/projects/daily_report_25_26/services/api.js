@@ -3,11 +3,22 @@ const rawBase =
     ? import.meta.env.VITE_API_BASE
     : ''
 
+function shouldPreferSameOriginProxy(base) {
+  if (!base || typeof window === 'undefined') return false
+  const origin = String(window.location?.origin || '')
+  const isLocalFrontend = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+  if (!isLocalFrontend) return false
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/api(\/v1)?)?$/i.test(base)
+}
+
 // 兼容 VITE_API_BASE 未包含 /api/v1 的情况：自动补全标准前缀
 const API_BASE = (() => {
   const base = rawBase ? String(rawBase).replace(/\/$/, '') : ''
   if (!base) return '/api/v1'
-  return /(\/api)(\/|$)/.test(base) ? base : `${base}/api/v1`
+  const normalizedBase = /(\/api)(\/|$)/.test(base) ? base : `${base}/api/v1`
+  // 本机开发优先同源 /api 代理，规避 localhost:5173 -> 127.0.0.1:8001 的 CORS 问题。
+  if (shouldPreferSameOriginProxy(normalizedBase)) return '/api/v1'
+  return normalizedBase
 })()
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -452,6 +463,7 @@ export async function importMonthlyDataShowCsv(projectKey, file) {
 export async function getMonthlyDataShowQueryOptions(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query-options`, {
     headers: attachAuthHeaders(),
+    cache: 'no-store',
   })
   if (!response.ok) {
     const message = await response.text()
@@ -841,7 +853,7 @@ export async function getDataAnalysisSchema(projectKey, options = {}) {
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
   const response = await fetch(
     `${projectPath(projectKey)}/data_analysis/schema${search}`,
-    { headers: attachAuthHeaders() },
+    { headers: attachAuthHeaders(), cache: 'no-store' },
   )
   if (!response.ok) {
     const message = await response.text()
@@ -902,6 +914,7 @@ export async function runDataAnalysisDialogChat(projectKey, payload = {}) {
 export async function getAiSettings(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
     headers: attachAuthHeaders(),
+    cache: 'no-store',
   })
   if (!response.ok) {
     const message = await response.text()
@@ -928,6 +941,7 @@ export async function updateAiSettings(projectKey, payload) {
       report_mode: payload?.report_mode ?? 'full',
       enable_validation: payload?.enable_validation ?? true,
       allow_non_admin_report: payload?.allow_non_admin_report ?? false,
+      show_chat_bubble: payload?.show_chat_bubble ?? true,
     }),
   })
   if (!response.ok) {
@@ -1213,6 +1227,7 @@ export async function setAdminValidationMasterSwitch(enabled) {
 export async function getAdminAiSettings() {
   const response = await fetch(normalized('/admin/ai-settings'), {
     headers: attachAuthHeaders(),
+    cache: 'no-store',
   })
   if (!response.ok) {
     const message = await response.text()
@@ -1239,6 +1254,7 @@ export async function updateAdminAiSettings(payload) {
       report_mode: payload?.report_mode ?? 'full',
       enable_validation: payload?.enable_validation ?? true,
       allow_non_admin_report: payload?.allow_non_admin_report ?? false,
+      show_chat_bubble: payload?.show_chat_bubble ?? true,
     }),
   })
   if (!response.ok) {

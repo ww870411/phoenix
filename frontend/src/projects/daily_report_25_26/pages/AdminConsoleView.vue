@@ -627,6 +627,12 @@
         </section>
       </section>
     </main>
+    <AiChatWorkspace
+      v-if="showChatBubble"
+      title="管理助手"
+      :query-mode-enabled="false"
+      :send-chat="sendAdminFreeChat"
+    />
     <AiAgentSettingsDialog
       v-model="aiSettingsDialogVisible"
       :can-manage="canManageAiSettings"
@@ -642,6 +648,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
+import AiChatWorkspace from '../components/AiChatWorkspace.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useAuthStore } from '../store/auth'
 import {
@@ -675,6 +682,7 @@ import {
   updateAdminAiSettings,
   uploadSuperFiles,
   writeSuperFile,
+  runDataAnalysisDialogChat,
 } from '../services/api'
 
 const TARGET_PROJECT_KEY = 'daily_report_25_26'
@@ -689,6 +697,27 @@ const SUPER_COMMAND_PRESETS = [
 const router = useRouter()
 const auth = useAuthStore()
 const activeTab = ref('files')
+
+const chatBubbleOverride = ref(null)
+const showChatBubble = computed(() => {
+  if (typeof chatBubbleOverride.value === 'boolean') return chatBubbleOverride.value
+  return false
+})
+
+const syncChatBubbleFromSettings = async () => {
+  try {
+    const payload = await getAdminAiSettings()
+    if (payload && typeof payload.show_chat_bubble === 'boolean') {
+      chatBubbleOverride.value = payload.show_chat_bubble
+    }
+  } catch (err) {
+    console.error('Failed to sync AI bubble in admin console:', err)
+  }
+}
+
+const sendAdminFreeChat = (payload) => {
+  return runDataAnalysisDialogChat(TARGET_PROJECT_KEY, payload)
+}
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -859,7 +888,13 @@ const canManageValidation = computed(() => auth.canManageValidationFor(TARGET_PR
 const canManageAiSettings = computed(() => auth.canManageAiSettingsFor(TARGET_PROJECT_KEY))
 const canManageCache = computed(() => auth.canPublishFor(TARGET_PROJECT_KEY))
 const loadAiSettingsPayload = () => getAdminAiSettings()
-const saveAiSettingsPayload = (payload) => updateAdminAiSettings(payload)
+const saveAiSettingsPayload = async (payload) => {
+  const saved = await updateAdminAiSettings(payload)
+  if (saved && typeof saved.show_chat_bubble === 'boolean') {
+    chatBubbleOverride.value = saved.show_chat_bubble
+  }
+  return saved
+}
 const testAiSettingsPayload = (payload) => testAdminAiSettings(payload)
 
 const filteredFiles = computed(() => {
@@ -2150,6 +2185,9 @@ onMounted(async () => {
     return
   }
   window.addEventListener('message', onMessage)
+  // 同步 AI 气泡设置
+  syncChatBubbleFromSettings()
+  
   await refreshSuperTree(fileManagerPath.value)
   await loadSuperFiles()
   await loadProjects()

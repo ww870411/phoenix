@@ -266,6 +266,10 @@
                   <input type="checkbox" v-model="form.allowNonAdmin" />
                   允许非管理员启用智能报告
                 </label>
+                <label class="inline">
+                  <input type="checkbox" v-model="form.showChatBubble" />
+                  显示 AI 聊天气泡
+                </label>
               </div>
             </details>
           </template>
@@ -325,6 +329,7 @@ const form = reactive({
   reportMode: 'full',
   validationEnabled: true,
   allowNonAdmin: false,
+  showChatBubble: true,
 })
 
 const canTest = computed(() => typeof props.testSettings === 'function' && props.canManage)
@@ -423,6 +428,7 @@ function applyPayload(payload) {
   form.reportMode = payload?.report_mode ?? 'full'
   form.validationEnabled = payload?.enable_validation !== undefined ? Boolean(payload.enable_validation) : true
   form.allowNonAdmin = payload?.allow_non_admin_report !== undefined ? Boolean(payload.allow_non_admin_report) : false
+  form.showChatBubble = payload?.show_chat_bubble !== undefined ? Boolean(payload.show_chat_bubble) : true
 }
 
 function addProvider() {
@@ -552,6 +558,7 @@ function buildSavePayload() {
     report_mode: form.reportMode || 'full',
     enable_validation: Boolean(form.validationEnabled),
     allow_non_admin_report: Boolean(form.allowNonAdmin),
+    show_chat_bubble: Boolean(form.showChatBubble),
   }
 }
 

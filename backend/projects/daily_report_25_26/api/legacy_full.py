@@ -1577,6 +1577,7 @@ class AiSettingsPayload(BaseModel):
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
+    show_chat_bubble: bool = True
 
 
 class AiSettingsConnectionTestPayload(BaseModel):
@@ -1757,6 +1758,7 @@ def _read_ai_settings() -> Dict[str, Any]:
             "report_mode": "full",
             "enable_validation": True,
             "allow_non_admin_report": False,
+            "show_chat_bubble": True,
         }
 
     providers_raw = data.get("providers")
@@ -1807,6 +1809,7 @@ def _read_ai_settings() -> Dict[str, Any]:
         "allow_non_admin_report": _coerce_bool(
             data.get("allow_non_admin_report"), False
         ),
+        "show_chat_bubble": _coerce_bool(data.get("show_chat_bubble"), True),
     }
 
 
@@ -1839,6 +1842,7 @@ def _safe_read_ai_settings() -> Dict[str, Any]:
             "instruction_monthly": "",
             "enable_validation": True,
             "allow_non_admin_report": False,
+            "show_chat_bubble": True,
         }
 
 
@@ -1857,6 +1861,7 @@ def _persist_ai_settings(
     report_mode: str,
     enable_validation: bool,
     allow_non_admin_report: bool,
+    show_chat_bubble: bool,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {}
     if AI_SETTINGS_PATH.exists():
@@ -1956,6 +1961,7 @@ def _persist_ai_settings(
     payload["report_mode"] = report_mode
     payload["enable_validation"] = bool(enable_validation)
     payload["allow_non_admin_report"] = bool(allow_non_admin_report)
+    payload["show_chat_bubble"] = bool(show_chat_bubble)
     AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     AI_SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     providers_plain = []
@@ -1990,6 +1996,7 @@ def _persist_ai_settings(
         "report_mode": report_mode,
         "enable_validation": bool(enable_validation),
         "allow_non_admin_report": bool(allow_non_admin_report),
+        "show_chat_bubble": bool(payload.get("show_chat_bubble", True)),
     }
 
 def _extract_local_ai_report_switch(payload: Dict[str, Any]) -> bool:
@@ -2227,6 +2234,7 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
         "report_mode": data["report_mode"],
         "enable_validation": data["enable_validation"],
         "allow_non_admin_report": data["allow_non_admin_report"],
+        "show_chat_bubble": data.get("show_chat_bubble", True),
     }
 
 
@@ -2257,6 +2265,7 @@ async def update_ai_settings_endpoint(
         payload.report_mode or "full",
         payload.enable_validation,
         payload.allow_non_admin_report,
+        payload.show_chat_bubble,
     )
     ai_runtime.reset_runtime_client()
     return {
@@ -2274,6 +2283,7 @@ async def update_ai_settings_endpoint(
         "report_mode": result["report_mode"],
         "enable_validation": result["enable_validation"],
         "allow_non_admin_report": result["allow_non_admin_report"],
+        "show_chat_bubble": result.get("show_chat_bubble", True),
     }
 
 
@@ -3725,6 +3735,7 @@ def get_data_analysis_schema(
     content["ai_report_flags"] = {
         "allow_non_admin": bool(flags.get("allow_non_admin_report", False)),
         "validation_enabled": bool(flags.get("enable_validation", True)),
+        "show_chat_bubble": bool(flags.get("show_chat_bubble", True)),
     }
     return JSONResponse(status_code=200, content=content)
 

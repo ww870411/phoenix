@@ -97,6 +97,7 @@ class AiSettingsPayload(BaseModel):
     report_mode: str = "full"
     enable_validation: bool = True
     allow_non_admin_report: bool = False
+    show_chat_bubble: bool = True
 
 
 class AiSettingsConnectionTestPayload(BaseModel):
@@ -868,6 +869,7 @@ def update_ai_settings(
         payload.report_mode,
         payload.enable_validation,
         payload.allow_non_admin_report,
+        payload.show_chat_bubble,
     )
     return {"ok": True, **saved}
 

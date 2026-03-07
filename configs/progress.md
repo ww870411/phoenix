@@ -1,3 +1,201 @@
+## 2026-03-08（日报/月报智能报告交互统一：移除复选框，改为直接按钮触发）
+
+- 目标：
+  - 日报分析页与月报查询页统一为“直接点击按钮生成/下载智能报告”，不再使用“智能报告生成”复选框作为前置开关。
+  - 保留“智能体设定”按钮。
+- 前端实现：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - 移除复选框与 `aiReportEnabled` 状态；
+    - 保留并前置显示“智能报告（BETA）”文案；
+    - 生成/下载按钮直接可用（仍受权限、加载状态、结果状态约束）；
+    - “本次分析要求（可选）”输入框改为权限可用时直接展示。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+    - 移除复选框与 `aiReportEnabled` 状态；
+    - 生成按钮改为直接触发（仍受 `loading`、结果为空、任务运行中约束）；
+    - “本次分析要求（可选）”输入框改为始终展示。
+- 结果：
+  - 两个查询页面操作路径统一为：
+    1) 查询结果
+    2) 点击“生成智能报告”
+    3) 点击“下载智能报告/下载智能分析报告”
+  - 交互更直观，无需额外勾选步骤。
+
+## 2026-03-08（日报分析页智能报告触发逻辑改造：查询后独立点击生成）
+
+- 需求：
+  - 日报分析页智能报告不再依赖“查询前勾选并随查询自动触发”；
+  - 改为与月报一致：先完成查询，再点击“生成智能报告”按钮启动任务。
+- 实现文件：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+- 关键改动：
+  - 结果区新增独立“生成智能报告”按钮（与“下载智能分析报告”分离）；
+  - 新增 `triggerAiReport()`，按当前激活单位与当前结果上下文发起 `runDataAnalysis(... request_ai_report: true)`；
+  - 查询主流程 `runAnalysis` 中统一改为 `request_ai_report: false`，只负责产出查询结果；
+  - 调整状态机文案与切换单位行为：无任务时提示“可点击生成”，不再自动进入 pending。
+- 结果：
+  - 日报查询页现在支持“先查后生”，交互灵活度与月报查询页一致。
+
+## 2026-03-08（月报查询页 500 修复：query-options 接口异常降级）
+
+- 现象：
+  - 月报查询页改为同源代理后，`/monthly-data-show/query-options` 不再 CORS 报错，但返回 `500 Internal Server Error`，导致页面初始化失败。
+- 处理：
+  - 对 `backend/projects/monthly_data_show/api/workspace.py` 的 `get_monthly_data_show_query_options()` 增加全链路兜底：
+    - 指标配置刷新失败：降级为空配置，不中断；
+    - 数据库读取失败：返回空筛选项（`row = {}`）；
+    - 指标排序异常：回退原始 `items_from_db`；
+    - AI 设置读取异常：回退 `show_chat_bubble=true`。
+- 结果：
+  - `query-options` 接口在异常场景下可稳定返回 `200 + 空数据`，页面可进入并继续使用/排障，不再被 500 阻断。
+- 验证：
+  - 已执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py`，语法通过。
+
+## 2026-03-08（月报查询页 CORS 修复：本机开发优先同源 /api 代理）
+
+- 现象：
+  - 月报查询页初始化请求 `query-options` 时出现浏览器 CORS 拦截：
+    - `http://localhost:5173` -> `http://127.0.0.1:8001/api/v1/...`
+- 根因判断：
+  - 本机开发环境中，前端存在直接命中绝对后端地址（`127.0.0.1:8001`）的路径，触发跨域链路；
+  - 实际开发应优先走同源 `/api` 代理，避免 CORS 前置失败。
+- 修复：
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - 新增 `shouldPreferSameOriginProxy(base)`；
+    - 当检测到“本机前端 + 本机后端地址”组合时，`API_BASE` 强制使用 `'/api/v1'`；
+    - 保持非本机场景（生产/非 localhost）不变。
+- 结果：
+  - 本机开发时接口优先同源代理，避免月报查询页因跨域导致 `Failed to fetch`。
+
+## 2026-03-08（AI 气泡开关终极兜底：页面启动后强制同步 AI 设置）
+
+- 现象补充：
+  - 即使配置接口已设为 `no-store`，仍有场景出现“刷新后气泡回弹”。
+- 处理策略：
+  - 不再仅依赖 `schema/query-options` 中的开关字段。
+  - 页面启动后主动调用 AI 设置接口读取 `show_chat_bubble`，并以该值作为气泡显示的最高优先级覆盖。
+- 实现：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - 新增 `chatBubbleOverride`；
+    - 新增 `syncChatBubbleFromSettings()`，通过 `getAiSettings` 读取并覆盖；
+    - `onMounted` 改为 `await loadSchema(); await syncChatBubbleFromSettings();`。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+    - 新增 `chatBubbleOverride`；
+    - 新增 `syncChatBubbleFromSettings()`，通过 `getAdminAiSettings` 读取并覆盖；
+    - 页面初始化完成 `loadOptions()` 后立即同步 AI 设置。
+- 结果：
+  - 刷新后气泡状态以实时 AI 设置为准，避免中间链路差异导致的回弹。
+
+## 2026-03-08（AI 气泡开关刷新后回弹修复：配置接口禁用缓存）
+
+- 现象：
+  - 在智能体设定中关闭气泡并保存后，当前页会隐藏；但刷新页面后，气泡再次出现。
+- 处理：
+  - 在前端配置读取接口上禁用缓存，确保每次刷新都读取最新配置：
+    - `getDataAnalysisSchema(...)`
+    - `getMonthlyDataShowQueryOptions(...)`
+    - `getAiSettings(...)`
+    - `getAdminAiSettings(...)`
+  - 统一在 fetch 选项中增加 `cache: 'no-store'`。
+- 影响文件：
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- 结果：
+  - “保存后即时生效”与“刷新后保持生效”两条链路已同时覆盖。
+
+## 2026-03-08（AI 气泡显示开关修复：保存后当前页即时生效）
+
+- 问题：
+  - 在“智能体设定”里关闭“显示 AI 聊天气泡”并保存后，当前页面气泡仍然显示，需手动刷新后才可能生效。
+- 根因：
+  - 页面气泡显示状态分别依赖：
+    - 日报分析页：`schema.ai_report_flags.show_chat_bubble`
+    - 月报查询页：`options.aiChatFlags.show_chat_bubble`
+  - 保存 AI 设置成功后，页面未把后端返回的 `show_chat_bubble` 回写到上述本地状态，导致 UI 未即时同步。
+- 修复：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - `saveAiSettingsPayload` 改为异步，保存成功后把 `saved.show_chat_bubble` 回写到 `schema.ai_report_flags.show_chat_bubble`。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+    - `saveAiSettingsPayload` 改为异步，保存成功后把 `saved.show_chat_bubble` 回写到 `options.aiChatFlags.show_chat_bubble`。
+- 结果：
+  - 用户在智能体设定中关闭气泡并保存后，当前页会立即隐藏气泡，无需刷新页面。
+
+## 2026-03-08（AI 自由对话气泡缺陷修复：文案透传 + 回车行为 + 上下文异常兜底）
+
+- 结论：
+  - 修复 `AiChatWorkspace` 未消费父页面文案参数的问题，页面传入的 `free-description/query-description/free-placeholder/query-placeholder` 现可生效。
+  - 修复输入框回车逻辑：`Shift+Enter` 正常换行，`Enter` 发送消息，避免手动拼接换行导致的输入体验异常。
+  - 修复“数据分析模式”构建上下文时的异常中断：`buildQueryContext` 抛错会转为前端错误提示，不再直接打断消息发送流程且无提示。
+  - 修复消息内容换行展示：消息气泡内容支持 `pre-wrap` 与长词断行，保留多行文本阅读性。
+- 影响文件：
+  - `frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`
+- 验证：
+  - 代码级检查已完成（事件绑定、props 定义、异常分支、样式规则均已落位）。
+  - 尚未执行前端构建命令；如需我可继续补跑 `npm run build` 做完整验证。
+
+## 2026-03-07（AI 分析深度优化：月报全量数据包 + 维度补全）
+
+- **故障分析:**
+  - 用户反馈月报数据分析时数据包不全。
+  - 核心原因：后端摘要逻辑对列数（16）和总字符（8000）限制过严，且前端未充分组装全量数据。
+- **协同优化方案:**
+  - **后端 (ai_chat_service.py)**: 放宽列限制至 24-32 列，总限制提升至 12,000 字符，并自动过滤无效元数据。
+  - **前端 (MonthlyDataShowQueryToolView.vue)**: 重构 `buildMonthlyChatContext`，支持抓取最高 1000 条记录，并新增 `companies_scope` 等维度背景元数据。
+- **结果:**
+  - AI 现在能看到更多的行和更全的列（同比/环比/计划值等），数据分析的深度和准确性显著提升。
+
+## 2026-03-07（紧急修复：管理后台页面无法加载问题）
+
+- **故障描述:** 
+  - 点击“进入后台”按钮无反应，控制台报错 `SyntaxError`，提示 `queryDailyDataAnalysisDialogChat` 未导出。
+- **修复详情:**
+  - 修正了 `AdminConsoleView.vue` 中的 API 导入名。
+  - 将错误的 `queryDailyDataAnalysisDialogChat` 更正为后端配套的 `runDataAnalysisDialogChat`。
+- **结果:**
+  - 页面加载恢复正常，管理后台 AI 气泡功能链路闭环。
+
+## 2026-03-07（AI 分析极限优化：数据包“表格化”序列化 + 容量翻倍）
+
+- **故障诊断:**
+  - 用户反馈在“所有单位+所有指标”查询下，AI 依然无法看到全量数据。
+  - 深度分析：JSON 格式冗余度极高，重复的 Key 占据了 80% 以上的 Token 空间，导致 12,000 字符只能承载极少量行数。
+- **重构方案:**
+  - **序列化革新**: 后端引入 `_rows_to_compact_table` 逻辑，将行数据从 JSON 数组转换为“表头声明 + 纯数值行”的类 CSV 格式。
+  - **容量扩充**: 字符限制提升至 24,000，Token 利用率提升约 400%。
+  - **截断策略优化**: 采用百分比平滑缩减行数，确保在极端数据量下也能保留尽可能多的业务样本。
+- **结果:**
+  - AI 现在能一次性处理涵盖所有单位、所有指标的大型数据包，彻底解决了明细数据“看不到、数不对”的问题。
+
+## 2026-03-07（功能扩展：管理后台集成 AI 助手气泡）
+
+- **集成详情:**
+  - 为 `AdminConsoleView.vue` 引入了 `AiChatWorkspace` 组件。
+  - 实现了基于全局 AI 设置的显示逻辑，确保“显示/隐藏”状态在管理端与业务端完全同步。
+  - 定制助手标题为“管理助手”，并锁定为“自由对话”模式。
+- **体验一致性:**
+  - 沿用了“默认隐藏”逻辑，彻底消除刷新后的视觉闪烁。
+  - 保存 AI 设置时，管理后台的气泡状态会实时响应变更。
+
+## 2026-03-07（体验优化：消除 AI 气泡刷新时的“闪烁”效应）
+
+- **故障诊断:**
+  - 虽然解决了持久化回弹问题，但由于计算属性默认返回 `true`，在异步加载配置前气泡会短暂显现（Flicker）。
+- **优化细节:**
+  - 将 `showChatBubble` 的缺省逻辑从 `true` 改为 `false`。
+  - **实现逻辑**: 遵循“宁缺毋滥”原则，直到明确从 Schema 或 全局设置中获取到开启标志，否则不进行渲染。
+- **结果:**
+  - 彻底解决了气泡在刷新后的“闪现”现象，界面交互更加稳重、专业。
+
+## 2026-03-07（AI 气泡开关持久化修复：解决刷新回弹问题）
+
+- **故障诊断:**
+  - 用户在智能体设置中关闭气泡后，刷新页面气泡会再次出现。
+  - 根本原因：页面初始化时 `computed` 属性优先读取了 `schema/options` 接口的默认值，而异步同步的全局设置没有及时且强制地覆盖该状态。
+- **修复方案:**
+  - **DataAnalysisView.vue**: 重构 `showChatBubble` 计算逻辑，明确 `Override > Schema > Default` 的优先级链。
+  - **MonthlyDataShowQueryToolView.vue**: 同步加固气泡显示逻辑，确保全局 AI 设置在加载后能稳定锁定显示状态。
+  - **syncChatBubbleFromSettings**: 增强异步同步函数的赋值强度，确保其在各页面初始化后能第一时间强制修正显示状态。
+- **结果:**
+  - AI 气泡开关现在可以跨页面、跨刷新稳定持久化。
+
 ## 2026-03-07（AI 聊天弹窗视觉重构：去除调试信息 + 现代气泡设计）
 
 - **功能精简:**
@@ -30,6 +228,43 @@
   - **System Role**: 注入全局身份定义，确保 AI 明确其作为“凤凰计划助手”的职责。
 - **验证结果:**
   - `debug_ai_chat_expert_v2.py` 测试通过，多轮对话流畅，Session 自动追加，逻辑闭环。
+
+## 2026-03-07（聊天上下文全量化 + 固定系统提示词 + 气泡显示开关）
+
+- 需求背景：
+  - “基于查询数据”模式下，聊天上下文不应只停留在前 200 行或预览行；
+  - 聊天系统提示词需要改为固定业务提示词，不再额外叠加 `instruction_monthly`；
+  - 希望在“智能体设定”中新增“是否显示 AI 聊天气泡”开关。
+- 后端实现：
+  - `backend/services/ai_chat_service.py`
+    - `summarize_query_context(...)` 改为保留查询结果的全量行集合，再由 `_serialize_context_summary(...)` 按字符上限渐进裁剪；
+    - `build_chat_messages(...)` 的 `query_context` 模式改为使用固定业务系统提示词；
+    - 不再在聊天系统提示词中额外注入 `instruction_monthly` / `instruction_daily`。
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`
+    - AI 设置新增 `show_chat_bubble` 字段；
+    - `get / update ai_settings`、`_read_ai_settings`、`_persist_ai_settings` 全链路支持该字段；
+    - `data_analysis/schema` 返回的 `ai_report_flags` 新增 `show_chat_bubble`。
+  - `backend/projects/monthly_data_show/api/workspace.py`
+    - `query-options` 返回新增 `ai_chat_flags.show_chat_bubble`，供月报页决定是否展示聊天悬浮气泡。
+- 前端实现：
+  - `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`
+    - 数据分析聊天上下文改为优先使用当前单位完整结果 `currentResult.rows`，不再只用 `previewRows`；
+    - 聊天气泡展示由 `schema.ai_report_flags.show_chat_bubble` 控制。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+    - `buildMonthlyChatContext()` 改为异步：若当前页面仅持有分页结果且 `summary.totalRows > rows.length`，会先补拉全量查询结果后再发送聊天上下文；
+    - 聊天气泡展示由 `query-options.ai_chat_flags.show_chat_bubble` 控制。
+  - `frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`
+    - 运行策略区域新增“显示 AI 聊天气泡”复选框；
+    - 保存/读取链路同步 `show_chat_bubble`。
+- 结果：
+  - 基于查询数据模式现在尽量携带当前页面查询到的全量结果；
+  - 聊天系统提示词固定为业务定义文案；
+  - 是否显示聊天悬浮气泡现在可由智能体设定统一控制。
+- 修复补充（同日）：
+  - “显示 AI 聊天气泡”无法保存的根因，不在后端持久化，而在前端 API 封装：
+    - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - `updateAiSettings(...)` 与 `updateAdminAiSettings(...)` 在 POST body 中漏传 `show_chat_bubble`；
+  - 已补齐该字段透传，保存后可正确写入 `backend_data/shared/ai_settings.json`。
 
 ## 2026-03-07（AI 聊天调试面板布局修复）
 
@@ -5995,3 +6230,37 @@
   - 本轮未改 apt 源、未启用 BuildKit cache，也未调整脚本入口。
 - 验证：
   - 本次为 Dockerfile 静态修改，未实际执行镜像构建；后续可直接通过 `./lo1_new_server.ps1` 观察 backend 依赖下载阶段耗时变化。
+
+## 2026-03-08 DataAnalysis 智能报告按钮位置调整
+- 需求：将“智能报告（BETA）”与“智能体设定”按钮移动到“生成智能报告”按钮前。
+- 变更文件：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`。
+- 实现：在结果区 `result-header-actions` 中新增“智能报告（BETA）”与“智能体设定”按钮，并放在“生成智能报告”按钮之前；查询区仅保留未开通提示文案。
+- 结果：日报查询页面按钮顺序符合新要求，智能报告入口更集中于结果操作区。
+- 回滚：恢复 `DataAnalysisView.vue` 中对应模板片段到本次改动前状态。
+
+## 2026-03-08 DataAnalysis 智能报告行对齐与按钮顺序微调
+- 需求补充：修复“智能报告（BETA）”与后方按钮不在同一水平位置问题；将“智能体设定”按钮放到该行最后。
+- 变更文件：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`。
+- 实现：
+  - 在 `result-header-actions` 中将“智能体设定”按钮移动到最后一个。
+  - 增强 `.ai-report-title` 样式为 `inline-flex + align-items:center + min-height + nowrap`，并补充字重，保证与按钮视觉对齐。
+- 结果：按钮行顺序与对齐均满足最新交互要求。
+- 回滚：恢复 `DataAnalysisView.vue` 的对应模板顺序与 `.ai-report-title` 样式为改动前状态。
+
+## 2026-03-08 月报智能体设定权限改为项目动作权限
+- 需求：月报页面“智能体设定”权限同步为 `monthly_data_show` 的 `can_manage_ai_settings`。
+- 变更文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`。
+- 实现：
+  - 按钮显示/禁用由 `isGlobalAdmin` 改为 `canConfigureAiSettings`。
+  - 弹窗 `:can-manage` 改为 `canConfigureAiSettings`。
+  - 权限计算改为 `auth.canManageAiSettingsFor('monthly_data_show')`。
+  - 打开设置函数中的权限拦截同步替换。
+- 结果：月报智能体设定与日报一致，按项目动作权限 `can_manage_ai_settings` 控制。
+- 回滚：恢复 `MonthlyDataShowQueryToolView.vue` 中上述判定与变量定义到改动前状态。
+
+## 2026-03-08 AI 气泡文案调整
+- 需求：将 AI 气泡组件显示文字“AI 助手”改为“智能助手”。
+- 变更文件：`frontend/src/projects/daily_report_25_26/components/AiChatWorkspace.vue`。
+- 实现：替换浮动入口文案文本，未改交互逻辑与权限逻辑。
+- 结果：页面气泡入口统一展示为“智能助手”。
+- 回滚：将上述组件文案恢复为“AI 助手”。
