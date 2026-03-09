@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import platform
 import re
@@ -225,6 +226,37 @@ def _load_table_meta(db, table: str) -> Dict[str, Any]:
 def _ensure_admin_console_access(session: AuthSession) -> None:
     if not session.permissions.actions.can_access_admin_console:
         raise HTTPException(status_code=403, detail="当前账号无全局后台访问权限。")
+
+
+def _extract_forwarded_client_ip(request: Request) -> str:
+    x_forwarded_for = str(request.headers.get("x-forwarded-for") or "").strip()
+    if x_forwarded_for:
+        # X-Forwarded-For: client, proxy1, proxy2
+        first_ip = x_forwarded_for.split(",")[0].strip()
+        if first_ip:
+            return first_ip
+    x_real_ip = str(request.headers.get("x-real-ip") or "").strip()
+    if x_real_ip:
+        return x_real_ip
+    return ""
+
+
+def _normalize_ip(raw_ip: str) -> str:
+    text = str(raw_ip or "").strip()
+    if not text:
+        return ""
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
+
+
+def _resolve_client_ip(request: Request) -> str:
+    forwarded_ip = _normalize_ip(_extract_forwarded_client_ip(request))
+    if forwarded_ip:
+        return forwarded_ip
+    direct_ip = request.client.host if request.client else ""
+    return _normalize_ip(direct_ip)
 
 
 def _ensure_cache_operator(session: AuthSession) -> None:
@@ -971,7 +1003,7 @@ def collect_audit_events(
     if not events:
         return {"ok": True, "accepted": 0}
     user_agent = request.headers.get("user-agent", "")
-    client_ip = request.client.host if request.client else ""
+    client_ip = _resolve_client_ip(request)
     normalized: List[Dict[str, Any]] = []
     for event in events[:200]:
         normalized.append(

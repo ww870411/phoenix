@@ -1,5 +1,37 @@
 # 前端说明（Vue3 + Vite）
 
+## 事故记录补充（2026-03-09）
+
+- 本轮按用户要求新增独立文档：`configs/3.9 docker故障记录.md`。
+- 该文档用于汇总本次“服务器重启后 Docker 环境错乱，导致登录 504”的完整过程，便于交由外部 Docker/运维专家继续处理。
+
+## 登录 504 排障记录（2026-03-09）
+
+- 当前登录页 `src/pages/LoginView.vue` 只负责采集用户名、密码、记住状态，并调用 `useAuthStore().login(...)`。
+- 实际登录请求由 `src/projects/daily_report_25_26/services/api.js` 中的 `login(credentials)` 发起，目标固定为 `${API_BASE}/auth/login`。
+- 用户 2026-03-09 提供的控制台证据显示：
+  - 浏览器已成功发出 `POST https://platform.smartview.top/api/v1/auth/login`
+  - 返回为 Cloudflare `504 Gateway time-out` HTML 页面
+- 这说明前端路由与请求构造已生效，故障点不在登录页组件本身，而在线上服务器对 `/api` 的回源链路。
+- 联动判断：
+  - 若首页可访问而登录接口 504，优先怀疑 `web` 容器到 `backend` 容器的反代异常，或后端处理登录时被数据库阻塞。
+- 2026-03-09 服务器新增实测进一步确认：
+  - `phoenix-web` 与 `phoenix-backend` 同属 `25-26_phoenix_net`；
+  - `phoenix-web` 错误日志为 `while connecting to upstream`，目标 upstream 是 `http://172.19.0.3:8000/api/v1/auth/login`；
+  - 因而前端与 Nginx 入口都正常，真正异常点已经收敛到“backend 容器内部 8000 端口未监听或未成功拉起服务”。
+- 第二轮实测修正结论（2026-03-09）：
+  - `phoenix-backend` 容器内 `127.0.0.1:8000/healthz` 已返回正常；
+  - 因此前端登录 504 的直接根因不再是后端应用未启动，而是 `phoenix-web` 到 `phoenix-backend` 的容器间网络链路异常。
+- 第三轮服务器操作补充（2026-03-09）：
+  - 停掉 Phoenix 容器后，`25-26_phoenix_net` 已被 Docker 自动移除；
+  - 因此前端侧后续无需围绕“手工删网络失败”继续排障，直接等待正确生产栈重新拉起即可。
+- 第四轮服务器观察修正（2026-03-09）：
+  - 即使 `docker ps` 为空，`25-26_phoenix_net` 仍可能保留；
+  - 这是 Docker 自定义 bridge 网络的正常行为，不代表前端或 Nginx 配置再次异常。
+- 后续进展（2026-03-09）：
+  - Phoenix 旧网络 `25-26_phoenix_net` 已被成功删除；
+  - 前端当前无需再围绕旧网络残留现象排障，下一步直接等待新网络随 compose 重建并验证 `web -> backend` 链路。
+
 ## 最新结构与状态（2026-02-28）
 
 - 日报分析页智能报告触发逻辑改造（2026-03-08）：
@@ -4481,3 +4513,46 @@ docker compose up -d --build
 - 组件：`AiChatWorkspace`。
 - 调整：浮动气泡入口文字由“AI 助手”改为“智能助手”。
 - 影响：仅前端展示文案变化，无功能逻辑变更。
+
+## 结构同步（2026-03-08 admin-console 操作日志页恢复）
+
+- 修复页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 问题原因：`activeTab === 'audit'` 的模板分支被误清空，导致“操作日志”页签无内容。
+- 修复内容：恢复日志页完整 UI（筛选、统计、日志表格），并绑定既有 `reloadAuditData` 数据流。
+- 当前行为：
+  - 点击“操作日志”页签后会触发日志加载；
+  - 支持按时间范围、用户、分类、动作、关键字筛选；
+  - 支持展示分类统计与日志明细。
+
+## 结构同步（2026-03-08 审计日志 IP 展示兼容）
+
+- 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整：操作日志表格中的 IP 列改为优先显示 `client_ip`，并兼容历史字段 `ip`。
+- 目的：适配后端真实客户端 IP 解析改动，同时不影响历史日志记录回看。
+## 结构同步（2026-03-08 管理后台日志采集范围收敛）
+
+- 变更目标：将后台审计日志采集从“全局页面”收敛为“仅管理后台的操作日志页签”。
+- 代码调整：
+  - `frontend/src/main.js`
+    - 移除全局 `initAuditTracking` 初始化，避免应用级路由/点击统一写入审计日志。
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+    - 新增 `syncAuditTrackingByTab`：仅在 `activeTab === 'audit'` 时调用 `initAuditTracking(...)`。
+    - 离开 `audit` 页签或组件卸载时调用 `stopAuditTracking()`。
+- 结果：
+  - “后台文件编辑 / 数据库表编辑 / 项目后台设定 / 服务器管理”页签不再产生审计记录。
+  - “操作日志”页签保留审计采集与展示能力。
+
+## 结构同步（2026-03-08 更正：撤回采集范围改动）
+
+- 用户确认本次诉求不包含“采集范围调整”。
+- 已回滚：
+  - 恢复 `frontend/src/main.js` 全局审计初始化。
+  - 移除 `AdminConsoleView.vue` 内按页签启停采集逻辑。
+- 当前口径：采集行为恢复为原有机制；操作日志页仍用于日志查看与筛选展示。
+
+## 结构同步（2026-03-08 仅展示修复：操作日志页签隔离）
+
+- 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 修复点：将日志区块条件从 `v-else` 改为 `v-else-if=\"activeTab === 'audit'\"`。
+- 影响：日志展示区仅在“操作日志”页签渲染；其他后台子页签不再显示日志区块。
+- 说明：本次未改日志采集逻辑。

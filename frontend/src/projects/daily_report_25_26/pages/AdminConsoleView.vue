@@ -623,7 +623,100 @@
           </section>
         </section>
 
-        <section v-else class="content-block">
+        <section v-else-if="activeTab === 'audit'" class="content-block">
+          <section class="inner-card">
+            <header class="section-header">
+              <h3>操作日志与分类统计</h3>
+              <button class="btn ghost" type="button" :disabled="auditLoading" @click="reloadAuditData">
+                {{ auditLoading ? '加载中…' : '刷新日志' }}
+              </button>
+            </header>
+            <div class="toolbar">
+              <label class="field">
+                <span>时间范围</span>
+                <select v-model.number="auditFilters.days">
+                  <option :value="1">最近 1 天</option>
+                  <option :value="3">最近 3 天</option>
+                  <option :value="7">最近 7 天</option>
+                  <option :value="15">最近 15 天</option>
+                  <option :value="30">最近 30 天</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>用户</span>
+                <input v-model.trim="auditFilters.username" type="text" placeholder="用户名" />
+              </label>
+              <label class="field">
+                <span>分类</span>
+                <input v-model.trim="auditFilters.category" type="text" placeholder="如 navigation / click" />
+              </label>
+              <label class="field">
+                <span>动作</span>
+                <input v-model.trim="auditFilters.action" type="text" placeholder="如 page_open / click" />
+              </label>
+              <label class="field grow">
+                <span>关键字</span>
+                <input v-model.trim="auditFilters.keyword" type="text" placeholder="搜索 page/target/detail 等字段" />
+              </label>
+            </div>
+            <div v-if="auditError" class="panel-state error">{{ auditError }}</div>
+            <div class="audit-grid">
+              <div class="overview-item">
+                <span class="label">日志总量</span>
+                <strong>{{ auditStats.total }}</strong>
+              </div>
+              <div class="overview-item">
+                <span class="label">分类 TOP</span>
+                <ul class="audit-list">
+                  <li v-for="item in topCategoryStats" :key="`category-${item.key}`">{{ item.key }}：{{ item.value }}</li>
+                  <li v-if="!topCategoryStats.length">暂无数据</li>
+                </ul>
+              </div>
+              <div class="overview-item">
+                <span class="label">动作 TOP</span>
+                <ul class="audit-list">
+                  <li v-for="item in topActionStats" :key="`action-${item.key}`">{{ item.key }}：{{ item.value }}</li>
+                  <li v-if="!topActionStats.length">暂无数据</li>
+                </ul>
+              </div>
+              <div class="overview-item">
+                <span class="label">用户 TOP</span>
+                <ul class="audit-list">
+                  <li v-for="item in topUserStats" :key="`user-${item.key}`">{{ item.key }}：{{ item.value }}</li>
+                  <li v-if="!topUserStats.length">暂无数据</li>
+                </ul>
+              </div>
+            </div>
+            <div class="audit-table-wrap">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th class="col-time">时间</th>
+                    <th class="col-user">用户</th>
+                    <th class="col-ip">IP</th>
+                    <th class="col-category">分类</th>
+                    <th class="col-action">动作</th>
+                    <th class="col-page">页面</th>
+                    <th class="col-target">目标</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, index) in auditEvents" :key="item.id || item.ts || index">
+                    <td>{{ item.ts_east8 || formatEast8Time(item.ts) }}</td>
+                    <td>{{ item.username || '-' }}</td>
+                    <td>{{ item.client_ip || item.ip || '-' }}</td>
+                    <td>{{ item.category || '-' }}</td>
+                    <td>{{ item.action || '-' }}</td>
+                    <td>{{ item.page || '-' }}</td>
+                    <td>{{ item.target || (item.detail ? JSON.stringify(item.detail) : '-') }}</td>
+                  </tr>
+                  <tr v-if="!auditEvents.length && !auditLoading">
+                    <td colspan="7" class="panel-state">暂无日志数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </section>
     </main>

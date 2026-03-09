@@ -1,5 +1,54 @@
 # daily_report_25_26 后端说明
 
+## 事故记录补充（2026-03-09）
+
+- 本轮按用户要求新增独立文档：`configs/3.9 docker故障记录.md`。
+- 该文档集中整理了本次 Docker 网络异常、容器间访问异常、旧 network id 残留等证据链，后续可直接供运维专家接手。
+
+## 登录 504 排障记录（2026-03-09）
+
+- 登录接口入口：
+  - `POST /api/v1/auth/login`
+  - `GET /api/v1/auth/me`
+  - `POST /api/v1/auth/logout`
+- 登录核心逻辑位于 `backend/services/auth_manager.py`：
+  - `login(...)` 负责读取账号配置、校验用户名密码、生成会话；
+  - 当 `remember_me=true` 时，会调用 `_persist_session(...)` 将会话写入 PostgreSQL `auth_sessions` 表。
+- 本地验证结果：
+  - `phoenix_backend` 健康检查 `/healthz` 正常返回 `200`；
+  - `/api/v1/auth/me` 无令牌时正常返回 `401`；
+  - 本地后端日志中可见登录接口返回 `200 OK`。
+- 因此 2026-03-09 线上 `504 Gateway time-out` 更接近部署层异常，而非此处认证接口代码直接报错。
+- 服务器排查时需重点检查：
+  - `web -> backend` 容器网络连通性；
+  - `backend -> db` 连接是否阻塞；
+  - `auth_sessions` 持久化表初始化/写入是否因数据库状态异常而卡住。
+- 2026-03-09 服务器新增实测：
+  - `phoenix-web` 日志报错为 `upstream timed out ... while connecting to upstream`；
+  - upstream 目标是 `http://172.19.0.3:8000/api/v1/auth/login`；
+  - `phoenix-backend` 日志为空。
+- 这意味着：
+  - Nginx 已拿到 `backend` 容器 IP，但 TCP 连接 `172.19.0.3:8000` 阶段就超时；
+  - 请求尚未进入 FastAPI 路由层；
+  - 当前优先怀疑 `phoenix-backend` 容器内部没有真正监听 8000，或 `uvicorn` 只保留父进程而子进程未成功启动。
+- 第二轮实测修正（2026-03-09）：
+  - `docker top phoenix-backend`、`docker logs phoenix-backend` 与容器内 Python 自检均确认：
+    - Uvicorn 已成功启动；
+    - `0.0.0.0:8000` 已建立监听；
+    - `127.0.0.1:8000/healthz` 正常返回。
+- 因而当前最终判断为：
+  - 后端应用本身可用；
+  - 故障位于 Docker 生产网络内 `phoenix-web -> phoenix-backend` 的容器间访问链路，而非认证接口代码本身。
+- 第三轮服务器操作补充（2026-03-09）：
+  - 停掉容器后 `25-26_phoenix_net` 已自动消失，`docker network rm` 报 `not found` 属于预期；
+  - 后续应直接重建生产 compose 栈，而非继续手工删除同名网络。
+- 第四轮服务器观察修正（2026-03-09）：
+  - `docker ps` 为空而 `25-26_phoenix_net` 仍存在，并不矛盾；
+  - 该网络属于 compose 创建的用户自定义 bridge，停止容器并不会自动删除，需要 `docker compose down` 或显式 `docker network rm`。
+- 后续进展（2026-03-09）：
+  - 经 `docker network inspect` 确认旧网络存在 IPAM 脏状态后，用户已成功删除 `25-26_phoenix_net`；
+  - 当前应重新拉起 Phoenix 栈，验证新建网络下 `phoenix-web -> phoenix-backend` 是否恢复正常。
+
 ## 最新结构与状态（2026-02-28）
 
 - 日报分析页智能报告触发逻辑改造联动（2026-03-08）：
@@ -3045,3 +3094,44 @@
 ## 2026-03-08 前端联动说明（AI 气泡文案）
 - 本轮无后端改动。
 - 前端仅调整 AI 气泡入口文案为“智能助手”。
+
+## 结构同步（2026-03-08 admin-console 操作日志页前端恢复）
+
+- 本次为前端模板修复，后端审计接口未改动。
+- 继续使用既有接口：
+  - `GET /api/v1/admin/audit/events`
+  - `GET /api/v1/admin/audit/stats`
+  - `POST /api/v1/audit/events`
+- 说明：前端恢复渲染后，现有审计查询链路可正常被使用。
+
+## 结构同步（2026-03-08 审计日志真实客户端 IP）
+
+- 文件：`backend/api/v1/admin_console.py`
+- 接口：`POST /api/v1/audit/events`
+- 调整：审计日志记录 IP 改为优先解析代理头（`X-Forwarded-For` 首个地址，其次 `X-Real-IP`），无法解析时回退 `request.client.host`。
+- 说明：适配 Nginx/反向代理部署，避免日志仅记录容器宿主机或代理地址。
+## 结构同步（2026-03-08 管理后台日志页签范围调整）
+
+- 本次需求为前端行为收敛，后端接口与服务实现未改动。
+- 受影响前端行为：
+  - 审计事件上报不再由应用入口全局触发；
+  - 改为仅在管理后台“操作日志”页签启用采集。
+- 后端现状：
+  - `/admin/audit/events` 与 `/admin/audit/stats` 接口保持不变；
+  - `backend/services/audit_log.py` 无需调整。
+
+## 结构同步（2026-03-08 更正：前端撤回采集范围收敛）
+
+- 根据用户确认，前端撤回“仅在 audit 页签采集”的改动。
+- 后端接口与服务仍无变更：
+  - `/admin/audit/events`
+  - `/admin/audit/stats`
+  - `backend/services/audit_log.py`
+
+## 结构同步（2026-03-08 仅展示修复）
+
+- 本次仅修复前端页签条件渲染，后端无代码改动。
+- 审计相关接口与服务保持不变：
+  - `/admin/audit/events`
+  - `/admin/audit/stats`
+  - `backend/services/audit_log.py`

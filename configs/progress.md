@@ -1,3 +1,83 @@
+- 2026-03-09：已按用户要求新增独立事故记录 `configs/3.9 docker故障记录.md`，系统整理本次服务器重启后 Phoenix Docker 网络异常、504 登录故障、bridge 网络脏状态与后续建议，供外部专家继续接手分析。
+
+## 2026-03-09（登录故障排查：线上 `/api/v1/auth/login` 返回 504，定位为服务器回源链路异常）
+
+- 现象：
+  - 用户在 `https://platform.smartview.top` 登录时，请求 `POST /api/v1/auth/login` 长时间等待后失败。
+  - 用户提供的浏览器控制台记录显示返回内容为 Cloudflare `504 Gateway time-out` 页面，而非 Phoenix 业务 JSON。
+- 代码与本地验证：
+  - 前端登录页 `frontend/src/pages/LoginView.vue` 调用 `auth.login(...)`；
+  - 前端 API 层 `frontend/src/projects/daily_report_25_26/services/api.js` 登录固定请求 `POST ${API_BASE}/auth/login`；
+  - 后端接口 `backend/api/v1/auth.py` 的 `/api/v1/auth/login` 逻辑仅调用 `auth_manager.login(...)`；
+  - 本地容器环境中，`phoenix_backend`、`phoenix_frontend`、`phoenix_db` 均正常运行，本地 `curl http://127.0.0.1:8001/healthz` 返回 `200`，`/api/v1/auth/me` 返回预期 `401`；
+  - 本地后端日志中可见登录接口曾返回 `200 OK`，说明当前仓库代码链路本身可用。
+- 关键判断：
+  - 本次不是前端未发请求、不是登录表单校验错误、也不是典型的 401/404 业务错误；
+  - 504 表明线上入口已经收到 `/api/v1/auth/login`，但服务器在把 `/api` 转发给 Phoenix 后端时超时；
+  - 结合部署文件，线上应使用 `docker-compose.server.yml` / `docker-compose.server_new_server.yml` 的 `web -> backend -> db` 结构，其中 Nginx 通过 `proxy_pass http://backend:8000` 转发；
+  - 登录接口本身不依赖外部 HTTP，主要可能卡在两处：
+    1. `web` 容器无法正确回源到 `backend`；
+    2. `backend` 在处理登录时访问 PostgreSQL（尤其“记住登录”对应 `auth_sessions` 持久化）发生阻塞。
+- 高优先级排查建议：
+  1. 在服务器确认当前实际运行的是哪套容器：生产应重点看到 `phoenix-web` / `phoenix-backend` / `phoenix-db`，而不是开发态 `phoenix_frontend` / `phoenix_backend` / `phoenix_db`。
+  2. 检查 `phoenix-web` 与 `phoenix-backend` 是否处于同一 Docker network（通常为 `phoenix_phoenix_net`）。
+  3. 在服务器容器内验证：
+     - `curl http://backend:8000/healthz`
+     - `curl -i -X POST http://backend:8000/api/v1/auth/login ...`
+  4. 查看 `phoenix-web` 的 Nginx 错误日志与 `phoenix-backend` 日志，确认是 upstream connect timeout、read timeout，还是后端执行卡住。
+  5. 若 backend 日志无登录请求，则优先修复容器网络/错误容器栈；若 backend 收到请求但长时间不返回，则重点检查 PostgreSQL 连接、锁等待与崩溃恢复状态。
+- 当前结论：
+  - 暂未修改业务代码；
+  - 根因更接近“服务器 Docker/反代/数据库回源异常”，不是本仓库登录逻辑回归。
+- 新增服务器实测证据（用户 2026-03-09 回传）：
+  - 线上实际运行容器为 `phoenix-web` / `phoenix-backend` / `phoenix-db`，且三者同属 `25-26_phoenix_net`；
+  - `phoenix-web` 日志明确报错：
+    - `upstream timed out (110: Operation timed out) while connecting to upstream`
+    - upstream 为 `http://172.19.0.3:8000/api/v1/auth/login`
+  - 这说明：
+    1. `web` 能解析到 `backend` 容器 IP；
+    2. 但与 `172.19.0.3:8000` 的 TCP 连接建立阶段就超时；
+    3. 后端日志为空，说明请求尚未进入 FastAPI。
+- 基于新增证据的收敛判断：
+  - 优先级已进一步收敛为：`phoenix-backend` 容器虽然处于 Up 状态，但其内部 `8000` 端口未真正监听，或启动过程卡在应用导入/子进程拉起前；
+  - 需要在服务器进一步检查：
+    - `docker exec phoenix-backend ps -ef`
+    - `docker exec phoenix-backend ss -ltnp`
+    - `docker exec phoenix-backend curl http://127.0.0.1:8000/healthz`
+    - `docker inspect phoenix-backend --format '{{json .State}}'`
+  - 若容器内无 8000 监听，则应重点排查生产命令 `uvicorn ... --reload` 下的实际启动状态，以及导入阶段是否阻塞。
+- 第二轮服务器实测（用户 2026-03-09 回传）：
+  - `docker top phoenix-backend` 显示 `uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload` 正在运行；
+  - `docker logs phoenix-backend` 显示：
+    - `Uvicorn running on http://0.0.0.0:8000`
+    - `Application startup complete`
+  - 容器内 Python 自检结果：
+    - `socket.connect_ex(('127.0.0.1', 8000)) == 0`
+    - `http://127.0.0.1:8000/healthz` 返回 200 JSON。
+- 最终收敛结论：
+  - `phoenix-backend` 容器内部服务已正常启动；
+  - 当前故障不在 FastAPI 进程本身，而在同一 Docker 网络内 `phoenix-web -> phoenix-backend:8000` 的容器间连通性；
+  - 下一步应直接从 `phoenix-web` 容器内验证访问 `http://backend:8000/healthz`，若失败，优先重建生产栈网络（而非继续修改业务代码）。
+- 第三轮服务器操作结果（用户 2026-03-09 回传）：
+  - 停掉 Phoenix 容器后执行 `docker network rm 25-26_phoenix_net` 返回 `network ... not found`；
+  - 随后 `docker network ls` 中已不再存在 `25-26_phoenix_net`。
+- 结论补充：
+  - 这不表示删除失败，而是说明 compose 网络已在停容器后被 Docker 自动清理；
+  - 当前无需继续手工删网络，下一步应直接使用正确的生产 compose 文件重新拉起整套服务，并重新生成新网络。
+- 第四轮服务器观察（用户 2026-03-09 回传）：
+  - `docker ps` 已为空，但 `docker network ls` 仍显示 `25-26_phoenix_net`；
+  - 这属于 Docker 的正常行为：用户自定义 bridge 网络不会因为容器停止而自动消失，只有 `docker compose down` 或显式 `docker network rm` 才会删除。
+- 当前运维判断：
+  - 需要先确认是否仍有“已停止但未删除”的容器端点占用该网络；
+  - 若无占用，则可直接 `docker network rm 25-26_phoenix_net`；
+  - 若仍异常，再继续执行 Docker daemon 级网络重置或改用显式新 subnet。
+- 当前结果更新（用户 2026-03-09 回传）：
+  - `docker network inspect 25-26_phoenix_net` 显示 `Containers: {}`，但 `IPsInUse: 3`，确认该 bridge 网络存在脏状态；
+  - 用户已成功执行 `docker network rm 25-26_phoenix_net`，并确认 `docker network ls` 中该网络已消失。
+- 当前建议：
+  - 直接用 `lo1_new_server.yml` 重新拉起 Phoenix，观察新建网络是否恢复容器间访问；
+  - 若重建后仍异常，再进入“固定 subnet 重建”方案。
+
 ## 2026-03-08（日报/月报智能报告交互统一：移除复选框，改为直接按钮触发）
 
 - 目标：
@@ -6264,3 +6344,60 @@
 - 实现：替换浮动入口文案文本，未改交互逻辑与权限逻辑。
 - 结果：页面气泡入口统一展示为“智能助手”。
 - 回滚：将上述组件文案恢复为“AI 助手”。
+
+## 2026-03-08 会话记录（admin-console 操作日志页不可查看修复）
+
+- **User Request:** 排查并修复 `http://localhost:5173/admin-console` 中“操作日志”无法查看的问题。
+- **Root Cause:** `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中 `activeTab === 'audit'` 对应模板分支被误清空为 `<section v-else class="content-block"></section>`，导致点击“操作日志”仅切换页签状态但无可见内容。
+- **Code Changes:**
+  - 在 `AdminConsoleView.vue` 恢复“操作日志与分类统计”渲染区块，包含：
+    - 筛选条件（时间范围、用户、分类、动作、关键字）
+    - 刷新按钮（调用 `reloadAuditData`）
+    - 统计区（总量、分类/动作/用户 TOP）
+    - 日志表格（时间、用户、IP、分类、动作、页面、目标）
+  - 复用既有 `auditFilters`、`auditLoading`、`auditError`、`auditEvents`、`auditStats` 与 `top*Stats` 逻辑，无后端接口改动。
+- **Result:** “操作日志”页签恢复可见并可查看日志数据；筛选与刷新流程重新生效。
+- **Risk / Follow-up:** 若接口返回异常（403/500），页面会显示 `auditError` 文案，便于继续排查权限或后端数据问题。
+
+## 2026-03-08 会话记录（操作日志记录真实客户端 IP 修复）
+
+- **User Request:** 生产环境“操作日志”中的 IP 一直显示 Docker 上一跳地址，需改为真实用户 IP。
+- **Root Cause:** `backend/api/v1/admin_console.py` 在 `POST /api/v1/audit/events` 中仅使用 `request.client.host` 写入 `client_ip`，在反向代理链路下该值通常为代理/宿主机地址。
+- **Code Changes:**
+  - 新增 `_extract_forwarded_client_ip(request)`：优先解析 `X-Forwarded-For`（取首个 IP），其次 `X-Real-IP`。
+  - 新增 `_normalize_ip(raw_ip)`：使用 `ipaddress.ip_address` 规范化 IP 文本。
+  - 新增 `_resolve_client_ip(request)`：优先使用转发头，回退到 `request.client.host`。
+  - `collect_audit_events` 改为 `client_ip = _resolve_client_ip(request)`。
+  - 前端日志表 IP 列兼容显示 `client_ip || ip`（兼容新老日志字段）。
+- **Verification:**
+  - `python -m py_compile backend/api/v1/admin_console.py` 通过；
+  - `frontend` 执行 `npm run build` 通过。
+- **Result:** 在生产反向代理场景下，审计日志优先记录并展示真实来源 IP。
+## 2026-03-08 系统后台操作日志仅在“操作日志”页签启用
+
+- 问题：系统后台多个子页面都会持续产生操作日志，用户期望仅在“操作日志”页签中呈现/采集相关日志。
+- 根因：`frontend/src/main.js` 全局执行 `initAuditTracking(...)`，导致全站路由与点击都进入审计队列。
+- 处理：
+  - 移除 `frontend/src/main.js` 的全局审计埋点初始化。
+  - 在 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 增加按页签启停逻辑：仅当 `activeTab === 'audit'` 时启用埋点，离开该页签立即停止。
+- 回滚方案：
+  - 若需恢复“全局采集”，可将 `initAuditTracking(...)` 重新放回 `main.js`。
+  - 或移除 `AdminConsoleView.vue` 内新增的 `syncAuditTrackingByTab` 与相关 `watch/onBeforeUnmount` 逻辑。
+- 验证建议：
+  - 在“后台文件编辑/数据库表编辑/项目后台设定/服务器管理”页签操作后，日志列表不应新增对应行为。
+  - 切换到“操作日志”页签后再操作，应可看到新增日志。
+
+## 2026-03-08 会话更正（撤回“采集范围收敛”）
+
+- 说明：用户反馈本次需求并未授权修改“日志采集范围”，仅要求日志相关内容不要在其他子页面呈现。
+- 已回滚：
+  - 恢复 `frontend/src/main.js` 中全局 `initAuditTracking(...)` 初始化。
+  - 删除 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中按 `activeTab==='audit'` 启停采集的新增逻辑。
+- 当前状态：日志采集机制恢复为改动前行为；“操作日志”页面展示能力保持可用。
+
+## 2026-03-08 会话记录（仅展示修复：日志块误出现在其他页签）
+
+- 用户确认：本次仅处理“展示”，不调整采集。
+- 根因：`AdminConsoleView.vue` 中日志区块使用 `v-else`，且位于另一条件链，导致在非 `system` 的页签也可能渲染日志区块。
+- 修复：将日志区块改为 `v-else-if="activeTab === 'audit'"`。
+- 结果：日志区块仅在“操作日志”页签显示；其他页签不再出现该区块；采集逻辑保持不变。
