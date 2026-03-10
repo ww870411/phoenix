@@ -3135,3 +3135,68 @@
   - `/admin/audit/events`
   - `/admin/audit/stats`
   - `backend/services/audit_log.py`
+
+## 生产环境故障记录（2026-03-09）
+
+- **故障现象**：Oracle 服务器重启后，登录接口 `/api/v1/auth/login` 返回 504。
+- **排查结论**：
+  - 后端应用正常（`127.0.0.1:8000/healthz` 响应 200）。
+  - 故障源于 Docker 网络元数据损坏，`phoenix-web` 无法连接到 `phoenix-backend:8000`。
+  - 删除网络后出现 `network not found` 残留引用错误。
+- **运维建议**：
+  - 需强制清理生产环境残留容器。
+  - 使用 `docker network prune` 清理孤立端点。
+  - 建议在 `lo1_new_server.yml` 中更换全新子网（`172.30.25.0/24`）以强制刷新 IPAM。
+- **详见**：`configs/3.9 docker故障记录.md`。
+
+## 外部接口分析记录（2026-03-09，辽宁省发改委现货电价）
+
+- 本轮后端无代码改动。
+- 已确认站外现货电价页面的实际数据接口为：
+  - `POST https://fgw.ln.gov.cn/indexview/api/getListData`
+  - `POST https://fgw.ln.gov.cn/indexview/api/getLine`
+- 其中 `getListData` 的请求体仅需 `{"date":"YYYY-MM-DD"}`，适合作为后端定时采集入口。
+- 单日返回口径：
+  - `data` 固定 24 行；
+  - 每行含 4 组 `name/beforeTime/realTime`；
+  - 合并后对应 96 个 15 分钟时点。
+- 已实测 `2026-01-01` 至 `2026-03-09` 共 68 天：
+  - `2026-01-01` 至 `2026-03-08` 数据完整；
+  - `2026-03-09` 结构存在，但价格字段全为空字符串，应按“未发布”处理。
+- 若后续接入 Phoenix 后端，建议：
+  - 采集时保留原始日期与原始字符串；
+  - 增加“全空日”判定，避免误入库为 0；
+  - 可用 `getLine` 返回的 `xData/before/realTime` 作为图表校验辅助数据。
+
+## 外部接口抓取脚本（2026-03-09，辽宁省发改委现货电价）
+
+- 新增脚本：
+  - `backend/services/liaoning_spot_price_fetcher.py`
+- 定位：
+  - 独立 CLI，不依赖现有 FastAPI 路由；
+  - 适合手工执行或后续接到定时任务。
+- 默认行为：
+  - 直接执行时默认抓取 `2026-01-01` 到 `2026-03-08`；
+  - 默认过滤“全空占位日”；
+  - 默认输出单个 JSON 到 `backend_data/liaoning_spot_price_2026-01-01_2026-03-08.json`；
+  - 仍支持导出 JSON/CSV。
+- JSON 结构：
+  - 采用 `days[] -> points[]` 的按天分组格式；
+  - `biz_date` 仅保留在每天节点，点位内不再重复；
+  - `points[]` 已按 `time_label` 从 `00:15` 到 `24:00` 递增排序。
+- 关键参数：
+  - `--start-date YYYY-MM-DD`
+  - `--end-date YYYY-MM-DD`
+  - `--output-json <path>`
+  - `--output-csv <path>`
+  - `--include-empty-days`
+- 已完成最小验证：
+  - `python backend/services/liaoning_spot_price_fetcher.py --start-date 2026-03-08 --end-date 2026-03-09`
+  - 实际输出为仅保留 `2026-03-08`，`2026-03-09` 因全空被默认过滤。
+- 已完成默认行为验证：
+  - `python backend/services/liaoning_spot_price_fetcher.py`
+  - 已生成：
+    - `D:\编程项目\phoenix\backend_data\liaoning_spot_price_2026-01-01_2026-03-08.json`
+- 依赖说明：
+  - 脚本已改为仅依赖 Python 标准库；
+  - 不再要求安装 `httpx`。
