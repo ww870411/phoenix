@@ -9,7 +9,7 @@
       </div>
       <div class="visual-overlay">
         <h1 class="visual-title">大连洁净能源集团</h1>
-        <p class="visual-subtitle">生产数据在线填报平台</p>
+        <p class="visual-subtitle">生产经营数据智算平台</p>
         <p class="visual-description">准确 · 规范 · 高效</p>
       </div>
     </div>
@@ -36,7 +36,7 @@
         </button>
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       </form>
-      <div class="form-footer">© 2025 大连洁净能源集团有限公司 · 经济运行部</div>
+      <div class="form-footer">© 2025-2026 大连洁净能源集团有限公司 · 经济运行部</div>
     </div>
   </div>
 </template>

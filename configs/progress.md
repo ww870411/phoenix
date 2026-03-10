@@ -1,3 +1,5 @@
+- 2026-03-10：继续按用户要求细化平台命名展示。登录页 `frontend/src/pages/LoginView.vue` 的副标题由“大连洁净能源集团 生产经营数据智算平台”调整为“生产经营数据智算平台”；浏览器页签标题 `frontend/index.html` 调整为无空格版本“大连洁净能源集团生产经营数据智算平台”；登录后顶部 banner `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` 中“数据填报平台”改为“数据智算平台”。本轮仍未改动后端代码。
+- 2026-03-10：按用户要求统一登录界面与站点标题文案。`frontend/src/pages/LoginView.vue` 中登录页 banner 副标题已由“生产数据在线填报平台”改为“大连洁净能源集团 生产经营数据智算平台”，登录页底部版权年份已由 `2025` 改为 `2025-2026`；同时 `frontend/index.html` 页签标题同步更新为新平台名。本轮未改动后端代码。
 - 2026-03-10：为 `monthly_data_show/import-workspace` 新增“步骤 3.2：标准表比对”。前端现在支持分别上传两份由步骤 3.1 导出的 `company,item,item_transform_type,item_transform_note` CSV，并在浏览器本地执行标准表差异诊断，生成可下载的 `diagnostics.csv`。本轮已将比对口径收紧为“先按 `company` 分组，再在同一口径内部做明确集合差异”；跨口径不再拿同名指标互相匹配，也不再做相近指标猜测，只输出“口径不存在”“标准表有，待比对表没有”“待比对表有，标准表没有”三类明确结果；结果文件已移除 `suggested_action` 字段。原有步骤 3、3.1、4 链路不变。已执行 `frontend npm run build` 通过。
 
 - 2026-03-09：已按用户要求新增独立事故记录 `configs/3.9 docker故障记录.md`，系统整理本次服务器重启后 Phoenix Docker 网络异常、504 登录故障、bridge 网络脏状态与后续建议，供外部专家继续接手分析。

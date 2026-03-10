@@ -1,5 +1,15 @@
 # 前端说明（Vue3 + Vite）
 
+## 平台名称展示微调（2026-03-10）
+- 登录页 `frontend/src/pages/LoginView.vue` 的副标题已进一步收敛为“生产经营数据智算平台”，不再重复集团全称。
+- 浏览器页签标题 `frontend/index.html` 已改为“大连洁净能源集团生产经营数据智算平台”，与用户指定口径完全一致。
+- 登录后顶部 banner `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` 的副标识已由“数据填报平台”改为“数据智算平台”。
+
+## 登录页与站点标题改名（2026-03-10）
+- 登录页 `frontend/src/pages/LoginView.vue` 的主视觉副标题已由“生产数据在线填报平台”统一改为“大连洁净能源集团 生产经营数据智算平台”。
+- 登录页底部版权文案已由 `© 2025 大连洁净能源集团有限公司 · 经济运行部` 改为 `© 2025-2026 大连洁净能源集团有限公司 · 经济运行部`。
+- 站点页签标题 `frontend/index.html` 已同步更新为“大连洁净能源集团 生产经营数据智算平台”，保证浏览器标签与登录页文案一致。
+
 ## 月报导入工作台补充（2026-03-10）
 
 - `src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 新增“步骤 3.2：标准表比对”。

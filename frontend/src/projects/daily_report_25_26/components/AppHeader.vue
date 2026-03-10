@@ -5,7 +5,7 @@
         <span class="brand-mark"></span>
         <div class="brand-text">
           <span class="brand-name">大连洁净能源集团</span>
-          <span class="brand-sub">数据填报平台</span>
+          <span class="brand-sub">数据智算平台</span>
         </div>
       </div>
       <nav class="nav">

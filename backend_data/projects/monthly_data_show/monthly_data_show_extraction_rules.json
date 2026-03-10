@@ -26,16 +26,6 @@
   ],
   "item_rename_rules": [
     {
-      "source": "主城区一次网电厂补水量",
-      "target": "一次网电厂补水量",
-      "companies": ["all"]
-    },
-    {
-      "source": "一次网电厂补水量",
-      "target": "一次网电厂补水量",
-      "companies": ["all"]
-    },
-    {
       "source": "高温水网电厂补水量",
       "target": "一次网电厂补水量",
       "companies": ["all"]
