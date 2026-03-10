@@ -1,5 +1,11 @@
 # daily_report_25_26 后端说明
 
+## 月报导入工作台补充（2026-03-10）
+
+- 本轮 `monthly_data_show/import-workspace` 新增的“步骤 3.2：标准表比对”未增加后端 API。
+- 当前比对完全在前端基于步骤 3.1 导出的对照 CSV 本地执行，因此后端既有 `extract-csv`、`import-csv`、查询接口与数据库写入逻辑均保持不变。
+- 既有步骤 3 导出仍继续输出 `item_transform_type`、`item_transform_note` 两列，供步骤 3.1 / 3.2 复用；步骤 4 入库仍忽略这两列。
+
 ## 事故记录补充（2026-03-09）
 
 - 本轮按用户要求新增独立文档：`configs/3.9 docker故障记录.md`。
@@ -3204,6 +3210,18 @@
 
 ## 2026-03-10 结构同步
 
+- `backend/projects/monthly_data_show/services/extractor.py`
+  - 运行时已不再依赖旧 `item_rename_map`，当前仅使用 `item_rename_rules`。
+  - 新增 `unit_normalize_rules`，单位字符串归一与数值换算由配置驱动。
+  - 导出 CSV 时额外追加 `item_transform_type`、`item_transform_note` 两列：
+    - `item_transform_type`：如 `指标更名`、`单位转换`、`常量注入`、`半计算`；
+    - `item_transform_note`：如 `A→B`、`千瓦时→万千瓦时`、`源1 + 源2→目标指标`。
+  - 这两列仅用于步骤 3/3.1 留痕，不参与步骤 4 入库。
+
+- `monthly_data_show/import-workspace` 的“步骤 3.1：标准表对照”为纯前端分支：
+  - 本轮未新增后端接口；
+  - 对照表 CSV 基于步骤 3 已提取的标准化结果在前端本地生成，保留 `company,item,item_transform_note` 三列并按 `company+item` 去重聚合说明。
+
 - `backend/projects/monthly_data_show/api/workspace.py`
   - 修复计算指标分组口径：默认按 `date`（业务月份）聚合，不再把 `report_month` 一并作为分组键。
   - 仅在显式使用 `report_month_*` 查询来源月份窗口时，才保留 `report_month` 分组。
@@ -3219,3 +3237,4 @@
     - `companies=[\"北海\"]`：仅对指定子工作表生效。
   - 抽取时会按当前子工作表标题逐条匹配适用规则，再执行指标标准化。
   - 旧 `item_rename_map` 与旧 `scope/rename_map` 结构仍保留兼容兜底。
+  - 导出 CSV 时额外追加 `item_transform_note` 字段，用于标记指标是否经更名规则转换（如 `A→B`）；该字段不参与步骤 4 入库。

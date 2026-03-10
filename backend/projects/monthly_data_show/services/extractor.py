@@ -23,6 +23,7 @@ from backend.projects.monthly_data_show.services.indicator_config import load_in
 
 BLOCKED_COMPANIES = {"恒流", "天然气炉", "中水"}
 ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type", "report_month")
+EXTRA_EXPORT_FIELDS = ("item_transform_type", "item_transform_note")
 DEFAULT_SOURCE_COLUMNS = ("本年计划", "本月计划", "本月实际", "上年同期")
 ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = False
 
@@ -48,36 +49,39 @@ ITEM_EXCLUDE_SET = {
     "信访处结率",
 }
 
-ITEM_RENAME_MAP = {
-    "主城区一次网电厂补水量": "一次网电厂补水量",
-    "一次网电厂补水量": "一次网电厂补水量",
-    "高温水网电厂补水量": "一次网电厂补水量",
-    "高温水低真空电厂补水量": "一次网电厂补水量",
-    "耗外购电量": "外购电量",
-    "外购电量": "外购电量",
-    "期末供热面积": "期末供暖收费面积",
-    "单位面积耗电量": "供暖电耗率",
-    "单位面积耗水量": "供暖水耗率",
-    "单位面积耗标准煤量": "供暖标准煤耗率",
-    "锅炉设备利用率": "供热设备利用率",
-    "锅炉热效率": "全厂热效率",
-    "总热效率": "全厂热效率",
-    "炉耗油量": "耗油量",
-    "锅炉耗柴油量": "耗油量",
-    "装机总容量": "锅炉设备容量",
-    "发电煤耗率": "发电标准煤耗率",
-    "供电煤耗率": "供电标准煤耗率",
-    "供热煤耗率": "供热标准煤耗率",
-    "供热标准煤耗量": "供热耗标煤量",
-    "发电标准煤耗量": "发电耗标煤量",
-}
 ITEM_RENAME_RULES = [
     {
-        "source": source,
-        "target": target,
+        "source": "主城区一次网电厂补水量",
+        "target": "一次网电厂补水量",
         "companies": ["all"],
-    }
-    for source, target in ITEM_RENAME_MAP.items()
+    },
+    {"source": "一次网电厂补水量", "target": "一次网电厂补水量", "companies": ["all"]},
+    {"source": "高温水网电厂补水量", "target": "一次网电厂补水量", "companies": ["all"]},
+    {"source": "高温水低真空电厂补水量", "target": "一次网电厂补水量", "companies": ["all"]},
+    {"source": "耗外购电量", "target": "外购电量", "companies": ["all"]},
+    {"source": "外购电量", "target": "外购电量", "companies": ["all"]},
+    {"source": "期末供热面积", "target": "期末供暖收费面积", "companies": ["all"]},
+    {"source": "单位面积耗电量", "target": "供暖电耗率", "companies": ["all"]},
+    {"source": "单位面积耗水量", "target": "供暖水耗率", "companies": ["all"]},
+    {"source": "单位面积耗标准煤量", "target": "供暖标准煤耗率", "companies": ["all"]},
+    {"source": "锅炉设备利用率", "target": "供热设备利用率", "companies": ["all"]},
+    {"source": "锅炉热效率", "target": "全厂热效率", "companies": ["all"]},
+    {"source": "总热效率", "target": "全厂热效率", "companies": ["all"]},
+    {"source": "炉耗油量", "target": "耗油量", "companies": ["all"]},
+    {"source": "锅炉耗柴油量", "target": "耗油量", "companies": ["all"]},
+    {"source": "装机总容量", "target": "锅炉设备容量", "companies": ["all"]},
+    {"source": "发电煤耗率", "target": "发电标准煤耗率", "companies": ["all"]},
+    {"source": "供电煤耗率", "target": "供电标准煤耗率", "companies": ["all"]},
+    {"source": "供热煤耗率", "target": "供热标准煤耗率", "companies": ["all"]},
+    {"source": "供热标准煤耗量", "target": "供热耗标煤量", "companies": ["all"]},
+    {"source": "发电标准煤耗量", "target": "发电耗标煤量", "companies": ["all"]},
+]
+UNIT_NORMALIZE_RULES = [
+    {"source": "米2", "target": "平方米"},
+    {"source": "米²", "target": "平方米"},
+    {"source": "/米2", "target": "/平方米"},
+    {"source": "/米²", "target": "/平方米"},
+    {"source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000},
 ]
 
 DEFAULT_CONSTANT_RULES = [
@@ -193,12 +197,13 @@ _BASE_RULES_SNAPSHOT = {
     "default_source_columns": list(DEFAULT_SOURCE_COLUMNS),
     "enable_jinpu_heating_area_adjustment": bool(ENABLE_JINPU_HEATING_AREA_ADJUSTMENT),
     "item_exclude_set": sorted(ITEM_EXCLUDE_SET),
-    "item_rename_map": dict(ITEM_RENAME_MAP),
     "item_rename_rules": [dict(rule) for rule in ITEM_RENAME_RULES],
+    "unit_normalize_rules": [dict(rule) for rule in UNIT_NORMALIZE_RULES],
     "default_constant_rules": [dict(x) for x in DEFAULT_CONSTANT_RULES],
     "semi_calculated_rules": [dict(x) for x in DEFAULT_SEMI_CALCULATED_RULES],
 }
 SEMI_CALCULATED_RULES = [dict(x) for x in DEFAULT_SEMI_CALCULATED_RULES]
+UNIT_NORMALIZE_RULES_RUNTIME = [dict(x) for x in UNIT_NORMALIZE_RULES]
 
 
 def _load_extraction_rules_from_config() -> Dict[str, Any]:
@@ -219,8 +224,8 @@ def _refresh_extraction_rules() -> None:
     global DEFAULT_SOURCE_COLUMNS
     global ENABLE_JINPU_HEATING_AREA_ADJUSTMENT
     global ITEM_EXCLUDE_SET
-    global ITEM_RENAME_MAP
     global ITEM_RENAME_RULES
+    global UNIT_NORMALIZE_RULES_RUNTIME
     global DEFAULT_CONSTANT_RULES
     global SEMI_CALCULATED_RULES
 
@@ -251,43 +256,30 @@ def _refresh_extraction_rules() -> None:
                     }
                 )
                 continue
-            rename_map_raw = raw_rule.get("rename_map") or {}
-            if not isinstance(rename_map_raw, dict):
-                continue
-            legacy_scope = str(raw_rule.get("scope") or "").strip().lower()
-            if legacy_scope == "all_allowed_companies":
-                companies = ["all"]
-            for src, dst in rename_map_raw.items():
-                src_text = str(src).strip()
-                dst_text = str(dst).strip()
-                if not src_text or not dst_text:
-                    continue
-                normalized_rename_rules.append(
-                    {
-                        "source": src_text,
-                        "target": dst_text,
-                        "companies": companies,
-                    }
-                )
         ITEM_RENAME_RULES = normalized_rename_rules or [dict(rule) for rule in _BASE_RULES_SNAPSHOT["item_rename_rules"]]
     else:
-        legacy_rename_map = dict(cfg.get("item_rename_map") or _BASE_RULES_SNAPSHOT["item_rename_map"])
-        ITEM_RENAME_RULES = [
-            {
-                "source": str(source).strip(),
-                "target": str(target).strip(),
-                "companies": ["all"],
-            }
-            for source, target in legacy_rename_map.items()
-            if str(source).strip() and str(target).strip()
-        ]
-    merged_rename_map: Dict[str, str] = {}
-    for rule in ITEM_RENAME_RULES:
-        source = str(rule.get("source") or "").strip()
-        target = str(rule.get("target") or "").strip()
-        if source and target:
-            merged_rename_map[source] = target
-    ITEM_RENAME_MAP = merged_rename_map
+        ITEM_RENAME_RULES = [dict(rule) for rule in _BASE_RULES_SNAPSHOT["item_rename_rules"]]
+    raw_unit_rules = cfg.get("unit_normalize_rules")
+    if isinstance(raw_unit_rules, list):
+        normalized_unit_rules: List[Dict[str, Any]] = []
+        for raw_rule in raw_unit_rules:
+            if not isinstance(raw_rule, dict):
+                continue
+            source = str(raw_rule.get("source") or "").strip()
+            target = str(raw_rule.get("target") or "").strip()
+            if not source or not target:
+                continue
+            rule: Dict[str, Any] = {"source": source, "target": target}
+            divisor = raw_rule.get("value_divisor")
+            if divisor is not None:
+                try:
+                    rule["value_divisor"] = float(divisor)
+                except (TypeError, ValueError):
+                    pass
+            normalized_unit_rules.append(rule)
+        UNIT_NORMALIZE_RULES_RUNTIME = normalized_unit_rules or [dict(rule) for rule in _BASE_RULES_SNAPSHOT["unit_normalize_rules"]]
+    else:
+        UNIT_NORMALIZE_RULES_RUNTIME = [dict(rule) for rule in _BASE_RULES_SNAPSHOT["unit_normalize_rules"]]
     raw_constants = cfg.get("default_constant_rules") or _BASE_RULES_SNAPSHOT["default_constant_rules"]
     DEFAULT_CONSTANT_RULES = [dict(x) for x in raw_constants if isinstance(x, dict)]
     raw_semi = cfg.get("semi_calculated_rules") or _BASE_RULES_SNAPSHOT["semi_calculated_rules"]
@@ -374,21 +366,38 @@ def _resolve_item_rename_map(company: str) -> Dict[str, str]:
         target = str(rule.get("target") or "").strip()
         if source and target:
             resolved[source] = target
-    return resolved or dict(ITEM_RENAME_MAP)
+    return resolved
 
 
-def _normalize_item(value: object, use_rename: bool = True, company: str = "") -> Tuple[str, bool]:
+def _append_transform_meta(
+    row: Dict[str, object],
+    transform_type: str = "",
+    transform_note: str = "",
+) -> None:
+    type_parts = [str(x).strip() for x in str(row.get("item_transform_type") or "").split("；") if str(x).strip()]
+    note_parts = [str(x).strip() for x in str(row.get("item_transform_note") or "").split("；") if str(x).strip()]
+    if transform_type and transform_type not in type_parts:
+        type_parts.append(transform_type)
+    if transform_note and transform_note not in note_parts:
+        note_parts.append(transform_note)
+    row["item_transform_type"] = "；".join(type_parts)
+    row["item_transform_note"] = "；".join(note_parts)
+
+
+def _normalize_item(value: object, use_rename: bool = True, company: str = "") -> Tuple[str, str, str]:
     raw = _clean_text(value)
     if not raw:
-        return "", False
+        return "", "", ""
     normalized = raw.replace("其中：", "")
-    changed = False
+    transform_type = ""
+    transform_note = ""
     if use_rename:
         rename_map = _resolve_item_rename_map(company)
         mapped = rename_map.get(normalized, normalized)
         if mapped != normalized:
+            transform_type = "指标更名"
+            transform_note = f"{normalized}→{mapped}"
             normalized = mapped
-            changed = True
         else:
             token = (
                 normalized.replace("、", "")
@@ -398,19 +407,29 @@ def _normalize_item(value: object, use_rename: bool = True, company: str = "") -
             )
             mapped_token = rename_map.get(token, normalized)
             if mapped_token != normalized:
+                transform_type = "指标更名"
+                transform_note = f"{normalized}→{mapped_token}"
                 normalized = mapped_token
-                changed = True
-    return normalized, changed
+    return normalized, transform_type, transform_note
 
 
-def _normalize_unit(value: object) -> str:
+def _normalize_unit(value: object) -> Tuple[str, str, str]:
     raw = _clean_text(value)
     if not raw:
-        return ""
-    normalized = raw.replace("米2", "平方米").replace("米²", "平方米")
-    normalized = re.sub(r"/平方米$", "/平方米", normalized)
-    normalized = normalized.replace("/米2", "/平方米").replace("/米²", "/平方米")
-    return normalized
+        return "", "", ""
+    normalized = raw
+    note_parts: List[str] = []
+    for rule in UNIT_NORMALIZE_RULES_RUNTIME:
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        if not source or not target or source not in normalized:
+            continue
+        updated = normalized.replace(source, target)
+        if updated != normalized:
+            note_parts.append(f"{source}→{target}")
+            normalized = updated
+    transform_type = "单位转换" if note_parts else ""
+    return normalized, transform_type, "；".join(note_parts)
 
 
 def _coerce_number(value: object) -> Optional[float]:
@@ -429,14 +448,16 @@ def _coerce_number(value: object) -> Optional[float]:
         return None
 
 
-def _normalize_value(unit: str, value: object) -> object:
+def _normalize_value(raw_unit: str, unit: str, value: object) -> object:
     number = _coerce_number(value)
     if number is None:
         return str(value).strip()
-    if unit == "万千瓦时":
-        return round(number, 8)
-    if unit == "千瓦时":
-        return round(number / 10000.0, 8)
+    for rule in UNIT_NORMALIZE_RULES_RUNTIME:
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        divisor = rule.get("value_divisor")
+        if raw_unit == source and unit == target and divisor not in (None, 0, 0.0):
+            return round(number / float(divisor), 8)
     return round(number, 8)
 
 
@@ -523,6 +544,8 @@ def _apply_semicalculated_completion_rules(
         item: str,
         unit: str,
         value: float,
+        transform_type: str = "",
+        transform_note: str = "",
     ) -> None:
         new_row = {
             "company": company,
@@ -533,7 +556,10 @@ def _apply_semicalculated_completion_rules(
             "period": win[1],
             "type": win[2],
             "report_month": win[3],
+            "item_transform_type": "",
+            "item_transform_note": "",
         }
+        _append_transform_meta(new_row, transform_type=transform_type, transform_note=transform_note)
         key = (
             company,
             item,
@@ -603,7 +629,24 @@ def _apply_semicalculated_completion_rules(
                 value = remainder
             if value is None:
                 continue
-            _upsert_value(company, win, target_item, target_unit, float(value))
+            if operation == "copy":
+                expr = sources[0]
+            elif operation == "sum":
+                expr = " + ".join(sources)
+            elif operation == "subtract":
+                expr = " - ".join(sources)
+            else:
+                expr = "规则计算"
+            note = f"{expr}→{target_item}"
+            _upsert_value(
+                company,
+                win,
+                target_item,
+                target_unit,
+                float(value),
+                transform_type="半计算",
+                transform_note=note,
+            )
             details[rule_id] = int(details.get(rule_id, 0)) + 1
 
     # 返回给前端时改为名称键，便于阅读
@@ -688,8 +731,8 @@ def normalize_constant_rules(raw_rules: Optional[Sequence[Dict[str, object]]]) -
         if not isinstance(raw, dict):
             continue
         company = str(raw.get("company") or "").strip()
-        item, _ = _normalize_item(raw.get("item"), use_rename=True, company=company)
-        unit = _normalize_unit(raw.get("unit"))
+        item, item_transform_type, item_transform_note = _normalize_item(raw.get("item"), use_rename=True, company=company)
+        unit, unit_transform_type, unit_transform_note = _normalize_unit(raw.get("unit"))
         if not company or not item:
             continue
         value = _coerce_number(raw.get("value"))
@@ -715,6 +758,12 @@ def normalize_constant_rules(raw_rules: Optional[Sequence[Dict[str, object]]]) -
                 "unit": unit,
                 "value": round(float(value), 8),
                 "source_columns": source_columns,
+                "item_transform_type": "；".join(
+                    [x for x in [item_transform_type, unit_transform_type] if x]
+                ),
+                "item_transform_note": "；".join(
+                    [x for x in [item_transform_note, unit_transform_note] if x]
+                ),
             }
         )
     return rules
@@ -800,33 +849,37 @@ def extract_rows(
             for row_idx in range(header_row + 1, sheet.max_row + 1):
                 item_raw = sheet.cell(row=row_idx, column=col_map["项目"]).value
                 unit_raw = sheet.cell(row=row_idx, column=col_map["计量单位"]).value
-                item, renamed = _normalize_item(item_raw, use_rename=use_item_rename, company=company)
-                unit = _normalize_unit(unit_raw)
+                item, item_transform_type, item_transform_note = _normalize_item(item_raw, use_rename=use_item_rename, company=company)
+                raw_unit = _clean_text(unit_raw)
+                unit, unit_transform_type, unit_transform_note = _normalize_unit(unit_raw)
                 if not item:
                     continue
                 if use_item_exclude and item in ITEM_EXCLUDE_SET:
                     exclude_hit_count += 1
                     continue
-                if renamed:
+                if item_transform_type == "指标更名":
                     rename_hit_count += 1
                 if item in calculated_item_set:
                     continue
                 for src_col in source_columns:
                     value_cell = sheet.cell(row=row_idx, column=col_map[src_col]).value
-                    value = _normalize_value(unit, value_cell)
+                    value = _normalize_value(raw_unit, unit, value_cell)
                     meta = _build_period_meta(report_year, report_month, src_col)
-                    rows.append(
-                        {
-                            "company": company,
-                            "item": item,
-                            "unit": "万千瓦时" if unit == "千瓦时" else unit,
-                            "value": value,
-                            "date": meta["date"],
-                            "period": meta["period"],
-                            "type": meta["type"],
-                            "report_month": report_month_text,
-                        }
-                    )
+                    row = {
+                        "company": company,
+                        "item": item,
+                        "unit": unit,
+                        "value": value,
+                        "date": meta["date"],
+                        "period": meta["period"],
+                        "type": meta["type"],
+                        "report_month": report_month_text,
+                        "item_transform_type": "",
+                        "item_transform_note": "",
+                    }
+                    _append_transform_meta(row, transform_type=item_transform_type, transform_note=item_transform_note)
+                    _append_transform_meta(row, transform_type=unit_transform_type, transform_note=unit_transform_note)
+                    rows.append(row)
             per_company_count[company] = len(rows) - count_before
     finally:
         workbook.close()
@@ -885,7 +938,11 @@ def extract_rows(
                     "period": meta["period"],
                     "type": meta["type"],
                     "report_month": report_month_text,
+                    "item_transform_type": "",
+                    "item_transform_note": "",
                 }
+                _append_transform_meta(new_row, transform_type=str(rule.get("item_transform_type") or ""), transform_note=str(rule.get("item_transform_note") or ""))
+                _append_transform_meta(new_row, transform_type="常量注入", transform_note="固定值注入")
                 key = (new_row["company"], new_row["item"], new_row["date"], new_row["period"], new_row["type"])
                 old_idx = row_index_by_key.get(key)
                 if old_idx is None:
@@ -905,4 +962,5 @@ def filter_fields(rows: Iterable[Dict[str, object]], selected_fields: Sequence[s
     field_set = [field for field in ALLOWED_FIELDS if field in set(selected_fields)]
     if not field_set:
         field_set = list(ALLOWED_FIELDS)
+    field_set.extend([field for field in EXTRA_EXPORT_FIELDS if field not in field_set])
     return [{field: row.get(field, "") for field in field_set} for row in rows]

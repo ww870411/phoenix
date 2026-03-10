@@ -192,6 +192,58 @@
       </section>
 
       <section class="card">
+        <h3>步骤 3.1：标准表对照</h3>
+        <div class="upload-row">
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="comparingStandard || !lastExtractedCsvFile"
+            @click="exportStandardCompareCsv"
+          >
+            {{ comparingStandard ? '导出中...' : '导出 company,item 对照表' }}
+          </button>
+        </div>
+        <p class="hint" v-if="compareMessage">{{ compareMessage }}</p>
+        <p class="hint">基于刚提取的标准化 CSV，独立导出去重后的 company、item 对照表，用于与历史表做标准项比对。</p>
+      </section>
+
+      <section class="card">
+        <h3>步骤 3.2：标准表比对</h3>
+        <div class="upload-row compare-inputs">
+          <label class="file-field">
+            <span>标准 CSV</span>
+            <input type="file" accept=".csv" @change="onStandardBaselineCsvChange" />
+          </label>
+          <label class="file-field">
+            <span>待比对 CSV</span>
+            <input type="file" accept=".csv" @change="onNonStandardCompareCsvChange" />
+          </label>
+        </div>
+        <div class="upload-row">
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="comparingBaseline || !standardBaselineCsvFile || !nonStandardCompareCsvFile"
+            @click="compareAgainstStandardCsv"
+          >
+            {{ comparingBaseline ? '比对中...' : '开始比对' }}
+          </button>
+          <button
+            class="btn primary"
+            type="button"
+            :disabled="comparingBaseline || !lastCompareResultFile"
+            @click="downloadCompareResultCsv"
+          >
+            下载比对结果
+          </button>
+        </div>
+        <p class="hint" v-if="standardBaselineCsvFile">标准 CSV：{{ standardBaselineCsvFile.name }}</p>
+        <p class="hint" v-if="nonStandardCompareCsvFile">待比对 CSV：{{ nonStandardCompareCsvFile.name }}</p>
+        <p class="hint" v-if="compareBaselineMessage">{{ compareBaselineMessage }}</p>
+        <p class="hint">比对会优先识别“口径差异”“指标名差异”“口径和指标双差异”“标准表缺失/待比对表独有”四类问题，并给出建议处理方向。</p>
+      </section>
+
+      <section class="card">
         <h3>步骤 4：CSV 入库（写入 monthly_data_show）</h3>
         <div class="upload-row">
           <input type="file" accept=".csv" @change="onCsvFileChange" />
@@ -265,11 +317,18 @@ const selectedFile = ref(null)
 const inspecting = ref(false)
 const extracting = ref(false)
 const importing = ref(false)
+const comparingStandard = ref(false)
+const comparingBaseline = ref(false)
 const errorMessage = ref('')
 const extractMessage = ref('')
+const compareMessage = ref('')
+const compareBaselineMessage = ref('')
 const importMessage = ref('')
 const selectedCsvFile = ref(null)
 const lastExtractedCsvFile = ref(null)
+const standardBaselineCsvFile = ref(null)
+const nonStandardCompareCsvFile = ref(null)
+const lastCompareResultFile = ref(null)
 const showRuleDetailDialog = ref(false)
 const showRulePickerDialog = ref(false)
 const extractRuleDetails = ref(null)
@@ -313,7 +372,12 @@ function onFileChange(event) {
   reportMonthInput.value = null
   lastExtractedCsvFile.value = null
   selectedCsvFile.value = null
+  standardBaselineCsvFile.value = null
+  nonStandardCompareCsvFile.value = null
+  lastCompareResultFile.value = null
   extractMessage.value = ''
+  compareMessage.value = ''
+  compareBaselineMessage.value = ''
   extractRuleDetails.value = null
   showRuleDetailDialog.value = false
   showRulePickerDialog.value = false
@@ -324,6 +388,20 @@ function onCsvFileChange(event) {
   selectedCsvFile.value = event?.target?.files?.[0] || null
   errorMessage.value = ''
   importMessage.value = ''
+}
+
+function onStandardBaselineCsvChange(event) {
+  standardBaselineCsvFile.value = event?.target?.files?.[0] || null
+  errorMessage.value = ''
+  compareBaselineMessage.value = ''
+  lastCompareResultFile.value = null
+}
+
+function onNonStandardCompareCsvChange(event) {
+  nonStandardCompareCsvFile.value = event?.target?.files?.[0] || null
+  errorMessage.value = ''
+  compareBaselineMessage.value = ''
+  lastCompareResultFile.value = null
 }
 
 function toggleAllCompanies(checked) {
@@ -411,6 +489,7 @@ async function extractCsv() {
   extracting.value = true
   errorMessage.value = ''
   extractMessage.value = ''
+  compareMessage.value = ''
   extractRuleDetails.value = null
   showRuleDetailDialog.value = false
   showRulePickerDialog.value = false
@@ -489,6 +568,410 @@ function downloadExtractedCsv() {
   const link = document.createElement('a')
   link.href = url
   link.download = lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function parseCsvLine(line) {
+  const cells = []
+  let current = ''
+  let inQuotes = false
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if (char === ',' && !inQuotes) {
+      cells.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  cells.push(current)
+  return cells
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? '')
+  if (text.includes('"') || text.includes(',') || text.includes('\n') || text.includes('\r')) {
+    return `"${text.replaceAll('"', '""')}"`
+  }
+  return text
+}
+
+function normalizeCompareText(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[（）()【】\[\]、，,。.:：;；'"“”‘’/\\_-]/g, '')
+    .toLowerCase()
+}
+
+function computeDiceSimilarity(left, right) {
+  const a = normalizeCompareText(left)
+  const b = normalizeCompareText(right)
+  if (!a || !b) return 0
+  if (a === b) return 1
+  if (a.includes(b) || b.includes(a)) {
+    return Math.min(a.length, b.length) / Math.max(a.length, b.length)
+  }
+  const buildBigrams = (text) => {
+    if (text.length < 2) return new Set([text])
+    const bigrams = new Set()
+    for (let index = 0; index < text.length - 1; index += 1) {
+      bigrams.add(text.slice(index, index + 2))
+    }
+    return bigrams
+  }
+  const aBigrams = buildBigrams(a)
+  const bBigrams = buildBigrams(b)
+  let overlap = 0
+  for (const token of aBigrams) {
+    if (bBigrams.has(token)) overlap += 1
+  }
+  return (2 * overlap) / (aBigrams.size + bBigrams.size)
+}
+
+function parseCompanyItemCompareCsv(csvText, fileLabel) {
+  const lines = String(csvText || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim())
+  if (!lines.length) {
+    throw new Error(`${fileLabel}为空，无法比对`)
+  }
+  const headers = parseCsvLine(lines[0]).map((cell) => String(cell || '').trim())
+  const companyIndex = headers.indexOf('company')
+  const itemIndex = headers.indexOf('item')
+  const transformTypeIndex = headers.indexOf('item_transform_type')
+  const transformNoteIndex = headers.indexOf('item_transform_note')
+  if (companyIndex < 0 || itemIndex < 0) {
+    throw new Error(`${fileLabel}缺少 company 或 item 字段`)
+  }
+  const groupedRows = new Map()
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line)
+    const company = String(cells[companyIndex] || '').trim()
+    const item = String(cells[itemIndex] || '').trim()
+    if (!company || !item) continue
+    const transformType = transformTypeIndex >= 0 ? String(cells[transformTypeIndex] || '').trim() : ''
+    const transformNote = transformNoteIndex >= 0 ? String(cells[transformNoteIndex] || '').trim() : ''
+    const key = `${company}|||${item}`
+    const existing = groupedRows.get(key) || { company, item, types: new Set(), notes: new Set() }
+    if (transformType) existing.types.add(transformType)
+    if (transformNote) existing.notes.add(transformNote)
+    groupedRows.set(key, existing)
+  }
+  const rows = Array.from(groupedRows.values()).map((row) => ({
+    company: row.company,
+    item: row.item,
+    itemTransformType: Array.from(row.types).join('；'),
+    itemTransformNote: Array.from(row.notes).join('；'),
+    key: `${row.company}|||${row.item}`,
+  }))
+  if (!rows.length) {
+    throw new Error(`${fileLabel}未解析到有效的 company/item 数据`)
+  }
+  return rows
+}
+
+function findBestCandidate(baseRow, candidates) {
+  let best = null
+  for (const candidate of candidates) {
+    const companyScore = computeDiceSimilarity(baseRow.company, candidate.company)
+    const itemScore = computeDiceSimilarity(baseRow.item, candidate.item)
+    const sameCompany = baseRow.company === candidate.company
+    const sameItem = baseRow.item === candidate.item
+    const combinedScore = sameCompany
+      ? itemScore
+      : sameItem
+        ? companyScore
+        : ((itemScore * 0.7) + (companyScore * 0.3))
+    if (!best || combinedScore > best.combinedScore) {
+      best = { row: candidate, companyScore, itemScore, combinedScore }
+    }
+  }
+  return best
+}
+
+function describeRow(row) {
+  if (!row) return ''
+  return `${row.company} / ${row.item}`
+}
+
+function buildDiagnosticCsv(standardRows, compareRows) {
+  const standardKeySet = new Set(standardRows.map((row) => row.key))
+  const compareKeySet = new Set(compareRows.map((row) => row.key))
+  const exactMatches = standardRows.filter((row) => compareKeySet.has(row.key))
+  const standardOnlyRows = standardRows.filter((row) => !compareKeySet.has(row.key))
+  const compareOnlyRows = compareRows.filter((row) => !standardKeySet.has(row.key))
+  const standardRowsByCompany = new Map()
+  const compareRowsByCompany = new Map()
+  for (const row of standardRows) {
+    if (!standardRowsByCompany.has(row.company)) standardRowsByCompany.set(row.company, [])
+    standardRowsByCompany.get(row.company).push(row)
+  }
+  for (const row of compareRows) {
+    if (!compareRowsByCompany.has(row.company)) compareRowsByCompany.set(row.company, [])
+    compareRowsByCompany.get(row.company).push(row)
+  }
+
+  const categoryCounter = {
+    companyDiff: 0,
+    itemDiff: 0,
+    bothDiff: 0,
+    missing: 0,
+    extra: 0,
+  }
+  const diagnostics = []
+
+  const pushDiagnostic = ({
+    resultType,
+    reasonCategory,
+    standardRow = null,
+    compareRow = null,
+    detail = '',
+    suggestion = '',
+    similarityScore = '',
+  }) => {
+    diagnostics.push({
+      result_type: resultType,
+      reason_category: reasonCategory,
+      standard_company: standardRow?.company || '',
+      standard_item: standardRow?.item || '',
+      nonstandard_company: compareRow?.company || '',
+      nonstandard_item: compareRow?.item || '',
+      reason_detail: detail,
+      suggested_action: suggestion,
+      similarity_score: similarityScore === '' ? '' : Number(similarityScore).toFixed(4),
+      standard_transform_type: standardRow?.itemTransformType || '',
+      standard_transform_note: standardRow?.itemTransformNote || '',
+      nonstandard_transform_type: compareRow?.itemTransformType || '',
+      nonstandard_transform_note: compareRow?.itemTransformNote || '',
+    })
+  }
+
+  for (const standardRow of standardOnlyRows) {
+    const sameCompanyCandidates = compareRowsByCompany.get(standardRow.company) || []
+    const itemCandidate = sameCompanyCandidates.length ? findBestCandidate(standardRow, sameCompanyCandidates) : null
+
+    if (!sameCompanyCandidates.length) {
+      categoryCounter.companyDiff += 1
+      pushDiagnostic({
+        resultType: '标准表缺失于待比对',
+        reasonCategory: '口径缺失',
+        standardRow,
+        detail: `标准项 ${describeRow(standardRow)} 所属口径 ${standardRow.company} 在待比对表中不存在，因此该口径下的指标无法进入同口径比对。`,
+        suggestion: '先统一子工作表名/口径名；3.2 只在同一 company 口径内部比较指标差异。',
+      })
+      continue
+    }
+    if (itemCandidate && itemCandidate.row && itemCandidate.itemScore >= 0.42 && itemCandidate.row.item !== standardRow.item) {
+      categoryCounter.itemDiff += 1
+      pushDiagnostic({
+        resultType: '标准表缺失于待比对',
+        reasonCategory: '指标名差异',
+        standardRow,
+        compareRow: itemCandidate.row,
+        detail: `标准项 ${describeRow(standardRow)} 在同口径下未命中，但待比对表中存在相近指标 ${describeRow(itemCandidate.row)}。`,
+        suggestion: '优先检查原表指标名，或补充 item_rename_rules 使其归一到标准指标名。',
+        similarityScore: itemCandidate.itemScore,
+      })
+      continue
+    }
+    categoryCounter.missing += 1
+    pushDiagnostic({
+      resultType: '标准表缺失于待比对',
+      reasonCategory: '待比对表缺失指标',
+      standardRow,
+      detail: `标准项 ${describeRow(standardRow)} 在同口径 ${standardRow.company} 下没有找到可接受的对应指标。`,
+      suggestion: '检查旧表是否根本没有该指标，或该指标是否应通过常量注入/半计算/排除规则处理。',
+    })
+  }
+
+  for (const compareRow of compareOnlyRows) {
+    const sameCompanyCandidates = standardRowsByCompany.get(compareRow.company) || []
+    const itemCandidate = sameCompanyCandidates.length ? findBestCandidate(compareRow, sameCompanyCandidates) : null
+
+    if (!sameCompanyCandidates.length) {
+      categoryCounter.companyDiff += 1
+      pushDiagnostic({
+        resultType: '待比对表多出项',
+        reasonCategory: '口径缺失',
+        compareRow,
+        detail: `待比对项 ${describeRow(compareRow)} 所属口径 ${compareRow.company} 在标准表中不存在，因此该口径下的指标无法进入同口径比对。`,
+        suggestion: '先统一子工作表名/口径名；3.2 不再把该指标拿到别的口径下做候选匹配。',
+      })
+      continue
+    }
+    if (itemCandidate && itemCandidate.row && itemCandidate.itemScore >= 0.42 && itemCandidate.row.item !== compareRow.item) {
+      categoryCounter.itemDiff += 1
+      pushDiagnostic({
+        resultType: '待比对表多出项',
+        reasonCategory: '指标名差异',
+        standardRow: itemCandidate.row,
+        compareRow,
+        detail: `待比对项 ${describeRow(compareRow)} 在标准表同口径下未命中，但存在相近标准指标 ${describeRow(itemCandidate.row)}。`,
+        suggestion: '优先补充 item_rename_rules，或调整旧表指标名以对齐标准指标。',
+        similarityScore: itemCandidate.itemScore,
+      })
+      continue
+    }
+    categoryCounter.extra += 1
+    pushDiagnostic({
+      resultType: '待比对表多出项',
+      reasonCategory: '非标准独有指标',
+      compareRow,
+      detail: `待比对项 ${describeRow(compareRow)} 在同口径 ${compareRow.company} 下未找到可信对应项。`,
+      suggestion: '确认该指标是否属于历史遗留口径、废弃指标，或需要新建兼容规则。',
+    })
+  }
+
+  const csvLines = [
+    'result_type,reason_category,standard_company,standard_item,nonstandard_company,nonstandard_item,reason_detail,suggested_action,similarity_score,standard_transform_type,standard_transform_note,nonstandard_transform_type,nonstandard_transform_note',
+    ...diagnostics.map((row) => [
+      row.result_type,
+      row.reason_category,
+      row.standard_company,
+      row.standard_item,
+      row.nonstandard_company,
+      row.nonstandard_item,
+      row.reason_detail,
+      row.suggested_action,
+      row.similarity_score,
+      row.standard_transform_type,
+      row.standard_transform_note,
+      row.nonstandard_transform_type,
+      row.nonstandard_transform_note,
+    ].map((cell) => escapeCsvCell(cell)).join(',')),
+  ].join('\r\n')
+
+  return {
+    csvText: csvLines,
+    summary: {
+      standardTotal: standardRows.length,
+      compareTotal: compareRows.length,
+      exactMatchCount: exactMatches.length,
+      standardOnlyCount: standardOnlyRows.length,
+      compareOnlyCount: compareOnlyRows.length,
+      diagnosticsCount: diagnostics.length,
+      ...categoryCounter,
+    },
+  }
+}
+
+async function exportStandardCompareCsv() {
+  if (!lastExtractedCsvFile.value || comparingStandard.value) return
+  comparingStandard.value = true
+  errorMessage.value = ''
+  compareMessage.value = ''
+  try {
+    const csvText = await lastExtractedCsvFile.value.text()
+    const lines = csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim())
+    if (!lines.length) {
+      throw new Error('刚提取的 CSV 为空，无法生成对照表')
+    }
+    const headers = parseCsvLine(lines[0]).map((cell) => String(cell || '').trim())
+    const companyIndex = headers.indexOf('company')
+    const itemIndex = headers.indexOf('item')
+    const transformTypeIndex = headers.indexOf('item_transform_type')
+    const transformNoteIndex = headers.indexOf('item_transform_note')
+    if (companyIndex < 0 || itemIndex < 0) {
+      throw new Error('刚提取的 CSV 缺少 company 或 item 字段')
+    }
+    const groupedRows = new Map()
+    for (const line of lines.slice(1)) {
+      const cells = parseCsvLine(line)
+      const company = String(cells[companyIndex] || '').trim()
+      const item = String(cells[itemIndex] || '').trim()
+      const transformType = transformTypeIndex >= 0 ? String(cells[transformTypeIndex] || '').trim() : ''
+      const transformNote = transformNoteIndex >= 0 ? String(cells[transformNoteIndex] || '').trim() : ''
+      if (!company || !item) continue
+      const key = `${company}|||${item}`
+      const existing = groupedRows.get(key) || { company, item, types: new Set(), notes: new Set() }
+      if (transformType) {
+        existing.types.add(transformType)
+      }
+      if (transformNote) {
+        existing.notes.add(transformNote)
+      }
+      groupedRows.set(key, existing)
+    }
+    const uniqueRows = Array.from(groupedRows.values()).map((row) => ({
+      company: row.company,
+      item: row.item,
+      itemTransformType: Array.from(row.types).join('；'),
+      itemTransformNote: Array.from(row.notes).join('；'),
+    }))
+    if (!uniqueRows.length) {
+      throw new Error('未提取到有效的 company、item 对照数据')
+    }
+    const compareCsv = [
+      'company,item,item_transform_type,item_transform_note',
+      ...uniqueRows.map((row) => `${escapeCsvCell(row.company)},${escapeCsvCell(row.item)},${escapeCsvCell(row.itemTransformType)},${escapeCsvCell(row.itemTransformNote)}`),
+    ].join('\r\n')
+    const blob = new Blob([`\uFEFF${compareCsv}`], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const baseName = String(lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv').replace(/\.csv$/i, '')
+    link.href = url
+    link.download = `${baseName}_company_item_compare.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    compareMessage.value = `标准表对照导出完成：共生成 ${uniqueRows.length} 条唯一 company,item 组合`
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : '导出标准表对照失败'
+  } finally {
+    comparingStandard.value = false
+  }
+}
+
+async function compareAgainstStandardCsv() {
+  if (!standardBaselineCsvFile.value || !nonStandardCompareCsvFile.value || comparingBaseline.value) return
+  comparingBaseline.value = true
+  errorMessage.value = ''
+  compareBaselineMessage.value = ''
+  lastCompareResultFile.value = null
+  try {
+    const [standardText, compareText] = await Promise.all([
+      standardBaselineCsvFile.value.text(),
+      nonStandardCompareCsvFile.value.text(),
+    ])
+    const standardRows = parseCompanyItemCompareCsv(standardText, '标准 CSV')
+    const compareRows = parseCompanyItemCompareCsv(compareText, '待比对 CSV')
+    const { csvText, summary } = buildDiagnosticCsv(standardRows, compareRows)
+    const blob = new Blob([`\uFEFF${csvText}`], { type: 'text/csv;charset=utf-8;' })
+    const standardBaseName = String(standardBaselineCsvFile.value.name || 'standard.csv').replace(/\.csv$/i, '')
+    const compareBaseName = String(nonStandardCompareCsvFile.value.name || 'compare.csv').replace(/\.csv$/i, '')
+    lastCompareResultFile.value = new File(
+      [blob],
+      `${standardBaseName}_vs_${compareBaseName}_diagnostics.csv`,
+      { type: 'text/csv' },
+    )
+    compareBaselineMessage.value = `比对完成：标准 ${summary.standardTotal} 条，待比对 ${summary.compareTotal} 条，完全匹配 ${summary.exactMatchCount} 条，标准缺失 ${summary.standardOnlyCount} 条，待比对多出 ${summary.compareOnlyCount} 条。已识别口径差异 ${summary.companyDiff} 条、指标名差异 ${summary.itemDiff} 条、口径和指标双差异 ${summary.bothDiff} 条。`
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : '标准表比对失败'
+  } finally {
+    comparingBaseline.value = false
+  }
+}
+
+function downloadCompareResultCsv() {
+  if (!lastCompareResultFile.value) return
+  const url = URL.createObjectURL(lastCompareResultFile.value)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = lastCompareResultFile.value.name || 'monthly_data_show_compare_diagnostics.csv'
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
@@ -595,6 +1078,19 @@ watch(
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.compare-inputs {
+  align-items: flex-start;
+}
+
+.file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  font-size: 13px;
+  color: #0f172a;
 }
 
 .panel {

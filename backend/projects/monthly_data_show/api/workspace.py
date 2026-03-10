@@ -33,6 +33,7 @@ from backend.projects.monthly_data_show.services.extractor import (
     ALLOWED_FIELDS,
     BLOCKED_COMPANIES,
     DEFAULT_SOURCE_COLUMNS,
+    EXTRA_EXPORT_FIELDS,
     extract_rows,
     filter_fields,
     get_default_constant_rules,
@@ -1939,6 +1940,7 @@ async def extract_monthly_data_show_csv(
         raise HTTPException(status_code=422, detail="未提取到数据，请检查所选口径与文件内容")
 
     selected_fields = [field for field in ALLOWED_FIELDS if field in set(fields)] or list(ALLOWED_FIELDS)
+    selected_fields.extend([field for field in EXTRA_EXPORT_FIELDS if field not in selected_fields])
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     with tempfile.NamedTemporaryFile(prefix="monthly_data_show_", suffix=".csv", delete=False, mode="w", encoding="utf-8-sig", newline="") as tmp:
         writer = csv.DictWriter(tmp, fieldnames=selected_fields)

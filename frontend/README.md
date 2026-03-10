@@ -1,5 +1,26 @@
 # 前端说明（Vue3 + Vite）
 
+## 月报导入工作台补充（2026-03-10）
+
+- `src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 新增“步骤 3.2：标准表比对”。
+- 该功能要求用户分别上传两份由步骤 3.1 导出的对照 CSV，字段口径至少包含 `company`、`item`，可选携带 `item_transform_type`、`item_transform_note`。
+- 比对在浏览器本地完成，不新增后端接口，也不影响原步骤 3 的提取下载或步骤 4 的 CSV 入库。
+- 比对主口径是 `company`：系统会先按口径分组，再在同一口径内部比较 `item`；不会再把同名指标拿到不同口径下做候选匹配。
+- 比对输出会生成可下载诊断 CSV，核心列包括：
+  - `result_type`
+  - `reason_category`
+  - `standard_company`
+  - `standard_item`
+  - `nonstandard_company`
+  - `nonstandard_item`
+  - `reason_detail`
+  - `suggested_action`
+  - `similarity_score`
+- 诊断逻辑优先识别三类问题：
+  - 口径缺失：标准口径或待比对口径在另一侧根本不存在
+  - 指标名差异：同口径下存在相近指标但未完全命中
+  - 缺失/独有：标准表缺失于待比对，或待比对存在标准表中找不到的独有项
+
 ## 事故记录补充（2026-03-09）
 
 - 本轮按用户要求新增独立文档：`configs/3.9 docker故障记录.md`。
@@ -4606,6 +4627,19 @@ docker compose up -d --build
 # 前端结构说明
 
 ## 2026-03-10 结构同步
+
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 步骤 3 导出的标准化 CSV 末尾新增两列：
+    - `item_transform_type`
+    - `item_transform_note`
+  - 步骤 3.1 标准表对照导出同步保留 `company,item,item_transform_type,item_transform_note`。
+  - 指标更名、单位转换、常量注入、半计算都会在这两列留下处理痕迹；步骤 4 入库继续忽略它们。
+
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+  - 新增“步骤 3.1：标准表对照”。
+  - 在步骤 3 提取完成后，可独立导出只含 `company,item,item_transform_note` 的去重 CSV，对照标准表项集合。
+  - 该分支纯前端本地生成，不影响原下载 CSV 与步骤 4 入库。
+  - 步骤 3 导出的标准化 CSV 末尾新增 `item_transform_note` 字段：若指标由更名规则转换得到，则记为 `A→B`，否则留空。
 
 - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
   - 修复月报查询页时间口径：查询窗口继续只按 `date`（业务月份）传递，不再错误绑定 `report_month`。

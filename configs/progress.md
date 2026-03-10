@@ -1,3 +1,5 @@
+- 2026-03-10：为 `monthly_data_show/import-workspace` 新增“步骤 3.2：标准表比对”。前端现在支持分别上传两份由步骤 3.1 导出的 `company,item,item_transform_type,item_transform_note` CSV，并在浏览器本地执行标准表差异诊断，生成可下载的 `diagnostics.csv`。本轮已将比对口径收紧为“先按 `company` 分组，再在同一口径内部比对 `item`”；跨口径不再拿同名指标互相匹配，而是直接诊断为“口径缺失”。原有步骤 3、3.1、4 链路不变。已执行 `frontend npm run build` 通过。
+
 - 2026-03-09：已按用户要求新增独立事故记录 `configs/3.9 docker故障记录.md`，系统整理本次服务器重启后 Phoenix Docker 网络异常、504 登录故障、bridge 网络脏状态与后续建议，供外部专家继续接手分析。
 
 - 2026-03-10：修复 `monthly_data_show/query-tool` 计算指标时间口径错位。确认查询主口径应以 `date`（业务月份）为准，不应强绑 `report_month`（来源月份）；本次改为恢复前端仅按 `date` 传查询窗口，并修正结果时间展示与计算指标分组逻辑，避免同一业务月份按不同 `report_month` 被拆分后产生 2026-01、2026-02 等窗口外 0 值结果；已执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
@@ -6545,3 +6547,6 @@
     - `00:15`、`00:30`、`00:45`、`01:00`、`01:15`、`01:30`、`01:45`、`02:00`、`02:15`、`02:30`
   - 末尾 5 个为：
     - `23:00`、`23:15`、`23:30`、`23:45`、`24:00`
+- 2026-03-10：在 `monthly_data_show/import-workspace` 页面新增独立分支“步骤 3.1：标准表对照”。实现方式：基于步骤 3 刚提取出的标准化 CSV，在前端本地导出去重后的 `company,item` 对照表 CSV，用于后续与历史月报做标准表差异对照；该按钮不影响原“下载 CSV”与“步骤 4：CSV 入库”链路。已执行 `frontend npm run build` 通过。
+- 2026-03-10：为 `monthly_data_show` 的步骤 3 导出 CSV 新增末尾字段 `item_transform_note`，用于记录指标名在抽取规则下的变换来源；当某行是由指标更名规则转换得到时，写为 `A→B`，未发生转换则留空。步骤 3.1 导出的标准表对照 CSV 也保留该字段；步骤 4 入库继续只写数据库既有字段，自动忽略该说明列。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
+- 2026-03-10：继续收敛 `monthly_data_show` 抽取规则与导出留痕。1) 删除 `monthly_data_show_extraction_rules.json` 中的旧 `item_rename_map`，后端运行时仅使用 `item_rename_rules`；2) 新增 `unit_normalize_rules` 配置项，将单位归一与数值换算规则配置化；3) 步骤 3 导出 CSV 与步骤 3.1 标准表对照 CSV 末尾改为两列：`item_transform_type`、`item_transform_note`，其中指标更名、常量注入、半计算、单位转换都会写入转换类型与处理说明，步骤 4 入库继续忽略这两列。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py`、JSON 校验与 `frontend npm run build` 通过。
