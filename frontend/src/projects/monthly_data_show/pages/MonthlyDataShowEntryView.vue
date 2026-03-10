@@ -240,7 +240,7 @@
         <p class="hint" v-if="standardBaselineCsvFile">标准 CSV：{{ standardBaselineCsvFile.name }}</p>
         <p class="hint" v-if="nonStandardCompareCsvFile">待比对 CSV：{{ nonStandardCompareCsvFile.name }}</p>
         <p class="hint" v-if="compareBaselineMessage">{{ compareBaselineMessage }}</p>
-        <p class="hint">比对会优先识别“口径差异”“指标名差异”“口径和指标双差异”“标准表缺失/待比对表独有”四类问题，并给出建议处理方向。</p>
+        <p class="hint">比对只做明确集合差异：先按 company 对齐，再输出各口径下“标准表有而待比对表没有”“待比对表有而标准表没有”两类结果；不做相似指标猜测。</p>
       </section>
 
       <section class="card">
@@ -608,39 +608,6 @@ function escapeCsvCell(value) {
   return text
 }
 
-function normalizeCompareText(value) {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(/[（）()【】\[\]、，,。.:：;；'"“”‘’/\\_-]/g, '')
-    .toLowerCase()
-}
-
-function computeDiceSimilarity(left, right) {
-  const a = normalizeCompareText(left)
-  const b = normalizeCompareText(right)
-  if (!a || !b) return 0
-  if (a === b) return 1
-  if (a.includes(b) || b.includes(a)) {
-    return Math.min(a.length, b.length) / Math.max(a.length, b.length)
-  }
-  const buildBigrams = (text) => {
-    if (text.length < 2) return new Set([text])
-    const bigrams = new Set()
-    for (let index = 0; index < text.length - 1; index += 1) {
-      bigrams.add(text.slice(index, index + 2))
-    }
-    return bigrams
-  }
-  const aBigrams = buildBigrams(a)
-  const bBigrams = buildBigrams(b)
-  let overlap = 0
-  for (const token of aBigrams) {
-    if (bBigrams.has(token)) overlap += 1
-  }
-  return (2 * overlap) / (aBigrams.size + bBigrams.size)
-}
-
 function parseCompanyItemCompareCsv(csvText, fileLabel) {
   const lines = String(csvText || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim())
   if (!lines.length) {
@@ -681,25 +648,6 @@ function parseCompanyItemCompareCsv(csvText, fileLabel) {
   return rows
 }
 
-function findBestCandidate(baseRow, candidates) {
-  let best = null
-  for (const candidate of candidates) {
-    const companyScore = computeDiceSimilarity(baseRow.company, candidate.company)
-    const itemScore = computeDiceSimilarity(baseRow.item, candidate.item)
-    const sameCompany = baseRow.company === candidate.company
-    const sameItem = baseRow.item === candidate.item
-    const combinedScore = sameCompany
-      ? itemScore
-      : sameItem
-        ? companyScore
-        : ((itemScore * 0.7) + (companyScore * 0.3))
-    if (!best || combinedScore > best.combinedScore) {
-      best = { row: candidate, companyScore, itemScore, combinedScore }
-    }
-  }
-  return best
-}
-
 function describeRow(row) {
   if (!row) return ''
   return `${row.company} / ${row.item}`
@@ -724,8 +672,6 @@ function buildDiagnosticCsv(standardRows, compareRows) {
 
   const categoryCounter = {
     companyDiff: 0,
-    itemDiff: 0,
-    bothDiff: 0,
     missing: 0,
     extra: 0,
   }
@@ -737,8 +683,6 @@ function buildDiagnosticCsv(standardRows, compareRows) {
     standardRow = null,
     compareRow = null,
     detail = '',
-    suggestion = '',
-    similarityScore = '',
   }) => {
     diagnostics.push({
       result_type: resultType,
@@ -748,8 +692,6 @@ function buildDiagnosticCsv(standardRows, compareRows) {
       nonstandard_company: compareRow?.company || '',
       nonstandard_item: compareRow?.item || '',
       reason_detail: detail,
-      suggested_action: suggestion,
-      similarity_score: similarityScore === '' ? '' : Number(similarityScore).toFixed(4),
       standard_transform_type: standardRow?.itemTransformType || '',
       standard_transform_note: standardRow?.itemTransformNote || '',
       nonstandard_transform_type: compareRow?.itemTransformType || '',
@@ -759,82 +701,50 @@ function buildDiagnosticCsv(standardRows, compareRows) {
 
   for (const standardRow of standardOnlyRows) {
     const sameCompanyCandidates = compareRowsByCompany.get(standardRow.company) || []
-    const itemCandidate = sameCompanyCandidates.length ? findBestCandidate(standardRow, sameCompanyCandidates) : null
 
     if (!sameCompanyCandidates.length) {
       categoryCounter.companyDiff += 1
       pushDiagnostic({
-        resultType: '标准表缺失于待比对',
-        reasonCategory: '口径缺失',
+        resultType: '标准表有，待比对表没有',
+        reasonCategory: '口径不存在',
         standardRow,
         detail: `标准项 ${describeRow(standardRow)} 所属口径 ${standardRow.company} 在待比对表中不存在，因此该口径下的指标无法进入同口径比对。`,
-        suggestion: '先统一子工作表名/口径名；3.2 只在同一 company 口径内部比较指标差异。',
-      })
-      continue
-    }
-    if (itemCandidate && itemCandidate.row && itemCandidate.itemScore >= 0.42 && itemCandidate.row.item !== standardRow.item) {
-      categoryCounter.itemDiff += 1
-      pushDiagnostic({
-        resultType: '标准表缺失于待比对',
-        reasonCategory: '指标名差异',
-        standardRow,
-        compareRow: itemCandidate.row,
-        detail: `标准项 ${describeRow(standardRow)} 在同口径下未命中，但待比对表中存在相近指标 ${describeRow(itemCandidate.row)}。`,
-        suggestion: '优先检查原表指标名，或补充 item_rename_rules 使其归一到标准指标名。',
-        similarityScore: itemCandidate.itemScore,
       })
       continue
     }
     categoryCounter.missing += 1
     pushDiagnostic({
-      resultType: '标准表缺失于待比对',
-      reasonCategory: '待比对表缺失指标',
+      resultType: '标准表有，待比对表没有',
+      reasonCategory: '指标缺失',
       standardRow,
-      detail: `标准项 ${describeRow(standardRow)} 在同口径 ${standardRow.company} 下没有找到可接受的对应指标。`,
-      suggestion: '检查旧表是否根本没有该指标，或该指标是否应通过常量注入/半计算/排除规则处理。',
+      detail: `标准项 ${describeRow(standardRow)} 在同口径 ${standardRow.company} 下不存在于待比对表。`,
     })
   }
 
   for (const compareRow of compareOnlyRows) {
     const sameCompanyCandidates = standardRowsByCompany.get(compareRow.company) || []
-    const itemCandidate = sameCompanyCandidates.length ? findBestCandidate(compareRow, sameCompanyCandidates) : null
 
     if (!sameCompanyCandidates.length) {
       categoryCounter.companyDiff += 1
       pushDiagnostic({
-        resultType: '待比对表多出项',
-        reasonCategory: '口径缺失',
+        resultType: '待比对表有，标准表没有',
+        reasonCategory: '口径不存在',
         compareRow,
         detail: `待比对项 ${describeRow(compareRow)} 所属口径 ${compareRow.company} 在标准表中不存在，因此该口径下的指标无法进入同口径比对。`,
-        suggestion: '先统一子工作表名/口径名；3.2 不再把该指标拿到别的口径下做候选匹配。',
-      })
-      continue
-    }
-    if (itemCandidate && itemCandidate.row && itemCandidate.itemScore >= 0.42 && itemCandidate.row.item !== compareRow.item) {
-      categoryCounter.itemDiff += 1
-      pushDiagnostic({
-        resultType: '待比对表多出项',
-        reasonCategory: '指标名差异',
-        standardRow: itemCandidate.row,
-        compareRow,
-        detail: `待比对项 ${describeRow(compareRow)} 在标准表同口径下未命中，但存在相近标准指标 ${describeRow(itemCandidate.row)}。`,
-        suggestion: '优先补充 item_rename_rules，或调整旧表指标名以对齐标准指标。',
-        similarityScore: itemCandidate.itemScore,
       })
       continue
     }
     categoryCounter.extra += 1
     pushDiagnostic({
-      resultType: '待比对表多出项',
-      reasonCategory: '非标准独有指标',
+      resultType: '待比对表有，标准表没有',
+      reasonCategory: '指标多出',
       compareRow,
-      detail: `待比对项 ${describeRow(compareRow)} 在同口径 ${compareRow.company} 下未找到可信对应项。`,
-      suggestion: '确认该指标是否属于历史遗留口径、废弃指标，或需要新建兼容规则。',
+      detail: `待比对项 ${describeRow(compareRow)} 在同口径 ${compareRow.company} 下不存在于标准表。`,
     })
   }
 
   const csvLines = [
-    'result_type,reason_category,standard_company,standard_item,nonstandard_company,nonstandard_item,reason_detail,suggested_action,similarity_score,standard_transform_type,standard_transform_note,nonstandard_transform_type,nonstandard_transform_note',
+    'result_type,reason_category,standard_company,standard_item,nonstandard_company,nonstandard_item,reason_detail,standard_transform_type,standard_transform_note,nonstandard_transform_type,nonstandard_transform_note',
     ...diagnostics.map((row) => [
       row.result_type,
       row.reason_category,
@@ -843,8 +753,6 @@ function buildDiagnosticCsv(standardRows, compareRows) {
       row.nonstandard_company,
       row.nonstandard_item,
       row.reason_detail,
-      row.suggested_action,
-      row.similarity_score,
       row.standard_transform_type,
       row.standard_transform_note,
       row.nonstandard_transform_type,
@@ -957,7 +865,7 @@ async function compareAgainstStandardCsv() {
       `${standardBaseName}_vs_${compareBaseName}_diagnostics.csv`,
       { type: 'text/csv' },
     )
-    compareBaselineMessage.value = `比对完成：标准 ${summary.standardTotal} 条，待比对 ${summary.compareTotal} 条，完全匹配 ${summary.exactMatchCount} 条，标准缺失 ${summary.standardOnlyCount} 条，待比对多出 ${summary.compareOnlyCount} 条。已识别口径差异 ${summary.companyDiff} 条、指标名差异 ${summary.itemDiff} 条、口径和指标双差异 ${summary.bothDiff} 条。`
+    compareBaselineMessage.value = `比对完成：标准 ${summary.standardTotal} 条，待比对 ${summary.compareTotal} 条，完全匹配 ${summary.exactMatchCount} 条，标准缺失 ${summary.standardOnlyCount} 条，待比对多出 ${summary.compareOnlyCount} 条，口径缺失 ${summary.companyDiff} 条。`
   } catch (error) {
     console.error(error)
     errorMessage.value = error instanceof Error ? error.message : '标准表比对失败'
