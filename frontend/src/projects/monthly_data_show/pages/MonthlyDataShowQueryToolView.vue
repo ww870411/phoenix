@@ -1276,7 +1276,7 @@ function setSheetNumericCell(sheet, rowIndex, colIndex, value, numFmt) {
 
 function getResultCellValue(row, field) {
   if (field === 'time') {
-    return formatResultMonth(row?.report_month || row?.date || '')
+    return formatResultMonth(row?.date || row?.report_month || '')
   }
   if (field === 'company') {
     return row?.company || '—'
@@ -1329,7 +1329,7 @@ function resolveExportMonthTag() {
 
   const monthTags = [...new Set(
     rows.value
-      .map((row) => String(row?.report_month || row?.date || '').slice(0, 7))
+      .map((row) => String(row?.date || row?.report_month || '').slice(0, 7))
       .filter((x) => monthRe.test(x))
   )].sort()
   if (monthTags.length === 1) return monthTags[0]
@@ -1646,6 +1646,7 @@ function buildPayload() {
     return null
   })()
   return {
+    // 查询页的月份控件既约束业务日期，也约束来源月份，避免计算指标按 report_month 出表时泄漏窗口外月份。
     report_month_from: null,
     report_month_to: null,
     date_from: normalizedDateFrom,

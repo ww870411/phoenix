@@ -24,6 +24,118 @@
     "按期结案总数",
     "信访处结率"
   ],
+  "item_rename_rules": [
+    {
+      "source": "主城区一次网电厂补水量",
+      "target": "一次网电厂补水量",
+      "companies": ["all"]
+    },
+    {
+      "source": "一次网电厂补水量",
+      "target": "一次网电厂补水量",
+      "companies": ["all"]
+    },
+    {
+      "source": "高温水网电厂补水量",
+      "target": "一次网电厂补水量",
+      "companies": ["all"]
+    },
+    {
+      "source": "高温水低真空电厂补水量",
+      "target": "一次网电厂补水量",
+      "companies": ["all"]
+    },
+    {
+      "source": "耗外购电量",
+      "target": "外购电量",
+      "companies": ["all"]
+    },
+    {
+      "source": "外购电量",
+      "target": "外购电量",
+      "companies": ["all"]
+    },
+    {
+      "source": "期末供热面积",
+      "target": "期末供暖收费面积",
+      "companies": ["all"]
+    },
+    {
+      "source": "单位面积耗电量",
+      "target": "供暖电耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "单位面积耗水量",
+      "target": "供暖水耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "单位面积耗标准煤量",
+      "target": "供暖标准煤耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "锅炉设备利用率",
+      "target": "供热设备利用率",
+      "companies": ["all"]
+    },
+    {
+      "source": "锅炉热效率",
+      "target": "全厂热效率",
+      "companies": ["all"]
+    },
+    {
+      "source": "总热效率",
+      "target": "全厂热效率",
+      "companies": ["all"]
+    },
+    {
+      "source": "炉耗油量",
+      "target": "耗油量",
+      "companies": ["all"]
+    },
+    {
+      "source": "锅炉耗柴油量",
+      "target": "耗油量",
+      "companies": ["all"]
+    },
+    {
+      "source": "装机总容量",
+      "target": "锅炉设备容量",
+      "companies": ["all"]
+    },
+    {
+      "source": "发电煤耗率",
+      "target": "发电标准煤耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "供电煤耗率",
+      "target": "供电标准煤耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "供热煤耗率",
+      "target": "供热标准煤耗率",
+      "companies": ["all"]
+    },
+    {
+      "source": "供热标准煤耗量",
+      "target": "供热耗标煤量",
+      "companies": ["all"]
+    },
+    {
+      "source": "发电标准煤耗量",
+      "target": "发电耗标煤量",
+      "companies": ["all"]
+    },
+    {
+      "source": "耗水质稳定剂量",
+      "target": "耗阻垢剂量",
+      "companies": ["all"]
+    }
+  ],
   "item_rename_map": {
     "主城区一次网电厂补水量": "一次网电厂补水量",
     "一次网电厂补水量": "一次网电厂补水量",

@@ -1,5 +1,11 @@
 - 2026-03-09：已按用户要求新增独立事故记录 `configs/3.9 docker故障记录.md`，系统整理本次服务器重启后 Phoenix Docker 网络异常、504 登录故障、bridge 网络脏状态与后续建议，供外部专家继续接手分析。
 
+- 2026-03-10：修复 `monthly_data_show/query-tool` 计算指标时间口径错位。确认查询主口径应以 `date`（业务月份）为准，不应强绑 `report_month`（来源月份）；本次改为恢复前端仅按 `date` 传查询窗口，并修正结果时间展示与计算指标分组逻辑，避免同一业务月份按不同 `report_month` 被拆分后产生 2026-01、2026-02 等窗口外 0 值结果；已执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
+- 2026-03-10：按业务要求收紧 `monthly_data_show/query-comparison` 的同比/计划可比规则。当前窗口仍按时间聚合，但同比值与计划值只有在对应窗口内逐月数据完整时才返回；若缺任一月份，则该指标的同比值/计划值与比率均返回空。环比逻辑本轮保持不变。已执行 `python -m py_compile backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
+- 2026-03-10：扩展 `monthly_data_show` 抽取规则中的 `item_rename_map`。后端新增 `item_rename_rules` 配置结构，支持按子工作表范围应用指标更名：`scope=all_allowed_companies` 表示对全部未屏蔽子工作表生效，`scope=specific_companies` 表示仅对指定子工作表生效；现有更名规则已整体迁移为“作用于全部允许子工作表”的显式规则，同时保留 `item_rename_map` 兼容旧配置。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py` 与规则 JSON 解析校验通过。
+- 2026-03-10：细化 `monthly_data_show` 的指标更名配置粒度。`item_rename_rules` 已由“规则组级作用范围”调整为“单条规则级作用范围”，每条规则独立声明 `source/target/scope/companies`；现有 22 条指标更名已全部改写为逐条显式规则，默认作用于全部允许子工作表。后端保持对旧 `rename_map` 组块格式兼容。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py` 与 JSON 结构校验通过。
+- 2026-03-10：按用户要求继续简化 `item_rename_rules` 结构，去掉 `scope` 字段，仅保留 `companies`。约定：`companies=[\"all\"]` 表示所有允许口径生效，`companies=[\"北海\"]` 表示仅北海口径生效；后端已按该规则匹配当前子工作表，且继续兼容旧 `scope/rename_map` 写法。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py` 与 JSON 校验通过。
+
 ## 2026-03-09（登录故障排查：线上 `/api/v1/auth/login` 返回 504，定位为服务器回源链路异常）
 
 - 现象：

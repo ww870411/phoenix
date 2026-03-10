@@ -474,6 +474,9 @@ def _build_calculated_rows(
     if not base_rows or not selected_calc_items:
         return []
 
+    use_report_month_scope = bool(
+        _safe_str(request.report_month_from) or _safe_str(request.report_month_to)
+    )
     grouped_metrics: Dict[Tuple[str, str, str, Optional[str], Optional[str]], Dict[str, float]] = {}
     grouped_meta: Dict[Tuple[str, str, str, Optional[str], Optional[str]], dict] = {}
     for row in base_rows:
@@ -482,7 +485,7 @@ def _build_calculated_rows(
             _safe_str(row.get("period")),
             _safe_str(row.get("type")),
             row.get("date"),
-            row.get("report_month"),
+            row.get("report_month") if use_report_month_scope else None,
         )
         metrics = grouped_metrics.setdefault(key, {})
         metric_name = _safe_str(row.get("item"))
@@ -496,7 +499,7 @@ def _build_calculated_rows(
                 "period": row.get("period"),
                 "type": row.get("type"),
                 "date": row.get("date"),
-                "report_month": row.get("report_month"),
+                "report_month": row.get("report_month") if use_report_month_scope else None,
                 "operation_time": row.get("operation_time"),
             },
         )
@@ -733,8 +736,8 @@ def _merge_and_sort_rows(
             return (0, 0)
 
     def _time_key(row: dict):
-        # 月报主场景下以 report_month 为主，缺失时回退 date。
-        raw = row.get("report_month") or row.get("date")
+        # 查询工具默认按业务月份(date)理解时间，只有缺失时才回退到来源月份(report_month)。
+        raw = row.get("date") or row.get("report_month")
         return _date_asc_key(raw)
 
     def _rank_key(field: str, value: object):
@@ -759,8 +762,8 @@ def _merge_and_sort_rows(
             key_parts.append(_rank_key(field, row.get(field)))
         # 若用户未显式选择 time，则保持历史行为：时间降序优先（最新月份在前）。
         if (not aggregate_months) and ("time" not in order_fields):
-            key_parts.append(_date_desc_key(row.get("report_month")))
             key_parts.append(_date_desc_key(row.get("date")))
+            key_parts.append(_date_desc_key(row.get("report_month")))
         key_parts.append(_safe_str(row.get("unit")))
         return tuple(key_parts)
 
@@ -1348,7 +1351,7 @@ def _fetch_compare_map(
     request: QueryRequest,
     start_date: date,
     end_date: date,
-) -> dict:
+) -> Tuple[dict, Set[str]]:
     companies = _normalize_text_list(request.companies)
     items = _normalize_text_list(request.items)
     periods = _normalize_text_list(request.periods)
@@ -1361,7 +1364,9 @@ def _fetch_compare_map(
     query_base_items = sorted(set(selected_base_items + required_base_items))
 
     result_map: dict = {}
+    complete_keys: Set[str] = set()
     base_rows: List[dict] = []
+    expected_month_keys = {month.isoformat() for month in _iter_month_starts(start_date, end_date)}
     if companies and periods and types and query_base_items:
         where_parts = ["date BETWEEN :date_from AND :date_to"]
         params = {
@@ -1421,6 +1426,48 @@ def _fetch_compare_map(
             if item in selected_base_items:
                 result_map[key] = dict(base_row)
 
+        monthly_stmt = text(
+            f"""
+            SELECT
+                {select_company_sql},
+                item,
+                period,
+                type,
+                unit,
+                date
+            FROM monthly_data_show
+            WHERE {where_sql}
+            GROUP BY {group_by_sql}, date
+            """
+        ).bindparams(
+            bindparam("companies", expanding=True),
+            bindparam("items", expanding=True),
+            bindparam("periods", expanding=True),
+            bindparam("types", expanding=True),
+        )
+        monthly_rows = session.execute(monthly_stmt, params).mappings().all()
+        month_coverage: Dict[Tuple[str, str, str, str], Set[str]] = {}
+        for row in monthly_rows:
+            row_date = row.get("date")
+            if row_date is None:
+                continue
+            coverage_key = (
+                str(row.get("company") or ""),
+                str(row.get("item") or ""),
+                str(row.get("period") or ""),
+                str(row.get("type") or ""),
+            )
+            month_coverage.setdefault(coverage_key, set()).add(row_date.isoformat())
+        for key, base_row in result_map.items():
+            coverage_key = (
+                str(base_row.get("company") or ""),
+                str(base_row.get("item") or ""),
+                str(base_row.get("period") or ""),
+                str(base_row.get("type") or ""),
+            )
+            if expected_month_keys.issubset(month_coverage.get(coverage_key, set())):
+                complete_keys.add(key)
+
     if selected_calc_items and base_rows:
         day_count = (end_date - start_date).days + 1
         if day_count <= 0:
@@ -1449,6 +1496,14 @@ def _fetch_compare_map(
                     "unit": CALCULATED_ITEM_UNITS.get(indicator, ""),
                     "value": calc_value,
                 }
+                required_items = _collect_required_base_items([indicator])
+                if all(
+                    expected_month_keys.issubset(
+                        month_coverage.get((company, required_item, period, type_value), set())
+                    )
+                    for required_item in required_items
+                ):
+                    complete_keys.add(key)
 
     if include_avg_temp and companies and ("month" in {x.lower() for x in periods}) and ("real" in {x.lower() for x in types}):
         avg_stmt = text(
@@ -1471,7 +1526,7 @@ def _fetch_compare_map(
                 "value": avg_value,
             }
 
-    return result_map
+    return result_map, complete_keys
 
 
 def _fetch_plan_value_map(
@@ -1479,7 +1534,7 @@ def _fetch_plan_value_map(
     request: QueryRequest,
     start_date: date,
     end_date: date,
-) -> Dict[Tuple[str, str, str, str], Optional[float]]:
+) -> Tuple[Dict[Tuple[str, str, str, str], Optional[float]], Set[Tuple[str, str, str, str]]]:
     companies = _normalize_text_list(request.companies)
     items = _normalize_text_list(request.items)
     periods = _normalize_text_list(request.periods)
@@ -1490,7 +1545,10 @@ def _fetch_plan_value_map(
     query_base_items = sorted(set(selected_base_items + required_base_items))
 
     result_map: Dict[Tuple[str, str, str, str], Optional[float]] = {}
+    complete_keys: Set[Tuple[str, str, str, str]] = set()
     base_rows: List[dict] = []
+    month_coverage: Dict[Tuple[str, str, str], Set[str]] = {}
+    expected_month_keys = {month.isoformat() for month in _iter_month_starts(start_date, end_date)}
     if companies and periods and query_base_items:
         where_sql = "date BETWEEN :date_from AND :date_to AND company IN :companies AND item IN :items AND period IN :periods AND type = 'plan'"
         params = {
@@ -1541,6 +1599,39 @@ def _fetch_plan_value_map(
             if item in selected_base_set:
                 result_map[(company, item, period, unit)] = value
 
+        monthly_stmt = text(
+            f"""
+            SELECT
+                {select_company_sql},
+                item,
+                period,
+                unit,
+                date
+            FROM monthly_data_show
+            WHERE {where_sql}
+            GROUP BY {group_by_sql}, date
+            """
+        ).bindparams(
+            bindparam("companies", expanding=True),
+            bindparam("items", expanding=True),
+            bindparam("periods", expanding=True),
+        )
+        monthly_rows = session.execute(monthly_stmt, params).mappings().all()
+        for row in monthly_rows:
+            row_date = row.get("date")
+            if row_date is None:
+                continue
+            coverage_key = (
+                str(row.get("company") or ""),
+                str(row.get("item") or ""),
+                str(row.get("period") or ""),
+            )
+            month_coverage.setdefault(coverage_key, set()).add(row_date.isoformat())
+        for key in list(result_map.keys()):
+            company, item, period, _unit = key
+            if expected_month_keys.issubset(month_coverage.get((company, item, period), set())):
+                complete_keys.add(key)
+
     if selected_calc_items and base_rows:
         day_count = (end_date - start_date).days + 1
         if day_count <= 0:
@@ -1559,8 +1650,17 @@ def _fetch_plan_value_map(
             )
             for indicator in selected_calc_items:
                 unit = CALCULATED_ITEM_UNITS.get(indicator, "")
-                result_map[(company, indicator, period, unit)] = _to_float(calc_values.get(indicator))
-    return result_map
+                result_key = (company, indicator, period, unit)
+                result_map[result_key] = _to_float(calc_values.get(indicator))
+                required_items = _collect_required_base_items([indicator])
+                if all(
+                    expected_month_keys.issubset(
+                        month_coverage.get((company, required_item, period), set())
+                    )
+                    for required_item in required_items
+                ):
+                    complete_keys.add(result_key)
+    return result_map, complete_keys
 
 
 def _build_temperature_comparison_payload(
@@ -2206,10 +2306,10 @@ def query_month_data_show_comparison(request: QueryRequest):
 
     try:
         with SessionLocal() as session:
-            current_map = _fetch_compare_map(session, request, current_start, current_end)
-            yoy_map = _fetch_compare_map(session, request, yoy_start, yoy_end)
-            mom_map = _fetch_compare_map(session, request, mom_start, mom_end)
-            plan_map = _fetch_plan_value_map(session, request, current_start, current_end)
+            current_map, _current_complete_keys = _fetch_compare_map(session, request, current_start, current_end)
+            yoy_map, yoy_complete_keys = _fetch_compare_map(session, request, yoy_start, yoy_end)
+            mom_map, _mom_complete_keys = _fetch_compare_map(session, request, mom_start, mom_end)
+            plan_map, plan_complete_keys = _fetch_plan_value_map(session, request, current_start, current_end)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"查询同比环比失败：{exc}") from exc
 
@@ -2217,16 +2317,15 @@ def query_month_data_show_comparison(request: QueryRequest):
     for key in current_map.keys():
         base = current_map.get(key) or {}
         current_value = base.get("value")
-        yoy_value = (yoy_map.get(key) or {}).get("value")
+        yoy_value = (yoy_map.get(key) or {}).get("value") if key in yoy_complete_keys else None
         mom_value = (mom_map.get(key) or {}).get("value")
-        plan_value = plan_map.get(
-            (
-                str(base.get("company") or ""),
-                str(base.get("item") or ""),
-                str(base.get("period") or ""),
-                str(base.get("unit") or ""),
-            )
+        plan_lookup_key = (
+            str(base.get("company") or ""),
+            str(base.get("item") or ""),
+            str(base.get("period") or ""),
+            str(base.get("unit") or ""),
         )
+        plan_value = plan_map.get(plan_lookup_key) if plan_lookup_key in plan_complete_keys else None
         rows.append(
             QueryComparisonRow(
                 company=str(base.get("company") or ""),

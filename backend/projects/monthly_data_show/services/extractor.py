@@ -71,6 +71,14 @@ ITEM_RENAME_MAP = {
     "供热标准煤耗量": "供热耗标煤量",
     "发电标准煤耗量": "发电耗标煤量",
 }
+ITEM_RENAME_RULES = [
+    {
+        "source": source,
+        "target": target,
+        "companies": ["all"],
+    }
+    for source, target in ITEM_RENAME_MAP.items()
+]
 
 DEFAULT_CONSTANT_RULES = [
     {"company": "北海", "item": "发电设备容量", "unit": "万千瓦", "value": 10.0, "source_columns": ["本月实际"]},
@@ -186,6 +194,7 @@ _BASE_RULES_SNAPSHOT = {
     "enable_jinpu_heating_area_adjustment": bool(ENABLE_JINPU_HEATING_AREA_ADJUSTMENT),
     "item_exclude_set": sorted(ITEM_EXCLUDE_SET),
     "item_rename_map": dict(ITEM_RENAME_MAP),
+    "item_rename_rules": [dict(rule) for rule in ITEM_RENAME_RULES],
     "default_constant_rules": [dict(x) for x in DEFAULT_CONSTANT_RULES],
     "semi_calculated_rules": [dict(x) for x in DEFAULT_SEMI_CALCULATED_RULES],
 }
@@ -211,6 +220,7 @@ def _refresh_extraction_rules() -> None:
     global ENABLE_JINPU_HEATING_AREA_ADJUSTMENT
     global ITEM_EXCLUDE_SET
     global ITEM_RENAME_MAP
+    global ITEM_RENAME_RULES
     global DEFAULT_CONSTANT_RULES
     global SEMI_CALCULATED_RULES
 
@@ -221,7 +231,63 @@ def _refresh_extraction_rules() -> None:
         cfg.get("enable_jinpu_heating_area_adjustment", _BASE_RULES_SNAPSHOT["enable_jinpu_heating_area_adjustment"])
     )
     ITEM_EXCLUDE_SET = set(cfg.get("item_exclude_set") or _BASE_RULES_SNAPSHOT["item_exclude_set"])
-    ITEM_RENAME_MAP = dict(cfg.get("item_rename_map") or _BASE_RULES_SNAPSHOT["item_rename_map"])
+    raw_rename_rules = cfg.get("item_rename_rules")
+    if isinstance(raw_rename_rules, list):
+        normalized_rename_rules: List[Dict[str, Any]] = []
+        for raw_rule in raw_rename_rules:
+            if not isinstance(raw_rule, dict):
+                continue
+            companies = [str(x).strip() for x in (raw_rule.get("companies") or []) if str(x).strip()]
+            if not companies:
+                companies = ["all"]
+            source = str(raw_rule.get("source") or "").strip()
+            target = str(raw_rule.get("target") or "").strip()
+            if source and target:
+                normalized_rename_rules.append(
+                    {
+                        "source": source,
+                        "target": target,
+                        "companies": companies,
+                    }
+                )
+                continue
+            rename_map_raw = raw_rule.get("rename_map") or {}
+            if not isinstance(rename_map_raw, dict):
+                continue
+            legacy_scope = str(raw_rule.get("scope") or "").strip().lower()
+            if legacy_scope == "all_allowed_companies":
+                companies = ["all"]
+            for src, dst in rename_map_raw.items():
+                src_text = str(src).strip()
+                dst_text = str(dst).strip()
+                if not src_text or not dst_text:
+                    continue
+                normalized_rename_rules.append(
+                    {
+                        "source": src_text,
+                        "target": dst_text,
+                        "companies": companies,
+                    }
+                )
+        ITEM_RENAME_RULES = normalized_rename_rules or [dict(rule) for rule in _BASE_RULES_SNAPSHOT["item_rename_rules"]]
+    else:
+        legacy_rename_map = dict(cfg.get("item_rename_map") or _BASE_RULES_SNAPSHOT["item_rename_map"])
+        ITEM_RENAME_RULES = [
+            {
+                "source": str(source).strip(),
+                "target": str(target).strip(),
+                "companies": ["all"],
+            }
+            for source, target in legacy_rename_map.items()
+            if str(source).strip() and str(target).strip()
+        ]
+    merged_rename_map: Dict[str, str] = {}
+    for rule in ITEM_RENAME_RULES:
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        if source and target:
+            merged_rename_map[source] = target
+    ITEM_RENAME_MAP = merged_rename_map
     raw_constants = cfg.get("default_constant_rules") or _BASE_RULES_SNAPSHOT["default_constant_rules"]
     DEFAULT_CONSTANT_RULES = [dict(x) for x in raw_constants if isinstance(x, dict)]
     raw_semi = cfg.get("semi_calculated_rules") or _BASE_RULES_SNAPSHOT["semi_calculated_rules"]
@@ -297,14 +363,29 @@ def _clean_text(value: object) -> str:
     return re.sub(r"\s+", "", text)
 
 
-def _normalize_item(value: object, use_rename: bool = True) -> Tuple[str, bool]:
+def _resolve_item_rename_map(company: str) -> Dict[str, str]:
+    resolved: Dict[str, str] = {}
+    company_text = str(company or "").strip()
+    for rule in ITEM_RENAME_RULES:
+        companies = {str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()}
+        if "all" not in companies and company_text not in companies:
+            continue
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        if source and target:
+            resolved[source] = target
+    return resolved or dict(ITEM_RENAME_MAP)
+
+
+def _normalize_item(value: object, use_rename: bool = True, company: str = "") -> Tuple[str, bool]:
     raw = _clean_text(value)
     if not raw:
         return "", False
     normalized = raw.replace("其中：", "")
     changed = False
     if use_rename:
-        mapped = ITEM_RENAME_MAP.get(normalized, normalized)
+        rename_map = _resolve_item_rename_map(company)
+        mapped = rename_map.get(normalized, normalized)
         if mapped != normalized:
             normalized = mapped
             changed = True
@@ -315,7 +396,7 @@ def _normalize_item(value: object, use_rename: bool = True) -> Tuple[str, bool]:
                 .replace(",", "")
                 .replace("/", "")
             )
-            mapped_token = ITEM_RENAME_MAP.get(token, normalized)
+            mapped_token = rename_map.get(token, normalized)
             if mapped_token != normalized:
                 normalized = mapped_token
                 changed = True
@@ -607,7 +688,7 @@ def normalize_constant_rules(raw_rules: Optional[Sequence[Dict[str, object]]]) -
         if not isinstance(raw, dict):
             continue
         company = str(raw.get("company") or "").strip()
-        item, _ = _normalize_item(raw.get("item"), use_rename=True)
+        item, _ = _normalize_item(raw.get("item"), use_rename=True, company=company)
         unit = _normalize_unit(raw.get("unit"))
         if not company or not item:
             continue
@@ -719,7 +800,7 @@ def extract_rows(
             for row_idx in range(header_row + 1, sheet.max_row + 1):
                 item_raw = sheet.cell(row=row_idx, column=col_map["项目"]).value
                 unit_raw = sheet.cell(row=row_idx, column=col_map["计量单位"]).value
-                item, renamed = _normalize_item(item_raw, use_rename=use_item_rename)
+                item, renamed = _normalize_item(item_raw, use_rename=use_item_rename, company=company)
                 unit = _normalize_unit(unit_raw)
                 if not item:
                     continue

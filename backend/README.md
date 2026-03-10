@@ -3200,3 +3200,22 @@
 - 依赖说明：
   - 脚本已改为仅依赖 Python 标准库；
   - 不再要求安装 `httpx`。
+# 后端结构说明
+
+## 2026-03-10 结构同步
+
+- `backend/projects/monthly_data_show/api/workspace.py`
+  - 修复计算指标分组口径：默认按 `date`（业务月份）聚合，不再把 `report_month` 一并作为分组键。
+  - 仅在显式使用 `report_month_*` 查询来源月份窗口时，才保留 `report_month` 分组。
+  - 查询结果排序时间维度也改为优先使用 `date`，`report_month` 仅作回退。
+  - `query-comparison` 新增同比/计划窗口完整性校验：
+    - 同比值仅在同比窗口逐月齐备时返回；
+    - 计划值仅在计划窗口逐月齐备时返回；
+    - 若窗口内缺任一月份，则视为不可比，返回 `null`，避免局部月份数据冒充整段窗口结果。
+- `backend/projects/monthly_data_show/services/extractor.py`
+  - 抽取规则新增 `item_rename_rules`：
+    - 每条规则独立声明 `source/target/companies`；
+    - `companies=[\"all\"]`：对全部未被 `blocked_companies` 屏蔽的子工作表生效；
+    - `companies=[\"北海\"]`：仅对指定子工作表生效。
+  - 抽取时会按当前子工作表标题逐条匹配适用规则，再执行指标标准化。
+  - 旧 `item_rename_map` 与旧 `scope/rename_map` 结构仍保留兼容兜底。
