@@ -124,14 +124,24 @@
       "source": "耗水质稳定剂量",
       "target": "耗阻垢剂量",
       "companies": ["all"]
+    },
+    {
+      "source": "耗电量",
+      "target": "外购电量",
+      "companies": ["供热公司","金普","庄河","研究院","主城区电锅炉"]
+    },
+    {
+      "source": "耗水量",
+      "target": "电厂耗水量",
+      "companies": ["北海","北海水炉","香海"]
     }
   ],
   "unit_normalize_rules": [
-    { "source": "米2", "target": "平方米" },
-    { "source": "米²", "target": "平方米" },
-    { "source": "/米2", "target": "/平方米" },
-    { "source": "/米²", "target": "/平方米" },
-    { "source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000 }
+    { "source": "米2", "target": "平方米", "exact_match": false },
+    { "source": "米²", "target": "平方米", "exact_match": false },
+    { "source": "/米2", "target": "/平方米", "exact_match": false },
+    { "source": "/米²", "target": "/平方米", "exact_match": false },
+    { "source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000, "exact_match": true }
   ],
   "default_constant_rules": [
     {"company": "北海", "item": "发电设备容量", "unit": "万千瓦", "value": 10.0, "source_columns": ["本月实际"]},
@@ -153,6 +163,7 @@
     {"name": "热网耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"]},
     {"name": "供暖耗热量补齐", "companies": ["供热公司"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["各热力站耗热量"]},
     {"name": "供暖耗热量补齐", "companies": ["金州", "北方"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "subtract", "sources": ["供热量", "高温水销售量"], "allow_missing_subtrahend_as_zero": true},
-    {"name": "供暖耗热量补齐", "companies": ["金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["供热量"]}
+    {"name": "供暖耗热量补齐", "companies": ["金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["供热量"]},
+    {"name": "非生产厂用电量补齐", "companies": ["全口径","主城区","集团本部","北海", "香海"], "target_item": "非生产厂用电量", "target_unit": "万千瓦时", "operation": "subtract", "sources": ["综合厂用电量","发电厂用电量","供热厂用电量"]}
   ]
 }

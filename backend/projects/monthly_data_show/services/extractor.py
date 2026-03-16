@@ -77,11 +77,11 @@ ITEM_RENAME_RULES = [
     {"source": "发电标准煤耗量", "target": "发电耗标煤量", "companies": ["all"]},
 ]
 UNIT_NORMALIZE_RULES = [
-    {"source": "米2", "target": "平方米"},
-    {"source": "米²", "target": "平方米"},
-    {"source": "/米2", "target": "/平方米"},
-    {"source": "/米²", "target": "/平方米"},
-    {"source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000},
+    {"source": "米2", "target": "平方米", "exact_match": False},
+    {"source": "米²", "target": "平方米", "exact_match": False},
+    {"source": "/米2", "target": "/平方米", "exact_match": False},
+    {"source": "/米²", "target": "/平方米", "exact_match": False},
+    {"source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000, "exact_match": True},
 ]
 
 DEFAULT_CONSTANT_RULES = [
@@ -422,9 +422,17 @@ def _normalize_unit(value: object) -> Tuple[str, str, str]:
     for rule in UNIT_NORMALIZE_RULES_RUNTIME:
         source = str(rule.get("source") or "").strip()
         target = str(rule.get("target") or "").strip()
-        if not source or not target or source not in normalized:
+        exact_match = bool(rule.get("exact_match"))
+        if not source or not target:
             continue
-        updated = normalized.replace(source, target)
+        if exact_match:
+            if normalized != source:
+                continue
+            updated = target
+        else:
+            if source not in normalized:
+                continue
+            updated = normalized.replace(source, target)
         if updated != normalized:
             note_parts.append(f"{source}→{target}")
             normalized = updated
@@ -456,7 +464,14 @@ def _normalize_value(raw_unit: str, unit: str, value: object) -> object:
         source = str(rule.get("source") or "").strip()
         target = str(rule.get("target") or "").strip()
         divisor = rule.get("value_divisor")
-        if raw_unit == source and unit == target and divisor not in (None, 0, 0.0):
+        exact_match = bool(rule.get("exact_match"))
+        if not source or not target:
+            continue
+        if exact_match:
+            normalized_by_rule = target if raw_unit == source else raw_unit
+        else:
+            normalized_by_rule = raw_unit.replace(source, target) if source in raw_unit else raw_unit
+        if normalized_by_rule == unit and divisor not in (None, 0, 0.0):
             return round(number / float(divisor), 8)
     return round(number, 8)
 

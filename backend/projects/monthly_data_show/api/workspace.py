@@ -441,7 +441,10 @@ def _compute_calculated_indicator(
         context: Dict[str, float] = {"天数": float(max(0, int(day_count or 0)))}
         dependencies = CALCULATED_DEPENDENCY_MAP.get(indicator, set())
         for dep in dependencies:
-            context[str(dep)] = val(str(dep))
+            dep_name = str(dep)
+            if dep_name == "天数":
+                continue
+            context[dep_name] = val(dep_name)
         computed = evaluate_formula(formula, context)
 
     cache[indicator] = _normalize_calc_value(computed)
@@ -1497,14 +1500,9 @@ def _fetch_compare_map(
                     "unit": CALCULATED_ITEM_UNITS.get(indicator, ""),
                     "value": calc_value,
                 }
-                required_items = _collect_required_base_items([indicator])
-                if all(
-                    expected_month_keys.issubset(
-                        month_coverage.get((company, required_item, period, type_value), set())
-                    )
-                    for required_item in required_items
-                ):
-                    complete_keys.add(key)
+                # 计算指标缺失依赖时，公式求值阶段会按 0 处理；这里不再额外卡完整覆盖，
+                # 避免出现“当前值已算出，但同比/计划值被判空”的不一致。
+                complete_keys.add(key)
 
     if include_avg_temp and companies and ("month" in {x.lower() for x in periods}) and ("real" in {x.lower() for x in types}):
         avg_stmt = text(
@@ -1653,14 +1651,8 @@ def _fetch_plan_value_map(
                 unit = CALCULATED_ITEM_UNITS.get(indicator, "")
                 result_key = (company, indicator, period, unit)
                 result_map[result_key] = _to_float(calc_values.get(indicator))
-                required_items = _collect_required_base_items([indicator])
-                if all(
-                    expected_month_keys.issubset(
-                        month_coverage.get((company, required_item, period), set())
-                    )
-                    for required_item in required_items
-                ):
-                    complete_keys.add(result_key)
+                # 计划口径下的计算指标与查询/同比保持一致：只要能按现有依赖算出值，就允许返回。
+                complete_keys.add(result_key)
     return result_map, complete_keys
 
 
