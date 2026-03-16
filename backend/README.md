@@ -3247,3 +3247,17 @@
   - 抽取时会按当前子工作表标题逐条匹配适用规则，再执行指标标准化。
   - 旧 `item_rename_map` 与旧 `scope/rename_map` 结构仍保留兼容兜底。
   - 导出 CSV 时额外追加 `item_transform_note` 字段，用于标记指标是否经更名规则转换（如 `A→B`）；该字段不参与步骤 4 入库。
+
+## 2026-03-11 数据库访问补充
+- 统一入口：`backend/db/database_daily_report_25_26.py`。
+- 常见模式：`SessionLocal()` 打开会话，`db.execute(text(sql), params)` 执行原生 SQL，`session.query(Model).filter(...)` 执行 ORM 查询，写入后显式 `commit()`。
+- 典型调用点：`services/auth_manager.py` 的会话持久化，`api/v1/admin_console.py` 的表查询/批量更新，`projects/daily_report_25_26/api/legacy_full.py` 的业务 ORM 查询。
+
+## 2026-03-11 数据库库与表定位补充
+- 依赖库：`SQLAlchemy==2.0.25`，`psycopg2-binary==2.9.11`。
+- ORM 定位表名依赖模型 `__tablename__`；动态查表依赖 `payload.table`，经 `_is_safe_identifier` 与 `_quote_identifier` 处理后进入 SQL。
+
+## 2026-03-16 monthly_data_show 2024 月报问题排查
+- 导入阶段：`backend/projects/monthly_data_show/services/extractor.py` 的 `_normalize_unit()` 对 `unit_normalize_rules` 执行字符串包含替换，配置中的 `千瓦时 -> 万千瓦时` 会把原本已是 `万千瓦时` 的单位重复替换成 `万万千瓦时`。
+- 查询阶段：`backend/projects/monthly_data_show/api/workspace.py` 对 `发电设备利用率`、`供热设备利用率` 这类计算指标不读取导入原值，而是依赖 `indicator_config.json` 中的公式实时计算。
+- 当前缺口：`backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json` 里的 `发电设备容量`、`锅炉设备容量` 常量只注入 `本月实际` 口径，其他口径缺少公式分母时会按 0 计算，造成利用率结果为 0。

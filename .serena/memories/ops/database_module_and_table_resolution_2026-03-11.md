@@ -1,0 +1,14 @@
+# 2026-03-11 数据库外部模块与表定位说明
+- 时间：2026-03-11
+- 用户问题：后端引入了哪一个外部模块实现数据库查询/写入；读取某张表时程序如何定位该表。
+- 结论：
+  - 外部库为 `SQLAlchemy==2.0.25`。
+  - PostgreSQL 驱动为 `psycopg2-binary==2.9.11`。
+  - 连接入口在 `backend/db/database_daily_report_25_26.py`，通过 `create_engine(DATABASE_URL)` 与 `SessionLocal = sessionmaker(...)` 建立会话工厂。
+  - ORM 场景通过模型类 `__tablename__` 绑定表名，例如 `DailyBasicData -> daily_basic_data`、`CoalInventoryData -> coal_inventory_data`。
+  - 动态表查询场景通过接口参数 `payload.table` 传入表名，在 `backend/api/v1/admin_console.py` 里先做 `_is_safe_identifier` 校验，再 `_quote_identifier`，最后拼入 `FROM {table_ident}`。
+- 证据：
+  - `backend/requirements.txt`
+  - `backend/db/database_daily_report_25_26.py`
+  - `backend/api/v1/admin_console.py`
+- 文档同步：`configs/progress.md`、`backend/README.md`、`frontend/README.md` 已补录。

@@ -6552,3 +6552,19 @@
 - 2026-03-10：在 `monthly_data_show/import-workspace` 页面新增独立分支“步骤 3.1：标准表对照”。实现方式：基于步骤 3 刚提取出的标准化 CSV，在前端本地导出去重后的 `company,item` 对照表 CSV，用于后续与历史月报做标准表差异对照；该按钮不影响原“下载 CSV”与“步骤 4：CSV 入库”链路。已执行 `frontend npm run build` 通过。
 - 2026-03-10：为 `monthly_data_show` 的步骤 3 导出 CSV 新增末尾字段 `item_transform_note`，用于记录指标名在抽取规则下的变换来源；当某行是由指标更名规则转换得到时，写为 `A→B`，未发生转换则留空。步骤 3.1 导出的标准表对照 CSV 也保留该字段；步骤 4 入库继续只写数据库既有字段，自动忽略该说明列。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
 - 2026-03-10：继续收敛 `monthly_data_show` 抽取规则与导出留痕。1) 删除 `monthly_data_show_extraction_rules.json` 中的旧 `item_rename_map`，后端运行时仅使用 `item_rename_rules`；2) 新增 `unit_normalize_rules` 配置项，将单位归一与数值换算规则配置化；3) 步骤 3 导出 CSV 与步骤 3.1 标准表对照 CSV 末尾改为两列：`item_transform_type`、`item_transform_note`，其中指标更名、常量注入、半计算、单位转换都会写入转换类型与处理说明，步骤 4 入库继续忽略这两列。已执行 `python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py`、JSON 校验与 `frontend npm run build` 通过。
+
+## 2026-03-11 数据库交互说明补录
+- 结论：后端统一数据库连接模块为 `backend/db/database_daily_report_25_26.py`，导出 `engine`、`SessionLocal`、`Base`、`get_session` 以及多个 ORM 模型。
+- 典型交互：业务层主要通过 `with SessionLocal() as db/session:` 获取会话，结合 `text()` 执行参数化 SQL，或使用 `session.query(Model).filter(...)` 进行 ORM 查询。
+- 参考位置：`backend/services/auth_manager.py`、`backend/api/v1/admin_console.py`、`backend/projects/daily_report_25_26/api/legacy_full.py`。
+
+## 2026-03-11 数据库外部模块与表定位补录
+- 外部模块：后端实际使用 `SQLAlchemy` 作为数据库访问库，`psycopg2-binary` 作为 PostgreSQL 驱动。
+- 表定位：ORM 场景靠模型类的 `__tablename__` 绑定真实表名；原生 SQL 场景则通过请求传入的表名，先做合法性校验，再拼入 `FROM <table>`。
+
+## 2026-03-16 monthly_data_show 2024 月报导入问题定位
+- 排查范围：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`、`backend/projects/monthly_data_show/services/extractor.py`、`backend/projects/monthly_data_show/api/workspace.py`、`backend/projects/monthly_data_show/services/indicator_config.py`、`backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`、`backend_data/projects/monthly_data_show/indicator_config.json`。
+- 结论1：`extractor.py` 的 `_normalize_unit()` 使用字符串包含替换，配置里存在 `千瓦时 -> 万千瓦时` 规则；当原始单位已经是 `万千瓦时` 时，会把其中的 `千瓦时` 再替换一次，结果变成 `万万千瓦时`。
+- 结论2：`发电设备利用率`、`供热设备利用率` 在导入阶段不会直接入库，`extract_rows()` 会跳过全部计算指标，查询时由 `workspace.py` 基于公式实时计算。
+- 结论3：当前容量常量 `发电设备容量`、`锅炉设备容量` 只在 `monthly_data_show_extraction_rules.json` 中注入到 `本月实际` 口径；若查询 `本月累计` 等其他口径，公式缺少容量分母，会按 0 参与计算，最终利用率显示为 0。
+- 附加观察：若历史表里本身带有 `锅炉设备利用率/发电设备利用率` 原值，当前设计也不会保留原值，而是统一走查询时重算，因此历史口径更容易暴露上述容量常量覆盖不足问题。

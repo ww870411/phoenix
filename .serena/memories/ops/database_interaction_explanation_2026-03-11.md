@@ -1,0 +1,14 @@
+# 2026-03-11 数据库交互说明留痕
+- 时间：2026-03-11
+- 背景：用户询问应用程序中与数据库表交互所引用的模块，以及典型交互语句示例。
+- 结论：统一数据库入口模块为 `backend/db/database_daily_report_25_26.py`，核心导出包括 `engine`、`SessionLocal`、`Base`、`get_session` 与多个 ORM 模型（`DailyBasicData`、`ConstantData`、`TemperatureData`、`CoalInventoryData`、`PlanAndRealMonthData`）。
+- 典型调用位置：
+  - `backend/services/auth_manager.py`：`db.execute(text(...), params)` 做登录会话持久化、读取、删除。
+  - `backend/api/v1/admin_console.py`：`db.execute(text(...), params).mappings().all()` 做表结构查询、数据查询、批量更新。
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`：`session.query(Model).filter(...)` 做 ORM 查询。
+  - `backend/services/data_analysis.py`：`with session.begin(): session.execute(text(...), params)` 在事务中设置会话级参数并查询视图。
+- 本轮文件留痕：
+  - `configs/progress.md`
+  - `backend/README.md`
+  - `frontend/README.md`
+- 验证依据：Serena 检索 `SessionLocal`、`db.execute(`、`session.query(`，并读取对应符号体。
