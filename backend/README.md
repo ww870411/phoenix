@@ -3261,3 +3261,88 @@
 - 导入阶段：`backend/projects/monthly_data_show/services/extractor.py` 的 `_normalize_unit()` 对 `unit_normalize_rules` 执行字符串包含替换，配置中的 `千瓦时 -> 万千瓦时` 会把原本已是 `万千瓦时` 的单位重复替换成 `万万千瓦时`。
 - 查询阶段：`backend/projects/monthly_data_show/api/workspace.py` 对 `发电设备利用率`、`供热设备利用率` 这类计算指标不读取导入原值，而是依赖 `indicator_config.json` 中的公式实时计算。
 - 当前缺口：`backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json` 里的 `发电设备容量`、`锅炉设备容量` 常量只注入 `本月实际` 口径，其他口径缺少公式分母时会按 0 计算，造成利用率结果为 0。
+## 2026-03-17 monthly_data_show 后端规则与查询链路更新
+
+### 1. 平均气温同比修复
+
+- 文件：
+  - `backend/projects/monthly_data_show/api/workspace.py`
+- 问题：
+  - `query-comparison` 中平均气温虽然查到了同比值，但未标记为完整可比项，导致主对比表把 `yoy_value` 清空。
+- 处理：
+  - 在平均气温专项映射分支补齐 `complete_keys` 标记。
+- 结果：
+  - `2024-01` 平均气温现可在主对比表正常返回同比值与同比率。
+
+### 2. 抽取规则引擎升级
+
+- 文件：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+  - `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`
+- 新能力：
+  - `semi_calculated_rules` 支持 `formula` 公式计算；
+  - 支持跨口径取值，写法：
+    - `口径::指标`
+    - `口径:指标`
+    - `口径：指标`
+  - 支持当前口径别名：
+    - `当前口径`
+    - `本口径`
+    - `self`
+    - `current`
+- 示例：
+  - `主城区` 的 `热网耗水量` 可直接取 `供热公司::耗水量`。
+
+### 3. 抽取规则选择已细化到子项级
+
+- `get_extraction_rule_options()` 现返回父项 + 子项结构，用于前端折叠渲染；
+- `extract_rows()` 现按子项级 ID 执行规则，包括：
+  - `item_exclude::*`
+  - `item_rename::*`
+  - `unit_normalize::*`
+  - `semi_rule_*`
+  - 特殊修正规则
+- 保留父项 ID 兼容能力，便于旧调用平滑过渡。
+
+### 4. 单位规则链路修正
+
+- `unit_normalize_rules` 已纳入选择项；
+- 单位规则支持把 `exact_match` 原样透传到前端描述；
+- 修复“空单位规则列表时错误回退执行全量单位规则”的问题。
+
+### 5. 规则记忆功能已移除
+
+- 曾新增 `extraction_rule_selection_defaults` 用于记住上次勾选状态；
+- 按当前需求已全部移除：
+  - 后端不再读取或回写该配置；
+  - 配置文件中不再保留该字段；
+  - 前端恢复默认全选。
+
+### 6. 半计算规则缺项容忍统一
+
+- `semi_calculated_rules` 下全部规则现统一设置：
+  - `allow_missing_subtrahend_as_zero: true`
+- 含义：
+  - 对 `subtract` 或公式型规则，在减项缺失场景下按 0 处理，减少导入时因局部缺列造成的规则失效。
+
+### 7. 配置维护可读性
+
+- `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`
+  中的 `semi_calculated_rules` 已改为每个对象单行，方便人工快速浏览和微调。
+
+### 8. 验证
+
+- `python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py` 通过；
+- `frontend npm run build` 通过。
+
+## 2026-03-17 monthly_data_show 抽取流水线顺序调整
+
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 本轮将抽取执行顺序调整为更接近配置文件主干顺序：
+  - 原始抽取阶段：指标剔除 -> 指标重命名 -> 计量单位转换
+  - 后处理阶段：常量注入 -> 半计算规则
+- 语义变化：
+  - `item_exclude_set` 现在基于“未重命名的标准化指标名”先执行；
+  - 常量注入结果现可作为后续半计算规则的数据来源。
+- 同时移除 `enable_jinpu_heating_area_adjustment` 与 `_apply_jinpu_heating_area_adjustment()` 这条专用逻辑，改由配置文件 `semi_calculated_rules` 中的普通规则 `金普期末供暖收费面积扣减高温水面积` 承担。
+- `get_extraction_rule_options()` 不再返回“特殊修正”父项。

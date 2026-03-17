@@ -14,18 +14,18 @@ import json
 import re
 from datetime import datetime
 from io import BytesIO
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 
-from backend.projects.monthly_data_show.services.indicator_config import load_indicator_runtime_config
+from backend.projects.monthly_data_show.services.indicator_config import evaluate_formula, load_indicator_runtime_config
 
 BLOCKED_COMPANIES = {"恒流", "天然气炉", "中水"}
 ALLOWED_FIELDS = ("company", "item", "unit", "value", "date", "period", "type", "report_month")
 EXTRA_EXPORT_FIELDS = ("item_transform_type", "item_transform_note")
 DEFAULT_SOURCE_COLUMNS = ("本年计划", "本月计划", "本月实际", "上年同期")
-ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = False
 
 ITEM_EXCLUDE_SET = {
     "本期平均供暖面积",
@@ -195,7 +195,6 @@ except Exception:
 _BASE_RULES_SNAPSHOT = {
     "blocked_companies": sorted(BLOCKED_COMPANIES),
     "default_source_columns": list(DEFAULT_SOURCE_COLUMNS),
-    "enable_jinpu_heating_area_adjustment": bool(ENABLE_JINPU_HEATING_AREA_ADJUSTMENT),
     "item_exclude_set": sorted(ITEM_EXCLUDE_SET),
     "item_rename_rules": [dict(rule) for rule in ITEM_RENAME_RULES],
     "unit_normalize_rules": [dict(rule) for rule in UNIT_NORMALIZE_RULES],
@@ -222,7 +221,6 @@ def _load_extraction_rules_from_config() -> Dict[str, Any]:
 def _refresh_extraction_rules() -> None:
     global BLOCKED_COMPANIES
     global DEFAULT_SOURCE_COLUMNS
-    global ENABLE_JINPU_HEATING_AREA_ADJUSTMENT
     global ITEM_EXCLUDE_SET
     global ITEM_RENAME_RULES
     global UNIT_NORMALIZE_RULES_RUNTIME
@@ -232,14 +230,11 @@ def _refresh_extraction_rules() -> None:
     cfg = _load_extraction_rules_from_config()
     BLOCKED_COMPANIES = set(cfg.get("blocked_companies") or _BASE_RULES_SNAPSHOT["blocked_companies"])
     DEFAULT_SOURCE_COLUMNS = tuple(cfg.get("default_source_columns") or _BASE_RULES_SNAPSHOT["default_source_columns"])
-    ENABLE_JINPU_HEATING_AREA_ADJUSTMENT = bool(
-        cfg.get("enable_jinpu_heating_area_adjustment", _BASE_RULES_SNAPSHOT["enable_jinpu_heating_area_adjustment"])
-    )
     ITEM_EXCLUDE_SET = set(cfg.get("item_exclude_set") or _BASE_RULES_SNAPSHOT["item_exclude_set"])
     raw_rename_rules = cfg.get("item_rename_rules")
     if isinstance(raw_rename_rules, list):
         normalized_rename_rules: List[Dict[str, Any]] = []
-        for raw_rule in raw_rename_rules:
+        for idx, raw_rule in enumerate(raw_rename_rules):
             if not isinstance(raw_rule, dict):
                 continue
             companies = [str(x).strip() for x in (raw_rule.get("companies") or []) if str(x).strip()]
@@ -250,6 +245,7 @@ def _refresh_extraction_rules() -> None:
             if source and target:
                 normalized_rename_rules.append(
                     {
+                        "id": str(raw_rule.get("id") or "").strip() or f"item_rename::{idx + 1}",
                         "source": source,
                         "target": target,
                         "companies": companies,
@@ -259,6 +255,10 @@ def _refresh_extraction_rules() -> None:
         ITEM_RENAME_RULES = normalized_rename_rules or [dict(rule) for rule in _BASE_RULES_SNAPSHOT["item_rename_rules"]]
     else:
         ITEM_RENAME_RULES = [dict(rule) for rule in _BASE_RULES_SNAPSHOT["item_rename_rules"]]
+    for idx, rule in enumerate(ITEM_RENAME_RULES):
+        if not isinstance(rule, dict):
+            continue
+        rule["id"] = str(rule.get("id") or "").strip() or f"item_rename::{idx + 1}"
     raw_unit_rules = cfg.get("unit_normalize_rules")
     if isinstance(raw_unit_rules, list):
         normalized_unit_rules: List[Dict[str, Any]] = []
@@ -269,7 +269,11 @@ def _refresh_extraction_rules() -> None:
             target = str(raw_rule.get("target") or "").strip()
             if not source or not target:
                 continue
-            rule: Dict[str, Any] = {"source": source, "target": target}
+            rule: Dict[str, Any] = {
+                "source": source,
+                "target": target,
+                "exact_match": bool(raw_rule.get("exact_match")),
+            }
             divisor = raw_rule.get("value_divisor")
             if divisor is not None:
                 try:
@@ -280,6 +284,10 @@ def _refresh_extraction_rules() -> None:
         UNIT_NORMALIZE_RULES_RUNTIME = normalized_unit_rules or [dict(rule) for rule in _BASE_RULES_SNAPSHOT["unit_normalize_rules"]]
     else:
         UNIT_NORMALIZE_RULES_RUNTIME = [dict(rule) for rule in _BASE_RULES_SNAPSHOT["unit_normalize_rules"]]
+    for idx, rule in enumerate(UNIT_NORMALIZE_RULES_RUNTIME):
+        if not isinstance(rule, dict):
+            continue
+        rule["id"] = str(rule.get("id") or "").strip() or f"unit_normalize::{idx + 1}"
     raw_constants = cfg.get("default_constant_rules") or _BASE_RULES_SNAPSHOT["default_constant_rules"]
     DEFAULT_CONSTANT_RULES = [dict(x) for x in raw_constants if isinstance(x, dict)]
     raw_semi = cfg.get("semi_calculated_rules") or _BASE_RULES_SNAPSHOT["semi_calculated_rules"]
@@ -297,28 +305,74 @@ def _refresh_extraction_rules() -> None:
 
 def get_extraction_rule_options() -> List[Dict[str, Any]]:
     _refresh_extraction_rules()
-    rules: List[Dict[str, Any]] = [
+
+    exclude_children = [
         {
-            "id": "item_exclude",
-            "name": "指标剔除",
-            "description": "按剔除清单过滤不入库指标（如本月平均气温、高压电量等）",
+            "id": f"item_exclude::{item}",
+            "name": str(item),
+            "description": f"剔除指标：{item}",
             "enabled_default": True,
-        },
-        {
-            "id": "item_rename",
-            "name": "指标重命名",
-            "description": "按重命名映射统一指标名称（如锅炉耗柴油量→耗油量）",
-            "enabled_default": True,
-        },
+            "item": str(item),
+        }
+        for item in sorted(ITEM_EXCLUDE_SET)
     ]
-    def _describe_rule(rule: Dict[str, Any]) -> str:
+
+    rename_children: List[Dict[str, Any]] = []
+    for idx, rule in enumerate(ITEM_RENAME_RULES):
+        companies = [str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()]
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        if not source or not target:
+            continue
+        company_text = "/".join(companies) if companies else "全部"
+        rename_children.append(
+            {
+                "id": str(rule.get("id") or "").strip() or f"item_rename::{idx + 1}",
+                "name": f"{source} → {target}",
+                "description": f"口径={company_text}，将 {source} 统一为 {target}",
+                "enabled_default": True,
+                "source": source,
+                "target": target,
+                "companies": companies,
+            }
+        )
+
+    unit_children: List[Dict[str, Any]] = []
+    for idx, rule in enumerate(UNIT_NORMALIZE_RULES_RUNTIME):
+        source = str(rule.get("source") or "").strip()
+        target = str(rule.get("target") or "").strip()
+        if not source or not target:
+            continue
+        exact_match = bool(rule.get("exact_match"))
+        divisor = rule.get("value_divisor")
+        desc_parts = [f"单位 {source} → {target}"]
+        desc_parts.append(f"完全匹配：{'是' if exact_match else '否'}")
+        if divisor not in (None, ""):
+            desc_parts.append(f"数值除以 {divisor}")
+        unit_children.append(
+            {
+                "id": str(rule.get("id") or "").strip() or f"unit_normalize::{idx + 1}",
+                "name": f"{source} → {target}",
+                "description": "，".join(desc_parts),
+                "enabled_default": True,
+                "source": source,
+                "target": target,
+                "exact_match": exact_match,
+                "value_divisor": divisor,
+            }
+        )
+
+    def _describe_semi_rule(rule: Dict[str, Any]) -> str:
         companies = [str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()]
         target_item = str(rule.get("target_item") or "").strip()
         target_unit = str(rule.get("target_unit") or "").strip()
         operation = str(rule.get("operation") or "").strip().lower()
         sources = [str(x).strip() for x in (rule.get("sources") or []) if str(x).strip()]
+        formula = str(rule.get("formula") or "").strip()
         company_text = f"口径={ '/'.join(companies) if companies else '全部' }"
-        if operation == "copy" and sources:
+        if formula:
+            expr = formula[1:].strip() if formula.startswith("=") else formula
+        elif operation == "copy" and sources:
             expr = sources[0]
         elif operation == "sum" and sources:
             expr = " + ".join(sources)
@@ -329,25 +383,48 @@ def get_extraction_rule_options() -> List[Dict[str, Any]]:
         if target_item:
             return f"{company_text}，{target_item} = {expr}，单位={target_unit or '按配置'}"
         return f"{company_text}，规则表达式={expr}"
-    for rule in SEMI_CALCULATED_RULES:
-        rules.append(
-            {
-                "id": str(rule.get("id") or ""),
-                "name": str(rule.get("name") or ""),
-                "description": str(rule.get("description") or _describe_rule(rule)),
-                "enabled_default": True,
-            }
-        )
-    if ENABLE_JINPU_HEATING_AREA_ADJUSTMENT:
-        rules.append(
-            {
-                "id": "jinpu_area_adjust",
-                "name": "金普面积扣减",
-                "description": "期末供暖收费面积=期末供暖收费面积-高温水面积",
-                "enabled_default": True,
-            }
-        )
-    return rules
+
+    semi_children = [
+        {
+            "id": str(rule.get("id") or ""),
+            "name": str(rule.get("name") or ""),
+            "description": str(rule.get("description") or _describe_semi_rule(rule)),
+            "enabled_default": True,
+        }
+        for rule in SEMI_CALCULATED_RULES
+        if str(rule.get("id") or "").strip()
+    ]
+
+    return [
+        {
+            "id": "item_exclude",
+            "name": "指标剔除",
+            "description": "可展开勾选 item_exclude_set 中的具体剔除项",
+            "enabled_default": True,
+            "children": exclude_children,
+        },
+        {
+            "id": "item_rename",
+            "name": "指标重命名",
+            "description": "可展开勾选 item_rename_rules 中的具体重命名规则",
+            "enabled_default": True,
+            "children": rename_children,
+        },
+        {
+            "id": "unit_normalize",
+            "name": "计量单位转换",
+            "description": "可展开勾选 unit_normalize_rules 中的具体单位转换规则",
+            "enabled_default": True,
+            "children": unit_children,
+        },
+        {
+            "id": "semi_calculated",
+            "name": "半计算规则",
+            "description": "可展开勾选 semi_calculated_rules 中的具体补齐规则",
+            "enabled_default": True,
+            "children": semi_children,
+        },
+    ]
 
 
 def _clean_text(value: object) -> str:
@@ -355,10 +432,11 @@ def _clean_text(value: object) -> str:
     return re.sub(r"\s+", "", text)
 
 
-def _resolve_item_rename_map(company: str) -> Dict[str, str]:
+def _resolve_item_rename_map(company: str, rename_rules: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, str]:
     resolved: Dict[str, str] = {}
     company_text = str(company or "").strip()
-    for rule in ITEM_RENAME_RULES:
+    active_rules = list(rename_rules or ITEM_RENAME_RULES)
+    for rule in active_rules:
         companies = {str(x).strip() for x in (rule.get("companies") or []) if str(x).strip()}
         if "all" not in companies and company_text not in companies:
             continue
@@ -384,7 +462,12 @@ def _append_transform_meta(
     row["item_transform_note"] = "；".join(note_parts)
 
 
-def _normalize_item(value: object, use_rename: bool = True, company: str = "") -> Tuple[str, str, str]:
+def _normalize_item(
+    value: object,
+    use_rename: bool = True,
+    company: str = "",
+    rename_rules: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Tuple[str, str, str]:
     raw = _clean_text(value)
     if not raw:
         return "", "", ""
@@ -392,7 +475,7 @@ def _normalize_item(value: object, use_rename: bool = True, company: str = "") -
     transform_type = ""
     transform_note = ""
     if use_rename:
-        rename_map = _resolve_item_rename_map(company)
+        rename_map = _resolve_item_rename_map(company, rename_rules=rename_rules)
         mapped = rename_map.get(normalized, normalized)
         if mapped != normalized:
             transform_type = "指标更名"
@@ -413,13 +496,14 @@ def _normalize_item(value: object, use_rename: bool = True, company: str = "") -
     return normalized, transform_type, transform_note
 
 
-def _normalize_unit(value: object) -> Tuple[str, str, str]:
+def _normalize_unit(value: object, unit_rules: Optional[Sequence[Dict[str, Any]]] = None) -> Tuple[str, str, str]:
     raw = _clean_text(value)
     if not raw:
         return "", "", ""
     normalized = raw
     note_parts: List[str] = []
-    for rule in UNIT_NORMALIZE_RULES_RUNTIME:
+    active_rules = list(UNIT_NORMALIZE_RULES_RUNTIME if unit_rules is None else unit_rules)
+    for rule in active_rules:
         source = str(rule.get("source") or "").strip()
         target = str(rule.get("target") or "").strip()
         exact_match = bool(rule.get("exact_match"))
@@ -440,6 +524,10 @@ def _normalize_unit(value: object) -> Tuple[str, str, str]:
     return normalized, transform_type, "；".join(note_parts)
 
 
+SEMI_FORMULA_QUOTED_TOKEN_PATTERN = re.compile(r'"([^"]+)"|\'([^\']+)\'')
+SEMI_FORMULA_TOKEN_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+
+
 def _coerce_number(value: object) -> Optional[float]:
     if value is None:
         return None
@@ -454,6 +542,79 @@ def _coerce_number(value: object) -> Optional[float]:
         return float(text)
     except ValueError:
         return None
+
+
+def _normalize_semicalculated_formula(formula: object) -> str:
+    text = str(formula or "").strip()
+    if text.startswith("="):
+        text = text[1:].strip()
+    if not text:
+        return ""
+
+    def _replace(match: re.Match) -> str:
+        token = str(match.group(1) or match.group(2) or "").strip()
+        return f"{{{{{token}}}}}" if token else ""
+
+    return SEMI_FORMULA_QUOTED_TOKEN_PATTERN.sub(_replace, text)
+
+
+def _extract_semicalculated_formula_tokens(formula: str) -> List[str]:
+    seen = set()
+    tokens: List[str] = []
+    for raw in SEMI_FORMULA_TOKEN_PATTERN.findall(formula or ""):
+        token = str(raw or "").strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        tokens.append(token)
+    return tokens
+
+
+def _resolve_formula_token_scope(current_company: str, raw_token: str) -> Tuple[str, str]:
+    token = str(raw_token or "").strip()
+    if not token:
+        return current_company, ""
+    for sep in ("::", "：", ":"):
+        if sep not in token:
+            continue
+        company_text, item_text = token.split(sep, 1)
+        company_name = str(company_text or "").strip() or current_company
+        item_name = str(item_text or "").strip()
+        if company_name in {"本口径", "当前口径", "self", "current"}:
+            company_name = current_company
+        return company_name, item_name
+    return current_company, token
+
+
+def _evaluate_semicalculated_formula(
+    formula: object,
+    company: str,
+    win: Tuple[str, str, str, str],
+    value_getter,
+    allow_missing_as_zero: bool = False,
+) -> Tuple[Optional[float], str]:
+    normalized_formula = _normalize_semicalculated_formula(formula)
+    if not normalized_formula:
+        return None, ""
+
+    context: Dict[str, float] = {}
+    missing_tokens: List[str] = []
+    for token in _extract_semicalculated_formula_tokens(normalized_formula):
+        source_company, item_name = _resolve_formula_token_scope(company, token)
+        token_value = value_getter(source_company, win, item_name)
+        if token_value is None:
+            if allow_missing_as_zero:
+                context[token] = 0.0
+            else:
+                missing_tokens.append(token)
+            continue
+        context[token] = float(token_value)
+    if missing_tokens:
+        return None, normalized_formula
+    try:
+        return float(evaluate_formula(normalized_formula, context)), normalized_formula
+    except Exception:
+        return None, normalized_formula
 
 
 def _normalize_value(raw_unit: str, unit: str, value: object) -> object:
@@ -536,7 +697,6 @@ def _apply_semicalculated_completion_rules(
             str(row.get("report_month") or "").strip(),
         )
 
-    # company+window -> item -> numeric value
     company_window_values: Dict[Tuple[str, Tuple[str, str, str, str]], Dict[str, float]] = {}
     row_index_by_key: Dict[Tuple[str, str, str, str, str, str], int] = {}
     for idx, row in enumerate(rows):
@@ -600,7 +760,6 @@ def _apply_semicalculated_completion_rules(
             continue
         details.setdefault(rule_id, 0)
         rule_name_map[rule_id] = rule_name
-    # 仅在该窗口存在原始数据时应用规则，避免凭空生成窗口。
     all_company_windows = list(company_window_values.keys())
 
     for company, win in all_company_windows:
@@ -615,43 +774,57 @@ def _apply_semicalculated_completion_rules(
             target_unit = str(rule.get("target_unit") or "").strip()
             operation = str(rule.get("operation") or "").strip().lower()
             sources = [str(x).strip() for x in (rule.get("sources") or []) if str(x).strip()]
-            if not target_item or not target_unit or not operation or not sources:
+            formula = str(rule.get("formula") or "").strip()
+            if not target_item or not target_unit:
                 continue
 
             value: Optional[float] = None
-            if operation == "copy":
-                value = _value_of(company, win, sources[0])
-            elif operation == "sum":
-                require_any = bool(rule.get("require_any_source", False))
-                parts = [_value_of(company, win, src) for src in sources]
-                if require_any and not any(v is not None for v in parts):
+            expr = "规则计算"
+            if formula:
+                value, normalized_formula = _evaluate_semicalculated_formula(
+                    formula=formula,
+                    company=company,
+                    win=win,
+                    value_getter=_value_of,
+                    allow_missing_as_zero=bool(rule.get("allow_missing_formula_sources_as_zero", False)),
+                )
+                expr = formula[1:].strip() if formula.startswith("=") else formula
+                if normalized_formula:
+                    expr = normalized_formula
+            else:
+                if not operation or not sources:
                     continue
-                if (not require_any) and any(v is None for v in parts):
-                    continue
-                value = float(sum(float(v or 0.0) for v in parts))
-            elif operation == "subtract":
-                minuend = _value_of(company, win, sources[0])
-                if minuend is None:
-                    continue
-                remainder = float(minuend)
-                allow_missing_sub = bool(rule.get("allow_missing_subtrahend_as_zero", True))
-                for src in sources[1:]:
-                    sub = _value_of(company, win, src)
-                    if sub is None and not allow_missing_sub:
-                        remainder = None
-                        break
-                    remainder -= float(sub or 0.0)
-                value = remainder
+                if operation == "copy":
+                    value = _value_of(company, win, sources[0])
+                elif operation == "sum":
+                    require_any = bool(rule.get("require_any_source", False))
+                    parts = [_value_of(company, win, src) for src in sources]
+                    if require_any and not any(v is not None for v in parts):
+                        continue
+                    if (not require_any) and any(v is None for v in parts):
+                        continue
+                    value = float(sum(float(v or 0.0) for v in parts))
+                elif operation == "subtract":
+                    minuend = _value_of(company, win, sources[0])
+                    if minuend is None:
+                        continue
+                    remainder = float(minuend)
+                    allow_missing_sub = bool(rule.get("allow_missing_subtrahend_as_zero", True))
+                    for src in sources[1:]:
+                        sub = _value_of(company, win, src)
+                        if sub is None and not allow_missing_sub:
+                            remainder = None
+                            break
+                        remainder -= float(sub or 0.0)
+                    value = remainder
+                if operation == "copy":
+                    expr = sources[0]
+                elif operation == "sum":
+                    expr = " + ".join(sources)
+                elif operation == "subtract":
+                    expr = " - ".join(sources)
             if value is None:
                 continue
-            if operation == "copy":
-                expr = sources[0]
-            elif operation == "sum":
-                expr = " + ".join(sources)
-            elif operation == "subtract":
-                expr = " - ".join(sources)
-            else:
-                expr = "规则计算"
             note = f"{expr}→{target_item}"
             _upsert_value(
                 company,
@@ -664,62 +837,12 @@ def _apply_semicalculated_completion_rules(
             )
             details[rule_id] = int(details.get(rule_id, 0)) + 1
 
-    # 返回给前端时改为名称键，便于阅读
     named_details: Dict[str, int] = {}
     for rule_id, count in details.items():
         rule_name = rule_name_map.get(rule_id, rule_id)
         named_details[rule_name] = int(named_details.get(rule_name, 0)) + int(count)
     return named_details
 
-
-def _apply_jinpu_heating_area_adjustment(rows: List[Dict[str, object]]) -> int:
-    """
-    规则：
-    口径=金普，指标=期末供暖收费面积
-    指标值 = 期末供暖收费面积 - 高温水面积
-    """
-    def _to_area_role(item_name: str) -> str:
-        if item_name in ("期末供暖收费面积", "期末供热面积", "期末供暖面积"):
-            return "target"
-        if item_name in ("高温水面积", "高温水供暖面积", "高温水供热面积"):
-            return "sub"
-        return ""
-
-    grouped: Dict[Tuple[str, str, str, str], Dict[str, List[int]]] = {}
-    for idx, row in enumerate(rows):
-        company = str(row.get("company") or "").strip()
-        if "金普" not in company:
-            continue
-        item = str(row.get("item") or "").strip()
-        role = _to_area_role(item)
-        if not role:
-            continue
-        key = (
-            str(row.get("date") or "").strip(),
-            str(row.get("period") or "").strip(),
-            str(row.get("type") or "").strip(),
-            str(row.get("report_month") or "").strip(),
-        )
-        slot = grouped.setdefault(key, {})
-        slot.setdefault(role, []).append(idx)
-
-    adjusted_count = 0
-    for indexes in grouped.values():
-        target_indexes = indexes.get("target") or []
-        sub_indexes = indexes.get("sub") or []
-        if not target_indexes or not sub_indexes:
-            continue
-        sub_num = _coerce_number(rows[sub_indexes[-1]].get("value"))
-        if sub_num is None:
-            continue
-        for target_idx in target_indexes:
-            target_num = _coerce_number(rows[target_idx].get("value"))
-            if target_num is None:
-                continue
-            rows[target_idx]["value"] = round(float(target_num) - float(sub_num), 8)
-            rows[target_idx]["unit"] = "平方米"
-            adjusted_count += 1
-    return adjusted_count
 
 
 def parse_report_period_from_filename(filename: str) -> Tuple[int, int]:
@@ -844,11 +967,57 @@ def extract_rows(
     workbook = load_workbook(filename=BytesIO(file_bytes), data_only=True, read_only=True)
     rows: List[Dict[str, object]] = []
     per_company_count: Dict[str, int] = {}
-    selected_rules = {str(x).strip() for x in (selected_rule_ids or []) if str(x).strip()}
-    if not selected_rules:
-        selected_rules = {str(rule.get("id") or "").strip() for rule in get_extraction_rule_options() if str(rule.get("id") or "").strip()}
-    use_item_exclude = "item_exclude" in selected_rules
-    use_item_rename = "item_rename" in selected_rules
+
+    available_rule_groups = get_extraction_rule_options()
+    child_rule_ids: set[str] = set()
+    parent_to_children: Dict[str, set[str]] = {}
+    for group in available_rule_groups:
+        parent_id = str(group.get("id") or "").strip()
+        children = [x for x in (group.get("children") or []) if isinstance(x, dict)]
+        ids = {str(child.get("id") or "").strip() for child in children if str(child.get("id") or "").strip()}
+        if parent_id:
+            parent_to_children[parent_id] = ids
+        child_rule_ids.update(ids)
+
+    raw_selected_rules = {str(x).strip() for x in (selected_rule_ids or []) if str(x).strip()}
+    if not raw_selected_rules:
+        selected_rules = set(child_rule_ids)
+    else:
+        selected_rules = set()
+        for rule_id in raw_selected_rules:
+            if rule_id in parent_to_children:
+                selected_rules.update(parent_to_children.get(rule_id) or set())
+            else:
+                selected_rules.add(rule_id)
+    selected_rules = {rule_id for rule_id in selected_rules if rule_id in child_rule_ids}
+
+    selected_exclude_items = {
+        str(rule_id).split("::", 1)[1]
+        for rule_id in selected_rules
+        if str(rule_id).startswith("item_exclude::") and "::" in str(rule_id)
+    }
+    selected_rename_rule_ids = {
+        str(rule_id)
+        for rule_id in selected_rules
+        if str(rule_id).startswith("item_rename::")
+    }
+    selected_unit_rule_ids = {
+        str(rule_id)
+        for rule_id in selected_rules
+        if str(rule_id).startswith("unit_normalize::")
+    }
+    active_rename_rules = [
+        dict(rule)
+        for rule in ITEM_RENAME_RULES
+        if str(rule.get("id") or "").strip() in selected_rename_rule_ids
+    ]
+    active_unit_rules = [
+        dict(rule)
+        for rule in UNIT_NORMALIZE_RULES_RUNTIME
+        if str(rule.get("id") or "").strip() in selected_unit_rule_ids
+    ]
+    use_item_exclude = bool(selected_exclude_items)
+    use_item_rename = bool(active_rename_rules)
     rename_hit_count = 0
     exclude_hit_count = 0
 
@@ -863,14 +1032,22 @@ def extract_rows(
             count_before = len(rows)
             for row_idx in range(header_row + 1, sheet.max_row + 1):
                 item_raw = sheet.cell(row=row_idx, column=col_map["项目"]).value
-                unit_raw = sheet.cell(row=row_idx, column=col_map["计量单位"]).value
-                item, item_transform_type, item_transform_note = _normalize_item(item_raw, use_rename=use_item_rename, company=company)
-                raw_unit = _clean_text(unit_raw)
-                unit, unit_transform_type, unit_transform_note = _normalize_unit(unit_raw)
-                if not item:
+                item_for_exclude, _, _ = _normalize_item(item_raw, use_rename=False, company=company)
+                if not item_for_exclude:
                     continue
-                if use_item_exclude and item in ITEM_EXCLUDE_SET:
+                if use_item_exclude and item_for_exclude in selected_exclude_items:
                     exclude_hit_count += 1
+                    continue
+                unit_raw = sheet.cell(row=row_idx, column=col_map["计量单位"]).value
+                item, item_transform_type, item_transform_note = _normalize_item(
+                    item_raw,
+                    use_rename=use_item_rename,
+                    company=company,
+                    rename_rules=active_rename_rules,
+                )
+                raw_unit = _clean_text(unit_raw)
+                unit, unit_transform_type, unit_transform_note = _normalize_unit(unit_raw, unit_rules=active_unit_rules)
+                if not item:
                     continue
                 if item_transform_type == "指标更名":
                     rename_hit_count += 1
@@ -908,15 +1085,8 @@ def extract_rows(
         "item_rename_hits": rename_hit_count,
         "selected_rule_ids": sorted(selected_rules),
     }
-    semi_details = _apply_semicalculated_completion_rules(rows, enabled_rule_ids=selected_rules)
-    stats["semi_calculated_details"] = semi_details
-    stats["semi_calculated_completed"] = int(sum(semi_details.values()))
-    stats["jinpu_heating_area_adjusted"] = (
-        _apply_jinpu_heating_area_adjustment(rows)
-        if (ENABLE_JINPU_HEATING_AREA_ADJUSTMENT and "jinpu_area_adjust" in selected_rules)
-        else 0
-    )
 
+    constants_injected = 0
     if constants_enabled:
         normalized_rules = normalize_constant_rules(constant_rules)
         selected_company_set = {str(x).strip() for x in (selected_companies or []) if str(x).strip()}
@@ -932,7 +1102,6 @@ def extract_rows(
             )
             row_index_by_key[key] = idx
 
-        injected_count = 0
         for rule in normalized_rules:
             company = str(rule["company"])
             if company in BLOCKED_COMPANIES:
@@ -963,13 +1132,16 @@ def extract_rows(
                 if old_idx is None:
                     row_index_by_key[key] = len(rows)
                     rows.append(new_row)
-                    injected_count += 1
+                    constants_injected += 1
                 else:
                     rows[old_idx] = new_row
-                    injected_count += 1
+                    constants_injected += 1
 
-        stats["constants_injected"] = injected_count
-        stats["total_rows"] = len(rows)
+    stats["constants_injected"] = constants_injected
+    semi_details = _apply_semicalculated_completion_rules(rows, enabled_rule_ids=selected_rules)
+    stats["semi_calculated_details"] = semi_details
+    stats["semi_calculated_completed"] = int(sum(semi_details.values()))
+    stats["total_rows"] = len(rows)
     return rows, stats
 
 

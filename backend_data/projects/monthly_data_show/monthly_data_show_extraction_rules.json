@@ -1,8 +1,18 @@
 {
   "version": 1,
-  "blocked_companies": ["说明","恒流", "天然气炉", "中水","临海"],
-  "default_source_columns": ["本年计划", "本月计划", "本月实际", "上年同期"],
-  "enable_jinpu_heating_area_adjustment": false,
+  "blocked_companies": [
+    "说明",
+    "恒流",
+    "天然气炉",
+    "中水",
+    "临海"
+  ],
+  "default_source_columns": [
+    "本年计划",
+    "本月计划",
+    "本月实际",
+    "上年同期"
+  ],
   "item_exclude_set": [
     "本期平均供暖面积",
     "实际平均供热面积",
@@ -26,144 +36,289 @@
   ],
   "item_rename_rules": [
     {
+      "source": "一次网电厂补水量",
+      "target": "主城区一次网电厂补水量",
+      "companies": [
+        "全口径"
+      ]
+    },
+    {
       "source": "高温水网电厂补水量",
       "target": "一次网电厂补水量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "高温水低真空电厂补水量",
       "target": "一次网电厂补水量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "耗外购电量",
       "target": "外购电量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "外购电量",
       "target": "外购电量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "期末供热面积",
       "target": "期末供暖收费面积",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "单位面积耗电量",
       "target": "供暖电耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "单位面积耗水量",
       "target": "供暖水耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "单位面积耗标准煤量",
       "target": "供暖标准煤耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "锅炉设备利用率",
       "target": "供热设备利用率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "锅炉热效率",
       "target": "全厂热效率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "总热效率",
       "target": "全厂热效率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "炉耗油量",
       "target": "耗油量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "锅炉耗柴油量",
       "target": "耗油量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "装机总容量",
       "target": "锅炉设备容量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "发电煤耗率",
       "target": "发电标准煤耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "供电煤耗率",
       "target": "供电标准煤耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "供热煤耗率",
       "target": "供热标准煤耗率",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "供热标准煤耗量",
       "target": "供热耗标煤量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "发电标准煤耗量",
       "target": "发电耗标煤量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "耗水质稳定剂量",
       "target": "耗阻垢剂量",
-      "companies": ["all"]
+      "companies": [
+        "all"
+      ]
     },
     {
       "source": "耗电量",
       "target": "外购电量",
-      "companies": ["供热公司","金普","庄河","研究院","主城区电锅炉"]
+      "companies": [
+        "供热公司",
+        "金普",
+        "庄河",
+        "研究院",
+        "主城区电锅炉"
+      ]
     },
     {
       "source": "耗水量",
       "target": "电厂耗水量",
-      "companies": ["北海","北海水炉","香海"]
+      "companies": [
+        "北海",
+        "北海水炉",
+        "香海"
+      ]
     }
   ],
   "unit_normalize_rules": [
-    { "source": "米2", "target": "平方米", "exact_match": false },
-    { "source": "米²", "target": "平方米", "exact_match": false },
-    { "source": "/米2", "target": "/平方米", "exact_match": false },
-    { "source": "/米²", "target": "/平方米", "exact_match": false },
-    { "source": "千瓦时", "target": "万千瓦时", "value_divisor": 10000, "exact_match": true }
+    {
+      "source": "米2",
+      "target": "平方米",
+      "exact_match": false
+    },
+    {
+      "source": "米²",
+      "target": "平方米",
+      "exact_match": false
+    },
+    {
+      "source": "/米2",
+      "target": "/平方米",
+      "exact_match": false
+    },
+    {
+      "source": "/米²",
+      "target": "/平方米",
+      "exact_match": false
+    },
+    {
+      "source": "千瓦时",
+      "target": "万千瓦时",
+      "value_divisor": 10000,
+      "exact_match": true
+    }
   ],
   "default_constant_rules": [
-    {"company": "北海", "item": "发电设备容量", "unit": "万千瓦", "value": 10.0, "source_columns": ["本月实际"]},
-    {"company": "香海", "item": "发电设备容量", "unit": "万千瓦", "value": 10.0, "source_columns": ["本月实际"]},
-    {"company": "金州", "item": "发电设备容量", "unit": "万千瓦", "value": 3.6, "source_columns": ["本月实际"]},
-    {"company": "北方", "item": "发电设备容量", "unit": "万千瓦", "value": 3.96, "source_columns": ["本月实际"]},
-    {"company": "北海", "item": "锅炉设备容量", "unit": "兆瓦", "value": 577.0, "source_columns": ["本月实际"]},
-    {"company": "香海", "item": "锅炉设备容量", "unit": "兆瓦", "value": 528.0, "source_columns": ["本月实际"]},
-    {"company": "金州", "item": "锅炉设备容量", "unit": "兆瓦", "value": 414.0, "source_columns": ["本月实际"]},
-    {"company": "北方", "item": "锅炉设备容量", "unit": "兆瓦", "value": 130.0, "source_columns": ["本月实际"]}
+    {
+      "company": "北海",
+      "item": "发电设备容量",
+      "unit": "万千瓦",
+      "value": 10.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "香海",
+      "item": "发电设备容量",
+      "unit": "万千瓦",
+      "value": 10.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "金州",
+      "item": "发电设备容量",
+      "unit": "万千瓦",
+      "value": 3.6,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "北方",
+      "item": "发电设备容量",
+      "unit": "万千瓦",
+      "value": 3.96,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "北海",
+      "item": "锅炉设备容量",
+      "unit": "兆瓦",
+      "value": 577.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "香海",
+      "item": "锅炉设备容量",
+      "unit": "兆瓦",
+      "value": 528.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "金州",
+      "item": "锅炉设备容量",
+      "unit": "兆瓦",
+      "value": 414.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    },
+    {
+      "company": "北方",
+      "item": "锅炉设备容量",
+      "unit": "兆瓦",
+      "value": 130.0,
+      "source_columns": [
+        "本月实际"
+      ]
+    }
   ],
   "semi_calculated_rules": [
-    {"name": "煤折标煤量补齐", "companies": ["金普", "庄河"], "target_item": "煤折标煤量", "target_unit": "吨", "operation": "copy", "sources": ["耗标煤总量"]},
-    {"name": "供热耗标煤量补齐", "companies": ["北海水炉", "金普", "庄河"], "target_item": "供热耗标煤量", "target_unit": "吨", "operation": "copy", "sources": ["耗标煤总量"]},
-    {"name": "耗电量补齐", "companies": ["北海", "香海"], "target_item": "耗电量", "target_unit": "万千瓦时", "operation": "sum", "sources": ["综合厂用电量", "外购电量"], "require_any_source": true},
-    {"name": "耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"]},
-    {"name": "耗水量补齐", "companies": ["北海", "北海水炉", "香海"], "target_item": "耗水量", "target_unit": "吨", "operation": "copy", "sources": ["电厂耗水量"]},
-    {"name": "热网耗水量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗水量", "target_unit": "吨", "operation": "copy", "sources": ["耗水量"]},
-    {"name": "热网耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"]},
-    {"name": "供暖耗热量补齐", "companies": ["供热公司"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["各热力站耗热量"]},
-    {"name": "供暖耗热量补齐", "companies": ["金州", "北方"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "subtract", "sources": ["供热量", "高温水销售量"], "allow_missing_subtrahend_as_zero": true},
-    {"name": "供暖耗热量补齐", "companies": ["金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["供热量"]},
-    {"name": "非生产厂用电量补齐", "companies": ["全口径","主城区","集团本部","北海", "香海"], "target_item": "非生产厂用电量", "target_unit": "万千瓦时", "operation": "subtract", "sources": ["综合厂用电量","发电厂用电量","供热厂用电量"]}
+    { "name": "煤折标煤量补齐", "companies": ["金普", "庄河"], "target_item": "煤折标煤量", "target_unit": "吨", "operation": "copy", "sources": ["耗标煤总量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "供热耗标煤量补齐", "companies": ["北海水炉", "金普", "庄河"], "target_item": "供热耗标煤量", "target_unit": "吨", "operation": "copy", "sources": ["耗标煤总量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "耗电量补齐", "companies": ["北海", "香海"], "target_item": "耗电量", "target_unit": "万千瓦时", "operation": "sum", "sources": ["综合厂用电量", "外购电量"], "require_any_source": true, "allow_missing_subtrahend_as_zero": true },
+    { "name": "耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "耗水量补齐", "companies": ["北海", "北海水炉", "香海"], "target_item": "耗水量", "target_unit": "吨", "operation": "copy", "sources": ["电厂耗水量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "热网耗水量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗水量", "target_unit": "吨", "operation": "copy", "sources": ["耗水量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "热网耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "供暖耗热量补齐", "companies": ["供热公司"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["各热力站耗热量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "供暖耗热量补齐", "companies": ["金州", "北方"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "subtract", "sources": ["供热量", "高温水销售量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "供暖耗热量补齐", "companies": ["金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["供热量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "非生产厂用电量补齐", "companies": ["全口径", "主城区", "集团本部", "北海", "香海"], "target_item": "非生产厂用电量", "target_unit": "万千瓦时", "operation": "subtract", "sources": ["综合厂用电量", "发电厂用电量", "供热厂用电量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "金普期末供暖收费面积扣减高温水面积", "companies": ["金普"], "target_item": "期末供暖收费面积", "target_unit": "平方米", "operation": "subtract", "sources": ["期末供暖收费面积", "高温水面积"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "主城区热网耗水量取供热公司耗水量", "companies": ["主城区"], "target_item": "热网耗水量", "target_unit": "吨", "formula": "=\"供热公司::耗水量\"", "allow_missing_subtrahend_as_zero": true },
+    { "name": "煤折标煤量补齐", "companies": ["全口径", "主城区", "集团本部", "股份本部", "北海", "北海水炉", "香海", "金州", "北方"], "target_item": "煤折标煤量", "target_unit": "吨", "formula": "=\"耗标煤总量\"-\"耗油量\"*1.4571", "allow_missing_subtrahend_as_zero": true }
   ]
 }

@@ -158,7 +158,7 @@
               <button class="btn small" type="button" :disabled="!extractionRules.length" @click="showRulePickerDialog = true">打开规则列表</button>
             </div>
           </div>
-          <p class="hint" v-if="extractionRules.length">已选择 {{ selectedExtractionRuleIds.length }} / {{ extractionRules.length }} 项规则</p>
+          <p class="hint" v-if="flattenedExtractionRules.length">已选择 {{ selectedExtractionRuleIds.length }} / {{ flattenedExtractionRules.length }} 项规则</p>
           <p class="hint" v-if="selectedRuleSummaryText">当前规则：{{ selectedRuleSummaryText }}</p>
           <p class="hint" v-if="!extractionRules.length">暂无可选规则</p>
         </div>
@@ -284,13 +284,31 @@
           </div>
         </div>
         <div class="dialog-body">
-          <label class="rule-row" v-for="rule in extractionRules" :key="`picker-${rule.id}`">
-            <input type="checkbox" :value="rule.id" v-model="selectedExtractionRuleIds" />
-            <div class="rule-text">
-              <div class="rule-name">{{ rule.name }}</div>
-              <div class="rule-desc" v-if="rule.description">{{ rule.description }}</div>
+          <section class="rule-group" v-for="group in extractionRules" :key="`group-${group.id}`">
+            <div class="rule-group-head">
+              <button class="rule-group-toggle" type="button" @click="toggleRuleGroupExpand(group.id)">
+                <span>{{ isRuleGroupExpanded(group.id) ? '▾' : '▸' }}</span>
+                <span>{{ group.name }}</span>
+              </button>
+              <div class="rule-group-head-right">
+                <div class="rule-group-meta">已选 {{ getSelectedRuleCount(group.children) }} / {{ (group.children || []).length }}</div>
+                <div class="actions">
+                  <button class="btn small" type="button" @click="toggleRuleGroup(group.children, true)">本项全选</button>
+                  <button class="btn small" type="button" @click="toggleRuleGroup(group.children, false)">本项全不选</button>
+                </div>
+              </div>
             </div>
-          </label>
+            <div class="rule-group-desc" v-if="group.description">{{ group.description }}</div>
+            <div v-if="isRuleGroupExpanded(group.id)">
+              <label class="rule-row" v-for="rule in group.children || []" :key="`picker-${group.id}-${rule.id}`">
+                <input type="checkbox" :value="rule.id" v-model="selectedExtractionRuleIds" />
+                <div class="rule-text">
+                  <div class="rule-name">{{ rule.name }}</div>
+                  <div class="rule-desc" v-if="rule.description">{{ rule.description }}</div>
+                </div>
+              </label>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -341,6 +359,8 @@ const selectedFields = ref([])
 const selectedSourceColumns = ref([])
 const extractionRules = ref([])
 const selectedExtractionRuleIds = ref([])
+const expandedExtractionRuleIds = ref([])
+const flattenedExtractionRules = computed(() => extractionRules.value.flatMap((group) => Array.isArray(group?.children) ? group.children : []))
 const constantsEnabled = ref(true)
 const constantRules = ref([])
 const reportYearInput = ref(null)
@@ -418,17 +438,55 @@ function toggleAllSourceColumns(checked) {
 
 function toggleAllExtractionRules(checked) {
   selectedExtractionRuleIds.value = checked
-    ? extractionRules.value.map((x) => String(x?.id || '')).filter(Boolean)
+    ? flattenedExtractionRules.value.map((x) => String(x?.id || '')).filter(Boolean)
     : []
+}
+
+function toggleRuleGroup(rules, checked) {
+  const ruleIds = Array.isArray(rules) ? rules.map((x) => String(x?.id || '')).filter(Boolean) : []
+  if (!ruleIds.length) return
+  if (checked) {
+    const merged = new Set(selectedExtractionRuleIds.value.map((x) => String(x || '')))
+    ruleIds.forEach((id) => merged.add(id))
+    selectedExtractionRuleIds.value = [...merged]
+    return
+  }
+  const blocked = new Set(ruleIds)
+  selectedExtractionRuleIds.value = selectedExtractionRuleIds.value.filter((id) => !blocked.has(String(id || '')))
+}
+
+function toggleRuleGroupExpand(groupId) {
+  const key = String(groupId || '')
+  if (!key) return
+  if (expandedExtractionRuleIds.value.includes(key)) {
+    expandedExtractionRuleIds.value = expandedExtractionRuleIds.value.filter((id) => id !== key)
+    return
+  }
+  expandedExtractionRuleIds.value = [...expandedExtractionRuleIds.value, key]
+}
+
+function isRuleGroupExpanded(groupId) {
+  return expandedExtractionRuleIds.value.includes(String(groupId || ''))
+}
+
+function getSelectedRuleCount(rules) {
+  const picked = new Set(selectedExtractionRuleIds.value.map((x) => String(x || '')))
+  return (Array.isArray(rules) ? rules : []).filter((rule) => picked.has(String(rule?.id || ''))).length
 }
 
 const selectedRuleSummaryText = computed(() => {
   if (!selectedExtractionRuleIds.value.length) return ''
   const picked = new Set(selectedExtractionRuleIds.value.map((x) => String(x)))
   return extractionRules.value
-    .filter((rule) => picked.has(rule.id))
-    .map((rule) => rule.name)
-    .join('、')
+    .map((group) => {
+      const names = (Array.isArray(group?.children) ? group.children : [])
+        .filter((rule) => picked.has(rule.id))
+        .map((rule) => rule.name)
+      if (!names.length) return ''
+      return `${group.name}：${names.join('、')}`
+    })
+    .filter(Boolean)
+    .join('；')
 })
 
 async function inspectFile() {
@@ -463,13 +521,21 @@ async function inspectFile() {
       }))
       : []
     extractionRules.value = Array.isArray(payload?.extraction_rules)
-      ? payload.extraction_rules.map((rule) => ({
-        id: String(rule?.id || ''),
-        name: String(rule?.name || ''),
-        description: String(rule?.description || ''),
-      })).filter((rule) => rule.id && rule.name)
+      ? payload.extraction_rules.map((group) => ({
+        id: String(group?.id || ''),
+        name: String(group?.name || ''),
+        description: String(group?.description || ''),
+        children: Array.isArray(group?.children)
+          ? group.children.map((rule) => ({
+            id: String(rule?.id || ''),
+            name: String(rule?.name || ''),
+            description: String(rule?.description || ''),
+          })).filter((rule) => rule.id && rule.name)
+          : [],
+      })).filter((group) => group.id && group.name)
       : []
-    selectedExtractionRuleIds.value = extractionRules.value.map((rule) => rule.id)
+    expandedExtractionRuleIds.value = extractionRules.value.map((group) => group.id)
+    selectedExtractionRuleIds.value = flattenedExtractionRules.value.map((rule) => rule.id)
     reportYearInput.value = Number.isInteger(payload?.inferred_report_year)
       ? payload.inferred_report_year
       : null
@@ -1168,6 +1234,56 @@ watch(
 .rule-line {
   font-size: 13px;
   color: #1e293b;
+}
+
+.rule-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.rule-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rule-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.rule-group-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.rule-group-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.rule-group-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.rule-group-desc {
+  font-size: 12px;
+  color: #64748b;
 }
 
 .rule-row {

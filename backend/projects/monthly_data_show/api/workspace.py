@@ -1524,6 +1524,7 @@ def _fetch_compare_map(
                 "unit": AVERAGE_TEMPERATURE_UNIT,
                 "value": avg_value,
             }
+            complete_keys.add(key)
 
     return result_map, complete_keys
 
