@@ -303,7 +303,7 @@ def commit_dashboard_temperature(
     tags=["daily_report_25_26"],
 )
 def get_cache_publish_status():
-    snapshot = cache_publish_job_manager.snapshot()
+    snapshot = cache_publish_job_manager.snapshot(PROJECT_KEY)
     return {"ok": True, "job": snapshot}
 
 
@@ -314,7 +314,7 @@ def get_cache_publish_status():
 )
 def cancel_cache_publish(session: AuthSession = Depends(get_current_session)):
     _ensure_cache_operator(session)
-    snapshot = cache_publish_job_manager.request_cancel()
+    snapshot = cache_publish_job_manager.request_cancel(PROJECT_KEY)
     return {"ok": True, "job": snapshot}
 
 

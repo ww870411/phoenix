@@ -1,0 +1,3 @@
+{"time": "2026-03-17T21:57:41.855211+08:00", "pid": 115, "level": "info", "text": "已启动分组 detail_tables 子进程 pid=115"}
+{"time": "2026-03-17T21:57:43.364575+08:00", "pid": 115, "level": "info", "text": "子进程开始计算分组 detail_tables: 0.5,7,11"}
+{"time": "2026-03-17T21:58:11.380770+08:00", "pid": 115, "level": "info", "text": "子进程完成分组 detail_tables"}

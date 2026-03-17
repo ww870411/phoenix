@@ -494,7 +494,7 @@ def get_admin_overview(
     cache_publish_job = None
     if can_publish:
         cache_status = dashboard_cache.get_cache_status(PROJECT_KEY)
-        cache_publish_job = cache_publish_job_manager.snapshot()
+        cache_publish_job = cache_publish_job_manager.snapshot(PROJECT_KEY)
 
     return {
         "ok": True,
@@ -946,14 +946,14 @@ def publish_dashboard_cache(
 @router.get("/admin/cache/publish/status", summary="获取缓存发布任务状态")
 def get_cache_publish_status(session: AuthSession = Depends(get_current_session)):
     _ensure_admin_console_access(session)
-    return {"ok": True, "job": cache_publish_job_manager.snapshot()}
+    return {"ok": True, "job": cache_publish_job_manager.snapshot(PROJECT_KEY)}
 
 
 @router.post("/admin/cache/publish/cancel", summary="停止缓存发布任务")
 def cancel_cache_publish(session: AuthSession = Depends(get_current_session)):
     _ensure_admin_console_access(session)
     _ensure_cache_operator(session)
-    return {"ok": True, "job": cache_publish_job_manager.request_cancel()}
+    return {"ok": True, "job": cache_publish_job_manager.request_cancel(PROJECT_KEY)}
 
 
 @router.delete("/admin/cache", summary="禁用并清空缓存")

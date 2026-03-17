@@ -8,16 +8,35 @@
           <button class="log-modal__close" @click="cacheLogVisible = false">×</button>
         </div>
         <div class="log-modal__content" ref="logContentRef">
-          <div v-if="cacheLogs.length === 0" class="log-modal__empty">暂无日志</div>
+          <div v-if="cacheWorkerGroups.length" class="log-worker-grid">
+            <div
+              v-for="group in cacheWorkerGroups"
+              :key="group.key"
+              class="worker-card"
+              :class="`is-${group.status}`"
+            >
+              <div class="worker-card__header">
+                <span class="worker-card__title">{{ group.label }}</span>
+                <span class="worker-card__badge">{{ formatCacheWorkerStatus(group.status) }}</span>
+              </div>
+              <div class="worker-card__message">{{ group.message || '等待开始' }}</div>
+              <div class="worker-card__meta">
+                <span>分块：{{ group.sectionsText }}</span>
+                <span v-if="group.updatedAt">{{ group.updatedAt }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="cacheLogs.length === 0 && !cacheWorkerGroups.length" class="log-modal__empty">暂无日志</div>
           <div v-else class="log-list">
-            <div v-for="(log, index) in cacheLogs" :key="index" class="log-item">
+            <div class="log-list__title">最近日志</div>
+            <div v-for="(log, index) in cacheLogs" :key="`${index}-${log.time || ''}`" class="log-item">
               <span class="log-item__time">{{ log.time }}</span>
               <span class="log-item__text">{{ log.text }}</span>
             </div>
           </div>
         </div>
         <div class="log-modal__footer">
-          <button class="cache-btn" @click="cacheLogs.length = 0">清空</button>
+          <button class="cache-btn" @click="pollCacheJobStatus">刷新</button>
           <button class="cache-btn cache-btn--primary" @click="cacheLogVisible = false">关闭</button>
         </div>
       </div>
@@ -94,6 +113,8 @@
                 <option :value="1">1天</option>
                 <option :value="3">3天</option>
                 <option :value="7">7天</option>
+                <option :value="14">14天</option>
+                <option :value="30">30天</option>
               </select>
             </label>
             <button
@@ -3159,37 +3180,48 @@ const cacheJob = reactive({
 let cacheJobPoller = null
 const cacheLogVisible = ref(false)
 const cacheLogs = reactive([])
+const cacheWorkerGroups = reactive([])
 const logContentRef = ref(null)
-let lastLoggedLabel = ''
+
+const formatCacheWorkerStatus = (status) => {
+  if (status === 'running') return '进行中'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'aborted') return '已中止'
+  return '待执行'
+}
 
 const updateCacheJob = (job = {}) => {
   cacheJob.status = job.status || 'idle'
   cacheJob.total = job.total ?? 0
   cacheJob.processed = job.processed ?? 0
-  
-  const newLabel = job.current_label || ''
-  cacheJob.currentLabel = newLabel
+  cacheJob.currentLabel = job.current_label || ''
   cacheJob.error = job.error || ''
 
-  if (newLabel && newLabel !== lastLoggedLabel) {
-    lastLoggedLabel = newLabel
-    const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-    cacheLogs.push({
-      time: timeStr,
-      text: newLabel,
+  const nextLogs = Array.isArray(job.logs) ? job.logs : []
+  cacheLogs.splice(0, cacheLogs.length, ...nextLogs.map((entry) => ({
+    time: entry?.time || '',
+    pid: entry?.pid ?? null,
+    text: entry?.text || '',
+    level: entry?.level || 'info',
+  })))
+
+  const workerGroups = Array.isArray(job.worker_groups) ? job.worker_groups : []
+  cacheWorkerGroups.splice(0, cacheWorkerGroups.length, ...workerGroups.map((group) => ({
+    key: group?.key || '',
+    label: group?.label || '未命名分块',
+    status: group?.status || 'pending',
+    message: group?.message || '',
+    updatedAt: group?.updated_at || '',
+    sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
+  })))
+
+  if (cacheLogVisible.value && logContentRef.value) {
+    nextTick(() => {
+      if (logContentRef.value) {
+        logContentRef.value.scrollTop = logContentRef.value.scrollHeight
+      }
     })
-    // Limit log size
-    if (cacheLogs.length > 1000) {
-      cacheLogs.shift()
-    }
-    // Auto scroll
-    if (cacheLogVisible.value && logContentRef.value) {
-      nextTick(() => {
-        if (logContentRef.value) {
-          logContentRef.value.scrollTop = logContentRef.value.scrollHeight
-        }
-      })
-    }
   }
 }
 
@@ -6151,4 +6183,74 @@ onMounted(() => {
   font-size: 14px;
 }
 
+.log-worker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.worker-card {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.36);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.worker-card.is-running {
+  border-color: rgba(59, 130, 246, 0.48);
+  background: rgba(30, 64, 175, 0.18);
+}
+.worker-card.is-completed {
+  border-color: rgba(34, 197, 94, 0.38);
+  background: rgba(20, 83, 45, 0.18);
+}
+.worker-card.is-failed {
+  border-color: rgba(248, 113, 113, 0.44);
+  background: rgba(127, 29, 29, 0.22);
+}
+.worker-card.is-aborted {
+  border-color: rgba(250, 204, 21, 0.4);
+  background: rgba(113, 63, 18, 0.22);
+}
+.worker-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.worker-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.worker-card__badge {
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.18);
+}
+.worker-card__message {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+.worker-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.log-list__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
 </style>

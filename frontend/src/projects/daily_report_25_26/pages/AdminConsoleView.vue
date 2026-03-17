@@ -253,6 +253,8 @@
                     <option :value="1">1</option>
                     <option :value="3">3</option>
                     <option :value="7">7</option>
+                    <option :value="14">14</option>
+                    <option :value="30">30</option>
                   </select>
                 </label>
                 <label>
@@ -268,6 +270,28 @@
                 </button>
               </div>
               <p class="subtext">任务状态：{{ cacheJobStatus }}</p>
+              <div v-if="cacheWorkerGroups.length" class="cache-worker-grid">
+                <div
+                  v-for="group in cacheWorkerGroups"
+                  :key="group.key"
+                  class="cache-worker-card"
+                  :class="`is-${group.status}`"
+                >
+                  <div class="cache-worker-card__header">
+                    <span class="cache-worker-card__title">{{ group.label }}</span>
+                    <span class="cache-worker-card__badge">{{ formatCacheWorkerStatus(group.status) }}</span>
+                  </div>
+                  <div class="cache-worker-card__message">{{ group.message || '等待开始' }}</div>
+                  <div class="cache-worker-card__meta">
+                    <span>分块：{{ group.sectionsText }}</span>
+                    <span v-if="group.updatedAt">{{ group.updatedAt }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="cacheJobLogs.length" class="panel-state cache-job-log-panel">
+                <div class="cache-job-log-panel__title">最近日志</div>
+                <div v-for="(log, index) in cacheJobLogs" :key="`${index}-${log.time || ''}`">{{ log.time }} {{ log.text }}</div>
+              </div>
               <div v-if="temperatureImportMessage" class="panel-state">{{ temperatureImportMessage }}</div>
             </section>
           </template>
@@ -1067,12 +1091,38 @@ const visibleTreeRows = computed(() => {
 })
 
 const cacheJobStatus = computed(() => {
-  const status = overview.value?.cache_publish_job?.status
+  const job = overview.value?.cache_publish_job || {}
+  const status = job.status
   if (!status) return '暂无任务'
-  const total = Number(overview.value?.cache_publish_job?.total || 0)
-  const processed = Number(overview.value?.cache_publish_job?.processed || 0)
-  return `${status}（${processed}/${total}）`
+  const total = Number(job.total || 0)
+  const processed = Number(job.processed || 0)
+  const label = job.current_label ? `，${job.current_label}` : ''
+  return `${status}（${processed}/${total}${label}）`
 })
+const cacheWorkerGroups = computed(() => {
+  const groups = overview.value?.cache_publish_job?.worker_groups
+  if (!Array.isArray(groups)) return []
+  return groups.map((group) => ({
+    key: group?.key || '',
+    label: group?.label || '未命名分块',
+    status: group?.status || 'pending',
+    message: group?.message || '',
+    updatedAt: group?.updated_at || '',
+    sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
+  }))
+})
+const cacheJobLogs = computed(() => {
+  const logs = overview.value?.cache_publish_job?.logs
+  if (!Array.isArray(logs)) return []
+  return logs.slice(-20)
+})
+const formatCacheWorkerStatus = (status) => {
+  if (status === 'running') return '进行中'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'aborted') return '已中止'
+  return '待执行'
+}
 const dbPkSet = computed(() => new Set((dbPkColumns.value || []).map((x) => String(x || ''))))
 const dbColumnTypeMap = computed(() => {
   const map = {}
@@ -3189,5 +3239,75 @@ onBeforeUnmount(() => {
   .db-filter-item {
     grid-template-columns: 1fr;
   }
+}
+.cache-worker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.cache-worker-card {
+  border: 1px solid #d9e3f2;
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cache-worker-card.is-running {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.cache-worker-card.is-completed {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.cache-worker-card.is-failed {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+.cache-worker-card.is-aborted {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+.cache-worker-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cache-worker-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.cache-worker-card__badge {
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  background: #e2e8f0;
+}
+.cache-worker-card__message {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #334155;
+}
+.cache-worker-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+.cache-job-log-panel__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  text-transform: uppercase;
 }
 </style>
