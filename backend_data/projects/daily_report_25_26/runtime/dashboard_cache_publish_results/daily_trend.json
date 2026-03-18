@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "pid": 113,
+  "pid": 250,
   "group": "daily_trend",
   "section_indexes": [
     "10"
@@ -245,5 +245,6 @@
       }
     }
   },
-  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json"
+  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json",
+  "updated_at": "2026-03-17T23:33:47.803547+08:00"
 }

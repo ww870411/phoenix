@@ -31,7 +31,8 @@ SECTION_GROUPS: List[Tuple[str, List[str]]] = [
     ("temperature", ["1"]),
     ("cumulative_cards", ["9"]),
     ("daily_trend", ["10"]),
-    ("metrics", ["2", "3", "4", "5", "6", "8"]),
+    ("metrics_profit", ["2", "3", "5"]),
+    ("metrics_operation", ["4", "6", "8"]),
     ("detail_tables", ["0.5", "7", "11"]),
 ]
 
@@ -39,7 +40,8 @@ GROUP_LABELS: Dict[str, str] = {
     "temperature": "日均气温",
     "cumulative_cards": "累计卡片",
     "daily_trend": "每日对比趋势",
-    "metrics": "核心指标卡片",
+    "metrics_profit": "利润收入与标煤",
+    "metrics_operation": "单耗投诉与分中心",
     "detail_tables": "明细表格与设备状态",
 }
 

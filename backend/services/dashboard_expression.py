@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ from fastapi import HTTPException
 
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import (
+    DailyBasicData,
     SessionLocal,
     TemperatureData,
     CoalInventoryData,
@@ -34,7 +36,7 @@ from backend.services.project_data_paths import (
 )
 from backend.services.project_registry import get_default_project_key
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select, text
 
 DATA_ROOT = Path(DATA_DIRECTORY)
 DEFAULT_PROJECT_KEY = get_default_project_key()
@@ -43,7 +45,6 @@ SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
 HEATING_SEASON_START = date(2025, 11, 1)
 
 
-from typing import Tuple
 @dataclass
 class DashboardResult:
     """标准化后的数据看板响应。"""
@@ -720,7 +721,14 @@ def evaluate_dashboard(
             _tick("正在生成：趋势图表...")
         daily_trend_section = get_section_by_index("10", "10.每日对比趋势")
         if _should_run("10") and isinstance(daily_trend_section, dict):
-            _fill_daily_trend_section(session, daily_trend_section, push_date, item_cn_to_item, _get_metrics, _tick)
+            _fill_daily_trend_section(
+                session,
+                daily_trend_section,
+                push_date,
+                item_cn_to_item,
+                metrics_cache,
+                _tick,
+            )
 
         if _should_run("11"):
             _tick("正在获取：设备运行状态...")
@@ -939,23 +947,54 @@ def _resolve_metric_axis(metric_key: str, preferred: Optional[str]) -> str:
 
 
 def _build_group_metric_cache(
-    session,
     dates: Sequence[date],
-    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
+    shared_cache: Optional[Dict[str, Dict[str, Any]]] = None,
     tick_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Dict[str, Any]]:
+    ordered_dates: List[str] = []
+    seen_dates: set[str] = set()
     cache: Dict[str, Dict[str, Any]] = {}
-    _fetch = fetcher if fetcher else _fetch_metrics_from_view
-    
+    shared_bucket = shared_cache if isinstance(shared_cache, dict) else {}
+
     for dt in dates:
         iso_key = dt.isoformat()
-        if tick_callback:
-            tick_callback(f"正在加载趋势数据：{iso_key}...")
-            
-        if iso_key in cache:
+        if iso_key in seen_dates:
             continue
-        cache[iso_key] = _fetch(session, "groups", "Group", iso_key)
-    return cache
+        seen_dates.add(iso_key)
+        ordered_dates.append(iso_key)
+
+        shared_key = f"groups:Group:{iso_key}"
+        if shared_key in shared_bucket:
+            cache[iso_key] = shared_bucket[shared_key]
+
+    pending_dates = [iso_key for iso_key in ordered_dates if iso_key not in cache]
+    if pending_dates:
+        if tick_callback:
+            tick_callback(f"正在装载趋势数据，共 {len(pending_dates)} 天...")
+
+        def _fetch_one(date_str: str) -> Tuple[str, Dict[str, Any]]:
+            with SessionLocal() as scoped_session:
+                fetched = _fetch_metrics_from_view(scoped_session, "groups", "Group", date_str)
+            return date_str, fetched
+
+        max_workers = min(4, len(pending_dates))
+        if max_workers <= 1:
+            for iso_key in pending_dates:
+                date_str, fetched = _fetch_one(iso_key)
+                cache[date_str] = fetched
+                shared_bucket[f"groups:Group:{date_str}"] = fetched
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_map = {executor.submit(_fetch_one, iso_key): iso_key for iso_key in pending_dates}
+                for future in as_completed(future_map):
+                    date_str, fetched = future.result()
+                    cache[date_str] = fetched
+                    shared_bucket[f"groups:Group:{date_str}"] = fetched
+
+        if tick_callback:
+            tick_callback(f"趋势数据装载完成（{len(pending_dates)} 天）")
+
+    return {iso_key: cache.get(iso_key, {}) for iso_key in ordered_dates}
 
 
 def _extract_group_metric_series(
@@ -970,6 +1009,71 @@ def _extract_group_metric_series(
         value = bucket.get("value_biz_date")
         series.append(_to_float_or_none(value))
     return series
+
+
+FAST_GROUP_DAILY_METRIC_RULES: Dict[str, Dict[str, Any]] = {
+    "sum_consumption_std_coal_zhangtun": {
+        "default_item": "consumption_std_coal",
+        "default_companies": ["BeiHai", "XiangHai", "GongRe", "JinZhou", "BeiFang", "JinPu"],
+        "extra_pairs": [("ZhuangHe", "consumption_std_coal_zhangtun")],
+    },
+}
+
+
+def _fetch_fast_group_daily_metric_map(
+    session,
+    item_code: str,
+    dates: Sequence[date],
+) -> Optional[Dict[str, Optional[float]]]:
+    rule = FAST_GROUP_DAILY_METRIC_RULES.get(item_code)
+    if not rule:
+        return None
+
+    ordered_dates: List[date] = []
+    seen_dates: set[date] = set()
+    for dt in dates:
+        if dt in seen_dates:
+            continue
+        seen_dates.add(dt)
+        ordered_dates.append(dt)
+    if not ordered_dates:
+        return {}
+
+    default_item = str(rule.get("default_item") or "").strip()
+    default_companies = [str(item).strip() for item in (rule.get("default_companies") or []) if str(item).strip()]
+    extra_pairs = [
+        (str(company).strip(), str(metric).strip())
+        for company, metric in (rule.get("extra_pairs") or [])
+        if str(company).strip() and str(metric).strip()
+    ]
+    if not default_item or not default_companies:
+        return None
+
+    conditions = [
+        (DailyBasicData.company.in_(default_companies)) & (DailyBasicData.item == default_item),
+    ]
+    for company, metric in extra_pairs:
+        conditions.append((DailyBasicData.company == company) & (DailyBasicData.item == metric))
+
+    rows = (
+        session.query(DailyBasicData.date, func.sum(DailyBasicData.value).label("total_value"))
+        .filter(DailyBasicData.date.in_(ordered_dates))
+        .filter(or_(*conditions))
+        .group_by(DailyBasicData.date)
+        .all()
+    )
+
+    value_map: Dict[date, Optional[float]] = {}
+    for row_date, total_value in rows:
+        if row_date is None:
+            continue
+        try:
+            cast_date = row_date if isinstance(row_date, date) else date.fromisoformat(str(row_date))
+        except ValueError:
+            continue
+        value_map[cast_date] = _to_float_or_none(total_value)
+
+    return {dt.isoformat(): value_map.get(dt) for dt in ordered_dates}
 
 
 def _build_temperature_series(
@@ -988,7 +1092,7 @@ def _fill_daily_trend_section(
     section: Dict[str, Any],
     push_date: str,
     item_cn_to_code: Dict[str, str],
-    fetcher: Optional[Callable[[Any, str, str, str], Dict[str, Any]]] = None,
+    shared_metrics_cache: Optional[Dict[str, Dict[str, Any]]] = None,
     tick_callback: Optional[Callable[[str], None]] = None,
 ) -> None:
     """填充“10.每日对比趋势”板块的时间序列数据。"""
@@ -1041,24 +1145,50 @@ def _fill_daily_trend_section(
 
     needs_group_current = any(not _is_temperature_metric(entry["key"]) for entry in current_config)
     needs_group_peer = any(not _is_temperature_metric(entry["key"]) for entry in peer_config)
-    
+
+    metric_code_by_label: Dict[str, str] = {}
+    fast_metric_series_map: Dict[str, Dict[str, Optional[float]]] = {}
+    required_group_codes: set[str] = set()
+    for entry in current_config + peer_config:
+        metric_key = entry["key"]
+        if _is_temperature_metric(metric_key):
+            continue
+        item_code = item_cn_to_code.get(metric_key, metric_key)
+        metric_code_by_label[metric_key] = item_code
+        required_group_codes.add(item_code)
+
+    combined_group_dates: List[date] = []
+    if needs_group_current:
+        combined_group_dates.extend(date_range)
+    if needs_group_peer:
+        combined_group_dates.extend(peer_dates)
+
+    fallback_group_codes = set(required_group_codes)
+    if combined_group_dates:
+        for item_code in list(required_group_codes):
+            direct_series = _fetch_fast_group_daily_metric_map(session, item_code, combined_group_dates)
+            if isinstance(direct_series, dict):
+                fast_metric_series_map[item_code] = direct_series
+                fallback_group_codes.discard(item_code)
+
+    fallback_group_dates = combined_group_dates if fallback_group_codes else []
+    combined_group_cache = (
+        _build_group_metric_cache(
+            fallback_group_dates,
+            shared_cache=shared_metrics_cache,
+            tick_callback=tick_callback,
+        )
+        if fallback_group_dates
+        else {}
+    )
+
     current_cache = {}
     if needs_group_current:
-        current_cache = _build_group_metric_cache(
-            session, 
-            date_range, 
-            fetcher=fetcher, 
-            tick_callback=tick_callback
-        )
-        
+        current_cache = {dt.isoformat(): combined_group_cache.get(dt.isoformat(), {}) for dt in date_range}
+
     peer_cache = {}
     if needs_group_peer:
-        peer_cache = _build_group_metric_cache(
-            session, 
-            peer_dates, 
-            fetcher=fetcher, 
-            tick_callback=tick_callback
-        )
+        peer_cache = {dt.isoformat(): combined_group_cache.get(dt.isoformat(), {}) for dt in peer_dates}
 
     def build_series(
         entries: List[Dict[str, Any]],
@@ -1075,8 +1205,12 @@ def _fill_daily_trend_section(
             if _is_temperature_metric(metric_key):
                 values = _build_temperature_series(temp_map or {}, dates_obj)
             else:
-                item_code = item_cn_to_code.get(metric_key, metric_key)
-                values = _extract_group_metric_series(cache, iso_dates, item_code)
+                item_code = metric_code_by_label.get(metric_key, item_cn_to_code.get(metric_key, metric_key))
+                if item_code in fast_metric_series_map:
+                    fast_map = fast_metric_series_map[item_code]
+                    values = [fast_map.get(iso_key) for iso_key in iso_dates]
+                else:
+                    values = _extract_group_metric_series(cache, iso_dates, item_code)
             series.append(
                 {
                     "key": metric_key,

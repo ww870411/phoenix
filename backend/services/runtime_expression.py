@@ -942,6 +942,16 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 if c:
                     companies_needed.add(c)
 
+    shared_metrics_cache = context.get("shared_metrics_cache") if isinstance(context, dict) else None
+    if not isinstance(shared_metrics_cache, dict):
+        shared_metrics_cache = {}
+    shared_constants_cache = context.get("shared_constants_cache") if isinstance(context, dict) else None
+    if not isinstance(shared_constants_cache, dict):
+        shared_constants_cache = {}
+    shared_temperature_cache = context.get("shared_temperature_cache") if isinstance(context, dict) else None
+    if not isinstance(shared_temperature_cache, dict):
+        shared_temperature_cache = {}
+
     with next(get_session()) as session:  # type: ignore
         metrics_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
         consts_by_company: Dict[str, Dict[str, Dict[str, Dict[str, Decimal]]]] = {}
@@ -962,24 +972,39 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         context_biz_date = None
         if context and isinstance(context.get("biz_date"), str):
             context_biz_date = context["biz_date"]
-        temperature_metrics_cache = _fetch_temperature_extremes(session, context_biz_date)
+        temperature_cache_key = context_biz_date or "regular"
+        if temperature_cache_key in shared_temperature_cache:
+            temperature_metrics_cache = shared_temperature_cache[temperature_cache_key]
+        else:
+            temperature_metrics_cache = _fetch_temperature_extremes(session, context_biz_date)
+            shared_temperature_cache[temperature_cache_key] = temperature_metrics_cache
 
         for comp in companies_needed:
             try:
                 # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
                 _per_table = "groups" if comp in _groups_set else _default_table
-                metrics_by_company[comp] = _fetch_metrics_from_view(
-                    session, _per_table, comp, context_biz_date
-                )
+                metrics_cache_key = f"{context_biz_date or 'regular'}::{_per_table}::{comp}"
+                if metrics_cache_key in shared_metrics_cache:
+                    metrics_by_company[comp] = shared_metrics_cache[metrics_cache_key]
+                else:
+                    metrics_by_company[comp] = _fetch_metrics_from_view(
+                        session, _per_table, comp, context_biz_date
+                    )
+                    shared_metrics_cache[metrics_cache_key] = metrics_by_company[comp]
             except Exception:
                 metrics_by_company[comp] = {}
             consts_by_company[comp] = {}
             for alias, table_name in (alias_map or {}).items():
                 try:
-                    if isinstance(table_name, str) and table_name == "sum_coal_inventory_data":
+                    constants_cache_key = f"{table_name}::{comp}"
+                    if constants_cache_key in shared_constants_cache:
+                        consts_by_company[comp][alias] = shared_constants_cache[constants_cache_key]
+                    elif isinstance(table_name, str) and table_name == "sum_coal_inventory_data":
                         consts_by_company[comp][alias] = _fetch_sum_coal_inventory_constants(session, comp)
+                        shared_constants_cache[constants_cache_key] = consts_by_company[comp][alias]
                     else:
                         consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
+                        shared_constants_cache[constants_cache_key] = consts_by_company[comp][alias]
                 except Exception:
                     consts_by_company[comp][alias] = {}
 

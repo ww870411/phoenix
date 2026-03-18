@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "pid": 115,
+  "pid": 253,
   "group": "detail_tables",
   "section_indexes": [
     "0.5",
@@ -321,5 +321,6 @@
       "计量单位": "吨"
     }
   },
-  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json"
+  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json",
+  "updated_at": "2026-03-17T23:34:17.064511+08:00"
 }

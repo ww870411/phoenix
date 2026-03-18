@@ -1,0 +1,3 @@
+{"time": "2026-03-17T23:33:45.931683+08:00", "pid": 249, "level": "info", "text": "已启动累计卡片任务", "group": "cumulative_cards"}
+{"time": "2026-03-17T23:33:47.546570+08:00", "pid": 249, "level": "info", "text": "开始计算 累计卡片：9", "group": "cumulative_cards"}
+{"time": "2026-03-17T23:34:10.578950+08:00", "pid": 249, "level": "info", "text": "累计卡片已完成", "group": "cumulative_cards"}

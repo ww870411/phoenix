@@ -6609,3 +6609,139 @@
   - `frontend npm run build` 通过。
 
 - 2026-03-17：按用户要求调整 `monthly_data_show` 抽取执行顺序，使大类顺序与配置文件一致：原始抽取阶段改为“指标剔除 -> 指标重命名 -> 计量单位转换”，并将“常量注入”前移到“半计算规则”之前执行；`backend/projects/monthly_data_show/services/extractor.py` 中 `extract_rows()` 已重排该流水线。与此同时，移除专门的 `enable_jinpu_heating_area_adjustment` 开关与 `_apply_jinpu_heating_area_adjustment()` 代码分支，将其改写为配置文件 `semi_calculated_rules` 中的一条普通半计算规则：`金普期末供暖收费面积扣减高温水面积`。步骤二规则选择中“特殊修正”父项已随之移除。已执行规则 JSON 解析、`python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
+## 2026-03-17 数据看板缓存性能与发布链路优化
+
+- 范围：`daily_report_25_26` 数据看板缓存、管理后台缓存发布、前端日志弹窗、后端趋势块计算。
+- 本轮核心目标：
+  - 降低缓存发布时的单日与多日耗时；
+  - 让发布日志可按业务分块观测；
+  - 保证趋势块优化前后数据口径一致。
+
+### 已完成改动
+
+- 缓存存储结构改造：
+  - 将原单文件 `backend_data/projects/daily_report_25_26/runtime/dashboard_cache.json` 拆为目录式缓存；
+  - 新结构位于 `backend_data/projects/daily_report_25_26/runtime/dashboard_cache_v2/`；
+  - 每个日期单独目录，包含 `meta.json`、`summary.json`、`detail.json`、`trend.json`；
+  - 抽取跨日期可复用内容到 `shared.json`；
+  - 保留旧缓存迁移兼容与 `dashboard_cache.legacy.json` 备份。
+
+- 缓存发布执行模型改造：
+  - `backend/services/dashboard_cache_job.py` 从线程式后台任务改为独立发布子进程；
+  - 发布状态、取消信号、锁文件改为运行目录落盘；
+  - 单日发布内部继续拆成多个业务分组子进程并行执行；
+  - 当前分组为：
+    - `temperature`
+    - `cumulative_cards`
+    - `daily_trend`
+    - `metrics_profit`
+    - `metrics_operation`
+    - `detail_tables`
+
+- 发布日志与前端展示改造：
+  - 后端日志改为按进程写入 `runtime/dashboard_cache_publish_logs/<pid>.jsonl`；
+  - 状态快照新增 `worker_groups`，以业务分块而非 PID 向前端返回状态；
+  - 数据看板页与管理后台均改为业务分块卡片展示；
+  - 卡片状态会实时刷新；
+  - 日志弹窗调整为“上方卡片固定、下方日志独立滚动”；
+  - 卡片排序改为“进行中优先，其次失败/中止/待执行，已完成置后”。
+
+- 前端缓存发布天数扩展：
+  - 数据看板页与管理后台发布天数下拉均增加 `14`、`30` 两个选项。
+
+- `10` 号趋势块专项优化：
+  - 原瓶颈来自按日期反复调用 `groups` 普通视图；
+  - 该视图依赖 `phoenix.biz_date`，每次查询都会触发重型聚合；
+  - 先做了同口径并发装载与任务级缓存复用；
+  - 随后识别到当前 `10` 号块配置只使用：
+    - `平均气温`
+    - `标煤耗量汇总(张屯)`
+  - 对 `标煤耗量汇总(张屯)` 增加快路径：
+    - 不再经 `groups` 视图整包取数；
+    - 直接从 `daily_basic_data` 按 `groups.sql` 中 `group_sum_std_zhangtun` 的同口径规则聚合；
+    - 仅计算趋势块所需的按日值；
+    - 无快路径的指标仍自动回退到原视图逻辑。
+
+### 正确性与性能验证
+
+- `backend/services/dashboard_cache_job.py` 与 `backend/services/dashboard_expression.py` 已通过 `py_compile`。
+- 前端 `npm run build` 已通过。
+- `10` 号块快路径与旧视图结果对照：
+  - 对 `2026-03-15`、`2026-03-16`、`2025-03-15`、`2025-03-16` 四个代表日期，
+  - `sum_consumption_std_coal_zhangtun.value_biz_date` 对照一致。
+- `10` 号块耗时变化：
+  - 旧实现约 `109.86s`；
+  - 新实现约 `0.12s`。
+
+### 当前仍存在的效率问题
+
+- `groups` 视图仍是普通视图，不是物化视图；对复杂指标依旧可能非常慢。
+- `metrics_profit` / `metrics_operation` 组仍大量依赖 `groups` 或 `sum_basic_data` 的整包读取，后续仍可继续做快路径或更细粒度拆分。
+- 当前 Web 服务层面是否多 worker，取决于生产部署命令；本轮改造的是“缓存发布任务的多进程”，不是“整个站点的 Web worker 扩容”。
+
+### 部署注意事项
+
+- 直接打包部署到生产后：
+  - 缓存发布链路的多进程能力会随代码一起生效；
+  - 也就是发布主进程与各业务分块子进程会按当前代码启动。
+- 但如果生产 `uvicorn` 仍是单 worker：
+  - Web 请求处理仍是单个应用进程；
+  - 这不影响“发布任务子进程并行”，但不等于整站已经做了多 worker 扩容。
+
+### 2026-03-17 生产启动参数修正
+
+- 调整文件：
+  - `backend/Dockerfile.prod`
+  - `lo1_new_server.yml`
+- 修正内容：
+  - 移除生产镜像启动命令中的 `--reload`；
+  - 将 `uvicorn` worker 数改为环境变量控制，默认 `2`；
+  - 在 `lo1_new_server.yml` 的 `backend.environment` 中补充 `UVICORN_WORKERS=${UVICORN_WORKERS:-2}`。
+- 结果：
+  - 直接重建并部署新后端镜像后，缓存发布链路的多进程能力可在生产生效；
+  - Web 层默认也不再固定为单 worker + reload 的不合理组合。
+
+### 2026-03-18 后端镜像构建阶段 apt 仓库瞬时失败修正
+
+- 现象：
+  - 构建 `backend/Dockerfile.prod` 时，`apt-get install build-essential libpq-dev` 阶段从 Debian `trixie` 仓库拉取 `libdpkg-perl_1.22.22_all.deb` 返回 `502 Bad Gateway`；
+  - 该问题属于上游仓库或链路瞬时失败，不是项目依赖声明错误。
+- 修改文件：
+  - `backend/Dockerfile.prod`
+- 修正内容：
+  - 两处 `apt-get update` 增加 `-o Acquire::Retries=5`
+  - 两处 `apt-get install` 增加 `--fix-missing`
+- 目的：
+  - 降低 Debian 仓库偶发 5xx / 短时不稳定导致的镜像构建失败率。
+- 备注：
+  - 本次未重新执行完整镜像构建；需在你的构建环境中重新打包验证。
+## 2026-03-18 展示页第一阶段性能优化
+
+- 目标页面：`daily_report_25_26` 数据展示运行时页面，重点覆盖 `Group_sum_show_Sheet` 及其 Excel 导出链路。
+- 前提约束：不改现有页面数据口径，不改导出模板样式，只做重复取数与重复求值削减。
+- 后端变更：
+  - `backend/services/runtime_expression.py` 增加同请求级共享缓存，按 `biz_date + table + company` 复用指标结果，按 `table + company` 复用常量结果，并缓存同业务日温度极值结果。
+  - `backend/projects/daily_report_25_26/api/legacy_full.py` 新增 `/runtime/spec/eval-batch`，允许一次请求批量求值多个展示 sheet，并在同一请求内共享上述缓存。
+- 前端变更：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 新增 `evalSpecsBatch` 封装。
+  - `frontend/src/projects/daily_report_25_26/pages/DisplayRuntimeView.vue` 的 Excel 导出由原先对 3 张展示表串行调用 3 次 `evalSpec`，改为一次批量调用 `evalSpecsBatch`，仍保持原模板填充方式与导出文件结构不变。
+- 预期收益：
+  - 导出链路减少 3 张展示表之间重复的数据库取数与模板求值。
+  - 后续若继续做第二阶段优化，可直接在批量接口基础上扩展更细粒度并行或后台任务。
+- 本轮验证：
+  - `python -m py_compile backend/services/runtime_expression.py backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+  - `frontend` 执行 `npm run build` 通过。
+- 当前边界：
+  - 本轮主要优化导出重算链路；单个展示页首次加载仍沿用单 sheet 的 `render_spec` 模式，若生产环境仍慢，下一阶段再继续拆解单次页面加载耗时。
+
+### 2026-03-18 补充修复：批量导出配置读取
+
+- 问题：导出时前端尝试直接读取 `/app/data/数据结构_全口径展示表.json`，当前环境返回 HTML 页面，导致报错 `Unexpected token '<'`。
+- 修复：
+  - `frontend/src/projects/daily_report_25_26/pages/DisplayRuntimeView.vue` 不再前端直读配置 JSON；
+  - 改为批量导出请求仅传 `sheet_key + config`；
+  - `backend/projects/daily_report_25_26/api/legacy_full.py` 的 `eval-batch` 接口支持按现有 `_locate_sheet_payload` 逻辑定位模板并求值。
+- 结果：导出配置定位链路与页面单次加载保持一致，避免静态资源路径不一致导致的 HTML/JSON 解析错误。
+- 验证：
+  - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过；
+  - `frontend` 执行 `npm run build` 通过。

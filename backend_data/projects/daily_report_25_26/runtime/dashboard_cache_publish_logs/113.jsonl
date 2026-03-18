@@ -1,3 +1,0 @@
-{"time": "2026-03-17T21:57:41.825278+08:00", "pid": 113, "level": "info", "text": "已启动分组 daily_trend 子进程 pid=113"}
-{"time": "2026-03-17T21:57:43.364553+08:00", "pid": 113, "level": "info", "text": "子进程开始计算分组 daily_trend: 10"}
-{"time": "2026-03-17T22:04:44.944248+08:00", "pid": 113, "level": "info", "text": "子进程完成分组 daily_trend"}

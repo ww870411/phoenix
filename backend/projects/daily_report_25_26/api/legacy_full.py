@@ -5190,6 +5190,182 @@ async def runtime_eval(request: Request):
 
 
 # 临时调试：查看指定 company 的指标与常量缓存（不依赖 render_spec）
+
+@router.post("/runtime/spec/eval-batch", summary="运行时表达式批量求值（共享缓存）", tags=["runtime"])
+async def runtime_eval_batch(request: Request):
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        return JSONResponse(status_code=400, content={"ok": False, "message": "请求体需为 JSON 对象"})
+
+    trace = bool(payload.get("trace", False))
+    project_key = str(payload.get("project_key") or "daily_report_25_26").strip()
+    biz_date_raw = str(payload.get("biz_date") or "regular").strip()
+    default_config = payload.get("config")
+    resolved_biz_date: Optional[str]
+    biz_date_mode = "regular"
+    if not biz_date_raw or biz_date_raw.lower() == "regular":
+        display_date = auth_manager.current_display_date()
+        resolved_biz_date = display_date.isoformat()
+    else:
+        try:
+            resolved_biz_date = date.fromisoformat(biz_date_raw).isoformat()
+            biz_date_mode = "custom"
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "message": "biz_date 需为空、'regular' 或符合 YYYY-MM-DD"},
+            )
+
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list) or not jobs:
+        return JSONResponse(status_code=422, content={"ok": False, "message": "jobs 需为非空数组"})
+
+    shared_metrics_cache: Dict[str, Any] = {}
+    shared_constants_cache: Dict[str, Any] = {}
+    shared_temperature_cache: Dict[str, Any] = {}
+    results: List[Dict[str, Any]] = []
+
+    def _resolve_acc(value: Any) -> Optional[int]:
+        try:
+            if isinstance(value, dict):
+                value = value.get("default")
+            return int(value)
+        except Exception:
+            return None
+
+    for index, job in enumerate(jobs):
+        if not isinstance(job, dict):
+            return JSONResponse(status_code=422, content={"ok": False, "message": f"jobs[{index}] 需为对象"})
+
+        sheet_key = str(job.get("sheet_key") or "").strip()
+        config = job.get("config") or default_config
+        spec = job.get("spec")
+        if not isinstance(spec, dict):
+            preferred_path = _resolve_data_file(config) if isinstance(config, str) and config.strip() else None
+            located_spec, _, _ = _locate_sheet_payload(sheet_key, preferred_path=preferred_path)
+            if isinstance(located_spec, dict):
+                spec = located_spec
+        if not isinstance(spec, dict):
+            return JSONResponse(
+                status_code=422,
+                content={"ok": False, "message": f"jobs[{index}] 缺少 spec 对象，且无法通过 config 定位模板"},
+            )
+
+        primary_key = job.get("primary_key") or {}
+        if not isinstance(primary_key, dict):
+            return JSONResponse(
+                status_code=422,
+                content={"ok": False, "message": f"jobs[{index}].primary_key 需为对象"},
+            )
+
+        names = _extract_names(spec)
+        columns_raw = _extract_list(spec, COLUMN_KEYS)
+        if columns_raw is None:
+            return JSONResponse(status_code=422, content={"ok": False, "message": f"jobs[{index}] 模板缺少列名"})
+
+        if not primary_key.get("company"):
+            unit_id = names.get("unit_id")
+            if unit_id:
+                primary_key = dict(primary_key)
+                primary_key["company"] = unit_id
+        if not primary_key.get("company"):
+            return JSONResponse(
+                status_code=422,
+                content={"ok": False, "message": f"jobs[{index}] 缺少 primary_key.company"},
+            )
+
+        try:
+            result = render_spec(
+                spec=spec,
+                project_key=project_key,
+                primary_key=primary_key,
+                trace=trace,
+                context={
+                    "biz_date": resolved_biz_date,
+                    "shared_metrics_cache": shared_metrics_cache,
+                    "shared_constants_cache": shared_constants_cache,
+                    "shared_temperature_cache": shared_temperature_cache,
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "message": f"批量求值失败：{sheet_key or index}", "error": str(exc)},
+            )
+
+        columns_from_result = result.get("columns") or result.get("列名")
+        if isinstance(columns_from_result, list) and columns_from_result:
+            columns = [str(col) for col in columns_from_result]
+        else:
+            columns = list(columns_raw)
+        rows = result.get("数据") or []
+
+        acc = _resolve_acc(result.get("accuracy") if isinstance(result, dict) else None)
+        if acc is None:
+            acc = _resolve_acc(spec.get("accuracy") if isinstance(spec, dict) else None)
+        nf_spec = spec.get("number_format") if isinstance(spec, dict) else None
+        if isinstance(nf_spec, dict):
+            nf_acc = _resolve_acc(nf_spec.get("default"))
+            if nf_acc is not None:
+                acc = nf_acc
+        if acc is None:
+            acc = 2
+
+        accuracy_map: Dict[str, int] = {}
+        try:
+            raw_map = result.get("accuracy_map") if isinstance(result, dict) else None
+            if isinstance(raw_map, dict):
+                for key, raw_val in raw_map.items():
+                    if key is None:
+                        continue
+                    parsed = _resolve_acc(raw_val)
+                    if parsed is None:
+                        continue
+                    if parsed < 0:
+                        parsed = 0
+                    if parsed > 8:
+                        parsed = 8
+                    accuracy_map[str(key)] = parsed
+        except Exception:
+            accuracy_map = {}
+
+        item_content: Dict[str, Any] = {
+            "ok": True,
+            "sheet_key": sheet_key or names.get("sheet_name") or "",
+            "sheet_name": names.get("sheet_name") or sheet_key,
+            "unit_id": names.get("unit_id", ""),
+            "unit_name": names.get("unit_name", ""),
+            "columns": columns,
+            "rows": rows,
+            "accuracy": acc,
+            "number_format": (nf_spec if isinstance(nf_spec, dict) else None),
+            "biz_date": resolved_biz_date,
+            "biz_date_mode": biz_date_mode,
+            "requested_biz_date": biz_date_raw,
+        }
+        if accuracy_map:
+            item_content["accuracy_overrides"] = accuracy_map
+        column_headers = result.get("column_headers")
+        if isinstance(column_headers, list) and column_headers:
+            item_content["column_headers"] = column_headers
+        column_groups = result.get("column_groups")
+        if isinstance(column_groups, list) and column_groups:
+            item_content["column_groups"] = column_groups
+        if trace and "_trace" in result:
+            item_content["debug"] = {"_trace": result["_trace"]}
+        results.append(item_content)
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "results": results,
+            "biz_date": resolved_biz_date,
+            "biz_date_mode": biz_date_mode,
+            "requested_biz_date": biz_date_raw,
+        },
+    )
+
 @router.get("/runtime/spec/debug-cache", summary="调试：查看 company 的指标与常量缓存")
 def debug_cache(company: str):
     """

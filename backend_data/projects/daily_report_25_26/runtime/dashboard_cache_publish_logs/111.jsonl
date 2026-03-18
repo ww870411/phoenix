@@ -1,3 +1,0 @@
-{"time": "2026-03-17T21:57:41.749908+08:00", "pid": 111, "level": "info", "text": "已启动分组 temperature 子进程 pid=111"}
-{"time": "2026-03-17T21:57:43.281629+08:00", "pid": 111, "level": "info", "text": "子进程开始计算分组 temperature: 1"}
-{"time": "2026-03-17T21:57:43.479319+08:00", "pid": 111, "level": "info", "text": "子进程完成分组 temperature"}

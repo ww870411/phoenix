@@ -1099,17 +1099,33 @@ const cacheJobStatus = computed(() => {
   const label = job.current_label ? `，${job.current_label}` : ''
   return `${status}（${processed}/${total}${label}）`
 })
+const getCacheWorkerOrder = (status) => {
+  if (status === 'running') return 0
+  if (status === 'failed') return 1
+  if (status === 'aborted') return 2
+  if (status === 'pending') return 3
+  if (status === 'completed') return 4
+  return 5
+}
 const cacheWorkerGroups = computed(() => {
   const groups = overview.value?.cache_publish_job?.worker_groups
   if (!Array.isArray(groups)) return []
-  return groups.map((group) => ({
-    key: group?.key || '',
-    label: group?.label || '未命名分块',
-    status: group?.status || 'pending',
-    message: group?.message || '',
-    updatedAt: group?.updated_at || '',
-    sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
-  }))
+  return groups
+    .map((group, index) => ({
+      key: group?.key || '',
+      label: group?.label || '未命名分块',
+      status: group?.status || 'pending',
+      message: group?.message || '',
+      updatedAt: group?.updated_at || '',
+      sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
+      originalIndex: index,
+    }))
+    .sort((a, b) => {
+      const orderDiff = getCacheWorkerOrder(a.status) - getCacheWorkerOrder(b.status)
+      if (orderDiff !== 0) return orderDiff
+      return a.originalIndex - b.originalIndex
+    })
+    .map(({ originalIndex, ...group }) => group)
 })
 const cacheJobLogs = computed(() => {
   const logs = overview.value?.cache_publish_job?.logs

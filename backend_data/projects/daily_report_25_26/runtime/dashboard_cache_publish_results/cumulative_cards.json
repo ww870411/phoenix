@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "pid": 112,
+  "pid": 249,
   "group": "cumulative_cards",
   "section_indexes": [
     "9"
@@ -1264,5 +1264,6 @@
       }
     }
   },
-  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json"
+  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json",
+  "updated_at": "2026-03-17T23:34:10.557936+08:00"
 }

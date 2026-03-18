@@ -7,7 +7,7 @@
           <h3>缓存发布日志</h3>
           <button class="log-modal__close" @click="cacheLogVisible = false">×</button>
         </div>
-        <div class="log-modal__content" ref="logContentRef">
+        <div class="log-modal__content">
           <div v-if="cacheWorkerGroups.length" class="log-worker-grid">
             <div
               v-for="group in cacheWorkerGroups"
@@ -27,7 +27,7 @@
             </div>
           </div>
           <div v-if="cacheLogs.length === 0 && !cacheWorkerGroups.length" class="log-modal__empty">暂无日志</div>
-          <div v-else class="log-list">
+          <div v-else class="log-list" ref="logContentRef">
             <div class="log-list__title">最近日志</div>
             <div v-for="(log, index) in cacheLogs" :key="`${index}-${log.time || ''}`" class="log-item">
               <span class="log-item__time">{{ log.time }}</span>
@@ -3190,6 +3190,14 @@ const formatCacheWorkerStatus = (status) => {
   if (status === 'aborted') return '已中止'
   return '待执行'
 }
+const getCacheWorkerOrder = (status) => {
+  if (status === 'running') return 0
+  if (status === 'failed') return 1
+  if (status === 'aborted') return 2
+  if (status === 'pending') return 3
+  if (status === 'completed') return 4
+  return 5
+}
 
 const updateCacheJob = (job = {}) => {
   cacheJob.status = job.status || 'idle'
@@ -3207,14 +3215,23 @@ const updateCacheJob = (job = {}) => {
   })))
 
   const workerGroups = Array.isArray(job.worker_groups) ? job.worker_groups : []
-  cacheWorkerGroups.splice(0, cacheWorkerGroups.length, ...workerGroups.map((group) => ({
-    key: group?.key || '',
-    label: group?.label || '未命名分块',
-    status: group?.status || 'pending',
-    message: group?.message || '',
-    updatedAt: group?.updated_at || '',
-    sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
-  })))
+  const orderedWorkerGroups = workerGroups
+    .map((group, index) => ({
+      key: group?.key || '',
+      label: group?.label || '未命名分块',
+      status: group?.status || 'pending',
+      message: group?.message || '',
+      updatedAt: group?.updated_at || '',
+      sectionsText: Array.isArray(group?.sections) ? group.sections.join(' / ') : '',
+      originalIndex: index,
+    }))
+    .sort((a, b) => {
+      const orderDiff = getCacheWorkerOrder(a.status) - getCacheWorkerOrder(b.status)
+      if (orderDiff !== 0) return orderDiff
+      return a.originalIndex - b.originalIndex
+    })
+    .map(({ originalIndex, ...group }) => group)
+  cacheWorkerGroups.splice(0, cacheWorkerGroups.length, ...orderedWorkerGroups)
 
   if (cacheLogVisible.value && logContentRef.value) {
     nextTick(() => {
@@ -4959,7 +4976,10 @@ onMounted(() => {
 }
 .log-modal__content {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 16px;
   background: #f8fafc;
 }
@@ -4976,6 +4996,10 @@ onMounted(() => {
   padding: 40px 0;
 }
 .log-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
   display: flex;
   flex-direction: column;
   gap: 8px;

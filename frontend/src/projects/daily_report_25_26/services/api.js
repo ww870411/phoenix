@@ -657,6 +657,21 @@ export async function evalSpec(projectKey, body, options = {}) {
   return response.json()
 }
 
+export async function evalSpecsBatch(projectKey, body, options = {}) {
+  const url = normalized('/projects/daily_report_25_26/runtime/spec/eval-batch')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(body || {}),
+    signal: options?.signal,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `runtime batch eval 失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getWorkflowStatus(projectKey) {
   const response = await fetch(`${projectPath(projectKey)}/workflow/status`, {
     headers: attachAuthHeaders(),

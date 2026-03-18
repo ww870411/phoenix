@@ -58,7 +58,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec, getTemplate, getWorkflowStatus } from '../services/api'
+import { evalSpec, evalSpecsBatch, getTemplate, getWorkflowStatus } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -402,35 +402,66 @@ async function evalSpecForExport(payload) {
   throw new Error(normalizeExportError(lastError))
 }
 
+async function evalSpecsForExport(payload) {
+  let lastError = null
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), EXPORT_EVAL_TIMEOUT_MS)
+    try {
+      return await evalSpecsBatch(projectKey.value, payload, { signal: controller.signal })
+    } catch (err) {
+      lastError = err
+      const message = String(err?.message || '')
+      const isAbort = err?.name === 'AbortError'
+      const isGatewayTimeout = /gateway\s*time-?out|error code\s*504|\b504\b/i.test(message)
+      if (!isAbort && !isGatewayTimeout) break
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, EXPORT_RETRY_DELAY_MS))
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  if (lastError?.name === 'AbortError') {
+    throw new Error(`导出请求超时（${Math.round(EXPORT_EVAL_TIMEOUT_MS / 1000)} 秒）`)
+  }
+  throw new Error(normalizeExportError(lastError))
+}
+
 async function exportToExcel() {
   isExporting.value = true
   errorMessage.value = ''
   try {
     // 1. Define configs
     const sheetKeys = ['Group_sum_show_Sheet', 'Group_analysis_brief_report_Sheet', 'ZhuChengQu_sum_show_Sheet']
-    const configPath = '/app/data/数据结构_全口径展示表.json'
+    const configPath = pageConfig.value
     const templatePath = '/25-26生产日报标准模板.xlsx'
     const origins = ['D3', 'C4', 'C3']
     const slicePoints = [3, 2, 2]
 
-    // 2. 串行获取各展示表数据（降低超时概率）
+    // 2. 批量获取展示表数据，共享后端取数缓存
     const templatePromise = fetch(templatePath).then(res => {
       if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`);
       return res.arrayBuffer();
     });
+    const templateData = await templatePromise
 
-    const results = [];
-    for (const key of sheetKeys) {
-      const res = await evalSpecForExport({
-        sheet_key: key,
-        project_key: 'daily_report_25_26',
-        config: configPath,
-        biz_date: bizDate.value ? bizDate.value : 'regular',
-        trace: false,
-      });
-      results.push(res);
+    const jobs = sheetKeys.map((key) => ({
+      sheet_key: key,
+      config: configPath,
+    }))
+
+    const batchRes = await evalSpecsForExport({
+      project_key: 'daily_report_25_26',
+      config: configPath,
+      biz_date: bizDate.value ? bizDate.value : 'regular',
+      trace: false,
+      jobs,
+    })
+    const results = Array.isArray(batchRes?.results) ? batchRes.results : []
+    if (results.length !== sheetKeys.length) {
+      throw new Error(`批量求值返回数量异常：期望 ${sheetKeys.length}，实际 ${results.length}`)
     }
-    const templateData = await templatePromise;
 
     // 3. Process and fill the workbook
     const workbook = XLSX.read(templateData, { type: 'array', cellStyles: true });
