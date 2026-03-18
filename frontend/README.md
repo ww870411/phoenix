@@ -4791,3 +4791,64 @@ docker compose up -d --build
   - 批量请求仅传 `config + sheet_key`；
   - 由后端沿用页面单次加载相同的模板定位逻辑解析展示 sheet。
 - 结果：导出链路与页面加载使用同一套配置解析入口，避免前端静态资源路径差异导致的 HTML/JSON 解析错误。
+
+### 2026-03-18 补充能力：展示页首屏性能剖析
+
+- `DisplayRuntimeView.vue` 的单 sheet 加载请求已默认附带 `profile: true`。
+- 当后端返回 `debug._perf` 时，页面会在浏览器控制台打印：
+  - `sheetKey`
+  - `bizDate`
+  - `perf`
+- 该能力仅用于剖析首屏加载耗时，不改变页面数据、导出内容或表格展示方式。
+
+### 2026-03-18 补充修复：首屏剖析接入后的 404 回归
+
+- 症状：页面加载返回 `{\"detail\":\"Not Found\"}`。
+- 根因不在前端请求，而在后端 `legacy_full.py` 的 runtime 路由装饰器曾被误移除，导致接口未注册。
+- 当前状态：后端 `/runtime/spec/eval` 与 `/runtime/spec/eval-batch` 已恢复注册，前端无需调整请求路径。
+
+### 2026-03-18 第二阶段尝试：首屏 metrics 批量查询
+
+- 前端本轮没有新增交互改动，仍沿用控制台输出 `[DisplayRuntimeView][perf]` 的方式观察首屏性能。
+- 本次后端优化的目标是把首屏加载中的主视图指标查询从“逐公司串行”改为“按表分组批量”，因此复测时重点关注控制台中的：
+  - `metrics_fetch_ms`
+  - `metrics_fetch_count`
+  - `total_ms`
+
+### 2026-03-18 补充能力：控制台查看按表 metrics 耗时
+
+- 展示页控制台返回的 `perf` 对象新增：
+  - `metrics_fetch_ms_by_table`
+  - `metrics_company_count_by_table`
+- 这两个字段用于直接区分 `groups` 与 `sum_basic_data` 哪张视图更慢，前端不做额外展示，仅用于排障分析。
+
+### 2026-03-18 补充分析：数据分析页性能风险
+
+- `frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue` 的 `runAnalysis()` 当前按所选单位逐个串行调用后端 `data_analysis/query`。
+- 若后端未直接返回环比对比数据，前端还会为每个单位再额外发一次上一周期查询请求。
+- 因此该页在“多单位 + 累计模式”下，前端请求次数会明显增加，性能问题不只来自后端单次查询。
+
+### 2026-03-18 数据分析页第一阶段：控制台输出 perf
+
+- `DataAnalysisView.vue` 的 `runAnalysis()` 请求默认附带 `profile: true`。
+- 每个单位完成查询后，页面会在浏览器控制台输出：
+  - `[DataAnalysisView][perf]`
+  - `unitKey`
+  - `unitLabel`
+  - `perf`
+- 这一步只用于定位慢点，不改变页面数据和交互结果。
+
+### 2026-03-18 数据分析页 perf 首轮观察
+
+- 用户首轮复测显示：多单位模式下，`runAnalysis()` 仍按单位串行请求，因此页面总耗时会接近各单位耗时累加。
+- 当前已确认：
+  - `Group` / `ZhuChengQu` 口径主要慢在主查询与上一周期查询；
+  - `JinZhou` 这类公司口径主查询较轻，主要耗时在 timeline 查询。
+
+### 2026-03-18 修复：单位不支持部分指标时不再整单位失败
+
+- 当前行为调整：
+  - 若某个单位/口径对应视图不支持部分已选指标，页面不再因该单位接口 `400` 而整单位无结果；
+  - 后端会返回该单位可查询的指标结果；
+  - 不支持的指标会作为缺失项展示，并在 `warnings` 中提示。
+- 前端无需额外改动，现有 `warnings` 展示逻辑即可承接这类提示。

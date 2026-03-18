@@ -304,6 +304,7 @@ async function runEval() {
       config: pageConfig.value,
       biz_date: bizDate.value ? bizDate.value : 'regular',
       trace: !!traceEnabled.value,
+      profile: true,
     }
     const res = await evalSpec(projectKey.value, body)
     if (!res || res.ok === false) {
@@ -318,6 +319,13 @@ async function runEval() {
     if (Number.isInteger(res.accuracy)) accuracy.value = res.accuracy
     if (res.number_format && typeof res.number_format === 'object') numberFormat.value = res.number_format
     traceData.value = res.debug && res.debug._trace ? res.debug._trace : null
+    if (res.debug && res.debug._perf) {
+      console.info('[DisplayRuntimeView][perf]', {
+        sheetKey: sheetKey.value,
+        bizDate: res.biz_date || body.biz_date,
+        perf: res.debug._perf,
+      })
+    }
 
     let overridesApplied = false
     if (res.accuracy_overrides && typeof res.accuracy_overrides === 'object') {

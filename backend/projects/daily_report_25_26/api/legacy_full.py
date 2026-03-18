@@ -13,6 +13,7 @@ import json
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
+from time import perf_counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path as SysPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
@@ -1559,6 +1560,7 @@ class DataAnalysisQueryPayload(BaseModel):
     request_ai_report: bool = False
     ai_mode_id: Optional[str] = "daily_analysis_v1"
     ai_user_prompt: Optional[str] = ""
+    profile: bool = False
 
 
 class AiSettingsPayload(BaseModel):
@@ -3930,6 +3932,9 @@ def _execute_data_analysis_query_legacy(
     metric_groups = schema_payload.get("metric_groups") or []
     metric_group_views = schema_payload.get("metric_group_views") or {}
     metric_decimals = schema_payload.get("metric_decimals") or {}
+    profile_enabled = bool(getattr(payload, "profile", False))
+    total_started_at = perf_counter()
+    perf: Dict[str, Any] = {}
 
     # Check AI usage limit if AI report is requested
     ai_limit_warning = None
@@ -3967,6 +3972,10 @@ def _execute_data_analysis_query_legacy(
     unit_label = unit_dict.get(unit_key, unit_key)
     is_beihai_sub_scope = scope_key in BEIHAI_SUB_SCOPES
     sheet_name_filter: Optional[str] = scope_key if is_beihai_sub_scope else None
+    if profile_enabled:
+        perf["unit_key"] = unit_key
+        perf["scope_key"] = scope_key or None
+        perf["is_beihai_sub_scope"] = is_beihai_sub_scope
 
     # 如果是北海分表，尝试使用更具体的子表名称作为 unit_label
     if is_beihai_sub_scope:
@@ -4026,6 +4035,11 @@ def _execute_data_analysis_query_legacy(
                 "message": f"累计模式暂只支持 {MAX_TIMELINE_DAYS} 天内的区间，请缩小日期范围。",
             },
         )
+    if profile_enabled:
+        perf["analysis_mode"] = analysis_mode_value
+        perf["timeline_days"] = range_days
+        perf["selected_metrics_count"] = len(ordered_metrics)
+        perf["request_ai_report"] = bool(getattr(payload, "request_ai_report", False))
 
     analysis_modes = schema_payload.get("analysis_modes") or []
     mode_label = next(
@@ -4081,14 +4095,12 @@ def _execute_data_analysis_query_legacy(
                 continue
         analysis_metric_keys.append(key)
 
-    if unsupported_metrics:
-        labels = [metric_dict.get(key, key) for key in unsupported_metrics]
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "message": f"当前视图不支持以下指标: {', '.join(labels)}"},
-        )
+    unsupported_metric_labels = [metric_dict.get(key, key) for key in unsupported_metrics]
+    if profile_enabled:
+        perf["unsupported_metrics_count"] = len(unsupported_metrics)
 
     try:
+        stage_started_at = perf_counter()
         analysis_rows = _query_analysis_rows(
             active_view_name,
             unit_key,
@@ -4097,6 +4109,10 @@ def _execute_data_analysis_query_legacy(
             end_date,
             sheet_name=sheet_name_filter,
         )
+        if profile_enabled:
+            perf["main_analysis_query_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+            perf["analysis_metric_count"] = len(analysis_metric_keys)
+            perf["analysis_view"] = active_view_name
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "message": str(exc)})
     except Exception as exc:  # pylint: disable=broad-except
@@ -4106,7 +4122,11 @@ def _execute_data_analysis_query_legacy(
         )
 
     try:
+        stage_started_at = perf_counter()
         constant_rows = _query_constant_rows(unit_key, constant_metric_keys)
+        if profile_enabled:
+            perf["constant_query_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+            perf["constant_metric_count"] = len(constant_metric_keys)
     except Exception as exc:  # pylint: disable=broad-except
         return JSONResponse(
             status_code=500,
@@ -4120,6 +4140,7 @@ def _execute_data_analysis_query_legacy(
         view_name = temperature_view_name or "calc_temperature_data"
         temperature_column_lookup = _build_temperature_column_lookup(temperature_metric_keys)
         try:
+            stage_started_at = perf_counter()
             temperature_rows = _query_temperature_rows(
                 view_name,
                 temperature_metric_keys,
@@ -4127,6 +4148,10 @@ def _execute_data_analysis_query_legacy(
                 end_date,
                 analysis_mode_value,
             )
+            if profile_enabled:
+                perf["temperature_query_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+                perf["temperature_metric_count"] = len(temperature_metric_keys)
+                perf["temperature_view"] = view_name
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"ok": False, "message": str(exc)})
         except Exception as exc:  # pylint: disable=broad-except
@@ -4156,6 +4181,7 @@ def _execute_data_analysis_query_legacy(
                 timeline_sheet_name = None
             if timeline_view_name:
                 try:
+                    stage_started_at = perf_counter()
                     timeline_rows_map.update(
                         _query_analysis_timeline(
                             timeline_view_name,
@@ -4166,6 +4192,9 @@ def _execute_data_analysis_query_legacy(
                             sheet_name=timeline_sheet_name,
                         )
                     )
+                    if profile_enabled:
+                        perf["analysis_timeline_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+                        perf["analysis_timeline_view"] = timeline_view_name
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("生成逐日明细失败: %s", exc)
         if constant_metric_keys:
@@ -4180,6 +4209,7 @@ def _execute_data_analysis_query_legacy(
                 timeline_rows_map[key] = _build_constant_timeline(val, peer_val, start_date, end_date)
         if temperature_metric_keys and temperature_column_lookup:
             try:
+                stage_started_at = perf_counter()
                 temp_timeline = _query_temperature_timeline(
                     temperature_view_name or "calc_temperature_data",
                     temperature_column_lookup,
@@ -4187,6 +4217,8 @@ def _execute_data_analysis_query_legacy(
                     end_date,
                 )
                 timeline_rows_map.update(temp_timeline)
+                if profile_enabled:
+                    perf["temperature_timeline_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("生成气温逐日明细失败: %s", exc)
 
@@ -4202,6 +4234,7 @@ def _execute_data_analysis_query_legacy(
     )
     if need_prev_range:
         try:
+            stage_started_at = perf_counter()
             prev_start, prev_end = _compute_previous_range(start_date, end_date)
             if prev_start and prev_end:
                 if analysis_metric_keys:
@@ -4228,6 +4261,8 @@ def _execute_data_analysis_query_legacy(
                     "start": prev_start.isoformat(),
                     "end": prev_end.isoformat(),
                 }
+            if profile_enabled:
+                perf["previous_period_query_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
         except Exception as exc:
             ring_compare_note = str(exc)
             logger.warning("计算环比数据失败: %s", exc)
@@ -4235,6 +4270,7 @@ def _execute_data_analysis_query_legacy(
     rows_payload: List[Dict[str, Any]] = []
     missing_metrics: List[Dict[str, str]] = []
     resolved_keys: List[str] = []
+    rows_assembly_started_at = perf_counter()
 
     for key in ordered_metrics:
         label = metric_dict.get(key, key)
@@ -4460,9 +4496,18 @@ def _execute_data_analysis_query_legacy(
             if value is not None:
                 prev_totals_map[key] = _scale_metric_value(key, value)
 
+    if profile_enabled:
+        perf["rows_assembly_ms"] = round((perf_counter() - rows_assembly_started_at) * 1000, 2)
+        perf["resolved_rows_count"] = len(rows_payload)
+        perf["missing_metrics_count"] = len(missing_metrics)
+
     warnings: List[str] = []
     if ai_limit_warning:
         warnings.append(f"【智能报告】{ai_limit_warning}")
+    if unsupported_metric_labels:
+        warnings.append(
+            "当前视图不支持以下指标，已按缺失处理：{}".format(", ".join(unsupported_metric_labels))
+        )
 
     # ... existing code ...
     if missing_metrics:
@@ -4473,6 +4518,7 @@ def _execute_data_analysis_query_legacy(
     plan_comparison_payload: Optional[Dict[str, Any]] = None
     plan_comparison_note: Optional[str] = None
     if data_analysis_service._is_same_month(start_date, end_date):
+        stage_started_at = perf_counter()
         (
             plan_comparison_payload,
             plan_comparison_note,
@@ -4487,6 +4533,8 @@ def _execute_data_analysis_query_legacy(
             analysis_mode_value,
             schema_payload.get("view_mapping") or {},
         )
+        if profile_enabled:
+            perf["plan_comparison_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
     else:
         plan_comparison_note = "计划比较仅支持起止日期位于同一自然月"
 
@@ -4521,7 +4569,10 @@ def _execute_data_analysis_query_legacy(
         try:
             response_payload["ai_mode_id"] = str(payload.ai_mode_id or "daily_analysis_v1")
             response_payload["ai_user_prompt"] = str(payload.ai_user_prompt or "").strip()
+            ai_enqueue_started_at = perf_counter()
             job_id = data_analysis_ai_report.enqueue_ai_report_job(response_payload)
+            if profile_enabled:
+                perf["ai_report_enqueue_ms"] = round((perf_counter() - ai_enqueue_started_at) * 1000, 2)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("触发 AI 报告生成失败: %s", exc)
         else:
@@ -4529,6 +4580,10 @@ def _execute_data_analysis_query_legacy(
                 response_payload["ai_report_job_id"] = job_id
     elif ai_limit_warning:
         response_payload["ai_report_error"] = ai_limit_warning
+
+    if profile_enabled:
+        perf["total_ms"] = round((perf_counter() - total_started_at) * 1000, 2)
+        response_payload["_perf"] = perf
 
     return JSONResponse(status_code=200, content=response_payload)
 
@@ -4960,6 +5015,7 @@ async def handle_coal_inventory_submission(payload: Dict[str, Any]) -> JSONRespo
 
 # ============ 调试：运行时表达式求值 ============
 @router.post("/runtime/spec/eval", summary="运行时表达式求值（调试）", tags=["runtime"])
+
 async def runtime_eval(request: Request):
     """
     调试路由：根据模板（或内联 spec）与主键、可选 biz_date，对模板中的表达式进行求值替换，返回 rows-only 结构。
@@ -4982,7 +5038,7 @@ async def runtime_eval(request: Request):
       "unit_name": "...",
       "columns": [...],
       "rows": [...],
-      "debug": {...}  // trace=true 时包含
+      "debug": {...}  // trace=true 或 profile=true 时包含
     }
     """
     payload = await request.json()
@@ -4999,6 +5055,7 @@ async def runtime_eval(request: Request):
         pass
 
     trace = bool(payload.get("trace", False))
+    profile = bool(payload.get("profile", False))
     biz_date_raw = str(payload.get("biz_date") or "regular").strip()
     resolved_biz_date: Optional[str]
     biz_date_mode = "regular"
@@ -5108,7 +5165,7 @@ async def runtime_eval(request: Request):
             project_key=project_key,
             primary_key=primary_key,
             trace=trace,
-            context={"biz_date": resolved_biz_date},
+            context={"biz_date": resolved_biz_date, "profile": profile},
         )
     except Exception as exc:
         return JSONResponse(status_code=500, content={"ok": False, "message": "求值失败", "error": str(exc)})
@@ -5184,20 +5241,27 @@ async def runtime_eval(request: Request):
     column_groups = result.get("column_groups")
     if isinstance(column_groups, list) and column_groups:
         content["column_groups"] = column_groups
+    debug_payload = {}
     if trace and "_trace" in result:
-        content["debug"] = {"_trace": result["_trace"]}
+        debug_payload["_trace"] = result["_trace"]
+    if profile and "_perf" in result:
+        debug_payload["_perf"] = result["_perf"]
+    if debug_payload:
+        content["debug"] = debug_payload
     return JSONResponse(status_code=200, content=content)
 
 
 # 临时调试：查看指定 company 的指标与常量缓存（不依赖 render_spec）
 
 @router.post("/runtime/spec/eval-batch", summary="运行时表达式批量求值（共享缓存）", tags=["runtime"])
+
 async def runtime_eval_batch(request: Request):
     payload = await request.json()
     if not isinstance(payload, dict):
         return JSONResponse(status_code=400, content={"ok": False, "message": "请求体需为 JSON 对象"})
 
     trace = bool(payload.get("trace", False))
+    profile = bool(payload.get("profile", False))
     project_key = str(payload.get("project_key") or "daily_report_25_26").strip()
     biz_date_raw = str(payload.get("biz_date") or "regular").strip()
     default_config = payload.get("config")
@@ -5282,6 +5346,7 @@ async def runtime_eval_batch(request: Request):
                 trace=trace,
                 context={
                     "biz_date": resolved_biz_date,
+                    "profile": profile,
                     "shared_metrics_cache": shared_metrics_cache,
                     "shared_constants_cache": shared_constants_cache,
                     "shared_temperature_cache": shared_temperature_cache,
@@ -5351,8 +5416,13 @@ async def runtime_eval_batch(request: Request):
         column_groups = result.get("column_groups")
         if isinstance(column_groups, list) and column_groups:
             item_content["column_groups"] = column_groups
+        debug_payload: Dict[str, Any] = {}
         if trace and "_trace" in result:
-            item_content["debug"] = {"_trace": result["_trace"]}
+            debug_payload["_trace"] = result["_trace"]
+        if profile and "_perf" in result:
+            debug_payload["_perf"] = result["_perf"]
+        if debug_payload:
+            item_content["debug"] = debug_payload
         results.append(item_content)
 
     return JSONResponse(

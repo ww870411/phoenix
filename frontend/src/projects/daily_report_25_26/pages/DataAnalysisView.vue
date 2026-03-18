@@ -2206,6 +2206,7 @@ async function runAnalysis() {
     request_ai_report: false,
     ai_mode_id: aiModeId.value,
     ai_user_prompt: aiUserPrompt.value.trim(),
+    profile: true,
   }
   resetAiReportState()
     const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
@@ -2217,6 +2218,13 @@ async function runAnalysis() {
         const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
         if (!response?.ok) {
           throw new Error(response?.message || '分析查询失败')
+        }
+        if (response._perf) {
+          console.info('[DataAnalysisView][perf]', {
+            unitKey,
+            unitLabel: response.unit_label || resolveUnitLabel(unitKey),
+            perf: response._perf,
+          })
         }
         const decoratedRows = Array.isArray(response.rows)
           ? response.rows.map((row) => ({

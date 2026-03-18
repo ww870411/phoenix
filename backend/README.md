@@ -3511,3 +3511,140 @@
 - 结果：批量导出与单 sheet 页面加载统一复用同一套模板解析入口，避免前端静态 JSON 路径与后端数据目录路径不一致时导出失败。
 - 验证：
   - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+### 2026-03-18 补充能力：运行时求值分段计时
+
+- 目标：定位 `daily_report_25_26` 数据展示页单 sheet 首屏加载慢的具体阶段，不改变现有口径和结果。
+- `backend/services/runtime_expression.py` 的 `render_spec(...)` 新增可选 `_perf` 输出，覆盖：
+  - `parse_context_ms`
+  - `collect_companies_ms`
+  - `prefetch_data_ms`
+  - `temperature_fetch_ms`
+  - `metrics_fetch_ms`
+  - `constants_fetch_ms`
+  - `prepare_render_ms`
+  - `evaluate_rows_ms`
+  - `finalize_output_ms`
+  - `total_ms`
+- 同时输出缓存/取数统计：
+  - `companies_needed_count`
+  - `metrics_fetch_count`
+  - `metrics_cache_hits`
+  - `constants_fetch_count`
+  - `constants_cache_hits`
+  - `temperature_cache_hit`
+- `/projects/daily_report_25_26/runtime/spec/eval` 与 `/projects/daily_report_25_26/runtime/spec/eval-batch` 支持请求体 `profile: true`，并在响应 `debug._perf` 返回分段耗时。
+- 验证：
+  - `python -m py_compile backend/services/runtime_expression.py backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+### 2026-03-18 补充修复：恢复 runtime 路由注册
+
+- 问题：剖析能力接入后，展示页调用 runtime 接口返回 `{\"detail\":\"Not Found\"}`。
+- 根因：`backend/projects/daily_report_25_26/api/legacy_full.py` 中 `runtime_eval` 与 `runtime_eval_batch` 的 `@router.post(...)` 装饰器被编辑时意外移除。
+- 修复：已恢复两个装饰器，重新注册：
+  - `/runtime/spec/eval`
+  - `/runtime/spec/eval-batch`
+- 验证：
+  - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py backend/services/runtime_expression.py` 通过。
+
+### 2026-03-18 第二阶段尝试：metrics 视图批量查询
+
+- 触发依据：展示页首屏 `_perf` 明确显示瓶颈集中在 `metrics_fetch_ms`，而 `evaluate_rows_ms` 仅几十毫秒。
+- `backend/services/runtime_expression.py` 本轮新增：
+  - `_fetch_metrics_from_view_batch(session, table, companies, biz_date)`：支持按 `company = ANY(:companies)` 批量读取 `sum_basic_data` / `groups`。
+- `render_spec(...)` 本轮调整：
+  - 先根据主表路由把 `companies_needed` 按目标表分组；
+  - 共享缓存命中的公司直接复用；
+  - 未命中的公司改为“每张表一次批量查询”，结果再拆回 `metrics_by_company` 与共享缓存。
+- 预期收益：
+  - 对同时涉及多个公司的展示 sheet，metrics 取数从 `N` 次串行查询压缩为最多按表数查询；
+  - 典型场景下 `metrics_fetch_count` 会从公司数下降到 1-2 次。
+- 验证：
+  - `python -m py_compile backend/services/runtime_expression.py backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+### 2026-03-18 补充能力：metrics 按表耗时明细
+
+- 为进一步定位剩余瓶颈，`render_spec(...)` 的 `_perf` 增加：
+  - `metrics_fetch_ms_by_table`
+  - `metrics_company_count_by_table`
+- 这两个字段分别记录每张主视图批量查询耗时，以及该次批量查询涉及的公司数。
+- 目标：明确剩余 18s 中究竟是 `groups` 慢，还是 `sum_basic_data` 慢，再决定是否进入 SQL/视图/索引层优化。
+- 验证：
+  - `python -m py_compile backend/services/runtime_expression.py backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+### 2026-03-18 补充分析：数据分析页查询链路风险点
+
+- 数据分析页后端主入口：`backend/projects/daily_report_25_26/api/legacy_full.py` 的 `/data_analysis/query`，实际执行落在 `_execute_data_analysis_query_legacy(...)`。
+- 当前识别出的主要性能风险：
+  - `_query_analysis_rows(...)` 负责主分析视图查询；
+  - `_query_analysis_timeline(...)` 在累计模式下按天循环，每天单独创建 session 并执行一次视图查询；
+  - `_query_temperature_rows(...)`、`_query_temperature_timeline(...)`、常量查询、上一周期对比、计划对比都可能叠加到同一请求中；
+  - 因此该页更像“多段串行组合查询”，而不是展示页那种单一重视图瓶颈。
+- 若后续正式优化此页，优先建议先为 `/data_analysis/query` 增加 `_perf` 分段计时，再决定先压前端串行，还是先重写 timeline 查询。
+
+### 2026-03-18 数据分析页第一阶段：后端分段计时
+
+- `backend/projects/daily_report_25_26/api/legacy_full.py`
+  - `DataAnalysisQueryPayload` 新增 `profile` 字段；
+  - `_execute_data_analysis_query_legacy(...)` 在 `profile=true` 时返回 `_perf`。
+- 当前 `_perf` 计时项：
+  - `main_analysis_query_ms`
+  - `constant_query_ms`
+  - `temperature_query_ms`
+  - `analysis_timeline_ms`
+  - `temperature_timeline_ms`
+  - `previous_period_query_ms`
+  - `plan_comparison_ms`
+  - `rows_assembly_ms`
+  - `ai_report_enqueue_ms`
+  - `total_ms`
+- 同时补充上下文字段：
+  - `unit_key`
+  - `scope_key`
+  - `is_beihai_sub_scope`
+  - `analysis_mode`
+  - `timeline_days`
+  - `selected_metrics_count`
+  - `analysis_metric_count`
+  - `constant_metric_count`
+  - `temperature_metric_count`
+- 目的：先明确究竟是主分析视图、timeline、上一周期查询还是计划比较拖慢该页。
+- 验证：
+  - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+### 2026-03-18 数据分析页 perf 首轮结论
+
+- 用户在 `range` 模式、`timeline_days=59`、`selected_metrics_count=6` 下复测：
+  - `Group`：`total_ms≈22507`，其中
+    - `main_analysis_query_ms≈10532`
+    - `previous_period_query_ms≈9579`
+    - `analysis_timeline_ms≈2395`
+    - 主视图：`analysis_groups_sum`
+    - timeline 视图：`analysis_groups_daily`
+  - `ZhuChengQu`：`total_ms≈22089`，结构与 `Group` 基本一致
+  - `JinZhou`：`total_ms≈1807`，其中
+    - `main_analysis_query_ms≈70`
+    - `previous_period_query_ms≈68`
+    - `analysis_timeline_ms≈1668`
+    - 主视图：`analysis_company_sum`
+    - timeline 视图：`analysis_company_daily`
+- 当前判断：
+  - 集团口径瓶颈集中在 `analysis_groups_sum` 及其上一周期同类查询；
+  - 公司口径主查询较轻，timeline 才是主要耗时；
+  - 因此后续不应把所有单位视为同一类瓶颈，而应分别处理 `groups` 口径与 `company` 口径。
+
+### 2026-03-18 修复：数据分析页 unsupported metrics 软降级
+
+- 触发问题：
+  - 多单位、多指标查询时，若当前单位对应视图不支持其中部分指标，`_execute_data_analysis_query_legacy(...)` 会直接返回 `400`：
+    - `当前视图不支持以下指标: ...`
+- 修复策略：
+  - 不再把 `unsupported_metrics` 当作硬错误；
+  - 保留当前单位其余可查询指标的结果；
+  - 对不支持指标按缺失项返回；
+  - 在 `warnings` 中附加：`当前视图不支持以下指标，已按缺失处理：...`
+- 边界说明：
+  - 仅对“当前视图不支持该指标”做软降级；
+  - `未知单位`、`存在未配置的指标` 等配置级错误仍保持硬失败，避免掩盖真实配置问题。
+- 验证：
+  - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过。

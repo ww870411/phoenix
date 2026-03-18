@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple, Set
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
+from time import perf_counter
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -753,7 +754,12 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     3) 逐行逐列替换表达式
     返回：新对象（深拷贝），其中 数据 的表达式已替换为数值/文本；如 trace=True，附加 _trace
     """
+    total_started_at = perf_counter()
+    profile_enabled = bool(context.get("profile")) if isinstance(context, dict) else False
+    perf: Dict[str, Any] = {}
+
     # --- 1. 解析上下文 ---
+    stage_started_at = perf_counter()
     qsrc = spec.get("查询数据源") or {}
     main_table = qsrc.get("主表", "sum_basic_data")
     alias_map = qsrc.get("缩写") or {"c": "constant_data"}
@@ -792,8 +798,11 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         unit_en_to_cn=unit_en_to_cn if unit_en_to_cn else None,
         context=context,
     )
+    if profile_enabled:
+        perf["parse_context_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
     # --- 2. 预取缓存（支持多 company） ---
+    stage_started_at = perf_counter()
     raw_columns: List[str] = spec.get("列名") or []
     rows: List[List[Any]] = spec.get("数据") or []
     is_crosstab = spec.get("类型") == "crosstab"
@@ -941,6 +950,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
                 c = _normalize_company(r[discriminator_index])
                 if c:
                     companies_needed.add(c)
+    if profile_enabled:
+        perf["collect_companies_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+        perf["companies_needed_count"] = len(companies_needed)
 
     shared_metrics_cache = context.get("shared_metrics_cache") if isinstance(context, dict) else None
     if not isinstance(shared_metrics_cache, dict):
@@ -952,6 +964,17 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     if not isinstance(shared_temperature_cache, dict):
         shared_temperature_cache = {}
 
+    stage_started_at = perf_counter()
+    temperature_fetch_ms = 0.0
+    metrics_fetch_ms = 0.0
+    constants_fetch_ms = 0.0
+    metrics_cache_hits = 0
+    metrics_fetch_count = 0
+    metrics_fetch_ms_by_table: Dict[str, float] = {}
+    metrics_company_count_by_table: Dict[str, int] = {}
+    constants_cache_hits = 0
+    constants_fetch_count = 0
+    temperature_cache_hit = False
     with next(get_session()) as session:  # type: ignore
         metrics_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
         consts_by_company: Dict[str, Dict[str, Dict[str, Dict[str, Decimal]]]] = {}
@@ -974,43 +997,88 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             context_biz_date = context["biz_date"]
         temperature_cache_key = context_biz_date or "regular"
         if temperature_cache_key in shared_temperature_cache:
+            temperature_cache_hit = True
             temperature_metrics_cache = shared_temperature_cache[temperature_cache_key]
         else:
+            fetch_started_at = perf_counter()
             temperature_metrics_cache = _fetch_temperature_extremes(session, context_biz_date)
+            temperature_fetch_ms += (perf_counter() - fetch_started_at) * 1000
             shared_temperature_cache[temperature_cache_key] = temperature_metrics_cache
 
+        table_to_missing_companies: Dict[str, List[str]] = {}
         for comp in companies_needed:
             try:
                 # 按公司动态选择主表（comp 在 groups 列表 → groups，否则 default）
                 _per_table = "groups" if comp in _groups_set else _default_table
                 metrics_cache_key = f"{context_biz_date or 'regular'}::{_per_table}::{comp}"
                 if metrics_cache_key in shared_metrics_cache:
+                    metrics_cache_hits += 1
                     metrics_by_company[comp] = shared_metrics_cache[metrics_cache_key]
                 else:
-                    metrics_by_company[comp] = _fetch_metrics_from_view(
-                        session, _per_table, comp, context_biz_date
-                    )
-                    shared_metrics_cache[metrics_cache_key] = metrics_by_company[comp]
+                    table_to_missing_companies.setdefault(_per_table, []).append(comp)
             except Exception:
                 metrics_by_company[comp] = {}
+
+        for table_name, missing_companies in table_to_missing_companies.items():
+            if not missing_companies:
+                continue
+            try:
+                fetch_started_at = perf_counter()
+                batch_metrics = _fetch_metrics_from_view_batch(
+                    session, table_name, missing_companies, context_biz_date
+                )
+                fetch_elapsed_ms = (perf_counter() - fetch_started_at) * 1000
+                metrics_fetch_ms += fetch_elapsed_ms
+                metrics_fetch_count += 1
+                metrics_fetch_ms_by_table[table_name] = round(fetch_elapsed_ms, 2)
+                metrics_company_count_by_table[table_name] = len(missing_companies)
+                for comp in missing_companies:
+                    company_metrics = batch_metrics.get(comp, {})
+                    metrics_by_company[comp] = company_metrics
+                    metrics_cache_key = f"{context_biz_date or 'regular'}::{table_name}::{comp}"
+                    shared_metrics_cache[metrics_cache_key] = company_metrics
+            except Exception:
+                for comp in missing_companies:
+                    metrics_by_company[comp] = {}
+        for comp in companies_needed:
             consts_by_company[comp] = {}
             for alias, table_name in (alias_map or {}).items():
                 try:
                     constants_cache_key = f"{table_name}::{comp}"
                     if constants_cache_key in shared_constants_cache:
+                        constants_cache_hits += 1
                         consts_by_company[comp][alias] = shared_constants_cache[constants_cache_key]
                     elif isinstance(table_name, str) and table_name == "sum_coal_inventory_data":
+                        fetch_started_at = perf_counter()
                         consts_by_company[comp][alias] = _fetch_sum_coal_inventory_constants(session, comp)
+                        constants_fetch_ms += (perf_counter() - fetch_started_at) * 1000
+                        constants_fetch_count += 1
                         shared_constants_cache[constants_cache_key] = consts_by_company[comp][alias]
                     else:
+                        fetch_started_at = perf_counter()
                         consts_by_company[comp][alias] = _fetch_constants_for_table(session, table_name, comp)
+                        constants_fetch_ms += (perf_counter() - fetch_started_at) * 1000
+                        constants_fetch_count += 1
                         shared_constants_cache[constants_cache_key] = consts_by_company[comp][alias]
                 except Exception:
                     consts_by_company[comp][alias] = {}
 
             if comp == "Group" and temperature_metrics_cache:
                 metrics_by_company.setdefault(comp, {}).update(temperature_metrics_cache)
+    if profile_enabled:
+        perf["prefetch_data_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+        perf["temperature_fetch_ms"] = round(temperature_fetch_ms, 2)
+        perf["temperature_cache_hit"] = temperature_cache_hit
+        perf["metrics_fetch_ms"] = round(metrics_fetch_ms, 2)
+        perf["metrics_fetch_count"] = metrics_fetch_count
+        perf["metrics_cache_hits"] = metrics_cache_hits
+        perf["metrics_fetch_ms_by_table"] = metrics_fetch_ms_by_table
+        perf["metrics_company_count_by_table"] = metrics_company_count_by_table
+        perf["constants_fetch_ms"] = round(constants_fetch_ms, 2)
+        perf["constants_fetch_count"] = constants_fetch_count
+        perf["constants_cache_hits"] = constants_cache_hits
 
+    stage_started_at = perf_counter()
     col_frames = map_columns_to_frames(columns)
     # 动态确定回填起点：以首个“本期日”所在列为准（data_start_idx）
     # 在此之前（ci < data_start_idx）的列原样保留（如 项目/中心/计量单位 等）
@@ -1090,6 +1158,8 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     except Exception:
         accuracy_default = 2
         accuracy_overrides = {}
+    if profile_enabled:
+        perf["prepare_render_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
     # 返回对象（在最后一轮填充）
     out = dict(spec)  # 浅拷贝基础字段
@@ -1104,6 +1174,7 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
     # 跨轮共享的行缓存（用于前后顺序依赖）——按 company 分片，避免串扰
     shared_row_cache_by_company: Dict[str, Dict[str, Dict[str, Decimal]]] = {}
 
+    stage_started_at = perf_counter()
     for pass_idx in range(max_passes):
         last_pass = (pass_idx == max_passes - 1)
         # 每一轮的临时输出
@@ -1386,7 +1457,10 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             final_rows = out_rows
             final_traces = all_traces
         # 下一轮继续，使用已累积的 shared_row_cache
+    if profile_enabled:
+        perf["evaluate_rows_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
+    stage_started_at = perf_counter()
     out["数据"] = final_rows
     if trace:
         out["_trace"] = final_traces
@@ -1461,7 +1535,72 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         out["column_headers"] = header_levels
     if column_groups_meta:
         out["column_groups"] = column_groups_meta
+    if profile_enabled:
+        perf["finalize_output_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
+        perf["total_ms"] = round((perf_counter() - total_started_at) * 1000, 2)
+        out["_perf"] = perf
 
+    return out
+
+
+def _fetch_metrics_from_view_batch(
+    session: Session,
+    table: str,
+    companies: List[str],
+    biz_date: Optional[str] = None,
+) -> Dict[str, Dict[str, Dict[str, Decimal]]]:
+    """
+    从视图按 company IN (...) 批量拉取多个公司所有 item 的 6 个窗口值。
+    返回结构：{ company: { item: {field_name: Decimal, ...}, ... }, ... }
+    """
+    normalized_companies = []
+    seen: Set[str] = set()
+    for company in companies or []:
+        token = str(company or "").strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        normalized_companies.append(token)
+    if not normalized_companies:
+        return {}
+
+    table_whitelist = {"sum_basic_data", "groups"}
+    target = table if table in table_whitelist else "sum_basic_data"
+    if biz_date and biz_date.lower() != "regular":
+        session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
+    else:
+        session.execute(text("SET LOCAL phoenix.biz_date = DEFAULT"))
+    sql = text(
+        f"""
+        SELECT company, item, item_cn, unit,
+               value_biz_date, value_peer_date,
+               sum_month_biz, sum_month_peer,
+               sum_ytd_biz, sum_ytd_peer
+          FROM {target}
+         WHERE company = ANY(:companies)
+        """
+    )
+    rows = session.execute(sql, {"companies": normalized_companies}).mappings().all()
+    out: Dict[str, Dict[str, Dict[str, Decimal]]] = {company: {} for company in normalized_companies}
+    for r in rows:
+        company = str(r.get("company") or "").strip()
+        if not company:
+            continue
+        company_bucket = out.setdefault(company, {})
+        item = r["item"]
+        bucket = {
+            "value_biz_date": _to_decimal(r.get("value_biz_date")),
+            "value_peer_date": _to_decimal(r.get("value_peer_date")),
+            "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
+            "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
+            "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
+            "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
+        }
+        company_bucket[item] = bucket
+        if r.get("item_cn"):
+            cn_key = str(r.get("item_cn")).strip()
+            if cn_key and cn_key not in company_bucket:
+                company_bucket[cn_key] = bucket
     return out
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
