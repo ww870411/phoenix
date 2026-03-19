@@ -1,5 +1,20 @@
 # daily_report_25_26 后端说明
 
+## 月报导入工作台单位换算修复（2026-03-19）
+- 文件：`backend/projects/monthly_data_show/services/extractor.py`
+- 问题现象：
+  - 原始单位为 `千瓦时` 的指标会正确转换为 `万千瓦时`，且数值除以 `10000`；
+  - 但原始单位本来就是 `万千瓦时` 的指标，单位文本不变，数值却仍被错误除以 `10000`。
+- 根因：
+  - `_normalize_value()` 旧逻辑在遍历单位规则时，只要“按该规则推导后的单位名”和当前标准化单位一致，就会执行 `value_divisor`；
+  - 对 `exact_match=true` 的 `千瓦时 -> 万千瓦时` 规则来说，`raw_unit='万千瓦时'` 也会落入这个条件，从而误除一次。
+- 修复：
+  - `_normalize_value()` 现在要求 `matched=True` 才允许执行换算，即规则必须真实命中原始单位；
+  - `extract_rows()` 传入 `active_unit_rules`，保证数值换算与单位文本标准化共享同一规则集。
+- 结果：
+  - 仅原始单位确实命中单位规则时才会进行数值缩放；
+  - 原始单位已是目标单位的记录不再被重复换算。
+
 ## 生产镜像构建上下文排除 db_data（2026-03-19）
 - `db_data` 是开发环境 PostgreSQL 的宿主机挂载目录，不属于后端镜像内容。
 - 根目录 `.dockerignore` 已显式排除 `db_data` 与递归子路径，避免 Docker 在 `context: .` 构建生产镜像时把数据库文件送入 build context。
@@ -3687,3 +3702,45 @@
 
 ## 2026-03-19 annual_completion_value 展示名称调整
 - 前端展示口径已统一使用“累计完成值”指代 `annual_completion_value`。
+# 后端补充说明（2026-03-19：月报导入工作台单位转换链路）
+
+- 模块入口：`backend/projects/monthly_data_show/api/workspace.py`
+- 提取服务：`backend/projects/monthly_data_show/services/extractor.py`
+- 规则配置：`backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`
+
+当前月报导入工作台里，“千瓦时 / 万千瓦时”相关逻辑按下面顺序执行：
+
+1. `POST /monthly-data-show/inspect`
+- 返回 `extraction_rules` 给前端。
+- `get_extraction_rule_options()` 会把 `unit_normalize_rules` 展开成“计量单位转换”规则组。
+
+2. `POST /monthly-data-show/extract-csv`
+- `extract_monthly_data_show_csv()` 调用 `extract_rows()`。
+- `extract_rows()` 在遍历每个子表时，会先根据前端传入的 `selected_rule_ids` 过滤出 `active_unit_rules`。
+- 对每一行：
+  - `_normalize_unit(unit_raw, unit_rules=active_unit_rules)` 负责单位文本标准化；
+  - `_normalize_value(raw_unit, unit, value_cell)` 负责依据命中的单位规则同步换算数值。
+
+3. 当前电量单位规则
+- 默认规则和运行时配置都包含：
+  - `source = "千瓦时"`
+  - `target = "万千瓦时"`
+  - `value_divisor = 10000`
+  - `exact_match = true`
+- 这表示：
+  - 只有当原始单位严格等于 `千瓦时` 时，才改成 `万千瓦时`；
+  - 同时把数值除以 `10000`；
+  - 若原始单位已经是 `万千瓦时`，则本条规则不应再命中。
+
+4. `POST /monthly-data-show/import-csv`
+- `import_monthly_data_show_csv()` 只负责解析 CSV 并写库。
+- `_parse_import_csv_rows()` 不再调用 `_normalize_unit()` 或 `_normalize_value()`。
+- 数据库 upsert 时会直接采用 CSV 中的 `unit` 与 `value`。
+
+因此当前后端行为可以明确区分为：
+
+- 提取阶段负责“标准化 + 换算”；
+- 入库阶段负责“原样写库”；
+- 查询阶段读取的是库里的最终值，除计算指标外不会重新做这条单位转换。
+
+这也解释了为什么历史旧库数据可能仍出现 `万万千瓦时`：那是旧提取结果留下的脏数据，不是当前 `import-csv` 重新算坏的。

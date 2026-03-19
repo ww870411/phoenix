@@ -1,3 +1,22 @@
+## 2026-03-19（月报导入工作台修复：原始单位已是万千瓦时时误除以10000）
+
+- 结论：
+  - `monthly_data_show/import-workspace` 的单位文本标准化与数值换算此前存在错位：当原始单位已经是 `万千瓦时` 时，单位文本不会变化，但 `_normalize_value()` 仍会把数值误除以 `10000`。
+  - 根因是数值换算逻辑只比较“按规则推导后的单位是否等于当前单位”，没有要求“这条规则必须真实命中原始单位”。于是 `raw_unit='万千瓦时'` 时，也会被误判为满足 `千瓦时 -> 万千瓦时` 规则。
+- 本轮改动：
+  - `backend/projects/monthly_data_show/services/extractor.py`
+    - `_normalize_value()` 新增 `unit_rules` 参数，并增加 `matched` 判断；仅当规则真实命中原始单位时，才允许执行 `value_divisor` 换算。
+    - `extract_rows()` 调用 `_normalize_value()` 时，改为传入当前已选中的 `active_unit_rules`，保证单位文本标准化与数值换算使用同一套规则集。
+- 验证：
+  - `python -m py_compile backend/projects/monthly_data_show/services/extractor.py` 通过。
+  - 本地样例验证：
+    - `千瓦时 / 10000 -> 万千瓦时 / 1.0`
+    - `万千瓦时 / 10000 -> 万千瓦时 / 10000.0`
+    - `千克标煤/米2 / 10000 -> 千克标煤/平方米 / 10000.0`
+- 结果：
+  - 只有原始单位确实为 `千瓦时` 的指标才会在提取阶段被除以 `10000`；
+  - 原始单位已是 `万千瓦时` 的指标将保持原值，不再被重复缩小。
+
 ## 2026-03-19（生产镜像构建上下文显式排除 db_data）
 
 - 结论：
@@ -6984,3 +7003,25 @@
 
 ## 2026-03-19（年度口径文案微调）
 - `query-tool` 年度口径中的“累计值”已统一更名为“累计完成值”，避免与普通累计概念混淆。
+## 2026-03-19（月报导入工作台单位转换链路梳理：千瓦时/万千瓦时）
+
+- 结论：
+  - `monthly_data_show/import-workspace` 中“千瓦时 → 万千瓦时”的单位转换只发生在步骤 3 的“提取 CSV”阶段，不发生在步骤 4 的“CSV 入库”阶段。
+  - 具体规则位于 `backend/projects/monthly_data_show/services/extractor.py` 与 `backend_data/projects/monthly_data_show/monthly_data_show_extraction_rules.json`，当前配置为：
+    - 单位文本：`千瓦时 -> 万千瓦时`
+    - 数值换算：`value_divisor = 10000`
+    - 匹配方式：`exact_match = true`
+  - 当前前端 `MonthlyDataShowEntryView.vue` 在步骤 1 读取规则后，默认会把全部规则自动勾选；如果用户没有手动取消，该单位规则会参与提取。
+- 实际流程：
+  - 步骤 1：前端调用 `POST /monthly-data-show/inspect`，后端返回可选口径、字段、源字段、常量规则和规则列表。
+  - 步骤 2：前端默认全选全部规则，并允许用户调整源字段、常量注入、规则选择。
+  - 步骤 3：前端调用 `POST /monthly-data-show/extract-csv`；后端 `extract_rows()` 逐个子表读取“项目/计量单位/本年计划/本月计划/上年同期/本月实际”。
+  - 提取时：
+    - `_normalize_unit()` 先改单位文本；
+    - `_normalize_value()` 再按同一条规则决定是否对数值除以 10000；
+    - 生成的 CSV 已经是标准化后的单位和值。
+  - 步骤 4：前端调用 `POST /monthly-data-show/import-csv`；后端 `_parse_import_csv_rows()` 只解析 CSV 并按 `(company, item, date, period, type)` upsert 到 `monthly_data_show`，不会再次做单位换算。
+- 关键判断：
+  - 如果“今天新提取”的 CSV 里已经出现异常单位或数值，问题在步骤 3 的提取链路或规则选择，不在入库。
+  - 如果是查询页面看到历史 `万万千瓦时` 等异常，而今天没有重新提取/重新入库，则更可能是历史库里旧脏数据仍在暴露；3 月 16 日的修复不会自动清洗旧库数据。
+  - 3 月 16 日已确认旧问题根因是早期单位规则做“包含替换”，会把原本就是 `万千瓦时` 的单位继续替成 `万万千瓦时`；当前代码已改为 `exact_match=true`，理论上新提取数据不应再出现该问题。

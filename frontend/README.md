@@ -1,5 +1,14 @@
 # 前端说明（Vue3 + Vite）
 
+## 月报导入工作台单位换算问题说明（2026-03-19）
+- 页面：`src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+- 本轮前端代码未改动，但已确认页面行为：
+  - 步骤 1 读取规则后，默认会自动选中全部子规则；
+  - 步骤 3 提取 CSV 时，会把当前选中的 `selectedExtractionRuleIds` 原样传给后端；
+  - 步骤 4 入库只是把步骤 3 产出的 CSV 原样上传，不做任何额外单位换算。
+- 因此这次“原始单位已是万千瓦时却仍被除以10000”的问题，不是前端页面重复处理，而是后端提取时的数值换算误判。
+- 当前前端侧无需额外兼容；重新提取同一批文件后，步骤 3 生成的 CSV 即应恢复正确。
+
 ## 生产镜像构建上下文排除 db_data（2026-03-19）
 - 根目录 `.dockerignore` 已显式排除 `db_data` 及其递归形式，本地 PostgreSQL 挂载目录不会进入生产镜像构建上下文。
 - `lo1.ps1` 与 `lo1_new_server.ps1` 在启动生产构建前会输出提示，明确 `db_data` 不参与镜像打包。
@@ -4890,3 +4899,29 @@ docker compose up -d --build
 
 ## 2026-03-19 年度口径名称微调
 - 页面中的年度列名已从“累计值”统一调整为“累计完成值”。
+# 前端补充说明（2026-03-19：月报导入工作台单位转换链路）
+
+- 页面：`/projects/monthly_data_show/import-workspace`
+- 入口文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue`
+- 相关前端 API：`frontend/src/projects/daily_report_25_26/services/api.js`
+
+当前页面关于“千瓦时 / 万千瓦时”的流程是：
+
+- 步骤 1 “读取口径与字段” 调用 `inspectMonthlyDataShowFile()`，后端返回 `extraction_rules`。
+- 页面拿到 `extraction_rules` 后，默认执行：
+  - `selectedExtractionRuleIds.value = flattenedExtractionRules.value.map((rule) => rule.id)`
+  - 也就是默认把所有子规则都勾上，包含“计量单位转换”里的 `千瓦时 -> 万千瓦时`。
+- 步骤 3 “提取 CSV” 调用 `extractMonthlyDataShowCsv()`，把：
+  - `selectedCompanies`
+  - `selectedFields`
+  - `effectiveSourceColumns`
+  - `selectedExtractionRuleIds`
+  - `constantRules`
+  一并传给后端。
+- 页面本身不做“千瓦时 / 万千瓦时”换算，只负责把规则选择传给后端，并缓存后端返回的标准化 CSV。
+- 步骤 4 “一键入库”只是把步骤 3 缓存的 CSV 再交给 `importMonthlyDataShowCsv()` 上传，前端不追加任何单位处理。
+
+因此，前端层面的关键点只有两条：
+
+- 默认情况下，这条单位转换规则是开启的，不是默认关闭。
+- 一键入库不会改变步骤 3 已产出的单位和值；如果 CSV 在步骤 3 已经不对，步骤 4 只会把错误原样写入数据库。

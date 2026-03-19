@@ -617,11 +617,17 @@ def _evaluate_semicalculated_formula(
         return None, normalized_formula
 
 
-def _normalize_value(raw_unit: str, unit: str, value: object) -> object:
+def _normalize_value(
+    raw_unit: str,
+    unit: str,
+    value: object,
+    unit_rules: Optional[Sequence[Dict[str, Any]]] = None,
+) -> object:
     number = _coerce_number(value)
     if number is None:
         return str(value).strip()
-    for rule in UNIT_NORMALIZE_RULES_RUNTIME:
+    active_rules = list(UNIT_NORMALIZE_RULES_RUNTIME if unit_rules is None else unit_rules)
+    for rule in active_rules:
         source = str(rule.get("source") or "").strip()
         target = str(rule.get("target") or "").strip()
         divisor = rule.get("value_divisor")
@@ -629,10 +635,12 @@ def _normalize_value(raw_unit: str, unit: str, value: object) -> object:
         if not source or not target:
             continue
         if exact_match:
-            normalized_by_rule = target if raw_unit == source else raw_unit
+            matched = raw_unit == source
+            normalized_by_rule = target if matched else raw_unit
         else:
-            normalized_by_rule = raw_unit.replace(source, target) if source in raw_unit else raw_unit
-        if normalized_by_rule == unit and divisor not in (None, 0, 0.0):
+            matched = source in raw_unit
+            normalized_by_rule = raw_unit.replace(source, target) if matched else raw_unit
+        if matched and normalized_by_rule == unit and divisor not in (None, 0, 0.0):
             return round(number / float(divisor), 8)
     return round(number, 8)
 
@@ -1055,7 +1063,7 @@ def extract_rows(
                     continue
                 for src_col in source_columns:
                     value_cell = sheet.cell(row=row_idx, column=col_map[src_col]).value
-                    value = _normalize_value(raw_unit, unit, value_cell)
+                    value = _normalize_value(raw_unit, unit, value_cell, unit_rules=active_unit_rules)
                     meta = _build_period_meta(report_year, report_month, src_col)
                     row = {
                         "company": company,
