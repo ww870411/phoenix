@@ -202,6 +202,9 @@ class QueryComparisonRow(BaseModel):
     mom_rate: Optional[float] = None
     plan_value: Optional[float] = None
     plan_rate: Optional[float] = None
+    annual_completion_value: Optional[float] = None
+    annual_plan_value: Optional[float] = None
+    annual_plan_rate: Optional[float] = None
 
 
 class TemperatureDailyComparisonRow(BaseModel):
@@ -232,6 +235,8 @@ class QueryComparisonResponse(BaseModel):
     yoy_window_label: str
     mom_window_label: str
     plan_window_label: str
+    annual_plan_enabled: bool = False
+    annual_plan_window_label: str = ""
     rows: List[QueryComparisonRow]
     temperature_comparison: Optional[TemperatureComparisonPayload] = None
 
@@ -871,6 +876,14 @@ def _calc_rate(current_value: Optional[float], base_value: Optional[float]) -> O
     if base_value == 0:
         return None
     return (current_value - base_value) / abs(base_value)
+
+
+def _calc_completion_rate(completed_value: Optional[float], plan_value: Optional[float]) -> Optional[float]:
+    if completed_value is None or plan_value is None:
+        return None
+    if plan_value == 0:
+        return None
+    return completed_value / plan_value
 
 
 def _parse_window_label_dates(label: str) -> Tuple[Optional[str], Optional[str]]:
@@ -1657,6 +1670,107 @@ def _fetch_plan_value_map(
     return result_map, complete_keys
 
 
+def _should_include_annual_plan_comparison(request: QueryRequest, start_date: date, end_date: date) -> bool:
+    periods = {str(x or "").strip().lower() for x in (request.periods or [])}
+    types = {str(x or "").strip().lower() for x in (request.types or [])}
+    return start_date.year == end_date.year and "month" in periods and "real" in types
+
+
+def _format_annual_plan_window_label(target_year: int) -> str:
+    return f"{target_year}年年计划"
+
+
+def _fetch_annual_plan_value_map(
+    session,
+    request: QueryRequest,
+    target_year: int,
+) -> Tuple[Dict[Tuple[str, str, str], Optional[float]], Set[Tuple[str, str, str]]]:
+    companies = _normalize_text_list(request.companies)
+    items = _normalize_text_list(request.items)
+    aggregate_companies = bool(request.aggregate_companies)
+    selected_calc_items = [x for x in items if x in CALCULATED_ITEM_SET]
+    selected_base_items = [x for x in items if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
+    required_base_items = _collect_required_base_items(selected_calc_items)
+    query_base_items = sorted(set(selected_base_items + required_base_items))
+
+    result_map: Dict[Tuple[str, str, str], Optional[float]] = {}
+    complete_keys: Set[Tuple[str, str, str]] = set()
+    base_rows: List[dict] = []
+    plan_date = date(target_year, 1, 1)
+
+    if companies and query_base_items:
+        select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
+        group_by_sql = "item, unit" if aggregate_companies else "company, item, unit"
+        stmt = text(
+            f"""
+            SELECT
+                {select_company_sql},
+                item,
+                unit,
+                CASE WHEN COUNT(value) = 0 THEN NULL ELSE SUM(value) END AS value
+            FROM monthly_data_show
+            WHERE date = :plan_date
+              AND company IN :companies
+              AND item IN :items
+              AND period = 'year'
+              AND type = 'plan'
+            GROUP BY {group_by_sql}
+            """
+        ).bindparams(
+            bindparam("companies", expanding=True),
+            bindparam("items", expanding=True),
+        )
+        rows = session.execute(
+            stmt,
+            {
+                "plan_date": plan_date,
+                "companies": companies,
+                "items": query_base_items,
+            },
+        ).mappings().all()
+        selected_base_set = set(selected_base_items)
+        for row in rows:
+            company = str(row.get("company") or "")
+            item = str(row.get("item") or "")
+            unit = str(row.get("unit") or "")
+            value_raw = row.get("value")
+            value = _to_float(value_raw) if value_raw is not None else None
+            base_rows.append(
+                {
+                    "company": company,
+                    "item": item,
+                    "unit": unit,
+                    "value": value,
+                }
+            )
+            if item in selected_base_set:
+                result_key = (company, item, unit)
+                result_map[result_key] = value
+                complete_keys.add(result_key)
+
+    if selected_calc_items and base_rows:
+        grouped_metrics: Dict[str, Dict[str, float]] = {}
+        for row in base_rows:
+            company = _safe_str(row.get("company"))
+            metrics = grouped_metrics.setdefault(company, {})
+            item = _safe_str(row.get("item"))
+            metrics[item] = _to_float(metrics.get(item)) + _to_float(row.get("value"))
+        annual_day_count = 366 if calendar.isleap(target_year) else 365
+        for company, metrics in grouped_metrics.items():
+            calc_values = _compute_calculated_two_pass(
+                metric_values=metrics,
+                selected_calc_items=selected_calc_items,
+                day_count=annual_day_count,
+            )
+            for indicator in selected_calc_items:
+                unit = CALCULATED_ITEM_UNITS.get(indicator, "")
+                result_key = (company, indicator, unit)
+                result_map[result_key] = _to_float(calc_values.get(indicator))
+                complete_keys.add(result_key)
+
+    return result_map, complete_keys
+
+
 def _build_temperature_comparison_payload(
     session,
     current_start: date,
@@ -2272,6 +2386,8 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_window_label="",
             mom_window_label="",
             plan_window_label="",
+            annual_plan_enabled=False,
+            annual_plan_window_label="",
             rows=[],
             temperature_comparison=None,
         )
@@ -2285,6 +2401,8 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_window_label="",
             mom_window_label="",
             plan_window_label="",
+            annual_plan_enabled=False,
+            annual_plan_window_label="",
             rows=[],
             temperature_comparison=None,
         )
@@ -2294,6 +2412,11 @@ def query_month_data_show_comparison(request: QueryRequest):
     yoy_start = _shift_year_safe(current_start, -1)
     yoy_end = _shift_year_safe(current_end, -1)
     mom_start, mom_end = _resolve_mom_window(current_start, current_end)
+    annual_plan_enabled = _should_include_annual_plan_comparison(request, current_start, current_end)
+    annual_plan_window_label = ""
+    annual_completion_map: Dict[str, dict] = {}
+    annual_plan_map: Dict[Tuple[str, str, str], Optional[float]] = {}
+    annual_plan_complete_keys: Set[Tuple[str, str, str]] = set()
 
     try:
         with SessionLocal() as session:
@@ -2301,6 +2424,21 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_map, yoy_complete_keys = _fetch_compare_map(session, request, yoy_start, yoy_end)
             mom_map, _mom_complete_keys = _fetch_compare_map(session, request, mom_start, mom_end)
             plan_map, plan_complete_keys = _fetch_plan_value_map(session, request, current_start, current_end)
+            if annual_plan_enabled:
+                annual_request = request.model_copy(update={"periods": ["month"], "types": ["real"]})
+                annual_completion_start = date(current_end.year, 1, 1)
+                annual_completion_map, _annual_completion_keys = _fetch_compare_map(
+                    session,
+                    annual_request,
+                    annual_completion_start,
+                    current_end,
+                )
+                annual_plan_map, annual_plan_complete_keys = _fetch_annual_plan_value_map(
+                    session,
+                    request,
+                    current_end.year,
+                )
+                annual_plan_window_label = _format_annual_plan_window_label(current_end.year)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"查询同比环比失败：{exc}") from exc
 
@@ -2310,20 +2448,33 @@ def query_month_data_show_comparison(request: QueryRequest):
         current_value = base.get("value")
         yoy_value = (yoy_map.get(key) or {}).get("value") if key in yoy_complete_keys else None
         mom_value = (mom_map.get(key) or {}).get("value")
-        plan_lookup_key = (
-            str(base.get("company") or ""),
-            str(base.get("item") or ""),
-            str(base.get("period") or ""),
-            str(base.get("unit") or ""),
-        )
+        company = str(base.get("company") or "")
+        item = str(base.get("item") or "")
+        period = str(base.get("period") or "")
+        row_type = str(base.get("type") or "")
+        unit = str(base.get("unit") or "")
+        plan_lookup_key = (company, item, period, unit)
         plan_value = plan_map.get(plan_lookup_key) if plan_lookup_key in plan_complete_keys else None
+        annual_completion_value = None
+        annual_plan_value = None
+        annual_plan_rate = None
+        if annual_plan_enabled and period == "month" and row_type == "real":
+            annual_base = annual_completion_map.get(key) or {}
+            annual_completion_value = annual_base.get("value")
+            annual_plan_lookup_key = (company, item, unit)
+            annual_plan_value = (
+                annual_plan_map.get(annual_plan_lookup_key)
+                if annual_plan_lookup_key in annual_plan_complete_keys
+                else None
+            )
+            annual_plan_rate = _calc_completion_rate(annual_completion_value, annual_plan_value)
         rows.append(
             QueryComparisonRow(
-                company=str(base.get("company") or ""),
-                item=str(base.get("item") or ""),
-                period=str(base.get("period") or ""),
-                type=str(base.get("type") or ""),
-                unit=str(base.get("unit") or ""),
+                company=company,
+                item=item,
+                period=period,
+                type=row_type,
+                unit=unit,
                 current_value=current_value,
                 yoy_value=yoy_value,
                 yoy_rate=_calc_rate(current_value, yoy_value),
@@ -2331,6 +2482,9 @@ def query_month_data_show_comparison(request: QueryRequest):
                 mom_rate=_calc_rate(current_value, mom_value),
                 plan_value=plan_value,
                 plan_rate=_calc_rate(current_value, plan_value),
+                annual_completion_value=annual_completion_value,
+                annual_plan_value=annual_plan_value,
+                annual_plan_rate=annual_plan_rate,
             )
         )
     rows = _sort_comparison_rows(rows, resolved_order_fields, rank_maps)
@@ -2355,6 +2509,8 @@ def query_month_data_show_comparison(request: QueryRequest):
         yoy_window_label=_format_window_label(yoy_start, yoy_end),
         mom_window_label=_format_window_label(mom_start, mom_end),
         plan_window_label=_format_window_label(current_start, current_end),
+        annual_plan_enabled=annual_plan_enabled,
+        annual_plan_window_label=annual_plan_window_label,
         rows=rows,
         temperature_comparison=temperature_comparison,
     )

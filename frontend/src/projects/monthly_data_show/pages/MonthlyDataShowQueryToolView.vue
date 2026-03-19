@@ -280,7 +280,7 @@
         <div v-if="hasSearched && comparisonRows.length" class="analysis-section">
           <h4>同比/环比/计划比（实时窗口）</h4>
           <p class="sub">
-            当前月份：{{ comparisonLatestMonthLabel }}；同比月份：{{ comparisonYoYMonthLabel || '无' }}；环比月份：{{ comparisonMoMMonthLabel || '无' }}；计划窗口：{{ comparisonPlanMonthLabel || '无' }}
+            当前月份：{{ comparisonLatestMonthLabel }}；同比月份：{{ comparisonYoYMonthLabel || '无' }}；环比月份：{{ comparisonMoMMonthLabel || '无' }}；计划窗口：{{ comparisonPlanMonthLabel || '无' }}<template v-if="showAnnualPlanColumns">；年计划口径：{{ comparisonAnnualPlanWindowLabel || '无' }}</template>
           </p>
           <div class="viz-toolbar">
             <div class="viz-field viz-switch-field">
@@ -374,6 +374,9 @@
                   <th>环比</th>
                   <th>计划值</th>
                   <th>计划比</th>
+                  <th v-if="showAnnualPlanColumns">累计完成值</th>
+                  <th v-if="showAnnualPlanColumns">年计划值</th>
+                  <th v-if="showAnnualPlanColumns">年计划完成率</th>
                 </tr>
               </thead>
               <tbody>
@@ -387,6 +390,9 @@
                   <td :class="deltaClass(entry.momRate)">{{ formatRate(entry.momRate) }}</td>
                   <td>{{ entry.planValue == null ? 'NULL' : formatValue(entry.planValue, entry.unit, entry.item) }}</td>
                   <td :class="deltaClass(entry.planRate)">{{ formatRate(entry.planRate) }}</td>
+                  <td v-if="showAnnualPlanColumns">{{ entry.annualCompletionValue == null ? 'NULL' : formatValue(entry.annualCompletionValue, entry.unit, entry.item) }}</td>
+                  <td v-if="showAnnualPlanColumns">{{ entry.annualPlanValue == null ? 'NULL' : formatValue(entry.annualPlanValue, entry.unit, entry.item) }}</td>
+                  <td v-if="showAnnualPlanColumns" :class="completionClass(entry.annualPlanRate)">{{ formatCompletionRate(entry.annualPlanRate) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -785,11 +791,15 @@ const comparisonMeta = reactive({
   yoyWindowLabel: '',
   momWindowLabel: '',
   planWindowLabel: '',
+  annualPlanEnabled: false,
+  annualPlanWindowLabel: '',
 })
 const comparisonLatestMonthLabel = computed(() => comparisonMeta.currentWindowLabel || '—')
 const comparisonYoYMonthLabel = computed(() => comparisonMeta.yoyWindowLabel || '—')
 const comparisonMoMMonthLabel = computed(() => comparisonMeta.momWindowLabel || '—')
 const comparisonPlanMonthLabel = computed(() => comparisonMeta.planWindowLabel || '—')
+const comparisonAnnualPlanWindowLabel = computed(() => comparisonMeta.annualPlanWindowLabel || '—')
+const showAnnualPlanColumns = computed(() => Boolean(comparisonMeta.annualPlanEnabled))
 const comparisonModeLabel = computed(() => {
   if (comparisonViewMode.value === 'mom') return '环比'
   if (comparisonViewMode.value === 'plan') return '计划比'
@@ -956,8 +966,9 @@ const analysisInsights = computed(() => {
   const yoyReady = comparisonRows.value.filter((x) => x.yoyRate != null)
   const momReady = comparisonRows.value.filter((x) => x.momRate != null)
   const planReady = comparisonRows.value.filter((x) => x.planRate != null)
+  const annualPlanReady = comparisonRows.value.filter((x) => x.annualPlanRate != null)
   const lines = [
-    `一、总体情况：本期窗口为 ${comparisonMeta.currentWindowLabel || '—'}，共纳入 ${comparisonRows.value.length} 条有效对比序列；同比可比 ${yoyReady.length} 条，环比可比 ${momReady.length} 条，计划可比 ${planReady.length} 条。`,
+    `一、总体情况：本期窗口为 ${comparisonMeta.currentWindowLabel || '—'}，共纳入 ${comparisonRows.value.length} 条有效对比序列；同比可比 ${yoyReady.length} 条，环比可比 ${momReady.length} 条，计划可比 ${planReady.length} 条${showAnnualPlanColumns.value ? `，年计划可比 ${annualPlanReady.length} 条` : ''}。`,
   ]
   lines.push(`二、分层分析：以下按“${resolvedFields.map((f) => fieldLabels[f]).join(' > ')}”顺序展开。`)
   const MAX_DETAIL_LINES = 180
@@ -968,6 +979,8 @@ const analysisInsights = computed(() => {
       toFiniteOrNull(row?.yoyValue),
       toFiniteOrNull(row?.momValue),
       toFiniteOrNull(row?.planValue),
+      toFiniteOrNull(row?.annualCompletionValue),
+      toFiniteOrNull(row?.annualPlanValue),
     ]
     return values.every((v) => v === 0)
   }
@@ -992,6 +1005,9 @@ const analysisInsights = computed(() => {
           segments.push(`上期 ${formatValueWithUnit(row.momValue, row.unit, row.item)}，环比${momTrend}${formatSignedNumber(momDiff, row.item)}，差异率 ${formatRate(row.momRate)}`)
         }
         segments.push(`本期计划值 ${formatValueWithUnit(row.planValue, row.unit, row.item)}，较计划${planTrend}${formatSignedNumber(planDiff, row.item)}，差异率 ${formatRate(row.planRate)}`)
+        if (showAnnualPlanColumns.value) {
+          segments.push(`累计完成值 ${formatValueWithUnit(row.annualCompletionValue, row.unit, row.item)}，年计划值 ${formatValueWithUnit(row.annualPlanValue, row.unit, row.item)}，年计划完成率 ${formatCompletionRate(row.annualPlanRate)}`)
+        }
         lines.push(`  ${segments.join('；')}。`)
         detailCount += 1
       }
@@ -1132,6 +1148,11 @@ function formatRate(rate) {
   return `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(2)}%`
 }
 
+function formatCompletionRate(rate) {
+  if (rate == null || !Number.isFinite(rate)) return '—'
+  return `${(rate * 100).toFixed(2)}%`
+}
+
 function formatSignedNumber(value, item) {
   const num = toFiniteOrNull(value)
   if (num == null) return '—'
@@ -1173,6 +1194,11 @@ function rateValue(row) {
 function deltaClass(rate) {
   if (rate == null || !Number.isFinite(rate)) return ''
   return rate >= 0 ? 'delta-up' : 'delta-down'
+}
+
+function completionClass(rate) {
+  if (rate == null || !Number.isFinite(rate)) return ''
+  return rate >= 1 ? 'delta-up' : 'delta-down'
 }
 
 function clamp(value, min, max) {
@@ -1370,6 +1396,7 @@ function downloadXlsx() {
     ['同比窗口', comparisonMeta.yoyWindowLabel || ''],
     ['环比窗口', comparisonMeta.momWindowLabel || ''],
     ['计划窗口', comparisonMeta.planWindowLabel || ''],
+    ['年计划口径', comparisonMeta.annualPlanWindowLabel || ''],
     ['当前图表口径', comparisonModeLabel.value],
     ['导出时间', new Date().toLocaleString('zh-CN')],
   ])
@@ -1407,22 +1434,35 @@ function downloadXlsx() {
 
   if (comparisonRows.value.length) {
     const compareHeader = ['口径', '指标', '期间', '类型', '本期值', '同期值', '同比差值', '同比差异率', '上期值', '环比差值', '环比差异率', '计划值', '计划差值', '计划差异率']
-    const compareData = comparisonRows.value.map((x) => [
-      x.company,
-      x.item,
-      x.period,
-      x.type,
-      x.currentValue == null ? '' : toFiniteOrNull(x.currentValue),
-      x.yoyValue == null ? '' : toFiniteOrNull(x.yoyValue),
-      x.currentValue == null || x.yoyValue == null ? '' : toFiniteOrNull(x.currentValue - x.yoyValue),
-      x.yoyRate == null ? '' : toFiniteOrNull(x.yoyRate),
-      x.momValue == null ? '' : toFiniteOrNull(x.momValue),
-      x.currentValue == null || x.momValue == null ? '' : toFiniteOrNull(x.currentValue - x.momValue),
-      x.momRate == null ? '' : toFiniteOrNull(x.momRate),
-      x.planValue == null ? '' : toFiniteOrNull(x.planValue),
-      x.currentValue == null || x.planValue == null ? '' : toFiniteOrNull(x.currentValue - x.planValue),
-      x.planRate == null ? '' : toFiniteOrNull(x.planRate),
-    ])
+    if (showAnnualPlanColumns.value) {
+      compareHeader.push('累计完成值', '年计划值', '年计划完成率')
+    }
+    const compareData = comparisonRows.value.map((x) => {
+      const row = [
+        x.company,
+        x.item,
+        x.period,
+        x.type,
+        x.currentValue == null ? '' : toFiniteOrNull(x.currentValue),
+        x.yoyValue == null ? '' : toFiniteOrNull(x.yoyValue),
+        x.currentValue == null || x.yoyValue == null ? '' : toFiniteOrNull(x.currentValue - x.yoyValue),
+        x.yoyRate == null ? '' : toFiniteOrNull(x.yoyRate),
+        x.momValue == null ? '' : toFiniteOrNull(x.momValue),
+        x.currentValue == null || x.momValue == null ? '' : toFiniteOrNull(x.currentValue - x.momValue),
+        x.momRate == null ? '' : toFiniteOrNull(x.momRate),
+        x.planValue == null ? '' : toFiniteOrNull(x.planValue),
+        x.currentValue == null || x.planValue == null ? '' : toFiniteOrNull(x.currentValue - x.planValue),
+        x.planRate == null ? '' : toFiniteOrNull(x.planRate),
+      ]
+      if (showAnnualPlanColumns.value) {
+        row.push(
+          x.annualCompletionValue == null ? '' : toFiniteOrNull(x.annualCompletionValue),
+          x.annualPlanValue == null ? '' : toFiniteOrNull(x.annualPlanValue),
+          x.annualPlanRate == null ? '' : toFiniteOrNull(x.annualPlanRate),
+        )
+      }
+      return row
+    })
     const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
     comparisonRows.value.forEach((x, index) => {
       const rowIndex = index + 1
@@ -1455,6 +1495,11 @@ function downloadXlsx() {
         valueFormat,
       )
       setSheetNumericCell(compareSheet, rowIndex, 13, x.planRate, '0.00%')
+      if (showAnnualPlanColumns.value) {
+        setSheetNumericCell(compareSheet, rowIndex, 14, x.annualCompletionValue, valueFormat)
+        setSheetNumericCell(compareSheet, rowIndex, 15, x.annualPlanValue, valueFormat)
+        setSheetNumericCell(compareSheet, rowIndex, 16, x.annualPlanRate, '0.00%')
+      }
     })
     finalizeSheet(compareSheet, [12, 24, 10, 10, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12])
     XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('对比明细'))
@@ -1883,6 +1928,8 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.annualPlanEnabled = false
+    comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0
@@ -1920,6 +1967,9 @@ async function runQuery(resetOffset = false) {
           momRate: row.mom_rate,
           planValue: row.plan_value,
           planRate: row.plan_rate,
+          annualCompletionValue: row.annual_completion_value,
+          annualPlanValue: row.annual_plan_value,
+          annualPlanRate: row.annual_plan_rate,
         }))
       : []
     const tempPayload = comparePayload?.temperature_comparison
@@ -1942,6 +1992,8 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = String(comparePayload?.yoy_window_label || '')
     comparisonMeta.momWindowLabel = String(comparePayload?.mom_window_label || '')
     comparisonMeta.planWindowLabel = String(comparePayload?.plan_window_label || '')
+    comparisonMeta.annualPlanEnabled = Boolean(comparePayload?.annual_plan_enabled)
+    comparisonMeta.annualPlanWindowLabel = String(comparePayload?.annual_plan_window_label || '')
     stopAiReportPolling()
     resetAiReportState()
   } catch (error) {
@@ -1962,6 +2014,8 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.annualPlanEnabled = false
+    comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0
@@ -1999,6 +2053,8 @@ async function resetFilters() {
   comparisonMeta.yoyWindowLabel = ''
   comparisonMeta.momWindowLabel = ''
   comparisonMeta.planWindowLabel = ''
+  comparisonMeta.annualPlanEnabled = false
+  comparisonMeta.annualPlanWindowLabel = ''
   summary.totalRows = 0
   summary.valueNonNullRows = 0
   summary.valueNullRows = 0
@@ -2038,6 +2094,8 @@ onMounted(async () => {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.annualPlanEnabled = false
+    comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0
     summary.valueNonNullRows = 0
     summary.valueNullRows = 0

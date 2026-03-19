@@ -1,0 +1,1 @@
+补充更新：用户要求将年度口径展示名“累计值”改为“累计完成值”。已在 frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue 的表头、分析文案和 Excel 导出列名中统一改为“累计完成值”，并同步更新 configs/progress.md、frontend/README.md、backend/README.md。

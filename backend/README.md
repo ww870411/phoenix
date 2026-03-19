@@ -3671,3 +3671,19 @@
 ## 2026-03-19 登录持久化复核结论
 - 后端登录持久化机制未调整：`remember_me=true` 时，鉴权会话仍写入数据库持久化表，由 `/auth/me` 与 `AuthManager.require_session()` 在服务重启后恢复。
 - 本轮针对“重部署后很多需要登录的操作报错”的处理重点在前端：默认开启记住我，并对通用 `401` 做统一失效收口；后端代码层面未发现“每次重部署都会主动使持久化登录失效”的额外逻辑。
+
+## 2026-03-19 monthly_data_show 对比查询新增年计划口径
+- `backend/projects/monthly_data_show/api/workspace.py` 的 `query_month_data_show_comparison` 在“同年月度窗口”下新增年计划比计算。
+- 年计划值直接取自 `monthly_data_show` 表内 `period='year' AND type='plan'` 的年度计划记录；月计划值仍沿用原 `period='month' AND type='plan'` 逻辑。
+- 年计划比分子为从当年 1 月累计到查询窗口末月的累计完成值，并复用现有状态类指标最新值聚合、平均气温日均值聚合以及计算指标两轮公式求值规则。
+
+## 2026-03-19 monthly_data_show 年度口径字段更正
+- `query_month_data_show_comparison` 的年度口径返回现为：累计值（`annual_completion_value`）、年计划值（`annual_plan_value`）、年计划完成率（`annual_plan_rate`）。
+- `annual_plan_rate` 语义是“累计完成值 / 年计划值”的完成率，不再作为“年计划比/差异率”解释。
+
+## 2026-03-19 annual_plan_rate 语义修正
+- `annual_plan_rate` 现明确表示“年计划完成率”，公式为 `annual_completion_value / annual_plan_value`。
+- 它不再是差异率；`1.0` 表示完成 100%，`>1.0` 表示超计划完成。
+
+## 2026-03-19 annual_completion_value 展示名称调整
+- 前端展示口径已统一使用“累计完成值”指代 `annual_completion_value`。
