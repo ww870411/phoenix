@@ -14,7 +14,7 @@ import re
 import threading
 import uuid
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from datetime import date
 from datetime import datetime
@@ -1945,17 +1945,9 @@ async def extract_monthly_data_show_csv(
     semi_count = int((stats or {}).get("semi_calculated_completed") or 0)
     jinpu_count = int((stats or {}).get("jinpu_heating_area_adjusted") or 0)
     total_rows = int((stats or {}).get("total_rows") or len(extracted_rows))
-    rule_details = {
-        "semi_calculated_details": (stats or {}).get("semi_calculated_details") or {},
-        "semi_calculated_completed": semi_count,
-        "jinpu_heating_area_adjusted": jinpu_count,
-        "item_exclude_hits": int((stats or {}).get("item_exclude_hits") or 0),
-        "item_rename_hits": int((stats or {}).get("item_rename_hits") or 0),
-        "selected_rule_ids": list((stats or {}).get("selected_rule_ids") or []),
-        "constants_injected": int((stats or {}).get("constants_injected") or 0),
-        "extracted_total_rows": total_rows,
-    }
-    encoded_rule_details = quote(json.dumps(rule_details, ensure_ascii=False, separators=(",", ":")))
+    item_exclude_hits = int((stats or {}).get("item_exclude_hits") or 0)
+    item_rename_hits = int((stats or {}).get("item_rename_hits") or 0)
+    constants_injected = int((stats or {}).get("constants_injected") or 0)
     return FileResponse(
         path=csv_path,
         media_type="text/csv; charset=utf-8",
@@ -1963,14 +1955,18 @@ async def extract_monthly_data_show_csv(
         headers={
             "X-Monthly-Semi-Calculated-Completed": str(semi_count),
             "X-Monthly-Jinpu-Heating-Area-Adjusted": str(jinpu_count),
+            "X-Monthly-Item-Exclude-Hits": str(item_exclude_hits),
+            "X-Monthly-Item-Rename-Hits": str(item_rename_hits),
+            "X-Monthly-Constants-Injected": str(constants_injected),
             "X-Monthly-Extracted-Total-Rows": str(total_rows),
-            "X-Monthly-Rule-Details": encoded_rule_details,
             "Access-Control-Expose-Headers": (
                 "Content-Disposition, "
                 "X-Monthly-Semi-Calculated-Completed, "
                 "X-Monthly-Jinpu-Heating-Area-Adjusted, "
-                "X-Monthly-Extracted-Total-Rows, "
-                "X-Monthly-Rule-Details"
+                "X-Monthly-Item-Exclude-Hits, "
+                "X-Monthly-Item-Rename-Hits, "
+                "X-Monthly-Constants-Injected, "
+                "X-Monthly-Extracted-Total-Rows"
             ),
         },
         background=BackgroundTask(_cleanup_file, csv_path),

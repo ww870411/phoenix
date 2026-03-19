@@ -1,5 +1,18 @@
 # daily_report_25_26 后端说明
 
+## 月报导入工作台提取 CSV 生产 502 修复（2026-03-19）
+- 文件：`backend/projects/monthly_data_show/api/workspace.py`
+- 调整：`POST /api/v1/projects/{project_key}/monthly-data-show/extract-csv` 不再通过 `X-Monthly-Rule-Details` 返回完整规则详情 JSON。
+- 当前仅保留小型统计响应头：
+  - `X-Monthly-Semi-Calculated-Completed`
+  - `X-Monthly-Jinpu-Heating-Area-Adjusted`
+  - `X-Monthly-Item-Exclude-Hits`
+  - `X-Monthly-Item-Rename-Hits`
+  - `X-Monthly-Constants-Injected`
+  - `X-Monthly-Extracted-Total-Rows`
+- 原因：生产链路经过 Nginx/Cloudflare，完整 JSON 放入响应头会提升 upstream header 过大导致 `502 Bad Gateway` 的风险。
+- 兼容说明：CSV 文件内容与提取主流程不变；若未来需要完整规则命中明细，应改为单独接口或响应体承载。
+
 ## 平台名称展示微调说明（2026-03-10）
 - 本轮继续调整前端展示文案：登录页副标题、浏览器页签标题，以及登录后顶部 banner 的平台简称均已按最新口径更新。
 - 该调整仍仅影响前端显示层，不涉及后端接口、鉴权、路由或数据库结构变更。

@@ -1,3 +1,18 @@
+## 2026-03-19（月报导入工作台生产环境提取 CSV 502 修复）
+
+- 结论：
+  - `monthly_data_show/import-workspace` 的生产环境 502 根因不是前端路由，而是 `extract-csv` 将完整规则详情 JSON 放进 `X-Monthly-Rule-Details` 响应头；生产链路经过 Nginx/Cloudflare 时更容易触发 upstream header 过大而返回 502。
+- 本轮改动：
+  - `backend/projects/monthly_data_show/api/workspace.py` 删除大响应头 `X-Monthly-Rule-Details`，改为只返回小型计数头：半计算补齐、金普面积扣减、指标剔除、指标重命名、常量注入、提取总行数。
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 改为读取新的小型计数头，不再解析规则详情大 header。
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 改为使用前端本地已选规则摘要 + 后端小型计数值组装“规则命中详情”弹窗。
+- 结果：
+  - 生产环境提取 CSV 时响应头体积显著缩小，规避 Nginx/Cloudflare 的 502 风险；
+  - 提取完成提示与规则命中弹窗仍保留核心统计信息。
+- 风险与说明：
+  - 弹窗不再展示服务端逐条 `semi_calculated_details` 明细，仅保留汇总统计与本次选中规则摘要；
+  - 若后续需要完整命中明细，应改为单独 JSON 接口或写入响应体/文件，不应继续放进响应头。
+
 - 2026-03-10：继续按用户要求细化平台命名展示。登录页 `frontend/src/pages/LoginView.vue` 的副标题由“大连洁净能源集团 生产经营数据智算平台”调整为“生产经营数据智算平台”；浏览器页签标题 `frontend/index.html` 调整为无空格版本“大连洁净能源集团生产经营数据智算平台”；登录后顶部 banner `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` 中“数据填报平台”改为“数据智算平台”。本轮仍未改动后端代码。
 - 2026-03-10：按用户要求统一登录界面与站点标题文案。`frontend/src/pages/LoginView.vue` 中登录页 banner 副标题已由“生产数据在线填报平台”改为“大连洁净能源集团 生产经营数据智算平台”，登录页底部版权年份已由 `2025` 改为 `2025-2026`；同时 `frontend/index.html` 页签标题同步更新为新平台名。本轮未改动后端代码。
 - 2026-03-10：为 `monthly_data_show/import-workspace` 新增“步骤 3.2：标准表比对”。前端现在支持分别上传两份由步骤 3.1 导出的 `company,item,item_transform_type,item_transform_note` CSV，并在浏览器本地执行标准表差异诊断，生成可下载的 `diagnostics.csv`。本轮已将比对口径收紧为“先按 `company` 分组，再在同一口径内部做明确集合差异”；跨口径不再拿同名指标互相匹配，也不再做相近指标猜测，只输出“口径不存在”“标准表有，待比对表没有”“待比对表有，标准表没有”三类明确结果；结果文件已移除 `suggested_action` 字段。原有步骤 3、3.1、4 链路不变。已执行 `frontend npm run build` 通过。

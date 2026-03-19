@@ -1,5 +1,17 @@
 # 前端说明（Vue3 + Vite）
 
+## 月报导入工作台生产 502 修复（2026-03-19）
+- `src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 的提取结果展示已改为使用前端本地规则摘要 + 后端小型统计头，不再依赖服务端返回的大型规则详情 header。
+- `src/projects/daily_report_25_26/services/api.js` 现在读取以下统计头：
+  - `x-monthly-semi-calculated-completed`
+  - `x-monthly-jinpu-heating-area-adjusted`
+  - `x-monthly-item-exclude-hits`
+  - `x-monthly-item-rename-hits`
+  - `x-monthly-constants-injected`
+  - `x-monthly-extracted-total-rows`
+- 目的：规避生产环境经 Nginx/Cloudflare 转发时因响应头过大导致的 `502 Bad Gateway`。
+- 兼容说明：步骤 3 的 CSV 提取与步骤 4 的入库主流程不变；“规则命中详情”保留汇总统计，但不再展示服务端逐条命中明细。
+
 ## 平台名称展示微调（2026-03-10）
 - 登录页 `frontend/src/pages/LoginView.vue` 的副标题已进一步收敛为“生产经营数据智算平台”，不再重复集团全称。
 - 浏览器页签标题 `frontend/index.html` 已改为“大连洁净能源集团生产经营数据智算平台”，与用户指定口径完全一致。

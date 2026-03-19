@@ -422,24 +422,20 @@ export async function extractMonthlyDataShowCsv(
   const matched = disposition.match(/filename=\"?([^\"]+)\"?/i)
   const semiCalculatedCompleted = Number.parseInt(response.headers.get('x-monthly-semi-calculated-completed') || '0', 10)
   const jinpuHeatingAreaAdjusted = Number.parseInt(response.headers.get('x-monthly-jinpu-heating-area-adjusted') || '0', 10)
+  const itemExcludeHits = Number.parseInt(response.headers.get('x-monthly-item-exclude-hits') || '0', 10)
+  const itemRenameHits = Number.parseInt(response.headers.get('x-monthly-item-rename-hits') || '0', 10)
+  const constantsInjected = Number.parseInt(response.headers.get('x-monthly-constants-injected') || '0', 10)
   const extractedTotalRows = Number.parseInt(response.headers.get('x-monthly-extracted-total-rows') || '0', 10)
-  let ruleDetails = null
-  const encodedRuleDetails = response.headers.get('x-monthly-rule-details') || ''
-  if (encodedRuleDetails) {
-    try {
-      ruleDetails = JSON.parse(decodeURIComponent(encodedRuleDetails))
-    } catch (_error) {
-      ruleDetails = null
-    }
-  }
   return {
     blob,
     filename: matched?.[1] || 'monthly_data_show_extract.csv',
     stats: {
       semiCalculatedCompleted: Number.isFinite(semiCalculatedCompleted) ? semiCalculatedCompleted : 0,
       jinpuHeatingAreaAdjusted: Number.isFinite(jinpuHeatingAreaAdjusted) ? jinpuHeatingAreaAdjusted : 0,
+      itemExcludeHits: Number.isFinite(itemExcludeHits) ? itemExcludeHits : 0,
+      itemRenameHits: Number.isFinite(itemRenameHits) ? itemRenameHits : 0,
+      constantsInjected: Number.isFinite(constantsInjected) ? constantsInjected : 0,
       extractedTotalRows: Number.isFinite(extractedTotalRows) ? extractedTotalRows : 0,
-      ruleDetails,
     },
   }
 }

@@ -591,8 +591,18 @@ async function extractCsv() {
     selectedCsvFile.value = cachedFile
     const semiCount = Number(stats?.semiCalculatedCompleted || 0)
     const jinpuCount = Number(stats?.jinpuHeatingAreaAdjusted || 0)
+    const itemExcludeHits = Number(stats?.itemExcludeHits || 0)
+    const itemRenameHits = Number(stats?.itemRenameHits || 0)
+    const constantsInjected = Number(stats?.constantsInjected || 0)
     const totalRows = Number(stats?.extractedTotalRows || 0)
-    extractRuleDetails.value = stats?.ruleDetails || null
+    extractRuleDetails.value = {
+      semi_calculated_completed: semiCount,
+      jinpu_heating_area_adjusted: jinpuCount,
+      item_exclude_hits: itemExcludeHits,
+      item_rename_hits: itemRenameHits,
+      constants_injected: constantsInjected,
+      extracted_total_rows: totalRows,
+    }
     extractMessage.value = `提取完成：${cachedFile.name}（可下载或一键入库）｜补齐规则命中 ${semiCount} 条｜金普面积扣减 ${jinpuCount} 条｜提取总行数 ${totalRows} 条`
   } catch (error) {
     console.error(error)
@@ -606,24 +616,14 @@ const extractRuleDetailLines = computed(() => {
   const details = extractRuleDetails.value
   if (!details || typeof details !== 'object') return []
   const lines = []
-  const semiDetailMap = details.semi_calculated_details && typeof details.semi_calculated_details === 'object'
-    ? details.semi_calculated_details
-    : {}
-  const selectedRuleSet = new Set(Array.isArray(details.selected_rule_ids) ? details.selected_rule_ids.map((x) => String(x || '')) : [])
   lines.push(`半计算补齐总命中：${Number(details.semi_calculated_completed || 0)} 条`)
   lines.push(`指标剔除命中：${Number(details.item_exclude_hits || 0)} 条`)
   lines.push(`指标重命名命中：${Number(details.item_rename_hits || 0)} 条`)
-  for (const [name, count] of Object.entries(semiDetailMap)) {
-    lines.push(`${name}：${Number(count || 0)} 条`)
-  }
   lines.push(`金普面积扣减命中：${Number(details.jinpu_heating_area_adjusted || 0)} 条`)
   lines.push(`常量注入命中：${Number(details.constants_injected || 0)} 条`)
   lines.push(`提取总行数：${Number(details.extracted_total_rows || 0)} 条`)
-  if (extractionRules.value.length) {
-    const selectedNames = extractionRules.value
-      .filter((rule) => selectedRuleSet.has(rule.id))
-      .map((rule) => rule.name)
-    lines.push(`本次选中规则：${selectedNames.join('、') || '无'}`)
+  if (selectedRuleSummaryText.value) {
+    lines.push(`本次选中规则：${selectedRuleSummaryText.value}`)
   }
   return lines
 })
