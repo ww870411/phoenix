@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  AUTH_EXPIRED_EVENT,
   approveWorkflow,
   clearAuthToken,
   fetchSession,
@@ -14,6 +15,7 @@ import {
 
 const STORAGE_KEY = 'phoenix_auth'
 const DEFAULT_PERMISSION_PROJECT = 'daily_report_25_26'
+let authExpiredListenerBound = false
 
 function detectStorage(type) {
   if (typeof window === 'undefined') return null
@@ -90,10 +92,25 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   const user = ref(null)
   const permissions = ref(null)
   const expiresIn = ref(0)
-  const rememberLogin = ref(false)
+  const rememberLogin = ref(true)
   const initialized = ref(false)
   const loading = ref(false)
   const lastError = ref('')
+
+  function handleAuthExpired() {
+    if (!token.value && !user.value && !permissions.value) return
+    lastError.value = '登录状态已失效，请重新登录'
+    clearSession()
+    initialized.value = true
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.assign('/login')
+    }
+  }
+
+  if (typeof window !== 'undefined' && !authExpiredListenerBound) {
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    authExpiredListenerBound = true
+  }
 
   function persist(remember = rememberLogin.value) {
     if (!token.value || !user.value) {
@@ -133,7 +150,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     user.value = null
     permissions.value = null
     expiresIn.value = 0
-    rememberLogin.value = false
+    rememberLogin.value = true
     clearAuthToken()
     clearAllStorage()
   }
@@ -155,7 +172,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     initialized.value = true
   }
 
-  async function login(username, password, remember = false) {
+  async function login(username, password, remember = true) {
     loading.value = true
     lastError.value = ''
     try {

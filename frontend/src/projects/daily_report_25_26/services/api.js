@@ -48,9 +48,26 @@ export function getAuthToken() {
   return authToken
 }
 
+export const AUTH_EXPIRED_EVENT = 'phoenix-auth-expired'
+
 export function clearAuthToken() {
   authToken = null
   resetProjectCache()
+}
+
+function notifyAuthExpired() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+}
+
+async function authAwareFetch(url, options = {}, config = {}) {
+  const { skipUnauthorizedHandling = false } = config
+  const response = await globalThis.fetch(url, options)
+  if (!skipUnauthorizedHandling && response.status === 401) {
+    clearAuthToken()
+    notifyAuthExpired()
+  }
+  return response
 }
 
 async function ensureSuperResponseOk(response, fallbackMessage) {
@@ -90,7 +107,7 @@ async function fetchWithDevChatFallback(url, options = {}) {
   const sameOriginUrl = buildSameOriginApiUrl(url)
   if (sameOriginUrl && typeof window !== 'undefined' && /localhost:5173|127\.0\.0\.1:5173/i.test(window.location.origin)) {
     try {
-      return await fetch(sameOriginUrl, options)
+      return await authAwareFetch(sameOriginUrl, options)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (!/Failed to fetch/i.test(message || '')) {
@@ -99,23 +116,27 @@ async function fetchWithDevChatFallback(url, options = {}) {
     }
   }
   try {
-    return await fetch(url, options)
+    return await authAwareFetch(url, options)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const fallbackUrl = buildDev8001FallbackUrl(url)
     if (!fallbackUrl || !/Failed to fetch/i.test(message || '')) {
       throw error
     }
-    return fetch(fallbackUrl, options)
+    return authAwareFetch(fallbackUrl, options)
   }
 }
 
 export async function login(credentials) {
-  const response = await fetch(normalized('/auth/login'), {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS, true),
-    body: JSON.stringify(credentials),
-  })
+  const response = await authAwareFetch(
+    normalized('/auth/login'),
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS, true),
+      body: JSON.stringify(credentials),
+    },
+    { skipUnauthorizedHandling: true },
+  )
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || '登录失败')
@@ -124,11 +145,10 @@ export async function login(credentials) {
 }
 
 export async function fetchSession() {
-  const response = await fetch(normalized('/auth/me'), {
+  const response = await authAwareFetch(normalized('/auth/me'), {
     headers: attachAuthHeaders(),
   })
   if (response.status === 401) {
-    clearAuthToken()
     throw new Error('登录状态已过期')
   }
   if (!response.ok) {
@@ -139,7 +159,7 @@ export async function fetchSession() {
 }
 
 export async function logout() {
-  await fetch(normalized('/auth/logout'), {
+  await authAwareFetch(normalized('/auth/logout'), {
     method: 'POST',
     headers: attachAuthHeaders(),
   })
@@ -151,7 +171,7 @@ export async function listProjects(force = false) {
     return cachedProjects
   }
 
-  const response = await fetch(normalized('/projects'), {
+  const response = await authAwareFetch(normalized('/projects'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -167,7 +187,7 @@ export async function listProjects(force = false) {
 }
 
 export async function listPages(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/pages`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/pages`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -187,7 +207,7 @@ export async function extractSpringFestivalJson(projectKey, file, options = {}) 
   formData.append('compute_diff', String(options.computeDiff ?? true))
   formData.append('normalize_metric', String(options.normalizeMetric ?? true))
 
-  const response = await fetch(`${projectPath(projectKey)}/spring-festival/extract-json`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/spring-festival/extract-json`, {
     method: 'POST',
     headers: attachAuthHeaders({}, false),
     body: formData,
@@ -213,7 +233,7 @@ export async function extractSpringFestivalJson(projectKey, file, options = {}) 
 }
 
 export async function getMonthlyDataPullWorkspace(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/workspace`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-pull/workspace`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -224,7 +244,7 @@ export async function getMonthlyDataPullWorkspace(projectKey) {
 }
 
 export async function listMonthlyDataPullFiles(projectKey, bucket) {
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/monthly-data-pull/files?bucket=${encodeURIComponent(bucket || '')}`,
     { headers: attachAuthHeaders() },
   )
@@ -243,7 +263,7 @@ export async function uploadMonthlyDataPullFiles(projectKey, bucket, files = [])
   for (const file of files) {
     formData.append('files', file)
   }
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/monthly-data-pull/files/upload?bucket=${encodeURIComponent(bucket || '')}`,
     {
       method: 'POST',
@@ -262,7 +282,7 @@ export async function analyzeMonthlyDataPullMapping(projectKey, file) {
   if (!file) throw new Error('请先选择映射文件')
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/analyze-mapping`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-pull/analyze-mapping`, {
     method: 'POST',
     headers: attachAuthHeaders({}, false),
     body: formData,
@@ -278,7 +298,7 @@ export async function getMonthlyDataPullSheets(projectKey, bucket, file) {
   if (!file) throw new Error('请先选择文件')
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/monthly-data-pull/get-sheets?bucket=${encodeURIComponent(bucket || '')}`,
     {
       method: 'POST',
@@ -294,7 +314,7 @@ export async function getMonthlyDataPullSheets(projectKey, bucket, file) {
 }
 
 export async function executeMonthlyDataPull(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/execute`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-pull/execute`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -307,7 +327,7 @@ export async function executeMonthlyDataPull(projectKey, payload) {
 }
 
 export async function clearMonthlyDataPullWorkspace(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/clear-workspace`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-pull/clear-workspace`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -320,7 +340,7 @@ export async function clearMonthlyDataPullWorkspace(projectKey) {
 }
 
 export async function downloadMonthlyDataPullOutputsZip(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-pull/download-outputs-zip`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-pull/download-outputs-zip`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -341,7 +361,7 @@ export function buildMonthlyDataPullDownloadUrl(projectKey, filename) {
 }
 
 export async function downloadMonthlyDataPullOutputFile(projectKey, filename) {
-  const response = await fetch(buildMonthlyDataPullDownloadUrl(projectKey, filename), {
+  const response = await authAwareFetch(buildMonthlyDataPullDownloadUrl(projectKey, filename), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -361,7 +381,7 @@ export async function inspectMonthlyDataShowFile(projectKey, file) {
   if (!file) throw new Error('请先选择文件')
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/inspect`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/inspect`, {
     method: 'POST',
     headers: attachAuthHeaders({}, false),
     body: formData,
@@ -408,7 +428,7 @@ export async function extractMonthlyDataShowCsv(
   }
   formData.append('constants_enabled', String(Boolean(constantsEnabled)))
   formData.append('constant_rules_json', JSON.stringify(Array.isArray(constantRules) ? constantRules : []))
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/extract-csv`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/extract-csv`, {
     method: 'POST',
     headers: attachAuthHeaders({}, false),
     body: formData,
@@ -444,7 +464,7 @@ export async function importMonthlyDataShowCsv(projectKey, file) {
   if (!file) throw new Error('请先选择 CSV 文件')
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/import-csv`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/import-csv`, {
     method: 'POST',
     headers: attachAuthHeaders({}, false),
     body: formData,
@@ -457,7 +477,7 @@ export async function importMonthlyDataShowCsv(projectKey, file) {
 }
 
 export async function getMonthlyDataShowQueryOptions(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query-options`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/query-options`, {
     headers: attachAuthHeaders(),
     cache: 'no-store',
   })
@@ -469,7 +489,7 @@ export async function getMonthlyDataShowQueryOptions(projectKey) {
 }
 
 export async function queryMonthlyDataShow(projectKey, payload = {}) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/query`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -482,7 +502,7 @@ export async function queryMonthlyDataShow(projectKey, payload = {}) {
 }
 
 export async function queryMonthlyDataShowComparison(projectKey, payload = {}) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/query-comparison`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/query-comparison`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -495,7 +515,7 @@ export async function queryMonthlyDataShowComparison(projectKey, payload = {}) {
 }
 
 export async function queryMonthlyDataShowAiChat(projectKey, payload = {}) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/ai-chat/query`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/ai-chat/query`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -522,7 +542,7 @@ export async function queryMonthlyDataShowDialogChat(projectKey, payload = {}) {
 }
 
 export async function startMonthlyDataShowAiReport(projectKey, payload = {}) {
-  const response = await fetch(`${projectPath(projectKey)}/monthly-data-show/ai-report/start`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/monthly-data-show/ai-report/start`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -536,7 +556,7 @@ export async function startMonthlyDataShowAiReport(projectKey, payload = {}) {
 
 export async function getMonthlyDataShowAiReport(projectKey, jobId) {
   if (!jobId) throw new Error('缺少月报 AI 报告任务 ID')
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/monthly-data-show/ai-report/${encodeURIComponent(jobId)}`,
     {
       headers: attachAuthHeaders(),
@@ -551,7 +571,7 @@ export async function getMonthlyDataShowAiReport(projectKey, jobId) {
 
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
-  const response = await fetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -562,7 +582,7 @@ export async function listSheets(projectKey, configFile) {
 
 export async function getSheetsSubmissionStatus(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/submission-status${search}`,
     {
       headers: attachAuthHeaders(),
@@ -579,7 +599,7 @@ export async function getSheetsSubmissionStatus(projectKey, configFile) {
 export async function getTemplate(projectKey, sheetKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/template${search}`,
     {
       headers: attachAuthHeaders(),
@@ -594,7 +614,7 @@ export async function getTemplate(projectKey, sheetKey, options = {}) {
 export async function submitData(projectKey, sheetKey, payload, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/submit${search}`,
     {
       method: 'POST',
@@ -617,7 +637,7 @@ export async function queryData(projectKey, sheetKey, payload, options = {}) {
     ? String(payload.request_id)
     : `${Date.now()}_${Math.random().toString(36).slice(2,8)}`
   const enriched = { ...(payload || {}), request_id: requestId }
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/query${search}`,
     {
       method: 'POST',
@@ -640,7 +660,7 @@ export function resetProjectCache() {
 // 运行时表达式求值（审批渲染）
 export async function evalSpec(projectKey, body, options = {}) {
   const url = normalized('/projects/daily_report_25_26/runtime/spec/eval')
-  const response = await fetch(url, {
+  const response = await authAwareFetch(url, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(body || {}),
@@ -655,7 +675,7 @@ export async function evalSpec(projectKey, body, options = {}) {
 
 export async function evalSpecsBatch(projectKey, body, options = {}) {
   const url = normalized('/projects/daily_report_25_26/runtime/spec/eval-batch')
-  const response = await fetch(url, {
+  const response = await authAwareFetch(url, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(body || {}),
@@ -669,7 +689,7 @@ export async function evalSpecsBatch(projectKey, body, options = {}) {
 }
 
 export async function getWorkflowStatus(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/workflow/status`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workflow/status`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -680,7 +700,7 @@ export async function getWorkflowStatus(projectKey) {
 }
 
 export async function approveWorkflow(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/workflow/approve`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workflow/approve`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -693,7 +713,7 @@ export async function approveWorkflow(projectKey, payload) {
 }
 
 export async function revokeWorkflow(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/workflow/revoke`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workflow/revoke`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify(payload || {}),
@@ -706,7 +726,7 @@ export async function revokeWorkflow(projectKey, payload) {
 }
 
 export async function publishWorkflow(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/workflow/publish`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workflow/publish`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ confirm: true }),
@@ -722,7 +742,7 @@ export async function getDashboardData(projectKey, params = {}) {
   const showDate =
     typeof params.showDate === 'string' ? params.showDate : ''
   const search = `?show_date=${encodeURIComponent(showDate)}`
-  const response = await fetch(`${projectPath(projectKey)}/dashboard${search}`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard${search}`, {
     headers: attachAuthHeaders(),
     signal: params.signal,
   })
@@ -745,7 +765,7 @@ export async function getDashboardTemperatureTrend(projectKey, params = {}) {
     start_date: startDate,
     end_date: endDate,
   })
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/trend?${search.toString()}`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/trend?${search.toString()}`, {
     headers: attachAuthHeaders(),
     signal: params.signal,
   })
@@ -757,7 +777,7 @@ export async function getDashboardTemperatureTrend(projectKey, params = {}) {
 }
 
 export async function getDashboardBizDate(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/date`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/date`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -770,7 +790,7 @@ export async function getDashboardBizDate(projectKey) {
 export async function publishDashboardCache(projectKey, params = {}) {
   const rawDays = Number(params?.days)
   const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish?days=${days}`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish?days=${days}`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -783,7 +803,7 @@ export async function publishDashboardCache(projectKey, params = {}) {
 }
 
 export async function getCachePublishStatus(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish/status`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish/status`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -794,7 +814,7 @@ export async function getCachePublishStatus(projectKey) {
 }
 
 export async function cancelCachePublishJob(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/publish/cancel`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish/cancel`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -809,7 +829,7 @@ export async function cancelCachePublishJob(projectKey) {
 export async function refreshDashboardCache(projectKey, params = {}) {
   const showDate = typeof params.showDate === 'string' ? params.showDate : ''
   const search = `?show_date=${encodeURIComponent(showDate)}`
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache/refresh${search}`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/refresh${search}`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -822,7 +842,7 @@ export async function refreshDashboardCache(projectKey, params = {}) {
 }
 
 export async function disableDashboardCache(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/cache`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache`, {
     method: 'DELETE',
     headers: attachAuthHeaders(),
   })
@@ -834,7 +854,7 @@ export async function disableDashboardCache(projectKey) {
 }
 
 export async function importTemperatureData(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -847,7 +867,7 @@ export async function importTemperatureData(projectKey) {
 }
 
 export async function commitTemperatureData(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -862,7 +882,7 @@ export async function commitTemperatureData(projectKey) {
 export async function getDataAnalysisSchema(projectKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_analysis/schema${search}`,
     { headers: attachAuthHeaders(), cache: 'no-store' },
   )
@@ -876,7 +896,7 @@ export async function getDataAnalysisSchema(projectKey, options = {}) {
 export async function runDataAnalysis(projectKey, payload, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_analysis/query${search}`,
     {
       method: 'POST',
@@ -895,7 +915,7 @@ export async function getDataAnalysisAiReport(projectKey, jobId) {
   if (!jobId) {
     throw new Error('缺少智能报告任务 ID')
   }
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_analysis/ai_report/${encodeURIComponent(jobId)}`,
     {
       headers: attachAuthHeaders(),
@@ -923,7 +943,7 @@ export async function runDataAnalysisDialogChat(projectKey, payload = {}) {
 }
 
 export async function getAiSettings(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
     headers: attachAuthHeaders(),
     cache: 'no-store',
   })
@@ -935,7 +955,7 @@ export async function getAiSettings(projectKey) {
 }
 
 export async function updateAiSettings(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_analysis/ai_settings`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -963,7 +983,7 @@ export async function updateAiSettings(projectKey, payload) {
 }
 
 export async function testAiSettings(projectKey, payload) {
-  const response = await fetch(`${projectPath(projectKey)}/data_analysis/ai_settings/test`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_analysis/ai_settings/test`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -989,7 +1009,7 @@ export async function getUnitAnalysisMetrics(projectKey, params = {}) {
   const searchParams = new URLSearchParams()
   if (config) searchParams.set('config', config)
   if (unitKey) searchParams.set('unit_key', unitKey)
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/analysis/metrics?${searchParams.toString()}`,
     { headers: attachAuthHeaders() },
   )
@@ -1001,7 +1021,7 @@ export async function getUnitAnalysisMetrics(projectKey, params = {}) {
 }
 
 export async function getValidationMasterSwitch(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1012,7 +1032,7 @@ export async function getValidationMasterSwitch(projectKey) {
 }
 
 export async function setValidationMasterSwitch(projectKey, enabled) {
-  const response = await fetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/validation/master-switch`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ validation_enabled: Boolean(enabled) }),
@@ -1027,7 +1047,7 @@ export async function setValidationMasterSwitch(projectKey, enabled) {
 export async function getSheetValidationSwitch(projectKey, sheetKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/validation-switch${search}`,
     {
       headers: attachAuthHeaders(),
@@ -1043,7 +1063,7 @@ export async function getSheetValidationSwitch(projectKey, sheetKey, options = {
 export async function setSheetValidationSwitch(projectKey, sheetKey, enabled, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/validation-switch${search}`,
     {
       method: 'POST',
@@ -1061,7 +1081,7 @@ export async function setSheetValidationSwitch(projectKey, sheetKey, enabled, op
 export async function getSheetAiSwitch(projectKey, sheetKey, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/ai-switch${search}`,
     {
       headers: attachAuthHeaders(),
@@ -1077,7 +1097,7 @@ export async function getSheetAiSwitch(projectKey, sheetKey, options = {}) {
 export async function setSheetAiSwitch(projectKey, sheetKey, enabled, options = {}) {
   const { config } = options
   const search = config ? `?config=${encodeURIComponent(config)}` : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     `${projectPath(projectKey)}/data_entry/sheets/${encodeURIComponent(sheetKey)}/ai-switch${search}`,
     {
       method: 'POST',
@@ -1094,7 +1114,7 @@ export async function setSheetAiSwitch(projectKey, sheetKey, enabled, options = 
 
 export async function getAdminOverview(projectKey = 'daily_report_25_26') {
   const search = `?project_key=${encodeURIComponent(projectKey)}`
-  const response = await fetch(normalized(`/admin/overview${search}`), {
+  const response = await authAwareFetch(normalized(`/admin/overview${search}`), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1105,7 +1125,7 @@ export async function getAdminOverview(projectKey = 'daily_report_25_26') {
 }
 
 export async function listAdminProjects() {
-  const response = await fetch(normalized('/admin/projects'), {
+  const response = await authAwareFetch(normalized('/admin/projects'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1116,7 +1136,7 @@ export async function listAdminProjects() {
 }
 
 export async function listAdminFileDirectories() {
-  const response = await fetch(normalized('/admin/files/directories'), {
+  const response = await authAwareFetch(normalized('/admin/files/directories'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1128,7 +1148,7 @@ export async function listAdminFileDirectories() {
 
 export async function listAdminFiles(directory) {
   const search = `?directory=${encodeURIComponent(directory || '')}`
-  const response = await fetch(normalized(`/admin/files${search}`), {
+  const response = await authAwareFetch(normalized(`/admin/files${search}`), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1140,7 +1160,7 @@ export async function listAdminFiles(directory) {
 
 export async function readAdminFile(path) {
   const search = `?path=${encodeURIComponent(path || '')}`
-  const response = await fetch(normalized(`/admin/files/content${search}`), {
+  const response = await authAwareFetch(normalized(`/admin/files/content${search}`), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1151,7 +1171,7 @@ export async function readAdminFile(path) {
 }
 
 export async function saveAdminFile(path, content) {
-  const response = await fetch(normalized('/admin/files/content'), {
+  const response = await authAwareFetch(normalized('/admin/files/content'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ path, content }),
@@ -1164,7 +1184,7 @@ export async function saveAdminFile(path, content) {
 }
 
 export async function listAdminDbTables() {
-  const response = await fetch(normalized('/admin/db/tables'), {
+  const response = await authAwareFetch(normalized('/admin/db/tables'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1175,7 +1195,7 @@ export async function listAdminDbTables() {
 }
 
 export async function queryAdminDbTable(payload = {}) {
-  const response = await fetch(normalized('/admin/db/table/query'), {
+  const response = await authAwareFetch(normalized('/admin/db/table/query'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -1196,7 +1216,7 @@ export async function queryAdminDbTable(payload = {}) {
 }
 
 export async function batchUpdateAdminDbTable(payload = {}) {
-  const response = await fetch(normalized('/admin/db/table/batch-update'), {
+  const response = await authAwareFetch(normalized('/admin/db/table/batch-update'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -1212,7 +1232,7 @@ export async function batchUpdateAdminDbTable(payload = {}) {
 }
 
 export async function getAdminValidationMasterSwitch() {
-  const response = await fetch(normalized('/admin/validation/master-switch'), {
+  const response = await authAwareFetch(normalized('/admin/validation/master-switch'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1223,7 +1243,7 @@ export async function getAdminValidationMasterSwitch() {
 }
 
 export async function setAdminValidationMasterSwitch(enabled) {
-  const response = await fetch(normalized('/admin/validation/master-switch'), {
+  const response = await authAwareFetch(normalized('/admin/validation/master-switch'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ validation_enabled: Boolean(enabled) }),
@@ -1236,7 +1256,7 @@ export async function setAdminValidationMasterSwitch(enabled) {
 }
 
 export async function getAdminAiSettings() {
-  const response = await fetch(normalized('/admin/ai-settings'), {
+  const response = await authAwareFetch(normalized('/admin/ai-settings'), {
     headers: attachAuthHeaders(),
     cache: 'no-store',
   })
@@ -1248,7 +1268,7 @@ export async function getAdminAiSettings() {
 }
 
 export async function updateAdminAiSettings(payload) {
-  const response = await fetch(normalized('/admin/ai-settings'), {
+  const response = await authAwareFetch(normalized('/admin/ai-settings'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -1276,7 +1296,7 @@ export async function updateAdminAiSettings(payload) {
 }
 
 export async function testAdminAiSettings(payload) {
-  const response = await fetch(normalized('/admin/ai-settings/test'), {
+  const response = await authAwareFetch(normalized('/admin/ai-settings/test'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -1300,7 +1320,7 @@ export async function testAdminAiSettings(payload) {
 export async function publishAdminDashboardCache(params = {}) {
   const rawDays = Number(params?.days)
   const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const response = await fetch(normalized(`/admin/cache/publish?days=${days}`), {
+  const response = await authAwareFetch(normalized(`/admin/cache/publish?days=${days}`), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -1313,7 +1333,7 @@ export async function publishAdminDashboardCache(params = {}) {
 }
 
 export async function getAdminCachePublishStatus() {
-  const response = await fetch(normalized('/admin/cache/publish/status'), {
+  const response = await authAwareFetch(normalized('/admin/cache/publish/status'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1324,7 +1344,7 @@ export async function getAdminCachePublishStatus() {
 }
 
 export async function cancelAdminCachePublishJob() {
-  const response = await fetch(normalized('/admin/cache/publish/cancel'), {
+  const response = await authAwareFetch(normalized('/admin/cache/publish/cancel'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -1337,7 +1357,7 @@ export async function cancelAdminCachePublishJob() {
 }
 
 export async function disableAdminCache() {
-  const response = await fetch(normalized('/admin/cache'), {
+  const response = await authAwareFetch(normalized('/admin/cache'), {
     method: 'DELETE',
     headers: attachAuthHeaders(),
   })
@@ -1350,7 +1370,7 @@ export async function disableAdminCache() {
 
 export async function refreshAdminCache(params = {}) {
   const showDate = typeof params?.showDate === 'string' ? params.showDate : ''
-  const response = await fetch(
+  const response = await authAwareFetch(
     normalized(`/admin/cache/refresh?show_date=${encodeURIComponent(showDate)}`),
     {
       method: 'POST',
@@ -1366,7 +1386,7 @@ export async function refreshAdminCache(params = {}) {
 }
 
 export async function getProjectDashboardBizDate(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/date`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/date`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1377,7 +1397,7 @@ export async function getProjectDashboardBizDate(projectKey) {
 }
 
 export async function importProjectTemperatureData(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/import`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -1390,7 +1410,7 @@ export async function importProjectTemperatureData(projectKey) {
 }
 
 export async function commitProjectTemperatureData(projectKey) {
-  const response = await fetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/import/commit`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -1403,7 +1423,7 @@ export async function commitProjectTemperatureData(projectKey) {
 }
 
 export async function getAdminSystemMetrics() {
-  const response = await fetch(normalized('/admin/system/metrics'), {
+  const response = await authAwareFetch(normalized('/admin/system/metrics'), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1414,7 +1434,7 @@ export async function getAdminSystemMetrics() {
 }
 
 export async function postAdminAuditEvents(events = []) {
-  const response = await fetch(normalized('/audit/events'), {
+  const response = await authAwareFetch(normalized('/audit/events'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ events: Array.isArray(events) ? events : [] }),
@@ -1434,7 +1454,7 @@ export async function getAdminAuditEvents(params = {}) {
   if (params.action) search.set('action', String(params.action))
   if (params.keyword) search.set('keyword', String(params.keyword))
   if (params.limit != null) search.set('limit', String(params.limit))
-  const response = await fetch(normalized(`/admin/audit/events?${search.toString()}`), {
+  const response = await authAwareFetch(normalized(`/admin/audit/events?${search.toString()}`), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1447,7 +1467,7 @@ export async function getAdminAuditEvents(params = {}) {
 export async function getAdminAuditStats(params = {}) {
   const search = new URLSearchParams()
   if (params.days != null) search.set('days', String(params.days))
-  const response = await fetch(normalized(`/admin/audit/stats?${search.toString()}`), {
+  const response = await authAwareFetch(normalized(`/admin/audit/stats?${search.toString()}`), {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -1458,7 +1478,7 @@ export async function getAdminAuditStats(params = {}) {
 }
 
 export async function execSuperCommand(payload) {
-  const response = await fetch(normalized('/admin/super/terminal/exec'), {
+  const response = await authAwareFetch(normalized('/admin/super/terminal/exec'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({
@@ -1472,7 +1492,7 @@ export async function execSuperCommand(payload) {
 }
 
 export async function listSuperFiles(path) {
-  const response = await fetch(normalized(`/admin/super/files/list?path=${encodeURIComponent(path || '')}`), {
+  const response = await authAwareFetch(normalized(`/admin/super/files/list?path=${encodeURIComponent(path || '')}`), {
     headers: attachAuthHeaders(),
   })
   await ensureSuperResponseOk(response, `目录读取失败: ${response.status}`)
@@ -1480,7 +1500,7 @@ export async function listSuperFiles(path) {
 }
 
 export async function readSuperFile(path) {
-  const response = await fetch(normalized(`/admin/super/files/read?path=${encodeURIComponent(path || '')}`), {
+  const response = await authAwareFetch(normalized(`/admin/super/files/read?path=${encodeURIComponent(path || '')}`), {
     headers: attachAuthHeaders(),
   })
   await ensureSuperResponseOk(response, `文件读取失败: ${response.status}`)
@@ -1488,7 +1508,7 @@ export async function readSuperFile(path) {
 }
 
 export async function writeSuperFile(path, content) {
-  const response = await fetch(normalized('/admin/super/files/write'), {
+  const response = await authAwareFetch(normalized('/admin/super/files/write'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ path, content }),
@@ -1498,7 +1518,7 @@ export async function writeSuperFile(path, content) {
 }
 
 export async function makeSuperDirectory(path) {
-  const response = await fetch(normalized('/admin/super/files/mkdir'), {
+  const response = await authAwareFetch(normalized('/admin/super/files/mkdir'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ path }),
@@ -1508,7 +1528,7 @@ export async function makeSuperDirectory(path) {
 }
 
 export async function moveSuperPath(source, destination) {
-  const response = await fetch(normalized('/admin/super/files/move'), {
+  const response = await authAwareFetch(normalized('/admin/super/files/move'), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({ source, destination }),
@@ -1518,7 +1538,7 @@ export async function moveSuperPath(source, destination) {
 }
 
 export async function deleteSuperPath(path) {
-  const response = await fetch(normalized(`/admin/super/files?path=${encodeURIComponent(path || '')}`), {
+  const response = await authAwareFetch(normalized(`/admin/super/files?path=${encodeURIComponent(path || '')}`), {
     method: 'DELETE',
     headers: attachAuthHeaders(),
   })
@@ -1531,7 +1551,7 @@ export async function uploadSuperFiles(targetDir, files = []) {
   for (const file of files) {
     formData.append('files', file)
   }
-  const response = await fetch(
+  const response = await authAwareFetch(
     normalized(`/admin/super/files/upload?target_dir=${encodeURIComponent(targetDir || '')}`),
     {
       method: 'POST',

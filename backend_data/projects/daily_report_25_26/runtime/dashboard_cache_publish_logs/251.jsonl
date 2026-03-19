@@ -1,3 +1,0 @@
-{"time": "2026-03-17T23:33:45.995415+08:00", "pid": 251, "level": "info", "text": "已启动利润收入与标煤任务", "group": "metrics_profit"}
-{"time": "2026-03-17T23:33:47.639128+08:00", "pid": 251, "level": "info", "text": "开始计算 利润收入与标煤：2,3,5", "group": "metrics_profit"}
-{"time": "2026-03-17T23:34:37.735684+08:00", "pid": 251, "level": "info", "text": "利润收入与标煤已完成", "group": "metrics_profit"}

@@ -16,6 +16,7 @@ $timestamp = (Get-Date -Format "yyyyMMddHHmmss")
 Write-Output "INFO: 生成镜像标签: $timestamp"
 
 Write-Output "INFO: Docker Hub 用户名设置为: $dockerhub_username"
+Write-Output "INFO: 根目录 .dockerignore 已排除 db_data，本地数据库挂载目录不会参与镜像打包。"
 Write-Output "INFO: 开始构建生产环境镜像 (HTTP ONLY 模式)..."
 
 # 使用适配新服务器的构建文件，确保开启 HTTP_ONLY: "true"

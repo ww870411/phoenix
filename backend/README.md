@@ -1,5 +1,11 @@
 # daily_report_25_26 后端说明
 
+## 生产镜像构建上下文排除 db_data（2026-03-19）
+- `db_data` 是开发环境 PostgreSQL 的宿主机挂载目录，不属于后端镜像内容。
+- 根目录 `.dockerignore` 已显式排除 `db_data` 与递归子路径，避免 Docker 在 `context: .` 构建生产镜像时把数据库文件送入 build context。
+- `lo1.ps1` 与 `lo1_new_server.ps1` 已增加构建前提示，提醒当前镜像打包不会包含 `db_data`。
+- 说明：目标环境数据库是否保留，仍取决于运行时卷挂载和是否删除卷，不取决于镜像构建本身。
+
 ## 月报导入工作台提取 CSV 生产 502 修复（2026-03-19）
 - 文件：`backend/projects/monthly_data_show/api/workspace.py`
 - 调整：`POST /api/v1/projects/{project_key}/monthly-data-show/extract-csv` 不再通过 `X-Monthly-Rule-Details` 返回完整规则详情 JSON。
@@ -3661,3 +3667,7 @@
   - `未知单位`、`存在未配置的指标` 等配置级错误仍保持硬失败，避免掩盖真实配置问题。
 - 验证：
   - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+## 2026-03-19 登录持久化复核结论
+- 后端登录持久化机制未调整：`remember_me=true` 时，鉴权会话仍写入数据库持久化表，由 `/auth/me` 与 `AuthManager.require_session()` 在服务重启后恢复。
+- 本轮针对“重部署后很多需要登录的操作报错”的处理重点在前端：默认开启记住我，并对通用 `401` 做统一失效收口；后端代码层面未发现“每次重部署都会主动使持久化登录失效”的额外逻辑。

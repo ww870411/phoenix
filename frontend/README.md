@@ -1,5 +1,10 @@
 # 前端说明（Vue3 + Vite）
 
+## 生产镜像构建上下文排除 db_data（2026-03-19）
+- 根目录 `.dockerignore` 已显式排除 `db_data` 及其递归形式，本地 PostgreSQL 挂载目录不会进入生产镜像构建上下文。
+- `lo1.ps1` 与 `lo1_new_server.ps1` 在启动生产构建前会输出提示，明确 `db_data` 不参与镜像打包。
+- 该调整不影响任何前端页面、接口调用或构建产物，只是避免误把本地数据库文件夹送入 Docker build context。
+
 ## 月报导入工作台生产 502 修复（2026-03-19）
 - `src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` 的提取结果展示已改为使用前端本地规则摘要 + 后端小型统计头，不再依赖服务端返回的大型规则详情 header。
 - `src/projects/daily_report_25_26/services/api.js` 现在读取以下统计头：
@@ -4864,3 +4869,8 @@ docker compose up -d --build
   - 后端会返回该单位可查询的指标结果；
   - 不支持的指标会作为缺失项展示，并在 `warnings` 中提示。
 - 前端无需额外改动，现有 `warnings` 展示逻辑即可承接这类提示。
+
+## 2026-03-19 登录状态与重部署体验
+- 登录页默认勾选“记住我”，对应 `daily_report_25_26/store/auth.js` 的 `rememberLogin` 默认值为 `true`，未主动取消时登录信息会优先写入 `localStorage`。
+- 前端 API 层新增统一 `401` 收口：`services/api.js` 通过 `authAwareFetch` 监听未授权响应，并派发 `phoenix-auth-expired` 事件。
+- `auth store` 收到该事件后会清理本地登录态并跳转 `/login`，用于处理后端重启、容器重部署或内存会话丢失时“界面未自动退出但受保护操作不断报错”的场景。

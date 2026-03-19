@@ -1,3 +1,17 @@
+## 2026-03-19（生产镜像构建上下文显式排除 db_data）
+
+- 结论：
+  - `D:\编程项目\phoenix\db_data` 是本地开发环境 PostgreSQL 的宿主机挂载目录，不应参与任何生产镜像构建上下文。
+  - 仓库原本已有根目录 `.dockerignore` 排除 `db_data`；本轮将该规则显式加固，并在构建脚本中输出提示，避免误把数据库目录随镜像一起打包。
+- 本轮改动：
+  - `.dockerignore`：扩展为 `db_data`、`db_data/`、`**/db_data`、`**/db_data/**`，并补充中文说明注释。
+  - `lo1.ps1`、`lo1_new_server.ps1`：在执行生产构建前输出提示，明确 `db_data` 已被 `.dockerignore` 排除，不会进入镜像打包。
+- 结果：
+  - 生产镜像构建时不会把本地数据库目录送入 Docker build context；
+  - 将镜像拿到其他环境运行时，也不会因为镜像内容覆盖目标环境已有数据库目录。
+- 说明：
+  - 真正影响目标环境数据库的仍是运行时卷挂载与是否删卷，而不是这两个构建脚本本身。
+
 ## 2026-03-19（月报导入工作台生产环境提取 CSV 502 修复）
 
 - 结论：
@@ -6938,3 +6952,10 @@
   - `未知单位`、`存在未配置的指标` 等真正配置错误仍保持硬错误。
 - 验证：
   - `python -m py_compile backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+## 2026-03-19 登录持久化默认开启与重部署失效收口
+- 前端登录态默认改为“记住我”开启，`phoenix-auth` store 初始化默认值改为持久化优先，清理会话后也恢复为默认勾选。
+- `frontend/src/projects/daily_report_25_26/services/api.js` 新增统一未授权事件 `phoenix-auth-expired` 与 `authAwareFetch` 包装，项目内请求在收到 `401` 时会先清理 token，再派发登录失效事件。
+- `frontend/src/projects/daily_report_25_26/store/auth.js` 监听登录失效事件，收到后会清理本地会话、写入“登录状态已失效，请重新登录”，并跳转 `/login`，避免后端重部署后页面仍显示在线但受保护操作连续报错。
+- 复核结论：后端 `AuthManager` 的持久化会话恢复链路仍有效，`remember_me=true` 时会话保存在数据库中，容器重部署本身不会主动让持久化登录失效；用户感知问题主要来自未勾选记住我时的内存会话丢失，以及前端此前未对通用 `401` 做统一收口。
+- 验证：`npm run build` 通过。
