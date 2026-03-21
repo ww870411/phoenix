@@ -1,0 +1,3 @@
+{"time": "2026-03-21T18:33:41.630464+08:00", "pid": 42, "level": "info", "text": "已启动日均气温任务", "group": "temperature"}
+{"time": "2026-03-21T18:33:43.457046+08:00", "pid": 42, "level": "info", "text": "开始计算 日均气温：1", "group": "temperature"}
+{"time": "2026-03-21T18:33:43.639277+08:00", "pid": 42, "level": "info", "text": "日均气温已完成", "group": "temperature"}

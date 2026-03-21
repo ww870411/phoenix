@@ -41,7 +41,8 @@ from sqlalchemy import func, or_, select, text
 DATA_ROOT = Path(DATA_DIRECTORY)
 DEFAULT_PROJECT_KEY = get_default_project_key()
 EAST_8 = timezone(timedelta(hours=8))
-SECTION_PREFIX_PATTERN = re.compile(r"^(\d+)\.")
+# 支持 `0.5.xxx` 这类小数序号板块，避免并行抽取时漏掉折叠详表。
+SECTION_PREFIX_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)")
 HEATING_SEASON_START = date(2025, 11, 1)
 
 

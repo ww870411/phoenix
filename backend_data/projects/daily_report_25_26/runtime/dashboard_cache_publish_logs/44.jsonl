@@ -1,0 +1,3 @@
+{"time": "2026-03-21T18:33:41.703968+08:00", "pid": 44, "level": "info", "text": "已启动每日对比趋势任务", "group": "daily_trend"}
+{"time": "2026-03-21T18:33:43.476766+08:00", "pid": 44, "level": "info", "text": "开始计算 每日对比趋势：10", "group": "daily_trend"}
+{"time": "2026-03-21T18:33:43.669443+08:00", "pid": 44, "level": "info", "text": "每日对比趋势已完成", "group": "daily_trend"}

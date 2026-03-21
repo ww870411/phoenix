@@ -2,25 +2,13 @@
   "project_key": "daily_report_25_26",
   "layout_version": 2,
   "disabled": false,
-  "updated_at": "2026-03-19T16:48:16.586523+08:00",
+  "updated_at": "2026-03-21T18:34:56.897423+08:00",
   "entries": {
-    "2026-03-16": {
-      "dir_name": "2026-03-16",
-      "generated_at": "2026-03-17T23:34:46.812104+08:00",
-      "show_date": "2026-03-16",
-      "push_date": "2026-03-16",
-      "parts": [
-        "meta.json",
-        "summary.json",
-        "detail.json",
-        "trend.json"
-      ]
-    },
-    "2026-03-18": {
-      "dir_name": "2026-03-18",
-      "generated_at": "2026-03-19T16:48:16.397291+08:00",
-      "show_date": "2026-03-18",
-      "push_date": "2026-03-18",
+    "2026-03-20": {
+      "dir_name": "2026-03-20",
+      "generated_at": "2026-03-21T18:34:56.722080+08:00",
+      "show_date": "2026-03-20",
+      "push_date": "2026-03-20",
       "parts": [
         "meta.json",
         "summary.json",

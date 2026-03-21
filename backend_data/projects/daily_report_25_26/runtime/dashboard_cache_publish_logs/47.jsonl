@@ -1,0 +1,3 @@
+{"time": "2026-03-21T18:33:41.854994+08:00", "pid": 47, "level": "info", "text": "已启动明细表格与设备状态任务", "group": "detail_tables"}
+{"time": "2026-03-21T18:33:43.647764+08:00", "pid": 47, "level": "info", "text": "开始计算 明细表格与设备状态：0.5,7,11", "group": "detail_tables"}
+{"time": "2026-03-21T18:34:23.460975+08:00", "pid": 47, "level": "info", "text": "明细表格与设备状态已完成", "group": "detail_tables"}

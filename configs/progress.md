@@ -6659,6 +6659,12 @@
 - 2026-03-17：按用户要求调整 `monthly_data_show` 抽取执行顺序，使大类顺序与配置文件一致：原始抽取阶段改为“指标剔除 -> 指标重命名 -> 计量单位转换”，并将“常量注入”前移到“半计算规则”之前执行；`backend/projects/monthly_data_show/services/extractor.py` 中 `extract_rows()` 已重排该流水线。与此同时，移除专门的 `enable_jinpu_heating_area_adjustment` 开关与 `_apply_jinpu_heating_area_adjustment()` 代码分支，将其改写为配置文件 `semi_calculated_rules` 中的一条普通半计算规则：`金普期末供暖收费面积扣减高温水面积`。步骤二规则选择中“特殊修正”父项已随之移除。已执行规则 JSON 解析、`python -m py_compile backend/projects/monthly_data_show/services/extractor.py backend/projects/monthly_data_show/api/workspace.py` 与 `frontend npm run build` 通过。
 ## 2026-03-17 数据看板缓存性能与发布链路优化
 
+- 2026-03-21 补充修复：
+  - 定位到“供暖期焦点指标详表(0.5 折叠表)”在缓存发布后回退为模板值的问题；
+  - 根因是 `dashboard_expression.py` 的 section 编号解析仅支持整数，`0.5卡片详细信数据表（折叠）` 在并行抽取结果时未被纳入子结果集合；
+  - 已将 section 索引解析修正为支持小数编号，`0.5` 板块现在可在多进程发布后正确写入缓存；
+  - 前端 `DashBoard.vue` 的 section 映射同步改为支持小数编号，避免后续读取同类板块时再出现错配。
+
 - 范围：`daily_report_25_26` 数据看板缓存、管理后台缓存发布、前端日志弹窗、后端趋势块计算。
 - 本轮核心目标：
   - 降低缓存发布时的单日与多日耗时；

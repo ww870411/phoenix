@@ -1563,7 +1563,7 @@ const sectionIndexMap = computed(() => {
   const map = {}
   Object.keys(sections).forEach((key) => {
     if (typeof key !== 'string') return
-    const match = key.match(/^(\d+)\./)
+    const match = key.match(/^(\d+(?:\.\d+)?)/)
     if (match && !map[match[1]]) {
       map[match[1]] = key
     }
