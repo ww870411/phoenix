@@ -3745,3 +3745,16 @@
 - 查询阶段读取的是库里的最终值，除计算指标外不会重新做这条单位转换。
 
 这也解释了为什么历史旧库数据可能仍出现 `万万千瓦时`：那是旧提取结果留下的脏数据，不是当前 `import-csv` 重新算坏的。
+
+## 2026-03-26 数据分析页 62 天区间上限排查
+- 接口：`backend/projects/daily_report_25_26/api/legacy_full.py` 的数据分析查询链路。
+- 当前限制：累计模式会计算 `range_days = (end_date - start_date).days + 1`，当区间天数大于 `MAX_TIMELINE_DAYS` 时直接返回 400。
+- 常量定义：`backend/services/data_analysis.py` 中 `MAX_TIMELINE_DAYS = 62`。
+- 根本原因：逐日明细由 `_query_analysis_timeline(...)` 逐天循环生成；每个自然日都会单独建立会话并执行一次视图查询，超长区间会带来明显线性放大，因此当前用 62 天做保护阈值。
+- 结论：该限制是代码显式约束，不是数据库数据缺失，也不是接口偶发异常。
+
+## 2026-03-26 数据分析页去掉 62 天区间限制
+- 按用户要求，已删除数据分析累计模式的 62 天显式上限。
+- 变更位置：`backend/projects/daily_report_25_26/api/legacy_full.py`、`backend/services/data_analysis.py`。
+- 当前行为：累计模式不再因区间超过 62 天返回 400。
+- 保留风险：逐日明细查询仍由 `_query_analysis_timeline(...)` 按天循环执行，长区间性能压力仍然存在，后续如需稳定支持更长区间，应继续优化查询实现。

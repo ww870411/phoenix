@@ -7031,3 +7031,17 @@
   - 如果“今天新提取”的 CSV 里已经出现异常单位或数值，问题在步骤 3 的提取链路或规则选择，不在入库。
   - 如果是查询页面看到历史 `万万千瓦时` 等异常，而今天没有重新提取/重新入库，则更可能是历史库里旧脏数据仍在暴露；3 月 16 日的修复不会自动清洗旧库数据。
   - 3 月 16 日已确认旧问题根因是早期单位规则做“包含替换”，会把原本就是 `万千瓦时` 的单位继续替成 `万万千瓦时`；当前代码已改为 `exact_match=true`，理论上新提取数据不应再出现该问题。
+
+## 2026-03-26 数据分析页 62 天区间上限排查
+- 现象确认：`/projects/daily_report_25_26/pages/data_analysis/data-analysis` 的累计模式查询并非数据库天然只能返回 62 天，而是后端显式限制了区间长度。
+- 后端原因：`backend/projects/daily_report_25_26/api/legacy_full.py` 在累计模式下计算 `range_days = (end_date - start_date).days + 1`，当天数大于 `MAX_TIMELINE_DAYS` 时直接返回 400，提示“累计模式暂只支持 62 天内的区间，请缩小日期范围”。
+- 常量来源：`backend/services/data_analysis.py` 定义 `MAX_TIMELINE_DAYS = 62`，并由当前接口复用。
+- 设计动机：同文件的 `_query_analysis_timeline(...)` 采用按天循环方式生成逐日明细，每一天都会新建 `SessionLocal` 并执行一次视图查询，区间越长查询成本越线性放大，因此当前用 62 天作保护上限。
+- 前端现状：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue` 没有在日期控件侧做 62 天禁选，只是把 `start_date/end_date` 原样提交到 `runDataAnalysis(...)`，后端报错后再透传给页面。
+- 结论：这是当前实现中的显式产品/性能保护阈值，不是用户数据问题，也不是浏览器日期控件限制。
+
+## 2026-03-26 数据分析页去掉 62 天区间限制
+- 按用户要求，已移除 `daily_report_25_26` 数据分析累计模式的 62 天显式拦截。
+- 后端变更：删除 `backend/projects/daily_report_25_26/api/legacy_full.py` 与 `backend/services/data_analysis.py` 中基于 `MAX_TIMELINE_DAYS` 的 400 返回逻辑，累计模式现在允许提交超过 62 天的区间。
+- 当前状态：页面前端无需改动，仍按原方式提交起止日期；是否可接受长区间耗时，取决于后端逐日 timeline 查询性能。
+- 风险：`_query_analysis_timeline(...)` 仍是按天循环、逐天开 session 查询，长区间请求可能明显变慢，但不会再因 62 天阈值被直接拒绝。

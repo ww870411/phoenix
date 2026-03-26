@@ -75,7 +75,6 @@ COAL_STORAGE_NAME_MAP = {
 }
 TEMPERATURE_COLUMN_MAP = data_analysis_service.TEMPERATURE_COLUMN_MAP
 TEMPERATURE_UNIT = data_analysis_service.TEMPERATURE_UNIT
-MAX_TIMELINE_DAYS = data_analysis_service.MAX_TIMELINE_DAYS
 BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
 NON_ACCUMULATION_METRICS = {"rate_overall_efficiency"}
 PERCENTAGE_SCALE_METRICS = {"rate_overall_efficiency": 100.0}
@@ -4027,14 +4026,6 @@ def _execute_data_analysis_query_legacy(
         end_date = start_date
 
     range_days = (end_date - start_date).days + 1
-    if analysis_mode_value == "range" and range_days > MAX_TIMELINE_DAYS:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "ok": False,
-                "message": f"累计模式暂只支持 {MAX_TIMELINE_DAYS} 天内的区间，请缩小日期范围。",
-            },
-        )
     if profile_enabled:
         perf["analysis_mode"] = analysis_mode_value
         perf["timeline_days"] = range_days

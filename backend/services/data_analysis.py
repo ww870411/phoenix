@@ -16,7 +16,7 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-MAX_TIMELINE_DAYS = 62
+
 TEMPERATURE_COLUMN_MAP = {
     "aver_temp": "aver_temp",
     "max_temp": "max_temp",
@@ -380,14 +380,6 @@ def execute_data_analysis_query(payload, schema_payload: Dict[str, Any]) -> JSON
         end_date = start_date
 
     range_days = (end_date - start_date).days + 1
-    if analysis_mode_value == "range" and range_days > MAX_TIMELINE_DAYS:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "ok": False,
-                "message": f"累计模式暂只支持 {MAX_TIMELINE_DAYS} 天内的区间，请缩小日期范围。",
-            },
-        )
 
     analysis_modes = schema_payload.get("analysis_modes") or []
     mode_label = next(
