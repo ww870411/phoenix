@@ -618,6 +618,7 @@ import {
   getDataAnalysisSchema,
   getDashboardBizDate,
   runDataAnalysis,
+  runDataAnalysisBatch,
   getDataAnalysisAiReport,
   runDataAnalysisDialogChat,
   getAiSettings,
@@ -2210,101 +2211,133 @@ async function runAnalysis() {
   }
   resetAiReportState()
     const prevRangeInfo = computePreviousRangeForRing(startDate.value, endDate.value, analysisMode.value)
+    const batchResponse = await runDataAnalysisBatch(
+      projectKey.value,
+      {
+        ...requestBase,
+        unit_keys: targetUnits,
+      },
+      { config: pageConfig.value },
+    )
+    if (!batchResponse?.ok) {
+      throw new Error(batchResponse?.message || '分析查询失败')
+    }
+    if (batchResponse.worker_count) {
+      console.info('[DataAnalysisView][batch]', {
+        workerCount: batchResponse.worker_count,
+        requestedUnits: batchResponse.requested_units || targetUnits,
+        succeededUnits: batchResponse.succeeded_units || [],
+      })
+    }
+    const batchResults = batchResponse.results && typeof batchResponse.results === 'object'
+      ? batchResponse.results
+      : {}
     const aggregatedResults = {}
-    const errors = []
-    for (const unitKey of targetUnits) {
-      const payload = { ...requestBase, unit_key: unitKey }
-      try {
-        const response = await runDataAnalysis(projectKey.value, payload, { config: pageConfig.value })
-        if (!response?.ok) {
-          throw new Error(response?.message || '分析查询失败')
-        }
-        if (response._perf) {
-          console.info('[DataAnalysisView][perf]', {
-            unitKey,
-            unitLabel: response.unit_label || resolveUnitLabel(unitKey),
-            perf: response._perf,
+    const errors = Array.isArray(batchResponse.errors)
+      ? batchResponse.errors
+          .map((item) => {
+            const unitLabel = item?.unit_label || resolveUnitLabel(item?.unit_key || '')
+            const message = item?.message || '分析查询失败'
+            return `${unitLabel}：${message}`
           })
+          .filter(Boolean)
+      : []
+    let nextAiJobId = ''
+    for (const unitKey of targetUnits) {
+      const response = batchResults[unitKey]
+      if (!response?.ok) {
+        if (!errors.some((message) => message.startsWith(`${resolveUnitLabel(unitKey)}：`))) {
+          errors.push(`${resolveUnitLabel(unitKey)}：分析查询失败`)
         }
-        const decoratedRows = Array.isArray(response.rows)
-          ? response.rows.map((row) => ({
-              ...row,
-              decimals: metricDecimalsMap.value?.[row.key] ?? 2,
-            }))
-          : []
-        const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
-        if (aiJobId) {
-          aiReportJobId.value = aiJobId
-          startAiReportPolling(aiJobId)
-        }
-        let ringComparePayload = null
-        if (response.ring_compare || response.ringCompare) {
-          const payloadSource = response.ring_compare || response.ringCompare
-          if (payloadSource?.prevTotals && payloadSource.range) {
-            ringComparePayload = {
-              range: payloadSource.range,
-              prevTotals: payloadSource.prevTotals,
-              note: payloadSource.note || '',
-            }
-          } else if (payloadSource?.note) {
-            ringComparePayload = {
-              range: payloadSource.range || null,
-              prevTotals: payloadSource.prevTotals || null,
-              note: payloadSource.note,
-            }
-          }
-        }
-        if (!ringComparePayload) {
-          let prevTotals = null
-          let ringNote = prevRangeInfo.note
-          if (prevRangeInfo.range) {
-            try {
-              const prevPayload = {
-                ...payload,
-                start_date: prevRangeInfo.range.start,
-                end_date: prevRangeInfo.range.end,
-                request_ai_report: false,
-              }
-              const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
-              if (prevResponse?.ok) {
-                const prevRows = Array.isArray(prevResponse.rows) ? prevResponse.rows : []
-                prevTotals = buildTotalsMap(prevRows)
-              } else {
-                ringNote = prevResponse?.message || '环比数据获取失败'
-              }
-            } catch (err) {
-              ringNote = err instanceof Error ? err.message : String(err)
-            }
-          }
-          ringComparePayload = {
-            range: prevRangeInfo.range || null,
-            prevTotals,
-            note: ringNote,
-          }
-        }
-        const meta = {
-          unit_key: unitKey,
-          unit_label: response.unit_label || resolveUnitLabel(unitKey),
-          analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
-          view: response.view || resolveViewNameForUnit(unitKey),
-          start_date: response.start_date || startDate.value,
-          end_date: response.end_date || endDate.value,
-          ai_report_job_id: aiJobId,
-        }
-        aggregatedResults[unitKey] = {
-          rows: decoratedRows,
-          warnings: Array.isArray(response.warnings) ? response.warnings : [],
-          timeline: buildTimelineGrid(decoratedRows),
-          infoBanner: buildInfoBannerFromMeta(meta),
-          ringCompare: ringComparePayload,
-          planComparison: response.plan_comparison || null,
-          planComparisonNote: response.plan_comparison_note || '',
-          meta,
-          aiReportJobId: aiJobId,
-        }
-      } catch (err) {
-        errors.push(`${resolveUnitLabel(unitKey)}：${err instanceof Error ? err.message : String(err)}`)
+        continue
       }
+      const payload = { ...requestBase, unit_key: unitKey }
+      if (response._perf) {
+        console.info('[DataAnalysisView][perf]', {
+          unitKey,
+          unitLabel: response.unit_label || resolveUnitLabel(unitKey),
+          perf: response._perf,
+        })
+      }
+      const decoratedRows = Array.isArray(response.rows)
+        ? response.rows.map((row) => ({
+            ...row,
+            decimals: metricDecimalsMap.value?.[row.key] ?? 2,
+          }))
+        : []
+      const aiJobId = typeof response.ai_report_job_id === 'string' ? response.ai_report_job_id : ''
+      if (!nextAiJobId && aiJobId) {
+        nextAiJobId = aiJobId
+      }
+      let ringComparePayload = null
+      if (response.ring_compare || response.ringCompare) {
+        const payloadSource = response.ring_compare || response.ringCompare
+        if (payloadSource?.prevTotals && payloadSource.range) {
+          ringComparePayload = {
+            range: payloadSource.range,
+            prevTotals: payloadSource.prevTotals,
+            note: payloadSource.note || '',
+          }
+        } else if (payloadSource?.note) {
+          ringComparePayload = {
+            range: payloadSource.range || null,
+            prevTotals: payloadSource.prevTotals || null,
+            note: payloadSource.note,
+          }
+        }
+      }
+      if (!ringComparePayload) {
+        let prevTotals = null
+        let ringNote = prevRangeInfo.note
+        if (prevRangeInfo.range) {
+          try {
+            const prevPayload = {
+              ...payload,
+              start_date: prevRangeInfo.range.start,
+              end_date: prevRangeInfo.range.end,
+              request_ai_report: false,
+            }
+            const prevResponse = await runDataAnalysis(projectKey.value, prevPayload, { config: pageConfig.value })
+            if (prevResponse?.ok) {
+              const prevRows = Array.isArray(prevResponse.rows) ? prevResponse.rows : []
+              prevTotals = buildTotalsMap(prevRows)
+            } else {
+              ringNote = prevResponse?.message || '环比数据获取失败'
+            }
+          } catch (err) {
+            ringNote = err instanceof Error ? err.message : String(err)
+          }
+        }
+        ringComparePayload = {
+          range: prevRangeInfo.range || null,
+          prevTotals,
+          note: ringNote,
+        }
+      }
+      const meta = {
+        unit_key: unitKey,
+        unit_label: response.unit_label || resolveUnitLabel(unitKey),
+        analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
+        view: response.view || resolveViewNameForUnit(unitKey),
+        start_date: response.start_date || startDate.value,
+        end_date: response.end_date || endDate.value,
+        ai_report_job_id: aiJobId,
+      }
+      aggregatedResults[unitKey] = {
+        rows: decoratedRows,
+        warnings: Array.isArray(response.warnings) ? response.warnings : [],
+        timeline: buildTimelineGrid(decoratedRows),
+        infoBanner: buildInfoBannerFromMeta(meta),
+        ringCompare: ringComparePayload,
+        planComparison: response.plan_comparison || null,
+        planComparisonNote: response.plan_comparison_note || '',
+        meta,
+        aiReportJobId: aiJobId,
+      }
+    }
+    if (nextAiJobId) {
+      aiReportJobId.value = nextAiJobId
+      startAiReportPolling(nextAiJobId)
     }
     const populatedKeys = Object.keys(aggregatedResults)
     if (!populatedKeys.length) {

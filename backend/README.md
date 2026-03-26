@@ -3758,3 +3758,24 @@
 - 变更位置：`backend/projects/daily_report_25_26/api/legacy_full.py`、`backend/services/data_analysis.py`。
 - 当前行为：累计模式不再因区间超过 62 天返回 400。
 - 保留风险：逐日明细查询仍由 `_query_analysis_timeline(...)` 按天循环执行，长区间性能压力仍然存在，后续如需稳定支持更长区间，应继续优化查询实现。
+
+## 2026-03-26 数据分析页 timeline 批量查询优化（阶段1）
+- 优化位置：`backend/services/data_analysis.py` 的 `_query_analysis_timeline(...)`。
+- 原实现：Python 层 `while current <= end_date`，逐天开启 session、逐天 `SET LOCAL phoenix.biz_date`、逐天查视图。
+- 新实现：改为单 session + 单条批量 SQL，使用 `generate_series(...)` 生成区间日期，并通过 `LATERAL + set_config('phoenix.biz_date', ...)` 批量驱动日视图查询。
+- 兼容与风险控制：保留 `_query_analysis_timeline_iterative(...)` 旧实现作为回退路径；若批量查询在数据库中失败，会自动记录 warning 并退回旧逻辑。
+- 验证指标：沿用接口 `_perf.analysis_timeline_ms` 观察逐日明细阶段耗时变化。
+
+## 2026-03-26 数据分析页多单位并发查询优化（阶段2）
+- 本阶段未改后端接口，但前端已不再串行调用数据分析接口。
+- 结合前一阶段的 timeline 批量查询优化，当前性能观察重点应转为：
+  - 单单位请求的 `_perf.analysis_timeline_ms`
+  - 页面整体等待时间与多单位并发后的体感
+- 若后续数据库侧仍有明显压力，再考虑新增后端批量单位查询接口，替代前端多次并发调用。
+
+## 2026-03-26 数据分析页后端多进程批量查询优化（阶段3）
+- 新增接口：`POST /projects/daily_report_25_26/data_analysis/query-batch`。
+- 执行模型：主请求进程在接口内使用 `ProcessPoolExecutor`，按单位拆分子进程并行执行数据分析查询，再统一汇总成功结果与错误列表。
+- 兼容策略：现有单单位 `POST /data_analysis/query` 保留不变，供 AI 报告等单单位场景继续使用。
+- 验证口径：批量响应返回 `worker_count`；每个单位结果中的 `_perf.worker_pid` 可用于确认实际进程分配。
+- 风险说明：当前是“每单位一个子进程任务”的第一版多进程模型，若单位数继续增大，需要根据数据库承压情况进一步调优 `DATA_ANALYSIS_BATCH_MAX_WORKERS`。

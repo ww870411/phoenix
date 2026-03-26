@@ -11,7 +11,9 @@ import copy
 import functools
 import json
 import logging
+import os
 import re
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from time import perf_counter
 from decimal import Decimal, InvalidOperation
@@ -1559,6 +1561,17 @@ class DataAnalysisQueryPayload(BaseModel):
     request_ai_report: bool = False
     ai_mode_id: Optional[str] = "daily_analysis_v1"
     ai_user_prompt: Optional[str] = ""
+    profile: bool = False
+
+
+class DataAnalysisBatchQueryPayload(BaseModel):
+    unit_keys: List[str]
+    metrics: List[str]
+    analysis_mode: Optional[str] = "daily"
+    start_date: date
+    end_date: Optional[date] = None
+    scope_key: Optional[str] = None
+    schema_unit_key: Optional[str] = None
     profile: bool = False
 
 
@@ -4624,6 +4637,188 @@ async def query_data_analysis(
             content={"ok": False, "message": "无法加载数据分析配置"},
         )
     return _execute_data_analysis_query(payload, schema_payload, session)
+
+
+DATA_ANALYSIS_BATCH_MAX_WORKERS = max(1, int(os.getenv("DATA_ANALYSIS_BATCH_MAX_WORKERS", "4") or "4"))
+
+
+def _resolve_data_analysis_batch_worker_count(unit_count: int) -> int:
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(unit_count, cpu_count, DATA_ANALYSIS_BATCH_MAX_WORKERS))
+
+
+def _build_data_analysis_unit_payload_dict(
+    payload: DataAnalysisBatchQueryPayload,
+    unit_key: str,
+) -> Dict[str, Any]:
+    return {
+        "unit_key": unit_key,
+        "metrics": list(payload.metrics or []),
+        "analysis_mode": payload.analysis_mode or "daily",
+        "start_date": payload.start_date.isoformat(),
+        "end_date": payload.end_date.isoformat() if payload.end_date else None,
+        "scope_key": payload.scope_key,
+        "schema_unit_key": payload.schema_unit_key,
+        "request_ai_report": False,
+        "ai_mode_id": "daily_analysis_v1",
+        "ai_user_prompt": "",
+        "profile": bool(payload.profile),
+    }
+
+
+def _execute_data_analysis_batch_worker(
+    payload_dict: Dict[str, Any],
+    schema_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    pid = os.getpid()
+    unit_key = str(payload_dict.get("unit_key") or "").strip()
+    try:
+        payload = DataAnalysisQueryPayload(**payload_dict)
+        response = _execute_data_analysis_query_legacy(payload, copy.deepcopy(schema_payload), None)
+        raw_body = response.body.decode("utf-8") if isinstance(response.body, (bytes, bytearray)) else str(response.body)
+        body = json.loads(raw_body) if raw_body else {"ok": response.status_code < 400}
+        perf = body.get("_perf") if isinstance(body, dict) else None
+        if isinstance(perf, dict):
+            perf["worker_pid"] = pid
+        return {
+            "ok": response.status_code < 400 and bool((body or {}).get("ok", True)),
+            "status_code": response.status_code,
+            "unit_key": unit_key,
+            "pid": pid,
+            "body": body,
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        return {
+            "ok": False,
+            "status_code": 500,
+            "unit_key": unit_key,
+            "pid": pid,
+            "body": {"ok": False, "message": f"批量子进程执行失败: {exc}"},
+        }
+
+
+def _execute_data_analysis_batch_query(
+    payload: DataAnalysisBatchQueryPayload,
+    schema_payload: Dict[str, Any],
+) -> JSONResponse:
+    requested_units = []
+    seen_units: Set[str] = set()
+    for unit_key in payload.unit_keys or []:
+        normalized = str(unit_key or "").strip()
+        if not normalized or normalized in seen_units:
+            continue
+        seen_units.add(normalized)
+        requested_units.append(normalized)
+    if not requested_units:
+        return JSONResponse(status_code=400, content={"ok": False, "message": "至少需要选择一个单位"})
+
+    unit_dict = schema_payload.get("unit_dict") or {}
+    invalid_units = [unit_key for unit_key in requested_units if unit_key not in unit_dict]
+    if invalid_units:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "message": f"存在未知单位: {', '.join(invalid_units)}"},
+        )
+
+    worker_payloads = [
+        _build_data_analysis_unit_payload_dict(payload, unit_key)
+        for unit_key in requested_units
+    ]
+    worker_count = _resolve_data_analysis_batch_worker_count(len(worker_payloads))
+    results: Dict[str, Any] = {}
+    errors: List[Dict[str, Any]] = []
+
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        future_map = {
+            executor.submit(_execute_data_analysis_batch_worker, item, schema_payload): item["unit_key"]
+            for item in worker_payloads
+        }
+        for future in as_completed(future_map):
+            unit_key = future_map[future]
+            unit_label = unit_dict.get(unit_key, unit_key)
+            try:
+                worker_result = future.result()
+            except Exception as exc:  # pylint: disable=broad-except
+                errors.append({"unit_key": unit_key, "unit_label": unit_label, "message": str(exc)})
+                continue
+            body = worker_result.get("body") if isinstance(worker_result, dict) else None
+            if worker_result.get("ok") and isinstance(body, dict) and body.get("ok"):
+                results[unit_key] = body
+            else:
+                message = None
+                if isinstance(body, dict):
+                    message = body.get("message")
+                errors.append(
+                    {
+                        "unit_key": unit_key,
+                        "unit_label": unit_label,
+                        "message": message or "分析查询失败",
+                        "status_code": worker_result.get("status_code"),
+                        "pid": worker_result.get("pid"),
+                    }
+                )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "results": results,
+            "errors": errors,
+            "requested_units": requested_units,
+            "succeeded_units": list(results.keys()),
+            "worker_count": worker_count,
+        },
+    )
+
+
+@router.post(
+    "/data_analysis/query-batch",
+    summary="执行数据分析批量组合查询（多进程）",
+)
+async def query_data_analysis_batch(
+    request: Request,
+    config: Optional[str] = Query(
+        default=None,
+        alias="config",
+        description="可选配置文件路径（相对 DATA_DIRECTORY）",
+    ),
+    session: AuthSession = Depends(get_current_session),
+):
+    try:
+        raw_payload = await request.json()
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "message": "请求体必须为合法的 JSON"},
+        )
+
+    try:
+        payload = DataAnalysisBatchQueryPayload(**raw_payload)
+    except ValidationError as exc:
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "message": "参数校验失败", "errors": exc.errors()},
+        )
+
+    schema_payload, error = _build_data_analysis_schema_payload(config)
+    if error:
+        return error
+    if not schema_payload:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "message": "无法加载数据分析配置"},
+        )
+
+    requested_units = set(str(item or "").strip() for item in (payload.unit_keys or []) if str(item or "").strip())
+    allowed_units = set((schema_payload.get("unit_dict") or {}).keys())
+    denied_units = sorted(requested_units - allowed_units)
+    if denied_units:
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "message": f"当前账号无权查询以下单位: {', '.join(denied_units)}"},
+        )
+
+    return _execute_data_analysis_batch_query(payload, schema_payload)
 
 
 @router.get(

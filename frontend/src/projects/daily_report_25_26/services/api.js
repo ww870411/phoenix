@@ -911,6 +911,24 @@ export async function runDataAnalysis(projectKey, payload, options = {}) {
   return response.json()
 }
 
+export async function runDataAnalysisBatch(projectKey, payload, options = {}) {
+  const { config } = options
+  const search = config ? `?config=${encodeURIComponent(config)}` : ''
+  const response = await authAwareFetch(
+    `${projectPath(projectKey)}/data_analysis/query-batch${search}`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify(payload || {}),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `执行批量数据分析失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getDataAnalysisAiReport(projectKey, jobId) {
   if (!jobId) {
     throw new Error('缺少智能报告任务 ID')

@@ -981,34 +981,14 @@ def _query_analysis_rows(
 
 
 
-def _query_analysis_timeline(
-    view_name: str,
+def _query_analysis_timeline_iterative(
+    stmt,
     unit_key: str,
     metric_keys: Sequence[str],
     start_date: date,
     end_date: date,
     sheet_name: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    if not metric_keys:
-        return {}
-    if start_date > end_date:
-        return {}
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法视图名称: {view_name}")
-    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
-    stmt = (
-        text(
-            f"""
-            SELECT item, item_cn, unit, biz_date, peer_date,
-                   value_biz_date, value_peer_date
-            FROM {sanitized}
-            WHERE company = :company
-              AND item IN :items
-              {sheet_clause}
-            """
-        ).bindparams(bindparam("items", expanding=True))
-    )
     timeline: Dict[str, List[Dict[str, Any]]] = {}
     current = start_date
     while current <= end_date:
@@ -1043,6 +1023,108 @@ def _query_analysis_timeline(
             timeline.setdefault(item_key, []).append(entry)
         current += timedelta(days=1)
     return timeline
+
+
+def _query_analysis_timeline(
+    view_name: str,
+    unit_key: str,
+    metric_keys: Sequence[str],
+    start_date: date,
+    end_date: date,
+    sheet_name: Optional[str] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    if not metric_keys:
+        return {}
+    if start_date > end_date:
+        return {}
+    sanitized = _sanitize_identifier(view_name)
+    if sanitized is None:
+        raise ValueError(f"非法视图名称: {view_name}")
+    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
+    base_stmt = (
+        text(
+            f"""
+            SELECT item, item_cn, unit, biz_date, peer_date,
+                   value_biz_date, value_peer_date
+            FROM {sanitized}
+            WHERE company = :company
+              AND item IN :items
+              {sheet_clause}
+            """
+        ).bindparams(bindparam("items", expanding=True))
+    )
+    batch_stmt = (
+        text(
+            f"""
+            WITH requested_dates AS (
+              SELECT generate_series(:start_date::date, :end_date::date, INTERVAL '1 day')::date AS requested_date
+            )
+            SELECT v.item, v.item_cn, v.unit, v.biz_date, v.peer_date,
+                   v.value_biz_date, v.value_peer_date,
+                   d.requested_date
+            FROM requested_dates d
+            CROSS JOIN LATERAL (
+              SELECT set_config('phoenix.biz_date', d.requested_date::text, true) AS applied_biz_date
+            ) cfg
+            CROSS JOIN LATERAL (
+              SELECT item, item_cn, unit, biz_date, peer_date,
+                     value_biz_date, value_peer_date
+              FROM {sanitized}
+              WHERE company = :company
+                AND item IN :items
+                {sheet_clause}
+            ) v
+            ORDER BY d.requested_date, v.item
+            """
+        )
+        .bindparams(bindparam("items", expanding=True))
+    )
+    try:
+        with SessionLocal() as session:
+            with session.begin():
+                rows = session.execute(
+                    batch_stmt,
+                    {
+                        "start_date": start_date.isoformat(),
+                        "end_date": end_date.isoformat(),
+                        "company": unit_key,
+                        "items": list(metric_keys),
+                        "sheet_name": sheet_name,
+                    },
+                ).mappings().all()
+        timeline: Dict[str, List[Dict[str, Any]]] = {}
+        for row in rows:
+            item_key = row.get("item")
+            if not isinstance(item_key, str) or not item_key:
+                continue
+            requested_date = row.get("requested_date")
+            entry_date = (
+                requested_date.isoformat()
+                if isinstance(requested_date, date)
+                else row.get("biz_date").isoformat()
+                if isinstance(row.get("biz_date"), date)
+                else None
+            )
+            entry = {
+                "date": entry_date,
+                "current": _decimal_to_float(row.get("value_biz_date")),
+                "peer": _decimal_to_float(row.get("value_peer_date")),
+                "peer_date": row.get("peer_date").isoformat()
+                if isinstance(row.get("peer_date"), date)
+                else None,
+            }
+            timeline.setdefault(item_key, []).append(entry)
+        return timeline
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("批量逐日明细查询失败，回退逐天查询: %s", exc)
+        return _query_analysis_timeline_iterative(
+            base_stmt,
+            unit_key,
+            metric_keys,
+            start_date,
+            end_date,
+            sheet_name=sheet_name,
+        )
 
 def _sanitize_identifier(value: str) -> Optional[str]:
     if not isinstance(value, str):

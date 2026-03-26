@@ -7045,3 +7045,25 @@
 - 后端变更：删除 `backend/projects/daily_report_25_26/api/legacy_full.py` 与 `backend/services/data_analysis.py` 中基于 `MAX_TIMELINE_DAYS` 的 400 返回逻辑，累计模式现在允许提交超过 62 天的区间。
 - 当前状态：页面前端无需改动，仍按原方式提交起止日期；是否可接受长区间耗时，取决于后端逐日 timeline 查询性能。
 - 风险：`_query_analysis_timeline(...)` 仍是按天循环、逐天开 session 查询，长区间请求可能明显变慢，但不会再因 62 天阈值被直接拒绝。
+
+## 2026-03-26 数据分析页 timeline 批量查询优化（阶段1）
+- 目标：优化累计模式长区间查询耗时，优先处理 `_query_analysis_timeline(...)` 的按天循环瓶颈。
+- 后端实现：`backend/services/data_analysis.py` 新增批量查询路径，使用 `generate_series(start_date, end_date)` 生成日期集合，并在单个 SQL / 单个 session 中通过 `set_config('phoenix.biz_date', ...) + LATERAL` 驱动日视图批量返回逐日明细。
+- 兼容策略：保留 `_query_analysis_timeline_iterative(...)` 作为回退路径；若批量 SQL 在实际库环境失败，会记录 warning 并自动退回旧的逐天查询，避免功能中断。
+- 验证方式：页面原有 `_perf.analysis_timeline_ms` 继续保留，可直接用来对比优化前后的逐日明细耗时。
+- 本地验证：`python -m py_compile backend/services/data_analysis.py backend/projects/daily_report_25_26/api/legacy_full.py` 通过。
+
+## 2026-03-26 数据分析页多单位并发查询优化（阶段2）
+- 目标：降低多单位同时查询时的总等待时间，避免前端逐个单位串行等待。
+- 前端实现：`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue` 的 `runAnalysis()` 已从 `for ... await` 串行请求改为 `targetUnits.map(...) + Promise.allSettled(...)` 并发执行。
+- 兼容策略：保留单单位失败隔离；某个单位报错只进入 `errors` 汇总，不阻断其它单位结果展示。
+- AI 报告兼容：并发结果中仍会取首个成功返回的 `ai_report_job_id` 启动轮询，保持现有行为。
+- 验证结果：`frontend` 执行 `npm run build` 通过。
+
+## 2026-03-26 数据分析页后端多进程批量查询优化（阶段3）
+- 目标：将数据分析页从“前端多次请求并发”升级为“后端一次批量请求 + 单位分块多进程执行”，对齐数据看板多进程任务思路。
+- 后端实现：`backend/projects/daily_report_25_26/api/legacy_full.py` 新增 `POST /data_analysis/query-batch`，接收 `unit_keys` 后使用 `ProcessPoolExecutor` 按单位分块执行 `_execute_data_analysis_query_legacy(...)`，统一汇总 `results/errors/worker_count` 返回。
+- 子进程行为：每个单位在独立子进程中复用现有单单位查询逻辑，保留原有 `rows/warnings/plan_comparison/ringCompare/_perf` 口径，并在 `_perf` 内追加 `worker_pid` 便于观察实际进程分布。
+- 前端实现：`DataAnalysisView.vue` 的 `runAnalysis()` 改为调用新的批量接口；页面只发一次请求，再按单位组装结果。单单位 AI 报告入口仍保留原单查询接口。
+- 当前收益：多单位查询不再由浏览器向后端发 N 次请求，而是由后端在一次批量请求内部做多进程分块，更接近数据看板的多核利用方式。
+- 验证：`python -m py_compile` 通过，`frontend npm run build` 通过。

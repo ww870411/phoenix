@@ -4937,3 +4937,18 @@ docker compose up -d --build
 - 前端本轮未改代码。
 - 当前页面继续原样提交 `analysis_mode/start_date/end_date`；区别在于后端不再用 62 天阈值拒绝累计模式长区间。
 - 体验风险仍在后端性能：区间越长，返回时间可能越久。
+
+## 2026-03-26 数据分析页 timeline 批量查询优化（阶段1）
+- 前端本轮未改逻辑，仍通过原有 `_perf` 输出观察后端逐日明细耗时。
+- 验证重点：浏览器控制台中的 `[DataAnalysisView][perf]`，对比 `analysis_timeline_ms` 在长区间查询下是否下降。
+- 如后端批量路径异常，接口仍会自动回退旧逻辑，前端无需额外兼容。
+
+## 2026-03-26 数据分析页多单位并发查询优化（阶段2）
+- `DataAnalysisView.vue` 中多单位查询已改为并发执行，不再按单位串行等待。
+- 页面仍保留原有失败提示逻辑：单个单位失败只影响该单位，不会清空其它已成功结果。
+- 验证重点：观察控制台 `[DataAnalysisView][perf]` 与页面总等待时长，尤其是 2 个及以上单位同时查询时的体感变化。
+
+## 2026-03-26 数据分析页后端多进程批量查询优化（阶段3）
+- `DataAnalysisView.vue` 已从单位级多次请求切换为单次批量请求，调用 `runDataAnalysisBatch(...)`。
+- 页面仍按单位展示结果，但网络层只发一次分析请求；控制台会输出 `[DataAnalysisView][batch]`，其中包含 `workerCount/requestedUnits/succeededUnits`。
+- 单位级 `_perf` 日志仍保留，可继续观察每个单位的 `total_ms/analysis_timeline_ms/worker_pid`。
