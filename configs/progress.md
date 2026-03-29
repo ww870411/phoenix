@@ -7067,3 +7067,27 @@
 - 前端实现：`DataAnalysisView.vue` 的 `runAnalysis()` 改为调用新的批量接口；页面只发一次请求，再按单位组装结果。单单位 AI 报告入口仍保留原单查询接口。
 - 当前收益：多单位查询不再由浏览器向后端发 N 次请求，而是由后端在一次批量请求内部做多进程分块，更接近数据看板的多核利用方式。
 - 验证：`python -m py_compile` 通过，`frontend npm run build` 通过。
+
+## 2026-03-26 口径补充：monthly_data_show 查询工具增加“临海”
+- 位置：`backend/projects/monthly_data_show/api/workspace.py`
+- 变更：`get_monthly_data_show_query_options()` 在数据库去重口径列表基础上追加兜底项“临海”，确保 `http://localhost:5173/projects/monthly_data_show/query-tool` 页面中的“口径”筛选可见该选项。
+- 实现流程：前端 `MonthlyDataShowQueryToolView.vue` 调用 `/monthly-data-show/query-options` 获取 `companies`；后端在返回 `QueryOptionsResponse` 前补齐“临海”。
+- 结果：即使数据库当前无 `临海` 数据，查询页也可选择该口径；选择后若无数据则返回空结果，不影响既有口径。
+
+## 2026-03-30 主城区边际利润口径修正
+- 触发：用户确认 `daily_report_25_26` 数据分析页中，口径为“主城区”的“边际利润/可比煤价边际利润”不应继续直接汇总北海、香海、供热三个子单位利润结果，而应按统一公式重算。
+- 后端变更：更新 `backend/sql/analysis.sql` 中 `analysis_groups_daily` 与 `analysis_groups_sum` 的主城区输出逻辑。
+- 公式调整：
+  - `边际利润 = 直接收入 - 煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本`
+  - `可比煤价边际利润 = 直接收入 - 可比煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本`
+  - `可比煤成本 = 标煤耗量 × 可比标煤单价 / 10000`
+- 口径一致性：主城区 `eco_direct_income` 同步改为汇总子单位 `eco_direct_income`，从而包含内售热收入，避免利润公式与主城区直接收入展示口径不一致。
+- 影响范围：仅调整主城区分组视图的利润口径；未改动北海、香海、供热三个子单位自身利润公式。
+- 验证：本轮未执行数据库重建或 SQL 实跑；需在数据库中刷新/重建视图后，用主城区本期、同期数据核对修正结果。
+- 补充排查：`数据展示页面` 下的 `数据结构_全口径展示表.json` 三张展示表中，`Group/ZhuChengQu` 的主数据源并不走 `analysis_groups_daily` 或 `analysis_groups_sum`，而是由 `backend/services/runtime_expression.py` 按配置路由到数据库视图 `groups`；其中 `ZhuChengQu` 的两个利润指标在 `backend/sql/groups.sql` 中来自 `base_zc` 对 `sum_basic_data` 的直接汇总透传。
+- 展示页同步修正：更新 `backend/sql/groups.sql` 中 `groups` 视图的主城区段，`eco_direct_income` 改为汇总子单位 `eco_direct_income`，`eco_marginal_profit` 与 `eco_comparable_marginal_profit` 改为按统一公式重算，避免 `/pages/data_show/sheets` 与数据分析页口径不一致。
+- 口径再调整：按用户最新要求，主城区 `eco_direct_income` 不再沿用子单位 `eco_direct_income` 汇总，而改为仅汇总 `eco_power_supply_income + eco_heating_supply_income + eco_hot_water_supply_income + eco_steam_supply_income`，明确剔除 `eco_inner_heat_supply_income`。本次同步修改 `backend/sql/analysis.sql` 与 `backend/sql/groups.sql`，使数据分析页与展示页继续保持一致。
+- 根因补充：用户执行 SQL 后利润值仍不对，复查发现利润公式本身仍在直接汇总 `base_zc` 中的子单位 `eco_direct_income`，导致“内售热收入”虽然从主城区展示口径剔除，但仍被算进利润；同时 `backend/sql/groups.sql` 的利润公式还引用了旧成本 key（如 `eco_raw_coal_cost`），与 `sum_basic_data` 实际输出的 `eco_coal_cost / eco_purchased_power_cost / eco_purchased_water_cost / eco_measurable_auxiliary_materials` 不一致。
+- 修正：主城区在 `analysis.sql` 与 `groups.sql` 中的两个利润公式，现统一直接汇总四项收入子项（售电、暖、售高温水、售汽）作为收入端，并统一使用 `sum_basic_data` 实际输出的成本 item key。
+- 口径最终调整：按用户最新决定，主城区 `eco_marginal_profit` 与 `eco_comparable_marginal_profit` 不再按主城区收入成本项重算，而是恢复为“北海 + 香海 + 供热”三个子口径对应利润指标之和，再额外叠加 `内购热成本 - 内售热收入`。本次同步修改 `backend/sql/analysis.sql` 与 `backend/sql/groups.sql`。
+- 集团全口径同步调整：`Group` 的 `eco_marginal_profit` 与 `eco_comparable_marginal_profit` 也改为按各子口径利润指标求和后，再统一叠加 `内购热成本 - 内售热收入`。本次同样同时修改 `backend/sql/analysis.sql` 与 `backend/sql/groups.sql`，覆盖数据分析页与展示页两条链路。

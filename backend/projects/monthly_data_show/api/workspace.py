@@ -2173,6 +2173,10 @@ def get_monthly_data_show_query_options():
         # 数据库异常时返回空筛选项，让前端页面可进入并继续排障。
         row = {}
 
+    companies = [str(x) for x in (row.get("companies") or []) if str(x).strip()]
+    if "临海" not in companies:
+        companies.append("临海")
+
     items_from_db = [str(x) for x in (row.get("items") or []) if str(x).strip()]
     try:
         items = order_items_by_config(items_from_db, INDICATOR_RUNTIME_CFG)
@@ -2192,7 +2196,7 @@ def get_monthly_data_show_query_options():
     return QueryOptionsResponse(
         ok=True,
         project_key=PROJECT_KEY,
-        companies=[str(x) for x in (row.get("companies") or []) if str(x).strip()],
+        companies=companies,
         items=items,
         periods=[str(x) for x in (row.get("periods") or []) if str(x).strip()],
         types=[str(x) for x in (row.get("types") or []) if str(x).strip()],

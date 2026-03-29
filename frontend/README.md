@@ -4952,3 +4952,20 @@ docker compose up -d --build
 - `DataAnalysisView.vue` 已从单位级多次请求切换为单次批量请求，调用 `runDataAnalysisBatch(...)`。
 - 页面仍按单位展示结果，但网络层只发一次分析请求；控制台会输出 `[DataAnalysisView][batch]`，其中包含 `workerCount/requestedUnits/succeededUnits`。
 - 单位级 `_perf` 日志仍保留，可继续观察每个单位的 `total_ms/analysis_timeline_ms/worker_pid`。
+
+## 2026-03-26 查询页口径补充
+- `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的“口径”多选项来自 `/monthly-data-show/query-options` 返回的 `companies`。
+- 本次为查询页补充“临海”口径时，前端无需额外枚举；页面会直接展示后端返回的新口径。
+- 若选择“临海”但当月无匹配数据，查询结果保持为空，这是接口返回的自然结果。
+
+## 2026-03-30 主城区边际利润口径修正
+- 前端页面未改代码，数据分析页仍通过 `DataAnalysisView.vue` 调用既有 `/data_analysis/query` 与 `/data_analysis/query-batch` 接口取数。
+- 本轮调整发生在后端 SQL 视图层：主城区的“边际利润/可比煤价边际利润”不再直接汇总三个子单位利润结果，而改为由后端按新公式重算后返回。
+- 主城区 `直接收入` 也同步改为汇总子单位 `eco_direct_income`，因此页面上看到的主城区直接收入与利润公式口径保持一致。
+- 页面侧无需迁移；待数据库刷新视图后重新查询即可生效。
+- 补充说明：`/pages/data_show/sheets` 的“全口径展示表”三张展示表不走 `analysis_groups_*` 数据分析视图；它们通过 `DisplayRuntimeView.vue` 的运行时取数链路，根据配置把 `Group/ZhuChengQu` 路由到数据库视图 `groups`，其它公司默认走 `sum_basic_data`。
+- 同步结果：`groups` 视图中的主城区利润口径也已按同样公式修正，因此数据分析页与全口径展示页在主城区两个利润指标上应保持一致。
+- 最新口径：主城区 `直接收入` 已再次调整为“售电 + 暖收入 + 售高温水收入 + 售汽收入”，明确剔除“内售热收入”；该调整已同时落到数据分析页和全口径展示页两条后端 SQL 链路。
+- 根因修复：主城区利润公式现不再引用子单位 `eco_direct_income` 汇总值，而是直接汇总四项收入子项；展示页 `groups` 视图也同步改为使用正确的成本 item key，因此前端两类页面看到的主城区利润值应当引用同一套有效口径。
+- 最新调整：主城区两个利润指标现改为“子口径利润之和 + 内购热成本 - 内售热收入”，不再按主城区成本项重新推导；数据分析页和全口径展示页两条链路已同步。
+- 集团全口径也已按相同思路修正：两个利润指标不再直接透传，而是改为“各子口径利润之和 + 内购热成本 - 内售热收入”；前端两类页面应看到一致结果。

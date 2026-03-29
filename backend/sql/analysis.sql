@@ -765,16 +765,46 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'eco_direct_income'
+  'eco_direct_income',
+  'eco_marginal_profit',
+  'eco_comparable_marginal_profit'
 )
 UNION ALL
--- 主城区：直接收入（售电/暖/售高温水/售汽）
+-- 主城区：直接收入（售电 + 暖 + 售高温水 + 售汽，剔除内售热收入）
 SELECT
   'ZhuChengQu','主城区',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_zc z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 主城区：边际利润 = 三个子口径边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'ZhuChengQu','主城区',
+  'eco_marginal_profit','边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_zc z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 主城区：可比煤价边际利润 = 三个子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'ZhuChengQu','主城区',
+  'eco_comparable_marginal_profit','可比煤价边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -879,7 +909,9 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'eco_direct_income'
+  'eco_direct_income',
+  'eco_marginal_profit',
+  'eco_comparable_marginal_profit'
 )
 UNION ALL
 -- 集团：原煤汇总（张屯范围）
@@ -905,6 +937,34 @@ SELECT
   z.biz_date, z.peer_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 集团：边际利润 = 各子口径边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'Group','集团全口径',
+  'eco_marginal_profit','边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 集团：可比煤价边际利润 = 各子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'Group','集团全口径',
+  'eco_comparable_marginal_profit','可比煤价边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -1788,16 +1848,46 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'eco_direct_income'
+  'eco_direct_income',
+  'eco_marginal_profit',
+  'eco_comparable_marginal_profit'
 )
 UNION ALL
--- 主城区：直接收入（售电/暖/售高温水/售汽）
+-- 主城区：直接收入（售电 + 暖 + 售高温水 + 售汽，剔除内售热收入）
 SELECT
   'ZhuChengQu','主城区',
   'eco_direct_income','直接收入','万元',
   z.biz_date, z.peer_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_zc z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 主城区：边际利润 = 三个子口径边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'ZhuChengQu','主城区',
+  'eco_marginal_profit','边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_zc z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 主城区：可比煤价边际利润 = 三个子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'ZhuChengQu','主城区',
+  'eco_comparable_marginal_profit','可比煤价边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_zc z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL
@@ -1898,7 +1988,9 @@ WHERE item NOT IN (
   'rate_power_per_10k_m2',
   'rate_water_per_10k_m2',
   'rate_overall_efficiency',
-  'eco_direct_income'
+  'eco_direct_income',
+  'eco_marginal_profit',
+  'eco_comparable_marginal_profit'
 )
 UNION ALL
 -- 集团：原煤汇总（张屯范围）
@@ -1924,6 +2016,34 @@ SELECT
   z.biz_date, z.peer_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
   SUM(CASE WHEN z.item IN ('eco_power_supply_income','eco_heating_supply_income','eco_hot_water_supply_income','eco_steam_supply_income') THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 集团：边际利润 = 各子口径边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'Group','集团全口径',
+  'eco_marginal_profit','边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
+FROM base_grp z
+GROUP BY z.biz_date, z.peer_date
+UNION ALL
+-- 集团：可比煤价边际利润 = 各子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入
+SELECT
+  'Group','集团全口径',
+  'eco_comparable_marginal_profit','可比煤价边际利润','万元',
+  z.biz_date, z.peer_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_biz_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_biz_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_biz_date ELSE 0 END) AS value_biz_date,
+  SUM(CASE WHEN z.item='eco_comparable_marginal_profit' THEN z.value_peer_date ELSE 0 END)
+    + SUM(CASE WHEN z.item='eco_inner_purchased_heat_cost' THEN z.value_peer_date ELSE 0 END)
+    - SUM(CASE WHEN z.item='eco_inner_heat_supply_income' THEN z.value_peer_date ELSE 0 END) AS value_peer_date
 FROM base_grp z
 GROUP BY z.biz_date, z.peer_date
 UNION ALL

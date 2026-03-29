@@ -3779,3 +3779,30 @@
 - 兼容策略：现有单单位 `POST /data_analysis/query` 保留不变，供 AI 报告等单单位场景继续使用。
 - 验证口径：批量响应返回 `worker_count`；每个单位结果中的 `_perf.worker_pid` 可用于确认实际进程分配。
 - 风险说明：当前是“每单位一个子进程任务”的第一版多进程模型，若单位数继续增大，需要根据数据库承压情况进一步调优 `DATA_ANALYSIS_BATCH_MAX_WORKERS`。
+
+## 2026-03-26 monthly_data_show 查询口径补充
+- 接口：`GET /monthly-data-show/query-options`
+- 实现：`backend/projects/monthly_data_show/api/workspace.py` 中的 `get_monthly_data_show_query_options()` 先读取 `monthly_data_show` 表中的去重口径，再追加兜底口径“临海”。
+- 目的：保证 `monthly_data_show/query-tool` 页面始终可选“临海”，不依赖数据库当前是否已有该口径数据。
+- 兼容性：无迁移，直接替换；若数据库后续已有“临海”，兜底逻辑不会重复追加。
+
+## 2026-03-30 主城区边际利润口径修正
+- 位置：`backend/sql/analysis.sql`
+- 影响视图：`analysis_groups_daily`、`analysis_groups_sum`
+- 背景：主城区原实现直接透传 `base_zc` 中的 `eco_marginal_profit` 与 `eco_comparable_marginal_profit`，实质上等于北海、香海、供热三个子单位利润结果求和；同时主城区 `eco_direct_income` 的重算逻辑遗漏了内售热收入。
+- 现改为：
+  - 主城区 `eco_direct_income` 直接汇总子单位 `eco_direct_income`
+  - 主城区 `eco_marginal_profit` 按 `直接收入 - 煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本` 重算
+  - 主城区 `eco_comparable_marginal_profit` 按 `直接收入 - 可比煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本` 重算
+- 说明：`可比煤成本 = consumption_std_coal × price_std_coal_comparable / 10000`，其中可比标煤单价按主城区成员单位在对应期间的常量值求和。
+- 验证要求：修改 SQL 文件本身不会自动刷新线上库视图，需在数据库执行对应 `DROP VIEW/CREATE VIEW` 补丁后再核对主城区本期、同期数据。
+- 补充链路：`daily_report_25_26` 的 `/data_show/sheets` 展示页使用 `backend/services/runtime_expression.py` 的 `render_spec` -> `_fetch_metrics_from_view_batch` 运行时取数；当配置中的 `主表` 路由命中 `groups` 时，会直接查询数据库视图 `groups`。因此展示页里的 `ZhuChengQu` 两个利润指标当前来源于 `backend/sql/groups.sql`，不是 `analysis_groups_daily` / `analysis_groups_sum`。
+- 展示页修复：`backend/sql/groups.sql` 的主城区段现已同步改为：
+  - `eco_direct_income` 按 `售电收入 + 暖收入 + 售高温水收入 + 售汽收入` 汇总，剔除 `内售热收入`
+  - `eco_marginal_profit` 按 `直接收入 - 煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本` 重算
+  - `eco_comparable_marginal_profit` 按 `直接收入 - 可比煤成本 - 外购电成本 - 购水成本 - 可计量辅材成本` 重算
+  - 因此主城区在 `analysis_groups_*` 与 `groups` 两条链路上的利润口径现已对齐
+- 最新同步：`backend/sql/analysis.sql` 中主城区 `eco_direct_income` 也已改为同样的四项收入汇总，不再沿用子单位 `eco_direct_income`，确保两条链路同时剔除 `eco_inner_heat_supply_income`。
+- 根因补充：仅修改主城区 `eco_direct_income` 展示口径并不足以修复利润值，因为利润公式之前仍直接读取 `base_zc` 中三个子单位的 `eco_direct_income`；另外 `groups.sql` 曾引用旧成本 key，和 `sum_basic_data.sql` 的实际 item 名不一致。本轮已同时修复这两点。
+- 最终利润算法：主城区 `eco_marginal_profit` 现为 `三个子口径边际利润之和 + 内购热成本 - 内售热收入`；`eco_comparable_marginal_profit` 现为 `三个子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入`。对应实现已同时落在 `analysis.sql` 与 `groups.sql`。
+- 集团全口径利润算法：`Group` 的 `eco_marginal_profit` 现为 `各子口径边际利润之和 + 内购热成本 - 内售热收入`；`eco_comparable_marginal_profit` 现为 `各子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入`。两条链路已同步在 `analysis.sql` 与 `groups.sql` 中排除透传并改为显式重算。
