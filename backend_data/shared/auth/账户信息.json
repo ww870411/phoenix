@@ -1,125 +1,123 @@
 {
   "users": {
-    "Global_admin":[
+    "Global_admin": [
       {
-      "username": "ww870411",
-      "password": "w870411w",
-      "unit": "系统管理员"
+        "username": "ww870411",
+        "password": "w870411w",
+        "unit": "系统管理员"
       }
     ],
-    "Group_admin":[
+    "Group_admin": [
       {
-      "username": "group_admin",
-      "password": "password",
-      "unit": "Group"
+        "username": "group_admin",
+        "password": "password",
+        "unit": "Group"
       }
     ],
-    "ZhuChengQu_admin":[
+    "ZhuChengQu_admin": [
       {
-      "username": "zhuchengqu_admin",
-      "password": "zhuchengqu_admin1",
-      "unit": "ZhuChengQu"
+        "username": "zhuchengqu_admin",
+        "password": "zhuchengqu_admin1",
+        "unit": "ZhuChengQu"
       }
     ],
-    "Unit_admin":[
+    "Unit_admin": [
       {
-      "username": "beihai_admin",
-      "password": "beihai_admin3",
-      "unit": "BeiHai"
+        "username": "beihai_admin",
+        "password": "beihai_admin3",
+        "unit": "BeiHai"
       },
       {
-      "username": "xianghai_admin",
-      "password": "xianghai_admin5",
-      "unit": "XiangHai"
+        "username": "xianghai_admin",
+        "password": "xianghai_admin5",
+        "unit": "XiangHai"
       },
       {
-      "username": "gongre_admin",
-      "password": "gongre_admin6",
-      "unit": "GongRe"
+        "username": "gongre_admin",
+        "password": "gongre_admin6",
+        "unit": "GongRe"
       },
       {
-      "username": "jinzhou_admin",
-      "password": "jinzhou_admin7",
-      "unit": "JinZhou"
+        "username": "jinzhou_admin",
+        "password": "jinzhou_admin7",
+        "unit": "JinZhou"
       },
       {
-      "username": "beifang_admin",
-      "password": "beifang_admin8",
-      "unit": "BeiFang"
+        "username": "beifang_admin",
+        "password": "beifang_admin8",
+        "unit": "BeiFang"
       },
       {
-      "username": "jinpu_admin",
-      "password": "jinpu_admin9",
-      "unit": "JinPu"
+        "username": "jinpu_admin",
+        "password": "jinpu_admin9",
+        "unit": "JinPu"
       },
       {
-      "username": "zhuanghe_admin",
-      "password": "zhuanghe_admin0",
-      "unit": "ZhuangHe"
+        "username": "zhuanghe_admin",
+        "password": "zhuanghe_admin0",
+        "unit": "ZhuangHe"
       },
       {
-      "username": "yanjiuyuan_admin",
-      "password": "yanjiuyuan_admin1",
-      "unit": "YanJiuYuan"
+        "username": "yanjiuyuan_admin",
+        "password": "yanjiuyuan_admin1",
+        "unit": "YanJiuYuan"
       }
     ],
-      "unit_filler":[
-        {
-      "username": "beihai_filler",
-      "password": "beihai_filler3",
-      "unit": "BeiHai"
+    "unit_filler": [
+      {
+        "username": "beihai_filler",
+        "password": "beihai_filler3",
+        "unit": "BeiHai"
       },
       {
-      "username": "xianghai_filler",
-      "password": "xianghai_filler5",
-      "unit": "XiangHai"
+        "username": "xianghai_filler",
+        "password": "xianghai_filler5",
+        "unit": "XiangHai"
       },
       {
-      "username": "gongre_filler",
-      "password": "gongre_filler6",
-      "unit": "GongRe"
+        "username": "gongre_filler",
+        "password": "gongre_filler6",
+        "unit": "GongRe"
       },
       {
-      "username": "jinzhou_filler",
-      "password": "jinzhou_filler7",
-      "unit": "JinZhou"
+        "username": "jinzhou_filler",
+        "password": "jinzhou_filler7",
+        "unit": "JinZhou"
       },
       {
-      "username": "beifang_filler",
-      "password": "beifang_filler8",
-      "unit": "BeiFang"
+        "username": "beifang_filler",
+        "password": "beifang_filler8",
+        "unit": "BeiFang"
       },
       {
-      "username": "jinpu_filler",
-      "password": "jinpu_filler9",
-      "unit": "JinPu"
+        "username": "jinpu_filler",
+        "password": "jinpu_filler9",
+        "unit": "JinPu"
       },
       {
-      "username": "zhuanghe_filler",
-      "password": "zhuanghe_filler0",
-      "unit": "ZhuangHe"
+        "username": "zhuanghe_filler",
+        "password": "zhuanghe_filler0",
+        "unit": "ZhuangHe"
       },
       {
-      "username": "yanjiuyuan_filler",
-      "password": "yanjiuyuan_filler1",
-      "unit": "YanJiuYuan"
+        "username": "yanjiuyuan_filler",
+        "password": "yanjiuyuan_filler1",
+        "unit": "YanJiuYuan"
       }
     ],
-    "shoudian_filler":[
+    "shoudian_filler": [
       {
-      "username": "shoudian_filler",
-      "password": "shoudian_filler3",
-      "unit": "ShouDian"
+        "username": "shoudian_filler",
+        "password": "shoudian_filler3",
+        "unit": "ShouDian"
       }
     ],
-    "Group_viewer":[
+    "Group_viewer": [
       {
         "username": "nyjt",
         "password": "nyjt666",
         "unit": "Group"
       }
-
     ]
-
   }
 }

@@ -7091,3 +7091,82 @@
 - 修正：主城区在 `analysis.sql` 与 `groups.sql` 中的两个利润公式，现统一直接汇总四项收入子项（售电、暖、售高温水、售汽）作为收入端，并统一使用 `sum_basic_data` 实际输出的成本 item key。
 - 口径最终调整：按用户最新决定，主城区 `eco_marginal_profit` 与 `eco_comparable_marginal_profit` 不再按主城区收入成本项重算，而是恢复为“北海 + 香海 + 供热”三个子口径对应利润指标之和，再额外叠加 `内购热成本 - 内售热收入`。本次同步修改 `backend/sql/analysis.sql` 与 `backend/sql/groups.sql`。
 - 集团全口径同步调整：`Group` 的 `eco_marginal_profit` 与 `eco_comparable_marginal_profit` 也改为按各子口径利润指标求和后，再统一叠加 `内购热成本 - 内售热收入`。本次同样同时修改 `backend/sql/analysis.sql` 与 `backend/sql/groups.sql`，覆盖数据分析页与展示页两条链路。
+## 2026-04-07 关闭日报常规提报并接入用户级提交开关
+
+- 目标：关闭 `daily_report_25_26` 项目的常规用户提交能力，仅保留 `Global_admin` 组默认可提交；在 `admin-console` 项目设定页增加用户级提交权限控制。
+- 后端权限：`backend/services/auth_manager.py`
+  - 账户信息新增可选 `project_actions` 解析能力，支持按用户覆盖项目动作位。
+  - 新增用户项目动作合并逻辑，登录态与持久会话恢复都会叠加用户级 `can_submit` 覆盖。
+  - 配置文件变更后改为刷新在线会话权限，不再直接清空全部会话。
+  - 新增日报提交权限列表/更新方法，供管理后台复用。
+- 后端接口：
+  - `backend/api/v1/admin_console.py` 新增
+    - `GET /admin/projects/{project_key}/submit-permissions`
+    - `POST /admin/projects/{project_key}/submit-permissions`
+  - `backend/projects/daily_report_25_26/api/legacy_full.py` 的提交入口新增登录态依赖与 `can_submit` 强校验，禁止绕过前端直接提交。
+- 前端界面：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 新增“日报提交权限”板块，可对非 `Global_admin` 用户逐个开启/关闭提交权限。
+  - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue` 提交按钮接入 `auth.canSubmitFor(projectKey)`，无权限时直接禁用并提示。
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 新增提交权限管理接口封装。
+- 默认策略：
+  - `backend_data/shared/auth/permissions.json` 中，除 `Global_admin` 外，`daily_report_25_26` 的各日报相关组默认 `can_submit=false`。
+  - 后续如需临时恢复某账号提报，可直接在管理后台开启该用户的提交权限。
+- 风险说明：
+  - 本次未新增独立权限文件，用户级例外写回现有 `账户信息.json`，避免第三份权限来源。
+  - 未执行自动化构建/测试；本轮主要完成权限链路与界面接线。
+
+### 补充：提交权限面板交互优化
+
+- 文件：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 调整：
+  - 用户权限列表默认折叠，减少后台页面占用空间。
+  - 新增“展开列表/折叠列表”切换按钮。
+  - 新增“全部开启/全部关闭”按钮，批量复用现有单用户更新接口顺序执行。
+- 结果：管理后台在账号较多时可先保持紧凑展示，需要时再展开逐项查看或一键批量切换。
+
+## 2026-04-07 管理后台增加月度查询页用户组访问权限面板
+
+- 在 `backend/services/auth_manager.py` 新增 `list_group_page_access` 与 `update_group_page_access`，直接读写 `backend_data/shared/auth/permissions.json` 中各用户组的 `projects.monthly_data_show.page_access`，不新增权限文件。
+- 在 `backend/api/v1/admin_console.py` 新增 `GET/POST /admin/projects/{project_key}/page-access-groups`，当前仅用于管理 `monthly_data_show` 项目的 `projects_monthly_data_show_query_tool` 页面访问权限。
+- 在 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 新增“月度查询页访问权限”板块，默认折叠，展示非 `Global_admin` 用户组，可逐组切换并支持“全部开启 / 全部关闭”。
+- 在 `frontend/src/projects/daily_report_25_26/services/api.js` 新增用户组页面访问权限接口封装，供管理后台调用。
+- 本地验证：`python -m py_compile backend/services/auth_manager.py backend/api/v1/admin_console.py` 通过；`frontend` 目录下 `npm run build` 通过。
+- 调整“月度查询页访问权限”板块展示：仍按用户组控制访问，但每行新增账号列表，直接显示组内用户名，便于识别权限影响范围。
+
+## 2026-04-07 权限覆盖来源统一收口到 permissions.json
+
+- 调整鉴权主链路：`backend/services/auth_manager.py` 不再从 `backend_data/shared/auth/账户信息.json` 读取 `project_actions`，用户级项目权限覆盖统一改为从 `backend_data/shared/auth/permissions.json` 的 `user_overrides` 读取。
+- `update_user_project_action_override` 已切换为写回 `permissions.json`，因此 admin-console 中“日报提交权限”板块的逐账号开关现在只修改 `permissions.json`。
+- 已删除 `账户信息.json` 中 `beifang_admin` 的 `project_actions` 字段，并将原有 `daily_report_25_26.can_submit=false` 迁移到 `permissions.json.user_overrides.beifang_admin.projects.daily_report_25_26.can_submit`。
+- 本地验证：`python -m py_compile backend/services/auth_manager.py backend/api/v1/admin_console.py` 通过；`frontend` 目录 `npm run build` 通过。
+
+## 2026-04-07 月度查询页访问权限改为逐账号管理
+
+- `backend/services/auth_manager.py` 新增 `list_user_page_access` 与 `update_user_project_page_access_override`，支持对 `monthly_data_show/query-tool` 做逐账号页面访问控制，数据仍统一落在 `permissions.json.user_overrides`。
+- `backend/api/v1/admin_console.py` 新增 `GET/POST /admin/projects/{project_key}/page-access-users`，管理后台改为读取账号列表，不再使用用户组面板作为主操作入口。
+- `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中“月度查询页访问权限”已改为逐账号展示，字段与“日报提交权限”对齐；同时删除“日报提交权限”板块中的“用户覆盖”列，避免把内部实现细节暴露到界面。
+- `backend_data/shared/auth/permissions.json` 中 `user_overrides.beifang_admin.projects.daily_report_25_26` 已整理为新结构：`actions.can_submit=false`。
+- 本地验证：`python -m py_compile backend/services/auth_manager.py backend/api/v1/admin_console.py` 通过；`frontend` 目录 `npm run build` 通过。
+- 修复月度查询页“全部允许”未生效问题：当账号所属分组原本不存在 `monthly_data_show` 项目配置时，`AuthManager._apply_user_project_overrides` 现在会按组默认上下文补建项目权限，再应用账号级 `page_access` 覆盖，因此逐账号开启访问后会立即正确生效。
+
+## 2026-04-07 放开 monthly_data_show 项目可见组
+
+- 在 `backend_data/shared/项目列表.json` 中，将 `monthly_data_show.availability` 扩展为全部现有用户组：`Global_admin`、`Group_admin`、`ZhuChengQu_admin`、`Unit_admin`、`unit_filler`、`shoudian_filler`、`Group_viewer`。
+- 这次改动只影响“项目列表是否显示”，不直接授予项目内页面访问权；实际能否进入仍由 `permissions.json` 与 `user_overrides` 决定。
+
+## 2026-04-07 权限模型回归纯分组配置
+
+- 按新的治理方向，已取消 `backend_data/shared/auth/permissions.json` 顶层 `user_overrides`，运行时权限链路重新收口到 `groups`。
+- `backend/services/auth_manager.py` 中 `_ensure_loaded` / `_load_permissions` 已不再加载账号级覆盖；日报提交改由 `list_project_submit_groups` / `update_group_project_action` 管理，月报查询访问继续由 `list_group_page_access` / `update_group_page_access` 管理。
+- `backend/api/v1/admin_console.py` 已移除月报查询逐账号接口 `/page-access-users`，并将 `/submit-permissions` 返回与更新对象统一改为用户组。
+- `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中“日报提交权限”与“月度查询页访问权限”两个板块现均按用户组展示，字段统一为用户组、层级、账号数、账号列表、当前状态与操作。
+- 为承接此前逐账号放开的 `monthly_data_show/query-tool` 权限，`permissions.json.groups` 已补齐以下分组的页面访问权：`Group_admin`、`ZhuChengQu_admin`、`Unit_admin`、`unit_filler`、`shoudian_filler`、`Group_viewer`。
+- 这意味着月报查询访问已从“个别人例外”正式提升为“整组生效”；后续如需调整，应直接改分组权限，不再做单账号差异。
+
+## 2026-04-07 日报看板缓存发布新增 25-26 固定档位
+
+- `backend/services/dashboard_cache.py` 新增 `resolve_publish_schedule`，统一解析缓存发布档位；除原有最近 N 天外，新增固定预设 `25-26`，对应 `2025-11-01` 至 `2026-04-05` 全量每日缓存。
+- `backend/projects/daily_report_25_26/api/dashboard.py` 与 `backend/api/v1/admin_console.py` 的缓存发布接口均新增 `preset` 查询参数；当 `preset=25-26` 时，后端直接构造整个供暖期的日期队列并交给发布任务。
+- `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue` 与 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 的缓存发布下拉框已新增 `25-26` 选项；选中该项后不再传 `days`，而是传 `preset=25-26`。
+- 数据看板页面启动任务后的提示文案也已改为显示实际档位标签，因此会显示“缓存发布任务已启动（25-26）”。 
+- 本地验证：项目列表 JSON 解析通过。

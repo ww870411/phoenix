@@ -14,17 +14,27 @@
             "data_show",
             "data_approval",
             "data_entry",
-          "constant_data",
-          "data_analysis",
-          "placeholder"
+            "constant_data",
+            "data_analysis",
+            "placeholder"
           ],
           "sheet_rules": {
-            "data_show": { "mode": "all" },
-            "data_approval": { "mode": "all" },
-            "data_entry": { "mode": "all" },
-            "constant_data": { "mode": "all" }
+            "data_show": {
+              "mode": "all"
+            },
+            "data_approval": {
+              "mode": "all"
+            },
+            "data_entry": {
+              "mode": "all"
+            },
+            "constant_data": {
+              "mode": "all"
+            }
           },
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
             "can_submit": true,
             "can_approve": true,
@@ -39,11 +49,15 @@
           }
         },
         "daily_report_spring_festval_2026": {
-          "page_access": ["mini_entry"],
+          "page_access": [
+            "mini_entry"
+          ],
           "sheet_rules": {},
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": true,
             "can_revoke": true,
             "can_publish": true,
@@ -56,11 +70,15 @@
           }
         },
         "monthly_data_pull": {
-          "page_access": ["workspace"],
+          "page_access": [
+            "workspace"
+          ],
           "sheet_rules": {},
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": false,
             "can_revoke": false,
             "can_publish": false,
@@ -78,9 +96,11 @@
             "projects_monthly_data_show_query_tool"
           ],
           "sheet_rules": {},
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": false,
             "can_revoke": false,
             "can_publish": false,
@@ -106,19 +126,29 @@
             "data_show",
             "data_approval",
             "data_entry",
-          "constant_data",
-          "data_analysis",
-          "placeholder"
+            "constant_data",
+            "data_analysis",
+            "placeholder"
           ],
           "sheet_rules": {
-            "data_show": { "mode": "all" },
-            "data_approval": { "mode": "all" },
-            "data_entry": { "mode": "all" },
-            "constant_data": { "mode": "all" }
+            "data_show": {
+              "mode": "all"
+            },
+            "data_approval": {
+              "mode": "all"
+            },
+            "data_entry": {
+              "mode": "all"
+            },
+            "constant_data": {
+              "mode": "all"
+            }
           },
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": true,
             "can_revoke": true,
             "can_publish": true,
@@ -131,9 +161,13 @@
           }
         },
         "monthly_data_show": {
-          "page_access": ["projects_monthly_data_show_query_tool"],
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
           "sheet_rules": {},
-          "units_access": ["*"],
+          "units_access": [
+            "*"
+          ],
           "actions": {
             "can_submit": true,
             "can_approve": false,
@@ -163,7 +197,9 @@
           "sheet_rules": {
             "data_show": {
               "mode": "explicit",
-              "sheets": ["ZhuChengQu_sum_show_Sheet"]
+              "sheets": [
+                "ZhuChengQu_sum_show_Sheet"
+              ]
             },
             "data_approval": {
               "mode": "explicit",
@@ -186,11 +222,39 @@
               ]
             }
           },
-          "units_access": ["ZhuChengQu", "BeiHai", "XiangHai", "GongRe"],
+          "units_access": [
+            "ZhuChengQu",
+            "BeiHai",
+            "XiangHai",
+            "GongRe"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": true,
             "can_revoke": true,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "ZhuChengQu",
+            "BeiHai",
+            "XiangHai",
+            "GongRe"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
             "can_publish": false,
             "can_manage_modularization": false,
             "can_manage_validation": false,
@@ -205,15 +269,44 @@
       "hierarchy": 70,
       "projects": {
         "daily_report_25_26": {
-          "page_access": ["data_approval", "data_entry"],
+          "page_access": [
+            "data_approval",
+            "data_entry"
+          ],
           "sheet_rules": {
-            "data_approval": { "mode": "by_unit" },
-            "data_entry": { "mode": "by_unit" }
+            "data_approval": {
+              "mode": "by_unit"
+            },
+            "data_entry": {
+              "mode": "by_unit"
+            }
           },
-          "units_access": ["{user_unit}"],
+          "units_access": [
+            "{user_unit}"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
             "can_approve": true,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
             "can_revoke": false,
             "can_publish": false,
             "can_manage_modularization": false,
@@ -229,13 +322,39 @@
       "hierarchy": 60,
       "projects": {
         "daily_report_25_26": {
-          "page_access": ["data_entry"],
+          "page_access": [
+            "data_entry"
+          ],
           "sheet_rules": {
-            "data_entry": { "mode": "by_unit" }
+            "data_entry": {
+              "mode": "by_unit"
+            }
           },
-          "units_access": ["{user_unit}"],
+          "units_access": [
+            "{user_unit}"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
             "can_approve": false,
             "can_revoke": false,
             "can_publish": false,
@@ -252,16 +371,37 @@
       "hierarchy": 60,
       "projects": {
         "daily_report_25_26": {
-          "page_access": ["data_entry"],
+          "page_access": [
+            "data_entry"
+          ],
           "sheet_rules": {
             "data_entry": {
               "mode": "by_unit",
-              "sheets": ["Coal_inventory_Sheet"]
+              "sheets": [
+                "Coal_inventory_Sheet"
+              ]
             }
           },
-          "units_access": ["{user_unit}"],
+          "units_access": [
+            "{user_unit}"
+          ],
           "actions": {
-            "can_submit": true,
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
             "can_approve": false,
             "can_revoke": false,
             "can_publish": false
@@ -273,11 +413,39 @@
       "hierarchy": 50,
       "projects": {
         "daily_report_25_26": {
-          "page_access": ["dashboard", "data_show", "placeholder"],
+          "page_access": [
+            "dashboard",
+            "data_show",
+            "placeholder"
+          ],
           "sheet_rules": {
-            "data_show": { "mode": "all" }
+            "data_show": {
+              "mode": "all"
+            }
           },
-          "units_access": ["Group"],
+          "units_access": [
+            "Group"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "Group"
+          ],
           "actions": {
             "can_submit": false,
             "can_approve": false,

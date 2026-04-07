@@ -108,13 +108,14 @@
         <div v-if="canManageCache" class="dashboard-cache-controls">
           <div class="dashboard-cache-buttons">
             <label class="cache-days-control" title="缓存发布窗口天数">
-              <span>发布天数</span>
-              <select v-model.number="cachePublishDays">
+              <span>发布范围</span>
+              <select v-model="cachePublishPreset">
                 <option :value="1">1天</option>
                 <option :value="3">3天</option>
                 <option :value="7">7天</option>
                 <option :value="14">14天</option>
                 <option :value="30">30天</option>
+                <option value="25-26">25-26</option>
               </select>
             </label>
             <button
@@ -1196,7 +1197,7 @@ const { canPublish } = storeToRefs(authStore)
 const canManageCache = computed(() => Boolean(canPublish.value))
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
-const cachePublishDays = ref(1)
+const cachePublishPreset = ref('1')
 const temperatureImportBusy = ref(false)
 const temperatureImportDialogVisible = ref(false)
 const temperatureImportCommitBusy = ref(false)
@@ -1409,11 +1410,14 @@ async function handlePublishDashboardCache() {
   cacheActionBusy.value = true
   cacheActionMessage.value = ''
   try {
-    const payload = await publishDashboardCache(projectKey, { days: cachePublishDays.value })
+    const publishParams = cachePublishPreset.value === '25-26'
+      ? { preset: '25-26' }
+      : { days: Number(cachePublishPreset.value) || 7 }
+    const payload = await publishDashboardCache(projectKey, publishParams)
     if (payload?.job) {
       handleCacheJobSnapshot(payload.job)
       if (payload.job.status === 'running') {
-        cacheActionMessage.value = `缓存发布任务已启动（${cachePublishDays.value} 天）`
+        cacheActionMessage.value = `缓存发布任务已启动（${payload?.selection_label || cachePublishLabel.value}）`
         startCacheJobPolling()
       } else if (payload.job.status === 'completed') {
         cacheActionMessage.value = '缓存发布完成'
@@ -6278,3 +6282,8 @@ onMounted(() => {
   text-transform: uppercase;
 }
 </style>
+const cachePublishLabel = computed(() => {
+  if (cachePublishPreset.value === '25-26') return '25-26'
+  const days = Number(cachePublishPreset.value)
+  return Number.isFinite(days) ? `${days}天` : '7天'
+})

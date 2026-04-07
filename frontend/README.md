@@ -4969,3 +4969,39 @@ docker compose up -d --build
 - 根因修复：主城区利润公式现不再引用子单位 `eco_direct_income` 汇总值，而是直接汇总四项收入子项；展示页 `groups` 视图也同步改为使用正确的成本 item key，因此前端两类页面看到的主城区利润值应当引用同一套有效口径。
 - 最新调整：主城区两个利润指标现改为“子口径利润之和 + 内购热成本 - 内售热收入”，不再按主城区成本项重新推导；数据分析页和全口径展示页两条链路已同步。
 - 集团全口径也已按相同思路修正：两个利润指标不再直接透传，而是改为“各子口径利润之和 + 内购热成本 - 内售热收入”；前端两类页面应看到一致结果。
+## 2026-04-07 日报提交权限控制
+
+- `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`
+  - 提交按钮现在直接受 `useAuthStore().canSubmitFor(projectKey)` 控制。
+  - 无提交权限时按钮文案显示“当前账号无提交权限”，点击会直接提示并终止提交流程。
+  - 日期只读限制仍然保留，和权限限制共同组成前端提交拦截。
+
+- `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - `daily_report_25_26` 项目设定页新增“日报提交权限”板块。
+  - 板块只展示非 `Global_admin` 账号，按“用户/分组/单位/当前状态/用户覆盖”展示。
+  - 管理员可逐个开启或关闭用户的日报提交权限，操作通过后台接口即时写回账号配置。
+  - 用户列表默认折叠，支持“展开列表/折叠列表”。
+  - 支持“全部开启/全部关闭”批量切换，内部复用单用户权限更新接口顺序执行。
+
+- `frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增：
+    - `getAdminProjectSubmitPermissions(projectKey)`
+    - `setAdminProjectSubmitPermission(projectKey, username, canSubmit)`
+  - 供 admin-console 的用户级提交权限面板调用。
+
+## 2026-04-07：admin-console 权限面板统一回归分组模型
+
+- 页面位置仍为 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`，管理入口仍是 `/admin-console`。
+- “日报提交权限”与“月度查询页访问权限”两个板块现在都按用户组展示，不再按账号逐条设定。
+- 两个板块均默认折叠，不展示 `Global_admin`；表格字段统一为用户组、层级、账号数、账号列表、当前状态与操作。
+- 日报提交权限继续调用 `getAdminProjectSubmitPermissions` / `setAdminProjectSubmitPermission`，但接口返回与提交对象都已切换为用户组。
+- 月度查询页访问权限统一调用 `getAdminProjectPageAccessGroups` / `setAdminProjectPageAccessGroup`，管理目标仍固定为 `monthly_data_show/query-tool`。
+- 前端界面已移除账号级“用户覆盖”语义；批量按钮现在作用于用户组，不再作用于单个账号。
+- `monthly_data_show` 项目本身已在项目列表配置中对全部现有用户组可见，但具体页面是否可进入，仍由权限配置决定。
+
+## 2026-04-07：日报缓存发布新增 25-26 档位
+
+- `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue` 的缓存发布下拉框已从单纯“发布天数”扩展为“发布范围”，在原有 `1天 / 3天 / 7天 / 14天 / 30天` 之外新增固定选项 `25-26`。
+- 当用户在数据看板页选择 `25-26` 并点击“发布缓存”时，前端会调用 `publishDashboardCache(projectKey, { preset: '25-26' })`，不再传 `days`。
+- `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中的管理后台缓存发布下拉框也同步新增 `25-26`，并通过 `publishAdminDashboardCache({ preset: '25-26' })` 触发同一套后端逻辑。
+- 数据看板页启动任务后的提示文案已按档位标签显示，因此固定供暖期任务会显示“缓存发布任务已启动（25-26）”。

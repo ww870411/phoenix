@@ -24,7 +24,7 @@ from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import audit_log
 from backend.services import ai_runtime
 from backend.services import dashboard_cache
-from backend.services.auth_manager import AuthSession, get_current_session
+from backend.services.auth_manager import AuthSession, auth_manager, get_current_session
 from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.dashboard_expression import evaluate_dashboard
 from backend.services.project_data_paths import resolve_project_list_path
@@ -43,6 +43,8 @@ from backend.projects.daily_report_25_26.api.legacy_full import (
 router = APIRouter(tags=["admin"])
 DATA_ROOT = Path(DATA_DIRECTORY).resolve()
 APP_START_TS = time.time()
+MONTHLY_DATA_SHOW_PROJECT_KEY = "monthly_data_show"
+MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY = "projects_monthly_data_show_query_tool"
 MAX_EDITABLE_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 EDITABLE_EXTENSIONS = {
     ".json",
@@ -80,6 +82,16 @@ class DbTableBatchUpdatePayload(BaseModel):
 
 class ValidationSwitchPayload(BaseModel):
     validation_enabled: bool
+
+
+class SubmitPermissionPayload(BaseModel):
+    group_name: str
+    can_submit: bool
+
+
+class GroupPageAccessPayload(BaseModel):
+    group_name: str
+    has_access: bool
 
 
 class AiSettingsPayload(BaseModel):
@@ -504,6 +516,7 @@ def get_admin_overview(
             "can_manage_validation": can_manage_validation,
             "can_manage_ai_settings": can_manage_ai,
             "can_publish_cache": can_publish,
+            "can_manage_submit_permissions": True,
         },
         "validation": {"master_enabled": validation_enabled},
         "ai_settings": ai_settings_summary,
@@ -533,6 +546,94 @@ def list_admin_projects(session: AuthSession = Depends(get_current_session)):
     if not projects:
         projects = [{"project_key": PROJECT_KEY, "project_name": "2025-2026供暖期生产日报"}]
     return {"ok": True, "projects": projects}
+
+
+@router.get("/admin/projects/{project_key}/submit-permissions", summary="获取项目提交权限列表")
+def list_project_submit_permissions(
+    project_key: str,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    normalized_project_key = str(project_key or "").strip()
+    if normalized_project_key != PROJECT_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持日报项目提交权限管理。")
+    return {
+        "ok": True,
+        "project_key": normalized_project_key,
+        "groups": auth_manager.list_project_submit_groups(normalized_project_key),
+    }
+
+
+@router.post("/admin/projects/{project_key}/submit-permissions", summary="更新用户组项目提交权限")
+def update_project_submit_permission(
+    project_key: str,
+    payload: SubmitPermissionPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    normalized_project_key = str(project_key or "").strip()
+    if normalized_project_key != PROJECT_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持日报项目提交权限管理。")
+    updated = auth_manager.update_group_project_action(
+        group_name=payload.group_name,
+        project_key=normalized_project_key,
+        action_key="can_submit",
+        enabled=payload.can_submit,
+    )
+    return {
+        "ok": True,
+        "project_key": normalized_project_key,
+        **updated,
+    }
+
+
+@router.get("/admin/projects/{project_key}/page-access-groups", summary="获取项目页面访问用户组列表")
+def list_project_page_access_groups(
+    project_key: str,
+    page_key: str = Query(..., description="页面访问权限键"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    normalized_project_key = str(project_key or "").strip()
+    normalized_page_key = str(page_key or "").strip()
+    if normalized_project_key != MONTHLY_DATA_SHOW_PROJECT_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持月度查询页访问权限管理。")
+    if normalized_page_key != MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持月度查询工具页面访问权限管理。")
+    return {
+        "ok": True,
+        "project_key": normalized_project_key,
+        "page_key": normalized_page_key,
+        "groups": auth_manager.list_group_page_access(normalized_project_key, normalized_page_key),
+    }
+
+
+@router.post("/admin/projects/{project_key}/page-access-groups", summary="更新项目页面访问用户组权限")
+def update_project_page_access_group(
+    project_key: str,
+    payload: GroupPageAccessPayload,
+    page_key: str = Query(..., description="页面访问权限键"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_admin_console_access(session)
+    normalized_project_key = str(project_key or "").strip()
+    normalized_page_key = str(page_key or "").strip()
+    if normalized_project_key != MONTHLY_DATA_SHOW_PROJECT_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持月度查询页访问权限管理。")
+    if normalized_page_key != MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY:
+        raise HTTPException(status_code=400, detail="当前仅支持月度查询工具页面访问权限管理。")
+    updated = auth_manager.update_group_page_access(
+        group_name=payload.group_name,
+        project_key=normalized_project_key,
+        page_key=normalized_page_key,
+        enabled=payload.has_access,
+    )
+    return {
+        "ok": True,
+        "project_key": normalized_project_key,
+        "page_key": normalized_page_key,
+        **updated,
+    }
 
 
 @router.get("/admin/files/directories", summary="列出 backend_data 子目录")
@@ -935,12 +1036,28 @@ def test_admin_ai_settings(
 def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
     days: int = Query(default=7, ge=1, le=30),
+    preset: str | None = Query(default=None),
 ):
     _ensure_admin_console_access(session)
     _ensure_cache_operator(session)
-    schedule = list(reversed(dashboard_cache.default_publish_dates(window=days, project_key=PROJECT_KEY)))
+    try:
+        target_dates, selection_label = dashboard_cache.resolve_publish_schedule(
+            window=days,
+            project_key=PROJECT_KEY,
+            preset=preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    schedule = list(reversed(target_dates))
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
-    return {"ok": True, "started": started, "days": days, "job": snapshot}
+    return {
+        "ok": True,
+        "started": started,
+        "days": days,
+        "preset": preset,
+        "selection_label": selection_label,
+        "job": snapshot,
+    }
 
 
 @router.get("/admin/cache/publish/status", summary="获取缓存发布任务状态")

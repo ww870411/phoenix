@@ -227,6 +227,152 @@
 
             <section class="inner-card">
               <header class="section-header">
+                <h3>日报提交权限</h3>
+                <div class="submit-permission-actions">
+                  <span class="subtext">仅管理非 Global_admin 用户组在 {{ TARGET_PROJECT_KEY }} 中是否允许提交数据。</span>
+                  <button class="btn ghost" type="button" @click="submitPermissionCollapsed = !submitPermissionCollapsed">
+                    {{ submitPermissionCollapsed ? '展开列表' : '折叠列表' }}
+                  </button>
+                  <button
+                    class="btn ghost"
+                    type="button"
+                    :disabled="!canManageSubmitPermissions || submitPermissionBulkPending || !submitPermissionRows.length"
+                    @click="setAllSubmitPermissions(true)"
+                  >
+                    {{ submitPermissionBulkPending === 'enable' ? '开启中…' : '全部开启' }}
+                  </button>
+                  <button
+                    class="btn ghost"
+                    type="button"
+                    :disabled="!canManageSubmitPermissions || submitPermissionBulkPending || !submitPermissionRows.length"
+                    @click="setAllSubmitPermissions(false)"
+                  >
+                    {{ submitPermissionBulkPending === 'disable' ? '关闭中…' : '全部关闭' }}
+                  </button>
+                </div>
+              </header>
+              <p v-if="submitPermissionMessage" class="subtext">{{ submitPermissionMessage }}</p>
+              <div v-if="submitPermissionLoading" class="panel-state">加载中…</div>
+              <div v-else-if="submitPermissionCollapsed" class="panel-state">
+                已折叠，共 {{ submitPermissionRows.length }} 个可管理用户组。
+              </div>
+              <div v-else class="submit-permission-table-wrap">
+                <table class="submit-permission-table">
+                  <thead>
+                    <tr>
+                      <th>用户组</th>
+                      <th>层级</th>
+                      <th>账号数</th>
+                      <th>账号列表</th>
+                      <th>当前状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in submitPermissionRows" :key="row.group_name">
+                      <td>{{ row.group_name }}</td>
+                      <td>{{ row.hierarchy }}</td>
+                      <td>{{ row.user_count }}</td>
+                      <td>{{ Array.isArray(row.usernames) && row.usernames.length ? row.usernames.join('、') : '-' }}</td>
+                      <td>{{ row.can_submit ? '允许提交' : '禁止提交' }}</td>
+                      <td>
+                        <button
+                          class="btn ghost"
+                          type="button"
+                          :disabled="!canManageSubmitPermissions || submitPermissionSavingGroup === row.group_name"
+                          @click="toggleSubmitPermission(row)"
+                        >
+                          {{
+                            submitPermissionSavingGroup === row.group_name
+                              ? '保存中…'
+                              : (row.can_submit ? '关闭提交' : '开启提交')
+                          }}
+                        </button>
+                      </td>
+                    </tr>
+                    <tr v-if="!submitPermissionRows.length">
+                      <td colspan="6" class="table-empty">暂无可管理用户组</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="inner-card">
+              <header class="section-header">
+                <h3>月度查询页访问权限</h3>
+                <div class="submit-permission-actions">
+                  <span class="subtext">仅管理非 Global_admin 用户组在 monthly_data_show/query-tool 页面中的访问权限。</span>
+                  <button class="btn ghost" type="button" @click="pageAccessGroupCollapsed = !pageAccessGroupCollapsed">
+                    {{ pageAccessGroupCollapsed ? '展开列表' : '折叠列表' }}
+                  </button>
+                  <button
+                    class="btn ghost"
+                    type="button"
+                    :disabled="!canManageSubmitPermissions || pageAccessGroupBulkPending || !pageAccessGroupRows.length"
+                    @click="setAllPageAccessGroups(true)"
+                  >
+                    {{ pageAccessGroupBulkPending === 'enable' ? '开启中…' : '全部开启' }}
+                  </button>
+                  <button
+                    class="btn ghost"
+                    type="button"
+                    :disabled="!canManageSubmitPermissions || pageAccessGroupBulkPending || !pageAccessGroupRows.length"
+                    @click="setAllPageAccessGroups(false)"
+                  >
+                    {{ pageAccessGroupBulkPending === 'disable' ? '关闭中…' : '全部关闭' }}
+                  </button>
+                </div>
+              </header>
+              <p v-if="pageAccessGroupMessage" class="subtext">{{ pageAccessGroupMessage }}</p>
+              <div v-if="pageAccessGroupLoading" class="panel-state">加载中…</div>
+              <div v-else-if="pageAccessGroupCollapsed" class="panel-state">
+                已折叠，共 {{ pageAccessGroupRows.length }} 个可管理用户组。
+              </div>
+              <div v-else class="submit-permission-table-wrap">
+                <table class="submit-permission-table">
+                  <thead>
+                    <tr>
+                      <th>用户组</th>
+                      <th>层级</th>
+                      <th>账号数</th>
+                      <th>账号列表</th>
+                      <th>当前状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in pageAccessGroupRows" :key="row.group_name">
+                      <td>{{ row.group_name }}</td>
+                      <td>{{ row.hierarchy }}</td>
+                      <td>{{ row.user_count }}</td>
+                      <td>{{ Array.isArray(row.usernames) && row.usernames.length ? row.usernames.join('、') : '-' }}</td>
+                      <td>{{ row.has_access ? '允许访问' : '禁止访问' }}</td>
+                      <td>
+                        <button
+                          class="btn ghost"
+                          type="button"
+                          :disabled="!canManageSubmitPermissions || pageAccessGroupSavingName === row.group_name"
+                          @click="togglePageAccessGroup(row)"
+                        >
+                          {{
+                            pageAccessGroupSavingName === row.group_name
+                              ? '保存中…'
+                              : (row.has_access ? '关闭访问' : '开启访问')
+                          }}
+                        </button>
+                      </td>
+                    </tr>
+                    <tr v-if="!pageAccessGroupRows.length">
+                      <td colspan="6" class="table-empty">暂无可管理用户组</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="inner-card">
+              <header class="section-header">
                 <h3>AI 设置</h3>
                 <button class="btn primary" type="button" :disabled="!canManageAiSettings" @click="openAiSettingsDialog">
                   智能体设定
@@ -248,13 +394,14 @@
                   {{ bizDateLoading ? '读取中…' : '读取业务日期' }}
                 </button>
                 <label>
-                  <span>发布天数</span>
-                  <select v-model.number="publishDays" :disabled="!canManageCache || cachePending">
+                  <span>发布范围</span>
+                  <select v-model="publishDays" :disabled="!canManageCache || cachePending">
                     <option :value="1">1</option>
                     <option :value="3">3</option>
                     <option :value="7">7</option>
                     <option :value="14">14</option>
                     <option :value="30">30</option>
+                    <option value="25-26">25-26</option>
                   </select>
                 </label>
                 <label>
@@ -795,7 +942,11 @@ import {
   refreshAdminCache,
   importProjectTemperatureData,
   commitProjectTemperatureData,
+  getAdminProjectSubmitPermissions,
+  getAdminProjectPageAccessGroups,
   setAdminValidationMasterSwitch,
+  setAdminProjectSubmitPermission,
+  setAdminProjectPageAccessGroup,
   updateAdminAiSettings,
   uploadSuperFiles,
   writeSuperFile,
@@ -803,6 +954,8 @@ import {
 } from '../services/api'
 
 const TARGET_PROJECT_KEY = 'daily_report_25_26'
+const MONTHLY_DATA_SHOW_PROJECT_KEY = 'monthly_data_show'
+const MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY = 'projects_monthly_data_show_query_tool'
 const METRIC_HISTORY_LIMIT = 60
 const ROOT_SUPER_PATH = '/'
 const SUPER_COMMAND_PRESETS = [
@@ -841,9 +994,21 @@ const errorMessage = ref('')
 const overview = ref(null)
 const validationMasterEnabled = ref(true)
 const validationPending = ref(false)
+const submitPermissionRows = ref([])
+const submitPermissionLoading = ref(false)
+const submitPermissionSavingGroup = ref('')
+const submitPermissionMessage = ref('')
+const submitPermissionCollapsed = ref(true)
+const submitPermissionBulkPending = ref('')
+const pageAccessGroupRows = ref([])
+const pageAccessGroupLoading = ref(false)
+const pageAccessGroupSavingName = ref('')
+const pageAccessGroupMessage = ref('')
+const pageAccessGroupCollapsed = ref(true)
+const pageAccessGroupBulkPending = ref('')
 const aiSettingsDialogVisible = ref(false)
 const cachePending = ref(false)
-const publishDays = ref(1)
+const publishDays = ref('1')
 const refreshDate = ref('')
 const dashboardBizDate = ref('')
 const bizDateLoading = ref(false)
@@ -1004,6 +1169,7 @@ const breadcrumbItems = computed(() => [
 const canManageValidation = computed(() => auth.canManageValidationFor(TARGET_PROJECT_KEY))
 const canManageAiSettings = computed(() => auth.canManageAiSettingsFor(TARGET_PROJECT_KEY))
 const canManageCache = computed(() => auth.canPublishFor(TARGET_PROJECT_KEY))
+const canManageSubmitPermissions = computed(() => Boolean(overview.value?.actions?.can_manage_submit_permissions))
 const loadAiSettingsPayload = () => getAdminAiSettings()
 const saveAiSettingsPayload = async (payload) => {
   const saved = await updateAdminAiSettings(payload)
@@ -1284,6 +1450,41 @@ async function loadProjectSettings() {
   }
 }
 
+async function loadSubmitPermissions() {
+  if (selectedProjectKey.value !== TARGET_PROJECT_KEY) return
+  submitPermissionLoading.value = true
+  submitPermissionMessage.value = ''
+  try {
+    const payload = await getAdminProjectSubmitPermissions(TARGET_PROJECT_KEY)
+    submitPermissionRows.value = Array.isArray(payload?.groups) ? payload.groups : []
+  } catch (err) {
+    console.error(err)
+    submitPermissionMessage.value =
+      err instanceof Error ? err.message : '加载提交权限列表失败'
+  } finally {
+    submitPermissionLoading.value = false
+  }
+}
+
+async function loadPageAccessGroups() {
+  if (selectedProjectKey.value !== TARGET_PROJECT_KEY) return
+  pageAccessGroupLoading.value = true
+  pageAccessGroupMessage.value = ''
+  try {
+    const payload = await getAdminProjectPageAccessGroups(
+      MONTHLY_DATA_SHOW_PROJECT_KEY,
+      MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY,
+    )
+    pageAccessGroupRows.value = Array.isArray(payload?.groups) ? payload.groups : []
+  } catch (err) {
+    console.error(err)
+    pageAccessGroupMessage.value =
+      err instanceof Error ? err.message : '加载页面访问用户组列表失败'
+  } finally {
+    pageAccessGroupLoading.value = false
+  }
+}
+
 async function syncDashboardBizDate(options = {}) {
   if (!canManageCache.value) return
   const silent = Boolean(options?.silent)
@@ -1307,10 +1508,128 @@ async function selectProject(projectKey) {
   selectedProjectKey.value = String(projectKey || '')
   if (selectedProjectKey.value === TARGET_PROJECT_KEY) {
     await loadProjectSettings()
+    await loadSubmitPermissions()
+    await loadPageAccessGroups()
     if (canManageValidation.value) {
       const payload = await getAdminValidationMasterSwitch()
       validationMasterEnabled.value = Boolean(payload?.validation_enabled)
     }
+  }
+}
+
+async function toggleSubmitPermission(row) {
+  const groupName = String(row?.group_name || '')
+  if (!groupName) return
+  submitPermissionSavingGroup.value = groupName
+  submitPermissionMessage.value = ''
+  try {
+    const payload = await setAdminProjectSubmitPermission(
+      TARGET_PROJECT_KEY,
+      groupName,
+      !Boolean(row?.can_submit),
+    )
+    const target = submitPermissionRows.value.find((item) => item.group_name === groupName)
+    if (target) {
+      target.can_submit = Boolean(payload?.can_submit)
+    }
+    submitPermissionMessage.value = `${groupName} 提交权限已${Boolean(payload?.can_submit) ? '开启' : '关闭'}`
+  } catch (err) {
+    console.error(err)
+    submitPermissionMessage.value =
+      err instanceof Error ? err.message : '更新提交权限失败'
+  } finally {
+    submitPermissionSavingGroup.value = ''
+  }
+}
+
+async function setAllSubmitPermissions(nextValue) {
+  const desired = Boolean(nextValue)
+  const pendingType = desired ? 'enable' : 'disable'
+  const targets = submitPermissionRows.value.filter((row) => Boolean(row?.can_submit) !== desired)
+  if (!targets.length) {
+    submitPermissionMessage.value = desired ? '所有用户组当前都已开启提交权限' : '所有用户组当前都已关闭提交权限'
+    return
+  }
+  submitPermissionBulkPending.value = pendingType
+  submitPermissionMessage.value = ''
+  try {
+    for (const row of targets) {
+      const payload = await setAdminProjectSubmitPermission(
+        TARGET_PROJECT_KEY,
+        row.group_name,
+        desired,
+      )
+      const target = submitPermissionRows.value.find((item) => item.group_name === row.group_name)
+      if (target) {
+        target.can_submit = Boolean(payload?.can_submit)
+      }
+    }
+    submitPermissionMessage.value = `已${desired ? '开启' : '关闭'} ${targets.length} 个用户组的提交权限`
+  } catch (err) {
+    console.error(err)
+    submitPermissionMessage.value =
+      err instanceof Error ? err.message : `批量${desired ? '开启' : '关闭'}提交权限失败`
+  } finally {
+    submitPermissionBulkPending.value = ''
+  }
+}
+
+async function togglePageAccessGroup(row) {
+  const groupName = String(row?.group_name || '')
+  if (!groupName) return
+  pageAccessGroupSavingName.value = groupName
+  pageAccessGroupMessage.value = ''
+  try {
+    const payload = await setAdminProjectPageAccessGroup(
+      MONTHLY_DATA_SHOW_PROJECT_KEY,
+      MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY,
+      groupName,
+      !Boolean(row?.has_access),
+    )
+    const target = pageAccessGroupRows.value.find((item) => item.group_name === groupName)
+    if (target) {
+      target.has_access = Boolean(payload?.has_access)
+    }
+    pageAccessGroupMessage.value = `${groupName} 页面访问权限已${Boolean(payload?.has_access) ? '开启' : '关闭'}`
+  } catch (err) {
+    console.error(err)
+    pageAccessGroupMessage.value =
+      err instanceof Error ? err.message : '更新页面访问权限失败'
+  } finally {
+    pageAccessGroupSavingName.value = ''
+  }
+}
+
+async function setAllPageAccessGroups(nextValue) {
+  const desired = Boolean(nextValue)
+  const pendingType = desired ? 'enable' : 'disable'
+  const targets = pageAccessGroupRows.value.filter((row) => Boolean(row?.has_access) !== desired)
+  if (!targets.length) {
+    pageAccessGroupMessage.value = desired ? '所有用户组当前都已开启访问权限' : '所有用户组当前都已关闭访问权限'
+    return
+  }
+  pageAccessGroupBulkPending.value = pendingType
+  pageAccessGroupMessage.value = ''
+  try {
+    for (const row of targets) {
+      const payload = await setAdminProjectPageAccessGroup(
+        MONTHLY_DATA_SHOW_PROJECT_KEY,
+        MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY,
+        row.group_name,
+        desired,
+      )
+      const target = pageAccessGroupRows.value.find((item) => item.group_name === row.group_name)
+      if (target) {
+        target.has_access = Boolean(payload?.has_access)
+      }
+    }
+    pageAccessGroupMessage.value = `已${desired ? '开启' : '关闭'} ${targets.length} 个用户组的页面访问权限`
+  } catch (err) {
+    console.error(err)
+    pageAccessGroupMessage.value =
+      err instanceof Error ? err.message : `批量${desired ? '开启' : '关闭'}页面访问权限失败`
+  } finally {
+    pageAccessGroupBulkPending.value = ''
   }
 }
 
@@ -2212,7 +2531,10 @@ async function publishCache() {
   if (!canManageCache.value) return
   cachePending.value = true
   try {
-    await publishAdminDashboardCache({ days: publishDays.value })
+    const publishParams = publishDays.value === '25-26'
+      ? { preset: '25-26' }
+      : { days: Number(publishDays.value) || 7 }
+    await publishAdminDashboardCache(publishParams)
     await loadProjectSettings()
   } finally {
     cachePending.value = false
@@ -2600,6 +2922,40 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.submit-permission-table-wrap {
+  overflow-x: auto;
+}
+
+.submit-permission-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.submit-permission-actions .subtext {
+  margin-right: auto;
+}
+
+.submit-permission-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.submit-permission-table th,
+.submit-permission-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  font-size: 13px;
+}
+
+.table-empty {
+  color: #6b7280;
+  text-align: center;
 }
 
 .system-actions {

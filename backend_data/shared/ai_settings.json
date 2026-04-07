@@ -54,7 +54,7 @@
       "name": "lEysiver",
       "kind": "newapi",
       "base_url": "https://elysiver.h-e.top/v1",
-      "model": "gpt-5.4",
+      "model": "claude-4.6-sonnet",
       "api_keys": [
         "sk-UywwGlMu3wOEoXyzpRBGRa1bRDsUnuZZOgryavUlwtcKKouu2F"
       ],

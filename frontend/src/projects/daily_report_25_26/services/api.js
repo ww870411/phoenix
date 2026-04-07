@@ -788,9 +788,13 @@ export async function getDashboardBizDate(projectKey) {
 }
 
 export async function publishDashboardCache(projectKey, params = {}) {
+  const rawPreset = typeof params?.preset === 'string' ? params.preset.trim() : ''
   const rawDays = Number(params?.days)
   const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish?days=${days}`, {
+  const query = rawPreset
+    ? `preset=${encodeURIComponent(rawPreset)}`
+    : `days=${days}`
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish?${query}`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),
@@ -1153,6 +1157,80 @@ export async function listAdminProjects() {
   return response.json()
 }
 
+export async function getAdminProjectSubmitPermissions(projectKey = 'daily_report_25_26') {
+  const response = await authAwareFetch(
+    normalized(`/admin/projects/${encodeURIComponent(projectKey)}/submit-permissions`),
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取提交权限列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setAdminProjectSubmitPermission(
+  projectKey = 'daily_report_25_26',
+  groupName,
+  canSubmit,
+) {
+  const response = await authAwareFetch(
+    normalized(`/admin/projects/${encodeURIComponent(projectKey)}/submit-permissions`),
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify({
+        group_name: groupName,
+        can_submit: Boolean(canSubmit),
+      }),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新提交权限失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getAdminProjectPageAccessGroups(projectKey, pageKey) {
+  const response = await authAwareFetch(
+    normalized(
+      `/admin/projects/${encodeURIComponent(projectKey)}/page-access-groups?page_key=${encodeURIComponent(pageKey)}`,
+    ),
+    {
+      headers: attachAuthHeaders(),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取页面访问用户组失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setAdminProjectPageAccessGroup(projectKey, pageKey, groupName, hasAccess) {
+  const response = await authAwareFetch(
+    normalized(
+      `/admin/projects/${encodeURIComponent(projectKey)}/page-access-groups?page_key=${encodeURIComponent(pageKey)}`,
+    ),
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(JSON_HEADERS),
+      body: JSON.stringify({
+        group_name: groupName,
+        has_access: Boolean(hasAccess),
+      }),
+    },
+  )
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `更新页面访问用户组失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function listAdminFileDirectories() {
   const response = await authAwareFetch(normalized('/admin/files/directories'), {
     headers: attachAuthHeaders(),
@@ -1336,9 +1414,13 @@ export async function testAdminAiSettings(payload) {
 }
 
 export async function publishAdminDashboardCache(params = {}) {
+  const rawPreset = typeof params?.preset === 'string' ? params.preset.trim() : ''
   const rawDays = Number(params?.days)
   const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const response = await authAwareFetch(normalized(`/admin/cache/publish?days=${days}`), {
+  const query = rawPreset
+    ? `preset=${encodeURIComponent(rawPreset)}`
+    : `days=${days}`
+  const response = await authAwareFetch(normalized(`/admin/cache/publish?${query}`), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
     body: JSON.stringify({}),

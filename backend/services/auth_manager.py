@@ -17,7 +17,7 @@ import json
 import logging
 import secrets
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
@@ -259,10 +259,9 @@ class AuthManager:
             self._accounts_mtime = accounts_mtime
             self._permissions_mtime = permissions_mtime
 
-            # 配置变更时清理所有已登录会话，避免权限失效
+            # 配置变更时刷新现有会话，避免权限陈旧且不强制踢出当前在线用户
             with self._session_lock:
-                self._sessions.clear()
-                self._user_tokens.clear()
+                self._refresh_active_sessions_locked()
 
     def _load_accounts(self) -> Dict[str, UserRecord]:
         if not self._accounts_path.exists():
@@ -291,11 +290,325 @@ class AuthManager:
                 unit = entry.get("unit")
                 if not username or not password:
                     continue
-                record = UserRecord(username=username, password=password, group=group_name, unit=unit)
+                record = UserRecord(
+                    username=username,
+                    password=password,
+                    group=group_name,
+                    unit=unit,
+                )
                 users[username] = record
         if not users:
             raise HTTPException(status_code=500, detail="账户信息为空")
         return users
+
+    @staticmethod
+    def _merge_action_flags(base: ActionFlags, overrides: Optional[Dict[str, bool]] = None) -> ActionFlags:
+        if not isinstance(overrides, dict) or not overrides:
+            return base
+        next_values = {
+            "can_submit": base.can_submit,
+            "can_approve": base.can_approve,
+            "can_revoke": base.can_revoke,
+            "can_publish": base.can_publish,
+            "can_manage_modularization": base.can_manage_modularization,
+            "can_manage_validation": base.can_manage_validation,
+            "can_manage_ai_settings": base.can_manage_ai_settings,
+            "can_manage_ai_sheet_switch": base.can_manage_ai_sheet_switch,
+            "can_extract_xlsx": base.can_extract_xlsx,
+            "can_unlimited_ai_usage": base.can_unlimited_ai_usage,
+            "can_access_admin_console": base.can_access_admin_console,
+        }
+        for key in list(next_values.keys()):
+            if key in overrides:
+                next_values[key] = bool(overrides[key])
+        return ActionFlags(**next_values)
+
+    def _apply_user_project_overrides(
+        self,
+        group_permissions: GroupPermissions,
+        record: UserRecord,
+    ) -> GroupPermissions:
+        return group_permissions
+
+    def _build_session(
+        self,
+        record: UserRecord,
+        group_permissions: GroupPermissions,
+        token: str,
+        issued_at: datetime,
+        expires_at: Optional[datetime],
+        persistent: bool,
+        allowed_units: Optional[Set[str]] = None,
+    ) -> AuthSession:
+        effective_permissions = self._apply_user_project_overrides(group_permissions, record)
+        resolved_allowed_units = allowed_units or self._resolve_units(
+            effective_permissions.units_access,
+            record.unit,
+        )
+        allowed_units_by_project = {
+            project_key: self._resolve_units(project_permissions.units_access, record.unit)
+            for project_key, project_permissions in effective_permissions.projects.items()
+        }
+        return AuthSession(
+            username=record.username,
+            group=record.group,
+            unit=record.unit,
+            hierarchy=effective_permissions.hierarchy,
+            permissions=effective_permissions,
+            allowed_units=resolved_allowed_units,
+            allowed_units_by_project=allowed_units_by_project,
+            token=token,
+            issued_at=issued_at,
+            expires_at=expires_at,
+            persistent=persistent,
+        )
+
+    def _refresh_active_sessions_locked(self) -> None:
+        refreshed_sessions: Dict[str, AuthSession] = {}
+        refreshed_user_tokens: Dict[str, Set[str]] = {}
+        for token, session in self._sessions.items():
+            record = self._users_by_name.get(session.username)
+            if not record:
+                continue
+            group_permissions = self._groups.get(record.group)
+            if not group_permissions:
+                continue
+            refreshed = self._build_session(
+                record=record,
+                group_permissions=group_permissions,
+                token=session.token,
+                issued_at=session.issued_at,
+                expires_at=session.expires_at,
+                persistent=session.persistent,
+            )
+            refreshed_sessions[token] = refreshed
+            refreshed_user_tokens.setdefault(refreshed.username, set()).add(token)
+        self._sessions = refreshed_sessions
+        self._user_tokens = refreshed_user_tokens
+
+    def list_project_submit_groups(self, project_key: str) -> List[Dict[str, object]]:
+        self._ensure_loaded()
+        normalized_project_key = str(project_key or "").strip()
+        rows: List[Dict[str, object]] = []
+        for group_name, group_permissions in sorted(
+            self._groups.items(),
+            key=lambda item: (-int(item[1].hierarchy), str(item[0])),
+        ):
+            if group_name == "Global_admin":
+                continue
+            project_permissions = group_permissions.projects.get(normalized_project_key)
+            usernames = sorted(
+                record.username
+                for record in self._users_by_name.values()
+                if str(record.group).strip() == group_name
+            )
+            rows.append(
+                {
+                    "group_name": group_name,
+                    "hierarchy": int(group_permissions.hierarchy),
+                    "user_count": len(usernames),
+                    "usernames": usernames,
+                    "can_submit": bool(project_permissions.actions.can_submit) if project_permissions else False,
+                }
+            )
+        return rows
+
+    def update_group_project_action(
+        self,
+        group_name: str,
+        project_key: str,
+        action_key: str,
+        enabled: bool,
+    ) -> Dict[str, object]:
+        self._ensure_loaded()
+        normalized_group_name = str(group_name or "").strip()
+        normalized_project_key = str(project_key or "").strip()
+        normalized_action_key = str(action_key or "").strip()
+        if normalized_action_key != "can_submit":
+            raise HTTPException(status_code=400, detail="当前仅支持提交权限设置。")
+        if normalized_group_name == "Global_admin":
+            raise HTTPException(status_code=403, detail="Global_admin 组提交权限不可在此处修改。")
+        group_permissions = self._groups.get(normalized_group_name)
+        if not group_permissions:
+            raise HTTPException(status_code=404, detail=f"未找到用户组：{normalized_group_name}")
+
+        try:
+            raw = json.loads(self._permissions_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=500, detail=f"权限配置文件解析失败: {exc}") from exc
+
+        groups_raw = raw.get("groups")
+        if not isinstance(groups_raw, dict):
+            raise HTTPException(status_code=500, detail="权限配置需包含 groups 字段")
+        group_cfg_raw = groups_raw.get(normalized_group_name)
+        if not isinstance(group_cfg_raw, dict):
+            raise HTTPException(status_code=500, detail=f"权限组 {normalized_group_name} 配置异常")
+
+        projects_raw = group_cfg_raw.get("projects")
+        if not isinstance(projects_raw, dict):
+            projects_raw = {}
+            group_cfg_raw["projects"] = projects_raw
+
+        project_cfg_raw = projects_raw.get(normalized_project_key)
+        project_cfg = dict(project_cfg_raw) if isinstance(project_cfg_raw, dict) else {}
+        project_actions_raw = project_cfg.get("actions")
+        project_actions = dict(project_actions_raw) if isinstance(project_actions_raw, dict) else {}
+        project_actions[normalized_action_key] = bool(enabled)
+        project_cfg["actions"] = project_actions
+
+        if "page_access" not in project_cfg:
+            project_cfg["page_access"] = []
+        if "sheet_rules" not in project_cfg:
+            project_cfg["sheet_rules"] = {}
+        if "units_access" not in project_cfg:
+            project_cfg["units_access"] = list(group_permissions.units_access) or ["*"]
+        projects_raw[normalized_project_key] = project_cfg
+
+        serialized = json.dumps(raw, ensure_ascii=False, indent=2)
+        temp_path = self._permissions_path.with_name(self._permissions_path.name + ".tmp")
+        try:
+            temp_path.write_text(serialized + "\n", encoding="utf-8")
+            temp_path.replace(self._permissions_path)
+        except Exception as exc:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise HTTPException(status_code=500, detail="写入权限配置失败") from exc
+
+        self._permissions_mtime = None
+        self._ensure_loaded()
+        updated_rows = self.list_project_submit_groups(normalized_project_key)
+        for item in updated_rows:
+            if item.get("group_name") == normalized_group_name:
+                return item
+        raise HTTPException(status_code=500, detail="提交权限更新后未找到目标用户组")
+
+    def list_group_page_access(self, project_key: str, page_key: str) -> List[Dict[str, object]]:
+        self._ensure_loaded()
+        normalized_project_key = str(project_key or "").strip()
+        normalized_page_key = str(page_key or "").strip()
+        rows: List[Dict[str, object]] = []
+        for group_name, group_permissions in sorted(
+            self._groups.items(),
+            key=lambda item: (-int(item[1].hierarchy), str(item[0])),
+        ):
+            if group_name == "Global_admin":
+                continue
+            project_permissions = group_permissions.projects.get(normalized_project_key)
+            page_access = project_permissions.page_access if project_permissions else set()
+            usernames = sorted(
+                record.username
+                for record in self._users_by_name.values()
+                if str(record.group).strip() == group_name
+            )
+            rows.append(
+                {
+                    "group_name": group_name,
+                    "hierarchy": int(group_permissions.hierarchy),
+                    "user_count": len(usernames),
+                    "usernames": usernames,
+                    "has_access": normalized_page_key in page_access,
+                }
+            )
+        return rows
+
+    def update_group_page_access(
+        self,
+        group_name: str,
+        project_key: str,
+        page_key: str,
+        enabled: bool,
+    ) -> Dict[str, object]:
+        self._ensure_loaded()
+        normalized_group_name = str(group_name or "").strip()
+        normalized_project_key = str(project_key or "").strip()
+        normalized_page_key = str(page_key or "").strip()
+        if normalized_group_name == "Global_admin":
+            raise HTTPException(status_code=403, detail="Global_admin 组访问权限不可在此处修改。")
+        group_permissions = self._groups.get(normalized_group_name)
+        if not group_permissions:
+            raise HTTPException(status_code=404, detail=f"未找到用户组：{normalized_group_name}")
+
+        try:
+            raw = json.loads(self._permissions_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=500, detail=f"权限配置文件解析失败: {exc}") from exc
+
+        groups_raw = raw.get("groups")
+        if not isinstance(groups_raw, dict):
+            raise HTTPException(status_code=500, detail="权限配置需包含 groups 字段")
+        group_cfg_raw = groups_raw.get(normalized_group_name)
+        if not isinstance(group_cfg_raw, dict):
+            raise HTTPException(status_code=500, detail=f"权限组 {normalized_group_name} 配置异常")
+
+        projects_raw = group_cfg_raw.get("projects")
+        if not isinstance(projects_raw, dict):
+            projects_raw = {}
+            group_cfg_raw["projects"] = projects_raw
+
+        project_cfg_raw = projects_raw.get(normalized_project_key)
+        project_cfg = dict(project_cfg_raw) if isinstance(project_cfg_raw, dict) else {}
+        project_page_access_raw = project_cfg.get("page_access") or []
+        project_page_access = {
+            str(page).strip()
+            for page in project_page_access_raw
+            if str(page).strip()
+        }
+
+        if bool(enabled):
+            project_page_access.add(normalized_page_key)
+        else:
+            project_page_access.discard(normalized_page_key)
+
+        if project_cfg:
+            project_cfg["page_access"] = sorted(project_page_access)
+            projects_raw[normalized_project_key] = project_cfg
+        elif bool(enabled):
+            base_units_access = list(group_permissions.units_access) or ["*"]
+            project_cfg = {
+                "page_access": sorted(project_page_access),
+                "sheet_rules": {},
+                "units_access": base_units_access,
+                "actions": {
+                    "can_submit": bool(group_permissions.actions.can_submit),
+                    "can_approve": bool(group_permissions.actions.can_approve),
+                    "can_revoke": bool(group_permissions.actions.can_revoke),
+                    "can_publish": bool(group_permissions.actions.can_publish),
+                    "can_manage_modularization": bool(
+                        group_permissions.actions.can_manage_modularization
+                    ),
+                    "can_manage_validation": bool(group_permissions.actions.can_manage_validation),
+                    "can_manage_ai_settings": bool(group_permissions.actions.can_manage_ai_settings),
+                    "can_manage_ai_sheet_switch": bool(
+                        group_permissions.actions.can_manage_ai_sheet_switch
+                    ),
+                    "can_extract_xlsx": bool(group_permissions.actions.can_extract_xlsx),
+                    "can_unlimited_ai_usage": bool(
+                        group_permissions.actions.can_unlimited_ai_usage
+                    ),
+                    "can_access_admin_console": bool(
+                        group_permissions.actions.can_access_admin_console
+                    ),
+                },
+            }
+            projects_raw[normalized_project_key] = project_cfg
+
+        serialized = json.dumps(raw, ensure_ascii=False, indent=2)
+        temp_path = self._permissions_path.with_name(self._permissions_path.name + ".tmp")
+        try:
+            temp_path.write_text(serialized + "\n", encoding="utf-8")
+            temp_path.replace(self._permissions_path)
+        except Exception as exc:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise HTTPException(status_code=500, detail="写入权限配置失败") from exc
+
+        self._permissions_mtime = None
+        self._ensure_loaded()
+        updated_rows = self.list_group_page_access(normalized_project_key, normalized_page_key)
+        for item in updated_rows:
+            if item.get("group_name") == normalized_group_name:
+                return item
+        raise HTTPException(status_code=500, detail="访问权限更新后未找到目标用户组")
 
     @staticmethod
     def _parse_action_flags(actions_cfg: object, fallback: Optional[ActionFlags] = None) -> ActionFlags:
@@ -471,20 +784,9 @@ class AuthManager:
         persistent = bool(remember)
         expires_at = self._compute_expiry(issued_at, persistent)
         token = secrets.token_urlsafe(32)
-        allowed_units = self._resolve_units(group_permissions.units_access, record.unit)
-        allowed_units_by_project = {
-            project_key: self._resolve_units(project_permissions.units_access, record.unit)
-            for project_key, project_permissions in group_permissions.projects.items()
-        }
-
-        session = AuthSession(
-            username=record.username,
-            group=record.group,
-            unit=record.unit,
-            hierarchy=group_permissions.hierarchy,
-            permissions=group_permissions,
-            allowed_units=allowed_units,
-            allowed_units_by_project=allowed_units_by_project,
+        session = self._build_session(
+            record=record,
+            group_permissions=group_permissions,
             token=token,
             issued_at=issued_at,
             expires_at=expires_at,
@@ -677,22 +979,14 @@ class AuthManager:
         except json.JSONDecodeError:
             allowed_units_list = []
         allowed_units = {str(unit) for unit in (allowed_units_list or [])}
-        allowed_units_by_project = {
-            project_key: self._resolve_units(project_permissions.units_access, record.unit)
-            for project_key, project_permissions in group_permissions.projects.items()
-        }
-        session = AuthSession(
-            username=row["username"],
-            group=row["user_group"],
-            unit=row["unit"],
-            hierarchy=row["hierarchy"],
-            permissions=group_permissions,
-            allowed_units=allowed_units or self._resolve_units(group_permissions.units_access, record.unit),
-            allowed_units_by_project=allowed_units_by_project,
+        session = self._build_session(
+            record=record,
+            group_permissions=group_permissions,
             token=row["token"],
             issued_at=row["issued_at"],
             expires_at=expires_at,
             persistent=True,
+            allowed_units=allowed_units or None,
         )
         return session
 

@@ -494,6 +494,31 @@ def default_publish_dates(window: int = 7, project_key: str = DEFAULT_PROJECT_KE
     return result
 
 
+def resolve_publish_schedule(
+    window: int = 7,
+    project_key: str = DEFAULT_PROJECT_KEY,
+    preset: str | None = None,
+) -> tuple[List[str], str]:
+    """
+    解析缓存发布档位。
+    - 默认按最近 N 天发布
+    - `25-26` 表示 2025-11-01 至 2026-04-05 的完整供暖期
+    """
+    normalized_preset = str(preset or "").strip()
+    if normalized_preset == "25-26":
+        start_date = date(2025, 11, 1)
+        end_date = date(2026, 4, 5)
+        total_days = (end_date - start_date).days + 1
+        schedule = [
+            (start_date + timedelta(days=offset)).isoformat()
+            for offset in range(total_days)
+        ]
+        return schedule, "25-26"
+    if normalized_preset:
+        raise ValueError(f"不支持的缓存发布档位：{normalized_preset}")
+    return default_publish_dates(window=window, project_key=project_key), f"{window}天"
+
+
 def summarize_cache(project_key: str) -> Dict[str, Any]:
     return get_cache_status(project_key)
 

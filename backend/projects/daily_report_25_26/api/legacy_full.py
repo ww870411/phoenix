@@ -2563,11 +2563,15 @@ def get_sheet_template(
 async def submit_debug(
     request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
+    session: AuthSession = Depends(get_current_session),
 ):
     """
     数据提交总调度入口。
     根据 sheet_key 将请求分发到不同的处理器。
     """
+    action_flags = session.get_project_action_flags(PROJECT_KEY)
+    if not action_flags.can_submit:
+        raise HTTPException(status_code=403, detail="当前账号无提交权限")
     payload = await request.json()
 
     # 根据 sheet_key 进行路由分发

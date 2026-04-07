@@ -95,7 +95,12 @@
   {
     "availability": [
       "Global_admin",
-      "Group_admin"
+      "Group_admin",
+      "ZhuChengQu_admin",
+      "Unit_admin",
+      "unit_filler",
+      "shoudian_filler",
+      "Group_viewer"
     ],
     "project_name": "月报导入与查询",
     "pages": {

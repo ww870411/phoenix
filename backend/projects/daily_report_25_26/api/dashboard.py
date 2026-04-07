@@ -201,15 +201,25 @@ def get_dashboard_temperature_trend(
 def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
     days: int = Query(default=7, ge=1, le=30, description="发布窗口天数（含 set_biz_date 当天）"),
+    preset: str | None = Query(default=None, description="缓存发布预设档位"),
 ):
     _ensure_cache_operator(session)
-    target_dates = list(reversed(dashboard_cache.default_publish_dates(window=days, project_key=PROJECT_KEY)))
-    schedule = target_dates
+    try:
+        target_dates, selection_label = dashboard_cache.resolve_publish_schedule(
+            window=days,
+            project_key=PROJECT_KEY,
+            preset=preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    schedule = list(reversed(target_dates))
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
     return {
         "ok": True,
         "started": started,
         "days": days,
+        "preset": preset,
+        "selection_label": selection_label,
         "job": snapshot,
     }
 

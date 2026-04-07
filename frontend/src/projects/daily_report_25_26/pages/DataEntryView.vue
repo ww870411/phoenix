@@ -57,7 +57,9 @@
           </label>
           <div class="topbar__buttons">
             <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
-            <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">提交</button>
+            <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">
+              {{ canSubmitCurrentProject ? '提交' : '当前账号无提交权限' }}
+            </button>
           </div>
         </div>
       </div>
@@ -455,7 +457,8 @@ const sheetValidationToggleDisabled = computed(
 );
 
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
-const submitDisabled = computed(() => isReadOnlyForDate.value);
+const canSubmitCurrentProject = computed(() => auth.canSubmitFor(projectKey));
+const submitDisabled = computed(() => !canSubmitCurrentProject.value || isReadOnlyForDate.value);
 const submitButtonDisabled = computed(() => submitDisabled.value || isSubmitting.value || hasBlockingValidation.value);
 
 watch(
@@ -1758,6 +1761,10 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
+  if (!canSubmitCurrentProject.value) {
+    window.alert('当前账号未获授权提交该项目日报数据。');
+    return;
+  }
   if (submitDisabled.value) {
     window.alert('所选日期仅支持查看，不能提交修改。');
     return;

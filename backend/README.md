@@ -3806,3 +3806,54 @@
 - 根因补充：仅修改主城区 `eco_direct_income` 展示口径并不足以修复利润值，因为利润公式之前仍直接读取 `base_zc` 中三个子单位的 `eco_direct_income`；另外 `groups.sql` 曾引用旧成本 key，和 `sum_basic_data.sql` 的实际 item 名不一致。本轮已同时修复这两点。
 - 最终利润算法：主城区 `eco_marginal_profit` 现为 `三个子口径边际利润之和 + 内购热成本 - 内售热收入`；`eco_comparable_marginal_profit` 现为 `三个子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入`。对应实现已同时落在 `analysis.sql` 与 `groups.sql`。
 - 集团全口径利润算法：`Group` 的 `eco_marginal_profit` 现为 `各子口径边际利润之和 + 内购热成本 - 内售热收入`；`eco_comparable_marginal_profit` 现为 `各子口径可比煤价边际利润之和 + 内购热成本 - 内售热收入`。两条链路已同步在 `analysis.sql` 与 `groups.sql` 中排除透传并改为显式重算。
+## 2026-04-07 日报用户级提交权限
+
+- `backend/services/auth_manager.py`
+  - 账户文件 `backend_data/shared/auth/账户信息.json` 现在支持可选字段：
+    - `project_actions.<project_key>.<action_key>`
+  - 当前实际使用场景是 `daily_report_25_26.can_submit` 的用户级覆盖。
+  - 登录、会话恢复、在线会话刷新都会合并组权限和用户级项目动作覆盖。
+
+- `backend/api/v1/admin_console.py`
+  - 新增日报项目用户提交权限管理接口：
+    - `GET /api/v1/admin/projects/{project_key}/submit-permissions`
+    - `POST /api/v1/admin/projects/{project_key}/submit-permissions`
+  - 当前只支持 `daily_report_25_26`，且只允许修改 `can_submit`。
+  - 接口返回非 `Global_admin` 账号的提交权限视图，包含组默认值、用户覆盖值和最终生效值。
+  - 前端批量“全部开启/全部关闭”当前复用单用户 `POST` 接口顺序调用，后端本轮未新增批量专用接口。
+
+- `backend/projects/daily_report_25_26/api/legacy_full.py`
+  - `POST /data_entry/sheets/{sheet_key}/submit` 现在必须带登录态。
+  - 接口会读取 `session.get_project_action_flags(PROJECT_KEY).can_submit`，无权限直接返回 `403 当前账号无提交权限`。
+  - 这样前端按钮禁用和后端接口强校验形成双重约束。
+
+- `backend_data/shared/auth/permissions.json`
+  - `daily_report_25_26` 默认已关闭非 `Global_admin` 组的 `can_submit`。
+  - 后续若需恢复某个普通账号提报，只需在管理后台为该账号打开提交权限，不必改组权限。
+
+## 2026-04-07：admin_console 增加月度查询页用户组访问权限接口
+
+- `backend/services/auth_manager.py`
+  - 新增 `list_group_page_access(project_key, page_key)`：列出非 `Global_admin` 用户组对指定项目页面的访问状态。
+  - 新增 `update_group_page_access(group_name, project_key, page_key, enabled)`：直接修改 `permissions.json` 中目标用户组的项目级 `page_access`，并在写回后刷新内存权限与活动会话。
+- `backend/api/v1/admin_console.py`
+  - 新增 `GET /admin/projects/{project_key}/page-access-groups?page_key=...`
+  - 新增 `POST /admin/projects/{project_key}/page-access-groups?page_key=...`
+  - 当前仅开放给 `monthly_data_show` 项目的 `projects_monthly_data_show_query_tool` 页面，用于管理后台上的组级访问控制面板。
+- 设计约束：不新增权限配置文件，仍以 `backend_data/shared/auth/permissions.json` 作为用户组访问权限唯一来源。
+- 2026-04-07 补充：`list_group_page_access` 现在除 `user_count` 外还返回 `usernames`，供管理后台直接展示组内账号名单。
+- 2026-04-07 更正：权限模型已再次收口到纯分组配置，`AuthManager` 不再解析或写入 `permissions.json.user_overrides`，运行时只使用 `permissions.json.groups`。
+- 2026-04-07 补充：`list_project_submit_groups` / `update_group_project_action` 已接管日报提交权限管理；`can_submit` 现在只按用户组设定。
+- 2026-04-07 补充：`monthly_data_show/query-tool` 的后台管理重新固定为组级接口 `list_group_page_access` / `update_group_page_access`，不再提供逐账号页面访问接口。
+- 2026-04-07 补充：为承接之前的月报查询例外，`permissions.json.groups` 中已补齐 `ZhuChengQu_admin`、`Unit_admin`、`unit_filler`、`shoudian_filler`、`Group_viewer` 的 `monthly_data_show.query-tool` 访问权；这意味着相关权限从“个别人例外”正式提升为“整组生效”。
+- 2026-04-07 补充：`backend_data/shared/项目列表.json` 中 `monthly_data_show.availability` 已扩展到全部现有用户组。该字段只控制项目列表可见性，不替代 `permissions.json` 的实际访问控制。
+
+## 2026-04-07 日报缓存发布新增 25-26 固定供暖期预设
+
+- `backend/services/dashboard_cache.py` 新增 `resolve_publish_schedule(window, project_key, preset)`，统一解析缓存发布档位。
+- 当前支持两类档位：
+  - 默认最近 N 天：继续沿用 `default_publish_dates(window=days, project_key=...)`
+  - 固定供暖期 `25-26`：返回 `2025-11-01` 到 `2026-04-05` 的完整每日日期序列
+- `backend/projects/daily_report_25_26/api/dashboard.py` 的 `POST /dashboard/cache/publish` 以及 `backend/api/v1/admin_console.py` 的 `POST /admin/cache/publish` 均新增 `preset` 查询参数。
+- 当 `preset=25-26` 时，后端会忽略前端的 `days` 选择，直接构造整个供暖期的缓存发布队列并交给 `cache_publish_job_manager.start(...)`。
+- 接口响应中已补充 `preset` 与 `selection_label`，供前端展示任务启动文案或后续扩展使用。
