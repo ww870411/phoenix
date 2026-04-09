@@ -7170,3 +7170,136 @@
 - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue` 与 `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 的缓存发布下拉框已新增 `25-26` 选项；选中该项后不再传 `days`，而是传 `preset=25-26`。
 - 数据看板页面启动任务后的提示文案也已改为显示实际档位标签，因此会显示“缓存发布任务已启动（25-26）”。 
 - 本地验证：项目列表 JSON 解析通过。
+## 2026-04-09 monthly_data_show query-tool 导出全量修复
+
+- 问题：月报查询工具页点击“导出 XLSX”时，导出的“查询结果”sheet 直接使用当前页 `rows`，导致当总条数超过 200 时，Excel 仅包含前端当前页数据，而不是全量命中结果。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 中新增 `exportLoading` 状态与 `fetchAllQueryRowsForExport()`，导出前按后端单次上限 1000 条分批请求 `/monthly-data-show/query` 拉取全部结果，再生成 Excel。
+- 结果：导出与页面分页解耦；页面仍保持每页 200 条浏览体验，但 Excel 可覆盖全部查询结果。若批量拉取未达到后端返回总数，会直接报错阻止导出不完整文件。
+- 验证：已在 `frontend` 目录执行 `npm run build`，构建通过。
+
+## 2026-04-09 monthly_data_show 对比明细补充计量单位列
+
+- 问题：导出的 XLSX 文件中，“对比明细”sheet 的“指标”右侧缺少“计量单位”列，不便于区分同名指标的口径。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的对比明细导出模板中，将 `x.unit` 插入到“指标”右侧，并同步调整数值列索引与列宽配置。
+- 结果：导出的“对比明细”sheet 现在列顺序为“口径 / 指标 / 计量单位 / 期间 / 类型 / …”，数值格式保持原逻辑。
+- 验证：已再次执行 `npm run build`，构建通过。
+
+## 2026-04-09 monthly_data_show 对比明细移除期间与类型列
+
+- 需求：导出的 XLSX 文件中，“对比明细”sheet 不再保留“期间”和“类型”两列。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的对比明细导出模板中移除这两列，并同步前移后续数值列的 Excel 写入索引与列宽配置。
+- 结果：当前“对比明细”sheet 的基础列顺序为“口径 / 指标 / 计量单位 / 本期值 / 同期值 / 同比差值 / 同比差异率 / 上期值 / 环比差值 / 环比差异率 / 计划值 / 计划差值 / 计划差异率”，若启用年计划则继续追加相关三列。
+- 验证：已再次执行 `npm run build`，构建通过。
+
+## 2026-04-09 monthly_data_show 气温指标供暖期过滤
+
+- 需求：气温数据仅在每年 11 月 1 日至次年 4 月 5 日有效；查询页在用户勾选气温指标时，不应列出供暖期外的气温数据。
+- 处理：在 `backend/projects/monthly_data_show/api/workspace.py` 中新增供暖期判断与时间段裁剪辅助函数，并在三处接入：
+  - 主查询结果：对所有气温类指标行按日期过滤；
+  - 平均气温派生：平均值计算仅统计供暖期内有效日；
+  - 气温同比明细：仅返回供暖期内日序数据与平均值。
+- 结果：供暖期外的气温类指标不会再出现在月报查询结果中，夏季窗口下“平均气温”等气温项返回空结果。
+- 验证：
+  - `py_compile` 编译 `backend/projects/monthly_data_show/api/workspace.py` 通过；
+  - `frontend` 目录执行 `npm run build` 通过；
+
+## 2026-04-09 monthly_data_show 查询页新增去除 0 值开关
+
+- 需求：在 `monthly_data_show/query-tool` 页面“数据层次顺序”“聚合开关”同一行右侧增加一个小板块，用于控制是否剔除 0 值指标；0、0.0、0% 等数值上等于 0 的结果均不显示。
+- 前端：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - 在查询条件行新增“0值过滤”板块与 `filters.excludeZeroValues` 开关；
+  - 查询 payload 新增 `exclude_zero_values`，重置时恢复为关闭状态；
+  - 页面布局由双列扩展为三列，使该开关与“数据层次顺序”“聚合开关”并排展示。
+- 后端：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryRequest` 新增 `exclude_zero_values: bool = False`；
+  - 新增 `_is_effective_zero_value()`，统一按数值语义识别 0、0.0、0% 等零值形式；
+  - 主查询结果与同比环比结果都会在排序/分页前先剔除当前值为 0 的指标行，保证列表、分页与导出一致。
+- 结果：用户勾选“已剔除 0 值”后，查询页显示结果、分页总数、导出明细以及对比明细都会同步隐藏当前指标值等于 0 的记录。
+- 验证：
+  - `py_compile` 编译 `backend/projects/monthly_data_show/api/workspace.py` 通过；
+  - `frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 指定指标默认小数位调整
+
+- 需求：查询页显示的数据中，“供暖热耗率”默认保留 4 位小数；“耗酸量”“耗碱量”默认保留 2 位小数。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 中，将原先隐式的四位小数集合改为显式指标精度映射 `ITEM_VALUE_DECIMAL_DIGITS`。
+- 规则：
+  - `供暖热耗率`：4 位小数；
+  - `耗酸量`：2 位小数；
+  - `耗碱量`：2 位小数；
+  - 其余未单独声明的指标继续默认 2 位小数。
+- 影响：查询表格展示、比较区派生格式化以及导出 Excel 的数值格式都复用同一精度规则。
+- 验证：`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 0值过滤新增全月份全零模式
+
+- 需求：在保留“逐条剔除 0 值”现有行为的基础上，新增一种剔除方式：
+  - 若某个口径的某个指标在查询范围内所有月份均为 0，则剔除该指标；
+  - 只要该口径该指标有任意一个月份不为 0，则保留该口径该指标的全部月份记录。
+- 前端：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+  - “0值过滤”板块改为“开关 + 模式”组合；
+  - 开启后可在两种模式之间切换：`逐条剔除 0 值`、`全月份均为 0 才剔除`；
+  - 查询 payload 新增 `exclude_zero_mode`。
+- 后端：`backend/projects/monthly_data_show/api/workspace.py`
+  - `QueryRequest` 新增 `exclude_zero_mode`；
+  - 新增 `_resolve_zero_filter_mode()`、`_zero_filter_group_key()`、`_filter_rows_by_zero_mode()`；
+  - 主查询在排序/分页前按模式过滤：
+    - `row`：逐条删除当前值为 0 的记录；
+    - `all_months_group`：按“口径 + 指标 + 期间 + 类型 + 单位”分组，只在整组所有月份都为 0 时才删除。
+- 结果：当选择“全月份均为 0 才剔除”时，只要某口径某指标在查询月份中存在任一非 0 月份，该指标的所有月份记录都会保留。
+- 备注：同比环比结果仅在 `row` 模式下继续按当前值为 0 过滤；在 `all_months_group` 模式下不额外裁剪，以避免与主查询月序规则冲突。
+- 验证：
+  - `py_compile` 编译 `backend/projects/monthly_data_show/api/workspace.py` 通过；
+  - `frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 查询条件三联面板宽度回调
+
+- 需求：`0值过滤` 板块未完整显示，同时其左侧 `聚合开关` 板块略宽，需要整体统筹调整。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 中重新分配 `.inline-layout` 三列宽度，并同步收紧 `aggregate-inline` 内边距/间距，放宽 `0值过滤` 面板内部文案换行。
+- 调整结果：
+  - `数据层次顺序` 保持主列；
+  - `聚合开关` 收窄；
+  - `0值过滤` 加宽，并允许模式说明自动换行，避免文案被裁切。
+- 验证：`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 0值过滤面板改为常显三选一
+
+- 问题：此前 `0值过滤` 面板采用“先勾选开关，再显示过滤模式”的交互，默认只看到“保留 0 值”，新增的过滤方式不会直接显示，而且内容块位置偏下。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 中将该面板改为常显三选一：
+  - `保留 0 值`
+  - `逐条剔除 0 值`
+  - `全月份均为 0 才剔除`
+- 协议映射：
+  - `zeroFilterMode = off` 时，发送 `exclude_zero_values=false`；
+  - 其他模式下发送 `exclude_zero_values=true`，并按所选模式传递 `exclude_zero_mode`。
+- 布局：`0值过滤` 面板内部改为顶部对齐，选项不再因为展开逻辑而下沉。
+- 验证：`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 0值过滤简化为双选项水平排列
+
+- 需求：移除 `保留 0 值` 字样，只保留 `逐条剔除 0 值`、`全月份均为 0 才剔除` 两个选项，并水平排列。
+- 处理：在 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 中将 `0值过滤` 面板改为两个并排复选选项，但内部仍映射为单一模式值 `zeroFilterMode`：
+  - 两项都不选：等价于保留 0 值；
+  - 选中其一：启用对应过滤模式；
+  - 再次取消当前选中项：回到保留 0 值。
+- 布局：`zero-filter-modes` 改为水平换行布局，避免额外占用纵向空间。
+- 验证：`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 0值过滤容器版式对齐聚合开关
+
+- 需求：`0值过滤` 框内布局需要效仿 `聚合开关` 中选项的高度、位置和整体节奏。
+- 处理：将 `zero-filter-modes` 的容器样式对齐到 `aggregate-inline`：
+  - 统一最小高度为 66px；
+  - 统一白底边框容器、内边距和垂直居中；
+  - 选项文字回到单行展示，整体视觉节奏与 `聚合开关` 保持接近。
+- 验证：`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-04-09 monthly_data_show 查询口径移除临海兜底项
+
+- 需求：从 `口径（可多选）` 中去掉 `临海`。
+- 处理：在 `backend/projects/monthly_data_show/api/workspace.py` 的 `get_monthly_data_show_query_options()` 中移除对 `临海` 的兜底追加逻辑，改为仅返回数据库真实存在的口径列表。
+- 结果：查询页的口径选项不再无条件出现 `临海`。
+- 验证：
+  - `py_compile` 编译 `backend/projects/monthly_data_show/api/workspace.py` 通过；
+  - `frontend` 目录执行 `npm run build` 通过。
+  - 直接调用后端查询函数验证 `2024-07-01 ~ 2024-07-31 + 平均气温` 返回 `total=0, rows=[]`。

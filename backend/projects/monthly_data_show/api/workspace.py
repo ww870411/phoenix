@@ -91,6 +91,9 @@ NULL_VALUE_TOKENS = {"", "none", "null", "nan", "-", "--", "无", "空", "#div/0
 AVERAGE_TEMPERATURE_ITEM = "平均气温"
 AVERAGE_TEMPERATURE_UNIT = "℃"
 AVERAGE_TEMPERATURE_COMPANY = "common"
+TEMPERATURE_ITEM_KEYWORD = "气温"
+HEATING_SEASON_START = (11, 1)
+HEATING_SEASON_END = (4, 5)
 INDICATOR_RUNTIME_CFG = load_indicator_runtime_config()
 CALCULATED_ITEM_SET = set(INDICATOR_RUNTIME_CFG.get("calculated_item_set") or set())
 CALCULATED_ITEM_UNITS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_units") or {})
@@ -157,6 +160,8 @@ class QueryRequest(BaseModel):
     order_fields: List[str] = []
     aggregate_companies: bool = False
     aggregate_months: bool = False
+    exclude_zero_values: bool = False
+    exclude_zero_mode: str = "row"
     limit: int = 200
     offset: int = 0
 
@@ -350,6 +355,49 @@ def _to_optional_float(value: object) -> Optional[float]:
         return float(value)
     except Exception:
         return None
+
+
+def _is_effective_zero_value(value: object, *, tolerance: float = 1e-12) -> bool:
+    numeric_value = _to_optional_float(value)
+    if numeric_value is None:
+        return False
+    return abs(numeric_value) <= tolerance
+
+
+def _resolve_zero_filter_mode(request: QueryRequest) -> str:
+    if not bool(request.exclude_zero_values):
+        return "off"
+    normalized = str(request.exclude_zero_mode or "row").strip().lower()
+    if normalized in {"row", "all_months_group"}:
+        return normalized
+    return "row"
+
+
+def _zero_filter_group_key(row: dict) -> Tuple[str, str, str, str, str]:
+    return (
+        _safe_str(row.get("company")),
+        _safe_str(row.get("item")),
+        _safe_str(row.get("period")),
+        _safe_str(row.get("type")),
+        _safe_str(row.get("unit")),
+    )
+
+
+def _filter_rows_by_zero_mode(rows: List[dict], mode: str) -> List[dict]:
+    if mode == "off":
+        return rows
+    if mode == "row":
+        return [row for row in rows if not _is_effective_zero_value(row.get("value"))]
+    if mode == "all_months_group":
+        non_zero_group_keys = {
+            _zero_filter_group_key(row)
+            for row in rows
+            if not _is_effective_zero_value(row.get("value"))
+        }
+        if not non_zero_group_keys:
+            return []
+        return [row for row in rows if _zero_filter_group_key(row) in non_zero_group_keys]
+    return rows
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -709,6 +757,88 @@ def _pick_temperature_date_range(request: QueryRequest) -> Tuple[Optional[date],
 
 def _safe_str(value: object) -> str:
     return str(value or "").strip()
+
+
+def _is_temperature_item_name(item: object) -> bool:
+    text = _safe_str(item)
+    return bool(text) and (text == AVERAGE_TEMPERATURE_ITEM or TEMPERATURE_ITEM_KEYWORD in text)
+
+
+def _is_heating_season_date(target: Optional[date]) -> bool:
+    if target is None:
+        return False
+    month_day = (target.month, target.day)
+    return month_day >= HEATING_SEASON_START or month_day <= HEATING_SEASON_END
+
+
+def _iter_heating_season_segments(range_start: date, range_end: date) -> List[Tuple[date, date]]:
+    if range_start > range_end:
+        return []
+    segments: List[Tuple[date, date]] = []
+    start_year = range_start.year - 1
+    end_year = range_end.year
+    for year in range(start_year, end_year + 1):
+        season_start = date(year, HEATING_SEASON_START[0], HEATING_SEASON_START[1])
+        season_end = date(year + 1, HEATING_SEASON_END[0], HEATING_SEASON_END[1])
+        actual_start = max(range_start, season_start)
+        actual_end = min(range_end, season_end)
+        if actual_start <= actual_end:
+            segments.append((actual_start, actual_end))
+    return segments
+
+
+def _extract_row_reference_date(row: Dict[str, Any]) -> Optional[date]:
+    for field in ("date", "report_month"):
+        raw = row.get(field)
+        if isinstance(raw, date):
+            return raw
+        text = _safe_str(raw)
+        if not text:
+            continue
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            continue
+    return None
+
+
+def _filter_temperature_rows_by_heating_season(rows: List[dict]) -> List[dict]:
+    filtered_rows: List[dict] = []
+    for row in rows:
+        if not _is_temperature_item_name(row.get("item")):
+            filtered_rows.append(row)
+            continue
+        ref_date = _extract_row_reference_date(row)
+        if ref_date is not None and _is_heating_season_date(ref_date):
+            filtered_rows.append(row)
+    return filtered_rows
+
+
+def _compute_average_temperature_value(session, range_start: date, range_end: date) -> Optional[float]:
+    segments = _iter_heating_season_segments(range_start, range_end)
+    if not segments:
+        return None
+    stmt = text(
+        """
+        SELECT aver_temp
+        FROM calc_temperature_data
+        WHERE date BETWEEN :date_from AND :date_to
+        ORDER BY date
+        """
+    )
+    values: List[float] = []
+    for segment_start, segment_end in segments:
+        rows = session.execute(
+            stmt,
+            {"date_from": segment_start, "date_to": segment_end},
+        ).mappings().all()
+        for row in rows:
+            value = _to_optional_float(row.get("aver_temp"))
+            if value is not None:
+                values.append(value)
+    if not values:
+        return None
+    return sum(values) / len(values)
 
 
 def _build_rank_map(values: List[str]) -> Dict[str, int]:
@@ -1375,6 +1505,7 @@ def _fetch_compare_map(
     types = _normalize_text_list(request.types)
     aggregate_companies = bool(request.aggregate_companies)
     include_avg_temp = AVERAGE_TEMPERATURE_ITEM in items
+    has_heating_season_overlap = bool(_iter_heating_season_segments(start_date, end_date))
     selected_calc_items = [x for x in items if x in CALCULATED_ITEM_SET]
     selected_base_items = [x for x in items if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
     required_base_items = _collect_required_base_items(selected_calc_items)
@@ -1425,6 +1556,8 @@ def _fetch_compare_map(
         for row in rows:
             company = str(row.get("company") or "")
             item = str(row.get("item") or "")
+            if _is_temperature_item_name(item) and not has_heating_season_overlap:
+                continue
             period = str(row.get("period") or "")
             type_value = str(row.get("type") or "")
             unit = str(row.get("unit") or "")
@@ -1518,15 +1651,7 @@ def _fetch_compare_map(
                 complete_keys.add(key)
 
     if include_avg_temp and companies and ("month" in {x.lower() for x in periods}) and ("real" in {x.lower() for x in types}):
-        avg_stmt = text(
-            """
-            SELECT AVG(aver_temp) AS avg_temp
-            FROM calc_temperature_data
-            WHERE date BETWEEN :date_from AND :date_to
-            """
-        )
-        raw_avg = session.execute(avg_stmt, {"date_from": start_date, "date_to": end_date}).scalar()
-        avg_value = _to_float(raw_avg) if raw_avg is not None else None
+        avg_value = _compute_average_temperature_value(session, start_date, end_date)
         if avg_value is not None:
             key = f"{AVERAGE_TEMPERATURE_COMPANY}|{AVERAGE_TEMPERATURE_ITEM}|month|real|{AVERAGE_TEMPERATURE_UNIT}"
             result_map[key] = {
@@ -1807,11 +1932,11 @@ def _build_temperature_comparison_payload(
     yoy_map: Dict[date, Optional[float]] = {}
     for row in current_rows:
         dt = row.get("date")
-        if isinstance(dt, date):
+        if isinstance(dt, date) and _is_heating_season_date(dt):
             current_map[dt] = _to_optional_float(row.get("aver_temp"))
     for row in yoy_rows:
         dt = row.get("date")
-        if isinstance(dt, date):
+        if isinstance(dt, date) and _is_heating_season_date(dt):
             yoy_map[dt] = _to_optional_float(row.get("aver_temp"))
 
     rows: List[TemperatureDailyComparisonRow] = []
@@ -1819,6 +1944,9 @@ def _build_temperature_comparison_payload(
     current_values: List[float] = []
     yoy_values: List[float] = []
     while cursor <= current_end:
+        if not _is_heating_season_date(cursor):
+            cursor += timedelta(days=1)
+            continue
         current_temp = current_map.get(cursor)
         yoy_date = _shift_year_safe(cursor, -1)
         yoy_temp = yoy_map.get(yoy_date)
@@ -1878,27 +2006,15 @@ def _build_average_temperature_rows(
         return []
     if range_start > range_end:
         return []
+    if not _iter_heating_season_segments(range_start, range_end):
+        return []
 
     target_companies = [AVERAGE_TEMPERATURE_COMPANY]
     rows: List[dict] = []
 
     if aggregate_months:
-        sql = text(
-            """
-            SELECT AVG(aver_temp) AS avg_temp
-            FROM calc_temperature_data
-            WHERE date BETWEEN :date_from AND :date_to
-            """
-        )
-        avg_value = session.execute(
-            sql,
-            {"date_from": range_start, "date_to": range_end},
-        ).scalar()
-        if avg_value is None:
-            return []
-        try:
-            value = float(avg_value)
-        except (TypeError, ValueError):
+        value = _compute_average_temperature_value(session, range_start, range_end)
+        if value is None:
             return []
         for company in target_companies:
             rows.append(
@@ -1927,22 +2043,8 @@ def _build_average_temperature_rows(
         actual_end = min(range_end, month_end_date)
         if actual_start > actual_end:
             continue
-        sql = text(
-            """
-            SELECT AVG(aver_temp) AS avg_temp
-            FROM calc_temperature_data
-            WHERE date BETWEEN :date_from AND :date_to
-            """
-        )
-        avg_value = session.execute(
-            sql,
-            {"date_from": actual_start, "date_to": actual_end},
-        ).scalar()
-        if avg_value is None:
-            continue
-        try:
-            value = float(avg_value)
-        except (TypeError, ValueError):
+        value = _compute_average_temperature_value(session, actual_start, actual_end)
+        if value is None:
             continue
         for company in target_companies:
             rows.append(
@@ -2174,8 +2276,6 @@ def get_monthly_data_show_query_options():
         row = {}
 
     companies = [str(x) for x in (row.get("companies") or []) if str(x).strip()]
-    if "临海" not in companies:
-        companies.append("临海")
 
     items_from_db = [str(x) for x in (row.get("items") or []) if str(x).strip()]
     try:
@@ -2247,6 +2347,7 @@ def query_month_data_show(request: QueryRequest):
         raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
     aggregate_companies = bool(request.aggregate_companies)
     aggregate_months = bool(request.aggregate_months)
+    zero_filter_mode = _resolve_zero_filter_mode(request)
     resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
 
     if run_base_query and (aggregate_companies or aggregate_months):
@@ -2320,6 +2421,7 @@ def query_month_data_show(request: QueryRequest):
                 "operation_time": row.get("operation_time").isoformat() if row.get("operation_time") else None,
             }
         )
+    base_rows_all = _filter_temperature_rows_by_heating_season(base_rows_all)
 
     calculated_rows = _build_calculated_rows(
         base_rows=base_rows_all,
@@ -2339,6 +2441,7 @@ def query_month_data_show(request: QueryRequest):
     all_rows.extend(output_base_rows)
     all_rows.extend(calculated_rows)
     all_rows.extend(temp_rows)
+    all_rows = _filter_rows_by_zero_mode(all_rows, zero_filter_mode)
     all_rows = _merge_and_sort_rows(all_rows, resolved_order_fields, aggregate_months, rank_maps=rank_maps)
     total_count = len(all_rows)
     page_rows = all_rows[offset : offset + limit]
@@ -2374,6 +2477,7 @@ def query_month_data_show_comparison(request: QueryRequest):
     if order_mode not in {"company_first", "item_first"}:
         raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
     aggregate_companies = bool(request.aggregate_companies)
+    zero_filter_mode = _resolve_zero_filter_mode(request)
     resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
     rank_maps = {
         "company": _build_rank_map(companies_selected),
@@ -2491,6 +2595,8 @@ def query_month_data_show_comparison(request: QueryRequest):
                 annual_plan_rate=annual_plan_rate,
             )
         )
+    if zero_filter_mode == "row":
+        rows = [row for row in rows if not _is_effective_zero_value(row.current_value)]
     rows = _sort_comparison_rows(rows, resolved_order_fields, rank_maps)
     temperature_comparison: Optional[TemperatureComparisonPayload] = None
     if include_temperature_comparison:

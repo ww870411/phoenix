@@ -312,6 +312,7 @@
     { "name": "耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"], "allow_missing_subtrahend_as_zero": true },
     { "name": "耗水量补齐", "companies": ["北海", "北海水炉", "香海"], "target_item": "耗水量", "target_unit": "吨", "operation": "copy", "sources": ["电厂耗水量"], "allow_missing_subtrahend_as_zero": true },
     { "name": "热网耗水量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗水量", "target_unit": "吨", "operation": "copy", "sources": ["耗水量"], "allow_missing_subtrahend_as_zero": true },
+    { "name": "供热公司耗水量补齐", "companies": ["供热公司"], "target_item": "耗水量", "target_unit": "吨", "operation": "copy", "sources": ["热网耗水量"], "allow_missing_subtrahend_as_zero": true },
     { "name": "热网耗电量补齐", "companies": ["供热公司", "金普", "庄河", "研究院", "主城区电锅炉"], "target_item": "热网耗电量", "target_unit": "万千瓦时", "operation": "copy", "sources": ["外购电量"], "allow_missing_subtrahend_as_zero": true },
     { "name": "供暖耗热量补齐", "companies": ["供热公司"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "copy", "sources": ["各热力站耗热量"], "allow_missing_subtrahend_as_zero": true },
     { "name": "供暖耗热量补齐", "companies": ["金州", "北方"], "target_item": "供暖耗热量", "target_unit": "吉焦", "operation": "subtract", "sources": ["供热量", "高温水销售量"], "allow_missing_subtrahend_as_zero": true },

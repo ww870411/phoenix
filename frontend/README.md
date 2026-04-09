@@ -5005,3 +5005,100 @@ docker compose up -d --build
 - 当用户在数据看板页选择 `25-26` 并点击“发布缓存”时，前端会调用 `publishDashboardCache(projectKey, { preset: '25-26' })`，不再传 `days`。
 - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 中的管理后台缓存发布下拉框也同步新增 `25-26`，并通过 `publishAdminDashboardCache({ preset: '25-26' })` 触发同一套后端逻辑。
 - 数据看板页启动任务后的提示文案已按档位标签显示，因此固定供暖期任务会显示“缓存发布任务已启动（25-26）”。
+## 2026-04-09 monthly_data_show 查询工具导出修复
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：`downloadXlsx()` 不再直接导出当前页 `rows`，而是在导出时通过 `fetchAllQueryRowsForExport()` 按批次拉取 `/monthly-data-show/query` 的全部结果后再写入“查询结果”sheet。
+- 保留：页面查询仍按 `limit=200` 分页展示，不改变用户日常浏览性能。
+- 新增：导出按钮在执行期间进入 `exportLoading` 状态，避免重复点击。
+
+## 2026-04-09 monthly_data_show 对比明细计量单位列
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：导出 XLSX 的“对比明细”sheet 在“指标”右侧新增“计量单位”列，数据来源为比较结果行的 `unit` 字段。
+- 同步：为新增列调整了后续数值列的 Excel 写入索引和列宽配置。
+
+## 2026-04-09 monthly_data_show 对比明细移除期间与类型
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：导出 XLSX 的“对比明细”sheet 删除“期间”“类型”两列，仅保留业务上需要展示的口径、指标、计量单位和各类对比值。
+- 同步：数值列写入索引整体前移 2，列宽配置相应收缩。
+
+## 2026-04-09 monthly_data_show 气温指标供暖期规则
+
+- 前端未新增额外判断，继续复用后端返回结果。
+- 查询页现在会自然遵循后端供暖期过滤：当选择气温类指标时，供暖期外（11 月 1 日至次年 4 月 5 日之外）的窗口不再返回气温数据。
+
+## 2026-04-09 monthly_data_show 查询页新增去除 0 值开关
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：在“数据层次顺序”“聚合开关”同一行右侧新增“0值过滤”板块，使用 `filters.excludeZeroValues` 控制是否剔除零值结果。
+- 协议：`buildPayload()` 新增 `exclude_zero_values`，查询、翻页与导出复用同一筛选口径。
+- 重置：`resetFilters()` 会把该开关恢复为关闭状态。
+- 布局：查询条件区 `.inline-layout` 由双列扩展为三列，移动端仍保持单列折叠。
+
+## 2026-04-09 monthly_data_show 指定指标默认小数位
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：将查询页数值格式化规则改为显式指标精度映射。
+- 当前规则：
+  - `供暖热耗率` 默认显示 4 位小数；
+  - `耗酸量`、`耗碱量` 默认显示 2 位小数；
+- 其余未单独声明的指标继续默认 2 位小数。
+- 复用范围：查询表格显示、比较区格式化、以及导出 XLSX 的数值格式共用同一规则入口。
+
+## 2026-04-09 monthly_data_show 0值过滤模式扩展
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：`0值过滤` 面板从单一开关扩展为“开关 + 模式选择”。
+- 当前模式：
+  - `逐条剔除 0 值`：只要某一条结果值为 0，就隐藏该条记录；
+  - `全月份均为 0 才剔除`：按“口径 + 指标”月序结果整体判断，只在查询范围内所有月份都为 0 时才整体隐藏，否则保留该口径该指标的全部月份。
+- 协议：`buildPayload()` 新增 `exclude_zero_mode`，主查询、翻页与导出继续共用同一筛选口径。
+
+## 2026-04-09 monthly_data_show 查询条件三联面板布局回调
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：重新分配“数据层次顺序 / 聚合开关 / 0值过滤”三联面板的列宽占比。
+- 具体：
+  - 适度收窄 `聚合开关`；
+  - 扩大 `0值过滤` 面板宽度；
+  - 允许 `0值过滤` 面板内部模式说明换行，避免长文案被截断。
+- 响应式：桌面和中等宽度断点都同步更新，移动端仍保持单列。
+
+## 2026-04-09 monthly_data_show 0值过滤改为三选一常显
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：`0值过滤` 面板不再使用“先开关、后展开模式”的交互，而是直接显示三种模式：
+  - `保留 0 值`
+  - `逐条剔除 0 值`
+  - `全月份均为 0 才剔除`
+- 参数映射：
+  - `保留 0 值` 对应 `exclude_zero_values=false`；
+  - 其余两项对应 `exclude_zero_values=true`，并分别传递对应的 `exclude_zero_mode`。
+- 布局：该面板内部改为顶部对齐，避免选项整体下沉。
+
+## 2026-04-09 monthly_data_show 0值过滤改为双选项水平排列
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：移除 `保留 0 值` 文案，仅保留两个水平排列的过滤选项：
+  - `逐条剔除 0 值`
+  - `全月份均为 0 才剔除`
+- 交互语义：
+  - 两项都不选时，等价于保留 0 值；
+  - 同一时刻内部只会生效一种过滤模式；
+  - 取消当前选中项后会回到保留 0 值。
+
+## 2026-04-09 monthly_data_show 0值过滤容器对齐聚合开关
+
+- 文件：`src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`
+- 调整：`0值过滤` 的内部白底容器改为接近 `聚合开关` 的版式参数：
+  - 同样的最小高度；
+  - 同样的垂直居中；
+  - 同样的内边距与边框节奏。
+- 目标：让两个板块在同一行视觉上更统一。
+
+## 2026-04-09 monthly_data_show 查询口径移除临海
+
+- 查询页 `口径（可多选）` 不再显示 `临海`。
+- 本轮前端未新增特殊过滤，直接复用后端 `/monthly-data-show/query-options` 返回的真实口径列表。

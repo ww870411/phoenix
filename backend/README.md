@@ -3857,3 +3857,92 @@
 - `backend/projects/daily_report_25_26/api/dashboard.py` 的 `POST /dashboard/cache/publish` 以及 `backend/api/v1/admin_console.py` 的 `POST /admin/cache/publish` 均新增 `preset` 查询参数。
 - 当 `preset=25-26` 时，后端会忽略前端的 `days` 选择，直接构造整个供暖期的缓存发布队列并交给 `cache_publish_job_manager.start(...)`。
 - 接口响应中已补充 `preset` 与 `selection_label`，供前端展示任务启动文案或后续扩展使用。
+## 2026-04-09 monthly_data_show 查询导出说明补充
+
+- 本轮未修改后端接口协议。
+- `monthly_data_show` 查询接口仍维持分页能力，前端查询页继续按每页 200 条展示。
+- 导出全量结果的修复放在前端完成：前端在导出时循环调用现有 `/monthly-data-show/query` 接口，按后端允许的单次批量上限取回全部命中数据后再生成 XLSX。
+
+## 2026-04-09 monthly_data_show 对比明细导出列补充
+
+- 本轮仍未修改后端接口协议。
+- “对比明细”sheet 新增“计量单位”列属于前端导出模板修复，数据继续复用后端比较结果中的 `unit` 字段。
+
+## 2026-04-09 monthly_data_show 对比明细导出列裁剪
+
+- 本轮仍未修改后端接口协议。
+- “对比明细”sheet 删除“期间”“类型”列属于前端导出模板裁剪，后端比较结果仍保留原字段，但导出端不再展示。
+
+## 2026-04-09 monthly_data_show 气温指标供暖期过滤
+
+- 文件：`projects/monthly_data_show/api/workspace.py`
+- 调整：
+  - 新增气温类指标识别与供暖期判断辅助函数；
+  - 主查询结果中的气温类指标按日期过滤，仅保留每年 11 月 1 日至次年 4 月 5 日区间内的数据；
+  - “平均气温”派生值只基于供暖期内有效日期计算；
+  - 气温同比明细也只输出供暖期内的日序记录与平均值。
+- 影响：查询页、导出和依赖同一接口结果的上层功能，都会统一遵循供暖期过滤规则。
+
+## 2026-04-09 monthly_data_show 查询结果新增零值过滤参数
+
+- 文件：`projects/monthly_data_show/api/workspace.py`
+- 请求模型：`QueryRequest` 新增 `exclude_zero_values: bool = False`，供 `monthly_data_show/query-tool` 页面控制是否隐藏零值指标。
+- 新增辅助：`_is_effective_zero_value()` 使用数值语义统一识别 0、0.0、0% 等等于 0 的结果。
+- 接入位置：
+  - `query_month_data_show()` 在排序和分页前过滤 `value == 0` 的结果行；
+  - `query_month_data_show_comparison()` 在生成比较行后过滤 `current_value == 0` 的指标行。
+- 影响：主查询列表、分页总数、同比环比明细以及前端导出都会共享同一零值过滤规则，无需额外接口分支。
+
+## 2026-04-09 monthly_data_show 前端指标显示精度显式化
+
+- 本轮未修改后端接口与数值计算逻辑。
+- 前端查询页已将部分指标的显示精度改为显式配置：
+  - `供暖热耗率`：4 位小数；
+- `耗酸量`、`耗碱量`：2 位小数。
+- 后端继续返回原始数值，显示与导出格式由前端统一控制。
+
+## 2026-04-09 monthly_data_show 零值过滤新增分组模式
+
+- 文件：`projects/monthly_data_show/api/workspace.py`
+- 请求模型：`QueryRequest` 新增 `exclude_zero_mode`，当前支持：
+  - `row`：逐条过滤当前值为 0 的结果；
+  - `all_months_group`：按“口径 + 指标 + 期间 + 类型 + 单位”分组，仅当该组在查询范围内所有月份都为 0 时才整体过滤。
+- 新增辅助：
+  - `_resolve_zero_filter_mode()`：统一解析前端传入的过滤模式；
+  - `_zero_filter_group_key()`：生成主查询分组键；
+  - `_filter_rows_by_zero_mode()`：按模式执行零值过滤。
+- 接入位置：
+  - `query_month_data_show()` 会在排序与分页前按模式处理月序结果；
+  - `query_month_data_show_comparison()` 仅在 `row` 模式下继续过滤 `current_value == 0` 的比较行，`all_months_group` 模式不额外裁剪比较结果。
+
+## 2026-04-09 monthly_data_show 0值过滤面板宽度调整
+
+- 本轮未修改后端接口和过滤逻辑。
+- 调整仅发生在前端查询页布局层：
+  - 收窄 `聚合开关` 面板；
+  - 扩大 `0值过滤` 面板；
+  - 放开 `0值过滤` 模式文案换行。
+
+## 2026-04-09 monthly_data_show 0值过滤前端交互改为常显模式
+
+- 本轮未修改后端过滤逻辑与支持的模式集合。
+- 仅调整前端参数组织方式：
+  - 前端不再单独维护 `excludeZeroValues` 开关，而是用 `zeroFilterMode` 三选一直接映射后端参数；
+  - `off` 模式映射为 `exclude_zero_values=false`；
+  - `row` / `all_months_group` 继续映射到既有后端零值过滤逻辑。
+
+## 2026-04-09 monthly_data_show 0值过滤前端文案进一步收敛
+
+- 本轮未修改后端接口与过滤逻辑。
+- 前端交互继续使用 `zeroFilterMode` 映射后端参数，但页面文案改为仅显示两个过滤选项，未选中任何项时即代表保留 0 值。
+
+## 2026-04-09 monthly_data_show 0值过滤视觉对齐聚合开关
+
+- 本轮未修改后端接口与过滤逻辑。
+- 仅前端样式调整：`0值过滤` 容器的高度、内边距和垂直对齐方式向 `聚合开关` 靠拢。
+
+## 2026-04-09 monthly_data_show 查询口径不再兜底追加临海
+
+- 文件：`projects/monthly_data_show/api/workspace.py`
+- 调整：`get_monthly_data_show_query_options()` 移除了对 `临海` 的固定兜底追加。
+- 结果：查询页的口径列表仅反映数据库中实际存在的口径，不再无条件带出 `临海`。

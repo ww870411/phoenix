@@ -134,6 +134,31 @@
                   </label>
                 </div>
               </div>
+              <div class="inline-col zero-filter-col">
+                <div class="field-head">
+                  <span class="panel-title">0值过滤</span>
+                </div>
+                <div class="zero-filter-stack">
+                  <div class="zero-filter-modes">
+                    <label class="check-item zero-filter-option">
+                      <input
+                        type="checkbox"
+                        :checked="filters.zeroFilterMode === 'row'"
+                        @change="toggleZeroFilterMode('row', $event.target.checked)"
+                      />
+                      <span>逐条剔除 0 值</span>
+                    </label>
+                    <label class="check-item zero-filter-option">
+                      <input
+                        type="checkbox"
+                        :checked="filters.zeroFilterMode === 'all_months_group'"
+                        @change="toggleZeroFilterMode('all_months_group', $event.target.checked)"
+                      />
+                      <span>全月份均为 0 才剔除</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -188,8 +213,8 @@
         <div class="result-head">
           <h3>查询结果</h3>
           <div class="result-actions">
-            <button class="btn" type="button" :disabled="loading || !rows.length" @click="downloadXlsx">
-              导出 XLSX
+            <button class="btn" type="button" :disabled="loading || exportLoading || !rows.length" @click="downloadXlsx">
+              {{ exportLoading ? '导出中...' : '导出 XLSX' }}
             </button>
           </div>
           <div class="pager">
@@ -567,6 +592,7 @@ const offset = ref(0)
 const total = ref(0)
 const hasSearched = ref(false)
 const loading = ref(false)
+const exportLoading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
 const summary = reactive({
@@ -604,6 +630,7 @@ const filters = reactive({
   orderFields: ['time', 'company', 'item'],
   aggregateCompanies: false,
   aggregateMonths: false,
+  zeroFilterMode: 'off',
 })
 const layerOptions = [
   { value: 'time', label: '时间' },
@@ -1089,11 +1116,17 @@ function getConsumeSubGroup(text) {
   return 5
 }
 
-const FOUR_DECIMAL_ITEMS = new Set(['供暖热耗率', '供暖水耗率', '供暖电耗率'])
+const ITEM_VALUE_DECIMAL_DIGITS = new Map([
+  ['供暖热耗率', 4],
+  ['供暖水耗率', 4],
+  ['供暖电耗率', 4],
+  ['耗酸量', 2],
+  ['耗碱量', 2],
+])
 
 function valueDecimalDigitsByItem(item) {
   const normalized = String(item || '').trim()
-  return FOUR_DECIMAL_ITEMS.has(normalized) ? 4 : 2
+  return ITEM_VALUE_DECIMAL_DIGITS.get(normalized) ?? 2
 }
 
 function formatNumber(value, fractionDigits = 2) {
@@ -1384,174 +1417,184 @@ function finalizeSheet(sheet, columnWidths = []) {
   }
 }
 
-function downloadXlsx() {
-  if (!rows.value.length) return
-  const wb = XLSX.utils.book_new()
-  const summarySheet = XLSX.utils.aoa_to_sheet([
-    ['字段', '内容'],
-    ['总记录数', summary.totalRows],
-    ['数值非空条数', summary.valueNonNullRows],
-    ['数值空值条数', summary.valueNullRows],
-    ['查询窗口', comparisonMeta.currentWindowLabel || ''],
-    ['同比窗口', comparisonMeta.yoyWindowLabel || ''],
-    ['环比窗口', comparisonMeta.momWindowLabel || ''],
-    ['计划窗口', comparisonMeta.planWindowLabel || ''],
-    ['年计划口径', comparisonMeta.annualPlanWindowLabel || ''],
-    ['当前图表口径', comparisonModeLabel.value],
-    ['导出时间', new Date().toLocaleString('zh-CN')],
-  ])
-  finalizeSheet(summarySheet, [18, 50])
-  XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName('汇总信息'))
-
-  const resultHeader = resultColumns.value.map((col) => col.label)
-  const resultData = rows.value.map((row) => resultColumns.value.map((col) => {
-    if (col.field === 'value') return row?.value == null ? '' : toFiniteOrNull(row.value)
-    return getResultCellValue(row, col.field)
-  }))
-  const resultColWidths = resultColumns.value.map((col) => {
-    if (col.field === 'company') return 12
-    if (col.field === 'item') return 26
-    if (col.field === 'time') return 14
-    if (col.field === 'value') return 14
-    if (col.field === 'unit') return 12
-    return 12
-  })
-  const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
-  const resultValueCol = resultColumns.value.findIndex((col) => col.field === 'value')
-  if (resultValueCol >= 0) {
-    rows.value.forEach((row, index) => {
-      setSheetNumericCell(
-        resultSheet,
-        index + 1,
-        resultValueCol,
-        row?.value,
-        buildExcelValueFormat(row?.unit, row?.item),
-      )
-    })
-  }
-  finalizeSheet(resultSheet, resultColWidths)
-  XLSX.utils.book_append_sheet(wb, resultSheet, sanitizeSheetName('查询结果'))
-
-  if (comparisonRows.value.length) {
-    const compareHeader = ['口径', '指标', '期间', '类型', '本期值', '同期值', '同比差值', '同比差异率', '上期值', '环比差值', '环比差异率', '计划值', '计划差值', '计划差异率']
-    if (showAnnualPlanColumns.value) {
-      compareHeader.push('累计完成值', '年计划值', '年计划完成率')
-    }
-    const compareData = comparisonRows.value.map((x) => {
-      const row = [
-        x.company,
-        x.item,
-        x.period,
-        x.type,
-        x.currentValue == null ? '' : toFiniteOrNull(x.currentValue),
-        x.yoyValue == null ? '' : toFiniteOrNull(x.yoyValue),
-        x.currentValue == null || x.yoyValue == null ? '' : toFiniteOrNull(x.currentValue - x.yoyValue),
-        x.yoyRate == null ? '' : toFiniteOrNull(x.yoyRate),
-        x.momValue == null ? '' : toFiniteOrNull(x.momValue),
-        x.currentValue == null || x.momValue == null ? '' : toFiniteOrNull(x.currentValue - x.momValue),
-        x.momRate == null ? '' : toFiniteOrNull(x.momRate),
-        x.planValue == null ? '' : toFiniteOrNull(x.planValue),
-        x.currentValue == null || x.planValue == null ? '' : toFiniteOrNull(x.currentValue - x.planValue),
-        x.planRate == null ? '' : toFiniteOrNull(x.planRate),
-      ]
-      if (showAnnualPlanColumns.value) {
-        row.push(
-          x.annualCompletionValue == null ? '' : toFiniteOrNull(x.annualCompletionValue),
-          x.annualPlanValue == null ? '' : toFiniteOrNull(x.annualPlanValue),
-          x.annualPlanRate == null ? '' : toFiniteOrNull(x.annualPlanRate),
-        )
-      }
-      return row
-    })
-    const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
-    comparisonRows.value.forEach((x, index) => {
-      const rowIndex = index + 1
-      const valueFormat = buildExcelValueFormat(x.unit, x.item)
-      setSheetNumericCell(compareSheet, rowIndex, 4, x.currentValue, valueFormat)
-      setSheetNumericCell(compareSheet, rowIndex, 5, x.yoyValue, valueFormat)
-      setSheetNumericCell(
-        compareSheet,
-        rowIndex,
-        6,
-        x.currentValue == null || x.yoyValue == null ? null : x.currentValue - x.yoyValue,
-        valueFormat,
-      )
-      setSheetNumericCell(compareSheet, rowIndex, 7, x.yoyRate, '0.00%')
-      setSheetNumericCell(compareSheet, rowIndex, 8, x.momValue, valueFormat)
-      setSheetNumericCell(
-        compareSheet,
-        rowIndex,
-        9,
-        x.currentValue == null || x.momValue == null ? null : x.currentValue - x.momValue,
-        valueFormat,
-      )
-      setSheetNumericCell(compareSheet, rowIndex, 10, x.momRate, '0.00%')
-      setSheetNumericCell(compareSheet, rowIndex, 11, x.planValue, valueFormat)
-      setSheetNumericCell(
-        compareSheet,
-        rowIndex,
-        12,
-        x.currentValue == null || x.planValue == null ? null : x.currentValue - x.planValue,
-        valueFormat,
-      )
-      setSheetNumericCell(compareSheet, rowIndex, 13, x.planRate, '0.00%')
-      if (showAnnualPlanColumns.value) {
-        setSheetNumericCell(compareSheet, rowIndex, 14, x.annualCompletionValue, valueFormat)
-        setSheetNumericCell(compareSheet, rowIndex, 15, x.annualPlanValue, valueFormat)
-        setSheetNumericCell(compareSheet, rowIndex, 16, x.annualPlanRate, '0.00%')
-      }
-    })
-    finalizeSheet(compareSheet, [12, 24, 10, 10, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12])
-    XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('对比明细'))
-  }
-
-  if (analysisInsights.value.length) {
-    const insightData = analysisInsights.value.map((line, idx) => [`要点${idx + 1}`, line])
-    const insightSheet = XLSX.utils.aoa_to_sheet([['序号', '分析结论'], ...insightData])
-    finalizeSheet(insightSheet, [12, 120])
-    XLSX.utils.book_append_sheet(wb, insightSheet, sanitizeSheetName('专业分析'))
-  }
-
-  if (temperatureDailyRows.value.length) {
-    const tempRows = temperatureDailyRows.value.map((row) => [
-      row.currentDate,
-      toFiniteOrNull(row.currentTemp),
-      row.yoyDate,
-      toFiniteOrNull(row.yoyTemp),
-      toFiniteOrNull(row.yoyDiff),
-      toFiniteOrNull(row.yoyRate),
-    ])
-    const tempSheet = XLSX.utils.aoa_to_sheet([
-      ['本期日期', '本期气温(℃)', '同期日期', '同期气温(℃)', '同比差值', '同比差异率'],
-      ...tempRows,
-    ])
-    temperatureDailyRows.value.forEach((row, index) => {
-      const rowIndex = index + 1
-      setSheetNumericCell(tempSheet, rowIndex, 1, row.currentTemp, buildDecimalFormat(2))
-      setSheetNumericCell(tempSheet, rowIndex, 3, row.yoyTemp, buildDecimalFormat(2))
-      setSheetNumericCell(tempSheet, rowIndex, 4, row.yoyDiff, buildDecimalFormat(2))
-      setSheetNumericCell(tempSheet, rowIndex, 5, row.yoyRate, '0.00%')
-    })
-    finalizeSheet(tempSheet, [14, 12, 14, 12, 12, 12])
-    XLSX.utils.book_append_sheet(wb, tempSheet, sanitizeSheetName('气温日序同比'))
-    const tempSummarySheet = XLSX.utils.aoa_to_sheet([
+async function downloadXlsx() {
+  if (!rows.value.length || exportLoading.value) return
+  exportLoading.value = true
+  errorMessage.value = ''
+  try {
+    const exportRows = await fetchAllQueryRowsForExport()
+    if (!exportRows.length) return
+    const wb = XLSX.utils.book_new()
+    const summarySheet = XLSX.utils.aoa_to_sheet([
       ['字段', '内容'],
-      ['本期平均气温', toFiniteOrNull(temperatureSummary.currentAvgTemp)],
-      ['同期平均气温', toFiniteOrNull(temperatureSummary.yoyAvgTemp)],
-      ['同比差值', toFiniteOrNull(temperatureSummary.yoyAvgDiff)],
-      ['同比差异率', toFiniteOrNull(temperatureSummary.yoyAvgRate)],
+      ['总记录数', summary.totalRows],
+      ['数值非空条数', summary.valueNonNullRows],
+      ['数值空值条数', summary.valueNullRows],
+      ['查询窗口', comparisonMeta.currentWindowLabel || ''],
+      ['同比窗口', comparisonMeta.yoyWindowLabel || ''],
+      ['环比窗口', comparisonMeta.momWindowLabel || ''],
+      ['计划窗口', comparisonMeta.planWindowLabel || ''],
+      ['年计划口径', comparisonMeta.annualPlanWindowLabel || ''],
+      ['当前图表口径', comparisonModeLabel.value],
+      ['导出时间', new Date().toLocaleString('zh-CN')],
     ])
-    setSheetNumericCell(tempSummarySheet, 1, 1, temperatureSummary.currentAvgTemp, buildDecimalFormat(2))
-    setSheetNumericCell(tempSummarySheet, 2, 1, temperatureSummary.yoyAvgTemp, buildDecimalFormat(2))
-    setSheetNumericCell(tempSummarySheet, 3, 1, temperatureSummary.yoyAvgDiff, buildDecimalFormat(2))
-    setSheetNumericCell(tempSummarySheet, 4, 1, temperatureSummary.yoyAvgRate, '0.00%')
-    finalizeSheet(tempSummarySheet, [18, 24])
-    XLSX.utils.book_append_sheet(wb, tempSummarySheet, sanitizeSheetName('气温汇总'))
-  }
+    finalizeSheet(summarySheet, [18, 50])
+    XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName('汇总信息'))
 
-  const monthTag = resolveExportMonthTag()
-  const filename = `月报查询分析_${monthTag}.xlsx`
-  XLSX.writeFile(wb, filename)
+    const resultHeader = resultColumns.value.map((col) => col.label)
+    const resultData = exportRows.map((row) => resultColumns.value.map((col) => {
+      if (col.field === 'value') return row?.value == null ? '' : toFiniteOrNull(row.value)
+      return getResultCellValue(row, col.field)
+    }))
+    const resultColWidths = resultColumns.value.map((col) => {
+      if (col.field === 'company') return 12
+      if (col.field === 'item') return 26
+      if (col.field === 'time') return 14
+      if (col.field === 'value') return 14
+      if (col.field === 'unit') return 12
+      return 12
+    })
+    const resultSheet = XLSX.utils.aoa_to_sheet([resultHeader, ...resultData])
+    const resultValueCol = resultColumns.value.findIndex((col) => col.field === 'value')
+    if (resultValueCol >= 0) {
+      exportRows.forEach((row, index) => {
+        setSheetNumericCell(
+          resultSheet,
+          index + 1,
+          resultValueCol,
+          row?.value,
+          buildExcelValueFormat(row?.unit, row?.item),
+        )
+      })
+    }
+    finalizeSheet(resultSheet, resultColWidths)
+    XLSX.utils.book_append_sheet(wb, resultSheet, sanitizeSheetName('查询结果'))
+
+    if (comparisonRows.value.length) {
+      const compareHeader = ['口径', '指标', '计量单位', '本期值', '同期值', '同比差值', '同比差异率', '上期值', '环比差值', '环比差异率', '计划值', '计划差值', '计划差异率']
+      if (showAnnualPlanColumns.value) {
+        compareHeader.push('累计完成值', '年计划值', '年计划完成率')
+      }
+      const compareData = comparisonRows.value.map((x) => {
+        const row = [
+          x.company,
+          x.item,
+          x.unit,
+          x.currentValue == null ? '' : toFiniteOrNull(x.currentValue),
+          x.yoyValue == null ? '' : toFiniteOrNull(x.yoyValue),
+          x.currentValue == null || x.yoyValue == null ? '' : toFiniteOrNull(x.currentValue - x.yoyValue),
+          x.yoyRate == null ? '' : toFiniteOrNull(x.yoyRate),
+          x.momValue == null ? '' : toFiniteOrNull(x.momValue),
+          x.currentValue == null || x.momValue == null ? '' : toFiniteOrNull(x.currentValue - x.momValue),
+          x.momRate == null ? '' : toFiniteOrNull(x.momRate),
+          x.planValue == null ? '' : toFiniteOrNull(x.planValue),
+          x.currentValue == null || x.planValue == null ? '' : toFiniteOrNull(x.currentValue - x.planValue),
+          x.planRate == null ? '' : toFiniteOrNull(x.planRate),
+        ]
+        if (showAnnualPlanColumns.value) {
+          row.push(
+            x.annualCompletionValue == null ? '' : toFiniteOrNull(x.annualCompletionValue),
+            x.annualPlanValue == null ? '' : toFiniteOrNull(x.annualPlanValue),
+            x.annualPlanRate == null ? '' : toFiniteOrNull(x.annualPlanRate),
+          )
+        }
+        return row
+      })
+      const compareSheet = XLSX.utils.aoa_to_sheet([compareHeader, ...compareData])
+      comparisonRows.value.forEach((x, index) => {
+        const rowIndex = index + 1
+        const valueFormat = buildExcelValueFormat(x.unit, x.item)
+        setSheetNumericCell(compareSheet, rowIndex, 3, x.currentValue, valueFormat)
+        setSheetNumericCell(compareSheet, rowIndex, 4, x.yoyValue, valueFormat)
+        setSheetNumericCell(
+          compareSheet,
+          rowIndex,
+          5,
+          x.currentValue == null || x.yoyValue == null ? null : x.currentValue - x.yoyValue,
+          valueFormat,
+        )
+        setSheetNumericCell(compareSheet, rowIndex, 6, x.yoyRate, '0.00%')
+        setSheetNumericCell(compareSheet, rowIndex, 7, x.momValue, valueFormat)
+        setSheetNumericCell(
+          compareSheet,
+          rowIndex,
+          8,
+          x.currentValue == null || x.momValue == null ? null : x.currentValue - x.momValue,
+          valueFormat,
+        )
+        setSheetNumericCell(compareSheet, rowIndex, 9, x.momRate, '0.00%')
+        setSheetNumericCell(compareSheet, rowIndex, 10, x.planValue, valueFormat)
+        setSheetNumericCell(
+          compareSheet,
+          rowIndex,
+          11,
+          x.currentValue == null || x.planValue == null ? null : x.currentValue - x.planValue,
+          valueFormat,
+        )
+        setSheetNumericCell(compareSheet, rowIndex, 12, x.planRate, '0.00%')
+        if (showAnnualPlanColumns.value) {
+          setSheetNumericCell(compareSheet, rowIndex, 13, x.annualCompletionValue, valueFormat)
+          setSheetNumericCell(compareSheet, rowIndex, 14, x.annualPlanValue, valueFormat)
+          setSheetNumericCell(compareSheet, rowIndex, 15, x.annualPlanRate, '0.00%')
+        }
+      })
+      finalizeSheet(compareSheet, [12, 24, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12])
+      XLSX.utils.book_append_sheet(wb, compareSheet, sanitizeSheetName('对比明细'))
+    }
+
+    if (analysisInsights.value.length) {
+      const insightData = analysisInsights.value.map((line, idx) => [`要点${idx + 1}`, line])
+      const insightSheet = XLSX.utils.aoa_to_sheet([['序号', '分析结论'], ...insightData])
+      finalizeSheet(insightSheet, [12, 120])
+      XLSX.utils.book_append_sheet(wb, insightSheet, sanitizeSheetName('专业分析'))
+    }
+
+    if (temperatureDailyRows.value.length) {
+      const tempRows = temperatureDailyRows.value.map((row) => [
+        row.currentDate,
+        toFiniteOrNull(row.currentTemp),
+        row.yoyDate,
+        toFiniteOrNull(row.yoyTemp),
+        toFiniteOrNull(row.yoyDiff),
+        toFiniteOrNull(row.yoyRate),
+      ])
+      const tempSheet = XLSX.utils.aoa_to_sheet([
+        ['本期日期', '本期气温(℃)', '同期日期', '同期气温(℃)', '同比差值', '同比差异率'],
+        ...tempRows,
+      ])
+      temperatureDailyRows.value.forEach((row, index) => {
+        const rowIndex = index + 1
+        setSheetNumericCell(tempSheet, rowIndex, 1, row.currentTemp, buildDecimalFormat(2))
+        setSheetNumericCell(tempSheet, rowIndex, 3, row.yoyTemp, buildDecimalFormat(2))
+        setSheetNumericCell(tempSheet, rowIndex, 4, row.yoyDiff, buildDecimalFormat(2))
+        setSheetNumericCell(tempSheet, rowIndex, 5, row.yoyRate, '0.00%')
+      })
+      finalizeSheet(tempSheet, [14, 12, 14, 12, 12, 12])
+      XLSX.utils.book_append_sheet(wb, tempSheet, sanitizeSheetName('气温日序同比'))
+      const tempSummarySheet = XLSX.utils.aoa_to_sheet([
+        ['字段', '内容'],
+        ['本期平均气温', toFiniteOrNull(temperatureSummary.currentAvgTemp)],
+        ['同期平均气温', toFiniteOrNull(temperatureSummary.yoyAvgTemp)],
+        ['同比差值', toFiniteOrNull(temperatureSummary.yoyAvgDiff)],
+        ['同比差异率', toFiniteOrNull(temperatureSummary.yoyAvgRate)],
+      ])
+      setSheetNumericCell(tempSummarySheet, 1, 1, temperatureSummary.currentAvgTemp, buildDecimalFormat(2))
+      setSheetNumericCell(tempSummarySheet, 2, 1, temperatureSummary.yoyAvgTemp, buildDecimalFormat(2))
+      setSheetNumericCell(tempSummarySheet, 3, 1, temperatureSummary.yoyAvgDiff, buildDecimalFormat(2))
+      setSheetNumericCell(tempSummarySheet, 4, 1, temperatureSummary.yoyAvgRate, '0.00%')
+      finalizeSheet(tempSummarySheet, [18, 24])
+      XLSX.utils.book_append_sheet(wb, tempSummarySheet, sanitizeSheetName('气温汇总'))
+    }
+
+    const monthTag = resolveExportMonthTag()
+    const filename = `月报查询分析_${monthTag}.xlsx`
+    XLSX.writeFile(wb, filename)
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = error instanceof Error ? error.message : '导出 XLSX 失败'
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 function resetAiReportState() {
@@ -1704,9 +1747,49 @@ function buildPayload() {
     order_fields: [...filters.orderFields].filter((x) => x === 'time' || x === 'company' || x === 'item'),
     aggregate_companies: Boolean(filters.aggregateCompanies),
     aggregate_months: Boolean(filters.aggregateMonths),
+    exclude_zero_values: filters.zeroFilterMode !== 'off',
+    exclude_zero_mode: filters.zeroFilterMode === 'off' ? 'row' : filters.zeroFilterMode,
     limit,
     offset: offset.value,
   }
+}
+
+function toggleZeroFilterMode(mode, checked) {
+  if (!checked) {
+    if (filters.zeroFilterMode === mode) {
+      filters.zeroFilterMode = 'off'
+    }
+    return
+  }
+  filters.zeroFilterMode = mode
+}
+
+async function fetchAllQueryRowsForExport() {
+  const totalRows = Math.max(0, Number(total.value || 0))
+  if (!totalRows) return []
+  if (rows.value.length >= totalRows) return [...rows.value]
+
+  const batchSize = 1000
+  const mergedRows = []
+
+  for (let currentOffset = 0; currentOffset < totalRows; currentOffset += batchSize) {
+    const payload = {
+      ...buildPayload(),
+      offset: currentOffset,
+      limit: Math.min(batchSize, totalRows - currentOffset),
+    }
+    const result = await queryMonthlyDataShow('monthly_data_show', payload)
+    const batchRows = Array.isArray(result?.rows) ? result.rows : []
+    if (!batchRows.length) break
+    mergedRows.push(...batchRows)
+    if (batchRows.length < payload.limit) break
+  }
+
+  if (mergedRows.length < totalRows) {
+    throw new Error(`导出数据不完整，预期 ${totalRows} 条，实际仅获取 ${mergedRows.length} 条`)
+  }
+
+  return mergedRows
 }
 
 const hasChatQueryContext = computed(() => rows.value.length > 0 || comparisonRows.value.length > 0)
@@ -2039,6 +2122,7 @@ async function resetFilters() {
   filters.orderFields = ['time', 'company', 'item']
   filters.aggregateCompanies = false
   filters.aggregateMonths = false
+  filters.zeroFilterMode = 'off'
   hasSearched.value = false
   rows.value = []
   total.value = 0
@@ -2226,7 +2310,7 @@ onBeforeUnmount(() => {
 
 .inline-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 1.25fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(300px, 1.12fr) minmax(260px, 0.82fr) minmax(340px, 1.18fr);
   gap: 10px;
   align-items: stretch;
 }
@@ -2248,8 +2332,39 @@ onBeforeUnmount(() => {
 }
 
 .order-col,
-.aggregate-col {
+.aggregate-col,
+.zero-filter-col {
   justify-content: space-between;
+}
+
+.zero-filter-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.zero-filter-modes {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+  min-width: 0;
+  min-height: 66px;
+  flex: 1;
+}
+
+.zero-filter-option {
+  flex: 0 1 auto;
+  min-height: 22px;
+  white-space: nowrap;
+  align-items: center;
 }
 
 .order-col .check-list.slim {
@@ -2275,16 +2390,21 @@ onBeforeUnmount(() => {
 
 .aggregate-col {
   justify-content: flex-start;
+  min-width: 0;
+}
+
+.zero-filter-col {
+  min-width: 0;
 }
 
 .aggregate-inline {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   border: 1px solid #dbeafe;
   border-radius: 8px;
   background: #fff;
-  padding: 10px 12px;
+  padding: 8px 10px;
   min-height: 66px;
   flex: 1;
 }
@@ -2293,6 +2413,10 @@ onBeforeUnmount(() => {
   min-height: 22px;
   align-items: center;
   white-space: nowrap;
+}
+
+.zero-filter-option span {
+  line-height: 1.2;
 }
 
 .check-list {
@@ -3133,7 +3257,7 @@ onBeforeUnmount(() => {
   }
 
   .inline-layout {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.8fr) minmax(280px, 1.08fr);
   }
   .order-inline,
   .aggregate-inline {
