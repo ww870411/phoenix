@@ -1,3 +1,76 @@
+## 2026-04-10（page_showcase 永久链接 404 修复：去除重复 API 前缀）
+
+- 现象：
+  - 开发环境点击 `page_showcase` 详情页“生成永久链接”后，会打开一个 `{\"detail\":\"Not Found\"}` 页面。
+- 根因：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 中的 `getPageShowcasePublicUrl(...)` 把 `projectPath(projectKey)` 返回的 `/api/v1/projects/...` 又包进了一次 `normalized(...)`，导致最终 URL 变成 `/api/v1/api/v1/projects/...`。
+- 本轮改动：
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - `getPageShowcasePublicUrl(...)` 改为直接使用 `projectPath(projectKey)` 结果拼接公开路径，不再重复追加 API_BASE。
+- 结果：
+  - 永久链接地址已恢复为正确的 `/api/v1/projects/page_showcase/page-showcase/public-html/{file_name}`；
+  - 开发环境点击按钮将不再打开 `Not Found` 页面。
+- 验证：
+  - `frontend npm run build` 通过。
+
+## 2026-04-10（page_showcase 卡片精简、公开永久链接、后台文件编辑递归目录修复）
+
+- 结论：
+  - `page_showcase` 卡片列表中存在一项重复信息：卡片标题已直接显示文件名，下面再显示一次同名 `file_name` 会造成冗余。
+  - `page_showcase/view/...` 之前只能在平台鉴权上下文中预览，不能生成真正的“任何人可直接访问”的公开静态页链接。
+  - `admin-console` 的“后台文件编辑”此前只读取 `backend_data` 第一层目录；嵌套目录、空目录、以及目录下没有可编辑文本文件的目录，在树中都会缺失。这就是你在生产环境里“明明存在却看不到某些文件夹”的直接原因。
+- 本轮改动：
+  - `frontend/src/projects/page_showcase/pages/PageShowcaseEntryView.vue`
+    - 移除卡片中与标题重复的 `file_name` 一行，仅保留大小与更新时间。
+  - `frontend/src/projects/page_showcase/pages/PageShowcaseViewerView.vue`
+    - 新增“生成永久链接”按钮；
+    - 点击后会生成公开链接、尝试复制到剪贴板，并直接在新窗口打开。
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+    - 新增 `getPageShowcasePublicUrl(...)`，统一生成公开访问地址。
+  - `backend/projects/page_showcase/api/workspace.py`
+    - 新增公开接口 `GET /api/v1/projects/page_showcase/page-showcase/public-html/{file_name}`；
+    - 直接返回 HTML 页面内容，供任何持链接者访问。
+  - `backend/api/v1/routes.py`
+    - `page_showcase` 的 `public_router` 改为不挂项目权限依赖，从而使公开静态页链接真正免鉴权。
+  - `backend/api/v1/admin_console.py`
+    - `/admin/files/directories` 从“仅列第一层目录”改为“递归列出 backend_data 下全部子目录”。
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+    - 文件树构建逻辑改为支持递归目录路径，确保后端返回的嵌套目录在树中按层级显示，包括空目录。
+- 结果：
+  - `page_showcase` 首页卡片信息更干净；
+  - 页面详情页现在可以生成真正可公开访问的永久链接；
+  - 生产环境后台文件编辑中看不到部分目录的问题已修复，后续会按 `backend_data` 的真实递归目录结构展示。
+- 验证：
+  - `python -m py_compile backend/projects/page_showcase/api/workspace.py backend/api/v1/routes.py backend/api/v1/admin_console.py` 通过。
+  - `frontend npm run build` 通过。
+
+## 2026-04-10（月报查询工具修复：calculated_items 支持公司口径，供热公司“蒸汽平均焓”并入正式计算指标）
+
+- 结论：
+  - `monthly_data_show/query-tool` 中，`company=供热公司`、`item=蒸汽平均焓` 在单月与多月聚合场景下都应按公式计算，不应直接读取或累计原值。
+  - 根因是原有 `calculated_items` 仅支持“全公司通用公式”，无法表达“某个计算指标只对指定公司生效”，导致 `蒸汽平均焓` 一直未被纳入正式计算指标体系。
+- 本轮改动：
+  - `backend_data/projects/monthly_data_show/indicator_config.json`
+    - 为全部既有 `calculated_items` 显式补充 `companies: [\"all\"]`；
+    - 将 `蒸汽平均焓` 追加到 `calculated_items` 末尾，并限定 `companies: [\"供热公司\"]`；
+    - `calculated_section.title` 同步由 `19项` 更新为 `20项`；
+    - `蒸汽平均焓` 公式为：
+      - `({{各热力站耗热量}} - {{低真空供暖耗热量}} - {{高温水供暖耗热量}}) * 1000 / {{供暖耗汽量}}`
+  - `backend/projects/monthly_data_show/services/indicator_config.py`
+    - `calculated_items` 配置解析新增 `companies` 支持；
+    - 运行时新增 `calculated_item_company_map`，用于按公司控制计算指标生效范围。
+  - `backend/projects/monthly_data_show/api/workspace.py`
+    - 计算指标构造阶段新增公司范围判断；
+    - 当 `companies` 不含当前公司且不含 `all` 时，不生成该计算指标结果；
+    - `蒸汽平均焓` 现在作为正式计算指标参与单月、逐月、多月聚合三种查询路径，统一走“先取依赖基础项，再按公式计算”的逻辑。
+- 结果：
+  - 查询 `供热公司 / 蒸汽平均焓` 时，单月与多月聚合都会按公式计算；
+  - 其他公司不会误命中该公式；
+  - 当前“计算指标按公司口径限制”的配置落点为：`backend_data/projects/monthly_data_show/indicator_config.json > calculated_items[*].companies`。
+- 验证：
+  - `python -m py_compile backend/projects/monthly_data_show/services/indicator_config.py` 通过。
+  - `python -m py_compile backend/projects/monthly_data_show/api/workspace.py` 通过。
+
 ## 2026-03-19（月报导入工作台修复：原始单位已是万千瓦时时误除以10000）
 
 - 结论：
@@ -7303,3 +7376,43 @@
   - `py_compile` 编译 `backend/projects/monthly_data_show/api/workspace.py` 通过；
   - `frontend` 目录执行 `npm run build` 通过。
   - 直接调用后端查询函数验证 `2024-07-01 ~ 2024-07-31 + 平均气温` 返回 `total=0, rows=[]`。
+
+## 2026-04-09 页面展示项目接入
+
+- 新增项目 `page_showcase`，中文名为“页面展示”，项目卡片显示在 `/projects` 列表末尾。
+- 项目可见性与权限限制为 `Global_admin`，并在 `backend_data/shared/auth/permissions.json` 中仅向该组开放。
+- 后端新增 `backend/projects/page_showcase/api/workspace.py`，提供 HTML 页面列表接口与页面内容读取接口。
+- 页面文件目录新增为 `backend_data/projects/page_showcase/`，前端会自动扫描该目录下顶层 `.html/.htm` 文件。
+- 前端新增项目入口页与页面 viewer：进入“页面展示”后显示页面卡片，卡片名称与 HTML 文件名一致，点击后在平台内按鉴权加载并预览。
+- 当前实现建议使用独立单文件 HTML；若页面依赖同目录外链资源，需后续补充资源代理能力。
+- 验证结果：后端 `py_compile` 通过，前端 `npm run build` 通过。
+
+## 2026-04-09 管理后台后台文件编辑新增上传与删除
+
+- 需求：在“管理后台”的“后台文件编辑”中补充上传文件、删除文件能力。
+- 后端：`backend/api/v1/admin_console.py`
+  - 新增 `POST /admin/files/upload`，支持向当前目录上传 UTF-8 文本类文件，沿用可编辑扩展名白名单与 2MB 大小限制；
+  - 新增 `DELETE /admin/files`，支持按相对路径删除后台文件；
+  - 两个接口都复用既有后台管理员权限与安全路径校验。
+- 前端：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` 新增上传/删除接口封装；
+  - `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue` 新增“上传文件”“删除文件”按钮、当前目录提示、上传后自动切换文件、删除前确认与父窗口消息广播；
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 新增对 `admin-file-uploaded`、`admin-file-deleted` 的监听，收到事件后刷新目录树和文件列表。
+- 结果：后台文件编辑弹窗现在可直接上传同目录文件，也可删除当前文件，主界面会同步刷新最近打开项与文件树。
+- 验证：后端 `py_compile` 通过，前端 `npm run build` 通过。
+
+## 2026-04-09 管理后台文件编辑改为主界面目录级上传/删除，并支持 HTML
+
+- 需求补充：上传与删除不应依赖先打开文件；应在“管理后台”主界面中直接操作，选中目录即可上传，选中项即可删除。同时后台文件树需要显示目录中的 HTML 文件。
+- 后端：`backend/api/v1/admin_console.py`
+  - 将 `.html`、`.htm` 纳入后台可编辑文件白名单，因此文件树、读取、保存、上传都会支持 HTML 文本文件；
+  - 新增 `DELETE /admin/files/directories`，用于删除 `backend_data/` 下空目录；非空目录会拒绝删除。
+- 前端：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+  - 文件树改为“单击选中、双击文件打开编辑器”；
+  - 顶部工具栏新增“上传到所选目录”“打开所选文件”“删除所选”；
+  - 选中目录时可直接上传文件到该目录；选中文件或空目录时可直接删除；
+  - 页面会显示当前选中项和上传目标目录。
+- 前端：`frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue`
+  - 上传/删除按钮从弹窗移除，恢复为纯编辑窗口。
+- 结果：后台文件管理的上传/删除入口已前移到主界面，HTML 文件也会在树中显示并可打开编辑。
+- 验证：后端 `py_compile` 通过，前端 `npm run build` 通过。

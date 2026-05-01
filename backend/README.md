@@ -3946,3 +3946,63 @@
 - 文件：`projects/monthly_data_show/api/workspace.py`
 - 调整：`get_monthly_data_show_query_options()` 移除了对 `临海` 的固定兜底追加。
 - 结果：查询页的口径列表仅反映数据库中实际存在的口径，不再无条件带出 `临海`。
+
+## 2026-04-09 页面展示项目
+
+- 新增后端项目 `page_showcase`，并已注册到 `backend/api/v1/project_router_registry.py`。
+- 项目列表配置位于 `backend_data/shared/项目列表.json`，可见性限制为 `Global_admin`。
+- 权限配置位于 `backend_data/shared/auth/permissions.json`，仅 `Global_admin` 拥有该项目访问权限。
+- 新增接口模块：
+  - `backend/projects/page_showcase/api/router.py`
+  - `backend/projects/page_showcase/api/workspace.py`
+- 已提供两个接口：
+  - `GET /api/v1/projects/page_showcase/page-showcase/pages`：读取项目目录中的顶层 HTML 页面列表。
+  - `GET /api/v1/projects/page_showcase/page-showcase/html/{file_name}`：按鉴权读取指定 HTML 页面内容。
+- 页面文件目录为 `backend_data/projects/page_showcase/`，当前仅扫描顶层 `.html/.htm` 文件，建议使用 UTF-8 编码的独立单文件页面。
+
+## 2026-04-09 管理后台后台文件编辑补充上传与删除
+
+- `backend/api/v1/admin_console.py` 新增后台文件上传与删除接口。
+- `POST /api/v1/admin/files/upload`
+  - 参数：查询参数 `directory` + multipart `file`
+  - 限制：仅允许后台管理员访问；目标目录必须位于 `backend_data/` 内；扩展名必须属于可编辑文本白名单；文件大小不超过 2MB；内容必须可按 UTF-8 解码。
+- `DELETE /api/v1/admin/files`
+  - 参数：查询参数 `path`
+  - 限制：仅允许后台管理员访问；仅允许删除 `backend_data/` 下的文件，不允许越权路径。
+- 该能力与既有 `GET /admin/files*`、`POST /admin/files/content` 共同组成后台文件浏览、读取、保存、上传、删除闭环。
+
+## 2026-04-09 管理后台文件接口补充目录删除与 HTML 支持
+
+- `backend/api/v1/admin_console.py` 的后台文件白名单已加入 `.html`、`.htm`，因此后台文件树会返回 HTML 文件，读取/保存/上传也支持 HTML 文本。
+- 新增 `DELETE /api/v1/admin/files/directories`
+  - 参数：查询参数 `path`
+  - 用途：删除 `backend_data/` 下空目录
+  - 限制：仅后台管理员可用；禁止删除 `backend_data` 根目录；非空目录会返回拒绝信息。
+- 当前后台文件接口能力已覆盖：列目录、列文件、读内容、保存内容、上传文件、删除文件、删除空目录。
+# 后端同步（2026-04-10 page_showcase / 后台文件编辑）
+
+- `backend/projects/page_showcase/api/workspace.py`
+  - 新增公开接口：
+    - `GET /api/v1/projects/page_showcase/page-showcase/public-html/{file_name}`
+  - 该接口直接返回静态 HTML 内容，用于“永久链接”公开访问。
+- `backend/api/v1/routes.py`
+  - `page_showcase` 的 `public_router` 改为不挂项目权限依赖，确保公开静态页链接真正免鉴权访问。
+- `backend/api/v1/admin_console.py`
+  - `/admin/files/directories` 由“仅返回 backend_data 第一层目录”改为“递归返回全部子目录相对路径”；
+  - 用于修复生产环境后台文件编辑中嵌套目录、空目录缺失的问题。
+- 永久链接开发环境 404 的后续修复仅发生在前端 URL 拼接层，后端公开接口路径本身无需调整。
+
+# 后端同步（2026-04-10）
+
+- `backend/projects/monthly_data_show/services/indicator_config.py`
+  - `calculated_items` 新增 `companies` 配置解析；
+  - 运行时新增 `calculated_item_company_map`，用于按公司限制计算指标生效范围。
+- `backend/projects/monthly_data_show/api/workspace.py`
+  - 计算指标生成时新增公司口径判断；
+  - 当指标配置为 `companies: ["all"]` 时对全部公司生效；
+  - 当指标配置为指定公司列表时，仅对命中的公司生成该计算指标结果。
+- `backend_data/projects/monthly_data_show/indicator_config.json`
+  - 现有全部 `calculated_items` 已显式补充 `companies: ["all"]`；
+  - `蒸汽平均焓` 已追加进 `calculated_items`，并限定 `companies: ["供热公司"]`；
+  - 当前 `蒸汽平均焓` 公式为：
+    - `（各热力站耗热量 - 低真空供暖耗热量 - 高温水供暖耗热量）* 1000 / 供暖耗汽量`

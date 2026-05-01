@@ -335,4 +335,7 @@ for project_key, routers in PROJECT_ROUTER_REGISTRY.items():
     if private_router is not None:
         router.include_router(private_router, prefix=prefix, dependencies=[Depends(dependency)])
     if public_router is not None:
-        router.include_router(public_router, prefix=prefix, dependencies=[Depends(dependency)])
+        if project_key == "page_showcase":
+            router.include_router(public_router, prefix=prefix)
+        else:
+            router.include_router(public_router, prefix=prefix, dependencies=[Depends(dependency)])

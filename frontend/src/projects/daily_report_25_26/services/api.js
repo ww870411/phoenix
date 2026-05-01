@@ -196,6 +196,35 @@ export async function listPages(projectKey) {
   return response.json()
 }
 
+export async function listPageShowcasePages(projectKey = 'page_showcase') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/page-showcase/pages`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(`读取页面展示列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getPageShowcaseHtml(projectKey, fileName) {
+  const encodedFileName = encodeURIComponent(String(fileName || ''))
+  const response = await authAwareFetch(`${projectPath(projectKey)}/page-showcase/html/${encodedFileName}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取页面内容失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export function getPageShowcasePublicUrl(projectKey = 'page_showcase', fileName = '') {
+  const encodedFileName = encodeURIComponent(String(fileName || ''))
+  const relative = `${projectPath(projectKey)}/page-showcase/public-html/${encodedFileName}`
+  if (typeof window === 'undefined') return relative
+  return new URL(relative, window.location.origin).toString()
+}
+
 export async function extractSpringFestivalJson(projectKey, file, options = {}) {
   if (!file) {
     throw new Error('请先选择 xlsx 文件')
@@ -1275,6 +1304,51 @@ export async function saveAdminFile(path, content) {
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `保存文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function uploadAdminFile(directory, file) {
+  if (!file) {
+    throw new Error('请先选择上传文件')
+  }
+  const search = `?directory=${encodeURIComponent(directory || '')}`
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await authAwareFetch(normalized(`/admin/files/upload${search}`), {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+    body: formData,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `上传文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function deleteAdminFile(path) {
+  const search = `?path=${encodeURIComponent(path || '')}`
+  const response = await authAwareFetch(normalized(`/admin/files${search}`), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `删除文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function deleteAdminDirectory(path) {
+  const search = `?path=${encodeURIComponent(path || '')}`
+  const response = await authAwareFetch(normalized(`/admin/files/directories${search}`), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `删除目录失败: ${response.status}`)
   }
   return response.json()
 }

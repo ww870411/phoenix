@@ -26,12 +26,42 @@
               <input v-model.trim="fileSearch" type="text" placeholder="输入目录名或文件名关键字（树中筛选）" />
             </label>
             <button class="btn ghost" type="button" @click="loadDirectories">刷新目录</button>
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="fileListLoading || fileUploading || !selectedDirectoryPath"
+              @click="triggerFileUpload"
+            >
+              {{ fileUploading ? '上传中…' : '上传到所选目录' }}
+            </button>
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="!canOpenSelectedFile"
+              @click="openSelectedFileEditor"
+            >
+              打开所选文件
+            </button>
+            <button
+              class="btn danger"
+              type="button"
+              :disabled="fileListLoading || fileUploading || fileDeleting || !selectedTreePath"
+              @click="deleteSelectedTreeNode"
+            >
+              {{ fileDeleting ? '删除中…' : '删除所选' }}
+            </button>
+            <input
+              ref="adminFileUploadInputRef"
+              class="hidden-upload"
+              type="file"
+              @change="handleAdminFileUpload"
+            >
           </div>
 
           <div class="tree-wrap">
             <div class="tree-head">
               <h3>文件树</h3>
-              <p class="subtext">树根为 backend_data，目录与文件统一显示；点击文件后将在弹出窗口中编辑</p>
+              <p class="subtext">树根为 backend_data；单击用于选中目录或文件，双击文件可直接打开编辑器。</p>
             </div>
             <div v-if="fileListLoading" class="panel-state">文件加载中…</div>
             <div v-else-if="!visibleTreeRows.length" class="panel-state">无匹配文件</div>
@@ -42,19 +72,21 @@
                 class="tree-row"
                 :class="[
                   row.type === 'folder' ? 'tree-folder' : 'tree-file',
-                  row.type === 'file' && row.path === selectedFilePath ? 'active' : '',
+                  row.type === selectedTreeType && row.path === selectedTreePath ? 'active' : '',
                 ]"
                 :style="{ paddingLeft: `${12 + row.depth * 18}px` }"
                 type="button"
                 @click="onTreeRowClick(row)"
+                @dblclick="onTreeRowDblClick(row)"
               >
                 <span v-if="row.type === 'folder'" class="tree-icon">{{ row.expanded ? '▾' : '▸' }}</span>
                 <span v-else class="tree-icon">•</span>
                 <span class="tree-label">{{ row.name }}</span>
               </button>
             </div>
+            <p v-if="selectedTreePath" class="subtext">当前选中：{{ selectedTreePath }}</p>
+            <p v-if="selectedDirectoryPath" class="subtext">上传目标目录：{{ selectedDirectoryPath }}</p>
             <p v-if="selectedFilePath" class="subtext">最近打开：{{ selectedFilePath }}</p>
-            <p class="subtext">点击文件后将在新窗口中打开编辑器。</p>
             <p v-if="fileMessage" class="message">{{ fileMessage }}</p>
           </div>
         </section>
@@ -918,6 +950,8 @@ import { useAuthStore } from '../store/auth'
 import {
   batchUpdateAdminDbTable,
   cancelAdminCachePublishJob,
+  deleteAdminDirectory,
+  deleteAdminFile,
   deleteSuperPath,
   disableAdminCache,
   execSuperCommand,
@@ -949,6 +983,7 @@ import {
   setAdminProjectPageAccessGroup,
   updateAdminAiSettings,
   uploadSuperFiles,
+  uploadAdminFile,
   writeSuperFile,
   runDataAnalysisDialogChat,
 } from '../services/api'
@@ -1036,6 +1071,11 @@ const fileListLoading = ref(false)
 const fileMessage = ref('')
 const expandedFolderKeys = ref(new Set())
 const popupWindowRef = ref(null)
+const selectedTreeType = ref('')
+const selectedTreePath = ref('')
+const fileUploading = ref(false)
+const fileDeleting = ref(false)
+const adminFileUploadInputRef = ref(null)
 const dbTables = ref([])
 const dbSelectedTable = ref('monthly_data_show')
 const dbColumns = ref([])
@@ -1186,6 +1226,18 @@ const filteredFiles = computed(() => {
   return files.value.filter((item) => String(item?.path || '').toLowerCase().includes(keyword))
 })
 
+const selectedDirectoryPath = computed(() => {
+  const currentPath = String(selectedTreePath.value || '').trim()
+  if (!currentPath) return ''
+  if (selectedTreeType.value === 'folder') return currentPath
+  const index = currentPath.lastIndexOf('/')
+  return index >= 0 ? currentPath.slice(0, index) : ''
+})
+
+const canOpenSelectedFile = computed(() => {
+  return selectedTreeType.value === 'file' && Boolean(selectedTreePath.value)
+})
+
 const fileTree = computed(() => {
   const roots = []
   const folderMap = new Map()
@@ -1193,16 +1245,31 @@ const fileTree = computed(() => {
   const ensureFolder = (folderKey, folderName, parentChildren) => {
     const existing = folderMap.get(folderKey)
     if (existing) return existing
-    const node = { type: 'folder', key: folderKey, name: folderName, children: [] }
+    const folderPath = String(folderKey || '').replace(/^folder:/, '')
+    const node = { type: 'folder', key: folderKey, name: folderName, path: folderPath, children: [] }
     folderMap.set(folderKey, node)
     parentChildren.push(node)
     return node
   }
 
+  const ensureFolderPath = (folderPath) => {
+    const normalized = String(folderPath || '').trim()
+    if (!normalized) return null
+    const parts = normalized.split('/').filter(Boolean)
+    if (!parts.length) return null
+    let parentChildren = roots
+    let accum = ''
+    let currentNode = null
+    for (const part of parts) {
+      accum = accum ? `${accum}/${part}` : part
+      currentNode = ensureFolder(`folder:${accum}`, part, parentChildren)
+      parentChildren = currentNode.children
+    }
+    return currentNode
+  }
+
   for (const dir of directories.value) {
-    const name = String(dir || '').trim()
-    if (!name) continue
-    ensureFolder(`folder:${name}`, name, roots)
+    ensureFolderPath(dir)
   }
 
   for (const item of filteredFiles.value) {
@@ -1220,7 +1287,7 @@ const fileTree = computed(() => {
       if (isLast) {
         parentChildren.push({ type: 'file', key: `file:${fullPath}`, name: part, path: fullPath })
       } else {
-        const folderNode = ensureFolder(`folder:${accum}`, part, parentChildren)
+        const folderNode = ensureFolderPath(accum) || ensureFolder(`folder:${accum}`, part, parentChildren)
         parentChildren = folderNode.children
       }
     }
@@ -1245,7 +1312,7 @@ const visibleTreeRows = computed(() => {
     for (const node of nodes) {
       if (node.type === 'folder') {
         const expanded = expandedFolderKeys.value.has(node.key)
-        rows.push({ type: 'folder', key: node.key, name: node.name, depth, expanded })
+        rows.push({ type: 'folder', key: node.key, name: node.name, path: node.path, depth, expanded })
         if (expanded) visit(node.children, depth + 1)
       } else {
         rows.push({ type: 'file', key: node.key, name: node.name, path: node.path, depth })
@@ -1426,11 +1493,82 @@ function toggleFolder(folderKey) {
 }
 
 function onTreeRowClick(row) {
+  selectedTreeType.value = String(row?.type || '')
+  selectedTreePath.value = String(row?.path || '')
   if (row.type === 'folder') {
     toggleFolder(row.key)
     return
   }
+}
+
+function onTreeRowDblClick(row) {
+  if (row?.type !== 'file') return
   openFileEditor(row.path)
+}
+
+function triggerFileUpload() {
+  if (!selectedDirectoryPath.value || fileListLoading.value || fileUploading.value || fileDeleting.value) return
+  adminFileUploadInputRef.value?.click()
+}
+
+async function handleAdminFileUpload(event) {
+  const target = event?.target
+  const selected = target?.files?.[0]
+  if (target) target.value = ''
+  if (!selected || !selectedDirectoryPath.value) return
+  fileUploading.value = true
+  fileMessage.value = ''
+  try {
+    const payload = await uploadAdminFile(selectedDirectoryPath.value, selected)
+    const successMessage = payload?.overwritten
+      ? `上传成功，已覆盖：${payload.path || ''}`
+      : `上传成功：${payload.path || ''}`
+    selectedTreeType.value = 'file'
+    selectedTreePath.value = String(payload?.path || '')
+    selectedFilePath.value = String(payload?.path || '')
+    await loadDirectories()
+    fileMessage.value = successMessage
+  } catch (err) {
+    console.error(err)
+    fileMessage.value = err instanceof Error ? err.message : '上传文件失败'
+  } finally {
+    fileUploading.value = false
+  }
+}
+
+function openSelectedFileEditor() {
+  if (!canOpenSelectedFile.value) return
+  openFileEditor(selectedTreePath.value)
+}
+
+async function deleteSelectedTreeNode() {
+  const nodeType = String(selectedTreeType.value || '')
+  const nodePath = String(selectedTreePath.value || '')
+  if (!nodeType || !nodePath || fileUploading.value || fileDeleting.value || fileListLoading.value) return
+  const label = nodeType === 'folder' ? '目录' : '文件'
+  const ok = window.confirm(`确认删除所选${label}“${nodePath}”？${nodeType === 'folder' ? '仅支持删除空目录。' : '该操作不可撤销。'}`)
+  if (!ok) return
+  fileDeleting.value = true
+  fileMessage.value = ''
+  try {
+    if (nodeType === 'folder') {
+      await deleteAdminDirectory(nodePath)
+    } else {
+      await deleteAdminFile(nodePath)
+      if (selectedFilePath.value === nodePath) {
+        selectedFilePath.value = ''
+      }
+    }
+    selectedTreeType.value = ''
+    selectedTreePath.value = ''
+    await loadDirectories()
+    fileMessage.value = `删除成功：${nodePath}`
+  } catch (err) {
+    console.error(err)
+    fileMessage.value = err instanceof Error ? err.message : `删除${label}失败`
+  } finally {
+    fileDeleting.value = false
+  }
 }
 
 async function loadProjectSettings() {
@@ -2499,6 +2637,8 @@ async function openFileEditor(path) {
   const filePath = String(path || '')
   if (!filePath) return
   selectedFilePath.value = filePath
+  selectedTreeType.value = 'file'
+  selectedTreePath.value = filePath
   const popupUrl = `/admin-file-editor?path=${encodeURIComponent(filePath)}`
   const opened = window.open(
     popupUrl,
@@ -2653,10 +2793,47 @@ function onMessage(event) {
   if (event.origin !== window.location.origin) return
   const payload = event.data || {}
   if (payload.type === 'admin-file-saved') {
-    fileMessage.value = `保存成功：${payload.path || ''}`
+    const successMessage = `保存成功：${payload.path || ''}`
     if (payload.path) {
       selectedFilePath.value = String(payload.path)
+      selectedTreeType.value = 'file'
+      selectedTreePath.value = String(payload.path)
     }
+    loadDirectories()
+      .then(() => {
+        fileMessage.value = successMessage
+      })
+      .catch((err) => console.error(err))
+    return
+  }
+  if (payload.type === 'admin-file-uploaded') {
+    const successMessage = `上传成功：${payload.path || ''}`
+    if (payload.path) {
+      selectedFilePath.value = String(payload.path)
+      selectedTreeType.value = 'file'
+      selectedTreePath.value = String(payload.path)
+    }
+    loadDirectories()
+      .then(() => {
+        fileMessage.value = successMessage
+      })
+      .catch((err) => console.error(err))
+    return
+  }
+  if (payload.type === 'admin-file-deleted') {
+    const successMessage = `删除成功：${payload.path || ''}`
+    if (String(selectedFilePath.value || '') === String(payload.path || '')) {
+      selectedFilePath.value = ''
+    }
+    if (String(selectedTreePath.value || '') === String(payload.path || '')) {
+      selectedTreeType.value = ''
+      selectedTreePath.value = ''
+    }
+    loadDirectories()
+      .then(() => {
+        fileMessage.value = successMessage
+      })
+      .catch((err) => console.error(err))
   }
 }
 
@@ -3175,6 +3352,16 @@ onBeforeUnmount(() => {
   border: 1px solid var(--primary-200);
   background: transparent;
   color: var(--primary-600);
+}
+
+.btn.danger {
+  border: 1px solid #fda4af;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.hidden-upload {
+  display: none;
 }
 
 .db-editor-card {

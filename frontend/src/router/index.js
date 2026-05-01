@@ -19,6 +19,10 @@ const routes = [
     component: () => import('../pages/ProjectEntryView.vue'),
   },
   {
+    path: '/projects/page_showcase/view/:fileName',
+    component: () => import('../projects/page_showcase/pages/PageShowcaseViewerView.vue'),
+  },
+  {
     path: '/projects/monthly_data_show/import-workspace',
     component: () => import('../projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue'),
   },

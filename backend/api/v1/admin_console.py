@@ -50,6 +50,8 @@ EDITABLE_EXTENSIONS = {
     ".json",
     ".md",
     ".txt",
+    ".html",
+    ".htm",
     ".yaml",
     ".yml",
     ".ini",
@@ -290,6 +292,17 @@ def _resolve_safe_data_path(relative_path: str) -> Path:
     except ValueError as exc:
         raise HTTPException(status_code=403, detail="不允许访问 backend_data 目录外文件。") from exc
     return resolved
+
+
+def _normalize_upload_filename(filename: str) -> str:
+    normalized = Path(str(filename or "").strip()).name
+    if not normalized:
+        raise HTTPException(status_code=400, detail="上传文件名不能为空。")
+    suffix = Path(normalized).suffix.lower()
+    if suffix not in EDITABLE_EXTENSIONS:
+        allowed = ", ".join(sorted(EDITABLE_EXTENSIONS))
+        raise HTTPException(status_code=400, detail=f"仅允许上传以下可编辑文件：{allowed}")
+    return normalized
 
 
 def _load_project_entries() -> Dict[str, Dict[str, Any]]:
@@ -642,8 +655,8 @@ def list_backend_data_directories(session: AuthSession = Depends(get_current_ses
     if not DATA_ROOT.exists() or not DATA_ROOT.is_dir():
         raise HTTPException(status_code=500, detail="backend_data 目录不存在。")
     directories = [
-        item.name
-        for item in sorted(DATA_ROOT.iterdir(), key=lambda p: p.name.lower())
+        item.relative_to(DATA_ROOT).as_posix()
+        for item in sorted(DATA_ROOT.rglob("*"), key=lambda p: str(p).lower())
         if item.is_dir()
     ]
     return {"ok": True, "directories": directories}
@@ -703,6 +716,71 @@ def save_backend_file_content(
         raise HTTPException(status_code=400, detail="文件内容过大，拒绝保存。")
     target.write_text(payload.content, encoding="utf-8")
     return {"ok": True, "path": target.relative_to(DATA_ROOT).as_posix(), "size": len(encoded)}
+
+
+@router.post("/admin/files/upload", summary="上传后台可编辑文件")
+async def upload_backend_file(
+    session: AuthSession = Depends(get_current_session),
+    directory: str = Query(default="", description="backend_data 下的目标目录相对路径"),
+    file: UploadFile = File(..., description="待上传的可编辑文件"),
+):
+    _ensure_admin_console_access(session)
+    target_dir = _resolve_safe_data_path(directory)
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="目标目录不存在。")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="上传文件名为空。")
+    safe_name = _normalize_upload_filename(file.filename)
+    target = (target_dir / safe_name).resolve()
+    try:
+        target.relative_to(target_dir.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="不允许写入目标目录外文件。") from exc
+    content = await file.read()
+    if len(content) > MAX_EDITABLE_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="上传文件过大，拒绝写入。")
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="仅支持 UTF-8 文本文件上传。") from exc
+    existed = target.exists()
+    target.write_bytes(content)
+    return {
+        "ok": True,
+        "path": target.relative_to(DATA_ROOT).as_posix(),
+        "size": len(content),
+        "overwritten": existed,
+    }
+
+
+@router.delete("/admin/files", summary="删除后台文件")
+def delete_backend_file(
+    session: AuthSession = Depends(get_current_session),
+    path: str = Query(..., description="backend_data 下待删除文件的相对路径"),
+):
+    _ensure_admin_console_access(session)
+    target = _resolve_safe_data_path(path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在。")
+    target.unlink()
+    return {"ok": True, "path": target.relative_to(DATA_ROOT).as_posix()}
+
+
+@router.delete("/admin/files/directories", summary="删除后台目录")
+def delete_backend_directory(
+    session: AuthSession = Depends(get_current_session),
+    path: str = Query(..., description="backend_data 下待删除目录的相对路径"),
+):
+    _ensure_admin_console_access(session)
+    target = _resolve_safe_data_path(path)
+    if target == DATA_ROOT:
+        raise HTTPException(status_code=400, detail="不允许删除 backend_data 根目录。")
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=404, detail="目录不存在。")
+    if any(target.iterdir()):
+        raise HTTPException(status_code=400, detail="目录非空，请先删除目录内文件。")
+    target.rmdir()
+    return {"ok": True, "path": target.relative_to(DATA_ROOT).as_posix()}
 
 
 @router.get("/admin/db/tables", summary="获取可编辑数据库表清单")

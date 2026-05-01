@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>530路工作日时刻表_JR打印版_v3</title>
+<style>
+  :root {
+    --ink:#35271f;
+    --muted:#7b6254;
+    --line:#e7d6c7;
+    --soft:#fff8f1;
+    --accent:#cc6b2c;
+    --accent-dark:#a94d14;
+    --dense:#ffbe3b;
+    --mid:#ffc98a;
+    --light:#fff0d8;
+    --up-accent:#d56a1f;
+    --up-accent-dark:#a94d14;
+    --down-accent:#da5b58;
+    --down-accent-dark:#b43b38;
+  }
+  * { box-sizing:border-box; }
+  html,body {
+    margin:0; padding:0;
+    background:#f7efe7; color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  body { padding:10mm 0; }
+  .page {
+    width:190mm; min-height:277mm;
+    margin:0 auto 10mm auto;
+    background:#fff;
+    box-shadow:0 10px 30px rgba(106,63,34,.10);
+    padding:9mm 8.5mm 7mm 8.5mm;
+    display:flex; flex-direction:column;
+    page-break-after:always;
+  }
+  .page:last-child { page-break-after:auto; }
+
+  .topbar {
+    display:grid;
+    grid-template-columns: 27mm 1fr 52mm;
+    gap:4mm;
+    align-items:stretch;
+    margin-bottom:4.5mm;
+  }
+  .line-block {
+    border-radius:4mm;
+    background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+    color:#fff;
+    padding:4mm 3.6mm 3.5mm;
+    display:flex; flex-direction:column; justify-content:center;
+    text-align:center;
+  }
+  .line-no {
+    font-size:24pt; line-height:1; font-weight:900; letter-spacing:.02em;
+  }
+  .line-sub {
+    margin-top:1.6mm; font-size:10pt; font-weight:700; opacity:.96;
+  }
+  .head-main {
+    border:1px solid var(--line);
+    border-radius:4mm;
+    padding:3.4mm 4mm 3.1mm;
+    background:linear-gradient(180deg,#fffdfb,#fff4e8);
+  }
+  .tag {
+    display:inline-block;
+    background:linear-gradient(180deg,#6b4b3c,#4f352b); color:#fff;
+    border-radius:999px;
+    padding:1mm 2.8mm;
+    font-size:9pt; font-weight:800;
+    margin-bottom:1.6mm;
+  }
+  .route {
+    font-size:16pt; font-weight:900; line-height:1.18;
+  }
+  .meta {
+    margin-top:1.6mm;
+    color:var(--muted);
+    font-size:8.8pt;
+  }
+  .head-stats {
+    display:grid;
+    grid-template-rows: repeat(3, 1fr);
+    gap:1.8mm;
+  }
+  .stat {
+    border:1px solid var(--line);
+    border-radius:3.2mm;
+    background:linear-gradient(180deg,#fffdf9,#fff3e6);
+    padding:2mm 3mm;
+    text-align:center;
+  }
+  .stat span {
+    display:block;
+    font-size:8.2pt; color:var(--muted);
+  }
+  .stat strong {
+    display:block;
+    margin-top:.5mm;
+    font-size:12.5pt; font-weight:900;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table-wrap {
+    border:1px solid var(--line);
+    border-radius:4mm;
+    overflow:hidden;
+    flex:1;
+  }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .jr-table thead th {
+    background:linear-gradient(180deg,#6b4b3c,#4f352b); color:#fff;
+    padding:2.4mm 1.6mm;
+    font-size:9.2pt; font-weight:800;
+    text-align:center;
+    line-height:1.2;
+  }
+  .jr-table thead th span {
+    font-size:7.8pt; font-weight:600; opacity:.9;
+  }
+  .th-hour { width:12mm; }
+  .th-count { width:12mm; }
+  .th-metric { width:20mm; }
+
+  .jr-table tbody tr { border-bottom:1px solid #efe3d9; }
+  .jr-table tbody tr:last-child { border-bottom:none; }
+  .jr-table tbody tr:nth-child(odd) { background:#fffaf5; }
+  .jr-table tbody tr:nth-child(even) { background:#ffffff; }
+
+  .hour-cell {
+    text-align:center;
+    font-size:16pt; font-weight:900;
+    color:var(--accent-dark);
+    background:linear-gradient(180deg,#fff8f0,#ffefd8);
+    border-right:1px solid #edd8c5;
+    padding:2.1mm 1mm;
+    font-variant-numeric: tabular-nums;
+  }
+  .minutes-cell {
+    padding:1.3mm 1.6mm;
+  }
+  .minute-grid {
+    display:grid;
+    grid-template-columns:repeat(8,minmax(0,1fr));
+    gap:1mm;
+  }
+  .minute {
+    min-height:7.1mm;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid #e6ccb0;
+    border-radius:2.2mm;
+    background:linear-gradient(180deg,#fffdf9,#fff2e2);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,.03);
+    font-size:11.8pt; font-weight:900;
+    font-variant-numeric: tabular-nums;
+    letter-spacing:.01em;
+  }
+  .minute.blank {
+    color:transparent;
+    border-style:dashed;
+    background:#fbf3ea;
+  }
+  .count-cell {
+    text-align:center; font-size:12.2pt; font-weight:900;
+    font-variant-numeric: tabular-nums;
+  }
+  .count-cell.dense { background:linear-gradient(180deg,#ffe7a8,var(--dense)); color:#7a4300; }
+  .count-cell.mid { background:linear-gradient(180deg,#ffdcb7,var(--mid)); color:#8a4a17; }
+  .count-cell.light { background:linear-gradient(180deg,#fff8ea,var(--light)); color:#8a6647; }
+
+  .metric-cell {
+    text-align:center;
+    padding:1.2mm 1mm 1mm;
+    font-variant-numeric: tabular-nums;
+    background:linear-gradient(180deg,#fffdfb,#fff6ee);
+    border-left:1px solid #f2e6dc;
+  }
+  .metric-main {
+    font-size:11.2pt;
+    font-weight:900;
+    line-height:1.15;
+  }
+  .metric-sub {
+    margin-top:.4mm;
+    font-size:7.9pt;
+    color:var(--muted);
+    line-height:1.15;
+    white-space:nowrap;
+  }
+  .run-cell .metric-main::after,
+  .gap-cell .metric-main::after {
+    content:" 分";
+    font-size:8pt;
+    margin-left:.5mm;
+    color:var(--muted);
+    font-weight:700;
+  }
+
+  .footer {
+    margin-top:3.2mm;
+    padding-top:2mm;
+    border-top:1px solid #e5eaef;
+    color:var(--muted);
+    font-size:8.2pt;
+    line-height:1.45;
+    display:flex;
+    justify-content:space-between;
+    gap:4mm;
+  }
+  .footer > div:first-child { flex:0 0 auto; }
+  .footer > div:last-child { text-align:right; }
+
+  .page.up .line-block {
+    background:linear-gradient(135deg,var(--up-accent),var(--up-accent-dark));
+  }
+  .page.down .line-block {
+    background:linear-gradient(135deg,var(--down-accent),var(--down-accent-dark));
+  }
+  .page.up .tag { background:linear-gradient(180deg,#e07b2a,#b85b16); }
+  .page.down .tag { background:linear-gradient(180deg,#e26e66,#bd4741); }
+  .page.up .hour-cell {
+    color:var(--up-accent-dark);
+    background:linear-gradient(180deg,#fff9f2,#ffe9cb);
+  }
+  .page.down .hour-cell {
+    color:var(--down-accent-dark);
+    background:linear-gradient(180deg,#fff7f2,#ffe1dc);
+  }
+  .page.up .minute { border-color:#ecc39c; background:linear-gradient(180deg,#fffdf9,#fff0dc); }
+  .page.down .minute { border-color:#efb9b0; background:linear-gradient(180deg,#fffdfa,#ffeceb); }
+  .page.up .minute.blank { background:#fff7ee; }
+  .page.down .minute.blank { background:#fff6f4; }
+  .page.up .head-main { background:linear-gradient(180deg,#fffdf9,#fff3e6); }
+  .page.down .head-main { background:linear-gradient(180deg,#fffdfa,#fff0ee); }
+
+  @page { size:A4 portrait; margin:0; }
+  @media print {
+    body { background:#fff; padding:0; }
+    .page {
+      width:210mm; min-height:297mm; margin:0;
+      box-shadow:none;
+      padding:9mm 8.5mm 7mm 8.5mm;
+    }
+  }
+</style>
+</head>
+<body>
+
+<section class="page up">
+  <div class="topbar">
+    <div class="line-block">
+      <div class="line-no">530</div>
+      <div class="line-sub">工作日</div>
+    </div>
+    <div class="head-main">
+      <div class="tag">上行</div>
+      <div class="route">大有文园→善水街</div>
+      <div class="meta">JR 风格整点分钟速查表</div>
+    </div>
+    <div class="head-stats">
+      <div class="stat"><span>首班</span><strong>06:00</strong></div>
+      <div class="stat"><span>末班</span><strong>20:30</strong></div>
+      <div class="stat"><span>总班次</span><strong>66</strong></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="jr-table">
+      <thead>
+        <tr>
+          <th class="th-hour">时</th>
+          <th class="th-min">发车分钟</th>
+          <th class="th-count">班次</th>
+          <th class="th-metric">运行时间<br><span>均值 / 范围</span></th>
+          <th class="th-metric">发车间隔<br><span>均值 / 范围</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+<th class="hour-cell">06</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">15</span><span class="minute">25</span><span class="minute">35</span><span class="minute">45</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">18.8</div><div class="metric-sub">17–21分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">11</div><div class="metric-sub">10–15分</div></td>
+</tr><tr>
+<th class="hour-cell">07</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">10</span><span class="minute">20</span><span class="minute">30</span><span class="minute">35</span><span class="minute">45</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">28</div><div class="metric-sub">20–36分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">8.3</div><div class="metric-sub">5–10分</div></td>
+</tr><tr>
+<th class="hour-cell">08</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">08</span><span class="minute">18</span><span class="minute">28</span><span class="minute">35</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">26.7</div><div class="metric-sub">23–31分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">10.8</div><div class="metric-sub">7–15分</div></td>
+</tr><tr>
+<th class="hour-cell">09</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">15</span><span class="minute">30</span><span class="minute">45</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">20.5</div><div class="metric-sub">15–25分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">13.8</div><div class="metric-sub">10–15分</div></td>
+</tr><tr>
+<th class="hour-cell">10</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">15</span><span class="minute">30</span><span class="minute">45</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.5</div><div class="metric-sub">15–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">15</div><div class="metric-sub">15–15分</div></td>
+</tr><tr>
+<th class="hour-cell">11</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">15</span><span class="minute">35</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">16.5</div><div class="metric-sub">15–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">17.5</div><div class="metric-sub">15–20分</div></td>
+</tr><tr>
+<th class="hour-cell">12</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">15</span><span class="minute">35</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">16</div><div class="metric-sub">15–18分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">13</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">15</span><span class="minute">35</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.7</div><div class="metric-sub">15–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">14</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">15</span><span class="minute">35</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.7</div><div class="metric-sub">15–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">15</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">10</span><span class="minute">25</span><span class="minute">40</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">14.8</div><div class="metric-sub">14–15分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">13.8</div><div class="metric-sub">10–15分</div></td>
+</tr><tr>
+<th class="hour-cell">16</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">10</span><span class="minute">17</span><span class="minute">24</span><span class="minute">30</span><span class="minute">40</span><span class="minute">48</span><span class="minute">57</span></div></td>
+<td class="count-cell dense">8</td>
+<td class="metric-cell run-cell"><div class="metric-main">17.1</div><div class="metric-sub">14–20分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">8.4</div><div class="metric-sub">6–10分</div></td>
+</tr><tr>
+<th class="hour-cell">17</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">12</span><span class="minute">20</span><span class="minute">30</span><span class="minute">40</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">19.8</div><div class="metric-sub">18–22分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">8.8</div><div class="metric-sub">7–10分</div></td>
+</tr><tr>
+<th class="hour-cell">18</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">15</span><span class="minute">30</span><span class="minute">45</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">19.5</div><div class="metric-sub">17–21分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">13.8</div><div class="metric-sub">10–15分</div></td>
+</tr><tr>
+<th class="hour-cell">19</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">25</span><span class="minute">45</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">13–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">20</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">30</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">2</td>
+<td class="metric-cell run-cell"><div class="metric-main">14</div><div class="metric-sub">13–15分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">22.5</div><div class="metric-sub">20–25分</div></td>
+</tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+<section class="page down">
+  <div class="topbar">
+    <div class="line-block">
+      <div class="line-no">530</div>
+      <div class="line-sub">工作日</div>
+    </div>
+    <div class="head-main">
+      <div class="tag">下行</div>
+      <div class="route">善水街→大有文园</div>
+      <div class="meta">JR 风格整点分钟速查表</div>
+    </div>
+    <div class="head-stats">
+      <div class="stat"><span>首班</span><strong>06:30</strong></div>
+      <div class="stat"><span>末班</span><strong>21:00</strong></div>
+      <div class="stat"><span>总班次</span><strong>67</strong></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="jr-table">
+      <thead>
+        <tr>
+          <th class="th-hour">时</th>
+          <th class="th-min">发车分钟</th>
+          <th class="th-count">班次</th>
+          <th class="th-metric">运行时间<br><span>均值 / 范围</span></th>
+          <th class="th-metric">发车间隔<br><span>均值 / 范围</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+<th class="hour-cell">06</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">30</span><span class="minute">40</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">15–15分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">10</div><div class="metric-sub">10–10分</div></td>
+</tr><tr>
+<th class="hour-cell">07</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">10</span><span class="minute">20</span><span class="minute">28</span><span class="minute">35</span><span class="minute">45</span><span class="minute">55</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">7</td>
+<td class="metric-cell run-cell"><div class="metric-main">17.9</div><div class="metric-sub">14–20分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">9.3</div><div class="metric-sub">7–10分</div></td>
+</tr><tr>
+<th class="hour-cell">08</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">07</span><span class="minute">14</span><span class="minute">22</span><span class="minute">25</span><span class="minute">35</span><span class="minute">45</span><span class="minute">52</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">7</td>
+<td class="metric-cell run-cell"><div class="metric-main">18</div><div class="metric-sub">14–21分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">8.1</div><div class="metric-sub">3–12分</div></td>
+</tr><tr>
+<th class="hour-cell">09</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">15</span><span class="minute">25</span><span class="minute">40</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">5</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.2</div><div class="metric-sub">13–17分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">12.6</div><div class="metric-sub">10–15分</div></td>
+</tr><tr>
+<th class="hour-cell">10</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">10</span><span class="minute">24</span><span class="minute">40</span><span class="minute">54</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.8</div><div class="metric-sub">13–18分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">14.8</div><div class="metric-sub">14–16分</div></td>
+</tr><tr>
+<th class="hour-cell">11</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">10</span><span class="minute">25</span><span class="minute">40</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">16.7</div><div class="metric-sub">16–18分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">15.3</div><div class="metric-sub">15–16分</div></td>
+</tr><tr>
+<th class="hour-cell">12</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">20</span><span class="minute">40</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">15–15分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">13</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">20</span><span class="minute">40</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">14–16分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">14</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">20</span><span class="minute">40</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">12–18分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">20</div><div class="metric-sub">20–20分</div></td>
+</tr><tr>
+<th class="hour-cell">15</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">20</span><span class="minute">35</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell mid">4</td>
+<td class="metric-cell run-cell"><div class="metric-main">15.2</div><div class="metric-sub">15–16分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">17.5</div><div class="metric-sub">15–20分</div></td>
+</tr><tr>
+<th class="hour-cell">16</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">15</span><span class="minute">25</span><span class="minute">32</span><span class="minute">40</span><span class="minute">48</span><span class="minute">57</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">7</td>
+<td class="metric-cell run-cell"><div class="metric-main">18.6</div><div class="metric-sub">17–21分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">9.6</div><div class="metric-sub">7–15分</div></td>
+</tr><tr>
+<th class="hour-cell">17</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">05</span><span class="minute">12</span><span class="minute">20</span><span class="minute">30</span><span class="minute">35</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">22.7</div><div class="metric-sub">19–25分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">8.8</div><div class="metric-sub">5–15分</div></td>
+</tr><tr>
+<th class="hour-cell">18</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute">10</span><span class="minute">15</span><span class="minute">30</span><span class="minute">42</span><span class="minute">55</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell dense">6</td>
+<td class="metric-cell run-cell"><div class="metric-main">26.5</div><div class="metric-sub">22–31分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">10.8</div><div class="metric-sub">5–15分</div></td>
+</tr><tr>
+<th class="hour-cell">19</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">10</span><span class="minute">30</span><span class="minute">50</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">3</td>
+<td class="metric-cell run-cell"><div class="metric-main">19</div><div class="metric-sub">16–22分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">18.3</div><div class="metric-sub">15–20分</div></td>
+</tr><tr>
+<th class="hour-cell">20</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">15</span><span class="minute">35</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">2</td>
+<td class="metric-cell run-cell"><div class="metric-main">15</div><div class="metric-sub">15–15分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">22.5</div><div class="metric-sub">20–25分</div></td>
+</tr><tr>
+<th class="hour-cell">21</th>
+<td class="minutes-cell"><div class="minute-grid"><span class="minute">00</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span><span class="minute blank">--</span></div></td>
+<td class="count-cell light">1</td>
+<td class="metric-cell run-cell"><div class="metric-main">16</div><div class="metric-sub">16–16分</div></td>
+<td class="metric-cell gap-cell"><div class="metric-main">25</div><div class="metric-sub">25–25分</div></td>
+</tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</body>
+</html>

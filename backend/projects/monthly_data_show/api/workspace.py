@@ -101,6 +101,9 @@ CALCULATED_DEPENDENCY_MAP = {
     str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
 }
 CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+CALCULATED_ITEM_COMPANY_MAP = {
+    str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_item_company_map") or {}).items()
+}
 LATEST_VALUE_ITEMS = {
     "期末供暖收费面积",
     "期末库存煤量",
@@ -117,6 +120,7 @@ def _refresh_indicator_runtime() -> None:
     global CALCULATED_ITEM_UNITS
     global CALCULATED_DEPENDENCY_MAP
     global CALCULATED_ITEM_FORMULAS
+    global CALCULATED_ITEM_COMPANY_MAP
     INDICATOR_RUNTIME_CFG = load_indicator_runtime_config()
     CALCULATED_ITEM_SET = set(INDICATOR_RUNTIME_CFG.get("calculated_item_set") or set())
     CALCULATED_ITEM_UNITS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_units") or {})
@@ -124,6 +128,9 @@ def _refresh_indicator_runtime() -> None:
         str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_dependency_map") or {}).items()
     }
     CALCULATED_ITEM_FORMULAS = dict(INDICATOR_RUNTIME_CFG.get("calculated_item_formulas") or {})
+    CALCULATED_ITEM_COMPANY_MAP = {
+        str(k): set(v or set()) for k, v in (INDICATOR_RUNTIME_CFG.get("calculated_item_company_map") or {}).items()
+    }
 
 
 def _build_value_aggregate_sql(*, apply_latest_for_state_items: bool) -> str:
@@ -412,7 +419,14 @@ def _normalize_calc_value(value: float) -> float:
     return float(round(value, 8))
 
 
-def _collect_required_base_items(calc_items: List[str]) -> List[str]:
+def _collect_required_base_items(
+    calc_items: List[str],
+    *,
+    dependency_map: Optional[Dict[str, Set[str]]] = None,
+    formula_item_set: Optional[Set[str]] = None,
+) -> List[str]:
+    dependency_map = dependency_map or CALCULATED_DEPENDENCY_MAP
+    formula_item_set = formula_item_set or CALCULATED_ITEM_SET
     required: Set[str] = set()
     visited: Set[str] = set()
 
@@ -420,10 +434,10 @@ def _collect_required_base_items(calc_items: List[str]) -> List[str]:
         if item_name in visited:
             return
         visited.add(item_name)
-        for dep in CALCULATED_DEPENDENCY_MAP.get(item_name, set()):
+        for dep in dependency_map.get(item_name, set()):
             if dep == "天数":
                 continue
-            if dep in CALCULATED_ITEM_SET:
+            if dep in formula_item_set:
                 walk(dep)
             else:
                 required.add(dep)
@@ -576,6 +590,10 @@ def _build_calculated_rows(
             day_count=day_count,
         )
         for indicator in selected_calc_items:
+            company_scope = CALCULATED_ITEM_COMPANY_MAP.get(indicator) or {"all"}
+            company_name = _safe_str(meta.get("company"))
+            if "all" not in company_scope and company_name not in company_scope:
+                continue
             value = _to_float(calc_values.get(indicator))
             calculated_rows.append(
                 {
@@ -2330,6 +2348,8 @@ def query_month_data_show(request: QueryRequest):
             ),
         )
     include_average_temperature = AVERAGE_TEMPERATURE_ITEM in items_selected
+    aggregate_companies = bool(request.aggregate_companies)
+    aggregate_months = bool(request.aggregate_months)
     selected_calc_items = [x for x in items_selected if x in CALCULATED_ITEM_SET]
     selected_base_items = [x for x in items_selected if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
     required_base_items = _collect_required_base_items(selected_calc_items)
@@ -2345,8 +2365,6 @@ def query_month_data_show(request: QueryRequest):
     order_mode = str(request.order_mode or "company_first").strip().lower()
     if order_mode not in {"company_first", "item_first"}:
         raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
-    aggregate_companies = bool(request.aggregate_companies)
-    aggregate_months = bool(request.aggregate_months)
     zero_filter_mode = _resolve_zero_filter_mode(request)
     resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
 

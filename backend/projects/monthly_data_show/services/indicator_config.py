@@ -130,11 +130,22 @@ def _normalize_calculated_items(raw_items: object) -> List[dict]:
             continue
         seen.add(name)
         formula = _safe_str(raw.get("formula"))
+        companies: List[str] = []
+        company_seen: Set[str] = set()
+        for value in raw.get("companies") or []:
+            company_name = _safe_str(value)
+            if not company_name or company_name in company_seen:
+                continue
+            company_seen.add(company_name)
+            companies.append(company_name)
+        if not companies:
+            companies = ["all"]
         rows.append(
             {
                 "name": name,
                 "unit": _safe_str(raw.get("unit")),
                 "formula": formula,
+                "companies": companies,
                 "dependencies": _extract_formula_tokens(formula),
             }
         )
@@ -159,9 +170,11 @@ def load_indicator_runtime_config() -> dict:
     calculated_item_units = {x["name"]: _safe_str(x.get("unit")) for x in calculated_items}
     calculated_item_formulas = {x["name"]: _safe_str(x.get("formula")) for x in calculated_items}
     dependency_map: Dict[str, Set[str]] = {}
+    company_map: Dict[str, Set[str]] = {}
     for item in calculated_items:
         name = item["name"]
         dependency_map[name] = set(item.get("dependencies") or [])
+        company_map[name] = set(item.get("companies") or ["all"])
     return {
         "basic_section_title": _safe_str((basic_section or {}).get("title")) or DEFAULT_BASIC_SECTION_TITLE,
         "calculated_section_title": _safe_str((calc_section or {}).get("title"))
@@ -175,6 +188,7 @@ def load_indicator_runtime_config() -> dict:
                 "name": x["name"],
                 "unit": _safe_str(x.get("unit")),
                 "formula": _safe_str(x.get("formula")),
+                "companies": list(x.get("companies") or ["all"]),
             }
             for x in calculated_items
         ],
@@ -183,6 +197,7 @@ def load_indicator_runtime_config() -> dict:
         "calculated_item_units": calculated_item_units,
         "calculated_item_formulas": calculated_item_formulas,
         "calculated_dependency_map": dependency_map,
+        "calculated_item_company_map": company_map,
     }
 
 

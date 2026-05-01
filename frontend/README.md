@@ -5102,3 +5102,45 @@ docker compose up -d --build
 
 - 查询页 `口径（可多选）` 不再显示 `临海`。
 - 本轮前端未新增特殊过滤，直接复用后端 `/monthly-data-show/query-options` 返回的真实口径列表。
+
+## 2026-04-09 页面展示项目
+
+- 新增前端直达项目 `page_showcase`，项目中文名为“页面展示”，仅 `Global_admin` 在项目选择页可见。
+- `ProjectSelectView.vue` 已将 `page_showcase` 加入直达项目集合，点击后直接进入 `/projects/page_showcase`。
+- `ProjectEntryView.vue` 新增 `PageShowcaseEntryView.vue` 映射。
+- 新增页面：
+  - `frontend/src/projects/page_showcase/pages/PageShowcaseEntryView.vue`
+  - `frontend/src/projects/page_showcase/pages/PageShowcaseViewerView.vue`
+- 入口页会读取后端返回的 HTML 文件列表并渲染卡片；viewer 页通过鉴权接口读取 HTML 文本并用 `iframe srcdoc` 预览。
+- 当前卡片标题与文件名保持一致，点击卡片打开对应 HTML 页面预览。
+
+## 2026-04-09 管理后台后台文件编辑补充上传与删除
+
+- `frontend/src/projects/daily_report_25_26/pages/AdminFileEditorWindow.vue` 现已支持在编辑弹窗内直接上传同目录文件与删除当前文件。
+- 上传成功后会自动载入新文件内容；删除成功后会关闭弹窗，并通知后台主界面刷新树与列表。
+- `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue` 已监听 `admin-file-saved`、`admin-file-uploaded`、`admin-file-deleted` 三类事件，确保“最近打开”和文件列表同步更新。
+- `frontend/src/projects/daily_report_25_26/services/api.js` 新增 `uploadAdminFile()`、`deleteAdminFile()`。
+
+## 2026-04-09 管理后台文件树改为主界面目录级上传/删除
+
+- `AdminConsoleView.vue` 的“后台文件编辑”区域现已支持：
+  - 单击选中目录或文件；
+  - 双击文件打开编辑器；
+  - 顶部直接执行“上传到所选目录”“打开所选文件”“删除所选”。
+- `AdminFileEditorWindow.vue` 已回归纯编辑窗口，不再承担上传/删除操作。
+- 后台文件树现在会显示 `.html` / `.htm` 文件，并可像其他文本文件一样打开编辑。
+# 前端同步（2026-04-10 page_showcase / 后台文件编辑）
+
+- `page_showcase`
+  - 列表卡片移除了与标题重复的文件名行；
+  - 详情页新增“生成永久链接”按钮，点击后会生成公开访问地址、尝试复制到剪贴板并直接打开。
+  - 后续修复：永久链接地址生成已去掉重复的 `/api/v1` 前缀，开发环境不再跳到 `{"detail":"Not Found"}`。
+- `后台文件编辑`
+  - 目录树已支持按递归目录路径构建，不再只显示第一层目录；
+  - 嵌套目录与空目录现在也会在树中正常展示。
+
+# 前端同步（2026-04-10）
+
+- `monthly_data_show/query-tool` 继续沿用既有查询页面与公式弹窗，无需前端组件改动。
+- 后端计算指标配置已升级为支持公司口径：`calculated_items[*].companies`。
+- 当前 `蒸汽平均焓` 已并入正式计算指标，并限定仅对 `供热公司` 生效；页面在单月与多月聚合下都会展示后端公式计算结果，而不是原始累计值。

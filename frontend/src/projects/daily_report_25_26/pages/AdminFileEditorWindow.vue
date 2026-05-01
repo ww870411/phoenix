@@ -17,7 +17,14 @@
         >
           格式化 JSON
         </button>
-        <button class="btn ghost" type="button" @click="closeWithoutSave">不保存关闭</button>
+        <button
+          class="btn ghost"
+          type="button"
+          :disabled="saving"
+          @click="closeWithoutSave"
+        >
+          不保存关闭
+        </button>
         <button
           class="btn primary"
           type="button"
@@ -133,8 +140,13 @@ const jsonValidation = computed(() => {
   }
 })
 
-async function loadFile() {
-  const raw = String(route.query.path || '')
+function notifyParent(type, path) {
+  if (!window.opener) return
+  window.opener.postMessage({ type, path }, window.location.origin)
+}
+
+async function loadFile(nextPath = '') {
+  const raw = String(nextPath || route.query.path || '')
   filePath.value = raw
   if (!raw) {
     message.value = '缺少文件路径参数'
@@ -146,6 +158,9 @@ async function loadFile() {
     const payload = await readAdminFile(raw)
     content.value = String(payload?.content || '')
     originalContent.value = content.value
+    if (String(route.query.path || '') !== raw) {
+      router.replace({ path: route.path, query: { path: raw } }).catch(() => {})
+    }
   } catch (err) {
     console.error(err)
     message.value = err instanceof Error ? err.message : '读取失败'
@@ -170,9 +185,7 @@ async function saveAndClose() {
     await saveAdminFile(filePath.value, content.value)
     originalContent.value = content.value
     message.value = '保存成功'
-    if (window.opener) {
-      window.opener.postMessage({ type: 'admin-file-saved', path: filePath.value }, window.location.origin)
-    }
+    notifyParent('admin-file-saved', filePath.value)
     window.close()
   } catch (err) {
     console.error(err)
