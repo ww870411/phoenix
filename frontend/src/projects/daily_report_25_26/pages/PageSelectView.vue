@@ -11,16 +11,17 @@
         <div v-if="loading" class="page-state">页面加载中，请稍候…</div>
         <div v-else-if="errorMessage" class="page-state error">{{ errorMessage }}</div>
         <div v-else class="card-grid">
-          <button
+          <component
+            :is="isClickable ? 'button' : 'div'"
             v-for="page in pages"
             :key="page.page_key"
-            type="button"
-            class="card elevated page-card"
-            @click="openPage(page)"
+            :type="isClickable ? 'button' : undefined"
+            :class="['card elevated page-card', { 'is-static': !isClickable }]"
+            @click="isClickable ? openPage(page) : undefined"
           >
             <div class="page-card-title">{{ page.page_name }}</div>
             <div class="page-card-desc">{{ pageDescription(page) }}</div>
-          </button>
+          </component>
         </div>
       </section>
       <section v-if="showWorkflowCardForProject" class="card elevated status-block">
@@ -146,7 +147,7 @@ const actionPending = ref(false)
 
 onMounted(async () => {
   await loadPages()
-  if (!isMonthlyDataShowProject.value) {
+  if (!isWorkflowExempt.value) {
     await refreshWorkflow()
   }
 })
@@ -198,7 +199,14 @@ watch(
 )
 
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
-const isMonthlyDataShowProject = computed(() => projectKey === 'monthly_data_show')
+const isWorkflowExempt = computed(() => {
+  const exempt = ['monthly_data_show', 'insulation_pipe_supply_2026']
+  return exempt.includes(projectKey)
+})
+const isClickable = computed(() => {
+  // 目前保温管项目尚未设计具体功能页，仅作展示
+  return projectKey !== 'insulation_pipe_supply_2026'
+})
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -229,7 +237,7 @@ const publishDisabled = computed(
 )
 
 const showWorkflowCardForProject = computed(() => {
-  if (isMonthlyDataShowProject.value) return false
+  if (isWorkflowExempt.value) return false
   return (
     workflowLoading.value ||
     Boolean(workflowError.value) ||
@@ -424,6 +432,13 @@ function openPage(page) {
 
 .page-card:hover {
   transform: translateY(-2px);
+}
+
+.page-card.is-static {
+  cursor: default;
+}
+.page-card.is-static:hover {
+  transform: none;
 }
 
 .page-card-title {

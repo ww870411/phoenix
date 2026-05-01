@@ -5158,3 +5158,26 @@ docker compose up -d --build
 - `monthly_data_show/query-tool` 继续沿用既有查询页面与公式弹窗，无需前端组件改动。
 - 后端计算指标配置已升级为支持公司口径：`calculated_items[*].companies`。
 - 当前 `蒸汽平均焓` 已并入正式计算指标，并限定仅对 `供热公司` 生效；页面在单月与多月聚合下都会展示后端公式计算结果，而不是原始累计值。
+## 2026-05-01 2026年度保温管供需管理系统目录对齐
+
+- `backend_data/projects/insulation_pipe_supply_2026/` 已创建，作为该项目当前的数据目录；前端项目键仍保持 `insulation_pipe_supply`。
+
+## 2026-05-01 2026年度保温管供需管理系统入口卡片样式
+
+- `src/projects/insulation_pipe_supply/pages/InsulationPipeSupplyEntryView.vue` 的四个功能入口已对齐 `/projects/monthly_data_show/pages` 使用的页面选择卡片结构。
+- 入口页采用 `card elevated page-block` 外层容器、`card-grid` 网格和 `card elevated page-card` 卡片，标题与描述分别使用 `page-card-title`、`page-card-desc`。
+- 项目级权限判断保持不变，未授权账号仍显示无权访问提示。
+
+## 2026-05-01 2026年度保温管供需管理系统入口
+
+- `/projects` 已接入新项目 `insulation_pipe_supply`，项目名称为“2026年度保温管供需管理系统”，属于直达型项目入口。
+- 项目入口组件位于 `src/projects/insulation_pipe_supply/pages/InsulationPipeSupplyEntryView.vue`，展示“数据看板”“原材料管理”“生产与分配管理”“需求管理”四个功能卡片。
+- 入口页基于登录会话中的 `permissions.projects.insulation_pipe_supply.page_access` 判断可见性，未授权账号进入直达路由时会显示无权访问提示。
+
+## 2026-05-01 insulation_pipe_supply 切换至动态入口
+
+- 修正：移除 `insulation_pipe_supply` 的硬编码入口组件 `InsulationPipeSupplyEntryView.vue`。
+- 路由调整：
+  - `ProjectEntryView.vue` 不再特殊处理该项目，使其进入通用的 `PageSelectView.vue`。
+  - `ProjectSelectView.vue` 移除 `DIRECT_ENTRY_PROJECTS` 标记，导航路径统一为 `/projects/:projectKey/pages`。
+- 效果：项目页面描述现在实时读取自 `backend_data/shared/项目列表.json` 中的 `页面描述` 字段，解决了此前硬编码导致的描述不一致问题。

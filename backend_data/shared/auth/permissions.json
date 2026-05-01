@@ -132,6 +132,30 @@
             "can_extract_xlsx": false,
             "can_unlimited_ai_usage": false
           }
+        },
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "dashboard",
+            "raw_materials",
+            "production_allocation",
+            "demand"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
         }
       },
       "actions": {

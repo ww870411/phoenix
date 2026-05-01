@@ -7496,3 +7496,53 @@
   - 上传/删除按钮从弹窗移除，恢复为纯编辑窗口。
 - 结果：后台文件管理的上传/删除入口已前移到主界面，HTML 文件也会在树中显示并可打开编辑。
 - 验证：后端 `py_compile` 通过，前端 `npm run build` 通过。
+## 2026-05-01 2026年度保温管供需管理系统名称与目录改名
+
+- 需求：将项目名称统一改为“2026年度保温管供需管理系统”，并同步调整 `backend_data/projects` 下的项目目录名。
+- 实施：更新项目清单、前端入口页、项目目录 README，以及前后端文档中的显示名称；将目录从 `backend_data/projects/insulation_pipe_supply/` 改为 `backend_data/projects/insulation_pipe_supply_2026/`。
+- 兼容：项目键、前端路由键、权限键仍保持 `insulation_pipe_supply`，避免影响现有入口与授权逻辑。
+- 验证：前端 `npm run build` 通过；目录校验通过，确认新目录存在且旧目录已移除。
+
+## 2026-05-01 2026年度保温管供需管理系统后端数据目录
+
+- 需求：在 `backend_data/projects` 下建立“2026年度保温管供需管理系统”项目目录。
+- 实施：新增 `backend_data/projects/insulation_pipe_supply_2026/README.md`，以 `insulation_pipe_supply` 作为项目目录键名，和前端入口、项目清单、权限配置保持一致。
+- 结果：后续该项目的配置文件、运行数据和业务文件可以统一落在该目录下。
+- 验证：目录与说明文件已创建。
+
+## 2026-05-01 2026年度保温管供需管理系统入口卡片样式对齐
+
+- 需求：将2026年度保温管供需管理系统的四个功能卡片样式仿照 `/projects/monthly_data_show/pages` 的页面卡片设计。
+- 前端：调整 `frontend/src/projects/insulation_pipe_supply/pages/InsulationPipeSupplyEntryView.vue`，使用 `card elevated page-block`、`card-grid`、`card elevated page-card`、`page-card-title`、`page-card-desc` 这一组与功能页面选择页一致的结构和视觉。
+- 权限：保留 `permissions.projects.insulation_pipe_supply.page_access` 的项目级访问判断，未授权时仍在同一页面卡片容器内显示无权访问提示。
+- 验证：`npm run build` 通过。
+
+## 2026-05-01 2026年度保温管供需管理系统项目入口
+
+- 需求：在 `/projects` 尾部新增“2026年度保温管供需管理系统”，仅 `global_admin` 权限可见，点击进入后展示“数据看板”“原材料管理”“生产与分配管理”“需求管理”四个页面卡片。
+- 前端：新增 `frontend/src/projects/insulation_pipe_supply/pages/InsulationPipeSupplyEntryView.vue`，并在 `ProjectSelectView.vue`、`ProjectEntryView.vue` 接入直达入口与项目入口组件；入口页直接检查 `permissions.projects.insulation_pipe_supply`，未授权账号显示无权访问提示。
+- 配置：在 `backend_data/shared/项目列表.json` 尾部追加 `insulation_pipe_supply`；在 `backend_data/shared/auth/permissions.json` 仅为 `Global_admin` 增加该项目页面权限。
+- 验证：`npm run build` 通过；`backend_data/shared/项目列表.json` 与 `backend_data/shared/auth/permissions.json` 解析通过。
+
+## 2026-05-01 insulation_pipe_supply 项目切换动态配置
+
+- 问题：用户发现 `insulation_pipe_supply` 项目页面的卡片描述与 `backend_data/shared/项目列表.json` 不一致。
+- 根因：该项目此前使用了硬编码的静态组件 `InsulationPipeSupplyEntryView.vue`，其中描述是写死的，未对接后端动态配置。
+- 调整：
+  - `frontend/src/pages/ProjectEntryView.vue`：移除 `insulation_pipe_supply` 的硬编码映射，使其回落至通用的 `PageSelectView.vue`。
+  - `frontend/src/pages/ProjectSelectView.vue`：从 `DIRECT_ENTRY_PROJECTS` 中移除该项目，确保点击后直接进入动态页面选择视图。
+  - 删除文件：`frontend/src/projects/insulation_pipe_supply/pages/InsulationPipeSupplyEntryView.vue`。
+- 结果：`insulation_pipe_supply` 现在完全由 `backend_data/shared/项目列表.json` 驱动，描述与页面列表实现实时同步。
+
+## 2026-05-01 优化 PageSelectView 审批模块显示
+
+- 调整：更新 `PageSelectView.vue`，将 `isMonthlyDataShowProject` 扩展为更通用的 `isWorkflowExempt`。
+- 逻辑：现在 `monthly_data_show` 和 `insulation_pipe_supply` 均被纳入“豁免名单”，不再在页面下方显示“审批进度”模块。
+- 效果：保温管项目的页面列表现在变得和月报项目一样“干净”，不再尝试加载无关的日报审批流。
+
+## 2026-05-01 禁用保温管项目页面超链接
+
+- 调整：更新 `PageSelectView.vue`，新增 `isClickable` 计算属性。
+- 逻辑：对于尚未开始设计具体功能页的项目（目前仅限 `insulation_pipe_supply`），其功能卡片将以静态 `div` 形式渲染。
+- 视觉：禁用了静态卡片的点击跳转逻辑、指针手势（cursor: pointer）以及悬停位移效果。
+- 效果：用户现在可以预览保温管项目的页面列表和描述，但无法点击进入不存在的子页面，避免了 404 或白屏错误。

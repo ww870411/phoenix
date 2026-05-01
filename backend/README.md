@@ -4019,3 +4019,24 @@
   - `蒸汽平均焓` 已追加进 `calculated_items`，并限定 `companies: ["供热公司"]`；
   - 当前 `蒸汽平均焓` 公式为：
     - `（各热力站耗热量 - 低真空供暖耗热量 - 高温水供暖耗热量）* 1000 / 供暖耗汽量`
+## 2026-05-01 2026年度保温管供需管理系统数据目录
+
+- 已新增 `backend_data/projects/insulation_pipe_supply_2026/` 目录，并放置说明文件 `README.md`。
+- 该目录用于承接2026年度保温管供需管理系统后续配置、运行数据与业务文件；项目键仍保持 `insulation_pipe_supply`，未随目录名变动。
+
+## 2026-05-01 2026年度保温管供需管理系统入口样式调整说明
+
+- 本轮仅调整前端 `insulation_pipe_supply` 入口卡片样式，未新增或修改后端接口。
+- 后端项目清单与权限配置沿用 2026-05-01 新增的 `insulation_pipe_supply` 配置。
+
+## 2026-05-01 2026年度保温管供需管理系统配置
+
+- 共享项目清单 `backend_data/shared/项目列表.json` 尾部新增 `insulation_pipe_supply`，显示名称为“2026年度保温管供需管理系统”，页面包括 `dashboard`、`raw_materials`、`production_allocation`、`demand`。
+- 共享权限配置 `backend_data/shared/auth/permissions.json` 仅在 `Global_admin` 组下增加该项目权限；其他权限组不包含该项目，因此 `/projects` 项目列表不会向非 global_admin 账号返回该入口。
+- 本次未新增后端接口，当前入口页为前端卡片导航骨架，后续业务接口可按项目模块继续扩展。
+
+## 2026-05-01 项目列表配置一致性说明
+
+- 确认 `backend_data/shared/项目列表.json` 为平台项目与页面的单一真相来源。
+- 所有前端项目（除非有特殊交互需求并显式注册）均应通过通用 `PageSelectView.vue` 从该 JSON 动态加载页面列表与描述。
+- 本轮已将 `insulation_pipe_supply` 切换为该动态模式，移除前端硬编码。
