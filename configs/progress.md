@@ -1,3 +1,83 @@
+## 2026-05-01 monthly_data_show 简要分析总体情况顺序调整
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 定位 `analysisInsights` 拼接逻辑，按仓库降级矩阵使用 `apply_patch` 修改前端与文档。回滚方式为恢复 `analysisInsights` 中 `windowNotes/windowNoteText` 拼接为原先的尾部缺失月份提示。
+- 调整：将“业务数据缺失月份”从总体情况句尾移入“本期窗口”后的括号中，并置于 4 月实际值口径说明之前。
+- 新格式示例：`本期窗口为 2026-03 ~ 2026-06（业务数据缺失月份：2026-05、2026-06；本期2026年4月实际值使用04-05；同期2025年4月未命中04-05，回退使用04-01），共纳入 ...。`
+- 文案精简：移除括号中的“平均气温不计入业务数据存在性”提示，缺失月份判定逻辑本身保持不变。
+
+## 2026-05-01 monthly_data_show 简要分析业务数据缺失月份标注
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 定位 `analysisInsights` 与结果行结构，按仓库降级矩阵使用 `apply_patch` 修改前端与文档。回滚方式为移除 `listSelectedMonthTags()`、`resolveMissingBusinessMonthTags()` 以及总体情况中的缺失月份拼接。
+- 问题：选择 `2026-03 ~ 2026-05` 时，如果 4 月只有平均气温、5 月完全无业务数据，简要分析仍写“本期窗口为 2026-03 ~ 2026-05，共纳入 46 条有效对比序列”，容易误解为 4、5 月业务数据已纳入。
+- 调整：简要分析第一句新增“业务数据缺失月份”标注，按筛选月份与查询结果中的非气温业务数据月份做差集。
+- 判定：`平均气温` 不计入业务数据存在性；仅有气温的月份会被视为业务数据缺失。
+- 示例：若 2026-04 仅有气温、2026-05 无任何记录，则显示“业务数据缺失月份：2026-04、2026-05（平均气温不计入业务数据存在性）”。
+- 边界：开启“聚合期间月份”时结果日期为空，前端不做缺失月份判断，避免误报。
+
+## 2026-05-01 monthly_data_show 默认多月查询只取月初
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 复核 `buildPayload()` 与 `_append_current_date_condition()`，按仓库降级矩阵使用 `apply_patch` 修改后端与文档。回滚方式为恢复 `_append_current_date_condition()` 未勾选时的 `date >= :from AND date <= :to` 范围查询。
+- 问题：选择 `2026-03 ~ 2026-04` 且不勾选“改用4月5日”时，前端会提交 `date_from=2026-03-01`、`date_to=2026-04-30`，后端默认范围查询把 `2026-04-05` 纳入结果，违背“未勾选时只查月初合计记录”的预期。
+- 调整：`_append_current_date_condition()` 对包含 `type=real` 的查询统一使用逐月目标日期集合。
+- 默认口径：未勾选时目标日期仅为各月 `YYYY-MM-01`，因此 `2026-03 ~ 2026-04` 只查 `2026-03-01` 与 `2026-04-01`；若 `2026-04-01` 不存在，不会自动查 `2026-04-05`。
+- 4月5日口径：仅勾选 `use_april_5_for_current=true` 时，4 月才进入 `04-05 优先、缺失回退 04-01` 逻辑。
+- 计划值保持：若请求混合非 `real` 类型，非实际值仍保留原日期范围条件；当前查询页固定 `types=['real']`，因此主查询按逐月实际值目标日期执行。
+
+## 2026-05-01 monthly_data_show 简要分析窗口月份化
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 定位 `analysisInsights` 文案生成位置，按仓库降级矩阵使用 `apply_patch` 修改前端与文档。回滚方式为移除 `formatAnalysisWindowMonthLabel()` 并恢复简要分析直接使用 `comparisonMeta.currentWindowLabel`。
+- 调整：查询结果“简要分析”第一句的“本期窗口”改为月份口径展示。
+- 示例：`2026-01-01 ~ 2026-04-30` 展示为 `2026-01 ~ 2026-04`；`2026-04-01` 展示为 `2026-04`。
+- 保留：4 月实际值口径说明继续保留在月份窗口后，如“本期2026年4月实际值使用04-05；同期2025年4月未命中04-05，回退使用04-01”。
+- 影响范围：仅影响“简要分析”文案；后端窗口字段、导出汇总信息、表格标签仍保留原有日期窗口。
+
+## 2026-05-01 monthly_data_show 简要分析4月口径标注
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮继续使用 Serena 检索“简要分析”生成链路，按仓库降级矩阵使用 `apply_patch` 修改 Vue/Python/Markdown 文本。回滚方式为移除 `QueryComparisonResponse` 的三段日期口径说明字段及前端 `comparisonMeta` 对应展示逻辑。
+- 问题：查询 4 月并勾选“改用4月5日”时，简要分析第一句仍只显示原始本期窗口（如 `2026-04-01`），没有说明实际值使用 `04-05`；若同期缺少 `04-05` 并回退 `04-01`，也没有提示。
+- 后端调整：`QueryComparisonResponse` 新增 `current_value_date_note`、`yoy_value_date_note`、`mom_value_date_note`；后端按当前/同期/环比窗口分别判断 4 月实际值口径。
+- 标注规则：同一 4 月窗口全部命中 `04-05` 时标注“实际值使用04-05”；全部缺失 `04-05` 但命中 `04-01` 时标注“未命中04-05，回退使用04-01”；部分维度混用时标注“部分实际值使用04-05，缺失维度回退04-01”。
+- 前端调整：`analysisInsights` 的第一句在“本期窗口为 ……”后追加上述口径说明，避免窗口标签与真实取数日期不一致。
+
+## 2026-05-01 monthly_data_show 4月5日本期值查询开关
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 检索主查询、同比环比和计划值取数路径。因目标为 Vue/Python/Markdown 文本编辑，按仓库降级矩阵使用 `apply_patch` 修改；回滚方式为移除 `use_april_5_for_current` 字段、前端开关、后端日期集合过滤辅助函数与本节文档。
+- 回退补充：开启“改用4月5日”后，4 月本期实际值不再硬性只查 `YYYY-04-05`；同一 `company + item + period + type` 维度存在 `YYYY-04-05` 时优先使用 5 日记录，不存在时自动回退 `YYYY-04-01`。
+- 同比修复：同比/环比实际值窗口也使用同一优先/回退规则，上一年度 4 月没有 `04-05` 但有 `04-01` 时，不再因为缺 5 日数据导致同期值为空。
+- 背景：4 月存在两类月度统计记录：`YYYY-04-05` 承载供暖期结束时 1-5 日数据，`YYYY-04-01` 承载月底 1-30 日全月数据。
+- 前端调整：`monthly_data_show/query-tool` 在“业务月份止（非必选）”后新增复选项“改用4月5日”，默认关闭；开启后请求体新增 `use_april_5_for_current=true`。
+- 后端调整：`QueryRequest` 新增 `use_april_5_for_current`；主查询和同比环比实际值路径会把查询窗口转换为逐月目标日期集合，其中 4 月优先使用 `YYYY-04-05` 并可回退 `YYYY-04-01`，其他月份使用 `YYYY-MM-01`。
+- 计划值保持：`_fetch_plan_value_map()` 与年度计划取数未接入该开关，`type=plan` 仍按原有日期窗口查询。
+- 示例：选择 `2025-11` 至 `2026-04` 并勾选该项时，本期实际值查询目标日期为 `2025-11-01`、`2025-12-01`、`2026-01-01`、`2026-02-01`、`2026-03-01`、`2026-04-05`。
+- 验证：`python -m py_compile backend\projects\monthly_data_show\api\workspace.py` 通过；`frontend` 目录执行 `npm run build` 通过。
+
+## 2026-05-01 monthly_data_show 单月查询日期口径修正
+
+- 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 完成本地检索，因目标为 Vue/Markdown 文本编辑，按仓库降级矩阵使用 `apply_patch` 修改文件，范围仅限查询页传参与同步文档；回滚方式为恢复本节与 `buildPayload()` 中 `date_to` 默认值。
+- 问题确认：`monthly_data_show/query-tool` 的月份控件原先在未选择“业务月份止”时，会把 `YYYY-MM` 转换为 `date_from=YYYY-MM-01`、`date_to=YYYY-MM-月末`，导致主查询、同比环比、导出与 AI 上下文都按整月日期窗口读取。
+- 调整结果：单月查询现在提交 `date_from=YYYY-MM-01` 且 `date_to=YYYY-MM-01`，匹配月报标准表“月初日期承载当月合计”的记录方式，避免误纳入同月其他日期的零散数据。
+- 影响范围：仅前端 `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue` 的 `buildPayload()`；后端 `/monthly-data-show/query` 与 `/monthly-data-show/query-comparison` 接口协议不变。
+- 保留行为：用户显式选择“业务月份止”时，仍按起始月 1 日至截止月月末的区间查询，未在本轮改变多月区间口径。
+- 验证：已通过代码路径核查确认 `runQuery()`、导出全量、AI 上下文和同比环比共用 `buildPayload()`，会同步使用新的单月日期窗口；`frontend` 目录执行 `npm run build` 通过，Vite 成功生成生产产物。
+
+## 2026-05-01（Serena 启动失败修复：改用离线 token 估算器）
+
+- 现象：
+  - Codex 加载 Serena MCP 时弹出 `ConnectionResetError(10054)`，远程主机强制关闭连接。
+- 根因：
+  - Serena 全局配置 `C:\Users\ww\.serena\serena_config.yml` 中 `token_count_estimator` 为 `TIKTOKEN_GPT4O`；
+  - Serena 启动时初始化 `tiktoken.encoding_for_model("gpt-4o")`，首次需要下载 `https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken`；
+  - 当前网络/代理链路重置该连接，导致 Serena 在 MCP 初始化阶段崩溃。
+- 本轮改动：
+  - `C:\Users\ww\.serena\serena_config.yml`
+    - `token_count_estimator: TIKTOKEN_GPT4O` 改为 `token_count_estimator: CHAR_COUNT`。
+- 验证：
+  - 手动启动 `uvx --from git+https://github.com/oraios/serena serena start-mcp-server --project-from-cwd --context=codex --enable-web-dashboard false --open-web-dashboard false`；
+  - 日志显示 `Will record tool usage statistics with token count estimator: CHAR_COUNT`；
+  - 日志显示 `MCP server lifetime setup complete`，并暴露 23 个 Serena 工具。
+- 结果：
+  - 本次报错已定位为 tiktoken 编码文件下载失败，不是 Phoenix 仓库代码问题，也不是 Codex MCP TOML 语法问题。
+
 ## 2026-04-10（page_showcase 永久链接 404 修复：去除重复 API 前缀）
 
 - 现象：

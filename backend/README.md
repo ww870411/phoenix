@@ -1,5 +1,18 @@
 # daily_report_25_26 后端说明
 
+## 2026-05-01 monthly_data_show 单月查询口径说明
+
+- `QueryRequest` 新增 `use_april_5_for_current: bool = False`，用于查询页“改用4月5日”开关。
+- 开关关闭时，实际值只查各月 `YYYY-MM-01`。
+- 实际值查询现在统一使用逐月目标日期集合：开关关闭时只查各月 `YYYY-MM-01`，不会因为日期范围覆盖而自动纳入 `YYYY-04-05`。
+- 开关开启且请求包含 `type=real` 时，4 月优先使用 `YYYY-04-05`，若同一 `company + item + period + type` 没有 5 日记录则回退 `YYYY-04-01`；其他月份使用 `YYYY-MM-01`。
+- `POST /monthly-data-show/query-comparison` 返回新增口径说明字段：`current_value_date_note`、`yoy_value_date_note`、`mom_value_date_note`，用于前端“简要分析”标注 4 月实际值使用 04-05 或回退 04-01。
+- 前端查询页已将单月查询请求从 `date_from=YYYY-MM-01`、`date_to=YYYY-MM-月末` 调整为 `date_from=date_to=YYYY-MM-01`。
+- `POST /monthly-data-show/query` 默认仍按 `QueryRequest.date_from/date_to` 生成日期范围条件；当 `use_april_5_for_current=true` 时，实际值改用逐月目标日期集合条件。
+- `POST /monthly-data-show/query-comparison` 的窗口仍优先取 `date_from/date_to`，实际值取数会随 `use_april_5_for_current` 切换 4 月目标日期。
+- 计划值保持原逻辑：`_fetch_plan_value_map()` 与年度计划取数不使用 `use_april_5_for_current`，`type=plan` 仍按原日期窗口查询。
+- `report_month_from/report_month_to` 逻辑未改变：只有调用方显式传入时才参与过滤。
+
 ## 月报导入工作台单位换算修复（2026-03-19）
 - 文件：`backend/projects/monthly_data_show/services/extractor.py`
 - 问题现象：

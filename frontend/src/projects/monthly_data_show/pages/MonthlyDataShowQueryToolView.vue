@@ -23,6 +23,13 @@
               <input class="month-input" type="month" v-model="filters.dateMonthTo" />
             </div>
           </label>
+          <div class="field month-field april-5-field">
+            <span>4月口径</span>
+            <label class="check-item april-5-option">
+              <input type="checkbox" v-model="filters.useApril5ForCurrent" />
+              <span>改用4月5日</span>
+            </label>
+          </div>
           <div class="field span-full">
             <div class="field-head">
               <span class="panel-title">口径（可多选）</span>
@@ -630,6 +637,7 @@ const filters = reactive({
   orderFields: ['time', 'company', 'item'],
   aggregateCompanies: false,
   aggregateMonths: false,
+  useApril5ForCurrent: false,
   zeroFilterMode: 'off',
 })
 const layerOptions = [
@@ -818,6 +826,9 @@ const comparisonMeta = reactive({
   yoyWindowLabel: '',
   momWindowLabel: '',
   planWindowLabel: '',
+  currentValueDateNote: '',
+  yoyValueDateNote: '',
+  momValueDateNote: '',
   annualPlanEnabled: false,
   annualPlanWindowLabel: '',
 })
@@ -994,8 +1005,20 @@ const analysisInsights = computed(() => {
   const momReady = comparisonRows.value.filter((x) => x.momRate != null)
   const planReady = comparisonRows.value.filter((x) => x.planRate != null)
   const annualPlanReady = comparisonRows.value.filter((x) => x.annualPlanRate != null)
+  const valueDateNotes = [
+    comparisonMeta.currentValueDateNote,
+    comparisonMeta.yoyValueDateNote,
+    comparisonMeta.momValueDateNote,
+  ].map((x) => String(x || '').trim()).filter(Boolean)
+  const analysisWindowLabel = formatAnalysisWindowMonthLabel(comparisonMeta.currentWindowLabel)
+  const missingBusinessMonthTags = resolveMissingBusinessMonthTags()
+  const windowNotes = [
+    missingBusinessMonthTags.length ? `业务数据缺失月份：${missingBusinessMonthTags.join('、')}` : '',
+    ...valueDateNotes,
+  ].filter(Boolean)
+  const windowNoteText = windowNotes.length ? `（${windowNotes.join('；')}）` : ''
   const lines = [
-    `一、总体情况：本期窗口为 ${comparisonMeta.currentWindowLabel || '—'}，共纳入 ${comparisonRows.value.length} 条有效对比序列；同比可比 ${yoyReady.length} 条，环比可比 ${momReady.length} 条，计划可比 ${planReady.length} 条${showAnnualPlanColumns.value ? `，年计划可比 ${annualPlanReady.length} 条` : ''}。`,
+    `一、总体情况：本期窗口为 ${analysisWindowLabel}${windowNoteText}，共纳入 ${comparisonRows.value.length} 条有效对比序列；同比可比 ${yoyReady.length} 条，环比可比 ${momReady.length} 条，计划可比 ${planReady.length} 条${showAnnualPlanColumns.value ? `，年计划可比 ${annualPlanReady.length} 条` : ''}。`,
   ]
   lines.push(`二、分层分析：以下按“${resolvedFields.map((f) => fieldLabels[f]).join(' > ')}”顺序展开。`)
   const MAX_DETAIL_LINES = 180
@@ -1297,6 +1320,56 @@ function formatMonthTag(year, month) {
   const m = Number(month)
   if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) return ''
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`
+}
+
+function formatAnalysisWindowMonthLabel(windowLabel) {
+  const text = String(windowLabel || '').trim()
+  if (!text) return '—'
+  const rangeMatch = text.match(/^(\d{4})-(\d{2})-\d{2}\s*~\s*(\d{4})-(\d{2})-\d{2}$/)
+  if (rangeMatch) {
+    const startTag = formatMonthTag(Number(rangeMatch[1]), Number(rangeMatch[2]))
+    const endTag = formatMonthTag(Number(rangeMatch[3]), Number(rangeMatch[4]))
+    if (startTag && endTag) return startTag === endTag ? startTag : `${startTag} ~ ${endTag}`
+  }
+  const singleMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (singleMatch) {
+    const tag = formatMonthTag(Number(singleMatch[1]), Number(singleMatch[2]))
+    if (tag) return tag
+  }
+  return text
+}
+
+function listSelectedMonthTags() {
+  const fromText = String(filters.dateMonthFrom || '').trim()
+  const toText = String(filters.dateMonthTo || '').trim() || fromText
+  const monthRe = /^(\d{4})-(\d{2})$/
+  const fromMatch = fromText.match(monthRe)
+  const toMatch = toText.match(monthRe)
+  if (!fromMatch || !toMatch) return []
+
+  const result = []
+  const cursor = new Date(Number(fromMatch[1]), Number(fromMatch[2]) - 1, 1)
+  const end = new Date(Number(toMatch[1]), Number(toMatch[2]) - 1, 1)
+  while (cursor <= end) {
+    result.push(formatMonthTag(cursor.getFullYear(), cursor.getMonth() + 1))
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return result.filter(Boolean)
+}
+
+function resolveMissingBusinessMonthTags() {
+  if (filters.aggregateMonths) return []
+  const expectedTags = listSelectedMonthTags()
+  if (!expectedTags.length) return []
+  const existingTags = new Set()
+  for (const row of rows.value || []) {
+    if (String(row?.item || '').trim() === AVERAGE_TEMPERATURE_ITEM) continue
+    const tag = String(row?.date || row?.report_month || '').slice(0, 7)
+    if (/^\d{4}-\d{2}$/.test(tag)) {
+      existingTags.add(tag)
+    }
+  }
+  return expectedTags.filter((tag) => !existingTags.has(tag))
 }
 
 function formatResultMonth(dateText) {
@@ -1730,7 +1803,8 @@ function buildPayload() {
   const normalizedDateTo = (() => {
     const explicitTo = toMonthEndDate(filters.dateMonthTo)
     if (explicitTo) return explicitTo
-    if (normalizedDateFrom) return toMonthEndDate(filters.dateMonthFrom)
+    // 月报标准表按月初日期承载当月合计；单月查询默认只取该月 1 日，避免误把零散日数据汇总进月度口径。
+    if (normalizedDateFrom) return normalizedDateFrom
     return null
   })()
   return {
@@ -1747,6 +1821,7 @@ function buildPayload() {
     order_fields: [...filters.orderFields].filter((x) => x === 'time' || x === 'company' || x === 'item'),
     aggregate_companies: Boolean(filters.aggregateCompanies),
     aggregate_months: Boolean(filters.aggregateMonths),
+    use_april_5_for_current: Boolean(filters.useApril5ForCurrent),
     exclude_zero_values: filters.zeroFilterMode !== 'off',
     exclude_zero_mode: filters.zeroFilterMode === 'off' ? 'row' : filters.zeroFilterMode,
     limit,
@@ -1829,6 +1904,7 @@ async function buildMonthlyChatContext() {
       companies_scope: filters.companies.join(', '),
       items_scope: filters.items.join(', '),
       date_range: `${filters.dateMonthFrom} 至 ${filters.dateMonthTo || '至今'}`,
+      use_april_5_for_current: Boolean(filters.useApril5ForCurrent),
       value_sum: summary.valueSum,
       comparison_window: comparisonMeta.currentWindowLabel,
       yoy_window: comparisonMeta.yoyWindowLabel,
@@ -2011,6 +2087,9 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.currentValueDateNote = ''
+    comparisonMeta.yoyValueDateNote = ''
+    comparisonMeta.momValueDateNote = ''
     comparisonMeta.annualPlanEnabled = false
     comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0
@@ -2075,6 +2154,9 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = String(comparePayload?.yoy_window_label || '')
     comparisonMeta.momWindowLabel = String(comparePayload?.mom_window_label || '')
     comparisonMeta.planWindowLabel = String(comparePayload?.plan_window_label || '')
+    comparisonMeta.currentValueDateNote = String(comparePayload?.current_value_date_note || '')
+    comparisonMeta.yoyValueDateNote = String(comparePayload?.yoy_value_date_note || '')
+    comparisonMeta.momValueDateNote = String(comparePayload?.mom_value_date_note || '')
     comparisonMeta.annualPlanEnabled = Boolean(comparePayload?.annual_plan_enabled)
     comparisonMeta.annualPlanWindowLabel = String(comparePayload?.annual_plan_window_label || '')
     stopAiReportPolling()
@@ -2097,6 +2179,9 @@ async function runQuery(resetOffset = false) {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.currentValueDateNote = ''
+    comparisonMeta.yoyValueDateNote = ''
+    comparisonMeta.momValueDateNote = ''
     comparisonMeta.annualPlanEnabled = false
     comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0
@@ -2122,6 +2207,7 @@ async function resetFilters() {
   filters.orderFields = ['time', 'company', 'item']
   filters.aggregateCompanies = false
   filters.aggregateMonths = false
+  filters.useApril5ForCurrent = false
   filters.zeroFilterMode = 'off'
   hasSearched.value = false
   rows.value = []
@@ -2137,6 +2223,9 @@ async function resetFilters() {
   comparisonMeta.yoyWindowLabel = ''
   comparisonMeta.momWindowLabel = ''
   comparisonMeta.planWindowLabel = ''
+  comparisonMeta.currentValueDateNote = ''
+  comparisonMeta.yoyValueDateNote = ''
+  comparisonMeta.momValueDateNote = ''
   comparisonMeta.annualPlanEnabled = false
   comparisonMeta.annualPlanWindowLabel = ''
   summary.totalRows = 0
@@ -2178,6 +2267,9 @@ onMounted(async () => {
     comparisonMeta.yoyWindowLabel = ''
     comparisonMeta.momWindowLabel = ''
     comparisonMeta.planWindowLabel = ''
+    comparisonMeta.currentValueDateNote = ''
+    comparisonMeta.yoyValueDateNote = ''
+    comparisonMeta.momValueDateNote = ''
     comparisonMeta.annualPlanEnabled = false
     comparisonMeta.annualPlanWindowLabel = ''
     summary.totalRows = 0

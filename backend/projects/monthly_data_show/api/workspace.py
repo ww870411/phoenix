@@ -167,6 +167,7 @@ class QueryRequest(BaseModel):
     order_fields: List[str] = []
     aggregate_companies: bool = False
     aggregate_months: bool = False
+    use_april_5_for_current: bool = False
     exclude_zero_values: bool = False
     exclude_zero_mode: str = "row"
     limit: int = 200
@@ -247,6 +248,9 @@ class QueryComparisonResponse(BaseModel):
     yoy_window_label: str
     mom_window_label: str
     plan_window_label: str
+    current_value_date_note: str = ""
+    yoy_value_date_note: str = ""
+    mom_value_date_note: str = ""
     annual_plan_enabled: bool = False
     annual_plan_window_label: str = ""
     rows: List[QueryComparisonRow]
@@ -666,23 +670,26 @@ def _build_query_sql_parts(request: QueryRequest):
     report_month_to = _parse_optional_date(request.report_month_to, "report_month_to")
     date_from = _parse_optional_date(request.date_from, "date_from")
     date_to = _parse_optional_date(request.date_to, "date_to")
+    companies = _normalize_text_list(request.companies)
+    items = _normalize_text_list(request.items)
+    periods = _normalize_text_list(request.periods)
+    types = _normalize_text_list(request.types)
+
     if report_month_from is not None:
         where_parts.append("report_month >= :report_month_from")
         params["report_month_from"] = report_month_from
     if report_month_to is not None:
         where_parts.append("report_month <= :report_month_to")
         params["report_month_to"] = report_month_to
-    if date_from is not None:
+
+    if date_from is not None and date_to is not None:
+        _append_current_date_condition(where_parts, params, bind_params, request, date_from, date_to, types)
+    elif date_from is not None:
         where_parts.append("date >= :date_from")
         params["date_from"] = date_from
-    if date_to is not None:
+    elif date_to is not None:
         where_parts.append("date <= :date_to")
         params["date_to"] = date_to
-
-    companies = _normalize_text_list(request.companies)
-    items = _normalize_text_list(request.items)
-    periods = _normalize_text_list(request.periods)
-    types = _normalize_text_list(request.types)
 
     if companies:
         where_parts.append("company IN :companies")
@@ -743,6 +750,148 @@ def _iter_month_starts(start: date, end: date) -> List[date]:
         else:
             cursor = date(cursor.year, cursor.month + 1, 1)
     return month_list
+
+
+def _iter_current_value_dates(start: date, end: date, use_april_5_for_current: bool) -> List[date]:
+    result: List[date] = []
+    for month_start in _iter_month_starts(start, end):
+        if use_april_5_for_current and month_start.month == 4:
+            result.append(date(month_start.year, 4, 5))
+            result.append(month_start)
+        else:
+            result.append(month_start)
+    return result
+
+
+def _uses_april_5_current(request: QueryRequest) -> bool:
+    return bool(getattr(request, "use_april_5_for_current", False))
+
+
+def _has_real_type(types: List[str]) -> bool:
+    return "real" in {str(item or "").strip().lower() for item in (types or [])}
+
+
+def _append_current_date_condition(
+    where_parts: List[str],
+    params: dict,
+    bind_params: List,
+    request: QueryRequest,
+    start: date,
+    end: date,
+    types: List[str],
+    prefix: str = "date",
+) -> List[date]:
+    if _has_real_type(types):
+        use_april_5 = _uses_april_5_current(request)
+        value_dates = _iter_current_value_dates(start, end, use_april_5)
+        date_param = f"{prefix}_current_dates"
+        params[date_param] = value_dates
+        bind_params.append(bindparam(date_param, expanding=True))
+        april_fallback_guard = (
+            "NOT (date_part('month', date) = 4 AND date_part('day', date) = 1 AND EXISTS ("
+            "SELECT 1 FROM monthly_data_show april5 "
+            "WHERE april5.company = monthly_data_show.company "
+            "AND april5.item = monthly_data_show.item "
+            "AND april5.period = monthly_data_show.period "
+            "AND april5.type = monthly_data_show.type "
+            "AND april5.date = monthly_data_show.date + 4"
+            "))"
+        )
+        if any(str(item or "").strip().lower() != "real" for item in (types or [])):
+            from_param = f"{prefix}_from"
+            to_param = f"{prefix}_to"
+            real_date_sql = f"type = 'real' AND date IN :{date_param}"
+            if use_april_5:
+                real_date_sql = f"{real_date_sql} AND {april_fallback_guard}"
+            where_parts.append(
+                f"(({real_date_sql}) OR "
+                f"(type <> 'real' AND date >= :{from_param} AND date <= :{to_param}))"
+            )
+            params[from_param] = start
+            params[to_param] = end
+        else:
+            where_parts.append(f"date IN :{date_param}")
+            if use_april_5:
+                where_parts.append(april_fallback_guard)
+        return value_dates
+
+    from_param = f"{prefix}_from"
+    to_param = f"{prefix}_to"
+    where_parts.append(f"date >= :{from_param}")
+    where_parts.append(f"date <= :{to_param}")
+    params[from_param] = start
+    params[to_param] = end
+    return _iter_month_starts(start, end)
+
+
+def _build_april_value_date_note(session, request: QueryRequest, start: date, end: date, label: str) -> str:
+    if not (_uses_april_5_current(request) and start <= end):
+        return ""
+    april_months = [month for month in _iter_month_starts(start, end) if month.month == 4]
+    if not april_months:
+        return ""
+
+    companies = _normalize_text_list(request.companies)
+    periods = _normalize_text_list(request.periods)
+    types = _normalize_text_list(request.types)
+    selected_items = _normalize_text_list(request.items)
+    query_items = sorted(set([x for x in selected_items if x != AVERAGE_TEMPERATURE_ITEM] + _collect_required_base_items(
+        [x for x in selected_items if x in CALCULATED_ITEM_SET]
+    )))
+    if not (companies and periods and types and query_items and _has_real_type(types)):
+        return ""
+
+    stmt = text(
+        """
+        SELECT DISTINCT date
+        , company
+        , item
+        , period
+        FROM monthly_data_show
+        WHERE company IN :companies
+          AND item IN :items
+          AND period IN :periods
+          AND type = 'real'
+          AND date IN :candidate_dates
+        """
+    ).bindparams(
+        bindparam("companies", expanding=True),
+        bindparam("items", expanding=True),
+        bindparam("periods", expanding=True),
+        bindparam("candidate_dates", expanding=True),
+    )
+
+    note_parts: List[str] = []
+    for month_start in april_months:
+        april_5 = date(month_start.year, 4, 5)
+        april_1 = month_start
+        rows = session.execute(
+            stmt,
+            {
+                "companies": companies,
+                "items": query_items,
+                "periods": periods,
+                "candidate_dates": [april_5, april_1],
+            },
+        ).mappings().all()
+        april_5_keys = {
+            (str(row.get("company") or ""), str(row.get("item") or ""), str(row.get("period") or ""))
+            for row in rows
+            if row.get("date") == april_5
+        }
+        april_1_keys = {
+            (str(row.get("company") or ""), str(row.get("item") or ""), str(row.get("period") or ""))
+            for row in rows
+            if row.get("date") == april_1
+        }
+        fallback_keys = april_1_keys - april_5_keys
+        if april_5_keys and fallback_keys:
+            note_parts.append(f"{label}{month_start.year}年4月部分实际值使用04-05，缺失维度回退04-01")
+        elif april_5_keys:
+            note_parts.append(f"{label}{month_start.year}年4月实际值使用04-05")
+        elif april_1_keys:
+            note_parts.append(f"{label}{month_start.year}年4月未命中04-05，回退使用04-01")
+    return "；".join(note_parts)
 
 
 def _pick_temperature_date_range(request: QueryRequest) -> Tuple[Optional[date], Optional[date]]:
@@ -1532,17 +1681,32 @@ def _fetch_compare_map(
     result_map: dict = {}
     complete_keys: Set[str] = set()
     base_rows: List[dict] = []
-    expected_month_keys = {month.isoformat() for month in _iter_month_starts(start_date, end_date)}
+    expected_month_dates = _iter_month_starts(start_date, end_date)
+    expected_month_keys = {month.isoformat() for month in expected_month_dates}
     if companies and periods and types and query_base_items:
-        where_parts = ["date BETWEEN :date_from AND :date_to"]
+        where_parts: List[str] = []
         params = {
-            "date_from": start_date,
-            "date_to": end_date,
             "companies": companies,
             "items": query_base_items,
             "periods": periods,
             "types": types,
         }
+        bind_params = [
+            bindparam("companies", expanding=True),
+            bindparam("items", expanding=True),
+            bindparam("periods", expanding=True),
+            bindparam("types", expanding=True),
+        ]
+        _append_current_date_condition(
+            where_parts,
+            params,
+            bind_params,
+            request,
+            start_date,
+            end_date,
+            types,
+            prefix="compare_date",
+        )
         where_parts.append("company IN :companies")
         where_parts.append("item IN :items")
         where_parts.append("period IN :periods")
@@ -1564,12 +1728,7 @@ def _fetch_compare_map(
             WHERE {where_sql}
             GROUP BY {group_by_sql}
             """
-        ).bindparams(
-            bindparam("companies", expanding=True),
-            bindparam("items", expanding=True),
-            bindparam("periods", expanding=True),
-            bindparam("types", expanding=True),
-        )
+        ).bindparams(*bind_params)
         rows = session.execute(stmt, params).mappings().all()
         for row in rows:
             company = str(row.get("company") or "")
@@ -1607,12 +1766,7 @@ def _fetch_compare_map(
             WHERE {where_sql}
             GROUP BY {group_by_sql}, date
             """
-        ).bindparams(
-            bindparam("companies", expanding=True),
-            bindparam("items", expanding=True),
-            bindparam("periods", expanding=True),
-            bindparam("types", expanding=True),
-        )
+        ).bindparams(*bind_params)
         monthly_rows = session.execute(monthly_stmt, params).mappings().all()
         month_coverage: Dict[Tuple[str, str, str, str], Set[str]] = {}
         for row in monthly_rows:
@@ -1625,7 +1779,7 @@ def _fetch_compare_map(
                 str(row.get("period") or ""),
                 str(row.get("type") or ""),
             )
-            month_coverage.setdefault(coverage_key, set()).add(row_date.isoformat())
+            month_coverage.setdefault(coverage_key, set()).add(_month_start(row_date).isoformat())
         for key, base_row in result_map.items():
             coverage_key = (
                 str(base_row.get("company") or ""),
@@ -2512,6 +2666,9 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_window_label="",
             mom_window_label="",
             plan_window_label="",
+            current_value_date_note="",
+            yoy_value_date_note="",
+            mom_value_date_note="",
             annual_plan_enabled=False,
             annual_plan_window_label="",
             rows=[],
@@ -2527,6 +2684,9 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_window_label="",
             mom_window_label="",
             plan_window_label="",
+            current_value_date_note="",
+            yoy_value_date_note="",
+            mom_value_date_note="",
             annual_plan_enabled=False,
             annual_plan_window_label="",
             rows=[],
@@ -2543,6 +2703,9 @@ def query_month_data_show_comparison(request: QueryRequest):
     annual_completion_map: Dict[str, dict] = {}
     annual_plan_map: Dict[Tuple[str, str, str], Optional[float]] = {}
     annual_plan_complete_keys: Set[Tuple[str, str, str]] = set()
+    current_value_date_note = ""
+    yoy_value_date_note = ""
+    mom_value_date_note = ""
 
     try:
         with SessionLocal() as session:
@@ -2550,6 +2713,9 @@ def query_month_data_show_comparison(request: QueryRequest):
             yoy_map, yoy_complete_keys = _fetch_compare_map(session, request, yoy_start, yoy_end)
             mom_map, _mom_complete_keys = _fetch_compare_map(session, request, mom_start, mom_end)
             plan_map, plan_complete_keys = _fetch_plan_value_map(session, request, current_start, current_end)
+            current_value_date_note = _build_april_value_date_note(session, request, current_start, current_end, "本期")
+            yoy_value_date_note = _build_april_value_date_note(session, request, yoy_start, yoy_end, "同期")
+            mom_value_date_note = _build_april_value_date_note(session, request, mom_start, mom_end, "环比期")
             if annual_plan_enabled:
                 annual_request = request.model_copy(update={"periods": ["month"], "types": ["real"]})
                 annual_completion_start = date(current_end.year, 1, 1)
@@ -2637,6 +2803,9 @@ def query_month_data_show_comparison(request: QueryRequest):
         yoy_window_label=_format_window_label(yoy_start, yoy_end),
         mom_window_label=_format_window_label(mom_start, mom_end),
         plan_window_label=_format_window_label(current_start, current_end),
+        current_value_date_note=current_value_date_note,
+        yoy_value_date_note=yoy_value_date_note,
+        mom_value_date_note=mom_value_date_note,
         annual_plan_enabled=annual_plan_enabled,
         annual_plan_window_label=annual_plan_window_label,
         rows=rows,
