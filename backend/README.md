@@ -1,5 +1,15 @@
 # daily_report_25_26 后端说明
 
+## 2026-05-21 agy CLI 全局提示词规范文件 GEMINI.md 建立
+
+- 本轮 Phoenix 项目后端代码无改动。
+- 协作补充：用户希望参考 `.codex/AGENTS.md`，在 agy cli 环境下建立一个可行的、适用的全局提示词/规则约束文件。已确认 `C:\Users\ww\.gemini\GEMINI.md` 为全局加载规则路径，并结合 Antigravity (agy cli) 的高精细编辑工具、子智能体调度 `invoke_subagent`、计时器 `schedule`、slash 命令等机制，将 `.codex/AGENTS.md` 的精髓翻译整合为一份完美的、具备高度防御性和生产力的 `GEMINI.md` 全局提示词文件。
+
+## 2026-05-21 agy MCP 环境配置文件修复与全局提示词设置答疑
+
+- 本轮 Phoenix 项目后端代码无改动。
+- 协作补充：协助定位了开发协作工具 `agy` 配置文件没有在开发机正确生效的问题。正确的 MCP 配置文件位置应在 `C:\Users\ww\.gemini\antigravity-cli\mcp_config.json`，且格式应正确包裹 `"mcpServers"` 顶层对象。已成功在上述正确路径生成标准格式配置文件并确认完整就绪。此外，进行了全局提示词设定途径的普及答疑，并仿照 `.codex/AGENTS.md`，结合 `gemini (agy)` 的核心工具箱与独特的规划模式与子智能体机制，为用户量身改写设计出了一份全新的全局智能体规范指南。
+
 ## 2026-05-01 monthly_data_show 单月查询口径说明
 
 - `QueryRequest` 新增 `use_april_5_for_current: bool = False`，用于查询页“改用4月5日”开关。
@@ -4022,16 +4032,16 @@
 ## 2026-05-01 2026年度保温管供需管理系统数据目录
 
 - 已新增 `backend_data/projects/insulation_pipe_supply_2026/` 目录，并放置说明文件 `README.md`。
-- 该目录用于承接2026年度保温管供需管理系统后续配置、运行数据与业务文件；项目键仍保持 `insulation_pipe_supply`，未随目录名变动。
+- 该目录用于承接2026年度保温管供需管理系统后续配置、运行数据与业务文件；项目键仍保持 `insulation_pipe_supply_2026`，未随目录名变动。
 
 ## 2026-05-01 2026年度保温管供需管理系统入口样式调整说明
 
-- 本轮仅调整前端 `insulation_pipe_supply` 入口卡片样式，未新增或修改后端接口。
-- 后端项目清单与权限配置沿用 2026-05-01 新增的 `insulation_pipe_supply` 配置。
+- 本轮仅调整前端 `insulation_pipe_supply_2026` 入口卡片样式，未新增或修改后端接口。
+- 后端项目清单与权限配置沿用 2026-05-01 新增的 `insulation_pipe_supply_2026` 配置。
 
 ## 2026-05-01 2026年度保温管供需管理系统配置
 
-- 共享项目清单 `backend_data/shared/项目列表.json` 尾部新增 `insulation_pipe_supply`，显示名称为“2026年度保温管供需管理系统”，页面包括 `dashboard`、`raw_materials`、`production_allocation`、`demand`。
+- 共享项目清单 `backend_data/shared/项目列表.json` 尾部新增 `insulation_pipe_supply_2026`，显示名称为“2026年度保温管供需管理系统”，页面包括 `dashboard`、`raw_materials`、`production_allocation`、`demand`。
 - 共享权限配置 `backend_data/shared/auth/permissions.json` 仅在 `Global_admin` 组下增加该项目权限；其他权限组不包含该项目，因此 `/projects` 项目列表不会向非 global_admin 账号返回该入口。
 - 本次未新增后端接口，当前入口页为前端卡片导航骨架，后续业务接口可按项目模块继续扩展。
 
@@ -4039,4 +4049,4 @@
 
 - 确认 `backend_data/shared/项目列表.json` 为平台项目与页面的单一真相来源。
 - 所有前端项目（除非有特殊交互需求并显式注册）均应通过通用 `PageSelectView.vue` 从该 JSON 动态加载页面列表与描述。
-- 本轮已将 `insulation_pipe_supply` 切换为该动态模式，移除前端硬编码。
+- 本轮已将 `insulation_pipe_supply_2026` 切换为该动态模式，移除前端硬编码。

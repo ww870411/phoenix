@@ -1,5 +1,15 @@
 # 前端说明（Vue3 + Vite）
 
+## 2026-05-21 agy CLI 全局提示词规范文件 GEMINI.md 建立
+
+- 本轮 Phoenix 项目前端代码无改动。
+- 协作补充：用户希望参考 `.codex/AGENTS.md`，在 agy cli 环境下建立一个可行的、适用的全局提示词/规则约束文件。已确认 `C:\Users\ww\.gemini\GEMINI.md` 为全局加载规则路径，并结合 Antigravity (agy cli) 的高精细编辑工具、子智能体调度 `invoke_subagent`、计时器 `schedule`、slash 命令等机制，将 `.codex/AGENTS.md` 的精髓翻译整合为一份完美的、具备高度防御性和生产力的 `GEMINI.md` 全局提示词文件。
+
+## 2026-05-21 agy MCP 环境配置文件修复与全局提示词设置答疑
+
+- 本轮 Phoenix 项目前端代码无改动。
+- 协作补充：协助定位了开发协作工具 `agy` 配置文件没有在开发机正确生效的问题。正确的 MCP 配置文件位置应在 `C:\Users\ww\.gemini\antigravity-cli\mcp_config.json`，且格式应正确包裹 `"mcpServers"` 顶层对象。已成功在上述正确路径生成标准格式配置文件并确认完整就绪。此外，进行了全局提示词设定途径的普及答疑，并仿照 `.codex/AGENTS.md`，结合 `gemini (agy)` 的核心工具箱与独特的规划模式与子智能体机制，为用户量身改写设计出了一份全新的全局智能体规范指南。
+
 ## 2026-05-01 monthly_data_show 查询页单月日期口径
 
 - 文件：`frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue`

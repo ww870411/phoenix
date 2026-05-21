@@ -1,3 +1,25 @@
+## 2026-05-21 agy CLI 全局提示词规范文件 GEMINI.md 建立
+
+- 现象：用户希望参考 `.codex/AGENTS.md`，在 agy cli (Antigravity CLI) 环境下建立一个可行的、适用的全局提示词/规则约束文件。
+- 实现：
+  1. 路径选定：结合 Antigravity 官方关于 Global Rules 的规范定义，确认 `C:\Users\ww\.gemini\GEMINI.md` 为 agy 自动加载的全局规则文件。
+  2. 整合与优化：深度参考 `.codex/AGENTS.md` 的核心指导原则，结合 Antigravity 的运行机制（如高精细编辑工具、子智能体调度 `invoke_subagent`、计时器 `schedule`、slash 命令等）重构编写了一份极具生产力和防错约束力的 `GEMINI.md` 全局提示词。
+  3. 核心约束：
+     - **高精细编辑优先**：禁止使用 shell (cmd/powershell/pwsh) 直接读写修改文件，必须优先使用 native 精细化编辑工具（如 `replace_file_content`）。
+     - **执行优先级**：用户命令绝对优先，其次是工作区级规则 `AGENTS.md`，再次是全局规则 `GEMINI.md`。
+     - **交付标准**：无占位符、完整生产就绪、求证先行。
+- 结果：全局规则文件 `C:\Users\ww\.gemini\GEMINI.md` 已成功建立并完整写入。此后 agy cli 将全局强制遵守该规范进行所有任务的开发与协作。
+
+## 2026-05-21 agy MCP 配置文件生效排查与全局提示词设置答疑
+
+- 现象：用户安装 agy 后，填写的 MCP 配置文件没能生效。
+- 原因：
+  1. 路径偏差：用户放置在了 `antigravity` 目录，而 `agy` 在 Windows 上的实际 App Data 目录为 `antigravity-cli`；
+  2. 格式缺失：原 JSON 缺少了 MCP 规范顶层的 `"mcpServers"` 包裹。
+- 修复：在 `C:\Users\ww\.gemini\antigravity-cli\mcp_config.json` 写入了正确包含 `"mcpServers"` 的标准 JSON 配置，将 Serena、context7、amap-maps、desktop-commander 和 filesystem 统一集成。
+- 全局提示词答疑与重构：对 `agy` 设定全局提示词的三种途径进行了技术普及。随后仿照 `.codex/AGENTS.md`，结合 `gemini (agy)` / `Antigravity` 的核心特性（规划模式、高精细编辑工具、子智能体调度、制品体系等），重构出了一份全新的 `AGENTS.md` 全局智能体协作规范模板。
+- 结果：`agy` 现可成功识别并拉起这些 MCP 服务。已于 2026-05-21 再次读取并确认文件完整就绪。
+
 ## 2026-05-01 monthly_data_show 简要分析总体情况顺序调整
 
 - 前置说明：Serena 项目已激活且 onboarding 已完成；本轮使用 Serena 定位 `analysisInsights` 拼接逻辑，按仓库降级矩阵使用 `apply_patch` 修改前端与文档。回滚方式为恢复 `analysisInsights` 中 `windowNotes/windowNoteText` 拼接为原先的尾部缺失月份提示。
@@ -7546,3 +7568,13 @@
 - 逻辑：对于尚未开始设计具体功能页的项目（目前仅限 `insulation_pipe_supply`），其功能卡片将以静态 `div` 形式渲染。
 - 视觉：禁用了静态卡片的点击跳转逻辑、指针手势（cursor: pointer）以及悬停位移效果。
 - 效果：用户现在可以预览保温管项目的页面列表和描述，但无法点击进入不存在的子页面，避免了 404 或白屏错误。
+
+## 2026-05-01 项目键名重命名为 insulation_pipe_supply_2026
+
+- 调整：为了使 URL 链接与项目名称中的“2026”字样保持一致，将项目唯一键从 `insulation_pipe_supply` 统一重命名为 `insulation_pipe_supply_2026`。
+- 修改范围：
+  - `backend_data/shared/项目列表.json`：更新主键名。
+  - `backend_data/shared/auth/permissions.json`：更新权限关联键名。
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`：更新豁免与禁用逻辑中的判断字符串。
+  - `backend_data/projects/insulation_pipe_supply_2026/README.md`：更新内部说明文字。
+- 效果：现在访问该项目的页面链接将变为 `/projects/insulation_pipe_supply_2026/pages`。
