@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Phoenix 开发环境账号权限矩阵，来源于 configs/10.31用户权限设定.md",
-    "updated_at": "2026-02-25T16:00:00+08:00",
+    "updated_at": "2026-05-21T21:10:00+08:00",
     "biz_date_offset_days": -1
   },
   "groups": {
@@ -136,25 +136,26 @@
         "insulation_pipe_supply_2026": {
           "page_access": [
             "dashboard",
-            "raw_materials",
-            "production_allocation",
-            "demand"
+            "global_management",
+            "supply_management",
+            "demand_management",
+            "warehouse_management"
           ],
           "sheet_rules": {},
           "units_access": [
             "*"
           ],
           "actions": {
-            "can_submit": false,
-            "can_approve": false,
-            "can_revoke": false,
-            "can_publish": false,
-            "can_manage_modularization": false,
-            "can_manage_validation": false,
-            "can_manage_ai_settings": false,
-            "can_manage_ai_sheet_switch": false,
-            "can_extract_xlsx": false,
-            "can_unlimited_ai_usage": false
+            "can_submit": true,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": true,
+            "can_manage_modularization": true,
+            "can_manage_validation": true,
+            "can_manage_ai_settings": true,
+            "can_manage_ai_sheet_switch": true,
+            "can_extract_xlsx": true,
+            "can_unlimited_ai_usage": true
           }
         }
       },
@@ -501,6 +502,110 @@
             "can_manage_ai_settings": false,
             "can_manage_ai_sheet_switch": false,
             "can_extract_xlsx": false
+          }
+        }
+      }
+    },
+    "tube_supplier": {
+      "hierarchy": 65,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "supply_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": true,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_site_manager": {
+      "hierarchy": 64,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "demand_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_construction_unit": {
+      "hierarchy": 63,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "demand_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_warehouse_keeper": {
+      "hierarchy": 62,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "warehouse_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
           }
         }
       }

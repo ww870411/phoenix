@@ -39,6 +39,10 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/PageSelectView.vue'),
   },
   {
+    path: '/projects/insulation_pipe_supply_2026/pages/:pageKey',
+    component: () => import('../projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages/:pageKey/sheets',
     component: () => import('../projects/daily_report_25_26/pages/Sheets.vue'),
   },

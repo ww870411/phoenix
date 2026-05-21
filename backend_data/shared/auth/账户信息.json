@@ -118,6 +118,49 @@
         "password": "nyjt666",
         "unit": "Group"
       }
+    ],
+    "tube_supplier": [
+      {
+        "username": "supplier_a",
+        "password": "supplier_a123",
+        "unit": "管厂A"
+      },
+      {
+        "username": "supplier_b",
+        "password": "supplier_b123",
+        "unit": "管厂B"
+      }
+    ],
+    "tube_site_manager": [
+      {
+        "username": "site_manager_a",
+        "password": "site_manager_a123",
+        "unit": "换热站A"
+      },
+      {
+        "username": "site_manager_b",
+        "password": "site_manager_b123",
+        "unit": "换热站C"
+      }
+    ],
+    "tube_construction_unit": [
+      {
+        "username": "construction_a",
+        "password": "construction_a123",
+        "unit": "施工方A"
+      },
+      {
+        "username": "construction_b",
+        "password": "construction_b123",
+        "unit": "施工方B"
+      }
+    ],
+    "tube_warehouse_keeper": [
+      {
+        "username": "warehouse_keeper_a",
+        "password": "warehouse_keeper_a123",
+        "unit": "库管A"
+      }
     ]
   }
 }

@@ -1,4 +1,111 @@
+## 2026-05-21 tube项目第二步实施：数据库建表 SQL 准备
+
+- 本轮 Phoenix 前端代码无改动。
+- 为配合 tube 项目后续页面、接口与联调，已在 `backend/sql/` 下新增统一数据库初始化脚本：
+  - `backend/sql/tube_schema_init.sql`
+- 该脚本约定：
+  - 新建独立 schema：`tube`
+  - tube 项目业务表全部位于 `tube` schema 下
+  - 当前脚本以 V5.1 确认版流程计划为准
+- 虽然本轮不涉及前端物理页面改动，但该 SQL 将直接决定后续 `demand_management`、`supply_management`、`warehouse_management`、`dashboard` 四个页面的数据来源结构。
+
+## 2026-05-21 tube项目第一步实施：前端骨架与测试配置接入
+
+- 本轮已为 `insulation_pipe_supply_2026` 落下首批真实前端骨架代码，不再只是项目列表中的占位入口。
+- 新增页面文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 新增辅助文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js`
+- 新增路由：
+  - `/projects/insulation_pipe_supply_2026/pages/:pageKey`
+- 行为调整：
+  - `PageSelectView.vue` 不再把 tube 项目页面卡片视为“仅展示不可点击”；
+  - 当项目为 `insulation_pipe_supply_2026` 时，页面选择卡片会直接进入对应的自定义页面骨架。
+- 首版页面职责已按 V5.1 口径固化：
+  - `demand_management`：需求侧管理入口；
+  - `supply_management`：供给侧管理入口；
+  - `warehouse_management`：库管员管理入口；
+  - `dashboard`：全局数据看板。
+- 页面当前已可读取后端返回的 `tube_config.json` 摘要，用于展示测试主体分布，后续可在此基础上继续叠加计划、发货、确认和看板功能。
+
+## 2026-05-21 tube项目流程计划按最新英文页面 key 校准
+
+- 本轮 Phoenix 前端代码无改动。
+- 已按 `backend_data/shared/项目列表.json` 最新定义，校准 `insulation_pipe_supply_2026` 的既定页面 key 为：
+  - `dashboard`
+  - `supply_management`
+  - `demand_management`
+  - `warehouse_management`
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 中的前端页面拆分与实施顺序已同步更新：
+  - `demand_management`：需求侧管理入口；
+  - `supply_management`：供给侧管理入口；
+  - `warehouse_management`：库管员管理入口；
+  - `dashboard`：全局数据看板。
+- 新 key 语义已足够清晰，后续前端讨论不再需要围绕旧 key 做额外解释。
+
+## 2026-05-21 tube项目流程计划按项目列表固定页面 key
+
+- 本轮 Phoenix 前端代码无改动。
+- 已按 `backend_data/shared/项目列表.json` 当前定义，收敛 `insulation_pipe_supply_2026` 的既定页面 key 为：
+  - `dashboard`
+  - `raw_materials`
+  - `production_allocation`
+  - `demand`
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 中已取消“是否改 key”的开放式讨论，后续前端页面拆分和路由讨论均按上述 4 个 key 推进。
+- 其中 `demand` 在当前项目语义中固定表示“库管员管理入口 / 库管台账入口”，后续如需减少误解，应优先通过页面标题、副标题和说明文案强化其库管定位，而不是先改 key。
+
+## 2026-05-21 tube项目流程计划补充 Phoenix 平台背景说明
+
+- 本轮 Phoenix 前端代码无改动。
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 已新增“给外部协作伙伴的 Phoenix 平台背景说明”章节，便于转发给网页版 ChatGPT 或其他协作方共同讨论。
+- 前端背景说明明确了 Phoenix 当前是“平台主站 + 多项目模块”的结构，而不是单一应用：
+  - 根入口：`frontend/src/main.js`
+  - 总路由：`frontend/src/router/index.js`
+  - 全局页面目录：`frontend/src/pages/`
+  - 项目子系统目录：`frontend/src/projects/`
+- 文档中同步说明了 tube 项目后续将通过 `frontend/src/projects/insulation_pipe_supply_2026/` 接入平台，并复用现有项目壳层、认证状态、布局组件和工作台式交互结构。
+
+## 2026-05-21 tube项目完整构建流程计划文档输出
+
+- 本轮 Phoenix 前端代码无改动。
+- 新增规划文档：`configs/5.21_tube项目完整构建流程计划_ChatGPT版.md`。
+- 前端实施判断已在文档中明确：后续将以 `frontend/src/projects/insulation_pipe_supply_2026/` 为载体，分阶段落地 4 个入口页面，优先顺序为 `production_allocation` → `raw_materials` → `demand` → `dashboard`。
+- 页面职责初步映射：
+  - `production_allocation`：未来三日计划、到货确认、每日实际使用、需求侧库存视图；
+  - `raw_materials`：供给侧需求汇总、缺口查看、发货登记、发货进度；
+  - `demand`：库管台账、库管确认、手续留痕；
+  - `dashboard`：全局指标、风险预警、聚合台账。
+- 文档中已明确一个待拍板点：`demand` 作为“库管员管理入口”的 key 语义不够贴切，后续可保持不动，也可改名为更贴业务的 `warehouse` / `warehouse_ledger` 等。
+
 # 前端说明（Vue3 + Vite）
+
+## 2026-05-21 tube项目无指导前端独立开发可行性答辩与技术宣讲
+
+- 本轮 Phoenix 项目前端代码无改动。
+- 技术宣讲：向用户明确表态前端团队完全具备“在无额外指导下自主研发 tube 项目”的能力。前端开发工作将采取“像素级适配与架构同构”的策略，以已完成的 `monthly_data_show` 查询工具和工作台作为最佳物理样本，在组件架构、样式风格、Pinia 状态管理以及 API 网络请求层实现 100% 契合。我们将直接将方案 V5.0 规划的当日及未来两日计划维护、多方流转确认、每日实际使用填报和 10 大风险预警大屏看板在 `frontend/src/projects/insulation_pipe_supply/` 目录下完成高水平的物理落地，并在 `frontend/src/router/index.js` 统一挂载。
+
+## 2026-05-21 保温管物流链管理（tube项目）V5.0 前端规划与需求分析
+
+- 本轮 Phoenix 项目前端代码无改动。
+- 架构分析：详细解析了 `configs/5.21_tube项目建设方案_v5.0_物流链管理版.md`，对保温管物流链管理的前端视图架构进行了如下规划：
+  1. 页面模块与权限绑定：site_manager、supplier、warehouse_keeper、construction_unit 等角色在登录后将分配其对应的数据 scope。
+  2. 核心视图规划：
+     - 未来三日计划页面（现场负责人）：每日维护当日及未来两日计划。
+     - 需求汇总与供给侧发货页面（供给主体）：查看需求和缺口，发起本管厂发货，生成发货单。
+     - 多方确认组件（现场负责人、施工单位、库管）：实现到货确认（12h 未确认预警）、施工单位确认接收（6h 提醒）、库管手续确认（集团库房留痕）。
+     - 每日实际使用页面（现场负责人）：每日 8:00 前填报上一自然日实际使用量，用于扣减当前现场库存。
+     - 总览及风险预警看板（领导与管理层）：以表格化明细展示需求、发货、在途、到货、接收、库存、使用、缺口和异常（含未来三日缺口、到货未确认、施工未确认、超设计领用等 10 类预警）。
+
+## 2026-05-21 平台新增项目（前端子模块）挂载与集成机制调研
+
+- 本轮 Phoenix 项目前端代码无改动。
+- 架构分析：梳理了前端接入新“子项目”的机制。前端基于 `Vue3 + Vite + RevoGrid` 构建，支持两种类型的项目接入：
+  1. 通用填报类项目：路由由全局动态页面（如 `/projects/:projectKey/pages/:pageKey/sheets`）动态接管并渲染。只需在 `项目列表.json` 注册，前端即可完美复用现有全部页面组件。
+  2. 独立业务系统（如已处于骨架状态的 `insulation_pipe_supply`）：需要在 `frontend/src/projects/` 创建独立目录，在其中实现专属视图页面，并在 `frontend/src/router/index.js` 手动追加相应的静态路由以进行挂载。
 
 ## 2026-05-21 agy CLI 全局提示词规范文件 GEMINI.md 建立
 
@@ -5191,3 +5298,205 @@ docker compose up -d --build
   - `ProjectEntryView.vue` 不再特殊处理该项目，使其进入通用的 `PageSelectView.vue`。
   - `ProjectSelectView.vue` 移除 `DIRECT_ENTRY_PROJECTS` 标记，导航路径统一为 `/projects/:projectKey/pages`。
 - 效果：项目页面描述现在实时读取自 `backend_data/shared/项目列表.json` 中的 `页面描述` 字段，解决了此前硬编码导致的描述不一致问题。
+## 2026-05-21 tube项目第三步：需求侧首批工作台
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 已从占位页面升级为首版可操作页面。
+  - 当前支持：
+    - 换热站选择
+    - 基准量台账查看
+    - 未来三日计划录入与保存
+    - 指定日期实际使用录入与保存
+    - 待确认到货记录查看
+- `frontend/src/projects/daily_report_25_26/services/api.js`
+  - 新增 tube 需求侧接口封装：
+    - `getTubeDemandManagementOptions`
+    - `getTubeDemandManagementBaseline`
+    - `getTubeDemandManagementPlanMatrix`
+    - `saveTubeDemandManagementPlanMatrix`
+    - `getTubeDemandManagementUsageSheet`
+    - `saveTubeDemandManagementUsageSheet`
+    - `getTubeDemandManagementPendingArrivals`
+- 当前 tube 前端实施顺序仍按确认版计划推进：
+  - `demand_management`
+  - `supply_management`
+  - `warehouse_management`
+  - `dashboard`
+## 2026-05-21 tube项目第四步：测试账号与项目可见性
+
+- tube 项目已接入专用测试账号组，项目入口可见性不再只限 `Global_admin`。
+- 当前新增可见组：
+  - `tube_supplier`
+  - `tube_site_manager`
+  - `tube_construction_unit`
+  - `tube_warehouse_keeper`
+- 这些账号登录后会依据后端返回的 `permissions.projects.insulation_pipe_supply_2026.page_access` 看到对应页面入口。
+- 当前页面访问口径：
+  - 供给侧账号进入 `supply_management`
+  - 现场负责人与施工单位进入 `demand_management`
+  - 库管进入 `warehouse_management`
+  - `Global_admin` 可进入全部 tube 页面
+## 2026-05-21 tube项目第五步：需求侧页面修正
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 修正需求侧页面与后端选项接口的字段对接错误。
+  - 页面现在兼容以下后端返回字段：
+    - `stations` / `station_options`
+    - `pipe_models` / `pipe_model_options`
+    - `default_plan_anchor_date` / `default_anchor_date`
+    - `user.group` / `current_group`
+  - 修正后，`Global_admin` 账号在该页可以正常加载换热站并进行计划/使用保存操作。
+  - 页面视觉已调整为 Phoenix 现有浅色工作台风格，不再使用 tube 独立视觉风格。
+## 2026-05-21 tube项目第六步：需求侧页面壳层统一
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 页面壳层已改为与 `SupplyManagementView.vue` 一致的 tube 项目框架。
+  - 当前统一结构包括：
+    - `AppHeader`
+    - `Breadcrumbs`
+    - `topbar`
+    - `card elevated` 内容卡片
+  - 这意味着 tube 项目内部页面不再各自采用独立视觉骨架，而是统一在同一工作台框架下承载各自业务内容。
+## 2026-05-21 tube项目第七步：biz_date 与全局管理页
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 新增 tube 项目“全局管理”页面，页面 key 为 `global_management`。
+  - 页面定位：仅供 `Global_admin` 使用，用于维护 `tube_config.json`。
+  - 首版能力：
+    - 维护 `biz_date`
+    - 查看基准量预设概览
+    - 直接编辑并保存完整配置 JSON
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`
+  - 已接入 `global_management` 页面映射。
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 默认计划日期与实际使用日期现由后端返回的 `biz_date` 驱动。
+  - 基准量台账已兼容 `purchase_plan_qty` / `remark` 字段，便于展示配置预设回退结果。
+## 2026-05-21 tube项目第八步：全局管理页结构化编辑
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 页面已从“单一 JSON 文本框”升级为结构化编辑器。
+  - 当前可直接在页面中修改：
+    - `biz_date`
+    - `supply_entities`
+    - `demand_entities`
+    - `pipe_models`
+    - `manager_assignments`
+    - `construction_units`
+    - `construction_assignments`
+    - `baseline_presets`
+  - 原始 JSON 仅保留在页面末尾折叠区，用于核对最终保存内容。
+- `baseline_presets`
+  - 当前已补成 40 条完整演示预设，所有站点、所有型号均有非零设计值与计划使用量。
+## 2026-05-21 tube项目第九步：全局管理页交互重构
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 由“全量 JSON + 全局保存”改为“结构化分块编辑 + 分块保存”。
+  - 关键交互升级：
+    - 每个分块独立保存
+    - 每个分块支持新增/删除行
+    - `pipe_models` 可直接新增或删除型号
+    - `baseline_presets` 按换热站筛选后编辑
+    - `baseline_presets` 支持“补齐缺失型号”
+  - 页面末尾仍保留原始 JSON 折叠预览，用于核对最终保存内容。
+## 2026-05-21 tube项目第十步：全局管理页面命名统一
+
+- `global_management` 页面展示名称已统一为“全局管理入口”。
+- 当前口径统一覆盖：
+  - 项目列表卡片名称
+  - 页面头部标题
+  - 面包屑标签
+## 2026-05-21 tube项目第十一步：需求侧日期与保存口径修正
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 页面不再展示可编辑的“计划锚点日期”。
+  - 当前统一显示只读“业务日期”，由后端返回的全局 `biz_date` 决定。
+  - 三日计划保存字段已修正为：
+    - `plan_qty`
+    - `remark`
+  - 实际使用保存字段已修正为：
+    - `usage_qty`
+    - `remark`
+- 修正后，需求侧页面的保存与回显字段已与后端接口一致。
+## 2026-05-21 tube项目第十二步：三日计划回显问题修正
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 修正 `normalizePlanRows()` 对 `plan-matrix` 返回结构的解析方式。
+  - 后端当前真实结构为：
+    - `values[date] = number`
+    - `remarks[date] = string`
+  - 前端现已按该真实结构回显计划值与备注，避免数据库已有值但页面仍显示 `0`。
+## 2026-05-21 tube项目第十三步：需求侧日期语义拆分
+
+- `DemandManagementView.vue`
+  - 页面当前区分两种日期：
+    - `biz_date`：实际使用量归属日期
+    - `plan_start_date`：未来三日计划起始日期
+  - `Global_admin` 在需求页面可直接编辑并保存 `biz_date`
+  - 其他用户只读查看 `biz_date`
+  - 三日计划板块使用 `plan_start_date`
+  - 实际使用板块使用 `biz_date`
+- `GlobalManagementView.vue`
+  - 核心参数区同步增加 `plan_start_date` 维护入口
+## 2026-05-21 tube项目第十四步：需求页日期文案修正
+
+- `DemandManagementView.vue`
+  - “上一日实际使用填报”已改为“业务日期实际使用填报”
+  - 说明文案直接展示当前 `biz_date`
+  - `Global_admin` 的日期按钮已改为“更新全局业务日期”，避免误解为仅保存本页局部状态
+## 2026-05-21 tube项目第十五步：需求页移除日期修改入口
+
+- `DemandManagementView.vue`
+  - 已移除 `Global_admin` 在需求页直接修改 `biz_date` 的按钮。
+  - 当前需求页仅只读展示：
+    - `biz_date`
+    - `plan_start_date`
+  - 全局日期修改统一回到 `global_management` 页面进行。
+## 2026-05-21 tube项目第十六步：实际使用板块文案收紧
+
+- `DemandManagementView.vue`
+  - 实际使用板块标题现直接展示为“`biz_date` + 实际使用量”
+  - 按钮文案统一为“提交 / 提交中...”
+
+## 2026-05-21 tube项目第十七步：计划可编辑天数与提交文案收口
+
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - 新增 `plan_editable_days` 配置，当前默认值为 `3`。
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 三日计划主按钮现改为“提交三日计划量”。
+  - 实际使用主按钮现改为“提交实际使用量”。
+  - 顶部元信息新增“计划可编辑天数”。
+  - 三日计划矩阵会按 `plan_editable_days` 自动锁定前部日期：
+    - `3`：三天都可编辑
+    - `2`：仅最后两天可编辑
+    - `1`：仅最后一天可编辑
+    - `0`：全部禁用
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 核心参数区新增 `plan_editable_days` 输入框。
+  - “保存本区块”现会一并保存：
+    - `biz_date`
+    - `plan_start_date`
+    - `plan_editable_days`
+
+## 2026-05-21 tube项目第十八步：全局管理页隐藏配置文件路径
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 核心参数区已移除“配置文件路径”展示。
+  - 页面保留结构化参数维护能力，但不再向用户显示底层文件路径。
+
+## 2026-05-21 tube项目第十九步：V5.1确认版计划文档补录实施进度
+
+- `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md`
+  - 已在文档尾部新增“当前实施进度（截至2026-05-21）”章节。
+  - 当前前端已落地内容已按最终状态汇总写入，不再保留中途修正痕迹。
+
+## 2026-05-21 tube项目第二十步：需求页可编辑计划日期高亮
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 三日计划矩阵中，当前允许填写的日期列已增加浅蓝色高亮。
+  - 被 `plan_editable_days` 锁定的日期列保持默认样式。
+
+## 2026-05-21 tube项目第二十一步：需求页数量单位标注
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 已在需求页各主要数量板块统一标注计量单位为“米”。
+  - 表头与板块说明现在会直接体现“米”，减少歧义。

@@ -133,7 +133,11 @@
   "insulation_pipe_supply_2026":
   {
     "availability": [
-      "Global_admin"
+      "Global_admin",
+      "tube_supplier",
+      "tube_site_manager",
+      "tube_construction_unit",
+      "tube_warehouse_keeper"
     ],
     "project_name": "2026年度保温管物流链管理系统",
     "pages": {
@@ -142,17 +146,22 @@
         "数据源": "",
         "页面描述": "查看保温管供需关键指标与统计概览"
       },
-      "raw_materials": {
+      "global_management": {
+        "页面名称": "全局管理入口",
+        "数据源": "",
+        "页面描述": "全局预设参数管理"
+      },
+      "supply_management": {
         "页面名称": "供给侧管理入口",
         "数据源": "",
         "页面描述": "保温管厂查看需求、发货管理"
       },
-      "production_allocation": {
+      "demand_management": {
         "页面名称": "需求侧管理入口",
         "数据源": "",
         "页面描述": "换热站提交需求、确认收货、施工进度管理"
       },
-      "demand": {
+      "warehouse_management": {
         "页面名称": "库管员管理入口",
         "数据源": "",
         "页面描述": "库管员保温管接货手续管理"

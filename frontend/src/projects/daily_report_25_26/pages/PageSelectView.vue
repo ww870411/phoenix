@@ -204,8 +204,7 @@ const isWorkflowExempt = computed(() => {
   return exempt.includes(projectKey)
 })
 const isClickable = computed(() => {
-  // 目前保温管项目尚未设计具体功能页，仅作展示
-  return projectKey !== 'insulation_pipe_supply_2026'
+  return true
 })
 
 const breadcrumbItems = computed(() => [
@@ -350,6 +349,11 @@ function openPage(page) {
   // 支持“专用调试页面”：若后端 pages 的键是形如 "/debug/..."，则直接导航到该路径
   if (typeof page?.page_url === 'string' && page.page_url.startsWith('/')) {
     return router.push({ path: page.page_url })
+  }
+  if (projectKey === 'insulation_pipe_supply_2026') {
+    return router.push({
+      path: `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`,
+    })
   }
   const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`
   const normalizedKey = String(page?.page_key ?? page?.page_url ?? '').toLowerCase()

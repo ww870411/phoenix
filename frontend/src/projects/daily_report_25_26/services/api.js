@@ -218,6 +218,149 @@ export async function getPageShowcaseHtml(projectKey, fileName) {
   return response.json()
 }
 
+export async function getTubeWorkspaceConfigSummary(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/config-summary`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取 tube 配置摘要失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeDemandManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/options`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取需求侧页面选项失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeDemandManagementBaseline(projectKey, stationId) {
+  const params = new URLSearchParams({ station_id: String(stationId || '') })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/baseline?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取需求侧基准数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeDemandManagementPlanMatrix(projectKey, stationId, anchorDate) {
+  const params = new URLSearchParams({
+    station_id: String(stationId || ''),
+    anchor_date: String(anchorDate || ''),
+  })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/plan-matrix?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取三日计划失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveTubeDemandManagementPlanMatrix(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/plan-matrix`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存三日计划失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeDemandManagementUsageSheet(projectKey, stationId, usageDate) {
+  const params = new URLSearchParams({
+    station_id: String(stationId || ''),
+    usage_date: String(usageDate || ''),
+  })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/usage-sheet?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取实际使用表单失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveTubeDemandManagementUsageSheet(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/usage-sheet`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存实际使用表单失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeDemandManagementPendingArrivals(projectKey, stationId) {
+  const params = new URLSearchParams({ station_id: String(stationId || '') })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/pending-arrivals?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取待确认到货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取 tube 全局管理配置失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function saveTubeGlobalManagementConfig(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config`, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '保存 tube 全局管理配置失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function saveTubeGlobalManagementConfigSection(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config-section`, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '保存 tube 全局管理配置区块失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
 export function getPageShowcasePublicUrl(projectKey = 'page_showcase', fileName = '') {
   const encodedFileName = encodeURIComponent(String(fileName || ''))
   const relative = `${projectPath(projectKey)}/page-showcase/public-html/${encodedFileName}`

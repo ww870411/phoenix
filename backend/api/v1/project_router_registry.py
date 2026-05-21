@@ -20,6 +20,10 @@ from backend.projects.monthly_data_show.api.router import (
     public_router as monthly_data_show_public_router,
     router as monthly_data_show_router,
 )
+from backend.projects.insulation_pipe_supply_2026.api.router import (
+    public_router as insulation_pipe_supply_public_router,
+    router as insulation_pipe_supply_router,
+)
 from backend.projects.page_showcase.api.router import (
     public_router as page_showcase_public_router,
     router as page_showcase_router,
@@ -42,6 +46,10 @@ PROJECT_ROUTER_REGISTRY: Dict[str, Dict[str, Optional[object]]] = {
     "monthly_data_show": {
         "router": monthly_data_show_router,
         "public_router": monthly_data_show_public_router,
+    },
+    "insulation_pipe_supply_2026": {
+        "router": insulation_pipe_supply_router,
+        "public_router": insulation_pipe_supply_public_router,
     },
     "page_showcase": {
         "router": page_showcase_router,

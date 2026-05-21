@@ -1,4 +1,132 @@
+## 2026-05-21 tube项目第二步实施：tube schema 统一建表 SQL
+
+- 本轮为 `insulation_pipe_supply_2026` 新增统一数据库初始化脚本：
+  - `backend/sql/tube_schema_init.sql`
+- 建设方式：
+  - 脚本先执行 `CREATE SCHEMA IF NOT EXISTS tube;`
+  - 所有首版 tube 项目业务表均创建在 `tube` schema 下，而不是沿用 `public`
+- 脚本覆盖的表：
+  - `tube.tube_baseline_quantity`
+  - `tube.tube_daily_plan`
+  - `tube.tube_delivery`
+  - `tube.tube_daily_usage`
+  - `tube.tube_inventory_adjustment`
+- 脚本内已包含：
+  - 主键
+  - 核心非空约束
+  - 数值范围校验
+  - 发货/到货/接收状态约束
+  - 必要唯一索引与查询索引
+  - 中文注释，便于后续维护和数据库中直接查看
+- 关键口径：
+  - `tube_delivery` 作为发货生命周期主表
+  - 发货状态采用 `pending_arrival`、`cancelled`、`pending_receive`、`pending_warehouse`、`completed`
+  - `tube_inventory_adjustment` 首期先建表结构，不强推复杂页面
+- 该脚本设计为由用户手动执行，执行完成后即可为后续 ORM / SQL 查询、主流程 API 与页面联调提供数据结构基础。
+
+## 2026-05-21 tube项目第一步实施：后端骨架与配置摘要接口
+
+- 本轮已为 `insulation_pipe_supply_2026` 落下首批真实后端骨架代码，不再只是项目清单中的待开发项目。
+- 新增后端文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/router.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- 项目注册：
+  - `backend/api/v1/project_router_registry.py` 已新增 `insulation_pipe_supply_2026` 项目注册项。
+- 新增接口：
+  - `GET /api/v1/projects/insulation_pipe_supply_2026/workspace/config-summary`
+- 接口作用：
+  - 读取 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - 返回供给主体、需求主体、保温管型号、现场负责人映射、施工单位、施工单位映射的数量摘要和明细。
+- 本轮同步落地了首版测试配置文件 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`，包含：
+  - 2 个供给主体；
+  - 4 个换热站；
+  - 10 个 DN 虚拟保温管型号；
+  - 2 个现场负责人及其换热站映射；
+  - 2 个施工单位及其换热站映射。
+- 该骨架为后续数据库核心表、权限接入、主流程 API 和页面联调提供了统一测试基座。
+
+## 2026-05-21 tube项目流程计划按最新英文页面 key 校准
+
+- 本轮 Phoenix 后端代码无改动。
+- 已按 `backend_data/shared/项目列表.json` 最新定义，校准 `insulation_pipe_supply_2026` 的既定页面 key 为：
+  - `dashboard`
+  - `supply_management`
+  - `demand_management`
+  - `warehouse_management`
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 中的接口分组讨论、权限矩阵说明和对外协作口径已同步更新到上述新 key。
+- 其中 `warehouse_management` 已明确作为库管员管理入口 / 库管台账入口，后续后端接口命名和权限描述可直接按字面语义推进，不再需要兼容旧 key 的歧义解释。
+
+## 2026-05-21 tube项目流程计划按项目列表固定页面 key
+
+- 本轮 Phoenix 后端代码无改动。
+- 已按 `backend_data/shared/项目列表.json` 当前定义，收敛 `insulation_pipe_supply_2026` 的既定页面 key 为：
+  - `dashboard`
+  - `raw_materials`
+  - `production_allocation`
+  - `demand`
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 中已取消“是否改 key”的开放式讨论，后续项目页面列表接口、权限矩阵说明和文档口径均按上述 4 个 key 继续推进。
+- 其中 `demand` 在当前项目语义中固定表示“库管员管理入口 / 库管台账入口”，后续后端接口分组和权限说明应以该实际业务职责为准，不再按字面理解为普通“需求页”。
+
+## 2026-05-21 tube项目流程计划补充 Phoenix 平台背景说明
+
+- 本轮 Phoenix 后端代码无改动。
+- `configs/5.21_tube项目完整构建流程计划_ChatGPT版.md` 已新增“给外部协作伙伴的 Phoenix 平台背景说明”章节，便于转发给网页版 ChatGPT 或其他协作方共同讨论。
+- 后端背景说明明确了 Phoenix 当前是通过统一 `/api/v1` 前缀和 `PROJECT_ROUTER_REGISTRY` 承载多个子项目的平台化结构：
+  - 应用入口：`backend/main.py`
+  - 总路由：`backend/api/v1/routes.py`
+  - 项目注册表：`backend/api/v1/project_router_registry.py`
+  - 项目实现目录：`backend/projects/`
+- 文档中同步说明了 tube 项目后续将通过 `backend/projects/insulation_pipe_supply_2026/` 和 `/api/v1/projects/insulation_pipe_supply_2026/...` 接入平台，并复用现有认证、权限与项目级挂载机制。
+
+## 2026-05-21 tube项目完整构建流程计划文档输出
+
+- 本轮 Phoenix 后端代码无改动。
+- 新增规划文档：`configs/5.21_tube项目完整构建流程计划_ChatGPT版.md`。
+- 后端实施判断已在文档中明确：后续将以 `backend/projects/insulation_pipe_supply_2026/` 为载体，优先建设配置服务、基准数据服务、每日计划服务、发货生命周期服务、每日实际使用服务、库存与缺口计算服务、看板聚合服务。
+- 首版核心业务表规划保持与 V5.0 方案一致：
+  - `tube_baseline_quantity`
+  - `tube_daily_plan`
+  - `tube_delivery`
+  - `tube_daily_usage`
+- 文档中已明确关键后端判断：
+  - `tube_delivery` 作为发货、到货、施工接收、库管确认统一生命周期主表；
+  - 库存首期按业务数据实时计算，不单独建设库存余额表；
+  - 风险预警和聚合口径统一由后端输出，不在前端分散计算。
+- 文档中同步标记了待拍板事项，包括库存调整表是否首期建设、发货及确认环节是否允许回退、施工单位和库管账号如何映射到现有权限体系等。
+
 # daily_report_25_26 后端说明
+
+## 2026-05-21 tube项目无指导后端独立开发可行性答辩与技术宣讲
+
+- 本轮 Phoenix 项目后端代码无改动。
+- 技术宣讲：向用户明确表态后端开发团队完全具备“在无额外指导下自主研发 tube 项目”的能力。后端逻辑将采用“完全同构与规范适配”策略，以现有的 `monthly_data_show` 子项目为物理标杆。我们将在没有额外指导的情况下，100% 独立开发完成 `tube_config.json` 解析中心，并在数据库层建立 `tube_baseline_quantity`、`tube_daily_plan`、`tube_daily_usage`、`tube_delivery` 四大物理 ORM 实体，完成大宽表的四阶段流转状态机与 10 类核心风险预警（如净待发缺口、到货未确认等）的计算接口设计，在全局路由注册中心 `PROJECT_ROUTER_REGISTRY` 自动挂载，交付无任何占位符的生产就绪后端方案。
+
+## 2026-05-21 保温管物流链管理（tube项目）V5.0 后端数据表与接口规划
+
+- 本轮 Phoenix 项目后端代码无改动。
+- 架构分析：详细解析了 `configs/5.21_tube项目建设方案_v5.0_物流链管理版.md`，对保温管物流链管理的后端数据架构和 API 进行了如下设计：
+  1. 相对静态配置层（`tube_config.json`，存放于 `backend_data/shared/`）：
+     - `supply_entities`：供给主体/管厂字典。
+     - `demand_entities`：需求主体/换换热站字典。
+     - `pipe_models`：保温管型号字典。
+     - `manager_assignments`：现场负责人换热站绑定字典。
+  2. 核心数据库物理表（4张表）：
+     - `tube_baseline_quantity`：设计及计划采购量表。唯一约束 `station_id + pipe_model_id + status`。仅允许 global_admin 修改。
+     - `tube_daily_plan`：每日计划长表。唯一约束 `plan_date + station_id + pipe_model_id`。
+     - `tube_daily_usage`：每日实际使用量长表。唯一约束 `usage_date + station_id + pipe_model_id`。
+     - `tube_delivery`：发货与多方确认生命周期大宽表。字段包含 `shipped_qty`（发货数量）、`arrived_qty`（到货数量）、`received_qty`（接收数量）和四阶段确认时间与备注。
+  3. 后端服务与核心接口：
+     - 数据计算引擎：实时计算当前现场库存（累计接收 - 累计实际使用 ± 调整量）、未来三日缺口与净待发缺口。
+     - 看板 API：提供供给侧、需求侧、库管台账和风险预警等多维度汇总数据。
+
+## 2026-05-21 平台新增项目（后端子模块）挂载与路由注册机制调研
+
+- 本轮 Phoenix 项目后端代码无改动。
+- 架构分析：梳理了后端接入新“子项目”的挂载与注册逻辑。后端基于 `FastAPI + SQLAlchemy` 构建，项目列表的解析和呈现路径为：
+  - 核心配置文件：`backend_data/shared/项目列表.json`（动态扫描呈现给前台）。
+  - 通用路由：如健康检查、项目及页面扫描、文件配置等路由，在 `backend/api/v1/routes.py` 动态加载和控制。
+  - 专属 API 接口（如 `monthly_data_show` 等）：在 `backend/projects/<project_key>/` 下以微模块形式提供独立的 api/service 目录。
+  - 路由挂载中心：必须在 `backend/api/v1/project_router_registry.py` 中将专属项目的 `router` 与 `public_router` 注册导入至 `PROJECT_ROUTER_REGISTRY`，从而在主路由中自动映射加载。
 
 ## 2026-05-21 agy CLI 全局提示词规范文件 GEMINI.md 建立
 
@@ -4050,3 +4178,198 @@
 - 确认 `backend_data/shared/项目列表.json` 为平台项目与页面的单一真相来源。
 - 所有前端项目（除非有特殊交互需求并显式注册）均应通过通用 `PageSelectView.vue` 从该 JSON 动态加载页面列表与描述。
 - 本轮已将 `insulation_pipe_supply_2026` 切换为该动态模式，移除前端硬编码。
+## 2026-05-21 tube项目第三步：需求侧首批服务与接口
+
+- `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - 提供 tube 配置文件读取、列表提取、按当前用户解析可访问换热站范围。
+- `backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py`
+  - 提供需求侧首批领域服务：
+    - 基准量查询
+    - 三日计划日期生成
+    - 三日计划查询与保存
+    - 实际使用查询与保存
+    - 待确认到货列表查询
+- `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 已扩展需求侧接口：
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/options`
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/baseline`
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/plan-matrix`
+    - `POST /api/v1/projects/insulation_pipe_supply_2026/demand-management/plan-matrix`
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/usage-sheet`
+    - `POST /api/v1/projects/insulation_pipe_supply_2026/demand-management/usage-sheet`
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/pending-arrivals`
+- `backend_data/shared/auth/permissions.json`
+  - 已同步修正 tube 项目页面权限 key，与最新 `项目列表.json` 一致。
+## 2026-05-21 tube项目第四步：测试账号与权限矩阵
+
+- 共享账号文件：`backend_data/shared/auth/账户信息.json`
+  - 新增 tube 项目测试账号组：
+    - `tube_supplier`
+    - `tube_site_manager`
+    - `tube_construction_unit`
+    - `tube_warehouse_keeper`
+- 共享权限文件：`backend_data/shared/auth/permissions.json`
+  - 新增上述 4 个组的 `insulation_pipe_supply_2026` 项目权限配置
+  - `Global_admin.projects.insulation_pipe_supply_2026` 已提升为全页面、全动作可用
+- 项目可见性文件：`backend_data/shared/项目列表.json`
+  - `insulation_pipe_supply_2026.availability` 已放开到 tube 专用组，避免账号已有权限但项目卡片不可见
+- 当前角色与页面映射：
+  - `tube_supplier` -> `supply_management`
+  - `tube_site_manager` -> `demand_management`
+  - `tube_construction_unit` -> `demand_management`
+  - `tube_warehouse_keeper` -> `warehouse_management`
+  - `Global_admin` -> 全页面
+## 2026-05-21 tube项目第五步：需求侧页面联调说明
+
+- 本轮未新增后端接口，但完成了一次前后端联调口径校正。
+- 当前 `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/options` 实际返回字段口径为：
+  - `stations`
+  - `pipe_models`
+  - `default_plan_anchor_date`
+  - `default_usage_date`
+  - `user.group`
+- 前端已改为兼容该真实返回结构，避免因字段别名不一致导致页面无可选换热站、表现为“无法操作”。
+## 2026-05-21 tube项目第六步：前端统一壳层说明
+
+- 本轮无后端接口变更。
+- 变更重点是前端 tube 页面壳层统一：
+  - `demand_management` 已切换到与 `supply_management` 相同的工作台结构
+  - 后端接口口径不变，继续复用现有需求侧 API
+## 2026-05-21 tube项目第七步：biz_date、配置回写与演示预设
+
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - 新增 `biz_date` 配置项，作为 tube 项目的统一日期锚点。
+  - 新增 `baseline_presets`，用于提供演示阶段的设计值/计划使用量预设。
+- `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - 新增：
+    - `get_configured_biz_date`
+    - `save_tube_config`
+- `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `GET /workspace/config-summary`
+    - 补充 `biz_date` 与 `baseline_presets`
+  - `GET /demand-management/options`
+    - 默认日期改为读取 `biz_date`
+  - `GET /demand-management/baseline`
+    - 当 `tube.tube_baseline_quantity` 无数据时回退到 `baseline_presets`
+  - 新增：
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/global-management/config`
+    - `POST /api/v1/projects/insulation_pipe_supply_2026/global-management/config`
+- `backend_data/shared/项目列表.json`
+  - tube 项目新增 `global_management` 页面入口，并修正项目可见性误配。
+## 2026-05-21 tube项目第八步：演示预设参数扩充
+
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - `baseline_presets` 已扩充为 40 条完整演示记录。
+  - 当前规则：
+    - 每个换热站的每种型号均有非零预设
+    - `design_qty` 与 `purchase_plan_qty` 首版保持相等
+    - 中口径偏少，小口径与大口径偏多
+- 后端接口无需新增调整：
+  - `GET /demand-management/baseline` 继续在数据库无数据时回退到这组预设
+  - `GET/POST /global-management/config` 继续负责整份配置读写
+## 2026-05-21 tube项目第九步：全局管理分块保存接口
+
+- `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 新增 `TubeConfigSectionSavePayload`
+  - 新增 `POST /api/v1/projects/insulation_pipe_supply_2026/global-management/config-section`
+- 该接口用于只保存单个配置区块，当前支持：
+  - `biz_date`
+  - `supply_entities`
+  - `demand_entities`
+  - `pipe_models`
+  - `manager_assignments`
+  - `construction_units`
+  - `construction_assignments`
+  - `baseline_presets`
+- 这样前端无需每次整份覆盖 `tube_config.json`，可显著降低误操作范围。
+## 2026-05-21 tube项目第十步：页面名称调整
+
+- `backend_data/shared/项目列表.json`
+  - tube 项目 `global_management` 页面名称已由“全局管理”调整为“全局管理入口”。
+- 后端接口与 page key 不变，仍为 `global_management`，本轮仅调整展示命名。
+## 2026-05-21 tube项目第十一步：需求侧前端联调修正
+
+- 本轮未新增后端接口，但修正了一处关键的前后端字段口径误配。
+- 后端实际字段保持不变：
+  - 三日计划：`plan_qty` / `remark`
+  - 实际使用：`usage_qty` / `remark`
+- 前端此前误发：
+  - `planned_qty / remarks`
+  - `used_qty / remarks`
+- 现已统一改回正确字段，因此保存后刷新不再丢值。
+## 2026-05-21 tube项目第十二步：三日计划回显联调说明
+
+- 本轮未改后端接口或数据库逻辑。
+- 结论确认：
+  - `GET /demand-management/plan-matrix` 返回的 `rows` 中，`values` 与 `remarks` 是分离的平行映射，而不是嵌套对象数组。
+- 前端此前误解析该结构，导致数据库有值时页面仍显示 `0`。
+- 现已在前端按后端真实返回结构完成修正。
+## 2026-05-21 tube项目第十三步：日期口径拆分
+
+- `tube_config.json` 当前包含两个独立日期配置：
+  - `biz_date`
+  - `plan_start_date`
+- 后端口径：
+  - `biz_date` 用于实际发生量日期
+  - `plan_start_date` 用于三日计划起始日期
+- `GET /demand-management/options`
+  - 现同时返回 `biz_date` 与 `plan_start_date`
+- `POST /global-management/config-section`
+  - 现支持保存 `plan_start_date`
+## 2026-05-21 tube项目第十四步：需求页文案与权限说明
+
+- 本轮无后端接口变更。
+- 前端对 `biz_date` 的页面文案进行了收口：
+  - 实际使用板块直接对应 `biz_date`
+  - `Global_admin` 在需求页的日期按钮明确表达为“更新全局业务日期”
+## 2026-05-21 tube项目第十五步：需求页日期职责收敛
+
+- 本轮无后端接口变更。
+- 前端需求页已取消直接修改 `biz_date` 的入口。
+- 当前日期维护职责统一为：
+  - `global_management` 负责修改全局日期
+  - `demand_management` 仅负责读取并展示日期
+## 2026-05-21 tube项目第十六步：需求页文案调整
+
+- 本轮无后端接口变更。
+- 前端实际使用板块标题与按钮文案已简化，保持与当前业务口径一致。
+
+## 2026-05-21 tube项目第十七步：计划可编辑天数配置接入
+
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - 新增 `plan_editable_days`，默认值为 `3`。
+- `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - 已新增 `get_configured_plan_editable_days(...)`，负责读取并校验 `0-3` 范围。
+- `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 现通过以下接口返回 `plan_editable_days`：
+    - `GET /workspace/config-summary`
+    - `GET /demand-management/options`
+    - `GET /global-management/config`
+  - 现通过以下接口保存并校验 `plan_editable_days`：
+    - `POST /global-management/config`
+    - `POST /global-management/config-section`
+  - 单区块保存现正式支持 `plan_editable_days`。
+- 当前前端使用方式：
+  - 需求页据此限制三日计划矩阵的可编辑日期范围。
+  - 全局管理页可直接维护该参数，无需手改 JSON。
+
+## 2026-05-21 tube项目第十八步：全局管理页隐藏配置文件路径
+
+- 本轮无后端接口变更。
+- 前端已不再展示 `config_path`，但后端仍保留该字段返回，便于后续调试或开发态排查使用。
+
+## 2026-05-21 tube项目第十九步：V5.1确认版计划文档补录实施进度
+
+- `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md`
+  - 已补录当前实施进度章节。
+  - 当前后端已完成的接入、配置、建表、权限、全局管理与需求侧接口状态，已按最终口径汇总进主计划文档。
+
+## 2026-05-21 tube项目第二十步：需求页可编辑计划日期高亮
+
+- 本轮无后端接口变更。
+- 前端已根据 `plan_editable_days` 对需求页可编辑计划日期增加浅蓝色高亮显示。
+
+## 2026-05-21 tube项目第二十一步：需求页数量单位标注
+
+- 本轮无后端接口变更。
+- 前端已将需求页主要数量板块的计量单位统一明确为“米”。
