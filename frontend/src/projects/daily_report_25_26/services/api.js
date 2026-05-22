@@ -361,6 +361,70 @@ export async function saveTubeGlobalManagementConfigSection(projectKey, payload)
   return response.json()
 }
 
+export async function getTubeSupplyManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/options`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取供给侧页面选项失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/demand-summary`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取供给侧需求汇总失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeSupplyManagementDeliveries(projectKey, params = {}) {
+  const search = new URLSearchParams()
+  if (params.stationId) search.set('station_id', String(params.stationId))
+  if (params.status) search.set('status', String(params.status))
+  if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
+  const suffix = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries${suffix}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取供给侧发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createTubeSupplyManagementDelivery(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `新增供给侧发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function cancelTubeSupplyManagementDelivery(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/cancel`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `撤销供给侧发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export function getPageShowcasePublicUrl(projectKey = 'page_showcase', fileName = '') {
   const encodedFileName = encodeURIComponent(String(fileName || ''))
   const relative = `${projectPath(projectKey)}/page-showcase/public-html/${encodedFileName}`

@@ -18,6 +18,10 @@ def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_pipe_model_id(value: Any) -> str:
+    return _normalize_text(value).upper()
+
+
 def build_plan_dates(anchor_date: date) -> List[date]:
     return [anchor_date + timedelta(days=offset) for offset in range(3)]
 
@@ -41,7 +45,7 @@ def list_baseline_rows(station_id: str) -> Dict[str, Dict[str, Any]]:
     try:
         rows = session.execute(sql, {"station_id": station_id}).mappings().all()
         return {
-            _normalize_text(row["pipe_model_id"]): {
+            _normalize_pipe_model_id(row["pipe_model_id"]): {
                 "design_qty": float(row["design_qty"]) if row["design_qty"] is not None else None,
                 "purchase_plan_qty": float(row["purchase_plan_qty"]) if row["purchase_plan_qty"] is not None else None,
                 "status": row["status"],
@@ -73,7 +77,7 @@ def list_plan_records(station_id: str, plan_dates: Sequence[date]) -> Dict[str, 
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             date_key = row["plan_date"].isoformat()
-            result[f"{_normalize_text(row['pipe_model_id'])}::{date_key}"] = {
+            result[f"{_normalize_pipe_model_id(row['pipe_model_id'])}::{date_key}"] = {
                 "plan_qty": float(row["plan_qty"]) if row["plan_qty"] is not None else None,
                 "remark": row["remark"] or "",
             }
@@ -128,7 +132,7 @@ def save_plan_records(station_id: str, records: Sequence[Dict[str, Any]], operat
                 {
                     "plan_date": item["plan_date"],
                     "station_id": station_id,
-                    "pipe_model_id": item["pipe_model_id"],
+                    "pipe_model_id": _normalize_pipe_model_id(item["pipe_model_id"]),
                     "plan_qty": plan_qty,
                     "filled_by": operator,
                     "remark": _normalize_text(item.get("remark")),
@@ -162,7 +166,7 @@ def list_usage_records(station_id: str, usage_date: date) -> Dict[str, Dict[str,
     try:
         rows = session.execute(sql, {"station_id": station_id, "usage_date": usage_date}).mappings().all()
         return {
-            _normalize_text(row["pipe_model_id"]): {
+            _normalize_pipe_model_id(row["pipe_model_id"]): {
                 "usage_qty": float(row["usage_qty"]) if row["usage_qty"] is not None else None,
                 "remark": row["remark"] or "",
             }
@@ -218,7 +222,7 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
                 {
                     "usage_date": usage_date,
                     "station_id": station_id,
-                    "pipe_model_id": item["pipe_model_id"],
+                    "pipe_model_id": _normalize_pipe_model_id(item["pipe_model_id"]),
                     "usage_qty": usage_qty,
                     "filled_by": operator,
                     "remark": _normalize_text(item.get("remark")),
@@ -264,7 +268,7 @@ def list_pending_arrivals(station_id: str) -> List[Dict[str, Any]]:
                 "id": int(row["id"]),
                 "supply_entity_id": _normalize_text(row["supply_entity_id"]),
                 "station_id": _normalize_text(row["station_id"]),
-                "pipe_model_id": _normalize_text(row["pipe_model_id"]),
+                "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
                 "shipped_qty": float(row["shipped_qty"]) if row["shipped_qty"] is not None else None,
                 "shipped_at": row["shipped_at"].isoformat() if row["shipped_at"] else "",
                 "ship_contact_name": row["ship_contact_name"] or "",

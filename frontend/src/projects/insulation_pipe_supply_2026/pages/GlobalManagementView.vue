@@ -50,9 +50,9 @@
           <span class="summary-chip">供给主体：{{ supplyEntities.length }}</span>
           <span class="summary-chip">换热站：{{ demandEntities.length }}</span>
           <span class="summary-chip">型号：{{ pipeModels.length }}</span>
+          <span class="summary-chip">产能预设：{{ productionCapacities.length }}</span>
           <span class="summary-chip">负责人映射：{{ managerAssignments.length }}</span>
           <span class="summary-chip">施工单位：{{ constructionUnits.length }}</span>
-          <span class="summary-chip">施工映射：{{ constructionAssignments.length }}</span>
           <span class="summary-chip">基准预设：{{ baselinePresets.length }}</span>
         </div>
       </section>
@@ -76,10 +76,8 @@
               <tr>
                 <th>主体ID</th>
                 <th>主体名称</th>
-                <th>简称</th>
                 <th>联系人</th>
                 <th>联系电话</th>
-                <th>状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -87,10 +85,8 @@
               <tr v-for="(item, index) in supplyEntities" :key="`${item.entity_id || 'new'}-${index}`">
                 <td><input v-model.trim="item.entity_id" type="text" /></td>
                 <td><input v-model.trim="item.entity_name" type="text" /></td>
-                <td><input v-model.trim="item.entity_short_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_phone" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(supplyEntities, index)">删除</button></td>
               </tr>
             </tbody>
@@ -120,7 +116,6 @@
                 <th>区域</th>
                 <th>标段</th>
                 <th>施工状态</th>
-                <th>状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -131,7 +126,6 @@
                 <td><input v-model.trim="item.region" type="text" /></td>
                 <td><input v-model.trim="item.section" type="text" /></td>
                 <td><input v-model.trim="item.construction_status" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(demandEntities, index)">删除</button></td>
               </tr>
             </tbody>
@@ -159,22 +153,56 @@
               <tr>
                 <th>型号ID</th>
                 <th>型号名称</th>
-                <th>口径标签</th>
                 <th>单位</th>
-                <th>分类</th>
-                <th>状态</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(item, index) in pipeModels" :key="`${item.pipe_model_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.pipe_model_id" type="text" /></td>
-                <td><input v-model.trim="item.pipe_model_name" type="text" /></td>
-                <td><input v-model.trim="item.diameter_label" type="text" /></td>
+                <td><input v-model.trim="item.pipe_model_id" type="text" @change="syncPipeModelIdentity(item, 'id')" /></td>
+                <td><input v-model.trim="item.pipe_model_name" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
                 <td><input v-model.trim="item.unit" type="text" /></td>
-                <td><input v-model.trim="item.category" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(pipeModels, index)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card elevated">
+        <div class="card-header-row">
+          <div>
+            <div class="card-header">保温管生产能力</div>
+            <p class="sub block-sub">维护每个管厂、各型号保温管的每日最大产能，计量单位为米/日。</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn ghost" type="button" @click="addProductionCapacity">新增一行</button>
+            <button class="btn" type="button" :disabled="isSaving('production_capacities')" @click="saveSection('production_capacities')">
+              {{ isSaving('production_capacities') ? '保存中…' : '保存本区块' }}
+            </button>
+          </div>
+        </div>
+        <p v-if="sectionMessage('production_capacities')" :class="['section-tip', sectionMessage('production_capacities').type]">
+          {{ sectionMessage('production_capacities').text }}
+        </p>
+        <div class="table-wrap">
+          <table class="table editor-table">
+            <thead>
+              <tr>
+                <th>供给主体</th>
+                <th>型号</th>
+                <th>每日最大产能（米）</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in productionCapacities" :key="`${item.supply_entity_name || 'supplier'}-${item.pipe_model_name || 'model'}-${index}`">
+                <td><input v-model.trim="item.supply_entity_name" type="text" /></td>
+                <td><input v-model.trim="item.pipe_model_name" type="text" /></td>
+                <td><input v-model.number="item.max_daily_output_qty" type="number" min="0" step="1" /></td>
+                <td><input v-model.trim="item.remark" type="text" /></td>
+                <td><button class="btn danger" type="button" @click="removeRow(productionCapacities, index)">删除</button></td>
               </tr>
             </tbody>
           </table>
@@ -202,8 +230,6 @@
                 <th>负责人ID</th>
                 <th>负责人名称</th>
                 <th>换热站ID列表</th>
-                <th>换热站名称列表</th>
-                <th>状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -212,8 +238,6 @@
                 <td><input v-model.trim="item.manager_id" type="text" /></td>
                 <td><input v-model.trim="item.manager_name" type="text" /></td>
                 <td><input v-model.trim="item.station_ids_text" type="text" /></td>
-                <td><input v-model.trim="item.station_names_text" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
               </tr>
             </tbody>
@@ -223,7 +247,7 @@
 
       <section class="card elevated">
         <div class="card-header-row">
-          <div class="card-header">施工单位</div>
+          <div class="card-header">施工单位及换热站映射</div>
           <div class="section-actions">
             <button class="btn ghost" type="button" @click="addConstructionUnit">新增一行</button>
             <button class="btn" type="button" :disabled="isSaving('construction_units')" @click="saveSection('construction_units')">
@@ -231,6 +255,7 @@
             </button>
           </div>
         </div>
+        <p class="sub block-sub">多个换热站请用英文逗号分隔，例如 `station_a, station_c`。仅通过换热站ID进行映射，不再单独维护名称列表。</p>
         <p v-if="sectionMessage('construction_units')" :class="['section-tip', sectionMessage('construction_units').type]">
           {{ sectionMessage('construction_units').text }}
         </p>
@@ -242,7 +267,7 @@
                 <th>单位名称</th>
                 <th>联系人</th>
                 <th>联系电话</th>
-                <th>状态</th>
+                <th>换热站ID列表</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -252,48 +277,8 @@
                 <td><input v-model.trim="item.unit_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_phone" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">施工单位映射</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addConstructionAssignment">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('construction_assignments')" @click="saveSection('construction_assignments')">
-              {{ isSaving('construction_assignments') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p class="sub block-sub">多个换热站请用英文逗号分隔，例如 `station_a, station_c`。</p>
-        <p v-if="sectionMessage('construction_assignments')" :class="['section-tip', sectionMessage('construction_assignments').type]">
-          {{ sectionMessage('construction_assignments').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>单位ID</th>
-                <th>单位名称</th>
-                <th>换热站ID列表</th>
-                <th>换热站名称列表</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in constructionAssignments" :key="`${item.unit_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.unit_id" type="text" /></td>
-                <td><input v-model.trim="item.unit_name" type="text" /></td>
                 <td><input v-model.trim="item.station_ids_text" type="text" /></td>
-                <td><input v-model.trim="item.station_names_text" type="text" /></td>
-                <td><input v-model.trim="item.status" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(constructionAssignments, index)">删除</button></td>
+                <td><button class="btn danger" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
               </tr>
             </tbody>
           </table>
@@ -397,9 +382,9 @@ const savingSections = ref({})
 const supplyEntities = ref([])
 const demandEntities = ref([])
 const pipeModels = ref([])
+const productionCapacities = ref([])
 const managerAssignments = ref([])
 const constructionUnits = ref([])
-const constructionAssignments = ref([])
 const baselinePresets = ref([])
 const selectedBaselineStationId = ref('')
 
@@ -448,17 +433,34 @@ function textToList(value) {
     .filter(Boolean)
 }
 
-function defaultQtyByCategory(category) {
-  const normalized = String(category || '').trim()
-  if (normalized === '中口径') return 160
-  if (normalized === '大口径') return 260
+function normalizePipeModelCode(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function parsePipeModelDiameter(value) {
+  const matched = normalizePipeModelCode(value).match(/^DN(\d+)$/)
+  return matched ? Number(matched[1]) : 0
+}
+
+function resolvePipeModelBucket(value) {
+  const diameter = parsePipeModelDiameter(value)
+  if (diameter >= 300) return 'large'
+  if (diameter >= 150) return 'medium'
+  if (diameter > 0) return 'small'
+  return 'small'
+}
+
+function defaultQtyByPipeModel(pipeModelCode) {
+  const bucket = resolvePipeModelBucket(pipeModelCode)
+  if (bucket === 'medium') return 160
+  if (bucket === 'large') return 260
   return 240
 }
 
-function defaultRemarkByCategory(category) {
-  const normalized = String(category || '').trim()
-  if (normalized === '中口径') return '演示预设-中口径偏低'
-  if (normalized === '大口径') return '演示预设-大口径偏高'
+function defaultRemarkByPipeModel(pipeModelCode) {
+  const bucket = resolvePipeModelBucket(pipeModelCode)
+  if (bucket === 'medium') return '演示预设-中管径偏低'
+  if (bucket === 'large') return '演示预设-大管径偏高'
   return '演示预设-小口径偏高'
 }
 
@@ -466,17 +468,17 @@ function normalizeAssignmentRows(rows, idKey, nameKey) {
   return cloneRows(rows).map((item) => ({
     ...item,
     station_ids_text: listToText(item.station_ids),
-    station_names_text: listToText(item.station_names),
     [idKey]: item[idKey] || '',
     [nameKey]: item[nameKey] || '',
-    status: item.status || 'active',
   }))
 }
 
 function normalizeBaselineRows(rows) {
   return cloneRows(rows).map((item, index) => ({
     ...item,
-    __row_key: `${item.station_id || 'station'}::${item.pipe_model_id || 'model'}::${index}`,
+    pipe_model_id: normalizePipeModelCode(item.pipe_model_id),
+    pipe_model_name: normalizePipeModelCode(item.pipe_model_name || item.pipe_model_id),
+    __row_key: `${item.station_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
     design_qty: Number(item.design_qty || 0),
     purchase_plan_qty: Number(item.purchase_plan_qty || 0),
     remark: item.remark || '',
@@ -486,8 +488,27 @@ function normalizeBaselineRows(rows) {
 function rebuildBaselineRowKeys() {
   baselinePresets.value = baselinePresets.value.map((item, index) => ({
     ...item,
-    __row_key: `${item.station_id || 'station'}::${item.pipe_model_id || 'model'}::${index}`,
+    __row_key: `${item.station_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
   }))
+}
+
+function normalizePipeModelRows(rows) {
+  return cloneRows(rows).map((item) => {
+    const normalizedCode = normalizePipeModelCode(item.pipe_model_id || item.pipe_model_name)
+    return {
+      pipe_model_id: normalizedCode,
+      pipe_model_name: normalizedCode,
+      unit: String(item.unit || '米').trim() || '米',
+    }
+  })
+}
+
+function syncPipeModelIdentity(row, source = 'id') {
+  const baseValue = source === 'name' ? row.pipe_model_name : row.pipe_model_id
+  const normalizedCode = normalizePipeModelCode(baseValue)
+  row.pipe_model_id = normalizedCode
+  row.pipe_model_name = normalizedCode
+  row.unit = String(row.unit || '米').trim() || '米'
 }
 
 function syncSelectedBaselineStation() {
@@ -510,10 +531,15 @@ function applyConfig(config) {
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
   supplyEntities.value = cloneRows(config.supply_entities)
   demandEntities.value = cloneRows(config.demand_entities)
-  pipeModels.value = cloneRows(config.pipe_models)
+  pipeModels.value = normalizePipeModelRows(config.pipe_models)
+  productionCapacities.value = cloneRows(config.production_capacities).map((item) => ({
+    ...item,
+    pipe_model_name: normalizePipeModelCode(item.pipe_model_name),
+    max_daily_output_qty: Number(item.max_daily_output_qty || 0),
+    remark: item.remark || '',
+  }))
   managerAssignments.value = normalizeAssignmentRows(config.manager_assignments, 'manager_id', 'manager_name')
-  constructionUnits.value = cloneRows(config.construction_units)
-  constructionAssignments.value = normalizeAssignmentRows(config.construction_assignments, 'unit_id', 'unit_name')
+  constructionUnits.value = normalizeAssignmentRows(config.construction_units, 'unit_id', 'unit_name')
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
 }
@@ -538,41 +564,62 @@ function buildSectionPayload(section) {
     return Number(planEditableDays.value ?? 3)
   }
   if (section === 'supply_entities') {
-    return cloneRows(supplyEntities.value)
+    return supplyEntities.value.map((item) => ({
+      entity_id: item.entity_id || '',
+      entity_name: item.entity_name || '',
+      contact_name: item.contact_name || '',
+      contact_phone: item.contact_phone || '',
+    }))
   }
   if (section === 'demand_entities') {
-    return cloneRows(demandEntities.value)
+    return demandEntities.value.map((item) => ({
+      station_id: item.station_id || '',
+      station_name: item.station_name || '',
+      region: item.region || '',
+      section: item.section || '',
+      construction_status: item.construction_status || '',
+    }))
   }
   if (section === 'pipe_models') {
-    return cloneRows(pipeModels.value)
+    return pipeModels.value.map((item) => {
+      const normalizedCode = normalizePipeModelCode(item.pipe_model_id || item.pipe_model_name)
+      return {
+        pipe_model_id: normalizedCode,
+        pipe_model_name: normalizedCode,
+        unit: String(item.unit || '米').trim() || '米',
+      }
+    })
+  }
+  if (section === 'production_capacities') {
+    return productionCapacities.value.map((item) => ({
+      supply_entity_name: item.supply_entity_name || '',
+      pipe_model_name: normalizePipeModelCode(item.pipe_model_name),
+      max_daily_output_qty: Number(item.max_daily_output_qty || 0),
+      remark: item.remark || '',
+    }))
   }
   if (section === 'manager_assignments') {
     return managerAssignments.value.map((item) => ({
       manager_id: item.manager_id || '',
       manager_name: item.manager_name || '',
       station_ids: textToList(item.station_ids_text),
-      station_names: textToList(item.station_names_text),
-      status: item.status || 'active',
     }))
   }
   if (section === 'construction_units') {
-    return cloneRows(constructionUnits.value)
-  }
-  if (section === 'construction_assignments') {
-    return constructionAssignments.value.map((item) => ({
+    return constructionUnits.value.map((item) => ({
       unit_id: item.unit_id || '',
       unit_name: item.unit_name || '',
+      contact_name: item.contact_name || '',
+      contact_phone: item.contact_phone || '',
       station_ids: textToList(item.station_ids_text),
-      station_names: textToList(item.station_names_text),
-      status: item.status || 'active',
     }))
   }
   if (section === 'baseline_presets') {
     return baselinePresets.value.map((item) => ({
       station_id: item.station_id || '',
       station_name: item.station_name || '',
-      pipe_model_id: item.pipe_model_id || '',
-      pipe_model_name: item.pipe_model_name || '',
+      pipe_model_id: normalizePipeModelCode(item.pipe_model_id),
+      pipe_model_name: resolvePipeModelById(item.pipe_model_id)?.pipe_model_name || normalizePipeModelCode(item.pipe_model_name || item.pipe_model_id),
       design_qty: Number(item.design_qty || 0),
       purchase_plan_qty: Number(item.purchase_plan_qty || 0),
       remark: item.remark || '',
@@ -590,9 +637,9 @@ const configPreviewText = computed(() =>
       supply_entities: buildSectionPayload('supply_entities'),
       demand_entities: buildSectionPayload('demand_entities'),
       pipe_models: buildSectionPayload('pipe_models'),
+      production_capacities: buildSectionPayload('production_capacities'),
       manager_assignments: buildSectionPayload('manager_assignments'),
       construction_units: buildSectionPayload('construction_units'),
-      construction_assignments: buildSectionPayload('construction_assignments'),
       baseline_presets: buildSectionPayload('baseline_presets'),
     },
     null,
@@ -675,17 +722,21 @@ async function saveCoreDatesSection() {
 }
 
 function removeRow(targetRef, index) {
-  targetRef.value.splice(index, 1)
+  if (Array.isArray(targetRef)) {
+    targetRef.splice(index, 1)
+    return
+  }
+  if (targetRef && Array.isArray(targetRef.value)) {
+    targetRef.value.splice(index, 1)
+  }
 }
 
 function addSupplyEntity() {
   supplyEntities.value.push({
     entity_id: '',
     entity_name: '',
-    entity_short_name: '',
     contact_name: '',
     contact_phone: '',
-    status: 'active',
   })
 }
 
@@ -696,7 +747,6 @@ function addDemandEntity() {
     region: '',
     section: '',
     construction_status: '',
-    status: 'active',
   })
 }
 
@@ -704,10 +754,7 @@ function addPipeModel() {
   pipeModels.value.push({
     pipe_model_id: '',
     pipe_model_name: '',
-    diameter_label: '',
     unit: '米',
-    category: '小口径',
-    status: 'active',
   })
 }
 
@@ -716,8 +763,24 @@ function addManagerAssignment() {
     manager_id: '',
     manager_name: '',
     station_ids_text: '',
-    station_names_text: '',
-    status: 'active',
+  })
+}
+
+function defaultCapacityByPipeModel(pipeModelCode) {
+  const bucket = resolvePipeModelBucket(pipeModelCode)
+  if (bucket === 'medium') return 420
+  if (bucket === 'large') return 300
+  return 600
+}
+
+function addProductionCapacity() {
+  const firstEntity = supplyEntities.value[0] || null
+  const firstModel = pipeModels.value[0] || null
+  productionCapacities.value.push({
+    supply_entity_name: firstEntity?.entity_name || '',
+    pipe_model_name: firstModel?.pipe_model_name || '',
+    max_daily_output_qty: defaultCapacityByPipeModel(firstModel?.pipe_model_id),
+    remark: '',
   })
 }
 
@@ -727,36 +790,28 @@ function addConstructionUnit() {
     unit_name: '',
     contact_name: '',
     contact_phone: '',
-    status: 'active',
-  })
-}
-
-function addConstructionAssignment() {
-  constructionAssignments.value.push({
-    unit_id: '',
-    unit_name: '',
     station_ids_text: '',
-    station_names_text: '',
-    status: 'active',
   })
 }
 
 function resolvePipeModelById(pipeModelId) {
-  return pipeModels.value.find((item) => item.pipe_model_id === pipeModelId) || null
+  const normalizedCode = normalizePipeModelCode(pipeModelId)
+  return pipeModels.value.find((item) => normalizePipeModelCode(item.pipe_model_id) === normalizedCode) || null
 }
 
 function syncBaselinePipeModelName(row) {
   const matched = resolvePipeModelById(row.pipe_model_id)
   if (!matched) return
   row.pipe_model_name = matched.pipe_model_name || matched.pipe_model_id
+  row.pipe_model_id = matched.pipe_model_id
   if (!row.design_qty) {
-    row.design_qty = defaultQtyByCategory(matched.category)
+    row.design_qty = defaultQtyByPipeModel(matched.pipe_model_id)
   }
   if (!row.purchase_plan_qty) {
-    row.purchase_plan_qty = defaultQtyByCategory(matched.category)
+    row.purchase_plan_qty = defaultQtyByPipeModel(matched.pipe_model_id)
   }
   if (!row.remark) {
-    row.remark = defaultRemarkByCategory(matched.category)
+    row.remark = defaultRemarkByPipeModel(matched.pipe_model_id)
   }
 }
 
@@ -769,9 +824,9 @@ function addBaselinePreset() {
     station_name: currentStation?.station_name || '',
     pipe_model_id: firstModel?.pipe_model_id || '',
     pipe_model_name: firstModel?.pipe_model_name || '',
-    design_qty: defaultQtyByCategory(firstModel?.category),
-    purchase_plan_qty: defaultQtyByCategory(firstModel?.category),
-    remark: defaultRemarkByCategory(firstModel?.category),
+    design_qty: defaultQtyByPipeModel(firstModel?.pipe_model_id),
+    purchase_plan_qty: defaultQtyByPipeModel(firstModel?.pipe_model_id),
+    remark: defaultRemarkByPipeModel(firstModel?.pipe_model_id),
   })
   rebuildBaselineRowKeys()
 }
@@ -802,9 +857,9 @@ function fillMissingPipeModelsForSelectedStation() {
       station_name: currentStation.station_name || currentStation.station_id,
       pipe_model_id: model.pipe_model_id,
       pipe_model_name: model.pipe_model_name || model.pipe_model_id,
-      design_qty: defaultQtyByCategory(model.category),
-      purchase_plan_qty: defaultQtyByCategory(model.category),
-      remark: defaultRemarkByCategory(model.category),
+      design_qty: defaultQtyByPipeModel(model.pipe_model_id),
+      purchase_plan_qty: defaultQtyByPipeModel(model.pipe_model_id),
+      remark: defaultRemarkByPipeModel(model.pipe_model_id),
     })
   })
   rebuildBaselineRowKeys()

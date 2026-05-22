@@ -5,7 +5,7 @@ insulation_pipe_supply_2026 工作台基础接口。
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +20,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     get_configured_plan_start_date,
     get_config_list,
     load_tube_config,
+    resolve_accessible_supply_entity_ids,
     resolve_accessible_station_ids,
     save_tube_config,
 )
@@ -31,6 +32,16 @@ from backend.projects.insulation_pipe_supply_2026.services.demand_management_ser
     list_usage_records,
     save_plan_records,
     save_usage_records,
+)
+from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import (
+    cancel_delivery_record,
+    create_delivery_record,
+    list_baseline_rows_all,
+    list_arrival_aggregates,
+    list_delivery_aggregates,
+    list_delivery_records,
+    list_plan_totals,
+    list_usage_totals,
 )
 
 router = APIRouter(tags=[PROJECT_KEY])
@@ -70,6 +81,25 @@ class TubeConfigSectionSavePayload(BaseModel):
     data: Any
 
 
+class SupplyDeliveryCreatePayload(BaseModel):
+    supply_entity_id: str
+    station_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    shipped_at: datetime
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    ship_remark: str = ""
+
+
+class SupplyDeliveryCancelPayload(BaseModel):
+    cancel_reason: str = ""
+
+
+def _normalize_pipe_model_id(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
 def _build_station_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
     result: Dict[str, str] = {}
     for item in get_config_list(payload, "demand_entities"):
@@ -83,10 +113,14 @@ def _build_station_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
 def _build_pipe_model_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "pipe_models"):
-        pipe_model_id = str(item.get("pipe_model_id") or "").strip()
+        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
         if not pipe_model_id:
             continue
-        result[pipe_model_id] = item
+        result[pipe_model_id] = {
+            **item,
+            "pipe_model_id": pipe_model_id,
+            "pipe_model_name": str(item.get("pipe_model_name") or pipe_model_id).strip() or pipe_model_id,
+        }
     return result
 
 
@@ -109,7 +143,7 @@ def _build_baseline_preset_map(payload: Dict[str, Any], station_id: str) -> Dict
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "baseline_presets"):
         normalized_station_id = str(item.get("station_id") or "").strip()
-        pipe_model_id = str(item.get("pipe_model_id") or "").strip()
+        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
         if normalized_station_id != station_id or not pipe_model_id:
             continue
         result[pipe_model_id] = {
@@ -130,9 +164,9 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "supply_entities",
         "demand_entities",
         "pipe_models",
+        "production_capacities",
         "manager_assignments",
         "construction_units",
-        "construction_assignments",
         "baseline_presets",
     }
     if normalized_section not in allowed_sections:
@@ -193,16 +227,34 @@ def _serialize_station_options(payload: Dict[str, Any], accessible_station_ids: 
 def _serialize_pipe_options(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for item in get_config_list(payload, "pipe_models"):
-        pipe_model_id = str(item.get("pipe_model_id") or "").strip()
+        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
         if not pipe_model_id:
             continue
         rows.append(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": item.get("pipe_model_name") or pipe_model_id,
-                "diameter_label": item.get("diameter_label") or "",
                 "unit": item.get("unit") or "",
-                "category": item.get("category") or "",
+            }
+        )
+    return rows
+
+
+def _serialize_supply_entity_options(
+    payload: Dict[str, Any],
+    accessible_supply_entity_ids: set[str],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for item in get_config_list(payload, "supply_entities"):
+        entity_id = str(item.get("entity_id") or "").strip()
+        if not entity_id or entity_id not in accessible_supply_entity_ids:
+            continue
+        rows.append(
+            {
+                "entity_id": entity_id,
+                "entity_name": item.get("entity_name") or entity_id,
+                "contact_name": item.get("contact_name") or "",
+                "contact_phone": item.get("contact_phone") or "",
             }
         )
     return rows
@@ -214,9 +266,9 @@ def get_workspace_config_summary() -> Dict[str, Any]:
     supply_entities = get_config_list(payload, "supply_entities")
     demand_entities = get_config_list(payload, "demand_entities")
     pipe_models = get_config_list(payload, "pipe_models")
+    production_capacities = get_config_list(payload, "production_capacities")
     manager_assignments = get_config_list(payload, "manager_assignments")
     construction_units = get_config_list(payload, "construction_units")
-    construction_assignments = get_config_list(payload, "construction_assignments")
     baseline_presets = get_config_list(payload, "baseline_presets")
 
     return {
@@ -230,17 +282,17 @@ def get_workspace_config_summary() -> Dict[str, Any]:
             "supply_entity_count": len(supply_entities),
             "demand_entity_count": len(demand_entities),
             "pipe_model_count": len(pipe_models),
+            "production_capacity_count": len(production_capacities),
             "manager_assignment_count": len(manager_assignments),
             "construction_unit_count": len(construction_units),
-            "construction_assignment_count": len(construction_assignments),
             "baseline_preset_count": len(baseline_presets),
         },
         "supply_entities": supply_entities,
         "demand_entities": demand_entities,
         "pipe_models": pipe_models,
+        "production_capacities": production_capacities,
         "manager_assignments": manager_assignments,
         "construction_units": construction_units,
-        "construction_assignments": construction_assignments,
         "baseline_presets": baseline_presets,
     }
 
@@ -273,6 +325,188 @@ def get_demand_management_options(
     }
 
 
+@router.get("/supply-management/options", summary="读取供给侧页面选项")
+def get_supply_management_options(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "user": {
+            "username": session.username,
+            "group": session.group,
+            "unit": session.unit,
+        },
+        "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
+        "stations": _serialize_station_options(payload, _build_station_name_map(payload).keys()),
+        "pipe_models": _serialize_pipe_options(payload),
+        "biz_date": get_configured_biz_date(payload).isoformat(),
+        "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
+        "current_supply_entity_ids": sorted(accessible_supply_entity_ids),
+    }
+
+
+@router.get("/supply-management/demand-summary", summary="读取供给侧需求与缺口汇总")
+def get_supply_management_demand_summary(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    station_name_map = _build_station_name_map(payload)
+    pipe_model_map = _build_pipe_model_map(payload)
+    plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
+    baseline_map = list_baseline_rows_all()
+    baseline_preset_map = _build_baseline_preset_map(payload, "")
+    plan_total_map = list_plan_totals(plan_dates)
+    delivery_aggregate_map = list_delivery_aggregates()
+    arrival_aggregate_map = list_arrival_aggregates()
+    usage_total_map = list_usage_totals()
+
+    rows: List[Dict[str, Any]] = []
+    for station in get_config_list(payload, "demand_entities"):
+        station_id = str(station.get("station_id") or "").strip()
+        if not station_id:
+            continue
+        station_baseline_preset_map = _build_baseline_preset_map(payload, station_id)
+        for pipe_model_id, pipe_model in pipe_model_map.items():
+            key = f"{station_id}::{pipe_model_id}"
+            baseline_row = baseline_map.get(key) or station_baseline_preset_map.get(pipe_model_id) or {}
+            plan_total_qty = float(plan_total_map.get(key, 0) or 0)
+            delivery_aggregate = delivery_aggregate_map.get(key) or {}
+            arrival_aggregate = arrival_aggregate_map.get(key) or {}
+            usage_aggregate = usage_total_map.get(key) or {}
+            pending_arrival_qty = float(delivery_aggregate.get("pending_arrival_qty", 0) or 0)
+            pending_receive_qty = float(delivery_aggregate.get("pending_receive_qty", 0) or 0)
+            pending_warehouse_qty = float(delivery_aggregate.get("pending_warehouse_qty", 0) or 0)
+            completed_qty = float(delivery_aggregate.get("completed_qty", 0) or 0)
+            total_shipped_qty = float(delivery_aggregate.get("total_shipped_qty", 0) or 0)
+            total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
+            total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
+            station_inventory_qty = total_arrived_qty - total_usage_qty
+            inbound_pipeline_qty = pending_arrival_qty + pending_receive_qty + pending_warehouse_qty
+            net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - station_inventory_qty, 0)
+            design_qty = float(baseline_row.get("design_qty", 0) or 0)
+            purchase_plan_qty = float(baseline_row.get("purchase_plan_qty", 0) or 0)
+            if (
+                design_qty <= 0
+                and purchase_plan_qty <= 0
+                and plan_total_qty <= 0
+                and inbound_pipeline_qty <= 0
+                and station_inventory_qty <= 0
+                and completed_qty <= 0
+                and total_shipped_qty <= 0
+            ):
+                continue
+            rows.append(
+                {
+                    "station_id": station_id,
+                    "station_name": station_name_map.get(station_id, station_id),
+                    "pipe_model_id": pipe_model_id,
+                    "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
+                    "unit": pipe_model.get("unit") or "",
+                    "design_qty": design_qty,
+                    "purchase_plan_qty": purchase_plan_qty,
+                    "future_plan_qty": plan_total_qty,
+                    "pending_arrival_qty": pending_arrival_qty,
+                    "pending_receive_qty": pending_receive_qty,
+                    "pending_warehouse_qty": pending_warehouse_qty,
+                    "completed_qty": completed_qty,
+                    "total_shipped_qty": total_shipped_qty,
+                    "total_arrived_qty": total_arrived_qty,
+                    "total_usage_qty": total_usage_qty,
+                    "station_inventory_qty": station_inventory_qty,
+                    "inbound_pipeline_qty": inbound_pipeline_qty,
+                    "net_gap_qty": net_gap_qty,
+                    "remark": baseline_row.get("remark") or "",
+                }
+            )
+
+    rows.sort(key=lambda item: (item["station_id"], item["pipe_model_id"]))
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "plan_dates": [item.isoformat() for item in plan_dates],
+        "rows": rows,
+    }
+
+
+@router.get("/supply-management/deliveries", summary="读取供给侧发货记录")
+def get_supply_management_deliveries(
+    station_id: str = "",
+    status: str = "",
+    supply_entity_id: str = "",
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    if not accessible_supply_entity_ids:
+        return {"ok": True, "project_key": PROJECT_KEY, "rows": []}
+
+    requested_supply_entity_id = str(supply_entity_id or "").strip()
+    if requested_supply_entity_id:
+        if requested_supply_entity_id not in accessible_supply_entity_ids:
+            raise HTTPException(status_code=403, detail="当前账号无该供给主体的访问权限")
+        target_supply_entity_ids = [requested_supply_entity_id]
+    else:
+        target_supply_entity_ids = sorted(accessible_supply_entity_ids)
+
+    rows = list_delivery_records(
+        supply_entity_ids=target_supply_entity_ids,
+        station_id=station_id,
+        status=status,
+    )
+    station_name_map = _build_station_name_map(payload)
+    pipe_model_map = _build_pipe_model_map(payload)
+    supply_entity_map = _build_supply_entity_map(payload)
+    for row in rows:
+        row["station_name"] = station_name_map.get(row["station_id"], row["station_id"])
+        row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
+        row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
+
+    return {"ok": True, "project_key": PROJECT_KEY, "rows": rows}
+
+
+@router.post("/supply-management/deliveries", summary="新增供给侧发货记录")
+def create_supply_management_delivery(
+    payload: SupplyDeliveryCreatePayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config_payload = load_tube_config()
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    if payload.supply_entity_id not in accessible_supply_entity_ids:
+        raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
+    delivery_id = create_delivery_record(
+        supply_entity_id=payload.supply_entity_id,
+        station_id=payload.station_id,
+        pipe_model_id=payload.pipe_model_id,
+        shipped_qty=payload.shipped_qty,
+        shipped_at=payload.shipped_at,
+        ship_contact_name=payload.ship_contact_name,
+        ship_contact_phone=payload.ship_contact_phone,
+        ship_remark=payload.ship_remark,
+        operator=session.username,
+    )
+    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
+
+
+@router.post("/supply-management/deliveries/{delivery_id}/cancel", summary="撤销供给侧发货记录")
+def cancel_supply_management_delivery(
+    delivery_id: int,
+    payload: SupplyDeliveryCancelPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config_payload = load_tube_config()
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    cancel_delivery_record(
+        delivery_id=delivery_id,
+        allowed_supply_entity_ids=sorted(accessible_supply_entity_ids),
+        operator=session.username,
+        cancel_reason=payload.cancel_reason,
+    )
+    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
+
+
 @router.get("/demand-management/baseline", summary="读取需求侧基准数据")
 def get_demand_management_baseline(
     station_id: str,
@@ -294,9 +528,7 @@ def get_demand_management_baseline(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
-                "diameter_label": pipe_model.get("diameter_label") or "",
                 "unit": pipe_model.get("unit") or "",
-                "category": pipe_model.get("category") or "",
                 "design_qty": baseline.get("design_qty"),
                 "purchase_plan_qty": baseline.get("purchase_plan_qty"),
                 "remark": baseline.get("remark") or "",

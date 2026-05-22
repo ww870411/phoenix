@@ -44,7 +44,7 @@
 
         <label class="field">
           <span>业务日期</span>
-          <input :value="bizDate" type="date" disabled />
+          <input v-model="bizDate" type="date" :disabled="!isGlobalAdmin" />
         </label>
       </div>
 
@@ -301,6 +301,7 @@ const pendingRows = ref([])
 
 const actionMessage = ref(null)
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
+const isGlobalAdmin = computed(() => currentGroup.value === 'Global_admin')
 
 const currentGroupLabel = computed(() => {
   if (!currentGroup.value) {
@@ -420,7 +421,9 @@ async function loadOptions() {
     stationOptions.value = normalized.stationOptions
     pipeModelOptions.value = normalized.pipeModelOptions
     currentGroup.value = normalized.currentGroup
-    bizDate.value = normalized.bizDate || bizDate.value || getTodayString(-1)
+    if (!bizDate.value) {
+      bizDate.value = normalized.bizDate || getTodayString(-1)
+    }
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
 
     if (!selectedStationId.value && stationOptions.value.length) {
@@ -429,9 +432,7 @@ async function loadOptions() {
     if (!anchorDate.value) {
       anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
     }
-    if (!usageDate.value) {
-      usageDate.value = normalized.bizDate || normalized.defaultUsageDate || getTodayString(-1)
-    }
+    usageDate.value = normalized.bizDate || normalized.defaultUsageDate || getTodayString(-1)
   } catch (error) {
     optionsError.value = error?.message || '加载需求侧配置失败'
   } finally {
@@ -591,6 +592,17 @@ watch(selectedStationId, () => {
   reloadStationData()
 })
 
+watch(bizDate, (value) => {
+  usageDate.value = value || ''
+})
+
+watch(usageDate, (value, oldValue) => {
+  if (!selectedStationId.value || !value || value === oldValue) {
+    return
+  }
+  loadUsageSheet()
+})
+
 onMounted(async () => {
   await loadOptions()
   await reloadStationData()
@@ -627,6 +639,7 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
+
 
 .field {
   display: flex;

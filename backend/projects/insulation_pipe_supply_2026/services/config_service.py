@@ -106,3 +106,28 @@ def resolve_accessible_station_ids(payload: Dict[str, Any], username: str, group
             if normalized_station_id:
                 allowed_station_ids.add(normalized_station_id)
     return allowed_station_ids
+
+
+def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
+    normalized_group = str(group or "").strip()
+    normalized_username = str(username or "").strip()
+    supply_entities = get_config_list(payload, "supply_entities")
+    all_entity_ids = {
+        str(item.get("entity_id") or "").strip()
+        for item in supply_entities
+        if str(item.get("entity_id") or "").strip()
+    }
+    if normalized_group == "Global_admin":
+        return all_entity_ids
+
+    allowed_entity_ids: Set[str] = set()
+    for item in supply_entities:
+        entity_id = str(item.get("entity_id") or "").strip()
+        candidate_keys = {
+            entity_id,
+            str(item.get("entity_name") or "").strip(),
+            str(item.get("username") or "").strip(),
+        }
+        if normalized_username in candidate_keys and entity_id:
+            allowed_entity_ids.add(entity_id)
+    return allowed_entity_ids

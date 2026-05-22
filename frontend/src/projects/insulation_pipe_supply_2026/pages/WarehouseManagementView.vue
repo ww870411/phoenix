@@ -31,7 +31,7 @@
               <tr v-for="unit in configSummary?.construction_units || []" :key="unit.unit_id">
                 <td>{{ unit.unit_name }}</td>
                 <td>{{ unit.contact_name }}</td>
-                <td>{{ resolveBoundStations(unit.unit_id).join('、') }}</td>
+                <td>{{ (unit.station_ids || []).join('、') }}</td>
               </tr>
             </tbody>
           </table>
@@ -52,7 +52,6 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 
 const {
@@ -62,18 +61,6 @@ const {
   breadcrumbItems,
   goProjectPages,
 } = useTubePageShell('库管员管理入口')
-
-const assignmentMap = computed(() => {
-  const mapping = new Map()
-  for (const item of configSummary.value?.construction_assignments || []) {
-    mapping.set(item.unit_id, item.station_names || [])
-  }
-  return mapping
-})
-
-function resolveBoundStations(unitId) {
-  return assignmentMap.value.get(unitId) || []
-}
 </script>
 
 <style scoped>

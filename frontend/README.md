@@ -5500,3 +5500,165 @@ docker compose up -d --build
 - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
   - 已在需求页各主要数量板块统一标注计量单位为“米”。
   - 表头与板块说明现在会直接体现“米”，减少歧义。
+
+## 2026-05-22 tube项目第二十二步：供给侧真实工作台落地
+
+- `frontend/src/projects/daily_report_25_26/services/api.js`
+  - 已新增供给侧接口封装：
+    - `getTubeSupplyManagementOptions`
+    - `getTubeSupplyManagementDemandSummary`
+    - `getTubeSupplyManagementDeliveries`
+    - `createTubeSupplyManagementDelivery`
+    - `cancelTubeSupplyManagementDelivery`
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 已从占位页升级为真实供给侧工作台。
+  - 当前包含：
+    - 供给主体 / 换热站 / 状态筛选
+    - 需求与缺口汇总
+    - 发货登记
+    - 发货记录列表
+    - 发货撤销
+  - 页面样式保持与 tube 项目当前统一壳层一致。
+
+## 2026-05-22 tube项目第二十三步：供给侧页面布局与表格样式修复
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 已对供给侧页面做一轮完整的布局与样式修复。
+  - 当前重点修正：
+    - 表单输入框溢出
+    - 标题区换行与按钮挤压
+    - 表格边界与留白不完整
+    - 窄屏下按钮和板块布局收口
+  - 页面视觉与 `DemandManagementView.vue` 的当前样式基线已进一步靠拢。
+
+## 2026-05-22 tube项目第二十四步：供给侧筛选简化与型号汇总增强
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 普通管厂账号不再显示“供给主体”筛选，改为只读显示当前主体。
+  - 删除了页面顶部的全局“状态筛选”。
+  - 新增“按型号汇总”板块，用于在当前换热站筛选范围内汇总各型号总需求、在途量与缺口。
+  - 原按站点表格保留，并调整为“换热站明细”板块。
+
+## 2026-05-22 tube项目第二十五步：供给侧供需表重构为单表视图
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 已取消原页面顶部“筛选条件”区块。
+  - 原“按型号汇总 + 换热站明细”两张表，已合并为“保温管供需明细”单一板块。
+  - 当前支持：
+    - 视图模式切换：整理汇总 / 全部换热站明细 / 单个换热站
+    - 型号下拉复选筛选
+  - 页面当前数据查看逻辑已收敛为“单表多视图”。
+
+## 2026-05-22 tube项目第二十六步：保温管生产能力静态配置接入
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 已新增“保温管生产能力”配置区块。
+  - 当前可直接维护：
+    - 供给主体
+    - 型号
+    - 每日最大产能（米）
+    - 状态
+    - 备注
+
+## 2026-05-22 tube项目第二十七步：演示产能数据按30天供完口径重设
+
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - 已按“约 30 天供完总设计量”的口径重设演示产能数据。
+  - 当前分工固定为：
+    - `管厂A`：`dn50`、`dn80`、`dn100`、`dn150`、`dn200`
+    - `管厂B`：`dn250`、`dn300`、`dn400`、`dn500`、`dn600`
+
+## 2026-05-22 tube项目第二十八步：生产能力配置改为纯静态文本字段
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - “保温管生产能力”区块中的“供给主体”“型号”已改为普通文本输入。
+  - “状态”列已移除。
+
+## 2026-05-22 tube项目第二十九步：全局管理页删除按钮修复
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 已修复全局管理页各区块“删除”按钮无效的问题。
+  - `removeRow(...)` 当前已兼容模板传入数组与 `ref` 两种情况。
+
+## 2026-05-22 tube项目第三十步：保温管型号字段收口为统一大写口径
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - “保温管型号”区块已删除：
+    - `口径标签`
+    - `分类`
+    - `状态`
+  - 当前仅保留：
+    - `型号ID`
+    - `型号名称`
+    - `单位`
+  - 页面中编辑 `型号ID` 或 `型号名称` 时，会自动转为大写并保持两者一致。
+  - 基准量预设与生产能力默认值不再依赖“分类”字段，而是按 `DN` 数值段自动判断小/中/大管径。
+
+## 2026-05-22 tube项目第三十一步：静态配置状态字段移除
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - 以下区块的“状态”列已移除：
+    - `供给主体`
+    - `换热站`
+    - `现场负责人映射`
+    - `施工单位`
+    - `施工单位映射`
+  - 对应区块保存时不再向配置文件写回 `status` 字段。
+
+## 2026-05-22 tube项目第三十二步：供给主体简称字段移除
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - “供给主体”区块已删除“简称”列。
+  - 供给主体保存与新增逻辑中，已不再处理 `entity_short_name`。
+
+## 2026-05-22 tube项目第三十三步：施工单位与映射区块合并
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - “施工单位”与“施工单位映射”已合并为单一区块“施工单位及换热站映射”。
+  - 该区块当前只维护：
+    - `单位ID`
+    - `单位名称`
+    - `联系人`
+    - `联系电话`
+    - `换热站ID列表`
+  - `换热站名称列表` 已移除。
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - 库管页当前直接读取 `construction_units[].station_ids` 展示绑定换热站，不再依赖独立映射表。
+
+## 2026-05-22 tube项目第三十四步：现场负责人映射去掉换热站名称列表
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - “现场负责人映射”区块已删除“换热站名称列表”列。
+  - 负责人映射保存与新增逻辑中，已不再处理 `station_names`。
+
+## 2026-05-22 tube项目第三十五步：需求侧页面业务日期联动收敛
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 普通用户看到的 `业务日期` 为只读。
+  - `Global_admin` 可在当前页面临时修改 `业务日期`，用于切换实际使用量的查询/提交日期上下文。
+  - 该修改不会回写全局 `biz_date` 配置。
+  - 实际使用量板块标题、读库与提交入库日期继续统一跟随当前页面 `biz_date` 联动。
+  - 原“更新业务日期”按钮已移除，避免误解为全局配置入口。
+
+## 2026-05-22 tube项目第三十六步：供给侧供需明细移除“当前在途”列
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - “保温管供需明细”表已移除“当前在途（米）”列。
+  - 页面当前只保留分状态明细列，不额外展示该合计指标。
+
+## 2026-05-22 tube项目第三十七步：供给侧缺口改为三日净缺口并纳入实时库存
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - “当前缺口（米）”已改名为“三日净缺口（米）”。
+  - 页面绑定字段已切换为 `netGapQty`。
+
+## 2026-05-22 tube项目第三十八步：上午阶段收尾总结
+
+- 本阶段前端侧已完成的收口：
+  - 型号字段统一为大写 `DNxx`
+  - 删除 `口径标签 / 分类 / 静态状态`
+  - 供给主体删除“简称”
+  - 现场负责人映射删除“换热站名称列表”
+  - 施工单位与施工映射合并为单一区块
+  - 需求侧页面允许 `Global_admin` 以页面级日期上下文切换历史使用日
+  - 供给侧明细改为“三日净缺口”
