@@ -320,6 +320,44 @@ export async function getTubeDemandManagementPendingArrivals(projectKey, station
   return response.json()
 }
 
+export async function getTubeDemandManagementLogisticsRecords(projectKey, stationId) {
+  const params = new URLSearchParams({ station_id: String(stationId || '') })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/logistics-records?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取需求侧物流确认记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function confirmTubeDemandManagementDeliveryArrival(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/arrival`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `需求侧确认到货失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function confirmTubeDemandManagementDeliveryReceipt(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/receipt`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `需求侧确认施工接收失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pipe_supply_2026') {
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config`, {
     headers: attachAuthHeaders(),
@@ -421,6 +459,73 @@ export async function cancelTubeSupplyManagementDelivery(projectKey, deliveryId,
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `撤销供给侧发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeWarehouseManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/options`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取库管页面选项失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getTubeWarehouseManagementDeliveries(projectKey, params = {}) {
+  const search = new URLSearchParams()
+  if (params.stationId) search.set('station_id', String(params.stationId))
+  if (params.status) search.set('status', String(params.status))
+  if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
+  if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
+  const suffix = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries${suffix}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取库管发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function confirmTubeWarehouseDeliveryArrival(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/arrival`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `确认到货失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function confirmTubeWarehouseDeliveryReceipt(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/receipt`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `确认施工接收失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function confirmTubeWarehouseDeliveryWarehouse(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/warehouse`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `库管确认失败: ${response.status}`)
   }
   return response.json()
 }

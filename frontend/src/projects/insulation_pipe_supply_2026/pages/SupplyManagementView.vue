@@ -204,6 +204,7 @@
                 <th>型号</th>
                 <th>发货量（米）</th>
                 <th>发货时间</th>
+                <th>在途时长</th>
                 <th>状态</th>
                 <th>备注</th>
                 <th>操作</th>
@@ -217,6 +218,7 @@
                 <td>{{ row.pipeModelName }}</td>
                 <td>{{ formatNumber(row.shippedQty) }}</td>
                 <td>{{ row.shippedAtDisplay || '—' }}</td>
+                <td>{{ formatElapsedLabel(row.shippedAt) || row.deliveryElapsedLabel || '—' }}</td>
                 <td>
                   <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
                 </td>
@@ -243,7 +245,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
@@ -285,6 +287,8 @@ const deliveriesLoading = ref(false)
 const deliveriesError = ref('')
 const deliveryRows = ref([])
 const cancelLoadingIds = ref({})
+const nowTick = ref(Date.now())
+let nowTimer = null
 
 const submitDeliveryLoading = ref(false)
 const actionMessage = ref(null)
@@ -486,16 +490,17 @@ function getStatusLabel(status) {
 function normalizeDeliveryRows(rows) {
   return (rows || []).map((row) => ({
     deliveryId: Number(row.id ?? 0),
-    deliveryCode: `DEL-${String(row.id ?? '').padStart(5, '0')}`,
+    deliveryCode: row.delivery_code || `DEL-${String(row.id ?? '').padStart(5, '0')}`,
     supplyEntityId: row.supply_entity_id || '',
-    supplyEntityName: row.supply_entity_name || row.supply_entity_id || '未命名供给主体',
+    supplyEntityName: row.supply_entity_name || row.supply_entity_id || '—',
     stationId: row.station_id || '',
-    stationName: row.station_name || row.station_id || '未命名换热站',
+    stationName: row.station_name || row.station_id || '—',
     pipeModelId: row.pipe_model_id || '',
-    pipeModelName: row.pipe_model_name || row.pipe_model_id || '未命名型号',
+    pipeModelName: row.pipe_model_name || row.pipe_model_id || '—',
     shippedQty: Number(row.shipped_qty ?? 0),
     shippedAt: row.shipped_at || '',
     shippedAtDisplay: formatDateTimeDisplay(row.shipped_at || ''),
+    deliveryElapsedLabel: row.delivery_elapsed_label || formatElapsedLabel(row.shipped_at || ''),
     shipContactName: row.ship_contact_name || '',
     shipContactPhone: row.ship_contact_phone || '',
     shipRemark: row.ship_remark || '',
@@ -580,7 +585,7 @@ async function submitDelivery() {
   submitDeliveryLoading.value = true
   clearActionMessage()
   try {
-    await createTubeSupplyManagementDelivery(PROJECT_KEY, {
+    const response = await createTubeSupplyManagementDelivery(PROJECT_KEY, {
       supply_entity_id: deliveryForm.value.supplyEntityId,
       station_id: deliveryForm.value.stationId,
       pipe_model_id: deliveryForm.value.pipeModelId,
@@ -590,7 +595,8 @@ async function submitDelivery() {
       ship_contact_phone: deliveryForm.value.shipContactPhone || '',
       ship_remark: deliveryForm.value.shipRemark || '',
     })
-    setActionMessage('success', '发货记录已提交。')
+    const deliveryCode = response?.delivery_code || response?.deliveryCode || ''
+    setActionMessage('success', deliveryCode ? `发货记录 ${deliveryCode} 已提交。` : '发货记录已提交。')
     const currentSupplyEntityId = deliveryForm.value.supplyEntityId
     deliveryForm.value = createDefaultDeliveryForm()
     deliveryForm.value.supplyEntityId = currentSupplyEntityId
@@ -640,6 +646,21 @@ watch(selectedSupplyEntityId, (value) => {
   }
 })
 
+function formatElapsedLabel(shippedAt) {
+  if (!shippedAt) return ''
+  const start = new Date(shippedAt)
+  if (Number.isNaN(start.getTime())) return ''
+  const diffMs = Math.max(nowTick.value - start.getTime(), 0)
+  const totalSeconds = Math.floor(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  if (days > 0) return `${days}天${hours}小时${minutes}分`
+  if (hours > 0) return `${hours}小时${minutes}分`
+  if (minutes > 0) return `${minutes}分`
+  return `${totalSeconds}秒`
+}
+
 watch(
   () => deliveryForm.value.supplyEntityId,
   (value) => {
@@ -656,8 +677,18 @@ watch(selectedSupplyEntityId, () => {
 })
 
 onMounted(async () => {
+  nowTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 60000)
   await loadOptions()
   await Promise.all([loadDemandSummary(), loadDeliveries()])
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
 })
 </script>
 

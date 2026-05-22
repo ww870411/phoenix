@@ -209,15 +209,15 @@
 
     <section class="card elevated">
       <div class="panel-title-row">
-        <h2>待确认到货记录</h2>
-        <span class="panel-hint">只展示当前换热站处于“已发货待到货”状态的记录。计量单位：米。</span>
+        <h2>物流确认记录</h2>
+        <span class="panel-hint">按当前换热站展示发货后的确认链路；不同角色可见不同操作按钮。计量单位：米。</span>
       </div>
 
-      <div v-if="pendingLoading" class="loading-text">正在加载待确认到货...</div>
+      <div v-if="pendingLoading" class="loading-text">正在加载物流确认记录...</div>
       <div v-else-if="pendingError" class="error-box">{{ pendingError }}</div>
-      <div v-else-if="!pendingRows.length" class="empty-box">当前没有待确认到货记录。</div>
+      <div v-else-if="!pendingRows.length" class="empty-box">当前没有物流确认记录。</div>
       <div v-else class="table-wrap">
-        <table class="data-table">
+        <table class="data-table logistics-table">
           <thead>
             <tr>
               <th>发货单号</th>
@@ -225,7 +225,10 @@
               <th>型号</th>
               <th>发货量（米）</th>
               <th>发货时间</th>
-              <th>备注</th>
+              <th>在途时长</th>
+              <th>状态</th>
+              <th>确认量（米）</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -235,7 +238,66 @@
               <td>{{ row.pipeModelName }}</td>
               <td>{{ formatNumber(row.shippedQty) }}</td>
               <td>{{ row.shippedAt || '—' }}</td>
-              <td>{{ row.remarks || '—' }}</td>
+              <td>{{ formatElapsedLabel(row.shippedAt) || row.deliveryElapsedLabel || '—' }}</td>
+              <td>
+                <span class="status-pill" :class="row.status">
+                  {{ row.statusLabel }}
+                </span>
+              </td>
+              <td>
+                <div v-if="row.status === 'pending_arrival'" class="stack-controls">
+                  <input
+                    v-model.number="row.arrivalConfirmQty"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+                <div v-else-if="row.status === 'pending_receive'" class="stack-controls">
+                  <input
+                    v-model.number="row.receiptConfirmQty"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+                <span v-else>{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
+              </td>
+              <td>
+                <div v-if="row.status === 'pending_arrival' || row.status === 'pending_receive'" class="action-stack action-inline">
+                  <button
+                    type="button"
+                    class="primary-button action-button arrival-button"
+                    :class="{ 'is-active': canClickArrival(row) }"
+                    :disabled="deliveryActionLoadingKey === `arrival-${row.deliveryId}` || !canClickArrival(row)"
+                    @click="confirmArrival(row)"
+                  >
+                    {{
+                      deliveryActionLoadingKey === `arrival-${row.deliveryId}`
+                        ? '确认中...'
+                        : row.status === 'pending_arrival'
+                          ? '确认到货'
+                          : '到货已确认'
+                    }}
+                  </button>
+                  <button
+                    type="button"
+                    class="primary-button action-button receipt-button"
+                    :class="{ 'is-active': canClickReceipt(row) }"
+                    :disabled="deliveryActionLoadingKey === `receipt-${row.deliveryId}` || !canClickReceipt(row)"
+                    @click="confirmReceipt(row)"
+                  >
+                    {{
+                      deliveryActionLoadingKey === `receipt-${row.deliveryId}`
+                        ? '确认中...'
+                        : row.status === 'pending_receive'
+                          ? '施工接收'
+                          : '等待到货'
+                    }}
+                  </button>
+                </div>
+                <span v-else class="action-placeholder">{{ deliveryStatusLabelMap[row.status] || row.status || '--' }}</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -246,13 +308,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
+  confirmTubeDemandManagementDeliveryArrival,
+  confirmTubeDemandManagementDeliveryReceipt,
   getTubeDemandManagementBaseline,
+  getTubeDemandManagementLogisticsRecords,
   getTubeDemandManagementOptions,
-  getTubeDemandManagementPendingArrivals,
   getTubeDemandManagementPlanMatrix,
   getTubeDemandManagementUsageSheet,
   saveTubeDemandManagementPlanMatrix,
@@ -298,19 +362,29 @@ const saveUsageLoading = ref(false)
 const pendingLoading = ref(false)
 const pendingError = ref('')
 const pendingRows = ref([])
+const nowTick = ref(Date.now())
+let nowTimer = null
 
 const actionMessage = ref(null)
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
-const isGlobalAdmin = computed(() => currentGroup.value === 'Global_admin')
+const normalizedGroupKey = computed(() => String(currentGroup.value || '').trim())
+const isGlobalAdmin = computed(() => {
+  const group = normalizedGroupKey.value.toLowerCase()
+  return group === 'global_admin' || group === 'globaladmin' || group === '系统管理员' || group === '管理员'
+})
+const canConfirmArrival = computed(() => isGlobalAdmin.value || normalizedGroupKey.value === 'tube_site_manager')
+const canConfirmReceipt = computed(() => isGlobalAdmin.value || normalizedGroupKey.value === 'tube_construction_unit')
+const deliveryActionLoadingKey = ref('')
 
 const currentGroupLabel = computed(() => {
-  if (!currentGroup.value) {
+  const group = normalizedGroupKey.value
+  if (!group) {
     return '未识别'
   }
-  if (currentGroup.value === 'Global_admin') {
+  if (isGlobalAdmin.value) {
     return '全局管理员'
   }
-  return currentGroup.value
+  return group
 })
 
 function isPlanDateEditable(index) {
@@ -319,6 +393,14 @@ function isPlanDateEditable(index) {
     return false
   }
   return index >= planDates.value.length - editableDays
+}
+
+function canClickArrival(row) {
+  return Boolean(canConfirmArrival.value && row?.status === 'pending_arrival')
+}
+
+function canClickReceipt(row) {
+  return Boolean(canConfirmReceipt.value && row?.status === 'pending_receive')
 }
 
 function getTodayString(offsetDays = 0) {
@@ -389,14 +471,49 @@ function normalizeUsageRows(rows) {
 
 function normalizePendingRows(rows) {
   return (rows || []).map((row) => ({
-    deliveryId: row.delivery_id || row.deliveryId,
+    deliveryId: row.delivery_id || row.deliveryId || row.id,
     deliveryCode: row.delivery_code || row.deliveryCode || '',
-    supplyEntityName: row.supply_entity_name || row.supplyEntityName || '未命名供给主体',
+    supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
-    shippedQty: row.shipped_qty || row.shippedQty || 0,
+    status: row.status || '',
+    statusLabel: getDeliveryStatusLabel(row.status),
+    shippedQty: Number(row.shipped_qty || row.shippedQty || 0),
+    arrivedQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
+    receivedQty: Number(row.received_qty || row.receivedQty || row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
     shippedAt: row.shipped_at || row.shippedAt || '',
-    remarks: row.remarks || ''
+    deliveryElapsedLabel: row.delivery_elapsed_label || row.deliveryElapsedLabel || '',
+    remarks: row.remarks || row.ship_remark || '',
+    arrivalConfirmQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
+    receiptConfirmQty: Number(row.received_qty || row.receivedQty || row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
+    arrivalRemark: '',
+    receiptRemark: ''
   }))
+}
+
+function formatElapsedLabel(shippedAt) {
+  if (!shippedAt) return ''
+  const start = new Date(shippedAt)
+  if (Number.isNaN(start.getTime())) return ''
+  const diffMs = Math.max(nowTick.value - start.getTime(), 0)
+  const totalSeconds = Math.floor(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  if (days > 0) return `${days}天${hours}小时${minutes}分`
+  if (hours > 0) return `${hours}小时${minutes}分`
+  if (minutes > 0) return `${minutes}分`
+  return `${totalSeconds}秒`
+}
+
+function getDeliveryStatusLabel(status) {
+  const mapping = {
+    pending_arrival: '已发货待到货',
+    pending_receive: '已到货待接收',
+    pending_warehouse: '已接收待库管',
+    completed: '已完成',
+    cancelled: '已撤销'
+  }
+  return mapping[status] || status || '—'
 }
 
 function normalizeOptionsPayload(response) {
@@ -498,7 +615,7 @@ async function loadUsageSheet() {
   }
 }
 
-async function loadPendingArrivals() {
+async function loadLogisticsRecords() {
   if (!selectedStationId.value) {
     pendingRows.value = []
     return
@@ -506,13 +623,53 @@ async function loadPendingArrivals() {
   pendingLoading.value = true
   pendingError.value = ''
   try {
-    const response = await getTubeDemandManagementPendingArrivals(PROJECT_KEY, selectedStationId.value)
+    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value)
     pendingRows.value = normalizePendingRows(response.rows)
   } catch (error) {
-    pendingError.value = error?.message || '加载待确认到货失败'
+    pendingError.value = error?.message || '加载物流确认记录失败'
     pendingRows.value = []
   } finally {
     pendingLoading.value = false
+  }
+}
+
+async function confirmArrival(row) {
+  if (!row?.deliveryId || !canClickArrival(row)) {
+    return
+  }
+  deliveryActionLoadingKey.value = `arrival-${row.deliveryId}`
+  clearActionMessage()
+  try {
+    await confirmTubeDemandManagementDeliveryArrival(PROJECT_KEY, row.deliveryId, {
+      arrived_qty: Number(row.arrivalConfirmQty || row.shippedQty || 0),
+      remark: row.arrivalRemark || ''
+    })
+    setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 到货已确认。`)
+    await loadLogisticsRecords()
+  } catch (error) {
+    setActionMessage('error', error?.message || '确认到货失败')
+  } finally {
+    deliveryActionLoadingKey.value = ''
+  }
+}
+
+async function confirmReceipt(row) {
+  if (!row?.deliveryId || !canClickReceipt(row)) {
+    return
+  }
+  deliveryActionLoadingKey.value = `receipt-${row.deliveryId}`
+  clearActionMessage()
+  try {
+    await confirmTubeDemandManagementDeliveryReceipt(PROJECT_KEY, row.deliveryId, {
+      received_qty: Number(row.receiptConfirmQty || row.arrivedQty || row.shippedQty || 0),
+      remark: row.receiptRemark || ''
+    })
+    setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 施工接收已确认。`)
+    await loadLogisticsRecords()
+  } catch (error) {
+    setActionMessage('error', error?.message || '确认施工接收失败')
+  } finally {
+    deliveryActionLoadingKey.value = ''
   }
 }
 
@@ -522,7 +679,7 @@ async function reloadStationData() {
     loadBaseline(),
     loadPlanMatrix(),
     loadUsageSheet(),
-    loadPendingArrivals()
+    loadLogisticsRecords()
   ])
 }
 
@@ -604,8 +761,18 @@ watch(usageDate, (value, oldValue) => {
 })
 
 onMounted(async () => {
+  nowTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 60000)
   await loadOptions()
   await reloadStationData()
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
 })
 </script>
 
@@ -719,6 +886,98 @@ onMounted(async () => {
   min-width: 180px;
 }
 
+.logistics-table {
+  min-width: 1180px;
+}
+
+.stack-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.action-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  min-width: 260px;
+}
+
+.action-button {
+  min-width: 118px;
+}
+
+.action-placeholder {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.2;
+  background: #eef2ff;
+  color: #334155;
+}
+
+.status-pill.pending_arrival {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-pill.pending_receive {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.status-pill.pending_warehouse {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.status-pill.completed {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.status-pill.cancelled {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.primary-button.arrival-button {
+  border-color: #e5e7eb;
+  background: #ffffff;
+  color: #cbd5e1;
+}
+
+.primary-button.arrival-button.is-active {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.primary-button.receipt-button {
+  border-color: #e5e7eb;
+  background: #ffffff;
+  color: #cbd5e1;
+}
+
+.primary-button.receipt-button.is-active {
+  border-color: #c2410c;
+  background: #c2410c;
+  color: #fff;
+}
+
 .editable-plan-date {
   background: #dbeafe;
   color: #1d4ed8;
@@ -748,7 +1007,7 @@ onMounted(async () => {
 
 .primary-button:disabled,
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 1;
   cursor: not-allowed;
 }
 

@@ -228,6 +228,11 @@ def list_delivery_records(
         return [
             {
                 "id": int(row["id"]),
+                "delivery_code": build_delivery_code(
+                    int(row["id"]),
+                    row["shipped_at"],
+                    _normalize_text(row["supply_entity_id"]),
+                ),
                 "supply_entity_id": _normalize_text(row["supply_entity_id"]),
                 "station_id": _normalize_text(row["station_id"]),
                 "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
@@ -338,6 +343,97 @@ def create_delivery_record(
         session.close()
 
 
+def build_delivery_code(
+    delivery_id: int,
+    shipped_at: Optional[datetime] = None,
+    supply_entity_id: str = "",
+    delivery_prefix: str = "",
+) -> str:
+    prefix = _normalize_text(delivery_prefix).upper()
+    if not prefix:
+        raw_prefix = _normalize_text(supply_entity_id).upper()
+        if raw_prefix:
+            parts = [part for part in raw_prefix.replace("-", "_").split("_") if part]
+            if len(parts) >= 2:
+                prefix = "".join(part[0] for part in parts if part[:1])
+            else:
+                prefix = "".join(ch for ch in raw_prefix if ch.isalnum())[:4]
+    if not prefix:
+        prefix = "DEL"
+    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    seq_part = f"{int(delivery_id):03d}"
+    if prefix and date_part:
+        return f"{prefix}-{date_part}-{seq_part}"
+    if prefix:
+        return f"{prefix}-{seq_part}"
+    if date_part:
+        return f"DEL-{date_part}-{seq_part}"
+    return f"DEL-{seq_part}"
+
+
+def format_delivery_elapsed(shipped_at: Optional[datetime], now_at: Optional[datetime] = None) -> str:
+    if not shipped_at:
+        return ""
+    if shipped_at.tzinfo is None or shipped_at.tzinfo.utcoffset(shipped_at) is None:
+        current = now_at or datetime.now()
+        if current.tzinfo is not None and current.tzinfo.utcoffset(current) is not None:
+            current = current.replace(tzinfo=None)
+    else:
+        current = now_at or datetime.now(shipped_at.tzinfo)
+        if current.tzinfo is None or current.tzinfo.utcoffset(current) is None:
+            current = current.replace(tzinfo=shipped_at.tzinfo)
+        else:
+            current = current.astimezone(shipped_at.tzinfo)
+    total_seconds = max(int((current - shipped_at).total_seconds()), 0)
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if days > 0:
+        return f"{days}天{hours}小时{minutes}分"
+    if hours > 0:
+        return f"{hours}小时{minutes}分"
+    if minutes > 0:
+        return f"{minutes}分{seconds}秒"
+    return f"{seconds}秒"
+
+
+def get_delivery_record_basic(delivery_id: int) -> Dict[str, Any]:
+    sql = text(
+        """
+        SELECT
+            id,
+            supply_entity_id,
+            station_id,
+            pipe_model_id,
+            shipped_qty,
+            arrived_qty,
+            received_qty,
+            shipped_at,
+            status
+        FROM tube.tube_delivery
+        WHERE id = :delivery_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql, {"delivery_id": int(delivery_id)}).mappings().first()
+        if not row:
+            return {}
+        return {
+            "id": int(row["id"]),
+            "supply_entity_id": _normalize_text(row["supply_entity_id"]),
+            "station_id": _normalize_text(row["station_id"]),
+            "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
+            "shipped_qty": float(row["shipped_qty"]) if row["shipped_qty"] is not None else 0,
+            "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else None,
+            "received_qty": float(row["received_qty"]) if row["received_qty"] is not None else None,
+            "shipped_at": row["shipped_at"],
+            "status": row["status"] or "",
+        }
+    finally:
+        session.close()
+
+
 def cancel_delivery_record(
     delivery_id: int,
     allowed_supply_entity_ids: Sequence[str],
@@ -383,6 +479,175 @@ def cancel_delivery_record(
                 "delivery_id": int(delivery_id),
                 "cancel_by": operator,
                 "cancel_reason": _normalize_text(cancel_reason) or "供给侧撤销发货",
+                "updated_by": operator,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def update_delivery_arrival_record(
+    delivery_id: int,
+    operator: str,
+    arrived_qty: float,
+    remark: str = "",
+) -> None:
+    if arrived_qty < 0:
+        raise HTTPException(status_code=422, detail="到货数量不能为负数")
+    sql_get = text(
+        """
+        SELECT id, shipped_qty, status
+        FROM tube.tube_delivery
+        WHERE id = :delivery_id
+        """
+    )
+    sql_update = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            arrived_qty = :arrived_qty,
+            arrived_confirm_by = :arrived_confirm_by,
+            arrived_confirm_at = NOW(),
+            arrived_remark = :arrived_remark,
+            status = 'pending_receive',
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE id = :delivery_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql_get, {"delivery_id": int(delivery_id)}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
+        if _normalize_text(row["status"]) != "pending_arrival":
+            raise HTTPException(status_code=422, detail="仅“已发货待到货”状态允许确认到货")
+        shipped_qty = float(row["shipped_qty"] or 0)
+        normalized_arrived_qty = float(arrived_qty if arrived_qty is not None else shipped_qty)
+        if normalized_arrived_qty <= 0:
+            raise HTTPException(status_code=422, detail="到货数量必须大于 0")
+        if normalized_arrived_qty > shipped_qty:
+            raise HTTPException(status_code=422, detail="到货数量不能大于发货数量")
+        session.execute(
+            sql_update,
+            {
+                "delivery_id": int(delivery_id),
+                "arrived_qty": normalized_arrived_qty,
+                "arrived_confirm_by": operator,
+                "arrived_remark": _normalize_text(remark),
+                "updated_by": operator,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def update_delivery_receipt_record(
+    delivery_id: int,
+    operator: str,
+    received_qty: float,
+    remark: str = "",
+) -> None:
+    if received_qty < 0:
+        raise HTTPException(status_code=422, detail="施工接收数量不能为负数")
+    sql_get = text(
+        """
+        SELECT id, shipped_qty, arrived_qty, status
+        FROM tube.tube_delivery
+        WHERE id = :delivery_id
+        """
+    )
+    sql_update = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            received_qty = :received_qty,
+            received_confirm_by = :received_confirm_by,
+            received_confirm_at = NOW(),
+            received_remark = :received_remark,
+            status = 'pending_warehouse',
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE id = :delivery_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql_get, {"delivery_id": int(delivery_id)}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
+        if _normalize_text(row["status"]) != "pending_receive":
+            raise HTTPException(status_code=422, detail="仅“已到货待接收”状态允许施工接收")
+        arrived_qty = float(row["arrived_qty"] if row["arrived_qty"] is not None else row["shipped_qty"] or 0)
+        normalized_received_qty = float(received_qty if received_qty is not None else arrived_qty)
+        if normalized_received_qty <= 0:
+            raise HTTPException(status_code=422, detail="施工接收数量必须大于 0")
+        if normalized_received_qty > arrived_qty:
+            raise HTTPException(status_code=422, detail="施工接收数量不能大于到货数量")
+        session.execute(
+            sql_update,
+            {
+                "delivery_id": int(delivery_id),
+                "received_qty": normalized_received_qty,
+                "received_confirm_by": operator,
+                "received_remark": _normalize_text(remark),
+                "updated_by": operator,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def update_delivery_warehouse_record(
+    delivery_id: int,
+    operator: str,
+    remark: str = "",
+) -> None:
+    sql_get = text(
+        """
+        SELECT id, status
+        FROM tube.tube_delivery
+        WHERE id = :delivery_id
+        """
+    )
+    sql_update = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            status = 'completed',
+            warehouse_confirm_by = :warehouse_confirm_by,
+            warehouse_confirm_at = NOW(),
+            warehouse_remark = :warehouse_remark,
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE id = :delivery_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql_get, {"delivery_id": int(delivery_id)}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
+        if _normalize_text(row["status"]) != "pending_warehouse":
+            raise HTTPException(status_code=422, detail="仅“已接收待库管确认”状态允许库管确认")
+        session.execute(
+            sql_update,
+            {
+                "delivery_id": int(delivery_id),
+                "warehouse_confirm_by": operator,
+                "warehouse_remark": _normalize_text(remark),
                 "updated_by": operator,
             },
         )
