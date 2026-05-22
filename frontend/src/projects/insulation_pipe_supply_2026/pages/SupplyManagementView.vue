@@ -128,7 +128,13 @@
         <div class="filter-grid">
           <label class="field">
             <span>供给主体</span>
-            <select v-model="deliveryForm.supplyEntityId" :disabled="!selectedSupplyEntityId || !canSwitchSupplyEntity">
+            <input
+              v-if="!canSwitchSupplyEntity"
+              :value="currentDeliverySupplyEntityLabel"
+              type="text"
+              disabled
+            />
+            <select v-else v-model="deliveryForm.supplyEntityId" :disabled="!selectedSupplyEntityId || !canSwitchSupplyEntity">
               <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
                 {{ entity.entity_name }}
               </option>
@@ -272,6 +278,7 @@ const supplyEntityOptions = ref([])
 const stationOptions = ref([])
 const pipeModelOptions = ref([])
 const currentGroup = ref('')
+const currentSupplyEntityIds = ref([])
 const bizDate = ref('')
 const planStartDate = ref('')
 
@@ -308,6 +315,11 @@ const currentGroupLabel = computed(() => {
 const currentSupplyEntityLabel = computed(() => {
   const matched = supplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
   return matched?.entity_name || '未识别'
+})
+
+const currentDeliverySupplyEntityLabel = computed(() => {
+  const matched = supplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)
+  return matched?.entity_name || currentSupplyEntityLabel.value
 })
 
 const supplyDemandViewOptions = computed(() => [
@@ -520,12 +532,17 @@ async function loadOptions() {
     supplyEntityOptions.value = normalized.supplyEntities
     stationOptions.value = normalized.stations
     pipeModelOptions.value = normalized.pipeModels
+    currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
     bizDate.value = normalized.bizDate
     planStartDate.value = normalized.planStartDate
-    if (!selectedSupplyEntityId.value && normalized.currentSupplyEntityIds.length) {
+    if (!canSwitchSupplyEntity.value && normalized.currentSupplyEntityIds.length) {
+      selectedSupplyEntityId.value = normalized.currentSupplyEntityIds[0]
+    } else if (!selectedSupplyEntityId.value && normalized.currentSupplyEntityIds.length) {
       selectedSupplyEntityId.value = normalized.currentSupplyEntityIds[0]
     }
-    if (!deliveryForm.value.supplyEntityId && selectedSupplyEntityId.value) {
+    if (!canSwitchSupplyEntity.value && selectedSupplyEntityId.value) {
+      deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
+    } else if (!deliveryForm.value.supplyEntityId && selectedSupplyEntityId.value) {
       deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
     }
     if (!selectedPipeModelIds.value.length) {
@@ -666,6 +683,10 @@ watch(
   (value) => {
     if (canSwitchSupplyEntity.value && value && value !== selectedSupplyEntityId.value) {
       selectedSupplyEntityId.value = value
+      return
+    }
+    if (!canSwitchSupplyEntity.value && selectedSupplyEntityId.value && value !== selectedSupplyEntityId.value) {
+      deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
     }
   },
 )
