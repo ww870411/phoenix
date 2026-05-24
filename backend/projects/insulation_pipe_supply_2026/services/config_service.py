@@ -62,6 +62,17 @@ def load_station_submission_status() -> Dict[str, Any]:
     }
 
 
+def save_station_submission_status(payload: Dict[str, Any]) -> None:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="station_submission_status.json 顶层必须为对象")
+    temp_path = SUBMISSION_STATUS_PATH.with_name(SUBMISSION_STATUS_PATH.name + ".tmp")
+    temp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temp_path.replace(SUBMISSION_STATUS_PATH)
+
+
 def get_configured_show_date(payload: Dict[str, Any]) -> date:
     raw_value = str(payload.get("show_date") or payload.get("biz_date") or "").strip()
     if raw_value:
@@ -73,6 +84,9 @@ def get_configured_show_date(payload: Dict[str, Any]) -> date:
 
 
 def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
+    auto_update = bool(payload.get("auto_update_plan_start_date"))
+    if auto_update:
+        return date.today()
     raw_value = str(payload.get("plan_start_date") or "").strip()
     if raw_value:
         try:

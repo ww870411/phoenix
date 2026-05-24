@@ -8790,3 +8790,45 @@
 - 本轮仍未接入：
   - 提交状态写入逻辑
   - 历史记录滚动写入逻辑
+
+## 2026-05-24 tube 全局管理页提交状态区块顺序调整
+
+- 按用户要求，`GlobalManagementView.vue` 中“换热站提交状态”已上移到“供给主体”区块之前。
+- 本轮仅调整全局管理页的展示顺序，不改动提交状态的读取来源、判定规则与接口结构。
+
+## 2026-05-24 tube 需求侧提交按钮最小闭环接通
+
+- 按用户要求，先忽略未来提交前置校验逻辑，直接将需求侧“提交本换热站填报状态”按钮接成可测试的真实写入动作。
+- 后端新增接口：
+  - `POST /demand-management/submission`
+  - 按当前登录账号的换热站权限校验 `station_id`
+  - 读取 `plan_start_date / show_date / usage_collection_date`
+  - 写入 `station_submission_status.json`
+- 写入规则：
+  - 同一换热站新提交时，原 `latest_submissions` 记录先挤入 `history_submissions`
+  - 再写入新的最新提交记录
+  - 当前记录至少包含 `station_id / station_name / data_submit_date / plan_start_date / show_date / usage_date / submitted_at / submitted_by / submitted_group / remark`
+- 前端当前行为：
+  - 点击按钮即提交当前选中换热站的填报完成状态
+  - 按钮提交中会临时禁用，避免重复点击
+  - 成功后提示本次写入的提交日期
+- 本轮仍刻意未加入：
+  - 提交前置条件检查
+  - “是否允许提交”的业务规则拦截
+  - 提交后二次确认或回退机制
+
+## 2026-05-24 tube 核心参数新增 plan_start_date 自动更新开关
+
+- 按用户要求，在全局管理页“核心参数”区块新增：
+  - `plan_start_date 是否随真实日期自动变化`
+- 新增配置字段：
+  - `auto_update_plan_start_date`
+- 当前行为定义：
+  - 当开关为“否”时，`plan_start_date` 继续按配置文件中的手工日期生效
+  - 当开关为“是”时，后端 `get_configured_plan_start_date()` 直接按系统真实日期返回
+  - 从“否”切换为“是”并保存时，前端会先将 `plan_start_date` 同步为当天日期，再保存开关
+- 页面交互：
+  - 自动更新开启后，`plan_start_date` 输入框变为禁用态
+  - 全局管理页初始加载时，会优先显示后端实际计算后的 `plan_start_date`
+- 当前结果：
+  - 需求侧三日计划窗口、实际使用采集日、供给侧页面、库管页等所有依赖 `get_configured_plan_start_date()` 的口径，都会统一受该开关影响

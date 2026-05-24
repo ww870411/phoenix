@@ -35,7 +35,15 @@
           </label>
           <label class="field">
             <span>plan_start_date</span>
-            <input v-model="planStartDate" type="date" />
+            <input v-model="planStartDate" type="date" :disabled="autoUpdatePlanStartDate" />
+            <small class="field-help">开启自动更新后，该日期会先同步为今天，后续再随真实日期自动变化。</small>
+          </label>
+          <label class="field">
+            <span>plan_start_date 是否随真实日期自动变化</span>
+            <select v-model="autoUpdatePlanStartDate" @change="handleAutoPlanStartDateChange">
+              <option :value="false">否</option>
+              <option :value="true">是</option>
+            </select>
           </label>
           <label class="field">
             <span>plan_editable_days</span>
@@ -54,6 +62,48 @@
           <span class="summary-chip">负责人映射：{{ managerAssignments.length }}</span>
           <span class="summary-chip">施工单位：{{ constructionUnits.length }}</span>
           <span class="summary-chip">基准预设：{{ baselinePresets.length }}</span>
+        </div>
+      </section>
+
+      <section class="card elevated">
+        <div class="card-header-row">
+          <div>
+            <div class="card-header">换热站提交状态</div>
+            <p class="sub block-sub">这里只读取独立提交状态文件中的最新提交记录，用于管理员判断各换热站是否完成当前批次填报。</p>
+          </div>
+          <div class="summary-row baseline-summary">
+            <span class="summary-chip">当前计划起始日期：{{ planStartDate || '未设置' }}</span>
+            <span class="summary-chip">已提交：{{ submittedStationCount }}</span>
+            <span class="summary-chip">未提交：{{ pendingStationCount }}</span>
+            <span class="summary-chip">历史记录：{{ historySubmissions.length }}</span>
+          </div>
+        </div>
+        <p class="sub block-sub">状态文件：{{ submissionStatusPath || '未设置' }}</p>
+        <div class="table-wrap">
+          <table class="table editor-table submission-table">
+            <thead>
+              <tr>
+                <th>换热站</th>
+                <th>当前状态</th>
+                <th>最新提交日期</th>
+                <th>最新提交时间</th>
+                <th>最新提交人</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in submissionStatusRows" :key="item.station_id">
+                <td>{{ item.station_name || item.station_id }}</td>
+                <td>
+                  <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
+                    {{ item.is_submitted ? '已提交' : '未提交' }}
+                  </span>
+                </td>
+                <td>{{ item.data_submit_date || '—' }}</td>
+                <td>{{ item.submitted_at || '—' }}</td>
+                <td>{{ item.submitted_by || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -163,48 +213,6 @@
                 <td><input v-model.trim="item.pipe_model_name" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
                 <td><input v-model.trim="item.unit" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(pipeModels, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div>
-            <div class="card-header">换热站提交状态</div>
-            <p class="sub block-sub">这里只读取独立提交状态文件中的最新提交记录，用于管理员判断各换热站是否完成当前批次填报。</p>
-          </div>
-          <div class="summary-row baseline-summary">
-            <span class="summary-chip">当前计划起始日期：{{ planStartDate || '未设置' }}</span>
-            <span class="summary-chip">已提交：{{ submittedStationCount }}</span>
-            <span class="summary-chip">未提交：{{ pendingStationCount }}</span>
-            <span class="summary-chip">历史记录：{{ historySubmissions.length }}</span>
-          </div>
-        </div>
-        <p class="sub block-sub">状态文件：{{ submissionStatusPath || '未设置' }}</p>
-        <div class="table-wrap">
-          <table class="table editor-table submission-table">
-            <thead>
-              <tr>
-                <th>换热站</th>
-                <th>当前状态</th>
-                <th>最新提交日期</th>
-                <th>最新提交时间</th>
-                <th>最新提交人</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in submissionStatusRows" :key="item.station_id">
-                <td>{{ item.station_name || item.station_id }}</td>
-                <td>
-                  <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
-                    {{ item.is_submitted ? '已提交' : '未提交' }}
-                  </span>
-                </td>
-                <td>{{ item.data_submit_date || '—' }}</td>
-                <td>{{ item.submitted_at || '—' }}</td>
-                <td>{{ item.submitted_by || '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -416,6 +424,7 @@ const {
 const configPath = ref('')
 const showDate = ref('')
 const planStartDate = ref('')
+const autoUpdatePlanStartDate = ref(false)
 const planEditableDays = ref(3)
 const globalMessage = ref(null)
 const sectionMessages = ref({})
@@ -585,6 +594,7 @@ function applyConfig(config) {
   configPath.value = configPath.value || ''
   showDate.value = config.show_date || config.biz_date || ''
   planStartDate.value = config.plan_start_date || showDate.value || ''
+  autoUpdatePlanStartDate.value = Boolean(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
   supplyEntities.value = cloneRows(config.supply_entities)
   demandEntities.value = cloneRows(config.demand_entities)
@@ -599,6 +609,16 @@ function applyConfig(config) {
   constructionUnits.value = normalizeAssignmentRows(config.construction_units, 'unit_id', 'unit_name')
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
+}
+
+function getTodayDateString() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function handleAutoPlanStartDateChange() {
+  if (autoUpdatePlanStartDate.value) {
+    planStartDate.value = getTodayDateString()
+  }
 }
 
 const selectedBaselineStationName = computed(() => {
@@ -640,6 +660,9 @@ function buildSectionPayload(section) {
   }
   if (section === 'plan_start_date') {
     return planStartDate.value || ''
+  }
+  if (section === 'auto_update_plan_start_date') {
+    return Boolean(autoUpdatePlanStartDate.value)
   }
   if (section === 'plan_editable_days') {
     return Number(planEditableDays.value ?? 3)
@@ -714,6 +737,7 @@ const configPreviewText = computed(() =>
     {
       show_date: showDate.value || '',
       plan_start_date: planStartDate.value || '',
+      auto_update_plan_start_date: Boolean(autoUpdatePlanStartDate.value),
       plan_editable_days: Number(planEditableDays.value ?? 3),
       supply_entities: buildSectionPayload('supply_entities'),
       demand_entities: buildSectionPayload('demand_entities'),
@@ -738,6 +762,12 @@ async function loadConfig() {
     latestSubmissions.value = normalizeSubmissionRows(response.submission_status?.latest_submissions || [])
     historySubmissions.value = normalizeSubmissionRows(response.submission_status?.history_submissions || [])
     applyConfig(config)
+    if (response.show_date) {
+      showDate.value = response.show_date
+    }
+    if (response.plan_start_date) {
+      planStartDate.value = response.plan_start_date
+    }
   } catch (error) {
     setGlobalMessage('error', error?.message || '读取全局配置失败')
   }
@@ -775,6 +805,9 @@ async function saveCoreDatesSection() {
   clearGlobalMessage()
   setSaving('core_dates', true)
   try {
+    if (autoUpdatePlanStartDate.value) {
+      planStartDate.value = getTodayDateString()
+    }
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'show_date',
       data: showDate.value || '',
@@ -782,6 +815,10 @@ async function saveCoreDatesSection() {
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_start_date',
       data: planStartDate.value || '',
+    })
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'auto_update_plan_start_date',
+      data: Boolean(autoUpdatePlanStartDate.value),
     })
     const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_editable_days',
@@ -794,6 +831,7 @@ async function saveCoreDatesSection() {
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
     }
+    autoUpdatePlanStartDate.value = Boolean(response.config?.auto_update_plan_start_date)
     if (response.plan_editable_days !== undefined) {
       planEditableDays.value = Number(response.plan_editable_days ?? 3)
     }

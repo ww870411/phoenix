@@ -1,4 +1,17 @@
 {
-  "latest_submissions": [],
+  "latest_submissions": [
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "data_submit_date": "2026-05-25",
+      "plan_start_date": "2026-05-26",
+      "show_date": "2026-05-26",
+      "usage_date": "2026-05-25",
+      "submitted_at": "2026-05-24T14:35:49",
+      "submitted_by": "ww870411",
+      "submitted_group": "Global_admin",
+      "remark": ""
+    }
+  ],
   "history_submissions": []
 }

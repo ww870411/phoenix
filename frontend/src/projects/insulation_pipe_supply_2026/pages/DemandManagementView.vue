@@ -17,10 +17,10 @@
           <button
             type="button"
             class="btn primary submit-status-button"
-            :disabled="!selectedStationId || !canSubmitCurrentProject"
+            :disabled="!selectedStationId || !canSubmitCurrentProject || submitStatusLoading"
             @click="handleStationSubmitClick"
           >
-            提交本换热站填报状态
+            {{ submitStatusLoading ? '提交中...' : '提交本换热站填报状态' }}
           </button>
         </div>
       </header>
@@ -329,7 +329,8 @@ import {
   getTubeDemandManagementPlanMatrix,
   getTubeDemandManagementUsageSheet,
   saveTubeDemandManagementPlanMatrix,
-  saveTubeDemandManagementUsageSheet
+  saveTubeDemandManagementUsageSheet,
+  submitTubeDemandManagementStationStatus
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -367,6 +368,7 @@ const usageLoading = ref(false)
 const usageError = ref('')
 const usageRows = ref([])
 const saveUsageLoading = ref(false)
+const submitStatusLoading = ref(false)
 
 const pendingLoading = ref(false)
 const pendingError = ref('')
@@ -771,11 +773,24 @@ async function saveUsageSheet() {
   }
 }
 
-function handleStationSubmitClick() {
+async function handleStationSubmitClick() {
   if (!selectedStationId.value || !canSubmitCurrentProject.value) {
     return
   }
-  setActionMessage('success', `换热站 ${selectedStationId.value} 的提交按钮已就位，后续将接入提交条件校验与提交记录写入。`)
+  submitStatusLoading.value = true
+  clearActionMessage()
+  try {
+    const response = await submitTubeDemandManagementStationStatus(PROJECT_KEY, {
+      station_id: selectedStationId.value,
+      remark: ''
+    })
+    const submittedDate = response?.submission?.data_submit_date || anchorDate.value || '未设置'
+    setActionMessage('success', `换热站 ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}。`)
+  } catch (error) {
+    setActionMessage('error', error?.message || '提交换热站填报状态失败')
+  } finally {
+    submitStatusLoading.value = false
+  }
 }
 
 watch(selectedStationId, () => {

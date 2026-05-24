@@ -4723,3 +4723,42 @@
   - `submission_status.latest_submissions`
   - `submission_status.history_submissions`
 - 当前全局管理页只读最新提交状态，不提供编辑入口
+- 本轮仅调整前端展示顺序，后端提交状态读取接口与数据结构未发生变化
+
+## 2026-05-24 insulation_pipe_supply_2026 需求侧提交状态写入首版
+
+- 新增接口：
+  - `POST /demand-management/submission`
+- 当前接口职责：
+  - 校验当前账号对 `station_id` 的访问权限
+  - 读取 `plan_start_date / show_date / usage_collection_date`
+  - 将当前换热站的提交状态写入 `station_submission_status.json`
+- 当前写入策略：
+  - 每站只保留一条最新记录在 `latest_submissions`
+  - 旧最新记录会被挤入 `history_submissions`
+- 当前记录字段包括：
+  - `station_id`
+  - `station_name`
+  - `data_submit_date`
+  - `plan_start_date`
+  - `show_date`
+  - `usage_date`
+  - `submitted_at`
+  - `submitted_by`
+  - `submitted_group`
+  - `remark`
+- 本轮为便于前端测试，尚未加入提交前置条件校验与业务拦截规则
+
+## 2026-05-24 insulation_pipe_supply_2026 plan_start_date 自动更新开关
+
+- `tube_config.json` 新增字段：
+  - `auto_update_plan_start_date`
+- 当前后端规则：
+  - 当该字段为 `false` 时，`get_configured_plan_start_date()` 继续读取配置中的 `plan_start_date`
+  - 当该字段为 `true` 时，`get_configured_plan_start_date()` 直接返回系统当天日期
+- 因此所有依赖 `get_configured_plan_start_date()` 的接口口径，都会统一切换到真实日期驱动，包括：
+  - 需求侧三日计划窗口
+  - 实际使用采集日期
+  - 供给侧/库管侧页面中的计划起始日期展示
+  - 需求侧提交状态写入时的 `data_submit_date`
+- 全局管理配置分区保存已支持 `auto_update_plan_start_date` 区块字段

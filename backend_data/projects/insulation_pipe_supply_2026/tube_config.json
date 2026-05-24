@@ -1,6 +1,7 @@
 {
   "show_date": "2026-05-26",
   "plan_start_date": "2026-05-26",
+  "auto_update_plan_start_date": false,
   "plan_editable_days": 1,
   "supply_entities": [
     {
@@ -47,28 +48,118 @@
     }
   ],
   "pipe_models": [
-    { "pipe_model_id": "DN50", "pipe_model_name": "DN50", "unit": "米" },
-    { "pipe_model_id": "DN80", "pipe_model_name": "DN80", "unit": "米" },
-    { "pipe_model_id": "DN100", "pipe_model_name": "DN100", "unit": "米" },
-    { "pipe_model_id": "DN150", "pipe_model_name": "DN150", "unit": "米" },
-    { "pipe_model_id": "DN200", "pipe_model_name": "DN200", "unit": "米" },
-    { "pipe_model_id": "DN250", "pipe_model_name": "DN250", "unit": "米" },
-    { "pipe_model_id": "DN300", "pipe_model_name": "DN300", "unit": "米" },
-    { "pipe_model_id": "DN400", "pipe_model_name": "DN400", "unit": "米" },
-    { "pipe_model_id": "DN500", "pipe_model_name": "DN500", "unit": "米" },
-    { "pipe_model_id": "DN600", "pipe_model_name": "DN600", "unit": "米" }
+    {
+      "pipe_model_id": "DN50",
+      "pipe_model_name": "DN50",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN80",
+      "pipe_model_name": "DN80",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN100",
+      "pipe_model_name": "DN100",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN150",
+      "pipe_model_name": "DN150",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN200",
+      "pipe_model_name": "DN200",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN250",
+      "pipe_model_name": "DN250",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN300",
+      "pipe_model_name": "DN300",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN400",
+      "pipe_model_name": "DN400",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN500",
+      "pipe_model_name": "DN500",
+      "unit": "米"
+    },
+    {
+      "pipe_model_id": "DN600",
+      "pipe_model_name": "DN600",
+      "unit": "米"
+    }
   ],
   "production_capacities": [
-    { "supply_entity_name": "管厂A", "pipe_model_name": "DN50", "max_daily_output_qty": 35, "remark": "按总设计量约30天供完测算，管厂A负责最小口径段" },
-    { "supply_entity_name": "管厂A", "pipe_model_name": "DN80", "max_daily_output_qty": 40, "remark": "按总设计量约30天供完测算，管厂A负责最小口径段" },
-    { "supply_entity_name": "管厂A", "pipe_model_name": "DN100", "max_daily_output_qty": 45, "remark": "按总设计量约30天供完测算，管厂A负责最小口径段" },
-    { "supply_entity_name": "管厂A", "pipe_model_name": "DN150", "max_daily_output_qty": 25, "remark": "按总设计量约30天供完测算，管厂A负责最小口径段" },
-    { "supply_entity_name": "管厂A", "pipe_model_name": "DN200", "max_daily_output_qty": 25, "remark": "按总设计量约30天供完测算，管厂A负责最小口径段" },
-    { "supply_entity_name": "管厂B", "pipe_model_name": "DN250", "max_daily_output_qty": 20, "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段" },
-    { "supply_entity_name": "管厂B", "pipe_model_name": "DN300", "max_daily_output_qty": 40, "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段" },
-    { "supply_entity_name": "管厂B", "pipe_model_name": "DN400", "max_daily_output_qty": 40, "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段" },
-    { "supply_entity_name": "管厂B", "pipe_model_name": "DN500", "max_daily_output_qty": 35, "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段" },
-    { "supply_entity_name": "管厂B", "pipe_model_name": "DN600", "max_daily_output_qty": 35, "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段" }
+    {
+      "supply_entity_name": "管厂A",
+      "pipe_model_name": "DN50",
+      "max_daily_output_qty": 35,
+      "remark": "按总设计量约30天供完测算，管厂A负责最小口径段"
+    },
+    {
+      "supply_entity_name": "管厂A",
+      "pipe_model_name": "DN80",
+      "max_daily_output_qty": 40,
+      "remark": "按总设计量约30天供完测算，管厂A负责最小口径段"
+    },
+    {
+      "supply_entity_name": "管厂A",
+      "pipe_model_name": "DN100",
+      "max_daily_output_qty": 45,
+      "remark": "按总设计量约30天供完测算，管厂A负责最小口径段"
+    },
+    {
+      "supply_entity_name": "管厂A",
+      "pipe_model_name": "DN150",
+      "max_daily_output_qty": 25,
+      "remark": "按总设计量约30天供完测算，管厂A负责最小口径段"
+    },
+    {
+      "supply_entity_name": "管厂A",
+      "pipe_model_name": "DN200",
+      "max_daily_output_qty": 25,
+      "remark": "按总设计量约30天供完测算，管厂A负责最小口径段"
+    },
+    {
+      "supply_entity_name": "管厂B",
+      "pipe_model_name": "DN250",
+      "max_daily_output_qty": 20,
+      "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段"
+    },
+    {
+      "supply_entity_name": "管厂B",
+      "pipe_model_name": "DN300",
+      "max_daily_output_qty": 40,
+      "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段"
+    },
+    {
+      "supply_entity_name": "管厂B",
+      "pipe_model_name": "DN400",
+      "max_daily_output_qty": 40,
+      "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段"
+    },
+    {
+      "supply_entity_name": "管厂B",
+      "pipe_model_name": "DN500",
+      "max_daily_output_qty": 35,
+      "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段"
+    },
+    {
+      "supply_entity_name": "管厂B",
+      "pipe_model_name": "DN600",
+      "max_daily_output_qty": 35,
+      "remark": "按总设计量约30天供完测算，管厂B负责其余较大口径段"
+    }
   ],
   "manager_assignments": [
     {
@@ -111,45 +202,365 @@
     }
   ],
   "baseline_presets": [
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN50", "pipe_model_name": "DN50", "design_qty": 220, "purchase_plan_qty": 220, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN80", "pipe_model_name": "DN80", "design_qty": 260, "purchase_plan_qty": 260, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN100", "pipe_model_name": "DN100", "design_qty": 300, "purchase_plan_qty": 300, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN150", "pipe_model_name": "DN150", "design_qty": 180, "purchase_plan_qty": 180, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN200", "pipe_model_name": "DN200", "design_qty": 160, "purchase_plan_qty": 160, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN250", "pipe_model_name": "DN250", "design_qty": 150, "purchase_plan_qty": 150, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN300", "pipe_model_name": "DN300", "design_qty": 280, "purchase_plan_qty": 280, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN400", "pipe_model_name": "DN400", "design_qty": 260, "purchase_plan_qty": 260, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN500", "pipe_model_name": "DN500", "design_qty": 240, "purchase_plan_qty": 240, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_a", "station_name": "换热站A", "pipe_model_id": "DN600", "pipe_model_name": "DN600", "design_qty": 230, "purchase_plan_qty": 230, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN50", "pipe_model_name": "DN50", "design_qty": 240, "purchase_plan_qty": 240, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN80", "pipe_model_name": "DN80", "design_qty": 280, "purchase_plan_qty": 280, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN100", "pipe_model_name": "DN100", "design_qty": 320, "purchase_plan_qty": 320, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN150", "pipe_model_name": "DN150", "design_qty": 170, "purchase_plan_qty": 170, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN200", "pipe_model_name": "DN200", "design_qty": 150, "purchase_plan_qty": 150, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN250", "pipe_model_name": "DN250", "design_qty": 140, "purchase_plan_qty": 140, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN300", "pipe_model_name": "DN300", "design_qty": 300, "purchase_plan_qty": 300, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN400", "pipe_model_name": "DN400", "design_qty": 280, "purchase_plan_qty": 280, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN500", "pipe_model_name": "DN500", "design_qty": 250, "purchase_plan_qty": 250, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_b", "station_name": "换热站B", "pipe_model_id": "DN600", "pipe_model_name": "DN600", "design_qty": 240, "purchase_plan_qty": 240, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN50", "pipe_model_name": "DN50", "design_qty": 260, "purchase_plan_qty": 260, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN80", "pipe_model_name": "DN80", "design_qty": 300, "purchase_plan_qty": 300, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN100", "pipe_model_name": "DN100", "design_qty": 340, "purchase_plan_qty": 340, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN150", "pipe_model_name": "DN150", "design_qty": 190, "purchase_plan_qty": 190, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN200", "pipe_model_name": "DN200", "design_qty": 170, "purchase_plan_qty": 170, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN250", "pipe_model_name": "DN250", "design_qty": 160, "purchase_plan_qty": 160, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN300", "pipe_model_name": "DN300", "design_qty": 320, "purchase_plan_qty": 320, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN400", "pipe_model_name": "DN400", "design_qty": 300, "purchase_plan_qty": 300, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN500", "pipe_model_name": "DN500", "design_qty": 270, "purchase_plan_qty": 270, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_c", "station_name": "换热站C", "pipe_model_id": "DN600", "pipe_model_name": "DN600", "design_qty": 260, "purchase_plan_qty": 260, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN50", "pipe_model_name": "DN50", "design_qty": 230, "purchase_plan_qty": 230, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN80", "pipe_model_name": "DN80", "design_qty": 270, "purchase_plan_qty": 270, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN100", "pipe_model_name": "DN100", "design_qty": 310, "purchase_plan_qty": 310, "remark": "演示预设-小口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN150", "pipe_model_name": "DN150", "design_qty": 175, "purchase_plan_qty": 175, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN200", "pipe_model_name": "DN200", "design_qty": 155, "purchase_plan_qty": 155, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN250", "pipe_model_name": "DN250", "design_qty": 145, "purchase_plan_qty": 145, "remark": "演示预设-中口径偏低" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN300", "pipe_model_name": "DN300", "design_qty": 290, "purchase_plan_qty": 290, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN400", "pipe_model_name": "DN400", "design_qty": 270, "purchase_plan_qty": 270, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN500", "pipe_model_name": "DN500", "design_qty": 245, "purchase_plan_qty": 245, "remark": "演示预设-大口径偏高" },
-    { "station_id": "station_d", "station_name": "换热站D", "pipe_model_id": "DN600", "pipe_model_name": "DN600", "design_qty": 235, "purchase_plan_qty": 235, "remark": "演示预设-大口径偏高" }
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN50",
+      "pipe_model_name": "DN50",
+      "design_qty": 220,
+      "purchase_plan_qty": 220,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN80",
+      "pipe_model_name": "DN80",
+      "design_qty": 260,
+      "purchase_plan_qty": 260,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN100",
+      "pipe_model_name": "DN100",
+      "design_qty": 300,
+      "purchase_plan_qty": 300,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN150",
+      "pipe_model_name": "DN150",
+      "design_qty": 180,
+      "purchase_plan_qty": 180,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN200",
+      "pipe_model_name": "DN200",
+      "design_qty": 160,
+      "purchase_plan_qty": 160,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN250",
+      "pipe_model_name": "DN250",
+      "design_qty": 150,
+      "purchase_plan_qty": 150,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN300",
+      "pipe_model_name": "DN300",
+      "design_qty": 280,
+      "purchase_plan_qty": 280,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN400",
+      "pipe_model_name": "DN400",
+      "design_qty": 260,
+      "purchase_plan_qty": 260,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN500",
+      "pipe_model_name": "DN500",
+      "design_qty": 240,
+      "purchase_plan_qty": 240,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_a",
+      "station_name": "换热站A",
+      "pipe_model_id": "DN600",
+      "pipe_model_name": "DN600",
+      "design_qty": 230,
+      "purchase_plan_qty": 230,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN50",
+      "pipe_model_name": "DN50",
+      "design_qty": 240,
+      "purchase_plan_qty": 240,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN80",
+      "pipe_model_name": "DN80",
+      "design_qty": 280,
+      "purchase_plan_qty": 280,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN100",
+      "pipe_model_name": "DN100",
+      "design_qty": 320,
+      "purchase_plan_qty": 320,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN150",
+      "pipe_model_name": "DN150",
+      "design_qty": 170,
+      "purchase_plan_qty": 170,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN200",
+      "pipe_model_name": "DN200",
+      "design_qty": 150,
+      "purchase_plan_qty": 150,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN250",
+      "pipe_model_name": "DN250",
+      "design_qty": 140,
+      "purchase_plan_qty": 140,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN300",
+      "pipe_model_name": "DN300",
+      "design_qty": 300,
+      "purchase_plan_qty": 300,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN400",
+      "pipe_model_name": "DN400",
+      "design_qty": 280,
+      "purchase_plan_qty": 280,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN500",
+      "pipe_model_name": "DN500",
+      "design_qty": 250,
+      "purchase_plan_qty": 250,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_b",
+      "station_name": "换热站B",
+      "pipe_model_id": "DN600",
+      "pipe_model_name": "DN600",
+      "design_qty": 240,
+      "purchase_plan_qty": 240,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN50",
+      "pipe_model_name": "DN50",
+      "design_qty": 260,
+      "purchase_plan_qty": 260,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN80",
+      "pipe_model_name": "DN80",
+      "design_qty": 300,
+      "purchase_plan_qty": 300,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN100",
+      "pipe_model_name": "DN100",
+      "design_qty": 340,
+      "purchase_plan_qty": 340,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN150",
+      "pipe_model_name": "DN150",
+      "design_qty": 190,
+      "purchase_plan_qty": 190,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN200",
+      "pipe_model_name": "DN200",
+      "design_qty": 170,
+      "purchase_plan_qty": 170,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN250",
+      "pipe_model_name": "DN250",
+      "design_qty": 160,
+      "purchase_plan_qty": 160,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN300",
+      "pipe_model_name": "DN300",
+      "design_qty": 320,
+      "purchase_plan_qty": 320,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN400",
+      "pipe_model_name": "DN400",
+      "design_qty": 300,
+      "purchase_plan_qty": 300,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN500",
+      "pipe_model_name": "DN500",
+      "design_qty": 270,
+      "purchase_plan_qty": 270,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_c",
+      "station_name": "换热站C",
+      "pipe_model_id": "DN600",
+      "pipe_model_name": "DN600",
+      "design_qty": 260,
+      "purchase_plan_qty": 260,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN50",
+      "pipe_model_name": "DN50",
+      "design_qty": 230,
+      "purchase_plan_qty": 230,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN80",
+      "pipe_model_name": "DN80",
+      "design_qty": 270,
+      "purchase_plan_qty": 270,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN100",
+      "pipe_model_name": "DN100",
+      "design_qty": 310,
+      "purchase_plan_qty": 310,
+      "remark": "演示预设-小口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN150",
+      "pipe_model_name": "DN150",
+      "design_qty": 175,
+      "purchase_plan_qty": 175,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN200",
+      "pipe_model_name": "DN200",
+      "design_qty": 155,
+      "purchase_plan_qty": 155,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN250",
+      "pipe_model_name": "DN250",
+      "design_qty": 145,
+      "purchase_plan_qty": 145,
+      "remark": "演示预设-中口径偏低"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN300",
+      "pipe_model_name": "DN300",
+      "design_qty": 290,
+      "purchase_plan_qty": 290,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN400",
+      "pipe_model_name": "DN400",
+      "design_qty": 270,
+      "purchase_plan_qty": 270,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN500",
+      "pipe_model_name": "DN500",
+      "design_qty": 245,
+      "purchase_plan_qty": 245,
+      "remark": "演示预设-大口径偏高"
+    },
+    {
+      "station_id": "station_d",
+      "station_name": "换热站D",
+      "pipe_model_id": "DN600",
+      "pipe_model_name": "DN600",
+      "design_qty": 235,
+      "purchase_plan_qty": 235,
+      "remark": "演示预设-大口径偏高"
+    }
   ]
 }

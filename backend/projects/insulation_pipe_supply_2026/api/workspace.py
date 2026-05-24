@@ -25,6 +25,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     load_station_submission_status,
     resolve_accessible_supply_entity_ids,
     resolve_accessible_station_ids,
+    save_station_submission_status,
     save_tube_config,
 )
 from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import (
@@ -77,6 +78,11 @@ class DemandUsageSavePayload(BaseModel):
     station_id: str
     usage_date: date
     records: List[DemandUsageRecordInput] = []
+
+
+class DemandStationSubmissionPayload(BaseModel):
+    station_id: str
+    remark: str = ""
 
 
 class TubeConfigSavePayload(BaseModel):
@@ -234,6 +240,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     allowed_sections = {
         "show_date",
         "plan_start_date",
+        "auto_update_plan_start_date",
         "plan_editable_days",
         "supply_entities",
         "demand_entities",
@@ -255,6 +262,8 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"{normalized_section} 非法：{normalized_date}") from exc
         payload[normalized_section] = normalized_date
+    elif normalized_section == "auto_update_plan_start_date":
+        payload[normalized_section] = bool(data)
     elif normalized_section == "plan_editable_days":
         try:
             normalized_editable_days = int(data)
@@ -296,6 +305,20 @@ def _serialize_station_options(payload: Dict[str, Any], accessible_station_ids: 
             }
         )
     return rows
+
+
+def _normalize_submission_rows(rows: Any) -> List[Dict[str, Any]]:
+    if not isinstance(rows, list):
+        return []
+    normalized_rows: List[Dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        station_id = str(item.get("station_id") or "").strip()
+        if not station_id:
+            continue
+        normalized_rows.append(dict(item))
+    return normalized_rows
 
 
 def _serialize_pipe_options(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -869,6 +892,65 @@ def save_demand_management_usage_sheet(
         "station_id": payload.station_id,
         "usage_date": payload.usage_date.isoformat(),
         "saved_count": saved_count,
+    }
+
+
+@router.post("/demand-management/submission", summary="提交换热站填报完成状态")
+def submit_demand_management_station_status(
+    payload: DemandStationSubmissionPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config_payload = load_tube_config()
+    accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
+    _ensure_station_access(payload.station_id, accessible_station_ids)
+
+    station_name_map = _build_station_name_map(config_payload)
+    plan_start_date = get_configured_plan_start_date(config_payload)
+    show_date = get_configured_show_date(config_payload)
+    usage_collection_date = get_usage_collection_date(config_payload)
+    current_status = load_station_submission_status()
+    latest_submissions = _normalize_submission_rows(current_status.get("latest_submissions"))
+    history_submissions = _normalize_submission_rows(current_status.get("history_submissions"))
+
+    existing_latest: Optional[Dict[str, Any]] = None
+    next_latest_submissions: List[Dict[str, Any]] = []
+    for item in latest_submissions:
+        if str(item.get("station_id") or "").strip() == payload.station_id:
+            existing_latest = item
+            continue
+        next_latest_submissions.append(item)
+
+    if existing_latest:
+        history_submissions.insert(0, existing_latest)
+
+    submission_record = {
+        "station_id": payload.station_id,
+        "station_name": station_name_map.get(payload.station_id, payload.station_id),
+        "data_submit_date": plan_start_date.isoformat(),
+        "plan_start_date": plan_start_date.isoformat(),
+        "show_date": show_date.isoformat(),
+        "usage_date": usage_collection_date.isoformat(),
+        "submitted_at": datetime.now().isoformat(timespec="seconds"),
+        "submitted_by": session.username,
+        "submitted_group": session.group,
+        "remark": payload.remark or "",
+    }
+    next_latest_submissions.append(submission_record)
+    next_latest_submissions.sort(key=lambda item: str(item.get("station_id") or ""))
+
+    save_station_submission_status(
+        {
+            "latest_submissions": next_latest_submissions,
+            "history_submissions": history_submissions,
+        }
+    )
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "station_id": payload.station_id,
+        "submission": submission_record,
+        "latest_submission_count": len(next_latest_submissions),
+        "history_submission_count": len(history_submissions),
     }
 
 

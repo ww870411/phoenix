@@ -308,6 +308,19 @@ export async function saveTubeDemandManagementUsageSheet(projectKey, payload) {
   return response.json()
 }
 
+export async function submitTubeDemandManagementStationStatus(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/submission`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `提交换热站填报状态失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeDemandManagementPendingArrivals(projectKey, stationId) {
   const params = new URLSearchParams({ station_id: String(stationId || '') })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/pending-arrivals?${params.toString()}`, {
