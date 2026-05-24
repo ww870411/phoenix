@@ -1,3 +1,16 @@
+## 2026-05-24 tube项目系统逻辑审计与致命缺陷分析
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 针对用户提供的 V5.2 建设方案与构建计划文档，我们结合 `backend/projects/insulation_pipe_supply_2026/` 目录下的真实代码实现了深度系统逻辑审计。
+- 从数据一致性、时区转换异常（Python TypeError）、负数库存污染、日期计算分裂以及库管页越权操作等维度，共精细化排查并梳理出 8 个明显的重大逻辑 Bug 隐患，保障系统正式进入多端联调前的极高稳定性。
+- 详细漏洞分析与修复建议已同步更新至 `configs/progress.md` 并在本轮终端报告中进行了先结论后细节的深度汇报。
+
+## 2026-05-24 agy cli 升级与更新机制解答
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 针对用户咨询的“如何更新 agy cli”，我们对 Windows 环境下 Antigravity CLI 的升级流程进行了规范整理与应答。
+- 本次为纯咨询会话，后端实际程序结构无任何变更。
+
 ## 2026-05-23 tube项目已完成进度系统性审计与缺陷审查
 
 - 本轮 Phoenix 后端代码无改动。
@@ -4666,3 +4679,47 @@
   - 后端职责在专项计划中已明确分层：基础事实取数、A类标准指标计算、B类基准字段输出，以及后续受控指标定义文件与白名单解析层建设。
 - 2026-05-24：已为 tube 指标专项计划补充外部协作上下文。
   - 文档现在已包含项目级 API / service 结构、当前运行配置源、当前真实口径和近期已修复问题，便于外部协作者在不了解代码库的前提下参与讨论。
+## 2026-05-24 insulation_pipe_supply_2026 日期口径更新
+
+- tube 项目后端日期语义已调整为：
+  - `plan_start_date`：控制采集窗口
+  - `show_date`：控制展示窗口
+- 当前统一规则：
+  - 需求侧滚动三日计划采集窗口 = `plan_start_date ~ plan_start_date+2`
+  - 实际使用量默认采集日期 = `plan_start_date - 1`
+  - 展示层滚动三日计划量汇总窗口 = `show_date ~ show_date+2`
+  - 展示层实际使用、库存、累计量等默认展示到 `show_date - 1`
+- `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 已新增：
+  - `get_configured_show_date`
+  - `get_usage_collection_date`
+- `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 已将需求侧、供给侧、库管侧、配置摘要与全局管理配置返回中的旧 `biz_date` 口径切换为 `show_date`
+
+## 2026-05-24 insulation_pipe_supply_2026 审计问题补修
+
+- `workspace.py`
+  - 供给侧需求与缺口汇总已改为按 `show_date` 计算滚动三日计划量
+  - 库管页冗余的到货确认、施工接收接口已删除
+- `supply_management_service.py`
+  - 到货量、使用量汇总已支持 `show_date` 截断
+  - 到货量汇总改为“非 `cancelled` 且已确认到货”
+  - 库存入账数量优先采用 `received_qty`，避免施工损耗继续计入可用库存
+
+## 2026-05-24 insulation_pipe_supply_2026 站点提交状态文件
+
+- 新增独立运行态文件：
+  - `backend_data/projects/insulation_pipe_supply_2026/station_submission_status.json`
+- 文件用途：
+  - 记录各换热站“填报完毕提交”信息
+  - 与 `tube_config.json` 分离，避免把运行状态混入主配置
+- 当前 JSON 结构：
+  - `latest_submissions`：每站最新提交记录
+  - `history_submissions`：历史提交记录
+- 当前阶段仅完成文件初始化，后续再接入提交按钮、前置校验与写入逻辑
+
+## 2026-05-24 insulation_pipe_supply_2026 全局管理页提交状态读取
+
+- `get_global_management_config` 已补充返回：
+  - `submission_status_path`
+  - `submission_status.latest_submissions`
+  - `submission_status.history_submissions`
+- 当前全局管理页只读最新提交状态，不提供编辑入口

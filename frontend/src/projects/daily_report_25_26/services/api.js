@@ -491,32 +491,6 @@ export async function getTubeWarehouseManagementDeliveries(projectKey, params = 
   return response.json()
 }
 
-export async function confirmTubeWarehouseDeliveryArrival(projectKey, deliveryId, payload) {
-  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/arrival`, {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS),
-    body: JSON.stringify(payload || {}),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `确认到货失败: ${response.status}`)
-  }
-  return response.json()
-}
-
-export async function confirmTubeWarehouseDeliveryReceipt(projectKey, deliveryId, payload) {
-  const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/receipt`, {
-    method: 'POST',
-    headers: attachAuthHeaders(JSON_HEADERS),
-    body: JSON.stringify(payload || {}),
-  })
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `确认施工接收失败: ${response.status}`)
-  }
-  return response.json()
-}
-
 export async function confirmTubeWarehouseDeliveryWarehouse(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/warehouse`, {
     method: 'POST',

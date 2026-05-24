@@ -38,8 +38,8 @@
           </label>
 
           <label class="field field-compact">
-            <span>业务日期</span>
-            <input :value="bizDate" type="date" disabled />
+            <span>展示日期</span>
+            <input :value="showDate" type="date" disabled />
           </label>
 
           <label class="field field-compact">
@@ -279,7 +279,7 @@ const stationOptions = ref([])
 const pipeModelOptions = ref([])
 const currentGroup = ref('')
 const currentSupplyEntityIds = ref([])
-const bizDate = ref('')
+const showDate = ref('')
 const planStartDate = ref('')
 
 const selectedSupplyEntityId = ref('')
@@ -472,7 +472,7 @@ function normalizeOptionsPayload(response) {
     supplyEntities: response.supply_entities || [],
     stations: response.stations || [],
     pipeModels: response.pipe_models || [],
-    bizDate: response.biz_date || '',
+    showDate: response.show_date || response.biz_date || '',
     planStartDate: response.plan_start_date || '',
     currentSupplyEntityIds: response.current_supply_entity_ids || [],
   }
@@ -537,7 +537,7 @@ async function loadOptions() {
     stationOptions.value = normalized.stations
     pipeModelOptions.value = normalized.pipeModels
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
-    bizDate.value = normalized.bizDate
+    showDate.value = normalized.showDate
     planStartDate.value = normalized.planStartDate
     const availableSupplyEntityIds = normalized.currentSupplyEntityIds
     if (!availableSupplyEntityIds.includes(selectedSupplyEntityId.value)) {

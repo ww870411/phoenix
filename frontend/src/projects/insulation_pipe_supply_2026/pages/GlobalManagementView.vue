@@ -30,8 +30,8 @@
         </div>
         <div class="field-grid">
           <label class="field">
-            <span>biz_date</span>
-            <input v-model="bizDate" type="date" />
+            <span>show_date</span>
+            <input v-model="showDate" type="date" />
           </label>
           <label class="field">
             <span>plan_start_date</span>
@@ -163,6 +163,48 @@
                 <td><input v-model.trim="item.pipe_model_name" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
                 <td><input v-model.trim="item.unit" type="text" /></td>
                 <td><button class="btn danger" type="button" @click="removeRow(pipeModels, index)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card elevated">
+        <div class="card-header-row">
+          <div>
+            <div class="card-header">换热站提交状态</div>
+            <p class="sub block-sub">这里只读取独立提交状态文件中的最新提交记录，用于管理员判断各换热站是否完成当前批次填报。</p>
+          </div>
+          <div class="summary-row baseline-summary">
+            <span class="summary-chip">当前计划起始日期：{{ planStartDate || '未设置' }}</span>
+            <span class="summary-chip">已提交：{{ submittedStationCount }}</span>
+            <span class="summary-chip">未提交：{{ pendingStationCount }}</span>
+            <span class="summary-chip">历史记录：{{ historySubmissions.length }}</span>
+          </div>
+        </div>
+        <p class="sub block-sub">状态文件：{{ submissionStatusPath || '未设置' }}</p>
+        <div class="table-wrap">
+          <table class="table editor-table submission-table">
+            <thead>
+              <tr>
+                <th>换热站</th>
+                <th>当前状态</th>
+                <th>最新提交日期</th>
+                <th>最新提交时间</th>
+                <th>最新提交人</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in submissionStatusRows" :key="item.station_id">
+                <td>{{ item.station_name || item.station_id }}</td>
+                <td>
+                  <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
+                    {{ item.is_submitted ? '已提交' : '未提交' }}
+                  </span>
+                </td>
+                <td>{{ item.data_submit_date || '—' }}</td>
+                <td>{{ item.submitted_at || '—' }}</td>
+                <td>{{ item.submitted_by || '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -372,7 +414,7 @@ const {
 } = useTubePageShell('全局管理入口')
 
 const configPath = ref('')
-const bizDate = ref('')
+const showDate = ref('')
 const planStartDate = ref('')
 const planEditableDays = ref(3)
 const globalMessage = ref(null)
@@ -386,6 +428,9 @@ const productionCapacities = ref([])
 const managerAssignments = ref([])
 const constructionUnits = ref([])
 const baselinePresets = ref([])
+const submissionStatusPath = ref('')
+const latestSubmissions = ref([])
+const historySubmissions = ref([])
 const selectedBaselineStationId = ref('')
 
 function setGlobalMessage(type, text) {
@@ -485,6 +530,18 @@ function normalizeBaselineRows(rows) {
   }))
 }
 
+function normalizeSubmissionRows(rows) {
+  return cloneRows(rows).map((item) => ({
+    station_id: item.station_id || '',
+    data_submit_date: item.data_submit_date || '',
+    submitted_at: item.submitted_at || '',
+    submitted_by: item.submitted_by || '',
+    plan_start_date: item.plan_start_date || '',
+    usage_date: item.usage_date || '',
+    remark: item.remark || '',
+  }))
+}
+
 function rebuildBaselineRowKeys() {
   baselinePresets.value = baselinePresets.value.map((item, index) => ({
     ...item,
@@ -526,8 +583,8 @@ function syncSelectedBaselineStation() {
 
 function applyConfig(config) {
   configPath.value = configPath.value || ''
-  bizDate.value = config.biz_date || ''
-  planStartDate.value = config.plan_start_date || config.biz_date || ''
+  showDate.value = config.show_date || config.biz_date || ''
+  planStartDate.value = config.plan_start_date || showDate.value || ''
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
   supplyEntities.value = cloneRows(config.supply_entities)
   demandEntities.value = cloneRows(config.demand_entities)
@@ -553,9 +610,33 @@ const filteredBaselinePresets = computed(() =>
   baselinePresets.value.filter((item) => item.station_id === selectedBaselineStationId.value),
 )
 
+const submissionStatusRows = computed(() => {
+  const latestByStationId = new Map(
+    latestSubmissions.value
+      .filter((item) => item.station_id)
+      .map((item) => [String(item.station_id), item]),
+  )
+  return demandEntities.value.map((station) => {
+    const stationId = String(station.station_id || '')
+    const latest = latestByStationId.get(stationId) || {}
+    const dataSubmitDate = String(latest.data_submit_date || '')
+    return {
+      station_id: stationId,
+      station_name: station.station_name || stationId,
+      data_submit_date: dataSubmitDate,
+      submitted_at: latest.submitted_at || '',
+      submitted_by: latest.submitted_by || '',
+      is_submitted: Boolean(dataSubmitDate && planStartDate.value && dataSubmitDate === planStartDate.value),
+    }
+  })
+})
+
+const submittedStationCount = computed(() => submissionStatusRows.value.filter((item) => item.is_submitted).length)
+const pendingStationCount = computed(() => submissionStatusRows.value.filter((item) => !item.is_submitted).length)
+
 function buildSectionPayload(section) {
-  if (section === 'biz_date') {
-    return bizDate.value || ''
+  if (section === 'show_date') {
+    return showDate.value || ''
   }
   if (section === 'plan_start_date') {
     return planStartDate.value || ''
@@ -631,7 +712,7 @@ function buildSectionPayload(section) {
 const configPreviewText = computed(() =>
   JSON.stringify(
     {
-      biz_date: bizDate.value || '',
+      show_date: showDate.value || '',
       plan_start_date: planStartDate.value || '',
       plan_editable_days: Number(planEditableDays.value ?? 3),
       supply_entities: buildSectionPayload('supply_entities'),
@@ -653,6 +734,9 @@ async function loadConfig() {
     const response = await getTubeGlobalManagementConfig(PROJECT_KEY)
     const config = response.config || {}
     configPath.value = response.config_path || ''
+    submissionStatusPath.value = response.submission_status_path || ''
+    latestSubmissions.value = normalizeSubmissionRows(response.submission_status?.latest_submissions || [])
+    historySubmissions.value = normalizeSubmissionRows(response.submission_status?.history_submissions || [])
     applyConfig(config)
   } catch (error) {
     setGlobalMessage('error', error?.message || '读取全局配置失败')
@@ -670,8 +754,8 @@ async function saveSection(section) {
     })
     configPath.value = response.config_path || configPath.value
     applyConfig(response.config || {})
-    if (response.biz_date) {
-      bizDate.value = response.biz_date
+    if (response.show_date) {
+      showDate.value = response.show_date
     }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
@@ -692,8 +776,8 @@ async function saveCoreDatesSection() {
   setSaving('core_dates', true)
   try {
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
-      section: 'biz_date',
-      data: bizDate.value || '',
+      section: 'show_date',
+      data: showDate.value || '',
     })
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_start_date',
@@ -704,8 +788,8 @@ async function saveCoreDatesSection() {
       data: Number(planEditableDays.value ?? 3),
     })
     applyConfig(response.config || {})
-    if (response.biz_date) {
-      bizDate.value = response.biz_date
+    if (response.show_date) {
+      showDate.value = response.show_date
     }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
@@ -947,6 +1031,25 @@ useTubeRealtimeRefresh(loadConfig)
 }
 .baseline-table {
   min-width: 920px;
+}
+.submission-table {
+  min-width: 760px;
+}
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-chip.success {
+  background: #dcfce7;
+  color: #166534;
+}
+.status-chip.pending {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 .json-details summary {
   cursor: pointer;

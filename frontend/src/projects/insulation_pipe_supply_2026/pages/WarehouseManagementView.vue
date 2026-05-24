@@ -21,7 +21,7 @@
       <section class="card elevated">
         <div class="card-header">
           <span>库管台账筛选</span>
-          <span class="muted">当前日期：{{ options?.biz_date || '--' }}</span>
+          <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
         </div>
         <div class="filter-grid">
           <label class="field">
@@ -183,8 +183,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
-  confirmTubeWarehouseDeliveryArrival,
-  confirmTubeWarehouseDeliveryReceipt,
   confirmTubeWarehouseDeliveryWarehouse,
   getTubeWarehouseManagementDeliveries,
   getTubeWarehouseManagementOptions,
@@ -206,16 +204,6 @@ const filters = reactive({
   supplyEntityId: '',
   pipeModelId: '',
   status: '',
-})
-
-const arrivalForm = reactive({
-  arrivedQty: '',
-  remark: '',
-})
-
-const receiptForm = reactive({
-  receivedQty: '',
-  remark: '',
 })
 
 const warehouseForm = reactive({
@@ -304,10 +292,6 @@ function statusClass(status) {
 
 function syncActionForms(row) {
   if (!row) return
-  arrivalForm.arrivedQty = String(row.arrived_qty ?? row.shipped_qty ?? '')
-  arrivalForm.remark = row.arrived_remark || ''
-  receiptForm.receivedQty = String(row.received_qty ?? row.arrived_qty ?? row.shipped_qty ?? '')
-  receiptForm.remark = row.received_remark || ''
   warehouseForm.remark = row.warehouse_remark || ''
 }
 
@@ -384,54 +368,6 @@ function resetFilters() {
   filters.pipeModelId = ''
   filters.status = ''
   loadDeliveries()
-}
-
-async function submitArrival() {
-  if (!selectedDelivery.value) return
-  const arrivedQty = Number(arrivalForm.arrivedQty)
-  if (!Number.isFinite(arrivedQty) || arrivedQty <= 0) {
-    pageError.value = '请先填写有效的到货数量'
-    return
-  }
-  actionLoading.value = true
-  pageError.value = ''
-  pageMessage.value = ''
-  try {
-    await confirmTubeWarehouseDeliveryArrival(projectKey, selectedDelivery.value.id, {
-      arrived_qty: arrivedQty,
-      remark: arrivalForm.remark || '',
-    })
-    pageMessage.value = '到货确认已提交'
-    await loadDeliveries()
-  } catch (error) {
-    pageError.value = error?.message || '确认到货失败'
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-async function submitReceipt() {
-  if (!selectedDelivery.value) return
-  const receivedQty = Number(receiptForm.receivedQty)
-  if (!Number.isFinite(receivedQty) || receivedQty <= 0) {
-    pageError.value = '请先填写有效的接收数量'
-    return
-  }
-  actionLoading.value = true
-  pageError.value = ''
-  pageMessage.value = ''
-  try {
-    await confirmTubeWarehouseDeliveryReceipt(projectKey, selectedDelivery.value.id, {
-      received_qty: receivedQty,
-      remark: receiptForm.remark || '',
-    })
-    pageMessage.value = '施工接收确认已提交'
-    await loadDeliveries()
-  } catch (error) {
-    pageError.value = error?.message || '确认施工接收失败'
-  } finally {
-    actionLoading.value = false
-  }
 }
 
 async function submitWarehouse() {

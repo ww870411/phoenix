@@ -1,3 +1,24 @@
+## 2026-05-24 tube项目系统逻辑审计与致命缺陷分析
+
+- 前置说明：本轮针对用户提供的《5.24_tube项目建设方案_v5.2_物流链管理版.md》与《5.24_tube项目完整构建流程计划_v5.2执行版.md》进行了极为深入细致的系统逻辑审计。同时结合 `backend/projects/insulation_pipe_supply_2026/` 目录下的真实代码逻辑，发现并定位了 8 个隐藏的重大逻辑 Bug 与系统性缺陷。改动范围限于文档更新；回滚方式为撤销本轮对应文档改动。
+- 审计确认的 8 个核心致命逻辑漏洞：
+  1. **负库存穿透虚增缺口 Bug**：库存计算公式 `total_arrived_qty - total_usage_qty` 没有做非负截断限制。在到货确认滞后时，库存沦为负数会直接在净缺口公式中反向虚增缺口，诱导超额发货。
+  2. **计划采集与展示日期严重分裂 Bug**：供给侧汇总接口在计算三日计划时使用 `plan_start_date` 进行汇总计算，但方案与展示层强约定使用 `show_date` 进行汇总。这导致两端数据产生严重错位。
+  3. **历史库存在展示推进日期后遭受污染 Bug**：`total_usage_qty` 和 `total_arrived_qty` 汇总时缺少 `show_date - 1` 日期上限切断。导致展示层累计使用量已推进截断，但库存依然包含未来数据，产生账实冲突。
+  4. **库管页到货与施工确认冗余接口越权风险**：库管接口中依旧残留且暴露了到货与接收确认 POST 接口，且无换热站站点级权限检验，存在跨角色越权代替现场负责人或施工单位进行确认的安全性漏洞。
+  5. **三日计划“填报死锁”风险**：历史计划第一阶段完全禁止修改，在遇到天气或机械故障等施工变更时，一旦填错便会一错三天并生成错误发货命令，在业务操作上缺乏容错度。
+  6. **施工损耗导致库房坏账与断料 Bug**：库管手续确认仅更改状态，而施工确认减去损耗时（例如到货 10 根只接收 8 根），公式计算库存依然按 `arrived_qty`（10 根）抵扣缺口，导致坏掉的 2 根管子永远在系统内充当“健康库存”去抵扣计划，引起现场断货。
+  7. **在途耗时计算 Aware 与 Naive datetime 相减崩溃（Python TypeError）Bug**：`format_delivery_elapsed` 函数在计算时间差时，将前端带时区的 Aware Datetime 与后端数据库生成的 Naive Datetime 直接相减，在 Python 运行时会直接抛出类型错误，导致发货单查询和记录接口大面积 `500 Server Error` 瘫痪。
+  8. **异常挂起态发货单导致库存暴跌与虚假报警 Bug**：在途总量中对于异常标记的发货记录一旦未归属于已定义的三种常规状态，其到货量会被瞬间归 0，导致库存断崖式下跌，系统报错失真。
+
+## 2026-05-24 agy cli 升级与更新机制解答
+
+- 前置说明：本轮针对用户提出的“如何更新 agy cli”问题进行解答与指导。由于本轮属于纯咨询讨论，不涉及 Phoenix 前后端物理代码及架构的实际变动，故前后端 README.md 的实际架构同步保持原样，仅以无害注释或更新记录形式在 progress.md 及 README.md 中进行本轮对话留痕；回滚方式为撤销本轮对 `progress.md`、`frontend/README.md` 和 `backend/README.md` 的新增内容。
+- 讨论结论：
+  1. 确认 `agy cli` 即 Google Antigravity CLI（命令行入口为 `agy`）。
+  2. 详细梳理了在 Windows 系统下进行升级的四种主流方法：官方安装包重新覆盖安装（最推荐）、通过 Windows 包管理器 `winget upgrade agy` 升级、尝试 CLI 内置 `agy upgrade` 热更新、以及手动下载 `agy.exe` 二进制包替换。
+  3. 提示用户更新 `agy cli` 时不会影响存放在 `C:\Users\ww\.gemini\antigravity-cli` 的本地配置及历史会话缓存，可安全进行。
+
 ## 2026-05-24 tube项目发货时间显示时区偏差修复
 
 - 前置说明：本轮针对用户复现的“供给侧发货登记提交后，发货记录显示时间比表单默认时间早约 8 小时”问题做定点排查。结论是展示层把带时区的 ISO 时间当普通字符串截断，未按本地时区格式化。改动范围限于 `frontend/src/projects/insulation_pipe_supply_2026/pages/` 与文档同步；回滚方式为撤销本轮对应前端文件改动并移除本节记录。
@@ -8690,3 +8711,82 @@
 - 已将 `C:\Users\ww\.codex\config.toml` 中 `mcp_servers.desktop-commander` 的启动方式，从 `command = "cmd" + args = ["/c", "npx", ...]` 改为直接调用 `D:\Program Files\nodejs\npx.cmd`，参数保留 `["-y", "@wonderwhy-er/desktop-commander@0.2.41"]`。
 - 当前判断：这类 MCP 更适合使用直接可执行文件而不是经过 `cmd` 转发，以减少 stdio 桥接与会话初始化时的兼容问题。
 - 本轮仍未改动 Phoenix 业务代码；需要完整重启 Codex 会话后再验证 `desktop-commander` 是否恢复正常读写能力。
+## 2026-05-24 tube 项目日期口径重构
+
+- 统一 tube 项目日期职责：
+  - `plan_start_date` 负责采集窗口，需求侧计划录入显示 `plan_start_date ~ plan_start_date+2`
+  - 实际使用量默认采集 `plan_start_date - 1`
+  - `show_date` 负责展示窗口，滚动三日计划量按 `show_date ~ show_date+2` 汇总
+  - 展示层使用量、库存、累计量等默认推进到 `show_date - 1`
+- 后端已完成：
+  - `config_service.py` 新增 `get_configured_show_date` 与 `get_usage_collection_date`
+  - `workspace.py` 的配置摘要、需求侧 options、供给侧 options、库管侧 options、全局管理配置返回已切到 `show_date`
+  - 原先依赖 `biz_date` 的默认使用量日期已改为 `plan_start_date - 1`
+  - `global_management/config-section` 已支持保存 `show_date`
+- 前端已完成：
+  - 全局管理页将 `biz_date` 维护项改为 `show_date`
+  - 需求侧页面顶部口径改为“展示日期 / 计划起始日期 / 实际使用采集日期”
+  - 需求侧实际使用量标题改为采集日期，不再跟展示日期绑定
+  - 供给侧、库管侧顶部日期展示改为 `show_date`
+- 文档已完成：
+  - 两份 2026-05-24 tube 方案文档已补充 `plan_start_date` 与 `show_date` 的职责划分
+  - “未来三日计划量”口径开始收口为“滚动三日计划量”
+
+## 2026-05-24 tube 审计问题第 2/3/4/6/8 项修复
+
+- 已修复供给侧汇总仍使用 `plan_start_date` 的问题：
+  - `supply-management/demand-summary` 已改为按 `show_date` 汇总滚动三日计划量
+- 已修复库存/缺口未按 `show_date - 1` 截断的问题：
+  - 到货量与使用量汇总已增加 `show_date` 上限过滤
+- 已修复库管冗余越权入口问题：
+  - 后端删除库管页“到货确认”“施工接收”两个接口
+  - 前端库管页及 API 包装层同步删除对应冗余调用
+- 已修复到货入库汇总口径问题：
+  - 到货量汇总改为“非 `cancelled` 且已确认到货”
+  - 数量口径优先使用 `received_qty`，避免施工损耗仍计入可用库存
+- 审计报告 `configs/5.24 tube项目审计（agy）.md` 已在相应条目标注“修改情况（2026-05-24）”
+
+## 2026-05-24 tube 站点提交状态文件初始化
+
+- 新增独立运行态文件：
+  - `backend_data/projects/insulation_pipe_supply_2026/station_submission_status.json`
+- 文件职责：
+  - 不再写入 `tube_config.json`
+  - 专门记录各换热站“填报完毕提交”状态
+- 当前结构：
+  - `latest_submissions`：每个换热站仅读取最新一条提交记录
+  - `history_submissions`：保留被新提交挤下来的历史记录
+- 本轮仅完成文件初始化，不包含按钮逻辑、提交前置校验与状态写入流程
+
+## 2026-05-24 tube 需求侧提交按钮首版入口
+
+- 在 `DemandManagementView.vue` 顶部操作区新增“提交本换热站填报状态”按钮
+- 当前按钮位置：
+  - 页面最上方 `topbar-actions`
+  - 与“返回功能页”同层，避免与计划保存、使用量保存混淆
+- 当前按钮行为：
+  - 仅作为入口占位
+  - 点击后提示“按钮已就位，后续接入提交条件校验与提交记录写入”
+- 本轮未接入：
+  - 提交前置条件判断
+  - `station_submission_status.json` 写入
+  - 最新提交 / 历史提交更新逻辑
+
+## 2026-05-24 tube 全局管理页提交状态展示首版
+
+- `GlobalManagementView.vue` 已新增“换热站提交状态”展示区
+- 后端 `get_global_management_config` 已返回：
+  - `submission_status_path`
+  - `submission_status.latest_submissions`
+  - `submission_status.history_submissions`
+- 全局管理页当前展示：
+  - 每个换热站是否“已提交 / 未提交”
+  - 最新提交日期
+  - 最新提交时间
+  - 最新提交人
+- 当前判定规则：
+  - 当某站 `data_submit_date == plan_start_date` 时显示“已提交”
+  - 否则显示“未提交”
+- 本轮仍未接入：
+  - 提交状态写入逻辑
+  - 历史记录滚动写入逻辑

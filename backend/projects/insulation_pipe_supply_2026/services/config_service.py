@@ -16,6 +16,7 @@ from backend.services.project_data_paths import get_project_root
 PROJECT_KEY = "insulation_pipe_supply_2026"
 PROJECT_DATA_DIR = get_project_root(PROJECT_KEY)
 CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
+SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "station_submission_status.json"
 
 
 def load_tube_config() -> Dict[str, Any]:
@@ -41,14 +42,34 @@ def save_tube_config(payload: Dict[str, Any]) -> None:
     temp_path.replace(CONFIG_PATH)
 
 
-def get_configured_biz_date(payload: Dict[str, Any]) -> date:
-    raw_value = str(payload.get("biz_date") or "").strip()
+def load_station_submission_status() -> Dict[str, Any]:
+    if not SUBMISSION_STATUS_PATH.exists():
+        return {
+            "latest_submissions": [],
+            "history_submissions": [],
+        }
+    try:
+        payload = json.loads(SUBMISSION_STATUS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"station_submission_status.json 格式错误：{exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=500, detail="station_submission_status.json 顶层必须为对象")
+    latest_submissions = payload.get("latest_submissions")
+    history_submissions = payload.get("history_submissions")
+    return {
+        "latest_submissions": latest_submissions if isinstance(latest_submissions, list) else [],
+        "history_submissions": history_submissions if isinstance(history_submissions, list) else [],
+    }
+
+
+def get_configured_show_date(payload: Dict[str, Any]) -> date:
+    raw_value = str(payload.get("show_date") or payload.get("biz_date") or "").strip()
     if raw_value:
         try:
             return date.fromisoformat(raw_value)
         except ValueError as exc:
-            raise HTTPException(status_code=500, detail=f"tube_config.json 中 biz_date 非法：{raw_value}") from exc
-    return date.today() - timedelta(days=1)
+            raise HTTPException(status_code=500, detail=f"tube_config.json 中 show_date 非法：{raw_value}") from exc
+    return get_configured_plan_start_date(payload) - timedelta(days=1)
 
 
 def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
@@ -58,7 +79,11 @@ def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
             return date.fromisoformat(raw_value)
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=f"tube_config.json 中 plan_start_date 非法：{raw_value}") from exc
-    return get_configured_biz_date(payload)
+    return date.today()
+
+
+def get_usage_collection_date(payload: Dict[str, Any]) -> date:
+    return get_configured_plan_start_date(payload) - timedelta(days=1)
 
 
 def get_configured_plan_editable_days(payload: Dict[str, Any]) -> int:

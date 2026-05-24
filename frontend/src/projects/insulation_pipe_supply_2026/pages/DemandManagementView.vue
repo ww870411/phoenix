@@ -14,6 +14,14 @@
           <button type="button" class="btn ghost" @click="goProjectPages">
             返回功能页
           </button>
+          <button
+            type="button"
+            class="btn primary submit-status-button"
+            :disabled="!selectedStationId || !canSubmitCurrentProject"
+            @click="handleStationSubmitClick"
+          >
+            提交本换热站填报状态
+          </button>
         </div>
       </header>
 
@@ -43,8 +51,8 @@
         </label>
 
         <label class="field">
-          <span>业务日期</span>
-          <input v-model="bizDate" type="date" :disabled="!isGlobalAdmin" />
+          <span>展示日期</span>
+          <input v-model="showDate" type="date" :disabled="!isGlobalAdmin" />
         </label>
       </div>
 
@@ -52,8 +60,9 @@
         <span class="meta-chip">可访问换热站：{{ stationOptions.length }}</span>
         <span class="meta-chip">型号数：{{ pipeModelOptions.length }}</span>
         <span class="meta-chip">角色：{{ currentGroupLabel }}</span>
-        <span class="meta-chip">业务日期：{{ bizDate || '未设置' }}</span>
+        <span class="meta-chip">展示日期：{{ showDate || '未设置' }}</span>
         <span class="meta-chip">计划起始日期：{{ anchorDate || '未设置' }}</span>
+        <span class="meta-chip">实际使用采集日期：{{ usageDate || '未设置' }}</span>
         <span class="meta-chip">计划可编辑天数：{{ planEditableDays }}</span>
       </div>
     </section>
@@ -156,8 +165,8 @@
     <section class="card elevated">
       <div class="panel-title-row">
         <div>
-          <h2>{{ bizDate || '未设置' }}实际使用量</h2>
-          <span class="panel-hint">逐型号填写当前业务日期对应的实际使用数量。计量单位：米。</span>
+          <h2>{{ usageDate || '未设置' }}实际使用量</h2>
+          <span class="panel-hint">逐型号填写当前采集日期对应的实际使用数量。计量单位：米。</span>
         </div>
         <button
           type="button"
@@ -339,7 +348,7 @@ const pipeModelOptions = ref([])
 const currentGroup = ref('')
 
 const selectedStationId = ref('')
-const bizDate = ref('')
+const showDate = ref('')
 const anchorDate = ref('')
 const usageDate = ref('')
 const planEditableDays = ref(3)
@@ -536,10 +545,11 @@ function normalizeOptionsPayload(response) {
     stationOptions: response.station_options || response.stations || [],
     pipeModelOptions: response.pipe_model_options || response.pipe_models || [],
     currentGroup: response.current_group || response.user?.group || '',
-    bizDate: response.biz_date || '',
+    showDate: response.show_date || response.biz_date || '',
     planStartDate: response.plan_start_date || '',
     planEditableDays: Number(response.plan_editable_days ?? 3),
     defaultAnchorDate: response.default_anchor_date || response.default_plan_anchor_date || '',
+    usageCollectionDate: response.usage_collection_date || '',
     defaultUsageDate: response.default_usage_date || response.default_usage_sheet_date || ''
   }
 }
@@ -553,14 +563,14 @@ async function loadOptions() {
     stationOptions.value = normalized.stationOptions
     pipeModelOptions.value = normalized.pipeModelOptions
     currentGroup.value = normalized.currentGroup
-    bizDate.value = normalized.bizDate || getTodayString(-1)
+    showDate.value = normalized.showDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
     const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
     if (!selectedStationId.value || !stationIdSet.has(selectedStationId.value)) {
       selectedStationId.value = stationOptions.value[0]?.station_id || ''
     }
     anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
-    usageDate.value = normalized.bizDate || normalized.defaultUsageDate || getTodayString(-1)
+    usageDate.value = normalized.usageCollectionDate || normalized.defaultUsageDate || getTodayString(-1)
   } catch (error) {
     optionsError.value = error?.message || '加载需求侧配置失败'
   } finally {
@@ -761,12 +771,15 @@ async function saveUsageSheet() {
   }
 }
 
+function handleStationSubmitClick() {
+  if (!selectedStationId.value || !canSubmitCurrentProject.value) {
+    return
+  }
+  setActionMessage('success', `换热站 ${selectedStationId.value} 的提交按钮已就位，后续将接入提交条件校验与提交记录写入。`)
+}
+
 watch(selectedStationId, () => {
   reloadStationData()
-})
-
-watch(bizDate, (value) => {
-  usageDate.value = value || ''
 })
 
 watch(usageDate, (value, oldValue) => {
@@ -797,6 +810,9 @@ onBeforeUnmount(() => {
 .tube-page-root { min-height: 100vh; background: var(--bg); }
 .tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; }
 .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.submit-status-button {
+  white-space: nowrap;
+}
 .page-error { margin: 0; color: var(--danger); }
 
 .panel-title-row {

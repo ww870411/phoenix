@@ -81,7 +81,7 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
         session.close()
 
 
-def list_arrival_aggregates() -> Dict[str, Dict[str, Any]]:
+def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
     sql = text(
         """
         SELECT
@@ -89,8 +89,10 @@ def list_arrival_aggregates() -> Dict[str, Dict[str, Any]]:
             pipe_model_id,
             SUM(
                 CASE
-                    WHEN status IN ('pending_receive', 'pending_warehouse', 'completed')
-                        THEN COALESCE(arrived_qty, received_qty, shipped_qty)
+                    WHEN status <> 'cancelled'
+                         AND COALESCE(arrived_qty, 0) > 0
+                         AND arrived_confirm_at < :show_date
+                        THEN COALESCE(received_qty, arrived_qty, shipped_qty)
                     ELSE 0
                 END
             ) AS total_arrived_qty
@@ -100,7 +102,7 @@ def list_arrival_aggregates() -> Dict[str, Dict[str, Any]]:
     )
     session = SessionLocal()
     try:
-        rows = session.execute(sql).mappings().all()
+        rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
@@ -112,7 +114,7 @@ def list_arrival_aggregates() -> Dict[str, Dict[str, Any]]:
         session.close()
 
 
-def list_usage_totals() -> Dict[str, Dict[str, Any]]:
+def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
     sql = text(
         """
         SELECT
@@ -120,12 +122,13 @@ def list_usage_totals() -> Dict[str, Dict[str, Any]]:
             pipe_model_id,
             SUM(usage_qty) AS total_usage_qty
         FROM tube.tube_daily_usage
+        WHERE usage_date < :show_date
         GROUP BY station_id, pipe_model_id
         """
     )
     session = SessionLocal()
     try:
-        rows = session.execute(sql).mappings().all()
+        rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"

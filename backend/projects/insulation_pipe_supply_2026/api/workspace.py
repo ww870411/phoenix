@@ -15,11 +15,14 @@ from backend.services.auth_manager import AuthSession, get_current_session
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
     CONFIG_PATH,
     PROJECT_KEY,
-    get_configured_biz_date,
+    SUBMISSION_STATUS_PATH,
     get_configured_plan_editable_days,
     get_configured_plan_start_date,
+    get_configured_show_date,
     get_config_list,
+    get_usage_collection_date,
     load_tube_config,
+    load_station_submission_status,
     resolve_accessible_supply_entity_ids,
     resolve_accessible_station_ids,
     save_tube_config,
@@ -229,7 +232,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     payload = load_tube_config()
     normalized_section = str(section or "").strip()
     allowed_sections = {
-        "biz_date",
+        "show_date",
         "plan_start_date",
         "plan_editable_days",
         "supply_entities",
@@ -243,7 +246,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
 
-    if normalized_section in {"biz_date", "plan_start_date"}:
+    if normalized_section in {"show_date", "plan_start_date"}:
         normalized_date = str(data or "").strip()
         if not normalized_date:
             raise HTTPException(status_code=422, detail=f"{normalized_section} 不能为空")
@@ -389,8 +392,9 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         "ok": True,
         "project_key": PROJECT_KEY,
         "config_path": str(CONFIG_PATH),
-        "biz_date": get_configured_biz_date(payload).isoformat(),
+        "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
+        "usage_collection_date": get_usage_collection_date(payload).isoformat(),
         "plan_editable_days": get_configured_plan_editable_days(payload),
         "summary": {
             "supply_entity_count": len(supply_entities),
@@ -417,8 +421,9 @@ def get_demand_management_options(
 ) -> Dict[str, Any]:
     payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    biz_date = get_configured_biz_date(payload)
+    show_date = get_configured_show_date(payload)
     plan_start_date = get_configured_plan_start_date(payload)
+    usage_collection_date = get_usage_collection_date(payload)
     plan_editable_days = get_configured_plan_editable_days(payload)
     supply_entities = get_config_list(payload, "supply_entities")
 
@@ -433,11 +438,12 @@ def get_demand_management_options(
         "stations": _serialize_station_options(payload, accessible_station_ids),
         "supply_entities": supply_entities,
         "pipe_models": _serialize_pipe_options(payload),
-        "biz_date": biz_date.isoformat(),
+        "show_date": show_date.isoformat(),
         "plan_start_date": plan_start_date.isoformat(),
         "plan_editable_days": plan_editable_days,
         "default_plan_anchor_date": plan_start_date.isoformat(),
-        "default_usage_date": biz_date.isoformat(),
+        "usage_collection_date": usage_collection_date.isoformat(),
+        "default_usage_date": usage_collection_date.isoformat(),
     }
 @router.get("/supply-management/options", summary="读取供给侧页面选项")
 def get_supply_management_options(
@@ -456,7 +462,7 @@ def get_supply_management_options(
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
         "stations": _serialize_station_options(payload, _build_station_name_map(payload).keys()),
         "pipe_models": _serialize_pipe_options(payload),
-        "biz_date": get_configured_biz_date(payload).isoformat(),
+        "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "current_supply_entity_ids": sorted(accessible_supply_entity_ids),
     }
@@ -467,11 +473,12 @@ def get_supply_management_demand_summary(
     payload = load_tube_config()
     station_name_map = _build_station_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
-    plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
+    show_date = get_configured_show_date(payload)
+    plan_dates = build_plan_dates(show_date)
     plan_total_map = list_plan_totals(plan_dates)
     delivery_aggregate_map = list_delivery_aggregates()
-    arrival_aggregate_map = list_arrival_aggregates()
-    usage_total_map = list_usage_totals()
+    arrival_aggregate_map = list_arrival_aggregates(show_date.isoformat())
+    usage_total_map = list_usage_totals(show_date.isoformat())
 
     rows: List[Dict[str, Any]] = []
     for station in get_config_list(payload, "demand_entities"):
@@ -639,7 +646,7 @@ def get_warehouse_management_options(
         "stations": _serialize_station_options(payload, set(_build_station_name_map(payload).keys())),
         "pipe_models": _serialize_pipe_options(payload),
         "supply_entities": _serialize_all_supply_entity_options(payload),
-        "biz_date": get_configured_biz_date(payload).isoformat(),
+        "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "delivery_status_options": [
             {"value": "pending_arrival", "label": "已发货待到货"},
@@ -684,38 +691,6 @@ def get_warehouse_management_deliveries(
             continue
         filtered_rows.append(row)
     return {"ok": True, "project_key": PROJECT_KEY, "rows": filtered_rows}
-
-
-@router.post("/warehouse-management/deliveries/{delivery_id}/arrival", summary="库管确认到货")
-def confirm_warehouse_delivery_arrival(
-    delivery_id: int,
-    payload: WarehouseArrivalConfirmPayload,
-    session: AuthSession = Depends(get_current_session),
-) -> Dict[str, Any]:
-    _ensure_warehouse_access(session)
-    update_delivery_arrival_record(
-        delivery_id=delivery_id,
-        operator=session.username,
-        arrived_qty=payload.arrived_qty,
-        remark=payload.remark,
-    )
-    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
-
-
-@router.post("/warehouse-management/deliveries/{delivery_id}/receipt", summary="库管确认施工接收")
-def confirm_warehouse_delivery_receipt(
-    delivery_id: int,
-    payload: WarehouseReceiptConfirmPayload,
-    session: AuthSession = Depends(get_current_session),
-) -> Dict[str, Any]:
-    _ensure_warehouse_access(session)
-    update_delivery_receipt_record(
-        delivery_id=delivery_id,
-        operator=session.username,
-        received_qty=payload.received_qty,
-        remark=payload.remark,
-    )
-    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
 
 @router.post("/warehouse-management/deliveries/{delivery_id}/warehouse", summary="库管确认手续闭环")
@@ -1012,13 +987,17 @@ def get_global_management_config(
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
     payload = load_tube_config()
+    submission_status = load_station_submission_status()
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
         "config": payload,
-        "biz_date": get_configured_biz_date(payload).isoformat(),
+        "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
+        "usage_collection_date": get_usage_collection_date(payload).isoformat(),
         "plan_editable_days": get_configured_plan_editable_days(payload),
+        "submission_status_path": str(SUBMISSION_STATUS_PATH),
+        "submission_status": submission_status,
     }
 
 
@@ -1044,4 +1023,8 @@ def save_global_management_config_section(
         "project_key": PROJECT_KEY,
         "section": payload.section,
         "config": updated,
+        "show_date": get_configured_show_date(updated).isoformat(),
+        "plan_start_date": get_configured_plan_start_date(updated).isoformat(),
+        "usage_collection_date": get_usage_collection_date(updated).isoformat(),
+        "plan_editable_days": get_configured_plan_editable_days(updated),
     }
