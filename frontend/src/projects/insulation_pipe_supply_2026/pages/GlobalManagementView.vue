@@ -356,7 +356,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   getTubeGlobalManagementConfig,
   saveTubeGlobalManagementConfigSection,
@@ -869,6 +869,8 @@ function fillMissingPipeModelsForSelectedStation() {
 onMounted(() => {
   loadConfig()
 })
+
+useTubeRealtimeRefresh(loadConfig)
 </script>
 
 <style scoped>

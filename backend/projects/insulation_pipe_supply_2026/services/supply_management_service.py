@@ -22,36 +22,6 @@ def _normalize_pipe_model_id(value: Any) -> str:
     return _normalize_text(value).upper()
 
 
-def list_baseline_rows_all() -> Dict[str, Dict[str, Any]]:
-    sql = text(
-        """
-        SELECT
-            station_id,
-            pipe_model_id,
-            design_qty,
-            purchase_plan_qty,
-            remark
-        FROM tube.tube_baseline_quantity
-        WHERE status = 'active'
-        ORDER BY station_id, pipe_model_id
-        """
-    )
-    session = SessionLocal()
-    try:
-        rows = session.execute(sql).mappings().all()
-        result: Dict[str, Dict[str, Any]] = {}
-        for row in rows:
-            key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
-            result[key] = {
-                "design_qty": float(row["design_qty"]) if row["design_qty"] is not None else 0,
-                "purchase_plan_qty": float(row["purchase_plan_qty"]) if row["purchase_plan_qty"] is not None else 0,
-                "remark": row["remark"] or "",
-            }
-        return result
-    finally:
-        session.close()
-
-
 def list_plan_totals(plan_dates: Sequence[date]) -> Dict[str, float]:
     if not plan_dates:
         return {}
@@ -371,10 +341,25 @@ def build_delivery_code(
     return f"DEL-{seq_part}"
 
 
-def format_delivery_elapsed(shipped_at: Optional[datetime], now_at: Optional[datetime] = None) -> str:
+def format_delivery_elapsed(
+    shipped_at: Optional[datetime],
+    now_at: Optional[datetime] = None,
+    arrived_confirm_at: Optional[datetime] = None,
+) -> str:
     if not shipped_at:
         return ""
-    if shipped_at.tzinfo is None or shipped_at.tzinfo.utcoffset(shipped_at) is None:
+    if arrived_confirm_at:
+        if shipped_at.tzinfo is None or shipped_at.tzinfo.utcoffset(shipped_at) is None:
+            current = arrived_confirm_at
+            if current.tzinfo is not None and current.tzinfo.utcoffset(current) is not None:
+                current = current.replace(tzinfo=None)
+        else:
+            current = arrived_confirm_at
+            if current.tzinfo is None or current.tzinfo.utcoffset(current) is None:
+                current = current.replace(tzinfo=shipped_at.tzinfo)
+            else:
+                current = current.astimezone(shipped_at.tzinfo)
+    elif shipped_at.tzinfo is None or shipped_at.tzinfo.utcoffset(shipped_at) is None:
         current = now_at or datetime.now()
         if current.tzinfo is not None and current.tzinfo.utcoffset(current) is not None:
             current = current.replace(tzinfo=None)

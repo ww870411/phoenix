@@ -237,8 +237,8 @@
               <td>{{ row.supplyEntityName }}</td>
               <td>{{ row.pipeModelName }}</td>
               <td>{{ formatNumber(row.shippedQty) }}</td>
-              <td>{{ row.shippedAt || '—' }}</td>
-              <td>{{ formatElapsedLabel(row.shippedAt) || row.deliveryElapsedLabel || '—' }}</td>
+              <td>{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
+              <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
               <td>
                 <span class="status-pill" :class="row.status">
                   {{ row.statusLabel }}
@@ -310,7 +310,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   confirmTubeDemandManagementDeliveryArrival,
   confirmTubeDemandManagementDeliveryReceipt,
@@ -505,6 +505,21 @@ function formatElapsedLabel(shippedAt) {
   return `${totalSeconds}秒`
 }
 
+function formatDeliveryElapsedDisplay(row) {
+  if (!row || row.status === 'cancelled') return '—'
+  return row.deliveryElapsedLabel || formatElapsedLabel(row.shippedAt) || '—'
+}
+
+function formatDateTimeDisplay(value) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value).replace('T', ' ').slice(0, 16)
+  }
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+}
+
 function getDeliveryStatusLabel(status) {
   const mapping = {
     pending_arrival: '已发货待到货',
@@ -538,17 +553,13 @@ async function loadOptions() {
     stationOptions.value = normalized.stationOptions
     pipeModelOptions.value = normalized.pipeModelOptions
     currentGroup.value = normalized.currentGroup
-    if (!bizDate.value) {
-      bizDate.value = normalized.bizDate || getTodayString(-1)
-    }
+    bizDate.value = normalized.bizDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
-
-    if (!selectedStationId.value && stationOptions.value.length) {
-      selectedStationId.value = stationOptions.value[0].station_id
+    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+    if (!selectedStationId.value || !stationIdSet.has(selectedStationId.value)) {
+      selectedStationId.value = stationOptions.value[0]?.station_id || ''
     }
-    if (!anchorDate.value) {
-      anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
-    }
+    anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
     usageDate.value = normalized.bizDate || normalized.defaultUsageDate || getTodayString(-1)
   } catch (error) {
     optionsError.value = error?.message || '加载需求侧配置失败'
@@ -683,6 +694,11 @@ async function reloadStationData() {
   ])
 }
 
+async function refreshRealtimeConfig() {
+  await loadOptions()
+  await reloadStationData()
+}
+
 async function savePlanMatrix() {
   if (!selectedStationId.value || !planDates.value.length || planEditableDays.value <= 0) {
     return
@@ -764,9 +780,10 @@ onMounted(async () => {
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 60000)
-  await loadOptions()
-  await reloadStationData()
+  await refreshRealtimeConfig()
 })
+
+useTubeRealtimeRefresh(refreshRealtimeConfig)
 
 onBeforeUnmount(() => {
   if (nowTimer) {

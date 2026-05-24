@@ -1,3 +1,14 @@
+## 2026-05-23 tube项目已完成进度系统性审计与缺陷审查
+
+- 本轮 Phoenix 后端代码无改动。
+- 我们对已完成的阶段性代码和配置开展了系统性的深度审计，发现并定位了 4 个致命缺陷：
+  1. **计划矩阵回显致命 Bug (`workspace.py`)**：在 `get_demand_management_plan_matrix` 接口中，使用 `record = matrix.get(pipe_model_id, {}).get(key)` 尝试读取计划，但服务层 `list_plan_records` 返回的是形如 `pipe_model_id::date_key` 的扁平化 Dict。此错位导致回显时 `record` 恒为 `None`，前端查询到的三日计划量永远显示为 `0`，无法查看已保存的数据！
+  2. **施工单位权限隔离与访问 403 阻断 Bug (`config_service.py`)**：`resolve_accessible_station_ids` 函数在解析用户可用换热站时，仅处理了 `manager_assignments`（现场负责人映射），完全忽略了配置中的 `construction_units`（施工单位映射）。导致 `tube_construction_unit` 角色登录后其可用站点集合恒为空 `{}`，前端页面无法选择换热站，且在调用施工接收接口确认时必因站点权限校验失败触发 `403 Forbidden` 阻断！
+  3. **净缺口计算重叠双倍扣减（Gap Calculation Math Bug, `workspace.py` & `supply_management_service.py`）**：在计算“三日净缺口”时，`inbound_pipeline_qty`（在途总量）累加了 `pending_receive_qty`（已到货待接收），而 `station_inventory_qty`（当前现场库存）的计算基于包含 `pending_receive` 状态的 `total_arrived_qty`。在 `net_gap_qty = plan_total_qty - inbound_pipeline_qty - station_inventory_qty` 算式中，处于“已到货待接收”状态的物资被**重复扣减了两次**！这将导致计算出的缺口远小于物理缺口，面临现场断货风险！
+  4. **数据库设计落地的结构性缺失（Unused `tube_baseline_quantity`）**：建立了 `tube.tube_baseline_quantity` 表，但在整个后端服务与 API 接口中，没有任何往该表写入或同步数据的逻辑，也未提供初始化预设数据导入的 seed 脚本。基准数据在表中恒为空，系统被迫始终回退读取 `tube_config.json` 的 `baseline_presets`，属于功能性残留缺陷。
+  5. **库管员缺乏换热站级权限隔离**：当前库管确认接口和台账读取仅做了 `Group_admin` 和 `tube_warehouse_keeper` 角色层校验，未结合具体的换热站限制。若后期有跨站库管细分，需提前设计其站级权限链。
+- 详情已同步记录在 `configs/progress.md` 中，将在进入下阶段联调前优先进行修复。
+
 ## 2026-05-21 tube项目第二步实施：tube schema 统一建表 SQL
 
 - 本轮为 `insulation_pipe_supply_2026` 新增统一数据库初始化脚本：
@@ -4583,3 +4594,75 @@
 - 本轮主要在前端完成角色化收口：普通供给主体锁定单一主体，管理员保留切换能力。
 ## 2026-05-22 tube项目第五十三步：主计划文档尾部汇总化
 - 已将 `5.21_tube项目完整构建流程计划_v5.1确认版.md` 尾部整理为最终状态汇总，不再保留中途补充流水段。
+
+## 2026-05-23 MCP配置修复协作说明
+- 本轮未改动后端业务代码。
+- 为修复 Codex 会话中部分 MCP 工具缺失问题，已在外部配置 `C:\Users\ww\.codex\config.toml` 中启用 `serena`，并统一拉长多个 MCP 的启动超时，同时将若干 `npx @latest` 调整为固定版本。
+- 该调整影响的是开发协作工具稳定性，不影响后端接口与数据逻辑；重启 Codex 会话后，应优先验证 `serena__*` 与其他常用 MCP 是否在会话初始化阶段正常暴露。
+## 2026-05-23 desktop-commander启动方式调整
+- 本轮仍未改动后端业务代码。
+- 外部 Codex 配置中 `desktop-commander` 的启动方式已从 `cmd /c npx ...` 调整为直接调用 `D:\Program Files\nodejs\npx.cmd`，目的是减少 MCP 会话初始化时的桥接不稳定问题。
+- 该调整仅影响开发协作工具可用性，不影响后端接口、数据库与服务逻辑。
+# 2026-05-24 tube发货时间显示时区说明
+
+- 本轮用户反馈的“发货记录显示时间比表单时间早 8 小时”问题，根因在前端展示层，不在后端存储层。
+- 后端继续按 `TIMESTAMPTZ` 保存 `shipped_at` 等时间字段；真正的问题是前端直接截断了带时区 ISO 字符串，导致把 UTC 值当成本地值显示。
+- 当前 tube 相关页面已改为在前端解析后按本地时区展示，因此无需为该问题调整数据库字段类型或后端入库逻辑。
+
+# 2026-05-24 tube配置读取根因修复
+
+- 已确认此前 tube 项目存在“配置实时刷新已接上，但后端仍读旧配置”的根因：`config_service.py` 没有走平台统一 `DATA_DIRECTORY`，而是硬编码仓库相对 `backend_data` 路径。
+- 在 Docker/容器环境下，Phoenix 运行数据挂载目录是 `/app/data`，而硬编码路径会落到镜像内 `/app/backend_data`，从而形成两套 `tube_config.json`：
+  - 宿主机实时挂载数据
+  - 镜像内历史副本
+- 这会导致手改宿主 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 后，接口仍返回旧值；但在全局管理页保存时，又会写到后端当前读取的旧副本里，于是页面看起来“保存后才生效”。
+- 本轮已将 `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 改为使用 `backend.services.project_data_paths.get_project_root(PROJECT_KEY)`，统一回到平台标准数据目录解析机制。
+
+# 2026-05-24 tube配置文件实时加载
+
+- 本轮主要是前端配置刷新机制收口，后端无需新增缓存清理逻辑。
+- `insulation_pipe_supply_2026` 的配置读取仍保持为每次请求直接读取平台统一数据目录 `DATA_DIRECTORY/projects/insulation_pipe_supply_2026/tube_config.json`，`load_tube_config()` 本身没有额外缓存层。
+- 前端现已改为在页面激活、窗口回焦、标签页重新可见时主动重拉接口，因此外部直接修改 `tube_config.json` 后，页面可通过自动刷新链路读到后端最新返回值，不再必须依赖全局管理页面的保存动作触发状态更新。
+
+# 2026-05-24 tube项目审计问题第一轮修复
+
+- 本轮后端已修复 `insulation_pipe_supply_2026` 的三项核心逻辑缺陷，并收口一项结构残留：
+- `workspace.py` 的需求侧计划矩阵读取已改为按 `pipe_model_id::date` 扁平 key 读取 `list_plan_records` 返回值，解决计划保存成功但回显恒为 `0` 的问题。
+- `config_service.py` 的 `resolve_accessible_station_ids` 已补充解析 `construction_units`，施工单位账号现在可基于 `unit_id / unit_name / username / station_ids` 获得换热站访问范围。
+- 供给侧净缺口计算已修正为：`net_gap_qty = max(三日计划 - 已发货待到货 - 当前现场库存, 0)`；其中“当前现场库存”继续由到货量减使用量得到，避免 `pending_receive` / `pending_warehouse` 被重复扣减。
+- 基准量读取逻辑已完全从 `tube.tube_baseline_quantity` 退场，需求侧与供给侧统一只读取 `tube_config.json` 的 `baseline_presets`；原本仅用于读取该表的服务函数已移除。
+- 2026-05-24：确认 `insulation_pipe_supply_2026` 发货记录“在途时长”问题的真实边界在前端展示层，而非后端计算层。
+  - 后端统一口径仍由 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 在发货记录装饰阶段写入 `delivery_elapsed_label`。
+  - 前端现已统一改为优先使用该字段展示，避免各页面本地重复计算覆盖后端结果。
+  - 当前约定：后端负责发货记录在途时长的标准口径；前端仅在接口缺失该字段时才执行兜底展示。
+- 2026-05-24：收紧 `insulation_pipe_supply_2026` 发货记录在途时长的截止规则。
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+    - `format_delivery_elapsed(...)` 现支持接收 `arrived_confirm_at`。
+    - 未到货记录继续按“当前时间 - 发货时间”计算。
+    - 已确认到货记录改为按“确认到货时间 - 发货时间”计算，后续 `pending_receive`、`pending_warehouse`、`completed` 状态不再继续累加。
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+    - 发货记录装饰阶段读取 `arrived_confirm_at`，并将其传入 `format_delivery_elapsed(...)`。
+    - 若记录状态为 `cancelled`，则直接输出空白 `delivery_elapsed_label`。
+  - 结果：后端现在输出的 `delivery_elapsed_label` 与“在途”业务语义一致，不再等同于“发货后已过时长”；已撤销记录不再显示在途时长。
+  - 补充：前端已同步禁止对 `cancelled` 状态做本地兜底重算，否则空白字段会再次被 `||` 表达式覆盖。
+- 2026-05-24：同步校正主计划文档中的供给侧缺口定义。
+  - 当前后端实际口径为：`三日净缺口 = 未来三日计划 - 当前库存 - 已发货待到货`。
+  - `pending_receive` / `已到货待接收` 不再作为净缺口的独立扣减项，避免和当前库存统计产生重复扣减。
+- 2026-05-24：tube 主流程计划文档已升级为 `v5.2执行版`。
+  - 新文档路径：`configs/5.21_tube项目完整构建流程计划_v5.2执行版.md`
+  - 后端相关口径已同步写实：配置路径统一到项目数据目录、基准量表运行逻辑下线、三日净缺口双扣修复、在途时长截止到确认到货、撤销状态输出空白在途时长。
+- 2026-05-24：tube 建设方案文档已升级为 `v5.2_物流链管理版`。
+  - 新文档路径：`configs/5.21_tube项目建设方案_v5.2_物流链管理版.md`
+  - 后端相关定义已同步写实：基准量主数据来源改为 `baseline_presets`，`tube.tube_baseline_quantity` 不再作为运行依赖，当前库存按 `总到货 - 总使用量`，三日净缺口只扣减 `pending_arrival`。
+- 2026-05-24：按用户反馈补全了 `v5.2_物流链管理版` 的“## 九、关键计算口径”。
+  - 方案层完整口径已恢复，包括基础数量、剩余量、完成率、时效指标和完工复盘指标；
+  - 同时明确标注当前后端已落地实现的真实口径，避免“方案完整性”和“实现现状”再次混淆。
+- 2026-05-24：继续补全了 `v5.2_物流链管理版` 其余章节的方案完整性。
+  - 当前后端相关定义现同时保留“完整业务设计”和“当前已实现边界”两层表达，尤其补全了配置文件设计、基准量主数据、看板设计、建设范围、实施路径和结论。
+- 2026-05-24：已完成两份 `v5.2` 文档的横向口径统一。
+  - 后端相关表述现统一承认：施工单位映射来自 `construction_units.station_ids`，当前库存按 `总到货 - 总使用量`，三日净缺口只扣减 `pending_arrival`，如未来改回施工接收入账则需重新校正缺口计算口径。
+- 2026-05-24：新增 tube 指标体系与计算实现专项计划。
+  - 新文档路径：`configs/5.24_tube项目指标体系与计算实现专项计划_v1.0.md`
+  - 后端职责在专项计划中已明确分层：基础事实取数、A类标准指标计算、B类基准字段输出，以及后续受控指标定义文件与白名单解析层建设。
+- 2026-05-24：已为 tube 指标专项计划补充外部协作上下文。
+  - 文档现在已包含项目级 API / service 结构、当前运行配置源、当前真实口径和近期已修复问题，便于外部协作者在不了解代码库的前提下参与讨论。

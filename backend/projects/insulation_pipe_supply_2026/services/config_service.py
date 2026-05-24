@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Any, Dict, List, Set
 
 from fastapi import HTTPException
+from backend.services.project_data_paths import get_project_root
 
 
 PROJECT_KEY = "insulation_pipe_supply_2026"
-PROJECT_DATA_DIR = Path(__file__).resolve().parents[4] / "backend_data" / "projects" / PROJECT_KEY
+PROJECT_DATA_DIR = get_project_root(PROJECT_KEY)
 CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
 
 
@@ -97,6 +97,20 @@ def resolve_accessible_station_ids(payload: Dict[str, Any], username: str, group
         candidate_keys = {
             str(item.get("manager_id") or "").strip(),
             str(item.get("manager_name") or "").strip(),
+            str(item.get("username") or "").strip(),
+        }
+        if normalized_username not in candidate_keys:
+            continue
+        for station_id in item.get("station_ids") or []:
+            normalized_station_id = str(station_id or "").strip()
+            if normalized_station_id:
+                allowed_station_ids.add(normalized_station_id)
+
+    construction_units = get_config_list(payload, "construction_units")
+    for item in construction_units:
+        candidate_keys = {
+            str(item.get("unit_id") or "").strip(),
+            str(item.get("unit_name") or "").strip(),
             str(item.get("username") or "").strip(),
         }
         if normalized_username not in candidate_keys:

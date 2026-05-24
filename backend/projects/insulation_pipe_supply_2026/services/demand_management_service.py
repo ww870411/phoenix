@@ -26,37 +26,6 @@ def build_plan_dates(anchor_date: date) -> List[date]:
     return [anchor_date + timedelta(days=offset) for offset in range(3)]
 
 
-def list_baseline_rows(station_id: str) -> Dict[str, Dict[str, Any]]:
-    sql = text(
-        """
-        SELECT
-            pipe_model_id,
-            design_qty,
-            purchase_plan_qty,
-            status,
-            remark
-        FROM tube.tube_baseline_quantity
-        WHERE station_id = :station_id
-          AND status = 'active'
-        ORDER BY pipe_model_id
-        """
-    )
-    session = SessionLocal()
-    try:
-        rows = session.execute(sql, {"station_id": station_id}).mappings().all()
-        return {
-            _normalize_pipe_model_id(row["pipe_model_id"]): {
-                "design_qty": float(row["design_qty"]) if row["design_qty"] is not None else None,
-                "purchase_plan_qty": float(row["purchase_plan_qty"]) if row["purchase_plan_qty"] is not None else None,
-                "status": row["status"],
-                "remark": row["remark"] or "",
-            }
-            for row in rows
-        }
-    finally:
-        session.close()
-
-
 def list_plan_records(station_id: str, plan_dates: Sequence[date]) -> Dict[str, Dict[str, Any]]:
     sql = text(
         """

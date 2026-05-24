@@ -1,3 +1,65 @@
+## 2026-05-24 tube项目发货时间显示时区偏差修复
+
+- 前置说明：本轮针对用户复现的“供给侧发货登记提交后，发货记录显示时间比表单默认时间早约 8 小时”问题做定点排查。结论是展示层把带时区的 ISO 时间当普通字符串截断，未按本地时区格式化。改动范围限于 `frontend/src/projects/insulation_pipe_supply_2026/pages/` 与文档同步；回滚方式为撤销本轮对应前端文件改动并移除本节记录。
+- 根因确认：
+  1. 供给侧发货表单 `datetime-local` 先由前端转成 `toISOString()` 后提交，后端与数据库 `TIMESTAMPTZ` 存储该时间。
+  2. 发货记录、需求侧物流记录、库管页对 `shipped_at` 的展示，之前直接执行 `String(value).replace('T', ' ').slice(...)`。
+  3. 当返回值为 `2026-05-24T04:00:00+00:00` 这类带时区的 ISO 字符串时，前端直接截断文本，就会把 UTC 时间原样显示出来，形成东八区下常见的 8 小时偏差。
+- 修复内容：
+  1. `SupplyManagementView.vue` 的 `formatDateTimeDisplay(...)` 已改为先 `new Date(value)`，再按浏览器本地时间格式化显示。
+  2. `DemandManagementView.vue` 的物流记录“发货时间”已改为同样的本地时间格式化显示，不再直接展示原始 `shipped_at` 字符串。
+  3. `WarehouseManagementView.vue` 的 `formatDateTime(...)` 已改为本地时间格式化显示，库管页发货时间展示口径同步修正。
+- 当前结果：tube 项目中与发货记录相关的页面展示，现在会按本地时区正确显示时间，不再出现提交后列表时间比表单时间早 8 小时的现象。
+
+## 2026-05-24 tube项目配置读取根因修复：容器挂载目录与硬编码路径冲突
+
+- 前置说明：在用户反馈“手改 `tube_config.json` 后前端仍显示旧数据”后，本轮转为全链路排查。最终确认问题不在前端刷新本身，而在后端 tube 配置服务读取了错误的数据根目录。改动范围限于 `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 与文档同步；回滚方式为恢复该文件中的旧路径解析逻辑并移除本节记录。
+- 根因确认：
+  1. Docker Compose 将项目运行数据目录挂载到容器内 `/app/data`。
+  2. Phoenix 平台统一通过 `backend.config.DATA_DIRECTORY` / `backend.services.project_data_paths.get_project_root()` 解析项目数据目录。
+  3. 但 tube 项目的 `config_service.py` 之前绕开了平台统一机制，直接硬编码 `Path(__file__).resolve().parents[4] / "backend_data" / "projects" / PROJECT_KEY`。
+  4. 在容器环境下，这会读到镜像内 `/app/backend_data/...` 的旧副本，而不是宿主机挂载到 `/app/data/projects/...` 的实时数据。
+  5. 因此出现“双数据源”现象：手改宿主 `backend_data/.../tube_config.json` 无效；而在全局管理页保存一次，则会把改动写进后端当前读取的那份旧副本，所以页面才会更新。
+- 修复内容：
+  1. `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+     - 已改为通过 `get_project_root(PROJECT_KEY)` 解析 `PROJECT_DATA_DIR`。
+     - `CONFIG_PATH` 现统一跟随平台 `DATA_DIRECTORY/projects/<project_key>/tube_config.json`。
+- 当前结果：tube 项目的配置读取、配置保存、前端显示现在已回到平台统一数据目录机制，不再出现“宿主文件和运行中接口读写的不是同一份配置”的问题。
+
+## 2026-05-24 tube项目配置文件实时加载收口
+
+- 前置说明：本轮按用户要求，将 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 的配置项在前端页面中改为实时加载，不再依赖页面首次进入时的旧本地状态。改动范围限于 `frontend/src/projects/insulation_pipe_supply_2026/pages/` 与文档同步；回滚方式为撤销本轮前端页面与 `shared.js` 的相关改动。
+- 处理结果：
+  1. 在 `pages/shared.js` 新增 tube 公共实时刷新钩子，统一接管页面激活、窗口回焦、标签页重新可见时的配置重拉逻辑，不再引入定时轮询。
+  2. `dashboard` 与公共页壳的配置摘要已接入自动刷新，不再长期停留在旧配置摘要。
+  3. `GlobalManagementView.vue` 已接入自动重载 `loadConfig()`，外部手改 `tube_config.json` 后页面可重新拉取最新配置。
+  4. `DemandManagementView.vue` 已改为每次加载都用接口返回值覆盖 `bizDate`、`planStartDate` 衍生状态，并在站点列表变化时校正当前选中站点。
+  5. `SupplyManagementView.vue` 已改为每次加载都覆盖日期、主体和筛选相关配置状态；当主体、站点、型号配置变化时，会自动校正本地已失效选项。
+  6. `WarehouseManagementView.vue` 已改为每次加载都重拉选项，并在配置项失效时自动清理对应筛选值。
+- 当前结论：tube 项目四个页面与公共摘要区已具备“配置文件变化后自动重新读取”的前端能力，手改 `tube_config.json` 后无需再依赖“在全局管理页点保存一次”才能让页面日期更新。
+
+## 2026-05-24 tube项目审计问题第一轮修复
+
+- 前置说明：本轮按用户确认，优先修复 `configs/3.23 tube项目审计（agy）.md` 中已验证存在的审计问题 1、2、4，并按代码逻辑确认问题 3 成立后一并修复。改动范围限于 `backend/projects/insulation_pipe_supply_2026/` 及文档同步；回滚方式为撤销本轮对应代码与本文档、README 的新增记录。
+- 已完成修复：
+  1. **三日计划矩阵回显修复**：`get_demand_management_plan_matrix` 已改为按 `pipe_model_id::date` 扁平 key 读取 `list_plan_records` 返回值，修复计划已保存但回显恒为 `0` 的问题。
+  2. **施工单位站点权限修复**：`resolve_accessible_station_ids` 已补充解析 `construction_units` 的 `unit_id / unit_name / username / station_ids`，施工单位账号现在可获得其绑定换热站范围，不再因站点集合为空触发施工接收 `403`。
+  3. **三日净缺口双扣修复**：供给侧 `inbound_pipeline_qty` 已从“待到货 + 待接收 + 待库管”收口为仅统计 `pending_arrival`，避免 `pending_receive` / `pending_warehouse` 既计入到货量又计入在途量而被重复扣减。
+  4. **基准量表逻辑下线**：需求侧台账与供给侧汇总已不再查询 `tube.tube_baseline_quantity`，统一只读取 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 中的 `baseline_presets`。原先仅用于读取该表的 `list_baseline_rows`、`list_baseline_rows_all` 已删除。
+- 当前结果：tube 项目已从“审计确认存在阻断级问题”推进到“首轮核心逻辑修复完成”。后续可继续做接口联调与页面回归，重点验证施工单位账号、计划回显和供给侧净缺口口径。
+
+## 2026-05-23 tube项目已完成进度系统性审计与缺陷审查
+
+- 前置说明：本轮以 `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md` 为执行基线，对已完成的阶段性代码和配置开展系统性的深度审计，不修改项目物理代码。回滚方式为在 `configs/progress.md` 中移除本节记录。
+- 审计范围：涵盖 `backend/projects/insulation_pipe_supply_2026/`、`frontend/src/projects/insulation_pipe_supply_2026/` 及核心数据库设计 `tube_schema_init.sql`、`tube_config.json`。
+- 发现的严重技术缺陷与隐患：
+  1. **计划矩阵回显致命 Bug (`workspace.py`)**：在 `get_demand_management_plan_matrix` 接口中，使用 `record = matrix.get(pipe_model_id, {}).get(key)` 尝试读取计划，但服务层 `list_plan_records` 返回的是形如 `pipe_model_id::date_key` 的扁平化 Dict。此错位导致回显时 `record` 恒为 `None`，前端查询到的三日计划量永远显示为 `0`，无法查看已保存的数据！
+  2. **施工单位权限隔离与访问 403 阻断 Bug (`config_service.py`)**：`resolve_accessible_station_ids` 函数在解析用户可用换热站时，仅处理了 `manager_assignments`（现场负责人映射），完全忽略了配置中的 `construction_units`（施工单位映射）。导致 `tube_construction_unit` 角色登录后其可用站点集合恒为空 `{}`，前端页面无法选择换热站，且在调用施工接收接口确认时必因站点权限校验失败触发 `403 Forbidden` 阻断！
+  3. **净缺口计算重叠双倍扣减（Gap Calculation Math Bug, `workspace.py` & `supply_management_service.py`）**：在计算“三日净缺口”时，`inbound_pipeline_qty`（在途总量）累加了 `pending_receive_qty`（已到货待接收），而 `station_inventory_qty`（当前现场库存）的计算基于包含 `pending_receive` 状态的 `total_arrived_qty`。在 `net_gap_qty = plan_total_qty - inbound_pipeline_qty - station_inventory_qty` 算式中，处于“已到货待接收”状态的物资被**重复扣减了两次**！同理，已接收待库管的物资也会被重复扣减。这将导致计算出的缺口远小于物理缺口，面临现场断货风险！
+  4. **数据库设计落地的结构性缺失（Unused `tube_baseline_quantity`）**：建立了 `tube.tube_baseline_quantity` 表，但在整个后端服务与 API 接口中，没有任何往该表写入或同步数据的逻辑，也未提供初始化预设数据导入的 seed 脚本。基准数据在表中恒为空，系统被迫始终回退读取 `tube_config.json` 的 `baseline_presets`，属于功能性残留缺陷。
+  5. **库管员缺乏换热站级权限隔离**：当前库管确认接口和台账读取仅做了 `Group_admin` 和 `tube_warehouse_keeper` 角色层校验，未结合具体的换热站限制。若后期有跨站库管细分，需提前设计其站级权限链。
+- 当前结论：目前已完成进度中存在这几项严重影响业务流和权限流的 Bug 与结构缺陷。虽然骨架搭建完整，但在开展全链路联调前，必须优先对这几处核心逻辑进行精准修复。
+
 ## 2026-05-21 tube项目第二步实施：tube schema 统一建表 SQL
 
 - 前置说明：本轮以 `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md` 为执行基线，按用户要求在 `backend/sql/` 下生成可手动执行的统一建表 SQL。继续按仓库降级矩阵使用 `apply_patch` 完成文件新增与文档同步。回滚方式为删除 `backend/sql/tube_schema_init.sql` 并移除本节及 README 对应记录。
@@ -8420,7 +8482,160 @@
 - 需求页面的物流确认记录已按当前换热站与发货状态联动展示，默认站点无记录时仅呈现空态，不再误导为按钮无响应。
 - 库管页面已彻底去除到货确认与施工接收的替代操作，仅保留 `pending_warehouse` 状态下的库管确认入口，前序状态仅作为信息展示。
 - 供给侧与需求侧共用的发货记录单号、在途时长、状态展示已统一口径，便于三端跟踪同一条物流链路。
+## 2026-05-24 tube 发货记录在途时长展示修正
+
+- 结论：发货记录中的“在途时长”错误，根因不在后端计算，而在前端展示优先级。后端接口已经统一返回 `delivery_elapsed_label`，但供给侧、需求侧、库管侧页面都优先使用各自前端的 `formatElapsedLabel(...)` 兜底计算，导致和后端统一口径发生偏差。
+- 修正：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 实施：
+  - 所有发货记录列表的“在途时长”展示统一改为“后端 `delivery_elapsed_label` 优先，前端本地计算仅作兜底”。
+  - 供给侧记录标准化阶段不再默认用前端计算结果回填 `deliveryElapsedLabel`，避免把后端统一口径提前覆盖。
+  - 库管页的已选发货记录详情同步改为相同优先级，保证列表与详情显示一致。
+- 结果：三个页面现在都以同一条后端计算结果作为主口径展示在途时长，只有当接口未返回该字段时才退回前端临时计算。
+- 验证：已执行 `npm run build`，前端构建通过。
+
+## 2026-05-24 tube 在途时长截止规则修正
+
+- 业务口径确认：发货记录的“在途时长”只统计运输过程。只要现场负责人完成“确认到货”，该条记录的在途计时就应停止，不再随着当前时间继续增长。
+- 真问题：后端原先的 `format_delivery_elapsed(...)` 一律按“当前时间 - 发货时间”计算，导致已经到货、已接收、已库管确认的记录仍然持续累加，字段含义实际上变成了“自发货以来已过去多久”。
+- 修正：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- 实施：
+  - `format_delivery_elapsed(...)` 新增 `arrived_confirm_at` 参与计算。
+  - 若记录尚未确认到货，则继续按“当前时间 - 发货时间”计算。
+  - 若记录已经确认到货，则统一按“确认到货时间 - 发货时间”计算，并在后续状态中保持不变。
+  - 若记录状态为 `cancelled`，则直接返回空白在途时长，不再显示任何累计结果。
+  - 发货记录装饰阶段改为读取 `arrived_confirm_at` 并传入统一计算函数。
+- 结果：供给侧、需求侧、库管侧看到的“在途时长”现在都在“确认到货”时刻封口；已撤销记录不再显示在途时长，符合物流业务定义。
+
+## 2026-05-24 tube 已撤销记录在途时长继续累计的二次修正
+
+- 根因复核：这是前后端双层逻辑叠加，不是单点缺陷。
+  - 后端已在 `cancelled` 状态下输出空白 `delivery_elapsed_label`。
+  - 但前端三个页面仍使用 `字段值 || formatElapsedLabel(...)` 作为展示表达式。
+  - 空字符串会触发 `||` 兜底，页面于是回退到前端本地累计计算；同时 `nowTick` 持续刷新，导致撤销记录仍表现为在途时长不断增长。
+- 修正：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 实施：
+  - 三端统一新增 `formatDeliveryElapsedDisplay(...)`。
+  - 若状态为 `cancelled`，直接显示 `—`，不再进入前端兜底计算。
+  - 其他状态继续维持“后端统一口径优先，前端仅兜底”的展示策略。
+- 结果：撤销记录现在在供给侧、需求侧、库管页都不会再显示持续增长的在途时长。
+
+## 2026-05-24 tube 主计划文档中净待发缺口定义校正
+
+- 按当前已落地代码口径，修订 `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md` 中关于“净待发缺口 / 三日净缺口”的定义。
+- 校正内容：
+  - 正文公式改为：`净待发缺口 = max(未来三日计划量 - 当前现场库存量 - 已发货待到货量, 0)`。
+  - 删除“默认扣减已到货待接收量”的旧说法。
+  - 拍板项汇总与尾部实施进度同步改为：净缺口只扣减“已发货待到货”，不再把“已到货待接收”作为独立扣减项。
+- 原因：当前后端实现已按双扣问题修正，只把 `pending_arrival` 视为净缺口扣减项；`pending_receive` 不再单独重复扣减。
 - 本轮前后端构建验证通过，当前收口版本可直接用于后续到货/接收/库管闭环测试。
+
+## 2026-05-24 tube 主流程计划升级为 v5.2 执行版
+
+- 前置说明：本轮未修改前后端业务代码，重点是把主计划文档从“v5.1 确认版”升级为与当前实现一致的“v5.2 执行版”。按仓库降级矩阵使用 `apply_patch` 新增文档并同步记录。回滚方式为删除 `configs/5.21_tube项目完整构建流程计划_v5.2执行版.md`，并移除本节与 README 对应记录。
+- 已完成内容：
+  1. 在 `configs/` 同目录新增 [5.21_tube项目完整构建流程计划_v5.2执行版.md](</D:/编程项目/phoenix/configs/5.21_tube项目完整构建流程计划_v5.2执行版.md:1>)。
+  2. 新版文档不再机械沿用 v5.1 的历史表述，而是按当前真实实现重写以下关键口径：
+     - 配置主源统一为 `tube_config.json`
+     - 基准量主数据统一为 `baseline_presets`
+     - `tube.tube_baseline_quantity` 不再作为运行依赖
+     - 三日净缺口只扣减 `已发货待到货`
+     - 在途时长到“确认到货”截止
+     - `cancelled` 不显示在途时长
+  3. 尾部“当前实施进度”已按截至 `2026-05-24` 的真实状态重写，不再停留在 `2026-05-22` 的旧结论。
+  4. 尾部进度新增了配置实时加载、配置路径根因修复、审计问题第一轮修复、发货时间与在途时长口径修复等已完成项。
+- 当前结果：现在同目录下同时保留
+  - `v5.1确认版`：历史确认基线
+  - `v5.2执行版`：当前继续开发与联调的正式基线
+
+## 2026-05-24 tube 建设方案升级为 v5.2 物流链管理版
+
+- 前置说明：本轮根据用户要求，以 `configs/5.21_tube项目建设方案_v5.1_物流链管理版.md` 为基础，新建一份 v5.2 方案文档，并按当前真实实现修正细节。未修改前后端业务代码，按仓库降级矩阵使用 `apply_patch` 新增文档并同步记录。回滚方式为删除 `configs/5.21_tube项目建设方案_v5.2_物流链管理版.md`，并移除本节及 README 对应记录。
+- 已完成内容：
+  1. 在同目录新增 [5.21_tube项目建设方案_v5.2_物流链管理版.md](</D:/编程项目/phoenix/configs/5.21_tube项目建设方案_v5.2_物流链管理版.md:1>)。
+  2. 按当前实现修正了以下关键业务定义：
+     - 配置主源改为 `tube_config.json`
+     - 施工单位映射改为 `construction_units.station_ids`
+     - 基准量主数据改为 `baseline_presets`
+     - `tube.tube_baseline_quantity` 明确不再作为运行依赖
+     - 三日计划窗口改为以 `plan_start_date` 为起点
+     - 当前库存口径改为 `总到货 - 总使用量`
+     - 三日净缺口只扣减 `已发货待到货`
+     - 在途时长到确认到货截止，撤销状态不显示
+  3. 新版方案把当前项目定位调整为“已落地主流程骨架后的继续完善阶段”，不再按纯待建设项目描述。
+- 当前结果：当前目录下同时保留
+  - `v5.1_物流链管理版`：历史方案版本
+  - `v5.2_物流链管理版`：与当前系统实现对齐的方案版本
+
+## 2026-05-24 tube 建设方案 v5.2 第九章计算口径补全修正
+
+- 用户反馈：`5.21_tube项目建设方案_v5.2_物流链管理版.md` 中“## 九、关键计算口径”被压缩过度，不应因第一阶段部分指标尚未全部落地展示，就删掉方案层应保留的完整计算框架。
+- 已修正：
+  1. 恢复并补全 `9.1 基础数量`，重新纳入设计用量、计划采购量、累计发货量、累计到货确认量、累计施工接收量等完整定义。
+  2. 恢复并补全 `9.2 剩余量与完成率`，重新纳入设计剩余量、计划采购剩余量、设计完成率、采购接收执行率、领用消化率。
+  3. 保留 `9.3 未来三日缺口` 的完整框架，同时把当前真实实现口径写清。
+  4. 将 `9.4` 恢复为“确认时效指标”，并把“在途时长”与“完工复盘指标”整合进 `9.5`。
+  5. 在每一小节中增加“V5.2补充说明 / V5.2确认”，区分“方案层完整口径”和“当前已落地实现口径”。
+- 当前结果：v5.2 方案文档的第九章已恢复为完整的业务口径章节，同时又保留了对当前实现差异的明确说明。
+
+## 2026-05-24 tube 建设方案 v5.2 其余章节完整性补全
+
+- 用户继续要求：不只补第九章，还要检查 `v5.2_物流链管理版` 其余章节是否也被压缩过头。方案文档应同时保留“完整业务表达”和“当前实现边界”。
+- 已补全章节：
+  1. `10.2 配置文件设计`：恢复为完整配置项表格，并明确当前真实承载项。
+  2. `11.1 基准量主数据`：恢复业务字段框架，同时说明当前运行主数据已转为 `baseline_presets`。
+  3. `13.1 - 13.5 看板设计`：恢复总览、供给侧、需求侧、库管、风险预警的完整方案建议。
+  4. `14. 第一阶段建设范围`：恢复完整范围清单，并补充当前已落地与待补强边界。
+  5. `15. 暂缓或后续扩展内容`：恢复二期预留能力地图。
+  6. `16. 实施路径`：恢复完整阶段路径，并说明当前所处阶段。
+  7. `18. 给开发人员的提示` 与 `19. 结论`：改为同时保留方案层和实现层两种视角。
+- 当前结果：`5.21_tube项目建设方案_v5.2_物流链管理版.md` 现已从“偏实现摘要版”修正为“完整方案版 + 当前实现说明版”。
+
+## 2026-05-24 tube 两份 v5.2 文档横向口径统一
+
+- 本轮对以下两份文档做了横向一致性复核：
+  - `configs/5.21_tube项目完整构建流程计划_v5.2执行版.md`
+  - `configs/5.21_tube项目建设方案_v5.2_物流链管理版.md`
+- 统一处理内容：
+  1. 两份文档都明确施工单位映射当前维护在 `construction_units.station_ids`；
+  2. 两份文档都明确当前库存执行口径以 `总到货 - 总使用量` 为准；
+  3. 两份文档都明确“三日净缺口”当前只扣减 `已发货待到货`，`已到货待接收` / `已接收待库管` 只展示、不重复扣减；
+  4. 两份文档都补充了“若未来改回施工接收入账，则需重新审视净缺口口径”的边界说明。
+- 当前结果：两份 v5.2 文档现在在配置源、施工单位映射、库存口径、净缺口口径等核心概念上的写法已基本同构，可作为同一阶段的对内对外基线。
+
+## 2026-05-24 tube 指标体系与计算实现专项计划
+
+- 用户要求：围绕“九、关键计算口径”进一步抽离出一份专项计划，系统列出 tube 项目要建设的指标，包括当前已实现与未实现项，并明确这些指标应如何计算、由前端/后端谁负责、后续如何配置化。
+- 已完成交付：
+  1. 新增 [5.24_tube项目指标体系与计算实现专项计划_v1.0.md](</D:/编程项目/phoenix/configs/5.24_tube项目指标体系与计算实现专项计划_v1.0.md:1>)。
+  2. 文档中将指标分为三类：
+     - `A类：后端标准指标`
+     - `B类：后端提供基准 + 前端动态展示指标`
+     - `C类：纯前端展示指标`
+  3. 系统列出当前已实现与待实现的指标清单，包括三日计划、库存、净缺口、时效指标、复盘指标等。
+  4. 明确建议建设受控的指标定义文件，例如 `tube_metric_definitions.json`，而不是直接把任意公式字符串塞进代码或配置中执行。
+  5. 给出分阶段实施路径：指标冻结 -> 指标定义配置落地 -> 后端解析层 -> 前端协同展示 -> 回归校验。
+- 当前结果：tube 项目现在已有一份可直接指导后续“指标配置化与看板建设”的专项执行文档。
+
+## 2026-05-24 tube 指标专项计划补充外部协作上下文
+
+- 用户补充要求：由于该专项计划文件将转发给看不到代码库的 ChatGPT / 外部协作方共同讨论，需要在文档中补充当前开发状况、基本结构、真实数据源、已修问题和讨论前提，避免外部协作方只看到“指标清单”却不了解系统现状。
+- 已补充内容：
+  1. 项目是什么、业务链条是什么；
+  2. 当前项目页面结构与各页面真实状态；
+  3. 当前真实开发阶段判断；
+  4. 当前关键数据源与真实口径；
+  5. 近期已修复的重要问题列表；
+  6. 前后端主要文件位置的简化说明；
+  7. 当前为什么要讨论“指标体系与计算实现”。
+- 当前结果：`5.24_tube项目指标体系与计算实现专项计划_v1.0.md` 现已具备“可转发给外部协作者直接阅读”的上下文完整性。
 ## 2026-05-22 tube项目第四十四步：需求页到货/接收按钮角色归一化
 - 需求管理页面的“确认到货 / 施工接收”按钮前端角色判断已改为兼容 `Global_admin`、`global_admin`、`系统管理员`、`管理员` 等常见显示口径，避免管理员账号看得到按钮却被误禁用。
 - 到货确认与施工接收的点击函数已去掉前端硬拦截，仅保留记录 ID 校验，权限最终由后端接口判定。
@@ -8464,3 +8679,14 @@
 - 已对 `configs/5.21_tube项目完整构建流程计划_v5.1确认版.md` 的尾部进度内容做整体收口。
 - 原 `17` 之后逐次追加形成的流水账补充段已移除，改为在 `17. 当前实施进度` 下按模块保留最终状态。
 - 当前主计划文档尾部已只保留项目接入、配置层、数据库、权限、全局管理入口、需求侧、供给侧、库管页、总体结论与未完成项的最终结果描述。
+
+## 2026-05-23 MCP工具启动配置修复
+- 本轮排查发现当前 Codex 主配置文件为 `C:\Users\ww\.codex\config.toml`，其中 `mcp_servers.serena` 被显式设置为 `enabled = false`，这是本会话中 `serena__*` 工具缺失的直接原因。
+- 已将 `serena` 改为启用，并把 `startup_timeout_sec` 与 `tool_timeout_sec` 从 `15` 提升到 `60`，降低 Windows 环境下 `uvx` 冷启动超时导致的挂载失败概率。
+- 已将 `desktop-commander`、`Context7`、`chrome-devtools`、`sequential-thinking-offical`、`hyperbrowser`、`memory`、`github` 的 `npx @latest` 或裸包调用整理为明确版本，同时把相关 MCP 的 `startup_timeout_ms` 统一提升到 `60000`。
+- 本轮修改范围在仓库外的 `C:\Users\ww\.codex\config.toml`，未改动 Phoenix 业务代码；建议下一步完整重启 Codex 会话，再验证 `serena__*`、`desktop-commander`、`Context7`、`sequential-thinking-offical` 是否在会话初始化时自动出现。
+## 2026-05-23 desktop-commander启动方式改写
+- 继续排查发现 `desktop-commander` 虽已配置，但在会话内出现 `unsupported call`，说明问题不只在超时，还可能与 `cmd /c npx ...` 的 MCP 启动链路有关。
+- 已将 `C:\Users\ww\.codex\config.toml` 中 `mcp_servers.desktop-commander` 的启动方式，从 `command = "cmd" + args = ["/c", "npx", ...]` 改为直接调用 `D:\Program Files\nodejs\npx.cmd`，参数保留 `["-y", "@wonderwhy-er/desktop-commander@0.2.41"]`。
+- 当前判断：这类 MCP 更适合使用直接可执行文件而不是经过 `cmd` 转发，以减少 stdio 桥接与会话初始化时的兼容问题。
+- 本轮仍未改动 Phoenix 业务代码；需要完整重启 Codex 会话后再验证 `desktop-commander` 是否恢复正常读写能力。

@@ -1,11 +1,57 @@
 import '../../daily_report_25_26/styles/theme.css'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import { getTubeWorkspaceConfigSummary } from '../../daily_report_25_26/services/api'
 
 export { AppHeader, Breadcrumbs }
+
+export function useTubeRealtimeRefresh(refreshFn, options = {}) {
+  let refreshPromise = null
+
+  async function runRefresh() {
+    if (refreshPromise) {
+      return refreshPromise
+    }
+    refreshPromise = Promise.resolve(refreshFn()).finally(() => {
+      refreshPromise = null
+    })
+    return refreshPromise
+  }
+
+  function triggerRefresh() {
+    runRefresh().catch(() => {})
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      triggerRefresh()
+    }
+  }
+
+  function handleWindowFocus() {
+    triggerRefresh()
+  }
+
+  onMounted(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+  })
+
+  onActivated(() => {
+    triggerRefresh()
+  })
+
+  onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('focus', handleWindowFocus)
+  })
+
+  return {
+    triggerTubeRealtimeRefresh: runRefresh,
+  }
+}
 
 export function useTubePageShell(currentLabel) {
   const route = useRoute()
@@ -41,6 +87,8 @@ export function useTubePageShell(currentLabel) {
   onMounted(() => {
     loadConfigSummary()
   })
+
+  useTubeRealtimeRefresh(loadConfigSummary)
 
   return {
     loading,

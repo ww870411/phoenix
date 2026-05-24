@@ -224,7 +224,7 @@
                 <td>{{ row.pipeModelName }}</td>
                 <td>{{ formatNumber(row.shippedQty) }}</td>
                 <td>{{ row.shippedAtDisplay || '—' }}</td>
-                <td>{{ formatElapsedLabel(row.shippedAt) || row.deliveryElapsedLabel || '—' }}</td>
+                <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
                 <td>
                   <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
                 </td>
@@ -253,7 +253,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   cancelTubeSupplyManagementDelivery,
   createTubeSupplyManagementDelivery,
@@ -458,8 +458,12 @@ function toDateTimeLocalString(input) {
 
 function formatDateTimeDisplay(value) {
   if (!value) return ''
-  const normalized = String(value).replace('T', ' ')
-  return normalized.slice(0, 16)
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    const normalized = String(value).replace('T', ' ')
+    return normalized.slice(0, 16)
+  }
+  return toDateTimeLocalString(parsed).replace('T', ' ')
 }
 
 function normalizeOptionsPayload(response) {
@@ -512,7 +516,7 @@ function normalizeDeliveryRows(rows) {
     shippedQty: Number(row.shipped_qty ?? 0),
     shippedAt: row.shipped_at || '',
     shippedAtDisplay: formatDateTimeDisplay(row.shipped_at || ''),
-    deliveryElapsedLabel: row.delivery_elapsed_label || formatElapsedLabel(row.shipped_at || ''),
+    deliveryElapsedLabel: row.delivery_elapsed_label || '',
     shipContactName: row.ship_contact_name || '',
     shipContactPhone: row.ship_contact_phone || '',
     shipRemark: row.ship_remark || '',
@@ -535,7 +539,10 @@ async function loadOptions() {
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
     bizDate.value = normalized.bizDate
     planStartDate.value = normalized.planStartDate
-    if (!canSwitchSupplyEntity.value && normalized.currentSupplyEntityIds.length) {
+    const availableSupplyEntityIds = normalized.currentSupplyEntityIds
+    if (!availableSupplyEntityIds.includes(selectedSupplyEntityId.value)) {
+      selectedSupplyEntityId.value = availableSupplyEntityIds[0] || ''
+    } else if (!canSwitchSupplyEntity.value && normalized.currentSupplyEntityIds.length) {
       selectedSupplyEntityId.value = normalized.currentSupplyEntityIds[0]
     } else if (!selectedSupplyEntityId.value && normalized.currentSupplyEntityIds.length) {
       selectedSupplyEntityId.value = normalized.currentSupplyEntityIds[0]
@@ -545,6 +552,15 @@ async function loadOptions() {
     } else if (!deliveryForm.value.supplyEntityId && selectedSupplyEntityId.value) {
       deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
     }
+    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+    const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
+    if (!stationIdSet.has(deliveryForm.value.stationId)) {
+      deliveryForm.value.stationId = stationOptions.value[0]?.station_id || ''
+    }
+    if (!pipeModelIdSet.has(deliveryForm.value.pipeModelId)) {
+      deliveryForm.value.pipeModelId = pipeModelOptions.value[0]?.pipe_model_id || ''
+    }
+    selectedPipeModelIds.value = selectedPipeModelIds.value.filter((item) => pipeModelIdSet.has(String(item || '')))
     if (!selectedPipeModelIds.value.length) {
       selectAllPipeModels()
     }
@@ -567,6 +583,11 @@ async function loadDemandSummary() {
   } finally {
     summaryLoading.value = false
   }
+}
+
+async function refreshRealtimeConfig() {
+  await loadOptions()
+  await Promise.all([loadDemandSummary(), loadDeliveries()])
 }
 
 async function loadDeliveries() {
@@ -678,6 +699,11 @@ function formatElapsedLabel(shippedAt) {
   return `${totalSeconds}秒`
 }
 
+function formatDeliveryElapsedDisplay(row) {
+  if (!row || row.status === 'cancelled') return '—'
+  return row.deliveryElapsedLabel || formatElapsedLabel(row.shippedAt) || '—'
+}
+
 watch(
   () => deliveryForm.value.supplyEntityId,
   (value) => {
@@ -701,9 +727,10 @@ onMounted(async () => {
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 60000)
-  await loadOptions()
-  await Promise.all([loadDemandSummary(), loadDeliveries()])
+  await refreshRealtimeConfig()
 })
+
+useTubeRealtimeRefresh(refreshRealtimeConfig)
 
 onBeforeUnmount(() => {
   if (nowTimer) {

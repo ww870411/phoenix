@@ -26,7 +26,6 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
 )
 from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import (
     build_plan_dates,
-    list_baseline_rows,
     list_pending_arrivals,
     list_plan_records,
     list_usage_records,
@@ -39,7 +38,6 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     build_delivery_code,
     get_delivery_record_basic,
     list_arrival_aggregates,
-    list_baseline_rows_all,
     list_delivery_aggregates,
     list_delivery_records,
     list_plan_totals,
@@ -357,13 +355,20 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
     supply_entity_prefix_map = _build_supply_entity_prefix_map(payload)
     for row in rows:
         shipped_at_value = datetime.fromisoformat(row["shipped_at"]) if row.get("shipped_at") else None
+        arrived_confirm_at_value = datetime.fromisoformat(row["arrived_confirm_at"]) if row.get("arrived_confirm_at") else None
         row["delivery_code"] = row.get("delivery_code") or build_delivery_code(
             row["id"],
             shipped_at_value,
             row["supply_entity_id"],
             supply_entity_prefix_map.get(row["supply_entity_id"], ""),
         )
-        row["delivery_elapsed_label"] = format_delivery_elapsed(shipped_at_value)
+        if row.get("status") == "cancelled":
+            row["delivery_elapsed_label"] = ""
+        else:
+            row["delivery_elapsed_label"] = format_delivery_elapsed(
+                shipped_at_value,
+                arrived_confirm_at=arrived_confirm_at_value,
+            )
         row["station_name"] = station_name_map.get(row["station_id"], row["station_id"])
         row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
         row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
@@ -463,7 +468,6 @@ def get_supply_management_demand_summary(
     station_name_map = _build_station_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
-    baseline_map = list_baseline_rows_all()
     plan_total_map = list_plan_totals(plan_dates)
     delivery_aggregate_map = list_delivery_aggregates()
     arrival_aggregate_map = list_arrival_aggregates()
@@ -477,7 +481,7 @@ def get_supply_management_demand_summary(
         station_baseline_preset_map = _build_baseline_preset_map(payload, station_id)
         for pipe_model_id, pipe_model in pipe_model_map.items():
             key = f"{station_id}::{pipe_model_id}"
-            baseline_row = baseline_map.get(key) or station_baseline_preset_map.get(pipe_model_id) or {}
+            baseline_row = station_baseline_preset_map.get(pipe_model_id) or {}
             plan_total_qty = float(plan_total_map.get(key, 0) or 0)
             delivery_aggregate = delivery_aggregate_map.get(key) or {}
             arrival_aggregate = arrival_aggregate_map.get(key) or {}
@@ -490,7 +494,7 @@ def get_supply_management_demand_summary(
             total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
             total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
             station_inventory_qty = total_arrived_qty - total_usage_qty
-            inbound_pipeline_qty = pending_arrival_qty + pending_receive_qty + pending_warehouse_qty
+            inbound_pipeline_qty = pending_arrival_qty
             net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - station_inventory_qty, 0)
             design_qty = float(baseline_row.get("design_qty", 0) or 0)
             purchase_plan_qty = float(baseline_row.get("purchase_plan_qty", 0) or 0)
@@ -740,12 +744,11 @@ def get_demand_management_baseline(
 
     station_name_map = _build_station_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
-    baseline_map = list_baseline_rows(station_id)
     baseline_preset_map = _build_baseline_preset_map(payload, station_id)
 
     rows: List[Dict[str, Any]] = []
     for pipe_model_id, pipe_model in pipe_model_map.items():
-        baseline = baseline_map.get(pipe_model_id) or baseline_preset_map.get(pipe_model_id) or {}
+        baseline = baseline_preset_map.get(pipe_model_id) or {}
         rows.append(
             {
                 "pipe_model_id": pipe_model_id,
@@ -786,7 +789,7 @@ def get_demand_management_plan_matrix(
         cell_remarks: Dict[str, str] = {}
         for plan_date in plan_dates:
             key = plan_date.isoformat()
-            record = matrix.get(pipe_model_id, {}).get(key)
+            record = matrix.get(f"{pipe_model_id}::{key}")
             cell_values[key] = float(record["plan_qty"]) if record and record.get("plan_qty") is not None else 0
             cell_remarks[key] = record.get("remark") if record else ""
         rows.append(

@@ -11,42 +11,6 @@ CREATE SCHEMA IF NOT EXISTS tube;
 
 COMMENT ON SCHEMA tube IS '保温管物流链管理项目专用 schema';
 
-CREATE TABLE IF NOT EXISTS tube.tube_baseline_quantity (
-    id BIGSERIAL PRIMARY KEY,
-    station_id VARCHAR(64) NOT NULL,
-    pipe_model_id VARCHAR(64) NOT NULL,
-    design_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
-    purchase_plan_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
-    status VARCHAR(32) NOT NULL DEFAULT 'active',
-    remark TEXT,
-    created_by VARCHAR(128),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by VARCHAR(128),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    update_reason TEXT,
-    CONSTRAINT chk_tube_baseline_quantity_design_qty_nonnegative
-        CHECK (design_qty >= 0),
-    CONSTRAINT chk_tube_baseline_quantity_purchase_plan_qty_nonnegative
-        CHECK (purchase_plan_qty >= 0)
-);
-
-COMMENT ON TABLE tube.tube_baseline_quantity IS '设计用量与计划采购量基准表';
-COMMENT ON COLUMN tube.tube_baseline_quantity.station_id IS '换热站 ID，对应 tube_config.json 中 demand_entities';
-COMMENT ON COLUMN tube.tube_baseline_quantity.pipe_model_id IS '保温管型号 ID，对应 tube_config.json 中 pipe_models';
-COMMENT ON COLUMN tube.tube_baseline_quantity.design_qty IS '设计用量';
-COMMENT ON COLUMN tube.tube_baseline_quantity.purchase_plan_qty IS '计划采购量';
-COMMENT ON COLUMN tube.tube_baseline_quantity.status IS '状态，首版默认 active';
-COMMENT ON COLUMN tube.tube_baseline_quantity.update_reason IS '调整原因，仅基准数据修改时填写';
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_baseline_quantity_active
-    ON tube.tube_baseline_quantity (station_id, pipe_model_id)
-    WHERE status = 'active';
-
-CREATE INDEX IF NOT EXISTS idx_tube_baseline_quantity_station
-    ON tube.tube_baseline_quantity (station_id);
-
-CREATE INDEX IF NOT EXISTS idx_tube_baseline_quantity_pipe_model
-    ON tube.tube_baseline_quantity (pipe_model_id);
 
 CREATE TABLE IF NOT EXISTS tube.tube_daily_plan (
     id BIGSERIAL PRIMARY KEY,

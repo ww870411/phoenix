@@ -141,7 +141,7 @@
                   </span>
                 </td>
                 <td>{{ formatDateTime(row.shipped_at) }}</td>
-                <td>{{ formatElapsedLabel(row.shipped_at) || row.delivery_elapsed_label || '—' }}</td>
+                <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
               </tr>
             </tbody>
           </table>
@@ -159,7 +159,7 @@
             <div><span>当前状态</span><strong>{{ deliveryStatusLabelMap[selectedDelivery.status] || selectedDelivery.status }}</strong></div>
             <div><span>到货状态</span><strong>{{ selectedDelivery.arrived_qty ? '已到货' : '待到货' }}</strong></div>
             <div><span>接收状态</span><strong>{{ selectedDelivery.received_qty ? '已接收' : '待接收' }}</strong></div>
-            <div><span>在途时长</span><strong>{{ formatElapsedLabel(selectedDelivery.shipped_at) || selectedDelivery.delivery_elapsed_label || '—' }}</strong></div>
+            <div><span>在途时长</span><strong>{{ formatDeliveryElapsedDisplay(selectedDelivery) }}</strong></div>
           </div>
 
           <div v-if="selectedDelivery.status === 'pending_warehouse'" class="form-grid">
@@ -181,7 +181,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   confirmTubeWarehouseDeliveryArrival,
   confirmTubeWarehouseDeliveryReceipt,
@@ -265,7 +265,12 @@ function formatAmount(value) {
 
 function formatDateTime(value) {
   if (!value) return '--'
-  return String(value).replace('T', ' ').slice(0, 19)
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value).replace('T', ' ').slice(0, 19)
+  }
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`
 }
 
 function formatElapsedLabel(shippedAt) {
@@ -281,6 +286,11 @@ function formatElapsedLabel(shippedAt) {
   if (hours > 0) return `${hours}小时${minutes}分`
   if (minutes > 0) return `${minutes}分`
   return `${totalSeconds}秒`
+}
+
+function formatDeliveryElapsedDisplay(row) {
+  if (!row || row.status === 'cancelled') return '—'
+  return row.delivery_elapsed_label || formatElapsedLabel(row.shipped_at) || '—'
 }
 
 function statusClass(status) {
@@ -309,6 +319,22 @@ function selectDelivery(row) {
 async function loadOptions() {
   const payload = await getTubeWarehouseManagementOptions(projectKey)
   options.value = payload
+  const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+  const supplyEntityIdSet = new Set(supplyEntityOptions.value.map((item) => String(item.entity_id || '')))
+  const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
+  const deliveryStatusValueSet = new Set(deliveryStatusOptions.value.map((item) => String(item.value || '')))
+  if (filters.stationId && !stationIdSet.has(filters.stationId)) {
+    filters.stationId = ''
+  }
+  if (filters.supplyEntityId && !supplyEntityIdSet.has(filters.supplyEntityId)) {
+    filters.supplyEntityId = ''
+  }
+  if (filters.pipeModelId && !pipeModelIdSet.has(filters.pipeModelId)) {
+    filters.pipeModelId = ''
+  }
+  if (filters.status && !deliveryStatusValueSet.has(filters.status)) {
+    filters.status = ''
+  }
   if (!filters.stationId && stationOptions.value.length === 1) {
     filters.stationId = stationOptions.value[0].station_id
   }
@@ -440,6 +466,8 @@ onMounted(async () => {
   }, 60000)
   await reloadAll()
 })
+
+useTubeRealtimeRefresh(reloadAll)
 
 onBeforeUnmount(() => {
   if (nowTimer) {
