@@ -220,46 +220,85 @@
       <div class="panel-title-row">
         <div>
           <h2>物流确认记录</h2>
-          <span class="panel-hint">按当前换热站展示发货后的确认链路；支持按运输车次号筛选。计量单位：米。</span>
+          <span class="panel-hint">按当前换热站展示发货后的确认链路。计量单位：米。</span>
         </div>
+        <div class="toolbar-actions">
+          <button type="button" class="btn ghost" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
+          <button type="button" class="primary-button" :disabled="pendingLoading || !selectedStationId" @click="applyPendingFilters">
+            {{ pendingLoading ? '查询中...' : '查询记录' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-grid compact-filter-grid">
+        <label class="field field-compact">
+          <span>订单号</span>
+          <input v-model.trim="pendingFilters.orderNo" type="text" placeholder="输入订单号" />
+        </label>
         <label class="field field-compact">
           <span>运输车次号</span>
-          <input v-model.trim="pendingShipmentFilter" type="text" placeholder="输入车次号筛选" />
+          <input v-model.trim="pendingFilters.shipmentNo" type="text" placeholder="输入运输车次号" />
+        </label>
+        <label class="field field-compact">
+          <span>型号</span>
+          <select v-model="pendingFilters.pipeModelId">
+            <option value="">全部型号</option>
+            <option v-for="model in pipeModelOptions" :key="model.pipe_model_id" :value="model.pipe_model_id">
+              {{ model.pipe_model_name || model.pipe_model_id }}
+            </option>
+          </select>
+        </label>
+        <label class="field field-compact">
+          <span>发货日期</span>
+          <input v-model="pendingFilters.shippedDate" type="date" />
+        </label>
+        <label class="field field-compact">
+          <span>确认到货日期</span>
+          <input v-model="pendingFilters.arrivedDate" type="date" />
         </label>
       </div>
 
       <div v-if="pendingLoading" class="loading-text">正在加载物流确认记录...</div>
       <div v-else-if="pendingError" class="error-box">{{ pendingError }}</div>
       <div v-else-if="!pendingRows.length" class="empty-box">当前没有物流确认记录。</div>
-      <div v-else class="table-wrap">
+      <div v-else class="table-wrap logistics-table-wrap">
         <table class="data-table logistics-table">
           <thead>
             <tr>
               <th>订单号</th>
               <th>运输车次号</th>
+              <th>车牌号</th>
               <th>供给主体</th>
               <th>型号</th>
               <th>发货量（米）</th>
               <th>发货时间</th>
+              <th>确认到货时间</th>
               <th>在途时长</th>
-              <th>状态</th>
+              <th class="cell-status">状态</th>
               <th>确认量（米）</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in pendingRows" :key="row.deliveryId">
-              <td>{{ row.deliveryCode || row.deliveryId }}</td>
-              <td>{{ row.shipmentNo || '—' }}</td>
-              <td>{{ row.supplyEntityName }}</td>
-              <td>{{ row.pipeModelName }}</td>
-              <td>{{ formatNumber(row.shippedQty) }}</td>
-              <td>{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
-              <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
-              <td>
-                <span class="status-pill" :class="row.status">
-                  {{ row.statusLabel }}
-                </span>
+              <td class="cell-code">{{ row.deliveryCode || row.deliveryId }}</td>
+              <td class="cell-code">{{ row.shipmentNo || '—' }}</td>
+              <td class="cell-text">{{ row.vehiclePlateNo || '—' }}</td>
+              <td class="cell-text">{{ row.supplyEntityName }}</td>
+              <td class="cell-text">{{ row.pipeModelName }}</td>
+              <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
+              <td class="cell-datetime">{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
+              <td class="cell-datetime">{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</td>
+              <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
+              <td class="cell-status">
+                <div class="status-pill-group">
+                  <span class="status-pill" :class="row.status">
+                    {{ row.statusLabel }}
+                  </span>
+                  <span v-if="row.abnormalFlag" class="status-pill abnormal">
+                    {{ getAbnormalLabel(row) }}
+                  </span>
+                </div>
               </td>
               <td>
                 <div v-if="row.status === 'pending_arrival'" class="stack-controls">
@@ -267,6 +306,7 @@
                     v-model.number="row.arrivalConfirmQty"
                     type="number"
                     min="0"
+                    :max="row.shippedQty"
                     step="1"
                   />
                 </div>
@@ -278,7 +318,7 @@
                     step="1"
                   />
                 </div>
-                <span v-else>{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
+                <span v-else class="cell-number">{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
               </td>
               <td>
                 <div v-if="row.status === 'pending_arrival' || row.status === 'pending_receive'" class="action-stack action-inline">
@@ -313,7 +353,7 @@
                     }}
                   </button>
                 </div>
-                <span v-else class="action-placeholder">{{ deliveryStatusLabelMap[row.status] || row.status || '--' }}</span>
+                <span v-else class="action-placeholder">{{ getDeliveryStatusLabel(row.status) }}</span>
               </td>
             </tr>
           </tbody>
@@ -325,7 +365,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
@@ -381,7 +421,13 @@ const submitStatusLoading = ref(false)
 const pendingLoading = ref(false)
 const pendingError = ref('')
 const pendingRows = ref([])
-const pendingShipmentFilter = ref('')
+const pendingFilters = reactive({
+  orderNo: '',
+  shipmentNo: '',
+  pipeModelId: '',
+  shippedDate: '',
+  arrivedDate: '',
+})
 const nowTick = ref(Date.now())
 let nowTimer = null
 
@@ -494,14 +540,17 @@ function normalizePendingRows(rows) {
     deliveryId: row.delivery_id || row.deliveryId || row.id,
     deliveryCode: row.delivery_code || row.deliveryCode || '',
     shipmentNo: row.shipment_no || row.shipmentNo || '',
+    vehiclePlateNo: row.vehicle_plate_no || row.vehiclePlateNo || '',
     supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
     status: row.status || '',
     statusLabel: getDeliveryStatusLabel(row.status),
+    abnormalFlag: Boolean(row.abnormal_flag || row.abnormalFlag),
     shippedQty: Number(row.shipped_qty || row.shippedQty || 0),
     arrivedQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
     receivedQty: Number(row.received_qty || row.receivedQty || row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
     shippedAt: row.shipped_at || row.shippedAt || '',
+    arrivedConfirmAt: row.arrived_confirm_at || row.arrivedConfirmAt || '',
     deliveryElapsedLabel: row.delivery_elapsed_label || row.deliveryElapsedLabel || '',
     remarks: row.remarks || row.ship_remark || '',
     arrivalConfirmQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
@@ -509,6 +558,17 @@ function normalizePendingRows(rows) {
     arrivalRemark: '',
     receiptRemark: ''
   }))
+}
+
+function getAbnormalLabel(row) {
+  if (!row?.abnormalFlag) return ''
+  if (row.receivedQty != null && row.arrivedQty != null && Number(row.receivedQty) < Number(row.arrivedQty)) {
+    return '少接收'
+  }
+  if (row.arrivedQty != null && Number(row.arrivedQty) < Number(row.shippedQty || 0)) {
+    return '少到货'
+  }
+  return '异常'
 }
 
 function formatElapsedLabel(shippedAt) {
@@ -651,13 +711,19 @@ async function loadUsageSheet() {
 async function loadLogisticsRecords() {
   if (!selectedStationId.value) {
     pendingRows.value = []
+    pendingError.value = ''
+    pendingLoading.value = false
     return
   }
   pendingLoading.value = true
   pendingError.value = ''
   try {
     const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value, {
-      shipmentNo: pendingShipmentFilter.value || '',
+      orderNo: pendingFilters.orderNo || '',
+      shipmentNo: pendingFilters.shipmentNo || '',
+      pipeModelId: pendingFilters.pipeModelId || '',
+      shippedDate: pendingFilters.shippedDate || '',
+      arrivedDate: pendingFilters.arrivedDate || '',
     })
     pendingRows.value = normalizePendingRows(response.rows)
   } catch (error) {
@@ -668,19 +734,33 @@ async function loadLogisticsRecords() {
   }
 }
 
-watch(pendingShipmentFilter, () => {
+function applyPendingFilters() {
   loadLogisticsRecords()
-})
+}
+
+function resetPendingFilters() {
+  pendingFilters.orderNo = ''
+  pendingFilters.shipmentNo = ''
+  pendingFilters.pipeModelId = ''
+  pendingFilters.shippedDate = ''
+  pendingFilters.arrivedDate = ''
+  loadLogisticsRecords()
+}
 
 async function confirmArrival(row) {
   if (!row?.deliveryId || !canClickArrival(row)) {
+    return
+  }
+  const normalizedArrivedQty = Number(row.arrivalConfirmQty || row.shippedQty || 0)
+  if (normalizedArrivedQty > Number(row.shippedQty || 0)) {
+    setActionMessage('error', '确认到货量不能大于该订单的发货量。')
     return
   }
   deliveryActionLoadingKey.value = `arrival-${row.deliveryId}`
   clearActionMessage()
   try {
     await confirmTubeDemandManagementDeliveryArrival(PROJECT_KEY, row.deliveryId, {
-      arrived_qty: Number(row.arrivalConfirmQty || row.shippedQty || 0),
+      arrived_qty: normalizedArrivedQty,
       remark: row.arrivalRemark || ''
     })
     setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 到货已确认。`)
@@ -865,6 +945,17 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
+.compact-filter-grid {
+  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+
+.field-compact span {
+  font-size: 12px;
+  color: #64748b;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -924,6 +1015,12 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
+.logistics-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -951,7 +1048,48 @@ onBeforeUnmount(() => {
 }
 
 .logistics-table {
-  min-width: 1180px;
+  min-width: 1460px;
+}
+
+.logistics-table th {
+  white-space: nowrap;
+}
+
+.logistics-table td {
+  white-space: normal;
+}
+
+.cell-code {
+  min-width: 140px;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 14px;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.cell-text {
+  min-width: 120px;
+}
+
+.cell-number {
+  min-width: 90px;
+  white-space: nowrap;
+}
+
+.cell-datetime {
+  min-width: 132px;
+  white-space: nowrap;
+  color: #334155;
+}
+
+.cell-elapsed {
+  min-width: 96px;
+  white-space: nowrap;
+}
+
+.cell-status {
+  min-width: 118px;
+  white-space: nowrap;
 }
 
 .stack-controls {
@@ -969,8 +1107,8 @@ onBeforeUnmount(() => {
 
 .action-inline {
   flex-direction: row;
-  flex-wrap: wrap;
-  min-width: 260px;
+  flex-wrap: nowrap;
+  min-width: 232px;
 }
 
 .action-button {
@@ -991,6 +1129,14 @@ onBeforeUnmount(() => {
   line-height: 1.2;
   background: #eef2ff;
   color: #334155;
+  white-space: nowrap;
+}
+
+.status-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .status-pill.pending_arrival {
@@ -1016,6 +1162,11 @@ onBeforeUnmount(() => {
 .status-pill.cancelled {
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.status-pill.abnormal {
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .primary-button.arrival-button {

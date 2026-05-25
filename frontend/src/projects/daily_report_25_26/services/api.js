@@ -335,7 +335,11 @@ export async function getTubeDemandManagementPendingArrivals(projectKey, station
 
 export async function getTubeDemandManagementLogisticsRecords(projectKey, stationId, params = {}) {
   const search = new URLSearchParams({ station_id: String(stationId || '') })
+  if (params.orderNo) search.set('order_no', String(params.orderNo))
   if (params.shipmentNo) search.set('shipment_no', String(params.shipmentNo))
+  if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
+  if (params.shippedDate) search.set('shipped_date', String(params.shippedDate))
+  if (params.arrivedDate) search.set('arrived_date', String(params.arrivedDate))
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/logistics-records?${search.toString()}`, {
     headers: attachAuthHeaders(),
   })
@@ -508,6 +512,8 @@ export async function getTubeWarehouseManagementDeliveries(projectKey, params = 
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
   if (params.shipmentNo) search.set('shipment_no', String(params.shipmentNo))
+  if (params.orderNo) search.set('order_no', String(params.orderNo))
+  if (params.vehiclePlateNo) search.set('vehicle_plate_no', String(params.vehiclePlateNo))
   const suffix = search.toString() ? `?${search.toString()}` : ''
   const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries${suffix}`, {
     headers: attachAuthHeaders(),

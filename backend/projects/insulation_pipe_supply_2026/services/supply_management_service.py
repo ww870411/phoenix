@@ -155,6 +155,7 @@ def list_delivery_records(
             supply_entity_id,
             order_no,
             shipment_no,
+            vehicle_plate_no,
             station_id,
             pipe_model_id,
             shipped_qty,
@@ -205,6 +206,7 @@ def list_delivery_records(
                 "id": int(row["id"]),
                 "order_no": _normalize_text(row["order_no"]),
                 "shipment_no": _normalize_text(row["shipment_no"]),
+                "vehicle_plate_no": _normalize_text(row["vehicle_plate_no"]),
                 "delivery_code": _normalize_text(row["order_no"]) or build_delivery_code(
                     int(row["id"]),
                     row["shipped_at"],
@@ -250,6 +252,7 @@ def create_delivery_record(
     supply_entity_id: str,
     order_no: str,
     shipment_no: str,
+    vehicle_plate_no: str,
     station_id: str,
     pipe_model_id: str,
     shipped_qty: float,
@@ -267,6 +270,7 @@ def create_delivery_record(
             supply_entity_id,
             order_no,
             shipment_no,
+            vehicle_plate_no,
             station_id,
             pipe_model_id,
             shipped_qty,
@@ -284,6 +288,7 @@ def create_delivery_record(
             :supply_entity_id,
             :order_no,
             :shipment_no,
+            :vehicle_plate_no,
             :station_id,
             :pipe_model_id,
             :shipped_qty,
@@ -308,6 +313,7 @@ def create_delivery_record(
                 "supply_entity_id": _normalize_text(supply_entity_id),
                 "order_no": _normalize_text(order_no),
                 "shipment_no": _normalize_text(shipment_no),
+                "vehicle_plate_no": _normalize_text(vehicle_plate_no),
                 "station_id": _normalize_text(station_id),
                 "pipe_model_id": _normalize_pipe_model_id(pipe_model_id),
                 "shipped_qty": float(shipped_qty),
@@ -364,6 +370,42 @@ def update_delivery_identifiers(
         session.close()
 
 
+def sync_shipment_vehicle_plate(
+    shipment_no: str,
+    vehicle_plate_no: str,
+    operator: str,
+) -> None:
+    normalized_shipment_no = _normalize_text(shipment_no)
+    if not normalized_shipment_no:
+        return
+    sql = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            vehicle_plate_no = :vehicle_plate_no,
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE shipment_no = :shipment_no
+        """
+    )
+    session = SessionLocal()
+    try:
+        session.execute(
+            sql,
+            {
+                "shipment_no": normalized_shipment_no,
+                "vehicle_plate_no": _normalize_text(vehicle_plate_no),
+                "updated_by": operator,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def get_shipment_owner(shipment_no: str) -> Dict[str, Any]:
     normalized_shipment_no = _normalize_text(shipment_no)
     if not normalized_shipment_no:
@@ -373,6 +415,7 @@ def get_shipment_owner(shipment_no: str) -> Dict[str, Any]:
         SELECT
             shipment_no,
             supply_entity_id,
+            MAX(NULLIF(TRIM(vehicle_plate_no), '')) AS vehicle_plate_no,
             COUNT(*) AS record_count
         FROM tube.tube_delivery
         WHERE shipment_no = :shipment_no
@@ -387,8 +430,45 @@ def get_shipment_owner(shipment_no: str) -> Dict[str, Any]:
         return {
             "shipment_no": _normalize_text(row["shipment_no"]),
             "supply_entity_id": _normalize_text(row["supply_entity_id"]),
+            "vehicle_plate_no": _normalize_text(row["vehicle_plate_no"]),
             "record_count": int(row["record_count"] or 0),
         }
+    finally:
+        session.close()
+
+
+def get_next_shipment_sequence(
+    *,
+    supply_code: str = "",
+    shipped_at: Optional[datetime] = None,
+) -> int:
+    normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
+    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    if not date_part:
+        return 1
+    shipment_prefix = f"S{normalized_supply_code}-{date_part}-"
+    sql = text(
+        """
+        SELECT shipment_no
+        FROM tube.tube_delivery
+        WHERE shipment_no LIKE :shipment_prefix
+        ORDER BY shipment_no DESC
+        LIMIT 1
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql, {"shipment_prefix": f"{shipment_prefix}%"}).mappings().first()
+        if not row:
+            return 1
+        shipment_no = _normalize_text(row["shipment_no"])
+        if not shipment_no.startswith(shipment_prefix):
+            return 1
+        seq_text = shipment_no.rsplit("-", 1)[-1]
+        seq_value = int(seq_text)
+        return max(seq_value + 1, 1)
+    except Exception:
+        return 1
     finally:
         session.close()
 
@@ -409,13 +489,13 @@ def build_order_no(
 
 
 def build_shipment_no(
-    delivery_id: int,
+    sequence_no: int,
     shipped_at: Optional[datetime] = None,
     supply_code: str = "",
 ) -> str:
     normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
     date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
-    seq_part = f"{int(delivery_id):03d}"
+    seq_part = f"{int(sequence_no):03d}"
     if date_part:
         return f"S{normalized_supply_code}-{date_part}-{seq_part}"
     return f"S{normalized_supply_code}-{seq_part}"
@@ -593,6 +673,7 @@ def update_delivery_arrival_record(
         UPDATE tube.tube_delivery
         SET
             arrived_qty = :arrived_qty,
+            abnormal_flag = :abnormal_flag,
             arrived_confirm_by = :arrived_confirm_by,
             arrived_confirm_at = NOW(),
             arrived_remark = :arrived_remark,
@@ -615,11 +696,13 @@ def update_delivery_arrival_record(
             raise HTTPException(status_code=422, detail="到货数量必须大于 0")
         if normalized_arrived_qty > shipped_qty:
             raise HTTPException(status_code=422, detail="到货数量不能大于发货数量")
+        abnormal_flag = normalized_arrived_qty < shipped_qty
         session.execute(
             sql_update,
             {
                 "delivery_id": int(delivery_id),
                 "arrived_qty": normalized_arrived_qty,
+                "abnormal_flag": abnormal_flag,
                 "arrived_confirm_by": operator,
                 "arrived_remark": _normalize_text(remark),
                 "updated_by": operator,
@@ -644,6 +727,7 @@ def update_delivery_receipt_record(
     sql_get = text(
         """
         SELECT id, shipped_qty, arrived_qty, status
+               , abnormal_flag
         FROM tube.tube_delivery
         WHERE id = :delivery_id
         """
@@ -653,6 +737,7 @@ def update_delivery_receipt_record(
         UPDATE tube.tube_delivery
         SET
             received_qty = :received_qty,
+            abnormal_flag = :abnormal_flag,
             received_confirm_by = :received_confirm_by,
             received_confirm_at = NOW(),
             received_remark = :received_remark,
@@ -675,11 +760,13 @@ def update_delivery_receipt_record(
             raise HTTPException(status_code=422, detail="施工接收数量必须大于 0")
         if normalized_received_qty > arrived_qty:
             raise HTTPException(status_code=422, detail="施工接收数量不能大于到货数量")
+        abnormal_flag = bool(row["abnormal_flag"]) or normalized_received_qty < arrived_qty
         session.execute(
             sql_update,
             {
                 "delivery_id": int(delivery_id),
                 "received_qty": normalized_received_qty,
+                "abnormal_flag": abnormal_flag,
                 "received_confirm_by": operator,
                 "received_remark": _normalize_text(remark),
                 "updated_by": operator,

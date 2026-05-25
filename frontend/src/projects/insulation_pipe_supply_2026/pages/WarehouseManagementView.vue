@@ -64,6 +64,14 @@
             <span>运输车次号</span>
             <input v-model.trim="filters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" />
           </label>
+          <label class="field">
+            <span>单号</span>
+            <input v-model.trim="filters.orderNo" class="input" type="text" placeholder="输入订单号筛选" />
+          </label>
+          <label class="field">
+            <span>车牌号</span>
+            <input v-model.trim="filters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" />
+          </label>
         </div>
         <div class="filter-actions">
           <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
@@ -109,9 +117,20 @@
           <table class="table">
             <thead>
               <tr>
-                <th>选择</th>
+                <th>
+                  <label class="table-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="allPendingWarehouseSelected"
+                      :indeterminate.prop="hasPartialPendingWarehouseSelection"
+                      @change="toggleSelectAllPendingWarehouse($event)"
+                    />
+                    <span>多选</span>
+                  </label>
+                </th>
                 <th>订单号</th>
                 <th>运输车次号</th>
+                <th>车牌号</th>
                 <th>供给主体</th>
                 <th>换热站</th>
                 <th>型号</th>
@@ -127,24 +146,36 @@
               <tr
                 v-for="row in deliveries"
                 :key="row.id"
-                :class="{ selected: String(row.id) === selectedDeliveryId }"
-                @click="selectDelivery(row)"
+                :class="{ selected: isDeliverySelected(row.id) }"
+                @click="toggleDeliverySelection(row)"
               >
                 <td>
-                  <button class="btn ghost tiny" type="button" @click.stop="selectDelivery(row)">选中</button>
+                  <input
+                    v-if="row.status === 'pending_warehouse'"
+                    type="checkbox"
+                    :checked="isDeliverySelected(row.id)"
+                    @click.stop
+                    @change="toggleDeliverySelection(row)"
+                  />
                 </td>
                 <td>{{ row.order_no || row.delivery_code || row.id }}</td>
                 <td>{{ row.shipment_no || '—' }}</td>
+                <td>{{ row.vehicle_plate_no || '—' }}</td>
                 <td>{{ row.supply_entity_name }}</td>
                 <td>{{ row.station_name }}</td>
                 <td>{{ row.pipe_model_name }}</td>
                 <td>{{ formatAmount(row.shipped_qty) }}</td>
-                <td>{{ formatAmount(row.arrived_qty) }}</td>
-                <td>{{ formatAmount(row.received_qty) }}</td>
+                <td>{{ formatOptionalAmount(row.arrived_qty) }}</td>
+                <td>{{ formatOptionalAmount(row.received_qty) }}</td>
                 <td>
-                  <span class="status-pill" :class="statusClass(row.status)">
-                    {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
-                  </span>
+                  <div class="status-pill-group">
+                    <span class="status-pill" :class="statusClass(row.status)">
+                      {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
+                    </span>
+                    <span v-if="row.abnormal_flag" class="status-pill status-abnormal">
+                      {{ getAbnormalLabel(row) }}
+                    </span>
+                  </div>
                 </td>
                 <td>{{ formatDateTime(row.shipped_at) }}</td>
                 <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
@@ -156,30 +187,28 @@
 
       <section class="card elevated">
         <div class="card-header">选中记录处置</div>
-        <div v-if="!selectedDelivery" class="page-state">请选择一条台账记录后再执行确认操作。</div>
+        <div v-if="!selectedDeliveries.length" class="page-state">请至少勾选一条台账记录后再执行确认操作。</div>
         <div v-else class="action-panel">
           <div class="action-summary">
-            <div><span>供给主体</span><strong>{{ selectedDelivery.supply_entity_name }}</strong></div>
-            <div><span>运输车次号</span><strong>{{ selectedDelivery.shipment_no || '—' }}</strong></div>
-            <div><span>换热站</span><strong>{{ selectedDelivery.station_name }}</strong></div>
-            <div><span>型号</span><strong>{{ selectedDelivery.pipe_model_name }}</strong></div>
-            <div><span>当前状态</span><strong>{{ deliveryStatusLabelMap[selectedDelivery.status] || selectedDelivery.status }}</strong></div>
-            <div><span>到货状态</span><strong>{{ selectedDelivery.arrived_qty ? '已到货' : '待到货' }}</strong></div>
-            <div><span>接收状态</span><strong>{{ selectedDelivery.received_qty ? '已接收' : '待接收' }}</strong></div>
-            <div><span>在途时长</span><strong>{{ formatDeliveryElapsedDisplay(selectedDelivery) }}</strong></div>
+            <div><span>已选记录</span><strong>{{ selectedDeliveryAggregate.totalRecords }} 条</strong></div>
+            <div><span>总发货长度</span><strong>{{ formatAmount(selectedDeliveryAggregate.totalShippedQty) }} 米</strong></div>
+            <div><span>总接收长度</span><strong>{{ formatAmount(selectedDeliveryAggregate.totalReceivedQty) }} 米</strong></div>
+            <div><span>平均在途时长</span><strong>{{ selectedDeliveryAggregate.averageElapsedLabel }}</strong></div>
           </div>
 
-          <div v-if="selectedDelivery.status === 'pending_warehouse'" class="form-grid">
+          <div v-if="pendingWarehouseSelectedDeliveries.length" class="form-grid">
             <label class="field field-wide">
               <span>库管备注</span>
               <textarea v-model="warehouseForm.remark" class="textarea" rows="3" placeholder="可填写手续闭环说明"></textarea>
             </label>
             <div class="form-actions">
-              <button class="btn primary" type="button" :disabled="actionLoading" @click="submitWarehouse">完成库管确认</button>
+              <button class="btn primary" type="button" :disabled="actionLoading" @click="submitWarehouse">
+                {{ actionLoading ? '提交中...' : `完成库管确认（${pendingWarehouseSelectedDeliveries.length}条）` }}
+              </button>
             </div>
           </div>
 
-          <div v-else class="page-state compact">当前仅展示前序状态信息，库管确认需在记录到达“已接收待库管”后执行。</div>
+          <div v-else class="page-state compact">当前勾选记录中没有“已接收待库管”状态数据，无法执行批量库管确认。</div>
         </div>
       </section>
     </main>
@@ -205,6 +234,7 @@ const pageMessage = ref('')
 const options = ref(null)
 const deliveries = ref([])
 const selectedDeliveryId = ref('')
+const selectedDeliveryIds = ref([])
 
 const filters = reactive({
   stationId: '',
@@ -212,6 +242,8 @@ const filters = reactive({
   pipeModelId: '',
   status: '',
   shipmentNo: '',
+  orderNo: '',
+  vehiclePlateNo: '',
 })
 
 const warehouseForm = reactive({
@@ -233,6 +265,82 @@ const deliveryStatusLabelMap = computed(() => {
 })
 
 const selectedDelivery = computed(() => deliveries.value.find((row) => String(row.id) === selectedDeliveryId.value) || null)
+const selectedDeliveries = computed(() => {
+  const selectedIdSet = new Set(selectedDeliveryIds.value)
+  return deliveries.value.filter((row) => selectedIdSet.has(String(row.id)))
+})
+const pendingWarehouseSelectedDeliveries = computed(() => selectedDeliveries.value.filter((row) => row.status === 'pending_warehouse'))
+const pendingWarehouseDeliveryIds = computed(() => deliveries.value.filter((row) => row.status === 'pending_warehouse').map((row) => String(row.id)))
+const allPendingWarehouseSelected = computed(() => {
+  if (!pendingWarehouseDeliveryIds.value.length) return false
+  const selectedIdSet = new Set(selectedDeliveryIds.value)
+  return pendingWarehouseDeliveryIds.value.every((id) => selectedIdSet.has(id))
+})
+const hasPartialPendingWarehouseSelection = computed(() => {
+  if (!pendingWarehouseDeliveryIds.value.length) return false
+  const selectedIdSet = new Set(selectedDeliveryIds.value)
+  const selectedCount = pendingWarehouseDeliveryIds.value.filter((id) => selectedIdSet.has(id)).length
+  return selectedCount > 0 && selectedCount < pendingWarehouseDeliveryIds.value.length
+})
+
+const selectedDeliveryAggregate = computed(() => {
+  const shipmentSet = new Set()
+  const orderSet = new Set()
+  const stationSet = new Set()
+  const pipeModelSet = new Set()
+  const vehiclePlateSet = new Set()
+  const statusCountMap = new Map()
+  let totalShippedQty = 0
+  let totalArrivedQty = 0
+  let totalReceivedQty = 0
+  let elapsedCount = 0
+  let elapsedTotalMs = 0
+  let maxElapsedMs = 0
+
+  for (const row of selectedDeliveries.value) {
+    if (row.shipment_no) shipmentSet.add(row.shipment_no)
+    if (row.order_no || row.delivery_code || row.id) orderSet.add(row.order_no || row.delivery_code || String(row.id))
+    if (row.station_name || row.station_id) stationSet.add(row.station_name || row.station_id)
+    if (row.pipe_model_name || row.pipe_model_id) pipeModelSet.add(row.pipe_model_name || row.pipe_model_id)
+    if (row.vehicle_plate_no) vehiclePlateSet.add(row.vehicle_plate_no)
+    const statusKey = row.status || 'unknown'
+    statusCountMap.set(statusKey, Number(statusCountMap.get(statusKey) || 0) + 1)
+    totalShippedQty += Number(row.shipped_qty || 0)
+    totalArrivedQty += Number(row.arrived_qty || 0)
+    totalReceivedQty += Number(row.received_qty || 0)
+    const elapsedMs = getDeliveryElapsedMs(row)
+    if (elapsedMs !== null) {
+      elapsedCount += 1
+      elapsedTotalMs += elapsedMs
+      if (elapsedMs > maxElapsedMs) {
+        maxElapsedMs = elapsedMs
+      }
+    }
+  }
+
+  const statusSummaryLabel =
+    Array.from(statusCountMap.entries())
+      .map(([status, count]) => `${deliveryStatusLabelMap.value[status] || status} ${count}条`)
+      .join(' / ') || '—'
+
+  return {
+    totalRecords: selectedDeliveries.value.length,
+    pendingWarehouseCount: pendingWarehouseSelectedDeliveries.value.length,
+    shipmentCount: shipmentSet.size,
+    orderCount: orderSet.size,
+    stationCount: stationSet.size,
+    pipeModelCount: pipeModelSet.size,
+    totalShippedQty,
+    totalArrivedQty,
+    totalReceivedQty,
+    averageElapsedLabel: elapsedCount ? formatDurationMs(elapsedTotalMs / elapsedCount) : '—',
+    maxElapsedLabel: elapsedCount ? formatDurationMs(maxElapsedMs) : '—',
+    statusSummaryLabel,
+    pipeModelLabel: summarizeCollection(Array.from(pipeModelSet)),
+    shipmentLabel: summarizeCollection(Array.from(shipmentSet)),
+    vehiclePlateLabel: summarizeCollection(Array.from(vehiclePlateSet)),
+  }
+})
 
 const deliverySummary = computed(() => {
   const summary = {
@@ -256,6 +364,12 @@ const deliverySummary = computed(() => {
 function formatAmount(value) {
   const num = Number(value)
   if (!Number.isFinite(num) || num === 0) return '0'
+  return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.00$/, '')
+}
+
+function formatOptionalAmount(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num === 0) return '—'
   return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.00$/, '')
 }
 
@@ -284,9 +398,50 @@ function formatElapsedLabel(shippedAt) {
   return `${totalSeconds}秒`
 }
 
+function formatDurationMs(durationMs) {
+  const totalSeconds = Math.max(Math.floor(Number(durationMs || 0) / 1000), 0)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (days > 0) return `${days}天${hours}小时${minutes}分`
+  if (hours > 0) return `${hours}小时${minutes}分`
+  if (minutes > 0) return `${minutes}分`
+  return `${seconds}秒`
+}
+
+function getDeliveryElapsedMs(row) {
+  if (!row || row.status === 'cancelled' || !row.shipped_at) return null
+  const shippedAt = new Date(row.shipped_at)
+  if (Number.isNaN(shippedAt.getTime())) return null
+  const endValue = row.arrived_confirm_at ? new Date(row.arrived_confirm_at) : new Date(nowTick.value)
+  if (Number.isNaN(endValue.getTime())) return null
+  return Math.max(endValue.getTime() - shippedAt.getTime(), 0)
+}
+
+function summarizeCollection(values, visibleCount = 3) {
+  const normalizedValues = (values || []).filter(Boolean)
+  if (!normalizedValues.length) return '—'
+  if (normalizedValues.length <= visibleCount) {
+    return normalizedValues.join('、')
+  }
+  const visibleValues = normalizedValues.slice(0, visibleCount)
+  return `${visibleValues.join('、')} 等${normalizedValues.length}项`
+}
+
 function formatDeliveryElapsedDisplay(row) {
   if (!row || row.status === 'cancelled') return '—'
   return row.delivery_elapsed_label || formatElapsedLabel(row.shipped_at) || '—'
+}
+
+function getAbnormalLabel(row) {
+  if (!row?.abnormal_flag) return ''
+  const shippedQty = Number(row.shipped_qty ?? 0)
+  const arrivedQty = row.arrived_qty == null ? null : Number(row.arrived_qty)
+  const receivedQty = row.received_qty == null ? null : Number(row.received_qty)
+  if (receivedQty != null && arrivedQty != null && receivedQty < arrivedQty) return '少接收'
+  if (arrivedQty != null && arrivedQty < shippedQty) return '少到货'
+  return '异常'
 }
 
 function statusClass(status) {
@@ -303,9 +458,54 @@ function syncActionForms(row) {
   warehouseForm.remark = row.warehouse_remark || ''
 }
 
+function isDeliverySelected(deliveryId) {
+  return selectedDeliveryIds.value.includes(String(deliveryId))
+}
+
 function selectDelivery(row) {
   selectedDeliveryId.value = String(row.id)
   syncActionForms(row)
+}
+
+function toggleDeliverySelection(row) {
+  const deliveryId = String(row.id)
+  if (isDeliverySelected(deliveryId)) {
+    selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => id !== deliveryId)
+    if (selectedDeliveryId.value === deliveryId) {
+      selectedDeliveryId.value = selectedDeliveryIds.value[0] || ''
+      const nextSelected = deliveries.value.find((item) => String(item.id) === selectedDeliveryId.value)
+      if (nextSelected) {
+        syncActionForms(nextSelected)
+      }
+    }
+    return
+  }
+  selectedDeliveryIds.value = [...selectedDeliveryIds.value, deliveryId]
+  selectDelivery(row)
+}
+
+function toggleSelectAllPendingWarehouse(event) {
+  const checked = Boolean(event?.target?.checked)
+  if (checked) {
+    const selectedIdSet = new Set(selectedDeliveryIds.value)
+    for (const deliveryId of pendingWarehouseDeliveryIds.value) {
+      selectedIdSet.add(deliveryId)
+    }
+    selectedDeliveryIds.value = Array.from(selectedIdSet)
+    if (!selectedDeliveryId.value && pendingWarehouseSelectedDeliveries.value.length) {
+      selectDelivery(pendingWarehouseSelectedDeliveries.value[0])
+    }
+    return
+  }
+  const pendingSet = new Set(pendingWarehouseDeliveryIds.value)
+  selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => !pendingSet.has(id))
+  if (selectedDeliveryId.value && !selectedDeliveryIds.value.includes(selectedDeliveryId.value)) {
+    selectedDeliveryId.value = selectedDeliveryIds.value[0] || ''
+    const nextSelected = deliveries.value.find((item) => String(item.id) === selectedDeliveryId.value)
+    if (nextSelected) {
+      syncActionForms(nextSelected)
+    }
+  }
 }
 
 async function loadOptions() {
@@ -342,13 +542,22 @@ async function loadDeliveries() {
       pipeModelId: filters.pipeModelId,
       status: filters.status,
       shipmentNo: filters.shipmentNo,
+      orderNo: filters.orderNo,
+      vehiclePlateNo: filters.vehiclePlateNo,
     })
     deliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
+    const availableIdSet = new Set(deliveries.value.map((row) => String(row.id)))
+    selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => availableIdSet.has(id))
     const keepSelected = deliveries.value.find((row) => String(row.id) === selectedDeliveryId.value)
     if (keepSelected) {
       syncActionForms(keepSelected)
+    } else if (selectedDeliveryIds.value.length > 0) {
+      const firstSelected = deliveries.value.find((row) => String(row.id) === selectedDeliveryIds.value[0])
+      if (firstSelected) {
+        selectDelivery(firstSelected)
+      }
     } else if (deliveries.value.length > 0) {
-      selectDelivery(deliveries.value[0])
+      selectedDeliveryId.value = ''
     } else {
       selectedDeliveryId.value = ''
     }
@@ -356,6 +565,7 @@ async function loadDeliveries() {
     pageError.value = error?.message || '读取库管台账失败'
     deliveries.value = []
     selectedDeliveryId.value = ''
+    selectedDeliveryIds.value = []
   } finally {
     loading.value = false
   }
@@ -377,19 +587,23 @@ function resetFilters() {
   filters.pipeModelId = ''
   filters.status = ''
   filters.shipmentNo = ''
+  filters.orderNo = ''
+  filters.vehiclePlateNo = ''
   loadDeliveries()
 }
 
 async function submitWarehouse() {
-  if (!selectedDelivery.value) return
+  if (!pendingWarehouseSelectedDeliveries.value.length) return
   actionLoading.value = true
   pageError.value = ''
   pageMessage.value = ''
   try {
-    await confirmTubeWarehouseDeliveryWarehouse(projectKey, selectedDelivery.value.id, {
-      remark: warehouseForm.remark || '',
-    })
-    pageMessage.value = '库管确认已提交'
+    for (const row of pendingWarehouseSelectedDeliveries.value) {
+      await confirmTubeWarehouseDeliveryWarehouse(projectKey, row.id, {
+        remark: warehouseForm.remark || '',
+      })
+    }
+    pageMessage.value = `库管确认已提交，共处理 ${pendingWarehouseSelectedDeliveries.value.length} 条记录。`
     await loadDeliveries()
   } catch (error) {
     pageError.value = error?.message || '库管确认失败'
@@ -443,6 +657,7 @@ onBeforeUnmount(() => {
 .input, .textarea { width: 100%; box-sizing: border-box; border: 1px solid rgba(15, 23, 42, 0.16); border-radius: 10px; padding: 10px 12px; font: inherit; background: #fff; color: var(--text); }
 .textarea { resize: vertical; }
 .filter-actions, .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.form-actions { grid-column: 1 / -1; align-items: center; }
 .stats-card { margin-top: 0; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .stat-box { border: 1px solid rgba(15, 23, 42, 0.1); background: rgba(255, 255, 255, 0.7); border-radius: 12px; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -457,12 +672,14 @@ onBeforeUnmount(() => {
 .table tbody tr.selected { background: rgba(59, 130, 246, 0.1); }
 .tiny { padding: 6px 10px; font-size: 12px; }
 .status-pill { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font-size: 12px; line-height: 1; border: 1px solid transparent; }
+.status-pill-group { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .status-warn { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
 .status-info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
 .status-secondary { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
 .status-success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
 .status-danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 .status-neutral { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
+.status-abnormal { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
 .action-panel { display: flex; flex-direction: column; gap: 16px; }
 .action-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .action-summary > div { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(248, 250, 252, 0.85); border: 1px solid rgba(15, 23, 42, 0.08); }

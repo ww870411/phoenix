@@ -42,6 +42,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     cancel_delivery_record,
     create_delivery_record,
     build_delivery_code,
+    get_next_shipment_sequence,
     update_delivery_identifiers,
     get_delivery_record_basic,
     get_shipment_owner,
@@ -51,6 +52,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     list_plan_totals,
     format_delivery_elapsed,
     list_usage_totals,
+    sync_shipment_vehicle_plate,
     update_delivery_arrival_record,
     update_delivery_receipt_record,
     update_delivery_warehouse_record,
@@ -105,6 +107,7 @@ class SupplyDeliveryCreatePayload(BaseModel):
     shipped_qty: float = Field(ge=0.01)
     shipped_at: datetime
     shipment_no: str = ""
+    vehicle_plate_no: str = ""
     ship_contact_name: str = ""
     ship_contact_phone: str = ""
     ship_remark: str = ""
@@ -121,6 +124,7 @@ class SupplyDeliveryBatchCreatePayload(BaseModel):
     supply_entity_id: str
     shipped_at: datetime
     shipment_no: str = ""
+    vehicle_plate_no: str = ""
     ship_contact_name: str = ""
     ship_contact_phone: str = ""
     items: List[SupplyDeliveryBatchItemInput]
@@ -464,21 +468,33 @@ def _resolve_shipment_no_for_create(
     supply_entity_id: str,
     supply_code: str,
     shipped_at: datetime,
-    delivery_id: int,
-) -> tuple[str, bool]:
+    requested_vehicle_plate_no: str = "",
+) -> tuple[str, bool, str]:
     normalized_requested = str(requested_shipment_no or "").strip().upper()
+    normalized_requested_vehicle_plate_no = str(requested_vehicle_plate_no or "").strip().upper()
     if normalized_requested:
         shipment_owner = get_shipment_owner(normalized_requested)
         if not shipment_owner:
             raise HTTPException(status_code=422, detail="指定的运输车次号不存在，无法继续沿用。")
         if shipment_owner.get("supply_entity_id") != supply_entity_id:
             raise HTTPException(status_code=422, detail="运输车次号所属供给主体与当前发货主体不一致。")
-        return normalized_requested, True
-    return build_shipment_no(
-        delivery_id,
-        shipped_at=shipped_at,
+        existing_vehicle_plate_no = str(shipment_owner.get("vehicle_plate_no") or "").strip().upper()
+        if existing_vehicle_plate_no and normalized_requested_vehicle_plate_no and existing_vehicle_plate_no != normalized_requested_vehicle_plate_no:
+            raise HTTPException(status_code=422, detail="当前运输车次号已登记其他车牌号，不能填写不一致的车牌号。")
+        return normalized_requested, True, existing_vehicle_plate_no or normalized_requested_vehicle_plate_no
+    next_sequence = get_next_shipment_sequence(
         supply_code=supply_code,
-    ), False
+        shipped_at=shipped_at,
+    )
+    return (
+        build_shipment_no(
+            next_sequence,
+            shipped_at=shipped_at,
+            supply_code=supply_code,
+        ),
+        False,
+        normalized_requested_vehicle_plate_no,
+    )
 
 
 def _create_supply_delivery_entry(
@@ -493,6 +509,7 @@ def _create_supply_delivery_entry(
     ship_contact_name: str,
     ship_contact_phone: str,
     ship_remark: str,
+    vehicle_plate_no: str = "",
     requested_shipment_no: str = "",
 ) -> Dict[str, Any]:
     supply_entity_code_map = _build_supply_entity_code_map(config_payload)
@@ -503,6 +520,7 @@ def _create_supply_delivery_entry(
         supply_entity_id=supply_entity_id,
         order_no="",
         shipment_no="",
+        vehicle_plate_no="",
         station_id=station_id,
         pipe_model_id=pipe_model_id,
         shipped_qty=shipped_qty,
@@ -518,12 +536,12 @@ def _create_supply_delivery_entry(
         supply_code=supply_code,
         station_code=station_code,
     )
-    shipment_no, shipment_reused = _resolve_shipment_no_for_create(
+    shipment_no, shipment_reused, resolved_vehicle_plate_no = _resolve_shipment_no_for_create(
         requested_shipment_no=requested_shipment_no,
         supply_entity_id=supply_entity_id,
         supply_code=supply_code,
         shipped_at=shipped_at,
-        delivery_id=delivery_id,
+        requested_vehicle_plate_no=vehicle_plate_no,
     )
     update_delivery_identifiers(
         delivery_id,
@@ -531,10 +549,16 @@ def _create_supply_delivery_entry(
         shipment_no=shipment_no,
         operator=session.username,
     )
+    sync_shipment_vehicle_plate(
+        shipment_no=shipment_no,
+        vehicle_plate_no=resolved_vehicle_plate_no,
+        operator=session.username,
+    )
     return {
         "delivery_id": delivery_id,
         "order_no": order_no,
         "shipment_no": shipment_no,
+        "vehicle_plate_no": resolved_vehicle_plate_no,
         "shipment_reused": shipment_reused,
         "delivery_code": order_no,
     }
@@ -761,6 +785,7 @@ def create_supply_management_delivery(
         ship_contact_name=payload.ship_contact_name,
         ship_contact_phone=payload.ship_contact_phone,
         ship_remark=payload.ship_remark,
+        vehicle_plate_no=payload.vehicle_plate_no,
         requested_shipment_no=payload.shipment_no,
     )
     return {
@@ -797,6 +822,7 @@ def create_supply_management_delivery_batch(
             ship_contact_name=payload.ship_contact_name,
             ship_contact_phone=payload.ship_contact_phone,
             ship_remark=item.ship_remark,
+            vehicle_plate_no=payload.vehicle_plate_no,
             requested_shipment_no=current_shipment_no,
         )
         if not current_shipment_no:
@@ -806,6 +832,7 @@ def create_supply_management_delivery_batch(
         "ok": True,
         "project_key": PROJECT_KEY,
         "shipment_no": current_shipment_no,
+        "vehicle_plate_no": created_rows[0].get("vehicle_plate_no", "") if created_rows else "",
         "shipment_reused": bool(shared_shipment_no),
         "rows": created_rows,
     }
@@ -864,6 +891,8 @@ def get_warehouse_management_deliveries(
     supply_entity_id: str = "",
     pipe_model_id: str = "",
     shipment_no: str = "",
+    order_no: str = "",
+    vehicle_plate_no: str = "",
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
@@ -880,6 +909,8 @@ def get_warehouse_management_deliveries(
     normalized_station_id = str(station_id or "").strip()
     normalized_status = str(status or "").strip()
     normalized_shipment_no = str(shipment_no or "").strip().upper()
+    normalized_order_no = str(order_no or "").strip().upper()
+    normalized_vehicle_plate_no = str(vehicle_plate_no or "").strip().upper()
     filtered_rows: List[Dict[str, Any]] = []
     for row in rows:
         if normalized_supply_entity_id and row["supply_entity_id"] != normalized_supply_entity_id:
@@ -891,6 +922,10 @@ def get_warehouse_management_deliveries(
         if normalized_status and row["status"] != normalized_status:
             continue
         if normalized_shipment_no and str(row.get("shipment_no") or "").strip().upper() != normalized_shipment_no:
+            continue
+        if normalized_order_no and normalized_order_no not in str(row.get("order_no") or row.get("delivery_code") or "").strip().upper():
+            continue
+        if normalized_vehicle_plate_no and normalized_vehicle_plate_no not in str(row.get("vehicle_plate_no") or "").strip().upper():
             continue
         filtered_rows.append(row)
     return {"ok": True, "project_key": PROJECT_KEY, "rows": filtered_rows}
@@ -1160,7 +1195,11 @@ def get_demand_management_pending_arrivals(
 @router.get("/demand-management/logistics-records", summary="读取需求侧物流确认记录")
 def get_demand_management_logistics_records(
     station_id: str,
+    order_no: str = "",
     shipment_no: str = "",
+    pipe_model_id: str = "",
+    shipped_date: str = "",
+    arrived_date: str = "",
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
@@ -1179,10 +1218,32 @@ def get_demand_management_logistics_records(
         for row in rows
         if row.get("station_id") == station_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse"}
     ]
+    normalized_order_no = str(order_no or "").strip().upper()
     normalized_shipment_no = str(shipment_no or "").strip().upper()
+    normalized_pipe_model_id = _normalize_pipe_model_id(pipe_model_id)
+    normalized_shipped_date = str(shipped_date or "").strip()
+    normalized_arrived_date = str(arrived_date or "").strip()
+    if normalized_order_no:
+        filtered_rows = [
+            row
+            for row in filtered_rows
+            if normalized_order_no in str(row.get("order_no") or row.get("delivery_code") or "").strip().upper()
+        ]
     if normalized_shipment_no:
         filtered_rows = [
             row for row in filtered_rows if str(row.get("shipment_no") or "").strip().upper() == normalized_shipment_no
+        ]
+    if normalized_pipe_model_id:
+        filtered_rows = [
+            row for row in filtered_rows if _normalize_pipe_model_id(row.get("pipe_model_id")) == normalized_pipe_model_id
+        ]
+    if normalized_shipped_date:
+        filtered_rows = [
+            row for row in filtered_rows if str(row.get("shipped_at") or "").strip()[:10] == normalized_shipped_date
+        ]
+    if normalized_arrived_date:
+        filtered_rows = [
+            row for row in filtered_rows if str(row.get("arrived_confirm_at") or "").strip()[:10] == normalized_arrived_date
         ]
     return {
         "ok": True,

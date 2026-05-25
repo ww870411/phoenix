@@ -8871,12 +8871,15 @@
   - 单条与批量都复用同一套后端编号/校验逻辑
 - 前端供给页已改为：
   - 表单只读展示“订单号/运输车次号”
-  - 通过“继续当前车次 / 新开车次”控制是否沿用 `shipment_no`
-  - 支持先把多条明细加入“待提交明细”，再一次性提交当前车次
+  - 发货时间改为“提交当前车次时自动取当前时间”，不再固定为页面初始加载时刻
+  - 取消表单内“继续当前车次 / 新开车次”双按钮，改为只通过发货记录中的“继续该车次 / 取消继续车次”切换车次上下文
+  - 必须先把每条明细加入“待提交明细”，再一次性提交当前车次
+  - 当前正在继续的车次按钮会以高亮样式显示，增强用户感知
+  - 提交当前车次成功后，默认恢复为“新车次”上下文，不再自动继续上一次车次
   - 需求管理页物流记录现已展示“订单号”“运输车次号”，并支持按 `shipment_no` 筛选当前换热站记录
   - 库房管理页现已新增“运输车次号”筛选，并在到货列表、选中明细摘要中展示 `order_no` / `shipment_no`
   - 供给页负责生成与复用车次，需求页与库房页只负责按车次检索和展示，不再分裂出第二套车次逻辑
-  - 发货记录表增加“继续此车次”按钮，避免人工输入与多套编号逻辑并存
+  - 发货记录表已将“继续此车次”统一为“继续该车次”，并在当前已选车次上显示“取消继续车次”
 - 全局管理页已支持维护 `code`：
   - 供给主体区块新增“主体编码”
   - 换热站区块新增“站点编码”
@@ -8884,5 +8887,164 @@
 - 上述 `order_no` / `shipment_no` 口径与最新页面链路，已同步回写到：
   - `configs/5.24_tube项目建设方案_v5.2_物流链管理版.md`
   - `configs/5.24_tube项目完整构建流程计划_v5.2执行版.md`
+- 后端 `shipment_no` 生成逻辑已进一步收口：
+  - 不再直接使用单条发货记录 `id` 作为车次序号来源
+  - 改为按“供给主体 code + 发货日期”独立查询当前最大车次流水后连续递增
+  - 因此同一车次包含多条明细时，下一次新建车次号不会再因为明细条数而跳号
+- 需求管理页“物流确认记录”当前已重新接入显式筛选区：
+  - 支持按 `order_no`、`shipment_no`、`pipe_model_id`、`shipped_date`、`arrived_date` 查询
+  - 改为“查询记录 / 重置筛选”按钮触发，不再采用输入即请求
+  - 前端统一传参，后端统一在物流记录接口内过滤，不再分裂成本地第二套筛选逻辑
+- 需求管理页“物流确认记录”表格已新增“确认到货时间”列，直接展示后端已有 `arrived_confirm_at` 字段。
+- 同一区域已同步重排版式：
+  - 筛选区改为更紧凑的 5 项工具条
+  - 物流表格增加代码列、时间列、数字列的专用样式
+  - 操作按钮区改为更稳定的横向布局，减轻拥挤感
+  - “状态”列已放宽并禁止换行，避免状态文案占成多行
+  - 订单号、运输车次号保留等宽字体，但已恢复正常字号，不再缩小显示
+- 需求管理页“物流确认记录”区域另修复一处前端渲染错误：
+  - 模板误引用未定义的 `deliveryStatusLabelMap`
+  - 当记录状态为 `pending_warehouse` 等非按钮态时，会直接抛出渲染异常并让页面停留在加载态
+  - 当前已统一改为复用现有 `getDeliveryStatusLabel()` 输出状态文案
+- 需求管理页“确认量（米）”单元格已修复重复数值展示：
+  - 之前输入框条件渲染后，静态数值仍无条件继续显示
+  - 当前已改为仅在非可编辑状态下显示静态确认量
+- `configs/5.24_tube项目完整构建流程计划_v5.2执行版.md` 已按截至 2026-05-25 的真实状态更新进度相关章节：
+  - 刷新 `17.6`、`17.7`、`17.11`
+  - 修正 `20.4`、`20.5`、`20.6` 中已过时的车次与筛选描述
 - 尚未完成的部分：
   - 若后续需要“编辑已暂存批量明细”或“按车次整批撤销”，仍需补专门交互与规则
+## 2026-05-25 发货与确认流程现状梳理
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮仅做方案文档、现有实现与 Serena 记忆的对齐梳理，未修改前后端业务代码。
+- 本轮确认的主流程现状：
+  - 供给侧已支持“先加入待提交明细，再统一提交当前车次”的批量发货流程。
+  - 单次批量提交下的全部发货记录共用同一个 `shipment_no`，但每条记录仍各自生成唯一 `order_no`。
+  - 到货确认、施工接收、库管确认三类动作，当前都严格按单条 `delivery_id` 执行，不按 `shipment_no` 批量推进状态。
+  - 当前状态机仍为：`pending_arrival -> pending_receive -> pending_warehouse -> completed`，撤销仅允许 `pending_arrival`。
+- 本轮确认的页面与接口对应关系：
+  - 供给页 `SupplyManagementView.vue`：负责批量发货暂存、提交当前车次、继续已有车次、撤销发货。
+  - 需求页 `DemandManagementView.vue`：负责物流确认记录查询、到货确认、施工接收，并已恢复 `order_no` / `shipment_no` / 型号 / 发货日期 / 到货日期筛选。
+  - 库管页 `WarehouseManagementView.vue`：只负责 `pending_warehouse` 状态下的库管确认，不再承接到货确认或施工接收替代入口。
+  - 后端接口主入口为 `backend/projects/insulation_pipe_supply_2026/api/workspace.py`，状态流转约束在 `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`。
+- 当前仍需继续完善的点：
+  - 需求页、库管页虽然已支持 `shipment_no` 展示与筛选，但确认动作仍偏“单条人工处理”，缺少按车次视角的辅助汇总与异常提示。
+  - 方案中强调的超时提醒、数量差异、风险提示，目前更多停留在文档目标和局部字段准备阶段，尚未形成完整 dashboard/预警闭环。
+  - 二期预留事项“确认后反向回退”仍未开放，当前继续保持第一阶段禁止回退口径。
+## 2026-05-25 发货车牌号字段接入
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮新增字段：`vehicle_plate_no`，中文定义为“车牌号”，按运输车次维度选填。
+- 数据层设计：
+  - 字段落在 `tube.tube_delivery` 表中，便于继续复用现有发货主表，不额外新建车次主表。
+  - 同一 `shipment_no` 下要求车牌号一致；后端在继续已有车次时会校验这一点。
+- 交互设计：
+  - 供给页发货表单新增“车牌号（选填）”输入框。
+  - 新建车次时可直接填写，也可留空。
+  - 继续已有车次时：
+    - 若该车次已登记车牌号，则自动带出并锁定；
+    - 若该车次尚未登记车牌号，则允许本次补录，提交后由后端回填整个车次。
+- 展示链路：
+  - 供给页发货记录表新增车牌号列。
+  - 需求页物流确认记录新增车牌号列。
+  - 库管页台账表与选中记录摘要新增车牌号展示。
+- 迁移说明：
+  - `tube_schema_init.sql` 已补字段定义与注释。
+  - 若运行环境中的 `tube.tube_delivery` 已存在，仍需补执行一次 `ALTER TABLE tube.tube_delivery ADD COLUMN vehicle_plate_no VARCHAR(32);` 后才会真正生效。
+## 2026-05-25 库管页筛选与批量确认收口
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮修正了库管页“选中”按钮无实际批量意义的问题，改为真正可用的勾选式多选。
+- 新增筛选项：
+  - 单号 `order_no`
+  - 车牌号 `vehicle_plate_no`
+- 当前库管页交互已收口为：
+  - 台账首列改为复选框，不再是无状态的“选中”按钮。
+  - 复选框只出现在 `pending_warehouse`（已接收待库管）记录前，其他状态只显示占位符。
+  - 表头支持一键勾选当前列表中全部 `pending_warehouse` 记录。
+  - 右侧处置区按“已选记录”工作，可对勾选的全部 `pending_warehouse` 记录一次性提交库管确认。
+  - “选中记录处置”已从单条详情残留样式改为多选汇总面板；当前按最新口径仅保留 4 项：已选记录数、总发货长度、总接收长度、平均在途时长。
+  - 当前批量确认仍复用单条确认接口逐条提交，不额外新增后端批量状态推进接口。
+- 后端接口同步支持：
+  - `/warehouse-management/deliveries?order_no=...`
+  - `/warehouse-management/deliveries?vehicle_plate_no=...`
+## 2026-05-25 到货确认量上限收口
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 当前核对结果：
+  - 后端服务层 `update_delivery_arrival_record()` 原本就已限制：单条订单的 `arrived_qty` 不能大于 `shipped_qty`。
+  - 初始化 SQL `chk_tube_delivery_arrived_qty_range` 也已限制：`arrived_qty <= shipped_qty`。
+- 本轮新增前端收口：
+  - 需求页“确认到货量”输入框增加 `max=发货量`
+  - 点击“确认到货”前增加显式前端校验，超出时直接提示“确认到货量不能大于该订单的发货量”
+- 当前结论：
+  - 这条业务规则现在已经形成“前端输入限制 + 前端提交拦截 + 后端服务校验 + 数据库约束”四层一致口径。
+## 2026-05-25 数量差异异常标记启用
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮启用现有字段 `abnormal_flag`，规则如下：
+  - `arrived_qty < shipped_qty` 时自动置为异常
+  - `received_qty < arrived_qty` 时自动置为异常
+- 当前状态口径保持不变：
+  - 少到货后状态仍推进为 `pending_receive`
+  - 少接收后状态仍推进为 `pending_warehouse`
+  - 即状态机继续表示流程阶段，`abnormal_flag` 单独表示数量差异异常
+- 当前前端展示已补齐：
+  - 供给页发货记录表已正确映射并显示 `到货量 / 接收量`，不再因前端字段未映射而空白
+  - 供给页状态旁按差异类型显示“少到货 / 少接收”，不再统一写“异常”
+  - 需求页物流确认记录状态旁按差异类型显示“少到货 / 少接收”
+  - 库管页台账状态旁按差异类型显示“少到货 / 少接收”
+## 2026-05-25 供给页发货记录表列宽修正
+
+- 用户进一步明确：问题不在于是否“分组展示”，而在于原表格部分字段列宽过窄、内容被挤压换行，导致整行发散难读。
+- 已按该口径修正 `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`：
+  - 恢复为原有列式表格结构，不再使用分组块式展示
+  - 通过 `colgroup` 重新分配列宽，重点放宽 `订单号 / 车次号 / 车牌号 / 型号 / 发货时间 / 状态 / 备注 / 操作`
+  - 编号列、时间列、数量列改为尽量不换行显示
+  - 名称列、备注列保留正常换行，避免整行被压缩成串行碎片
+  - 状态列与操作列内容进一步收紧为单行横向排列，避免标签和按钮在单元格内换行堆叠
+  - 操作列中的“不可撤销”提示进一步强制为单行显示，避免在窄列中拆成两行
+  - 当前表格布局从 `table-layout: fixed` 调整为“自动分配宽度 + 关键列最小宽度”模式，让 `状态 / 备注 / 操作` 可随内容更自然伸缩，减少相互挤压和重叠
+- 本轮仍仅调整前端模板与样式，不涉及后端接口、字段或业务逻辑变化。
+## 2026-05-25 库管页零值数量显示收口
+
+- 用户要求：库管页台账中的“到货量”“接收量”若为 `0`，前端应显示为横杠，而不是数字 `0`。
+- 已在 `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` 收口：
+  - 列表中的 `arrived_qty`、`received_qty` 改为走 `formatOptionalAmount(...)`
+  - 显示规则为：非数值或 `0` 显示 `—`，正数继续按原格式显示
+- 本轮仅调整前端展示口径，不改变后端真实数据。

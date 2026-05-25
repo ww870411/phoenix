@@ -122,12 +122,12 @@
               :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
               @click="appendDraftDelivery"
             >
-              加入本车次
+              加入当前车次
             </button>
             <button
               type="button"
               class="primary-button"
-              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
+              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId || !draftDeliveryItems.length"
               @click="submitDeliveryBatch"
             >
               {{ submitDeliveryLoading ? '提交中...' : '提交当前车次' }}
@@ -188,7 +188,7 @@
 
           <label class="field">
             <span>发货时间</span>
-            <input v-model="deliveryForm.shippedAt" type="datetime-local" />
+            <input value="提交当前车次时自动取当前时间" type="text" disabled />
           </label>
 
           <label class="field">
@@ -201,31 +201,40 @@
             <input v-model.trim="deliveryForm.shipContactPhone" type="text" maxlength="30" placeholder="联系电话" />
           </label>
 
+          <label class="field">
+            <span>车牌号（选填）</span>
+            <input
+              v-model.trim="deliveryForm.vehiclePlateNo"
+              type="text"
+              maxlength="32"
+              placeholder="同一车次只需填写一次"
+              :disabled="currentReusedShipmentPlateLocked"
+            />
+          </label>
+
           <label class="field field-span-2">
             <span>备注</span>
             <input v-model.trim="deliveryForm.shipRemark" type="text" maxlength="120" placeholder="发货备注" />
           </label>
 
-          <div class="field field-span-2 shipment-mode-row">
-            <span>车次控制</span>
-            <div class="shipment-mode-actions">
-              <button type="button" class="btn ghost" :class="{ active: deliveryForm.reuseCurrentShipment }" @click="continueCurrentShipment">
-                继续当前车次
-              </button>
-              <button type="button" class="btn ghost" :disabled="!deliveryForm.shipmentNo" @click="startNewShipment">
-                新开车次
-              </button>
-              <span class="muted-text">
-                {{ deliveryForm.reuseCurrentShipment && deliveryForm.shipmentNo ? '本次提交将沿用当前运输车次号。' : '本次提交将由系统自动生成新的运输车次号。' }}
-              </span>
-            </div>
+          <div class="field field-span-2">
+            <span>车次说明</span>
+            <span class="muted-text">
+              {{
+                deliveryForm.reuseCurrentShipment && deliveryForm.shipmentNo
+                  ? currentReusedShipmentPlateLocked
+                    ? `当前将继续运输车次号 ${deliveryForm.shipmentNo}，并沿用已登记车牌号 ${deliveryForm.vehiclePlateNo}。`
+                    : `当前将继续运输车次号 ${deliveryForm.shipmentNo}。若该车次尚未登记车牌号，可在本次一起补录。`
+                  : '当前未指定继续车次，提交时将自动新建运输车次号；车牌号可选填，同一车次只需填写一次。'
+              }}
+            </span>
           </div>
         </div>
 
         <div class="batch-box">
           <div class="batch-box-header">
             <strong>待提交明细</strong>
-            <span class="muted-text">当前车次下已暂存 {{ draftDeliveryItems.length }} 条，提交当前车次时将连同当前表单这一条一起提交。</span>
+            <span class="muted-text">当前车次下已暂存 {{ draftDeliveryItems.length }} 条，提交当前车次时将一次性提交这 {{ draftDeliveryItems.length }} 条明细。</span>
           </div>
           <div v-if="!draftDeliveryItems.length" class="empty-box compact">当前没有已暂存明细。</div>
           <div v-else class="table-wrap">
@@ -266,15 +275,34 @@
         <div v-else-if="deliveriesError" class="error-box">{{ deliveriesError }}</div>
         <div v-else-if="!deliveryRows.length" class="empty-box">当前没有发货记录。</div>
         <div v-else class="table-wrap">
-          <table class="data-table">
+          <table class="data-table delivery-record-table">
+            <colgroup>
+              <col class="col-order" />
+              <col class="col-shipment" />
+              <col class="col-plate" />
+              <col class="col-supply" />
+              <col class="col-station" />
+              <col class="col-model" />
+              <col class="col-qty" />
+              <col class="col-qty" />
+              <col class="col-qty" />
+              <col class="col-time" />
+              <col class="col-elapsed" />
+              <col class="col-status" />
+              <col class="col-remark" />
+              <col class="col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>订单号</th>
                 <th>运输车次号</th>
+                <th>车牌号</th>
                 <th>供给主体</th>
                 <th>换热站</th>
                 <th>型号</th>
                 <th>发货量（米）</th>
+                <th>到货量（米）</th>
+                <th>接收量（米）</th>
                 <th>发货时间</th>
                 <th>在途时长</th>
                 <th>状态</th>
@@ -284,37 +312,45 @@
             </thead>
             <tbody>
               <tr v-for="row in deliveryRows" :key="row.deliveryId">
-                <td>{{ row.deliveryCode }}</td>
-                <td>{{ row.shipmentNo || '—' }}</td>
-                <td>{{ row.supplyEntityName }}</td>
-                <td>{{ row.stationName }}</td>
-                <td>{{ row.pipeModelName }}</td>
-                <td>{{ formatNumber(row.shippedQty) }}</td>
-                <td>{{ row.shippedAtDisplay || '—' }}</td>
-                <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
+                <td class="cell-nowrap">{{ row.deliveryCode }}</td>
+                <td class="cell-nowrap">{{ row.shipmentNo || '—' }}</td>
+                <td class="cell-nowrap">{{ row.vehiclePlateNo || '—' }}</td>
+                <td class="cell-wrap">{{ row.supplyEntityName }}</td>
+                <td class="cell-wrap">{{ row.stationName }}</td>
+                <td class="cell-wrap">{{ row.pipeModelName }}</td>
+                <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
+                <td class="cell-number">{{ formatNullableNumber(row.arrivedQty) }}</td>
+                <td class="cell-number">{{ formatNullableNumber(row.receivedQty) }}</td>
+                <td class="cell-nowrap">{{ row.shippedAtDisplay || '—' }}</td>
+                <td class="cell-nowrap">{{ formatDeliveryElapsedDisplay(row) }}</td>
                 <td>
-                  <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
+                  <div class="status-chip-group">
+                    <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
+                    <span v-if="row.abnormalFlag" class="status-chip status-abnormal">{{ getAbnormalLabel(row) }}</span>
+                  </div>
                 </td>
-                <td>{{ row.shipRemark || row.cancelReason || '—' }}</td>
+                <td class="cell-remark">{{ row.shipRemark || row.cancelReason || '—' }}</td>
                 <td>
-                  <button
-                    v-if="row.shipmentNo"
-                    type="button"
-                    class="btn ghost"
-                    @click="reuseShipment(row)"
-                  >
-                    继续此车次
-                  </button>
-                  <button
-                    v-if="row.status === 'pending_arrival'"
-                    type="button"
-                    class="btn danger-ghost"
-                    :disabled="cancelLoadingIds[row.deliveryId]"
-                    @click="cancelDelivery(row)"
-                  >
-                    {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
-                  </button>
-                  <span v-else class="muted-text">不可撤销</span>
+                  <div class="action-stack">
+                    <button
+                      v-if="row.shipmentNo"
+                      type="button"
+                      :class="['btn', isReusingShipment(row) ? 'active-ghost' : 'ghost']"
+                      @click="toggleShipmentReuse(row)"
+                    >
+                      {{ isReusingShipment(row) ? '取消继续车次' : '继续该车次' }}
+                    </button>
+                    <button
+                      v-if="row.status === 'pending_arrival'"
+                      type="button"
+                      class="btn danger-ghost"
+                      :disabled="cancelLoadingIds[row.deliveryId]"
+                      @click="cancelDelivery(row)"
+                    >
+                      {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
+                    </button>
+                    <span v-else class="muted-text">不可撤销</span>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -404,6 +440,15 @@ const currentShipmentDisplay = computed(() => {
   }
   return '提交后由系统自动生成'
 })
+
+const currentReusedShipmentRow = computed(() => {
+  if (!deliveryForm.value.reuseCurrentShipment || !deliveryForm.value.shipmentNo) {
+    return null
+  }
+  return deliveryRows.value.find((row) => row.shipmentNo === deliveryForm.value.shipmentNo) || null
+})
+
+const currentReusedShipmentPlateLocked = computed(() => Boolean(currentReusedShipmentRow.value?.vehiclePlateNo))
 
 const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
@@ -504,9 +549,9 @@ function createDefaultDeliveryForm() {
     stationId: '',
     pipeModelId: '',
     shipmentNo: '',
+    vehiclePlateNo: '',
     reuseCurrentShipment: false,
     shippedQty: 0,
-    shippedAt: toDateTimeLocalString(new Date()),
     shipContactName: '',
     shipContactPhone: '',
     shipRemark: '',
@@ -544,6 +589,11 @@ function formatNumber(value) {
   if (!Number.isFinite(numeric)) return '0'
   if (Math.abs(numeric - Math.round(numeric)) < 0.0001) return String(Math.round(numeric))
   return numeric.toFixed(2)
+}
+
+function formatNullableNumber(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  return formatNumber(value)
 }
 
 function toDateTimeLocalString(input) {
@@ -606,6 +656,7 @@ function normalizeDeliveryRows(rows) {
     deliveryCode: row.order_no || row.delivery_code || `DEL-${String(row.id ?? '').padStart(5, '0')}`,
     orderNo: row.order_no || row.delivery_code || '',
     shipmentNo: row.shipment_no || '',
+    vehiclePlateNo: row.vehicle_plate_no || '',
     supplyEntityId: row.supply_entity_id || '',
     supplyEntityName: row.supply_entity_name || row.supply_entity_id || '—',
     stationId: row.station_id || '',
@@ -613,6 +664,8 @@ function normalizeDeliveryRows(rows) {
     pipeModelId: row.pipe_model_id || '',
     pipeModelName: row.pipe_model_name || row.pipe_model_id || '—',
     shippedQty: Number(row.shipped_qty ?? 0),
+    arrivedQty: row.arrived_qty == null ? null : Number(row.arrived_qty),
+    receivedQty: row.received_qty == null ? null : Number(row.received_qty),
     shippedAt: row.shipped_at || '',
     shippedAtDisplay: formatDateTimeDisplay(row.shipped_at || ''),
     deliveryElapsedLabel: row.delivery_elapsed_label || '',
@@ -621,8 +674,20 @@ function normalizeDeliveryRows(rows) {
     shipRemark: row.ship_remark || '',
     status: row.status || '',
     statusLabel: getStatusLabel(row.status || ''),
+    abnormalFlag: Boolean(row.abnormal_flag),
     cancelReason: row.cancel_reason || '',
   }))
+}
+
+function getAbnormalLabel(row) {
+  if (!row?.abnormalFlag) return ''
+  if (row.receivedQty != null && row.arrivedQty != null && Number(row.receivedQty) < Number(row.arrivedQty)) {
+    return '少接收'
+  }
+  if (row.arrivedQty != null && Number(row.arrivedQty) < Number(row.shippedQty || 0)) {
+    return '少到货'
+  }
+  return '异常'
 }
 
 function buildCurrentDraftItem() {
@@ -643,10 +708,6 @@ function validateCurrentDeliveryForm() {
   }
   if (Number(deliveryForm.value.shippedQty || 0) <= 0) {
     setActionMessage('error', '发货量必须大于 0。')
-    return false
-  }
-  if (!deliveryForm.value.shippedAt) {
-    setActionMessage('error', '请填写发货时间。')
     return false
   }
   return true
@@ -741,7 +802,7 @@ function appendDraftDelivery() {
   deliveryForm.value.pipeModelId = ''
   deliveryForm.value.shippedQty = 0
   deliveryForm.value.shipRemark = ''
-  setActionMessage('success', `已加入本车次，待提交明细共 ${draftDeliveryItems.value.length} 条。`)
+  setActionMessage('success', `已加入当前车次，待提交明细共 ${draftDeliveryItems.value.length} 条。`)
 }
 
 function removeDraftDelivery(index) {
@@ -749,30 +810,25 @@ function removeDraftDelivery(index) {
 }
 
 async function submitDeliveryBatch() {
-  if (!validateCurrentDeliveryForm()) {
+  if (!draftDeliveryItems.value.length) {
+    setActionMessage('error', '请先将发货明细加入当前车次，再提交当前车次。')
     return
   }
-  const items = [
-    ...draftDeliveryItems.value.map((item) => ({
-      station_id: item.stationId,
-      pipe_model_id: item.pipeModelId,
-      shipped_qty: Number(item.shippedQty || 0),
-      ship_remark: item.shipRemark || '',
-    })),
-    {
-      station_id: deliveryForm.value.stationId,
-      pipe_model_id: deliveryForm.value.pipeModelId,
-      shipped_qty: Number(deliveryForm.value.shippedQty || 0),
-      ship_remark: deliveryForm.value.shipRemark || '',
-    },
-  ]
+  const items = draftDeliveryItems.value.map((item) => ({
+    station_id: item.stationId,
+    pipe_model_id: item.pipeModelId,
+    shipped_qty: Number(item.shippedQty || 0),
+    ship_remark: item.shipRemark || '',
+  }))
   submitDeliveryLoading.value = true
   clearActionMessage()
   try {
+    const submittedAt = new Date()
     const response = await createTubeSupplyManagementDeliveryBatch(PROJECT_KEY, {
       supply_entity_id: deliveryForm.value.supplyEntityId,
       shipment_no: deliveryForm.value.reuseCurrentShipment ? deliveryForm.value.shipmentNo || '' : '',
-      shipped_at: new Date(deliveryForm.value.shippedAt).toISOString(),
+      vehicle_plate_no: deliveryForm.value.vehiclePlateNo || '',
+      shipped_at: submittedAt.toISOString(),
       ship_contact_name: deliveryForm.value.shipContactName || '',
       ship_contact_phone: deliveryForm.value.shipContactPhone || '',
       items,
@@ -787,8 +843,6 @@ async function submitDeliveryBatch() {
     const currentSupplyEntityId = deliveryForm.value.supplyEntityId
     const nextForm = createDefaultDeliveryForm()
     nextForm.supplyEntityId = currentSupplyEntityId
-    nextForm.shipmentNo = shipmentNo || ''
-    nextForm.reuseCurrentShipment = Boolean(shipmentNo)
     nextForm.shipContactName = deliveryForm.value.shipContactName || ''
     nextForm.shipContactPhone = deliveryForm.value.shipContactPhone || ''
     deliveryForm.value = nextForm
@@ -802,27 +856,47 @@ async function submitDeliveryBatch() {
   }
 }
 
-function reuseShipment(row) {
-  if (!row?.shipmentNo) return
-  deliveryForm.value.supplyEntityId = row.supplyEntityId || deliveryForm.value.supplyEntityId
-  deliveryForm.value.shipmentNo = row.shipmentNo
-  deliveryForm.value.reuseCurrentShipment = true
-  setActionMessage('success', `已切换为继续运输车次 ${row.shipmentNo}。`)
+function isReusingShipment(row) {
+  return Boolean(
+    row?.shipmentNo &&
+    deliveryForm.value.reuseCurrentShipment &&
+    deliveryForm.value.shipmentNo &&
+    deliveryForm.value.shipmentNo === row.shipmentNo
+  )
 }
 
-function continueCurrentShipment() {
-  if (!deliveryForm.value.shipmentNo) {
-    setActionMessage('error', '当前没有可沿用的运输车次号，请先提交一条发货记录或从下方记录中选择“继续此车次”。')
+function ensureShipmentSwitchAllowed(nextShipmentNo = '') {
+  if (!draftDeliveryItems.value.length) {
+    return true
+  }
+  const currentShipmentNo = deliveryForm.value.reuseCurrentShipment ? deliveryForm.value.shipmentNo || '' : ''
+  if ((currentShipmentNo || '') === (nextShipmentNo || '')) {
+    return true
+  }
+  setActionMessage('error', '当前车次已有待提交明细，请先提交或移除后再切换车次。')
+  return false
+}
+
+function toggleShipmentReuse(row) {
+  if (!row?.shipmentNo) return
+  if (isReusingShipment(row)) {
+    if (!ensureShipmentSwitchAllowed('')) {
+      return
+    }
+    deliveryForm.value.reuseCurrentShipment = false
+    deliveryForm.value.shipmentNo = ''
+    deliveryForm.value.vehiclePlateNo = ''
+    setActionMessage('success', '已取消继续车次，下一次提交将自动新建运输车次号。')
     return
   }
+  if (!ensureShipmentSwitchAllowed(row.shipmentNo)) {
+    return
+  }
+  deliveryForm.value.supplyEntityId = row.supplyEntityId || deliveryForm.value.supplyEntityId
+  deliveryForm.value.shipmentNo = row.shipmentNo
+  deliveryForm.value.vehiclePlateNo = row.vehiclePlateNo || ''
   deliveryForm.value.reuseCurrentShipment = true
-  setActionMessage('success', `当前将继续沿用运输车次号 ${deliveryForm.value.shipmentNo}。`)
-}
-
-function startNewShipment() {
-  deliveryForm.value.reuseCurrentShipment = false
-  deliveryForm.value.shipmentNo = ''
-  setActionMessage('success', '下一条发货记录将自动生成新的运输车次号。')
+  setActionMessage('success', `已切换为继续该车次 ${row.shipmentNo}。`)
 }
 
 async function cancelDelivery(row) {
@@ -940,21 +1014,10 @@ onBeforeUnmount(() => {
   font-size: 18px;
 }
 
-.shipment-mode-row {
-  align-items: flex-start;
-}
-
-.shipment-mode-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  align-items: center;
-}
-
-.shipment-mode-actions .btn.active {
-  border-color: #1d4ed8;
-  color: #1d4ed8;
-  background: #dbeafe;
+.active-ghost {
+  border-color: #b91c1c;
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
 .batch-box {
@@ -1079,11 +1142,20 @@ onBeforeUnmount(() => {
   color: #334155;
 }
 
+.status-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .status-pending_arrival { background: #dbeafe; color: #1d4ed8; }
 .status-pending_receive { background: #fef3c7; color: #92400e; }
 .status-pending_warehouse { background: #ede9fe; color: #6d28d9; }
 .status-completed { background: #dcfce7; color: #166534; }
 .status-cancelled { background: #fee2e2; color: #b91c1c; }
+.status-abnormal { background: #fff1f2; color: #be123c; }
 
 .loading-text,
 .empty-box {
@@ -1133,6 +1205,124 @@ onBeforeUnmount(() => {
 
 .data-table tr:last-child td {
   border-bottom: none;
+}
+
+.delivery-record-table {
+  min-width: 1540px;
+  table-layout: auto;
+}
+
+.delivery-record-table th,
+.delivery-record-table td {
+  vertical-align: middle;
+  padding: 10px 12px;
+}
+
+.delivery-record-table th {
+  white-space: nowrap;
+}
+
+.delivery-record-table .col-order {
+  width: 140px;
+  min-width: 140px;
+}
+
+.delivery-record-table .col-shipment {
+  width: 150px;
+  min-width: 150px;
+}
+
+.delivery-record-table .col-plate {
+  width: 120px;
+  min-width: 120px;
+}
+
+.delivery-record-table .col-supply {
+  width: 130px;
+  min-width: 130px;
+}
+
+.delivery-record-table .col-station {
+  width: 150px;
+  min-width: 150px;
+}
+
+.delivery-record-table .col-model {
+  width: 170px;
+  min-width: 170px;
+}
+
+.delivery-record-table .col-qty {
+  width: 92px;
+  min-width: 92px;
+}
+
+.delivery-record-table .col-time {
+  width: 170px;
+  min-width: 170px;
+}
+
+.delivery-record-table .col-elapsed {
+  width: 100px;
+  min-width: 100px;
+}
+
+.delivery-record-table .col-status {
+  width: 180px;
+  min-width: 180px;
+}
+
+.delivery-record-table .col-remark {
+  width: auto;
+  min-width: 240px;
+}
+
+.delivery-record-table .col-actions {
+  width: 170px;
+  min-width: 170px;
+}
+
+.delivery-record-table .btn {
+  white-space: nowrap;
+}
+
+.cell-nowrap {
+  white-space: nowrap;
+}
+
+.cell-wrap {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.cell-number {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-remark {
+  white-space: normal;
+  word-break: break-word;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.delivery-record-table td:nth-child(12) {
+  white-space: nowrap;
+}
+
+.action-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.action-stack .muted-text {
+  white-space: nowrap;
 }
 
 .primary-button {

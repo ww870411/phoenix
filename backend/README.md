@@ -4786,3 +4786,98 @@
 - 状态机保持不变：到货确认、施工接收、库管确认仍然按单条 `delivery` 记录推进。
 - 这意味着“同车次多条记录共用同一 `shipment_no`”的基础后端能力已经具备，前端当前通过只读复用方式接入，未开放人工输入。
 - 配置层面，供给主体与换热站均已支持 `code` 字段，并通过全局管理页维护。
+- 2026-05-25 交互收口后，前端批量发货改为“先逐条加入待提交明细，再统一提交当前车次”；后端批量接口口径不变，仍以一次提交请求中的统一 `shipped_at` 作为本车次实际发货时间。
+- `shipment_no` 的序号来源已独立于 `tube_delivery.id`：
+  - 当前改为按“供给主体 code + 发货日期”查询现有最大车次号后连续递增
+  - 因此一个车次下即使包含 5 条发货记录，也只消耗 1 个车次流水号
+- 2026-05-25 需求管理页“物流确认记录”异常加载问题处置后，前端已临时撤下 `shipment_no` 筛选入口；后端物流确认记录接口口径暂不变，仍保留 `station_id + 可选 shipment_no` 的查询能力。
+- 同时确认该问题还叠加了一处前端渲染异常：需求页模板曾引用未定义状态映射，后端接口本身无需改动。
+- 当前需求侧物流确认记录接口已扩展统一筛选能力：支持 `order_no`、`shipment_no`、`pipe_model_id`、`shipped_date`、`arrived_date`，由接口统一过滤后返回。
+- 需求页新增“确认到货时间”展示时，直接复用接口已返回的 `arrived_confirm_at` 字段，后端无需新增额外时间口径。
+- 本轮“状态列放宽、编号字号恢复”属于需求页前端排版调整，后端接口口径不变。
+- “确认量（米）”重复数值问题同样属于需求页前端模板条件渲染问题，后端接口未改动。
+- 执行版流程文档已同步改写截至 2026-05-25 的编号规则、物流记录筛选与页面进度描述，后续后端实现以该文档最新状态为准。
+## 2026-05-25 保温管项目发货与确认链路现状
+
+- 当前后端主入口集中在 `backend/projects/insulation_pipe_supply_2026/api/workspace.py`。
+- 发货与确认链路当前对应关系如下：
+  - `POST /supply-management/deliveries/batch`：按同一 `shipment_no` 批量创建多条发货记录。
+  - `POST /demand-management/deliveries/{delivery_id}/arrival`：按单条记录确认到货。
+  - `POST /demand-management/deliveries/{delivery_id}/receipt`：按单条记录确认施工接收。
+  - `POST /warehouse-management/deliveries/{delivery_id}/warehouse`：按单条记录完成库管确认。
+- 当前服务层状态机约束位于 `services/supply_management_service.py`：
+  - 创建发货时写入 `pending_arrival`
+  - 到货确认后推进到 `pending_receive`
+  - 施工接收后推进到 `pending_warehouse`
+  - 库管确认后推进到 `completed`
+  - 撤销仅允许 `pending_arrival`
+- 当前编号与确认边界继续保持：
+  - `order_no` 为单条记录级编号
+  - `shipment_no` 为运输分组级编号
+  - 三类确认动作都仍按 `delivery_id` 落库，不按 `shipment_no` 批量更新
+- 当前需要继续完善但尚未落地的后端方向：
+  - 面向车次维度的辅助汇总、超时提醒、数量差异提示
+  - dashboard/风险提示接口对发货、到货、施工、库管四段时效的正式聚合输出
+  - 若后续业务要支持“确认后回退”或“按车次整批撤销”，需要单独扩展状态机与留痕规则，不能直接复用现有单条确认接口
+## 2026-05-25 保温管项目车牌号字段
+
+- `tube.tube_delivery` 已新增可选字段 `vehicle_plate_no`，中文定义为“车牌号”。
+- 当前后端口径：
+  - 车牌号按运输车次维度维护，但继续复用现有 `tube_delivery` 主表存储。
+  - 同一 `shipment_no` 下车牌号必须一致。
+  - 若继续已有车次且原车次已登记车牌号，接口会强制沿用该值。
+  - 若继续已有车次但原车次尚未登记车牌号，接口允许本次提交时补录，并回填整个车次。
+- 本轮已接入位置：
+  - `SupplyDeliveryCreatePayload`
+  - `SupplyDeliveryBatchCreatePayload`
+  - `_resolve_shipment_no_for_create()`
+  - `_create_supply_delivery_entry()`
+  - `create_delivery_record()`
+  - `list_delivery_records()`
+  - `get_shipment_owner()`
+  - `sync_shipment_vehicle_plate()`
+- 迁移说明：
+  - `backend/sql/tube_schema_init.sql` 已写入新字段定义，适用于新环境初始化。
+  - 已存在的环境需要额外执行一次：
+    - `ALTER TABLE tube.tube_delivery ADD COLUMN vehicle_plate_no VARCHAR(32);`
+## 2026-05-25 库管页筛选扩展
+
+- `GET /warehouse-management/deliveries` 当前新增两个可选过滤参数：
+  - `order_no`
+  - `vehicle_plate_no`
+- 当前过滤策略保持与需求页一致的轻量口径：
+  - `order_no` 走包含匹配
+  - `vehicle_plate_no` 走包含匹配
+  - `shipment_no` 仍走标准化后的精确匹配
+- 当前库管页批量确认未新增专门后端批处理接口：
+  - 前端通过勾选多条记录后，继续逐条调用现有 `POST /warehouse-management/deliveries/{delivery_id}/warehouse`
+  - 这样能保持现有单条状态机、权限校验和失败提示逻辑不变
+- 前端当前仅允许对 `pending_warehouse` 记录展示勾选框并发起批量库管确认，其余状态不提供勾选入口。
+- 当前库管页右侧面板的汇总统计全部基于前端已加载台账记录聚合计算，按当前口径仅展示：已选记录数、总发货长度、总接收长度、平均在途时长；后端本轮未新增专门的汇总接口。
+## 2026-05-25 到货确认量上限
+
+- 后端原有约束已满足“单条订单确认到货量不能大于发货量”：
+  - 服务层 `update_delivery_arrival_record()` 会拒绝 `arrived_qty > shipped_qty`
+  - 初始化 SQL 约束 `chk_tube_delivery_arrived_qty_range` 要求 `arrived_qty <= shipped_qty`
+- 本轮后端未新增新的服务逻辑，主要是与前端输入限制完成一致性收口。
+## 2026-05-25 数量差异异常标记
+
+- 当前继续复用 `tube.tube_delivery.abnormal_flag`，不新增重复字段。
+- 本轮已接入自动写入规则：
+  - `update_delivery_arrival_record()` 中，若 `arrived_qty < shipped_qty`，则写入 `abnormal_flag = true`
+  - `update_delivery_receipt_record()` 中，若 `received_qty < arrived_qty`，则写入 `abnormal_flag = true`
+- 当前状态与异常的职责分离：
+  - `status` 只表达流程阶段
+  - `abnormal_flag` 表达数量差异类异常
+- 因此“少到货”不会变成新状态，而是表现为：
+  - 状态 = `pending_receive`
+  - `abnormal_flag = true`
+- 因此“少接收”不会变成新状态，而是表现为：
+  - 状态 = `pending_warehouse`
+  - `abnormal_flag = true`
+- 前端当前按后端数量字段直接区分异常类型：
+  - `arrived_qty < shipped_qty` 显示为“少到货”
+  - `received_qty < arrived_qty` 显示为“少接收”
+- 供给页发货记录表已按返回字段正确展示 `arrived_qty / received_qty`，避免出现状态已异常但数量列空白的误导情况。
+- 2026-05-25 补充：供给页“发货记录”表格本轮最终收口为前端列宽、换行规则与自动宽度分配优化，且状态列、操作列及“不可撤销”提示统一单行横排；后端接口返回字段、状态机与数量口径均无变化。
+- 2026-05-25 补充：库管页台账中的 `arrived_qty / received_qty = 0` 当前仅在前端展示层转为横杠，后端数据与接口口径不变。
