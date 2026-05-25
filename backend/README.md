@@ -1,3 +1,12 @@
+## 2026-05-26 tube项目 GlobalManagementView.vue 独立的即时 JSON 语法校验与边框爆红优化
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对全局配置管理控制台中的原始整个 JSON 编辑区进行了独立的即时校验重构。彻底将 JSON 报错状态从 Hook `useTubePageShell` 中解耦，改为使用全新独立的本地变量 `jsonErrorMessage = ref('')` 接管，完美解决了页面聚焦导致全局报错被清空的 bug；同时新增了对 `jsonEditVal` 的毫秒级 `watch` 即时解析校验（Live Linting），使用户增删字符时可以瞬间触发解析提示，且输入框同步爆红高亮，补齐语法后又能瞬间恢复，实现了零盲区的即时语法合规控制。
+
+## 2026-05-25 tube项目全局数据看板 DashboardView.vue 页面从零开发与落地
+
+- 前端对 `insulation_pipe_supply_2026`（内部代号 `tube`）全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 开展了从零构建与高级上卷透视。通过前端高度复用后端极其健壮、完备的 `getTubeSupplyManagementDemandSummary` 和 `getTubeSupplyManagementDeliveries` 接口，在前端无感聚合完成了多维计划、库存、在途、硬缺口、净缺口汇总以及 3 级时效延滞超时扫描大盘；本次追加在前端无缝部署了 `📏 保温管型号供需堆叠图` 和 `🏢 换热站缺口 TOP 10 危险排队图` 的 ECharts 交互可视化对比展示。另外，全面激活了全局管理页底层的“原始整个 JSON 配置物理控制台”，前端与后端的 `POST /global-management/config` 直接联通进行实时保存与覆盖，并就地集成了**亮红色解析阻断警示栏**与 **textarea 猩红边框高亮**，实现了零盲区的即时语法合规提示。
+- 本地静态 Vite 编译构建 100% 绿色通过，零警告零报错。
 
 ## 2026-05-25 tube项目 V5.4 殿堂级 UI/UX 重新设计与核心防错交互重构
 

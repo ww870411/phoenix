@@ -495,11 +495,35 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">原始 JSON 数据预览</div>
-                  <p class="sub block-sub">提供全局数据库种子的只读 JSON 文本预览，用于技术核对底层参数拼载结构。</p>
+                  <div class="card-header">原始 JSON 数据配置控制台</div>
+                  <p class="sub block-sub">直接编辑底层的 JSON 结构并一键落盘。编辑后点击右下角“保存 JSON 配置”，系统将进行实时合法性校验并覆盖全局数据库。</p>
                 </div>
               </div>
-              <textarea :value="configPreviewText" class="json-editor-textarea" readonly spellcheck="false"></textarea>
+              
+              <!-- 本地 JSON 校验错误高亮展示框 -->
+              <div v-if="jsonErrorMessage" class="json-error-banner">
+                <div class="json-error-banner__header">
+                  <strong>🚨 配置解析阻断：输入语法错误</strong>
+                  <button class="btn link-btn" style="color: #ffffff !important;" @click="jsonErrorMessage = ''">×</button>
+                </div>
+                <div class="json-error-banner__body">{{ jsonErrorMessage }}</div>
+              </div>
+
+              <textarea 
+                v-model="jsonEditVal" 
+                :class="['json-editor-textarea', { 'has-error': jsonErrorMessage }]" 
+                spellcheck="false" 
+                placeholder="原始整个 JSON 结构在此加载并允许编辑..."
+              ></textarea>
+              <div class="json-editor-actions">
+                <span class="json-editor-hint">⚠️ 请极其谨慎操作！JSON 配置格式损坏（如逗号、中括号缺失）可能会直接导致平台报错！</span>
+                <div class="action-btn-group">
+                  <button class="btn ghost" type="button" @click="resetJsonEditVal">重置当前编辑</button>
+                  <button class="btn primary" type="button" :disabled="savingJson" @click="handleSaveRawJson">
+                    {{ savingJson ? '正在提交配置...' : '保存 JSON 配置' }}
+                  </button>
+                </div>
+              </div>
             </section>
           </div>
 
@@ -511,10 +535,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   getTubeGlobalManagementConfig,
+  saveTubeGlobalManagementConfig,
   saveTubeGlobalManagementConfigSection,
 } from '../../daily_report_25_26/services/api'
 
@@ -534,6 +559,9 @@ const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
 const planEditableDays = ref(3)
 const globalMessage = ref(null)
+const jsonEditVal = ref('')
+const jsonErrorMessage = ref('')
+const savingJson = ref(false)
 const sectionMessages = ref({})
 const savingSections = ref({})
 
@@ -861,6 +889,63 @@ const configPreviewText = computed(() =>
   ),
 )
 
+// 切换到原始 JSON Tab 时，自动将当前解析数据格式化覆盖可编辑值
+watch(activeTab, (newTab) => {
+  if (newTab === 'json') {
+    jsonEditVal.value = configPreviewText.value
+    jsonErrorMessage.value = '' // 切换 Tab 时自动清空历史校验错误
+  }
+})
+
+// 实时监听 JSON 编辑器的内容变化，进行即时语法校验，让用户增删字符时瞬间看到红边框和警示栏
+watch(jsonEditVal, (newVal) => {
+  if (activeTab.value !== 'json') return
+  if (!newVal || !newVal.trim()) {
+    jsonErrorMessage.value = ''
+    return
+  }
+  try {
+    JSON.parse(newVal)
+    jsonErrorMessage.value = '' // 解析成功，即时清空错误
+  } catch (error) {
+    // 实时显示详细的 JSON 语法错误，帮助用户精确定位
+    jsonErrorMessage.value = `🚨 JSON 语法错误：${error.message}！请检查标点、逗号或括号是否闭环！`
+  }
+})
+
+function resetJsonEditVal() {
+  jsonEditVal.value = configPreviewText.value
+  jsonErrorMessage.value = ''
+}
+
+async function handleSaveRawJson() {
+  clearGlobalMessage()
+  jsonErrorMessage.value = ''
+  
+  let parsedConfig = null
+  try {
+    parsedConfig = JSON.parse(jsonEditVal.value)
+  } catch (error) {
+    // 语法错误拦截，并弹出高雅提示
+    jsonErrorMessage.value = `🚨 JSON 格式解析错误：${error.message}！请检查标点、逗号或括号是否闭环！`
+    return
+  }
+  
+  savingJson.value = true
+  try {
+    await saveTubeGlobalManagementConfig(PROJECT_KEY, { config: parsedConfig })
+    setGlobalMessage('success', '🎉 原始整个 JSON 配置已成功整体保存！已自动同步刷新各版块状态。')
+    jsonErrorMessage.value = '' // 保存成功，彻底清空
+    // 自动重载配置
+    await loadConfig()
+  } catch (error) {
+    console.error(error)
+    jsonErrorMessage.value = error instanceof Error ? error.message : '保存原始配置数据失败'
+  } finally {
+    savingJson.value = false
+  }
+}
+
 async function loadConfig() {
   clearGlobalMessage()
   try {
@@ -876,6 +961,11 @@ async function loadConfig() {
     }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
+    }
+    
+    // 如果当前已经是原始编辑 Tab，同步一下内容
+    if (activeTab.value === 'json') {
+      jsonEditVal.value = configPreviewText.value
     }
   } catch (error) {
     setGlobalMessage('error', error?.message || '读取全局配置失败')
@@ -1431,8 +1521,70 @@ useTubeRealtimeRefresh(loadConfig)
   font-size: 13px;
   line-height: 1.6;
   resize: vertical;
-  background: #f8fafc;
+  background: #ffffff;
   box-sizing: border-box;
+  transition: all 0.2s ease-in-out;
+}
+
+.json-editor-textarea.has-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+  outline: none !important;
+}
+
+.json-error-banner {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px 0 rgba(239, 68, 68, 0.2);
+  font-size: 13px;
+  animation: slide-down-fade 0.25s ease-out;
+}
+
+.json-error-banner__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.json-error-banner__body {
+  line-height: 1.5;
+  font-family: "Consolas", "Monaco", monospace;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 8px 12px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+@keyframes slide-down-fade {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.json-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.json-editor-hint {
+  font-size: 13px;
+  color: #ea580c;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+.action-btn-group {
+  display: flex;
+  gap: 10px;
 }
 
 .cell-text {
