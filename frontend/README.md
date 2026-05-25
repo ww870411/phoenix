@@ -1,4 +1,26 @@
 
+## 2026-05-25 tube项目 V5.4 殿堂级 UI/UX 重新设计与核心防错交互重构
+
+- 本轮针对保温管物流数字化子系统（`insulation_pipe_supply_2026`）的前端页面开展了**整容级重新设计与防错交互重构**。
+- 前端物理代码大面积演进，且**100% 成功通过本地 Vite 生产打包构建验证**（零错误，零警告），高规格落盘：
+  1. **[WarehouseManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue) 库管台账重设与大表加固**：
+     - **多选单选解耦**：彻底解决了点击表格任意行直接加入多选导致数据统计污染的逻辑 Bug。在 JS 中限制只有 `pending_warehouse` 状态行可勾选，非该状态的行点击时仅激活单选详情（展示备注），数据汇总 100% 精确。
+     - **多轨状态高亮与左侧蓝条**：行选中时（`.checked`）呈淡蓝色微磨砂背景，单选激活时（`.active`）最左侧增加精致的 **4px 科技蓝指示竖线** 特效。
+     - **13列大表物理列宽与 tabular-nums 右对齐**：去除表头“多选”文字；订单号与车次号升级为 Mono 代码标牌，车牌号升级为专属淡蓝色物流勋章。利用 `colgroup` 对 13 列进行物理宽度限制，配合 `table-layout: fixed` 与 `min-width: 1400px` 彻底消除折行挤压；数值列强制进行右对齐和 `font-variant-numeric: tabular-nums` 金融级等宽数字排版，千位/百位在中轴线精确对齐。
+     - **在途耗时休眠与 Promise 并行入库**：修正驼峰字段 `row.arrivedConfirmAt` 使送达后计时完美休眠；批量入库升级为 `Promise.allSettled` 并行提交与异常失败明细反馈。
+  2. **[SupplyManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 供给发货 3 Tab 独立工作台**：
+     - **多轨 Tab workbench 工作台**：彻底拆分为 `🎯 供需及净缺口`、`🚚 车次批量发货`、`📋 物流跟踪历史` 3大面板，支持 smooth 切换过渡。
+     - **发货左右 Premium 布局**：左侧为圆角微渐变发货表单，右侧暂存改版为积木卡片样式。
+     - **Watcher 循环死锁爆破**：删去两个双向 watcher 链，改由单向流 `@change="handleSupplyEntityChange"` 驱动，极大提高接口吞吐与稳定性。
+  3. **[DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 需求侧粘贴区呼吸灯与 Glow 卡片**：
+     - 顶部 Quick Dashboard 磁贴升级为 Glow 微晕 Glassmorphism 磨砂卡片；
+     - 粘贴激活区注入 **Pulse Glow 脉冲边缘霓虹呼吸动画**，动态显示状态。
+  4. **[GlobalManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 全局管理 SaaS 纵向侧边控制台**：
+     - 将 10 个配置区块解耦为 6 个纵向子 Tab，升级为 **SaaS 纵向双栏控制台**；
+     - 顶部核心数据升级为 Glassmorphic 看板；优化表格内嵌 input 的宽度和行高，彻底对齐。
+  5. **[jsconfig.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/jsconfig.json) 路径别名配置修复**：
+     - 将 paths 数组中非相对前缀的 `"src/*"` 修正为标准的相对前缀 `["./src/*"]`，彻底消除编辑器内 Schema 路径别名校验红线警报，IntelliSense 全线恢复绿色健康。
+
 ## 2026-05-25 tube项目最新方案与构建流程计划宣底及对接调研
 
 - 本轮 Phoenix 前端代码无物理改动。

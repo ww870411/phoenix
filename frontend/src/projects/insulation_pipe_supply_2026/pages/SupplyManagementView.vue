@@ -3,360 +3,453 @@
     <AppHeader />
     <main class="tube-page-main container">
       <Breadcrumbs :items="breadcrumbItems" />
-      <header class="topbar">
+      
+      <!-- 高级工作台头部 -->
+      <header class="topbar premium-topbar">
         <div>
-          <h2>供给侧管理入口</h2>
+          <h2>现场管理工作台 (供给侧)</h2>
           <p class="sub">
-            面向供给主体，完成需求与缺口查看、发货登记、发货进度查询与发货撤销。涉及数量口径时，当前页面统一以“米”为计量单位。
+            面向供给主体。提供 Tabs 标签化分类，支持查看缺口与供需明细、运输车次装配、物流发货批量登记及在途运输跟踪。数量当前统一以“米”为计量单位。
           </p>
         </div>
         <div class="topbar-actions">
-          <button type="button" class="btn ghost" @click="goProjectPages">返回功能页</button>
+          <button type="button" class="btn ghost btn-back" @click="goProjectPages">返回功能页</button>
         </div>
       </header>
 
       <p v-if="errorMessage" class="page-error">{{ errorMessage }}</p>
 
-      <section class="card elevated">
-        <div class="panel-title-row">
-          <div>
-            <h2>保温管供需明细</h2>
-            <span class="panel-hint">{{ supplyDemandTableHint }}</span>
+      <!-- 磨砂玻璃态数据微看板 (Quick Dashboard) -->
+      <section class="card elevated quick-dashboard-card" v-if="selectedSupplyEntityId">
+        <div class="meta-dashboard">
+          <div class="meta-card">
+            <span class="meta-label">当前供给主体</span>
+            <strong class="meta-value">{{ currentSupplyEntityLabel }}</strong>
           </div>
-          <div class="toolbar-actions">
-            <p v-if="actionMessage" :class="['action-message', actionMessage.type]">{{ actionMessage.text }}</p>
-            <button type="button" class="btn ghost" :disabled="summaryLoading" @click="loadDemandSummary">刷新明细</button>
+          <div class="meta-card">
+            <span class="meta-label">展示/业务日期</span>
+            <strong class="meta-value">{{ showDate || '—' }}</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">待提交车次明细</span>
+            <strong class="meta-value highlight-num">{{ draftDeliveryItems.length }} 条</strong>
+          </div>
+          <div class="meta-card highlight">
+            <span class="meta-label">计划起始日期</span>
+            <strong class="meta-value">{{ planStartDate || '—' }}</strong>
+          </div>
+          <div class="meta-card highlight">
+            <span class="meta-label">发货记录总数</span>
+            <strong class="meta-value">{{ deliveryRows.length }} 笔</strong>
           </div>
         </div>
+      </section>
 
-        <div v-if="optionsError" class="error-box">{{ optionsError }}</div>
+      <!-- 选项卡导航 (Responsive Tabs Header) -->
+      <div class="tube-tabs-header-wrap" v-if="selectedSupplyEntityId">
+        <div class="tube-tabs-header">
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'demand' }" 
+            @click="activeTab = 'demand'"
+          >
+            🎯 需求与缺口看板
+          </button>
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'register' }" 
+            @click="activeTab = 'register'"
+          >
+            🚚 批量发货与车次装配
+          </button>
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'history' }" 
+            @click="activeTab = 'history'"
+          >
+            📋 物流发货记录
+          </button>
+        </div>
+      </div>
 
-        <div class="supply-demand-toolbar">
-          <label class="field field-compact">
-            <span>当前供给主体</span>
-            <input :value="currentSupplyEntityLabel" type="text" disabled />
-          </label>
-
-          <label class="field field-compact">
-            <span>展示日期</span>
-            <input :value="showDate" type="date" disabled />
-          </label>
-
-          <label class="field field-compact">
-            <span>计划起始日期</span>
-            <input :value="planStartDate" type="date" disabled />
-          </label>
-
-          <label class="field field-compact">
-            <span>视图模式</span>
-            <select v-model="supplyDemandViewMode" :disabled="summaryLoading || optionsLoading">
-              <option v-for="option in supplyDemandViewOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-
-          <div class="field field-compact">
-            <span>型号筛选</span>
-            <details class="multi-select-dropdown">
-              <summary class="multi-select-summary">{{ selectedPipeModelSummaryLabel }}</summary>
-              <div class="multi-select-panel">
-                <div class="multi-select-actions">
-                  <button type="button" class="btn ghost btn-xs" @click.prevent="selectAllPipeModels">全部型号</button>
-                  <button type="button" class="btn ghost btn-xs" @click.prevent="clearPipeModelSelection">清空勾选</button>
-                </div>
-                <label v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" class="checkbox-option">
-                  <input v-model="selectedPipeModelIds" type="checkbox" :value="pipe.pipe_model_id" />
-                  <span>{{ pipe.pipe_model_name }}</span>
-                </label>
+      <!-- Tab内容区域 -->
+      <div class="tube-tab-content-wrap" v-if="selectedSupplyEntityId">
+        
+        <!-- Tab 1: 需求与缺口看板 -->
+        <div v-if="activeTab === 'demand'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row">
+              <div>
+                <h2>保温管供需明细</h2>
+                <span class="panel-hint">{{ supplyDemandTableHint }}</span>
               </div>
-            </details>
-          </div>
-        </div>
+              <div class="toolbar-actions">
+                <p v-if="actionMessage" :class="['action-message', actionMessage.type]">{{ actionMessage.text }}</p>
+                <button type="button" class="btn ghost" :disabled="summaryLoading" @click="loadDemandSummary">刷新明细</button>
+              </div>
+            </div>
 
-        <div v-if="summaryLoading" class="loading-text">正在加载需求汇总...</div>
-        <div v-else-if="summaryError" class="error-box">{{ summaryError }}</div>
-        <div v-else-if="!supplyDemandTableRows.length" class="empty-box">当前没有可展示的供需明细数据。</div>
-        <div v-else class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>{{ supplyDemandViewMode === 'summary' ? '统计范围' : '换热站' }}</th>
-                <th>型号</th>
-                <th>设计总量（米）</th>
-                <th>计划采购总量（米）</th>
-                <th>未来三日计划（米）</th>
-                <th>已发货待到货（米）</th>
-                <th>已到货待接收（米）</th>
-                <th>已接收待库管（米）</th>
-                <th>三日净缺口（米）</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in supplyDemandTableRows" :key="row.rowKey">
-                <td>{{ row.scopeLabel }}</td>
-                <td>{{ row.pipeModelName }}</td>
-                <td>{{ formatNumber(row.designQty) }}</td>
-                <td>{{ formatNumber(row.purchasePlanQty) }}</td>
-                <td>{{ formatNumber(row.futurePlanQty) }}</td>
-                <td>{{ formatNumber(row.pendingArrivalQty) }}</td>
-                <td>{{ formatNumber(row.pendingReceiveQty) }}</td>
-                <td>{{ formatNumber(row.pendingWarehouseQty) }}</td>
-                <td :class="{ 'danger-text': row.netGapQty > 0 }">{{ formatNumber(row.netGapQty) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+            <div v-if="optionsError" class="error-box">{{ optionsError }}</div>
 
-      <section class="card elevated">
-        <div class="panel-title-row">
-          <div>
-            <h2>发货登记</h2>
-            <span class="panel-hint">订单号与运输车次号均由系统生成；下方可先累积多条明细，再一次性按同一车次提交。计量单位：米。</span>
-          </div>
-          <div class="topbar-actions">
-            <button
-              type="button"
-              class="btn ghost"
-              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
-              @click="appendDraftDelivery"
-            >
-              加入当前车次
-            </button>
-            <button
-              type="button"
-              class="primary-button"
-              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId || !draftDeliveryItems.length"
-              @click="submitDeliveryBatch"
-            >
-              {{ submitDeliveryLoading ? '提交中...' : '提交当前车次' }}
-            </button>
-          </div>
-        </div>
+            <div class="supply-demand-toolbar">
+              <label class="field field-compact">
+                <span>当前供给主体</span>
+                <input :value="currentSupplyEntityLabel" type="text" disabled />
+              </label>
 
-        <div class="filter-grid">
-          <label class="field">
-            <span>供给主体</span>
-            <input
-              v-if="!canSwitchSupplyEntity"
-              :value="currentDeliverySupplyEntityLabel"
-              type="text"
-              disabled
-            />
-            <select v-else v-model="deliveryForm.supplyEntityId" :disabled="!selectedSupplyEntityId || !canSwitchSupplyEntity">
-              <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
-                {{ entity.entity_name }}
-              </option>
-            </select>
-          </label>
+              <label class="field field-compact">
+                <span>展示日期</span>
+                <input :value="showDate" type="date" disabled />
+              </label>
 
-          <label class="field">
-            <span>换热站</span>
-            <select v-model="deliveryForm.stationId">
-              <option value="" disabled>请选择换热站</option>
-              <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
-                {{ station.station_name }}
-              </option>
-            </select>
-          </label>
+              <label class="field field-compact">
+                <span>计划起始日期</span>
+                <input :value="planStartDate" type="date" disabled />
+              </label>
 
-          <label class="field">
-            <span>保温管型号</span>
-            <select v-model="deliveryForm.pipeModelId">
-              <option value="" disabled>请选择型号</option>
-              <option v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" :value="pipe.pipe_model_id">
-                {{ pipe.pipe_model_name }}
-              </option>
-            </select>
-          </label>
+              <label class="field field-compact">
+                <span>视图模式</span>
+                <select v-model="supplyDemandViewMode" :disabled="summaryLoading || optionsLoading">
+                  <option v-for="option in supplyDemandViewOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
 
-          <label class="field">
-            <span>订单号</span>
-            <input :value="deliveryOrderNoPreview" type="text" disabled />
-          </label>
-
-          <label class="field">
-            <span>运输车次号</span>
-            <input :value="currentShipmentDisplay" type="text" disabled />
-          </label>
-
-          <label class="field">
-            <span>发货量（米）</span>
-            <input v-model.number="deliveryForm.shippedQty" type="number" min="0" step="1" />
-          </label>
-
-          <label class="field">
-            <span>发货时间</span>
-            <input value="提交当前车次时自动取当前时间" type="text" disabled />
-          </label>
-
-          <label class="field">
-            <span>联系人</span>
-            <input v-model.trim="deliveryForm.shipContactName" type="text" maxlength="50" placeholder="发货联系人" />
-          </label>
-
-          <label class="field">
-            <span>联系电话</span>
-            <input v-model.trim="deliveryForm.shipContactPhone" type="text" maxlength="30" placeholder="联系电话" />
-          </label>
-
-          <label class="field">
-            <span>车牌号（选填）</span>
-            <input
-              v-model.trim="deliveryForm.vehiclePlateNo"
-              type="text"
-              maxlength="32"
-              placeholder="同一车次只需填写一次"
-              :disabled="currentReusedShipmentPlateLocked"
-            />
-          </label>
-
-          <label class="field field-span-2">
-            <span>备注</span>
-            <input v-model.trim="deliveryForm.shipRemark" type="text" maxlength="120" placeholder="发货备注" />
-          </label>
-
-          <div class="field field-span-2">
-            <span>车次说明</span>
-            <span class="muted-text">
-              {{
-                deliveryForm.reuseCurrentShipment && deliveryForm.shipmentNo
-                  ? currentReusedShipmentPlateLocked
-                    ? `当前将继续运输车次号 ${deliveryForm.shipmentNo}，并沿用已登记车牌号 ${deliveryForm.vehiclePlateNo}。`
-                    : `当前将继续运输车次号 ${deliveryForm.shipmentNo}。若该车次尚未登记车牌号，可在本次一起补录。`
-                  : '当前未指定继续车次，提交时将自动新建运输车次号；车牌号可选填，同一车次只需填写一次。'
-              }}
-            </span>
-          </div>
-        </div>
-
-        <div class="batch-box">
-          <div class="batch-box-header">
-            <strong>待提交明细</strong>
-            <span class="muted-text">当前车次下已暂存 {{ draftDeliveryItems.length }} 条，提交当前车次时将一次性提交这 {{ draftDeliveryItems.length }} 条明细。</span>
-          </div>
-          <div v-if="!draftDeliveryItems.length" class="empty-box compact">当前没有已暂存明细。</div>
-          <div v-else class="table-wrap">
-            <table class="table data-table compact-table">
-              <thead>
-                <tr>
-                  <th>换热站</th>
-                  <th>型号</th>
-                  <th>发货量（米）</th>
-                  <th>备注</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, index) in draftDeliveryItems" :key="`${item.stationId}-${item.pipeModelId}-${index}`">
-                  <td>{{ item.stationName }}</td>
-                  <td>{{ item.pipeModelName }}</td>
-                  <td>{{ formatNumber(item.shippedQty) }}</td>
-                  <td>{{ item.shipRemark || '—' }}</td>
-                  <td><button type="button" class="btn danger-ghost" @click="removeDraftDelivery(index)">移除</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="panel-title-row">
-          <div>
-            <h2>发货记录</h2>
-            <span class="panel-hint">仅“已发货待到货”状态允许撤销。计量单位：米。</span>
-          </div>
-          <button type="button" class="btn ghost" :disabled="deliveriesLoading" @click="loadDeliveries">刷新记录</button>
-        </div>
-
-        <div v-if="deliveriesLoading" class="loading-text">正在加载发货记录...</div>
-        <div v-else-if="deliveriesError" class="error-box">{{ deliveriesError }}</div>
-        <div v-else-if="!deliveryRows.length" class="empty-box">当前没有发货记录。</div>
-        <div v-else class="table-wrap">
-          <table class="data-table delivery-record-table">
-            <colgroup>
-              <col class="col-order" />
-              <col class="col-shipment" />
-              <col class="col-plate" />
-              <col class="col-supply" />
-              <col class="col-station" />
-              <col class="col-model" />
-              <col class="col-qty" />
-              <col class="col-qty" />
-              <col class="col-qty" />
-              <col class="col-time" />
-              <col class="col-elapsed" />
-              <col class="col-status" />
-              <col class="col-remark" />
-              <col class="col-actions" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>订单号</th>
-                <th>运输车次号</th>
-                <th>车牌号</th>
-                <th>供给主体</th>
-                <th>换热站</th>
-                <th>型号</th>
-                <th>发货量（米）</th>
-                <th>到货量（米）</th>
-                <th>接收量（米）</th>
-                <th>发货时间</th>
-                <th>在途时长</th>
-                <th>状态</th>
-                <th>备注</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in deliveryRows" :key="row.deliveryId">
-                <td class="cell-nowrap">{{ row.deliveryCode }}</td>
-                <td class="cell-nowrap">{{ row.shipmentNo || '—' }}</td>
-                <td class="cell-nowrap">{{ row.vehiclePlateNo || '—' }}</td>
-                <td class="cell-wrap">{{ row.supplyEntityName }}</td>
-                <td class="cell-wrap">{{ row.stationName }}</td>
-                <td class="cell-wrap">{{ row.pipeModelName }}</td>
-                <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
-                <td class="cell-number">{{ formatNullableNumber(row.arrivedQty) }}</td>
-                <td class="cell-number">{{ formatNullableNumber(row.receivedQty) }}</td>
-                <td class="cell-nowrap">{{ row.shippedAtDisplay || '—' }}</td>
-                <td class="cell-nowrap">{{ formatDeliveryElapsedDisplay(row) }}</td>
-                <td>
-                  <div class="status-chip-group">
-                    <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
-                    <span v-if="row.abnormalFlag" class="status-chip status-abnormal">{{ getAbnormalLabel(row) }}</span>
+              <div class="field field-compact">
+                <span>型号筛选</span>
+                <details class="multi-select-dropdown">
+                  <summary class="multi-select-summary">{{ selectedPipeModelSummaryLabel }}</summary>
+                  <div class="multi-select-panel">
+                    <div class="multi-select-actions">
+                      <button type="button" class="btn ghost btn-xs" @click.prevent="selectAllPipeModels">全部型号</button>
+                      <button type="button" class="btn ghost btn-xs" @click.prevent="clearPipeModelSelection">清空勾选</button>
+                    </div>
+                    <label v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" class="checkbox-option">
+                      <input v-model="selectedPipeModelIds" type="checkbox" :value="pipe.pipe_model_id" />
+                      <span>{{ pipe.pipe_model_name }}</span>
+                    </label>
                   </div>
-                </td>
-                <td class="cell-remark">{{ row.shipRemark || row.cancelReason || '—' }}</td>
-                <td>
-                  <div class="action-stack">
-                    <button
-                      v-if="row.shipmentNo"
-                      type="button"
-                      :class="['btn', isReusingShipment(row) ? 'active-ghost' : 'ghost']"
-                      @click="toggleShipmentReuse(row)"
-                    >
-                      {{ isReusingShipment(row) ? '取消继续车次' : '继续该车次' }}
-                    </button>
-                    <button
-                      v-if="row.status === 'pending_arrival'"
-                      type="button"
-                      class="btn danger-ghost"
-                      :disabled="cancelLoadingIds[row.deliveryId]"
-                      @click="cancelDelivery(row)"
-                    >
-                      {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
-                    </button>
-                    <span v-else class="muted-text">不可撤销</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </details>
+              </div>
+            </div>
+
+            <div v-if="summaryLoading" class="loading-text">正在加载需求汇总...</div>
+            <div v-else-if="summaryError" class="error-box">{{ summaryError }}</div>
+            <div v-else-if="!supplyDemandTableRows.length" class="empty-box">当前没有可展示的供需明细数据。</div>
+            <div v-else class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>{{ supplyDemandViewMode === 'summary' ? '统计范围' : '换热站' }}</th>
+                    <th>型号</th>
+                    <th>设计总量（米）</th>
+                    <th>计划采购总量（米）</th>
+                    <th>未来三日计划（米）</th>
+                    <th>已发货待到货（米）</th>
+                    <th>已到货待接收（米）</th>
+                    <th>已接收待库管（米）</th>
+                    <th>三日净缺口（米）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in supplyDemandTableRows" :key="row.rowKey">
+                    <td class="cell-text" :title="row.scopeLabel">{{ row.scopeLabel }}</td>
+                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
+                    <td class="cell-number">{{ formatNumber(row.designQty) }}</td>
+                    <td class="cell-number">{{ formatNumber(row.purchasePlanQty) }}</td>
+                    <td class="cell-number">{{ formatNumber(row.futurePlanQty) }}</td>
+                    <td class="cell-number">{{ formatNumber(row.pendingArrivalQty) }}</td>
+                    <td class="cell-number">{{ formatNumber(row.pendingReceiveQty) }}</td>
+                    <td class="cell-number">{{ formatNumber(row.pendingWarehouseQty) }}</td>
+                    <td class="cell-number" :class="{ 'danger-text': row.netGapQty > 0 }">{{ formatNumber(row.netGapQty) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
-      </section>
+
+        <!-- Tab 2: 批量发货与车次装配 (左右分栏高端布局) -->
+        <div v-if="activeTab === 'register'" class="tab-pane">
+          <div class="workbench-split-layout">
+            <!-- 左栏：车次装填登记表单 -->
+            <section class="card elevated split-left-card">
+              <div class="panel-title-row">
+                <div>
+                  <h2>发货车次信息登记</h2>
+                  <span class="panel-hint">订单号与运输车次号由系统生成；您可以累积多条保温管明细装配在同一车次中提交。</span>
+                </div>
+              </div>
+
+              <div class="form-vertical-grid">
+                <label class="field">
+                  <span>供给主体</span>
+                  <input
+                    v-if="!canSwitchSupplyEntity"
+                    :value="currentDeliverySupplyEntityLabel"
+                    type="text"
+                    disabled
+                  />
+                  <!-- 绑定显式单向同步事件，打破 watcher 闭环死锁 -->
+                  <select v-else v-model="deliveryForm.supplyEntityId" @change="handleSupplyEntityChange($event.target.value)" :disabled="!selectedSupplyEntityId || !canSwitchSupplyEntity">
+                    <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
+                      {{ entity.entity_name }}
+                    </option>
+                  </select>
+                </label>
+
+                <div class="form-row-2col">
+                  <label class="field">
+                    <span>装车换热站</span>
+                    <select v-model="deliveryForm.stationId">
+                      <option value="" disabled>请选择换热站</option>
+                      <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
+                        {{ station.station_name }}
+                      </option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>保温管型号</span>
+                    <select v-model="deliveryForm.pipeModelId">
+                      <option value="" disabled>请选择型号</option>
+                      <option v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" :value="pipe.pipe_model_id">
+                        {{ pipe.pipe_model_name }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="form-row-2col">
+                  <label class="field">
+                    <span>发货量（米）</span>
+                    <input v-model.number="deliveryForm.shippedQty" type="number" min="0" step="1" />
+                  </label>
+
+                  <label class="field">
+                    <span>发货时间</span>
+                    <input value="提交当前车次时自动取当前时间" type="text" disabled />
+                  </label>
+                </div>
+
+                <div class="form-row-2col">
+                  <label class="field">
+                    <span>联系人</span>
+                    <input v-model.trim="deliveryForm.shipContactName" type="text" maxlength="50" placeholder="发货联系人" />
+                  </label>
+
+                  <label class="field">
+                    <span>联系电话</span>
+                    <input v-model.trim="deliveryForm.shipContactPhone" type="text" maxlength="30" placeholder="联系电话" />
+                  </label>
+                </div>
+
+                <div class="form-row-2col">
+                  <label class="field">
+                    <span>车牌号（选填）</span>
+                    <input
+                      v-model.trim="deliveryForm.vehiclePlateNo"
+                      type="text"
+                      maxlength="32"
+                      placeholder="同一车次只需填写一次"
+                      :disabled="currentReusedShipmentPlateLocked"
+                    />
+                  </label>
+
+                  <label class="field">
+                    <span>运输车次号状态</span>
+                    <input :value="currentShipmentDisplay" type="text" class="shipment-status-input" disabled />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>备注</span>
+                  <input v-model.trim="deliveryForm.shipRemark" type="text" maxlength="120" placeholder="发货备注" />
+                </label>
+
+                <div class="field">
+                  <span>车次说明</span>
+                  <span class="muted-text text-hint-highlight">
+                    {{
+                      deliveryForm.reuseCurrentShipment && deliveryForm.shipmentNo
+                        ? currentReusedShipmentPlateLocked
+                          ? `当前将继续装配运输车次号 ${deliveryForm.shipmentNo}，并沿用车牌号 ${deliveryForm.vehiclePlateNo}。`
+                          : `当前将继续装配运输车次号 ${deliveryForm.shipmentNo}。若该车次尚未登记车牌号，可在本次一起补录。`
+                        : '当前将自动新建运输车次号；同一车次下可累积不同换热站/型号明细一并出发。'
+                    }}
+                  </span>
+                </div>
+
+                <div class="form-submit-row">
+                  <button
+                    type="button"
+                    class="btn ghost btn-large"
+                    :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
+                    @click="appendDraftDelivery"
+                  >
+                    ➕ 加入当前发货车次
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 右栏：待提交车次明细暂存积木 -->
+            <section class="card elevated split-right-card">
+              <div class="panel-title-row">
+                <div>
+                  <h2>待提交车次明细</h2>
+                  <span class="panel-hint">当前车次下已暂存 <b>{{ draftDeliveryItems.length }}</b> 条明细，点击“一键提交当前车次”物理发车。</span>
+                </div>
+                <button
+                  type="button"
+                  class="primary-button btn-large shadow-accent"
+                  :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId || !draftDeliveryItems.length"
+                  @click="submitDeliveryBatch"
+                >
+                  {{ submitDeliveryLoading ? '🚀 提交当前车次中...' : '🚀 一键提交当前发货车次' }}
+                </button>
+              </div>
+
+              <p v-if="actionMessage" :class="['action-message', actionMessage.type]">{{ actionMessage.text }}</p>
+
+              <div class="batch-box-premium">
+                <div v-if="!draftDeliveryItems.length" class="empty-box-split">
+                  <div class="empty-icon-bubble">📦</div>
+                  <strong class="empty-title">当前发车车厢为空</strong>
+                  <span class="empty-subtitle">请从左侧选择换热站、型号、发货米数，并点击“加入当前发货车次”进行装载。</span>
+                </div>
+                <div v-else class="draft-items-card-list">
+                  <div 
+                    v-for="(item, index) in draftDeliveryItems" 
+                    :key="`${item.stationId}-${item.pipeModelId}-${index}`" 
+                    class="draft-item-card"
+                  >
+                    <div class="draft-card-header">
+                      <span class="station-tag">📍 {{ item.stationName }}</span>
+                      <button type="button" class="btn-remove-draft" @click="removeDraftDelivery(index)" title="移除此条">✕</button>
+                    </div>
+                    <div class="draft-card-body">
+                      <div class="info-row">
+                        <span class="lbl">管材型号</span>
+                        <strong class="val">{{ item.pipeModelName }}</strong>
+                      </div>
+                      <div class="info-row">
+                        <span class="lbl">发货米数</span>
+                        <strong class="val highlight-qty">{{ formatNumber(item.shippedQty) }} 米</strong>
+                      </div>
+                      <div class="info-row" v-if="item.shipRemark">
+                        <span class="lbl">明细备注</span>
+                        <span class="val remark-val">{{ item.shipRemark }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Tab 3: 物流发货记录 -->
+        <div v-if="activeTab === 'history'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row">
+              <div>
+                <h2>已发货物流跟踪记录</h2>
+                <span class="panel-hint">仅“已发货待到货”状态允许撤销。可在表格中点击“继续该车次”为过往车辆追加追加管材发货。</span>
+              </div>
+              <button type="button" class="btn ghost" :disabled="deliveriesLoading" @click="loadDeliveries">刷新发货台账</button>
+            </div>
+
+            <div v-if="deliveriesLoading" class="loading-text">正在加载发货记录...</div>
+            <div v-else-if="deliveriesError" class="error-box">{{ deliveriesError }}</div>
+            <div v-else-if="!deliveryRows.length" class="empty-box">当前没有发货记录。</div>
+            <div v-else class="table-wrap">
+              <table class="data-table delivery-record-table">
+                <colgroup>
+                  <col class="col-order" />
+                  <col class="col-shipment" />
+                  <col class="col-plate" />
+                  <col class="col-supply" />
+                  <col class="col-station" />
+                  <col class="col-model" />
+                  <col class="col-qty" />
+                  <col class="col-qty" />
+                  <col class="col-qty" />
+                  <col class="col-time" />
+                  <col class="col-elapsed" />
+                  <col class="col-status" />
+                  <col class="col-remark" />
+                  <col class="col-actions" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>订单号</th>
+                    <th>运输车次号</th>
+                    <th>车牌号</th>
+                    <th>供给主体</th>
+                    <th>换热站</th>
+                    <th>型号</th>
+                    <th>发货量（米）</th>
+                    <th>到货量（米）</th>
+                    <th>接收量（米）</th>
+                    <th>发货时间</th>
+                    <th>在途时长</th>
+                    <th>状态</th>
+                    <th>备注</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in deliveryRows" :key="row.deliveryId">
+                    <td class="cell-nowrap cell-code">{{ row.deliveryCode }}</td>
+                    <td class="cell-nowrap cell-code">{{ row.shipmentNo || '—' }}</td>
+                    <td class="cell-nowrap cell-text" :title="row.vehiclePlateNo || '—'">{{ row.vehiclePlateNo || '—' }}</td>
+                    <td class="cell-text" :title="row.supplyEntityName">{{ row.supplyEntityName }}</td>
+                    <td class="cell-text" :title="row.stationName">{{ row.stationName }}</td>
+                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
+                    <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
+                    <td class="cell-number">{{ formatNullableNumber(row.arrivedQty) }}</td>
+                    <td class="cell-number">{{ formatNullableNumber(row.receivedQty) }}</td>
+                    <td class="cell-nowrap cell-datetime">{{ row.shippedAtDisplay || '—' }}</td>
+                    <td class="cell-nowrap cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
+                    <td>
+                      <div class="status-chip-group">
+                        <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
+                        <span v-if="row.abnormalFlag" class="status-chip status-abnormal">{{ getAbnormalLabel(row) }}</span>
+                      </div>
+                    </td>
+                    <td class="cell-text cell-remark" :title="row.shipRemark || row.cancelReason || '—'">{{ row.shipRemark || row.cancelReason || '—' }}</td>
+                    <td>
+                      <div class="action-stack">
+                        <button
+                          v-if="row.shipmentNo"
+                          type="button"
+                          :class="['btn', isReusingShipment(row) ? 'active-ghost' : 'ghost']"
+                          @click="toggleShipmentReuse(row)"
+                        >
+                          {{ isReusingShipment(row) ? '取消继续车次' : '继续该车次' }}
+                        </button>
+                        <button
+                          v-if="row.status === 'pending_arrival'"
+                          type="button"
+                          class="btn danger-ghost"
+                          :disabled="cancelLoadingIds[row.deliveryId]"
+                          @click="cancelDelivery(row)"
+                        >
+                          {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
+                        </button>
+                        <span v-else class="muted-text">不可撤销</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+      </div>
     </main>
   </div>
 </template>
@@ -394,6 +487,7 @@ const showDate = ref('')
 const planStartDate = ref('')
 
 const selectedSupplyEntityId = ref('')
+const activeTab = ref('demand')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
 
@@ -922,6 +1016,16 @@ async function cancelDelivery(row) {
   }
 }
 
+function handleSupplyEntityChange(value) {
+  if (!value) return
+  if (canSwitchSupplyEntity.value) {
+    selectedSupplyEntityId.value = value
+    loadDeliveries()
+  } else {
+    deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
+  }
+}
+
 watch(selectedSupplyEntityId, (value) => {
   if (value) {
     deliveryForm.value.supplyEntityId = value
@@ -934,8 +1038,9 @@ watch(selectedSupplyEntityId, (value) => {
         deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''
       }
     }
+    loadDeliveries()
   }
-})
+}, { immediate: true })
 
 function formatElapsedLabel(shippedAt) {
   if (!shippedAt) return ''
@@ -956,25 +1061,6 @@ function formatDeliveryElapsedDisplay(row) {
   if (!row || row.status === 'cancelled') return '—'
   return row.deliveryElapsedLabel || formatElapsedLabel(row.shippedAt) || '—'
 }
-
-watch(
-  () => deliveryForm.value.supplyEntityId,
-  (value) => {
-    if (canSwitchSupplyEntity.value && value && value !== selectedSupplyEntityId.value) {
-      selectedSupplyEntityId.value = value
-      return
-    }
-    if (!canSwitchSupplyEntity.value && selectedSupplyEntityId.value && value !== selectedSupplyEntityId.value) {
-      deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
-    }
-  },
-)
-
-watch(selectedSupplyEntityId, () => {
-  if (selectedSupplyEntityId.value) {
-    loadDeliveries()
-  }
-})
 
 onMounted(async () => {
   nowTimer = setInterval(() => {
@@ -1343,6 +1429,16 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+.btn, .primary-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  box-sizing: border-box !important;
+}
+
 .btn {
   border: 1px solid #cbd5e1;
   border-radius: 10px;
@@ -1495,5 +1591,352 @@ onBeforeUnmount(() => {
     margin-top: 6px;
     box-shadow: none;
   }
+}
+
+/* 磨砂玻璃态微数据看板 */
+.quick-dashboard-card {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.meta-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.meta-card {
+  background: rgba(255, 255, 255, 0.65) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  border-radius: 14px !important;
+  padding: 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+}
+
+.meta-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: linear-gradient(180deg, #6366f1 0%, #3b82f6 100%);
+}
+
+.meta-card.highlight::before {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+}
+
+.meta-card:hover {
+  transform: translateY(-4px) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.08), 0 4px 6px -2px rgba(59, 130, 246, 0.04) !important;
+  border-color: rgba(147, 197, 253, 0.5) !important;
+}
+
+.meta-label {
+  font-size: 12px !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meta-value {
+  font-size: 20px !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  font-family: "Inter", "Outfit", -apple-system, sans-serif !important;
+}
+
+.highlight-num {
+  color: #2563eb !important;
+}
+
+/* Vue Tabs 高端样式切换 */
+.tube-tabs-header-wrap {
+  background: rgba(241, 245, 249, 0.8) !important;
+  border-radius: 14px !important;
+  padding: 6px !important;
+  margin-top: 8px !important;
+  margin-bottom: 16px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-sizing: border-box;
+}
+
+.tube-tabs-header {
+  display: flex !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.tube-tabs-header button {
+  flex: 1 !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 12px 16px !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.tube-tabs-header button:hover {
+  color: #1e293b !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.tube-tabs-header button.active {
+  color: #2563eb !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* 左右分栏布局 */
+@media (min-width: 1024px) {
+  .workbench-split-layout {
+    display: grid !important;
+    grid-template-columns: 1.1fr 0.9fr !important;
+    gap: 20px !important;
+    align-items: start !important;
+  }
+}
+
+.split-left-card, .split-right-card {
+  box-sizing: border-box;
+  margin: 0 !important;
+}
+
+.form-vertical-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row-2col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.btn-large {
+  padding: 12px 20px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  width: 100%;
+}
+
+.form-submit-row {
+  margin-top: 8px;
+}
+
+.shipment-status-input {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+.text-hint-highlight {
+  background: #f0f7ff;
+  border-left: 3px solid #3b82f6;
+  padding: 10px 12px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px !important;
+  line-height: 1.5;
+  color: #1e3a8a !important;
+}
+
+.shadow-accent {
+  box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35) !important;
+}
+
+/* 待提交明细积木列表 */
+.batch-box-premium {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 18px;
+  min-height: 280px;
+  box-sizing: border-box;
+}
+
+.empty-box-split {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 10px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.empty-icon-bubble {
+  font-size: 48px;
+  margin-bottom: 12px;
+  animation: float-bubble 3s ease-in-out infinite;
+}
+
+@keyframes float-bubble {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0px); }
+}
+
+.empty-title {
+  font-size: 16px;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.empty-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 240px;
+  line-height: 1.5;
+}
+
+.draft-items-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.draft-item-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.draft-item-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  transform: scale(1.01);
+}
+
+.draft-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.station-tag {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.btn-remove-draft {
+  border: none;
+  background: #fee2e2;
+  color: #ef4444;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-draft:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.draft-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.info-row .lbl {
+  color: #64748b;
+}
+
+.info-row .val {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.info-row .highlight-qty {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.info-row .remark-val {
+  font-weight: 500;
+  color: #475569;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 升级表格 Hover 和 Ellipsis 防御 */
+.cell-text {
+  max-width: 180px !important;
+  min-width: 130px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.cell-code {
+  font-family: "Consolas", "Courier New", monospace !important;
+  font-size: 13px !important;
+}
+
+.cell-remark {
+  max-width: 160px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.data-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.03) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+
+.status-chip {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
 }
 </style>

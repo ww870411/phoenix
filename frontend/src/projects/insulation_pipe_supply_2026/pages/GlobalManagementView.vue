@@ -3,15 +3,17 @@
     <AppHeader />
     <main class="tube-page-main container">
       <Breadcrumbs :items="breadcrumbItems" />
-      <header class="topbar">
+      
+      <!-- 高级控制台头部 -->
+      <header class="topbar premium-topbar">
         <div>
-          <h2>全局管理入口</h2>
-          <p class="sub">仅供 Global_admin 使用。优先按分块修改和保存，减少一次性误改全局配置的风险。</p>
+          <h2>系统全局控制台 (管理员)</h2>
+          <p class="sub">仅供 Global_admin 全局管理员使用。按区块纵向管理，独立校验并保存，降低一次性误改全局配置的安全风险。</p>
         </div>
         <div class="topbar-actions">
-          <button class="btn ghost" type="button" @click="goProjectPages">返回功能页</button>
+          <button class="btn ghost btn-back" type="button" @click="goProjectPages">返回功能页</button>
           <button class="btn ghost" type="button" :disabled="loading" @click="loadConfig">
-            {{ loading ? '加载中…' : '刷新配置' }}
+            {{ loading ? '同步配置中…' : '🔄 刷新同步全局配置' }}
           </button>
         </div>
       </header>
@@ -19,391 +21,491 @@
       <p v-if="errorMessage" class="page-error">{{ errorMessage }}</p>
       <p v-if="globalMessage" :class="['page-tip', globalMessage.type]">{{ globalMessage.text }}</p>
 
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">核心参数</div>
-          <div class="section-actions">
-            <button class="btn" type="button" :disabled="isSaving('core_dates')" @click="saveCoreDatesSection">
-              {{ isSaving('core_dates') ? '保存中…' : '保存本区块' }}
-            </button>
+      <!-- 磨砂玻璃态全局数据看板 (Quick Dashboard) -->
+      <section class="card elevated quick-dashboard-card">
+        <div class="meta-dashboard">
+          <div class="meta-card">
+            <span class="meta-label">供给主体数</span>
+            <strong class="meta-value">{{ supplyEntities.length }} 个注册主体</strong>
           </div>
-        </div>
-        <div class="field-grid">
-          <label class="field">
-            <span>show_date</span>
-            <input v-model="showDate" type="date" />
-          </label>
-          <label class="field">
-            <span>plan_start_date</span>
-            <input v-model="planStartDate" type="date" :disabled="autoUpdatePlanStartDate" />
-            <small class="field-help">开启自动更新后，该日期会先同步为今天，后续再随真实日期自动变化。</small>
-          </label>
-          <label class="field">
-            <span>plan_start_date 是否随真实日期自动变化</span>
-            <select v-model="autoUpdatePlanStartDate" @change="handleAutoPlanStartDateChange">
-              <option :value="false">否</option>
-              <option :value="true">是</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>plan_editable_days</span>
-            <input v-model.number="planEditableDays" type="number" min="0" max="3" step="1" />
-            <small class="field-help">`3` 为三天都可改，`2` 为最后两天可改，`1` 为仅最后一天可改，`0` 为全部不可改。</small>
-          </label>
-        </div>
-        <p v-if="sectionMessage('core_dates')" :class="['section-tip', sectionMessage('core_dates').type]">
-          {{ sectionMessage('core_dates').text }}
-        </p>
-        <div class="summary-row">
-          <span class="summary-chip">供给主体：{{ supplyEntities.length }}</span>
-          <span class="summary-chip">换热站：{{ demandEntities.length }}</span>
-          <span class="summary-chip">型号：{{ pipeModels.length }}</span>
-          <span class="summary-chip">产能预设：{{ productionCapacities.length }}</span>
-          <span class="summary-chip">负责人映射：{{ managerAssignments.length }}</span>
-          <span class="summary-chip">施工单位：{{ constructionUnits.length }}</span>
-          <span class="summary-chip">基准预设：{{ baselinePresets.length }}</span>
+          <div class="meta-card">
+            <span class="meta-label">管理的换热站</span>
+            <strong class="meta-value">{{ demandEntities.length }} 个运营站点</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">系统保温管型号</span>
+            <strong class="meta-value">{{ pipeModels.length }} 种规格</strong>
+          </div>
+          <div class="meta-card highlight">
+            <span class="meta-label">当前计划起始日期</span>
+            <strong class="meta-value">{{ planStartDate || '未设置' }}</strong>
+          </div>
+          <div class="meta-card highlight">
+            <span class="meta-label">换热站提交状态</span>
+            <strong class="meta-value highlight-num">{{ submittedStationCount }} / {{ demandEntities.length }} 站已提交</strong>
+          </div>
         </div>
       </section>
 
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div>
-            <div class="card-header">换热站提交状态</div>
-            <p class="sub block-sub">这里只读取独立提交状态文件中的最新提交记录，用于管理员判断各换热站是否完成当前批次填报。</p>
-          </div>
-          <div class="summary-row baseline-summary">
-            <span class="summary-chip">当前计划起始日期：{{ planStartDate || '未设置' }}</span>
-            <span class="summary-chip">已提交：{{ submittedStationCount }}</span>
-            <span class="summary-chip">未提交：{{ pendingStationCount }}</span>
-            <span class="summary-chip">历史记录：{{ historySubmissions.length }}</span>
-          </div>
-        </div>
-        <p class="sub block-sub">状态文件：{{ submissionStatusPath || '未设置' }}</p>
-        <div class="table-wrap">
-          <table class="table editor-table submission-table">
-            <thead>
-              <tr>
-                <th>换热站</th>
-                <th>当前状态</th>
-                <th>最新提交日期</th>
-                <th>最新提交时间</th>
-                <th>最新提交人</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in submissionStatusRows" :key="item.station_id">
-                <td>{{ item.station_name || item.station_id }}</td>
-                <td>
-                  <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
-                    {{ item.is_submitted ? '已提交' : '未提交' }}
-                  </span>
-                </td>
-                <td>{{ item.data_submit_date || '—' }}</td>
-                <td>{{ item.submitted_at || '—' }}</td>
-                <td>{{ item.submitted_by || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <!-- 纵向双栏侧边控制台 -->
+      <div class="admin-workbench-layout">
+        
+        <!-- 左侧纵向选项卡菜单 -->
+        <aside class="admin-sidebar">
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'core' }]" 
+            @click="activeTab = 'core'"
+          >
+            ⚙️ 核心参数与状态
+          </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'station' }]" 
+            @click="activeTab = 'station'"
+          >
+            📍 换热站基础台账
+          </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'supply' }]" 
+            @click="activeTab = 'supply'"
+          >
+            🚚 供给主体与产能
+          </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'people' }]" 
+            @click="activeTab = 'people'"
+          >
+            👥 人员映射与施工
+          </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'baseline' }]" 
+            @click="activeTab = 'baseline'"
+          >
+            📋 基准设计量预设
+          </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'json' }]" 
+            @click="activeTab = 'json'"
+          >
+            💻 原始 JSON 预览
+          </button>
+        </aside>
 
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">供给主体</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addSupplyEntity">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('supply_entities')" @click="saveSection('supply_entities')">
-              {{ isSaving('supply_entities') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p v-if="sectionMessage('supply_entities')" :class="['section-tip', sectionMessage('supply_entities').type]">
-          {{ sectionMessage('supply_entities').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>主体ID</th>
-                <th>主体编码</th>
-                <th>主体名称</th>
-                <th>联系人</th>
-                <th>联系电话</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in supplyEntities" :key="`${item.entity_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.entity_id" type="text" /></td>
-                <td><input v-model.trim="item.code" type="text" maxlength="8" placeholder="如 SA" /></td>
-                <td><input v-model.trim="item.entity_name" type="text" /></td>
-                <td><input v-model.trim="item.contact_name" type="text" /></td>
-                <td><input v-model.trim="item.contact_phone" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(supplyEntities, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">换热站</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addDemandEntity">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('demand_entities')" @click="saveSection('demand_entities')">
-              {{ isSaving('demand_entities') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p v-if="sectionMessage('demand_entities')" :class="['section-tip', sectionMessage('demand_entities').type]">
-          {{ sectionMessage('demand_entities').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>站点ID</th>
-                <th>站点编码</th>
-                <th>站点名称</th>
-                <th>区域</th>
-                <th>标段</th>
-                <th>施工状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in demandEntities" :key="`${item.station_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.station_id" type="text" /></td>
-                <td><input v-model.trim="item.code" type="text" maxlength="8" placeholder="如 A / AA" /></td>
-                <td><input v-model.trim="item.station_name" type="text" /></td>
-                <td><input v-model.trim="item.region" type="text" /></td>
-                <td><input v-model.trim="item.section" type="text" /></td>
-                <td><input v-model.trim="item.construction_status" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(demandEntities, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">保温管型号</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addPipeModel">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('pipe_models')" @click="saveSection('pipe_models')">
-              {{ isSaving('pipe_models') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p class="sub block-sub">如果要增加或删除型号，直接在这里操作即可；保存后，基准量预设区可以再按站点补齐缺失型号。</p>
-        <p v-if="sectionMessage('pipe_models')" :class="['section-tip', sectionMessage('pipe_models').type]">
-          {{ sectionMessage('pipe_models').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>型号ID</th>
-                <th>型号名称</th>
-                <th>单位</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in pipeModels" :key="`${item.pipe_model_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.pipe_model_id" type="text" @change="syncPipeModelIdentity(item, 'id')" /></td>
-                <td><input v-model.trim="item.pipe_model_name" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
-                <td><input v-model.trim="item.unit" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(pipeModels, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div>
-            <div class="card-header">保温管生产能力</div>
-            <p class="sub block-sub">维护每个管厂、各型号保温管的每日最大产能，计量单位为米/日。</p>
-          </div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addProductionCapacity">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('production_capacities')" @click="saveSection('production_capacities')">
-              {{ isSaving('production_capacities') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p v-if="sectionMessage('production_capacities')" :class="['section-tip', sectionMessage('production_capacities').type]">
-          {{ sectionMessage('production_capacities').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>供给主体</th>
-                <th>型号</th>
-                <th>每日最大产能（米）</th>
-                <th>备注</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in productionCapacities" :key="`${item.supply_entity_name || 'supplier'}-${item.pipe_model_name || 'model'}-${index}`">
-                <td><input v-model.trim="item.supply_entity_name" type="text" /></td>
-                <td><input v-model.trim="item.pipe_model_name" type="text" /></td>
-                <td><input v-model.number="item.max_daily_output_qty" type="number" min="0" step="1" /></td>
-                <td><input v-model.trim="item.remark" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(productionCapacities, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">现场负责人映射</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addManagerAssignment">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('manager_assignments')" @click="saveSection('manager_assignments')">
-              {{ isSaving('manager_assignments') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p class="sub block-sub">多个换热站请用英文逗号分隔，例如 `station_a, station_b`。</p>
-        <p v-if="sectionMessage('manager_assignments')" :class="['section-tip', sectionMessage('manager_assignments').type]">
-          {{ sectionMessage('manager_assignments').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>负责人ID</th>
-                <th>负责人名称</th>
-                <th>换热站ID列表</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in managerAssignments" :key="`${item.manager_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.manager_id" type="text" /></td>
-                <td><input v-model.trim="item.manager_name" type="text" /></td>
-                <td><input v-model.trim="item.station_ids_text" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div class="card-header">施工单位及换热站映射</div>
-          <div class="section-actions">
-            <button class="btn ghost" type="button" @click="addConstructionUnit">新增一行</button>
-            <button class="btn" type="button" :disabled="isSaving('construction_units')" @click="saveSection('construction_units')">
-              {{ isSaving('construction_units') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p class="sub block-sub">多个换热站请用英文逗号分隔，例如 `station_a, station_c`。仅通过换热站ID进行映射，不再单独维护名称列表。</p>
-        <p v-if="sectionMessage('construction_units')" :class="['section-tip', sectionMessage('construction_units').type]">
-          {{ sectionMessage('construction_units').text }}
-        </p>
-        <div class="table-wrap">
-          <table class="table editor-table">
-            <thead>
-              <tr>
-                <th>单位ID</th>
-                <th>单位名称</th>
-                <th>联系人</th>
-                <th>联系电话</th>
-                <th>换热站ID列表</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in constructionUnits" :key="`${item.unit_id || 'new'}-${index}`">
-                <td><input v-model.trim="item.unit_id" type="text" /></td>
-                <td><input v-model.trim="item.unit_name" type="text" /></td>
-                <td><input v-model.trim="item.contact_name" type="text" /></td>
-                <td><input v-model.trim="item.contact_phone" type="text" /></td>
-                <td><input v-model.trim="item.station_ids_text" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card elevated">
-        <div class="card-header-row">
-          <div>
-            <div class="card-header">基准量预设</div>
-            <p class="sub block-sub">先选择换热站，再维护该站点下的型号与设计值，避免一次展开全部换热站。</p>
-          </div>
-          <div class="section-actions baseline-actions">
-            <label class="field inline-field">
-              <span>换热站</span>
-              <select v-model="selectedBaselineStationId">
-                <option v-for="station in demandEntities" :key="station.station_id" :value="station.station_id">
-                  {{ station.station_name || station.station_id }}
-                </option>
-              </select>
-            </label>
-            <button class="btn ghost" type="button" @click="addBaselinePreset">新增一行</button>
-            <button class="btn ghost" type="button" @click="fillMissingPipeModelsForSelectedStation">补齐缺失型号</button>
-            <button class="btn" type="button" :disabled="isSaving('baseline_presets')" @click="saveSection('baseline_presets')">
-              {{ isSaving('baseline_presets') ? '保存中…' : '保存本区块' }}
-            </button>
-          </div>
-        </div>
-        <p v-if="sectionMessage('baseline_presets')" :class="['section-tip', sectionMessage('baseline_presets').type]">
-          {{ sectionMessage('baseline_presets').text }}
-        </p>
-        <div class="summary-row baseline-summary">
-          <span class="summary-chip">当前站点：{{ selectedBaselineStationName }}</span>
-          <span class="summary-chip">当前显示：{{ filteredBaselinePresets.length }} 条</span>
-          <span class="summary-chip">全量预设：{{ baselinePresets.length }} 条</span>
-        </div>
-        <div class="table-wrap">
-          <table class="table editor-table baseline-table">
-            <thead>
-              <tr>
-                <th>型号</th>
-                <th>设计值(m)</th>
-                <th>计划使用量(m)</th>
-                <th>备注</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in filteredBaselinePresets" :key="item.__row_key">
-                <td>
-                  <select v-model="item.pipe_model_id" @change="syncBaselinePipeModelName(item)">
-                    <option v-for="model in pipeModels" :key="model.pipe_model_id" :value="model.pipe_model_id">
-                      {{ model.pipe_model_name || model.pipe_model_id }}
-                    </option>
+        <!-- 右侧当前选中的配置主卡片 -->
+        <div class="admin-content-pane">
+          
+          <!-- Tab 1: 核心参数与提交状态 -->
+          <div v-if="activeTab === 'core'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div class="card-header">⚙️ 核心控制参数</div>
+                <div class="section-actions">
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('core_dates')" @click="saveCoreDatesSection">
+                    {{ isSaving('core_dates') ? '保存中…' : '💾 保存核心参数' }}
+                  </button>
+                </div>
+              </div>
+              <div class="field-grid">
+                <label class="field">
+                  <span>展示/业务日期 (show_date)</span>
+                  <input v-model="showDate" type="date" class="input" />
+                </label>
+                <label class="field">
+                  <span>滚动计划起始日期 (plan_start_date)</span>
+                  <input v-model="planStartDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
+                  <small class="field-help">开启自动更新后，该日期会随真实日期自动变化。</small>
+                </label>
+                <label class="field">
+                  <span>起始日期是否自动随今天变化</span>
+                  <select v-model="autoUpdatePlanStartDate" class="input" @change="handleAutoPlanStartDateChange">
+                    <option :value="false">否 (手动维护起始日期)</option>
+                    <option :value="true">是 (每天随日期自动后移)</option>
                   </select>
-                </td>
-                <td><input v-model.number="item.design_qty" type="number" min="0" step="1" /></td>
-                <td><input v-model.number="item.purchase_plan_qty" type="number" min="0" step="1" /></td>
-                <td><input v-model.trim="item.remark" type="text" /></td>
-                <td><button class="btn danger" type="button" @click="removeBaselinePreset(item.__row_key)">删除</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+                </label>
+                <label class="field">
+                  <span>计划可填报修改天数 (plan_editable_days)</span>
+                  <input v-model.number="planEditableDays" class="input" type="number" min="0" max="3" step="1" />
+                  <small class="field-help">`3`为三天都可改，`2`为最后两天可改，`0`为不可填报。</small>
+                </label>
+              </div>
+              <p v-if="sectionMessage('core_dates')" :class="['section-tip', sectionMessage('core_dates').type]">
+                {{ sectionMessage('core_dates').text }}
+              </p>
+            </section>
 
-      <details class="card elevated json-details">
-        <summary>原始 JSON 折叠查看</summary>
-        <p class="sub block-sub">这里只用于核对最终保存内容，日常维护建议优先使用上面的分块编辑区。</p>
-        <textarea :value="configPreviewText" class="json-editor" readonly spellcheck="false"></textarea>
-      </details>
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">换热站昨日提交状态审计</div>
+                  <p class="sub block-sub">审计昨日三日计划上报进度，判断昨日消耗数据及滚动计划是否全部锁盘入库。</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="table editor-table submission-table">
+                  <thead>
+                    <tr>
+                      <th>换热站</th>
+                      <th>提交状态</th>
+                      <th>最近一次提交日期</th>
+                      <th>提交完成物理时间</th>
+                      <th>现场填报人</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in submissionStatusRows" :key="item.station_id">
+                      <td class="cell-text" :title="item.station_name || item.station_id">{{ item.station_name || item.station_id }}</td>
+                      <td>
+                        <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
+                          {{ item.is_submitted ? '✓ 已上报' : '⌛ 未上报' }}
+                        </span>
+                      </td>
+                      <td>{{ item.data_submit_date || '—' }}</td>
+                      <td class="cell-datetime">{{ item.submitted_at || '—' }}</td>
+                      <td>{{ item.submitted_by || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 2: 换热站基础台账 -->
+          <div v-if="activeTab === 'station'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">换热站基础档案信息</div>
+                  <p class="sub block-sub">管理保温管物理覆盖的所有换热站点、地理区域及标段映射。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addDemandEntity">➕ 新增站点</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('demand_entities')" @click="saveSection('demand_entities')">
+                    {{ isSaving('demand_entities') ? '正在同步…' : '💾 保存站点台账' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('demand_entities')" :class="['section-tip', sectionMessage('demand_entities').type]">
+                {{ sectionMessage('demand_entities').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>换热站ID (唯一)</th>
+                      <th>换热站编码</th>
+                      <th>换热站名称</th>
+                      <th>管线所属区域</th>
+                      <th>所属施工标段</th>
+                      <th>当前施工状态</th>
+                      <th>物理移除</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in demandEntities" :key="`${item.station_id || 'new'}-${index}`">
+                      <td><input v-model.trim="item.station_id" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 AA" /></td>
+                      <td><input v-model.trim="item.station_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.region" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.section" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.construction_status" class="input table-cell-input" type="text" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(demandEntities, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 3: 供给主体与产能 -->
+          <div v-if="activeTab === 'supply'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">供货商与供给主体档案</div>
+                  <p class="sub block-sub">配置参与本次管材物流链的所有保温管制造厂主体及发货人默认信息。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addSupplyEntity">➕ 新增主体</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('supply_entities')" @click="saveSection('supply_entities')">
+                    {{ isSaving('supply_entities') ? '保存中…' : '💾 保存主体信息' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('supply_entities')" :class="['section-tip', sectionMessage('supply_entities').type]">
+                {{ sectionMessage('supply_entities').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>主体ID (唯一)</th>
+                      <th>主体编码</th>
+                      <th>供给主体名称</th>
+                      <th>发货联系人</th>
+                      <th>联系电话</th>
+                      <th>物理移除</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in supplyEntities" :key="`${item.entity_id || 'new'}-${index}`">
+                      <td><input v-model.trim="item.entity_id" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 SA" /></td>
+                      <td><input v-model.trim="item.entity_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(supplyEntities, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">系统保温管型号规格</div>
+                  <p class="sub block-sub">定义系统中支持登记的保温管径规格，通常符合 DN 命名规范。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addPipeModel">➕ 新增型号</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('pipe_models')" @click="saveSection('pipe_models')">
+                    {{ isSaving('pipe_models') ? '保存中…' : '💾 保存管径规格' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('pipe_models')" :class="['section-tip', sectionMessage('pipe_models').type]">
+                {{ sectionMessage('pipe_models').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>型号规格ID (如 DN200)</th>
+                      <th>展示名称</th>
+                      <th>物理计量单位</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in pipeModels" :key="`${item.pipe_model_id || 'new'}-${index}`">
+                      <td><input v-model.trim="item.pipe_model_id" class="input table-cell-input" type="text" @change="syncPipeModelIdentity(item, 'id')" /></td>
+                      <td><input v-model.trim="item.pipe_model_name" class="input table-cell-input" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
+                      <td><input v-model.trim="item.unit" class="input table-cell-input" type="text" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(pipeModels, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">供给侧制造产能预设</div>
+                  <p class="sub block-sub">维护每个供给厂、各型号保温管的每日最大制造上限（米/日）。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addProductionCapacity">➕ 新增产能</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('production_capacities')" @click="saveSection('production_capacities')">
+                    {{ isSaving('production_capacities') ? '保存中…' : '💾 保存产能数据' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('production_capacities')" :class="['section-tip', sectionMessage('production_capacities').type]">
+                {{ sectionMessage('production_capacities').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>供给主体</th>
+                      <th>保温管型号</th>
+                      <th>每日制造上限 (米)</th>
+                      <th>特殊限制说明</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in productionCapacities" :key="`${item.supply_entity_name || 'supplier'}-${item.pipe_model_name || 'model'}-${index}`">
+                      <td><input v-model.trim="item.supply_entity_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.pipe_model_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.number="item.max_daily_output_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
+                      <td><input v-model.trim="item.remark" class="input table-cell-input" type="text" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(productionCapacities, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 4: 人员映射与施工单位 -->
+          <div v-if="activeTab === 'people'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">现场主管负责人映射</div>
+                  <p class="sub block-sub">授权不同负责人账号所分管的换热站列表。多个换热站请用英文逗号(,)分隔。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addManagerAssignment">➕ 新增主管</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('manager_assignments')" @click="saveSection('manager_assignments')">
+                    {{ isSaving('manager_assignments') ? '保存中…' : '💾 保存主管映射' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('manager_assignments')" :class="['section-tip', sectionMessage('manager_assignments').type]">
+                {{ sectionMessage('manager_assignments').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>分管人账号ID (对应登录名)</th>
+                      <th>分管负责人姓名</th>
+                      <th>所分管的换热站ID列表 (逗号分隔)</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in managerAssignments" :key="`${item.manager_id || 'new'}-${index}`">
+                      <td><input v-model.trim="item.manager_id" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.manager_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" placeholder="如 station_a, station_b" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">施工分包单位及站点映射</div>
+                  <p class="sub block-sub">配置各施工标段分包商基本联络方式及分管站点。多个换热站请用英文逗号(,)分隔。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addConstructionUnit">➕ 新增分包商</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('construction_units')" @click="saveSection('construction_units')">
+                    {{ isSaving('construction_units') ? '保存中…' : '💾 保存施工映射' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('construction_units')" :class="['section-tip', sectionMessage('construction_units').type]">
+                {{ sectionMessage('construction_units').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>分包单位ID (唯一)</th>
+                      <th>施工单位名称</th>
+                      <th>工地联系人</th>
+                      <th>联系电话</th>
+                      <th>分管的换热站ID列表 (逗号分隔)</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in constructionUnits" :key="`${item.unit_id || 'new'}-${index}`">
+                      <td><input v-model.trim="item.unit_id" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.unit_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" placeholder="如 station_a, station_c" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 5: 基准量预设 -->
+          <div v-if="activeTab === 'baseline'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">换热站管线基准设计量</div>
+                  <p class="sub block-sub">维护特定换热站的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择站点过滤。</p>
+                </div>
+                <div class="section-actions baseline-actions-panel">
+                  <div class="station-filter-inline">
+                    <span>过滤站点：</span>
+                    <select v-model="selectedBaselineStationId" class="input inline-select">
+                      <option v-for="station in demandEntities" :key="station.station_id" :value="station.station_id">
+                        {{ station.station_name || station.station_id }}
+                      </option>
+                    </select>
+                  </div>
+                  <button class="btn ghost" type="button" @click="addBaselinePreset">➕ 新增型号行</button>
+                  <button class="btn ghost btn-action-tool" type="button" @click="fillMissingPipeModelsForSelectedStation">补齐缺失规格</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('baseline_presets')" @click="saveSection('baseline_presets')">
+                    {{ isSaving('baseline_presets') ? '保存中…' : '💾 保存设计基准' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('baseline_presets')" :class="['section-tip', sectionMessage('baseline_presets').type]">
+                {{ sectionMessage('baseline_presets').text }}
+              </p>
+              <div class="summary-row baseline-summary">
+                <span class="summary-chip">当前站点：{{ selectedBaselineStationName }}</span>
+                <span class="summary-chip">当前显示：{{ filteredBaselinePresets.length }} 条</span>
+                <span class="summary-chip">全量预设：{{ baselinePresets.length }} 条</span>
+              </div>
+              <div class="table-wrap">
+                <table class="table editor-table baseline-table">
+                  <thead>
+                    <tr>
+                      <th>管材型号</th>
+                      <th>设计量(米)</th>
+                      <th>计划采购总量(米)</th>
+                      <th>说明备注</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in filteredBaselinePresets" :key="item.__row_key">
+                      <td>
+                        <select v-model="item.pipe_model_id" class="input table-cell-input" @change="syncBaselinePipeModelName(item)">
+                          <option v-for="model in pipeModels" :key="model.pipe_model_id" :value="model.pipe_model_id">
+                            {{ model.pipe_model_name || model.pipe_model_id }}
+                          </option>
+                        </select>
+                      </td>
+                      <td><input v-model.number="item.design_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
+                      <td><input v-model.number="item.purchase_plan_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
+                      <td><input v-model.trim="item.remark" class="input table-cell-input" type="text" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeBaselinePreset(item.__row_key)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab 6: 原始 JSON 预览 -->
+          <div v-if="activeTab === 'json'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">原始 JSON 数据预览</div>
+                  <p class="sub block-sub">提供全局数据库种子的只读 JSON 文本预览，用于技术核对底层参数拼载结构。</p>
+                </div>
+              </div>
+              <textarea :value="configPreviewText" class="json-editor-textarea" readonly spellcheck="false"></textarea>
+            </section>
+          </div>
+
+        </div>
+
+      </div>
     </main>
   </div>
 </template>
@@ -426,6 +528,7 @@ const {
 } = useTubePageShell('全局管理入口')
 
 const configPath = ref('')
+const activeTab = ref('core')
 const showDate = ref('')
 const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
@@ -1121,5 +1224,239 @@ useTubeRealtimeRefresh(loadConfig)
   .section-actions {
     align-items: stretch;
   }
+}
+
+/* 磨砂玻璃态全局数据看板 */
+.quick-dashboard-card {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin-bottom: 8px !important;
+}
+
+.meta-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.meta-card {
+  background: rgba(255, 255, 255, 0.65) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  border-radius: 14px !important;
+  padding: 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+}
+
+.meta-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: linear-gradient(180deg, #6366f1 0%, #3b82f6 100%);
+}
+
+.meta-card.highlight::before {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+}
+
+.meta-card:hover {
+  transform: translateY(-4px) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.08), 0 4px 6px -2px rgba(59, 130, 246, 0.04) !important;
+  border-color: rgba(147, 197, 253, 0.5) !important;
+}
+
+.meta-label {
+  font-size: 12px !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meta-value {
+  font-size: 20px !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  font-family: "Inter", "Outfit", -apple-system, sans-serif !important;
+}
+
+.highlight-num {
+  color: #2563eb !important;
+}
+
+/* 高级侧边控制台布局 */
+.admin-workbench-layout {
+  display: grid !important;
+  grid-template-columns: 240px 1fr !important;
+  gap: 24px !important;
+  align-items: start !important;
+  margin-top: 16px !important;
+}
+
+@media (max-width: 1024px) {
+  .admin-workbench-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.admin-sidebar {
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  border-radius: 14px !important;
+  padding: 12px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  box-sizing: border-box;
+}
+
+.sidebar-tab-btn {
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 12px 16px !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  box-sizing: border-box;
+}
+
+.sidebar-tab-btn:hover {
+  color: #1e293b !important;
+  background: rgba(241, 245, 249, 0.6) !important;
+}
+
+.sidebar-tab-btn.active {
+  color: #2563eb !important;
+  background: #eff6ff !important;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1) !important;
+}
+
+.admin-content-pane {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 20px !important;
+  min-width: 0 !important;
+}
+
+.pane-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.section-card {
+  margin: 0 !important;
+}
+
+.table-cell-input {
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+  border-color: #e2e8f0 !important;
+}
+
+.table-cell-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+}
+
+.compact-btn {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+}
+
+.danger-ghost {
+  border: 1px solid #fee2e2 !important;
+  color: #ef4444 !important;
+  background: #fef2f2 !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.danger-ghost:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+}
+
+/* 升级表格 Hover 和对齐 */
+.table th, .table td {
+  padding: 12px 14px !important;
+  vertical-align: middle !important;
+}
+
+.table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.02) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+
+.shadow-accent {
+  box-shadow: 0 4px 12px 0 rgba(37, 99, 235, 0.25) !important;
+}
+
+.json-editor-textarea {
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 16px;
+  font-family: "Consolas", "Monaco", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.cell-text {
+  max-width: 180px !important;
+  min-width: 130px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.cell-datetime {
+  font-family: "Consolas", "Courier New", monospace !important;
+  font-size: 13px !important;
+  min-width: 132px;
+}
+
+/* 按钮 Premium 居中与防折行加固 */
+.btn, .primary-button, .button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  box-sizing: border-box !important;
 }
 </style>

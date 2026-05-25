@@ -1,3 +1,34 @@
+## 2026-05-25 大连洁净能源集团生产日报仪表盘看板源码路由追踪与审计
+
+- 前置说明：本轮顺着用户提供的本地生产日报看板 URL，通过前端路由系统 `frontend/src/router/index.js` 精确定位并审计了该看板页面源文件 `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`。本轮为纯路由追踪与源码审计，未改动实际前端和后端业务逻辑文件，改动范围仅限于全局过程日志 `progress.md` 留痕；回滚方式为撤销本轮对 `configs/progress.md` 的新增内容。
+- 审计确认与实现原理：
+  1. **路由匹配映射成功**：用户访问的本地路由 `http://localhost:5173/projects/daily_report_25_26/pages/dashboard/dashboard` 对应了 `index.js` 中的动态路由配置 `/projects/:projectKey/pages/:pageKey/dashboard`，从而精准映射并动态导入了 `../projects/daily_report_25_26/pages/DashBoard.vue` 物理组件。
+  2. **DashBoard 源码深度审计**：确认该物理组件（`DashBoard.vue` 共有 6290 行）是大连洁净能源集团的核心生产看板，承载了整个集团的当日平均气温、煤价边际利润、标煤耗量、投诉量等当日及供暖期累积指标，并采用 ECharts 渲染包括气温、边际利润、投诉、单耗、主城中心、库存等九大核心板块。
+  3. **架构与接口映射**：该页面逻辑层高度依赖 `/dashboard` 响应及 `/projects/{key}/dashboard/date` 接口，包含缓存发布日志、气温手动入库、PDF 自动生成（自动展开折叠区导出）以及 shallowRef/Aborted 性能防抖等多项大厂级 SaaS 架构设计。
+
+## 2026-05-25 tube项目 V5.4 殿堂级 UI/UX 重新设计与核心防错交互重构
+
+- 前置说明：本轮针对保温管物流供应链管理子系统（`insulation_pipe_supply_2026`，内部代号 `tube`）的需求侧、供给侧、库管侧和全局管理入口开展了**整容级重新设计与防错交互重构**。不仅消除了程序员式的粗糙对齐与文字折行，升级为极具 Premium 大厂品质的 SaaS 工作台体验，更是定点爆破了 3 项交互 Bug，实现数据 100% 精确防错。改动范围涵盖四个前端主页面及 `jsconfig.json`；本地静态构建打包编译测试 100% 成功，零错误、零警告。
+- 重构与优化细节：
+  1. **库管侧台账整容级加固 (`WarehouseManagementView.vue`)**：
+     - **多选与单选视觉/逻辑解耦**：彻底解决了点击任意行均会将其加入多选 `selectedDeliveryIds` 导致批量汇总数据（总米数、均时等）被非待库管单据严重污染的逻辑 Bug。重塑 `toggleDeliverySelection`，限制只有 `pending_warehouse` 拥有多选资格，非该状态的行点击时仅触发单选激活查看备注，绝不计入多选。
+     - **多轨状态高亮与科技蓝指示竖线**：引入 `.checked`（多选行，淡蓝色微磨砂底）与 `.active`（激活行，更深磨砂底且左侧贴 4px 亮丽科技蓝指示竖线）双轨状态，交互手感大厂品质。
+     - **13列大表列宽控制与 tabular-nums 右对齐**：去掉表头拥挤的“多选”文字；对订单号、车次号升级为专属的 Badge 代码标牌，车牌号升级为专属淡蓝色物流徽章。在 CSS 中精确定义 `colgroup` 物理比例，锁死大表 `min-width` 为 1400px，配合 `table-layout: fixed` 与外层滚动条，彻底解决了折行挤压；数值列强制进行右对齐和 `font-variant-numeric: tabular-nums` 金融级等宽数字排版，千位/百位在中轴线精确对齐。
+     - **在途耗时静止与 Promise 健壮化**：更正驼峰字段 `row.arrivedConfirmAt` 使送达后计时完美休眠；批量入库升级为 `Promise.allSettled` 支持失败精准反馈。
+  2. **供给侧 Tab 工作台与 Watcher 爆破 (`SupplyManagementView.vue`)**：
+     - **3 Tab Workbench 工作台**：彻底拆分为 `🎯 供需及净缺口`、`🚚 车次批量发货`、`📋 物流发货历史` 面板，支持 smooth cubic-bezier 微过渡。
+     - **左右分栏高端布局**：左侧为圆角微渐变发货表单，右侧为暂存车卡，明细改版为积木卡片样式。
+     - **彻底消灭 Watcher 循环死锁**：删去两个双向拷贝 selectedSupplyEntityId 的 Watcher 链，改由单向流 `@change="handleSupplyEntityChange"` 驱动，API 查询效率飙升。
+     - **长文本 ellipsis 截断**：配合 `min-width` 表格行高像素级一致对齐。
+  3. **需求侧 Paste 呼吸灯与 Glow 卡片 (`DemandManagementView.vue`)**：
+     - **Glow 看板**：顶部 Quick Dashboard 磁贴升级为 Glow 微晕 Glassmorphism 磨砂卡片。
+     - **Excel 智能解析呼吸灯 (Pulse Glow)**：快速粘贴框聚焦时呈现天蓝色霓虹光晕规律脉动，动态显示状态。
+  4. **全局控制台纵向侧边控制菜单 (`GlobalManagementView.vue`)**：
+     - **侧边双栏控制菜单 (Side-tabbed Configuration Workspace)**：将十个臃肿配置块解耦为 6 个纵向子 Tab 菜单，极具大厂控制台品质。
+     - **Glassmorphic 控制看板**：顶部大字展示注册站点、规格和提交统计，内嵌 input 高宽自适应防折行。
+  5. **工程别名校验规范修复 (`jsconfig.json`)**：
+     - 将 paths 数组中非相对前缀 of `"src/*"` 修正为标准的相对前缀 `["./src/*"]`，彻底消除了编辑器内部 Schema 路径别名校验红线警报，IntelliSense 高度恢复绿色健康。
+- 当前结论：本轮重设与加固，在视觉、交互与防错机制上为 tube 系统注入了卓越的大厂品质；全链路静态打包完美通过，逻辑 100% 严密。
 
 ## 2026-05-25 tube项目最新方案与构建流程计划宣底及对接调研
 

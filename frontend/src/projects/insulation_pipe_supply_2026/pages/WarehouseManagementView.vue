@@ -115,41 +115,53 @@
         <div v-else-if="deliveries.length === 0" class="page-state">当前筛选条件下没有记录。</div>
         <div v-else class="table-wrap">
           <table class="table">
+            <colgroup>
+              <col class="col-checkbox" />
+              <col class="col-order" />
+              <col class="col-shipment" />
+              <col class="col-plate" />
+              <col class="col-supply" />
+              <col class="col-station" />
+              <col class="col-model" />
+              <col class="col-qty" />
+              <col class="col-qty" />
+              <col class="col-qty" />
+              <col class="col-status" />
+              <col class="col-time" />
+              <col class="col-elapsed" />
+            </colgroup>
             <thead>
               <tr>
-                <th>
-                  <label class="table-checkbox">
-                    <input
-                      type="checkbox"
-                      :checked="allPendingWarehouseSelected"
-                      :indeterminate.prop="hasPartialPendingWarehouseSelection"
-                      @change="toggleSelectAllPendingWarehouse($event)"
-                    />
-                    <span>多选</span>
-                  </label>
+                <th class="cell-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="allPendingWarehouseSelected"
+                    :indeterminate.prop="hasPartialPendingWarehouseSelection"
+                    @change="toggleSelectAllPendingWarehouse($event)"
+                  />
                 </th>
                 <th>订单号</th>
                 <th>运输车次号</th>
-                <th>车牌号</th>
+                <th class="cell-plate-header">车牌号</th>
                 <th>供给主体</th>
                 <th>换热站</th>
                 <th>型号</th>
-                <th>发货量（米）</th>
-                <th>到货量（米）</th>
-                <th>接收量（米）</th>
-                <th>状态</th>
-                <th>发货时间</th>
-                <th>在途时长</th>
+                <th class="cell-number">发货量（米）</th>
+                <th class="cell-number">到货量（米）</th>
+                <th class="cell-number">接收量（米）</th>
+                <th class="cell-status">状态</th>
+                <th class="cell-datetime">发货时间</th>
+                <th class="cell-elapsed">在途时长</th>
               </tr>
             </thead>
             <tbody>
               <tr
                 v-for="row in deliveries"
                 :key="row.id"
-                :class="{ selected: isDeliverySelected(row.id) }"
+                :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
                 @click="toggleDeliverySelection(row)"
               >
-                <td>
+                <td class="cell-checkbox">
                   <input
                     v-if="row.status === 'pending_warehouse'"
                     type="checkbox"
@@ -158,16 +170,22 @@
                     @change="toggleDeliverySelection(row)"
                   />
                 </td>
-                <td>{{ row.order_no || row.delivery_code || row.id }}</td>
-                <td>{{ row.shipment_no || '—' }}</td>
-                <td>{{ row.vehicle_plate_no || '—' }}</td>
-                <td>{{ row.supply_entity_name }}</td>
-                <td>{{ row.station_name }}</td>
-                <td>{{ row.pipe_model_name }}</td>
-                <td>{{ formatAmount(row.shipped_qty) }}</td>
-                <td>{{ formatOptionalAmount(row.arrived_qty) }}</td>
-                <td>{{ formatOptionalAmount(row.received_qty) }}</td>
-                <td>
+                <td class="cell-code-wrapper">
+                  <span class="cell-code">{{ row.order_no || row.delivery_code || row.id }}</span>
+                </td>
+                <td class="cell-code-wrapper">
+                  <span class="cell-code">{{ row.shipment_no || '—' }}</span>
+                </td>
+                <td class="cell-plate">
+                  <span class="plate-badge">{{ row.vehicle_plate_no || '—' }}</span>
+                </td>
+                <td class="cell-supply" :title="row.supply_entity_name">{{ row.supply_entity_name }}</td>
+                <td class="cell-station" :title="row.station_name">{{ row.station_name }}</td>
+                <td class="cell-model" :title="row.pipe_model_name">{{ row.pipe_model_name }}</td>
+                <td class="cell-number">{{ formatAmount(row.shipped_qty) }}</td>
+                <td class="cell-number">{{ formatOptionalAmount(row.arrived_qty) }}</td>
+                <td class="cell-number">{{ formatOptionalAmount(row.received_qty) }}</td>
+                <td class="cell-status">
                   <div class="status-pill-group">
                     <span class="status-pill" :class="statusClass(row.status)">
                       {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
@@ -177,8 +195,8 @@
                     </span>
                   </div>
                 </td>
-                <td>{{ formatDateTime(row.shipped_at) }}</td>
-                <td>{{ formatDeliveryElapsedDisplay(row) }}</td>
+                <td class="cell-datetime">{{ formatDateTime(row.shipped_at) }}</td>
+                <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
               </tr>
             </tbody>
           </table>
@@ -414,7 +432,8 @@ function getDeliveryElapsedMs(row) {
   if (!row || row.status === 'cancelled' || !row.shipped_at) return null
   const shippedAt = new Date(row.shipped_at)
   if (Number.isNaN(shippedAt.getTime())) return null
-  const endValue = row.arrived_confirm_at ? new Date(row.arrived_confirm_at) : new Date(nowTick.value)
+  const arrivedConfirmAtVal = row.arrivedConfirmAt ?? row.arrived_confirm_at
+  const endValue = arrivedConfirmAtVal ? new Date(arrivedConfirmAtVal) : new Date(nowTick.value)
   if (Number.isNaN(endValue.getTime())) return null
   return Math.max(endValue.getTime() - shippedAt.getTime(), 0)
 }
@@ -469,6 +488,15 @@ function selectDelivery(row) {
 
 function toggleDeliverySelection(row) {
   const deliveryId = String(row.id)
+  
+  // 非“待库管”状态的行，点击行时仅作为“查看单条详情备注”，不参与多选勾选
+  if (row.status !== 'pending_warehouse') {
+    selectedDeliveryId.value = deliveryId
+    syncActionForms(row)
+    return
+  }
+  
+  // 待库管状态的行进行多选切换
   if (isDeliverySelected(deliveryId)) {
     selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => id !== deliveryId)
     if (selectedDeliveryId.value === deliveryId) {
@@ -597,16 +625,32 @@ async function submitWarehouse() {
   actionLoading.value = true
   pageError.value = ''
   pageMessage.value = ''
+  
+  const targets = [...pendingWarehouseSelectedDeliveries.value]
+  const promises = targets.map((row) =>
+    confirmTubeWarehouseDeliveryWarehouse(projectKey, row.id, {
+      remark: warehouseForm.remark || '',
+    })
+  )
+  
   try {
-    for (const row of pendingWarehouseSelectedDeliveries.value) {
-      await confirmTubeWarehouseDeliveryWarehouse(projectKey, row.id, {
-        remark: warehouseForm.remark || '',
-      })
+    const results = await Promise.allSettled(promises)
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r) => r.status === 'rejected')
+    
+    if (rejected.length === 0) {
+      pageMessage.value = `批量库管确认处理成功！已完美处理 ${fulfilled.length} 条记录。`
+      warehouseForm.remark = ''
+      selectedDeliveryIds.value = [] // 批量处置成功后清空勾选
+    } else {
+      const errorMsg = rejected.map((r) => {
+        return r.reason?.message || '网络连接或权限异常'
+      }).join('; ')
+      pageError.value = `部分处置成功！成功 ${fulfilled.length} 条，失败 ${rejected.length} 条。失败反馈: ${errorMsg}`
     }
-    pageMessage.value = `库管确认已提交，共处理 ${pendingWarehouseSelectedDeliveries.value.length} 条记录。`
     await loadDeliveries()
   } catch (error) {
-    pageError.value = error?.message || '库管确认失败'
+    pageError.value = error?.message || '库管确认批量接口执行异常'
   } finally {
     actionLoading.value = false
   }
@@ -639,7 +683,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .tube-page-root { min-height: 100vh; background: var(--bg); }
-.tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; }
+.tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; max-width: 1440px; margin: 0 auto; width: 100%; box-sizing: border-box; padding-left: 24px; padding-right: 24px; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .topbar h2 { margin: 0 0 6px; font-size: 22px; }
 .topbar .sub { margin: 0; color: var(--muted); line-height: 1.6; }
@@ -660,18 +704,237 @@ onBeforeUnmount(() => {
 .form-actions { grid-column: 1 / -1; align-items: center; }
 .stats-card { margin-top: 0; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
-.stat-box { border: 1px solid rgba(15, 23, 42, 0.1); background: rgba(255, 255, 255, 0.7); border-radius: 12px; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
-.stat-box span { color: var(--muted); font-size: 13px; }
-.stat-box strong { font-size: 22px; color: var(--text); }
-.table-wrap { overflow-x: auto; border: 1px solid rgba(15, 23, 42, 0.08); border-radius: 14px; background: #fff; }
-.table { width: 100%; border-collapse: collapse; min-width: 1120px; }
-.table th, .table td { padding: 12px 14px; border-bottom: 1px solid rgba(15, 23, 42, 0.08); text-align: left; vertical-align: middle; white-space: nowrap; }
-.table thead th { background: rgba(37, 99, 235, 0.06); color: var(--text); font-weight: 600; }
-.table tbody tr { cursor: pointer; transition: background 0.15s ease; }
-.table tbody tr:hover { background: rgba(59, 130, 246, 0.05); }
-.table tbody tr.selected { background: rgba(59, 130, 246, 0.1); }
+.stat-box {
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: rgba(255, 255, 255, 0.65) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-radius: 12px !important;
+  padding: 16px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+}
+
+.stat-box::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: #3b82f6;
+}
+
+.stat-box:nth-child(1)::before { background: #3b82f6; }
+.stat-box:nth-child(2)::before { background: #f59e0b; }
+.stat-box:nth-child(3)::before { background: #ea580c; }
+.stat-box:nth-child(4)::before { background: #8b5cf6; }
+.stat-box:nth-child(5)::before { background: #10b981; }
+.stat-box:nth-child(6)::before { background: #64748b; }
+
+.stat-box:hover {
+  transform: translateY(-4px) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.03) !important;
+}
+
+.stat-box span {
+  color: #64748b !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.stat-box strong {
+  font-size: 24px !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  font-family: "Inter", "Outfit", sans-serif !important;
+}
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 10px 15px -3px rgba(0, 0, 0, 0.04);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1400px;
+  table-layout: fixed;
+}
+.table th, .table td {
+  padding: 14px 12px !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+  vertical-align: middle !important;
+}
+
+/* colgroup 列宽物理比例控制 */
+.col-checkbox { width: 50px !important; }
+.col-order { width: 130px !important; }
+.col-shipment { width: 120px !important; }
+.col-plate { width: 100px !important; }
+.col-supply { width: 160px !important; }
+.col-station { width: 160px !important; }
+.col-model { width: 130px !important; }
+.col-qty { width: 105px !important; }
+.col-status { width: 150px !important; }
+.col-time { width: 160px !important; }
+.col-elapsed { width: 110px !important; }
+
+/* 单元格精细对齐与样式 */
+.cell-checkbox {
+  text-align: center !important;
+  justify-content: center !important;
+  width: 50px !important;
+  padding: 14px 6px !important;
+}
+.cell-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  accent-color: #3b82f6;
+  vertical-align: middle;
+}
+.cell-code-wrapper {
+  text-align: left !important;
+  white-space: nowrap !important;
+}
+.cell-code {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace !important;
+  font-size: 12.5px !important;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 3px 8px !important;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  font-weight: 500;
+  display: inline-block;
+}
+.cell-plate {
+  min-width: 90px !important;
+  width: 100px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+.cell-plate-header {
+  text-align: center !important;
+}
+.plate-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  font-family: "Inter", "Outfit", -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+.cell-supply, .cell-station {
+  max-width: 160px !important;
+  min-width: 120px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  color: #334155 !important;
+  font-size: 13px !important;
+}
+.cell-model {
+  max-width: 130px !important;
+  min-width: 100px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-weight: 500;
+  color: #0f172a;
+}
+.cell-number {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  white-space: nowrap !important;
+}
+th.cell-number {
+  text-align: right !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+}
+.cell-status {
+  min-width: 140px !important;
+  width: 150px !important;
+  white-space: nowrap !important;
+}
+.cell-datetime {
+  font-family: "Inter", -apple-system, sans-serif !important;
+  font-size: 13px !important;
+  color: #475569 !important;
+  white-space: nowrap !important;
+}
+.cell-elapsed {
+  font-family: "Inter", -apple-system, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #2563eb !important;
+  white-space: nowrap !important;
+}
+
+.table thead th {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e2e8f0 !important;
+  white-space: nowrap !important;
+}
+.table tbody tr {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.02) !important;
+}
+.table tbody tr.checked {
+  background: rgba(59, 130, 246, 0.04) !important;
+}
+.table tbody tr.active {
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+.table tbody tr.active td {
+  border-bottom-color: rgba(59, 130, 246, 0.15);
+}
+.table tbody tr.active td:first-child {
+  position: relative;
+}
+.table tbody tr.active td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: #2563eb;
+}
+
 .tiny { padding: 6px 10px; font-size: 12px; }
-.status-pill { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font-size: 12px; line-height: 1; border: 1px solid transparent; }
+.status-pill { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font-size: 12px; line-height: 1; border: 1px solid transparent; font-weight: 500; }
 .status-pill-group { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .status-warn { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
 .status-info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
@@ -679,7 +942,18 @@ onBeforeUnmount(() => {
 .status-success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
 .status-danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 .status-neutral { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
-.status-abnormal { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.status-abnormal {
+  background: #fff1f2 !important;
+  color: #e11d48 !important;
+  border-color: #ffe4e6 !important;
+  font-weight: 600 !important;
+  animation: abnormal-pulse 2s infinite ease-in-out;
+}
+@keyframes abnormal-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
 .action-panel { display: flex; flex-direction: column; gap: 16px; }
 .action-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .action-summary > div { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(248, 250, 252, 0.85); border: 1px solid rgba(15, 23, 42, 0.08); }
@@ -695,5 +969,16 @@ onBeforeUnmount(() => {
   .topbar { flex-direction: column; }
   .topbar-actions, .filter-actions, .form-actions { width: 100%; justify-content: stretch; }
   .topbar-actions .btn, .filter-actions .btn, .form-actions .btn { width: 100%; }
+}
+
+/* 按钮 Premium 居中与防折行加固 */
+.btn, .primary-button, .button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  box-sizing: border-box !important;
 }
 </style>
