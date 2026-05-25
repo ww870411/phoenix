@@ -37,10 +37,14 @@ from backend.projects.insulation_pipe_supply_2026.services.demand_management_ser
     save_usage_records,
 )
 from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import (
+    build_order_no,
+    build_shipment_no,
     cancel_delivery_record,
     create_delivery_record,
     build_delivery_code,
+    update_delivery_identifiers,
     get_delivery_record_basic,
+    get_shipment_owner,
     list_arrival_aggregates,
     list_delivery_aggregates,
     list_delivery_records,
@@ -100,9 +104,26 @@ class SupplyDeliveryCreatePayload(BaseModel):
     pipe_model_id: str
     shipped_qty: float = Field(ge=0.01)
     shipped_at: datetime
+    shipment_no: str = ""
     ship_contact_name: str = ""
     ship_contact_phone: str = ""
     ship_remark: str = ""
+
+
+class SupplyDeliveryBatchItemInput(BaseModel):
+    station_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    ship_remark: str = ""
+
+
+class SupplyDeliveryBatchCreatePayload(BaseModel):
+    supply_entity_id: str
+    shipped_at: datetime
+    shipment_no: str = ""
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    items: List[SupplyDeliveryBatchItemInput]
 
 
 class SupplyDeliveryCancelPayload(BaseModel):
@@ -137,6 +158,17 @@ def _build_station_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
     return result
 
 
+def _build_station_code_map(payload: Dict[str, Any]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for index, item in enumerate(get_config_list(payload, "demand_entities")):
+        station_id = str(item.get("station_id") or "").strip()
+        if not station_id:
+            continue
+        explicit_code = str(item.get("code") or "").strip().upper()
+        result[station_id] = explicit_code or _index_to_letters(index)
+    return result
+
+
 def _build_pipe_model_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "pipe_models"):
@@ -158,6 +190,20 @@ def _build_supply_entity_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any
         if not entity_id:
             continue
         result[entity_id] = item
+    return result
+
+
+def _build_supply_entity_code_map(payload: Dict[str, Any]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for index, item in enumerate(get_config_list(payload, "supply_entities")):
+        entity_id = str(item.get("entity_id") or "").strip()
+        if not entity_id:
+            continue
+        explicit_code = str(item.get("code") or "").strip().upper()
+        if explicit_code:
+            result[entity_id] = explicit_code
+            continue
+        result[entity_id] = f"S{_index_to_letters(index)}"
     return result
 
 
@@ -298,6 +344,7 @@ def _serialize_station_options(payload: Dict[str, Any], accessible_station_ids: 
         rows.append(
             {
                 "station_id": station_id,
+                "code": str(item.get("code") or "").strip().upper(),
                 "station_name": item.get("station_name") or station_id,
                 "region": item.get("region") or "",
                 "section": item.get("section") or "",
@@ -349,6 +396,7 @@ def _serialize_supply_entity_options(
         rows.append(
             {
                 "entity_id": entity_id,
+                "code": str(item.get("code") or "").strip().upper(),
                 "entity_name": item.get("entity_name") or entity_id,
                 "contact_name": item.get("contact_name") or "",
                 "contact_phone": item.get("contact_phone") or "",
@@ -366,6 +414,7 @@ def _serialize_all_supply_entity_options(payload: Dict[str, Any]) -> List[Dict[s
         rows.append(
             {
                 "entity_id": entity_id,
+                "code": str(item.get("code") or "").strip().upper(),
                 "entity_name": item.get("entity_name") or entity_id,
                 "contact_name": item.get("contact_name") or "",
                 "contact_phone": item.get("contact_phone") or "",
@@ -376,18 +425,27 @@ def _serialize_all_supply_entity_options(payload: Dict[str, Any]) -> List[Dict[s
 
 def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
     station_name_map = _build_station_name_map(payload)
+    station_code_map = _build_station_code_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     supply_entity_map = _build_supply_entity_map(payload)
-    supply_entity_prefix_map = _build_supply_entity_prefix_map(payload)
+    supply_entity_code_map = _build_supply_entity_code_map(payload)
     for row in rows:
         shipped_at_value = datetime.fromisoformat(row["shipped_at"]) if row.get("shipped_at") else None
         arrived_confirm_at_value = datetime.fromisoformat(row["arrived_confirm_at"]) if row.get("arrived_confirm_at") else None
-        row["delivery_code"] = row.get("delivery_code") or build_delivery_code(
+        supply_code = supply_entity_code_map.get(row["supply_entity_id"], "")
+        station_code = station_code_map.get(row["station_id"], "")
+        row["order_no"] = row.get("order_no") or build_order_no(
             row["id"],
-            shipped_at_value,
-            row["supply_entity_id"],
-            supply_entity_prefix_map.get(row["supply_entity_id"], ""),
+            shipped_at=shipped_at_value,
+            supply_code=supply_code,
+            station_code=station_code,
         )
+        row["shipment_no"] = row.get("shipment_no") or build_shipment_no(
+            row["id"],
+            shipped_at=shipped_at_value,
+            supply_code=supply_code,
+        )
+        row["delivery_code"] = row["order_no"]
         if row.get("status") == "cancelled":
             row["delivery_elapsed_label"] = ""
         else:
@@ -398,6 +456,88 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
         row["station_name"] = station_name_map.get(row["station_id"], row["station_id"])
         row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
         row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
+
+
+def _resolve_shipment_no_for_create(
+    *,
+    requested_shipment_no: str,
+    supply_entity_id: str,
+    supply_code: str,
+    shipped_at: datetime,
+    delivery_id: int,
+) -> tuple[str, bool]:
+    normalized_requested = str(requested_shipment_no or "").strip().upper()
+    if normalized_requested:
+        shipment_owner = get_shipment_owner(normalized_requested)
+        if not shipment_owner:
+            raise HTTPException(status_code=422, detail="指定的运输车次号不存在，无法继续沿用。")
+        if shipment_owner.get("supply_entity_id") != supply_entity_id:
+            raise HTTPException(status_code=422, detail="运输车次号所属供给主体与当前发货主体不一致。")
+        return normalized_requested, True
+    return build_shipment_no(
+        delivery_id,
+        shipped_at=shipped_at,
+        supply_code=supply_code,
+    ), False
+
+
+def _create_supply_delivery_entry(
+    *,
+    config_payload: Dict[str, Any],
+    session: AuthSession,
+    supply_entity_id: str,
+    station_id: str,
+    pipe_model_id: str,
+    shipped_qty: float,
+    shipped_at: datetime,
+    ship_contact_name: str,
+    ship_contact_phone: str,
+    ship_remark: str,
+    requested_shipment_no: str = "",
+) -> Dict[str, Any]:
+    supply_entity_code_map = _build_supply_entity_code_map(config_payload)
+    station_code_map = _build_station_code_map(config_payload)
+    supply_code = supply_entity_code_map.get(supply_entity_id, "")
+    station_code = station_code_map.get(station_id, "")
+    delivery_id = create_delivery_record(
+        supply_entity_id=supply_entity_id,
+        order_no="",
+        shipment_no="",
+        station_id=station_id,
+        pipe_model_id=pipe_model_id,
+        shipped_qty=shipped_qty,
+        shipped_at=shipped_at,
+        ship_contact_name=ship_contact_name,
+        ship_contact_phone=ship_contact_phone,
+        ship_remark=ship_remark,
+        operator=session.username,
+    )
+    order_no = build_order_no(
+        delivery_id,
+        shipped_at=shipped_at,
+        supply_code=supply_code,
+        station_code=station_code,
+    )
+    shipment_no, shipment_reused = _resolve_shipment_no_for_create(
+        requested_shipment_no=requested_shipment_no,
+        supply_entity_id=supply_entity_id,
+        supply_code=supply_code,
+        shipped_at=shipped_at,
+        delivery_id=delivery_id,
+    )
+    update_delivery_identifiers(
+        delivery_id,
+        order_no=order_no,
+        shipment_no=shipment_no,
+        operator=session.username,
+    )
+    return {
+        "delivery_id": delivery_id,
+        "order_no": order_no,
+        "shipment_no": shipment_no,
+        "shipment_reused": shipment_reused,
+        "delivery_code": order_no,
+    }
 
 
 @public_router.get("/workspace/config-summary", summary="读取 tube 配置摘要")
@@ -610,7 +750,9 @@ def create_supply_management_delivery(
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
     if payload.supply_entity_id not in accessible_supply_entity_ids:
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
-    delivery_id = create_delivery_record(
+    created = _create_supply_delivery_entry(
+        config_payload=config_payload,
+        session=session,
         supply_entity_id=payload.supply_entity_id,
         station_id=payload.station_id,
         pipe_model_id=payload.pipe_model_id,
@@ -619,19 +761,53 @@ def create_supply_management_delivery(
         ship_contact_name=payload.ship_contact_name,
         ship_contact_phone=payload.ship_contact_phone,
         ship_remark=payload.ship_remark,
-        operator=session.username,
+        requested_shipment_no=payload.shipment_no,
     )
-    supply_entity_prefix_map = _build_supply_entity_prefix_map(config_payload)
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "delivery_id": delivery_id,
-        "delivery_code": build_delivery_code(
-            delivery_id,
-            payload.shipped_at,
-            payload.supply_entity_id,
-            supply_entity_prefix_map.get(payload.supply_entity_id, ""),
-        ),
+        **created,
+    }
+
+
+@router.post("/supply-management/deliveries/batch", summary="批量新增供给侧发货记录")
+def create_supply_management_delivery_batch(
+    payload: SupplyDeliveryBatchCreatePayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config_payload = load_tube_config()
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    if payload.supply_entity_id not in accessible_supply_entity_ids:
+        raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
+    items = list(payload.items or [])
+    if not items:
+        raise HTTPException(status_code=422, detail="至少需要一条发货明细。")
+    shared_shipment_no = str(payload.shipment_no or "").strip().upper()
+    created_rows: List[Dict[str, Any]] = []
+    current_shipment_no = shared_shipment_no
+    for item in items:
+        created = _create_supply_delivery_entry(
+            config_payload=config_payload,
+            session=session,
+            supply_entity_id=payload.supply_entity_id,
+            station_id=item.station_id,
+            pipe_model_id=item.pipe_model_id,
+            shipped_qty=item.shipped_qty,
+            shipped_at=payload.shipped_at,
+            ship_contact_name=payload.ship_contact_name,
+            ship_contact_phone=payload.ship_contact_phone,
+            ship_remark=item.ship_remark,
+            requested_shipment_no=current_shipment_no,
+        )
+        if not current_shipment_no:
+            current_shipment_no = created["shipment_no"]
+        created_rows.append(created)
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "shipment_no": current_shipment_no,
+        "shipment_reused": bool(shared_shipment_no),
+        "rows": created_rows,
     }
 
 
@@ -687,6 +863,7 @@ def get_warehouse_management_deliveries(
     status: str = "",
     supply_entity_id: str = "",
     pipe_model_id: str = "",
+    shipment_no: str = "",
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
@@ -702,6 +879,7 @@ def get_warehouse_management_deliveries(
     normalized_pipe_model_id = _normalize_pipe_model_id(pipe_model_id)
     normalized_station_id = str(station_id or "").strip()
     normalized_status = str(status or "").strip()
+    normalized_shipment_no = str(shipment_no or "").strip().upper()
     filtered_rows: List[Dict[str, Any]] = []
     for row in rows:
         if normalized_supply_entity_id and row["supply_entity_id"] != normalized_supply_entity_id:
@@ -711,6 +889,8 @@ def get_warehouse_management_deliveries(
         if normalized_station_id and row["station_id"] != normalized_station_id:
             continue
         if normalized_status and row["status"] != normalized_status:
+            continue
+        if normalized_shipment_no and str(row.get("shipment_no") or "").strip().upper() != normalized_shipment_no:
             continue
         filtered_rows.append(row)
     return {"ok": True, "project_key": PROJECT_KEY, "rows": filtered_rows}
@@ -980,6 +1160,7 @@ def get_demand_management_pending_arrivals(
 @router.get("/demand-management/logistics-records", summary="读取需求侧物流确认记录")
 def get_demand_management_logistics_records(
     station_id: str,
+    shipment_no: str = "",
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
@@ -998,6 +1179,11 @@ def get_demand_management_logistics_records(
         for row in rows
         if row.get("station_id") == station_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse"}
     ]
+    normalized_shipment_no = str(shipment_no or "").strip().upper()
+    if normalized_shipment_no:
+        filtered_rows = [
+            row for row in filtered_rows if str(row.get("shipment_no") or "").strip().upper() == normalized_shipment_no
+        ]
     return {
         "ok": True,
         "project_key": PROJECT_KEY,

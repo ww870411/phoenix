@@ -60,6 +60,10 @@
               </option>
             </select>
           </label>
+          <label class="field">
+            <span>运输车次号</span>
+            <input v-model.trim="filters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" />
+          </label>
         </div>
         <div class="filter-actions">
           <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
@@ -106,7 +110,8 @@
             <thead>
               <tr>
                 <th>选择</th>
-                <th>编号</th>
+                <th>订单号</th>
+                <th>运输车次号</th>
                 <th>供给主体</th>
                 <th>换热站</th>
                 <th>型号</th>
@@ -128,7 +133,8 @@
                 <td>
                   <button class="btn ghost tiny" type="button" @click.stop="selectDelivery(row)">选中</button>
                 </td>
-                <td>{{ row.id }}</td>
+                <td>{{ row.order_no || row.delivery_code || row.id }}</td>
+                <td>{{ row.shipment_no || '—' }}</td>
                 <td>{{ row.supply_entity_name }}</td>
                 <td>{{ row.station_name }}</td>
                 <td>{{ row.pipe_model_name }}</td>
@@ -154,6 +160,7 @@
         <div v-else class="action-panel">
           <div class="action-summary">
             <div><span>供给主体</span><strong>{{ selectedDelivery.supply_entity_name }}</strong></div>
+            <div><span>运输车次号</span><strong>{{ selectedDelivery.shipment_no || '—' }}</strong></div>
             <div><span>换热站</span><strong>{{ selectedDelivery.station_name }}</strong></div>
             <div><span>型号</span><strong>{{ selectedDelivery.pipe_model_name }}</strong></div>
             <div><span>当前状态</span><strong>{{ deliveryStatusLabelMap[selectedDelivery.status] || selectedDelivery.status }}</strong></div>
@@ -204,6 +211,7 @@ const filters = reactive({
   supplyEntityId: '',
   pipeModelId: '',
   status: '',
+  shipmentNo: '',
 })
 
 const warehouseForm = reactive({
@@ -333,6 +341,7 @@ async function loadDeliveries() {
       supplyEntityId: filters.supplyEntityId,
       pipeModelId: filters.pipeModelId,
       status: filters.status,
+      shipmentNo: filters.shipmentNo,
     })
     deliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
     const keepSelected = deliveries.value.find((row) => String(row.id) === selectedDeliveryId.value)
@@ -367,6 +376,7 @@ function resetFilters() {
   filters.supplyEntityId = ''
   filters.pipeModelId = ''
   filters.status = ''
+  filters.shipmentNo = ''
   loadDeliveries()
 }
 

@@ -333,9 +333,10 @@ export async function getTubeDemandManagementPendingArrivals(projectKey, station
   return response.json()
 }
 
-export async function getTubeDemandManagementLogisticsRecords(projectKey, stationId) {
-  const params = new URLSearchParams({ station_id: String(stationId || '') })
-  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/logistics-records?${params.toString()}`, {
+export async function getTubeDemandManagementLogisticsRecords(projectKey, stationId, params = {}) {
+  const search = new URLSearchParams({ station_id: String(stationId || '') })
+  if (params.shipmentNo) search.set('shipment_no', String(params.shipmentNo))
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/logistics-records?${search.toString()}`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
@@ -463,6 +464,19 @@ export async function createTubeSupplyManagementDelivery(projectKey, payload) {
   return response.json()
 }
 
+export async function createTubeSupplyManagementDeliveryBatch(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries/batch`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `批量新增供给侧发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function cancelTubeSupplyManagementDelivery(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/cancel`, {
     method: 'POST',
@@ -493,6 +507,7 @@ export async function getTubeWarehouseManagementDeliveries(projectKey, params = 
   if (params.status) search.set('status', String(params.status))
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
+  if (params.shipmentNo) search.set('shipment_no', String(params.shipmentNo))
   const suffix = search.toString() ? `?${search.toString()}` : ''
   const response = await authAwareFetch(`${projectPath(projectKey)}/warehouse-management/deliveries${suffix}`, {
     headers: attachAuthHeaders(),

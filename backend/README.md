@@ -4762,3 +4762,27 @@
   - 供给侧/库管侧页面中的计划起始日期展示
   - 需求侧提交状态写入时的 `data_submit_date`
 - 全局管理配置分区保存已支持 `auto_update_plan_start_date` 区块字段
+## 2026-05-25 保温管项目运输车次号预埋
+
+- 在 `backend/sql/tube_schema_init.sql` 的 `tube.tube_delivery` 表增加 `order_no` 与 `shipment_no` 两个字段。
+- `order_no` 为正式落库的订单号，用于单条发货记录的展示、检索与统计。
+- `shipment_no` 中文定义为“运输车次号”，用于同车次多条发货记录的分组、筛选和只读展示。
+- `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 已为供给主体与换热站补充 `code` 字段，当前示例值为：供给主体 `SA/SB`，换热站 `A/B/C/D`。
+- 后端已接入基础生成规则：
+  - `order_no = O{供给主体code}-{换热站code}-{yyMMdd}-{序号}`
+  - `shipment_no = S{供给主体code}-{yyMMdd}-{序号}`
+- 当前创建接口已会生成并回写 `order_no/shipment_no`，并继续兼容旧展示字段 `delivery_code = order_no`。
+- 已新增批量发货接口：`POST /supply-management/deliveries/batch`
+- 单条发货与批量发货共享同一套编号生成与车次复用校验逻辑，不再分成两套规则。
+- 需求管理物流记录接口与库房管理到货列表接口现已同时支持可选 `shipment_no` 过滤。
+- 接口职责保持单一：
+  - `shipment_no` 只负责运输分组、筛选和展示
+  - 订单状态流转、到货确认、施工接收、库管确认仍仅按单条发货记录处理
+- 项目方案文档与执行版流程文档已同步更新 `order_no` / `shipment_no` 正式口径，后续后端实现以文档中的正式规则为准。
+- 当前创建接口支持两种且仅两种 `shipment_no` 来源：
+  - 未传入 `shipment_no`：后端自动新建
+  - 传入已有 `shipment_no`：后端校验该车次存在且供给主体一致后沿用
+- `order_no` 始终由后端按单条记录唯一生成，不允许复用。
+- 状态机保持不变：到货确认、施工接收、库管确认仍然按单条 `delivery` 记录推进。
+- 这意味着“同车次多条记录共用同一 `shipment_no`”的基础后端能力已经具备，前端当前通过只读复用方式接入，未开放人工输入。
+- 配置层面，供给主体与换热站均已支持 `code` 字段，并通过全局管理页维护。

@@ -44,6 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_pipe_model_date
 CREATE TABLE IF NOT EXISTS tube.tube_delivery (
     id BIGSERIAL PRIMARY KEY,
     supply_entity_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(64),
+    shipment_no VARCHAR(64),
     station_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     shipped_qty NUMERIC(18, 2) NOT NULL,
@@ -96,6 +98,8 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
 
 COMMENT ON TABLE tube.tube_delivery IS '发货、到货、施工接收、库管确认生命周期主表';
 COMMENT ON COLUMN tube.tube_delivery.supply_entity_id IS '供给主体 ID，对应 tube_config.json 中 supply_entities';
+COMMENT ON COLUMN tube.tube_delivery.order_no IS '订单号，由系统生成并落库，用于单条发货记录的展示、检索与统计';
+COMMENT ON COLUMN tube.tube_delivery.shipment_no IS '运输车次号，由系统自动生成，用于同一车次发货记录的筛选与分组展示';
 COMMENT ON COLUMN tube.tube_delivery.station_id IS '换热站 ID';
 COMMENT ON COLUMN tube.tube_delivery.pipe_model_id IS '保温管型号 ID';
 COMMENT ON COLUMN tube.tube_delivery.shipped_qty IS '发货数量';
@@ -113,6 +117,12 @@ CREATE INDEX IF NOT EXISTS idx_tube_delivery_station
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_supply_entity
     ON tube.tube_delivery (supply_entity_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_delivery_order_no
+    ON tube.tube_delivery (order_no);
+
+CREATE INDEX IF NOT EXISTS idx_tube_delivery_shipment_no
+    ON tube.tube_delivery (shipment_no);
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_pipe_model
     ON tube.tube_delivery (pipe_model_id);

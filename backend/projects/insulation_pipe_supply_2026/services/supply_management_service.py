@@ -153,6 +153,8 @@ def list_delivery_records(
         SELECT
             id,
             supply_entity_id,
+            order_no,
+            shipment_no,
             station_id,
             pipe_model_id,
             shipped_qty,
@@ -201,7 +203,9 @@ def list_delivery_records(
         return [
             {
                 "id": int(row["id"]),
-                "delivery_code": build_delivery_code(
+                "order_no": _normalize_text(row["order_no"]),
+                "shipment_no": _normalize_text(row["shipment_no"]),
+                "delivery_code": _normalize_text(row["order_no"]) or build_delivery_code(
                     int(row["id"]),
                     row["shipped_at"],
                     _normalize_text(row["supply_entity_id"]),
@@ -244,6 +248,8 @@ def list_delivery_records(
 def create_delivery_record(
     *,
     supply_entity_id: str,
+    order_no: str,
+    shipment_no: str,
     station_id: str,
     pipe_model_id: str,
     shipped_qty: float,
@@ -259,6 +265,8 @@ def create_delivery_record(
         """
         INSERT INTO tube.tube_delivery (
             supply_entity_id,
+            order_no,
+            shipment_no,
             station_id,
             pipe_model_id,
             shipped_qty,
@@ -274,6 +282,8 @@ def create_delivery_record(
         )
         VALUES (
             :supply_entity_id,
+            :order_no,
+            :shipment_no,
             :station_id,
             :pipe_model_id,
             :shipped_qty,
@@ -296,6 +306,8 @@ def create_delivery_record(
             sql,
             {
                 "supply_entity_id": _normalize_text(supply_entity_id),
+                "order_no": _normalize_text(order_no),
+                "shipment_no": _normalize_text(shipment_no),
                 "station_id": _normalize_text(station_id),
                 "pipe_model_id": _normalize_pipe_model_id(pipe_model_id),
                 "shipped_qty": float(shipped_qty),
@@ -316,32 +328,111 @@ def create_delivery_record(
         session.close()
 
 
+def update_delivery_identifiers(
+    delivery_id: int,
+    order_no: str,
+    shipment_no: str,
+    operator: str,
+) -> None:
+    sql = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            order_no = :order_no,
+            shipment_no = :shipment_no,
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE id = :delivery_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        session.execute(
+            sql,
+            {
+                "delivery_id": int(delivery_id),
+                "order_no": _normalize_text(order_no),
+                "shipment_no": _normalize_text(shipment_no),
+                "updated_by": operator,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def get_shipment_owner(shipment_no: str) -> Dict[str, Any]:
+    normalized_shipment_no = _normalize_text(shipment_no)
+    if not normalized_shipment_no:
+        return {}
+    sql = text(
+        """
+        SELECT
+            shipment_no,
+            supply_entity_id,
+            COUNT(*) AS record_count
+        FROM tube.tube_delivery
+        WHERE shipment_no = :shipment_no
+        GROUP BY shipment_no, supply_entity_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql, {"shipment_no": normalized_shipment_no}).mappings().first()
+        if not row:
+            return {}
+        return {
+            "shipment_no": _normalize_text(row["shipment_no"]),
+            "supply_entity_id": _normalize_text(row["supply_entity_id"]),
+            "record_count": int(row["record_count"] or 0),
+        }
+    finally:
+        session.close()
+
+
+def build_order_no(
+    delivery_id: int,
+    shipped_at: Optional[datetime] = None,
+    supply_code: str = "",
+    station_code: str = "",
+) -> str:
+    normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
+    normalized_station_code = _normalize_text(station_code).upper() or "X"
+    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    seq_part = f"{int(delivery_id):03d}"
+    if date_part:
+        return f"O{normalized_supply_code}-{normalized_station_code}-{date_part}-{seq_part}"
+    return f"O{normalized_supply_code}-{normalized_station_code}-{seq_part}"
+
+
+def build_shipment_no(
+    delivery_id: int,
+    shipped_at: Optional[datetime] = None,
+    supply_code: str = "",
+) -> str:
+    normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
+    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    seq_part = f"{int(delivery_id):03d}"
+    if date_part:
+        return f"S{normalized_supply_code}-{date_part}-{seq_part}"
+    return f"S{normalized_supply_code}-{seq_part}"
+
+
 def build_delivery_code(
     delivery_id: int,
     shipped_at: Optional[datetime] = None,
     supply_entity_id: str = "",
     delivery_prefix: str = "",
 ) -> str:
-    prefix = _normalize_text(delivery_prefix).upper()
-    if not prefix:
-        raw_prefix = _normalize_text(supply_entity_id).upper()
-        if raw_prefix:
-            parts = [part for part in raw_prefix.replace("-", "_").split("_") if part]
-            if len(parts) >= 2:
-                prefix = "".join(part[0] for part in parts if part[:1])
-            else:
-                prefix = "".join(ch for ch in raw_prefix if ch.isalnum())[:4]
-    if not prefix:
-        prefix = "DEL"
-    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
-    seq_part = f"{int(delivery_id):03d}"
-    if prefix and date_part:
-        return f"{prefix}-{date_part}-{seq_part}"
-    if prefix:
-        return f"{prefix}-{seq_part}"
-    if date_part:
-        return f"DEL-{date_part}-{seq_part}"
-    return f"DEL-{seq_part}"
+    return build_order_no(
+        delivery_id,
+        shipped_at=shipped_at,
+        supply_code=delivery_prefix or supply_entity_id,
+        station_code="X",
+    )
 
 
 def format_delivery_elapsed(
@@ -391,6 +482,8 @@ def get_delivery_record_basic(delivery_id: int) -> Dict[str, Any]:
         SELECT
             id,
             supply_entity_id,
+            order_no,
+            shipment_no,
             station_id,
             pipe_model_id,
             shipped_qty,
@@ -410,6 +503,8 @@ def get_delivery_record_basic(delivery_id: int) -> Dict[str, Any]:
         return {
             "id": int(row["id"]),
             "supply_entity_id": _normalize_text(row["supply_entity_id"]),
+            "order_no": _normalize_text(row["order_no"]),
+            "shipment_no": _normalize_text(row["shipment_no"]),
             "station_id": _normalize_text(row["station_id"]),
             "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
             "shipped_qty": float(row["shipped_qty"]) if row["shipped_qty"] is not None else 0,

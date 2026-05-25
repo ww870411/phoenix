@@ -218,8 +218,14 @@
 
     <section class="card elevated">
       <div class="panel-title-row">
-        <h2>物流确认记录</h2>
-        <span class="panel-hint">按当前换热站展示发货后的确认链路；不同角色可见不同操作按钮。计量单位：米。</span>
+        <div>
+          <h2>物流确认记录</h2>
+          <span class="panel-hint">按当前换热站展示发货后的确认链路；支持按运输车次号筛选。计量单位：米。</span>
+        </div>
+        <label class="field field-compact">
+          <span>运输车次号</span>
+          <input v-model.trim="pendingShipmentFilter" type="text" placeholder="输入车次号筛选" />
+        </label>
       </div>
 
       <div v-if="pendingLoading" class="loading-text">正在加载物流确认记录...</div>
@@ -229,7 +235,8 @@
         <table class="data-table logistics-table">
           <thead>
             <tr>
-              <th>发货单号</th>
+              <th>订单号</th>
+              <th>运输车次号</th>
               <th>供给主体</th>
               <th>型号</th>
               <th>发货量（米）</th>
@@ -243,6 +250,7 @@
           <tbody>
             <tr v-for="row in pendingRows" :key="row.deliveryId">
               <td>{{ row.deliveryCode || row.deliveryId }}</td>
+              <td>{{ row.shipmentNo || '—' }}</td>
               <td>{{ row.supplyEntityName }}</td>
               <td>{{ row.pipeModelName }}</td>
               <td>{{ formatNumber(row.shippedQty) }}</td>
@@ -373,6 +381,7 @@ const submitStatusLoading = ref(false)
 const pendingLoading = ref(false)
 const pendingError = ref('')
 const pendingRows = ref([])
+const pendingShipmentFilter = ref('')
 const nowTick = ref(Date.now())
 let nowTimer = null
 
@@ -484,6 +493,7 @@ function normalizePendingRows(rows) {
   return (rows || []).map((row) => ({
     deliveryId: row.delivery_id || row.deliveryId || row.id,
     deliveryCode: row.delivery_code || row.deliveryCode || '',
+    shipmentNo: row.shipment_no || row.shipmentNo || '',
     supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
     status: row.status || '',
@@ -646,7 +656,9 @@ async function loadLogisticsRecords() {
   pendingLoading.value = true
   pendingError.value = ''
   try {
-    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value)
+    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value, {
+      shipmentNo: pendingShipmentFilter.value || '',
+    })
     pendingRows.value = normalizePendingRows(response.rows)
   } catch (error) {
     pendingError.value = error?.message || '加载物流确认记录失败'
@@ -655,6 +667,10 @@ async function loadLogisticsRecords() {
     pendingLoading.value = false
   }
 }
+
+watch(pendingShipmentFilter, () => {
+  loadLogisticsRecords()
+})
 
 async function confirmArrival(row) {
   if (!row?.deliveryId || !canClickArrival(row)) {

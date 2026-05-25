@@ -6,12 +6,14 @@
   "supply_entities": [
     {
       "entity_id": "supplier_a",
+      "code": "SA",
       "entity_name": "管厂A",
       "contact_name": "供给联系人A",
       "contact_phone": "13800000001"
     },
     {
       "entity_id": "supplier_b",
+      "code": "SB",
       "entity_name": "管厂B",
       "contact_name": "供给联系人B",
       "contact_phone": "13800000002"
@@ -20,6 +22,7 @@
   "demand_entities": [
     {
       "station_id": "station_a",
+      "code": "A",
       "station_name": "换热站A",
       "region": "一区",
       "section": "一标段",
@@ -27,6 +30,7 @@
     },
     {
       "station_id": "station_b",
+      "code": "B",
       "station_name": "换热站B",
       "region": "一区",
       "section": "一标段",
@@ -34,6 +38,7 @@
     },
     {
       "station_id": "station_c",
+      "code": "C",
       "station_name": "换热站C",
       "region": "二区",
       "section": "二标段",
@@ -41,6 +46,7 @@
     },
     {
       "station_id": "station_d",
+      "code": "D",
       "station_name": "换热站D",
       "region": "二区",
       "section": "二标段",

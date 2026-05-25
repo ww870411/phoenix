@@ -8832,3 +8832,57 @@
   - 全局管理页初始加载时，会优先显示后端实际计算后的 `plan_start_date`
 - 当前结果：
   - 需求侧三日计划窗口、实际使用采集日、供给侧页面、库管页等所有依赖 `get_configured_plan_start_date()` 的口径，都会统一受该开关影响
+## 2026-05-25 运输车次号字段预埋
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql`
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- 本轮完成初始化脚本预埋、配置补码与后端编号规则接入；未直接改线上或本地实际数据库表。
+- 在 `tube.tube_delivery` 表结构中新增 `order_no VARCHAR(64)` 与 `shipment_no VARCHAR(64)`。
+- `order_no` 中文定义为“订单号”，由系统生成并落库，用于单条发货记录的展示、检索与统计。
+- 字段定位：系统自动生成，仅用于同车次发货记录的筛选、分组和只读展示，不作为到货、施工接收、库管确认的唯一标识。
+- `shipment_no` 中文定义为“运输车次号”，由系统自动生成，用于同车次发货记录的筛选、分组和只读展示。
+- `tube_config.json` 中已为供给主体与换热站新增 `code` 字段：
+  - 管厂：`SA`、`SB`
+  - 换热站：`A`、`B`、`C`、`D`
+- 同步新增字段注释与索引：
+  - `uq_tube_delivery_order_no`
+  - `idx_tube_delivery_shipment_no`
+- 业务约束暂定：
+  - 同一 `shipment_no` 下供给主体必须唯一；
+  - 可包含多个换热站；
+  - 确认动作仍按单条发货记录执行，不按 `shipment_no` 批量改变状态。
+- 当前后端编号规则已调整为：
+  - `order_no = O{供给主体code}-{换热站code}-{yyMMdd}-{序号}`
+  - `shipment_no = S{供给主体code}-{yyMMdd}-{序号}`
+- 说明：`shipment_no` 未带换热站码，这是为了保留“同一车次可覆盖多个换热站”的业务语义；若把站点码带入 `shipment_no`，同车次跨站点时将无法共用同一个编号。
+- 当前创建接口已可生成并回写 `order_no/shipment_no`，并继续兼容旧返回字段 `delivery_code = order_no`。
+- 当前“同车次多条记录共享 `shipment_no`”的闭环已接通：
+  - 后端创建接口新增可选入参 `shipment_no`
+  - 若传入已有 `shipment_no`，后端会校验其存在且供给主体一致，然后沿用
+  - 若未传入，则由后端自动新建新的 `shipment_no`
+  - `order_no` 始终按单条记录唯一生成，不复用
+- 后端已新增批量发货接口 `/supply-management/deliveries/batch`：
+  - 一次请求可提交多条明细
+  - 同批次内全部明细共用同一个 `shipment_no`
+  - 单条与批量都复用同一套后端编号/校验逻辑
+- 前端供给页已改为：
+  - 表单只读展示“订单号/运输车次号”
+  - 通过“继续当前车次 / 新开车次”控制是否沿用 `shipment_no`
+  - 支持先把多条明细加入“待提交明细”，再一次性提交当前车次
+  - 需求管理页物流记录现已展示“订单号”“运输车次号”，并支持按 `shipment_no` 筛选当前换热站记录
+  - 库房管理页现已新增“运输车次号”筛选，并在到货列表、选中明细摘要中展示 `order_no` / `shipment_no`
+  - 供给页负责生成与复用车次，需求页与库房页只负责按车次检索和展示，不再分裂出第二套车次逻辑
+  - 发货记录表增加“继续此车次”按钮，避免人工输入与多套编号逻辑并存
+- 全局管理页已支持维护 `code`：
+  - 供给主体区块新增“主体编码”
+  - 换热站区块新增“站点编码”
+- 后端序列化已统一输出 `code`，避免不同页面拿到的配置结构不一致
+- 上述 `order_no` / `shipment_no` 口径与最新页面链路，已同步回写到：
+  - `configs/5.24_tube项目建设方案_v5.2_物流链管理版.md`
+  - `configs/5.24_tube项目完整构建流程计划_v5.2执行版.md`
+- 尚未完成的部分：
+  - 若后续需要“编辑已暂存批量明细”或“按车次整批撤销”，仍需补专门交互与规则

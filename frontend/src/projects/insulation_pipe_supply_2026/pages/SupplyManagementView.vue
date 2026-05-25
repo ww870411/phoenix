@@ -113,16 +113,26 @@
         <div class="panel-title-row">
           <div>
             <h2>发货登记</h2>
-            <span class="panel-hint">新增发货后，记录将进入“已发货待到货”状态。计量单位：米。</span>
+            <span class="panel-hint">订单号与运输车次号均由系统生成；下方可先累积多条明细，再一次性按同一车次提交。计量单位：米。</span>
           </div>
-          <button
-            type="button"
-            class="primary-button"
-            :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
-            @click="submitDelivery"
-          >
-            {{ submitDeliveryLoading ? '提交中...' : '提交发货记录' }}
-          </button>
+          <div class="topbar-actions">
+            <button
+              type="button"
+              class="btn ghost"
+              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
+              @click="appendDraftDelivery"
+            >
+              加入本车次
+            </button>
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId"
+              @click="submitDeliveryBatch"
+            >
+              {{ submitDeliveryLoading ? '提交中...' : '提交当前车次' }}
+            </button>
+          </div>
         </div>
 
         <div class="filter-grid">
@@ -162,6 +172,16 @@
           </label>
 
           <label class="field">
+            <span>订单号</span>
+            <input :value="deliveryOrderNoPreview" type="text" disabled />
+          </label>
+
+          <label class="field">
+            <span>运输车次号</span>
+            <input :value="currentShipmentDisplay" type="text" disabled />
+          </label>
+
+          <label class="field">
             <span>发货量（米）</span>
             <input v-model.number="deliveryForm.shippedQty" type="number" min="0" step="1" />
           </label>
@@ -185,6 +205,51 @@
             <span>备注</span>
             <input v-model.trim="deliveryForm.shipRemark" type="text" maxlength="120" placeholder="发货备注" />
           </label>
+
+          <div class="field field-span-2 shipment-mode-row">
+            <span>车次控制</span>
+            <div class="shipment-mode-actions">
+              <button type="button" class="btn ghost" :class="{ active: deliveryForm.reuseCurrentShipment }" @click="continueCurrentShipment">
+                继续当前车次
+              </button>
+              <button type="button" class="btn ghost" :disabled="!deliveryForm.shipmentNo" @click="startNewShipment">
+                新开车次
+              </button>
+              <span class="muted-text">
+                {{ deliveryForm.reuseCurrentShipment && deliveryForm.shipmentNo ? '本次提交将沿用当前运输车次号。' : '本次提交将由系统自动生成新的运输车次号。' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="batch-box">
+          <div class="batch-box-header">
+            <strong>待提交明细</strong>
+            <span class="muted-text">当前车次下已暂存 {{ draftDeliveryItems.length }} 条，提交当前车次时将连同当前表单这一条一起提交。</span>
+          </div>
+          <div v-if="!draftDeliveryItems.length" class="empty-box compact">当前没有已暂存明细。</div>
+          <div v-else class="table-wrap">
+            <table class="table data-table compact-table">
+              <thead>
+                <tr>
+                  <th>换热站</th>
+                  <th>型号</th>
+                  <th>发货量（米）</th>
+                  <th>备注</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, index) in draftDeliveryItems" :key="`${item.stationId}-${item.pipeModelId}-${index}`">
+                  <td>{{ item.stationName }}</td>
+                  <td>{{ item.pipeModelName }}</td>
+                  <td>{{ formatNumber(item.shippedQty) }}</td>
+                  <td>{{ item.shipRemark || '—' }}</td>
+                  <td><button type="button" class="btn danger-ghost" @click="removeDraftDelivery(index)">移除</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -204,7 +269,8 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>单号</th>
+                <th>订单号</th>
+                <th>运输车次号</th>
                 <th>供给主体</th>
                 <th>换热站</th>
                 <th>型号</th>
@@ -219,6 +285,7 @@
             <tbody>
               <tr v-for="row in deliveryRows" :key="row.deliveryId">
                 <td>{{ row.deliveryCode }}</td>
+                <td>{{ row.shipmentNo || '—' }}</td>
                 <td>{{ row.supplyEntityName }}</td>
                 <td>{{ row.stationName }}</td>
                 <td>{{ row.pipeModelName }}</td>
@@ -230,6 +297,14 @@
                 </td>
                 <td>{{ row.shipRemark || row.cancelReason || '—' }}</td>
                 <td>
+                  <button
+                    v-if="row.shipmentNo"
+                    type="button"
+                    class="btn ghost"
+                    @click="reuseShipment(row)"
+                  >
+                    继续此车次
+                  </button>
                   <button
                     v-if="row.status === 'pending_arrival'"
                     type="button"
@@ -256,7 +331,7 @@ import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   cancelTubeSupplyManagementDelivery,
-  createTubeSupplyManagementDelivery,
+  createTubeSupplyManagementDeliveryBatch,
   getTubeSupplyManagementDeliveries,
   getTubeSupplyManagementDemandSummary,
   getTubeSupplyManagementOptions,
@@ -299,6 +374,7 @@ let nowTimer = null
 
 const submitDeliveryLoading = ref(false)
 const actionMessage = ref(null)
+const draftDeliveryItems = ref([])
 
 const deliveryForm = ref(createDefaultDeliveryForm())
 
@@ -321,6 +397,15 @@ const currentDeliverySupplyEntityLabel = computed(() => {
   const matched = supplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)
   return matched?.entity_name || currentSupplyEntityLabel.value
 })
+
+const currentShipmentDisplay = computed(() => {
+  if (deliveryForm.value.reuseCurrentShipment && deliveryForm.value.shipmentNo) {
+    return deliveryForm.value.shipmentNo
+  }
+  return '提交后由系统自动生成'
+})
+
+const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
 const supplyDemandViewOptions = computed(() => [
   { value: 'summary', label: '整理汇总' },
@@ -418,12 +503,24 @@ function createDefaultDeliveryForm() {
     supplyEntityId: '',
     stationId: '',
     pipeModelId: '',
+    shipmentNo: '',
+    reuseCurrentShipment: false,
     shippedQty: 0,
     shippedAt: toDateTimeLocalString(new Date()),
     shipContactName: '',
     shipContactPhone: '',
     shipRemark: '',
   }
+}
+
+function getStationName(stationId) {
+  const matched = stationOptions.value.find((item) => item.station_id === stationId)
+  return matched?.station_name || stationId || '—'
+}
+
+function getPipeModelName(pipeModelId) {
+  const matched = pipeModelOptions.value.find((item) => item.pipe_model_id === pipeModelId)
+  return matched?.pipe_model_name || pipeModelId || '—'
 }
 
 function clearActionMessage() {
@@ -506,7 +603,9 @@ function getStatusLabel(status) {
 function normalizeDeliveryRows(rows) {
   return (rows || []).map((row) => ({
     deliveryId: Number(row.id ?? 0),
-    deliveryCode: row.delivery_code || `DEL-${String(row.id ?? '').padStart(5, '0')}`,
+    deliveryCode: row.order_no || row.delivery_code || `DEL-${String(row.id ?? '').padStart(5, '0')}`,
+    orderNo: row.order_no || row.delivery_code || '',
+    shipmentNo: row.shipment_no || '',
     supplyEntityId: row.supply_entity_id || '',
     supplyEntityName: row.supply_entity_name || row.supply_entity_id || '—',
     stationId: row.station_id || '',
@@ -524,6 +623,33 @@ function normalizeDeliveryRows(rows) {
     statusLabel: getStatusLabel(row.status || ''),
     cancelReason: row.cancel_reason || '',
   }))
+}
+
+function buildCurrentDraftItem() {
+  return {
+    stationId: deliveryForm.value.stationId || '',
+    stationName: getStationName(deliveryForm.value.stationId),
+    pipeModelId: deliveryForm.value.pipeModelId || '',
+    pipeModelName: getPipeModelName(deliveryForm.value.pipeModelId),
+    shippedQty: Number(deliveryForm.value.shippedQty || 0),
+    shipRemark: deliveryForm.value.shipRemark || '',
+  }
+}
+
+function validateCurrentDeliveryForm() {
+  if (!deliveryForm.value.supplyEntityId || !deliveryForm.value.stationId || !deliveryForm.value.pipeModelId) {
+    setActionMessage('error', '请先完整选择供给主体、换热站和保温管型号。')
+    return false
+  }
+  if (Number(deliveryForm.value.shippedQty || 0) <= 0) {
+    setActionMessage('error', '发货量必须大于 0。')
+    return false
+  }
+  if (!deliveryForm.value.shippedAt) {
+    setActionMessage('error', '请填写发货时间。')
+    return false
+  }
+  return true
 }
 
 async function loadOptions() {
@@ -606,44 +732,97 @@ async function loadDeliveries() {
   }
 }
 
-async function submitDelivery() {
-  if (!deliveryForm.value.supplyEntityId || !deliveryForm.value.stationId || !deliveryForm.value.pipeModelId) {
-    setActionMessage('error', '请先完整选择供给主体、换热站和保温管型号。')
+function appendDraftDelivery() {
+  if (!validateCurrentDeliveryForm()) {
     return
   }
-  if (Number(deliveryForm.value.shippedQty || 0) <= 0) {
-    setActionMessage('error', '发货量必须大于 0。')
-    return
-  }
-  if (!deliveryForm.value.shippedAt) {
-    setActionMessage('error', '请填写发货时间。')
-    return
-  }
+  draftDeliveryItems.value = [...draftDeliveryItems.value, buildCurrentDraftItem()]
+  deliveryForm.value.stationId = ''
+  deliveryForm.value.pipeModelId = ''
+  deliveryForm.value.shippedQty = 0
+  deliveryForm.value.shipRemark = ''
+  setActionMessage('success', `已加入本车次，待提交明细共 ${draftDeliveryItems.value.length} 条。`)
+}
 
-  submitDeliveryLoading.value = true
-  clearActionMessage()
-  try {
-    const response = await createTubeSupplyManagementDelivery(PROJECT_KEY, {
-      supply_entity_id: deliveryForm.value.supplyEntityId,
+function removeDraftDelivery(index) {
+  draftDeliveryItems.value = draftDeliveryItems.value.filter((_, itemIndex) => itemIndex !== index)
+}
+
+async function submitDeliveryBatch() {
+  if (!validateCurrentDeliveryForm()) {
+    return
+  }
+  const items = [
+    ...draftDeliveryItems.value.map((item) => ({
+      station_id: item.stationId,
+      pipe_model_id: item.pipeModelId,
+      shipped_qty: Number(item.shippedQty || 0),
+      ship_remark: item.shipRemark || '',
+    })),
+    {
       station_id: deliveryForm.value.stationId,
       pipe_model_id: deliveryForm.value.pipeModelId,
       shipped_qty: Number(deliveryForm.value.shippedQty || 0),
+      ship_remark: deliveryForm.value.shipRemark || '',
+    },
+  ]
+  submitDeliveryLoading.value = true
+  clearActionMessage()
+  try {
+    const response = await createTubeSupplyManagementDeliveryBatch(PROJECT_KEY, {
+      supply_entity_id: deliveryForm.value.supplyEntityId,
+      shipment_no: deliveryForm.value.reuseCurrentShipment ? deliveryForm.value.shipmentNo || '' : '',
       shipped_at: new Date(deliveryForm.value.shippedAt).toISOString(),
       ship_contact_name: deliveryForm.value.shipContactName || '',
       ship_contact_phone: deliveryForm.value.shipContactPhone || '',
-      ship_remark: deliveryForm.value.shipRemark || '',
+      items,
     })
-    const deliveryCode = response?.delivery_code || response?.deliveryCode || ''
-    setActionMessage('success', deliveryCode ? `发货记录 ${deliveryCode} 已提交。` : '发货记录已提交。')
+    const shipmentNo = response?.shipment_no || response?.shipmentNo || ''
+    const shipmentVerb = response?.shipment_reused || response?.shipmentReused ? '沿用车次' : '新建车次'
+    const createdRows = Array.isArray(response?.rows) ? response.rows : []
+    setActionMessage(
+      'success',
+      `当前车次已提交 ${createdRows.length || items.length} 条明细，${shipmentVerb}${shipmentNo ? `：${shipmentNo}` : ''}。`
+    )
     const currentSupplyEntityId = deliveryForm.value.supplyEntityId
-    deliveryForm.value = createDefaultDeliveryForm()
+    const nextForm = createDefaultDeliveryForm()
+    nextForm.supplyEntityId = currentSupplyEntityId
+    nextForm.shipmentNo = shipmentNo || ''
+    nextForm.reuseCurrentShipment = Boolean(shipmentNo)
+    nextForm.shipContactName = deliveryForm.value.shipContactName || ''
+    nextForm.shipContactPhone = deliveryForm.value.shipContactPhone || ''
+    deliveryForm.value = nextForm
     deliveryForm.value.supplyEntityId = currentSupplyEntityId
+    draftDeliveryItems.value = []
     await Promise.all([loadDemandSummary(), loadDeliveries()])
   } catch (error) {
-    setActionMessage('error', error?.message || '提交发货记录失败')
+    setActionMessage('error', error?.message || '提交当前车次失败')
   } finally {
     submitDeliveryLoading.value = false
   }
+}
+
+function reuseShipment(row) {
+  if (!row?.shipmentNo) return
+  deliveryForm.value.supplyEntityId = row.supplyEntityId || deliveryForm.value.supplyEntityId
+  deliveryForm.value.shipmentNo = row.shipmentNo
+  deliveryForm.value.reuseCurrentShipment = true
+  setActionMessage('success', `已切换为继续运输车次 ${row.shipmentNo}。`)
+}
+
+function continueCurrentShipment() {
+  if (!deliveryForm.value.shipmentNo) {
+    setActionMessage('error', '当前没有可沿用的运输车次号，请先提交一条发货记录或从下方记录中选择“继续此车次”。')
+    return
+  }
+  deliveryForm.value.reuseCurrentShipment = true
+  setActionMessage('success', `当前将继续沿用运输车次号 ${deliveryForm.value.shipmentNo}。`)
+}
+
+function startNewShipment() {
+  deliveryForm.value.reuseCurrentShipment = false
+  deliveryForm.value.shipmentNo = ''
+  setActionMessage('success', '下一条发货记录将自动生成新的运输车次号。')
 }
 
 async function cancelDelivery(row) {
@@ -759,6 +938,44 @@ onBeforeUnmount(() => {
   margin: 0;
   color: #0f172a;
   font-size: 18px;
+}
+
+.shipment-mode-row {
+  align-items: flex-start;
+}
+
+.shipment-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.shipment-mode-actions .btn.active {
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.batch-box {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.batch-box-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.compact {
+  padding: 10px 12px;
 }
 
 .panel-hint {

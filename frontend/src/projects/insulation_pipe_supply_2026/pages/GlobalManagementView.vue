@@ -125,6 +125,7 @@
             <thead>
               <tr>
                 <th>主体ID</th>
+                <th>主体编码</th>
                 <th>主体名称</th>
                 <th>联系人</th>
                 <th>联系电话</th>
@@ -134,6 +135,7 @@
             <tbody>
               <tr v-for="(item, index) in supplyEntities" :key="`${item.entity_id || 'new'}-${index}`">
                 <td><input v-model.trim="item.entity_id" type="text" /></td>
+                <td><input v-model.trim="item.code" type="text" maxlength="8" placeholder="如 SA" /></td>
                 <td><input v-model.trim="item.entity_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_name" type="text" /></td>
                 <td><input v-model.trim="item.contact_phone" type="text" /></td>
@@ -162,6 +164,7 @@
             <thead>
               <tr>
                 <th>站点ID</th>
+                <th>站点编码</th>
                 <th>站点名称</th>
                 <th>区域</th>
                 <th>标段</th>
@@ -172,6 +175,7 @@
             <tbody>
               <tr v-for="(item, index) in demandEntities" :key="`${item.station_id || 'new'}-${index}`">
                 <td><input v-model.trim="item.station_id" type="text" /></td>
+                <td><input v-model.trim="item.code" type="text" maxlength="8" placeholder="如 A / AA" /></td>
                 <td><input v-model.trim="item.station_name" type="text" /></td>
                 <td><input v-model.trim="item.region" type="text" /></td>
                 <td><input v-model.trim="item.section" type="text" /></td>
@@ -670,6 +674,7 @@ function buildSectionPayload(section) {
   if (section === 'supply_entities') {
     return supplyEntities.value.map((item) => ({
       entity_id: item.entity_id || '',
+      code: String(item.code || '').trim().toUpperCase(),
       entity_name: item.entity_name || '',
       contact_name: item.contact_name || '',
       contact_phone: item.contact_phone || '',
@@ -678,6 +683,7 @@ function buildSectionPayload(section) {
   if (section === 'demand_entities') {
     return demandEntities.value.map((item) => ({
       station_id: item.station_id || '',
+      code: String(item.code || '').trim().toUpperCase(),
       station_name: item.station_name || '',
       region: item.region || '',
       section: item.section || '',
@@ -856,6 +862,7 @@ function removeRow(targetRef, index) {
 function addSupplyEntity() {
   supplyEntities.value.push({
     entity_id: '',
+    code: '',
     entity_name: '',
     contact_name: '',
     contact_phone: '',
@@ -865,6 +872,7 @@ function addSupplyEntity() {
 function addDemandEntity() {
   demandEntities.value.push({
     station_id: '',
+    code: '',
     station_name: '',
     region: '',
     section: '',
