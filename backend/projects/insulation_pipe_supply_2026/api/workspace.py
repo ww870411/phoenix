@@ -56,6 +56,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     update_delivery_arrival_record,
     update_delivery_receipt_record,
     update_delivery_warehouse_record,
+    super_update_delivery_record,
 )
 
 router = APIRouter(tags=[PROJECT_KEY])
@@ -132,6 +133,20 @@ class SupplyDeliveryBatchCreatePayload(BaseModel):
 
 class SupplyDeliveryCancelPayload(BaseModel):
     cancel_reason: str = ""
+
+
+class SuperUpdateDeliveryPayload(BaseModel):
+    station_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    shipped_at: datetime
+    vehicle_plate_no: str = ""
+    ship_remark: str = ""
+    status: str
+    order_no: str = ""
+    shipment_no: str = ""
+    arrived_qty: Optional[float] = None
+    received_qty: Optional[float] = None
 
 
 class WarehouseArrivalConfirmPayload(BaseModel):
@@ -578,7 +593,6 @@ def get_workspace_config_summary() -> Dict[str, Any]:
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "config_path": str(CONFIG_PATH),
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "usage_collection_date": get_usage_collection_date(payload).isoformat(),
@@ -855,6 +869,37 @@ def cancel_supply_management_delivery(
     return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
 
+@router.post("/supply-management/deliveries/{delivery_id}/super-update", summary="[超级管理员] 强力覆写更新发货单任意信息")
+def super_update_supply_management_delivery(
+    delivery_id: int,
+    payload: SuperUpdateDeliveryPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower != "global_admin":
+        raise HTTPException(status_code=403, detail="此接口为 Global_admin 超级管理员专属数据订正通道,普通角色无权访问")
+    
+    super_update_delivery_record(
+        delivery_id=delivery_id,
+        station_id=payload.station_id,
+        pipe_model_id=payload.pipe_model_id,
+        shipped_qty=payload.shipped_qty,
+        shipped_at=payload.shipped_at,
+        vehicle_plate_no=payload.vehicle_plate_no,
+        ship_remark=payload.ship_remark,
+        status=payload.status,
+        order_no=payload.order_no,
+        shipment_no=payload.shipment_no,
+        arrived_qty=payload.arrived_qty,
+        received_qty=payload.received_qty,
+        operator=session.username,
+    )
+    return {
+        "ok": True,
+        "detail": "发货记录已由超级管理员强力重写保存",
+    }
+
+
 @router.get("/warehouse-management/options", summary="读取库管页选项")
 def get_warehouse_management_options(
     session: AuthSession = Depends(get_current_session),
@@ -996,6 +1041,17 @@ def get_demand_management_plan_matrix(
     plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
     pipe_model_map = _build_pipe_model_map(payload)
     matrix = list_plan_records(station_id, plan_dates)
+    
+    strict_planning_flow_control = bool(payload.get("strict_planning_flow_control", True))
+    usage_date = get_usage_collection_date(payload)
+    usage_map = list_usage_records(station_id, usage_date)
+    is_usage_submitted = len(usage_map) > 0
+    
+    show_date = get_configured_show_date(payload)
+    delivery_aggregate_map = list_delivery_aggregates()
+    arrival_aggregate_map = list_arrival_aggregates(show_date.isoformat())
+    usage_total_map = list_usage_totals(show_date.isoformat())
+    
     rows: List[Dict[str, Any]] = []
     for pipe_model_id, pipe_model in pipe_model_map.items():
         cell_values: Dict[str, Any] = {}
@@ -1005,11 +1061,28 @@ def get_demand_management_plan_matrix(
             record = matrix.get(f"{pipe_model_id}::{key}")
             cell_values[key] = float(record["plan_qty"]) if record and record.get("plan_qty") is not None else 0
             cell_remarks[key] = record.get("remark") if record else ""
+            
+        agg_key = f"{station_id}::{pipe_model_id}"
+        delivery_aggregate = delivery_aggregate_map.get(agg_key) or {}
+        arrival_aggregate = arrival_aggregate_map.get(agg_key) or {}
+        usage_aggregate = usage_total_map.get(agg_key) or {}
+        
+        pending_arrival_qty = float(delivery_aggregate.get("pending_arrival_qty", 0) or 0)
+        pending_receive_qty = float(delivery_aggregate.get("pending_receive_qty", 0) or 0)
+        
+        total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
+        total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
+        
+        station_inventory_qty = max(total_arrived_qty - total_usage_qty, 0)
+        inbound_pipeline_qty = pending_arrival_qty + pending_receive_qty
+        
         rows.append(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
                 "unit": pipe_model.get("unit") or "",
+                "station_inventory_qty": station_inventory_qty,
+                "inbound_pipeline_qty": inbound_pipeline_qty,
                 "values": cell_values,
                 "remarks": cell_remarks,
             }
@@ -1023,6 +1096,8 @@ def get_demand_management_plan_matrix(
             "station_name": _build_station_name_map(payload).get(station_id, station_id),
         },
         "plan_dates": [item.isoformat() for item in plan_dates],
+        "strict_planning_flow_control": strict_planning_flow_control,
+        "is_usage_submitted": is_usage_submitted,
         "rows": rows,
     }
 
@@ -1035,6 +1110,22 @@ def save_demand_management_plan_matrix(
     config_payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
     _ensure_station_access(payload.station_id, accessible_station_ids)
+
+    # 严格流程顺序锁后台强拦截
+    strict_planning_flow_control = bool(config_payload.get("strict_planning_flow_control", True))
+    if strict_planning_flow_control:
+        usage_date = get_usage_collection_date(config_payload)
+        usage_map = list_usage_records(payload.station_id, usage_date)
+        if len(usage_map) == 0:
+            plan_dates = build_plan_dates(get_configured_plan_start_date(config_payload))
+            if len(plan_dates) >= 3:
+                tail_date_str = plan_dates[2].isoformat()
+                for rec in payload.records:
+                    if rec.plan_date.isoformat() == tail_date_str and rec.plan_qty > 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="🚨 填报被顺序锁阻断：当前换热站前日实际消耗尚未结清上报！请先返回完成消耗上报，再填写并提交第三日计划量。"
+                        )
 
     saved_count = save_plan_records(
         station_id=payload.station_id,

@@ -1,8 +1,8 @@
 {
-  "show_date": "2026-05-26",
+  "show_date": "2026-05-25",
   "plan_start_date": "2026-05-26",
   "auto_update_plan_start_date": false,
-  "plan_editable_days": 2,
+  "plan_editable_days": 1,
   "supply_entities": [
     {
       "entity_id": "supplier_a",

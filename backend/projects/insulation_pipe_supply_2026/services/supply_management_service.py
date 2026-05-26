@@ -5,13 +5,24 @@ tube 项目供给侧服务。
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import HTTPException
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+
+
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def _to_beijing_time(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(BEIJING_TZ)
+    return dt
 
 
 def _normalize_text(value: Any) -> str:
@@ -443,7 +454,8 @@ def get_next_shipment_sequence(
     shipped_at: Optional[datetime] = None,
 ) -> int:
     normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
-    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    beijing_shipped_at = _to_beijing_time(shipped_at)
+    date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
     if not date_part:
         return 1
     shipment_prefix = f"S{normalized_supply_code}-{date_part}-"
@@ -481,7 +493,8 @@ def build_order_no(
 ) -> str:
     normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
     normalized_station_code = _normalize_text(station_code).upper() or "X"
-    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    beijing_shipped_at = _to_beijing_time(shipped_at)
+    date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
     seq_part = f"{int(delivery_id):03d}"
     if date_part:
         return f"O{normalized_supply_code}-{normalized_station_code}-{date_part}-{seq_part}"
@@ -494,7 +507,8 @@ def build_shipment_no(
     supply_code: str = "",
 ) -> str:
     normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
-    date_part = shipped_at.strftime("%y%m%d") if shipped_at else ""
+    beijing_shipped_at = _to_beijing_time(shipped_at)
+    date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
     seq_part = f"{int(sequence_no):03d}"
     if date_part:
         return f"S{normalized_supply_code}-{date_part}-{seq_part}"
@@ -827,3 +841,113 @@ def update_delivery_warehouse_record(
         raise
     finally:
         session.close()
+
+
+def super_update_delivery_record(
+    *,
+    delivery_id: int,
+    station_id: str,
+    pipe_model_id: str,
+    shipped_qty: float,
+    shipped_at: datetime,
+    vehicle_plate_no: str,
+    ship_remark: str,
+    status: str,
+    order_no: str,
+    shipment_no: str,
+    arrived_qty: Optional[float] = None,
+    received_qty: Optional[float] = None,
+    operator: str,
+) -> None:
+    session = SessionLocal()
+    try:
+        check_sql = text("SELECT id FROM tube.tube_delivery WHERE id = :id")
+        exists = session.execute(check_sql, {"id": delivery_id}).first()
+        if not exists:
+            raise HTTPException(status_code=404, detail="发货记录不存在，无法更新")
+        
+        # 根据最新覆写的数据动态判定是否应该标记为异常 (abnormal_flag)
+        new_abnormal_flag = False
+        val_shipped_qty = float(shipped_qty)
+        val_arrived_qty = float(arrived_qty) if arrived_qty is not None else None
+        val_received_qty = float(received_qty) if received_qty is not None else None
+
+        # (1) 少到货判定：到货数量 < 发货数量
+        if val_arrived_qty is not None and val_arrived_qty < val_shipped_qty:
+            new_abnormal_flag = True
+
+        # (2) 少接收判定：施工接收数量 < 到货数量 (若到货量为空则对比发货量)
+        if val_received_qty is not None:
+            compare_target = val_arrived_qty if val_arrived_qty is not None else val_shipped_qty
+            if val_received_qty < compare_target:
+                new_abnormal_flag = True
+
+        # 智能判定撤销字段流转，防止幽灵备注残留
+        cancel_info_sql = text("SELECT cancel_by, cancel_at, cancel_reason FROM tube.tube_delivery WHERE id = :id")
+        orig_row = session.execute(cancel_info_sql, {"id": delivery_id}).mappings().first()
+        
+        new_cancel_by = None
+        new_cancel_at = None
+        new_cancel_reason = None
+        
+        normalized_status = _normalize_text(status)
+        if normalized_status == "cancelled":
+            # 如果新状态是已撤销，优先保留原有的撤销明细；若原本没有则以当前管理员和备注自动注入
+            new_cancel_by = orig_row["cancel_by"] if orig_row and orig_row["cancel_by"] else operator
+            new_cancel_at = orig_row["cancel_at"] if orig_row and orig_row["cancel_at"] else datetime.now()
+            new_cancel_reason = orig_row["cancel_reason"] if orig_row and orig_row["cancel_reason"] else (_normalize_text(ship_remark) or "超级管理员编辑覆盖撤销")
+
+        update_sql = text(
+            """
+            UPDATE tube.tube_delivery
+            SET station_id = :station_id,
+                pipe_model_id = :pipe_model_id,
+                shipped_qty = :shipped_qty,
+                shipped_at = :shipped_at,
+                vehicle_plate_no = :vehicle_plate_no,
+                ship_remark = :ship_remark,
+                status = :status,
+                order_no = :order_no,
+                shipment_no = :shipment_no,
+                arrived_qty = :arrived_qty,
+                received_qty = :received_qty,
+                abnormal_flag = :abnormal_flag,
+                cancel_by = :cancel_by,
+                cancel_at = :cancel_at,
+                cancel_reason = :cancel_reason,
+                updated_by = :operator,
+                updated_at = NOW()
+            WHERE id = :id
+            """
+        )
+        session.execute(
+            update_sql,
+            {
+                "id": delivery_id,
+                "station_id": _normalize_text(station_id),
+                "pipe_model_id": _normalize_pipe_model_id(pipe_model_id),
+                "shipped_qty": val_shipped_qty,
+                "shipped_at": shipped_at,
+                "vehicle_plate_no": _normalize_text(vehicle_plate_no),
+                "ship_remark": _normalize_text(ship_remark),
+                "status": normalized_status,
+                "order_no": _normalize_text(order_no),
+                "shipment_no": _normalize_text(shipment_no),
+                "arrived_qty": val_arrived_qty,
+                "received_qty": val_received_qty,
+                "abnormal_flag": new_abnormal_flag,
+                "cancel_by": new_cancel_by,
+                "cancel_at": new_cancel_at,
+                "cancel_reason": new_cancel_reason,
+                "operator": operator,
+            }
+        )
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"超级管理员强力更新数据失败: {str(e)}")
+    finally:
+        session.close()
+

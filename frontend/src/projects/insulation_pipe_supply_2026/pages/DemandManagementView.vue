@@ -89,13 +89,6 @@
         <div class="tube-tabs-header">
           <button 
             type="button" 
-            :class="{ active: activeTab === 'plan' }" 
-            @click="activeTab = 'plan'"
-          >
-            🕒 三日滚动计划填报
-          </button>
-          <button 
-            type="button" 
             :class="{ active: activeTab === 'usage' }" 
             @click="activeTab = 'usage'"
           >
@@ -103,10 +96,10 @@
           </button>
           <button 
             type="button" 
-            :class="{ active: activeTab === 'baseline' }" 
-            @click="activeTab = 'baseline'"
+            :class="{ active: activeTab === 'plan' }" 
+            @click="activeTab = 'plan'"
           >
-            📋 基准设计量台账
+            🕒 三日滚动计划填报
           </button>
           <button 
             type="button" 
@@ -114,6 +107,13 @@
             @click="activeTab = 'logistics'"
           >
             🚚 现场到货与接收确认
+          </button>
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'baseline' }" 
+            @click="activeTab = 'baseline'"
+          >
+            📋 基准设计量台账
           </button>
         </div>
       </div>
@@ -136,6 +136,18 @@
                 @click="savePlanMatrix"
               >
                 {{ savePlanLoading ? '提交中...' : '提交三日计划量' }}
+              </button>
+            </div>
+
+            <!-- 严格顺序填报流程锁拦截横幅 -->
+            <div v-if="strictPlanningFlowControl && !isUsageSubmitted" class="flow-gateway-banner animate-slide-down">
+              <span class="gateway-icon">🔒</span>
+              <div class="gateway-desc">
+                <strong>首二日流程管控锁已激活</strong>
+                <span>由于当前换热站前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
+              </div>
+              <button type="button" class="gateway-link-btn" @click="activeTab = 'usage'">
+                👉 一键去上报前日消耗
               </button>
             </div>
 
@@ -168,6 +180,7 @@
                     >
                       {{ date }}
                     </th>
+                    <th class="sandbox-th">🔮 首二日填报决策沙盘 (决策辅助)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -185,15 +198,33 @@
                           min="0"
                           step="1"
                           placeholder="数量"
-                          :disabled="!isPlanDateEditable(index) || !canSubmitCurrentProject"
+                          :disabled="!isPlanDateEditable(index) || !canSubmitCurrentProject || (index === 2 && strictPlanningFlowControl && !isUsageSubmitted)"
                         />
                         <input
                           v-model.trim="row.values[date].remarks"
                           type="text"
                           maxlength="120"
                           placeholder="备注"
-                          :disabled="!isPlanDateEditable(index) || !canSubmitCurrentProject"
+                          :disabled="!isPlanDateEditable(index) || !canSubmitCurrentProject || (index === 2 && strictPlanningFlowControl && !isUsageSubmitted)"
                         />
+                      </div>
+                    </td>
+                    <td class="cell-sandbox">
+                      <div class="sandbox-badge" :class="getSandboxStatusClass(row)">
+                        <div class="sandbox-header-row">
+                          <span class="sandbox-title">🔮 首二日后盈缺</span>
+                          <span class="result-chip" :class="getPredictionStatusClass(row)">
+                            {{ getPredictionStatusLabel(row) }}
+                          </span>
+                        </div>
+                        <div class="sandbox-metrics">
+                          <span class="metric-item" title="当前现场已确认接收在库总量">在库: <strong>{{ strictPlanningFlowControl && !isUsageSubmitted ? '待结算' : `${row.stationInventoryQty} 米` }}</strong></span>
+                          <span class="metric-item" title="当前所有已发货在途及到站待确认的总量">在途: <strong>{{ row.inboundPipelineQty }} 米</strong></span>
+                          <span class="metric-item" title="未来三日计划中前两日计划量之和">前两日需: <strong>{{ getPrevTwoDaysPlanSum(row) }} 米</strong></span>
+                        </div>
+                        <div class="sandbox-suggestion">
+                          💡 {{ getSandboxSuggestion(row) }}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -306,11 +337,12 @@
                 <h2>到货与施工接收记录</h2>
                 <span class="panel-hint">确认运输车次的安全到站，并录入施工单位的真实物理接收量。计量单位：米。</span>
               </div>
-              <div class="toolbar-actions">
+              <div class="toolbar-actions" style="display: flex; gap: 8px;">
                 <button type="button" class="btn ghost" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
                 <button type="button" class="primary-button" :disabled="pendingLoading || !selectedStationId" @click="applyPendingFilters">
                   {{ pendingLoading ? '查询中...' : '筛选记录' }}
                 </button>
+                <button v-if="pendingRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
               </div>
             </div>
 
@@ -460,6 +492,15 @@
       </section>
 
     </main>
+    <!-- 导出配置与 XLSX 导出组件 -->
+    <ExportSettingsModal
+      :show="showExportModal"
+      :columns="exportColumns"
+      :data="exportAllPendingRows"
+      :filtered-data="exportPendingRows"
+      default-filename="保温管到货与接收确认记录"
+      @close="showExportModal = false"
+    />
   </div>
 </template>
 
@@ -467,6 +508,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeDemandManagementDeliveryArrival,
   confirmTubeDemandManagementDeliveryReceipt,
@@ -496,7 +538,38 @@ const pipeModelOptions = ref([])
 const currentGroup = ref('')
 
 const selectedStationId = ref('')
-const activeTab = ref('plan')
+const activeTab = ref('usage')
+const showExportModal = ref(false)
+const allPendingRows = ref([])
+const exportColumns = [
+  { key: 'deliveryCode', label: '订单号' },
+  { key: 'shipmentNo', label: '运输车次号' },
+  { key: 'vehiclePlateNo', label: '车牌号' },
+  { key: 'supplyEntityName', label: '供给主体' },
+  { key: 'pipeModelName', label: '规格型号' },
+  { key: 'shippedQty', label: '发货量（米）' },
+  { key: 'shippedAtDisplay', label: '发货时间' },
+  { key: 'arrivedConfirmAtDisplay', label: '确认到货时间' },
+  { key: 'statusLabel', label: '状态' },
+  { key: 'receivedQty', label: '物理接收量（米）' },
+  { key: 'shipRemark', label: '备注' }
+]
+const exportPendingRows = computed(() => {
+  return pendingRows.value.map(row => ({
+    ...row,
+    shippedAtDisplay: formatDateTimeDisplay(row.shippedAt),
+    arrivedConfirmAtDisplay: formatDateTimeDisplay(row.arrivedConfirmAt),
+    shipRemark: row.remarks || ''
+  }))
+})
+const exportAllPendingRows = computed(() => {
+  return allPendingRows.value.map(row => ({
+    ...row,
+    shippedAtDisplay: formatDateTimeDisplay(row.shippedAt),
+    arrivedConfirmAtDisplay: formatDateTimeDisplay(row.arrivedConfirmAt),
+    shipRemark: row.remarks || ''
+  }))
+})
 
 // 智能 Excel 一键粘贴解析函数
 function handleClipboardPaste(event) {
@@ -557,6 +630,8 @@ const showDate = ref('')
 const anchorDate = ref('')
 const usageDate = ref('')
 const planEditableDays = ref(3)
+const strictPlanningFlowControl = ref(true)
+const isUsageSubmitted = ref(false)
 
 const baselineLoading = ref(false)
 const baselineError = ref('')
@@ -677,6 +752,8 @@ function normalizePlanRows(rows, dates) {
     return {
       pipeModelId: row.pipe_model_id || row.pipeModelId,
       pipeModelName: row.pipe_model_name || row.pipeModelName || row.model_name || '未命名型号',
+      stationInventoryQty: Number(row.station_inventory_qty ?? row.stationInventoryQty ?? 0),
+      inboundPipelineQty: Number(row.inbound_pipeline_qty ?? row.inboundPipelineQty ?? 0),
       values: valueMap
     }
   })
@@ -837,6 +914,8 @@ async function loadPlanMatrix() {
     const dates = response.plan_dates || []
     planDates.value = dates
     planRows.value = normalizePlanRows(response.rows, dates)
+    strictPlanningFlowControl.value = response.strict_planning_flow_control ?? true
+    isUsageSubmitted.value = response.is_usage_submitted ?? false
   } catch (error) {
     planError.value = error?.message || '加载三日计划失败'
     planDates.value = []
@@ -861,6 +940,19 @@ async function loadUsageSheet() {
     usageRows.value = []
   } finally {
     usageLoading.value = false
+  }
+}
+
+async function loadAllPendingLogistics() {
+  if (!selectedStationId.value) {
+    allPendingRows.value = []
+    return
+  }
+  try {
+    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value, {})
+    allPendingRows.value = normalizePendingRows(response.rows)
+  } catch (error) {
+    console.error('Failed to load all pending logistics for export:', error)
   }
 }
 
@@ -894,13 +986,16 @@ function applyPendingFilters() {
   loadLogisticsRecords()
 }
 
-function resetPendingFilters() {
+async function resetPendingFilters() {
   pendingFilters.orderNo = ''
   pendingFilters.shipmentNo = ''
   pendingFilters.pipeModelId = ''
   pendingFilters.shippedDate = ''
   pendingFilters.arrivedDate = ''
-  loadLogisticsRecords()
+  await Promise.all([
+    loadLogisticsRecords(),
+    loadAllPendingLogistics()
+  ])
 }
 
 async function confirmArrival(row) {
@@ -920,7 +1015,10 @@ async function confirmArrival(row) {
       remark: row.arrivalRemark || ''
     })
     setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 到货已确认。`)
-    await loadLogisticsRecords()
+    await Promise.all([
+      loadLogisticsRecords(),
+      loadAllPendingLogistics()
+    ])
   } catch (error) {
     setActionMessage('error', error?.message || '确认到货失败')
   } finally {
@@ -950,7 +1048,10 @@ async function confirmReceipt(row) {
       remark: row.receiptRemark || ''
     })
     setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 施工接收已确认。`)
-    await loadLogisticsRecords()
+    await Promise.all([
+      loadLogisticsRecords(),
+      loadAllPendingLogistics()
+    ])
   } catch (error) {
     setActionMessage('error', error?.message || '确认施工接收失败')
   } finally {
@@ -964,7 +1065,8 @@ async function reloadStationData() {
     loadBaseline(),
     loadPlanMatrix(),
     loadUsageSheet(),
-    loadLogisticsRecords()
+    loadLogisticsRecords(),
+    loadAllPendingLogistics()
   ])
 }
 
@@ -1081,6 +1183,69 @@ onBeforeUnmount(() => {
     nowTimer = null
   }
 })
+
+// 计算前两日计划需求总量
+function getPrevTwoDaysPlanSum(row) {
+  if (!planDates.value || planDates.value.length < 2) return 0
+  const date1 = planDates.value[0]
+  const date2 = planDates.value[1]
+  const q1 = Number(row.values[date1]?.plannedQty || 0)
+  const q2 = Number(row.values[date2]?.plannedQty || 0)
+  return q1 + q2
+}
+
+// 预测尾部一日开工时的可用库存量 = 现场在库 + 在途总量 - 前两日计划需求之和
+function getTailDayPrediction(row) {
+  const stock = Number(row.stationInventoryQty || 0)
+  const transit = Number(row.inboundPipelineQty || 0)
+  const prevDemand = getPrevTwoDaysPlanSum(row)
+  return stock + transit - prevDemand
+}
+
+// 预测状态样式类
+function getPredictionStatusClass(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return 'locked-grey'
+  }
+  const prediction = getTailDayPrediction(row)
+  return prediction >= 0 ? 'safe-green' : 'danger-red'
+}
+
+// 决策沙盘的外层状态样式类
+function getSandboxStatusClass(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return 'status-locked'
+  }
+  const prediction = getTailDayPrediction(row)
+  return prediction >= 0 ? 'status-safe' : 'status-alert'
+}
+
+// 状态标签文本
+function getPredictionStatusLabel(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return '⌛ 待上报前日消耗'
+  }
+  const prediction = getTailDayPrediction(row)
+  if (prediction > 0) return `盈余 +${prediction} 米`
+  if (prediction === 0) return `平衡 0 米`
+  return `缺口 -${Math.abs(prediction)} 米`
+}
+
+// 智能决策建议提示
+function getSandboxSuggestion(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return '前日(昨日)实际使用消耗尚未上报结清！为了避免给您的三日计划提供虚假的盈缺预测，请先前往‘每日使用消耗填报’中提交昨日消耗，系统将即时为您解锁首二日后库存盈缺推演与第三日计划填报。'
+  }
+  const prediction = getTailDayPrediction(row)
+  if (prediction > 0) {
+    return `首二日后可用富余 ${prediction} 米，第三天建议≤${prediction}米填报，防止爆仓积压。`
+  }
+  if (prediction === 0) {
+    return `前两天计划恰好耗光全部可用库存。第三天填报量建议等于第3天的真实施工需求量。`
+  }
+  const absoluteGap = Math.abs(prediction)
+  return `前两天计划将消耗光全部可用库存！首二日后将面临断料缺口 ${absoluteGap} 米，第三天填报量建议≥${absoluteGap}米。`
+}
 </script>
 
 <style scoped>
@@ -1634,5 +1799,274 @@ onBeforeUnmount(() => {
   color: #2563eb !important;
   background: #ffffff !important;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* 🔮 首二日填报决策沙盘殿堂级 UI 样式 */
+.sandbox-th {
+  min-width: 330px !important;
+  max-width: 360px !important;
+}
+
+.cell-sandbox {
+  padding: 8px 10px !important;
+}
+
+.sandbox-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+}
+
+.sandbox-badge::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+}
+
+/* 安全盈余卡片 */
+.sandbox-badge.status-safe {
+  background: rgba(240, 253, 244, 0.6) !important;
+  border: 1px solid rgba(187, 247, 208, 0.7) !important;
+}
+
+.sandbox-badge.status-safe::before {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+}
+
+.sandbox-badge.status-safe:hover {
+  background: rgba(240, 253, 244, 0.95) !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.08);
+}
+
+/* 缺口警报卡片 */
+.sandbox-badge.status-alert {
+  background: rgba(254, 242, 242, 0.6) !important;
+  border: 1px solid rgba(254, 226, 226, 0.7) !important;
+  animation: border-glow-alert 3s infinite ease-in-out;
+}
+
+.sandbox-badge.status-alert::before {
+  background: linear-gradient(180deg, #ef4444 0%, #be123c 100%);
+}
+
+.sandbox-badge.status-alert:hover {
+  background: rgba(254, 242, 242, 0.95) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.08);
+}
+
+.sandbox-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sandbox-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.02em;
+}
+
+.result-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.result-chip.safe-green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.result-chip.danger-red {
+  background: #fee2e2;
+  color: #be123c;
+  animation: pulse-danger-text 2s infinite ease-in-out;
+}
+
+.sandbox-metrics {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px dashed rgba(226, 232, 240, 0.8);
+  padding-bottom: 6px;
+}
+
+.metric-item {
+  font-size: 11px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.metric-item strong {
+  color: #1e293b;
+}
+
+.sandbox-suggestion {
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.45;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 6px 8px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.status-alert .sandbox-suggestion {
+  background: rgba(255, 255, 255, 0.7);
+  color: #991b1b;
+}
+
+.status-safe .sandbox-suggestion {
+  background: rgba(255, 255, 255, 0.7);
+  color: #166534;
+}
+
+@keyframes pulse-danger-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes border-glow-alert {
+  0%, 100% {
+    border-color: rgba(254, 226, 226, 0.7);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+  }
+  50% {
+    border-color: rgba(248, 113, 113, 0.35);
+    box-shadow: 0 2px 8px 0 rgba(239, 68, 68, 0.04);
+  }
+}
+
+/* 🔒 首二日顺序填报控制锁引导横幅 */
+.flow-gateway-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.9) 0%, rgba(253, 230, 138, 0.8) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.08);
+  box-sizing: border-box;
+}
+
+.gateway-icon {
+  font-size: 20px;
+  background: #f59e0b;
+  color: #ffffff;
+  padding: 6px;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gateway-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  text-align: left;
+}
+
+.gateway-desc strong {
+  font-size: 14px;
+  color: #78350f;
+}
+
+.gateway-desc span {
+  font-size: 12px;
+  color: #92400e;
+}
+
+.gateway-link-btn {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: none !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15) !important;
+  animation: link-pulse-glow 2s infinite !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+}
+
+.gateway-link-btn:hover {
+  background: #1d4ed8 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* 锁定灰卡片样式 */
+.sandbox-badge.status-locked {
+  background: rgba(241, 245, 249, 0.6) !important;
+  border: 1px dashed rgba(148, 163, 184, 0.6) !important;
+  box-shadow: none !important;
+}
+
+.sandbox-badge.status-locked::before {
+  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
+}
+
+.result-chip.locked-grey {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.status-locked .sandbox-suggestion {
+  background: rgba(255, 255, 255, 0.8);
+  color: #475569;
+  border-left: 2px solid #94a3b8;
+}
+
+.status-locked .metric-item strong {
+  color: #94a3b8;
+}
+
+@keyframes link-pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+@keyframes slide-down-fade {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-down {
+  animation: slide-down-fade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 </style>

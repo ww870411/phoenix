@@ -110,15 +110,16 @@
                   </button>
                 </div>
               </div>
-              <div class="field-grid">
+              <div class="field-grid core-field-grid">
                 <label class="field">
                   <span>展示/业务日期 (show_date)</span>
                   <input v-model="showDate" type="date" class="input" />
+                  <small class="field-help">决定大盘看板及历史消耗数据统计的宏观切断视界。</small>
                 </label>
                 <label class="field">
                   <span>滚动计划起始日期 (plan_start_date)</span>
                   <input v-model="planStartDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
-                  <small class="field-help">开启自动更新后，该日期会随真实日期自动变化。</small>
+                  <small class="field-help">未来三日计划采集的物理起始日期锚点（滚动计划 T 日）。</small>
                 </label>
                 <label class="field">
                   <span>起始日期是否自动随今天变化</span>
@@ -126,11 +127,20 @@
                     <option :value="false">否 (手动维护起始日期)</option>
                     <option :value="true">是 (每天随日期自动后移)</option>
                   </select>
+                  <small class="field-help">开启自动更新后，该日期会随物理时间每天自动向后平推。</small>
                 </label>
                 <label class="field">
                   <span>计划可填报修改天数 (plan_editable_days)</span>
                   <input v-model.number="planEditableDays" class="input" type="number" min="0" max="3" step="1" />
-                  <small class="field-help">`3`为三天都可改，`2`为最后两天可改，`0`为不可填报。</small>
+                  <small class="field-help">3 为三天都可填，2 为后两天可填，0 为计划全部锁盘不可填。</small>
+                </label>
+                <label class="field field-span-2">
+                  <span>严格计划填报流程管控 (strict_planning_flow_control)</span>
+                  <select v-model="strictPlanningFlowControl" class="input">
+                    <option :value="true">开启 (现场必须先结清前日消耗，才解锁第三日计划)</option>
+                    <option :value="false">关闭 (现场可直接独立填报第三日计划，不强加顺序)</option>
+                  </select>
+                  <small class="field-help">开启后强力规范现场工作流顺序并激活滚动盈缺预测，关闭则保障紧急状态下的独立填报弹性。</small>
                 </label>
               </div>
               <p v-if="sectionMessage('core_dates')" :class="['section-tip', sectionMessage('core_dates').type]">
@@ -552,12 +562,12 @@ const {
   goProjectPages,
 } = useTubePageShell('全局管理入口')
 
-const configPath = ref('')
 const activeTab = ref('core')
 const showDate = ref('')
 const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
 const planEditableDays = ref(3)
+const strictPlanningFlowControl = ref(true)
 const globalMessage = ref(null)
 const jsonEditVal = ref('')
 const jsonErrorMessage = ref('')
@@ -726,11 +736,11 @@ function syncSelectedBaselineStation() {
 }
 
 function applyConfig(config) {
-  configPath.value = configPath.value || ''
   showDate.value = config.show_date || config.biz_date || ''
   planStartDate.value = config.plan_start_date || showDate.value || ''
   autoUpdatePlanStartDate.value = Boolean(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
+  strictPlanningFlowControl.value = config.strict_planning_flow_control ?? true
   supplyEntities.value = cloneRows(config.supply_entities)
   demandEntities.value = cloneRows(config.demand_entities)
   pipeModels.value = normalizePipeModelRows(config.pipe_models)
@@ -801,6 +811,9 @@ function buildSectionPayload(section) {
   }
   if (section === 'plan_editable_days') {
     return Number(planEditableDays.value ?? 3)
+  }
+  if (section === 'strict_planning_flow_control') {
+    return Boolean(strictPlanningFlowControl.value)
   }
   if (section === 'supply_entities') {
     return supplyEntities.value.map((item) => ({
@@ -876,6 +889,7 @@ const configPreviewText = computed(() =>
       plan_start_date: planStartDate.value || '',
       auto_update_plan_start_date: Boolean(autoUpdatePlanStartDate.value),
       plan_editable_days: Number(planEditableDays.value ?? 3),
+      strict_planning_flow_control: Boolean(strictPlanningFlowControl.value),
       supply_entities: buildSectionPayload('supply_entities'),
       demand_entities: buildSectionPayload('demand_entities'),
       pipe_models: buildSectionPayload('pipe_models'),
@@ -951,7 +965,6 @@ async function loadConfig() {
   try {
     const response = await getTubeGlobalManagementConfig(PROJECT_KEY)
     const config = response.config || {}
-    configPath.value = response.config_path || ''
     submissionStatusPath.value = response.submission_status_path || ''
     latestSubmissions.value = normalizeSubmissionRows(response.submission_status?.latest_submissions || [])
     historySubmissions.value = normalizeSubmissionRows(response.submission_status?.history_submissions || [])
@@ -981,7 +994,6 @@ async function saveSection(section) {
       section,
       data: buildSectionPayload(section),
     })
-    configPath.value = response.config_path || configPath.value
     applyConfig(response.config || {})
     if (response.show_date) {
       showDate.value = response.show_date
@@ -1018,6 +1030,10 @@ async function saveCoreDatesSection() {
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'auto_update_plan_start_date',
       data: Boolean(autoUpdatePlanStartDate.value),
+    })
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'strict_planning_flow_control',
+      data: Boolean(strictPlanningFlowControl.value),
     })
     const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_editable_days',
@@ -1610,5 +1626,20 @@ useTubeRealtimeRefresh(loadConfig)
   white-space: nowrap !important;
   word-break: keep-all !important;
   box-sizing: border-box !important;
+}
+
+/* ⚙️ 核心参数板块 $3\times2$ 规整双栏矩阵 */
+.core-field-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 20px 32px !important; /* 行距20px，列距32px */
+  align-items: start !important;
+}
+
+@media (max-width: 860px) {
+  .core-field-grid {
+    grid-template-columns: 1fr !important; /* 移动端折叠为单栏 */
+    gap: 16px !important;
+  }
 }
 </style>

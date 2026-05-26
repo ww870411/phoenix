@@ -73,9 +73,10 @@
             <input v-model.trim="filters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" />
           </label>
         </div>
-        <div class="filter-actions">
+        <div class="filter-actions" style="display: flex; gap: 8px;">
           <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
           <button class="btn ghost" type="button" :disabled="loading" @click="resetFilters">重置</button>
+          <button v-if="deliveries.length > 0" class="btn primary" type="button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
         </div>
       </section>
 
@@ -203,39 +204,222 @@
         </div>
       </section>
 
-      <section class="card elevated">
-        <div class="card-header">选中记录处置</div>
-        <div v-if="!selectedDeliveries.length" class="page-state">请至少勾选一条台账记录后再执行确认操作。</div>
-        <div v-else class="action-panel">
-          <div class="action-summary">
-            <div><span>已选记录</span><strong>{{ selectedDeliveryAggregate.totalRecords }} 条</strong></div>
-            <div><span>总发货长度</span><strong>{{ formatAmount(selectedDeliveryAggregate.totalShippedQty) }} 米</strong></div>
-            <div><span>总接收长度</span><strong>{{ formatAmount(selectedDeliveryAggregate.totalReceivedQty) }} 米</strong></div>
-            <div><span>平均在途时长</span><strong>{{ selectedDeliveryAggregate.averageElapsedLabel }}</strong></div>
-          </div>
-
-          <div v-if="pendingWarehouseSelectedDeliveries.length" class="form-grid">
-            <label class="field field-wide">
-              <span>库管备注</span>
-              <textarea v-model="warehouseForm.remark" class="textarea" rows="3" placeholder="可填写手续闭环说明"></textarea>
-            </label>
-            <div class="form-actions">
-              <button class="btn primary" type="button" :disabled="actionLoading" @click="submitWarehouse">
-                {{ actionLoading ? '提交中...' : `完成库管确认（${pendingWarehouseSelectedDeliveries.length}条）` }}
-              </button>
+      <section class="card elevated" style="padding: 24px;">
+        <div class="card-header" style="border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px;">
+          <span style="font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px;">
+            💼 库管操作与全生命周期证据链
+          </span>
+        </div>
+        
+        <div class="double-panel-layout" style="display: flex; gap: 24px; flex-wrap: wrap; width: 100%; box-sizing: border-box;">
+          <!-- 左侧：批量处置操作面板 (占 42%) -->
+          <div class="left-panel" style="flex: 42; min-width: 320px; display: flex; flex-direction: column; gap: 16px; border-right: 1px solid #e2e8f0; padding-right: 24px; box-sizing: border-box;">
+            <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px;">
+              <span>⚡ 批量入库确认</span>
+            </h4>
+            
+            <div v-if="!selectedDeliveries.length" class="empty-action-tip" style="padding: 30px 20px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-sizing: border-box;">
+              <span style="font-size: 28px;">💡</span>
+              <span style="font-size: 13px; color: #64748b; line-height: 1.6;">提示：请勾选列表中状态为“已接收待库管”的发货记录以执行批量入库确认。</span>
+            </div>
+            
+            <div v-else class="action-panel" style="display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box;">
+              <div class="action-summary" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; box-sizing: border-box;">
+                <div style="display: flex; flex-direction: column; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box;">
+                  <span style="font-size: 12px; color: #64748b; margin-bottom: 4px;">已勾选记录</span>
+                  <strong style="font-size: 16px; color: #1e293b;">{{ selectedDeliveryAggregate.totalRecords }} 条</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box;">
+                  <span style="font-size: 12px; color: #64748b; margin-bottom: 4px;">总发货长度</span>
+                  <strong style="font-size: 16px; color: #1e293b;">{{ formatAmount(selectedDeliveryAggregate.totalShippedQty) }} 米</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box;">
+                  <span style="font-size: 12px; color: #64748b; margin-bottom: 4px;">总物理接收</span>
+                  <strong style="font-size: 16px; color: #1e293b;">{{ formatAmount(selectedDeliveryAggregate.totalReceivedQty) }} 米</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box;">
+                  <span style="font-size: 12px; color: #64748b; margin-bottom: 4px;">在途平均用时</span>
+                  <strong style="font-size: 14px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="selectedDeliveryAggregate.averageElapsedLabel">{{ selectedDeliveryAggregate.averageElapsedLabel }}</strong>
+                </div>
+              </div>
+              
+              <div v-if="pendingWarehouseSelectedDeliveries.length" class="form-grid" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px; width: 100%; box-sizing: border-box;">
+                <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 13px; font-weight: 600; color: #475569;">✍️ 批量库管入库备注 (选填)</span>
+                  <textarea v-model="warehouseForm.remark" class="textarea" rows="3" placeholder="可在此处统一填写这批量入库单的凭证说明或手续情况..." style="font-size: 13px; line-height: 1.5;"></textarea>
+                </label>
+                <button class="btn primary" type="button" :disabled="actionLoading" @click="submitWarehouse" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                  <span>{{ actionLoading ? '⏳ 正在提交确认...' : `💾 确认完成库管入库 (${pendingWarehouseSelectedDeliveries.length}条)` }}</span>
+                </button>
+              </div>
+              
+              <div v-else class="page-state compact" style="background: #fff8f8; border: 1px solid #ffe4e6; color: #b91c1c; border-radius: 8px; padding: 12px; font-size: 13px; text-align: center; font-weight: 500;">
+                ⚠️ 当前勾选的记录中没有“已接收待库管”状态数据，无法执行入库确认。
+              </div>
             </div>
           </div>
-
-          <div v-else class="page-state compact">当前勾选记录中没有“已接收待库管”状态数据，无法执行批量库管确认。</div>
+          
+          <!-- 右侧：全生命周期流转时光轴 (占 58%) -->
+          <div class="right-panel" style="flex: 58; min-width: 380px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box;">
+            <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: #475569; display: flex; justify-content: space-between; align-items: center;">
+              <span>⏳ 运输单全生命周期流转轨迹</span>
+              <span v-if="selectedDelivery" style="font-size: 12px; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 99px; font-weight: 500; font-family: monospace;">
+                ID: {{ selectedDelivery.order_no || selectedDelivery.delivery_code || selectedDelivery.id }}
+              </span>
+            </h4>
+            
+            <div v-if="!selectedDelivery" class="empty-timeline-tip" style="padding: 40px 20px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; justify-content: center; height: 100%; min-height: 220px; box-sizing: border-box;">
+              <span style="font-size: 28px;">🔍</span>
+              <span style="font-size: 13px; color: #64748b; line-height: 1.6;">提示：点击上方列表中的任意一行记录，即可在此处瞬时查看其全生命周期闭环证据链与流转状态。</span>
+            </div>
+            
+            <div v-else class="timeline-container" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; position: relative; box-sizing: border-box; width: 100%;">
+              <!-- 顶部信息摘要 -->
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #f1f5f9; box-sizing: border-box;">
+                <div>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">车牌号</div>
+                  <div style="font-size: 13px; font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ selectedDelivery.vehicle_plate_no || '—' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">规格型号</div>
+                  <div style="font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="selectedDelivery.pipe_model_name">{{ selectedDelivery.pipe_model_name || '—' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">当前状态</div>
+                  <div style="white-space: nowrap; overflow: hidden;">
+                    <span :class="['status-pill', statusClass(selectedDelivery.status)]" style="padding: 2px 6px; font-size: 11px;">
+                      {{ deliveryStatusLabelMap[selectedDelivery.status] || selectedDelivery.status }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 运输单 Timeline 时光轴 -->
+              <div class="vertical-timeline" style="position: relative; padding-left: 24px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
+                <!-- 垂直连接虚线 -->
+                <div style="position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; border-left: 2px dashed #cbd5e1; z-index: 1;"></div>
+                
+                <!-- 1. 发货阶段 -->
+                <div style="position: relative; z-index: 2;">
+                  <span style="position: absolute; left: -24px; top: 2px; width: 16px; height: 16px; border-radius: 99px; background: #4f46e5; border: 3px solid #ffffff; box-shadow: 0 0 0 2px #4f46e5; display: inline-block;"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span style="font-size: 13px; font-weight: 700; color: #1e293b;">📦 供给侧装车发货</span>
+                      <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.shipped_at) }}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>发货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.shipped_qty) }} 米</strong></div>
+                      <div>经办人：<span>{{ selectedDelivery.ship_contact_name || '供给端系统' }}</span></div>
+                      <div style="grid-column: span 2;">联系电话：<span>{{ selectedDelivery.ship_contact_phone || '—' }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.ship_remark || selectedDelivery.cancel_reason">发货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.ship_remark || selectedDelivery.cancel_reason }}”</span></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 2. 到货确认阶段 -->
+                <div style="position: relative; z-index: 2;">
+                  <span :style="{
+                    position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
+                    background: selectedDelivery.arrived_confirm_at ? '#10b981' : '#cbd5e1',
+                    border: '3px solid #ffffff',
+                    boxShadow: '0 0 0 2px ' + (selectedDelivery.arrived_confirm_at ? '#10b981' : '#cbd5e1'),
+                    display: 'inline-block'
+                  }"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.arrived_confirm_at ? '#1e293b' : '#94a3b8' }">🚚 物流卸车到货确认</span>
+                      <span v-if="selectedDelivery.arrived_confirm_at" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.arrived_confirm_at) }}</span>
+                      <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待节点确认...</span>
+                    </div>
+                    <div v-if="selectedDelivery.arrived_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>到货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.arrived_qty) }} 米</strong></div>
+                      <div>确认人：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.arrived_remark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.arrived_remark }}”</span></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 3. 施工接收阶段 -->
+                <div style="position: relative; z-index: 2;">
+                  <span :style="{
+                    position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
+                    background: selectedDelivery.received_confirm_at ? '#8b5cf6' : '#cbd5e1',
+                    border: '3px solid #ffffff',
+                    boxShadow: '0 0 0 2px ' + (selectedDelivery.received_confirm_at ? '#8b5cf6' : '#cbd5e1'),
+                    display: 'inline-block'
+                  }"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.received_confirm_at ? '#1e293b' : '#94a3b8' }">📐 施工物理接收确认</span>
+                      <span v-if="selectedDelivery.received_confirm_at" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.received_confirm_at) }}</span>
+                      <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待节点确认...</span>
+                    </div>
+                    <div v-if="selectedDelivery.received_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>接收量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.received_qty) }} 米</strong></div>
+                      <div>经办人：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.received_remark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.received_remark }}”</span></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 4. 库管入库阶段 -->
+                <div style="position: relative; z-index: 2;">
+                  <span :style="{
+                    position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
+                    background: selectedDelivery.warehouse_confirm_at ? '#0f766e' : '#cbd5e1',
+                    border: '3px solid #ffffff',
+                    boxShadow: '0 0 0 2px ' + (selectedDelivery.warehouse_confirm_at ? '#0f766e' : '#cbd5e1'),
+                    display: 'inline-block'
+                  }"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.warehouse_confirm_at ? '#1e293b' : '#94a3b8' }">🏢 库管确认手续结清</span>
+                      <span v-if="selectedDelivery.warehouse_confirm_at" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.warehouse_confirm_at) }}</span>
+                      <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待节点确认...</span>
+                    </div>
+                    <div v-if="selectedDelivery.warehouse_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>入库状态：<strong style="color: #0f766e;">✅ 入库手续已结清</strong></div>
+                      <div>经办人：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.warehouse_confirm_by || '—' }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.warehouse_remark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.warehouse_remark }}”</span></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 5. 撤销/异常废弃阶段 (仅在状态是撤销时展示) -->
+                <div v-if="selectedDelivery.status === 'cancelled' || selectedDelivery.cancel_reason" style="position: relative; z-index: 2; margin-top: 4px;">
+                  <span style="position: absolute; left: -24px; top: 2px; width: 16px; height: 16px; border-radius: 99px; background: #ef4444; border: 3px solid #ffffff; box-shadow: 0 0 0 2px #ef4444; display: inline-block;"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span style="font-size: 13px; font-weight: 700; color: #b91c1c;">🚫 供给侧撤销/强制退单</span>
+                      <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.updated_at || selectedDelivery.shipped_at) }}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #475569; background: #fef2f2; padding: 8px; border-radius: 6px; border: 1px solid #fecaca; margin-top: 2px; box-sizing: border-box; width: 100%; word-break: break-all;">
+                      <div>撤销缘由：<strong style="color: #b91c1c;">{{ selectedDelivery.cancel_reason || '主动撤单或后台废弃' }}</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
+    <!-- 导出配置与 XLSX 导出组件 -->
+    <ExportSettingsModal
+      :show="showExportModal"
+      :columns="exportColumns"
+      :data="exportAllWarehouseRows"
+      :filtered-data="exportWarehouseRows"
+      default-filename="保温管库管待入库明细台账"
+      @close="showExportModal = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeWarehouseDeliveryWarehouse,
   getTubeWarehouseManagementDeliveries,
@@ -251,6 +435,55 @@ const pageError = ref('')
 const pageMessage = ref('')
 const options = ref(null)
 const deliveries = ref([])
+const allDeliveries = ref([])
+const showExportModal = ref(false)
+const exportColumns = [
+  { key: 'order_no', label: '订单号' },
+  { key: 'shipment_no', label: '运输车次号' },
+  { key: 'vehicle_plate_no', label: '车牌号' },
+  { key: 'supply_entity_name', label: '供给主体' },
+  { key: 'station_name', label: '装车接收换热站' },
+  { key: 'pipe_model_name', label: '保温管规格型号' },
+  { key: 'shipped_qty', label: '发货量（米）' },
+  { key: 'arrived_qty', label: '到货量（米）' },
+  { key: 'received_qty', label: '接收量（米）' },
+  { key: 'shippedAtDisplay', label: '发货时间' },
+  { key: 'statusLabel', label: '状态' },
+  { key: 'ship_contact_name', label: '发货联系人' },
+  { key: 'ship_contact_phone', label: '发货电话' },
+  { key: 'ship_remark', label: '发货备注' },
+  { key: 'arrived_confirm_by', label: '到货确认人' },
+  { key: 'arrivedConfirmAtDisplay', label: '确认到货时间' },
+  { key: 'arrived_remark', label: '到货备注' },
+  { key: 'received_confirm_by', label: '施工接收人' },
+  { key: 'receivedConfirmAtDisplay', label: '接收确认时间' },
+  { key: 'received_remark', label: '接收备注' },
+  { key: 'warehouse_confirm_by', label: '库管确认人' },
+  { key: 'warehouseConfirmAtDisplay', label: '入库确认时间' },
+  { key: 'warehouse_remark', label: '入库备注' }
+]
+const exportWarehouseRows = computed(() => {
+  return deliveries.value.map(row => ({
+    ...row,
+    shippedAtDisplay: formatDateTime(row.shipped_at),
+    arrivedConfirmAtDisplay: formatDateTime(row.arrived_confirm_at),
+    receivedConfirmAtDisplay: formatDateTime(row.received_confirm_at),
+    warehouseConfirmAtDisplay: formatDateTime(row.warehouse_confirm_at),
+    statusLabel: deliveryStatusLabelMap[row.status] || row.status || '',
+    ship_remark: row.ship_remark || row.cancel_reason || ''
+  }))
+})
+const exportAllWarehouseRows = computed(() => {
+  return allDeliveries.value.map(row => ({
+    ...row,
+    shippedAtDisplay: formatDateTime(row.shipped_at),
+    arrivedConfirmAtDisplay: formatDateTime(row.arrived_confirm_at),
+    receivedConfirmAtDisplay: formatDateTime(row.received_confirm_at),
+    warehouseConfirmAtDisplay: formatDateTime(row.warehouse_confirm_at),
+    statusLabel: deliveryStatusLabelMap[row.status] || row.status || '',
+    ship_remark: row.ship_remark || row.cancel_reason || ''
+  }))
+})
 const selectedDeliveryId = ref('')
 const selectedDeliveryIds = ref([])
 
@@ -560,6 +793,15 @@ async function loadOptions() {
   }
 }
 
+async function loadAllDeliveries() {
+  try {
+    const payload = await getTubeWarehouseManagementDeliveries(projectKey, {})
+    allDeliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
+  } catch (error) {
+    console.error('Failed to load all deliveries for export:', error)
+  }
+}
+
 async function loadDeliveries() {
   loading.value = true
   pageError.value = ''
@@ -574,6 +816,7 @@ async function loadDeliveries() {
       vehiclePlateNo: filters.vehiclePlateNo,
     })
     deliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
+    
     const availableIdSet = new Set(deliveries.value.map((row) => String(row.id)))
     selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => availableIdSet.has(id))
     const keepSelected = deliveries.value.find((row) => String(row.id) === selectedDeliveryId.value)
@@ -606,10 +849,13 @@ async function reloadAll() {
     pageError.value = error?.message || '读取库管页面选项失败'
     return
   }
-  await loadDeliveries()
+  await Promise.all([
+    loadDeliveries(),
+    loadAllDeliveries()
+  ])
 }
 
-function resetFilters() {
+async function resetFilters() {
   filters.stationId = ''
   filters.supplyEntityId = ''
   filters.pipeModelId = ''
@@ -617,7 +863,10 @@ function resetFilters() {
   filters.shipmentNo = ''
   filters.orderNo = ''
   filters.vehiclePlateNo = ''
-  loadDeliveries()
+  await Promise.all([
+    loadDeliveries(),
+    loadAllDeliveries()
+  ])
 }
 
 async function submitWarehouse() {
@@ -648,7 +897,10 @@ async function submitWarehouse() {
       }).join('; ')
       pageError.value = `部分处置成功！成功 ${fulfilled.length} 条，失败 ${rejected.length} 条。失败反馈: ${errorMsg}`
     }
-    await loadDeliveries()
+    await Promise.all([
+      loadDeliveries(),
+      loadAllDeliveries()
+    ])
   } catch (error) {
     pageError.value = error?.message || '库管确认批量接口执行异常'
   } finally {

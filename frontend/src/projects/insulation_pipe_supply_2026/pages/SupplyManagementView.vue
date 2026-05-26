@@ -229,7 +229,18 @@
 
                   <label class="field">
                     <span>发货时间</span>
-                    <input value="提交当前车次时自动取当前时间" type="text" disabled />
+                    <input 
+                      v-if="currentGroup === 'Global_admin'" 
+                      v-model="deliveryForm.customShippedAt" 
+                      type="datetime-local" 
+                      class="input"
+                    />
+                    <input 
+                      v-else 
+                      value="提交当前车次时自动取当前时间" 
+                      type="text" 
+                      disabled 
+                    />
                   </label>
                 </div>
 
@@ -358,7 +369,10 @@
                 <h2>已发货物流跟踪记录</h2>
                 <span class="panel-hint">仅“已发货待到货”状态允许撤销。可在表格中点击“继续该车次”为过往车辆追加追加管材发货。</span>
               </div>
-              <button type="button" class="btn ghost" :disabled="deliveriesLoading" @click="loadDeliveries">刷新发货台账</button>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn ghost" :disabled="deliveriesLoading" @click="loadDeliveries">刷新发货台账</button>
+                <button v-if="deliveryRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
+              </div>
             </div>
 
             <div v-if="deliveriesLoading" class="loading-text">正在加载发货记录...</div>
@@ -423,6 +437,15 @@
                     <td>
                       <div class="action-stack">
                         <button
+                          v-if="currentGroup === 'Global_admin'"
+                          type="button"
+                          class="btn primary"
+                          style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important;"
+                          @click="openSuperEdit(row)"
+                        >
+                          ⚙️ 编辑覆盖
+                        </button>
+                        <button
                           v-if="row.shipmentNo"
                           type="button"
                           :class="['btn', isReusingShipment(row) ? 'active-ghost' : 'ghost']"
@@ -439,7 +462,7 @@
                         >
                           {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
                         </button>
-                        <span v-else class="muted-text">不可撤销</span>
+                        <span v-else-if="currentGroup !== 'Global_admin'" class="muted-text">不可撤销</span>
                       </div>
                     </td>
                   </tr>
@@ -451,6 +474,99 @@
 
       </div>
     </main>
+
+    <!-- 超级管理员数据编辑覆盖模态窗 -->
+    <div v-if="showSuperEditModal" class="modal-overlay">
+      <div class="modal-card elevated" style="max-width: 680px; width: 90%; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+        <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #1e293b;">⚙️ 超级数据编辑覆盖 (Global_admin 专属)</h3>
+          <button type="button" class="close-btn" @click="showSuperEditModal = false" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">×</button>
+        </div>
+        <div class="modal-body" style="padding: 20px; max-height: 60vh; overflow-y: auto;">
+          <p class="section-desc" style="color: #4f46e5; font-weight: bold; margin-bottom: 20px; font-size: 14px;">
+            ⚠️ 注意：此通道为您行使最高管理员权力编辑覆盖异常或错误数据，保存后将直接覆盖底层数据库，请务必核实数据后再保存！
+          </p>
+          <div class="field-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货订单号 (order_no)</span>
+              <input v-model.trim="superEditForm.orderNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">运输车次号 (shipment_no)</span>
+              <input v-model.trim="superEditForm.shipmentNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收换热站</span>
+              <select v-model="superEditForm.stationId" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <option v-for="st in stationOptions" :key="st.station_id" :value="st.station_id">
+                  {{ st.station_name }}
+                </option>
+              </select>
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">保温管规格型号</span>
+              <select v-model="superEditForm.pipeModelId" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <option v-for="pm in pipeModelOptions" :key="pm.pipe_model_id" :value="pm.pipe_model_id">
+                  {{ pm.pipe_model_name }}
+                </option>
+              </select>
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货量（米）</span>
+              <input v-model.number="superEditForm.shippedQty" type="number" min="0" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货日期与时间</span>
+              <input v-model="superEditForm.shippedAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">运输车牌号</span>
+              <input v-model.trim="superEditForm.vehiclePlateNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货单流转状态</span>
+              <select v-model="superEditForm.status" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <option value="pending_arrival">在途 (pending_arrival)</option>
+                <option value="arrived">已到货待接收 (arrived)</option>
+                <option value="received">现场已接收待库管确认 (received)</option>
+                <option value="pending_warehouse">现场已接收待库管确认 (pending_warehouse)</option>
+                <option value="completed">已入库已结清 (completed)</option>
+                <option value="cancelled">已撤销废弃 (cancelled)</option>
+              </select>
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">物理到货确认数量（米）</span>
+              <input v-model.number="superEditForm.arrivedQty" type="number" min="0" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空为无" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">施工接收确认数量（米）</span>
+              <input v-model.number="superEditForm.receivedQty" type="number" min="0" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空为无" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货备注信息</span>
+              <textarea v-model.trim="superEditForm.shipRemark" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; height: 60px; resize: vertical;"></textarea>
+            </label>
+          </div>
+          <p v-if="superEditError" style="margin-top: 16px; color: #ef4444; font-size: 13px; font-weight: 600;">⚠️ 错误提示：{{ superEditError }}</p>
+        </div>
+        <div class="modal-footer" style="padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+          <button type="button" class="btn ghost" @click="showSuperEditModal = false" style="padding: 10px 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;">取消覆盖</button>
+          <button type="button" class="btn primary" :disabled="superEditSaving" @click="saveSuperEdit" style="padding: 10px 20px; border: none; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
+            {{ superEditSaving ? '正在保存覆盖...' : '💾 确认编辑覆盖' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 导出配置与 XLSX 导出组件 -->
+    <ExportSettingsModal
+      :show="showExportModal"
+      :columns="exportColumns"
+      :data="allDeliveryRows"
+      :filtered-data="deliveryRows"
+      default-filename="保温管物流发货历史台账"
+      @close="showExportModal = false"
+    />
   </div>
 </template>
 
@@ -458,12 +574,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   cancelTubeSupplyManagementDelivery,
   createTubeSupplyManagementDeliveryBatch,
   getTubeSupplyManagementDeliveries,
   getTubeSupplyManagementDemandSummary,
   getTubeSupplyManagementOptions,
+  superUpdateTubeSupplyManagementDelivery,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -498,6 +616,22 @@ const summaryRows = ref([])
 const deliveriesLoading = ref(false)
 const deliveriesError = ref('')
 const deliveryRows = ref([])
+const allDeliveryRows = ref([])
+const showExportModal = ref(false)
+const exportColumns = [
+  { key: 'deliveryCode', label: '订单号' },
+  { key: 'shipmentNo', label: '运输车次号' },
+  { key: 'vehiclePlateNo', label: '车牌号' },
+  { key: 'supplyEntityName', label: '供给主体' },
+  { key: 'stationName', label: '装车接收换热站' },
+  { key: 'pipeModelName', label: '保温管规格型号' },
+  { key: 'shippedQty', label: '发货量（米）' },
+  { key: 'arrivedQty', label: '到货量（米）' },
+  { key: 'receivedQty', label: '接收量（米）' },
+  { key: 'shippedAtDisplay', label: '发货时间' },
+  { key: 'statusLabel', label: '状态' },
+  { key: 'shipRemark', label: '备注' }
+]
 const cancelLoadingIds = ref({})
 const nowTick = ref(Date.now())
 let nowTimer = null
@@ -649,6 +783,7 @@ function createDefaultDeliveryForm() {
     shipContactName: '',
     shipContactPhone: '',
     shipRemark: '',
+    customShippedAt: '',
   }
 }
 
@@ -879,6 +1014,7 @@ async function loadDeliveries() {
       supplyEntityId: selectedSupplyEntityId.value,
     })
     deliveryRows.value = normalizeDeliveryRows(response.rows)
+    allDeliveryRows.value = [...deliveryRows.value]
   } catch (error) {
     deliveriesError.value = error?.message || '读取供给侧发货记录失败'
     deliveryRows.value = []
@@ -917,7 +1053,8 @@ async function submitDeliveryBatch() {
   submitDeliveryLoading.value = true
   clearActionMessage()
   try {
-    const submittedAt = new Date()
+    const customAt = deliveryForm.value.customShippedAt
+    const submittedAt = customAt ? new Date(customAt) : new Date()
     const response = await createTubeSupplyManagementDeliveryBatch(PROJECT_KEY, {
       supply_entity_id: deliveryForm.value.supplyEntityId,
       shipment_no: deliveryForm.value.reuseCurrentShipment ? deliveryForm.value.shipmentNo || '' : '',
@@ -1077,6 +1214,82 @@ onBeforeUnmount(() => {
     nowTimer = null
   }
 })
+
+const showSuperEditModal = ref(false)
+const superEditSaving = ref(false)
+const superEditError = ref('')
+const superEditForm = ref({
+  deliveryId: 0,
+  stationId: '',
+  pipeModelId: '',
+  shippedQty: 0,
+  shippedAt: '',
+  vehiclePlateNo: '',
+  shipRemark: '',
+  status: '',
+  orderNo: '',
+  shipmentNo: '',
+  arrivedQty: null,
+  receivedQty: null,
+})
+
+function openSuperEdit(row) {
+  superEditError.value = ''
+  let formattedTime = ''
+  if (row.shippedAt) {
+    const d = new Date(row.shippedAt)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const date = String(d.getDate()).padStart(2, '0')
+    const hours = String(d.getHours()).padStart(2, '0')
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    formattedTime = `${year}-${month}-${date}T${hours}:${minutes}`
+  }
+  
+  superEditForm.value = {
+    deliveryId: row.deliveryId,
+    stationId: row.stationId || '',
+    pipeModelId: row.pipeModelId || '',
+    shippedQty: row.shippedQty || 0,
+    shippedAt: formattedTime,
+    vehiclePlateNo: row.vehiclePlateNo || '',
+    shipRemark: row.shipRemark || '',
+    status: row.status || '',
+    orderNo: row.deliveryCode || '',
+    shipmentNo: row.shipmentNo || '',
+    arrivedQty: row.arrivedQty ?? null,
+    receivedQty: row.receivedQty ?? null,
+  }
+  showSuperEditModal.value = true
+}
+
+async function saveSuperEdit() {
+  superEditError.value = ''
+  superEditSaving.value = true
+  try {
+    const shippedAtIso = superEditForm.value.shippedAt ? new Date(superEditForm.value.shippedAt).toISOString() : new Date().toISOString()
+    await superUpdateTubeSupplyManagementDelivery(PROJECT_KEY, superEditForm.value.deliveryId, {
+      station_id: superEditForm.value.stationId,
+      pipe_model_id: superEditForm.value.pipeModelId,
+      shipped_qty: Number(superEditForm.value.shippedQty || 0),
+      shipped_at: shippedAtIso,
+      vehicle_plate_no: superEditForm.value.vehiclePlateNo,
+      ship_remark: superEditForm.value.shipRemark,
+      status: superEditForm.value.status,
+      order_no: superEditForm.value.orderNo,
+      shipment_no: superEditForm.value.shipmentNo,
+      arrived_qty: superEditForm.value.arrivedQty !== null && superEditForm.value.arrivedQty !== '' ? Number(superEditForm.value.arrivedQty) : null,
+      received_qty: superEditForm.value.receivedQty !== null && superEditForm.value.receivedQty !== '' ? Number(superEditForm.value.receivedQty) : null,
+    })
+    showSuperEditModal.value = false
+    setActionMessage('success', '🎉 超级数据已成功编辑覆盖保存！')
+    await loadDeliveries()
+  } catch (error) {
+    superEditError.value = error?.message || '数据编辑覆盖保存失败'
+  } finally {
+    superEditSaving.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -1938,5 +2151,27 @@ onBeforeUnmount(() => {
 
 .status-chip {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+/* 超级管理员编辑覆盖极简弹窗与经典半透明遮罩层 */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 9999 !important;
+}
+
+.modal-card {
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25) !important;
+  overflow: hidden !important;
+  border: 1px solid #e2e8f0 !important;
 }
 </style>

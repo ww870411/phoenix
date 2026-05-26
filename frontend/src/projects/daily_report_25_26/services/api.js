@@ -489,7 +489,20 @@ export async function cancelTubeSupplyManagementDelivery(projectKey, deliveryId,
   })
   if (!response.ok) {
     const message = await response.text()
-    throw new Error(message || `撤销供给侧发货记录失败: ${response.status}`)
+    throw new Error(message || `撤销发货失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function superUpdateTubeSupplyManagementDelivery(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/super-update`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `超级管理员强力订正发货记录失败: ${response.status}`)
   }
   return response.json()
 }

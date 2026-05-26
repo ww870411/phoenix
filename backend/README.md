@@ -1,3 +1,97 @@
+## 2026-05-26 tube项目 警示大盘颠覆式视觉精简与交互式 Tab 降噪控制台开发落地
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的警报中心进行了极富人机交互工效学的极简降噪与大重构。
+- 彻底消除了原本庞大拥挤、堆满多维数字（且与透视表数字完全重复）的大卡片网格。重构为高密度、仅占一行的“状态胶囊行 (Capsule Row)”控制台，一行把 `[状态] 🏢[换热站] 🏷️[管径] [缺口米数] 🎯[调度建议]` 简练地连成一句话呈现；并在头部挂载了支持 🔴严重短料 / ⚠️供应偏紧 / ⚡现场积压 / 💡计划漏报 / 全部警示 的交互式过滤 Tab 栏，一键重组大盘，实现了异常业务重点的秒级一瞥、瞬间聚焦，信息密度和视觉透亮度提升显著。前端静态编译打包 100% 成功通过。
+
+## 2026-05-26 tube项目 看板异动警示大盘升维重塑为“按换热站高阶聚合提炼”大厂算法
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的警报中心进行了极富深度的人机交互调优与高阶重构。
+- 彻底解决了大盘平铺展开每项规格时数据庞杂臃塞的问题，开发了按换热站（Station）大类聚合折叠、以及自动过滤大体量/重度阈值外部的小批量无害噪音（库存积压过滤阈值：在库>80m且超计划4倍，或无设计且在库>25m；漏报过滤阈值：骨干设计量>=200m）的 SaaS 级预警引擎。将断档、在途偏紧、重度积压、重点计划漏报这四大供需警示完美整合进少数几张宏观换热站卡片上，大盘视觉精炼透亮，辅助物资平衡决策的精确性获得巨大飞跃。前端静态编译打包 100% 成功通过。
+
+## 2026-05-26 tube项目 全局数据看板时效超时大盘重塑为“换热站供需与库存异动警示大盘”
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的警报中心进行了重大升维重构。淘汰了原本仅针对时间流超时（发货>12h等）的表象扫描，升级为业务层面更有意义的“🏢 换热站供需与库存异动警示大盘”。
+- 配合前端 ECharts 供需透视表与 Pivot 大表格，在前端完全基于 summaryRes 多维汇总实现了对每个换热站、规格型号下：🔴 极度断料短缺（库存<三日计划）、⚠️ 供需偏紧（在库能维持但在库+在途<三日计划，净缺口>0）、⚡ 物资闲置积压（库存严重积压）、💡 滚动计划漏报四大供需水位风险的精确实时扫描，大幅提升了对生产物资配给决策的辅助价值。前端静态编译打包 100% 成功通过。
+
+## 2026-05-26 tube项目 Excel导出Bug彻底修复与库管全生命周期Timeline时光轴双面板重构
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对数据拉取和克隆底层逻辑进行了大刀阔斧的重构，彻底修复了 Excel 导出在筛选状态下“全部原始数据”与“仅筛选数据”条目数一样的 Bug。
+- 在库管员发货台账页面（`WarehouseManagementView.vue`），完成了从零到一的“批量库管处置 + 全生命周期流转 Timeline 时光轴”左右双面板重构。完美支持发货联系人/电话/备注、到货确认人/时间/备注、施工接收人/时间/备注、库管确认人/时间/备注等多维度重要证据链的平铺展示。前端静态编译打包 100% 成功通过，UI/UX 达到了极致的 premium 大厂级视界。
+
+## 2026-05-26 tube项目 大厂级通用 XLSX 数据导出与自适应列宽美化功能开发落地
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端物理引入了通用的导出设置弹窗，并全面在供给侧历史发货台账、需求侧到货确认台账以及库管侧待入库大表台账中，打通了支持高精度自适应列宽、字里行间排版大气优雅的 Excel (XLSX) 数据导出。
+
+## 2026-05-26 tube项目 supply_management_service.py 编辑覆盖下撤销幽灵备注残留隐患修复
+
+- 后端针对超级管理员在进行“编辑覆盖”数据修正时状态与撤销明细可能发生的残留冲突开展了物理机制健全。
+- 本地静态编译打包 100% 成功通过，高规格落盘：
+  1. **智能撤销关系链清退**：在 `supply_management_service.py` 内部的 `super_update_delivery_record` 方法中，注入了状态流转安全防御。当发货单在先前已被撤销后，管理员强力通过编辑覆盖重新将状态设定为其他非 `'cancelled'`（即活动状态）时，后端将对 `cancel_by` / `cancel_at` / `cancel_reason` 进行**彻底的物理清空为 `NULL`**，终结了已复活发货单上残留撤销幽灵数据的安全隐患。
+  2. **智能撤销明细补齐**：若管理员明确将状态修正为已撤销 `'cancelled'`，后端将优先保留历史已有的撤销明细；若原本没有则会自动以当前操作管理员作为撤销人、当前系统时间作为撤销时间、表单备注作为撤销理由自动补齐，实现了数据的极高一致性与防御力。
+
+## 2026-05-26 tube项目 SupplyManagementView.vue 编辑覆盖弹窗数量输入步长优化为 1
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对超级编辑覆盖弹窗中的发货量、到货确认数量、施工接收确认数量三处输入框的 HTML `step` 步长属性进行了升级优化。将原本的 `step="0.01"` 升级为 `step="1"`，使用户点击上下箭头进行微调时以 `1` 米为步长增减，极大降低了累积点击成本。外围原有的发货输入框已确认为标准的 `step="1"` 步长，本次改动使内外整体操作手感完美协调。
+
+## 2026-05-26 tube项目 supply_management_service.py 编辑覆盖异常标志动态重算与消除修复
+
+- 后端针对全局管理员“编辑覆盖”保存异常发货单的逻辑开展了定点优化与机制健全。
+- 本地静态编译打包 100% 成功通过，高规格落盘：
+  1. **异常状态自动重算机制**：在 `supply_management_service.py` 内部的 `super_update_delivery_record` 方法中，注入了覆盖后即时重算 `abnormal_flag` (异常标志) 的双轨检测判定逻辑。
+  2. **双轨精准评估判定**：如果覆写后的数据符合“到货数量小于发货数量”或“施工接收数量小于到货数量 (或发货量)”时自动评估为 `True`，若数据对齐正常且无短缺则自动刷新为 `False` \。
+  3. **SQL 数据同步刷写**：在 `UPDATE` 执行中追加了对 `abnormal_flag = :abnormal_flag` 的绑定写入，彻底消除已订正记录在数据库底层的异常脏状态，完美打通数据在物理与展示维度的零偏差对齐。
+
+## 2026-05-26 tube项目 SupplyManagementView.vue 编辑覆盖弹窗极简降级与真居中修复
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 物理消除了超级编辑覆盖弹窗因 opacity/transform 偏置与 W3C CSS 动画规范中 `!important` 冲突导致的隐形 Bug。前端移除了毛玻璃滤镜与复杂的进场动画，降级为极其清晰、直观、高对比度的经典半透明遮罩与 100% 水平垂直真居中提示框，为全局管理员行使编辑覆盖特权提供极其稳健、防错的使用体验。
+
+## 2026-05-26 tube项目 SupplyManagementView.vue 超级编辑覆盖弹窗完美居中及中文字眼规范更名
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端发货明细编辑修改界面文案进行了规范化调优，全面更名为更具行政亲和力的“编辑覆盖”字眼；同时补充了模态遮罩与卡片的 fixed + flex 定位样式，使弹窗在浏览器全尺寸视界下实现绝对的水平垂直居中，彻底消除沉底缺陷。
+
+## 2026-05-26 tube项目 后端超级管理员发货单强力数据订正功能开发与落地
+
+- 本轮 Phoenix 后端强力扩展了对超级管理员特权的接口支持。
+- 重点完成了以下增量后端代码演进：
+  1. **SuperUpdate 专有 API 端口暴露**：增量挂载了 `POST /supply-management/deliveries/{delivery_id}/super-update` 终极订正接口。接口内部强制执行 `global_admin` 角色校验拦截，实现了绝对安全的特权隔离。
+  2. **服务层物理库表重写引擎实现**：在 `supply_management_service.py` 内部开发了 `super_update_delivery_record` 方法。采用精确事务控制，允许强力且无损地重置 `station_id`、`pipe_model_id`、`shipped_qty`、`shipped_at`、`vehicle_plate_no`、`ship_remark`、`status`、`order_no`、`shipment_no`、`arrived_qty` 以及 `received_qty` 字段，一键落盘，全面保障数据高维度强纠偏需求。
+
+## 2026-05-26 tube项目 后端时区对齐与订单号/运输车次号日期错乱 Bug 修复
+
+- 本轮物理修复了发货记录创建及装载时，订单号与车次号内部提取日期不准的 Bug。
+- 在 `supply_management_service.py` 内部引入了东八区北京时区上下文对齐：
+  1. **BEIJING_TZ 与 _to_beijing_time 导入**：精确定位时区，支持在 `tzinfo is not None` 时将带时区的时间自动平滑 astimezone 切换至东八区；对 naive 时间则原样安全返回，保证了双层反序列化口径的统一性。
+  2. **get_next_shipment_sequence 提取前缀修正**：使查询发货天流水号的前缀完全按北京时间对齐。
+  3. **build_order_no 与 build_shipment_no 提取日期修正**：在执行 `.strftime("%y%m%d")` 提取 6 位日期戳之前，强制运用北京时间进行时区对齐。这彻底根治了中国时间 00:00 - 08:00（即早八点前）时，订单号和车次号内所嵌日期变成 UTC 前一天日期的跨天 Bug。
+
+## 2026-05-26 tube项目 DemandManagementView.vue 需求侧管理页面选项卡次序调整为 2,1,4,3
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端需求侧管理台账 [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 选项卡（Tabs）按钮次序与默认初始化展示进行了精细调整。按钮顺序按 [消耗填报, 三日计划, 到货接收, 基准台账] 完美重排，并且默认初始化选中的 Tab 改为了 `'usage'`。这在交互流上顺应了“每日消耗先填，滚动计划解锁”的强力业务锁顺序。
+
+## 2026-05-26 tube项目 GlobalManagementView.vue 彻底清除无用全局配置文件路径 (config_path)
+
+- 本轮 Phoenix 后端代码进行了物理精简与解耦。
+- 在后端配置摘要接口 `/workspace/config-summary` 及其对应的 python 核心方法 `get_workspace_config_summary` 中，彻底移除了返回给前端响应体中的 `config_path` 物理键值，真正做到“非必需不返回”，实现了全链路的彻底瘦身。
+- 前端同步彻底清除了声明挂载的 `configPath` 响应式变量及对 API 响应体中 `config_path` 字段的读取与写入。
+
+## 2026-05-26 tube项目 GlobalManagementView.vue 核心控制参数排版升级与对称美学重塑
+
+- 本轮 Phoenix 后端代码无物理改动。
+- 前端对全局配置控制台中“核心控制参数”表单板块进行了规整化重构。将原本容易因为宽度自适应而杂乱折行的高矮参差表单，重构为极其整齐工整的 $3\times2$ 双栏六格对称矩阵。引入了第六个只读卡片“全局配置文件路径 (`configPath`)”作为拼图，为所有 6 个配置项配齐了高度完全一致的业务解释描述小字，保证表单框高度完美齐平对齐，美学体验极佳。
+
+## 2026-05-26 tube项目 DemandManagementView.vue 滚动三日计划填报智能决策沙盘重塑
+
+- 后端主接口 `/demand-management/plan-matrix` 进行了向下兼容的增量计算演进。接口在返回每种管径型号时，新增实时在库库存总量 (`station_inventory_qty`) 和当前在途总量 (`inbound_pipeline_qty`) 两个关键指标字段，支持前端在需求侧填报计划时无感联动、精确辅助决策。
+
 ## 2026-05-26 tube项目 GlobalManagementView.vue 独立的即时 JSON 语法校验与边框爆红优化
 
 - 本轮 Phoenix 后端代码无物理改动。
