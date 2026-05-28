@@ -1,3 +1,94 @@
+## 2026-05-28 tube项目 OTD/DOI 两张卡片按底部三卡高度下压收口
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理：
+  - 回退上一轮把 5 张卡片整体锁成同高的做法。
+  - 保持底部三张卡片原有高度不变，仅对 `OTD`、`DOI` 两张顶部卡片设置更低的固定高度。
+  - 移动端断点下恢复顶部两张卡片自然高度，避免窄屏内容被硬裁切。
+- 当前结果：
+  - 调整方向已改为“以上面两张向下面三张靠齐”为准，不再抬高底部三张。
+
+## 2026-05-28 tube项目 SaaS 指标卡三行网格硬锁同高
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理：
+  - `workbench-grid-layout` 新增统一行高变量，并将三行网格显式锁定为相同高度。
+  - 雷达图格子和雷达画布改为跟随 2 行固定网格高度自动伸展。
+  - 指标卡本体补充 `height: 100%`，使 OTD / DOI / PCR / UCR / SSR 全部按同一网格高度铺满。
+- 当前结果：
+  - 顶部两张卡与底部三张卡改为物理同高，不再依赖内容长短决定高度。
+
+## 2026-05-28 tube项目 OTD/DOI 顶部卡片高度与底部三卡统一
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理：
+  - SaaS 指标卡统一改为纵向弹性布局。
+  - `metric-saas-help` 统一限制为两行固定高度，避免 OTD / DOI 因说明文案更长而额外撑高。
+  - `metric-saas-interactive-tip` 改为自动贴底，保持 5 张卡片底部节奏一致。
+- 当前结果：
+  - 顶部 OTD、DOI 两张卡片已按底部三张的视觉高度标准收口。
+
+## 2026-05-28 tube项目雷达图标题与顶部角标重叠修复
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理：
+  - 将雷达图标题 `top` 从 `1%` 下移到 `4%`。
+  - 将雷达图中心点从 `['50%', '51%']` 下移到 `['50%', '54%']`。
+- 当前结果：
+  - 标题与顶部角标之间留出稳定间距，不再发生视觉重叠。
+
+## 2026-05-28 tube项目雷达图角标第三行副标题移除
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理：
+  - 大盘雷达图 5 个角标的文本由“三行结构”收敛为“两行结构”，仅保留指标简称与主标题。
+  - 已移除诸如“物流全链路履约保障”“物料积压与场地效率”这类第三行说明，以及对应的 `desc` 富文本样式。
+- 当前结果：
+  - 雷达图外围标签更紧凑，视觉噪音下降，不影响指标数值与交互逻辑。
+
+## 2026-05-28 tube项目看板净缺口口径统一、指标去演示化与 OTD 弹窗修复
+
+- 子项目：`insulation_pipe_supply_2026`
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理结论：
+  - 后端再次收口“净缺口只扣减 `pending_arrival`”原则，补齐到需求侧计划矩阵接口返回中的 `inbound_pipeline_qty`，不再把 `pending_receive` 混入扣减口径。
+  - 看板 `DashboardView.vue` 已移除 OTD/DOI/PCR/UCR/SSR 的演示兜底数值，全部改为依据后台真实返回数据动态计算。
+  - OTD 卡片点击无效的关键链路已修复：前端此前把 `getTubeSupplyManagementDeliveries(...)` 的整个响应对象误当作数组写入 `deliveries.value`，现已改为只取 `rows`；同时雷达图区容器补充 `overflow: hidden`，雷达画布关闭鼠标事件，避免上层点击被画布透明区域吞掉。
+  - 指标弹窗中的公式展示已校正：OTD 明确为“24 小时到货达成率”，DOI 改为按“库存 / 日均计划消耗”直接展示“天”，不再错误显示 `× 100%`。
+- 验证结果：
+  - 已在 `frontend/` 执行 `npm run build`，Vite 生产构建通过，完成时间约 6.96s。
+  - 尝试补跑 `python -m py_compile backend/projects/insulation_pipe_supply_2026/api/workspace.py`，但当前终端执行器出现 `spawn setup refresh` 异常，未拿到有效结果；本轮后端验证以代码审查与前端构建联动结果为准。
+
 ## 2026-05-28 tube project 大盘 OTD 点击遮挡极速爆破与全指标空值计算防爆升级完成
 
 - 前置说明：为了协助用户彻底根治大盘“OTD 点击仍然无效”这一棘手问题，我们进行了**层叠上下文物理爆破与指标数据防暴双重保通重构**。

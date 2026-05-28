@@ -1099,7 +1099,7 @@ def get_demand_management_plan_matrix(
         total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
         
         station_inventory_qty = max(total_arrived_qty - total_usage_qty, 0)
-        inbound_pipeline_qty = pending_arrival_qty + pending_receive_qty
+        inbound_pipeline_qty = pending_arrival_qty
         
         rows.append(
             {

@@ -1,3 +1,48 @@
+## 2026-05-28 tube项目顶部两张指标卡下压对齐
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 已撤回“5 张卡全部锁同高”的方案。
+  - 当前改为仅压低 `OTD / DOI` 两张顶部卡片，使其向底部三张卡片的现有高度靠齐。
+  - 手机端断点下取消顶部两张的固定高度，恢复自然排布。
+
+## 2026-05-28 tube项目 SaaS 指标卡硬锁同高
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 雷达图区右侧 5 张指标卡已从“内容驱动高度”改为“网格固定行高驱动”。
+  - 三行网格统一锁定同一行高，卡片本体使用 `height: 100%` 铺满网格。
+  - 雷达图容器同步改为跟随两行网格高度伸展，避免只改卡片不改雷达导致重新挤压。
+
+## 2026-05-28 tube项目 SaaS 指标卡高度统一
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 大盘 5 张 SaaS 指标卡已统一为纵向弹性布局。
+  - 说明文案区统一压成两行固定高度，避免 OTD / DOI 因文案更长而比底部三张更高。
+  - 底部“点击查看计算过程”提示已统一自动贴底。
+
+## 2026-05-28 tube项目雷达图标题避让修正
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 雷达图标题位置已从顶部极限贴边调整为更靠下的安全位置。
+  - 雷达图整体中心同步轻微下沉，避免标题与上方角标重叠。
+
+## 2026-05-28 tube项目雷达图角标文案降噪
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 大盘雷达图 5 个角标已从三行文案改为两行文案。
+  - 当前仅保留 `OTD / DOI / PCR / UCR / SSR` 简称和中文主标题，不再显示第三行补充说明。
+  - 同步移除了对应的 `desc` 富文本配置，避免保留无效样式。
+
+## 2026-05-28 tube项目看板真实数据化与 OTD 指标弹窗修复
+
+- `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - 大盘 5 个 SaaS 指标卡片已去除所有演示兜底值，不再使用 `94.2 / 4.1 / 84.3 / 92.0 / 113/120` 之类的静态样例数字。
+  - `loadDashboardData()` 现按真实接口结构读取供给侧发货记录，只把 `getTubeSupplyManagementDeliveries(...)` 返回体中的 `rows` 写入 `deliveries.value`，修正了 OTD 统计与弹窗链路。
+  - OTD 指标定义已与真实算法对齐，当前页面口径为“24 小时到货达成率”，样本范围为“已确认到货且具备完整发货/到货时间的发货记录”。
+  - DOI 弹窗公式已修正为“库存 / 日均计划消耗 = 天数”，不再错误展示 `× 100%`；雷达图继续使用 DOI 折算分值 `realDOIScore`。
+  - 为避免雷达画布透明区域吞掉右上卡片点击，雷达图区已新增 `overflow: hidden`，并将 `.echarts-dom-radar` 调整为 `pointer-events: none`；OTD 卡片点击可稳定弹出解释面板。
+- 构建验证：
+  - 已执行 `npm run build`，前端生产构建通过。
+
 ## 2026-05-28 tube project 大盘 OTD 点击遮挡极速爆破与全指标空值计算防爆升级完成
 
 - 前置说明：为了协助用户彻底根治大盘“OTD 点击仍然无效”这一棘手问题，我们进行了**层叠上下文物理爆破与指标数据防暴双重保通重构**。

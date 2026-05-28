@@ -220,8 +220,8 @@
               <span class="metric-badge success">物流履约</span>
             </div>
             <div class="metric-saas-value">{{ realOTD }}%</div>
-            <div class="metric-saas-label">供应链发货准时率</div>
-            <p class="metric-saas-help">已启动全高时效绿色通道配送，大连洁净能源集团物流基准线 (>=90%)</p>
+            <div class="metric-saas-label">供应链 24 小时到货达成率</div>
+            <p class="metric-saas-help">以已确认到货记录为样本，衡量 24 小时内完成到货的物流履约水平 (集团基准线 &gt;=90%)</p>
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
@@ -426,7 +426,7 @@
                       <span class="fraction-numerator">{{ getMetricFormulaNumerator(activeMetric) }}</span>
                       <span class="fraction-denominator">{{ getMetricFormulaDenominator(activeMetric) }}</span>
                     </div>
-                    <span class="formula-multiplier">× 100%</span>
+                    <span v-if="getMetricMultiplier(activeMetric)" class="formula-multiplier">{{ getMetricMultiplier(activeMetric) }}</span>
                   </div>
                 </div>
               </div>
@@ -441,7 +441,8 @@
                       <span class="fraction-numerator highlighted">{{ getMetricCalcNumerator(activeMetric) }}</span>
                       <span class="fraction-denominator highlighted">{{ getMetricCalcDenominator(activeMetric) }}</span>
                     </div>
-                    <span class="formula-multiplier">× 100% = </span>
+                    <span v-if="getMetricMultiplier(activeMetric)" class="formula-multiplier">{{ getMetricMultiplier(activeMetric) }} = </span>
+                    <span v-else class="formula-multiplier">= </span>
                     <span class="calc-result">{{ getMetricResultText(activeMetric) }}</span>
                   </div>
                   <div class="calc-vars-list">
@@ -528,102 +529,107 @@ const loadingWeather = ref(false)
 const activeMetric = ref(null) // 'otd' | 'doi' | 'pcr' | 'ucr' | 'ssr' | null
 
 function openMetricModal(metricKey) {
-  console.log('Antigravity Debug: openMetricModal triggered with key:', metricKey)
   activeMetric.value = metricKey
 }
 
 function closeMetricModal() {
-  console.log('Antigravity Debug: closeMetricModal triggered')
   activeMetric.value = null
 }
 
 // --- 实时多维运营指标精算引擎 (SaaS Real-time Metric Aggregator) ---
-const realOTD = computed(() => {
-  const list = deliveries.value || []
-  const activeDeliveries = list.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
-  if (activeDeliveries.length === 0) return 94.2
+function getSafeSummaryRows() {
+  return Array.isArray(summaryRows.value) ? summaryRows.value : []
+}
+
+function getSafeDeliveries() {
+  return Array.isArray(deliveries.value) ? deliveries.value : []
+}
+
+const metricSnapshot = computed(() => {
+  const rows = getSafeSummaryRows()
+  const deliveryRows = getSafeDeliveries()
+  const completedDeliveries = deliveryRows.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
+
   let onTimeCount = 0
-  activeDeliveries.forEach(d => {
+  completedDeliveries.forEach((d) => {
     try {
       const diffHours = (new Date(d.arrived_at) - new Date(d.shipped_at)) / (1000 * 60 * 60)
-      if (!isNaN(diffHours) && diffHours <= 24) onTimeCount++ // 24小时内到货为准时
+      if (!isNaN(diffHours) && diffHours <= 24) {
+        onTimeCount += 1
+      }
     } catch (e) {
-      console.error('Error calculating diffHours for OTD:', e)
+      console.error('计算 OTD 时效差失败:', e)
     }
   })
-  return Number(((onTimeCount / activeDeliveries.length) * 100).toFixed(1))
-})
 
-const realDOI = computed(() => {
-  try {
-    const list = summaryRows.value || []
-    const totalInv = list.reduce((sum, r) => sum + (r.station_inventory_qty || 0), 0)
-    const totalFuturePlan = list.reduce((sum, r) => sum + (r.future_plan_qty || 0), 0)
-    const dailyConsumePlan = totalFuturePlan / 3
-    if (dailyConsumePlan <= 0) return 4.1
-    return Number((totalInv / dailyConsumePlan).toFixed(1))
-  } catch (e) {
-    console.error('Error calculating realDOI:', e)
-    return 4.1
+  const totalInv = rows.reduce((sum, r) => sum + (Number(r?.station_inventory_qty) || 0), 0)
+  const totalFuturePlan = rows.reduce((sum, r) => sum + (Number(r?.future_plan_qty) || 0), 0)
+  const dailyConsumePlan = totalFuturePlan > 0 ? totalFuturePlan / 3 : 0
+  const totalUsage = rows.reduce((sum, r) => sum + (Number(r?.total_usage_qty) || 0), 0)
+  const totalArrived = rows.reduce((sum, r) => sum + (Number(r?.total_arrived_qty) || 0), 0)
+
+  const activeStations = new Set(rows.filter(r => r && (Number(r.design_qty) || 0) > 0).map(r => r.station_id))
+  const stationsWithPlan = new Set(rows.filter(r => r && (Number(r.future_plan_qty) || 0) > 0).map(r => r.station_id))
+  const submittedStationCount = [...stationsWithPlan].filter(id => activeStations.has(id)).length
+  const gapStations = new Set(rows.filter(r => r && (Number(r.hard_gap_qty) || 0) > 0).map(r => r.station_id))
+  const safeStationCount = [...activeStations].filter(id => !gapStations.has(id)).length
+
+  const otd = completedDeliveries.length > 0
+    ? Number(((onTimeCount / completedDeliveries.length) * 100).toFixed(1))
+    : 0
+  const doi = dailyConsumePlan > 0
+    ? Number((totalInv / dailyConsumePlan).toFixed(1))
+    : 0
+  const doiScore = dailyConsumePlan > 0
+    ? Number(Math.min(100, Math.max(0, 100 - Math.max(doi - 3.2, 0) * 10)).toFixed(1))
+    : 0
+  const pcr = activeStations.size > 0
+    ? Number(((submittedStationCount / activeStations.size) * 100).toFixed(1))
+    : 0
+  const ucr = totalArrived > 0
+    ? Number(((totalUsage / totalArrived) * 100).toFixed(1))
+    : 0
+  const ssr = activeStations.size > 0
+    ? Number(((safeStationCount / activeStations.size) * 100).toFixed(1))
+    : 0
+
+  return {
+    completedDeliveries,
+    onTimeCount,
+    totalInv,
+    totalFuturePlan,
+    dailyConsumePlan,
+    totalUsage,
+    totalArrived,
+    activeStations,
+    submittedStationCount,
+    safeStationCount,
+    otd,
+    doi,
+    doiScore,
+    pcr,
+    ucr,
+    ssr
   }
 })
 
-// DOI 转换雷达图百分制得分 (反向线性，天数越低得分越高)
-const realDOIScore = computed(() => {
-  try {
-    const doiVal = realDOI.value || 4.1
-    const score = 100 - (doiVal - 3.2) * 10
-    return Number(Math.min(100, Math.max(0, score)).toFixed(1))
-  } catch (e) {
-    return 91.5
-  }
-})
+const realOTD = computed(() => metricSnapshot.value.otd)
 
-const realPCR = computed(() => {
-  try {
-    const list = summaryRows.value || []
-    const stationsWithDesign = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    if (stationsWithDesign.size === 0) return 100.0
-    const stationsWithPlan = new Set(list.filter(r => r && (r.future_plan_qty || 0) > 0).map(r => r.station_id))
-    const submitted = [...stationsWithPlan].filter(id => stationsWithDesign.has(id)).length
-    return Number(((submitted / stationsWithDesign.size) * 100).toFixed(1))
-  } catch (e) {
-    console.error('Error calculating realPCR:', e)
-    return 100.0
-  }
-})
+const realDOI = computed(() => metricSnapshot.value.doi)
 
-const realUCR = computed(() => {
-  try {
-    const list = summaryRows.value || []
-    const totalUsage = list.reduce((sum, r) => sum + (r.total_usage_qty || 0), 0)
-    const totalArrived = list.reduce((sum, r) => sum + (r.total_arrived_qty || 0), 0)
-    if (totalArrived === 0) return 84.3
-    return Number(((totalUsage / totalArrived) * 100).toFixed(1))
-  } catch (e) {
-    console.error('Error calculating realUCR:', e)
-    return 84.3
-  }
-})
+// DOI 转换雷达图百分制得分（天数越低得分越高；无有效分母时不使用演示值）
+const realDOIScore = computed(() => metricSnapshot.value.doiScore)
 
-const realSSR = computed(() => {
-  try {
-    const list = summaryRows.value || []
-    const activeStations = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    if (activeStations.size === 0) return 92.0
-    const gapStations = new Set(list.filter(r => r && (r.hard_gap_qty || 0) > 0).map(r => r.station_id))
-    const safeCount = [...activeStations].filter(id => !gapStations.has(id)).length
-    return Number(((safeCount / activeStations.size) * 100).toFixed(1))
-  } catch (e) {
-    console.error('Error calculating realSSR:', e)
-    return 92.0
-  }
-})
+const realPCR = computed(() => metricSnapshot.value.pcr)
+
+const realUCR = computed(() => metricSnapshot.value.ucr)
+
+const realSSR = computed(() => metricSnapshot.value.ssr)
 
 // --- SaaS 指标穿透详情数据解析 (系统数据动态穿透) ---
 function getMetricTitle(key) {
   const titles = {
-    otd: 'OTD 物流履约度 (发货准时率)',
+    otd: 'OTD 物流履约度 (24小时到货达成率)',
     doi: 'DOI 周转效率 (在库库存周转天数)',
     pcr: 'PCR 计划达成度 (三日滚动计划提报率)',
     ucr: 'UCR 消耗转化度 (到货施工消耗转化率)',
@@ -634,7 +640,7 @@ function getMetricTitle(key) {
 
 function getMetricSubtitle(key) {
   const subs = {
-    otd: 'On-Time Delivery - 供给侧与物流链履约效率核心指标',
+    otd: 'On-Time Delivery - 已确认到货样本的 24 小时时效履约指标',
     doi: 'Days of Inventory - 换热站物资现场周转与场地占用管控指标',
     pcr: 'Plan Commitment Ratio - 数字化报表管理纪律与滚动计划管控指标',
     ucr: 'Utilization Conversion Ratio - 到货接收向实体工程的高效转化指标',
@@ -649,7 +655,7 @@ function getMetricAbbr(key) {
 
 function getMetricDesc(key) {
   const descs = {
-    otd: '物流履约度主要衡量承运车队与供给主体根据换热站要求的工期与发货计划，按时发货离场、兑现物流承诺的速度。由集团运输调度室每日进行精准统计与调度考核。目前全线实施了按发货时效匹配绿色通道的高精细机制。',
+    otd: '物流履约度当前按已确认到货样本计算，衡量发货记录从发货到到货确认是否在 24 小时内完成。该指标反映运输履约时效，不再混用演示口径或人工估算值。',
     doi: '在库库存周转天数是反映工程现场资金利用效率与物资积压情况的生命线指标。它代表当前的在库管材库存，在没有新发货补充的情况下，能够支持工区施工开挖敷设多少天。天数越低说明周转越快、资金占用越少。',
     pcr: '三日滚动计划提报率是集团落实“以消定供、精细化平衡”的数字化治理核心纪律。它强力考核各工区施工现场负责人是否按照“按日滚动提报未来三日需求计划”的规范操作。零漏报代表数字化执行力达标。',
     ucr: '到货施工消耗转化率主要用于杜绝工区“只到货、不敷设”的只囤不建现象。该指标衡量运抵现场并物理签收确认的管材，有多大比例已真正转化为实体工程中的管道消耗敷设，保证资金及时形成物理产值。',
@@ -660,7 +666,7 @@ function getMetricDesc(key) {
 
 function getMetricFormulaNumerator(key) {
   const nums = {
-    otd: '准时发货单数 (发货北京时间 ≤ 计划要求时效)',
+    otd: '24小时内确认到货的发货单数 (单)',
     doi: '全网在库管材总库存量 (米)',
     pcr: '按时提报三日滚动计划的换热站数',
     ucr: '全网累计施工已消耗敷设长度 (米)',
@@ -671,7 +677,7 @@ function getMetricFormulaNumerator(key) {
 
 function getMetricFormulaDenominator(key) {
   const dens = {
-    otd: '已执行发货的总发货单数 (单)',
+    otd: '已确认到货且可计算时效的发货单数 (单)',
     doi: '未来三日全网日均滚动计划消耗量 (米/天)',
     pcr: '当前处于活跃施工期的总换热站数',
     ucr: '全网累计已到货物理签收的总长度 (米)',
@@ -680,72 +686,44 @@ function getMetricFormulaDenominator(key) {
   return dens[key] || ''
 }
 
+function getMetricMultiplier(key) {
+  return key === 'doi' ? '' : '× 100%'
+}
+
 function getMetricCalcNumerator(key) {
   if (key === 'otd') {
-    const list = deliveries.value || []
-    const activeDeliveries = list.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
-    let onTimeCount = 0
-    activeDeliveries.forEach(d => {
-      try {
-        const diffHours = (new Date(d.arrived_at) - new Date(d.shipped_at)) / (1000 * 60 * 60)
-        if (!isNaN(diffHours) && diffHours <= 24) onTimeCount++
-      } catch (e) {}
-    })
-    return activeDeliveries.length > 0 ? `${onTimeCount} 单` : '113 单'
+    return `${metricSnapshot.value.onTimeCount} 单`
   }
   if (key === 'doi') {
-    const list = summaryRows.value || []
-    const totalInv = list.reduce((sum, r) => sum + (r.station_inventory_qty || 0), 0)
-    return totalInv > 0 ? `${totalInv.toFixed(1)} 米` : '485.0 米'
+    return `${metricSnapshot.value.totalInv.toFixed(1)} 米`
   }
   if (key === 'pcr') {
-    const list = summaryRows.value || []
-    const stationsWithDesign = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    const stationsWithPlan = new Set(list.filter(r => r && (r.future_plan_qty || 0) > 0).map(r => r.station_id))
-    const submitted = [...stationsWithPlan].filter(id => stationsWithDesign.has(id)).length
-    return stationsWithDesign.size > 0 ? `${submitted} 个工区` : '12 个工区'
+    return `${metricSnapshot.value.submittedStationCount} 个工区`
   }
   if (key === 'ucr') {
-    const list = summaryRows.value || []
-    const totalUsage = list.reduce((sum, r) => sum + (r.total_usage_qty || 0), 0)
-    return totalUsage > 0 ? `${totalUsage.toFixed(1)} 米` : '2,850.0 米'
+    return `${metricSnapshot.value.totalUsage.toFixed(1)} 米`
   }
   if (key === 'ssr') {
-    const list = summaryRows.value || []
-    const activeStations = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    const gapStations = new Set(list.filter(r => r && (r.hard_gap_qty || 0) > 0).map(r => r.station_id))
-    const safeCount = [...activeStations].filter(id => !gapStations.has(id)).length
-    return activeStations.size > 0 ? `${safeCount} 个站点` : '11 个站点'
+    return `${metricSnapshot.value.safeStationCount} 个站点`
   }
   return ''
 }
 
 function getMetricCalcDenominator(key) {
   if (key === 'otd') {
-    const list = deliveries.value || []
-    const activeDeliveries = list.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
-    return activeDeliveries.length > 0 ? `${activeDeliveries.length} 单` : '120 单'
+    return `${metricSnapshot.value.completedDeliveries.length} 单`
   }
   if (key === 'doi') {
-    const list = summaryRows.value || []
-    const totalFuturePlan = list.reduce((sum, r) => sum + (r.future_plan_qty || 0), 0)
-    const dailyConsumePlan = totalFuturePlan / 3
-    return dailyConsumePlan > 0 ? `${dailyConsumePlan.toFixed(1)} 米/天` : '118.3 米/天'
+    return `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天`
   }
   if (key === 'pcr') {
-    const list = summaryRows.value || []
-    const stationsWithDesign = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    return stationsWithDesign.size > 0 ? `${stationsWithDesign.size} 个工区` : '12 个工区'
+    return `${metricSnapshot.value.activeStations.size} 个工区`
   }
   if (key === 'ucr') {
-    const list = summaryRows.value || []
-    const totalArrived = list.reduce((sum, r) => sum + (r.total_arrived_qty || 0), 0)
-    return totalArrived > 0 ? `${totalArrived.toFixed(1)} 米` : '3,380.0 米'
+    return `${metricSnapshot.value.totalArrived.toFixed(1)} 米`
   }
   if (key === 'ssr') {
-    const list = summaryRows.value || []
-    const activeStations = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    return activeStations.size > 0 ? `${activeStations.size} 个工区` : '12 个工区'
+    return `${metricSnapshot.value.activeStations.size} 个工区`
   }
   return ''
 }
@@ -761,61 +739,37 @@ function getMetricResultText(key) {
 
 function getMetricCalcVars(key) {
   if (key === 'otd') {
-    const list = deliveries.value || []
-    const activeDeliveries = list.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
-    let onTimeCount = 0
-    activeDeliveries.forEach(d => {
-      try {
-        const diffHours = (new Date(d.arrived_at) - new Date(d.shipped_at)) / (1000 * 60 * 60)
-        if (!isNaN(diffHours) && diffHours <= 24) onTimeCount++
-      } catch (e) {}
-    })
     return {
-      '分子 (按时发货单数)': activeDeliveries.length > 0 ? `${onTimeCount} 单 (由承运车队提供高时效调度)` : '113 单 (由承运车队提供高时效调度)',
-      '分母 (已执行发货单数)': activeDeliveries.length > 0 ? `${activeDeliveries.length} 单 (大连洁净能源集团历史派发车次)` : '120 单 (大连洁净能源集团历史派发车次)',
-      '基准核算时效': '北京时间当日前台发货完成度'
+      '分子 (24小时内到货)': `${metricSnapshot.value.onTimeCount} 单 (发货至到货确认不超过 24 小时)`,
+      '分母 (可计算样本数)': `${metricSnapshot.value.completedDeliveries.length} 单 (已确认到货且具备完整发货/到货时间)`,
+      '判定规则': '以发货时间到到货确认时间的小时差 <= 24 视为准时'
     }
   }
   if (key === 'doi') {
-    const list = summaryRows.value || []
-    const totalInv = list.reduce((sum, r) => sum + (r.station_inventory_qty || 0), 0)
-    const totalFuturePlan = list.reduce((sum, r) => sum + (r.future_plan_qty || 0), 0)
-    const dailyConsumePlan = totalFuturePlan / 3
     return {
-      '分子 (现场在库库存)': totalInv > 0 ? `${totalInv.toFixed(1)} 米 (全网在库实测管材之和)` : '485.0 米 (全网 12 个换热站在库实测管材之和)',
-      '分母 (日均计划消耗)': dailyConsumePlan > 0 ? `${dailyConsumePlan.toFixed(1)} 米/天 (由未来三日滚动计划消耗量 ${totalFuturePlan.toFixed(1)} 米折算而来)` : '118.3 米/天 (由未来三日滚动计划消耗量 355 米折算而来)',
-      'DOI 折算公式说明': `DOI = 在库库存 / 日均计划消耗。本指标越低代表工地流转越迅速、场地占用越少。当前实测周转积压安全系数：${realDOIScore.value} 分。`
+      '分子 (现场在库库存)': `${metricSnapshot.value.totalInv.toFixed(1)} 米 (全网在库实测管材之和)`,
+      '分母 (日均计划消耗)': `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天 (由未来三日滚动计划 ${metricSnapshot.value.totalFuturePlan.toFixed(1)} 米折算)`,
+      'DOI 说明': `DOI = 在库库存 / 日均计划消耗。本指标单位为“天”，不乘以 100%。当前雷达折算得分：${realDOIScore.value} 分。`
     }
   }
   if (key === 'pcr') {
-    const list = summaryRows.value || []
-    const stationsWithDesign = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    const stationsWithPlan = new Set(list.filter(r => r && (r.future_plan_qty || 0) > 0).map(r => r.station_id))
-    const submitted = [...stationsWithPlan].filter(id => stationsWithDesign.has(id)).length
     return {
-      '分子 (按时提报站点)': stationsWithDesign.size > 0 ? `${submitted} 个工区 (今日按日滚动计划填报已完成提交)` : '12 个站点 (今日按日滚动计划填报已完成提交)',
-      '分母 (活跃总工区数)': stationsWithDesign.size > 0 ? `${stationsWithDesign.size} 个换热站标段 (全网在建全部活跃工区)` : '12 个换热站标段 (全网在建全部活跃工区)',
+      '分子 (按时提报站点)': `${metricSnapshot.value.submittedStationCount} 个工区 (存在滚动三日计划数据)`,
+      '分母 (活跃总工区数)': `${metricSnapshot.value.activeStations.size} 个换热站标段 (design_qty > 0 视为活跃站点)`,
       '数字化纪律得分': `当前提报达成率 ${realPCR.value}%。数字化指令下达零延误、零漏报。`
     }
   }
   if (key === 'ucr') {
-    const list = summaryRows.value || []
-    const totalUsage = list.reduce((sum, r) => sum + (r.total_usage_qty || 0), 0)
-    const totalArrived = list.reduce((sum, r) => sum + (r.total_arrived_qty || 0), 0)
     return {
-      '分子 (实际消耗敷设)': totalUsage > 0 ? `${totalUsage.toFixed(1)} 米 (槽下物理铺设焊接完毕并经确认的长度)` : '2,850.0 米 (槽下物理铺设焊接完毕并经确认的长度)',
-      '分母 (签收到货总量)': totalArrived > 0 ? `${totalArrived.toFixed(1)} 米 (现场负责人和库管员扫码点验到货的长度)` : '3,380.0 米 (现场负责人和库管员扫码点验到货的长度)',
+      '分子 (实际消耗敷设)': `${metricSnapshot.value.totalUsage.toFixed(1)} 米 (槽下物理铺设焊接完毕并经确认的长度)`,
+      '分母 (签到到货总量)': `${metricSnapshot.value.totalArrived.toFixed(1)} 米 (现场负责人确认到货的累计长度)`,
       '转化成效评估': `全网累计 ${realUCR.value}% 的到货管材已立即转化为空中或槽下物理管道实体，流转效率极优。`
     }
   }
   if (key === 'ssr') {
-    const list = summaryRows.value || []
-    const activeStations = new Set(list.filter(r => r && (r.design_qty || 0) > 0).map(r => r.station_id))
-    const gapStations = new Set(list.filter(r => r && (r.hard_gap_qty || 0) > 0).map(r => r.station_id))
-    const safeCount = [...activeStations].filter(id => !gapStations.has(id)).length
     return {
-      '分子 (安全在建工区)': activeStations.size > 0 ? `${safeCount} 个工区 (未面临物理断料风险)` : '11 个工区 (全网仅大连港换热站 1 个面临物理断料风险)',
-      '分母 (总活跃工区数)': activeStations.size > 0 ? `${activeStations.size} 个换热站标段 (全网在建全部活跃工区)` : '12 个换热站标段 (全网在建全部活跃工区)',
+      '分子 (安全在建工区)': `${metricSnapshot.value.safeStationCount} 个工区 (未面临物理断料风险)`,
+      '分母 (总活跃工区数)': `${metricSnapshot.value.activeStations.size} 个换热站标段 (全网在建全部活跃工区)`,
       '缺口避让防线': `全要素缺口安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。`
     }
   }
@@ -868,7 +822,7 @@ async function loadDashboardData() {
     summaryRows.value = summaryRes?.rows || []
 
     const deliveriesRes = await getTubeSupplyManagementDeliveries(projectKey.value)
-    deliveries.value = deliveriesRes || []
+    deliveries.value = Array.isArray(deliveriesRes?.rows) ? deliveriesRes.rows : []
     
     // 数据加载完毕后渲染图表
     nextTick(() => {
@@ -1284,17 +1238,11 @@ function renderCharts() {
       chartInstance2 = window.echarts.init(chartContainer2.value)
     }
 
-    // 5 维数据建模评分（大厂供应链高精细模型）
-    // OTD (物流履约指数): 94.2
-    // DOI (现场平均库存周转天数指数): 91.5 (基于 average DOI = 4.1 天)
-    // PCR (三日滚动计划提报率): 100.0 (100% 填报率)
-    // UCR (施工消耗转化率): 84.3 (转化比)
-    // SSR (安全供应度): 92.0 (规避硬缺口)
     const option2 = {
       title: {
         text: '大连洁净能源集团 - 物流全链路综合健康评估',
         left: 'center',
-        top: '1%',
+        top: '4%',
         textStyle: { color: '#1e293b', fontSize: 13, fontWeight: '800' }
       },
       tooltip: {
@@ -1306,18 +1254,18 @@ function renderCharts() {
       },
       radar: {
         indicator: [
-          { name: 'OTD|供应链发货准时率|物流全链路履约保障', max: 100 },
-          { name: 'DOI|现场在库周转天数|物料积压与场地效率', max: 100 },
-          { name: 'PCR|三日滚动计划达成率|数字化工程申报纪律', max: 100 },
-          { name: 'UCR|施工消耗转化率|到货签收向实体转化', max: 100 },
-          { name: 'SSR|安全供应防线|规避断料与停工窝工', max: 100 }
+          { name: 'OTD|供应链发货准时率', max: 100 },
+          { name: 'DOI|现场在库周转天数', max: 100 },
+          { name: 'PCR|三日滚动计划达成率', max: 100 },
+          { name: 'UCR|施工消耗转化率', max: 100 },
+          { name: 'SSR|安全供应防线', max: 100 }
         ],
-        center: ['50%', '51%'],
+        center: ['50%', '54%'],
         radius: '58%',
         axisName: {
           formatter: (value) => {
-            const [abbr, title, desc] = value.split('|')
-            return `{abbr|${abbr}}\n{title|${title}}\n{desc|${desc}}`
+            const [abbr, title] = value.split('|')
+            return `{abbr|${abbr}}\n{title|${title}}`
           },
           rich: {
             abbr: {
@@ -1335,14 +1283,6 @@ function renderCharts() {
               align: 'center',
               lineHeight: 18
             },
-            desc: {
-              color: '#64748b',
-              fontSize: 11,
-              fontWeight: '500',
-              align: 'center',
-              lineHeight: 16,
-              padding: [2, 0, 0, 0]
-            }
           },
           color: '#475569',
           backgroundColor: '#f8fafc',
@@ -2007,12 +1947,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
   box-shadow: inset 0 0 12px rgba(241, 245, 249, 0.5);
 }
 
 .echarts-dom-radar {
   height: 400px; /* 高度提升至 400px，使雷达图展现更饱满 */
   width: 100%;
+  pointer-events: none;
 }
 
 /* 5个卡片依次在九宫格中占位 */
@@ -2074,6 +2016,12 @@ onBeforeUnmount(() => {
     padding: 12px;
   }
   
+  .metric-saas-card.cell-3,
+  .metric-saas-card.cell-6 {
+    min-height: auto;
+    max-height: none;
+  }
+
   .metric-saas-card.cell-9 {
     grid-column: auto;
   }
@@ -2090,6 +2038,14 @@ onBeforeUnmount(() => {
   pointer-events: auto !important; /* 物理强制保证点击事件 100% 畅通无阻传递 */
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-saas-card.cell-3,
+.metric-saas-card.cell-6 {
+  min-height: 156px;
+  max-height: 156px;
 }
 
 .metric-saas-card:hover {
@@ -2163,6 +2119,12 @@ onBeforeUnmount(() => {
   font-size: 10px;
   color: #94a3b8;
   line-height: 1.4;
+  min-height: 28px;
+  max-height: 28px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* 宽屏下的全链路健康状态 */
@@ -2410,7 +2372,8 @@ onBeforeUnmount(() => {
 .metric-saas-interactive-tip {
   font-size: 10px;
   color: #64748b;
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 8px;
   text-align: right;
   font-style: italic;
   opacity: 0.65;
