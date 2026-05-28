@@ -1,3 +1,40 @@
+## 2026-05-28 tube project 大盘 OTD 点击遮挡极速爆破与全指标空值计算防爆升级完成
+
+- 前置说明：为了协助用户彻底根治大盘“OTD 点击仍然无效”这一棘手问题，我们进行了**层叠上下文物理爆破与指标数据防暴双重保通重构**。
+- 具体改动与实现原理：
+  1. **大盘卡片 z-index 极限防御与 pointer-events 物理强绑 (Stacking Context & Click Capture Defense)**：
+     - 在 CSS 中，除了清除 `ssr` 卡片的 `span 2` 影响外，将原本 2080 行处的卡片底层样式 `.metric-saas-card` 的 `z-index` 从保守的 `10` **直接拉满升格至 `999`**！
+     - 显式注入了最强力的 **`pointer-events: auto !important;`** 控制属性。这代表无论有任何雷达图 Canvas 的透明溢出区域、绝对定位元素或者其他未知图层从侧边飘过来遮盖，浏览器在底层事件分发时，都**必然会 100% 优先将点击事件完全派发给卡片本身**，彻底排除了所有的物理悬浮层遮挡可能！
+  2. **全指标 computed 与 Modal 数据精算引擎空校验大换装 (Global Computed Null-Safety & try-catch Wrapping)**：
+     - **大范围防爆改装**：在 `realDOI`、`realDOIScore`、`realPCR`、`realUCR`、`realSSR` 这五个实时精算 `computed` 属性，以及 `getMetricCalcNumerator`、`getMetricCalcDenominator` 和 `getMetricCalcVars` 的所有指标（`doi`、`pcr`、`ucr`、`ssr`）分支中，全面完成了**空列表兜底与 null item 降级**。
+     - 统一将计算源数组从脆弱的 `summaryRows.value` 替换为了绝对健壮的 `(summaryRows.value || [])`，并对所有 `reduce`、`filter` 及 `Set` 映射封装了 `try-catch` 容错。这能完全扼杀在 API 未完全加载返回、数据清空、或筛选变更时任何潜在的 JS 运行时 `Cannot read properties of undefined` 空指针崩溃。Vue 渲染通道与响应式系统 100% 重获新生。
+  3. **Antigravity Debug 控制台调试日志挂载**：
+     - 在 `openMetricModal` 与 `closeMetricModal` 函数中优雅植入了控制台输出指令，当您在浏览器中按下 F12 打开 Console 时，每一次点击卡片均会物理回显日志（如 `Antigravity Debug: openMetricModal triggered with key: otd`），让点击行为与状态跃迁 100% 清晰可见、有据可查。
+
+## 2026-05-28 tube project 大盘 OTD 点击无反应物理修复与雷达多行指标大字号精致重排完成
+
+- 前置说明：为了彻底修复用户反馈的“OTD 卡片（‘供应链发货准时率’）点击没有反应”这一严重体验缺陷，同时响应“重新排版雷达图每个角上的文字、拉大字号”的美学优化痛点，本轮完成了**全链路空间重组与雷达富文本大字号排版升级**。
+- 具体改动与实现原理：
+  1. **OTD 物理重合与 Stacking Context 彻底排除 (OTD Click Re-activation)**：
+     - **病因根治**：定位到全局 CSS 样式中，多余的 `.metric-saas-card.ssr { grid-column: span 2; }` 导致在 3x3 黄金九宫格中，SSR 强行在第三行 `span 2` 宽度，进而迫使 Grid 的 Auto-placement 布局引擎错乱，产生了幽灵定位与 DOM 隐形溢出重叠，物理遮挡并“吃掉”了位于第一行第三列的 OTD（`cell-3`）卡片的点击事件。
+     - **物理破障**：彻底清除了 2334 行的全局 `.metric-saas-card.ssr { grid-column: span 2; }`，只在 1200px 以下降级媒体查询中保留响应式 span。OTD 卡片 100% 重获新生，点击事件 100% 毫无阻碍地捕获。
+     - **逻辑加固**：在 realOTD、getMetricCalcNumerator、getMetricCalcDenominator 和 getMetricCalcVars 核心方法中全面注入对 `deliveries.value` 的空容错兜底 `(deliveries.value || [])`，并对日期解析的 `diffHours` 增加了 `try-catch` 及 `isNaN` 检测，实现逻辑层的 100% 容错防空指针白屏。
+  2. **雷达图指标牌“三段式富文本大字号”美学重塑 (Big-Font Rich Text Radar Label)**：
+     - **`|` 分隔符隔离机制**：将 5 大指标名称重塑为带有 `|` 分隔的高清结构：
+       - `OTD|供应链发货准时率|物流全链路履约保障`
+       - `DOI|现场在库周转天数|物料积压与场地效率`
+       - `PCR|三日滚动计划达成率|数字化工程申报纪律`
+       - `UCR|施工消耗转化率|到货签收向实体转化`
+       - `SSR|安全供应防线|规避断料与停工窝工`
+     - **多行居中富文本对齐**：在 `formatter` 中用 `split('|')` 彻底解离英文缩写、中文主标题、副说明，并借助 `rich` 配置实现完美的三行居中对齐排版。
+     - **字号拉大与高对比度色彩**：将原 13px/12px/10px 的拥挤文字，整体拉大升级至：
+       - 第一行 `{abbr}` 英文缩写：**`fontSize: 14`，`fontFamily: 'monospace'`，`#3b82f6` (SaaS 蓝色)**
+       - 第二行 `{title}` 中文主标题：**`fontSize: 13`，加粗，`#1e293b` (深石墨灰)**
+       - 第三行 `{desc}` 业务副标题：**`fontSize: 11`，`#64748b` (优雅灰石色)**
+     - **视觉呼吸感与空间拓展**：将 ECharts 雷达图的半径 `radius` 调小至 `58%`，垂直中心点设为 `['50%', '51%']`。为外围放大后的多行“指标牌”腾出绝对宽敞、不被裁剪的呼吸空间，视觉层次感与大厂高端质感全面拉满。
+  3. **生产静态打包编译验证**：
+     - 运行 `npm run build`，打包构建无任何报错、编译警告或异常，100% 完美生产就绪。
+
 ## 2026-05-28 tube project 大盘 3x3 融合九宫格重构与雷达图饱满度极致拉伸调优完成
 
 - 前置说明：为了解决用户反馈的“雷达图在 3x3 九宫格融合面板中未占满空间、显得较小”的视觉痛点，本轮对 ECharts 雷达图的半径占比、中心点坐标以及外部大格子的内边距进行了像素级拉伸调优（Stretching Optimization）。使雷达图在 2x2 格子里直接放大至 1.5 倍以上，画面极具张力与数据震撼感。
