@@ -417,6 +417,59 @@ export async function saveTubeGlobalManagementConfigSection(projectKey, payload)
   return response.json()
 }
 
+export async function getTubeWorkspaceWeatherData(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const query = params.show_date ? `?show_date=${encodeURIComponent(params.show_date)}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/weather${query}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取大盘气温数据失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function getTubeWeatherConfig(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/weather/config`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取天气配置与统计失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function evaluateTubeWeatherImport(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/weather/eval`, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '评估天气数据导入失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function importTubeWeatherData(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/weather/import`, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '物理导入天气数据失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
 export async function getTubeSupplyManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
   const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/options`, {
     headers: attachAuthHeaders(),

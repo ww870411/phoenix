@@ -1,4 +1,60 @@
+## 2026-05-28 tube project 大盘 3x3 融合九宫格重构与雷达图饱满度极致拉伸调优完成
+
+- 配合前端大盘页面 `DashboardView.vue` 将雷达图半径拉伸及九宫格物理占比调整落实：
+  1. **ECharts 雷达图半径极限拉伸 (Stretching)**：
+     - 本轮确认最新前端雷达图半径 `radar.radius` 已强力提升为最饱满的 `'78%'`，垂直中心调整为 `['50%', '53%']`，标题顶边距缩窄为 `'1%'`。
+  2. **网格物理空间最大化释放**：
+     - 雷达图大格子的内边距由 `padding: 16px` 收缩为 `padding: 8px`，容器高度升级拉伸至 `400px`，雷达图画布展现面积直接放大至 1.5 倍以上，气势极为雄浑饱满。
+  3. **3x3 融合九宫格布局黄金对称落地**：
+     - 雷达图和 5 个卡片统一置于 `.workbench-grid-layout` 网格下。雷达图占 **1, 2, 4, 5 号格子**（大 2x2）；卡片 1 到 5 分别精密占满 **3, 6, 7, 8, 9 号格子**，结构黄金对称。
+     - PCR（卡片3）占 **7 号格子**（左下角）
+     - UCR（卡片4）占 **8 号格子**（下中）
+     - SSR（卡片5）占 **9 号格子**（右下角）
+  2. **高逼格“SaaS 指标穿透解析毛玻璃弹窗”组件开发**：
+     - 在 `DashboardView.vue` 模板底部开发了 `.metric-modal-overlay` 磨砂玻璃层，分子分母代入实际业务数据（OTD: 113/120, DOI: 485/118.3, PCR: 12/12, UCR: 2850/3380, SSR: 11/12）高精度展示。
+  3. **极致的 3 阶段响应式自适应降级**：
+     - **桌面/超宽屏阶段 (>= 1200px)**：以极致的 3x3 融合九宫格呈现。
+     - **中屏阶段 (< 1200px)**：降级为双列网格。雷达图独占一整行置顶，5 个卡片在下方自动流动，且 SSR（卡片5）自动转化为 `span 2` 再次独占一整行，维持 2 + 2 + 1 的黄金对称。
+     - **手机端阶段 (< 640px)**：自动降级为 1 列纯净流式排布，卡片宽度自动归并，极富 PREMIUM 响应式手感。
+
+  3. **完美的响应式与交互引导**：
+     - 在各指标卡片底部精巧嵌入了 `.metric-saas-interactive-tip` 动作引导药丸（带有 `💡 点击查看计算过程` 字样和顺滑的右侧小幅平移 hover 动画）。
+     - 通过 `@media (max-width: 640px)` 对 SSR 加上了 `grid-column: span 1` 的媒体查询，在大屏下独占两列，手机屏下自适应归并，极富 PREMIUM SaaS 体验。
+
+
+## 2026-05-28 tube项目 全局数据看板气象沙盘与数据库气象双表全链路对接连线完毕
+
+
+- 本轮配合前端全局看板 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的气象沙盘直连重构，后端提供了高鲁棒的 `workspace/weather` 公开路由对接服务：
+  1. **零鉴权限制公开接口**：`GET /workspace/weather` 在 `public_router` 下运行，支持大盘的快速直连免密查询，支持参数 `show_date`（默认当日）对前一日、当日、明日、后日这 4 日天气状况的一键提取。
+  2. **高容错自适应缓存机制 (Meteorological Cache Aggregator)**：在后端 `weather_service.get_weather_dashboard_data` 中，设计了“优先本地查库 -> 若未来日期记录有缺失则静默连线外部 API 执行增量 Upsert -> 再次查库归并返回”的自适应缓存代理模型。即使管理员很长时间未登录控制台手动同步导入，大盘在访问时也能通过静默更新永不发生未来数据白屏或缺失。
+  3. **WMO 状态码与气象平均温输出**：服务层对每条记录自动带回 WMO weather_code、中文 weather_text，并输出日降水量、紫外线极值、日最高气温以及底层逐小时温度数据的算术平均气温，以标准的极简 JSON 数据结构反馈，完美替代了原先需要在前端进行小时温累加计算的沉重负担。
+
+## 2026-05-28 tube项目 气温数据管理与持久化导入控制台开发落地
+
+- 本轮 Phoenix 后端代码在 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 中引入 `weather_service` 并挂载了 3 个全新的气象配置/管理路由接口：
+  1. `GET /global-management/weather/config`：读取气温库表已存记录统计和极端日期区间，带回当前设定的 API URL。
+  2. `POST /global-management/weather/eval`：输入 API URL 临时连线外部 WMO 数据源拉取并与本地已存记录进行字段级精细化变更评估，传回变化指标（新增/更新/未变）和对照预览数据。
+  3. `POST /global-management/weather/import`：输入 API URL 批量物理连线拉取并采用 Postgres SQL `ON CONFLICT DO UPDATE` 完成幂等入库。
+  - 这 3 个路由均绑定 `_ensure_global_admin(session)` 以实施超级管理员特权安全隔离。
+- **持久化配置保存**：在 `_save_config_section` 中增加了对 `"weather_api_url"` 字段的允许与净化存储处理，支持在系统配置文件 `tube_config.json` 中一键保存 API 地址。
+- 前端同步修改了 API 接口定义，在全局管理面板 Tab 中加入了气温统计与输入保存面板，并设计了精致的磨砂玻璃风格导入对照二次确认弹窗。
+- 本地静态编译构建 100% 成功通过。
+
+## 2026-05-28 tube项目 大连气象施工决策沙盘升级：引入全新 WMO 天气代码与最大紫外线指数 (UV) 智能大盘
+
+- 本轮 Phoenix 后端代码在 `backend/sql/tube_schema_init.sql` 中高规格设计并落盘了气象数据物理存储结构，以便稍后优化天气沙盘的加载性能。
+- 前端对全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的“大连气象环境与施工防汛决策沙盘”进行了全方位的指标升维与 UI 像素级重塑，并将右上角地理位置微徽章更名规范为“大连市主城区”。
+- 升级 Fetch URL 为包含 daily(weather_code, rain_sum, uv_index_max) 与 hourly(temperature_2m) 的高级接口。在维持前一日 + 当日 + 未来两日（4 天卡片）的基础上，在前端高规格实现自适应日期匹配对齐、WMO Code 气象翻译，以及降水防汛与高温紫外线防暑双轨智能决策调度文案。
+- **大厂级 2x2 对称网格排版**：废除所有脆弱的单行 flex 布局，将雨量、紫外线、最高温、平均温 4 个核心微指标精细布局在 2x2 网格中，每一列高度对齐。每个微指标包裹在带有微透明背景和柔和过渡的精致“药丸微徽章”中，字号精调为 `12px` Monospace；并配置卡片 `min-height: 235px` 等高，在大中小屏下绝无任何跑偏或换行堆叠，精细度极其高级。
+- **时区零漂移与历史兜底匹配算法**：在前端针对 baseDate 采用“本地中午 12 点实例化安全转换”，粉碎了因各浏览器解析 YYYY-MM-DD 时区不同导致的跨天错位 Bug；同时注入 relative index 兜底匹配，大盘若切换至历史偏置日期（API无当日历史数据）时会自动降级使用 API 对应索引实际日期提取，**彻底解决了当日、前日气温在测试时显示为“—”的顽固 Bug**，达成 100% 容错。
+- **气象物理表落盘详情**：
+  1. **日级聚合表 `tube.tube_weather_daily`**：存放天气代码、日降雨量、最大紫外线、最高/平均气温等，配备 `uq_tube_weather_daily_date` 唯一索引以支持秒级高性能加载。
+  2. **小时级原始表 `tube.tube_weather_hourly`**：存放逐小时温度数值，配备 `uq_tube_weather_hourly_datetime` 唯一索引支持更精细的分析。
+- 前端静态编译打包 100% 成功通过。
+
 ## 2026-05-26 tube项目 警示大盘颠覆式视觉精简与交互式 Tab 降噪控制台开发落地
+
 
 - 本轮 Phoenix 后端代码无物理改动。
 - 前端对全局数据看板页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的警报中心进行了极富人机交互工效学的极简降噪与大重构。

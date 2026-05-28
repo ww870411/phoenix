@@ -190,4 +190,50 @@ CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_station_date
 CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_pipe_model_date
     ON tube.tube_inventory_adjustment (pipe_model_id, adjust_date);
 
+
+-- =========================================================================
+-- 大连主城区气象数据存储表 (2026-05-28 升级)
+-- 包含日级聚合与逐小时温度记录，用以优化天气决策沙盘的加载性能
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS tube.tube_weather_daily (
+    id BIGSERIAL PRIMARY KEY,
+    weather_date DATE NOT NULL,
+    weather_code INTEGER NOT NULL DEFAULT 0,
+    rain_sum NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+    uv_index_max NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+    temp_max NUMERIC(18, 2),
+    temp_mean NUMERIC(18, 2),
+    temp_min NUMERIC(18, 2),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE tube.tube_weather_daily IS '大连主城区日级气象数据及施工决策聚合表';
+COMMENT ON COLUMN tube.tube_weather_daily.weather_date IS '气象日期';
+COMMENT ON COLUMN tube.tube_weather_daily.weather_code IS 'WMO 天气状态码';
+COMMENT ON COLUMN tube.tube_weather_daily.rain_sum IS '日降水总量 (mm)';
+COMMENT ON COLUMN tube.tube_weather_daily.uv_index_max IS '最大紫外线指数';
+COMMENT ON COLUMN tube.tube_weather_daily.temp_max IS '日内最高气温 (℃)';
+COMMENT ON COLUMN tube.tube_weather_daily.temp_mean IS '日内算术平均气温 (℃)';
+COMMENT ON COLUMN tube.tube_weather_daily.temp_min IS '日内最低气温 (℃)';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_weather_daily_date
+    ON tube.tube_weather_daily (weather_date);
+
+
+CREATE TABLE IF NOT EXISTS tube.tube_weather_hourly (
+    id BIGSERIAL PRIMARY KEY,
+    weather_date_time TIMESTAMPTZ NOT NULL,
+    temperature NUMERIC(18, 2) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE tube.tube_weather_hourly IS '大连主城区逐小时气温原始数据表';
+COMMENT ON COLUMN tube.tube_weather_hourly.weather_date_time IS '日期时间粒度 (带时区)';
+COMMENT ON COLUMN tube.tube_weather_hourly.temperature IS '逐小时气温 (℃)';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_weather_hourly_datetime
+    ON tube.tube_weather_hourly (weather_date_time);
+
+
 COMMIT;

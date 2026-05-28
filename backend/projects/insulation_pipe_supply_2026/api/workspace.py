@@ -58,6 +58,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     update_delivery_warehouse_record,
     super_update_delivery_record,
 )
+from backend.projects.insulation_pipe_supply_2026.services import weather_service
 
 router = APIRouter(tags=[PROJECT_KEY])
 public_router = APIRouter(tags=[PROJECT_KEY])
@@ -99,6 +100,14 @@ class TubeConfigSavePayload(BaseModel):
 class TubeConfigSectionSavePayload(BaseModel):
     section: str
     data: Any
+
+
+class WeatherEvalPayload(BaseModel):
+    api_url: Optional[str] = None
+
+
+class WeatherImportPayload(BaseModel):
+    api_url: Optional[str] = None
 
 
 class SupplyDeliveryCreatePayload(BaseModel):
@@ -314,6 +323,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "manager_assignments",
         "construction_units",
         "baseline_presets",
+        "weather_api_url",
     }
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
@@ -337,6 +347,8 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         if normalized_editable_days < 0 or normalized_editable_days > 3:
             raise HTTPException(status_code=422, detail=f"plan_editable_days 超出范围：{normalized_editable_days}")
         payload[normalized_section] = normalized_editable_days
+    elif normalized_section == "weather_api_url":
+        payload[normalized_section] = str(data or "").strip()
     else:
         if not isinstance(data, list):
             raise HTTPException(status_code=422, detail=f"{normalized_section} 必须为数组")
@@ -614,6 +626,19 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         "construction_units": construction_units,
         "baseline_presets": baseline_presets,
     }
+
+
+@public_router.get("/workspace/weather", summary="大盘气象数据接口")
+def get_workspace_weather_data(
+    show_date: str = "",
+) -> Dict[str, Any]:
+    if not show_date:
+        try:
+            payload = load_tube_config()
+            show_date = get_configured_show_date(payload).isoformat()
+        except Exception:
+            show_date = date.today().isoformat()
+    return weather_service.get_weather_dashboard_data(show_date)
 
 
 @router.get("/demand-management/options", summary="读取需求侧页面选项")
@@ -1448,3 +1473,36 @@ def save_global_management_config_section(
         "usage_collection_date": get_usage_collection_date(updated).isoformat(),
         "plan_editable_days": get_configured_plan_editable_days(updated),
     }
+
+
+@router.get("/global-management/weather/config", summary="读取天气配置与统计行数")
+def get_global_management_weather_config(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    stats = weather_service.get_weather_db_stats()
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        **stats
+    }
+
+
+@router.post("/global-management/weather/eval", summary="评估天气数据导入")
+def evaluate_global_management_weather_import(
+    payload: WeatherEvalPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    result = weather_service.evaluate_weather_import(payload.api_url)
+    return result
+
+
+@router.post("/global-management/weather/import", summary="物理导入天气数据")
+def import_global_management_weather_data(
+    payload: WeatherImportPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    result = weather_service.import_weather_data(payload.api_url)
+    return result

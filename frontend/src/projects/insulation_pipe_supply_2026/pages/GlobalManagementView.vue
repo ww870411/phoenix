@@ -89,6 +89,13 @@
           </button>
           <button 
             type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'weather' }]" 
+            @click="activeTab = 'weather'"
+          >
+            ⛅ 气温数据管理
+          </button>
+          <button 
+            type="button" 
             :class="['sidebar-tab-btn', { active: activeTab === 'json' }]" 
             @click="activeTab = 'json'"
           >
@@ -500,6 +507,92 @@
             </section>
           </div>
 
+          <!-- Tab 5.5: 气温数据管理 -->
+          <div v-if="activeTab === 'weather'" class="pane-content-wrapper">
+            <!-- 磨砂玻璃统计子面板 -->
+            <section class="card elevated section-card weather-stats-overview">
+              <div class="card-header">⛅ 气象库已存数据统计</div>
+              <p class="sub">统计当前管网系统底层数据库中缓存的日级天气与逐小时温度的总记录状况。</p>
+              
+              <div class="weather-meta-grid">
+                <div class="weather-meta-item">
+                  <span class="weather-meta-label">日级气象已存</span>
+                  <strong class="weather-meta-value">{{ dailyCount }} 条记录</strong>
+                  <span class="weather-meta-desc">历史日期区间：{{ minDate }} 至 {{ maxDate }}</span>
+                </div>
+                <div class="weather-meta-item">
+                  <span class="weather-meta-label">逐小时气温缓存</span>
+                  <strong class="weather-meta-value">{{ hourlyCount }} 条温度点</strong>
+                  <span class="weather-meta-desc">用于精确日最高、平均温算术解算</span>
+                </div>
+                <div class="weather-meta-item highlight">
+                  <span class="weather-meta-label">数据来源服务</span>
+                  <strong class="weather-meta-value">Open-Meteo API</strong>
+                  <span class="weather-meta-desc">WMO 标准天气解码与自动时区对齐</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- 配置 API 与拉取导入面板 -->
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">🛠️ 气象数据接口配置与一键导入</div>
+                  <p class="sub block-sub">
+                    在此配置大连主城区的 Open-Meteo 气象 API 网址。您可以直接修改后点击“评估并导入”来进行数据校验和拉取，或点击“保存修改”将接口网址永久持久化写入系统的 tube_config.json 配置文件。
+                  </p>
+                </div>
+              </div>
+
+              <div class="weather-config-form">
+                <div class="field">
+                  <span>气象 API 网址 (weather_api_url)</span>
+                  <textarea 
+                    v-model="weatherApiUrl" 
+                    class="input weather-textarea" 
+                    placeholder="请输入 Open-Meteo API 地址..."
+                    rows="3"
+                  ></textarea>
+                  <small class="field-help">
+                    说明：输入框可自由编辑。若直接点击“拉取评估与导入”，系统将按照当前编辑框内的临时 API 连线拉取（不更改下次打开的默认值）。点击右侧的“保存修改”才会将该 URL 永久持久化。
+                  </small>
+                </div>
+
+                <p v-if="sectionMessage('weather_api_url')" :class="['section-tip', sectionMessage('weather_api_url').type]">
+                  {{ sectionMessage('weather_api_url').text }}
+                </p>
+
+                <div class="weather-actions-panel">
+                  <button 
+                    class="btn ghost" 
+                    type="button" 
+                    @click="weatherApiUrl = 'https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5'"
+                  >
+                    🔄 恢复默认网址
+                  </button>
+                  <div class="action-btn-group">
+                    <button 
+                      class="btn ghost" 
+                      type="button" 
+                      :disabled="isSaving('weather_api_url')" 
+                      @click="saveWeatherApiUrl"
+                    >
+                      {{ isSaving('weather_api_url') ? '正在永久保存…' : '💾 仅保存网址修改' }}
+                    </button>
+                    <button 
+                      class="btn primary shadow-accent" 
+                      type="button" 
+                      :disabled="evalLoading" 
+                      @click="handleEvalWeatherImport"
+                    >
+                      {{ evalLoading ? '正在连线拉取评估…' : '📊 拉取评估并物理导入' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
           <!-- Tab 6: 原始 JSON 预览 -->
           <div v-if="activeTab === 'json'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -541,6 +634,94 @@
 
       </div>
     </main>
+
+    <!-- 气象导入二次确认 Modal 弹窗 -->
+    <div v-if="showEvalModal" class="weather-modal-mask">
+      <div class="weather-modal-container card elevated">
+        <header class="weather-modal-header">
+          <h3>⛅ 气象数据导入变更预审与对照评估</h3>
+          <button class="btn-close" type="button" @click="showEvalModal = false">×</button>
+        </header>
+
+        <div class="weather-modal-body">
+          <div class="eval-summary-banner">
+            <div class="eval-summary-title">📊 预审评估完成：连线 Open-Meteo 数据分析结果</div>
+            
+            <div class="eval-metrics-row">
+              <div class="eval-metric-capsule">
+                <span class="lbl">预评估天数</span>
+                <strong class="val">{{ evalResult?.daily_stats?.total }} 天</strong>
+              </div>
+              <div class="eval-metric-capsule success">
+                <span class="lbl">🌱 预计新增</span>
+                <strong class="val">{{ evalResult?.daily_stats?.inserted }} 天</strong>
+              </div>
+              <div class="eval-metric-capsule warning">
+                <span class="lbl">🔄 冲突覆盖</span>
+                <strong class="val">{{ evalResult?.daily_stats?.updated }} 天</strong>
+              </div>
+              <div class="eval-metric-capsule info">
+                <span class="lbl">💤 完全未变</span>
+                <strong class="val">{{ evalResult?.daily_stats?.unchanged }} 天</strong>
+              </div>
+            </div>
+            <p class="eval-summary-desc">
+              提示：本次评估比对仅涉及日级气象属性（天气描述、最高/平均气温、降水量、紫外线），小时级细精温度将自动对齐做 Upsert 入库。重复日期的记录将使用新获取的外部数据完美覆盖合并。
+            </p>
+          </div>
+
+          <!-- 待导入数据日级对照预览列表 -->
+          <div class="weather-preview-table-wrap">
+            <table class="table editor-table preview-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>天气情况 (WMO)</th>
+                  <th>最高气温</th>
+                  <th>算术平均温</th>
+                  <th>最低气温</th>
+                  <th>预计降水</th>
+                  <th>最大紫外线</th>
+                  <th>预审状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in evalResult?.preview_list" :key="row.date">
+                  <td class="cell-date"><strong>{{ row.date }}</strong></td>
+                  <td>{{ row.weather_text }} <small class="wmo-code-gray">(Code: {{ row.weather_code }})</small></td>
+                  <td class="cell-num">{{ row.temp_max != null ? row.temp_max.toFixed(1) + ' °C' : '—' }}</td>
+                  <td class="cell-num highlight-temp">{{ row.temp_mean != null ? row.temp_mean.toFixed(1) + ' °C' : '—' }}</td>
+                  <td class="cell-num">{{ row.temp_min != null ? row.temp_min.toFixed(1) + ' °C' : '—' }}</td>
+                  <td class="cell-num text-rain">{{ row.rain_sum != null ? row.rain_sum.toFixed(1) + ' mm' : '—' }}</td>
+                  <td class="cell-num">{{ row.uv_index_max != null ? row.uv_index_max.toFixed(1) : '—' }}</td>
+                  <td>
+                    <span :class="['status-chip', row.status === 'inserted' ? 'success' : row.status === 'updated' ? 'warning' : 'pending']">
+                      {{ row.status === 'inserted' ? '+ 新增' : row.status === 'updated' ? '✎ 覆盖更新' : '— 完全未变' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer class="weather-modal-footer">
+          <span class="footer-hint">⚠️ 点击「确认物理导入」后，数据将写入 PostgreSQL 数据库，操作不可撤回！</span>
+          <div class="action-btn-group">
+            <button class="btn ghost" type="button" @click="showEvalModal = false">取消</button>
+            <button 
+              class="btn primary shadow-accent" 
+              type="button" 
+              :disabled="importLoading" 
+              @click="handleConfirmWeatherImport"
+            >
+              {{ importLoading ? '正在物理覆盖入库中…' : '✓ 确认物理导入' }}
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -551,6 +732,9 @@ import {
   getTubeGlobalManagementConfig,
   saveTubeGlobalManagementConfig,
   saveTubeGlobalManagementConfigSection,
+  getTubeWeatherConfig,
+  evaluateTubeWeatherImport,
+  importTubeWeatherData,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -563,6 +747,98 @@ const {
 } = useTubePageShell('全局管理入口')
 
 const activeTab = ref('core')
+
+// 天气气温导入相关 Ref 变量
+const dailyCount = ref(0)
+const hourlyCount = ref(0)
+const minDate = ref('—')
+const maxDate = ref('—')
+const weatherApiUrl = ref('')
+const evalLoading = ref(false)
+const importLoading = ref(false)
+const showEvalModal = ref(false)
+const evalResult = ref(null)
+
+async function loadWeatherConfig() {
+  try {
+    const res = await getTubeWeatherConfig(PROJECT_KEY)
+    dailyCount.value = res.daily_count ?? 0
+    hourlyCount.value = res.hourly_count ?? 0
+    minDate.value = res.min_date || '—'
+    maxDate.value = res.max_date || '—'
+    weatherApiUrl.value = res.weather_api_url || ''
+  } catch (error) {
+    console.error('加载天气配置与统计失败:', error)
+  }
+}
+
+async function saveWeatherApiUrl() {
+  clearGlobalMessage()
+  setSectionMessage('weather_api_url', 'success', '')
+  setSaving('weather_api_url', true)
+  try {
+    const urlVal = String(weatherApiUrl.value || '').trim()
+    if (!urlVal) {
+      throw new Error('API 网址不能为空')
+    }
+    const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'weather_api_url',
+      data: urlVal,
+    })
+    // 刷新统计
+    await loadWeatherConfig()
+    setSectionMessage('weather_api_url', 'success', '气象 API 地址已成功永久保存至 tube_config.json！')
+  } catch (error) {
+    setSectionMessage('weather_api_url', 'error', error?.message || '保存 API 失败')
+  } finally {
+    setSaving('weather_api_url', false)
+  }
+}
+
+async function handleEvalWeatherImport() {
+  clearGlobalMessage()
+  setSectionMessage('weather_api_url', 'success', '')
+  const urlVal = String(weatherApiUrl.value || '').trim()
+  if (!urlVal) {
+    setSectionMessage('weather_api_url', 'error', '请输入有效的气象 API 网址后再试')
+    return
+  }
+  evalLoading.value = true
+  try {
+    const res = await evaluateTubeWeatherImport(PROJECT_KEY, { api_url: urlVal })
+    if (res.ok) {
+      evalResult.value = res
+      showEvalModal.value = true
+    } else {
+      throw new Error(res.detail || '评估拉取失败')
+    }
+  } catch (error) {
+    setSectionMessage('weather_api_url', 'error', error?.message || '拉取天气数据评估失败，请检查连线状态或 API 格式。')
+  } finally {
+    evalLoading.value = false
+  }
+}
+
+async function handleConfirmWeatherImport() {
+  if (!evalResult.value) return
+  importLoading.value = true
+  try {
+    const urlVal = String(weatherApiUrl.value || '').trim()
+    const res = await importTubeWeatherData(PROJECT_KEY, { api_url: urlVal })
+    if (res.ok) {
+      showEvalModal.value = false
+      setSectionMessage('weather_api_url', 'success', `🎉 气温数据物理导入成功！本次共导入了 ${res.daily_count} 条日级记录，${res.hourly_count} 条逐小时温度记录，历史冲突数据已完美覆盖合并！`)
+      // 刷新最新统计
+      await loadWeatherConfig()
+    } else {
+      throw new Error(res.detail || '导入失败')
+    }
+  } catch (error) {
+    setSectionMessage('weather_api_url', 'error', error?.message || '写入天气数据库失败，事务已安全回滚。')
+  } finally {
+    importLoading.value = false
+  }
+}
 const showDate = ref('')
 const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
@@ -754,6 +1030,7 @@ function applyConfig(config) {
   constructionUnits.value = normalizeAssignmentRows(config.construction_units, 'unit_id', 'unit_name')
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
+  weatherApiUrl.value = config.weather_api_url || ''
 }
 
 function getTodayDateString() {
@@ -879,6 +1156,9 @@ function buildSectionPayload(section) {
       remark: item.remark || '',
     }))
   }
+  if (section === 'weather_api_url') {
+    return weatherApiUrl.value || ''
+  }
   return null
 }
 
@@ -897,6 +1177,7 @@ const configPreviewText = computed(() =>
       manager_assignments: buildSectionPayload('manager_assignments'),
       construction_units: buildSectionPayload('construction_units'),
       baseline_presets: buildSectionPayload('baseline_presets'),
+      weather_api_url: weatherApiUrl.value || '',
     },
     null,
     2,
@@ -969,6 +1250,7 @@ async function loadConfig() {
     latestSubmissions.value = normalizeSubmissionRows(response.submission_status?.latest_submissions || [])
     historySubmissions.value = normalizeSubmissionRows(response.submission_status?.history_submissions || [])
     applyConfig(config)
+    await loadWeatherConfig()
     if (response.show_date) {
       showDate.value = response.show_date
     }
@@ -1213,6 +1495,250 @@ useTubeRealtimeRefresh(loadConfig)
 </script>
 
 <style scoped>
+/* ==================== ⛅ 气温数据管理与导入 CSS ==================== */
+.weather-stats-overview {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(240, 249, 255, 0.7));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(186, 230, 253, 0.5) !important;
+}
+.weather-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.weather-meta-item {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.25s ease;
+}
+.weather-meta-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+}
+.weather-meta-item.highlight {
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.8), rgba(204, 251, 241, 0.6));
+  border-color: rgba(153, 246, 228, 0.8);
+}
+.weather-meta-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.weather-meta-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.weather-meta-desc {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.weather-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.weather-textarea {
+  min-height: 80px;
+  resize: vertical;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px !important;
+  line-height: 1.5;
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+.weather-actions-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Modal Mask & Layout */
+.weather-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.weather-modal-container {
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+  animation: modalEnter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modalEnter {
+  from { transform: scale(0.96) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+.weather-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: linear-gradient(to bottom, #f8fafc, #ffffff);
+  border-bottom: 1px solid #f1f5f9;
+}
+.weather-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+.btn-close:hover {
+  color: #0f172a;
+}
+.weather-modal-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.eval-summary-banner {
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(241, 245, 249, 0.8));
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+.eval-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 12px;
+}
+.eval-metrics-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.eval-metric-capsule {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.eval-metric-capsule .lbl {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.eval-metric-capsule .val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.eval-metric-capsule.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+.eval-metric-capsule.success .val {
+  color: #166534;
+}
+.eval-metric-capsule.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+.eval-metric-capsule.warning .val {
+  color: #c2410c;
+}
+.eval-metric-capsule.info {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.eval-metric-capsule.info .val {
+  color: #475569;
+}
+.eval-summary-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+.weather-preview-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.02);
+}
+.weather-preview-table-wrap th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 10;
+}
+.preview-table {
+  margin: 0;
+}
+.wmo-code-gray {
+  color: #94a3b8;
+  font-size: 11px;
+}
+.highlight-temp {
+  font-weight: 700;
+  color: #0f172a;
+  background: rgba(241, 245, 249, 0.5);
+}
+.text-rain {
+  color: #0284c7;
+  font-weight: 600;
+}
+.weather-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+.footer-hint {
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
 .tube-page-root { min-height: 100vh; background: var(--bg); }
 .tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; }
 .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
