@@ -501,6 +501,79 @@
       default-filename="保温管到货与接收确认记录"
       @close="showExportModal = false"
     />
+
+    <!-- 负库存硬性拦截磨砂玻璃警告弹窗 (Premium Glassmorphism Usage Block Modal) -->
+    <Transition name="fade">
+      <div v-if="blockModalVisible && blockModalData" class="block-modal-overlay">
+        <div class="block-modal-container">
+          <!-- 头部警告区 -->
+          <div class="block-modal-header">
+            <span class="block-warning-icon">🚨</span>
+            <h3>实际使用量填报硬性拦截</h3>
+            <p class="block-warning-desc">现场实际库存量不允许填报至负数，您的保存申请已被系统安全拦截！</p>
+          </div>
+          
+          <!-- 参数对照表格卡片 -->
+          <div class="block-modal-metrics">
+            <div class="metric-block-card">
+              <span class="lbl">被拦截规格</span>
+              <span class="val model-val">{{ blockModalData.pipeModelId }}</span>
+            </div>
+            <div class="metric-block-card">
+              <span class="lbl">现场累计已到货</span>
+              <span class="val green-val">{{ formatNumber(blockModalData.totalArrived) }} <small>米</small></span>
+            </div>
+            <div class="metric-block-card">
+              <span class="lbl">拟上报消耗总量</span>
+              <span class="val red-val">{{ formatNumber(blockModalData.expectedTotalUsage) }} <small>米</small></span>
+            </div>
+            <div class="metric-block-card warning">
+              <span class="lbl">超前账面亏空</span>
+              <span class="val orange-val">{{ formatNumber(blockModalData.shortage) }} <small>米</small></span>
+            </div>
+          </div>
+
+          <!-- 物流在途提示 -->
+          <div class="block-logistics-card" :class="{ 'has-transit': blockModalData.pendingArrival > 0 }">
+            <div v-if="blockModalData.pendingArrival > 0" class="logistics-info">
+              <span class="logistics-icon">🚚</span>
+              <div class="logistics-detail">
+                <h4>运输链好消息：正有在途物资！</h4>
+                <p>检测到目前正有 <strong>{{ formatNumber(blockModalData.pendingArrival) }} 米</strong> 保温管已从工厂发货，正处于<strong>“已发货待到货确认”</strong>在途状态！</p>
+                <p class="action-guide">业务纠偏指引：请先前往“到货与施工接收记录”标签下，对这批物资执行<strong>【到货确认】</strong>操作，补充账面现场库存，再返回提交实际使用量。</p>
+              </div>
+            </div>
+            <div v-else class="logistics-info no-transit">
+              <span class="logistics-icon">⚠️</span>
+              <div class="logistics-detail">
+                <h4>物流警告：暂无在途物资！</h4>
+                <p>检测到目前针对该规格<strong>暂无在途运输车次</strong>，无法通过到货确认进行现场库存的自主补充。</p>
+                <p class="action-guide danger">业务纠偏指引：请先联系发货工厂或主管库管员安排紧急物资发货，待车次录入后再执行到货确认。</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部按钮区 -->
+          <div class="block-modal-actions">
+            <button 
+              v-if="blockModalData.pendingArrival > 0" 
+              type="button" 
+              class="btn primary handle-btn" 
+              @click="handleGotoLogistics"
+            >
+              去处理在途物资 (到货确认)
+            </button>
+            <button 
+              type="button" 
+              class="btn ghost cancel-btn" 
+              @click="blockModalVisible = false"
+            >
+              {{ blockModalData.pendingArrival > 0 ? '稍后处理' : '我知道了' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -540,7 +613,47 @@ const currentGroup = ref('')
 const selectedStationId = ref('')
 const activeTab = ref('usage')
 const showExportModal = ref(false)
+const blockModalVisible = ref(false)
+const blockModalData = ref(null)
 const allPendingRows = ref([])
+
+function tryParseBlockError(message) {
+  if (!message || typeof message !== 'string') return null
+  if (!message.includes('现场可用账面库存不足')) return null
+  
+  try {
+    const modelMatch = message.match(/规格【(.*?)】/)
+    const arrivedMatch = message.match(/累计到货仅为\s*([\d.]+)\s*米/)
+    const expectedMatch = message.match(/累计消耗将达到\s*([\d.]+)\s*米/)
+    const shortageMatch = message.match(/账面超前亏空\s*([\d.]+)\s*米/)
+    const pendingMatch = message.match(/当前正有\s*([\d.]+)\s*米\s*在途物资/)
+    
+    if (modelMatch && arrivedMatch && expectedMatch && shortageMatch && pendingMatch) {
+      return {
+        pipeModelId: modelMatch[1],
+        totalArrived: Number(arrivedMatch[1]),
+        expectedTotalUsage: Number(expectedMatch[1]),
+        shortage: Number(shortageMatch[1]),
+        pendingArrival: Number(pendingMatch[1]),
+        rawMessage: message
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null
+}
+
+function handleGotoLogistics() {
+  blockModalVisible.value = false
+  activeTab.value = 'logistics'
+  setTimeout(() => {
+    const el = document.querySelector('.tab-card')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, 100)
+}
 const exportColumns = [
   { key: 'deliveryCode', label: '订单号' },
   { key: 'shipmentNo', label: '运输车次号' },
@@ -712,6 +825,26 @@ function setActionMessage(type, text) {
 
 function clearActionMessage() {
   actionMessage.value = null
+}
+
+function getErrorMessage(error, defaultMsg = '操作失败') {
+  if (!error) return defaultMsg
+  const msg = error.message || String(error)
+  try {
+    if (msg.trim().startsWith('{')) {
+      const parsed = JSON.parse(msg)
+      if (parsed.detail) {
+        if (typeof parsed.detail === 'string') {
+          return parsed.detail
+        } else if (Array.isArray(parsed.detail)) {
+          return parsed.detail.map(d => d.msg).join('; ')
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return msg
 }
 
 function formatNumber(value) {
@@ -1020,7 +1153,7 @@ async function confirmArrival(row) {
       loadAllPendingLogistics()
     ])
   } catch (error) {
-    setActionMessage('error', error?.message || '确认到货失败')
+    setActionMessage('error', getErrorMessage(error, '确认到货失败'))
   } finally {
     deliveryActionLoadingKey.value = ''
   }
@@ -1053,7 +1186,7 @@ async function confirmReceipt(row) {
       loadAllPendingLogistics()
     ])
   } catch (error) {
-    setActionMessage('error', error?.message || '确认施工接收失败')
+    setActionMessage('error', getErrorMessage(error, '确认施工接收失败'))
   } finally {
     deliveryActionLoadingKey.value = ''
   }
@@ -1105,7 +1238,7 @@ async function savePlanMatrix() {
     setActionMessage('success', '三日计划量已提交。')
     await loadPlanMatrix()
   } catch (error) {
-    setActionMessage('error', error?.message || '提交三日计划量失败')
+    setActionMessage('error', getErrorMessage(error, '提交三日计划量失败'))
   } finally {
     savePlanLoading.value = false
   }
@@ -1131,7 +1264,14 @@ async function saveUsageSheet() {
     setActionMessage('success', '实际使用量已提交。')
     await loadUsageSheet()
   } catch (error) {
-    setActionMessage('error', error?.message || '提交实际使用量失败')
+    const errorText = getErrorMessage(error, '提交实际使用量失败')
+    const parsed = tryParseBlockError(errorText)
+    if (parsed) {
+      blockModalData.value = parsed
+      blockModalVisible.value = true
+    } else {
+      setActionMessage('error', errorText)
+    }
   } finally {
     saveUsageLoading.value = false
   }
@@ -1151,7 +1291,7 @@ async function handleStationSubmitClick() {
     const submittedDate = response?.submission?.data_submit_date || anchorDate.value || '未设置'
     setActionMessage('success', `换热站 ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}。`)
   } catch (error) {
-    setActionMessage('error', error?.message || '提交换热站填报状态失败')
+    setActionMessage('error', getErrorMessage(error, '提交换热站填报状态失败'))
   } finally {
     submitStatusLoading.value = false
   }
@@ -1249,6 +1389,240 @@ function getSandboxSuggestion(row) {
 </script>
 
 <style scoped>
+/* Premium Usage Block Modal */
+.block-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.block-modal-container {
+  width: 90%;
+  max-width: 620px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.block-modal-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.block-warning-icon {
+  font-size: 40px;
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.block-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e11d48;
+}
+
+.block-warning-desc {
+  margin: 0;
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.block-modal-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.metric-block-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-block-card.warning {
+  background: #fff5f5;
+  border-color: #fee2e2;
+}
+
+.metric-block-card .lbl {
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+}
+
+.metric-block-card .val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.metric-block-card .val.model-val {
+  font-size: 12px;
+  color: #3b82f6;
+  word-break: break-all;
+  text-align: center;
+}
+
+.metric-block-card .val.green-val {
+  color: #10b981;
+}
+
+.metric-block-card .val.red-val {
+  color: #ef4444;
+}
+
+.metric-block-card .val.orange-val {
+  color: #f97316;
+}
+
+.metric-block-card .val small {
+  font-size: 10px;
+  font-weight: normal;
+  color: #94a3b8;
+}
+
+.block-logistics-card {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.block-logistics-card.has-transit {
+  background: #ecfdf5;
+  border-color: #d1fae5;
+}
+
+.logistics-info {
+  display: flex;
+  gap: 12px;
+}
+
+.logistics-icon {
+  font-size: 28px;
+}
+
+.logistics-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.logistics-detail h4 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.no-transit .logistics-detail h4 {
+  color: #92400e;
+}
+
+.logistics-detail p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.logistics-detail p strong {
+  color: #047857;
+  font-size: 13.5px;
+}
+
+.no-transit .logistics-detail p strong {
+  color: #b45309;
+}
+
+.action-guide {
+  margin-top: 4px !important;
+  font-size: 12px !important;
+  color: #6b7280 !important;
+  background: rgba(255, 255, 255, 0.5);
+  border-left: 3px solid #10b981;
+  padding: 6px 8px;
+  border-radius: 0 4px 4px 0;
+}
+
+.no-transit .action-guide {
+  border-left-color: #f97316;
+}
+
+.block-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.block-modal-actions .btn {
+  padding: 10px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.block-modal-actions .btn.primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+.block-modal-actions .btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.3);
+}
+
+.block-modal-actions .btn.ghost {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.block-modal-actions .btn.ghost:hover {
+  background: #e2e8f0;
+}
+
+/* Transition Animations */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
 .tube-page-root { min-height: 100vh; background: var(--bg); }
 .tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; }
 .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }

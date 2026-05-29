@@ -857,45 +857,148 @@ def super_update_delivery_record(
     shipment_no: str,
     arrived_qty: Optional[float] = None,
     received_qty: Optional[float] = None,
+    arrived_confirm_at: Optional[datetime] = None,
+    received_confirm_at: Optional[datetime] = None,
+    warehouse_confirm_at: Optional[datetime] = None,
     operator: str,
 ) -> None:
     session = SessionLocal()
     try:
-        check_sql = text("SELECT id FROM tube.tube_delivery WHERE id = :id")
-        exists = session.execute(check_sql, {"id": delivery_id}).first()
-        if not exists:
+        check_sql = text(
+            """
+            SELECT id, status, arrived_confirm_by, received_confirm_by, warehouse_confirm_by, ship_remark 
+            FROM tube.tube_delivery WHERE id = :id
+            """
+        )
+        orig_record = session.execute(check_sql, {"id": delivery_id}).mappings().first()
+        if not orig_record:
             raise HTTPException(status_code=404, detail="发货记录不存在，无法更新")
         
-        # 根据最新覆写的数据动态判定是否应该标记为异常 (abnormal_flag)
-        new_abnormal_flag = False
-        val_shipped_qty = float(shipped_qty)
+        # 规整状态名称映射
+        normalized_status = _normalize_text(status).lower()
+        if normalized_status == "arrived":
+            normalized_status = "pending_receive"
+        elif normalized_status == "received":
+            normalized_status = "pending_warehouse"
+
+        val_shipped_qty = max(float(shipped_qty), 0.01)
         val_arrived_qty = float(arrived_qty) if arrived_qty is not None else None
         val_received_qty = float(received_qty) if received_qty is not None else None
 
-        # (1) 少到货判定：到货数量 < 发货数量
-        if val_arrived_qty is not None and val_arrived_qty < val_shipped_qty:
-            new_abnormal_flag = True
+        dt_arrived_confirm_at = arrived_confirm_at
+        dt_received_confirm_at = received_confirm_at
+        dt_warehouse_confirm_at = warehouse_confirm_at
 
-        # (2) 少接收判定：施工接收数量 < 到货数量 (若到货量为空则对比发货量)
-        if val_received_qty is not None:
-            compare_target = val_arrived_qty if val_arrived_qty is not None else val_shipped_qty
-            if val_received_qty < compare_target:
+        # 从数据库中拉取历史操作人，如果为空则默认为当前管理员
+        op_arrived_by = orig_record["arrived_confirm_by"] or operator
+        op_received_by = orig_record["received_confirm_by"] or operator
+        op_warehouse_by = orig_record["warehouse_confirm_by"] or operator
+
+        # 根据目标状态执行逆向级联不变量校准
+        if normalized_status in {"pending_arrival", "cancelled"}:
+            # 在途或已撤销，清空一切子状态数据
+            val_arrived_qty = None
+            val_received_qty = None
+            dt_arrived_confirm_at = None
+            dt_received_confirm_at = None
+            dt_warehouse_confirm_at = None
+            op_arrived_by = None
+            op_received_by = None
+            op_warehouse_by = None
+
+        elif normalized_status == "pending_receive":
+            # 已到货待接收，必有到货数据凭证
+            if val_arrived_qty is None or val_arrived_qty <= 0:
+                val_arrived_qty = val_shipped_qty
+            val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
+
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+            if dt_arrived_confirm_at < shipped_at:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+
+            val_received_qty = None
+            dt_received_confirm_at = None
+            dt_warehouse_confirm_at = None
+            op_received_by = None
+            op_warehouse_by = None
+
+        elif normalized_status == "pending_warehouse":
+            # 已接收待库管确认，必有到货与施工接收凭证
+            if val_arrived_qty is None or val_arrived_qty <= 0:
+                val_arrived_qty = val_shipped_qty
+            val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
+
+            if val_received_qty is None or val_received_qty <= 0:
+                val_received_qty = val_arrived_qty
+            val_received_qty = min(val_received_qty, val_arrived_qty)
+
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+            if dt_arrived_confirm_at < shipped_at:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+
+            if dt_received_confirm_at is None:
+                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=6)
+            if dt_received_confirm_at < dt_arrived_confirm_at:
+                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=1)
+
+            dt_warehouse_confirm_at = None
+            op_warehouse_by = None
+
+        elif normalized_status == "completed":
+            # 已入库结清，必有完整的时空与数量时序链
+            if val_arrived_qty is None or val_arrived_qty <= 0:
+                val_arrived_qty = val_shipped_qty
+            val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
+
+            if val_received_qty is None or val_received_qty <= 0:
+                val_received_qty = val_arrived_qty
+            val_received_qty = min(val_received_qty, val_arrived_qty)
+
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+            if dt_arrived_confirm_at < shipped_at:
+                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+
+            if dt_received_confirm_at is None:
+                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=6)
+            if dt_received_confirm_at < dt_arrived_confirm_at:
+                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=1)
+
+            if dt_warehouse_confirm_at is None:
+                dt_warehouse_confirm_at = dt_received_confirm_at + timedelta(hours=2)
+            if dt_warehouse_confirm_at < dt_received_confirm_at:
+                dt_warehouse_confirm_at = dt_received_confirm_at + timedelta(hours=1)
+
+        # 智能重新评估 abnormal_flag
+        new_abnormal_flag = False
+        if normalized_status not in {"pending_arrival", "cancelled"}:
+            if val_arrived_qty is not None and val_arrived_qty < val_shipped_qty:
+                new_abnormal_flag = True
+            if val_received_qty is not None and val_arrived_qty is not None and val_received_qty < val_arrived_qty:
                 new_abnormal_flag = True
 
-        # 智能判定撤销字段流转，防止幽灵备注残留
-        cancel_info_sql = text("SELECT cancel_by, cancel_at, cancel_reason FROM tube.tube_delivery WHERE id = :id")
-        orig_row = session.execute(cancel_info_sql, {"id": delivery_id}).mappings().first()
-        
+        # 判定已取消撤销信息的流转
         new_cancel_by = None
         new_cancel_at = None
         new_cancel_reason = None
         
-        normalized_status = _normalize_text(status)
+        cancel_info_sql = text("SELECT cancel_by, cancel_at, cancel_reason FROM tube.tube_delivery WHERE id = :id")
+        orig_cancel = session.execute(cancel_info_sql, {"id": delivery_id}).mappings().first()
+
         if normalized_status == "cancelled":
-            # 如果新状态是已撤销，优先保留原有的撤销明细；若原本没有则以当前管理员和备注自动注入
-            new_cancel_by = orig_row["cancel_by"] if orig_row and orig_row["cancel_by"] else operator
-            new_cancel_at = orig_row["cancel_at"] if orig_row and orig_row["cancel_at"] else datetime.now()
-            new_cancel_reason = orig_row["cancel_reason"] if orig_row and orig_row["cancel_reason"] else (_normalize_text(ship_remark) or "超级管理员编辑覆盖撤销")
+            new_cancel_by = orig_cancel["cancel_by"] if orig_cancel and orig_cancel["cancel_by"] else operator
+            new_cancel_at = orig_cancel["cancel_at"] if orig_cancel and orig_cancel["cancel_at"] else datetime.now()
+            new_cancel_reason = orig_cancel["cancel_reason"] if orig_cancel and orig_cancel["cancel_reason"] else (_normalize_text(ship_remark) or "超级管理员编辑覆盖撤销")
+
+        # 格式化自动审计备注打标
+        audit_tag = f" | [超级修正智能补齐] 状态强改至 {normalized_status}, 操作人: {operator}"
+        clean_remark = _normalize_text(ship_remark)
+        # 去除可能存在的历史系统备注打标，防止备注无限长
+        if " | [超级修正智能补齐]" in clean_remark:
+            clean_remark = clean_remark.split(" | [超级修正智能补齐]")[0]
+        final_remark = clean_remark + audit_tag
 
         update_sql = text(
             """
@@ -911,6 +1014,12 @@ def super_update_delivery_record(
                 shipment_no = :shipment_no,
                 arrived_qty = :arrived_qty,
                 received_qty = :received_qty,
+                arrived_confirm_by = :arrived_confirm_by,
+                arrived_confirm_at = :arrived_confirm_at,
+                received_confirm_by = :received_confirm_by,
+                received_confirm_at = :received_confirm_at,
+                warehouse_confirm_by = :warehouse_confirm_by,
+                warehouse_confirm_at = :warehouse_confirm_at,
                 abnormal_flag = :abnormal_flag,
                 cancel_by = :cancel_by,
                 cancel_at = :cancel_at,
@@ -929,12 +1038,18 @@ def super_update_delivery_record(
                 "shipped_qty": val_shipped_qty,
                 "shipped_at": shipped_at,
                 "vehicle_plate_no": _normalize_text(vehicle_plate_no),
-                "ship_remark": _normalize_text(ship_remark),
+                "ship_remark": final_remark,
                 "status": normalized_status,
                 "order_no": _normalize_text(order_no),
                 "shipment_no": _normalize_text(shipment_no),
                 "arrived_qty": val_arrived_qty,
                 "received_qty": val_received_qty,
+                "arrived_confirm_by": op_arrived_by,
+                "arrived_confirm_at": dt_arrived_confirm_at,
+                "received_confirm_by": op_received_by,
+                "received_confirm_at": dt_received_confirm_at,
+                "warehouse_confirm_by": op_warehouse_by,
+                "warehouse_confirm_at": dt_warehouse_confirm_at,
                 "abnormal_flag": new_abnormal_flag,
                 "cancel_by": new_cancel_by,
                 "cancel_at": new_cancel_at,
@@ -950,4 +1065,5 @@ def super_update_delivery_record(
         raise HTTPException(status_code=500, detail=f"超级管理员强力更新数据失败: {str(e)}")
     finally:
         session.close()
+
 

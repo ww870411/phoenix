@@ -1,3 +1,55 @@
+## 2026-05-29 tube项目实际使用量负库存硬拦截磨砂玻璃大警告弹窗与 Tab 联动一键切换上线
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- 本轮处理与实现原理：
+  1. **🚨 负库存拦截磨砂玻璃大弹窗（Premium Block Modal）**：
+     - 在填报侧页面底部集成了支持磨砂玻璃背景（`backdrop-filter: blur(12px)`）的高逼格中央警告弹窗，强制吸引填报人员视觉焦点，物理阻断负库存的产生。
+  2. **🔍 正则级异常解析与对比排版**：
+     - 脚本中添加了 `tryParseBlockError`，能够从报错文本中用正则智能提取被拦截规格、已到货、拟消耗及超前亏空量。
+     - 结合 4 列网格以优雅的高亮药丸微徽章（绿/红/橙）进行可视化呈现。
+  3. **🚚 运输在途状态双态展示卡片**：
+     - 依据在途数量自动呈现：绿色的“在途物资好消息”卡片或橙红色的“无在途物资警告”卡片，并明确提供下一步的流程纠偏指示。
+  4. **🔄 跨 Tab 联动跳转一键处理（Cross-Tab Seamless Routing）**：
+     - 在弹窗中加入一键直达按钮，用户点击即可自动关闭弹窗、一键切换到 `'logistics'`（物流到货确认）Tab 栏，并且使用平滑滚动（`scrollIntoView`）将屏幕直接带到到货确认物流大卡片上，实现了惊艳的极速业务流程纠偏。
+
+## 2026-05-29 tube项目负库存真实溢出允许与硬缺口后端收口统一修改方案
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- 本轮处理与实现原理：
+  1. **前端完全出清计算逻辑（Unification of Computations）**：
+     - 修改大盘 `DashboardView.vue` 脚本中的 KPI 卡片公式累加和透视聚合 `computedTableData`。
+     - 彻底移除了原前端 `row.future_plan_qty > row.station_inventory_qty` 自行作减法的分散逻辑，改由直接累加后端统一计算返回的 `row.hard_gap_qty`。消除了因为前端分散算法在大盘各处导致数据不一致的隐患。
+  2. **智能解析并渲染 FastAPI HTTP 422 友好异常**：
+     - 在需求侧填报端 `DemandManagementView.vue` 中添加 `getErrorMessage` 解析辅助函数。
+     - 在提交三日计划、确认到货、确认施工接收、提交实际使用量、提交填报状态这 5 处 catch 异常拦截点，全部由 `getErrorMessage(error)` 代理，能够优雅剥离出 JSON 内的 `detail` 字符串进行高品质渲染。
+     - 解决了如果发生负库存或违背时序拦截时，用户直接看到 `Request failed with status code 422` 或乱码 JSON 的顽疾，使其直接看到“现场可用库存仅有 X 米、在途正有 Y 米、请先确认到货”的高水准提示。
+  3. **实际库存负数支持（True Negative Stock Display）**：
+     - 顺应后端出清 `max(..., 0)` 强制限制的改动，需求侧 `normalizeBaselineRows` 等方法完美接收真实的负库存并原样渲染在大盘和填报表格上，用于向管理层清晰警示报送时序和漏报问题。
+
+## 2026-05-29 tube项目当前逻辑审计报告审视与设计对齐
+
+- 本轮完成了对 tube 项目 2026-05-28 审计报告进行认真细致的前端页面只读审视与对齐。
+- 确认前端核心逻辑隐患：
+  - Dashboard 看板中 OTD、DOI、PCR、UCR、SSR 指标及硬缺口（`hard_gap_qty`）完全由前端 `metricSnapshot` / `kpi` computed 属性重复推导，具有逻辑分裂与口径漂移风险。
+  - 各端页面状态字典标签存在多处重复维护。
+- 后续将配合后端做计算下沉治理，前端仅负责纯粹的展示与图表联动呈现。
+
+## 2026-05-28 tube项目当前逻辑审计报告生成
+
+- 已新增审计报告：`configs/tube_audit_report_2026-05-28.md`。
+- 本轮未修改前端业务代码。
+- 前端后续治理重点：Dashboard KPI 与硬缺口计算下沉后端、物流状态字典共享化、禁止重新引入演示兜底值。
+
+## 2026-05-28 tube项目当前前端逻辑审计记录
+
+- 本轮未修改前端业务代码，仅记录审计结论。
+- Dashboard 当前仍承担 OTD、DOI、PCR、UCR、SSR 以及硬缺口等指标展示计算；其中硬缺口在前端多处重复推导，建议后续改为消费后端统一返回字段。
+- 供应、库管、需求相关页面存在物流状态标签、状态样式和动作入口的重复维护，建议后续抽为 tube 项目共享状态字典，或统一使用后端 `delivery_status_options`/动作元数据。
+- 前端应继续保持“只展示后台真实数据”的方向，避免再次引入演示兜底值或本地自造业务结果。
+
 ## 2026-05-28 tube项目顶部两张指标卡下压对齐
 
 - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`

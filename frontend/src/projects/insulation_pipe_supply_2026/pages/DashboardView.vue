@@ -933,10 +933,8 @@ const kpi = computed(() => {
     inventory += row.station_inventory_qty || 0
     netGap += row.net_gap_qty || 0
     
-    // 硬缺口计算：滚动三日计划 > 当前库存
-    if (row.future_plan_qty > row.station_inventory_qty) {
-      hardGap += (row.future_plan_qty - row.station_inventory_qty)
-    }
+    // 硬缺口统一使用后端计算，防范负库存导致的公式膨胀
+    hardGap += row.hard_gap_qty || 0
   })
 
   return {
@@ -1007,9 +1005,9 @@ const computedTableData = computed(() => {
     g.total_usage_qty += row.total_usage_qty || 0
     g.station_inventory_qty += row.station_inventory_qty || 0
     g.net_gap_qty += row.net_gap_qty || 0
-    if (row.future_plan_qty > row.station_inventory_qty) {
-      g.hard_gap_qty += (row.future_plan_qty - row.station_inventory_qty)
-    }
+    
+    // 硬缺口统一使用后端计算，规避前端分散逻辑
+    g.hard_gap_qty += row.hard_gap_qty || 0
   })
 
   const list = Object.values(groups)

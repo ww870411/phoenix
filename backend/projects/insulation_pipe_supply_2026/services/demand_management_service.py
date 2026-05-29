@@ -187,11 +187,72 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             usage_qty = float(item["usage_qty"])
             if usage_qty < 0:
                 raise HTTPException(status_code=422, detail="实际使用量不能为负数")
+            
+            pipe_model_id = _normalize_pipe_model_id(item["pipe_model_id"])
+
+            # 1. 累计到货量：非 cancelled 且已到现场确认的发货记录中可用量之和
+            sql_arrived = text(
+                """
+                SELECT SUM(COALESCE(received_qty, arrived_qty, shipped_qty)) AS total
+                FROM tube.tube_delivery
+                WHERE station_id = :station_id
+                  AND pipe_model_id = :pipe_model_id
+                  AND status <> 'cancelled'
+                  AND arrived_confirm_at IS NOT NULL
+                """
+            )
+            arrived_row = session.execute(sql_arrived, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
+            total_arrived = float(arrived_row[0]) if arrived_row and arrived_row[0] is not None else 0.0
+
+            # 2. 除去今日所填之外的历史累计使用量之和
+            sql_usage_before = text(
+                """
+                SELECT SUM(usage_qty) AS total
+                FROM tube.tube_daily_usage
+                WHERE station_id = :station_id
+                  AND pipe_model_id = :pipe_model_id
+                  AND usage_date <> :usage_date
+                """
+            )
+            usage_before_row = session.execute(
+                sql_usage_before, 
+                {"station_id": station_id, "pipe_model_id": pipe_model_id, "usage_date": usage_date}
+            ).first()
+            total_usage_before = float(usage_before_row[0]) if usage_before_row and usage_before_row[0] is not None else 0.0
+
+            expected_total_usage = total_usage_before + usage_qty
+
+            # 3. 负库存硬性拦截校验：累计消耗量不能大于账面累计到货量
+            if expected_total_usage > total_arrived:
+                # 计算在途待到货量
+                sql_pending = text(
+                    """
+                    SELECT SUM(shipped_qty) AS total
+                    FROM tube.tube_delivery
+                    WHERE station_id = :station_id
+                      AND pipe_model_id = :pipe_model_id
+                      AND status = 'pending_arrival'
+                    """
+                )
+                pending_row = session.execute(sql_pending, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
+                pending_arrival = float(pending_row[0]) if pending_row and pending_row[0] is not None else 0.0
+                
+                shortage = expected_total_usage - total_arrived
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"⚠️ 提交失败：现场可用账面库存不足！保温管规格【{pipe_model_id}】累计到货仅为 {total_arrived:.1f} 米，"
+                        f"但若保存本次使用量填报，累计消耗将达到 {expected_total_usage:.1f} 米（账面超前亏空 {shortage:.1f} 米）。\n"
+                        f"🚚 运输信息提示：当前正有 {pending_arrival:.1f} 米在途物资（已发货待到货确认）。"
+                        f"请先对已到现场的物资执行【到货确认】以补充账面库存，再返回提交实际使用量！"
+                    )
+                )
+
             payloads.append(
                 {
                     "usage_date": usage_date,
                     "station_id": station_id,
-                    "pipe_model_id": _normalize_pipe_model_id(item["pipe_model_id"]),
+                    "pipe_model_id": pipe_model_id,
                     "usage_qty": usage_qty,
                     "filled_by": operator,
                     "remark": _normalize_text(item.get("remark")),

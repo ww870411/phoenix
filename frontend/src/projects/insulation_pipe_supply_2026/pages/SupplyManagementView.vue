@@ -526,12 +526,11 @@
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">发货单流转状态</span>
               <select v-model="superEditForm.status" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                <option value="pending_arrival">在途 (pending_arrival)</option>
-                <option value="arrived">已到货待接收 (arrived)</option>
-                <option value="received">现场已接收待库管确认 (received)</option>
-                <option value="pending_warehouse">现场已接收待库管确认 (pending_warehouse)</option>
-                <option value="completed">已入库已结清 (completed)</option>
-                <option value="cancelled">已撤销废弃 (cancelled)</option>
+                <option value="pending_arrival">🚚 在途待现场到货</option>
+                <option value="pending_receive">📦 已到货待施工接收</option>
+                <option value="pending_warehouse">🧱 施工已接收待入库</option>
+                <option value="completed">✅ 已完成入库结清</option>
+                <option value="cancelled">❌ 已撤销发货废弃</option>
               </select>
             </label>
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
@@ -542,6 +541,34 @@
               <span style="font-size: 13px; font-weight: 600; color: #475569;">施工接收确认数量（米）</span>
               <input v-model.number="superEditForm.receivedQty" type="number" min="0" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空为无" />
             </label>
+            
+            <!-- 智能对齐前置提示区 & 魔术棒 -->
+            <div v-if="['arrived', 'received', 'pending_receive', 'pending_warehouse', 'completed'].includes(superEditForm.status)" style="grid-column: span 2; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
+              <span style="font-size: 13.5px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
+                💡 级联时序凭证对齐提示 (SLA 防爆锁)
+              </span>
+              <p style="margin: 0; font-size: 12.5px; color: #78350f; line-height: 1.5;">
+                您正将订单强改至该状态。为防范大盘时效分析（OTD/在途时长）因凭证缺失爆零崩溃，请核对并补全下方暴露的时间戳凭证。您也可以点击下方魔术棒一键等距自动分布对齐。
+              </p>
+              <button type="button" @click="smartAlignSuperTimestamps" style="align-self: flex-start; padding: 6px 12px; font-size: 12.5px; border: 1px dashed #d97706; background: #fffbeb; color: #d97706; border-radius: 6px; cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
+                🪄 智能时间与数量一键对齐（推荐）
+              </button>
+            </div>
+
+            <!-- 动态级联时间戳输入框 -->
+            <label v-if="['arrived', 'received', 'pending_receive', 'pending_warehouse', 'completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">1. 到货确认时间 (arrived_confirm_at)</span>
+              <input v-model="superEditForm.arrivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label v-if="['received', 'pending_warehouse', 'completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">2. 施工接收时间 (received_confirm_at)</span>
+              <input v-model="superEditForm.receivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label v-if="['completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">3. 库管入库确认时间 (warehouse_confirm_at)</span>
+              <input v-model="superEditForm.warehouseConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+
             <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">发货备注信息</span>
               <textarea v-model.trim="superEditForm.shipRemark" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; height: 60px; resize: vertical;"></textarea>
@@ -1231,27 +1258,73 @@ const superEditForm = ref({
   shipmentNo: '',
   arrivedQty: null,
   receivedQty: null,
+  arrivedConfirmAt: '',
+  receivedConfirmAt: '',
+  warehouseConfirmAt: '',
 })
 
-function openSuperEdit(row) {
-  superEditError.value = ''
-  let formattedTime = ''
-  if (row.shippedAt) {
-    const d = new Date(row.shippedAt)
+function formatToDatetimeLocal(isoString) {
+  if (!isoString) return ''
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) return ''
     const year = d.getFullYear()
     const month = String(d.getMonth() + 1).padStart(2, '0')
     const date = String(d.getDate()).padStart(2, '0')
     const hours = String(d.getHours()).padStart(2, '0')
     const minutes = String(d.getMinutes()).padStart(2, '0')
-    formattedTime = `${year}-${month}-${date}T${hours}:${minutes}`
+    return `${year}-${month}-${date}T${hours}:${minutes}`
+  } catch (e) {
+    return ''
   }
+}
+
+function smartAlignSuperTimestamps() {
+  if (!superEditForm.value.shippedAt) return
+  try {
+    const shippedTime = new Date(superEditForm.value.shippedAt).getTime()
+    if (isNaN(shippedTime)) return
+    
+    // 按照 12小时、6小时、2小时的等距分布进行智能凭证补录与物理顺序防呆自动对齐
+    const arrivedTime = new Date(shippedTime + 12 * 60 * 60 * 1000)
+    const receivedTime = new Date(arrivedTime.getTime() + 6 * 60 * 60 * 1000)
+    const warehouseTime = new Date(receivedTime.getTime() + 2 * 60 * 60 * 1000)
+    
+    const formatTimeObj = (d) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const date = String(d.getDate()).padStart(2, '0')
+      const hours = String(d.getHours()).padStart(2, '0')
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      return `${year}-${month}-${date}T${hours}:${minutes}`
+    }
+    
+    superEditForm.value.arrivedConfirmAt = formatTimeObj(arrivedTime)
+    superEditForm.value.receivedConfirmAt = formatTimeObj(receivedTime)
+    superEditForm.value.warehouseConfirmAt = formatTimeObj(warehouseTime)
+    
+    // 数量也自动按照发货量进行防漏对齐
+    const shipQty = Number(superEditForm.value.shippedQty || 0)
+    if (!superEditForm.value.arrivedQty || superEditForm.value.arrivedQty === '') {
+      superEditForm.value.arrivedQty = shipQty
+    }
+    if (!superEditForm.value.receivedQty || superEditForm.value.receivedQty === '') {
+      superEditForm.value.receivedQty = superEditForm.value.arrivedQty
+    }
+  } catch (e) {
+    console.error('智能时间自动对齐失败:', e)
+  }
+}
+
+function openSuperEdit(row) {
+  superEditError.value = ''
   
   superEditForm.value = {
     deliveryId: row.deliveryId,
     stationId: row.stationId || '',
     pipeModelId: row.pipeModelId || '',
     shippedQty: row.shippedQty || 0,
-    shippedAt: formattedTime,
+    shippedAt: formatToDatetimeLocal(row.shippedAt),
     vehiclePlateNo: row.vehiclePlateNo || '',
     shipRemark: row.shipRemark || '',
     status: row.status || '',
@@ -1259,6 +1332,9 @@ function openSuperEdit(row) {
     shipmentNo: row.shipmentNo || '',
     arrivedQty: row.arrivedQty ?? null,
     receivedQty: row.receivedQty ?? null,
+    arrivedConfirmAt: formatToDatetimeLocal(row.arrivedConfirmAt),
+    receivedConfirmAt: formatToDatetimeLocal(row.receivedConfirmAt),
+    warehouseConfirmAt: formatToDatetimeLocal(row.warehouseConfirmAt),
   }
   showSuperEditModal.value = true
 }
@@ -1268,6 +1344,10 @@ async function saveSuperEdit() {
   superEditSaving.value = true
   try {
     const shippedAtIso = superEditForm.value.shippedAt ? new Date(superEditForm.value.shippedAt).toISOString() : new Date().toISOString()
+    const arrivedConfirmAtIso = superEditForm.value.arrivedConfirmAt ? new Date(superEditForm.value.arrivedConfirmAt).toISOString() : null
+    const receivedConfirmAtIso = superEditForm.value.receivedConfirmAt ? new Date(superEditForm.value.receivedConfirmAt).toISOString() : null
+    const warehouseConfirmAtIso = superEditForm.value.warehouseConfirmAt ? new Date(superEditForm.value.warehouseConfirmAt).toISOString() : null
+
     await superUpdateTubeSupplyManagementDelivery(PROJECT_KEY, superEditForm.value.deliveryId, {
       station_id: superEditForm.value.stationId,
       pipe_model_id: superEditForm.value.pipeModelId,
@@ -1280,6 +1360,9 @@ async function saveSuperEdit() {
       shipment_no: superEditForm.value.shipmentNo,
       arrived_qty: superEditForm.value.arrivedQty !== null && superEditForm.value.arrivedQty !== '' ? Number(superEditForm.value.arrivedQty) : null,
       received_qty: superEditForm.value.receivedQty !== null && superEditForm.value.receivedQty !== '' ? Number(superEditForm.value.receivedQty) : null,
+      arrived_confirm_at: arrivedConfirmAtIso,
+      received_confirm_at: receivedConfirmAtIso,
+      warehouse_confirm_at: warehouseConfirmAtIso,
     })
     showSuperEditModal.value = false
     setActionMessage('success', '🎉 超级数据已成功编辑覆盖保存！')

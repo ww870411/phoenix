@@ -156,6 +156,10 @@ class SuperUpdateDeliveryPayload(BaseModel):
     shipment_no: str = ""
     arrived_qty: Optional[float] = None
     received_qty: Optional[float] = None
+    arrived_confirm_at: Optional[datetime] = None
+    received_confirm_at: Optional[datetime] = None
+    warehouse_confirm_at: Optional[datetime] = None
+
 
 
 class WarehouseArrivalConfirmPayload(BaseModel):
@@ -729,6 +733,8 @@ def get_supply_management_demand_summary(
             station_inventory_qty = total_arrived_qty - total_usage_qty
             inbound_pipeline_qty = pending_arrival_qty
             net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - station_inventory_qty, 0)
+            # 统一硬缺口计算：未来三日计划 - 现场库存（由于使用量已做硬性强拦截校验，正常业务下库存永不为负；若异常负值发生，硬缺口将真实包含历史亏空补齐）
+            hard_gap_qty = max(plan_total_qty - station_inventory_qty, 0.0)
             design_qty = float(baseline_row.get("design_qty", 0) or 0)
             purchase_plan_qty = float(baseline_row.get("purchase_plan_qty", 0) or 0)
             if (
@@ -761,6 +767,7 @@ def get_supply_management_demand_summary(
                     "station_inventory_qty": station_inventory_qty,
                     "inbound_pipeline_qty": inbound_pipeline_qty,
                     "net_gap_qty": net_gap_qty,
+                    "hard_gap_qty": hard_gap_qty,
                     "remark": baseline_row.get("remark") or "",
                 }
             )
@@ -917,6 +924,9 @@ def super_update_supply_management_delivery(
         shipment_no=payload.shipment_no,
         arrived_qty=payload.arrived_qty,
         received_qty=payload.received_qty,
+        arrived_confirm_at=payload.arrived_confirm_at,
+        received_confirm_at=payload.received_confirm_at,
+        warehouse_confirm_at=payload.warehouse_confirm_at,
         operator=session.username,
     )
     return {
@@ -1098,7 +1108,8 @@ def get_demand_management_plan_matrix(
         total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
         total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
         
-        station_inventory_qty = max(total_arrived_qty - total_usage_qty, 0)
+        # 允许库存为负数，真实暴露管理问题，不强制锁死为 0
+        station_inventory_qty = total_arrived_qty - total_usage_qty
         inbound_pipeline_qty = pending_arrival_qty
         
         rows.append(
