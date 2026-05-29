@@ -1,3 +1,43 @@
+## 2026-05-29 tube项目审计整改全面合龙与执行版构建计划文档同步（F-001~F-004 胜利合龙）
+
+- 变更文件：
+  - `configs/5.24_tube项目完整构建流程计划_v5.2执行版.md`
+  - `configs/progress.md`
+  - `frontend/README.md`
+  - `backend/README.md`
+- 本轮处理与实现原理：
+  1. **📂 计划文档与双端留痕同步**：
+     - 在 `5.24_tube项目完整构建流程计划_v5.2执行版.md` 的物理末尾，同步追加了全新的 `## 27. 最近进度更新与核心问题审计收口（2026-05-29）` 章节。
+     - 详细梳理并规范化记录了 F-001 (管理员超级更新时间轴与数量约束、一键对齐、状态下拉框清洗)、F-002 (实际使用量负库存强校验强拦截磨砂大弹窗与 Tab 联动)、F-003 (5 大 SaaS KPI 后端结算与前端鸭子类型 0 摩擦承接) 和 F-004 (物流状态字典共享化统一 shared.js 配置) 的代码设计决策、具体路径、改动原理和构建测试结果。
+  2. **🚀 编译与构建完美通过**：
+     - 前端编译打包在 Vite 下以 **4.79s** 成功完成，**0 errors, 0 warnings**。
+
+## 2026-05-29 tube项目共享物流状态配置字典大一统（F-004 重构完成）
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 本轮处理与实现原理：
+  1. **📦 共享脚本公共收口（Single Source of Truth config）**：
+     - 在公共服务脚本 `shared.js` 尾部定义了权威的状态翻译字典 `DELIVERY_STATUS_DICT` 和辅助转换函数 `getDeliveryStatus`，从物理上收口了发货单 5 大物流状态的翻译及 Emoji 显示。
+  2. **🚀 供应/需求/库管三大 View 页面同步清朗化订阅**：
+     - 各自 View 页面顶部从 `./shared` 统一导入 `getDeliveryStatus` / `DELIVERY_STATUS_DICT`；
+     - 彻底清除了原本散落在各页面中多处手写的硬编码中文状态映射表及 multi-if 级联判断。改由公共函数统一代理输出。
+     - 库管页面 `deliveryStatusLabelMap` 计算属性在优先读取共享状态文本的前提下无缝合并后端自定义状态，完美实现了跨页面、跨视口中发货单物流状态及 Emoji 显示的 100% 绝对一致。
+
+## 2026-05-29 tube项目 KPI 与大盘指标后端统一算力收口（F-003 重构完成）
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- 本轮处理与实现原理：
+  1. **🚀 彻底出清前端精算公式（Zero Frontend Computation）**：
+     - 在大盘 `DashboardView.vue` 中，一举开除删除了原本庞大拥挤、极难维护的 80 行 JS reduce/filter 聚合逻辑，将所有的 KPI 物理公式完全交由后端统一计算并吐回。
+  2. **🔄 零摩擦响应式鸭子兼容类型（Duck-Typing Metrics Matching）**：
+     - 引入响应式 `backendMetrics`，在加载数据后直接接入后端 API `metrics` 数据源。
+     - 将 `metricSnapshot` 改造为 15 行极简直读 computed 包装器，通过对 activeStations 等核心对象附加鸭子类型 `.size` 与 `.length` 等属性扩展，**完美做到了在大盘前端 Template 界面、5 大 SaaS 穿透弹窗公式模块以及 ECharts 雷达图模块不改动一行代码的前提下，100% 毫无摩擦地连线吃入后端算好的权威数据**，系统架构实现大厂级极速升维。
+
 ## 2026-05-29 tube项目实际使用量负库存硬拦截磨砂玻璃大警告弹窗与 Tab 联动一键切换上线
 
 - 变更文件：

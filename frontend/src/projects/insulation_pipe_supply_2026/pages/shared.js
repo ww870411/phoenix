@@ -99,3 +99,46 @@ export function useTubePageShell(currentLabel) {
     reloadConfigSummary: loadConfigSummary,
   }
 }
+
+// --- 统一物流状态字典与动作配置 (Unified Logistics Status Dictionary) ---
+export const DELIVERY_STATUS_DICT = {
+  pending_arrival: {
+    label: '🚚 待确认到货',
+    class: 'status-pending-arrival',
+    icon: '🚚',
+    color: '#eab308',
+  },
+  pending_receive: {
+    label: '👷 待施工接收',
+    class: 'status-pending-receive',
+    icon: '👷',
+    color: '#3b82f6',
+  },
+  pending_warehouse: {
+    label: '🏢 待库管确认',
+    class: 'status-pending-warehouse',
+    icon: '🏢',
+    color: '#a855f7',
+  },
+  completed: {
+    label: '✅ 已入库结清',
+    class: 'status-completed',
+    icon: '✅',
+    color: '#10b981',
+  },
+  cancelled: {
+    label: '❌ 已撤销订单',
+    class: 'status-cancelled',
+    icon: '❌',
+    color: '#64748b',
+  }
+}
+
+export function getDeliveryStatus(status) {
+  return DELIVERY_STATUS_DICT[status] || {
+    label: `未知状态 (${status || '—'})`,
+    class: 'status-unknown',
+    icon: '❓',
+    color: '#94a3b8'
+  }
+}

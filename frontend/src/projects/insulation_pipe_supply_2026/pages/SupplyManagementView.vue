@@ -600,7 +600,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   cancelTubeSupplyManagementDelivery,
@@ -898,12 +898,7 @@ function normalizeSummaryRows(rows) {
 }
 
 function getStatusLabel(status) {
-  if (status === 'pending_arrival') return '已发货待到货'
-  if (status === 'pending_receive') return '已到货待接收'
-  if (status === 'pending_warehouse') return '已接收待库管确认'
-  if (status === 'completed') return '已完成'
-  if (status === 'cancelled') return '已撤销'
-  return status || '未知状态'
+  return getDeliveryStatus(status).label
 }
 
 function normalizeDeliveryRows(rows) {

@@ -580,7 +580,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeDemandManagementDeliveryArrival,
@@ -968,14 +968,7 @@ function formatDateTimeDisplay(value) {
 }
 
 function getDeliveryStatusLabel(status) {
-  const mapping = {
-    pending_arrival: '已发货待到货',
-    pending_receive: '已到货待接收',
-    pending_warehouse: '已接收待库管',
-    completed: '已完成',
-    cancelled: '已撤销'
-  }
-  return mapping[status] || status || '—'
+  return getDeliveryStatus(status).label
 }
 
 function normalizeOptionsPayload(response) {

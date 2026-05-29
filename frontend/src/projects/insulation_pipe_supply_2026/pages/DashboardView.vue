@@ -537,79 +537,27 @@ function closeMetricModal() {
 }
 
 // --- 实时多维运营指标精算引擎 (SaaS Real-time Metric Aggregator) ---
-function getSafeSummaryRows() {
-  return Array.isArray(summaryRows.value) ? summaryRows.value : []
-}
-
-function getSafeDeliveries() {
-  return Array.isArray(deliveries.value) ? deliveries.value : []
-}
+const backendMetrics = ref(null)
 
 const metricSnapshot = computed(() => {
-  const rows = getSafeSummaryRows()
-  const deliveryRows = getSafeDeliveries()
-  const completedDeliveries = deliveryRows.filter(d => d && d.status !== 'cancelled' && d.arrived_at && d.shipped_at)
-
-  let onTimeCount = 0
-  completedDeliveries.forEach((d) => {
-    try {
-      const diffHours = (new Date(d.arrived_at) - new Date(d.shipped_at)) / (1000 * 60 * 60)
-      if (!isNaN(diffHours) && diffHours <= 24) {
-        onTimeCount += 1
-      }
-    } catch (e) {
-      console.error('计算 OTD 时效差失败:', e)
-    }
-  })
-
-  const totalInv = rows.reduce((sum, r) => sum + (Number(r?.station_inventory_qty) || 0), 0)
-  const totalFuturePlan = rows.reduce((sum, r) => sum + (Number(r?.future_plan_qty) || 0), 0)
-  const dailyConsumePlan = totalFuturePlan > 0 ? totalFuturePlan / 3 : 0
-  const totalUsage = rows.reduce((sum, r) => sum + (Number(r?.total_usage_qty) || 0), 0)
-  const totalArrived = rows.reduce((sum, r) => sum + (Number(r?.total_arrived_qty) || 0), 0)
-
-  const activeStations = new Set(rows.filter(r => r && (Number(r.design_qty) || 0) > 0).map(r => r.station_id))
-  const stationsWithPlan = new Set(rows.filter(r => r && (Number(r.future_plan_qty) || 0) > 0).map(r => r.station_id))
-  const submittedStationCount = [...stationsWithPlan].filter(id => activeStations.has(id)).length
-  const gapStations = new Set(rows.filter(r => r && (Number(r.hard_gap_qty) || 0) > 0).map(r => r.station_id))
-  const safeStationCount = [...activeStations].filter(id => !gapStations.has(id)).length
-
-  const otd = completedDeliveries.length > 0
-    ? Number(((onTimeCount / completedDeliveries.length) * 100).toFixed(1))
-    : 0
-  const doi = dailyConsumePlan > 0
-    ? Number((totalInv / dailyConsumePlan).toFixed(1))
-    : 0
-  const doiScore = dailyConsumePlan > 0
-    ? Number(Math.min(100, Math.max(0, 100 - Math.max(doi - 3.2, 0) * 10)).toFixed(1))
-    : 0
-  const pcr = activeStations.size > 0
-    ? Number(((submittedStationCount / activeStations.size) * 100).toFixed(1))
-    : 0
-  const ucr = totalArrived > 0
-    ? Number(((totalUsage / totalArrived) * 100).toFixed(1))
-    : 0
-  const ssr = activeStations.size > 0
-    ? Number(((safeStationCount / activeStations.size) * 100).toFixed(1))
-    : 0
-
+  const m = backendMetrics.value
   return {
-    completedDeliveries,
-    onTimeCount,
-    totalInv,
-    totalFuturePlan,
-    dailyConsumePlan,
-    totalUsage,
-    totalArrived,
-    activeStations,
-    submittedStationCount,
-    safeStationCount,
-    otd,
-    doi,
-    doiScore,
-    pcr,
-    ucr,
-    ssr
+    completedDeliveries: { length: m?.completedDeliveriesCount || 0 }, // 兼容 OTD modal
+    onTimeCount: m?.onTimeCount || 0,
+    totalInv: m?.totalInv || 0,
+    totalFuturePlan: m?.totalFuturePlan || 0,
+    dailyConsumePlan: m?.dailyConsumePlan || 0,
+    totalUsage: m?.totalUsage || 0,
+    totalArrived: m?.totalArrived || 0,
+    activeStations: { size: m?.activeStationsCount || 0 }, // 兼容 PCR/SSR activeStations
+    submittedStationCount: m?.submittedStationCount || 0,
+    safeStationCount: m?.safeStationCount || 0,
+    otd: m?.otd || 0,
+    doi: m?.doi || 0,
+    doiScore: m?.doiScore || 0,
+    pcr: m?.pcr || 0,
+    ucr: m?.ucr || 0,
+    ssr: m?.ssr || 0
   }
 })
 
@@ -820,6 +768,7 @@ async function loadDashboardData() {
   try {
     const summaryRes = await getTubeSupplyManagementDemandSummary(projectKey.value)
     summaryRows.value = summaryRes?.rows || []
+    backendMetrics.value = summaryRes?.metrics || null
 
     const deliveriesRes = await getTubeSupplyManagementDeliveries(projectKey.value)
     deliveries.value = Array.isArray(deliveriesRes?.rows) ? deliveriesRes.rows : []

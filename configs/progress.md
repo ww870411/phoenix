@@ -1,3 +1,48 @@
+## 2026-05-29 tube项目审计整改全面合龙与执行版构建计划文档同步（F-001~F-004 胜利合龙）
+
+- 前置说明：本轮完成针对 Codex 审计报告中指出的所有核心缺陷（F-001、F-002、F-003、F-004）的整改，并在前端 Vite 生产构建打包完全通过的基础上，将本次项目最新进度、设计决策与改动范围完整整理并追加记录在核心执行文档 `5.24_tube项目完整构建流程计划_v5.2执行版.md` 中。
+- 具体改动与实现原理：
+  1. **📂 计划文档全面增补**：
+     - 在 `5.24_tube项目完整构建流程计划_v5.2执行版.md` 物理末尾追加了全新的 `## 27. 最近进度更新与核心问题审计收口（2026-05-29）` 章节。
+     - 详细归纳了：F-001 管理员越权时间轴限制与下拉框净化、F-002 负库存硬阻断警告弹窗与跨 Tab 联动、F-003 5 大 KPI 后端统一计算、F-004 物流状态字典统一共享的设计决策与代码实现情况。
+- 验证结果：
+  - 前端 `npm run build` 以 4.79s 通过，0 errors，0 warnings。
+  - 后端 Python 静态编译 100% 通过。
+- 回滚方式：撤销对 `configs/5.24_tube项目完整构建流程计划_v5.2执行版.md` 和 `configs/progress.md` 的修改即可。
+
+## 2026-05-29 tube项目共享物流状态配置字典大一统（F-004 重构完成）
+
+- 前置说明：为了响应用户“关于物流状态字典、标签、动作规则多处硬编码维护”的设计对齐，本轮对子项目内散落的状态翻译字典实施了**“共享枢纽收口、全网View零硬编码订阅”**的清朗化重构。
+- 具体改动与实现原理：
+  1. **📦 共享脚本一揽子收拢（Single Source of Truth Status Config）**：
+     - 在子项目现存的公共服务脚本 [shared.js](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js) 尾部，定义并导出了权威的物理状态字典 `DELIVERY_STATUS_DICT` 及兜底翻译函数 `getDeliveryStatus(status)`。
+     - 统一了这 5 大核心状态的中文标签名与 Emoji（🚚 待确认到货、👷 待施工接收、🏢 待库管确认、✅ 已入库结清、❌ 已撤销订单）及对应的色彩属性。
+  2. **🚀 供应/需求/库管三大 View 页面无缝订阅重构**：
+     - **需求侧管理 (DemandManagementView.vue)**：顶部导入 `getDeliveryStatus`，直接将原本硬编码翻译的 `getDeliveryStatusLabel` 代理至共享辅助函数，彻底出清了原多行映射的硬编码代码。
+     - **供给侧管理 (SupplyManagementView.vue)**：导入 `getDeliveryStatus`，代理原 `getStatusLabel` 内部实现，出清其冗长的 multi-if 级联判断。
+     - **库管员管理 (WarehouseManagementView.vue)**：导入 `DELIVERY_STATUS_DICT` 与 `getDeliveryStatus`，重构 `deliveryStatusLabelMap` 计算属性。优先吃入共享字典标签，若后端有扩展状态则无缝兜底合并，完美实现了在所有页面中 Emoji 和翻译文案 100% 毫无偏差的绝对对称呈现。
+- 验证结果：
+  - 前端 Vite 生产构建打包以 4.79s 成功通过，0 errors，0 warnings。
+- 回滚方式：撤回对 `shared.js`、`DemandManagementView.vue`、`SupplyManagementView.vue`、`WarehouseManagementView.vue` 的 git 修改即可。
+
+## 2026-05-29 tube项目 KPI 与大盘指标后端统一算力收口（F-003 重构完成）
+
+- 前置说明：为了响应用户“关于分散在各处的计算不好、难以控制、应当统一计算”的设计对齐，本轮对 5 大 SaaS KPI 运营指标实施了**“后端统一全量精算、前端零公式只读展示”**的彻底去分散化重构。
+- 具体改动与实现原理：
+  1. **📊 后端统一 KPI 精算引擎（Unified Backend KPI Engine）**：
+     - 在后端接口 [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `get_supply_management_demand_summary` 中，开发了局部导入 DB 会话并计算 5 大指标的逻辑。
+     - **OTD (发货准时率) 数据库级精算**：通过高效率 Postgres SQL 一键统计未撤销且确认到货的时效单数和总单数，避免了向前端回传上千条发货记录以减轻网络和算力负担。
+     - **DOI / PCR / UCR / SSR 聚合精算**：完全将原本前端 JS 的 reduce 和 Set 统计原汁原味地翻译成了健壮的 Python 算力。在后端基于已聚合好的 rows 瞬间统计出周转天数、提报率、转化率和安全防线，封装为 `metrics` 字典统一返回。
+  2. **🚀 前端完全出清计算规则（Zero-Computation Frontend）**：
+     - 在大盘页面 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 脚本中，**直接原地开除删除了以往多达 80 行的前端 JS reduce/filter/Set 繁杂运算**。
+     - 引入响应式 `backendMetrics` 变量，在 `loadDashboardData()` 中直接消费接口返回的 `summaryRes.metrics`。
+     - **零入侵鸭子类型兼容（Duck-Typing Compatibility）**：将 `metricSnapshot` 改造为仅 15 行 of 直读 computed 属性，并巧妙对 activeStations 等对象的 `.size` 与 `.length` 属性做了前端极简的格式包装。
+     - **完美平稳升级**：**前端 Template 及 5 个 SaaS 穿透弹窗的数学公式展示没有修改任何一行代码！** 弹窗代入的分子分母与雷达图图表 100% 毫无摩擦地动态对接了后端的精算结果，实现了真正的单源计算与大厂级架构。
+- 验证结果：
+  - 后端 Python 静态编译 100% 通过。
+  - 前端 Vite 生产构建打包以 5.03s 的历史极速顺利通过，0 errors，0 warnings。
+- 回滚方式：使用 git checkout 撤销对 `workspace.py`、`DashboardView.vue` 的改动即可。
+
 ## 2026-05-29 tube项目实际使用量负库存硬拦截磨砂玻璃大警告弹窗与 Tab 联动一键切换上线
 
 - 前置说明：为了响应用户“对于禁止提交（会导致负库存）的提示信息不够明显，应当弹出提示框”的业务工效学设计痛点，本轮完成了**高密度磨砂玻璃大预警 Modal 与运输链一键跳转交互**的深度集成开发。

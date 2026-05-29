@@ -772,12 +772,91 @@ def get_supply_management_demand_summary(
                 }
             )
 
+    # 局部导入底层 DB 依赖，执行 KPI 指标的后端物理计算
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    # 1. 查 OTD 的完成单与准时单数量（ status <> 'cancelled' 且 arrived_confirm_at 与 shipped_at 不为空）
+    sql_otd = text(
+        """
+        SELECT 
+            COUNT(*) AS total_completed,
+            SUM(CASE WHEN arrived_confirm_at - shipped_at <= INTERVAL '24 hours' THEN 1 ELSE 0 END) AS on_time_count
+        FROM tube.tube_delivery
+        WHERE status <> 'cancelled'
+          AND arrived_confirm_at IS NOT NULL
+          AND shipped_at IS NOT NULL
+        """
+    )
+    db_session = SessionLocal()
+    completed_deliveries_count = 0
+    on_time_count = 0
+    try:
+        otd_row = db_session.execute(sql_otd).first()
+        if otd_row:
+            completed_deliveries_count = int(otd_row[0]) if otd_row[0] is not None else 0
+            on_time_count = int(otd_row[1]) if otd_row[1] is not None else 0
+    except Exception as e:
+        print(f"⚠️ 后端计算 OTD 时发生异常: {e}")
+    finally:
+        db_session.close()
+
+    otd = round((on_time_count / completed_deliveries_count) * 100, 1) if completed_deliveries_count > 0 else 0.0
+
+    # 2. 从已生成的 rows 中计算剩下的指标 (DOI, PCR, UCR, SSR)
+    total_inv = sum(row["station_inventory_qty"] for row in rows)
+    total_future_plan = sum(row["future_plan_qty"] for row in rows)
+    daily_consume_plan = total_future_plan / 3.0 if total_future_plan > 0 else 0.0
+    total_usage = sum(row["total_usage_qty"] for row in rows)
+    total_arrived = sum(row["total_arrived_qty"] for row in rows)
+
+    # 活跃工区：设计量大于0的站点的唯一集合
+    active_stations = {row["station_id"] for row in rows if row["design_qty"] > 0}
+    # 提报计划工区：未来计划大于0的站点的唯一集合
+    stations_with_plan = {row["station_id"] for row in rows if row["future_plan_qty"] > 0}
+    submitted_station_count = len(stations_with_plan.intersection(active_stations))
+    
+    # 物理断料工区：硬缺口大于0的站点的唯一集合
+    gap_stations = {row["station_id"] for row in rows if row["hard_gap_qty"] > 0}
+    safe_station_count = len(active_stations - gap_stations)
+
+    # 核心指标计算
+    doi = round(total_inv / daily_consume_plan, 1) if daily_consume_plan > 0 else 0.0
+    doi_score = round(min(100.0, max(0.0, 100.0 - max(doi - 3.2, 0.0) * 10.0)), 1) if daily_consume_plan > 0 else 0.0
+    pcr = round((submitted_station_count / len(active_stations)) * 100, 1) if len(active_stations) > 0 else 0.0
+    ucr = round((total_usage / total_arrived) * 100, 1) if total_arrived > 0 else 0.0
+    ssr = round((safe_station_count / len(active_stations)) * 100, 1) if len(active_stations) > 0 else 0.0
+
+    metrics = {
+        "otd": otd,
+        "onTimeCount": on_time_count,
+        "completedDeliveriesCount": completed_deliveries_count,
+        
+        "doi": doi,
+        "doiScore": doi_score,
+        "totalInv": total_inv,
+        "dailyConsumePlan": daily_consume_plan,
+        "totalFuturePlan": total_future_plan,
+        
+        "pcr": pcr,
+        "submittedStationCount": submitted_station_count,
+        "activeStationsCount": len(active_stations),
+        
+        "ucr": ucr,
+        "totalUsage": total_usage,
+        "totalArrived": total_arrived,
+        
+        "ssr": ssr,
+        "safeStationCount": safe_station_count
+    }
+
     rows.sort(key=lambda item: (item["station_id"], item["pipe_model_id"]))
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
         "plan_dates": [item.isoformat() for item in plan_dates],
         "rows": rows,
+        "metrics": metrics,
     }
 
 

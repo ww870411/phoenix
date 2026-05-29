@@ -418,7 +418,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeWarehouseDeliveryWarehouse,
@@ -509,8 +509,14 @@ const pipeModelOptions = computed(() => options.value?.pipe_models || [])
 const deliveryStatusOptions = computed(() => options.value?.delivery_status_options || [])
 const deliveryStatusLabelMap = computed(() => {
   const result = {}
+  // 优先使用共享配置中的状态文字，保障多页面 Emoji 与中文一致性
+  for (const key of Object.keys(DELIVERY_STATUS_DICT)) {
+    result[key] = DELIVERY_STATUS_DICT[key].label
+  }
   for (const item of deliveryStatusOptions.value) {
-    result[item.value] = item.label
+    if (!result[item.value]) {
+      result[item.value] = item.label
+    }
   }
   return result
 })
