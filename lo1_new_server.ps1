@@ -19,42 +19,43 @@ Write-Output "INFO: Docker Hub 用户名设置为: $dockerhub_username"
 Write-Output "INFO: 根目录 .dockerignore 已排除 db_data，本地数据库挂载目录不会参与镜像打包。"
 Write-Output "INFO: 开始构建生产环境镜像 (HTTP ONLY 模式)..."
 
-# 使用适配新服务器的构建文件，确保开启 HTTP_ONLY: "true"
-docker-compose -f docker-compose.server_new_server.yml build $services
+Write-Output "INFO: 开始构建生产环境 ARM64 镜像 (backend, web, HTTP ONLY 模式)..."
 
-# 检查构建是否成功
+# 1. 构建后端服务镜像 (ARM64)
+docker build --platform linux/arm64 -t "$dockerhub_username/${backend_image}:$timestamp" -f backend/Dockerfile.prod .
+
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "ERROR: 镜像构建失败，请检查 docker-compose 输出。"
+    Write-Error "ERROR: 构建 $backend_image 失败。"
+    exit 1
+}
+
+# 2. 构建前端 Web 服务镜像 (ARM64, 强制开启 HTTP_ONLY)
+$vite_api_base = if ($env:VITE_API_BASE) { $env:VITE_API_BASE } else { "/api/v1" }
+docker build --platform linux/arm64 --build-arg HTTP_ONLY=true --build-arg VITE_API_BASE=$vite_api_base -t "$dockerhub_username/${web_image}:$timestamp" -f deploy/Dockerfile.web .
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "ERROR: 构建 $web_image 失败。"
     exit 1
 }
 
 Write-Output "SUCCESS: 镜像构建成功。"
-Write-Output "INFO: 开始为镜像添加标签..."
-
-# 为镜像打上 Docker Hub 标签
-docker tag $backend_image "$dockerhub_username/${backend_image}:$timestamp"
-docker tag $web_image "$dockerhub_username/${web_image}:$timestamp"
-
-Write-Output "SUCCESS: 标签添加成功。"
-Write-Output "  - $dockerhub_username/${backend_image}:$timestamp"
-Write-Output "  - $dockerhub_username/${web_image}:$timestamp"
-
 Write-Output "INFO: 开始推送镜像到 Docker Hub..."
 
-# 推送镜像
+# 推送后端镜像
 docker push "$dockerhub_username/${backend_image}:$timestamp"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ERROR: 推送 $backend_image 失败。"
     exit 1
 }
 
+# 推送前端 Web 镜像
 docker push "$dockerhub_username/${web_image}:$timestamp"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ERROR: 推送 $web_image 失败。"
     exit 1
 }
 
-Write-Output "SUCCESS: 所有镜像已成功推送到 Docker Hub!"
+Write-Output "SUCCESS: 所有镜像（ARM64 / HTTP ONLY）已成功推送到 Docker Hub!"
 Write-Output "--------------------------------------------------------"
 Write-Output "请使用以下时间戳更新您的 lo1_new_server.yml 文件中的镜像标签: $timestamp"
 Write-Output "下一步: 请在服务器上执行 'docker-compose -f lo1_new_server.yml up -d'。"

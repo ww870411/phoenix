@@ -9,7 +9,31 @@
   2. **💡 解决方案设计与指导**：
      - 提供了两种打包应对方案：使用 `docker buildx` 进行多架构复合打包直接推送到 Docker Hub（推荐，完美支持 amd64+arm64），或者在打包时显式添加 `--platform linux/arm64` 参数单独编译目标服务器镜像。
 
+## 2026-06-03 新服务器打包脚本 HTTP_ONLY & ARM64 专供版重构
+
+- 变更文件：
+  - `phoenix/lo1_new_server.ps1`
+- 本轮处理与实现原理：
+  1. **🚨 Nginx 缺少 SSL 证书闪退定位**：
+     - 分析了服务器滚动日志，发现新服务器（基于 NPM 架构）由于没有在容器内挂载 SSL 证书，在启动带 SSL (HTTP_ONLY=false) 默认配置的 Web 容器时引发了 `/etc/letsencrypt/options-ssl-nginx.conf` 找不到的致命报错，导致前端容器死循环闪退。
+  2. **💡 纠正打包脚本混淆**：
+     - 指出用户混淆了 `lo1.ps1`（老服务器部署）与 `lo1_new_server.ps1`（新服务器部署，带 HTTP_ONLY）。
+     - 重构了 `lo1_new_server.ps1`。在构建命令中显式加入了 `--platform linux/arm64`（解决服务器平台不匹配错误）和 `--build-arg HTTP_ONLY=true`（剥离容器内 SSL 配置，使 NPM 纯端口转发正常工作），从而一键彻底解开网站打不开的死锁。
+
+## 2026-06-03 生产环境 Docker 滚动日志查看与服务排查指引
+
+
+- 变更文件：
+  - 无（仅提供服务器排障日志查看命令与 502/端口冲突等场景判定方法，同步更新文档说明）
+- 本轮处理与实现原理：
+  1. **📋 制定 Docker 滚动刷新命令**：
+     - 给出了 `docker logs -f --tail 100 <container_name>` 的标准实时跟踪命令.
+     - 给出了生产目录下的 `docker-compose -f lo1.yml logs -f --tail 100` 联合多容器追踪命令。
+  2. **🔍 梳理典型故障日志排查链路**：
+     - 分析了“网站无法打开”时，如何根据 502（Nginx 连接 Refuse）、504（后端超时）及端口冲突等日志报错特征进行秒级故障定性。
+
 ## 2026-06-03 自动化打包脚本防卡死编译优化
+
 
 - 变更文件：
   - `phoenix/lo1.ps1`
