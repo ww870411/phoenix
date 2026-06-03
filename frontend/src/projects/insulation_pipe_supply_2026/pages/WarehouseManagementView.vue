@@ -24,42 +24,133 @@
           <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
         </div>
         <div class="filter-grid">
-          <label class="field">
+          <div class="field custom-multi-select-container" ref="stationDropdownRef">
             <span>换热站</span>
-            <select v-model="filters.stationId" class="input">
-              <option value="">全部换热站</option>
-              <option v-for="item in stationOptions" :key="item.station_id" :value="item.station_id">
-                {{ item.station_name }}（{{ item.station_id }}）
-              </option>
-            </select>
-          </label>
-          <label class="field">
+            <div class="custom-multi-select">
+              <div class="select-trigger" @click="toggleDropdown('station')" :class="{ active: activeDropdown === 'station' }">
+                <span class="trigger-text" :class="{ placeholder: filters.stationIds.length === 0 }">
+                  {{ displaySelectedStations }}
+                </span>
+                <span class="trigger-arrow">▼</span>
+              </div>
+              <transition name="dropdown-fade">
+                <div v-if="activeDropdown === 'station'" class="select-dropdown">
+                  <div class="dropdown-actions">
+                    <button type="button" class="action-btn" @click="selectAllStations">全选</button>
+                    <button type="button" class="action-btn" @click="clearAllStations">清空</button>
+                  </div>
+                  <div class="dropdown-list">
+                    <div 
+                      v-for="item in stationOptions" 
+                      :key="item.station_id" 
+                      class="dropdown-item"
+                      :class="{ selected: filters.stationIds.includes(item.station_id) }"
+                      @click="toggleStation(item.station_id)"
+                    >
+                      <input type="checkbox" :checked="filters.stationIds.includes(item.station_id)" @click.stop="toggleStation(item.station_id)" />
+                      <span class="item-label">{{ item.station_name }}（{{ item.station_id }}）</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+
+          <div class="field custom-multi-select-container" ref="supplyDropdownRef">
             <span>供给主体</span>
-            <select v-model="filters.supplyEntityId" class="input">
-              <option value="">全部供给主体</option>
-              <option v-for="item in supplyEntityOptions" :key="item.entity_id" :value="item.entity_id">
-                {{ item.entity_name }}（{{ item.entity_id }}）
-              </option>
-            </select>
-          </label>
-          <label class="field">
+            <div class="custom-multi-select">
+              <div class="select-trigger" @click="toggleDropdown('supplier')" :class="{ active: activeDropdown === 'supplier' }">
+                <span class="trigger-text" :class="{ placeholder: filters.supplyEntityIds.length === 0 }">
+                  {{ displaySelectedSupplyEntities }}
+                </span>
+                <span class="trigger-arrow">▼</span>
+              </div>
+              <transition name="dropdown-fade">
+                <div v-if="activeDropdown === 'supplier'" class="select-dropdown">
+                  <div class="dropdown-actions">
+                    <button type="button" class="action-btn" @click="selectAllSupplyEntities">全选</button>
+                    <button type="button" class="action-btn" @click="clearAllSupplyEntities">清空</button>
+                  </div>
+                  <div class="dropdown-list">
+                    <div 
+                      v-for="item in supplyEntityOptions" 
+                      :key="item.entity_id" 
+                      class="dropdown-item"
+                      :class="{ selected: filters.supplyEntityIds.includes(item.entity_id) }"
+                      @click="toggleSupplyEntity(item.entity_id)"
+                    >
+                      <input type="checkbox" :checked="filters.supplyEntityIds.includes(item.entity_id)" @click.stop="toggleSupplyEntity(item.entity_id)" />
+                      <span class="item-label">{{ item.entity_name }}（{{ item.entity_id }}）</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+
+          <div class="field custom-multi-select-container" ref="pipeDropdownRef">
             <span>型号</span>
-            <select v-model="filters.pipeModelId" class="input">
-              <option value="">全部型号</option>
-              <option v-for="item in pipeModelOptions" :key="item.pipe_model_id" :value="item.pipe_model_id">
-                {{ item.pipe_model_name }}
-              </option>
-            </select>
-          </label>
-          <label class="field">
+            <div class="custom-multi-select">
+              <div class="select-trigger" @click="toggleDropdown('pipeModel')" :class="{ active: activeDropdown === 'pipeModel' }">
+                <span class="trigger-text" :class="{ placeholder: filters.pipeModelIds.length === 0 }">
+                  {{ displaySelectedPipeModels }}
+                </span>
+                <span class="trigger-arrow">▼</span>
+              </div>
+              <transition name="dropdown-fade">
+                <div v-if="activeDropdown === 'pipeModel'" class="select-dropdown">
+                  <div class="dropdown-actions">
+                    <button type="button" class="action-btn" @click="selectAllPipeModels">全选</button>
+                    <button type="button" class="action-btn" @click="clearAllPipeModels">清空</button>
+                  </div>
+                  <div class="dropdown-list">
+                    <div 
+                      v-for="item in pipeModelOptions" 
+                      :key="item.pipe_model_id" 
+                      class="dropdown-item"
+                      :class="{ selected: filters.pipeModelIds.includes(item.pipe_model_id) }"
+                      @click="togglePipeModel(item.pipe_model_id)"
+                    >
+                      <input type="checkbox" :checked="filters.pipeModelIds.includes(item.pipe_model_id)" @click.stop="togglePipeModel(item.pipe_model_id)" />
+                      <span class="item-label">{{ item.pipe_model_name }}</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+
+          <div class="field custom-multi-select-container" ref="statusDropdownRef">
             <span>状态</span>
-            <select v-model="filters.status" class="input">
-              <option value="">全部状态</option>
-              <option v-for="item in deliveryStatusOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-          </label>
+            <div class="custom-multi-select">
+              <div class="select-trigger" @click="toggleDropdown('status')" :class="{ active: activeDropdown === 'status' }">
+                <span class="trigger-text" :class="{ placeholder: filters.statuses.length === 0 }">
+                  {{ displaySelectedStatuses }}
+                </span>
+                <span class="trigger-arrow">▼</span>
+              </div>
+              <transition name="dropdown-fade">
+                <div v-if="activeDropdown === 'status'" class="select-dropdown">
+                  <div class="dropdown-actions">
+                    <button type="button" class="action-btn" @click="selectAllStatuses">全选</button>
+                    <button type="button" class="action-btn" @click="clearAllStatuses">清空</button>
+                  </div>
+                  <div class="dropdown-list">
+                    <div 
+                      v-for="item in deliveryStatusOptions" 
+                      :key="item.value" 
+                      class="dropdown-item"
+                      :class="{ selected: filters.statuses.includes(item.value) }"
+                      @click="toggleStatus(item.value)"
+                    >
+                      <input type="checkbox" :checked="filters.statuses.includes(item.value)" @click.stop="toggleStatus(item.value)" />
+                      <span class="item-label">{{ item.label }}</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
           <label class="field">
             <span>运输车次号</span>
             <input v-model.trim="filters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" />
@@ -488,14 +579,126 @@ const selectedDeliveryId = ref('')
 const selectedDeliveryIds = ref([])
 
 const filters = reactive({
-  stationId: '',
-  supplyEntityId: '',
-  pipeModelId: '',
-  status: '',
+  stationIds: [],
+  supplyEntityIds: [],
+  pipeModelIds: [],
+  statuses: [],
   shipmentNo: '',
   orderNo: '',
   vehiclePlateNo: '',
 })
+
+// 多选下拉组件状态与控制
+const activeDropdown = ref('')
+const stationDropdownRef = ref(null)
+const supplyDropdownRef = ref(null)
+const pipeDropdownRef = ref(null)
+const statusDropdownRef = ref(null)
+
+const toggleDropdown = (name) => {
+  activeDropdown.value = activeDropdown.value === name ? '' : name
+}
+
+const handleGlobalClick = (e) => {
+  if (activeDropdown.value === 'station' && stationDropdownRef.value && !stationDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'supplier' && supplyDropdownRef.value && !supplyDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'pipeModel' && pipeDropdownRef.value && !pipeDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'status' && statusDropdownRef.value && !statusDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+}
+
+// 选中值格式化回显
+const displaySelectedStations = computed(() => {
+  if (filters.stationIds.length === 0) return '全部换热站'
+  if (filters.stationIds.length === stationOptions.value.length) return '全部换热站（全选）'
+  const names = stationOptions.value
+    .filter(o => filters.stationIds.includes(o.station_id))
+    .map(o => o.station_name)
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个站`
+})
+
+const displaySelectedSupplyEntities = computed(() => {
+  if (filters.supplyEntityIds.length === 0) return '全部供给主体'
+  if (filters.supplyEntityIds.length === supplyEntityOptions.value.length) return '全部供给主体（全选）'
+  const names = supplyEntityOptions.value
+    .filter(o => filters.supplyEntityIds.includes(o.entity_id))
+    .map(o => o.entity_name)
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个主体`
+})
+
+const displaySelectedPipeModels = computed(() => {
+  if (filters.pipeModelIds.length === 0) return '全部型号'
+  if (filters.pipeModelIds.length === pipeModelOptions.value.length) return '全部型号（全选）'
+  const names = pipeModelOptions.value
+    .filter(o => filters.pipeModelIds.includes(o.pipe_model_id))
+    .map(o => o.pipe_model_name)
+  return names.length <= 1 ? names.join(', ') : `已选 ${names.length} 个型号`
+})
+
+const displaySelectedStatuses = computed(() => {
+  if (filters.statuses.length === 0) return '全部状态'
+  if (filters.statuses.length === deliveryStatusOptions.value.length) return '全部状态（全选）'
+  const labels = deliveryStatusOptions.value
+    .filter(o => filters.statuses.includes(o.value))
+    .map(o => o.label)
+  return labels.length <= 2 ? labels.join(', ') : `已选 ${labels.length} 个状态`
+})
+
+// 复选操作函数
+const toggleStation = (id) => {
+  const idx = filters.stationIds.indexOf(id)
+  if (idx > -1) filters.stationIds.splice(idx, 1)
+  else filters.stationIds.push(id)
+}
+const selectAllStations = () => {
+  filters.stationIds = stationOptions.value.map(o => o.station_id)
+}
+const clearAllStations = () => {
+  filters.stationIds = []
+}
+
+const toggleSupplyEntity = (id) => {
+  const idx = filters.supplyEntityIds.indexOf(id)
+  if (idx > -1) filters.supplyEntityIds.splice(idx, 1)
+  else filters.supplyEntityIds.push(id)
+}
+const selectAllSupplyEntities = () => {
+  filters.supplyEntityIds = supplyEntityOptions.value.map(o => o.entity_id)
+}
+const clearAllSupplyEntities = () => {
+  filters.supplyEntityIds = []
+}
+
+const togglePipeModel = (id) => {
+  const idx = filters.pipeModelIds.indexOf(id)
+  if (idx > -1) filters.pipeModelIds.splice(idx, 1)
+  else filters.pipeModelIds.push(id)
+}
+const selectAllPipeModels = () => {
+  filters.pipeModelIds = pipeModelOptions.value.map(o => o.pipe_model_id)
+}
+const clearAllPipeModels = () => {
+  filters.pipeModelIds = []
+}
+
+const toggleStatus = (val) => {
+  const idx = filters.statuses.indexOf(val)
+  if (idx > -1) filters.statuses.splice(idx, 1)
+  else filters.statuses.push(val)
+}
+const selectAllStatuses = () => {
+  filters.statuses = deliveryStatusOptions.value.map(o => o.value)
+}
+const clearAllStatuses = () => {
+  filters.statuses = []
+}
 
 const warehouseForm = reactive({
   remark: '',
@@ -782,20 +985,14 @@ async function loadOptions() {
   const supplyEntityIdSet = new Set(supplyEntityOptions.value.map((item) => String(item.entity_id || '')))
   const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
   const deliveryStatusValueSet = new Set(deliveryStatusOptions.value.map((item) => String(item.value || '')))
-  if (filters.stationId && !stationIdSet.has(filters.stationId)) {
-    filters.stationId = ''
-  }
-  if (filters.supplyEntityId && !supplyEntityIdSet.has(filters.supplyEntityId)) {
-    filters.supplyEntityId = ''
-  }
-  if (filters.pipeModelId && !pipeModelIdSet.has(filters.pipeModelId)) {
-    filters.pipeModelId = ''
-  }
-  if (filters.status && !deliveryStatusValueSet.has(filters.status)) {
-    filters.status = ''
-  }
-  if (!filters.stationId && stationOptions.value.length === 1) {
-    filters.stationId = stationOptions.value[0].station_id
+  
+  filters.stationIds = filters.stationIds.filter(id => stationIdSet.has(id))
+  filters.supplyEntityIds = filters.supplyEntityIds.filter(id => supplyEntityIdSet.has(id))
+  filters.pipeModelIds = filters.pipeModelIds.filter(id => pipeModelIdSet.has(id))
+  filters.statuses = filters.statuses.filter(val => deliveryStatusValueSet.has(val))
+
+  if (filters.stationIds.length === 0 && stationOptions.value.length === 1) {
+    filters.stationIds = [stationOptions.value[0].station_id]
   }
 }
 
@@ -813,10 +1010,10 @@ async function loadDeliveries() {
   pageError.value = ''
   try {
     const payload = await getTubeWarehouseManagementDeliveries(projectKey, {
-      stationId: filters.stationId,
-      supplyEntityId: filters.supplyEntityId,
-      pipeModelId: filters.pipeModelId,
-      status: filters.status,
+      stationId: filters.stationIds.join(','),
+      supplyEntityId: filters.supplyEntityIds.join(','),
+      pipeModelId: filters.pipeModelIds.join(','),
+      status: filters.statuses.join(','),
       shipmentNo: filters.shipmentNo,
       orderNo: filters.orderNo,
       vehiclePlateNo: filters.vehiclePlateNo,
@@ -862,10 +1059,10 @@ async function reloadAll() {
 }
 
 async function resetFilters() {
-  filters.stationId = ''
-  filters.supplyEntityId = ''
-  filters.pipeModelId = ''
-  filters.status = ''
+  filters.stationIds = []
+  filters.supplyEntityIds = []
+  filters.pipeModelIds = []
+  filters.statuses = []
   filters.shipmentNo = ''
   filters.orderNo = ''
   filters.vehiclePlateNo = ''
@@ -1227,6 +1424,152 @@ th.cell-number {
   .topbar { flex-direction: column; }
   .topbar-actions, .filter-actions, .form-actions { width: 100%; justify-content: stretch; }
   .topbar-actions .btn, .filter-actions .btn, .form-actions .btn { width: 100%; }
+}
+
+/* 自定义多选下拉组件样式 */
+.custom-multi-select-container {
+  position: relative;
+}
+.custom-multi-select {
+  position: relative;
+  width: 100%;
+  height: 41px;
+}
+.custom-multi-select .select-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease-in-out;
+  height: 41px;
+}
+.custom-multi-select .select-trigger:hover {
+  border-color: rgba(15, 23, 42, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+.custom-multi-select .select-trigger.active {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.custom-multi-select .trigger-text {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+  max-width: 90%;
+  text-align: left;
+}
+.custom-multi-select .trigger-text.placeholder {
+  color: #94a3b8;
+}
+.custom-multi-select .trigger-arrow {
+  font-size: 10px;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+.custom-multi-select .select-trigger.active .trigger-arrow {
+  transform: rotate(180deg);
+}
+
+.custom-multi-select .select-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  min-width: 240px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  z-index: 50;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.custom-multi-select .dropdown-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  background: #f8fafc;
+}
+.custom-multi-select .action-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.custom-multi-select .action-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+.custom-multi-select .dropdown-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.custom-multi-select .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.custom-multi-select .dropdown-item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.custom-multi-select .dropdown-item.selected {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+.custom-multi-select .dropdown-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+  margin: 0;
+}
+.custom-multi-select .item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  text-align: left;
+}
+
+/* 动效 */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: all 0.2s ease;
+}
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 /* 按钮 Premium 居中与防折行加固 */

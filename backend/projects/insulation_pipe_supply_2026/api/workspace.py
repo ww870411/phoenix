@@ -1057,28 +1057,34 @@ def get_warehouse_management_deliveries(
     _ensure_warehouse_access(session)
     payload = load_tube_config()
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
+    
+    # 逗号分隔解析多选值
+    selected_stations = {s.strip() for s in station_id.split(",") if s.strip()} if station_id else set()
+    selected_statuses = {s.strip() for s in status.split(",") if s.strip()} if status else set()
+    selected_supply_entities = {s.strip() for s in supply_entity_id.split(",") if s.strip()} if supply_entity_id else set()
+    selected_pipe_models = {_normalize_pipe_model_id(s) for s in pipe_model_id.split(",") if s.strip()} if pipe_model_id else set()
+
+    # 在 SQL 层面，我们不传入单选 station_id 和 status，以便我们在 Python 内存中对大盘记录直接做高性能多选集合检索
     rows = list_delivery_records(
         supply_entity_ids=all_supply_entity_ids,
-        station_id=station_id,
-        status=status,
+        station_id="",
+        status="",
     )
     _decorate_delivery_rows(payload, rows)
-    normalized_supply_entity_id = str(supply_entity_id or "").strip()
-    normalized_pipe_model_id = _normalize_pipe_model_id(pipe_model_id)
-    normalized_station_id = str(station_id or "").strip()
-    normalized_status = str(status or "").strip()
+    
     normalized_shipment_no = str(shipment_no or "").strip().upper()
     normalized_order_no = str(order_no or "").strip().upper()
     normalized_vehicle_plate_no = str(vehicle_plate_no or "").strip().upper()
+    
     filtered_rows: List[Dict[str, Any]] = []
     for row in rows:
-        if normalized_supply_entity_id and row["supply_entity_id"] != normalized_supply_entity_id:
+        if selected_supply_entities and row["supply_entity_id"] not in selected_supply_entities:
             continue
-        if normalized_pipe_model_id and row["pipe_model_id"] != normalized_pipe_model_id:
+        if selected_pipe_models and _normalize_pipe_model_id(row["pipe_model_id"]) not in selected_pipe_models:
             continue
-        if normalized_station_id and row["station_id"] != normalized_station_id:
+        if selected_stations and row["station_id"] not in selected_stations:
             continue
-        if normalized_status and row["status"] != normalized_status:
+        if selected_statuses and row["status"] not in selected_statuses:
             continue
         if normalized_shipment_no and str(row.get("shipment_no") or "").strip().upper() != normalized_shipment_no:
             continue
@@ -1088,6 +1094,7 @@ def get_warehouse_management_deliveries(
             continue
         filtered_rows.append(row)
     return {"ok": True, "project_key": PROJECT_KEY, "rows": filtered_rows}
+
 
 
 @router.post("/warehouse-management/deliveries/{delivery_id}/warehouse", summary="库管确认手续闭环")

@@ -1,4 +1,45 @@
+## 2026-06-03 库管台账多选下拉组件高度自适应修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 本轮处理与实现原理：
+  1. **📐 纵向布局拉伸防御**：
+     - 排查了多选 Dropdown 组件在 Flexbox/Grid 联合布局下的拉伸表现。
+     - 判定以前未给子容器设置定高约束，导致单元格在 Grid 默认的 `align-items: stretch` 下被严重向下扯高并产生巨大空白。
+  2. **🔒 双层高度锁死机制**：
+     - 将 `.custom-multi-select .select-trigger` 的高度由 `min-height: 41px` 变更为固定的 `height: 41px`。
+     - 将外层 `.custom-multi-select` 容器同样锁死为 `height: 41px`。通过双层固定高度限制，防止其被宿主 flex 容器拉伸，视觉效果恢复为与普通文本输入框完全等高的紧凑高度（41px）。
+
+## 2026-06-03 库管台账多选筛选功能实现与部署
+
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- 本轮处理与实现原理：
+  1. **🔗 后端多值入参和内存集合过滤**：
+     - 修改了 `get_warehouse_management_deliveries` 发货单列表查询 API。支持 `station_id`, `status`, `supply_entity_id`, `pipe_model_id` 参数以逗号分隔（如 `station_a,station_b`）传入。
+     - 优化了查询性能与逻辑：调用数据库接口时传入空过滤（即拉取全部 500 条数据），改由在 Python 内存中利用 `set.intersection` 的逻辑对大盘行记录进行高效检索，避免了去改造底层复杂的 `list_delivery_records` SQL 逻辑，防止影响到其他页面的调用，保证了安全性。
+  2. **🎨 前端自定义交互多选 Dropdown 模块**：
+     - 废弃了原有的普通 HTML `<select>` 控件，在前端 `WarehouseManagementView.vue` 中实现了带复选框的浮动多选 Dropdown 组件。
+     - 新增了 `filters` 对应属性的多选数组重构（如 `filters.stationIds`），并新增对应的 Computed 回显属性，以 `"换热站A, 换热站B"` 或 `"已选 3 个站"` 的形式在 Trigger 上呈现，提升了视觉精美度与直观性。
+     - 添加了“全选”、“清空”快捷操作按钮，并配置了 `click` 监听器，确保点击外部区域时能够瞬间自动收起下拉面板（Click Outside），符合优秀的前端交互规范。
+     - 增加了配套的 CSS 动画过渡与美观的毛玻璃背景（`backdrop-filter`）阴影面板样式。
+
+## 2026-06-03 库管台账多选筛选功能机制研判
+
+
+- 变更文件：
+  - 无（仅排查筛选机制与代码审计，同步更新文档说明）
+- 本轮处理与实现原理：
+  1. **🔍 前端筛选逻辑审计**：
+     - 分析了 [WarehouseManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue) 中的 `filter-grid` HTML 结构与 `loadDeliveries` API 调用参数。
+     - 确认目前所有的筛选维度（换热站、供给主体、型号、状态、运输车次号、单号、车牌号）均只支持**单值筛选**（使用普通的单选 `<select>` 或单文本框 `<input type="text">`）。
+  2. **🔗 后端 API 兼容性判定**：
+     - 明确指出目前前后端交互使用扁平的键值对参数交互，没有多值数组字段（如 `List[str]` 类型的查询参数），目前不支持多选筛选。
+
 ## 2026-06-03 管道真实规格配置覆写与微服务重启
+
 
 - 变更文件：
   - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
