@@ -1,4 +1,42 @@
+## 2026-06-03 Docker 跨平台 ARM64 部署镜像打包指导
+
+- 变更文件：
+  - 无（仅排查跨平台部署报错并给出一键打包命令，同步更新文档说明）
+- 本轮处理与实现原理：
+  1. **🚨 跨平台 Manifest 缺失诊断**：
+     - 分析了服务器报错 `no matching manifest for linux/arm64/v8 in the manifest list entries`。
+     - 明确指出这是由于本地构建默认采用 amd64 (x86_64) 架构，导致服务器在拉取镜像时找不到对应的 ARM64 分层架构。
+  2. **💡 解决方案设计与指导**：
+     - 提供了两种打包应对方案：使用 `docker buildx` 进行多架构复合打包直接推送到 Docker Hub（推荐，完美支持 amd64+arm64），或者在打包时显式添加 `--platform linux/arm64` 参数单独编译目标服务器镜像。
+
+## 2026-06-03 自动化打包脚本防卡死编译优化
+
+- 变更文件：
+  - `phoenix/lo1.ps1`
+- 本轮处理与实现原理：
+  1. **🚨 绕过 Buildx Bootstrap 挂起问题**：
+     - 用户本地执行时在 `docker buildx inspect --bootstrap` 状态发生网络或环境卡死。
+     - 判定在本地并不需要做 amd64+arm64 双架构联合多级 Manifest 构建，只需要为 ARM64 目标服务器构建单平台架构。
+  2. **🚀 极简 Docker Build --platform 策略**：
+     - 回滚并改写了 `lo1.ps1` 中复杂的 Buildx 构建器指令，变更为直接通过默认引擎执行带有 `--platform linux/arm64` 参数的单平台构建，完美避开了下载 Buildkit 镜像和多环境节点拉起卡死的隐患，速度更稳定且同样生成适配 ARM64 服务器的高性能镜像包。
+
+## 2026-06-03 自动化打包脚本跨平台构建支持升级
+
+
+- 变更文件：
+  - `phoenix/lo1.ps1`
+- 本轮处理与实现原理：
+  1. **🛠️ 引入 Buildx 多平台引擎**：
+     - 审计了 [lo1.ps1](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/lo1.ps1) 原有的 `docker-compose build` 打包命令，确认原命令仅适配 x86/amd64 本地单架构。
+     - 将其升级为 `docker buildx build --platform linux/amd64,linux/arm64` 跨架构构建命令。
+  2. **🚀 构建与推送流程合一**：
+     - 废弃了原脚本在 build 后再次执行 `docker tag` 与 `docker push` 的繁琐过程，直接利用 buildx 引擎的 `--push` 参数一键完成多架构联合清单（Manifest List）的编译并推送到 Docker Hub。
+  3. **🔋 首次运行自动建构兼容**：
+     - 脚本中内置了对 `docker buildx ls` 的字符串正则匹配，若本地不存在名为 `mybuilder` 的跨架构构造器实例，则会自动执行创建与启用，极大提升了本地脚本运行的成功率。
+
 ## 2026-06-03 库管台账多选下拉组件高度自适应修复
+
+
 
 - 变更文件：
   - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
