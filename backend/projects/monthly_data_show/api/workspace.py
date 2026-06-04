@@ -141,8 +141,8 @@ def _build_value_aggregate_sql(*, apply_latest_for_state_items: bool) -> str:
         return sum_expr
     items_literal = ", ".join("'" + x.replace("'", "''") + "'" for x in sorted(LATEST_VALUE_ITEMS))
     latest_expr = (
-        "(ARRAY_AGG(value ORDER BY COALESCE(report_month, date) DESC NULLS LAST, "
-        "date DESC NULLS LAST, operation_time DESC NULLS LAST))[1]"
+        "(ARRAY_AGG(value ORDER BY date DESC NULLS LAST, "
+        "operation_time DESC NULLS LAST))[1]"
     )
     return f"CASE WHEN item IN ({items_literal}) THEN {latest_expr} ELSE {sum_expr} END"
 METRIC_ALIAS_MAP = {
@@ -1712,8 +1712,8 @@ def _fetch_compare_map(
         where_parts.append("period IN :periods")
         where_parts.append("type IN :types")
         where_sql = " AND ".join(where_parts)
-        select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
-        group_by_sql = "item, period, type, unit" if aggregate_companies else "company, item, period, type, unit"
+        select_company_sql = "company"
+        group_by_sql = "company, item, period, type, unit"
         value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=True)
         stmt = text(
             f"""
@@ -1730,6 +1730,8 @@ def _fetch_compare_map(
             """
         ).bindparams(*bind_params)
         rows = session.execute(stmt, params).mappings().all()
+
+        aggregated_base_rows: Dict[Tuple[str, str, str, str, str], dict] = {}
         for row in rows:
             company = str(row.get("company") or "")
             item = str(row.get("item") or "")
@@ -1738,19 +1740,31 @@ def _fetch_compare_map(
             period = str(row.get("period") or "")
             type_value = str(row.get("type") or "")
             unit = str(row.get("unit") or "")
-            key = f"{company}|{item}|{period}|{type_value}|{unit}"
+
+            target_company = "聚合口径" if aggregate_companies else company
+            agg_key = (target_company, item, period, type_value, unit)
+
             raw_value = row.get("value")
             value = _to_float(raw_value) if raw_value is not None else None
-            base_row = {
-                "company": company,
-                "item": item,
-                "period": period,
-                "type": type_value,
-                "unit": unit,
-                "value": value,
-            }
+
+            if agg_key not in aggregated_base_rows:
+                aggregated_base_rows[agg_key] = {
+                    "company": target_company,
+                    "item": item,
+                    "period": period,
+                    "type": type_value,
+                    "unit": unit,
+                    "value": value,
+                }
+            else:
+                if value is not None:
+                    curr_val = aggregated_base_rows[agg_key]["value"]
+                    aggregated_base_rows[agg_key]["value"] = _to_float(curr_val) + value
+
+        for base_row in aggregated_base_rows.values():
             base_rows.append(base_row)
-            if item in selected_base_items:
+            if base_row["item"] in selected_base_items:
+                key = f"{base_row['company']}|{base_row['item']}|{base_row['period']}|{base_row['type']}|{base_row['unit']}"
                 result_map[key] = dict(base_row)
 
         monthly_stmt = text(
@@ -1773,8 +1787,9 @@ def _fetch_compare_map(
             row_date = row.get("date")
             if row_date is None:
                 continue
+            target_company = "聚合口径" if aggregate_companies else str(row.get("company") or "")
             coverage_key = (
-                str(row.get("company") or ""),
+                target_company,
                 str(row.get("item") or ""),
                 str(row.get("period") or ""),
                 str(row.get("type") or ""),
@@ -1868,8 +1883,8 @@ def _fetch_plan_value_map(
             "items": query_base_items,
             "periods": periods,
         }
-        select_company_sql = "'聚合口径'::TEXT AS company" if aggregate_companies else "company"
-        group_by_sql = "item, period, unit" if aggregate_companies else "company, item, period, unit"
+        select_company_sql = "company"
+        group_by_sql = "company, item, period, unit"
         value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=True)
         stmt = text(
             f"""
@@ -1889,25 +1904,38 @@ def _fetch_plan_value_map(
             bindparam("periods", expanding=True),
         )
         rows = session.execute(stmt, params).mappings().all()
-        selected_base_set = set(selected_base_items)
+
+        aggregated_base_rows: Dict[Tuple[str, str, str, str], dict] = {}
         for row in rows:
             company = str(row.get("company") or "")
             item = str(row.get("item") or "")
             period = str(row.get("period") or "")
             unit = str(row.get("unit") or "")
+
+            target_company = "聚合口径" if aggregate_companies else company
+            agg_key = (target_company, item, period, unit)
+
             value_raw = row.get("value")
             value = _to_float(value_raw) if value_raw is not None else None
-            base_rows.append(
-                {
-                    "company": company,
+
+            if agg_key not in aggregated_base_rows:
+                aggregated_base_rows[agg_key] = {
+                    "company": target_company,
                     "item": item,
                     "period": period,
                     "unit": unit,
                     "value": value,
                 }
-            )
-            if item in selected_base_set:
-                result_map[(company, item, period, unit)] = value
+            else:
+                if value is not None:
+                    curr_val = aggregated_base_rows[agg_key]["value"]
+                    aggregated_base_rows[agg_key]["value"] = _to_float(curr_val) + value
+
+        selected_base_set = set(selected_base_items)
+        for base_row in aggregated_base_rows.values():
+            base_rows.append(base_row)
+            if base_row["item"] in selected_base_set:
+                result_map[(base_row["company"], base_row["item"], base_row["period"], base_row["unit"])] = base_row["value"]
 
         monthly_stmt = text(
             f"""
@@ -1931,8 +1959,9 @@ def _fetch_plan_value_map(
             row_date = row.get("date")
             if row_date is None:
                 continue
+            target_company = "聚合口径" if aggregate_companies else str(row.get("company") or "")
             coverage_key = (
-                str(row.get("company") or ""),
+                target_company,
                 str(row.get("item") or ""),
                 str(row.get("period") or ""),
             )
@@ -2524,9 +2553,7 @@ def query_month_data_show(request: QueryRequest):
 
     if run_base_query and (aggregate_companies or aggregate_months):
         value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=aggregate_months)
-        group_fields: List[str] = []
-        if not aggregate_companies:
-            group_fields.append("company")
+        group_fields: List[str] = ["company"]
         group_fields.extend(["item", "unit"])
         if not aggregate_months:
             group_fields.extend(["date", "report_month"])
@@ -2535,7 +2562,7 @@ def query_month_data_show(request: QueryRequest):
         list_sql = text(
             f"""
             SELECT
-                {'\'聚合口径\'::TEXT AS company' if aggregate_companies else 'company'},
+                company,
                 item,
                 unit,
                 {value_agg_sql} AS value,
@@ -2579,20 +2606,68 @@ def query_month_data_show(request: QueryRequest):
         raise HTTPException(status_code=400, detail=f"查询月报数据失败：{exc}") from exc
 
     base_rows_all: List[dict] = []
-    for row in row_mappings:
-        base_rows_all.append(
-            {
-                "company": row.get("company"),
-                "item": row.get("item"),
-                "unit": row.get("unit"),
-                "value": _to_float(row.get("value")) if row.get("value") is not None else None,
-                "date": row.get("date").isoformat() if row.get("date") else None,
-                "period": row.get("period"),
-                "type": row.get("type"),
-                "report_month": row.get("report_month").isoformat() if row.get("report_month") else None,
-                "operation_time": row.get("operation_time").isoformat() if row.get("operation_time") else None,
-            }
-        )
+    if run_base_query and aggregate_companies:
+        aggregated_mappings: Dict[Tuple[str, str, Any, str, str, Any], dict] = {}
+        for row in row_mappings:
+            key = (
+                row.get("item"),
+                row.get("unit"),
+                row.get("date"),
+                row.get("period"),
+                row.get("type"),
+                row.get("report_month")
+            )
+            val_raw = row.get("value")
+            val = _to_float(val_raw) if val_raw is not None else None
+
+            if key not in aggregated_mappings:
+                aggregated_mappings[key] = {
+                    "company": "聚合口径",
+                    "item": row.get("item"),
+                    "unit": row.get("unit"),
+                    "value": val,
+                    "date": row.get("date"),
+                    "period": row.get("period"),
+                    "type": row.get("type"),
+                    "report_month": row.get("report_month"),
+                    "operation_time": row.get("operation_time"),
+                }
+            else:
+                if val is not None:
+                    curr_val = aggregated_mappings[key]["value"]
+                    aggregated_mappings[key]["value"] = _to_float(curr_val) + val
+                    if row.get("operation_time") and aggregated_mappings[key]["operation_time"]:
+                        aggregated_mappings[key]["operation_time"] = max(aggregated_mappings[key]["operation_time"], row.get("operation_time"))
+
+        for row in aggregated_mappings.values():
+            base_rows_all.append(
+                {
+                    "company": row.get("company"),
+                    "item": row.get("item"),
+                    "unit": row.get("unit"),
+                    "value": row.get("value"),
+                    "date": row.get("date").isoformat() if row.get("date") else None,
+                    "period": row.get("period"),
+                    "type": row.get("type"),
+                    "report_month": row.get("report_month").isoformat() if row.get("report_month") else None,
+                    "operation_time": row.get("operation_time").isoformat() if row.get("operation_time") else None,
+                }
+            )
+    else:
+        for row in row_mappings:
+            base_rows_all.append(
+                {
+                    "company": row.get("company"),
+                    "item": row.get("item"),
+                    "unit": row.get("unit"),
+                    "value": _to_float(row.get("value")) if row.get("value") is not None else None,
+                    "date": row.get("date").isoformat() if row.get("date") else None,
+                    "period": row.get("period"),
+                    "type": row.get("type"),
+                    "report_month": row.get("report_month").isoformat() if row.get("report_month") else None,
+                    "operation_time": row.get("operation_time").isoformat() if row.get("operation_time") else None,
+                }
+            )
     base_rows_all = _filter_temperature_rows_by_heating_season(base_rows_all)
 
     calculated_rows = _build_calculated_rows(

@@ -1,3 +1,14 @@
+## 2026-06-04 月报“期末供暖收费面积”等状态值多月与多主体聚合BUG修复实施
+
+- 变更文件：
+  - `backend/projects/monthly_data_show/api/workspace.py`
+- 本轮处理与实现原理：
+  1. **🛠️ 修复“多月份聚合BUG”**：
+     - 在 SQL 的 `ARRAY_AGG` 中排除受上报时间/补录时间干扰的 `COALESCE(report_month, date)`，改写为严格按自然业务日期排序：`ORDER BY date DESC NULLS LAST, operation_time DESC NULLS LAST`。这确保了在跨多月查询时，最新月份（如 12 月）的值会被准确获取。
+  2. **🛠️ 修复“多主体聚合BUG”**：
+     - 将 SQL 层面直接进行合并公司 Group By 的方式变更为在 SQL 层按各公司细粒度分组查询。
+     - 在 `_fetch_compare_map`、`_fetch_plan_value_map` 和 `query_month_data_show` 接口中，针对 `aggregate_companies = True` 的情况，改为在 Python 内存中对各个子公司的最新值做累加求和，以防 SQL 层 Group By + 状态指标切片操作导致其余子公司数据被过滤丢失。
+
 ## 2026-06-03 Docker 跨平台 ARM64 部署镜像打包指导
 
 - 变更文件：
@@ -9,7 +20,17 @@
   2. **💡 解决方案设计与指导**：
      - 提供了两种打包应对方案：使用 `docker buildx` 进行多架构复合打包直接推送到 Docker Hub（推荐，完美支持 amd64+arm64），或者在打包时显式添加 `--platform linux/arm64` 参数单独编译目标服务器镜像。
 
+## 2026-06-03 完整构建流程计划执行版文档同步追加
+
+- 变更文件：
+  - `phoenix/configs/5.24_tube项目完整构建流程计划_v5.2执行版.md`
+- 本轮处理与实现原理：
+  1. **📝 进度内容整理与追加**：
+     - 精准提取了 2026-06-03 里程碑关于“库管台账多选筛选功能实现及部署”、“库管多选下拉组件高度自适应修复”、“生产环境打包脚本防卡死编译优化”和“新服务器 (NPM 架构) 打包脚本 HTTP_ONLY 专供版重构”的技术实现。
+     - 将上述 3 大核心要点整理为第 28 章节，追加至 [5.24_tube项目完整构建流程计划_v5.2执行版.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/configs/5.24_tube%E9%A1%B9%E7%9B%AE%E5%AE%8C%E6%95%B4%E6%9E%84%E5%BB%BA%E6%B5%81%E7%A8%8B%E8%AE%A1%E5%88%92_v5.2%E6%89%A7%E8%A1%8C%E7%89%88.md) 文件的尾部，保证了项目整体开发规约与当前实际交付的代码、配置以及排障结果的高度同步对齐。
+
 ## 2026-06-03 新服务器打包脚本 HTTP_ONLY & ARM64 专供版重构
+
 
 - 变更文件：
   - `phoenix/lo1_new_server.ps1`
