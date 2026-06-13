@@ -43,6 +43,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     create_delivery_record,
     build_delivery_code,
     get_next_shipment_sequence,
+    get_next_order_sequence,
     update_delivery_identifiers,
     get_delivery_record_basic,
     get_shipment_owner,
@@ -59,9 +60,33 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     super_update_delivery_record,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
+from sqlalchemy import text
+from backend.db.database_daily_report_25_26 import SessionLocal
 
 router = APIRouter(tags=[PROJECT_KEY])
 public_router = APIRouter(tags=[PROJECT_KEY])
+
+
+def run_db_migration():
+    session = SessionLocal()
+    try:
+        session.execute(text("ALTER TABLE tube.tube_daily_usage ADD COLUMN IF NOT EXISTS loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0;"))
+        session.execute(text("""
+            ALTER TABLE tube.tube_daily_usage 
+            DROP CONSTRAINT IF EXISTS chk_tube_daily_usage_loss_qty_nonnegative;
+        """))
+        session.execute(text("""
+            ALTER TABLE tube.tube_daily_usage 
+            ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
+        """))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"DB Migration for loss_qty failed (safe to ignore if already applied): {e}")
+    finally:
+        session.close()
+
+run_db_migration()
 
 
 class DemandPlanRecordInput(BaseModel):
@@ -79,6 +104,7 @@ class DemandPlanSavePayload(BaseModel):
 class DemandUsageRecordInput(BaseModel):
     pipe_model_id: str
     usage_qty: float = Field(default=0, ge=0)
+    loss_qty: float = Field(default=0, ge=0)
     remark: str = ""
 
 
@@ -561,8 +587,12 @@ def _create_supply_delivery_entry(
         ship_remark=ship_remark,
         operator=session.username,
     )
+    next_order_sequence = get_next_order_sequence(
+        supply_code=supply_code,
+        shipped_at=shipped_at,
+    )
     order_no = build_order_no(
-        delivery_id,
+        next_order_sequence,
         shipped_at=shipped_at,
         supply_code=supply_code,
         station_code=station_code,
@@ -730,7 +760,8 @@ def get_supply_management_demand_summary(
             total_shipped_qty = float(delivery_aggregate.get("total_shipped_qty", 0) or 0)
             total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
             total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
-            station_inventory_qty = total_arrived_qty - total_usage_qty
+            total_loss_qty = float(usage_aggregate.get("total_loss_qty", 0) or 0)
+            station_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
             inbound_pipeline_qty = pending_arrival_qty
             net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - station_inventory_qty, 0)
             # 统一硬缺口计算：未来三日计划 - 现场库存（由于使用量已做硬性强拦截校验，正常业务下库存永不为负；若异常负值发生，硬缺口将真实包含历史亏空补齐）
@@ -764,6 +795,7 @@ def get_supply_management_demand_summary(
                     "total_shipped_qty": total_shipped_qty,
                     "total_arrived_qty": total_arrived_qty,
                     "total_usage_qty": total_usage_qty,
+                    "total_loss_qty": total_loss_qty,
                     "station_inventory_qty": station_inventory_qty,
                     "inbound_pipeline_qty": inbound_pipeline_qty,
                     "net_gap_qty": net_gap_qty,
@@ -1193,9 +1225,10 @@ def get_demand_management_plan_matrix(
         
         total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
         total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
+        total_loss_qty = float(usage_aggregate.get("total_loss_qty", 0) or 0)
         
         # 允许库存为负数，真实暴露管理问题，不强制锁死为 0
-        station_inventory_qty = total_arrived_qty - total_usage_qty
+        station_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
         inbound_pipeline_qty = pending_arrival_qty
         
         rows.append(
@@ -1283,6 +1316,7 @@ def get_demand_management_usage_sheet(
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
                 "unit": pipe_model.get("unit") or "",
                 "usage_qty": float(usage.get("usage_qty", 0) or 0),
+                "loss_qty": float(usage.get("loss_qty", 0) or 0),
                 "remark": usage.get("remark") or "",
             }
         )

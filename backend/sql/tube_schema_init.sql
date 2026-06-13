@@ -141,13 +141,16 @@ CREATE TABLE IF NOT EXISTS tube.tube_daily_usage (
     station_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     usage_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
     filled_by VARCHAR(128),
     filled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     remark TEXT,
     updated_by VARCHAR(128),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_tube_daily_usage_usage_qty_nonnegative
-        CHECK (usage_qty >= 0)
+        CHECK (usage_qty >= 0),
+    CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative
+        CHECK (loss_qty >= 0)
 );
 
 COMMENT ON TABLE tube.tube_daily_usage IS '每日实际使用长表';

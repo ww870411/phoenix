@@ -1,3 +1,15 @@
+## 2026-06-13 保温管管网项目（tube）自增订单号每天重置与损耗量可用库存业务支持
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (Schema 升级)
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (流水号计算与总量统计)
+  - `backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py` (保存与拦截校验重构)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (API 与启动迁移)
+- 本轮处理与实现原理：
+  1. **🔢 订单号每天按厂家重置为 001**：在 `supply_management_service.py` 新增 `get_next_order_sequence`。在创建订单时使用 SQL 对天前缀匹配进行自增统计流水号。修改 `build_order_no` 的入参，不再采用数据库全局自增主键，实现订单号在跨天重置。
+  2. **🔋 损耗量（loss_qty）存储与自动迁移**：在表 `tube.tube_daily_usage` 中新增字段，并在 `workspace.py` 顶层增加 `run_db_migration()`，以在服务导入时自检测并自动运行 `ALTER TABLE` 语句迁移。
+  3. **⚖️ 可用库存与拦截重构**：将可用库存的数学公式更新为 `累计到货 - 实际使用 - 实际损耗`。在 `save_usage_records` 中，将拦截不变量更改为 `使用+损耗` 的累计消耗量不能大于到货量，超额则触发 422 报错并携带细分使用和损耗的友好信息。
+
 ## 2026-06-04 月报“期末供暖收费面积”等状态值多月与多主体聚合BUG修复实施
 
 - 变更文件：

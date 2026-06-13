@@ -239,8 +239,8 @@
           <section class="card elevated tab-card">
             <div class="panel-title-row">
               <div>
-                <h2>实际使用消耗上报</h2>
-                <span class="panel-hint">登记昨日（{{ usageDate || '今日' }}）各保温管型号的实际消耗量。计量单位：米。</span>
+                <h2>实际消耗与损耗上报</h2>
+                <span class="panel-hint">登记昨日（{{ usageDate || '今日' }}）各保温管型号的实际施工消耗与现场损耗。计量单位：米。</span>
               </div>
               <button
                 type="button"
@@ -248,7 +248,7 @@
                 :disabled="usageLoading || saveUsageLoading || !selectedStationId || !canSubmitCurrentProject"
                 @click="saveUsageSheet"
               >
-                {{ saveUsageLoading ? '提交中...' : '提交实际使用量' }}
+                {{ saveUsageLoading ? '提交中...' : '提交消耗与损耗数据' }}
               </button>
             </div>
 
@@ -261,6 +261,7 @@
                   <tr>
                     <th>型号</th>
                     <th>实际使用量（米）</th>
+                    <th>实际损耗量（米）</th>
                     <th>备注</th>
                   </tr>
                 </thead>
@@ -270,6 +271,16 @@
                     <td>
                       <input
                         v-model.number="row.usedQty"
+                        class="number-input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        :disabled="usageActionLoading || !canSubmitCurrentProject"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        v-model.number="row.lossQty"
                         class="number-input"
                         type="number"
                         min="0"
@@ -502,6 +513,12 @@
       @close="showExportModal = false"
     />
 
+    <!-- 全局操作反馈 Toast 弹窗 (SaaS Premium Floating Toast) -->
+    <div v-if="toastVisible" :class="['global-toast', toastType]">
+      <span class="toast-icon">{{ toastType === 'success' ? '✅' : '❌' }}</span>
+      <span class="toast-text">{{ toastText }}</span>
+    </div>
+
     <!-- 负库存硬性拦截磨砂玻璃警告弹窗 (Premium Glassmorphism Usage Block Modal) -->
     <Transition name="fade">
       <div v-if="blockModalVisible && blockModalData" class="block-modal-overlay">
@@ -526,6 +543,9 @@
             <div class="metric-block-card">
               <span class="lbl">拟上报消耗总量</span>
               <span class="val red-val">{{ formatNumber(blockModalData.expectedTotalUsage) }} <small>米</small></span>
+              <span v-if="blockModalData.expectedLossOnly > 0" class="sub-lbl-detail">
+                (使用: {{ formatNumber(blockModalData.expectedUsageOnly) }} | 损耗: {{ formatNumber(blockModalData.expectedLossOnly) }})
+              </span>
             </div>
             <div class="metric-block-card warning">
               <span class="lbl">超前账面亏空</span>
@@ -625,6 +645,8 @@ function tryParseBlockError(message) {
     const modelMatch = message.match(/规格【(.*?)】/)
     const arrivedMatch = message.match(/累计到货仅为\s*([\d.]+)\s*米/)
     const expectedMatch = message.match(/累计消耗将达到\s*([\d.]+)\s*米/)
+    const useMatch = message.match(/其中实际使用\s*([\d.]+)\s*米/)
+    const lossMatch = message.match(/实际损耗\s*([\d.]+)\s*米/)
     const shortageMatch = message.match(/账面超前亏空\s*([\d.]+)\s*米/)
     const pendingMatch = message.match(/当前正有\s*([\d.]+)\s*米\s*在途物资/)
     
@@ -633,6 +655,8 @@ function tryParseBlockError(message) {
         pipeModelId: modelMatch[1],
         totalArrived: Number(arrivedMatch[1]),
         expectedTotalUsage: Number(expectedMatch[1]),
+        expectedUsageOnly: useMatch ? Number(useMatch[1]) : Number(expectedMatch[1]),
+        expectedLossOnly: lossMatch ? Number(lossMatch[1]) : 0,
         shortage: Number(shortageMatch[1]),
         pendingArrival: Number(pendingMatch[1]),
         rawMessage: message
@@ -819,12 +843,29 @@ function getTodayString(offsetDays = 0) {
   return today.toISOString().slice(0, 10)
 }
 
+const toastVisible = ref(false)
+const toastType = ref('success')
+const toastText = ref('')
+let toastTimer = null
+
 function setActionMessage(type, text) {
   actionMessage.value = { type, text }
+  
+  // 激活浮动 Toast
+  toastType.value = type
+  toastText.value = text
+  toastVisible.value = true
+  
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastVisible.value = false
+  }, 3000)
 }
 
 function clearActionMessage() {
   actionMessage.value = null
+  toastVisible.value = false
+  if (toastTimer) clearTimeout(toastTimer)
 }
 
 function getErrorMessage(error, defaultMsg = '操作失败') {
@@ -897,6 +938,7 @@ function normalizeUsageRows(rows) {
     pipeModelId: row.pipe_model_id || row.pipeModelId,
     pipeModelName: row.pipe_model_name || row.pipeModelName || row.model_name || '未命名型号',
     usedQty: Number(row.usage_qty ?? row.used_qty ?? row.usedQty ?? 0),
+    lossQty: Number(row.loss_qty ?? row.lossQty ?? 0),
     remarks: row.remark || row.remarks || ''
   }))
 }
@@ -1247,6 +1289,7 @@ async function saveUsageSheet() {
     const records = usageRows.value.map((row) => ({
       pipe_model_id: row.pipeModelId,
       usage_qty: Number(row.usedQty || 0),
+      loss_qty: Number(row.lossQty || 0),
       remark: row.remarks || ''
     }))
     await saveTubeDemandManagementUsageSheet(PROJECT_KEY, {
@@ -1254,7 +1297,7 @@ async function saveUsageSheet() {
       usage_date: usageDate.value,
       records
     })
-    setActionMessage('success', '实际使用量已提交。')
+    setActionMessage('success', '实际消耗量及损耗数据已成功上报提交！')
     await loadUsageSheet()
   } catch (error) {
     const errorText = getErrorMessage(error, '提交实际使用量失败')
@@ -1471,6 +1514,15 @@ function getSandboxSuggestion(row) {
   text-align: center;
 }
 
+.metric-block-card .sub-lbl-detail {
+  font-size: 10px;
+  color: #94a3b8;
+  transform: scale(0.9);
+  margin-top: 1px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .metric-block-card .val {
   font-size: 15px;
   font-weight: 700;
@@ -1507,6 +1559,44 @@ function getSandboxSuggestion(row) {
   border: 1px solid #fef3c7;
   border-radius: 12px;
   padding: 16px;
+}
+
+/* 浮动 Toast 弹窗 */
+.global-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid #e2e8f0;
+  padding: 12px 28px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 99999;
+  font-weight: 600;
+  font-size: 14px;
+  animation: toast-in-out 3s ease forwards;
+  pointer-events: none;
+}
+.global-toast.success {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background: rgba(240, 253, 250, 0.96);
+}
+.global-toast.error {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: rgba(254, 242, 242, 0.96);
+}
+@keyframes toast-in-out {
+  0% { top: -60px; opacity: 0; }
+  8% { top: 24px; opacity: 1; }
+  92% { top: 24px; opacity: 1; }
+  100% { top: -60px; opacity: 0; }
 }
 
 .block-logistics-card.has-transit {

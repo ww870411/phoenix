@@ -1,3 +1,33 @@
+## 2026-06-13 保温管管网项目（tube）三大业务痛点优化及供需明细排序调整
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (数据库初始化定义升级)
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (订单号天重置自增与使用统计累加损耗)
+  - `backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py` (使用记录增加损耗量读写与可用库存拦截重构)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (数据库启动自动迁移、Pydantic 输入模型字段追加与订单流水自增和可用库存计算重写)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (大盘图表 Top 5 排序过滤与标题优化)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (填报表格中增加损耗量列、提交 payload 与大警告拦截 Modal 细分显示)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (供需明细行型号次序排序规则重构)
+- 本轮处理与实现原理：
+  1. **📊 优化大盘缺口柱状图**：
+     - 在 [DashboardView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 中，通过对规格型号按三日净缺口（`netGap`）进行降序排序并截取 Top 5，精简同屏图表数据。
+     - 自然消除了横轴 24 种型号标签文本重叠的拥挤问题，使供需缺口的预警指挥焦点更醒目，同时更新了图表标题。
+  2. **🔢 订单号每天按厂家重置为 001**：
+     - 在 [supply_management_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py) 中新增了 `get_next_order_sequence`。在 API 中新建订单时，系统将使用 SQL 对该厂家在当天已生成的订单前缀（`O{supply_code}-%-{date_part}-%`）进行扫描，计算出流水自增序号。
+     - 重构了 `build_order_no` 的入参，使其不再依赖数据库全局连续不可逆的自增主键 `delivery_id`，从而使得订单号（O开头）后缀实现天级别的自增重置（如 001, 002...）。
+  3. **🔋 每日实际使用量填报增加“损耗量”业务链**：
+     - **数据库层**：在 `tube.tube_daily_usage` 表中增加了 `loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0` 字段与对应的非负约束。通过在 [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 挂载自动迁移逻辑 `run_db_migration()`，后端启动时自动追加此字段。
+     - **可用库存计算**：在 backend/api 及 service 的所有累计消耗及库存算力中，可用库存计算公式升级为 `可用库存 = 累计到货 - 累计使用 - 累计损耗`。
+     - **安全拦截校验**：[demand_management_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py) 保存时校验 `预计总消耗（使用+损耗）`，若超出到货则拦截。
+     - **前端填报与弹窗**：[DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 在表格中新增“实际损耗量”列并打通 Payload。当拦截触发时，警告 Modal 正则智能解析出使用与损耗的细分量，并在“拟上报消耗总量”指标卡下以小标细节优雅呈现。
+     - **交互体验重构（重命名与悬浮 Toast）**：填报板块和提交按钮分别重命名为更契合的“实际消耗与损耗上报”与“提交消耗与损耗数据”。为解决由于原提示文字位于页面最顶部导致用户滚屏填报时看不见保存结果的问题，重构了 `setActionMessage` 反馈消息，在页面最顶层插入浮动于视口中央上方的 ✅ 成功/❌ 失败 Floating Toast 弹窗（3秒自动渐隐），大幅提升了现场填报可用性。
+  4. **📐 保温管供需明细次序对齐**：
+     - 在 [SupplyManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中，摒弃了原本按拼音字典序进行 `localeCompare` 排序的汇总逻辑，以及明细列表默认接收后端无序结果的行为。
+     - 开发了配置优先级位置匹配器 `getPipeModelPos` 和 `getStationPos`，根据主配置摘要中拉取到的型号 `pipeModelOptions` 索引位置，实现了 100% 精确的级联排序约束（汇总行严格按配置顺序升序排列；逐站明细行以配置换热站顺序为第一主轴，站内型号以配置顺序为第二主轴），使各端表格排版视觉次序完全大一统。
+- 验证结果：
+  - 后端 Python 代码编译通过，无任何语法或静态检查错误。
+  - 前端 Vite 生产环境打包以 6.76s 成功通过。
+
 ## 2026-06-04 月报“期末供暖收费面积”等状态值多月与多主体聚合BUG修复实施
 
 - 变更文件：

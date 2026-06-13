@@ -124,6 +124,7 @@ def list_usage_records(station_id: str, usage_date: date) -> Dict[str, Dict[str,
         SELECT
             pipe_model_id,
             usage_qty,
+            loss_qty,
             remark
         FROM tube.tube_daily_usage
         WHERE station_id = :station_id
@@ -137,6 +138,7 @@ def list_usage_records(station_id: str, usage_date: date) -> Dict[str, Dict[str,
         return {
             _normalize_pipe_model_id(row["pipe_model_id"]): {
                 "usage_qty": float(row["usage_qty"]) if row["usage_qty"] is not None else None,
+                "loss_qty": float(row["loss_qty"]) if row["loss_qty"] is not None else None,
                 "remark": row["remark"] or "",
             }
             for row in rows
@@ -155,6 +157,7 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             station_id,
             pipe_model_id,
             usage_qty,
+            loss_qty,
             filled_by,
             filled_at,
             remark,
@@ -166,6 +169,7 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             :station_id,
             :pipe_model_id,
             :usage_qty,
+            :loss_qty,
             :filled_by,
             NOW(),
             :remark,
@@ -175,6 +179,7 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
         ON CONFLICT (usage_date, station_id, pipe_model_id)
         DO UPDATE SET
             usage_qty = EXCLUDED.usage_qty,
+            loss_qty = EXCLUDED.loss_qty,
             remark = EXCLUDED.remark,
             updated_by = EXCLUDED.updated_by,
             updated_at = NOW()
@@ -187,6 +192,10 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             usage_qty = float(item["usage_qty"])
             if usage_qty < 0:
                 raise HTTPException(status_code=422, detail="实际使用量不能为负数")
+            
+            loss_qty = float(item.get("loss_qty") or 0.0)
+            if loss_qty < 0:
+                raise HTTPException(status_code=422, detail="实际损耗量不能为负数")
             
             pipe_model_id = _normalize_pipe_model_id(item["pipe_model_id"])
 
@@ -204,10 +213,10 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             arrived_row = session.execute(sql_arrived, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
             total_arrived = float(arrived_row[0]) if arrived_row and arrived_row[0] is not None else 0.0
 
-            # 2. 除去今日所填之外的历史累计使用量之和
+            # 2. 除去今日所填之外的历史累计使用量与损耗量之和
             sql_usage_before = text(
                 """
-                SELECT SUM(usage_qty) AS total
+                SELECT SUM(usage_qty) AS total_use, SUM(loss_qty) AS total_loss
                 FROM tube.tube_daily_usage
                 WHERE station_id = :station_id
                   AND pipe_model_id = :pipe_model_id
@@ -218,12 +227,15 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
                 sql_usage_before, 
                 {"station_id": station_id, "pipe_model_id": pipe_model_id, "usage_date": usage_date}
             ).first()
-            total_usage_before = float(usage_before_row[0]) if usage_before_row and usage_before_row[0] is not None else 0.0
+            total_use_before = float(usage_before_row[0]) if usage_before_row and usage_before_row[0] is not None else 0.0
+            total_loss_before = float(usage_before_row[1]) if usage_before_row and usage_before_row[1] is not None else 0.0
 
-            expected_total_usage = total_usage_before + usage_qty
+            expected_total_usage = total_use_before + usage_qty
+            expected_total_loss = total_loss_before + loss_qty
+            expected_total_consumption = expected_total_usage + expected_total_loss
 
-            # 3. 负库存硬性拦截校验：累计消耗量不能大于账面累计到货量
-            if expected_total_usage > total_arrived:
+            # 3. 负库存硬性拦截校验：累计消耗量（使用+损耗）不能大于账面累计到货量
+            if expected_total_consumption > total_arrived:
                 # 计算在途待到货量
                 sql_pending = text(
                     """
@@ -237,14 +249,15 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
                 pending_row = session.execute(sql_pending, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
                 pending_arrival = float(pending_row[0]) if pending_row and pending_row[0] is not None else 0.0
                 
-                shortage = expected_total_usage - total_arrived
+                shortage = expected_total_consumption - total_arrived
                 raise HTTPException(
                     status_code=422,
                     detail=(
                         f"⚠️ 提交失败：现场可用账面库存不足！保温管规格【{pipe_model_id}】累计到货仅为 {total_arrived:.1f} 米，"
-                        f"但若保存本次使用量填报，累计消耗将达到 {expected_total_usage:.1f} 米（账面超前亏空 {shortage:.1f} 米）。\n"
+                        f"但若保存本次填报，累计消耗将达到 {expected_total_consumption:.1f} 米（其中实际使用 {expected_total_usage:.1f} 米，"
+                        f"实际损耗 {expected_total_loss:.1f} 米，账面超前亏空 {shortage:.1f} 米）。\n"
                         f"🚚 运输信息提示：当前正有 {pending_arrival:.1f} 米在途物资（已发货待到货确认）。"
-                        f"请先对已到现场的物资执行【到货确认】以补充账面库存，再返回提交实际使用量！"
+                        f"请先对已到现场的物资执行【到货确认】以补充账面库存，再返回提交实际填报数据！"
                     )
                 )
 
@@ -254,6 +267,7 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
                     "station_id": station_id,
                     "pipe_model_id": pipe_model_id,
                     "usage_qty": usage_qty,
+                    "loss_qty": loss_qty,
                     "filled_by": operator,
                     "remark": _normalize_text(item.get("remark")),
                     "updated_by": operator,

@@ -748,6 +748,16 @@ const filteredSummaryRows = computed(() => {
   return pipeModelFilteredSummaryRows.value.filter((row) => row.stationId === supplyDemandViewMode.value)
 })
 
+const getStationPos = (stationId) => {
+  const idx = stationOptions.value.findIndex(item => item.station_id === stationId)
+  return idx === -1 ? 9999 : idx
+}
+
+const getPipeModelPos = (pipeModelId) => {
+  const idx = pipeModelOptions.value.findIndex(item => item.pipe_model_id === pipeModelId)
+  return idx === -1 ? 9999 : idx
+}
+
 const aggregatedSummaryRows = computed(() => {
   const grouped = new Map()
   filteredSummaryRows.value.forEach((row) => {
@@ -773,18 +783,25 @@ const aggregatedSummaryRows = computed(() => {
     existing.netGapQty += Number(row.netGapQty || 0)
     grouped.set(row.pipeModelId, existing)
   })
-  return Array.from(grouped.values()).sort((a, b) => a.pipeModelName.localeCompare(b.pipeModelName, 'zh-CN'))
+  return Array.from(grouped.values()).sort((a, b) => getPipeModelPos(a.pipeModelId) - getPipeModelPos(b.pipeModelId))
 })
 
 const supplyDemandTableRows = computed(() => {
   if (supplyDemandViewMode.value === 'summary') {
     return aggregatedSummaryRows.value
   }
-  return filteredSummaryRows.value.map((row) => ({
+  const list = filteredSummaryRows.value.map((row) => ({
     ...row,
     rowKey: `${row.stationId}-${row.pipeModelId}`,
     scopeLabel: row.stationName,
   }))
+  return list.sort((a, b) => {
+    const stationDiff = getStationPos(a.stationId) - getStationPos(b.stationId)
+    if (stationDiff !== 0) {
+      return stationDiff
+    }
+    return getPipeModelPos(a.pipeModelId) - getPipeModelPos(b.pipeModelId)
+  })
 })
 
 const supplyDemandTableHint = computed(() => {

@@ -120,7 +120,7 @@
         <div class="charts-container">
           <!-- 图表一：各保温管型号供需堆叠柱状图 -->
           <div class="chart-wrapper">
-            <div class="chart-title">📏 保温管型号供需及三日缺口分布 (m)</div>
+            <div class="chart-title">📏 保温管型号供需及三日缺口分布 (三日净缺口 Top 5)</div>
             <div ref="chartContainer1" class="echarts-dom"></div>
             <div v-if="!hasEcharts" class="chart-placeholder">ECharts 全局对象未加载</div>
           </div>
@@ -1113,7 +1113,10 @@ function renderCharts() {
       modelsMap[modelId].netGap += row.net_gap_qty || 0
     })
 
+    // 仅展示三日净缺口排名前 5 的型号规格，避免横轴文本堆叠
     const mList = Object.values(modelsMap)
+      .sort((a, b) => b.netGap - a.netGap)
+      .slice(0, 5)
     
     const option1 = {
       tooltip: {

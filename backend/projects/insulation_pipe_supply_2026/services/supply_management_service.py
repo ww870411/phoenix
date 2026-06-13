@@ -131,7 +131,8 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
         SELECT
             station_id,
             pipe_model_id,
-            SUM(usage_qty) AS total_usage_qty
+            SUM(usage_qty) AS total_usage_qty,
+            SUM(loss_qty) AS total_loss_qty
         FROM tube.tube_daily_usage
         WHERE usage_date < :show_date
         GROUP BY station_id, pipe_model_id
@@ -144,7 +145,8 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
         for row in rows:
             key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
             result[key] = {
-                "total_usage_qty": float(row["total_usage_qty"]) if row["total_usage_qty"] is not None else 0,
+                "total_usage_qty": float(row["total_usage_qty"]) if row["total_usage_qty"] is not None else 0.0,
+                "total_loss_qty": float(row["total_loss_qty"]) if row["total_loss_qty"] is not None else 0.0,
             }
         return result
     finally:
@@ -485,8 +487,43 @@ def get_next_shipment_sequence(
         session.close()
 
 
+def get_next_order_sequence(
+    *,
+    supply_code: str = "",
+    shipped_at: Optional[datetime] = None,
+) -> int:
+    normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
+    beijing_shipped_at = _to_beijing_time(shipped_at)
+    date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
+    if not date_part:
+        return 1
+    order_prefix_pattern = f"O{normalized_supply_code}-%-{date_part}-%"
+    sql = text(
+        """
+        SELECT order_no
+        FROM tube.tube_delivery
+        WHERE order_no LIKE :pattern
+        ORDER BY order_no DESC
+        LIMIT 1
+        """
+    )
+    session = SessionLocal()
+    try:
+        row = session.execute(sql, {"pattern": order_prefix_pattern}).mappings().first()
+        if not row:
+            return 1
+        order_no = _normalize_text(row["order_no"])
+        seq_text = order_no.rsplit("-", 1)[-1]
+        seq_value = int(seq_text)
+        return max(seq_value + 1, 1)
+    except Exception:
+        return 1
+    finally:
+        session.close()
+
+
 def build_order_no(
-    delivery_id: int,
+    sequence_no: int,
     shipped_at: Optional[datetime] = None,
     supply_code: str = "",
     station_code: str = "",
@@ -495,7 +532,7 @@ def build_order_no(
     normalized_station_code = _normalize_text(station_code).upper() or "X"
     beijing_shipped_at = _to_beijing_time(shipped_at)
     date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
-    seq_part = f"{int(delivery_id):03d}"
+    seq_part = f"{int(sequence_no):03d}"
     if date_part:
         return f"O{normalized_supply_code}-{normalized_station_code}-{date_part}-{seq_part}"
     return f"O{normalized_supply_code}-{normalized_station_code}-{seq_part}"
