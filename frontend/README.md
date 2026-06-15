@@ -1,3 +1,82 @@
+## 2026-06-15 月报数据展示项目（monthly_data_show）CSV 导出文件名秒级时间戳后缀支持
+
+- 变更文件：
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` (在 `downloadExtractedCsv`、`exportStandardCompareCsv` 和 `downloadCompareResultCsv` 三处导出 CSV 的函数中，将文件名尾部附加当前的秒级时间戳 `_YYYYMMDD_HHMMSS`，并去除可能已存在的历史时间戳，避免重复累加，从而防止文件名冲突。)
+- 本轮处理与实现原理：
+  1. **🕒 导出文件名秒级时间戳防重名**：
+     - 重构了前端三处下载/导出 CSV 的入口函数中的文件名格式。将原有的文件名后缀升级为本地时间 `YYYYMMDD_HHMMSS` 格式的秒级复合时间戳。
+     - 每次执行导出时，会先通过正则规则过滤掉已存在的历史时间戳后缀，然后再拼接当前最新秒级时间戳，防范同名重载冲突。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志导出 CSV 文件名秒级时间戳后缀支持
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在 handleExportLogs 导出处理函数中，将 a.download 文件名格式升级为 `operation_logs_Ymd_HMS.csv` 格式以支持秒级时间戳)
+- 本轮处理与实现原理：
+  1. **🕒 导出文件名秒级时间戳防重名**：
+     - 重构了前端 `a.download` 参数中的文件名格式。将原有的以天为精度的日期后缀（如 `operation_logs_2026-06-15.csv`）升级为本地时间 `YYYYMMDD_HHMMSS` 格式的秒级复合时间戳。
+     - 避免了多次重复导出日志时本地下载目录下产生文件重名覆盖冲突的问题。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志 IP 列合并展示与 fixed 气泡定位修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (将原本独立的“IP地址”列物理移除，合并至时间列内展示；重构 togglePopover 定位算法及 template 底部 Popover 气泡组件，彻底解决了 absolute 定位受阻于祖先容器而导致坐标漂移的缺陷。)
+- 本轮处理与实现原理：
+  1. **🎯 修复 absolute 定位漂移（Popver 物理悬浮上线）**：
+     - 将 Popover 气泡及遮罩层的样式完全重塑为 `position: fixed`。利用 fixed 基于视口本身定位的特性，并在 `togglePopover` 算法中彻底剥离 `scrollTop`/`scrollLeft` 的坐标累加。实现了在任何嵌套层级、相对定位及滚动视口下都 100% 精准、绝对自洽悬浮在被点击 td 正上方 `8px` 位置的完美气泡浮层。
+  2. **📐 IP 地址展示列移位合并至时间列**：
+     - 将原本独立的“IP地址”列彻底移除。合并至第一列“时间与IP”中，在具体的时间字符串下方另起一行以精致灰小字（IP: XXX.XXX.XXX.XXX）呈现。极大节省了横向空间，为核心操作详情字段腾退了富余的横向排版宽度，使大表视觉体验更清爽。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志详情单行截断与Popover气泡交互开发
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (重构“操作详情”td 单元格样式，加 max-width、white-space nowrap 和 overflow ellipsis 截断；定义了 activePopoverLog, popoverStyle 变量和 togglePopover 控制定位方法；并在页面 template 底部加入了绝对定位的气泡提示浮层及透明关闭遮罩 DOM 结构。)
+- 本轮处理与实现原理：
+  1. **📐 操作详情列单行截断与下划线交互提示**：
+     - 为防止过长的操作描述撑开表格行的纵向高度，对其设置了最大宽度限制 (`max-width: 240px`)，超出部分隐藏并以三个省略点展示 (`text-overflow: ellipsis`)。
+     - 在文本下加了淡灰色虚线下划线 (`border-bottom: 1px dashed #cbd5e1`)，且配置了 hover 鼠标悬停变蓝的平滑色彩过渡动效，直观传达“此处可点击展开”的强烈交互隐喻。
+  2. **🌐 全局单例悬浮定位 Popover 气泡开发**：
+     - 限制表格行高度的同时，开发了基于 `getBoundingClientRect()` 和滚动偏移量动态算力的页面级绝对定位气泡。
+     - 气泡中带有向下的指向小三角，动态计算并精准漂浮在被点击 td 的水平居中、纵向垂直偏上 8px 的位置。
+  3. **✨ 极简空白处点击关闭防吞逻辑**：
+     - 在气泡底层铺设了 `z-index: 9990` 的全屏透明遮罩层 (`popover-overlay`)。用户在阅读完详情后，点击页面中任何空白或非气泡区域，即可瞬间将 `activePopoverLog` 状态自动归零收起，交互流畅自洽。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志 IP 地址展示列添加
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在操作审计日志列表表格中，在操作人和类型列之间新增了“IP地址”列展示，优雅回显 log.client_ip)
+- 本轮处理与实现原理：
+  1. **🎨 审计日志表格新增 IP 地址列**：
+     - 在 `GlobalManagementView.vue` 审计日志的 thead 和 tbody 中插缝增加了“IP地址”列展示。
+     - 使用 monospace 等宽字体排版并限制列宽，让操作日志的网格看起来极其匀称专业，并且在没有记录 IP 时自动优雅回显为 `—`。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志组件标签修复与明亮卡片美化
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (修复 v-else 标签未闭合的 Vite 编译阻塞，并将物理操作与配置审计日志卡片、表格、分页栏以及 Diff 对比弹窗的暗色调硬编码样式重构为高雅的明亮现代设计风格)
+- 本轮处理与实现原理：
+  1. **🛠️ 修复 v-else 标签未闭合**：
+     - 解决了在 `activeTab === 'audit'` 时由于 `div v-else` 标签闭合缺失引发的前端 Vite 编译 SyntaxError。在 `</section>` 前面加入了一个闭合的 `</div>`，彻底打通前端发布管线。
+  2. **🎨 审计日志表格与分页栏美化重构**：
+     - 彻底清理了操作审计日志选项卡中的大量深色硬编码，全部重塑为高水准明亮淡雅卡片风。
+     - 优化表格样式：表格行边框重构为浅灰色 (`border-bottom: 1px solid #e2e8f0`)，操作详情文本颜色由原本暗色背景下的灰白 `#ccc` 改为高对比度的深石墨灰 `#334155`，使得白底背景下可读性大大增强。
+     - 增加了表格行的 hover 悬浮变色动效 (`#f8fafc`)。
+     - 分页栏底色和文本色更改为清透淡雅的 `#f8fafc` 和 `#475569`，分页按钮替换为统一规范的系统明亮鬼魅按钮 (`class="btn ghost compact-btn"`)。
+  3. **🔍 数据快照 Diff 弹窗明亮红绿配色重塑**：
+     - 弹窗蒙层背景修改为温润的毛玻璃半透明层 (`background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(8px)`)。
+     - 弹窗卡片背景整体采用纯白亮色设计 (`background: #ffffff; border: 1px solid #e2e8f0;`)。
+     - 变更前后对比窗口彻底告别原本全黑的代码展示块。变更前 (Before) 卡片采用淡雅温和的红色系 (`background: #fff5f5; border: 1px solid #fca5a5; color: #991b1b;`)；变更后 (After) 卡片采用清爽温和的绿色系 (`background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;`)。以鲜明的高对比红绿视觉语言映射 JSON 变更对比，界面极富现代感。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志系统前端实现
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (新增 getTubeAuditLogs 获取审计日志请求适配器)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (全局管理面板中新增审计日志 Tab 视图、多条件过滤、分页器及 Before/After 格式化 JSON Diff 模态弹窗)
+- 本轮处理与实现原理：
+  1. **🔗 请求集成**：在 `api.js` 中新增了 `getTubeAuditLogs`。基于 `authAwareFetch` 规范和 `URLSearchParams` 将 actionType, operator, startDate, endDate 等过滤条件连同分页参数向后端发送。
+  2. **🎨 侧边控制台新增 Tab**：在 `GlobalManagementView.vue` 侧边栏中追加了“📜 操作审计日志”选项，且与大盘整体响应式同步。
+  3. **📊 日志明细列表与多维过滤**：实现由 `auditFilters` 驱动的类型、操作人、起止日期过滤栏，支持在表单直接模糊匹配。列表行数据展示了人性化中英 Emoji 动作状态对照。
+  4. **🔍 变更快照 JSON Diff 对比弹窗**：在页面最底层集成了基于 `diffModalVisible` 的 `.modal-overlay` 磨砂毛玻璃遮罩。用户点击“查看 Diff”时，弹窗以 1:1 双栏（Before 红色、After 绿色）优雅形式格式化呈现操作前后的 JSON 数据快照差异，直观暴露所有配置修改和单据覆写细节，极具工业级质感。
+
 ## 2026-06-13 保温管管网项目（tube）大盘 Top 5 缺口筛选与实际填报损耗量功能支持
 
 - 变更文件：

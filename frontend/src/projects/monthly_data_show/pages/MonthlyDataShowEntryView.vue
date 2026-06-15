@@ -633,7 +633,20 @@ function downloadExtractedCsv() {
   const url = URL.createObjectURL(lastExtractedCsvFile.value)
   const link = document.createElement('a')
   link.href = url
-  link.download = lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv'
+  // 增加导出时间（至秒），避免文件名冲突
+  const originalName = lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv'
+  let baseName = originalName.replace(/\.csv$/i, '')
+  // 去除已有的秒级时间戳后缀，避免重复累加
+  baseName = baseName.replace(/_\d{8}_\d{6}$/, '')
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`
+  link.download = `${baseName}_${timestamp}.csv`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
@@ -893,9 +906,19 @@ async function exportStandardCompareCsv() {
     const blob = new Blob([`\uFEFF${compareCsv}`], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    const baseName = String(lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv').replace(/\.csv$/i, '')
+    let baseName = String(lastExtractedCsvFile.value.name || 'monthly_data_show_extract.csv').replace(/\.csv$/i, '')
+    // 去除已有的秒级时间戳后缀，避免重复累加
+    baseName = baseName.replace(/_\d{8}_\d{6}$/, '')
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    const ss = String(now.getSeconds()).padStart(2, '0')
+    const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`
     link.href = url
-    link.download = `${baseName}_company_item_compare.csv`
+    link.download = `${baseName}_company_item_compare_${timestamp}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -945,7 +968,20 @@ function downloadCompareResultCsv() {
   const url = URL.createObjectURL(lastCompareResultFile.value)
   const link = document.createElement('a')
   link.href = url
-  link.download = lastCompareResultFile.value.name || 'monthly_data_show_compare_diagnostics.csv'
+  // 增加导出时间（至秒），避免文件名冲突
+  const originalName = lastCompareResultFile.value.name || 'monthly_data_show_compare_diagnostics.csv'
+  let baseName = originalName.replace(/\.csv$/i, '')
+  // 去除已有的秒级时间戳后缀，避免重复累加
+  baseName = baseName.replace(/_\d{8}_\d{6}$/, '')
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`
+  link.download = `${baseName}_${timestamp}.csv`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

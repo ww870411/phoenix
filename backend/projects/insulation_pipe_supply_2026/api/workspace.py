@@ -8,8 +8,15 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+def _get_client_ip(request: Request) -> str:
+    # 优先从 X-Forwarded-For 获取（代理情况）
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 from backend.services.auth_manager import AuthSession, get_current_session
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
@@ -60,6 +67,10 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     super_update_delivery_record,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
+from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
+    save_operation_log,
+    query_operation_logs,
+)
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 
@@ -79,14 +90,36 @@ def run_db_migration():
             ALTER TABLE tube.tube_daily_usage 
             ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
         """))
+        
+        # 2026-06-15 操作审计日志表自动初始化
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tube.operation_logs (
+                id SERIAL PRIMARY KEY,
+                project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
+                operator VARCHAR(100) NOT NULL,
+                operator_group VARCHAR(100),
+                action_type VARCHAR(50) NOT NULL,
+                action_desc TEXT NOT NULL,
+                resource_id VARCHAR(100),
+                before_value JSONB,
+                after_value JSONB,
+                client_ip VARCHAR(50),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_operator ON tube.operation_logs(operator);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_action_type ON tube.operation_logs(action_type);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_created_at ON tube.operation_logs(created_at DESC);"))
+        
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"DB Migration for loss_qty failed (safe to ignore if already applied): {e}")
+        print(f"DB Migration for loss_qty and operation_logs failed: {e}")
     finally:
         session.close()
 
 run_db_migration()
+
 
 
 class DemandPlanRecordInput(BaseModel):
@@ -925,6 +958,7 @@ def get_supply_management_deliveries(
 @router.post("/supply-management/deliveries", summary="新增供给侧发货记录")
 def create_supply_management_delivery(
     payload: SupplyDeliveryCreatePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
@@ -945,6 +979,32 @@ def create_supply_management_delivery(
         vehicle_plate_no=payload.vehicle_plate_no,
         requested_shipment_no=payload.shipment_no,
     )
+    
+    # 记录操作审计日志
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CREATE_DELIVERY",
+        action_desc=f"创建发货单: 订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {created['vehicle_plate_no']})，规格 {payload.pipe_model_id}，发货 {payload.shipped_qty} 米",
+        resource_id=str(created["delivery_id"]),
+        before_value=None,
+        after_value={
+            "delivery_id": created["delivery_id"],
+            "order_no": created["order_no"],
+            "shipment_no": created["shipment_no"],
+            "vehicle_plate_no": created["vehicle_plate_no"],
+            "supply_entity_id": payload.supply_entity_id,
+            "station_id": payload.station_id,
+            "pipe_model_id": payload.pipe_model_id,
+            "shipped_qty": payload.shipped_qty,
+            "shipped_at": payload.shipped_at.isoformat() if payload.shipped_at else None,
+            "ship_contact_name": payload.ship_contact_name,
+            "ship_contact_phone": payload.ship_contact_phone,
+            "ship_remark": payload.ship_remark,
+        },
+        client_ip=_get_client_ip(request)
+    )
+    
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -955,6 +1015,7 @@ def create_supply_management_delivery(
 @router.post("/supply-management/deliveries/batch", summary="批量新增供给侧发货记录")
 def create_supply_management_delivery_batch(
     payload: SupplyDeliveryBatchCreatePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
@@ -985,6 +1046,32 @@ def create_supply_management_delivery_batch(
         if not current_shipment_no:
             current_shipment_no = created["shipment_no"]
         created_rows.append(created)
+        
+        # 批量发货记录明细日志
+        save_operation_log(
+            operator=session.username,
+            operator_group=session.group,
+            action_type="CREATE_DELIVERY",
+            action_desc=f"批量创建发货单: 订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {payload.vehicle_plate_no})，规格 {item.pipe_model_id}，发货 {item.shipped_qty} 米",
+            resource_id=str(created["delivery_id"]),
+            before_value=None,
+            after_value={
+                "delivery_id": created["delivery_id"],
+                "order_no": created["order_no"],
+                "shipment_no": created["shipment_no"],
+                "vehicle_plate_no": payload.vehicle_plate_no,
+                "supply_entity_id": payload.supply_entity_id,
+                "station_id": item.station_id,
+                "pipe_model_id": item.pipe_model_id,
+                "shipped_qty": item.shipped_qty,
+                "shipped_at": payload.shipped_at.isoformat() if payload.shipped_at else None,
+                "ship_contact_name": payload.ship_contact_name,
+                "ship_contact_phone": payload.ship_contact_phone,
+                "ship_remark": item.ship_remark,
+            },
+            client_ip=_get_client_ip(request)
+        )
+        
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -999,16 +1086,34 @@ def create_supply_management_delivery_batch(
 def cancel_supply_management_delivery(
     delivery_id: int,
     payload: SupplyDeliveryCancelPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    
+    before_val = get_delivery_record_basic(delivery_id)
+    
     cancel_delivery_record(
         delivery_id=delivery_id,
         allowed_supply_entity_ids=sorted(accessible_supply_entity_ids),
         operator=session.username,
         cancel_reason=payload.cancel_reason,
     )
+    
+    after_val = get_delivery_record_basic(delivery_id)
+    
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CANCEL_DELIVERY",
+        action_desc=f"撤销发货单: 订单号 {before_val.get('order_no')}，原因: {payload.cancel_reason}",
+        resource_id=str(delivery_id),
+        before_value=_to_json_serializable(before_val),
+        after_value=_to_json_serializable(after_val),
+        client_ip=_get_client_ip(request)
+    )
+    
     return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
 
@@ -1016,11 +1121,14 @@ def cancel_supply_management_delivery(
 def super_update_supply_management_delivery(
     delivery_id: int,
     payload: SuperUpdateDeliveryPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     group_lower = str(session.group or "").strip().lower()
     if group_lower != "global_admin":
         raise HTTPException(status_code=403, detail="此接口为 Global_admin 超级管理员专属数据订正通道,普通角色无权访问")
+    
+    before_val = get_delivery_record_basic(delivery_id)
     
     super_update_delivery_record(
         delivery_id=delivery_id,
@@ -1040,10 +1148,25 @@ def super_update_supply_management_delivery(
         warehouse_confirm_at=payload.warehouse_confirm_at,
         operator=session.username,
     )
+    
+    after_val = get_delivery_record_basic(delivery_id)
+    
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="SUPER_UPDATE_DELIVERY",
+        action_desc=f"超级管理员强力覆写发货单: 订单号 {before_val.get('order_no')}",
+        resource_id=str(delivery_id),
+        before_value=_to_json_serializable(before_val),
+        after_value=_to_json_serializable(after_val),
+        client_ip=_get_client_ip(request)
+    )
+    
     return {
         "ok": True,
         "detail": "发货记录已由超级管理员强力重写保存",
     }
+
 
 
 @router.get("/warehouse-management/options", summary="读取库管页选项")
@@ -1133,13 +1256,26 @@ def get_warehouse_management_deliveries(
 def confirm_warehouse_delivery_warehouse(
     delivery_id: int,
     payload: WarehouseConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
+    before_val = get_delivery_record_basic(delivery_id)
     update_delivery_warehouse_record(
         delivery_id=delivery_id,
         operator=session.username,
         remark=payload.remark,
+    )
+    after_val = get_delivery_record_basic(delivery_id)
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CONFIRM_WAREHOUSE",
+        action_desc=f"库管确认订单手续闭环: 订单号 {before_val.get('order_no')}",
+        resource_id=str(delivery_id),
+        before_value=_to_json_serializable(before_val),
+        after_value=_to_json_serializable(after_val),
+        client_ip=_get_client_ip(request)
     )
     return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
@@ -1260,12 +1396,13 @@ def get_demand_management_plan_matrix(
 @router.post("/demand-management/plan-matrix", summary="保存需求侧三日计划矩阵")
 def save_demand_management_plan_matrix(
     payload: DemandPlanSavePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
     _ensure_station_access(payload.station_id, accessible_station_ids)
-
+ 
     # 严格流程顺序锁后台强拦截
     strict_planning_flow_control = bool(config_payload.get("strict_planning_flow_control", True))
     if strict_planning_flow_control:
@@ -1281,12 +1418,43 @@ def save_demand_management_plan_matrix(
                             status_code=400,
                             detail="🚨 填报被顺序锁阻断：当前换热站前日实际消耗尚未结清上报！请先返回完成消耗上报，再填写并提交第三日计划量。"
                         )
-
+ 
+    # 获取修改前快照
+    plan_dates_list = [item.plan_date for item in payload.records]
+    before_records = list_plan_records(payload.station_id, plan_dates_list)
+    before_serialized = {}
+    for k, v in before_records.items():
+        before_serialized[k] = {
+            "plan_qty": float(v.get("plan_qty", 0) or 0),
+            "remark": v.get("remark") or ""
+        }
+ 
     saved_count = save_plan_records(
         station_id=payload.station_id,
         records=[item.model_dump() for item in payload.records],
         operator=session.username,
     )
+ 
+    # 获取修改后快照
+    after_records = list_plan_records(payload.station_id, plan_dates_list)
+    after_serialized = {}
+    for k, v in after_records.items():
+        after_serialized[k] = {
+            "plan_qty": float(v.get("plan_qty", 0) or 0),
+            "remark": v.get("remark") or ""
+        }
+ 
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="SAVE_PLAN",
+        action_desc=f"更新换热站【{payload.station_id}】三日计划量，共计 {saved_count} 条记录",
+        resource_id=payload.station_id,
+        before_value=before_serialized,
+        after_value=after_serialized,
+        client_ip=_get_client_ip(request)
+    )
+ 
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1304,7 +1472,7 @@ def get_demand_management_usage_sheet(
     payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
     _ensure_station_access(station_id, accessible_station_ids)
-
+ 
     pipe_model_map = _build_pipe_model_map(payload)
     usage_map = list_usage_records(station_id, usage_date)
     rows: List[Dict[str, Any]] = []
@@ -1320,7 +1488,7 @@ def get_demand_management_usage_sheet(
                 "remark": usage.get("remark") or "",
             }
         )
-
+ 
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1331,23 +1499,56 @@ def get_demand_management_usage_sheet(
         "usage_date": usage_date.isoformat(),
         "rows": rows,
     }
-
-
+ 
+ 
 @router.post("/demand-management/usage-sheet", summary="保存需求侧实际使用量表")
 def save_demand_management_usage_sheet(
     payload: DemandUsageSavePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
     _ensure_station_access(payload.station_id, accessible_station_ids)
-
+ 
+    # 获取修改前快照
+    before_usages = list_usage_records(payload.station_id, payload.usage_date)
+    before_serialized = {}
+    for k, v in before_usages.items():
+        before_serialized[k] = {
+            "usage_qty": float(v.get("usage_qty", 0) or 0),
+            "loss_qty": float(v.get("loss_qty", 0) or 0),
+            "remark": v.get("remark") or ""
+        }
+ 
     saved_count = save_usage_records(
         station_id=payload.station_id,
         usage_date=payload.usage_date,
         records=[item.model_dump() for item in payload.records],
         operator=session.username,
     )
+ 
+    # 获取修改后快照
+    after_usages = list_usage_records(payload.station_id, payload.usage_date)
+    after_serialized = {}
+    for k, v in after_usages.items():
+        after_serialized[k] = {
+            "usage_qty": float(v.get("usage_qty", 0) or 0),
+            "loss_qty": float(v.get("loss_qty", 0) or 0),
+            "remark": v.get("remark") or ""
+        }
+ 
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="SUBMIT_USAGE",
+        action_desc=f"上报施工使用与损耗量: 换热站【{payload.station_id}】，消耗日期 {payload.usage_date.isoformat()}",
+        resource_id=payload.station_id,
+        before_value=before_serialized,
+        after_value=after_serialized,
+        client_ip=_get_client_ip(request)
+    )
+
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1360,12 +1561,13 @@ def save_demand_management_usage_sheet(
 @router.post("/demand-management/submission", summary="提交换热站填报完成状态")
 def submit_demand_management_station_status(
     payload: DemandStationSubmissionPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
     _ensure_station_access(payload.station_id, accessible_station_ids)
-
+ 
     station_name_map = _build_station_name_map(config_payload)
     plan_start_date = get_configured_plan_start_date(config_payload)
     show_date = get_configured_show_date(config_payload)
@@ -1373,7 +1575,7 @@ def submit_demand_management_station_status(
     current_status = load_station_submission_status()
     latest_submissions = _normalize_submission_rows(current_status.get("latest_submissions"))
     history_submissions = _normalize_submission_rows(current_status.get("history_submissions"))
-
+ 
     existing_latest: Optional[Dict[str, Any]] = None
     next_latest_submissions: List[Dict[str, Any]] = []
     for item in latest_submissions:
@@ -1381,10 +1583,10 @@ def submit_demand_management_station_status(
             existing_latest = item
             continue
         next_latest_submissions.append(item)
-
+ 
     if existing_latest:
         history_submissions.insert(0, existing_latest)
-
+ 
     submission_record = {
         "station_id": payload.station_id,
         "station_name": station_name_map.get(payload.station_id, payload.station_id),
@@ -1399,13 +1601,25 @@ def submit_demand_management_station_status(
     }
     next_latest_submissions.append(submission_record)
     next_latest_submissions.sort(key=lambda item: str(item.get("station_id") or ""))
-
+ 
     save_station_submission_status(
         {
             "latest_submissions": next_latest_submissions,
             "history_submissions": history_submissions,
         }
     )
+ 
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="SUBMIT_STATUS",
+        action_desc=f"确认提交换热站填报状态: 换热站【{payload.station_id}】，计划启用日期 {plan_start_date.isoformat()}，实际消耗日期 {usage_collection_date.isoformat()}",
+        resource_id=payload.station_id,
+        before_value=existing_latest,
+        after_value=submission_record,
+        client_ip=_get_client_ip(request)
+    )
+
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1519,6 +1733,7 @@ def _ensure_demand_receipt_access(session: AuthSession) -> None:
 def confirm_demand_management_delivery_arrival(
     delivery_id: int,
     payload: WarehouseArrivalConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_demand_arrival_access(session)
@@ -1527,12 +1742,29 @@ def confirm_demand_management_delivery_arrival(
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
     accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
     _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    
+    before_val = _to_json_serializable(delivery)
+    
     update_delivery_arrival_record(
         delivery_id=delivery_id,
         operator=session.username,
         arrived_qty=payload.arrived_qty,
         remark=payload.remark,
     )
+    
+    after_val = _to_json_serializable(get_delivery_record_basic(delivery_id))
+    
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CONFIRM_ARRIVAL",
+        action_desc=f"确认到货: 订单号 {delivery.get('order_no')} (到货 {payload.arrived_qty} 米)",
+        resource_id=str(delivery_id),
+        before_value=before_val,
+        after_value=after_val,
+        client_ip=_get_client_ip(request)
+    )
+    
     return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
 
@@ -1540,6 +1772,7 @@ def confirm_demand_management_delivery_arrival(
 def confirm_demand_management_delivery_receipt(
     delivery_id: int,
     payload: WarehouseReceiptConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_demand_receipt_access(session)
@@ -1548,12 +1781,29 @@ def confirm_demand_management_delivery_receipt(
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
     accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
     _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    
+    before_val = _to_json_serializable(delivery)
+    
     update_delivery_receipt_record(
         delivery_id=delivery_id,
         operator=session.username,
         received_qty=payload.received_qty,
         remark=payload.remark,
     )
+    
+    after_val = _to_json_serializable(get_delivery_record_basic(delivery_id))
+    
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CONFIRM_CONSTRUCTION",
+        action_desc=f"施工确认接收: 订单号 {delivery.get('order_no')} (实收 {payload.received_qty} 米)",
+        resource_id=str(delivery_id),
+        before_value=before_val,
+        after_value=after_val,
+        client_ip=_get_client_ip(request)
+    )
+    
     return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
 
 
@@ -1580,20 +1830,45 @@ def get_global_management_config(
 @router.post("/global-management/config", summary="保存全局管理配置")
 def save_global_management_config(
     payload: TubeConfigSavePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
+    before_config = load_tube_config()
     save_tube_config(payload.config)
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="UPDATE_CONFIG",
+        action_desc="保存全局管理配置（完整覆盖）",
+        resource_id="global_config",
+        before_value=before_config,
+        after_value=payload.config,
+        client_ip=_get_client_ip(request)
+    )
     return {"ok": True, "project_key": PROJECT_KEY}
 
 
 @router.post("/global-management/config-section", summary="保存全局管理配置区块")
 def save_global_management_config_section(
     payload: TubeConfigSectionSavePayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
+    before_config = load_tube_config()
+    before_section = before_config.get(payload.section)
     updated = _save_config_section(payload.section, payload.data)
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="UPDATE_CONFIG",
+        action_desc=f"保存全局配置区块: {payload.section}",
+        resource_id=payload.section,
+        before_value={payload.section: before_section} if before_section is not None else None,
+        after_value={payload.section: payload.data},
+        client_ip=_get_client_ip(request)
+    )
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1632,8 +1907,148 @@ def evaluate_global_management_weather_import(
 @router.post("/global-management/weather/import", summary="物理导入天气数据")
 def import_global_management_weather_data(
     payload: WeatherImportPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
+    stats_before = weather_service.get_weather_db_stats()
     result = weather_service.import_weather_data(payload.api_url)
+    
+    # 物理导入天气数据写审计日志
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="UPDATE_CONFIG",
+        action_desc=f"物理拉取并覆盖导入天气数据，API 网址: {payload.api_url}",
+        resource_id="weather_data",
+        before_value={"daily_count": stats_before.get("daily_count"), "hourly_count": stats_before.get("hourly_count")},
+        after_value=result,
+        client_ip=_get_client_ip(request)
+    )
     return result
+
+
+def _to_json_serializable(snap: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not snap:
+        return None
+    res = {}
+    for k, v in snap.items():
+        if isinstance(v, (datetime, date)):
+            res[k] = v.isoformat()
+        else:
+            res[k] = v
+    return res
+
+
+@router.get("/global-management/operation-logs", summary="读取操作审计日志")
+def get_global_management_operation_logs(
+    action_type: Optional[str] = None,
+    operator: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+        raise HTTPException(status_code=403, detail="无权查看系统操作审计日志")
+        
+    offset = (page - 1) * limit
+    result = query_operation_logs(
+        action_type=action_type,
+        operator=operator,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        offset=offset
+    )
+    
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "total": result["total"],
+        "page": page,
+        "limit": limit,
+        "rows": result["logs"]
+    }
+
+
+import csv
+import io
+from fastapi.responses import StreamingResponse
+
+@router.get("/global-management/operation-logs/export", summary="导出操作审计日志")
+def export_global_management_operation_logs(
+    action_type: Optional[str] = None,
+    operator: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    session: AuthSession = Depends(get_current_session),
+):
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+        raise HTTPException(status_code=403, detail="无权导出系统操作审计日志")
+        
+    result = query_operation_logs(
+        action_type=action_type,
+        operator=operator,
+        start_date=start_date,
+        end_date=end_date,
+        limit=10000,
+        offset=0
+    )
+    
+    logs = result["logs"]
+    
+    output = io.StringIO()
+    # 写入 UTF-8 BOM 防止 Excel 乱码
+    output.write('\ufeff')
+    writer = csv.writer(output)
+    
+    writer.writerow(["时间", "操作人", "操作角色", "操作类型", "操作详情", "关联资源ID", "IP地址"])
+    
+    action_type_map = {
+        "CREATE_DELIVERY": "新增发货单",
+        "CANCEL_DELIVERY": "撤销发货",
+        "CONFIRM_ARRIVAL": "确认到货",
+        "CONFIRM_CONSTRUCTION": "施工接收",
+        "CONFIRM_WAREHOUSE": "库管确认",
+        "SAVE_PLAN": "更新三日计划",
+        "SUBMIT_USAGE": "上报消耗损耗",
+        "SUBMIT_STATUS": "提交填报状态",
+        "UPDATE_CONFIG": "配置修改",
+        "SUPER_UPDATE_DELIVERY": "超管强改",
+    }
+    
+    for log in logs:
+        created_at_str = log["created_at"]
+        if created_at_str:
+            try:
+                dt = datetime.fromisoformat(created_at_str)
+                created_at_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                pass
+                
+        action_name = action_type_map.get(log["action_type"], log["action_type"])
+        writer.writerow([
+            created_at_str,
+            log["operator"],
+            log["operator_group"] or "",
+            action_name,
+            log["action_desc"],
+            log["resource_id"] or "",
+            log["client_ip"] or "",
+        ])
+        
+    output.seek(0)
+    
+    response = StreamingResponse(
+        iter([output.getvalue()]), 
+        media_type="text/csv"
+    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    response.headers["Content-Disposition"] = f"attachment; filename=operation_logs_{timestamp}.csv"
+    return response
+
+

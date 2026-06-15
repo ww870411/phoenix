@@ -239,4 +239,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_weather_hourly_datetime
     ON tube.tube_weather_hourly (weather_date_time);
 
 
+-- =========================================================================
+-- 操作审计日志表 (2026-06-15 追加)
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS tube.operation_logs (
+    id SERIAL PRIMARY KEY,
+    project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
+    operator VARCHAR(100) NOT NULL,
+    operator_group VARCHAR(100),
+    action_type VARCHAR(50) NOT NULL,
+    action_desc TEXT NOT NULL,
+    resource_id VARCHAR(100),
+    before_value JSONB,
+    after_value JSONB,
+    client_ip VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tube_op_logs_operator ON tube.operation_logs(operator);
+CREATE INDEX IF NOT EXISTS idx_tube_op_logs_action_type ON tube.operation_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_tube_op_logs_created_at ON tube.operation_logs(created_at DESC);
+
+COMMENT ON TABLE tube.operation_logs IS '保温管供需管理系统操作审计日志表';
+COMMENT ON COLUMN tube.operation_logs.operator IS '操作人用户名';
+COMMENT ON COLUMN tube.operation_logs.action_type IS '操作动作类型';
+COMMENT ON COLUMN tube.operation_logs.action_desc IS '中文业务语义操作描述';
+COMMENT ON COLUMN tube.operation_logs.before_value IS '变更前 JSON 快照';
+COMMENT ON COLUMN tube.operation_logs.after_value IS '变更后 JSON 快照';
+
+
 COMMIT;
+

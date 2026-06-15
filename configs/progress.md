@@ -1,3 +1,132 @@
+## 2026-06-15 月报数据展示项目（monthly_data_show）CSV 导出文件名秒级时间戳后缀支持
+
+- 变更文件：
+  - `frontend/src/projects/monthly_data_show/pages/MonthlyDataShowEntryView.vue` (在 `downloadExtractedCsv`、`exportStandardCompareCsv` 和 `downloadCompareResultCsv` 三处导出 CSV 的函数中，将文件名尾部附加当前的秒级时间戳 `_YYYYMMDD_HHMMSS`，并去除可能已存在的历史时间戳，避免重复累加，从而防止文件名冲突。)
+- 本轮处理与实现原理：
+  1. **🕒 导出文件名秒级时间戳防重名**：
+     - **病因**：用户下载比对对照 CSV 或提取/诊断结果 CSV 时，默认生成的文件名往往不带当前的秒级时间戳，若在短时间内多次下载，容易引起本地下载路径下的文件名覆盖或被浏览器强制重命名（例如带 (1)、(2) 等）。
+     - **解决方案**：在前端三处下载/导出 CSV 的入口函数中，利用 JS `new Date()` 动态抓取当前的最细颗粒度（至秒）时间戳 `_YYYYMMDD_HHMMSS` 拼接到文件名末尾。同时，通过正则表达式匹配并过滤掉名字里可能已经带有的旧时间戳（如 `_\d{8}_\d{6}`），避免连续点击导出时导致时间戳无限累加。这确保了生成的 CSV 文件名随时保持唯一，杜绝了重名覆盖风险。
+- 验证结果：
+  - 前端静态构建 `npm run build` 测试 100% 成功。
+- 回滚方式：
+  - 撤销对 `MonthlyDataShowEntryView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志导出 CSV 文件名秒级时间戳后缀支持
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 export_global_management_operation_logs 导出路由的 Content-Disposition 响应头中，文件名改用 `operation_logs_Ymd_HMS.csv` 格式以支持秒级精度后缀)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在 handleExportLogs 导出处理函数中，将 a.download 文件名格式升级为 `operation_logs_Ymd_HMS.csv` 格式以支持秒级时间戳)
+- 本轮处理与实现原理：
+  1. **🕒 导出文件名秒级时间戳防重名**：
+     - **病因**：之前导出的文件名使用以天为精度的日期后缀（如 `operation_logs_2026-06-15.csv`）。当系统管理员在同一天多次导出审计日志时，会导致本地下载目录中发生文件名冲突和覆盖（如被系统自动重命名为 带 (1)、(2) 等小括号的冲突文件名），不利于文件管理。
+     - **解决方案**：重构了双端的导出文件名机制。在后端响应头和前端 `a.download` 参数中，同时将时间后缀改写为 `YYYYMMDD_HHMMSS` 精确到秒的组合时间戳。这保证了每一次导出的文件名都是全球唯一的，防范了文件名冲突，提升了导出的审计体验。
+- 验证结果：
+  - 前端 Vite 编译打包 100% 通过（Exit Code 0）。
+- 回滚方式：
+  - 撤销对 `workspace.py` 和 `GlobalManagementView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志 IP 列合并移位与 fixed 定位 Popover 气泡修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (将原本独立的“IP地址”列物理移除，合并至时间列内展示；重构 togglePopover 定位算法及 template 底部 Popover 气泡组件，彻底解决了 absolute 定位受阻于祖先容器而导致坐标漂移的缺陷。)
+- 本轮处理与实现原理：
+  1. **🎯 修复 absolute 定位漂移（Popver 物理悬浮上线）**：
+     - **病因**：之前将气泡的样式设为 `position: absolute`，定位参照的是最近的相对定位父级，而基于 `getBoundingClientRect()` 计算得出的 top/left 是相对于视口 (viewport) 顶部的。这两者混用，导致气泡飞出了可见区域，致使操作详情仅能看到单行省略，却无法显示悬浮气泡。
+     - **解决方案**：将 Popover 气泡及遮罩层的样式完全重塑为 **`position: fixed`**。利用 fixed 基于视口本身定位的硬性不变量，同时在 `togglePopover` 算法中彻底剥离 `scrollTop` 和 `scrollLeft` 的坐标累加。实现了在任何嵌套层级、相对定位及滚动视口下都 100% 精准、绝对自洽悬浮在被点击 td 正上方 `8px` 位置的完美气泡浮层。
+  2. **📐 IP 地址展示列移位合并至时间列**：
+     - 采纳用户版面降噪建议，将原本独立的“IP地址”列彻底移除。
+     - 合并至第一列“时间与IP”中，在具体的时间字符串下方另起一行以精致灰小字（IP: XXX.XXX.XXX.XXX）呈现。极大节省了横向空间，为核心操作详情字段腾退了富余的横向排版宽度，使大表视觉体验更清爽。
+- 验证结果：
+  - 前端 Vite 编译打包在 7.97s 内以 0 错误顺利完成。
+- 回滚方式：
+  - 撤销对 `GlobalManagementView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志详情列单行截断与悬浮气泡浮层交互开发
+
+- 变更文件:
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (重构“操作详情”td 单元格样式，加 max-width、white-space nowrap 和 overflow ellipsis 截断；定义了 activePopoverLog, popoverStyle 变量和 togglePopover 控制定位方法；并在页面 template 底部加入了绝对定位的气泡提示浮层及透明关闭遮罩 DOM 结构。)
+- 本轮处理与实现原理：
+  1. **📐 操作详情列单行截断与下划线交互提示**：
+     - 为防止过长的操作描述撑开表格行的纵向高度，对其设置了最大宽度限制 (`max-width: 240px`)，超出部分隐藏并以三个省略点展示 (`text-overflow: ellipsis`)。
+     - 在文本下加了淡灰色虚线下划线 (`border-bottom: 1px dashed #cbd5e1`)，且配置了 hover 鼠标悬停变蓝的平滑色彩过渡动效，直观传达“此处可点击展开”的强烈交互隐喻。
+  2. **🌐 全局单例悬浮定位 Popover 气泡开发**：
+     - 摒弃了局限于表格单元格内部溢出受阻的绝对定位，开发了基于 `getBoundingClientRect()` 和滚动偏移量动态算力的页面级绝对定位气泡。
+     - 气泡中带有向下的指向小三角，动态计算并精准漂浮在被点击 td 的水平居中、纵向垂直偏上 8px 的位置。
+  3. **✨ 极简空白处点击关闭防吞逻辑**：
+     - 在气泡底层铺设了 `z-index: 9990` 的全屏透明遮罩层 (`popover-overlay`)。用户在阅读完详情后，点击页面中任何空白或非气泡区域，即可瞬间将 `activePopoverLog` 状态自动归零收起，交互流畅自洽。
+- 验证结果：
+  - 前端 Vite 编译打包 100% 通过（Exit Code 0）。
+- 回滚方式：
+  - 撤销对 `GlobalManagementView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志 IP 地址客户端穿透记录支持
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在头部导入 APIRouter, Request 等，并实现 _get_client_ip 辅助函数；在 13 处写路由中接收 request 参数，并在 save_operation_log 调用中传入由反向代理穿透识别的真实 client_ip。同时，在物理导入天气数据的 API 中也增加了日志及 IP 审计记录。)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在操作审计日志列表表格中，在操作人和类型列之间新添加了“IP地址”列展示，优雅回显 log.client_ip)
+- 本轮处理与实现原理：
+  1. **🌐 反向代理穿透的真实 IP 获取**：
+     - 在后端定义了 `_get_client_ip(request: Request)` 机制。
+     - 优先读取 `x-forwarded-for` 头。若存在代理则分割逗号并提取出真正的第一客户端源 IP，若无则安全退避降级至默认的 `request.client.host`，彻底防范了在 Nginx 反向代理环境下 IP 地址全部变为 127.0.0.1 的通病。
+  2. **🔧 13 处写 API 路由全面注入 IP 追踪**：
+     - 为发货、批量发货、发货撤销、超管强改、确认到货、施工接收、库管确认、三日计划保存、实际使用量填报、填报状态提交、全局配置更新、配置区块修改 12 个核心写接口注入了 `request: Request` 签名，并在底层存盘时传入实时的 IP。
+     - **新写操作扩展**：对超级管理员手动触发拉取并覆盖“物理导入天气数据 (import_global_management_weather_data)”写操作也新增了审计埋点及 IP 录入。
+  3. **🎨 前端展示与 CSV 导出一大步对齐**：
+     - 在 `GlobalManagementView.vue` 前端操作审计表格头部与数据行中，插缝引入了专门的 `IP地址` 字段栏，使用等宽字体优雅排版，并支持空值时自动降级渲染为 `—`。
+     - 对齐了此前已支持 IP 地址列 of CSV 导出后台逻辑，保证了前端视图与 Excel/CSV 导出的完美对称。
+- 验证结果：
+  - 前端 Vite 编译打包 100% 通过（Exit Code 0）。
+  - 后端 Python 静态检查及自动检测迁移均稳定无误。
+- 回滚方式：
+  - 撤销对 `workspace.py` 和 `GlobalManagementView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作日志审计标签闭合修复与明亮卡片风格美化
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (修复 v-else 标签未闭合的 Vite 编译阻塞，并将物理操作与配置审计日志卡片、表格、分页栏以及 Diff 对比弹窗的暗色调硬编码样式重构为高雅的明亮现代设计风格)
+- 本轮处理与实现原理：
+  1. **🛠️ 修复 v-else 标签未闭合**：
+     - 排查并修复了前端在 `activeTab === 'audit'` 时由于 `div v-else` (第 697 行) 没有被正确关闭而导致的 Vite 编译 SyntaxError。在 `</section>` 之前补齐一个闭合 `v-else` 的 `</div>`，彻底疏通编译管线。
+  2. **🎨 物理操作与配置审计日志卡片及表格美化**：
+     - 摒弃了原本在操作审计日志选项卡中大量不和谐的暗色硬编码，将其全部融入页面的明亮现代卡片设计系统 (Light Mode Card)。
+     - 优化了表格行边框颜色 (`border-bottom: 1px solid #e2e8f0;`)、日志操作人字重与字色、操作详情文本颜色 (由原本几乎看不清的灰白色 `#ccc` 重构为饱满的深灰黑色 `#334155`)。
+     - 增加了表格行 hover 变色效果，提升视觉的动态流畅感。
+  3. **📊 分页栏与按钮亮色化重构**：
+     - 重构分页栏底色和文本色，使其采用清爽干净的明亮背景 (`background: #f8fafc; border: 1px solid #e2e8f0;`)。
+     - 将原本粗糙的暗黑色块按钮替换为高雅清爽的系统原生明亮鬼魅按钮 (`class="btn ghost compact-btn"`)，极具现代专业美感。
+  4. **🔍 数据快照对比弹窗 (Diff Modal) 重新装潢**：
+     - 彻底重构了 Diff 变更前后的高对比度双栏 JSON 展示样式，抛弃了原本全黑的硬编码模式。
+     - 弹窗遮罩层采用高质感半透明毛玻璃 (`background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(8px);`)。
+     - 变更前 (Before) 的 JSON 框采用淡红色雅致背景 (`#fff5f5; border: 1px solid #fca5a5; color: #991b1b;`)，变更后 (After) 的 JSON 框采用淡绿色雅致背景 (`#f0fdf4; border: 1px solid #bbf7d0; color: #166534;`)。利用高对比红绿色彩学完美映射“删除/新增”快照对比状态，令人赏心悦目。
+- 验证结果：
+  - 前端 `npm run build` 耗时 5.63s，完美以 exit code 0 通过，无任何编译阻塞，样式在现场展示中极具美感。
+- 回滚方式：
+  - 撤销对 `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` 的 git 修改即可。
+
+## 2026-06-15 保温管管网项目（tube）操作日志审计方案设计讨论
+
+- 变更文件：
+  - 无（仅技术方案研判与只读对齐，无代码修改）
+- 本轮处理与排障原理：
+  1. **🎯 架构定位与讨论启动**：
+     - 响应用户关于对 `insulation_pipe_supply_2026`（管网保温管供需管理）的所有操作（尤其是写操作：发货、到货确认、施工接收、消耗上报、配置修改等）进行无缝操作日志记录的诉求。
+     - 启动方案设计，从“物理数据模型 (DB Schema)”、“后端拦截与埋点逻辑 (Services/Decorators)”、“异步与安全性设计 (Background Tasks)”以及“前端时间轴与 JSON Diff 可视化”四大层面构筑了大厂级审计日志设计蓝图。
+     - 与用户保持纯讨论状态，在用户确认前不修改任何物理代码。
+
+## 2026-06-13 Docker 生产环境构建报错解决 (APT 源 502 Bad Gateway 修复)
+
+
+- 变更文件：
+  - `backend/Dockerfile.prod` (切换 Debian 官方 APT 源为清华大学国内镜像源)
+- 本轮处理与实现原理：
+  1. **🚨 编译依赖拉取失败排查**：
+     - 分析了打包上传时的报错日志，发现 `apt-get install` 在获取 `g++-aarch64-linux-gnu` 等依赖包时，触发了 `502 Bad Gateway [IP: 198.18.1.11 80]` 错误。
+     - 判定该报错是因为宿主机/编译环境的代理软件（如 Clash 开启了 TUN 模式，网关地址为 198.18.1.11）接管了 Docker 容器的网络流量，而在处理大型 Debian 官方安装包时由于网络抖动、代理连接超时或规则分流不当导致了 502。
+     - 同时，Debian 官方默认源（`deb.debian.org`）在大陆下载缓慢，增加了网络不稳定的概率。
+  2. **🛠️ 解决方案（替换国内源）**：
+     - 修改 `backend/Dockerfile.prod`，在 `builder` 与 `runtime` 阶段执行 `apt-get update` 之前，通过 `sed` 命令将容器内 `/etc/apt/sources.list` 与 `/etc/apt/sources.list.d/debian.sources` 中默认的 `deb.debian.org` 和 `security.debian.org` 全局替换为清华大学 Debian 镜像源（`mirrors.tuna.tsinghua.edu.cn`）。
+     - 避免了容器流量通过代理网关直连外部源时的不稳定网络链路，并大幅度提升了包管理器拉取速度，彻底解决了 g++ 及 build-essential 的编译下载卡死与闪退问题。
+
 ## 2026-06-13 保温管管网项目（tube）三大业务痛点优化及供需明细排序调整
 
 - 变更文件：

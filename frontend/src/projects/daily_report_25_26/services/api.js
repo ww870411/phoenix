@@ -387,6 +387,42 @@ export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pip
   return response.json()
 }
 
+export async function getTubeAuditLogs(projectKey, params) {
+  const query = new URLSearchParams()
+  if (params.actionType) query.append('action_type', params.actionType)
+  if (params.operator) query.append('operator', params.operator)
+  if (params.startDate) query.append('start_date', params.startDate)
+  if (params.endDate) query.append('end_date', params.endDate)
+  query.append('page', params.page || 1)
+  query.append('limit', params.limit || 50)
+  
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/operation-logs?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取操作审计日志失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function exportTubeAuditLogs(projectKey, params) {
+  const query = new URLSearchParams()
+  if (params.actionType) query.append('action_type', params.actionType)
+  if (params.operator) query.append('operator', params.operator)
+  if (params.startDate) query.append('start_date', params.startDate)
+  if (params.endDate) query.append('end_date', params.endDate)
+  
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/operation-logs/export?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '导出操作审计日志失败')
+    throw new Error(detail)
+  }
+  return response.blob()
+}
+
 export async function saveTubeGlobalManagementConfig(projectKey, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config`, {
     method: 'POST',

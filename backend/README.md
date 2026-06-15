@@ -1,3 +1,71 @@
+## 2026-06-15 月报数据展示项目（monthly_data_show）CSV 导出文件名秒级时间戳后缀同步
+
+- 变更文件：
+  - 无物理后端代码变更（配合前端完成月报导入、导出、对照和诊断结果 CSV 表的文件名秒级时间戳防冲突后缀）
+- 本轮处理与实现原理：
+  - 配合前端完成了各处 CSV 数据导出交互的微调。后端之前已经在 `/monthly-data-show/extract-csv` 路由中返回带秒级时间戳的文件名，此次主要同步在文档中记录前端三处导出 CSV 文件名秒级时间戳的支持，保持整体版本和日志一致。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志 IP 展示合并与气泡修复同步
+
+- 变更文件：
+  - 无物理后端代码变更（配合前端完成表格 IP 移位与 fixed 气泡悬浮定位重组）
+- 本轮处理与实现原理：
+  - 配合前端完成了审计操作详情字段及 IP 地址字段的交互微调。IP 地址由独立列合并至时间列下方展示，后端继续保持输出以支撑前端页面无缝享用。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志详情单行截断与前端气泡交互同步
+
+- 变更文件：
+  - 无物理后端代码变更（仅配合前端展示层进行操作详情省略与悬浮 Popover 气泡的联动展示设计）
+- 本轮处理与实现原理：
+  - 配合前端完成了审计操作详情字段的交互重塑，后端继续保持输出长文本的原始操作详情以支撑前端气泡无损解析展示。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志客户端 IP 穿透记录支持
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在头部导入 APIRouter, Request 等，并实现 _get_client_ip 辅助函数；在 13 处写路由中接收 request 参数，并在 save_operation_log 调用中传入由反向代理穿透识别的真实 client_ip。同时，在物理导入天气数据的 API 中也增加了日志及 IP 审计记录。)
+- 本轮处理与实现原理：
+  1. **🌐 反向代理穿透的真实 IP 获取**：
+     - 在后端定义了 `_get_client_ip(request: Request)` 机制。
+     - 优先读取 `x-forwarded-for` 头。若存在代理则分割逗号并提取出真正的第一客户端源 IP，若无则安全退避降级至默认的 `request.client.host`，彻底防范了在 Nginx 反向代理环境下 IP 地址全部变为 127.0.0.1 的通病。
+  2. **🔧 13 处写 API 路由全面注入 IP 追踪**：
+     - 为发货、批量发货、发货撤销、超管强改、确认到货、施工接收、库管确认、三日计划保存、实际使用量填报、填报状态提交、全局配置更新、配置区块修改 12 个核心写接口注入了 `request: Request` 签名，并在底层存盘时传入实时的 IP。
+     - **新写操作扩展**：对超级管理员手动触发拉取并覆盖“物理导入天气数据 (import_global_management_weather_data)”写操作也新增了审计埋点及 IP 录入。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志审计组件美化及同步
+
+- 变更文件：
+  - 无物理后端代码变更（仅前端展示层样式优化及 HTML 标签结构修复，后端直接提供完备的 API 支持）
+- 本轮处理与实现原理：
+  - 配合前端完成了对物理操作与配置审计日志选项卡中的视觉样式大重构，将暗色硬编码彻底迁移至明亮现代卡片系统。
+  - 维持后端 `/global-management/operation-logs` 查询接口和导出 CSV 文件流接口的高并发稳定支持，并已确保前后端在明亮淡雅风格下进行 100% 完美的协议联动及快照 Diff 数据对接。
+
+## 2026-06-15 保温管管网项目（tube）操作审计日志系统后端实现
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (初始化 SQL 中追加 operation_logs 物理表和索引)
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py` (新增：底层日志写入与多维过滤查询逻辑)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (集成：引入服务、run_db_migration 启动自动建表、在发货/撤单/到货/接收/库管/填报等 8 个核心写接口注入日志拦截、暴露查询 API)
+- 本轮处理与实现原理：
+  1. **📂 自动迁移与物理建表**：在 `workspace.py` 启动 hook `run_db_migration` 中加入创建 `tube.operation_logs` 物理表及 operator、action_type、created_at 索引的 SQL 语句。使得容器在热重载启动时全自动在 Postgres 里把操作日志审计表创建就绪，实现物理无感部署。
+  2. **🔋 底层日志模块构建**：新建了 `audit_log_service.py`。其封装了 `save_operation_log`（在 `try...except` 中吞掉异常以确保写日志绝不阻断业务流程，同时处理 JSON 快照序列化）和 `query_operation_logs`（支持多条件过滤与时间区间筛选的分页高效查询算力）。
+  3. **🔧 8 大核心写操作埋点**：
+     - 在发货（`create_supply_management_delivery`）、批量发货（`create_supply_management_delivery_batch`）接口中，在记录生成后，记录 `CREATE_DELIVERY` 日志，附带订单号、规格及发货米数快照。
+     - 在撤销（`cancel_supply_management_delivery`）、超管强改（`super_update_supply_management_delivery`）、库管确认（`confirm_warehouse_delivery_warehouse`）、确认到货（`confirm_demand_management_delivery_arrival`）、施工接收（`confirm_demand_management_delivery_receipt`）、计划保存（`save_demand_management_plan_matrix`）、消耗损耗填报（`save_demand_management_usage_sheet`）以及填报状态提交（`submit_demand_management_station_status`）接口中，在修改前后，获取物理记录并用 `_to_json_serializable` 安全转换后作为 `before_value` 和 `after_value` 快照传入，留存最权威的 Diff 轨迹。
+  4. **⚙️ 注册查询接口**：追加了 GET `/global-management/operation-logs` 接口，进行了权限拦截（仅限管理员与库管），打通前后端。
+
+## 2026-06-13 Docker 生产环境构建报错解决 (APT 源 502 Bad Gateway 修复)
+
+- 变更文件：
+  - `backend/Dockerfile.prod` (切换 Debian 官方 APT 源为清华大学国内镜像源)
+- 本轮处理与实现原理：
+  1. **🚨 编译依赖拉取失败排查**：
+     - 分析了打包上传时的报错日志，发现 `apt-get install` 在获取 `g++-aarch64-linux-gnu` 等依赖包时，触发了 `502 Bad Gateway [IP: 198.18.1.11 80]` 错误。
+     - 判定该报错是因为宿主机/编译环境的代理软件（如 Clash 开启了 TUN 模式，网关地址为 198.18.1.11）接管了 Docker 容器的网络流量，而在处理大型 Debian 官方安装包时由于网络抖动、代理连接超时或规则分流不当导致了 502。
+     - 同时，Debian 官方默认源（`deb.debian.org`）在大陆下载缓慢，增加了网络不稳定的概率。
+  2. **🛠️ 解决方案（替换国内源）**：
+     - 修改 `backend/Dockerfile.prod`，在 `builder` 与 `runtime` 阶段执行 `apt-get update` 之前，通过 `sed` 命令将容器内 `/etc/apt/sources.list` 与 `/etc/apt/sources.list.d/debian.sources` 中默认的 `deb.debian.org` 和 `security.debian.org` 全局替换为清华大学 Debian 镜像源（`mirrors.tuna.tsinghua.edu.cn`）。
+     - 避免了容器流量通过代理网关直连外部源时的不稳定网络链路，并大幅度提升了包管理器拉取速度，彻底解决了 g++ 及 build-essential 的编译下载卡死与闪退问题。
+
 ## 2026-06-13 保温管管网项目（tube）自增订单号每天重置与损耗量可用库存业务支持
 
 - 变更文件：

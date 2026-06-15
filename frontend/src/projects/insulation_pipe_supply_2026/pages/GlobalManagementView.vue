@@ -101,6 +101,13 @@
           >
             💻 原始 JSON 预览
           </button>
+          <button 
+            type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'audit' }]" 
+            @click="activeTab = 'audit'; fetchAuditLogs(1)"
+          >
+            📜 操作审计日志
+          </button>
         </aside>
 
         <!-- 右侧当前选中的配置主卡片 -->
@@ -630,10 +637,167 @@
             </section>
           </div>
 
+          <!-- Tab 8: 操作审计日志 -->
+          <div v-if="activeTab === 'audit'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">📜 物理操作与配置审计日志</div>
+                  <p class="sub block-sub">记录保温管系统的核心写操作（填报、物流、到货、施工、配置修改），支持快照 Diff 追溯。</p>
+                </div>
+              </div>
+              
+              <!-- 过滤条件与导出栏 -->
+              <div class="filter-panel" style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; flex-wrap: wrap;">
+                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">操作类型</label>
+                  <select v-model="auditFilters.actionType" class="select" style="min-width: 150px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
+                    <option value="">全部类型</option>
+                    <option value="CREATE_DELIVERY">🚚 新增发货单</option>
+                    <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
+                    <option value="CONFIRM_ARRIVAL">👷 确认到货</option>
+                    <option value="CONFIRM_CONSTRUCTION">👷 施工接收</option>
+                    <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
+                    <option value="SAVE_PLAN">📅 更新三日计划</option>
+                    <option value="SUBMIT_USAGE">🔋 上报消耗损耗</option>
+                    <option value="SUBMIT_STATUS">✅ 提交填报状态</option>
+                    <option value="UPDATE_CONFIG">⚙️ 配置修改</option>
+                    <option value="SUPER_UPDATE_DELIVERY">🚨 超管强改</option>
+                  </select>
+                </div>
+                
+                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">操作人</label>
+                  <input v-model.trim="auditFilters.operator" class="input" type="text" placeholder="模糊搜索操作人" style="height: 32px; width: 140px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
+                </div>
+                
+                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">开始日期</label>
+                  <input v-model="auditFilters.startDate" class="input" type="date" style="height: 32px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
+                </div>
+                
+                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">结束日期</label>
+                  <input v-model="auditFilters.endDate" class="input" type="date" style="height: 32px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
+                </div>
+ 
+                <div class="filter-item" style="display: flex; gap: 8px; align-self: flex-end; margin-left: auto;">
+                  <button class="btn primary" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 5px; cursor: pointer;" @click="fetchAuditLogs(1)">
+                    🔍 查询日志
+                  </button>
+                  <button class="btn ghost" :disabled="exportLoading" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 5px; border-color: #cbd5e1; cursor: pointer; background: #fff;" @click="handleExportLogs">
+                    <span>{{ exportLoading ? '正在导出...' : '📥 导出 Excel (CSV)' }}</span>
+                  </button>
+                </div>
+              </div>
+ 
+              <!-- 日志明细列表 -->
+              <div v-if="auditLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">加载审计日志中...</div>
+              <div v-else-if="auditLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何匹配的操作日志。</div>
+              <div v-else>
+                <div class="table-wrap" style="max-height: 550px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                  <table class="table editor-table" style="margin: 0; width: 100%; border-collapse: collapse;">
+                    <thead>
+                      <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                        <th style="width: 170px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">时间与IP</th>
+                        <th style="width: 130px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">操作人</th>
+                        <th style="width: 140px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">类型</th>
+                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">操作详情</th>
+                        <th style="width: 110px; text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">快照对比</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="log in auditLogs" :key="log.id" style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                        <td style="color: #64748b; font-size: 12px; padding: 12px 16px; white-space: nowrap; line-height: 1.4; vertical-align: middle;">
+                          <div style="font-weight: 500; color: #475569;">{{ formatDateTime(log.created_at) }}</div>
+                          <div v-if="log.client_ip" style="font-family: monospace; color: #94a3b8; font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 3px;">
+                            <span style="display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #cbd5e1;"></span>
+                            IP: {{ log.client_ip }}
+                          </div>
+                          <div v-else style="font-family: monospace; color: #cbd5e1; font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 3px;">
+                            <span style="display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #e2e8f0;"></span>
+                            IP: —
+                          </div>
+                        </td>
+                        <td style="padding: 12px 16px; vertical-align: middle;">
+                          <span style="font-weight: 600; color: #334155; display: block; font-size: 13px;">{{ log.operator }}</span>
+                          <span v-if="log.operator_group" style="display: block; font-size: 11px; color: #94a3b8; margin-top: 2px;">{{ log.operator_group }}</span>
+                        </td>
+                        <td style="padding: 12px 16px; vertical-align: middle;">
+                          <span class="badge" :style="getActionTypeBadgeStyle(log.action_type)" style="font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-block;">
+                            {{ translateActionType(log.action_type) }}
+                          </span>
+                        </td>
+                        <td style="font-size: 13px; color: #334155; padding: 12px 16px; line-height: 1.5; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 0.2s; vertical-align: middle;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#334155'" @click="togglePopover($event, log)">
+                          <span style="border-bottom: 1px dashed #cbd5e1; padding-bottom: 2px;">{{ log.action_desc }}</span>
+                        </td>
+                        <td style="text-align: center; padding: 12px 16px; vertical-align: middle;">
+                          <button 
+                            v-if="log.before_value || log.after_value" 
+                            class="btn-text" 
+                            style="color: #2563eb; cursor: pointer; background: none; border: none; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                            onmouseover="this.style.background='rgba(37,99,235,0.06)'"
+                            onmouseout="this.style.background='none'"
+                            @click="showDiffModal(log)"
+                          >
+                            🔍 查看 Diff
+                          </button>
+                          <span v-else style="color: #94a3b8; font-size: 12px;">无快照</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <!-- 分页栏 -->
+                <div class="pagination-bar" style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; color: #475569; font-size: 13px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px;">
+                  <span>共计 <strong style="color: #0f172a;">{{ auditTotal }}</strong> 条记录</span>
+                  <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn ghost compact-btn" style="padding: 4px 12px; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer;" :disabled="auditPage <= 1" @click="fetchAuditLogs(auditPage - 1)">上一页</button>
+                    <span style="color: #64748b;">第 <strong style="color: #0f172a;">{{ auditPage }}</strong> 页 / 共 <strong style="color: #0f172a;">{{ Math.ceil(auditTotal / auditLimit) || 1 }}</strong> 页</span>
+                    <button class="btn ghost compact-btn" style="padding: 4px 12px; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer;" :disabled="auditPage >= Math.ceil(auditTotal / auditLimit)" @click="fetchAuditLogs(auditPage + 1)">下一页</button>
+                  </div>
+                </div>
+              </div> <!-- 闭合 v-else -->
+            </section>
+          </div>
+
         </div>
 
       </div>
     </main>
+
+    <!-- 快照 Diff 对比弹窗 -->
+    <div v-if="diffModalVisible" class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(8px);">
+      <div class="modal-card" style="width: 85%; max-width: 1000px; max-height: 85vh; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); animation: modalEnter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+        <div class="modal-header" style="padding: 18px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, #f8fafc, #ffffff);">
+          <div>
+            <h4 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px;">🔍 数据快照变更审计</h4>
+            <span style="font-size: 12px; color: #64748b; margin-top: 4px; display: block;">单号/资源: <strong style="color: #334155;">{{ selectedLog?.resource_id || '未知' }}</strong> | 操作人: <strong style="color: #334155;">{{ selectedLog?.operator }}</strong></span>
+          </div>
+          <button style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#94a3b8'" @click="diffModalVisible = false">×</button>
+        </div>
+        <div class="modal-body" style="padding: 24px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #ffffff;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 13px; font-weight: 700; color: #dc2626; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #dc2626;"></span>
+              变更前数据 (Before)
+            </div>
+            <pre style="background: #fff5f5; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; margin: 0; font-family: Consolas, Monaco, monospace; font-size: 12px; color: #991b1b; overflow-x: auto; max-height: 450px; white-space: pre-wrap; text-align: left; line-height: 1.6; box-shadow: inset 0 1px 3px rgba(220, 38, 38, 0.02);">{{ selectedLog?.before_value ? JSON.stringify(selectedLog.before_value, null, 2) : '（无原始数据快照 - 属于新增操作）' }}</pre>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 13px; font-weight: 700; color: #16a34a; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #16a34a;"></span>
+              变更后数据 (After)
+            </div>
+            <pre style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 0; font-family: Consolas, Monaco, monospace; font-size: 12px; color: #166534; overflow-x: auto; max-height: 450px; white-space: pre-wrap; text-align: left; line-height: 1.6; box-shadow: inset 0 1px 3px rgba(22, 163, 74, 0.02);">{{ selectedLog?.after_value ? JSON.stringify(selectedLog.after_value, null, 2) : '（无新数据快照 - 属于删除或撤销操作）' }}</pre>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc;">
+          <button class="btn ghost compact-btn" style="padding: 6px 18px; border-radius: 6px; background: #ffffff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer; font-size: 13px; font-weight: 600;" @click="diffModalVisible = false">关闭</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 气象导入二次确认 Modal 弹窗 -->
     <div v-if="showEvalModal" class="weather-modal-mask">
@@ -719,7 +883,19 @@
             </button>
           </div>
         </footer>
+    </div>
+
+    <!-- 操作详情气泡提示浮层 -->
+    <div v-if="activePopoverLog" class="popover-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9990; background: transparent;" @click="activePopoverLog = null"></div>
+    <div v-if="activePopoverLog" :style="popoverStyle" style="position: fixed; z-index: 9995; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px 18px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05); max-width: 380px; min-width: 260px; font-size: 13px; color: #1e293b; line-height: 1.6; pointer-events: auto;">
+      <!-- 小三角箭头 -->
+      <div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 10px; height: 10px; background: #ffffff; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;"></div>
+      <div style="font-weight: 700; color: #475569; margin-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;">
+        <span style="display: flex; align-items: center; gap: 4px;">📋 操作详情描述</span>
+        <span style="color: #94a3b8; font-size: 10px; font-weight: normal;">点击空白处关闭</span>
       </div>
+      <div style="word-break: break-all; white-space: pre-wrap; color: #334155; font-size: 13px;">{{ activePopoverLog.action_desc }}</div>
+    </div>
     </div>
 
   </div>
@@ -735,6 +911,8 @@ import {
   getTubeWeatherConfig,
   evaluateTubeWeatherImport,
   importTubeWeatherData,
+  getTubeAuditLogs,
+  exportTubeAuditLogs,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -747,6 +925,26 @@ const {
 } = useTubePageShell('全局管理入口')
 
 const activeTab = ref('core')
+
+// 操作审计日志相关 Ref 变量
+const auditLogs = ref([])
+const auditTotal = ref(0)
+const exportLoading = ref(false)
+const auditLoading = ref(false)
+const auditPage = ref(1)
+const auditLimit = ref(15)
+const auditFilters = ref({
+  actionType: '',
+  operator: '',
+  startDate: '',
+  endDate: '',
+})
+const diffModalVisible = ref(false)
+const selectedLog = ref(null)
+
+// 操作详情悬浮气泡状态
+const activePopoverLog = ref(null)
+const popoverStyle = ref({ top: '0px', left: '0px' })
 
 // 天气气温导入相关 Ref 变量
 const dailyCount = ref(0)
@@ -1492,6 +1690,140 @@ onMounted(() => {
 })
 
 useTubeRealtimeRefresh(loadConfig)
+
+// ==================== 📜 操作审计日志 JS 业务逻辑 ====================
+
+async function fetchAuditLogs(page = 1) {
+  auditLoading.value = true
+  auditPage.value = page
+  try {
+    const res = await getTubeAuditLogs(PROJECT_KEY, {
+      actionType: auditFilters.value.actionType,
+      operator: auditFilters.value.operator,
+      startDate: auditFilters.value.startDate,
+      endDate: auditFilters.value.endDate,
+      page: auditPage.value,
+      limit: auditLimit.value,
+    })
+    auditLogs.value = res.rows || []
+    auditTotal.value = res.total || 0
+  } catch (error) {
+    console.error('加载操作审计日志失败:', error)
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+function showDiffModal(log) {
+  selectedLog.value = log
+  diffModalVisible.value = true
+}
+
+function togglePopover(event, log) {
+  if (activePopoverLog.value && activePopoverLog.value.id === log.id) {
+    activePopoverLog.value = null
+    return
+  }
+  activePopoverLog.value = log
+  
+  const rect = event.currentTarget.getBoundingClientRect()
+  
+  // 气泡定位在单元格上方居中，直接使用相对于视口的 rect.top 和 rect.left (对应 position: fixed 展现)
+  popoverStyle.value = {
+    top: `${rect.top - 8}px`,
+    left: `${rect.left + rect.width / 2}px`,
+    transform: 'translate(-50%, -100%)',
+  }
+}
+
+watch(activeTab, () => {
+  activePopoverLog.value = null
+})
+
+function formatDateTime(isoString) {
+  if (!isoString) return '—'
+  try {
+    const date = new Date(isoString)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const hh = String(date.getHours()).padStart(2, '0')
+    const mm = String(date.getMinutes()).padStart(2, '0')
+    const ss = String(date.getSeconds()).padStart(2, '0')
+    return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+  } catch (e) {
+    return isoString
+  }
+}
+
+function translateActionType(type) {
+  const dict = {
+    CREATE_DELIVERY: '🚚 新增发货单',
+    CANCEL_DELIVERY: '❌ 撤销发货',
+    CONFIRM_ARRIVAL: '👷 确认到货',
+    CONFIRM_CONSTRUCTION: '👷 施工接收',
+    CONFIRM_WAREHOUSE: '🏢 库管确认',
+    SAVE_PLAN: '📅 更新三日计划',
+    SUBMIT_USAGE: '🔋 上报消耗损耗',
+    SUBMIT_STATUS: '✅ 提交填报状态',
+    UPDATE_CONFIG: '⚙️ 配置修改',
+    SUPER_UPDATE_DELIVERY: '🚨 超管强改',
+  }
+  return dict[type] || type
+}
+
+function getActionTypeBadgeStyle(type) {
+  const colors = {
+    CREATE_DELIVERY: { bg: '#e8f4fd', color: '#1d88e5' },
+    CANCEL_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
+    CONFIRM_ARRIVAL: { bg: '#fef3d6', color: '#f5b000' },
+    CONFIRM_CONSTRUCTION: { bg: '#e8f7f0', color: '#2dca73' },
+    CONFIRM_WAREHOUSE: { bg: '#f4eafc', color: '#8e44ad' },
+    SAVE_PLAN: { bg: '#e8f4fd', color: '#1d88e5' },
+    SUBMIT_USAGE: { bg: '#fef3d6', color: '#f5b000' },
+    SUBMIT_STATUS: { bg: '#e8f7f0', color: '#2dca73' },
+    UPDATE_CONFIG: { bg: '#f4f5f7', color: '#5a6b82' },
+    SUPER_UPDATE_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
+  }
+  const match = colors[type] || { bg: '#f4f5f7', color: '#5a6b82' }
+  return {
+    backgroundColor: match.bg,
+    color: match.color,
+  }
+}
+
+async function handleExportLogs() {
+  exportLoading.value = true
+  try {
+    const blob = await exportTubeAuditLogs(PROJECT_KEY, {
+      actionType: auditFilters.value.actionType,
+      operator: auditFilters.value.operator,
+      startDate: auditFilters.value.startDate,
+      endDate: auditFilters.value.endDate,
+    })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    const ss = String(now.getSeconds()).padStart(2, '0')
+    const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`
+    a.download = `operation_logs_${timestamp}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('导出操作日志失败:', error)
+    alert(error?.message || '导出操作日志失败')
+  } finally {
+    exportLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
