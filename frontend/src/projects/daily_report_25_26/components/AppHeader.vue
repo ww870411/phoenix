@@ -55,7 +55,7 @@ async function logout() {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 1000;
   background: linear-gradient(90deg, #0b3b86 0%, #0e4cba 60%, #2563eb 100%);
   color: #fff;
   box-shadow: 0 6px 16px rgba(0,0,0,.12);

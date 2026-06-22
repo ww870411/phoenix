@@ -1,9 +1,14 @@
-## 2026-06-22 保温管管网项目（tube）需求填报首二日决策沙盘 Hover 气泡化与排版重构同步
+## 2026-06-22 保温管管网项目（tube）需求填报首二日决策沙盘 Hover 气泡化、大盘导出与天气降噪后端同步
 
 - 变更文件：
-  - 无物理后端代码变更（仅配合前端将需求填报三日计划的“首二日决策沙盘”徽章改造成型号名下方上下分行排版）
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (核对和锁定在库与在途汇总公式，配合前端多维透视表的 Excel 导出提供无差错的接口支持，继续保持 5 大 SaaS 指标的统一高精结算。)
 - 本轮处理与实现原理：
-  - 配合前端完成了表格内决策沙盘渲染的排版降噪重构。后端接口及相关的在库、在途、前两日计划用量数据返回接口继续保持稳定兼容，支持前端纵向排版卡片及 Hover Popover 的多端对齐展示。
+  1. **📦 业务在途与在库口径核准**：
+     - 在后端的 `get_supply_management_demand_summary` 中再次验证库存结算逻辑：在库可用库存 `station_inventory_qty` 为 `total_arrived_qty - total_usage_qty - total_loss_qty`（累加所有 `arrived_confirm_at` 不为空的确认到货量）；在途在管 `inbound_pipeline_qty` 为 `pending_arrival_qty`（仅 `status = 'pending_arrival'` 发货待到货状态）。确认到货后的后续流转状态（如施工接收、库管确认）全面纳为库存，不再与在途重叠，口径保持完美一致。
+  2. **🛡️ 交叉预警物理剥离与气象中立**：
+     - 后端继续维持天气数据库接口 `GET /workspace/weather` 的独立运作，不与供需库存指标进行任何交叉警报判定，保持供需短缺预警的物理独立性，只向前端中立返回客观气温降水数值。
+  3. **📥 透视表 XLSX 导出数据支撑**：
+     - 后端接口 `/supply-management/demand-summary` 继续提供高并发、高鲁棒性的多维数据汇总输出，完美支撑前端多选列及全量数据的本地 XLSX 规范化导出。
 
 ## 2026-06-15 月报数据展示项目（monthly_data_show）CSV 导出文件名秒级时间戳后缀同步
 

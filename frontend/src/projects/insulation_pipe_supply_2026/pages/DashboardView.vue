@@ -180,10 +180,6 @@
 
                   <span class="weather-status-tag" :class="day.themeClass">{{ day.statusText }}</span>
                 </div>
-                
-                <div class="weather-day-footer">
-                  <div class="decision-badge" :class="day.themeClass">🎯 {{ day.decisionText }}</div>
-                </div>
               </div>
             </div>
             
@@ -329,6 +325,14 @@
             </select>
           </div>
           <button class="btn link-btn" @click="resetFilters">重置过滤</button>
+          <button 
+            class="btn primary compact-btn export-pivot-btn" 
+            style="margin-left: auto; height: 36px; padding: 0 16px;" 
+            type="button" 
+            @click="showExportModal = true"
+          >
+            📥 导出当前分析表
+          </button>
         </div>
 
         <div class="pivot-table-container">
@@ -482,6 +486,16 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 导出配置与 XLSX 导出组件 -->
+    <ExportSettingsModal
+      :show="showExportModal"
+      :columns="exportColumns"
+      :data="unfilteredTableData"
+      :filtered-data="computedTableData"
+      :default-filename="pivotMode === 'station' ? '保温管供需分析透视表_按换热站' : '保温管供需分析透视表_按型号'"
+      @close="showExportModal = false"
+    />
   </div>
 </template>
 
@@ -494,6 +508,7 @@ import {
   getTubeSupplyManagementDeliveries,
   getTubeWorkspaceWeatherData
 } from '../../daily_report_25_26/services/api'
+import ExportSettingsModal from './ExportSettingsModal.vue'
 
 // 获取路由与当前项目 Key
 const route = useRoute()
@@ -535,6 +550,75 @@ function openMetricModal(metricKey) {
 function closeMetricModal() {
   activeMetric.value = null
 }
+
+// 导出分析表控制
+const showExportModal = ref(false)
+
+const exportColumns = computed(() => {
+  return [
+    { key: 'name', label: pivotMode.value === 'station' ? '换热站名称' : '保温管型号' },
+    { key: 'design_qty', label: '设计量 (米)' },
+    { key: 'purchase_plan_qty', label: '计划采购 (米)' },
+    { key: 'future_plan_qty', label: '三日计划量 (米)' },
+    { key: 'total_shipped_qty', label: '累计发货 (米)' },
+    { key: 'pending_arrival_qty', label: '在途待到货 (米)' },
+    { key: 'pending_receive_qty', label: '待施工接收 (米)' },
+    { key: 'pending_warehouse_qty', label: '到货待库管确认 (米)' },
+    { key: 'completed_qty', label: '已确认入库 (米)' },
+    { key: 'total_arrived_qty', label: '累计到货 (米)' },
+    { key: 'total_usage_qty', label: '累计实际使用 (米)' },
+    { key: 'station_inventory_qty', label: '现场可用在库 (米)' },
+    { key: 'net_gap_qty', label: '三日净缺口 (米)' },
+    { key: 'hard_gap_qty', label: '三日硬缺口 (米)' }
+  ]
+})
+
+const unfilteredTableData = computed(() => {
+  const isStationMode = pivotMode.value === 'station'
+  const groups = {}
+
+  summaryRows.value.forEach(row => {
+    const groupKey = isStationMode ? row.station_id : row.pipe_model_id
+    const groupName = isStationMode ? row.station_name : row.pipe_model_name
+
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        id: groupKey,
+        name: groupName,
+        design_qty: 0,
+        purchase_plan_qty: 0,
+        future_plan_qty: 0,
+        total_shipped_qty: 0,
+        pending_arrival_qty: 0,
+        pending_receive_qty: 0,
+        pending_warehouse_qty: 0,
+        completed_qty: 0,
+        total_arrived_qty: 0,
+        total_usage_qty: 0,
+        station_inventory_qty: 0,
+        net_gap_qty: 0,
+        hard_gap_qty: 0,
+      }
+    }
+
+    const g = groups[groupKey]
+    g.design_qty += row.design_qty || 0
+    g.purchase_plan_qty += row.purchase_plan_qty || 0
+    g.future_plan_qty += row.future_plan_qty || 0
+    g.total_shipped_qty += row.total_shipped_qty || 0
+    g.pending_arrival_qty += row.pending_arrival_qty || 0
+    g.pending_receive_qty += row.pending_receive_qty || 0
+    g.pending_warehouse_qty += row.pending_warehouse_qty || 0
+    g.completed_qty += row.completed_qty || 0
+    g.total_arrived_qty += row.total_arrived_qty || 0
+    g.total_usage_qty += row.total_usage_qty || 0
+    g.station_inventory_qty += row.station_inventory_qty || 0
+    g.net_gap_qty += row.net_gap_qty || 0
+    g.hard_gap_qty += row.hard_gap_qty || 0
+  })
+
+  return Object.values(groups)
+})
 
 // --- 实时多维运营指标精算引擎 (SaaS Real-time Metric Aggregator) ---
 const backendMetrics = ref(null)
@@ -1030,27 +1114,14 @@ async function fetchWeatherData() {
         const weatherIcon = getWeatherIcon(day.weather_code)
         const statusText = day.weather_text || '未知'
         
-        let decisionText = '宜施工'
-        let decisionDesc = '今日天气极佳，建议现场全线全力开挖，抢抓大管径管网焊口工期。'
         let themeClass = 'fine'
 
         if (rainVal > 0 && rainVal <= 2.0) {
-          decisionText = '宜施工'
-          decisionDesc = '有微量阵雨，对现场施工基本无不良影响，请各标段组织防雨管网焊接防护。'
           themeClass = 'light-rain'
         } else if (rainVal > 2.0 && rainVal <= 8.0) {
-          decisionText = '注意防护'
-          decisionDesc = '现场存在细雨，道路泥泞，请密切注意沟槽防塌，做好焊口遮挡并限速行驶。'
           themeClass = 'moderate-rain'
         } else if (rainVal > 8.0) {
-          decisionText = '停工防汛'
-          decisionDesc = '预计发生强降水！已触发防汛三级警告，现场必须立即停工，管口封闭，人员撤离。'
           themeClass = 'heavy-rain'
-        }
-
-        // 针对历史前一日的说明修正
-        if (idx === 0) {
-          decisionDesc = `前日实际降水为 ${rainVal.toFixed(1)}mm。现场地表已风干，未发生大范围基坑积水。`
         }
 
         // 解析紫外线色阶与等级
@@ -1067,8 +1138,6 @@ async function fetchWeatherData() {
           tempMean: day.temp_mean,
           weatherIcon,
           statusText,
-          decisionText,
-          decisionDesc,
           themeClass
         })
       })
@@ -1608,7 +1677,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 16px 20px;
   position: relative;
-  z-index: 999; /* 极大提升层级，物理防御雷达图 Canvas 任何可能的溢出透明遮挡 */
+  z-index: 5; /* 适度提升层级，物理防御雷达图 Canvas 溢出，且不遮挡顶部 Banner */
   cursor: pointer;
   pointer-events: auto !important; /* 强制拦截鼠标事件并响应点击，杜绝任何外部层级劫持 */
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1842,36 +1911,7 @@ onBeforeUnmount(() => {
 .weather-status-tag.moderate-rain { background: #ffedd5; color: #c2410c; }
 .weather-status-tag.heavy-rain { background: #fee2e2; color: #b91c1c; }
 
-.weather-day-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.decision-badge {
-  font-size: 10px;
-  font-weight: 800;
-  padding: 3px 6px;
-  border-radius: 4px;
-  text-align: center;
-}
-.decision-badge.fine { background: rgba(21, 128, 61, 0.08); color: #15803d; }
-.decision-badge.light-rain { background: rgba(29, 236, 216, 0.08); color: #1d4ed8; }
-.decision-badge.moderate-rain { background: rgba(194, 65, 12, 0.08); color: #c2410c; }
-.decision-badge.heavy-rain { background: rgba(185, 28, 28, 0.08); color: #b91c1c; }
-
-.decision-desc-text {
-  margin: 0;
-  font-size: 9.5px;
-  color: #64748b;
-  line-height: 1.4;
-  height: 40px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
+/* 去除已弃用的决策话术与气象卡片底部布局 */
 
 /* 第三区：健康雷达评估与精细化运营大盘 (双面板) */
 /* 第三区：健康雷达评估与精细化运营大盘 (3x3 融合网格布局) */
@@ -1983,7 +2023,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 16px 20px;
   position: relative;
-  z-index: 999; /* 极大提升层级，物理防御雷达图 Canvas 任何可能的溢出透明遮挡 */
+  z-index: 5; /* 适度提升层级，物理防御雷达图 Canvas 溢出，且不遮挡顶部 Banner */
   cursor: pointer;
   pointer-events: auto !important; /* 物理强制保证点击事件 100% 畅通无阻传递 */
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
