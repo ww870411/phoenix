@@ -180,12 +180,23 @@
                     >
                       {{ date }}
                     </th>
-                    <th class="sandbox-th">🔮 首二日填报决策沙盘 (决策辅助)</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in planRows" :key="row.pipeModelId">
-                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
+                    <td class="cell-text cell-model-name" :title="row.pipeModelName">
+                      <div class="model-name-text">{{ row.pipeModelName }}</div>
+                      <div class="model-badge-row">
+                        <span
+                          class="sandbox-trigger-badge"
+                          :class="getSandboxTriggerClass(row)"
+                          @mouseenter="showSandboxPopover($event, row)"
+                          @mouseleave="hideSandboxPopover"
+                        >
+                          {{ getSandboxTriggerLabel(row) }}
+                        </span>
+                      </div>
+                    </td>
                     <td
                       v-for="(date, index) in planDates"
                       :key="`${row.pipeModelId}-${date}`"
@@ -207,24 +218,6 @@
                           placeholder="备注"
                           :disabled="!isPlanDateEditable(index) || !canSubmitCurrentProject || (index === 2 && strictPlanningFlowControl && !isUsageSubmitted)"
                         />
-                      </div>
-                    </td>
-                    <td class="cell-sandbox">
-                      <div class="sandbox-badge" :class="getSandboxStatusClass(row)">
-                        <div class="sandbox-header-row">
-                          <span class="sandbox-title">🔮 首二日后盈缺</span>
-                          <span class="result-chip" :class="getPredictionStatusClass(row)">
-                            {{ getPredictionStatusLabel(row) }}
-                          </span>
-                        </div>
-                        <div class="sandbox-metrics">
-                          <span class="metric-item" title="当前现场已确认接收在库总量">在库: <strong>{{ strictPlanningFlowControl && !isUsageSubmitted ? '待结算' : `${row.stationInventoryQty} 米` }}</strong></span>
-                          <span class="metric-item" title="当前所有已发货在途及到站待确认的总量">在途: <strong>{{ row.inboundPipelineQty }} 米</strong></span>
-                          <span class="metric-item" title="未来三日计划中前两日计划量之和">前两日需: <strong>{{ getPrevTwoDaysPlanSum(row) }} 米</strong></span>
-                        </div>
-                        <div class="sandbox-suggestion">
-                          💡 {{ getSandboxSuggestion(row) }}
-                        </div>
                       </div>
                     </td>
                   </tr>
@@ -594,6 +587,53 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 🔮 首二日填报决策沙盘 Hover 悬浮气泡 (Popover) -->
+    <div
+      v-if="activeSandboxRow"
+      :style="sandboxPopoverStyle"
+      class="sandbox-popover-card"
+    >
+      <div class="popover-arrow"></div>
+      <div class="popover-header">
+        <span class="popover-title">🔮 第三天开工前库存推演</span>
+        <span class="popover-badge-label" :class="getPredictionStatusClass(activeSandboxRow)">
+          {{ getPredictionStatusLabel(activeSandboxRow) }}
+        </span>
+      </div>
+      <div class="popover-body">
+        <div class="popover-metrics-grid">
+          <div class="metric-row">
+            <span class="metric-label">现场可用在库：</span>
+            <span class="metric-val text-bold">
+              {{ strictPlanningFlowControl && !isUsageSubmitted ? '待结算' : `${activeSandboxRow.stationInventoryQty} 米` }}
+            </span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">发货在途总量：</span>
+            <span class="metric-val text-bold">{{ activeSandboxRow.inboundPipelineQty }} 米</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">前两日计划用量：</span>
+            <span class="metric-val text-bold text-danger">- {{ getPrevTwoDaysPlanSum(activeSandboxRow) }} 米</span>
+          </div>
+        </div>
+        <div class="popover-divider"></div>
+        <div class="popover-suggestion-box">
+          <span class="suggestion-icon">💡</span>
+          <div class="suggestion-text">
+            {{ getSandboxSuggestion(activeSandboxRow) }}
+            <span
+              v-if="strictPlanningFlowControl && !isUsageSubmitted"
+              class="popover-jump-hint"
+              @click="jumpToUsageTab"
+            >
+              去上报昨日消耗 ➜
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1387,15 +1427,6 @@ function getPredictionStatusClass(row) {
   return prediction >= 0 ? 'safe-green' : 'danger-red'
 }
 
-// 决策沙盘的外层状态样式类
-function getSandboxStatusClass(row) {
-  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
-    return 'status-locked'
-  }
-  const prediction = getTailDayPrediction(row)
-  return prediction >= 0 ? 'status-safe' : 'status-alert'
-}
-
 // 状态标签文本
 function getPredictionStatusLabel(row) {
   if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
@@ -1410,7 +1441,7 @@ function getPredictionStatusLabel(row) {
 // 智能决策建议提示
 function getSandboxSuggestion(row) {
   if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
-    return '前日(昨日)实际使用消耗尚未上报结清！为了避免给您的三日计划提供虚假的盈缺预测，请先前往‘每日使用消耗填报’中提交昨日消耗，系统将即时为您解锁首二日后库存盈缺推演与第三日计划填报。'
+    return '昨日实际使用消耗尚未上报结清！为了避免提供虚假的盈缺预测，请先提交昨日消耗以解锁首二日盈缺推演。'
   }
   const prediction = getTailDayPrediction(row)
   if (prediction > 0) {
@@ -1421,6 +1452,50 @@ function getSandboxSuggestion(row) {
   }
   const absoluteGap = Math.abs(prediction)
   return `前两天计划将消耗光全部可用库存！首二日后将面临断料缺口 ${absoluteGap} 米，第三天填报量建议≥${absoluteGap}米。`
+}
+
+// 🔮 首二日填报决策沙盘 Hover Popover 相关状态与方法
+const activeSandboxRow = ref(null)
+const sandboxPopoverStyle = ref({ top: '0px', left: '0px' })
+
+function showSandboxPopover(event, row) {
+  activeSandboxRow.value = row
+  const rect = event.currentTarget.getBoundingClientRect()
+  // 气泡定位在触发Badge的上方居中 (利用 position: fixed)
+  sandboxPopoverStyle.value = {
+    top: `${rect.top - 8}px`,
+    left: `${rect.left + rect.width / 2}px`,
+    transform: 'translate(-50%, -100%)',
+  }
+}
+
+function hideSandboxPopover() {
+  activeSandboxRow.value = null
+}
+
+function getSandboxTriggerClass(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return 'trigger-locked'
+  }
+  const prediction = getTailDayPrediction(row)
+  return prediction >= 0 ? 'trigger-safe' : 'trigger-danger'
+}
+
+function getSandboxTriggerLabel(row) {
+  if (strictPlanningFlowControl.value && !isUsageSubmitted.value) {
+    return '🔒 待上报'
+  }
+  const prediction = getTailDayPrediction(row)
+  if (prediction > 0) return `盈 +${prediction}m`
+  if (prediction === 0) return `平 0m`
+  return `缺 -${Math.abs(prediction)}m`
+}
+
+function jumpToUsageTab() {
+  activeSandboxRow.value = null
+  activeTab.value = 'usage'
+  // 滚动到顶部以看到填报卡片
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 </script>
 
@@ -2258,163 +2333,232 @@ function getSandboxSuggestion(row) {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
 }
 
-/* 🔮 首二日填报决策沙盘殿堂级 UI 样式 */
-.sandbox-th {
-  min-width: 330px !important;
-  max-width: 360px !important;
+/* 🔮 首二日填报决策沙盘 Hover 悬浮气泡极致优化样式 */
+.cell-model-name {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-width: 180px !important;
 }
 
-.cell-sandbox {
-  padding: 8px 10px !important;
-}
-
-.sandbox-badge {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
-}
-
-.sandbox-badge::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  width: 4px;
-}
-
-/* 安全盈余卡片 */
-.sandbox-badge.status-safe {
-  background: rgba(240, 253, 244, 0.6) !important;
-  border: 1px solid rgba(187, 247, 208, 0.7) !important;
-}
-
-.sandbox-badge.status-safe::before {
-  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
-}
-
-.sandbox-badge.status-safe:hover {
-  background: rgba(240, 253, 244, 0.95) !important;
-  border-color: rgba(34, 197, 94, 0.4) !important;
-  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.08);
-}
-
-/* 缺口警报卡片 */
-.sandbox-badge.status-alert {
-  background: rgba(254, 242, 242, 0.6) !important;
-  border: 1px solid rgba(254, 226, 226, 0.7) !important;
-  animation: border-glow-alert 3s infinite ease-in-out;
-}
-
-.sandbox-badge.status-alert::before {
-  background: linear-gradient(180deg, #ef4444 0%, #be123c 100%);
-}
-
-.sandbox-badge.status-alert:hover {
-  background: rgba(254, 242, 242, 0.95) !important;
-  border-color: rgba(239, 68, 68, 0.4) !important;
-  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.08);
-}
-
-.sandbox-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.sandbox-title {
-  font-size: 12px;
-  font-weight: 700;
+.model-name-text {
+  font-size: 13px;
+  font-weight: 600;
   color: #334155;
-  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
 
-.result-chip {
+.model-badge-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.sandbox-trigger-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+  cursor: help;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid transparent;
 }
 
-.result-chip.safe-green {
+/* 触发器徽章颜色状态 */
+.sandbox-trigger-badge.trigger-safe {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border-color: rgba(187, 247, 208, 0.6) !important;
+}
+
+.sandbox-trigger-badge.trigger-safe:hover {
+  background: #bbf7d0 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(34, 197, 94, 0.15);
+}
+
+.sandbox-trigger-badge.trigger-danger {
+  background: #fee2e2 !important;
+  color: #be123c !important;
+  border-color: rgba(254, 226, 226, 0.6) !important;
+  animation: badge-pulse-danger 2s infinite ease-in-out;
+}
+
+.sandbox-trigger-badge.trigger-danger:hover {
+  background: #fca5a5 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(239, 68, 68, 0.15);
+}
+
+.sandbox-trigger-badge.trigger-locked {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border-color: rgba(226, 232, 240, 0.8) !important;
+  border-style: dashed !important;
+}
+
+.sandbox-trigger-badge.trigger-locked:hover {
+  background: #e2e8f0 !important;
+  transform: translateY(-1px);
+}
+
+@keyframes badge-pulse-danger {
+  0%, 100% { border-color: rgba(254, 226, 226, 0.6); }
+  50% { border-color: rgba(239, 68, 68, 0.4); }
+}
+
+/* 🔮 Hover Popover 容器 (SaaS Glassmorphism) */
+.sandbox-popover-card {
+  position: fixed;
+  z-index: 9995;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 
+    0 10px 25px -5px rgba(15, 23, 42, 0.1), 
+    0 8px 10px -6px rgba(15, 23, 42, 0.05),
+    0 0 1px 1px rgba(0, 0, 0, 0.02);
+  max-width: 320px;
+  min-width: 250px;
+  pointer-events: auto;
+  animation: popover-fade-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.popover-arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+  z-index: -1;
+}
+
+@keyframes popover-fade-in {
+  from { opacity: 0; transform: translate(-50%, -95%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+/* 气泡头部 */
+.popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.popover-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.popover-badge-label {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.popover-badge-label.safe-green {
   background: #dcfce7;
   color: #15803d;
 }
 
-.result-chip.danger-red {
+.popover-badge-label.danger-red {
   background: #fee2e2;
   color: #be123c;
-  animation: pulse-danger-text 2s infinite ease-in-out;
 }
 
-.sandbox-metrics {
+.popover-badge-label.locked-grey {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* 指标表格网格 */
+.popover-metrics-grid {
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-  border-bottom: 1px dashed rgba(226, 232, 240, 0.8);
-  padding-bottom: 6px;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
-.metric-item {
-  font-size: 11px;
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
   color: #64748b;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  white-space: nowrap;
 }
 
-.metric-item strong {
+.metric-val.text-bold {
+  font-weight: 600;
   color: #1e293b;
 }
 
-.sandbox-suggestion {
+.metric-val.text-danger {
+  color: #ef4444;
+}
+
+.popover-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 8px 0;
+}
+
+/* 气泡建议框 */
+.popover-suggestion-box {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.suggestion-icon {
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.suggestion-text {
   font-size: 11px;
   color: #475569;
   line-height: 1.45;
   text-align: left;
-  background: rgba(255, 255, 255, 0.4);
-  padding: 6px 8px;
-  border-radius: 6px;
-  word-break: break-all;
 }
 
-.status-alert .sandbox-suggestion {
-  background: rgba(255, 255, 255, 0.7);
-  color: #991b1b;
+.popover-jump-hint {
+  display: block;
+  margin-top: 6px;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.status-safe .sandbox-suggestion {
-  background: rgba(255, 255, 255, 0.7);
-  color: #166534;
-}
-
-@keyframes pulse-danger-text {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.75; }
-}
-
-@keyframes border-glow-alert {
-  0%, 100% {
-    border-color: rgba(254, 226, 226, 0.7);
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
-  }
-  50% {
-    border-color: rgba(248, 113, 113, 0.35);
-    box-shadow: 0 2px 8px 0 rgba(239, 68, 68, 0.04);
-  }
+.popover-jump-hint:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
 }
 
 /* 🔒 首二日顺序填报控制锁引导横幅 */
@@ -2486,31 +2630,7 @@ function getSandboxSuggestion(row) {
   transform: translateY(-1px) !important;
 }
 
-/* 锁定灰卡片样式 */
-.sandbox-badge.status-locked {
-  background: rgba(241, 245, 249, 0.6) !important;
-  border: 1px dashed rgba(148, 163, 184, 0.6) !important;
-  box-shadow: none !important;
-}
 
-.sandbox-badge.status-locked::before {
-  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
-}
-
-.result-chip.locked-grey {
-  background: #e2e8f0;
-  color: #475569;
-}
-
-.status-locked .sandbox-suggestion {
-  background: rgba(255, 255, 255, 0.8);
-  color: #475569;
-  border-left: 2px solid #94a3b8;
-}
-
-.status-locked .metric-item strong {
-  color: #94a3b8;
-}
 
 @keyframes link-pulse-glow {
   0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
