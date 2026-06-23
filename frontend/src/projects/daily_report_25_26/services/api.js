@@ -376,6 +376,19 @@ export async function confirmTubeDemandManagementDeliveryReceipt(projectKey, del
   return response.json()
 }
 
+export async function approveTubeDemandManagementDeliveryDifference(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/diff-approve`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `审批接收差异失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pipe_supply_2026') {
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/config`, {
     headers: attachAuthHeaders(),

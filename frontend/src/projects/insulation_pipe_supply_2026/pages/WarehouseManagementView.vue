@@ -434,26 +434,53 @@
                 <div style="position: relative; z-index: 2;">
                   <span :style="{
                     position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
-                    background: selectedDelivery.received_confirm_at ? '#8b5cf6' : '#cbd5e1',
+                    background: selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1',
                     border: '3px solid #ffffff',
-                    boxShadow: '0 0 0 2px ' + (selectedDelivery.received_confirm_at ? '#8b5cf6' : '#cbd5e1'),
+                    boxShadow: '0 0 0 2px ' + (selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1'),
                     display: 'inline-block'
                   }"></span>
                   <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.received_confirm_at ? '#1e293b' : '#94a3b8' }">📐 施工物理接收确认</span>
+                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve' ? '#1e293b' : '#94a3b8' }">📐 施工物理接收确认</span>
                       <span v-if="selectedDelivery.received_confirm_at" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.received_confirm_at) }}</span>
+                      <span v-else-if="selectedDelivery.status === 'pending_diff_approve'" style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⌛ 施工已上报待审批</span>
                       <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待节点确认...</span>
                     </div>
-                    <div v-if="selectedDelivery.received_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                    <div v-if="selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve'" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>接收量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.received_qty) }} 米</strong></div>
-                      <div>经办人：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
+                      <div>经办人：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '施工填报人' }}</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.received_remark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.received_remark }}”</span></div>
+                      <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="selectedDelivery.is_timeout_receive">
+                        🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                <!-- 4. 库管入库阶段 -->
+                <!-- 4. 差异审批阶段 -->
+                <div v-if="selectedDelivery.diff_approve_by || selectedDelivery.status === 'pending_diff_approve'" style="position: relative; z-index: 2;">
+                  <span :style="{
+                    position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
+                    background: selectedDelivery.diff_approve_by ? '#f97316' : '#cbd5e1',
+                    border: '3px solid #ffffff',
+                    boxShadow: '0 0 0 2px ' + (selectedDelivery.diff_approve_by ? '#f97316' : '#cbd5e1'),
+                    display: 'inline-block'
+                  }"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span :style="{ fontSize: '13px', fontWeight: '700', color: selectedDelivery.diff_approve_by ? '#1e293b' : '#94a3b8' }">🛡️ 现场负责人差异审批</span>
+                      <span v-if="selectedDelivery.diff_approve_at" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.diff_approve_at) }}</span>
+                      <span v-else style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⚠️ 挂起待审批...</span>
+                    </div>
+                    <div v-if="selectedDelivery.diff_approve_by" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>审批人：<strong style="color: #0f172a;">{{ selectedDelivery.diff_approve_by }}</strong></div>
+                      <div>审批时间：<span>{{ formatDateTime(selectedDelivery.diff_approve_at) }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.diff_approve_remark">审批意见：<span style="color: #ea580c; font-weight: 500;">{{ selectedDelivery.diff_approve_remark }}</span></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 5. 库管入库阶段 -->
                 <div style="position: relative; z-index: 2;">
                   <span :style="{
                     position: 'absolute', left: '-24px', top: '2px', width: '16px', height: '16px', borderRadius: '99px',
@@ -476,7 +503,31 @@
                   </div>
                 </div>
                 
-                <!-- 5. 撤销/异常废弃阶段 (仅在状态是撤销时展示) -->
+                <!-- 6. 管理员编辑覆盖节点 -->
+                <div v-if="selectedDelivery.ship_remark && (selectedDelivery.ship_remark.includes('[超级修正智能补齐]') || selectedDelivery.ship_remark.includes(' | 状态强改至'))" style="position: relative; z-index: 2; margin-top: 20px;">
+                  <span style="position: absolute; left: -24px; top: 2px; width: 16px; height: 16px; border-radius: 99px; background: #64748b; border: 3px solid #ffffff; box-shadow: 0 0 0 2px #64748b; display: inline-block;"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                      <span style="font-size: 13px; font-weight: 700; color: #1e293b;">🛠️ 超级管理员覆盖修正</span>
+                      <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.updated_at || selectedDelivery.shipped_at) }}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
+                      <div>修正人：<strong style="color: #0f172a;">{{ selectedDelivery.updated_by || '超级管理员' }}</strong></div>
+                      <div>修改时间：<span>{{ formatDateTime(selectedDelivery.updated_at) }}</span></div>
+                      <div style="grid-column: span 2; word-break: break-all;">修正轨迹及批注：
+                        <span style="color: #475569; font-style: italic; font-weight: 500;">
+                          {{ 
+                            selectedDelivery.ship_remark.includes('[超级修正智能补齐]') 
+                              ? selectedDelivery.ship_remark.substring(selectedDelivery.ship_remark.indexOf('[超级修正智能补齐]')).replace('[超级修正智能补齐] ', '') 
+                              : selectedDelivery.ship_remark.substring(selectedDelivery.ship_remark.indexOf(' | 状态强改至') + 3) 
+                          }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 6. 撤销/异常废弃阶段 (仅在状态是撤销时展示) -->
                 <div v-if="selectedDelivery.status === 'cancelled' || selectedDelivery.cancel_reason" style="position: relative; z-index: 2; margin-top: 4px;">
                   <span style="position: absolute; left: -24px; top: 2px; width: 16px; height: 16px; border-radius: 99px; background: #ef4444; border: 3px solid #ffffff; box-shadow: 0 0 0 2px #ef4444; display: inline-block;"></span>
                   <div style="display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">

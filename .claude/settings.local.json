@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cp:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(where claude-code *)",
+      "mcp__Serena__initial_instructions"
     ],
     "deny": [],
     "ask": []

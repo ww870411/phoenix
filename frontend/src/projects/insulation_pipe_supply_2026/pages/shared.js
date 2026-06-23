@@ -31,6 +31,15 @@ export function useTubeRealtimeRefresh(refreshFn, options = {}) {
   }
 
   function handleWindowFocus() {
+    // 保护正在输入的输入框或文本域，防止打字/输入法切换时被动刷新
+    const activeEl = document.activeElement
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+      return
+    }
+    // 如果页面上有任何遮罩弹窗处于打开状态，也避免刷新干扰用户
+    if (document.querySelector('.block-modal-overlay') || document.querySelector('.modal-overlay')) {
+      return
+    }
     triggerRefresh()
   }
 
@@ -131,10 +140,24 @@ export const DELIVERY_STATUS_DICT = {
     class: 'status-cancelled',
     icon: '❌',
     color: '#64748b',
+  },
+  pending_diff_approve: {
+    label: '⚠️ 待差异审批',
+    class: 'status-pending-receive',
+    icon: '⚠️',
+    color: '#f97316',
   }
 }
 
-export function getDeliveryStatus(status) {
+export function getDeliveryStatus(status, isTimeout = false) {
+  if (isTimeout) {
+    return {
+      label: '🕒 超时自动确认',
+      class: 'status-pending-warehouse',
+      icon: '🕒',
+      color: '#a855f7',
+    }
+  }
   return DELIVERY_STATUS_DICT[status] || {
     label: `未知状态 (${status || '—'})`,
     class: 'status-unknown',

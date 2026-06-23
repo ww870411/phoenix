@@ -413,7 +413,12 @@
                     <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td class="cell-status">
                       <div class="status-pill-group">
-                        <span class="status-pill" :class="row.status">
+                        <span 
+                          class="status-pill clickable-pill" 
+                          :class="row.status === 'pending_diff_approve' ? 'pending_receive' : (row.isTimeoutReceive ? 'pending_warehouse' : row.status)"
+                          title="点击查看全生命周期流转备注详情"
+                          @click="showDeliveryDetail(row)"
+                        >
                           {{ row.statusLabel }}
                         </span>
                         <span v-if="row.abnormalFlag" class="status-pill abnormal">
@@ -440,6 +445,9 @@
                           step="1"
                         />
                       </div>
+                      <span v-else-if="row.status === 'pending_diff_approve'" class="cell-number" style="color: #f97316; font-weight: bold;">
+                        {{ formatNumber(row.receivedQty) }} (待审批)
+                      </span>
                       <span v-else class="cell-number">{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
                     </td>
                     <td>
@@ -475,7 +483,26 @@
                           }}
                         </button>
                       </div>
-                      <span v-else class="action-placeholder">{{ getDeliveryStatusLabel(row.status) }}</span>
+                      <div v-else-if="row.status === 'pending_diff_approve' && isSiteManager" class="action-stack action-inline">
+                        <button
+                          type="button"
+                          class="primary-button action-button arrival-button is-active"
+                          :disabled="deliveryActionLoadingKey === `approve-${row.deliveryId}` || deliveryActionLoadingKey === `reject-${row.deliveryId}`"
+                          @click="handleDiffApprove(row, true)"
+                        >
+                          {{ deliveryActionLoadingKey === `approve-${row.deliveryId}` ? '处理中...' : '同意差异' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="primary-button action-button receipt-button"
+                          style="border-color: #ef4444; color: #ef4444;"
+                          :disabled="deliveryActionLoadingKey === `approve-${row.deliveryId}` || deliveryActionLoadingKey === `reject-${row.deliveryId}`"
+                          @click="handleDiffApprove(row, false)"
+                        >
+                          {{ deliveryActionLoadingKey === `reject-${row.deliveryId}` ? '处理中...' : '驳回并更正' }}
+                        </button>
+                      </div>
+                      <span v-else class="action-placeholder">{{ row.statusLabel }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -588,6 +615,245 @@
       </div>
     </Transition>
 
+    <!-- 施工少接收备注输入弹窗 -->
+    <Transition name="fade">
+      <div v-if="receiptRemarkModalVisible && receiptRemarkModalData.row" class="block-modal-overlay">
+        <div class="block-modal-container" style="max-width: 500px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;">
+            <span class="block-warning-icon">📝</span>
+            <h3 style="margin-top: 5px; color: #fff;">少到货/少接收备注确认</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">检测到您的实收量小于到货确认量，系统强制需要填写差异备注原因（不少于 10 个字符）</p>
+          </div>
+          
+          <div class="block-modal-metrics" style="grid-template-columns: repeat(2, 1fr); padding: 15px; gap: 10px;">
+            <div class="metric-block-card" style="grid-column: span 2;">
+              <span class="lbl">保温管规格</span>
+              <span class="val model-val" style="font-size: 13px;">{{ receiptRemarkModalData.row.pipeModelName }}</span>
+            </div>
+            <div class="metric-block-card">
+              <span class="lbl">确认到货量</span>
+              <span class="val green-val" style="font-size: 18px;">{{ formatNumber(receiptRemarkModalData.limitQty) }} <small>米</small></span>
+            </div>
+            <div class="metric-block-card">
+              <span class="lbl">施工拟收量</span>
+              <span class="val red-val" style="font-size: 18px; color: #f97316;">{{ formatNumber(receiptRemarkModalData.receivedQty) }} <small>米</small></span>
+            </div>
+          </div>
+
+          <div style="padding: 0 20px 15px 20px; text-align: left;">
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
+              ⚠️ 请输入具体的差异原因（不得少于10个字）：
+            </label>
+            <textarea
+              v-model="receiptRemarkModalData.remark"
+              placeholder="例如：运输途中破损2米；现场测量短缺1米，管厂发货短少... （字数不少于10字）"
+              rows="3"
+              style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 12px; resize: none; box-sizing: border-box; outline: none;"
+            ></textarea>
+            <div style="font-size: 11px; color: #94a3b8; text-align: right; margin-top: 4px;">
+              当前字数：<strong :style="{ color: receiptRemarkModalData.remark.trim().length >= 10 ? '#10b981' : '#ef4444' }">
+                {{ receiptRemarkModalData.remark.trim().length }}
+              </strong> / 最少 10 字
+            </div>
+          </div>
+
+          <div class="block-modal-actions" style="margin-top: 5px;">
+            <button 
+              type="button" 
+              class="btn primary" 
+              style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important; width: 100%; color: #fff !important; font-weight: 600;"
+              :disabled="receiptRemarkModalData.remark.trim().length < 10"
+              @click="submitReceiptWithRemark"
+            >
+              提交接收并挂起差异审批
+            </button>
+            <button 
+              type="button" 
+              class="btn ghost" 
+              style="width: 100%; margin-top: 5px;"
+              @click="receiptRemarkModalVisible = false"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 订单流转备注及全生命周期详情弹窗 -->
+    <Transition name="fade">
+      <div v-if="deliveryDetailModalVisible && deliveryDetailModalData" class="block-modal-overlay" @click.self="deliveryDetailModalVisible = false">
+        <div class="block-modal-container" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%) !important;">
+            <span class="block-warning-icon">🚚</span>
+            <h3 style="margin-top: 5px; color: #fff;">订单全生命周期流转凭证</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">单号：{{ deliveryDetailModalData.deliveryCode || deliveryDetailModalData.deliveryId }}</p>
+          </div>
+          
+          <!-- 信息概述 -->
+          <div class="block-modal-metrics" style="grid-template-columns: repeat(3, 1fr); padding: 15px; gap: 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div class="metric-block-card">
+              <span class="lbl">车牌号</span>
+              <span class="val" style="font-size: 13px; font-weight: bold; color: #1e293b;">{{ deliveryDetailModalData.vehiclePlateNo || '—' }}</span>
+            </div>
+            <div class="metric-block-card" style="grid-column: span 2;">
+              <span class="lbl">规格型号</span>
+              <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
+            </div>
+          </div>
+
+          <!-- 时光轴内容 Timeline -->
+          <div style="padding: 25px 25px 15px 35px; text-align: left; position: relative; width: 100%; box-sizing: border-box;">
+            <!-- 时光轴中轴线 -->
+            <div style="position: absolute; left: 17px; top: 30px; bottom: 30px; width: 2px; border-left: 2px dashed #cbd5e1;"></div>
+
+            <!-- 1. 发货阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #4f46e5; border: 2px solid #fff; box-shadow: 0 0 0 2px #4f46e5; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #1e293b;">🏭 供给侧装车发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.shippedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} 米</strong></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">发货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 到货确认阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.arrivedConfirmAt ? '#10b981' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.arrivedConfirmAt ? '#10b981' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.arrivedConfirmAt ? '#1e293b' : '#94a3b8' }">🚚 物流卸车到货确认</span>
+                  <span v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.arrivedConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待卸车到货...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} 米</strong></div>
+                  <div>确认人：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedRemark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.arrivedRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 施工接收阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#1e293b' : '#94a3b8' }">👷 施工单位确认领用</span>
+                  <span v-if="deliveryDetailModalData.receivedConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.receivedConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待施工接收...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
+                  <div>接收人：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedRemark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.receivedRemark }}”</span></div>
+                  <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="deliveryDetailModalData.isTimeoutReceive">
+                    🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 差异审批阶段 -->
+            <div v-if="deliveryDetailModalData.diffApproveBy || deliveryDetailModalData.status === 'pending_diff_approve'" style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.diffApproveBy ? '#f97316' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.diffApproveBy ? '#f97316' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.diffApproveBy ? '#1e293b' : '#94a3b8' }">🛡️ 现场负责人差异审批</span>
+                  <span v-if="deliveryDetailModalData.diffApproveAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.diffApproveAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⚠️ 挂起待审批...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.diffApproveBy" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>审批人：<strong>{{ deliveryDetailModalData.diffApproveBy }}</strong></div>
+                  <div>审批时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.diffApproveAt) }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.diffApproveRemark">审批意见：<span style="color: #ea580c; font-weight: 500;">{{ deliveryDetailModalData.diffApproveRemark }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. 库管入库阶段 -->
+            <div style="position: relative;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.warehouseConfirmAt ? '#059669' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.warehouseConfirmAt ? '#059669' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.warehouseConfirmAt ? '#1e293b' : '#94a3b8' }">🏢 库管员确认物资归档入库</span>
+                  <span v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待库管确认...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>入库日期：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
+                  <div>经办库管：<strong>{{ deliveryDetailModalData.warehouseConfirmBy }}</strong></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 6. 管理员编辑覆盖节点 -->
+            <div v-if="deliveryDetailModalData.shipRemark && (deliveryDetailModalData.shipRemark.includes('[超级修正智能补齐]') || deliveryDetailModalData.shipRemark.includes(' | 状态强改至'))" style="position: relative; margin-top: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #64748b; border: 2px solid #fff; box-shadow: 0 0 0 2px #64748b"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #1e293b;">🛠️ 超级管理员覆盖修正</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt || deliveryDetailModalData.shippedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>修正人：<strong>{{ deliveryDetailModalData.updatedBy || '超级管理员' }}</strong></div>
+                  <div>修改时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt) }}</span></div>
+                  <div style="grid-column: span 2; word-break: break-all;">修正轨迹及批注：
+                    <span style="color: #475569; font-style: italic; font-weight: 500;">
+                      {{ 
+                        deliveryDetailModalData.shipRemark.includes('[超级修正智能补齐]') 
+                          ? deliveryDetailModalData.shipRemark.substring(deliveryDetailModalData.shipRemark.indexOf('[超级修正智能补齐]')).replace('[超级修正智能补齐] ', '') 
+                          : deliveryDetailModalData.shipRemark.substring(deliveryDetailModalData.shipRemark.indexOf(' | 状态强改至') + 3) 
+                      }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部按钮区 -->
+          <div class="block-modal-actions" style="margin-top: 5px;">
+            <button 
+              type="button" 
+              class="btn primary cancel-btn" 
+              style="width: 100%; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
+              @click="deliveryDetailModalVisible = false"
+            >
+              已阅并关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 🔮 首二日填报决策沙盘 Hover 悬浮气泡 (Popover) -->
     <div
       v-if="activeSandboxRow"
@@ -645,6 +911,7 @@ import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeDemandManagementDeliveryArrival,
   confirmTubeDemandManagementDeliveryReceipt,
+  approveTubeDemandManagementDeliveryDifference,
   getTubeDemandManagementBaseline,
   getTubeDemandManagementLogisticsRecords,
   getTubeDemandManagementOptions,
@@ -676,6 +943,24 @@ const showExportModal = ref(false)
 const blockModalVisible = ref(false)
 const blockModalData = ref(null)
 const allPendingRows = ref([])
+
+// 新增差异备注弹窗与订单流转时光轴详情弹窗状态
+const receiptRemarkModalVisible = ref(false)
+const receiptRemarkModalData = ref({
+  row: null,
+  receivedQty: 0,
+  limitQty: 0,
+  remark: ''
+})
+
+const deliveryDetailModalVisible = ref(false)
+const deliveryDetailModalData = ref(null)
+
+function showDeliveryDetail(row) {
+  deliveryDetailModalData.value = row
+  deliveryDetailModalVisible.value = true
+}
+
 
 function tryParseBlockError(message) {
   if (!message || typeof message !== 'string') return null
@@ -848,6 +1133,7 @@ const isGlobalAdmin = computed(() => {
 })
 const canConfirmArrival = computed(() => isGlobalAdmin.value || normalizedGroupKey.value === 'tube_site_manager')
 const canConfirmReceipt = computed(() => isGlobalAdmin.value || normalizedGroupKey.value === 'tube_construction_unit')
+const isSiteManager = computed(() => isGlobalAdmin.value || normalizedGroupKey.value === 'tube_site_manager')
 const deliveryActionLoadingKey = ref('')
 
 const currentGroupLabel = computed(() => {
@@ -992,7 +1278,8 @@ function normalizePendingRows(rows) {
     supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
     status: row.status || '',
-    statusLabel: getDeliveryStatusLabel(row.status),
+    isTimeoutReceive: Boolean(row.is_timeout_receive || row.isTimeoutReceive),
+    statusLabel: getDeliveryStatusLabel(row.status, Boolean(row.is_timeout_receive || row.isTimeoutReceive)),
     abnormalFlag: Boolean(row.abnormal_flag || row.abnormalFlag),
     shippedQty: Number(row.shipped_qty || row.shippedQty || 0),
     arrivedQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
@@ -1003,9 +1290,25 @@ function normalizePendingRows(rows) {
     remarks: row.remarks || row.ship_remark || '',
     arrivalConfirmQty: Number(row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
     receiptConfirmQty: Number(row.received_qty || row.receivedQty || row.arrived_qty || row.arrivedQty || row.shipped_qty || row.shippedQty || 0),
-    arrivalRemark: '',
-    receiptRemark: ''
+    arrivalRemark: row.arrived_remark || row.arrivedRemark || '',
+    receiptRemark: row.received_remark || row.receivedRemark || '',
+    createdBy: row.created_by || row.createdBy || '',
+    shipRemark: row.ship_remark || row.shipRemark || '',
+    arrivedConfirmBy: row.arrived_confirm_by || row.arrivedConfirmBy || '',
+    arrivedRemark: row.arrived_remark || row.arrivedRemark || '',
+    receivedConfirmBy: row.received_confirm_by || row.receivedConfirmBy || '',
+    receivedConfirmAt: row.received_confirm_at || row.receivedConfirmAt || '',
+    receivedRemark: row.received_remark || row.receivedRemark || '',
+    diffApproveBy: row.diff_approve_by || row.diffApproveBy || '',
+    diffApproveAt: row.diff_approve_at || row.diffApproveAt || '',
+    diffApproveRemark: row.diff_approve_remark || row.diffApproveRemark || '',
+    warehouseConfirmBy: row.warehouse_confirm_by || row.warehouseConfirmBy || '',
+    warehouseConfirmAt: row.warehouse_confirm_at || row.warehouseConfirmAt || '',
+    warehouseRemark: row.warehouse_remark || row.warehouseRemark || '',
+    updatedBy: row.updated_by || row.updatedBy || '',
+    updatedAt: row.updated_at || row.updatedAt || ''
   }))
+
 }
 
 function getAbnormalLabel(row) {
@@ -1049,8 +1352,8 @@ function formatDateTimeDisplay(value) {
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
 }
 
-function getDeliveryStatusLabel(status) {
-  return getDeliveryStatus(status).label
+function getDeliveryStatusLabel(status, isTimeout = false) {
+  return getDeliveryStatus(status, isTimeout).label
 }
 
 function normalizeOptionsPayload(response) {
@@ -1248,14 +1551,34 @@ async function confirmReceipt(row) {
     setActionMessage('error', `确认施工接收量不能为负数`)
     return
   }
+  if (receivedQty < limitQty) {
+    // 弹窗让用户填写备注，而不是直接阻断
+    receiptRemarkModalData.value = {
+      row: row,
+      receivedQty: receivedQty,
+      limitQty: limitQty,
+      remark: (row.receiptRemark || '').trim()
+    }
+    receiptRemarkModalVisible.value = true
+    return
+  }
+  
+  // 正常全额到货签收，无需备注，直接执行提交
+  await submitReceiptExecution(row, receivedQty, '')
+}
+
+async function submitReceiptExecution(row, receivedQty, remark) {
   deliveryActionLoadingKey.value = `receipt-${row.deliveryId}`
   clearActionMessage()
   try {
     await confirmTubeDemandManagementDeliveryReceipt(PROJECT_KEY, row.deliveryId, {
       received_qty: receivedQty,
-      remark: row.receiptRemark || ''
+      remark: remark
     })
     setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 施工接收已确认。`)
+    // 回写数据，以便回显
+    row.receivedQty = receivedQty
+    row.receiptRemark = remark
     await Promise.all([
       loadLogisticsRecords(),
       loadAllPendingLogistics()
@@ -1267,7 +1590,62 @@ async function confirmReceipt(row) {
   }
 }
 
+async function submitReceiptWithRemark() {
+  const remark = receiptRemarkModalData.value.remark.trim()
+  if (remark.length < 10) {
+    alert('⚠️ 备注理由字数必须不少于 10 个字符！')
+    return
+  }
+  receiptRemarkModalVisible.value = false
+  const row = receiptRemarkModalData.value.row
+  const receivedQty = receiptRemarkModalData.value.receivedQty
+  await submitReceiptExecution(row, receivedQty, remark)
+}
+
+
+async function handleDiffApprove(row, approved) {
+  if (!row?.deliveryId) {
+    return
+  }
+  const actionName = approved ? '同意差异' : '驳回差异'
+  const confirmText = approved
+    ? `您确定同意发货单 ${row.deliveryCode || row.deliveryId} 的少接收确认吗？\n确认后，实收数量将按施工上报的 ${row.receivedQty} 米进行结账。`
+    : `您确定驳回发货单 ${row.deliveryCode || row.deliveryId} 的少接收确认吗？\n驳回后，实收数量将强制更正并等于到货数量 ${row.arrivedQty} 米。`
+  
+  if (!confirm(confirmText)) {
+    return
+  }
+  
+  const approveRemark = prompt('请输入审批意见 (选填):') || ''
+  
+  deliveryActionLoadingKey.value = approved ? `approve-${row.deliveryId}` : `reject-${row.deliveryId}`
+  clearActionMessage()
+  try {
+    await approveTubeDemandManagementDeliveryDifference(PROJECT_KEY, row.deliveryId, {
+      approved: approved,
+      remark: approveRemark
+    })
+    setActionMessage('success', `发货单 ${row.deliveryCode || row.deliveryId} 差异审批已完成 (${actionName})。`)
+    await Promise.all([
+      loadLogisticsRecords(),
+      loadAllPendingLogistics()
+    ])
+  } catch (error) {
+    setActionMessage('error', getErrorMessage(error, `${actionName}失败`))
+  } finally {
+    deliveryActionLoadingKey.value = ''
+  }
+}
+
 async function reloadStationData() {
+  if (
+    receiptRemarkModalVisible.value ||
+    deliveryDetailModalVisible.value ||
+    showExportModal.value ||
+    blockModalVisible.value
+  ) {
+    return
+  }
   clearActionMessage()
   await Promise.all([
     loadBaseline(),
@@ -1279,9 +1657,18 @@ async function reloadStationData() {
 }
 
 async function refreshRealtimeConfig() {
+  if (
+    receiptRemarkModalVisible.value ||
+    deliveryDetailModalVisible.value ||
+    showExportModal.value ||
+    blockModalVisible.value
+  ) {
+    return
+  }
   await loadOptions()
   await reloadStationData()
 }
+
 
 async function savePlanMatrix() {
   if (!selectedStationId.value || !planDates.value.length || planEditableDays.value <= 0) {
@@ -1507,8 +1894,8 @@ function jumpToUsageTab() {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: none;
   z-index: 2000;
   display: flex;
   justify-content: center;
@@ -1997,6 +2384,18 @@ function jumpToUsageTab() {
   color: #334155;
   white-space: nowrap;
 }
+
+.clickable-pill {
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.clickable-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  filter: brightness(0.95);
+}
+
 
 .status-pill-group {
   display: inline-flex;

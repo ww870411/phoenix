@@ -428,9 +428,10 @@
                     <td class="cell-nowrap cell-datetime">{{ row.shippedAtDisplay || '—' }}</td>
                     <td class="cell-nowrap cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td>
-                      <div class="status-chip-group">
-                        <span :class="['status-chip', `status-${row.status}`]">{{ row.statusLabel }}</span>
-                        <span v-if="row.abnormalFlag" class="status-chip status-abnormal">{{ getAbnormalLabel(row) }}</span>
+                      <!-- 供给侧物流状态点击，唤起订单全生命周期时光轴 -->
+                      <div class="status-chip-group" @click="openTimelineModal(row)" style="cursor: pointer;" title="点击查看订单全生命周期流转凭证">
+                        <span :class="['status-chip', `status-${row.status}`]" style="cursor: pointer;">{{ row.statusLabel }}</span>
+                        <span v-if="row.abnormalFlag" class="status-chip status-abnormal" style="cursor: pointer;">{{ getAbnormalLabel(row) }}</span>
                       </div>
                     </td>
                     <td class="cell-text cell-remark" :title="row.shipRemark || row.cancelReason || '—'">{{ row.shipRemark || row.cancelReason || '—' }}</td>
@@ -475,7 +476,180 @@
       </div>
     </main>
 
-    <!-- 超级管理员数据编辑覆盖模态窗 -->
+    <!-- 运输单全生命周期流转轨迹时光轴 modal -->
+    <Transition name="fade">
+      <div v-if="deliveryDetailModalVisible && deliveryDetailModalData" class="block-modal-overlay" @click.self="deliveryDetailModalVisible = false">
+        <div class="block-modal-container" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%) !important;">
+            <span class="block-warning-icon">🚚</span>
+            <h3 style="margin-top: 5px; color: #fff;">订单全生命周期流转凭证</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">单号：{{ deliveryDetailModalData.deliveryCode || deliveryDetailModalData.deliveryId }}</p>
+          </div>
+          
+          <!-- 信息概述 -->
+          <div class="block-modal-metrics" style="grid-template-columns: repeat(3, 1fr); padding: 15px; gap: 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div class="metric-block-card">
+              <span class="lbl">车牌号</span>
+              <span class="val" style="font-size: 13px; font-weight: bold; color: #1e293b;">{{ deliveryDetailModalData.vehiclePlateNo || '—' }}</span>
+            </div>
+            <div class="metric-block-card" style="grid-column: span 2;">
+              <span class="lbl">规格型号</span>
+              <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
+            </div>
+          </div>
+
+          <!-- 时光轴内容 Timeline -->
+          <div style="padding: 25px 25px 15px 35px; text-align: left; position: relative; width: 100%; box-sizing: border-box;">
+            <!-- 时光轴中轴线 -->
+            <div style="position: absolute; left: 17px; top: 30px; bottom: 30px; width: 2px; border-left: 2px dashed #cbd5e1;"></div>
+
+            <!-- 1. 发货阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #4f46e5; border: 2px solid #fff; box-shadow: 0 0 0 2px #4f46e5; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #1e293b;">🏭 供给侧装车发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.shippedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} 米</strong></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">发货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 到货确认阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.arrivedConfirmAt ? '#10b981' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.arrivedConfirmAt ? '#10b981' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.arrivedConfirmAt ? '#1e293b' : '#94a3b8' }">🚚 物流卸车到货确认</span>
+                  <span v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.arrivedConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待卸车到货...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} 米</strong></div>
+                  <div>确认人：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedRemark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.arrivedRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 施工接收阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#8b5cf6' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve' ? '#1e293b' : '#94a3b8' }">👷 施工单位确认领用</span>
+                  <span v-if="deliveryDetailModalData.receivedConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.receivedConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待施工接收...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
+                  <div>接收人：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedRemark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.receivedRemark }}”</span></div>
+                  <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="deliveryDetailModalData.isTimeoutReceive">
+                    🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 差异审批阶段 -->
+            <div v-if="deliveryDetailModalData.diffApproveBy || deliveryDetailModalData.status === 'pending_diff_approve'" style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.diffApproveBy ? '#f97316' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.diffApproveBy ? '#f97316' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.diffApproveBy ? '#1e293b' : '#94a3b8' }">🛡️ 现场负责人差异审批</span>
+                  <span v-if="deliveryDetailModalData.diffApproveAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.diffApproveAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⚠️ 挂起待审批...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.diffApproveBy" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>审批人：<strong>{{ deliveryDetailModalData.diffApproveBy }}</strong></div>
+                  <div>审批时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.diffApproveAt) }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.diffApproveRemark">审批意见：<span style="color: #ea580c; font-weight: 500;">{{ deliveryDetailModalData.diffApproveRemark }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. 库管入库阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span :style="{
+                position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
+                background: deliveryDetailModalData.warehouseConfirmAt ? '#059669' : '#cbd5e1',
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 2px ' + (deliveryDetailModalData.warehouseConfirmAt ? '#059669' : '#cbd5e1')
+              }"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.warehouseConfirmAt ? '#1e293b' : '#94a3b8' }">🏢 库管员确认物资归档入库</span>
+                  <span v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待库管确认...</span>
+                </div>
+                <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>入库日期：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
+                  <div>经办库管：<strong>{{ deliveryDetailModalData.warehouseConfirmBy }}</strong></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. 管理员编辑覆盖节点 -->
+            <div v-if="deliveryDetailModalData.shipRemark && (deliveryDetailModalData.shipRemark.includes('[超级修正智能补齐]') || deliveryDetailModalData.shipRemark.includes(' | 状态强改至'))" style="position: relative; margin-top: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #64748b; border: 2px solid #fff; box-shadow: 0 0 0 2px #64748b"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #1e293b;">🛠️ 超级管理员覆盖修正</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt || deliveryDetailModalData.shippedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>修正人：<strong>{{ deliveryDetailModalData.updatedBy || '超级管理员' }}</strong></div>
+                  <div>修改时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt) }}</span></div>
+                  <div style="grid-column: span 2; word-break: break-all;">修正轨迹及批注：
+                    <span style="color: #475569; font-style: italic; font-weight: 500;">
+                      {{ 
+                        deliveryDetailModalData.shipRemark.includes('[超级修正智能补齐]') 
+                          ? deliveryDetailModalData.shipRemark.substring(deliveryDetailModalData.shipRemark.indexOf('[超级修正智能补齐]')).replace('[超级修正智能补齐] ', '') 
+                          : deliveryDetailModalData.shipRemark.substring(deliveryDetailModalData.shipRemark.indexOf(' | 状态强改至') + 3) 
+                      }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部按钮区 -->
+          <div class="block-modal-actions" style="margin-top: 5px;">
+            <button 
+              type="button" 
+              class="btn primary cancel-btn" 
+              style="width: 100%; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
+              @click="deliveryDetailModalVisible = false"
+            >
+              已阅并关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <div v-if="showSuperEditModal" class="modal-overlay">
       <div class="modal-card elevated" style="max-width: 680px; width: 90%; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
         <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
@@ -635,6 +809,42 @@ const selectedSupplyEntityId = ref('')
 const activeTab = ref('demand')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
+
+const deliveryDetailModalVisible = ref(false)
+const deliveryDetailModalData = ref(null)
+const openTimelineModal = (row) => {
+  deliveryDetailModalData.value = {
+    deliveryId: row.deliveryId,
+    deliveryCode: row.deliveryCode,
+    shipmentNo: row.shipmentNo,
+    vehiclePlateNo: row.vehiclePlateNo,
+    pipeModelName: row.pipeModelName,
+    status: row.status,
+    isTimeoutReceive: Boolean(row.isTimeoutReceive),
+    shippedQty: row.shippedQty,
+    shippedAt: row.shippedAtDisplay || row.shippedAt,
+    shipContactName: row.shipContactName,
+    shipContactPhone: row.shipContactPhone,
+    shipRemark: row.shipRemark,
+    arrivedQty: row.arrivedQty,
+    arrivedConfirmBy: row.arrivedConfirmBy,
+    arrivedConfirmAt: row.arrivedConfirmAt,
+    arrivedRemark: row.arrivedRemark,
+    receivedQty: row.receivedQty,
+    receivedConfirmBy: row.receivedConfirmBy,
+    receivedConfirmAt: row.receivedConfirmAt,
+    receivedRemark: row.receivedRemark,
+    diffApproveBy: row.diffApproveBy,
+    diffApproveAt: row.diffApproveAt,
+    diffApproveRemark: row.diffApproveRemark,
+    warehouseConfirmBy: row.warehouseConfirmBy,
+    warehouseConfirmAt: row.warehouseConfirmAt,
+    warehouseRemark: row.warehouseRemark,
+    updatedBy: row.updatedBy || '',
+    updatedAt: row.updatedAt || '',
+  }
+  deliveryDetailModalVisible.value = true
+}
 
 const summaryLoading = ref(false)
 const summaryError = ref('')
@@ -944,6 +1154,21 @@ function normalizeDeliveryRows(rows) {
     statusLabel: getStatusLabel(row.status || ''),
     abnormalFlag: Boolean(row.abnormal_flag),
     cancelReason: row.cancel_reason || '',
+    arrivedConfirmBy: row.arrived_confirm_by || '',
+    arrivedConfirmAt: row.arrived_confirm_at || '',
+    arrivedRemark: row.arrived_remark || '',
+    receivedConfirmBy: row.received_confirm_by || '',
+    receivedConfirmAt: row.received_confirm_at || '',
+    receivedRemark: row.received_remark || '',
+    diffApproveBy: row.diff_approve_by || '',
+    diffApproveAt: row.diff_approve_at || '',
+    diffApproveRemark: row.diff_approve_remark || '',
+    warehouseConfirmBy: row.warehouse_confirm_by || '',
+    warehouseConfirmAt: row.warehouse_confirm_at || '',
+    warehouseRemark: row.warehouse_remark || '',
+    isTimeoutReceive: Boolean(row.is_timeout_receive),
+    updatedBy: row.updated_by || '',
+    updatedAt: row.updated_at || '',
   }))
 }
 
@@ -1388,6 +1613,110 @@ async function saveSuperEdit() {
 </script>
 
 <style scoped>
+/* Premium Usage Block Modal */
+.block-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: none;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.block-modal-container {
+  width: 90%;
+  max-width: 620px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.block-modal-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.block-warning-icon {
+  font-size: 40px;
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.block-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.block-warning-desc {
+  margin: 0;
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.block-modal-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.metric-block-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-block-card .lbl {
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+}
+
+.metric-block-card .val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.metric-block-card .val.model-val {
+  font-size: 12px;
+  color: #3b82f6;
+  word-break: break-all;
+  text-align: center;
+}
+
+.block-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
 .tube-page-root { min-height: 100vh; background: var(--bg); }
 .tube-page-main { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; padding-bottom: 24px; }
 .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }

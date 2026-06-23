@@ -74,6 +74,10 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by VARCHAR(128),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    diff_approve_by VARCHAR(128),
+    diff_approve_at TIMESTAMPTZ,
+    diff_approve_remark TEXT,
+    is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT chk_tube_delivery_shipped_qty_positive
         CHECK (shipped_qty > 0),
     CONSTRAINT chk_tube_delivery_arrived_qty_range
@@ -92,7 +96,8 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
                 'cancelled',
                 'pending_receive',
                 'pending_warehouse',
-                'completed'
+                'completed',
+                'pending_diff_approve'
             )
         )
 );
@@ -107,9 +112,13 @@ COMMENT ON COLUMN tube.tube_delivery.pipe_model_id IS '保温管型号 ID';
 COMMENT ON COLUMN tube.tube_delivery.shipped_qty IS '发货数量';
 COMMENT ON COLUMN tube.tube_delivery.arrived_qty IS '到货确认数量，允许小于发货数量';
 COMMENT ON COLUMN tube.tube_delivery.received_qty IS '施工接收数量，允许小于到货确认数量';
-COMMENT ON COLUMN tube.tube_delivery.status IS '状态：pending_arrival/cancelled/pending_receive/pending_warehouse/completed';
+COMMENT ON COLUMN tube.tube_delivery.status IS '状态：pending_arrival/cancelled/pending_receive/pending_warehouse/completed/pending_diff_approve';
 COMMENT ON COLUMN tube.tube_delivery.abnormal_flag IS '是否异常';
 COMMENT ON COLUMN tube.tube_delivery.cancel_reason IS '发货撤销原因，仅允许在已发货待到货状态使用';
+COMMENT ON COLUMN tube.tube_delivery.diff_approve_by IS '现场负责人（Site Manager）差异审批的审批人账号';
+COMMENT ON COLUMN tube.tube_delivery.diff_approve_at IS '差异审批的具体处理时间戳';
+COMMENT ON COLUMN tube.tube_delivery.diff_approve_remark IS '差异审批的审批意见与驳回备注';
+COMMENT ON COLUMN tube.tube_delivery.is_timeout_receive IS '是否因到货确认 12 小时施工未签收触发系统自动强制接收标记';
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_status
     ON tube.tube_delivery (status);

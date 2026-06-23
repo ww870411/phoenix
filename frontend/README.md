@@ -1,3 +1,102 @@
+## 2026-06-23 保温管管网项目（tube）项目完整构建流程计划同步更新
+
+- 变更文件：
+  - `phoenix/configs/5.24_tube项目完整构建流程计划_v5.2执行版.md` (在最末尾追加第 31 节，包含超管强改数据无损继承、三端时光轴规范以及审批节点更名逻辑，完成了今天开发成果与执行计划的同步更新)
+- 本轮处理与实现原理：
+  1. **📋 计划文档同步更新**：
+     - 在第 31 节记录了关于超级管理员强改备注数据去污与第六节点追加、供给侧物流台账时光轴接入与坠落修复、库管/三端时光轴审批节点改名等开发里程碑。
+
+## 2026-06-23 保温管管网项目（tube）供给侧时光轴凭证接入与管理员批注格式剔除优化同步
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (为发车记录状态 chip 绑定点击事件，补充 `deliveryDetailModal` DOM 与响应式状态，并在 `normalizeDeliveryRows` 中补齐所有物流流转元数据映射，使得供给侧也拥有订单全生命周期时光轴查看能力)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (修正超管批注渲染，利用 `.replace()` 剔除字符 `[超级修正智能补齐]`，直接回显真实的修正说明)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (修正超管批注渲染，利用 `.replace()` 剔除字符 `[超级修正智能补齐]`，直接回显真实的修正说明)
+- 本轮处理与实现原理：
+  1. **🎯 供给侧时光轴无缝打通**：
+     - **解决方案**：将全生命周期凭证时光轴模态窗对齐嵌入到供给侧发车历史跟踪页面中，并在物流历史数据转换中注入到货确认人/时间、施工确认人/时间、差异审批及库管确认、超时标志、修改人及修改时间字段。
+  2. **🧼 管理员批注前缀屏蔽**：
+     - **解决方案**：在三端（需求侧、库管侧、供给侧）的时光轴第 6 步骤“超级管理员覆盖修正”组件中，通过前端逻辑把后端生成的 `[超级修正智能补齐]` 文本做纯化，移除了开发字样前缀，展示效果更加清爽直观。
+
+## 2026-06-23 保温管管网项目（tube）超级管理员强改痕迹时光轴审计与历史数据无损继承同步
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在 `normalizePendingRows` 中补充对 `updatedBy` 与 `updatedAt` 的解析，并在时光轴末尾引入“超级管理员覆盖修正”第六步骤节点)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (在库管流转时光轴最末端同步植入“超级管理员覆盖修正”步骤节点)
+- 本轮处理与实现原理：
+  1. **🛠️ 强改痕迹在时间线上作为最终审计环节呈现**：
+     - **痛点**：此前的级联清空方案会导致管理员修正后，订单之前的所有流转详情被强行抹除。
+     - **解决方案**：保留数据库中的历史各阶段数据，并将管理员的修正作为时光轴的最后一环呈现。当前端检测到 `ship_remark` 包含超管备注特征 `[超级修正智能补齐]` 时，自动唤起底部的灰色第六节点 **【超级管理员覆盖修正】**，优雅展示管理员账号、修改时间以及修正批注，完美展示数据修正的来龙去脉。
+
+## 2026-06-23 保温管管网项目（tube）管理员强改接口级联校准与重置优化同步
+
+- 本轮前端无物理代码改动。主要同步记录管理员后台超级覆盖接口对 `diff_approve_by/at/remark` 和 `is_timeout_receive` 的清理与智能重算逻辑更新，保证管理员在强改数据后，前端无论在需求端还是库管端刷新页面时都能拉取到合乎业务逻辑的时间线状态。
+
+## 2026-06-23 保温管管网项目（tube）数据库初始化种子脚本结构同步更新同步
+
+- 本轮前端无物理代码改动。同步记录后端种子脚本 `tube_schema_init.sql` 对 `tube_delivery` 新列、新约束及新注释的写入，对齐了开发/初始数据库表的基础定义。
+
+## 2026-06-23 保温管管网项目（tube）差异审批意见流转时光轴回显修复同步
+
+- 本轮前端无物理代码改动。配合后端在物流列表接口中补齐并吐出 `diff_approve_by`、`diff_approve_at`、`diff_approve_remark`、`is_timeout_receive` 这四个新加的审批流转元数据，使“订单全生命周期流转凭证”时光轴弹窗能够成功加载并呈现 Site Manager 的差异审批意见和处理时间。
+
+## 2026-06-23 保温管管网项目（tube）库管页面流转时光轴数据回显与节点补齐同步
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (重构全生命周期流转轨迹 Timeline 时光轴 HTML 结构。扩容“施工物理接收确认”节点，使其在 `pending_diff_approve` 待审批阶段也能渲染上报数据，并对 `is_timeout_receive` 新增超时强收视觉提示；全新植入“现场负责人差异审批”为第四节点，回显 `diff_approve_by`、`diff_approve_at`、`diff_approve_remark` 三大审批元数据，使库管侧获得完整的流转证据链)
+- 本轮处理与实现原理：
+  1. **📐 库管时光轴高水准对齐**：
+     - **痛点**：此前库管台账管理页面（`WarehouseManagementView.vue`）的右侧时光轴只简单渲染了发货、到货、接收和入库，完全缺少了中间关键的“差异审批”控制节点。且在“施工物理接收确认”节点中，只判断了 `received_confirm_at` 存在时才显示详情，导致正在待审批的单据其接收详情被完全隐藏，用户也看不到站点经理的审批决定。
+     - **重塑**：从 DOM 层面对齐了需求侧时光轴。在施工接收节点中融入 `pending_diff_approve` 和超时自动接收状态感知；新增“差异审批阶段”时光轴卡片，完美承接了后端最新吐出的 `diff_approve_by`, `diff_approve_at`, `diff_approve_remark` 数据并实现 1:1 精细渲染。
+
+## 2026-06-23 保温管管网项目（tube）需求侧物流列表待差异审批状态回显修复同步
+
+- 本轮前端无物理代码改动。主要配合后端接口豁免放开 `pending_diff_approve` 待差异审批状态过滤，使前端物流到货接收台账能够无缝接收该状态的数据并渲染出 Site Manager 对应的“同意差异”与“驳回并更正”的操作按钮。
+
+## 2026-06-23 保温管管网项目（tube）打字重绘闪烁深层优化与输入焦点刷新防御重磅加固
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (移除大面积全屏遮罩 `.block-modal-overlay` 中的 `backdrop-filter: blur(12px)` 重度高斯模糊属性，并将其背景加深至不透明的 `rgba(15, 23, 42, 0.85)` 以保证高端视效，物理层面根绝打字触发局部 Diff 时的模糊像素全屏重绘，从而消灭了打字闪烁和排版卡顿)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js` (在全局刷新处理器 `useTubeRealtimeRefresh` 的 `window.focus` 事件监听中引入“输入控件聚集状态及 Modal 激活状态拦截防御”；如果 `document.activeElement` 为 INPUT、TEXTAREA 等输入控件，或者页面存在 Modal 遮罩时，强行拦截 `window.focus` 引起的自动拉取刷新，在框架设计层面彻底杜绝了打字及切换输入法时频繁触发接口被动更新引发的页面闪烁与卡顿)
+- 本轮处理与实现原理：
+  1. **🚫 移除 Modal 重度高斯模糊 (物理级防闪烁)**：
+     - **痛点分析**：在大表单页面，包含着上百个复杂的网格单元格。当大面积全屏遮罩 overlay 启用并带有 `backdrop-filter: blur(12px)` 滤镜时，浏览器在每一次 DOM 微调时都需要消耗极高 GPU/CPU 资源重新计算下层所有复杂网格的高斯模糊像素混合。在特定硬件、浏览器或者输入法打字造成局部更新时，就会表现为不停的高频“重绘闪烁”与输入延迟。
+     - **解决方案**：移除 `.block-modal-overlay` 的重度模糊滤镜，代之以更高对比度的 SaaS 级沉浸式深色遮罩背景（`background: rgba(15, 23, 42, 0.85)`），完美兼顾了界面的专业深邃感与零开销像素级渲染表现，彻底消灭了备注输入时的打字重绘抖动。
+  2. **🛡️ 全局 window.focus 触发源深度加固 (输入聚焦拦截防御)**：
+     - **痛点分析**：在中文输入法输入字符、切换焦点或选词时，输入法选词悬浮窗的激活会导致浏览器 window 不断在 `blur` / `focus` 状态间频繁切换，被动触发全局 focus 监听器，进而调起自动数据拉取。虽然我们在上一版本对页面层加上了 Modal 可见性 Guard 忽略接口调用，但后台网络连接的请求排队、引用更新和子组件的无条件重新计算，依然会为浏览器排版引擎带来不必要的负担。
+     - **安全网设计**：我们直接在底层刷新模块 `useTubeRealtimeRefresh` 的 focus 回调顶层增设双保险拦截——如果当前正在操作 INPUT、TEXTAREA 或 isContentEditable 等文本元素，或者系统当前正有 Modal 弹窗存在，直接无条件 `return`。从源头上完全过滤了用户正常交互输入文字时的 window focus 副作用触发，彻底避免了任何多余的数据流触碰。
+  3. **📦 Vite 生产环境一键构建 100% 通过**：
+     - Vite 生产环境一键编译打包成功完成（built in 5.67s，0 错误，0 警告）。
+
+## 2026-06-23 保温管管网项目（tube）施工少接收强备注弹窗与状态详情时光轴模态弹窗重磅升级与防闪烁逻辑加固
+
+- 验证结果：
+  1. **📝 少接收差异备注录入弹窗**：当施工拟收量少于确认到货量时，前端不再进行简易表单拦截，而是弹出一个高颜值的 Glassmorphism 备注填写弹窗，展示数量比对及短缺值，强校验备注长度不得少于 10 字；
+  2. **🚚 状态点击详情时光轴弹窗**：在物流记录列表中，状态 Badge 全部升级为 `clickable-pill` 手型高亮态。点击即可弹起大卡片，以 Vertical Timeline（垂直时光轴）呈现包括装车发货、卸车到货、施工接收（附带超时自动强收提醒）、差异审批、库管入库在内的 5 大流转节点的经办人、动作时间及全链路流转备注。
+  3. **🛡️ 弹窗防闪烁安全拦截（Guard）**：修复了在打开弹窗和焦点转移时，由于浏览器 focus 动作导致 `window.focus` 频繁触发 `useTubeRealtimeRefresh` 全局异步拉取和 rows 重绘，从而引起页面闪烁的性能 Bug。已在 `reloadStationData` 和 `refreshRealtimeConfig` 的前置阶段增加了模态框可见性拦截。任何模态框打开时，前台均拒绝一切自动和被动数据重载，保障了用户在弹窗 textarea 中正在编辑的草稿不被刷新冲掉。
+  4. **Vite 生产构建校验**：项目已一键 build 成功，0 错误，0 警告。
+
+
+## 2026-06-23 保温管管网项目（tube）P0漏洞修复与“差异审批”、“超时接收”集成测试通过
+
+
+## 2026-06-23 保温管管网项目（tube）前端配合“差异审批”与“超时确认”状态展示重构
+
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (操作列按钮与数量展示升级：若发货单为 `pending_diff_approve` 状态，对 `site_manager` 角色渲染“同意差异”与“驳回并更正”两个按钮，对普通角色则隐藏操作。在施工接收数量列，对于待审批单据特别使用橙色标记并提示待审批；更新 normalizePendingRows 转换以承接 isTimeoutReceive 并传导至状态翻译；在确认施工接收时，若存在实收少于到货差异，前端强制要求备注字数不少于 10 字进行拦截提示)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js` (统一物流状态字典更新：DELIVERY_STATUS_DICT 增加 pending_diff_approve 状态配置；重写 getDeliveryStatus 翻译函数以支持 passes in isTimeout 参数，当超时标志为 true 时，返回“🕒 超时自动确认”专属回显卡)
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (新增 approveTubeDemandManagementDeliveryDifference API 接口封装以支持 Site Manager 差异审批决策提交)
+- 本轮处理与实现原理：
+  1. **👷 待差异审批（pending_diff_approve）全功能流转**：
+     - **施工侧备注拦截**：确认施工接收时，若实收小于到货，输入框下方和保存前置动作会强校验【接收备注】必须大于等于 10 个字符，防止施工方单方面减少接收逃避保管责任。
+     - **Site Manager 专属审批入口**：当用户组为 `tube_site_manager` 且发货单处于 `pending_diff_approve` 时，在物流记录右侧操作栏特别渲染“同意差异”和“驳回并更正”按钮。同意时以暂存的实收量结算，驳回时系统通过 `diff-approve` 接口向后端发送决策并将实收强制拉回为到货确认量，审批完后自动刷新物流大盘。
+  2. **🕒 自动识别并渲染“超时自动确认”**：
+     - **双轨状态感知**：从接口 rows 中解析 `is_timeout_receive`（或 `isTimeoutReceive`），当超时标志为 `true` 时，`statusLabel` 会被 getDeliveryStatus 翻译为“🕒 超时自动确认”。
+     - **颜色自适应映射**：在 HTML 列表渲染中，通过三元表达式动态绑定状态 Class：超时接收单据自动复用已接收的 `pending_warehouse` 样式（浅绿），待差异审批单据自动复用 `pending_receive` 样式（黄色/橙色），在零 CSS 修改的前提下达成了完美的 UI 主题适配。
+  3. **Vite 生产环境编译 100% 通过**：
+     - Vite 生产环境一键 build 成功，`built in 5.40s`，0 警告，0 报错。
+
 ## 2026-06-22 保温管管网项目（tube）需求填报首二日决策沙盘 Hover 气泡化与大盘透视表导出及天气降噪与口径核准重构
 
 - 变更文件：

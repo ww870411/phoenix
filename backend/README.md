@@ -1,3 +1,85 @@
+## 2026-06-23 保温管管网项目（tube）项目完整构建流程计划同步更新
+
+- 变更文件：
+  - `phoenix/configs/5.24_tube项目完整构建流程计划_v5.2执行版.md` (在最末尾追加第 31 节，包含超管强改数据无损继承、三端时光轴规范以及审批节点更名逻辑，完成了今天开发成果与执行计划的同步更新)
+- 本轮处理与实现原理：
+  1. **📋 计划文档同步更新**：
+     - 在第 31 节记录了关于超级管理员强改备注数据去污与第六节点追加、供给侧物流台账时光轴接入与坠落修复、库管/三端时光轴审批节点改名等开发里程碑。
+
+## 2026-06-23 保温管管网项目（tube）供给侧时光轴凭证接入与管理员批注格式剔除优化
+
+- 本轮后端无物理代码改动。配合前端 `SupplyManagementView.vue` 状态列点击弹窗时光轴展示，接口继续吐出完整的到货、施工、审批及超管更新人数据。
+
+## 2026-06-23 保温管管网项目（tube）超级管理员强改痕迹时光轴审计与历史数据无损继承
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (在 `super_update_delivery_record` 方法中，移除原有的清空子状态（设为 `None`）的级联逻辑。改为：若强改参数为空则自动从数据库 `orig_record` 中继承原有各节点的接收量、确认人、确认备注与时间戳；并将 `arrived_remark`、`received_remark` 和 `warehouse_remark` 追加进 UPDATE SET SQL 中，确保原本经历的流转节点元数据得以 100% 完整保留)
+- 本轮处理与实现原理：
+  1. **🛡️ 历史节点证据链无损保留**：
+     - **解决方案**：在后端的强改方法中，我们通过宽字段 `check_sql` 提前将之前的到货量、到货备注、施工实收量、施工接收备注、差异审批人、审批时间与意见、库管备注等全面加载。当管理员进行强改状态（如将订单强行退回为待到货状态）时，这些历史节点的备注和签收数据不会在数据库中被强行置空，而是继续保留，作为物流生命周期中曾经发生过的重要依据。
+     - **强改最终节点痕迹固化**：继续对强改生成审计文本后缀（包含 `[超级修正智能补齐]` 关键字）并注入 `ship_remark`，以在前端时光轴中作为最终的纠偏锚点。
+
+## 2026-06-23 保温管管网项目（tube）管理员强改接口级联校准与审批重置优化
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (修改 `super_update_delivery_record` 方法。在 DDL 检查时加入 `diff_approve_by` 等列的获取；重新设计五个流转状态分支的逆向与级联补全逻辑，保证在管理员重置单据状态或修改接收数据时，审批决定与超时标志能够合理清理、重置或自动补全，避免幽灵残留)
+- 本轮处理与实现原理：
+  1. **🛡️ 状态级联与幽灵审批元数据清退**：
+     - **痛点分析**：原超级编辑覆盖接口 `super_update_delivery_record` 不涉及新增的差异审批字段，导致管理员如果将一个已经完成的订单强改回“在途”状态，其审批人和意见字段依然顽固保留在数据库中，再次流转时会在时光轴上显示极其突兀的脏数据。
+     - **解决方案**：我们在后端的强改方法中，增加了对 `diff_approve_by`、`diff_approve_at`、`diff_approve_remark` 和 `is_timeout_receive` 的加载与更新。并在逆向级联时：
+       * 在途/待到货/待接收状态下，强制将这四个字段清空（设为 `NULL` 和 `False`）；
+       * 待差异审批（`pending_diff_approve`）状态下，级联校准实收必须小于到货，并清空临时审批信息；
+       * 待入库（`pending_warehouse`）/ 已完成（`completed`）状态下，若实收等于到货（即无差异），则物理清空差异审批字段；若有差异且审批人为空，则自动指派当前管理员执行审批落款并补上强改说明，消除了时光轴节点冲突。
+
+## 2026-06-23 保温管管网项目（tube）库管页面流转时光轴数据回显与节点补齐同步记录
+
+- 本轮后端无物理代码改动。主要配合前端 `WarehouseManagementView.vue` 时光轴对“差异审批阶段”与“待审批状态数据”的渲染重构，后端将继续提供带完整审批字段的列表接口。
+
+## 2026-06-23 保温管管网项目（tube）数据库初始化种子脚本结构同步更新
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (在 `tube_delivery` 发货单生命周期表的定义中补充追加 `diff_approve_by`、`diff_approve_at`、`diff_approve_remark`、`is_timeout_receive` 四个审批与流转字段；将 `chk_tube_delivery_status` 的 CHECK 状态约束更新扩充为包含 `'pending_diff_approve'`，并补全该四个列的 `COMMENT` 注释规范。保证系统初始脚本在物理初始化时与当前运行期升级表的结构 100% 对齐)
+
+## 2026-06-23 保温管管网项目（tube）差异审批意见流转时光轴回显修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (在 `list_delivery_records` 查询中补齐 `diff_approve_by`、`diff_approve_at`、`diff_approve_remark`、`is_timeout_receive` 四个字段的 SQL SELECT 和 Dict 序列化映射，确保前端时光轴弹窗能够成功接收这四个关键数据并渲染显现)
+- 本轮处理与实现原理：
+  1. **🚫 修复底层 SQL 及映射字段缺失（流转凭证回显治理）**：
+     - **痛点分析**：在之前的重构中，数据库中虽然新增了差异审批和超时确认的相关物理字段，且在 Site Manager 进行差异审批操作时可以成功提交并保存。但是底层负责读取物流大表记录的 `list_delivery_records` 共享函数中，其 SELECT 语句和 Dict Mapping 映射依然停留在历史旧字段版本，未跟进查询并返回 `diff_approve_by`, `diff_approve_at`, `diff_approve_remark`, `is_timeout_receive` 这四个新字段，导致前端拿到的 row 中对应值为 `undefined`，引起时光轴渲染失效。
+     - **解决方案**：在底层 `list_delivery_records` 的 SQL 及 Dict 中添加该四个字段的加载与映射。
+
+## 2026-06-23 保温管管网项目（tube）需求侧物流列表待差异审批状态回显修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (修改 `get_demand_management_logistics_records` 接口，在过滤 station 记录状态时，把 `pending_diff_approve` 状态加入状态白名单，解决施工少接收提交后发货单隐藏消失的 Bug，确保 Site Manager 能够看见并执行差异审批决策)
+- 本轮处理与实现原理：
+  1. **🚫 修正状态白名单隐藏过滤 Bug**：
+     - **痛点分析**：在之前的重构中，当施工方进行少接收确认时，由于前端加了备注强校验并且会挂起为待审批状态，其 status 在数据库中被成功修改为 `pending_diff_approve`。然而，在需求侧读取物流明细的 `get_demand_management_logistics_records` API 内部，过滤条件 `row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse"}` 是写死的。这就导致任何处于待差异审批状态下的发货单被强行从列表中排除，使站点经理在大盘上看不见该记录，无法操作审批。
+     - **解决方案**：在白名单过滤集合中扩容，允许 `pending_diff_approve` 状态通过，使页面可以无障碍渲染。
+
+## 2026-06-23 保温管管网项目（tube）前端打字闪烁与重绘防闪烁加固同步记录
+
+- 本轮后端无物理代码改动。主要配合前端完成填报与流转时光轴在打字时的防闪烁防御及 Modal 遮罩高斯模糊的物理移除，后端继续提供稳定高效的 API 支持。
+
+## 2026-06-23 保温管管网项目（tube）P0漏洞修复与“差异审批”、“超时接收”集成测试通过
+
+- 验证结果：通过编写专用的集成测试脚本 `test_business_logic.py`，成功在本地环境对 12 小时超时确认、少接收 10 字备注拦截、站点经理差异审批流（同意/驳回更正）、以及全新库存公式与负库存强校验进行了全方位链路验证，全部用例 100% 顺利通过。
+
+## 2026-06-23 保温管管网项目（tube）P0漏洞修复与“差异审批”、“超时自动接收”业务机制后端落盘
+
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (新增 site_manager 差异审批接口，增加 DDL 迁移逻辑以创建 diff_approve_by/diff_approve_at/diff_approve_remark/is_timeout_receive 四个字段并修改 CHECK 状态约束，修复数据库初始化迁移静默失败不阻断应用启动的 P0 问题，为接收确认加上备注字数限制判定)
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (新增 auto_process_timeout_deliveries 批量处理 12 小时超时自动接收逻辑并挂载于 list_delivery_aggregates/list_arrival_aggregates/list_delivery_records，更新 list_arrival_aggregates 的库存累计到货公式，更新施工接收逻辑以支持 pending_diff_approve 状态及少到货备注字数强校验)
+  - `backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py` (优化 save_usage_records 保存日使用量接口，彻底消除了 N+1 数据库查询，改用一次性批量 ANY 查询并在内存中进行高速库存拦截校验，应用新库存累计算法并在开头挂载超时清算逻辑)
+- 本轮处理与实现原理：
+  1. **🛡️ P0漏洞1 - 数据库迁移静默报错隐患修复**：在 `run_db_migration()` 发生异常时，统一使用标准 log 记录错误并抛出 `RuntimeError` 阻断启动，避免在异常数据库状态下带病运行。
+  2. **⚡ P0漏洞2 - N+1 数据库查询高并发隐患修复**：在填报保存方法中将循环内部 SQL 重构为循环外批量 `ANY` 查询，并在内存中建立 Dict 高速匹配校验，将数据库往返交互次数缩减为恒定的 3 次。
+  3. **⚖️ P0漏洞3 - 可用库存算法统一纠偏**：重新将库存算法统一定义为 `累计施工接收量 - 累计施工使用量 - 累计施工损耗量`，并附加规则：如果某条记录确认到货但未经施工接收，该记录临时以“确认到货量”计入库存。
+  4. **👷 差异审批拦截与备注字数强限制**：当施工方上报实收量小于到货确认量时，前端和后端强校验备注字数必须大于等于 10 字，并发货单转为 `pending_diff_approve` 状态；引入同属一个 unit 的 `site_manager` 角色审批机制，审批同意则按实收算，审批驳回则强制更正为全额到货量算，实现物权责任对质闭环。
+  5. **🕒 12小时超时自动接收**：当到货确认后 12 小时内施工方未接收，系统在计算大盘、列表查询或库存拦截前，自动通过 SQL 进行被动清算并强制按到货量确认接收（状态记录为 `SYSTEM_TIMEOUT` 并设置 `is_timeout_receive` 为 `true`），规避施工方恶意拖延接收的道德风险。
+
 ## 2026-06-22 保温管管网项目（tube）需求填报首二日决策沙盘 Hover 气泡化、大盘导出与天气降噪后端同步
 
 - 变更文件：

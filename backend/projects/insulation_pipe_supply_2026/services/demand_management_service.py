@@ -150,6 +150,11 @@ def list_usage_records(station_id: str, usage_date: date) -> Dict[str, Dict[str,
 def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict[str, Any]], operator: str) -> int:
     if not records:
         return 0
+        
+    from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import auto_process_timeout_deliveries
+    # 前置执行超时自动确认
+    auto_process_timeout_deliveries()
+
     sql = text(
         """
         INSERT INTO tube.tube_daily_usage (
@@ -185,8 +190,81 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
             updated_at = NOW()
         """
     )
+    
+    # 批量收集型号并正规化
+    normalized_pipe_model_ids = []
+    pipe_model_orig_map = {}
+    for item in records:
+        norm_id = _normalize_pipe_model_id(item["pipe_model_id"])
+        normalized_pipe_model_ids.append(norm_id)
+        pipe_model_orig_map[norm_id] = item["pipe_model_id"]
+
+    # 1. 批量查询累计到货量：支持新的算法定义
+    sql_arrived_batch = text(
+        """
+        SELECT pipe_model_id, SUM(
+            CASE 
+                WHEN status = 'pending_receive' THEN COALESCE(arrived_qty, shipped_qty)
+                ELSE COALESCE(received_qty, arrived_qty, shipped_qty)
+            END
+        ) AS total
+        FROM tube.tube_delivery
+        WHERE station_id = :station_id
+          AND pipe_model_id = ANY(:pipe_model_ids)
+          AND status <> 'cancelled'
+          AND arrived_confirm_at IS NOT NULL
+        GROUP BY pipe_model_id
+        """
+    )
+    
+    # 2. 批量查询除去今日所填之外的历史累计使用量与损耗量之和
+    sql_usage_before_batch = text(
+        """
+        SELECT pipe_model_id, SUM(usage_qty) AS total_use, SUM(loss_qty) AS total_loss
+        FROM tube.tube_daily_usage
+        WHERE station_id = :station_id
+          AND pipe_model_id = ANY(:pipe_model_ids)
+          AND usage_date <> :usage_date
+        GROUP BY pipe_model_id
+        """
+    )
+    
+    # 3. 批量查询在途待到货量
+    sql_pending_batch = text(
+        """
+        SELECT pipe_model_id, SUM(shipped_qty) AS total
+        FROM tube.tube_delivery
+        WHERE station_id = :station_id
+          AND pipe_model_id = ANY(:pipe_model_ids)
+          AND status = 'pending_arrival'
+        GROUP BY pipe_model_id
+        """
+    )
+
     session = SessionLocal()
     try:
+        # 执行批量拉取并转为字典
+        arrived_rows = session.execute(
+            sql_arrived_batch, 
+            {"station_id": station_id, "pipe_model_ids": normalized_pipe_model_ids}
+        ).all()
+        arrived_map = {row.pipe_model_id: float(row.total or 0.0) for row in arrived_rows}
+        
+        usage_rows = session.execute(
+            sql_usage_before_batch, 
+            {"station_id": station_id, "pipe_model_ids": normalized_pipe_model_ids, "usage_date": usage_date}
+        ).all()
+        usage_before_map = {
+            row.pipe_model_id: (float(row.total_use or 0.0), float(row.total_loss or 0.0)) 
+            for row in usage_rows
+        }
+        
+        pending_rows = session.execute(
+            sql_pending_batch, 
+            {"station_id": station_id, "pipe_model_ids": normalized_pipe_model_ids}
+        ).all()
+        pending_map = {row.pipe_model_id: float(row.total or 0.0) for row in pending_rows}
+
         payloads = []
         for item in records:
             usage_qty = float(item["usage_qty"])
@@ -198,62 +276,22 @@ def save_usage_records(station_id: str, usage_date: date, records: Sequence[Dict
                 raise HTTPException(status_code=422, detail="实际损耗量不能为负数")
             
             pipe_model_id = _normalize_pipe_model_id(item["pipe_model_id"])
+            orig_pipe_model_id = pipe_model_orig_map.get(pipe_model_id, pipe_model_id)
 
-            # 1. 累计到货量：非 cancelled 且已到现场确认的发货记录中可用量之和
-            sql_arrived = text(
-                """
-                SELECT SUM(COALESCE(received_qty, arrived_qty, shipped_qty)) AS total
-                FROM tube.tube_delivery
-                WHERE station_id = :station_id
-                  AND pipe_model_id = :pipe_model_id
-                  AND status <> 'cancelled'
-                  AND arrived_confirm_at IS NOT NULL
-                """
-            )
-            arrived_row = session.execute(sql_arrived, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
-            total_arrived = float(arrived_row[0]) if arrived_row and arrived_row[0] is not None else 0.0
-
-            # 2. 除去今日所填之外的历史累计使用量与损耗量之和
-            sql_usage_before = text(
-                """
-                SELECT SUM(usage_qty) AS total_use, SUM(loss_qty) AS total_loss
-                FROM tube.tube_daily_usage
-                WHERE station_id = :station_id
-                  AND pipe_model_id = :pipe_model_id
-                  AND usage_date <> :usage_date
-                """
-            )
-            usage_before_row = session.execute(
-                sql_usage_before, 
-                {"station_id": station_id, "pipe_model_id": pipe_model_id, "usage_date": usage_date}
-            ).first()
-            total_use_before = float(usage_before_row[0]) if usage_before_row and usage_before_row[0] is not None else 0.0
-            total_loss_before = float(usage_before_row[1]) if usage_before_row and usage_before_row[1] is not None else 0.0
+            total_arrived = arrived_map.get(pipe_model_id, 0.0)
+            total_use_before, total_loss_before = usage_before_map.get(pipe_model_id, (0.0, 0.0))
+            pending_arrival = pending_map.get(pipe_model_id, 0.0)
 
             expected_total_usage = total_use_before + usage_qty
             expected_total_loss = total_loss_before + loss_qty
             expected_total_consumption = expected_total_usage + expected_total_loss
 
-            # 3. 负库存硬性拦截校验：累计消耗量（使用+损耗）不能大于账面累计到货量
             if expected_total_consumption > total_arrived:
-                # 计算在途待到货量
-                sql_pending = text(
-                    """
-                    SELECT SUM(shipped_qty) AS total
-                    FROM tube.tube_delivery
-                    WHERE station_id = :station_id
-                      AND pipe_model_id = :pipe_model_id
-                      AND status = 'pending_arrival'
-                    """
-                )
-                pending_row = session.execute(sql_pending, {"station_id": station_id, "pipe_model_id": pipe_model_id}).first()
-                pending_arrival = float(pending_row[0]) if pending_row and pending_row[0] is not None else 0.0
-                
                 shortage = expected_total_consumption - total_arrived
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        f"⚠️ 提交失败：现场可用账面库存不足！保温管规格【{pipe_model_id}】累计到货仅为 {total_arrived:.1f} 米，"
+                        f"⚠️ 提交失败：现场可用账面库存不足！保温管规格【{orig_pipe_model_id}】累计到货与接收可用仅为 {total_arrived:.1f} 米，"
                         f"但若保存本次填报，累计消耗将达到 {expected_total_consumption:.1f} 米（其中实际使用 {expected_total_usage:.1f} 米，"
                         f"实际损耗 {expected_total_loss:.1f} 米，账面超前亏空 {shortage:.1f} 米）。\n"
                         f"🚚 运输信息提示：当前正有 {pending_arrival:.1f} 米在途物资（已发货待到货确认）。"

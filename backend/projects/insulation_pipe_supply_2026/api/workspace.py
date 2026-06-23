@@ -111,10 +111,26 @@ def run_db_migration():
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_action_type ON tube.operation_logs(action_type);"))
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_created_at ON tube.operation_logs(created_at DESC);"))
         
+        # 2026-06-23 新增差异审批与超时接收字段
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_at TIMESTAMPTZ;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_remark TEXT;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE;"))
+        
+        # 更新 CHECK 约束以支持 'pending_diff_approve' 状态
+        session.execute(text("ALTER TABLE tube.tube_delivery DROP CONSTRAINT IF EXISTS chk_tube_delivery_status;"))
+        session.execute(text("""
+            ALTER TABLE tube.tube_delivery ADD CONSTRAINT chk_tube_delivery_status 
+            CHECK (status IN ('pending_arrival', 'cancelled', 'pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'));
+        """))
+        
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"DB Migration for loss_qty and operation_logs failed: {e}")
+        import logging
+        logger = logging.getLogger("uvicorn.error")
+        logger.error(f"数据库初始化迁移失败: {e}", exc_info=True)
+        raise RuntimeError(f"数据库初始化迁移失败，应用无法启动: {e}") from e
     finally:
         session.close()
 
@@ -233,6 +249,17 @@ class WarehouseReceiptConfirmPayload(BaseModel):
 
 class WarehouseConfirmPayload(BaseModel):
     remark: str = ""
+
+
+class DiffApprovePayload(BaseModel):
+    approved: bool
+    remark: str = ""
+
+
+def _ensure_site_manager_access(session: AuthSession) -> None:
+    group = str(session.group or "").strip()
+    if group not in {"Global_admin", "tube_site_manager"}:
+        raise HTTPException(status_code=403, detail="当前账号无差异审批权限，必须是 site_manager")
 
 
 def _normalize_pipe_model_id(value: Any) -> str:
@@ -1677,7 +1704,7 @@ def get_demand_management_logistics_records(
     filtered_rows = [
         row
         for row in rows
-        if row.get("station_id") == station_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse"}
+        if row.get("station_id") == station_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve"}
     ]
     normalized_order_no = str(order_no or "").strip().upper()
     normalized_shipment_no = str(shipment_no or "").strip().upper()
@@ -1784,7 +1811,7 @@ def confirm_demand_management_delivery_receipt(
     
     before_val = _to_json_serializable(delivery)
     
-    update_delivery_receipt_record(
+    new_status = update_delivery_receipt_record(
         delivery_id=delivery_id,
         operator=session.username,
         received_qty=payload.received_qty,
@@ -1793,18 +1820,114 @@ def confirm_demand_management_delivery_receipt(
     
     after_val = _to_json_serializable(get_delivery_record_basic(delivery_id))
     
+    action_desc = (
+        f"提交施工接收 (待差异审批): 订单号 {delivery.get('order_no')} (实收 {payload.received_qty} 米, 理由: {payload.remark})"
+        if new_status == 'pending_diff_approve' else
+        f"施工确认接收: 订单号 {delivery.get('order_no')} (实收 {payload.received_qty} 米)"
+    )
+    
     save_operation_log(
         operator=session.username,
         operator_group=session.group,
         action_type="CONFIRM_CONSTRUCTION",
-        action_desc=f"施工确认接收: 订单号 {delivery.get('order_no')} (实收 {payload.received_qty} 米)",
+        action_desc=action_desc,
         resource_id=str(delivery_id),
         before_value=before_val,
         after_value=after_val,
         client_ip=_get_client_ip(request)
     )
     
-    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id}
+    return {"ok": True, "project_key": PROJECT_KEY, "delivery_id": delivery_id, "status": new_status}
+
+
+@router.post("/demand-management/deliveries/{delivery_id}/diff-approve", summary="Site Manager差异审批")
+def approve_delivery_difference(
+    delivery_id: int,
+    payload: DiffApprovePayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_site_manager_access(session)
+    delivery = get_delivery_record_basic(delivery_id)
+    if not delivery:
+        raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
+        
+    accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
+    _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    
+    if delivery["status"] != 'pending_diff_approve':
+        raise HTTPException(status_code=422, detail="该发货单不需要进行差异审批或已被审批")
+        
+    before_val = _to_json_serializable(delivery)
+    
+    arrived_qty = float(delivery["arrived_qty"] if delivery["arrived_qty"] is not None else delivery["shipped_qty"] or 0)
+    final_received_qty = float(delivery["received_qty"]) if payload.approved else arrived_qty
+    new_status = 'pending_warehouse'
+    
+    approve_remark = str(payload.remark or "").strip()
+    if not payload.approved:
+        approve_remark = f"[Site Manager驳回少接收，更正为确认到货量] {approve_remark}"
+        
+    sql_update = text(
+        """
+        UPDATE tube.tube_delivery
+        SET
+            received_qty = :received_qty,
+            status = :new_status,
+            diff_approve_by = :diff_approve_by,
+            diff_approve_at = NOW(),
+            diff_approve_remark = :diff_approve_remark,
+            updated_by = :updated_by,
+            updated_at = NOW()
+        WHERE id = :delivery_id
+        """
+    )
+    db_session = SessionLocal()
+    try:
+        db_session.execute(
+            sql_update,
+            {
+                "delivery_id": int(delivery_id),
+                "received_qty": final_received_qty,
+                "new_status": new_status,
+                "diff_approve_by": session.username,
+                "diff_approve_remark": approve_remark,
+                "updated_by": session.username,
+            }
+        )
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        raise
+    finally:
+        db_session.close()
+        
+    after_val = _to_json_serializable(get_delivery_record_basic(delivery_id))
+    
+    action_desc = (
+        f"Site Manager同意差异接收: 订单号 {delivery.get('order_no')} (实收确认 {final_received_qty} 米)"
+        if payload.approved else
+        f"Site Manager驳回差异接收: 订单号 {delivery.get('order_no')} (强制按到货量 {final_received_qty} 米接收)"
+    )
+    
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="APPROVE_DIFFERENCE",
+        action_desc=action_desc,
+        resource_id=str(delivery_id),
+        before_value=before_val,
+        after_value=after_val,
+        client_ip=_get_client_ip(request)
+    )
+    
+    return {
+        "ok": True, 
+        "project_key": PROJECT_KEY, 
+        "delivery_id": delivery_id,
+        "approved": payload.approved,
+        "final_received_qty": final_received_qty
+    }
 
 
 @router.get("/global-management/config", summary="读取全局管理配置")
