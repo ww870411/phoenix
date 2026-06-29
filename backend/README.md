@@ -1,3 +1,22 @@
+## 2026-06-29 全局管理历史数据查询与统计功能优化上线准备
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (新增 `query_history_records` 函数，采用 `FULL OUTER JOIN` 跨多张表进行 (站, 日期, 管材) 维度的聚合)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `/global-management` 下新增 `/history` 数据接口和 `/history/export` 导出 CSV 接口，进行管理员鉴权和中文名称字典补全映射，并补齐了顶部的 `fastapi.Query` 导入)
+- 本轮处理与实现原理：
+  1. **🛠️ 跨三表维度 FULL OUTER JOIN 完全外连接设计**：
+     - **痛点**：计划量、消耗与损耗量、到货量及在途时间分别由三张不关联的业务表记录，且日期上经常存在错位对齐。如果使用普通的 INNER JOIN 或 LEFT JOIN，容易导致遗漏未填报但发生物流的日期，或漏掉有填报无到货的日期。
+     - **解决方案**：在 SQL 中使用 `FULL OUTER JOIN`，将这三个维度在 `(station_id, biz_date, pipe_model_id)` 上完全连接，配合 `COALESCE` 语法输出，完美解决了多表间数据非对齐场景。
+     - **时区与指标汇总支持**：到货时间 `arrived_confirm_at` 属于带时区的 timestamp。在 SQL 中使用 `(arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date` 进行北京时间的精准转换，确保到货归档不会产生跨天漂移。**同时，在 SQL 的到货子查询中引入 `MIN` 和 `MAX` 聚合，输出单日最快/最慢在途秒数，配合总秒数与批次，为前端呈现“物流效率时效波动区间”提供高精度的基础数据支撑**。
+
+## 2026-06-23 保温管管网项目（tube）代码审计报告修复状态同步更新
+
+- 变更文件：
+  - `phoenix/configs/6.23_tube_project_code_audit_report.md` (在 P0 模块下追加四项问题的最新修复记录，保持审计文档闭环)
+- 本轮处理与实现原理：
+  1. **📋 审计报告修复状态固化**：
+     - 在审计报告中记录了已物理修复的三项 P0 级后端/架构问题（库存公式物理纠偏、迁移失败强阻断、N+1批量ANY查询重构），以及对 ECharts 内存泄漏分析为误报的评估结论。
+
 ## 2026-06-23 保温管管网项目（tube）项目完整构建流程计划同步更新
 
 - 变更文件：

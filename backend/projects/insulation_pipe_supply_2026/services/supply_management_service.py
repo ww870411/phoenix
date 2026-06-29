@@ -1247,3 +1247,109 @@ def super_update_delivery_record(
         session.close()
 
 
+def query_history_records(
+    start_date: date,
+    end_date: date,
+    station_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    查询历史数据，包含当日计划量、实际使用量、损耗量、确认到货量、运输在途时间。
+    采用 FULL OUTER JOIN 将三张表在 (station_id, biz_date, pipe_model_id) 维度合并。
+    """
+    sql = text(
+        """
+        WITH p AS (
+            SELECT
+                station_id,
+                plan_date AS biz_date,
+                pipe_model_id,
+                SUM(plan_qty) AS total_plan_qty
+            FROM tube.tube_daily_plan
+            WHERE plan_date >= :start_date AND plan_date <= :end_date
+              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
+            GROUP BY station_id, plan_date, pipe_model_id
+        ), u AS (
+            SELECT
+                station_id,
+                usage_date AS biz_date,
+                pipe_model_id,
+                SUM(usage_qty) AS total_usage_qty,
+                SUM(loss_qty) AS total_loss_qty
+            FROM tube.tube_daily_usage
+            WHERE usage_date >= :start_date AND usage_date <= :end_date
+              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
+            GROUP BY station_id, usage_date, pipe_model_id
+        ), d AS (
+            SELECT
+                station_id,
+                (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
+                pipe_model_id,
+                SUM(arrived_qty) AS total_arrived_qty,
+                SUM(EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at))) AS total_transit_seconds,
+                COUNT(id) AS arrived_batch_count,
+                MIN(EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at))) AS min_transit_seconds,
+                MAX(EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at))) AS max_transit_seconds
+            FROM tube.tube_delivery
+            WHERE arrived_confirm_at IS NOT NULL
+              AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date 
+              AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
+              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
+              AND status <> 'cancelled'
+            GROUP BY station_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+        )
+        SELECT
+            COALESCE(p.station_id, u.station_id, d.station_id) AS station_id,
+            COALESCE(p.biz_date, u.biz_date, d.biz_date) AS biz_date,
+            COALESCE(p.pipe_model_id, u.pipe_model_id, d.pipe_model_id) AS pipe_model_id,
+            COALESCE(p.total_plan_qty, 0) AS plan_qty,
+            COALESCE(u.total_usage_qty, 0) AS usage_qty,
+            COALESCE(u.total_loss_qty, 0) AS loss_qty,
+            COALESCE(d.total_arrived_qty, 0) AS arrived_qty,
+            COALESCE(d.total_transit_seconds, 0) AS total_transit_seconds,
+            COALESCE(d.arrived_batch_count, 0) AS arrived_batch_count,
+            d.min_transit_seconds,
+            d.max_transit_seconds
+        FROM p
+        FULL OUTER JOIN u ON p.station_id = u.station_id AND p.biz_date = u.biz_date AND p.pipe_model_id = u.pipe_model_id
+        FULL OUTER JOIN d ON COALESCE(p.station_id, u.station_id) = d.station_id
+                         AND COALESCE(p.biz_date, u.biz_date) = d.biz_date
+                         AND COALESCE(p.pipe_model_id, u.pipe_model_id) = d.pipe_model_id
+        WHERE COALESCE(p.total_plan_qty, 0) <> 0
+           OR COALESCE(u.total_usage_qty, 0) <> 0
+           OR COALESCE(u.total_loss_qty, 0) <> 0
+           OR COALESCE(d.total_arrived_qty, 0) <> 0
+        ORDER BY biz_date DESC, station_id, pipe_model_id
+        """
+    )
+    session = SessionLocal()
+    try:
+        rows = session.execute(
+            sql,
+            {
+                "start_date": start_date,
+                "end_date": end_date,
+                "station_id": station_id if station_id else None,
+            }
+        ).mappings().all()
+        
+        return [
+            {
+                "station_id": _normalize_text(row["station_id"]),
+                "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
+                "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
+                "plan_qty": float(row["plan_qty"]),
+                "usage_qty": float(row["usage_qty"]),
+                "loss_qty": float(row["loss_qty"]),
+                "arrived_qty": float(row["arrived_qty"]),
+                "total_transit_seconds": float(row["total_transit_seconds"]),
+                "arrived_batch_count": int(row["arrived_batch_count"]),
+                "min_transit_seconds": float(row["min_transit_seconds"]) if row["min_transit_seconds"] is not None else None,
+                "max_transit_seconds": float(row["max_transit_seconds"]) if row["max_transit_seconds"] is not None else None,
+            }
+            for row in rows
+        ]
+    finally:
+        session.close()
+
+
+

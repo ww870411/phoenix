@@ -1,3 +1,25 @@
+## 2026-06-29 [全局管理历史数据查询与统计功能优化上线准备]
+- **任务结论**：为 `insulation_pipe_supply_2026` 项目的“全局管理”页面新增了“历史数据查询”标签页与配套的后端服务及数据流，实现管理员对任意换热站在指定日期范围内的每日每种管材计划量、实际使用量、损耗量、到货量及运输在途时间的综合查询，支持时段内的汇总统计与无乱码 CSV 报表导出。
+- **改动清单**：
+  - [supply_management_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py) (新增 `query_history_records` 函数，基于 `FULL OUTER JOIN` 跨多张表进行 (站, 日期, 管材) 维度的零遗漏聚合)
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) (新增 `/global-management/history` 数据接口和 `/global-management/history/export` 导出 CSV 接口，进行管理员鉴权和中文名称字典补全映射)
+  - [api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) (新增前端 API 封装函数 `getTubeHistoryData` 与 `exportTubeHistoryData`)
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) (在侧边栏新增“历史数据查询”Tab 按钮，实现包含数据过滤控制、数据明细行与置底加权统计汇总行的混合展示表格及 CSV 一键下载)
+- **验证细节**：
+  - 修复了后端因为缺少 fastapi.Query 导入导致的 NameError 编译错误，已物理补齐。
+  - 修正了历史数据查询中到货记录状态过滤条件错误（从错误的 `status IN ('arrived', 'received', 'warehouse')` 修正为 `status <> 'cancelled'`），打通了到货数据的统计展示。
+  - 在 SQL 尾部增加了过滤全 0 行的 `WHERE` 条件，自动剔除计划量、使用量、损耗量、到货量均等于 0 的无业务意义的历史记录。
+  - 静态语法与模块导入检测均通过。
+
+## 2026-06-23 [6.23代码审计报告P0级修复状态更新]
+- **任务结论**：在项目代码审计报告 `6.23_tube_project_code_audit_report.md` 中，对四项 P0 级严重问题（库存计算公式纠偏、数据库迁移失败阻断保护、N+1数据库查询性能提升、ECharts图表销毁内存泄漏）的最新物理修复及分析状态进行了逐项记录，使项目审计追溯完全闭环。
+- **改动清单**：
+  - [6.23_tube_project_code_audit_report.md](file:///D:/编程项目/phoenix/configs/6.23_tube_project_code_audit_report.md) (在四个 P0 问题节点下方追加最新的“修复状态 (2026-06-23)”说明，包含修复逻辑与对应物理文件的路径引用)
+- **验证细节**：
+  - 审计报告文件已被物理保存，格式规整无误。
+- **验证细节**：
+  - 审计报告文件已被物理保存，格式规整无误。
+
 ## 2026-06-23 [5.24_tube项目完整构建流程计划执行版进度同步]
 - **任务结论**：将今日有关“超级管理员强改无损审计”、“三端时光轴（`deliveryDetailModal`）样式/图标/备注100%对齐”、“供给侧时光轴卡片接入与定位坠落修复”以及“现场负责人差异审批节点命名规范化”的联调与收口成果，以 In-place update 的方式同步写入至项目计划文件 `5.24_tube项目完整构建流程计划_v5.2执行版.md` 中（追加第 31 节），实现了开发成果与执行计划的完全校准。
 - **改动清单**：

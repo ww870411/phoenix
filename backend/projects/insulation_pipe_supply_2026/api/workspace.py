@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
 def _get_client_ip(request: Request) -> str:
@@ -65,6 +65,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     update_delivery_receipt_record,
     update_delivery_warehouse_record,
     super_update_delivery_record,
+    query_history_records,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
@@ -2173,5 +2174,269 @@ def export_global_management_operation_logs(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     response.headers["Content-Disposition"] = f"attachment; filename=operation_logs_{timestamp}.csv"
     return response
+
+
+@router.get("/global-management/history", summary="读取历史填报与到货聚合数据")
+def get_global_management_history(
+    start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
+    station_id: Optional[str] = Query(None, description="换热站ID"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+        raise HTTPException(status_code=403, detail="无权查看历史数据")
+        
+    try:
+        dt_start = date.fromisoformat(start_date)
+        dt_end = date.fromisoformat(end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
+
+    # 获取原始合并历史数据
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, station_id=station_id)
+    
+    # 载入配置以映射中文名
+    config = load_tube_config()
+    
+    # 建立映射字典
+    station_map = {
+        item.get("station_id"): item.get("station_name")
+        for item in config.get("demand_entities", [])
+        if item.get("station_id")
+    }
+    pipe_map = {
+        item.get("pipe_model_id"): item.get("pipe_model_name")
+        for item in config.get("pipe_models", [])
+        if item.get("pipe_model_id")
+    }
+    
+    # 补充中文名
+    for row in rows:
+        row["station_name"] = station_map.get(row["station_id"]) or row["station_id"]
+        row["pipe_model_name"] = pipe_map.get(row["pipe_model_id"]) or row["pipe_model_id"]
+        
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "rows": rows
+    }
+
+
+@router.get("/global-management/history/export", summary="导出历史填报与到货数据")
+def export_global_management_history(
+    start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
+    station_id: Optional[str] = Query(None, description="换热站ID"),
+    session: AuthSession = Depends(get_current_session),
+):
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+        raise HTTPException(status_code=403, detail="无权导出历史数据")
+        
+    try:
+        dt_start = date.fromisoformat(start_date)
+        dt_end = date.fromisoformat(end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
+
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, station_id=station_id)
+    config = load_tube_config()
+    
+    station_map = {
+        item.get("station_id"): item.get("station_name")
+        for item in config.get("demand_entities", [])
+        if item.get("station_id")
+    }
+    pipe_map = {
+        item.get("pipe_model_id"): item.get("pipe_model_name")
+        for item in config.get("pipe_models", [])
+        if item.get("pipe_model_id")
+    }
+    
+    output = io.StringIO()
+    output.write('\ufeff')  # UTF-8 BOM
+    writer = csv.writer(output)
+    
+    # 按换热站进行分组与排序
+    from collections import defaultdict
+    station_groups = defaultdict(list)
+    for row in rows:
+        station_groups[row["station_id"]].append(row)
+        
+    sorted_station_ids = sorted(station_groups.keys())
+    
+    for st_id in sorted_station_ids:
+        # 1. 每个换热站块的头部写入相同的表头
+        writer.writerow([
+            "日期", "换热站ID", "换热站名称", "管材型号ID", "管材型号名称", 
+            "当日计划量 (米)", "当日使用量 (米)", "当日损耗量 (米)", 
+            "确认到货量 (米)", "运输在途时间", "时间单位"
+        ])
+        
+        group_rows = station_groups[st_id]
+        # 按日期降序排序
+        group_rows.sort(key=lambda x: x["biz_date"], reverse=True)
+        st_name = station_map.get(st_id) or st_id
+        
+        # 2. 写入该站明细行
+        for row in group_rows:
+            pm_name = pipe_map.get(row["pipe_model_id"]) or row["pipe_model_id"]
+            
+            # 计算在途时间（分钟）
+            transit_val = ""
+            unit_val = ""
+            if row["arrived_batch_count"] > 0:
+                avg_seconds = row["total_transit_seconds"] / row["arrived_batch_count"]
+                transit_val = round(avg_seconds / 60, 1)
+                unit_val = "分钟"
+                
+            writer.writerow([
+                row["biz_date"],
+                row["station_id"],
+                st_name,
+                row["pipe_model_id"],
+                pm_name,
+                row["plan_qty"],
+                row["usage_qty"],
+                row["loss_qty"],
+                row["arrived_qty"],
+                transit_val,
+                unit_val
+            ])
+            
+        # 3. 计算并写入该站历史小计行（对应表头列填写）
+        sub_plan = sum(r["plan_qty"] for r in group_rows)
+        sub_usage = sum(r["usage_qty"] for r in group_rows)
+        sub_loss = sum(r["loss_qty"] for r in group_rows)
+        sub_arrived = sum(r["arrived_qty"] for r in group_rows)
+        sub_transit = sum(r["total_transit_seconds"] for r in group_rows)
+        sub_batches = sum(r["arrived_batch_count"] for r in group_rows)
+        
+        sub_transit_val = round(sub_transit / 60 / sub_batches, 1) if sub_batches > 0 else ""
+        sub_unit_val = "分钟" if sub_batches > 0 else ""
+        
+        writer.writerow([
+            f"[{st_name}] 历史小计",
+            st_id,
+            st_name,
+            "-",
+            "-",
+            sub_plan,
+            sub_usage,
+            sub_loss,
+            sub_arrived,
+            sub_transit_val,
+            sub_unit_val
+        ])
+        
+        # 4. 计算并写入该站专属的决策辅助透视（两列纯文本形式）
+        sub_active_dates = {r["biz_date"] for r in group_rows if r["usage_qty"] > 0 and r["biz_date"]}
+        sub_active_days_count = len(sub_active_dates)
+        
+        sub_valid_mins = [r["min_transit_seconds"] for r in group_rows if r.get("min_transit_seconds") is not None]
+        sub_valid_maxs = [r["max_transit_seconds"] for r in group_rows if r.get("max_transit_seconds") is not None]
+        sub_min_transit_val = min(sub_valid_mins) if sub_valid_mins else None
+        sub_max_transit_val = max(sub_valid_maxs) if sub_valid_maxs else None
+        
+        sub_fulfillment_rate_str = f"{(sub_arrived / sub_plan * 100):.1f}%" if sub_plan > 0 else "-"
+        sub_plan_usage_alignment_str = f"{(sub_usage / sub_plan * 100):.1f}%" if sub_plan > 0 else "-"
+        sub_loss_rate_str = f"{(sub_loss / (sub_usage + sub_loss) * 100):.1f}%" if (sub_usage + sub_loss) > 0 else "-"
+        sub_daily_consumption_str = f"{(sub_usage / sub_active_days_count):.1f} 米/天" if sub_active_days_count > 0 else "-"
+        
+        sub_min_transit_str = format_delivery_elapsed_seconds(sub_min_transit_val) if sub_min_transit_val is not None else "-"
+        sub_max_transit_str = format_delivery_elapsed_seconds(sub_max_transit_val) if sub_max_transit_val is not None else "-"
+        sub_avg_transit_str = format_delivery_elapsed_seconds(sub_transit / sub_batches) if sub_batches > 0 else "-"
+        sub_overall_transit_str = f"最快 {sub_min_transit_str} / 最慢 {sub_max_transit_str} (平均 {sub_avg_transit_str}, 共 {sub_batches} 批)"
+        
+        writer.writerow([f"--- [{st_name}] 决策辅助透视 ---"])
+        writer.writerow(["物资综合保障率", f"{sub_fulfillment_rate_str} (计划 {sub_plan:.1f} 米 / 到货 {sub_arrived:.1f} 米)"])
+        writer.writerow(["计划消耗契合度", f"{sub_plan_usage_alignment_str} (实际消耗 {sub_usage:.1f} 米 / 计划 {sub_plan:.1f} 米)"])
+        writer.writerow(["施工综合损耗率", f"{sub_loss_rate_str} (消耗 {sub_usage:.1f} 米 / 损耗 {sub_loss:.1f} 米)"])
+        writer.writerow(["施工消耗强度", f"{sub_daily_consumption_str} (施工 {sub_active_days_count} 天)"])
+        writer.writerow(["物流配送效率区间", sub_overall_transit_str])
+        
+        # 换热站之间空出 2 行
+        writer.writerow([])
+        writer.writerow([])
+        
+    # 5. 写入全局大总计行
+    total_plan = sum(r["plan_qty"] for r in rows)
+    total_usage = sum(r["usage_qty"] for r in rows)
+    total_loss = sum(r["loss_qty"] for r in rows)
+    total_arrived = sum(r["arrived_qty"] for r in rows)
+    total_transit = sum(r["total_transit_seconds"] for r in rows)
+    total_batches = sum(r["arrived_batch_count"] for r in rows)
+    
+    overall_avg_transit_val = round(total_transit / 60 / total_batches, 1) if total_batches > 0 else ""
+    overall_unit_val = "分钟" if total_batches > 0 else ""
+    
+    writer.writerow([
+        "[全局大总计]",
+        "-",
+        "所有查询换热站",
+        "-",
+        "-",
+        total_plan,
+        total_usage,
+        total_loss,
+        total_arrived,
+        overall_avg_transit_val,
+        overall_unit_val
+    ])
+    
+    # 6. 计算并写入全局决策辅助透视统计（两列纯文本形式）
+    active_dates = {r["biz_date"] for r in rows if r["usage_qty"] > 0 and r["biz_date"]}
+    active_days_count = len(active_dates)
+    
+    valid_mins = [r["min_transit_seconds"] for r in rows if r.get("min_transit_seconds") is not None]
+    valid_maxs = [r["max_transit_seconds"] for r in rows if r.get("max_transit_seconds") is not None]
+    min_transit_val = min(valid_mins) if valid_mins else None
+    max_transit_val = max(valid_maxs) if valid_maxs else None
+    
+    fulfillment_rate_str = f"{(total_arrived / total_plan * 100):.1f}%" if total_plan > 0 else "-"
+    plan_usage_alignment_str = f"{(total_usage / total_plan * 100):.1f}%" if total_plan > 0 else "-"
+    loss_rate_str = f"{(total_loss / (total_usage + total_loss) * 100):.1f}%" if (total_usage + total_loss) > 0 else "-"
+    daily_consumption_str = f"{(total_usage / active_days_count):.1f} 米/天" if active_days_count > 0 else "-"
+    
+    min_transit_str = format_delivery_elapsed_seconds(min_transit_val) if min_transit_val is not None else "-"
+    max_transit_str = format_delivery_elapsed_seconds(max_transit_val) if max_transit_val is not None else "-"
+    avg_transit_str = format_delivery_elapsed_seconds(total_transit / total_batches) if total_batches > 0 else "-"
+    overall_transit_str = f"最快 {min_transit_str} / 最慢 {max_transit_str} (平均 {avg_transit_str}, 共 {total_batches} 批)"
+    
+    writer.writerow([])
+    writer.writerow([])
+    writer.writerow(["--- 全局决策辅助透视统计 ---"])
+    writer.writerow(["指标名称", "指标值/计算细节"])
+    writer.writerow(["物资综合保障率", f"{fulfillment_rate_str} (计划 {total_plan:.1f} 米 / 到货 {total_arrived:.1f} 米)"])
+    writer.writerow(["计划消耗契合度", f"{plan_usage_alignment_str} (实际消耗 {total_usage:.1f} 米 / 计划 {total_plan:.1f} 米)"])
+    writer.writerow(["施工综合损耗率", f"{loss_rate_str} (消耗 {total_usage:.1f} 米 / 损耗 {total_loss:.1f} 米)"])
+    writer.writerow(["施工消耗强度", f"{daily_consumption_str} (施工 {active_days_count} 天)"])
+    writer.writerow(["物流配送效率区间", overall_transit_str])
+        
+    output.seek(0)
+    
+    response = StreamingResponse(
+        iter([output.getvalue()]), 
+        media_type="text/csv"
+    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    response.headers["Content-Disposition"] = f"attachment; filename=history_records_{timestamp}.csv"
+    return response
+
+
+def format_delivery_elapsed_seconds(total_seconds: float) -> str:
+    seconds_int = max(int(total_seconds), 0)
+    days, remainder = divmod(seconds_int, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if days > 0:
+        return f"{days}天{hours}小时{minutes}分"
+    if hours > 0:
+        return f"{hours}小时{minutes}分"
+    if minutes > 0:
+        return f"{minutes}分{seconds}秒"
+    return f"{seconds}秒"
+
 
 

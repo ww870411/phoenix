@@ -2171,3 +2171,36 @@ export async function uploadSuperFiles(targetDir, files = []) {
   await ensureSuperResponseOk(response, `上传失败: ${response.status}`)
   return response.json()
 }
+
+export async function getTubeHistoryData(projectKey, params) {
+  const query = new URLSearchParams()
+  if (params.startDate) query.append('start_date', params.startDate)
+  if (params.endDate) query.append('end_date', params.endDate)
+  if (params.stationId) query.append('station_id', params.stationId)
+  
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取历史填报与到货数据失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function exportTubeHistoryData(projectKey, params) {
+  const query = new URLSearchParams()
+  if (params.startDate) query.append('start_date', params.startDate)
+  if (params.endDate) query.append('end_date', params.endDate)
+  if (params.stationId) query.append('station_id', params.stationId)
+  
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history/export?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '导出历史数据失败')
+    throw new Error(detail)
+  }
+  return response.blob()
+}
+
