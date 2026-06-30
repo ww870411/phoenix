@@ -1,3 +1,50 @@
+## 2026-06-30 [实时库存与周期填报数据对齐机制确认]
+- **任务结论**：确认了系统在处理“实时到货/发货”与“每日周期填报使用量”数据时间错位时的解决方案。
+- **业务规则**：系统引入了“双日期口径”（展示日期 `show_date` 与计划起始日期 `plan_start_date`）设计。在计算现场库存和缺口时，系统对到货数据和使用数据统一进行了 `show_date` 时间截断，确保两端数据均对齐在 `show_date - 1`。
+- **实现逻辑**：
+  - 累计到货量（`total_arrived`）计算中加入了 `arrived_confirm_at < :show_date` 的时间截断。
+  - 累计使用量（`total_usage`）计算中加入了 `usage_date < :show_date` 的日期截断。
+  - 从而保证了在数据看板和统计列表中，库存的计算公式为：`截止到 show_date-1 的累计到货 - 截止到 show_date-1 的累计使用/损耗`，消灭了因实时到货与每日8点一次性填报造成的数据时间错位。
+- **改动清单**：无代码改动，仅业务规则确认与文档留痕。
+
+## 2026-06-30 [差异审批期间换热站库存计算规则确认]
+- **任务结论**：确认了发货记录在处于“待差异审批（pending_diff_approve）”状态下，换热站可用账面库存的计算规则。
+- **业务规则**：在差异审批处理期间，系统将采用施工单位上报的**较小接收量（实收接收量）**计入换热站的现场库存，而非原有的到货确认量。
+- **底层实现**：
+  - 库存在 `demand_management_service.py` 统计时，依据 `sql_arrived_batch` 查询：
+    ```sql
+    CASE 
+        WHEN status = 'pending_receive' THEN COALESCE(arrived_qty, shipped_qty)
+        ELSE COALESCE(received_qty, arrived_qty, shipped_qty)
+    END
+    ```
+  - 当状态为 `pending_diff_approve` 时，触发 `ELSE` 分支，由于已保存施工方填写的 `received_qty`（较小值），因此 `COALESCE` 优先取该值。
+  - 审批通过后，维持该较小值；审批驳回后，系统会通过 `approve_delivery_difference` 接口将 `received_qty` 强行更正回原本的到货量 `arrived_qty`。
+- **改动清单**：无代码改动，仅业务规则确认与文档留痕。
+
+## 2026-06-30 [确认到货至施工接收自动超时流转规则确认]
+- **任务结论**：确认了发货记录在“确认到货”后自动变为“施工接收”的业务规则与底层实现。
+- **业务规则**：到货确认后，若 **12小时** 内施工单位未进行接收确认，系统将在拉取列表或进行库存清算时，自动触发超时强制接收。
+- **底层实现**：
+  - 由 `supply_management_service.py` 中的 `auto_process_timeout_deliveries` 函数实现。
+  - 触发条件：`status = 'pending_receive'` 且 `arrived_confirm_at < NOW() - INTERVAL '12 hours'`。
+  - 自动处理结果：状态扭转为 `pending_warehouse`（已接收待库管确认），实收数量 `received_qty` 默认取到货数量 `arrived_qty`，接收人 `received_confirm_by` 标记为 `'SYSTEM_TIMEOUT'`，备注 `received_remark` 记录 `🕒 [系统超时确认] 超出12小时未接收，系统强制确认为到货量。`，并将超时接收标记 `is_timeout_receive` 设为 `TRUE`。
+- **改动清单**：无代码改动，仅业务规则确认与文档留痕。
+
+## 2026-06-29 [保温管供应管理平台填报与使用说明书标准版重构与细化]
+- **任务结论**：根据用户“在填报流程中再细致一点，写清楚具体点击什么按钮及先后顺序”的反馈，对 SOP 中的“填报流程”章节进行了深度细化。现在每一流转节点都明确标注了操作角色、前置要求（如不到货不能接收的强制顺序）以及细粒度到界面按钮点击的具体步骤。
+- **改动清单**：
+  - [insulation_pipe_supply_manual.md](file:///D:/编程项目/phoenix/configs/insulation_pipe_supply_manual.md) (在“核心操作流转”中增加了具体页面、按钮操作指引及严密的节点依赖关系说明)
+- **验证细节**：
+  - 已成功覆盖写入至 `phoenix/configs/insulation_pipe_supply_manual.md`。
+
+## 2026-06-29 [保温管供应管理平台填报制度与说明书大纲设计]
+- **任务结论**：为配合下周启动的“城市管网更新”项目，针对 `insulation_pipe_supply_2026` 子项目的使用者学习成本和在线统计管理要求，设计并输出了《填报规范、使用说明与管理制度》的结构目录与大纲草案。
+- **改动清单**：
+  - [insulation_pipe_supply_2026_outline.md](file:///C:/Users/ww/.gemini/antigravity-cli/brain/9bbb6530-6ef0-4186-b2bd-0f199756597a/insulation_pipe_supply_2026_outline.md) (新增，包含填报制度、指标口径、系统操作和常见问题的大纲设计)
+- **验证细节**：
+  - 成功生成大纲 Artifact 文件，等待用户确认并决定后续细化内容。
+
 ## 2026-06-29 [全局管理历史数据查询与统计功能优化上线准备]
 - **任务结论**：为 `insulation_pipe_supply_2026` 项目的“全局管理”页面新增了“历史数据查询”标签页与配套的后端服务及数据流，实现管理员对任意换热站在指定日期范围内的每日每种管材计划量、实际使用量、损耗量、到货量及运输在途时间的综合查询，支持时段内的汇总统计与无乱码 CSV 报表导出。
 - **改动清单**：
