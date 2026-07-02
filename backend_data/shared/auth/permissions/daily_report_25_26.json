@@ -1,0 +1,256 @@
+{
+  "project_key": "daily_report_25_26",
+  "groups": {
+    "Global_admin": {
+      "page_access": [
+        "dashboard",
+        "data_show",
+        "data_approval",
+        "data_entry",
+        "constant_data",
+        "data_analysis",
+        "placeholder"
+      ],
+      "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        },
+        "data_approval": {
+          "mode": "all"
+        },
+        "data_entry": {
+          "mode": "all"
+        },
+        "constant_data": {
+          "mode": "all"
+        }
+      },
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": true,
+        "can_unlimited_ai_usage": true,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": true,
+        "can_access_admin_console": true,
+        "can_approve": true,
+        "can_manage_modularization": true,
+        "can_manage_validation": true,
+        "can_manage_ai_settings": true,
+        "can_extract_xlsx": false
+      }
+    },
+    "Group_admin": {
+      "page_access": [
+        "dashboard",
+        "data_show",
+        "data_approval",
+        "data_entry",
+        "constant_data",
+        "data_analysis",
+        "placeholder"
+      ],
+      "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        },
+        "data_approval": {
+          "mode": "all"
+        },
+        "data_entry": {
+          "mode": "all"
+        },
+        "constant_data": {
+          "mode": "all"
+        }
+      },
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": true,
+        "can_unlimited_ai_usage": true,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": true,
+        "can_access_admin_console": false,
+        "can_approve": true,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "ZhuChengQu_admin": {
+      "page_access": [
+        "dashboard",
+        "data_show",
+        "data_approval",
+        "data_entry",
+        "data_analysis"
+      ],
+      "sheet_rules": {
+        "data_show": {
+          "mode": "explicit",
+          "sheets": [
+            "ZhuChengQu_sum_show_Sheet"
+          ]
+        },
+        "data_approval": {
+          "mode": "explicit",
+          "sheets": [
+            "ZhuChengQu_approval_Sheet",
+            "BeiHai_approval_Sheet",
+            "XiangHai_approval_Sheet",
+            "GongRe_approval_Sheet"
+          ]
+        },
+        "data_entry": {
+          "mode": "explicit",
+          "sheets": [
+            "BeiHai_co_generation_Sheet",
+            "BeiHai_water_boiler_Sheet",
+            "BeiHai_gas_boiler_Sheet",
+            "XiangHai_Sheet",
+            "GongRe_Sheet",
+            "GongRe_branches_detail_Sheet"
+          ]
+        }
+      },
+      "units_access": [
+        "ZhuChengQu",
+        "BeiHai",
+        "XiangHai",
+        "GongRe"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": true,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "Unit_admin": {
+      "page_access": [
+        "data_approval",
+        "data_entry"
+      ],
+      "sheet_rules": {
+        "data_approval": {
+          "mode": "by_unit"
+        },
+        "data_entry": {
+          "mode": "by_unit"
+        }
+      },
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": true,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "unit_filler": {
+      "page_access": [
+        "data_entry"
+      ],
+      "sheet_rules": {
+        "data_entry": {
+          "mode": "by_unit"
+        }
+      },
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "shoudian_filler": {
+      "page_access": [
+        "data_entry"
+      ],
+      "sheet_rules": {
+        "data_entry": {
+          "mode": "by_unit",
+          "sheets": [
+            "Coal_inventory_Sheet"
+          ]
+        }
+      },
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "Group_viewer": {
+      "page_access": [
+        "dashboard",
+        "data_show",
+        "placeholder"
+      ],
+      "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        }
+      },
+      "units_access": [
+        "Group"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    }
+  }
+}

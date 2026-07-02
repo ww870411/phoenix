@@ -16,6 +16,7 @@
             <button class="tab-btn" :class="{ active: activeTab === 'project' }" type="button" @click="activeTab = 'project'">项目后台设定</button>
             <button class="tab-btn" :class="{ active: activeTab === 'system' }" type="button" @click="activeTab = 'system'">服务器管理</button>
             <button class="tab-btn" :class="{ active: activeTab === 'audit' }" type="button" @click="activeTab = 'audit'">操作日志</button>
+            <button class="tab-btn" :class="{ active: activeTab === 'accounts' }" type="button" @click="activeTab = 'accounts'">账户与权限管理</button>
           </div>
         </header>
 
@@ -921,6 +922,256 @@
             </div>
           </section>
         </section>
+
+        <!-- ================= 账户与权限管理大盘 (2026-07-02 重构优化版) ================= -->
+        <section v-else-if="activeTab === 'accounts'" class="content-block accounts-management-block">
+          
+          <!-- 二级子 Tabs 导航栏 (升级为 iOS 精致 Segmented Control) -->
+          <div class="sub-tab-segmented-container">
+            <div class="segmented-control">
+              <button 
+                class="segmented-btn" 
+                :class="{ active: activeSubTab === 'accounts_list' }" 
+                type="button" 
+                @click="activeSubTab = 'accounts_list'"
+              >
+                👤 账户管理与兼职分配
+              </button>
+              <button 
+                class="segmented-btn" 
+                :class="{ active: activeSubTab === 'matrix_control' }" 
+                type="button" 
+                @click="activeSubTab = 'matrix_control'"
+              >
+                🎛️ 项目权限配置中心
+              </button>
+            </div>
+          </div>
+
+          <!-- 子 Tab 1：账户管理列表 -->
+          <div v-if="activeSubTab === 'accounts_list'" class="accounts-list-view">
+            <section class="inner-card account-card">
+              <header class="section-header">
+                <div>
+                  <h3>系统用户账号控制台</h3>
+                  <p class="subtext">在此创建新账户、维护密码、并为单位用户分派多项目兼职角色覆盖</p>
+                </div>
+                <button class="btn primary" type="button" :disabled="accountsLoading" @click="openCreateAccountModal">
+                  新建账号
+                </button>
+              </header>
+
+              <div v-if="accountsLoading" class="panel-state">账号列表加载中…</div>
+              <div v-else class="table-container">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>用户名</th>
+                      <th>登录密码</th>
+                      <th>归属单位</th>
+                      <th>系统角色组</th>
+                      <th class="col-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="user in accounts" :key="user.username">
+                      <td class="username-cell">
+                        <strong>{{ user.username }}</strong>
+                      </td>
+                      <td><code>{{ user.password }}</code></td>
+                      <td>
+                        <span class="unit-badge" :class="{ empty: !user.unit }">
+                          {{ user.unit || '未分配单位' }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="role-badge global">{{ user.group }}</span>
+                      </td>
+                      <td class="col-actions">
+                        <div class="action-buttons">
+                          <button class="btn ghost btn-sm" type="button" @click="openEditAccountModal(user)">编辑账号</button>
+                          <button class="btn danger btn-sm" type="button" @click="deleteAccount(user.username)">删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <!-- 子 Tab 2：三栏式权限配置中心 (自适应项目隔离) -->
+          <div v-else-if="activeSubTab === 'matrix_control'" class="matrix-control-view">
+            <section class="inner-card matrix-card-reborn">
+              
+              <div v-if="matrixLoading" class="panel-state">权限数据加载中…</div>
+              <div v-else class="matrix-three-columns-layout">
+                
+                <!-- 第一栏：选择子项目列表 -->
+                <div class="matrix-column project-nav-column">
+                  <div class="column-header">
+                    <h4>📁 选择子项目</h4>
+                  </div>
+                  <div class="column-list">
+                    <button 
+                      v-for="proj in availableProjects" 
+                      :key="proj"
+                      class="nav-list-btn project-btn"
+                      :class="{ active: selectedProjectForMatrix === proj }"
+                      type="button"
+                      @click="selectedProjectForMatrix = proj"
+                    >
+                      <span class="btn-icon">{{ proj === 'global' ? '🌐' : '📂' }}</span>
+                      <span class="btn-text">{{ proj }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 第二栏：选择配置角色组列表 -->
+                <div class="matrix-column role-nav-column">
+                  <div class="column-header">
+                    <h4>👥 选择角色组</h4>
+                  </div>
+                  <div class="column-list">
+                    <button
+                      v-for="(roleVal, roleName) in permissionMatrix.roles"
+                      :key="roleName"
+                      class="nav-list-btn role-btn"
+                      :class="{ active: selectedRoleForMatrix === roleName }"
+                      type="button"
+                      @click="selectedRoleForMatrix = roleName"
+                    >
+                      <span class="btn-text">{{ roleName }}</span>
+                      <span class="btn-badge">Lv.{{ roleVal.hierarchy }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 第三栏：权限开关卡片网格 -->
+                <div class="matrix-column settings-panel-column">
+                  <div class="column-header sticky-header">
+                    <div class="panel-title-info">
+                      <h4>
+                        ⚙️ 权限明细: 
+                        <span class="highlight-role">[{{ selectedRoleForMatrix }}]</span> 
+                        在项目 <span class="highlight-proj">[{{ selectedProjectForMatrix }}]</span>
+                      </h4>
+                      <p class="subtext">变更选项立即动态热更新底层配置文件并刷新在线用户 Session</p>
+                    </div>
+                  </div>
+
+                  <div class="permission-scroll-container">
+                    
+                    <!-- 页面访问控制 -->
+                    <div class="permission-section-tile-group">
+                      <h5 class="sec-title">🖥️ 允许访问的项目页面</h5>
+                      <div v-if="!permissionMatrix.project_metadata[selectedProjectForMatrix]?.pages.length" class="empty-section-tip">
+                        该项目目前未配置或无需特定页面访问隔离
+                      </div>
+                      <div v-else class="switches-grid-reborn">
+                        <div 
+                          v-for="page in permissionMatrix.project_metadata[selectedProjectForMatrix]?.pages" 
+                          :key="`switch-page-${selectedRoleForMatrix}-${selectedProjectForMatrix}-${page}`"
+                          class="switch-tile-reborn"
+                        >
+                          <div class="tile-info">
+                            <span class="tile-name">{{ page }}</span>
+                            <span class="tile-desc">项目特定页面路由的加载与访问权</span>
+                          </div>
+                          <label class="switch-container">
+                            <input 
+                              type="checkbox" 
+                              :checked="permissionMatrix.roles[selectedRoleForMatrix]?.projects[selectedProjectForMatrix]?.page_access.includes(page) || (selectedProjectForMatrix === 'global' && permissionMatrix.roles[selectedRoleForMatrix]?.global_pages.includes(page))" 
+                              @change="togglePermission(selectedRoleForMatrix, selectedProjectForMatrix, 'page', page, (selectedProjectForMatrix === 'global' ? permissionMatrix.roles[selectedRoleForMatrix]?.global_pages.includes(page) : permissionMatrix.roles[selectedRoleForMatrix]?.projects[selectedProjectForMatrix]?.page_access.includes(page)))"
+                            />
+                            <span class="switch-slider"></span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 动作权限控制 -->
+                    <div class="permission-section-tile-group">
+                      <h5 class="sec-title">⚡ 允许执行的业务动作 (Action Flags)</h5>
+                      <div v-if="!permissionMatrix.project_metadata[selectedProjectForMatrix]?.actions.length" class="empty-section-tip">
+                        该项目目前未配置任何特定操作动作权限
+                      </div>
+                      <div v-else class="switches-grid-reborn">
+                        <div 
+                          v-for="action in permissionMatrix.project_metadata[selectedProjectForMatrix]?.actions" 
+                          :key="`switch-action-${selectedRoleForMatrix}-${selectedProjectForMatrix}-${action}`"
+                          class="switch-tile-reborn"
+                        >
+                          <div class="tile-info">
+                            <span class="tile-name action-name">{{ action }}</span>
+                            <span class="tile-desc">对应后端的业务接口操作鉴权标识</span>
+                          </div>
+                          <label class="switch-container">
+                            <input 
+                              type="checkbox" 
+                              :checked="(selectedProjectForMatrix === 'global' ? permissionMatrix.roles[selectedRoleForMatrix]?.global_actions[action] : permissionMatrix.roles[selectedRoleForMatrix]?.projects[selectedProjectForMatrix]?.actions[action])" 
+                              @change="togglePermission(selectedRoleForMatrix, selectedProjectForMatrix, 'action', action, (selectedProjectForMatrix === 'global' ? permissionMatrix.roles[selectedRoleForMatrix]?.global_actions[action] : permissionMatrix.roles[selectedRoleForMatrix]?.projects[selectedProjectForMatrix]?.actions[action]))"
+                            />
+                            <span class="switch-slider slider-action"></span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+            </section>
+          </div>
+
+          <!-- 账号新建/编辑磨砂弹窗 -->
+          <div v-if="showAccountModal" class="block-modal-overlay show-modal-active">
+            <div class="dialog account-form-dialog">
+              <header class="dialog-header">
+                <h3>{{ isCreateAccount ? '新建用户账户' : '编辑账户权限与兼职' }}</h3>
+                <button class="close-btn" type="button" @click="showAccountModal = false">×</button>
+              </header>
+              <main class="dialog-body">
+                <div class="form-grid">
+                  <label class="field">
+                    <span>用户名</span>
+                    <input v-model.trim="editingAccount.username" type="text" :disabled="!isCreateAccount" placeholder="输入唯一的账户登录名" />
+                  </label>
+                  <label class="field">
+                    <span>登录密码</span>
+                    <input v-model.trim="editingAccount.password" type="text" placeholder="输入账户密码（明文）" />
+                  </label>
+                  <label class="field">
+                    <span>所属系统角色组</span>
+                    <select v-model="editingAccount.group">
+                      <option v-for="grp in availableGroups" :key="grp" :value="grp">{{ grp }}</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>归属业务单位 (数据隔离控制)</span>
+                    <select v-model="editingAccount.unit">
+                      <option :value="null">-- 无单位限制 (未分配) --</option>
+                      <option v-for="u in availableUnits" :key="u" :value="u">{{ u }}</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="project-roles-editor">
+                  <div class="editor-title">
+                    <span>💡 单位隔离数据提示</span>
+                    <span class="subtext-pure" style="color: #64748b;">此归属单位将用于限制该账号在供暖日报等项目中的填报范围，不分配则默认不受单位数据隔离限制。对于超级管理员等全局角色，此项通常留空。</span>
+                  </div>
+                </div>
+              </main>
+              <footer class="dialog-footer">
+                <button class="btn ghost" type="button" @click="showAccountModal = false">取消</button>
+                <button class="btn primary" type="button" :disabled="accountsLoading" @click="saveAccount">
+                  {{ accountsLoading ? '保存中…' : '保存配置' }}
+                </button>
+              </footer>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
     <AiChatWorkspace
@@ -986,6 +1237,11 @@ import {
   uploadAdminFile,
   writeSuperFile,
   runDataAnalysisDialogChat,
+  getAdminAccounts,
+  saveAdminAccount,
+  deleteAdminAccount,
+  getAdminPermissionsMatrix,
+  updateAdminPermissionMatrixItem,
 } from '../services/api'
 
 const TARGET_PROJECT_KEY = 'daily_report_25_26'
@@ -2853,6 +3109,9 @@ onMounted(async () => {
   await loadDbTables()
   await loadDbRows()
   await selectProject(TARGET_PROJECT_KEY)
+  if (activeTab.value === 'accounts') {
+    await loadAccountsAndMatrix()
+  }
 })
 
 watch(
@@ -2884,6 +3143,11 @@ watch(
     if (tab === 'audit') {
       await reloadAuditData()
       stopSystemTimer()
+      return
+    }
+    if (tab === 'accounts') {
+      stopSystemTimer()
+      await loadAccountsAndMatrix()
       return
     }
     stopSystemTimer()
@@ -2926,6 +3190,182 @@ onBeforeUnmount(() => {
     console.warn('关闭文件编辑窗口失败', err)
   }
 })
+
+// --- 账户与权限管理大盘 (2026-07-02 重构优化版) ---
+const activeSubTab = ref('accounts_list') // 'accounts_list' or 'matrix_control'
+const selectedRoleForMatrix = ref('Global_admin')
+const accounts = ref([])
+const availableGroups = ref([])
+const availableUnits = ref([])
+const availableProjects = ref([])
+const accountsLoading = ref(false)
+
+const permissionMatrix = ref({ roles: {}, project_metadata: {}, available_projects: [] })
+const selectedProjectForMatrix = ref('global')
+const matrixLoading = ref(false)
+
+// 模态框及表单数据
+const showAccountModal = ref(false)
+const editingAccount = reactive({
+  username: '',
+  password: '',
+  group: '', // 兼容兜底
+  groups: [], // 新增多角色勾选数组
+  unit: ''
+})
+const isCreateAccount = ref(false)
+
+async function loadAccountsAndMatrix() {
+  accountsLoading.value = true
+  matrixLoading.value = true
+  try {
+    const [accData, permData] = await Promise.all([
+      getAdminAccounts(),
+      getAdminPermissionsMatrix()
+    ])
+    accounts.value = accData.accounts || []
+    availableGroups.value = accData.available_groups || []
+    availableUnits.value = accData.available_units || []
+    
+    availableProjects.value = permData.available_projects || accData.available_projects || []
+    permissionMatrix.value = permData || { roles: {}, project_metadata: {}, available_projects: [] }
+    
+    if (availableProjects.value.length && !availableProjects.value.includes(selectedProjectForMatrix.value)) {
+      selectedProjectForMatrix.value = availableProjects.value[0]
+    }
+    
+    if (availableGroups.value.length && !availableGroups.value.includes(selectedRoleForMatrix.value)) {
+      selectedRoleForMatrix.value = availableGroups.value[0]
+    }
+  } catch (err) {
+    alert('加载账户与权限数据失败: ' + err.message)
+  } finally {
+    accountsLoading.value = false
+    matrixLoading.value = false
+  }
+}
+
+function openCreateAccountModal() {
+  isCreateAccount.value = true
+  editingAccount.username = ''
+  editingAccount.password = ''
+  editingAccount.group = availableGroups.value[0] || ''
+  editingAccount.groups = [availableGroups.value[0] || '']
+  editingAccount.unit = null
+  showAccountModal.value = true
+}
+
+function openEditAccountModal(account) {
+  isCreateAccount.value = false
+  editingAccount.username = account.username
+  editingAccount.password = account.password
+  editingAccount.group = account.group
+  editingAccount.groups = [account.group]
+  editingAccount.unit = account.unit || null
+  showAccountModal.value = true
+}
+
+async function saveAccount() {
+  if (!editingAccount.username.trim() || !editingAccount.password.trim() || !editingAccount.group) {
+    alert('用户名、密码和角色组为必选项')
+    return
+  }
+  
+  const payload = {
+    username: editingAccount.username.trim(),
+    password: editingAccount.password.trim(),
+    group: editingAccount.group,
+    groups: [editingAccount.group],
+    unit: editingAccount.unit || null,
+    project_roles: {}
+  }
+  
+  accountsLoading.value = true
+  try {
+    await saveAdminAccount(payload)
+    showAccountModal.value = false
+    await loadAccountsAndMatrix()
+    alert('账号保存成功')
+  } catch (err) {
+    alert('保存失败: ' + err.message)
+  } finally {
+    accountsLoading.value = false
+  }
+}
+
+async function deleteAccount(username) {
+  if (!confirm(`确认物理删除用户 ${username} 吗？此操作不可逆！`)) {
+    return
+  }
+  accountsLoading.value = true
+  try {
+    await deleteAdminAccount(username)
+    await loadAccountsAndMatrix()
+    alert('账号已成功删除')
+  } catch (err) {
+    alert('删除失败: ' + err.message)
+  } finally {
+    accountsLoading.value = false
+  }
+}
+
+async function togglePermission(group_name, project_key, type, key, current_val) {
+  const targetEnabled = !current_val
+  let rollbackFunc = () => {}
+  
+  try {
+    const roleObj = permissionMatrix.value.roles[group_name]
+    if (roleObj) {
+      if (project_key === 'global') {
+        if (type === 'page') {
+          const oldPages = [...roleObj.global_pages]
+          if (targetEnabled) {
+            if (!roleObj.global_pages.includes(key)) roleObj.global_pages.push(key)
+          } else {
+            roleObj.global_pages = roleObj.global_pages.filter(x => x !== key)
+          }
+          rollbackFunc = () => { roleObj.global_pages = oldPages }
+        } else {
+          const oldVal = roleObj.global_actions[key]
+          roleObj.global_actions[key] = targetEnabled
+          rollbackFunc = () => { roleObj.global_actions[key] = oldVal }
+        }
+      } else {
+        const projObj = roleObj.projects[project_key]
+        if (projObj) {
+          if (type === 'page') {
+            const oldPages = [...projObj.page_access]
+            if (targetEnabled) {
+              if (!projObj.page_access.includes(key)) projObj.page_access.push(key)
+            } else {
+              projObj.page_access = projObj.page_access.filter(x => x !== key)
+            }
+            rollbackFunc = () => { projObj.page_access = oldPages }
+          } else {
+            const oldVal = projObj.actions[key]
+            projObj.actions[key] = targetEnabled
+            rollbackFunc = () => { projObj.actions[key] = oldVal }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('乐观更新前置失败', err)
+  }
+
+  try {
+    await updateAdminPermissionMatrixItem({
+      group_name,
+      project_key,
+      type,
+      key,
+      enabled: targetEnabled
+    })
+  } catch (err) {
+    rollbackFunc()
+    alert('切换权限失败: ' + err.message)
+  }
+}
 </script>
 
 <style scoped>
@@ -3869,4 +4309,620 @@ onBeforeUnmount(() => {
   color: #64748b;
   text-transform: uppercase;
 }
+
+/* ================================================================== */
+/* 账户与权限管理大盘极致美学样式 (2026-07-02 重构优化版 - 浅色统一风格)
+/* ================================================================== */
+.accounts-management-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  padding: 0.2rem;
+  width: 100%;
+}
+
+/* 升级为 iOS 风格的 Segmented Control */
+.sub-tab-segmented-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.8rem;
+  width: 100%;
+}
+
+.segmented-control {
+  display: inline-flex;
+  background: #e2e8f0; 
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+
+.segmented-btn {
+  background: transparent;
+  border: none;
+  color: #475569; 
+  padding: 0.5rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.segmented-btn:hover {
+  color: #0f172a;
+}
+
+.segmented-btn.active {
+  color: #2563eb; 
+  background: #ffffff; 
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 
+              0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* 账户列表相关 (支持多选角色并撑满宽度) */
+.accounts-list-view {
+  width: 100%;
+}
+
+.account-card {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+.table-container {
+  width: 100% !important;
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100% !important;
+  border-collapse: collapse;
+  table-layout: auto; 
+}
+
+/* 合理规划列宽度，拥有系统用户组列自适应扩展撑满 */
+.admin-table th:nth-child(1), .admin-table td:nth-child(1) { width: 15%; min-width: 120px; } /* 用户名 */
+.admin-table th:nth-child(2), .admin-table td:nth-child(2) { width: 15%; min-width: 120px; } /* 密码 */
+.admin-table th:nth-child(3), .admin-table td:nth-child(3) { width: 20%; min-width: 150px; } /* 归属单位 */
+.admin-table th:nth-child(4), .admin-table td:nth-child(4) { width: 30%; min-width: 180px; } /* 系统角色组 */
+.admin-table th:nth-child(5), .admin-table td:nth-child(5) { width: 20%; min-width: 150px; } /* 操作 */
+
+.role-text-pure {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+/* 精美颜色 Badge 样式 */
+.role-badge {
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.role-badge.global {
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.unit-badge {
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(14, 116, 144, 0.08);
+  color: #0e7490;
+  border: 1px solid rgba(14, 116, 144, 0.15);
+}
+
+.unit-badge.empty {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px dashed #d1d5db;
+}
+
+.project-roles-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.empty-text {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+/* ================= 三栏式控制台大布局 (浅色统一版) ================= */
+.matrix-card-reborn {
+  background: #ffffff !important; 
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0 !important; 
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.matrix-three-columns-layout {
+  display: grid;
+  grid-template-columns: 240px 240px 1fr;
+  min-height: 600px;
+  max-height: 750px;
+}
+
+.matrix-column {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e5e7eb;
+  background: #f8fafc; 
+}
+
+.matrix-column:last-child {
+  border-right: none;
+  background: transparent;
+}
+
+.matrix-column .column-header {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f1f5f9; 
+}
+
+.matrix-column .column-header h4 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #475569; 
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.matrix-column .column-list {
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nav-list-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+  border-left: 3px solid transparent;
+}
+
+/* 第一栏：项目选择 */
+.project-btn {
+  color: #64748b;
+}
+
+.project-btn:hover {
+  background: rgba(0, 0, 0, 0.02);
+  color: #0f172a;
+}
+
+.project-btn.active {
+  background: rgba(16, 185, 129, 0.08);
+  border-left-color: #10b981;
+  color: #059669;
+  font-weight: 700;
+}
+
+.project-btn .btn-icon {
+  margin-right: 0.6rem;
+  font-size: 1rem;
+}
+
+/* 第二栏：角色选择 */
+.role-btn {
+  color: #475569;
+  justify-content: space-between;
+}
+
+.role-btn:hover {
+  background: rgba(0, 0, 0, 0.02);
+  color: #0f172a;
+}
+
+.role-btn.active {
+  background: rgba(59, 130, 246, 0.08);
+  border-left-color: #3b82f6;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.role-btn .btn-badge {
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.role-btn.active .btn-badge {
+  background: #3b82f6;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* 第三栏：权限配置面板 */
+.settings-panel-column {
+  overflow: hidden;
+}
+
+.settings-panel-column .sticky-header {
+  background: #f1f5f9;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.panel-title-info h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.highlight-role {
+  color: #7c3aed; 
+  font-weight: 700;
+}
+
+.highlight-proj {
+  color: #059669; 
+  font-weight: 700;
+}
+
+.permission-scroll-container {
+  padding: 1.2rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background: #ffffff;
+}
+
+.permission-section-tile-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.permission-section-tile-group .sec-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  border-left: 3px solid #3b82f6;
+  padding-left: 0.5rem;
+}
+
+.empty-section-tip {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #e2e8f0;
+}
+
+/* 浅色网格卡片 */
+.switches-grid-reborn {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.8rem;
+}
+
+.switch-tile-reborn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff; 
+  border: 1px solid #e2e8f0; 
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease;
+  gap: 1rem;
+  min-width: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.switch-tile-reborn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.switch-tile-reborn .tile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.switch-tile-reborn .tile-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e3a8a; 
+  word-break: break-all;
+  white-space: normal;
+}
+
+.switch-tile-reborn .tile-name.action-name {
+  color: #6b21a8; 
+}
+
+.switch-tile-reborn .tile-desc {
+  font-size: 0.75rem;
+  color: #475569; 
+  font-weight: 500;
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* Switch 浅色开关样式 */
+.switch-container {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch-container input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1; 
+  transition: .3s;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  transition: .3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+input:checked + .switch-slider {
+  background-color: #10b981;
+  border-color: #10b981;
+}
+
+input:checked + .switch-slider.slider-action {
+  background-color: #8b5cf6;
+  border-color: #8b5cf6;
+}
+
+input:checked + .switch-slider:before {
+  transform: translateX(18px);
+  background-color: #ffffff;
+}
+
+/* 遮罩层与模态对话框定位 */
+.block-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.45) !important; 
+  backdrop-filter: blur(4px) !important; 
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 9999 !important; 
+}
+
+.dialog {
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  width: 90% !important;
+  max-width: 580px !important; 
+  overflow: hidden !important;
+  border: 1px solid #cbd5e1 !important;
+  animation: modal-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.dialog-header {
+  padding: 1.25rem 1.5rem !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.dialog-header h3 {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+}
+
+.close-btn {
+  background: transparent !important;
+  border: none !important;
+  font-size: 1.5rem !important;
+  color: #94a3b8 !important;
+  cursor: pointer !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+}
+
+.close-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.dialog-body {
+  padding: 1.5rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.5rem !important;
+  background: #ffffff !important;
+}
+
+/* 基本表单网格 */
+.form-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 1rem !important;
+}
+
+.form-grid .field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.4rem !important;
+}
+
+.form-grid .field span {
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* 输入框与下拉选择框 */
+.dialog-body input[type="text"],
+.dialog-body select {
+  width: 100% !important;
+  padding: 0.6rem 0.8rem !important;
+  font-size: 0.85rem !important;
+  color: #1e293b !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  outline: none !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+}
+
+.dialog-body input[type="text"]:focus,
+.dialog-body select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important;
+  background: #ffffff !important;
+}
+
+.dialog-body input[type="text"]:disabled {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+}
+
+/* 提示卡片 */
+.project-roles-editor {
+  border: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 1.2rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.8rem !important;
+}
+
+.editor-title {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+  border-bottom: 1px dashed #e2e8f0 !important;
+  padding-bottom: 0.6rem !important;
+}
+
+.editor-title span {
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+}
+
+.subtext-pure {
+  font-size: 0.75rem !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+}
+
+/* 弹窗底部操作区 */
+.dialog-footer {
+  padding: 1rem 1.5rem !important;
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.8rem !important;
+}
+
+@keyframes modal-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 账户管理表格适配 (内容及操作强制在各列中正中央对齐) */
+.admin-table th,
+.admin-table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-table th {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.admin-table tr:hover {
+  background: #f8fafc;
+}
+
+.admin-table .action-buttons {
+  display: flex !important;
+  gap: 0.5rem !important;
+  justify-content: center !important; /* 强制按钮居中对齐 */
+}
+
 </style>

@@ -1,0 +1,163 @@
+{
+  "project_key": "monthly_data_show",
+  "groups": {
+    "Global_admin": {
+      "page_access": [
+        "projects_monthly_data_show_import_workspace",
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": true,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": true,
+        "can_extract_xlsx": false
+      }
+    },
+    "Group_admin": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "ZhuChengQu_admin": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "ZhuChengQu",
+        "BeiHai",
+        "XiangHai",
+        "GongRe"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "Unit_admin": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "unit_filler": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "shoudian_filler": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "{user_unit}"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "Group_viewer": {
+      "page_access": [
+        "projects_monthly_data_show_query_tool"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "Group"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    }
+  }
+}

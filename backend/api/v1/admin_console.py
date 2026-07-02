@@ -1422,3 +1422,335 @@ async def super_upload_files(
         "files": written,
         "count": len(written),
     }
+
+
+# ================================================================== #
+# 账户与权限管理大盘扩展 API (2026-07-02 多角色重塑版)
+# ================================================================== #
+from pydantic import BaseModel, Field as PydanticField
+from typing import Dict, Any, List, Optional
+
+class AccountSavePayload(BaseModel):
+    username: str
+    password: str
+    group: Optional[str] = None
+    groups: Optional[List[str]] = PydanticField(default_factory=list)
+    unit: Optional[str] = None
+    project_roles: Optional[Dict[str, str]] = PydanticField(default_factory=dict)
+
+class PermissionMatrixUpdatePayload(BaseModel):
+    group_name: str
+    project_key: str
+    type: str  # "page" or "action"
+    key: str   # page_key or action_key
+    enabled: bool
+
+@router.get("/admin/accounts", summary="获取账户列表及关联元数据")
+def list_accounts_metadata(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    auth_manager._ensure_loaded()
+    
+    # 提取所有用户信息，返回 groups 数组
+    accounts_list = []
+    for username, record in auth_manager._users_by_name.items():
+        accounts_list.append({
+            "username": record.username,
+            "password": record.password,
+            "group": record.group,
+            "groups": record.groups,
+            "unit": record.unit,
+            "project_roles": record.project_roles
+        })
+        
+    # 可选组（全局定义的组）
+    available_groups = list(auth_manager._groups.keys())
+    
+    # 已知单位
+    available_units = sorted(list(auth_manager._known_units))
+    
+    # 子项目列表
+    permissions_dir = auth_manager._permissions_path.parent / "permissions"
+    available_projects = []
+    if permissions_dir.exists() and permissions_dir.is_dir():
+        for f in permissions_dir.glob("*.json"):
+            if f.name != "global.json":
+                available_projects.append(f.stem)
+    if not available_projects:
+        for group_perm in auth_manager._groups.values():
+            for p_key in group_perm.projects.keys():
+                if p_key not in available_projects:
+                    available_projects.append(p_key)
+                    
+    return {
+        "ok": True,
+        "accounts": accounts_list,
+        "available_groups": available_groups,
+        "available_units": available_units,
+        "available_projects": sorted(available_projects)
+    }
+
+@router.post("/admin/accounts", summary="新建或保存账户信息")
+def save_account_info(
+    payload: AccountSavePayload,
+    session: AuthSession = Depends(get_current_session)
+):
+    _ensure_admin_console_access(session)
+    
+    username = str(payload.username).strip()
+    password = str(payload.password).strip()
+    group_name = str(payload.group).strip() if payload.group else ""
+    unit = str(payload.unit).strip() if payload.unit else None
+    
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="用户名和密码为必填项")
+        
+    accounts_path = auth_manager._accounts_path
+    if not accounts_path.exists():
+        raise HTTPException(status_code=500, detail="用户账户配置文件缺失")
+        
+    try:
+        data = json.loads(accounts_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"解析账户文件失败: {exc}") from exc
+        
+    users_raw = data.get("users")
+    if not isinstance(users_raw, dict):
+        users_raw = {}
+        data["users"] = users_raw
+        
+    # 自适应迁移升级：检查并转换旧的嵌套组列表格式
+    is_old_format = False
+    for k, v in users_raw.items():
+        if isinstance(v, list):
+            is_old_format = True
+            break
+            
+    if is_old_format:
+        new_users_dict = {}
+        for g_name, entries in users_raw.items():
+            if isinstance(entries, list):
+                for entry in entries:
+                    uname = str(entry.get("username", "")).strip()
+                    if uname:
+                        new_users_dict[uname] = {
+                            "password": str(entry.get("password", "")).strip(),
+                            "groups": [g_name],
+                            "unit": entry.get("unit"),
+                            "project_roles": entry.get("project_roles") or {}
+                        }
+        users_raw = new_users_dict
+        data["users"] = users_raw
+        
+    # 优先读取多选的 groups，如果为空则取兜底
+    submitted_groups = payload.groups if (payload.groups is not None and len(payload.groups) > 0) else []
+    if not submitted_groups and group_name:
+        submitted_groups = [group_name]
+    if not submitted_groups:
+        submitted_groups = ["unit_filler"]
+        
+    submitted_groups = [str(g).strip() for g in submitted_groups if g]
+    
+    users_raw[username] = {
+        "password": password,
+        "groups": submitted_groups,
+        "unit": unit,
+        "project_roles": {}
+    }
+    
+    serialized = json.dumps(data, ensure_ascii=False, indent=2)
+    temp_path = accounts_path.with_name(accounts_path.name + ".tmp")
+    try:
+        temp_path.write_text(serialized + "\n", encoding="utf-8")
+        temp_path.replace(accounts_path)
+    except Exception as exc:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(status_code=500, detail="保存账户配置失败") from exc
+        
+    auth_manager._accounts_mtime = None
+    auth_manager._ensure_loaded()
+    
+    return {"ok": True, "message": f"账户 {username} 保存成功"}
+
+@router.delete("/admin/accounts/{username}", summary="物理删除某一用户")
+def delete_account_info(
+    username: str,
+    session: AuthSession = Depends(get_current_session)
+):
+    _ensure_admin_console_access(session)
+    username = str(username).strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+        
+    if username == session.username:
+        raise HTTPException(status_code=400, detail="无法删除自己当前正在登录 of 账号")
+        
+    accounts_path = auth_manager._accounts_path
+    if not accounts_path.exists():
+        raise HTTPException(status_code=500, detail="用户账户配置文件缺失")
+        
+    try:
+        data = json.loads(accounts_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"解析账户文件失败: {exc}") from exc
+        
+    users_raw = data.get("users")
+    if not isinstance(users_raw, dict):
+        raise HTTPException(status_code=500, detail="账户配置格式异常")
+        
+    is_old_format = False
+    for k, v in users_raw.items():
+        if isinstance(v, list):
+            is_old_format = True
+            break
+            
+    found = False
+    if is_old_format:
+        for g_name, user_list in users_raw.items():
+            if isinstance(user_list, list):
+                new_list = [u for u in user_list if str(u.get("username", "")).strip() != username]
+                if len(new_list) < len(user_list):
+                    found = True
+                users_raw[g_name] = new_list
+    else:
+        if username in users_raw:
+            users_raw.pop(username)
+            found = True
+            
+    if not found:
+        raise HTTPException(status_code=404, detail=f"未找到用户 {username}")
+        
+    serialized = json.dumps(data, ensure_ascii=False, indent=2)
+    temp_path = accounts_path.with_name(accounts_path.name + ".tmp")
+    try:
+        temp_path.write_text(serialized + "\n", encoding="utf-8")
+        temp_path.replace(accounts_path)
+    except Exception as exc:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(status_code=500, detail="保存账户配置失败") from exc
+        
+    auth_manager._accounts_mtime = None
+    auth_manager._ensure_loaded()
+    
+    return {"ok": True, "message": f"账户 {username} 已物理删除"}
+
+@router.get("/admin/permissions/matrix", summary="获取项目与角色的权限矩阵大盘")
+def get_permissions_matrix(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    auth_manager._ensure_loaded()
+    
+    roles_data = {}
+    for group_name, g_perm in auth_manager._groups.items():
+        proj_perms_dict = {}
+        for proj_key, p_perm in g_perm.projects.items():
+            proj_perms_dict[proj_key] = {
+                "page_access": sorted(list(p_perm.page_access)),
+                "actions": {
+                    "can_submit": bool(p_perm.actions.can_submit),
+                    "can_approve": bool(p_perm.actions.can_approve),
+                    "can_revoke": bool(p_perm.actions.can_revoke),
+                    "can_publish": bool(p_perm.actions.can_publish),
+                    "can_manage_modularization": bool(p_perm.actions.can_manage_modularization),
+                    "can_manage_validation": bool(p_perm.actions.can_manage_validation),
+                    "can_manage_ai_settings": bool(p_perm.actions.can_manage_ai_settings),
+                    "can_manage_ai_sheet_switch": bool(p_perm.actions.can_manage_ai_sheet_switch),
+                    "can_extract_xlsx": bool(p_perm.actions.can_extract_xlsx),
+                    "can_unlimited_ai_usage": bool(p_perm.actions.can_unlimited_ai_usage),
+                    "can_access_admin_console": bool(p_perm.actions.can_access_admin_console)
+                }
+            }
+        roles_data[group_name] = {
+            "hierarchy": g_perm.hierarchy,
+            "global_pages": sorted(list(g_perm.page_access)),
+            "global_actions": {
+                "can_submit": bool(g_perm.actions.can_submit),
+                "can_approve": bool(g_perm.actions.can_approve),
+                "can_revoke": bool(g_perm.actions.can_revoke),
+                "can_publish": bool(g_perm.actions.can_publish),
+                "can_manage_modularization": bool(g_perm.actions.can_manage_modularization),
+                "can_manage_validation": bool(g_perm.actions.can_manage_validation),
+                "can_manage_ai_settings": bool(g_perm.actions.can_manage_ai_settings),
+                "can_manage_ai_sheet_switch": bool(g_perm.actions.can_manage_ai_sheet_switch),
+                "can_extract_xlsx": bool(g_perm.actions.can_extract_xlsx),
+                "can_unlimited_ai_usage": bool(g_perm.actions.can_unlimited_ai_usage),
+                "can_access_admin_console": bool(g_perm.actions.can_access_admin_console)
+            },
+            "projects": proj_perms_dict
+        }
+    
+    project_metadata = {}
+    all_projects = set()
+    for g_perm in auth_manager._groups.values():
+        all_projects.update(g_perm.projects.keys())
+    
+    all_projects_list = ["global"] + sorted(list(all_projects))
+    core_actions = ["can_submit", "can_approve", "can_revoke"]
+    
+    for proj in all_projects_list:
+        p_pages = set()
+        p_actions = set(core_actions)
+        for g_perm in auth_manager._groups.values():
+            if proj == "global":
+                p_pages.update(g_perm.page_access)
+                for k, v in g_perm.actions.__dict__.items():
+                    if v:
+                        p_actions.add(k)
+            else:
+                p_perm = g_perm.projects.get(proj)
+                if p_perm:
+                    p_pages.update(p_perm.page_access)
+                    for k, v in p_perm.actions.__dict__.items():
+                        if v is not None:
+                            p_actions.add(k)
+                            
+        project_metadata[proj] = {
+            "pages": sorted(list(p_pages)),
+            "actions": sorted(list(p_actions))
+        }
+        
+    return {
+        "ok": True,
+        "roles": roles_data,
+        "project_metadata": project_metadata,
+        "available_projects": all_projects_list
+    }
+
+@router.post("/admin/permissions/matrix", summary="更新角色项目级特定权限开关")
+def update_permission_matrix_item(
+    payload: PermissionMatrixUpdatePayload,
+    session: AuthSession = Depends(get_current_session)
+):
+    _ensure_admin_console_access(session)
+    
+    group_name = str(payload.group_name).strip()
+    project_key = str(payload.project_key).strip()
+    p_type = str(payload.type).strip().lower()
+    key = str(payload.key).strip()
+    enabled = bool(payload.enabled)
+    
+    if not group_name or not project_key or p_type not in ("page", "action") or not key:
+        raise HTTPException(status_code=400, detail="非法的矩阵权限更新参数")
+        
+    if p_type == "page":
+        updated = auth_manager.update_group_page_access(
+            group_name=group_name,
+            project_key=project_key,
+            page_key=key,
+            enabled=enabled
+        )
+    else:
+        updated = auth_manager.update_group_project_action(
+            group_name=group_name,
+            project_key=project_key,
+            action_key=key,
+            enabled=enabled
+        )
+        
+    return {
+        "ok": True,
+        "project_key": project_key,
+        "group_name": group_name,
+        **updated
+    }
+

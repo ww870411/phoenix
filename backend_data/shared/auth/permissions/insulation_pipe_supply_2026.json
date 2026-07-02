@@ -1,0 +1,119 @@
+{
+  "project_key": "insulation_pipe_supply_2026",
+  "groups": {
+    "Global_admin": {
+      "page_access": [
+        "dashboard",
+        "global_management",
+        "supply_management",
+        "demand_management",
+        "warehouse_management"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": true,
+        "can_unlimited_ai_usage": true,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": true,
+        "can_access_admin_console": true,
+        "can_approve": true,
+        "can_manage_modularization": true,
+        "can_manage_validation": true,
+        "can_manage_ai_settings": true,
+        "can_extract_xlsx": true
+      }
+    },
+    "tube_supplier": {
+      "page_access": [
+        "supply_management"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "tube_site_manager": {
+      "page_access": [
+        "demand_management"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "tube_construction_unit": {
+      "page_access": [
+        "demand_management"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    },
+    "tube_warehouse_keeper": {
+      "page_access": [
+        "warehouse_management"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": false,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": false
+      }
+    }
+  }
+}

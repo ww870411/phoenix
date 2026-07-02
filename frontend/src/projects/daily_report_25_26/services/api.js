@@ -2204,3 +2204,61 @@ export async function exportTubeHistoryData(projectKey, params) {
   return response.blob()
 }
 
+export async function getAdminAccounts() {
+  const response = await authAwareFetch(normalized('/admin/accounts'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(`加载账户列表失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveAdminAccount(payload) {
+  const response = await authAwareFetch(normalized('/admin/accounts'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '保存账户信息失败')
+  }
+  return response.json()
+}
+
+export async function deleteAdminAccount(username) {
+  const response = await authAwareFetch(normalized(`/admin/accounts/${encodeURIComponent(username)}`), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '删除账户失败')
+  }
+  return response.json()
+}
+
+export async function getAdminPermissionsMatrix() {
+  const response = await authAwareFetch(normalized('/admin/permissions/matrix'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(`加载权限矩阵失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateAdminPermissionMatrixItem(payload) {
+  const response = await authAwareFetch(normalized('/admin/permissions/matrix'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '更新权限状态失败')
+  }
+  return response.json()
+}
+

@@ -1,0 +1,614 @@
+{
+  "metadata": {
+    "description": "Phoenix 开发环境账号权限矩阵，来源于 configs/10.31用户权限设定.md",
+    "updated_at": "2026-05-21T21:10:00+08:00",
+    "biz_date_offset_days": -1
+  },
+  "groups": {
+    "Global_admin": {
+      "hierarchy": 100,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "dashboard",
+            "data_show",
+            "data_approval",
+            "data_entry",
+            "constant_data",
+            "data_analysis",
+            "placeholder"
+          ],
+          "sheet_rules": {
+            "data_show": {
+              "mode": "all"
+            },
+            "data_approval": {
+              "mode": "all"
+            },
+            "data_entry": {
+              "mode": "all"
+            },
+            "constant_data": {
+              "mode": "all"
+            }
+          },
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": true,
+            "can_manage_modularization": true,
+            "can_manage_validation": true,
+            "can_manage_ai_settings": true,
+            "can_manage_ai_sheet_switch": true,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": true
+          }
+        },
+        "daily_report_spring_festval_2026": {
+          "page_access": [
+            "mini_entry"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": true,
+            "can_manage_modularization": true,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": true,
+            "can_unlimited_ai_usage": false
+          }
+        },
+        "monthly_data_pull": {
+          "page_access": [
+            "workspace"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_import_workspace",
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": true,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        },
+        "page_showcase": {
+          "page_access": [
+            "workspace"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        },
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "dashboard",
+            "global_management",
+            "supply_management",
+            "demand_management",
+            "warehouse_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": true,
+            "can_manage_modularization": true,
+            "can_manage_validation": true,
+            "can_manage_ai_settings": true,
+            "can_manage_ai_sheet_switch": true,
+            "can_extract_xlsx": true,
+            "can_unlimited_ai_usage": true
+          }
+        }
+      },
+      "actions": {
+        "can_access_admin_console": true
+      }
+    },
+    "Group_admin": {
+      "hierarchy": 90,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "dashboard",
+            "data_show",
+            "data_approval",
+            "data_entry",
+            "constant_data",
+            "data_analysis",
+            "placeholder"
+          ],
+          "sheet_rules": {
+            "data_show": {
+              "mode": "all"
+            },
+            "data_approval": {
+              "mode": "all"
+            },
+            "data_entry": {
+              "mode": "all"
+            },
+            "constant_data": {
+              "mode": "all"
+            }
+          },
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": true,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": true,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": true
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "ZhuChengQu_admin": {
+      "hierarchy": 80,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "dashboard",
+            "data_show",
+            "data_approval",
+            "data_entry",
+            "data_analysis"
+          ],
+          "sheet_rules": {
+            "data_show": {
+              "mode": "explicit",
+              "sheets": [
+                "ZhuChengQu_sum_show_Sheet"
+              ]
+            },
+            "data_approval": {
+              "mode": "explicit",
+              "sheets": [
+                "ZhuChengQu_approval_Sheet",
+                "BeiHai_approval_Sheet",
+                "XiangHai_approval_Sheet",
+                "GongRe_approval_Sheet"
+              ]
+            },
+            "data_entry": {
+              "mode": "explicit",
+              "sheets": [
+                "BeiHai_co_generation_Sheet",
+                "BeiHai_water_boiler_Sheet",
+                "BeiHai_gas_boiler_Sheet",
+                "XiangHai_Sheet",
+                "GongRe_Sheet",
+                "GongRe_branches_detail_Sheet"
+              ]
+            }
+          },
+          "units_access": [
+            "ZhuChengQu",
+            "BeiHai",
+            "XiangHai",
+            "GongRe"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": true,
+            "can_revoke": true,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "ZhuChengQu",
+            "BeiHai",
+            "XiangHai",
+            "GongRe"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        }
+      }
+    },
+    "Unit_admin": {
+      "hierarchy": 70,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "data_approval",
+            "data_entry"
+          ],
+          "sheet_rules": {
+            "data_approval": {
+              "mode": "by_unit"
+            },
+            "data_entry": {
+              "mode": "by_unit"
+            }
+          },
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": true,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        }
+      }
+    },
+    "unit_filler": {
+      "hierarchy": 60,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "data_entry"
+          ],
+          "sheet_rules": {
+            "data_entry": {
+              "mode": "by_unit"
+            }
+          },
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        }
+      }
+    },
+    "shoudian_filler": {
+      "hierarchy": 60,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "data_entry"
+          ],
+          "sheet_rules": {
+            "data_entry": {
+              "mode": "by_unit",
+              "sheets": [
+                "Coal_inventory_Sheet"
+              ]
+            }
+          },
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "{user_unit}"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false
+          }
+        }
+      }
+    },
+    "Group_viewer": {
+      "hierarchy": 50,
+      "projects": {
+        "daily_report_25_26": {
+          "page_access": [
+            "dashboard",
+            "data_show",
+            "placeholder"
+          ],
+          "sheet_rules": {
+            "data_show": {
+              "mode": "all"
+            }
+          },
+          "units_access": [
+            "Group"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        },
+        "monthly_data_show": {
+          "page_access": [
+            "projects_monthly_data_show_query_tool"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "Group"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false
+          }
+        }
+      }
+    },
+    "tube_supplier": {
+      "hierarchy": 65,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "supply_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": true,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_site_manager": {
+      "hierarchy": 64,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "demand_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_construction_unit": {
+      "hierarchy": 63,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "demand_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_warehouse_keeper": {
+      "hierarchy": 62,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "warehouse_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    }
+  }
+}

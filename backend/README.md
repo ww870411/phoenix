@@ -1,3 +1,70 @@
+## 2026-07-02 账户单角色单选与单位隔离 API 兼容控制
+
+- 变更文件：
+  - `backend/api/v1/admin_console.py` (对 `groups` 单值数组封装传回做兼容校验)
+- 本轮处理与实现原理：
+  - 账户保存接口 `save_account_info` 完美接收前端传回的单元素组数组（如 `groups: [group_name]`），底层依然利用多角色合并鉴权引擎，保证了高度的向下兼容与未来的水平扩容。
+
+## 2026-07-02 账户多用户组权限重构与后端 API 改造上线
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (新增多组联合合并鉴权引擎，支持自适应新老格式账户加载)
+  - `backend/api/v1/admin_console.py` (升级账户保存与删除路由以适配 groups 多组扁平格式)
+- 本轮处理与实现原理：
+  1. **多用户组联合合并 (Union Merge) 鉴权算法**：
+     - 用户 `UserRecord` 新增 `groups` 列表属性，并在 Session 实例化时通过新方法 `_build_merged_permissions` 装配。
+     - 权级级别 `hierarchy` 取数值最小值；页面访问与单位数据访问取各所属组的并集并支持 `*` 号合并；动作 flags 实例化 Frozen dataclass 做出逻辑或 (OR) 合并。
+  2. **账户扁平字典数据迁移与保存**：
+     - `_load_accounts` 支持旧组名嵌套格式与新扁平用户名 key 格式的兼容读取，并对 groups 做兜底补齐。
+     - `POST /admin/accounts` 在写入前会智能校验旧数据，并在保存时直接将旧列表格式原地无痛重塑并升级为扁平用户名 key 字典格式写回物理文件，兼职 project_roles 字段在此模式下废弃清空。
+     - `DELETE /admin/accounts/{username}` 智能根据新老格式完成物理安全删除。
+
+## 2026-07-02 账户与权限管理大盘后端 API 开发上线
+
+- 变更文件：
+  - `backend/api/v1/admin_console.py` (新增账户列表与权限控制矩阵相关路由)
+- 本轮处理与实现原理：
+  1. **👥 账户 CRUD 核心 API**：
+     - `GET /api/v1/admin/accounts`：读取 [账户信息.json](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)，吐出所有账户明细，并返回可用的全局组、单位和子项目列表以填充前端下拉框。
+     - `POST /api/v1/admin/accounts`：新建或修改账户，将前端传入的账户信息与兼职角色覆盖字典清洗后物理插入正确的全局组，并触发 ensure_ascii=False 且 2 空格缩进排版回写。
+     - `DELETE /api/v1/admin/accounts/{username}`：从账户字典中移除特定用户名，禁止用户删除当前在线 Session 用户。
+  2. **📐 项目与角色 Switch 权限矩阵大盘 API**：
+     - `GET /api/v1/admin/permissions/matrix`：在内存中融合所有项目配置文件 `{project_key}.json` 和全局 `global.json`。将原本分散的角色与权限关联扁平化为 `roles -> projects -> page_access / actions`，提供给前端生成三维权限开关大盘。
+     - `POST /api/v1/admin/permissions/matrix`：超管在前端切换页面或动作 Switch 时直接发出此请求。后端智能识别 `type` 并直接调用 `auth_manager.update_group_page_access` 或 `auth_manager.update_group_project_action`，写回子项目权限文件并静默触发全内存热重载。
+
+## 2026-07-02 账号权限系统物理拆分与多项目鉴权引擎上线
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (核心鉴权与 Session 管理服务重构)
+- 本轮处理与实现原理：
+  1. **📂 多子项目权限物理文件拆分与结构扁平化**：
+     - **新结构**：彻底剥离了原单体大文件 `permissions.json`。在 [permissions/ 目录](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions) 下创建了统一的权限体系。
+     - **global.json**：包含全局角色及安全层级 `hierarchy`，以及系统时间偏移等元数据。
+     - **{project_key}.json**：将原嵌套在项目下的各角色权限拍平为“groups → 角色名 → 权限”三层，各项目配置文件物理完全独立。
+  2. **🔗 多文件联合热重载监控系统**：
+     - 重写了 `_ensure_loaded`。使用 `permissions_dir.glob("*.json")` 动态扫描并追踪所有子权限配置文件的最大修改时间（`max(st_mtime)`）。
+     - 若有任意项目或全局配置文件发生变动，自动触发后台热重载，并通过内存写锁快速调用 `_refresh_active_sessions_locked` 静默更新所有已登录 Session 的权限，用户无感即可刷新加载新权限。
+  3. **👥 项目级兼职角色覆盖与隔离机制**：
+     - 修改了 `_apply_user_project_overrides`。登录后，鉴权引擎会获取用户在 `账户信息.json` 中配置的 `project_roles`。
+     - 依据项目键（`project_key`），在内存中通过 `dataclasses.replace` 生成当前会话专用的 Group 实例并绑定所覆盖角色的项目特有权限。该过程为 Session 实例级别隔离，绝不污染全局的 `self._groups` 缓存。
+  4. **🔐 精准写回与平滑向后兼容 (Fallback)**：
+     - 改造了 `update_group_project_action` 和 `update_group_page_access` 超管写回 API。如果 `permissions/` 目录存在，超管页面所做的权限修改会自动精准修改并保存回对应的 `{project_key}.json`；若配置目录缺失，鉴权与写回会自动向下平滑降级（Fallback）到原单体 `permissions.json`，确保运维升级不致断服。
+  5. **🧪 测试套件物理验证通过**：
+     - 编写了集成测试脚本 `test_auth.py`。针对超管、填报员、日报管理员、管网供应商和兼职角色，在内存中真实登录并成功交叉验证了 `page_access`、`actions` 以及子项目多角色兼职等逻辑判定，全部测试 100% 顺利通过。
+
+## 2026-07-02 账号权限系统整顿方案讨论与设计对齐
+
+- 变更文件：
+  - ...
+- 本轮处理与实现原理：
+  1. **🔐 账号与权限文件结构层级对齐**：
+     - **账户层级**：[账户信息.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/%E8%B4%A6%E6%88%B7%E4%BF%A1%E6%81%AF.json) 维持原有“全局组 → 用户 → 密码/单位”主脉络以兼容历史解析接口，在用户节点中增加可选属性 `project_roles: { project_key: override_role_name }` 实现跨项目兼职覆盖。
+     - **权限层级**：新创建 [permissions 目录](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions)，由 `global.json`（保存全局层级与元数据）和各个拍平的项目配置 `{project_key}.json`（保存该项目角色到页面/表单/动作权限的映射）组成。
+     - **保留明文密码**：开发联调阶段暂时保留明文密码存储，降低当前阶段测试调试复杂度。
+     - **账户管理页设计**：确认后续可在前端开发“账号与权限控制大盘”，实现账号增删改查、兼职项目角色设置以及全局与项目角色权限的可视化 Switch 切换，数据通过后端 API 写入 JSON 并自动热重载。
+
+## 2026-07-02 账号与权限系统架构走读与整顿方案设计
+
 ## 2026-06-29 全局管理历史数据查询与统计功能优化上线准备
 
 - 变更文件：

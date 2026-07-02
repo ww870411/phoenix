@@ -1,0 +1,27 @@
+{
+  "project_key": "daily_report_spring_festval_2026",
+  "groups": {
+    "Global_admin": {
+      "page_access": [
+        "mini_entry"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": true,
+        "can_unlimited_ai_usage": false,
+        "can_submit": false,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": true,
+        "can_approve": true,
+        "can_manage_modularization": true,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": true
+      }
+    }
+  }
+}

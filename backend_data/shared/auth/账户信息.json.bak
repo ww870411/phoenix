@@ -1,0 +1,166 @@
+{
+  "users": {
+    "Global_admin": [
+      {
+        "username": "ww870411",
+        "password": "w870411w",
+        "unit": "系统管理员"
+      }
+    ],
+    "Group_admin": [
+      {
+        "username": "group_admin",
+        "password": "password",
+        "unit": "Group"
+      }
+    ],
+    "ZhuChengQu_admin": [
+      {
+        "username": "zhuchengqu_admin",
+        "password": "zhuchengqu_admin1",
+        "unit": "ZhuChengQu"
+      }
+    ],
+    "Unit_admin": [
+      {
+        "username": "beihai_admin",
+        "password": "beihai_admin3",
+        "unit": "BeiHai"
+      },
+      {
+        "username": "xianghai_admin",
+        "password": "xianghai_admin5",
+        "unit": "XiangHai"
+      },
+      {
+        "username": "gongre_admin",
+        "password": "gongre_admin6",
+        "unit": "GongRe"
+      },
+      {
+        "username": "jinzhou_admin",
+        "password": "jinzhou_admin7",
+        "unit": "JinZhou"
+      },
+      {
+        "username": "beifang_admin",
+        "password": "beifang_admin8",
+        "unit": "BeiFang"
+      },
+      {
+        "username": "jinpu_admin",
+        "password": "jinpu_admin9",
+        "unit": "JinPu"
+      },
+      {
+        "username": "zhuanghe_admin",
+        "password": "zhuanghe_admin0",
+        "unit": "ZhuangHe"
+      },
+      {
+        "username": "yanjiuyuan_admin",
+        "password": "yanjiuyuan_admin1",
+        "unit": "YanJiuYuan"
+      }
+    ],
+    "unit_filler": [
+      {
+        "username": "beihai_filler",
+        "password": "beihai_filler3",
+        "unit": "BeiHai"
+      },
+      {
+        "username": "xianghai_filler",
+        "password": "xianghai_filler5",
+        "unit": "XiangHai"
+      },
+      {
+        "username": "gongre_filler",
+        "password": "gongre_filler6",
+        "unit": "GongRe"
+      },
+      {
+        "username": "jinzhou_filler",
+        "password": "jinzhou_filler7",
+        "unit": "JinZhou"
+      },
+      {
+        "username": "beifang_filler",
+        "password": "beifang_filler8",
+        "unit": "BeiFang"
+      },
+      {
+        "username": "jinpu_filler",
+        "password": "jinpu_filler9",
+        "unit": "JinPu"
+      },
+      {
+        "username": "zhuanghe_filler",
+        "password": "zhuanghe_filler0",
+        "unit": "ZhuangHe"
+      },
+      {
+        "username": "yanjiuyuan_filler",
+        "password": "yanjiuyuan_filler1",
+        "unit": "YanJiuYuan"
+      }
+    ],
+    "shoudian_filler": [
+      {
+        "username": "shoudian_filler",
+        "password": "shoudian_filler3",
+        "unit": "ShouDian"
+      }
+    ],
+    "Group_viewer": [
+      {
+        "username": "nyjt",
+        "password": "nyjt666",
+        "unit": "Group"
+      }
+    ],
+    "tube_supplier": [
+      {
+        "username": "supplier_a",
+        "password": "supplier_a123",
+        "unit": "管厂A"
+      },
+      {
+        "username": "supplier_b",
+        "password": "supplier_b123",
+        "unit": "管厂B"
+      }
+    ],
+    "tube_site_manager": [
+      {
+        "username": "site_manager_a",
+        "password": "site_manager_a123",
+        "unit": "换热站A"
+      },
+      {
+        "username": "site_manager_b",
+        "password": "site_manager_b123",
+        "unit": "换热站C"
+      }
+    ],
+    "tube_construction_unit": [
+      {
+        "username": "construction_a",
+        "password": "construction_a123",
+        "unit": "施工方A"
+      },
+      {
+        "username": "construction_b",
+        "password": "construction_b123",
+        "unit": "施工方B"
+      }
+    ],
+    "tube_warehouse_keeper": [
+      {
+        "username": "warehouse_keeper_a",
+        "password": "warehouse_keeper_a123",
+        "unit": "库管A"
+      }
+    ]
+  }
+}

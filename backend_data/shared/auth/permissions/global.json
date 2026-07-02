@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "description": "Phoenix 开发环境账号权限矩阵，来源于 configs/10.31用户权限设定.md",
+    "updated_at": "2026-05-21T21:10:00+08:00",
+    "biz_date_offset_days": -1
+  },
+  "groups": {
+    "Global_admin": {
+      "hierarchy": 100,
+      "actions": {
+        "can_access_admin_console": true
+      }
+    },
+    "Group_admin": {
+      "hierarchy": 90
+    },
+    "ZhuChengQu_admin": {
+      "hierarchy": 80
+    },
+    "Unit_admin": {
+      "hierarchy": 70
+    },
+    "unit_filler": {
+      "hierarchy": 60
+    },
+    "shoudian_filler": {
+      "hierarchy": 60
+    },
+    "Group_viewer": {
+      "hierarchy": 50
+    },
+    "tube_supplier": {
+      "hierarchy": 65
+    },
+    "tube_site_manager": {
+      "hierarchy": 64
+    },
+    "tube_construction_unit": {
+      "hierarchy": 63
+    },
+    "tube_warehouse_keeper": {
+      "hierarchy": 62
+    }
+  }
+}
