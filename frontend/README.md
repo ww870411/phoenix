@@ -1,3 +1,62 @@
+## 2026-07-14 修复需求侧管理入口因缺少 section_1_id 参数导致的 422 报错 Bug
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (修改 `getTubeDemandManagementBaseline` 等五个核心需求侧 API 方法的查询参数名，将 `station_id` 全面正名为 `section_1_id`)
+- 本轮处理与实现原理：
+  - 彻底解决了进入需求侧管理页面时，因发送至后端的 query 传参还是旧字段名 `station_id`，而新版后端强制校验 `section_1_id` 从而产生的 422 校验失败阻断。
+
+## 2026-07-14 取消基准设计量新增行设计量与采购量默认数值
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (修改 `defaultQtyByPipeModel()` 函数返回 `null`)
+- 本轮处理与实现原理：
+  - 避免了在“基准量预设”模块下新增型号行或补齐规格行时，系统自动填充 `160` / `260` / `240` 等默认测试数据。将其全部初始化为 `null`，保持界面干净且输入框内容为空白。
+
+## 2026-07-14 取消基准设计量新增行自动预设说明备注
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (修改 `defaultRemarkByPipeModel()` 函数返回空字串 `''`)
+- 本轮处理与实现原理：
+  - 避免了在“基准量预设”模块下新增型号行或通过补齐规格按钮填充数据时，系统自动在备注列录入带有演示字样的“演示预设-小口径偏高”等文案。统一保持其为纯空状态。
+
+## 2026-07-14 基准预设管线设计量失焦自动刷新覆盖脏数据与规格重复录入 Bug 修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (移除 `useTubeRealtimeRefresh(loadConfig)` 挂载，优化管材型号下拉的禁用逻辑及初始新增函数)
+- 本轮处理与实现原理：
+  1. 彻底去除了全局管理页面的被动自动刷新机制，防止用户在未保存配置前因离开页面或焦点抖动被动重新加载覆盖内存中的未保存数据。
+  2. 重构了管材型号基准下拉的渲染 `<option>` 的禁用逻辑，当前需求主体已经添加的管线规格在下拉列表内进行置灰禁用。
+  3. 优化了 `addBaselinePreset()`，在新增时智能默认匹配第一个尚未在当前主体中被占用的管径规格，杜绝了初始化时带出重复型号导致的置灰报错。
+
+## 2026-07-14 全局管理页面配置表格输入失焦体验 Bug 修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (将各大可编辑配置表格 `v-for` 的 `:key` 绑定统一修改为 `index`)
+- 本轮处理与实现原理：
+  - 移除了原绑定中拼接的 `section_1_id`、`entity_id` 等动态输入属性对 `key` 的劫持。
+  - 使用不受输入值影响的 `index` 作为 Vue 的 Diff Key，完全阻止了 Vue 对行级 DOM 的销毁重建，彻底根治了输入失焦的问题，录入体验极为丝滑顺畅。
+
+## 2026-07-14 全局管理页面清理冗余“施工管理维度设置”卡片
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (彻底移除该管理模式设置卡片、状态变量 `selectedManagementMode` 及保存函数 `saveManagementMode`)
+- 本轮处理与实现原理：
+  - 前端视图已将文案物理写死为通用概念“需求主体”，不再需要动态的“管理维度（模式）文案转换”。
+  - 界面移除 Radio 切换卡片；删除相关的响应式引用与 apply 赋值逻辑，保持代码结构的简单与纯净。
+
+## 2026-07-14 保温管标段模式维度大重构 · 前端视图与 API 全面闭环
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (顶部过滤器文案物理写死，字段与 payload 参数正名 `section_1_id`)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (发货站及表头标签静态化，字段与 payload 参数正名 `section_1_id` / `section_1_name`)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (收发列表表头与筛选回显静态化，导出 CSV 对应的 key 由 `station_name` 改为 `section_1_name`)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (审计卡片、基础台账卡片、负责人及施工方映射卡片、历史数据查询卡片与表格的静态文案全部硬写为“需求主体”；对新增、加载、同步修改、删除映射时的 payload 序列化字段进行了全面字段正名)
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (将发货记录拉取、全局历史记录拉取与导出接口中的请求参数 `station_id` 更名为 `section_1_id`)
+- 本轮处理与实现原理：
+  1. 各视图在渲染与传输数据时全面废除对第一维度 `labels.section_1` 动态字段标签的引用，一律物理硬编码写死为静态文案 “需求主体”、“需求主体名称” 或 “需求主体ID”。
+  2. 物理重写并正名了前端所有的寻址解构和 payload 属性键。所有发送至后端的过滤或保存请求的参数键名均变更为 `section_1_id`，接收的数据字段也对齐为 `section_1_id` 和 `section_1_name`。
+  3. 大管理员保存基准设计 presets 时不再在 payload 写入冗余的 `station_name` / `section_1_name` 属性，前端改用根据 `section_1_id` 动态去 `demand_entities` 查询匹配的动态回显方案，精简了配置文件的数据结构。
+
 ## 2026-07-14 保温管管理模式动态切换前端自适应适配上线
 
 - 变更文件：

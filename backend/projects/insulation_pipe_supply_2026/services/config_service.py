@@ -16,7 +16,7 @@ from backend.services.project_data_paths import get_project_root
 PROJECT_KEY = "insulation_pipe_supply_2026"
 PROJECT_DATA_DIR = get_project_root(PROJECT_KEY)
 CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
-SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "station_submission_status.json"
+SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "section_1_submission_status.json"
 
 
 def load_tube_config() -> Dict[str, Any]:
@@ -42,7 +42,7 @@ def save_tube_config(payload: Dict[str, Any]) -> None:
     temp_path.replace(CONFIG_PATH)
 
 
-def load_station_submission_status() -> Dict[str, Any]:
+def load_section_1_submission_status() -> Dict[str, Any]:
     if not SUBMISSION_STATUS_PATH.exists():
         return {
             "latest_submissions": [],
@@ -51,9 +51,9 @@ def load_station_submission_status() -> Dict[str, Any]:
     try:
         payload = json.loads(SUBMISSION_STATUS_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail=f"station_submission_status.json 格式错误：{exc}") from exc
+        raise HTTPException(status_code=500, detail=f"section_1_submission_status.json 格式错误：{exc}") from exc
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=500, detail="station_submission_status.json 顶层必须为对象")
+        raise HTTPException(status_code=500, detail="section_1_submission_status.json 顶层必须为对象")
     latest_submissions = payload.get("latest_submissions")
     history_submissions = payload.get("history_submissions")
     return {
@@ -62,9 +62,9 @@ def load_station_submission_status() -> Dict[str, Any]:
     }
 
 
-def save_station_submission_status(payload: Dict[str, Any]) -> None:
+def save_section_1_submission_status(payload: Dict[str, Any]) -> None:
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=422, detail="station_submission_status.json 顶层必须为对象")
+        raise HTTPException(status_code=422, detail="section_1_submission_status.json 顶层必须为对象")
     temp_path = SUBMISSION_STATUS_PATH.with_name(SUBMISSION_STATUS_PATH.name + ".tmp")
     temp_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -118,20 +118,20 @@ def get_config_list(payload: Dict[str, Any], key: str) -> List[Dict[str, Any]]:
     return value if isinstance(value, list) else []
 
 
-def resolve_accessible_station_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
+def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
     normalized_group = str(group or "").strip()
     normalized_username = str(username or "").strip()
     demand_entities = get_config_list(payload, "demand_entities")
-    all_station_ids = {
-        str(item.get("station_id") or "").strip()
+    all_section_1_ids = {
+        str(item.get("section_1_id") or "").strip()
         for item in demand_entities
-        if str(item.get("station_id") or "").strip()
+        if str(item.get("section_1_id") or "").strip()
     }
     if normalized_group == "Global_admin":
-        return all_station_ids
+        return all_section_1_ids
 
     manager_assignments = get_config_list(payload, "manager_assignments")
-    allowed_station_ids: Set[str] = set()
+    allowed_section_1_ids: Set[str] = set()
     for item in manager_assignments:
         candidate_keys = {
             str(item.get("manager_id") or "").strip(),
@@ -140,10 +140,10 @@ def resolve_accessible_station_ids(payload: Dict[str, Any], username: str, group
         }
         if normalized_username not in candidate_keys:
             continue
-        for station_id in item.get("station_ids") or []:
-            normalized_station_id = str(station_id or "").strip()
-            if normalized_station_id:
-                allowed_station_ids.add(normalized_station_id)
+        for section_1_id in item.get("section_1_ids") or []:
+            normalized_section_1_id = str(section_1_id or "").strip()
+            if normalized_section_1_id:
+                allowed_section_1_ids.add(normalized_section_1_id)
 
     construction_units = get_config_list(payload, "construction_units")
     for item in construction_units:
@@ -154,11 +154,11 @@ def resolve_accessible_station_ids(payload: Dict[str, Any], username: str, group
         }
         if normalized_username not in candidate_keys:
             continue
-        for station_id in item.get("station_ids") or []:
-            normalized_station_id = str(station_id or "").strip()
-            if normalized_station_id:
-                allowed_station_ids.add(normalized_station_id)
-    return allowed_station_ids
+        for section_1_id in item.get("section_1_ids") or []:
+            normalized_section_1_id = str(section_1_id or "").strip()
+            if normalized_section_1_id:
+                allowed_section_1_ids.add(normalized_section_1_id)
+    return allowed_section_1_ids
 
 
 def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:

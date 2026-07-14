@@ -79,21 +79,13 @@ export function useTubePageShell(currentLabel) {
   const managementMode = computed(() => configSummary.value?.management_mode || 'station')
 
   const modeLabels = computed(() => {
-    if (managementMode.value === 'section') {
-      return {
-        station: '标段',
-        stationId: '标段ID',
-        stationName: '标段名称',
-        stationCode: '标段编码',
-        region: '所属区域',
-      }
-    }
     return {
-      station: '换热站',
-      stationId: '换热站ID',
-      stationName: '换热站名称',
-      stationCode: '换热站编码',
-      region: '管线所属区域',
+      station: '需求主体',
+      stationId: '需求主体ID',
+      stationName: '需求主体名称',
+      stationCode: '需求主体编码',
+      region: configSummary.value?.labels?.section_2 || '所属区域',
+      section: configSummary.value?.labels?.section_3 || '所属标段',
     }
   })
 

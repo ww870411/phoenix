@@ -39,19 +39,19 @@ def list_plan_totals(plan_dates: Sequence[date]) -> Dict[str, float]:
     sql = text(
         """
         SELECT
-            station_id,
+            section_1_id,
             pipe_model_id,
             SUM(plan_qty) AS total_plan_qty
         FROM tube.tube_daily_plan
         WHERE plan_date = ANY(:plan_dates)
-        GROUP BY station_id, pipe_model_id
+        GROUP BY section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
     try:
         rows = session.execute(sql, {"plan_dates": list(plan_dates)}).mappings().all()
         return {
-            f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}":
+            f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}":
             float(row["total_plan_qty"]) if row["total_plan_qty"] is not None else 0
             for row in rows
         }
@@ -99,7 +99,7 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
     sql = text(
         """
         SELECT
-            station_id,
+            section_1_id,
             pipe_model_id,
             SUM(CASE WHEN status = 'pending_arrival' THEN shipped_qty ELSE 0 END) AS pending_arrival_qty,
             SUM(CASE WHEN status = 'pending_receive' THEN COALESCE(arrived_qty, shipped_qty) ELSE 0 END) AS pending_receive_qty,
@@ -107,7 +107,7 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
             SUM(CASE WHEN status = 'completed' THEN COALESCE(received_qty, 0) ELSE 0 END) AS completed_qty,
             SUM(CASE WHEN status <> 'cancelled' THEN shipped_qty ELSE 0 END) AS total_shipped_qty
         FROM tube.tube_delivery
-        GROUP BY station_id, pipe_model_id
+        GROUP BY section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
@@ -115,7 +115,7 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
         rows = session.execute(sql).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
-            key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
+            key = f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
             result[key] = {
                 "pending_arrival_qty": float(row["pending_arrival_qty"]) if row["pending_arrival_qty"] is not None else 0,
                 "pending_receive_qty": float(row["pending_receive_qty"]) if row["pending_receive_qty"] is not None else 0,
@@ -133,7 +133,7 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
     sql = text(
         """
         SELECT
-            station_id,
+            section_1_id,
             pipe_model_id,
             SUM(
                 CASE
@@ -149,7 +149,7 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
                 END
             ) AS total_arrived_qty
         FROM tube.tube_delivery
-        GROUP BY station_id, pipe_model_id
+        GROUP BY section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
@@ -157,7 +157,7 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
         rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
-            key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
+            key = f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
             result[key] = {
                 "total_arrived_qty": float(row["total_arrived_qty"]) if row["total_arrived_qty"] is not None else 0,
             }
@@ -170,13 +170,13 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
     sql = text(
         """
         SELECT
-            station_id,
+            section_1_id,
             pipe_model_id,
             SUM(usage_qty) AS total_usage_qty,
             SUM(loss_qty) AS total_loss_qty
         FROM tube.tube_daily_usage
         WHERE usage_date < :show_date
-        GROUP BY station_id, pipe_model_id
+        GROUP BY section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
@@ -184,7 +184,7 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
         rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
-            key = f"{_normalize_text(row['station_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
+            key = f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
             result[key] = {
                 "total_usage_qty": float(row["total_usage_qty"]) if row["total_usage_qty"] is not None else 0.0,
                 "total_loss_qty": float(row["total_loss_qty"]) if row["total_loss_qty"] is not None else 0.0,
@@ -196,7 +196,7 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
 
 def list_delivery_records(
     supply_entity_ids: Sequence[str],
-    station_id: str = "",
+    section_1_id: str = "",
     status: str = "",
 ) -> List[Dict[str, Any]]:
     auto_process_timeout_deliveries()
@@ -211,7 +211,7 @@ def list_delivery_records(
             order_no,
             shipment_no,
             vehicle_plate_no,
-            station_id,
+            section_1_id,
             pipe_model_id,
             shipped_qty,
             arrived_qty,
@@ -244,7 +244,7 @@ def list_delivery_records(
             is_timeout_receive
         FROM tube.tube_delivery
         WHERE supply_entity_id = ANY(:supply_entity_ids)
-          AND (:station_id = '' OR station_id = :station_id)
+          AND (:section_1_id = '' OR section_1_id = :section_1_id)
           AND (:status = '' OR status = :status)
         ORDER BY shipped_at DESC, id DESC
         LIMIT 500
@@ -256,7 +256,7 @@ def list_delivery_records(
             sql,
             {
                 "supply_entity_ids": normalized_entity_ids,
-                "station_id": _normalize_text(station_id),
+                "section_1_id": _normalize_text(section_1_id),
                 "status": _normalize_text(status),
             },
         ).mappings().all()
@@ -272,7 +272,7 @@ def list_delivery_records(
                     _normalize_text(row["supply_entity_id"]),
                 ),
                 "supply_entity_id": _normalize_text(row["supply_entity_id"]),
-                "station_id": _normalize_text(row["station_id"]),
+                "section_1_id": _normalize_text(row["section_1_id"]),
                 "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
                 "shipped_qty": float(row["shipped_qty"]) if row["shipped_qty"] is not None else 0,
                 "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else None,
@@ -316,7 +316,7 @@ def create_delivery_record(
     order_no: str,
     shipment_no: str,
     vehicle_plate_no: str,
-    station_id: str,
+    section_1_id: str,
     pipe_model_id: str,
     shipped_qty: float,
     shipped_at: datetime,
@@ -334,7 +334,7 @@ def create_delivery_record(
             order_no,
             shipment_no,
             vehicle_plate_no,
-            station_id,
+            section_1_id,
             pipe_model_id,
             shipped_qty,
             shipped_at,
@@ -352,7 +352,7 @@ def create_delivery_record(
             :order_no,
             :shipment_no,
             :vehicle_plate_no,
-            :station_id,
+            :section_1_id,
             :pipe_model_id,
             :shipped_qty,
             :shipped_at,
@@ -377,7 +377,7 @@ def create_delivery_record(
                 "order_no": _normalize_text(order_no),
                 "shipment_no": _normalize_text(shipment_no),
                 "vehicle_plate_no": _normalize_text(vehicle_plate_no),
-                "station_id": _normalize_text(station_id),
+                "section_1_id": _normalize_text(section_1_id),
                 "pipe_model_id": _normalize_pipe_model_id(pipe_model_id),
                 "shipped_qty": float(shipped_qty),
                 "shipped_at": shipped_at,
@@ -576,16 +576,16 @@ def build_order_no(
     sequence_no: int,
     shipped_at: Optional[datetime] = None,
     supply_code: str = "",
-    station_code: str = "",
+    section_1_code: str = "",
 ) -> str:
     normalized_supply_code = _normalize_text(supply_code).upper() or "XX"
-    normalized_station_code = _normalize_text(station_code).upper() or "X"
+    normalized_section_1_code = _normalize_text(section_1_code).upper() or "X"
     beijing_shipped_at = _to_beijing_time(shipped_at)
     date_part = beijing_shipped_at.strftime("%y%m%d") if beijing_shipped_at else ""
     seq_part = f"{int(sequence_no):03d}"
     if date_part:
-        return f"O{normalized_supply_code}-{normalized_station_code}-{date_part}-{seq_part}"
-    return f"O{normalized_supply_code}-{normalized_station_code}-{seq_part}"
+        return f"O{normalized_supply_code}-{normalized_section_1_code}-{date_part}-{seq_part}"
+    return f"O{normalized_supply_code}-{normalized_section_1_code}-{seq_part}"
 
 
 def build_shipment_no(
@@ -612,7 +612,7 @@ def build_delivery_code(
         delivery_id,
         shipped_at=shipped_at,
         supply_code=delivery_prefix or supply_entity_id,
-        station_code="X",
+        section_1_code="X",
     )
 
 
@@ -665,7 +665,7 @@ def get_delivery_record_basic(delivery_id: int) -> Dict[str, Any]:
             supply_entity_id,
             order_no,
             shipment_no,
-            station_id,
+            section_1_id,
             pipe_model_id,
             shipped_qty,
             arrived_qty,
@@ -686,7 +686,7 @@ def get_delivery_record_basic(delivery_id: int) -> Dict[str, Any]:
             "supply_entity_id": _normalize_text(row["supply_entity_id"]),
             "order_no": _normalize_text(row["order_no"]),
             "shipment_no": _normalize_text(row["shipment_no"]),
-            "station_id": _normalize_text(row["station_id"]),
+            "section_1_id": _normalize_text(row["section_1_id"]),
             "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
             "shipped_qty": float(row["shipped_qty"]) if row["shipped_qty"] is not None else 0,
             "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else None,
@@ -945,7 +945,7 @@ def update_delivery_warehouse_record(
 def super_update_delivery_record(
     *,
     delivery_id: int,
-    station_id: str,
+    section_1_id: str,
     pipe_model_id: str,
     shipped_qty: float,
     shipped_at: datetime,
@@ -1175,7 +1175,7 @@ def super_update_delivery_record(
         update_sql = text(
             """
             UPDATE tube.tube_delivery
-            SET station_id = :station_id,
+            SET section_1_id = :section_1_id,
                 pipe_model_id = :pipe_model_id,
                 shipped_qty = :shipped_qty,
                 shipped_at = :shipped_at,
@@ -1209,7 +1209,7 @@ def super_update_delivery_record(
             update_sql,
             {
                 "id": delivery_id,
-                "station_id": _normalize_text(station_id),
+                "section_1_id": _normalize_text(section_1_id),
                 "pipe_model_id": _normalize_pipe_model_id(pipe_model_id),
                 "shipped_qty": val_shipped_qty,
                 "shipped_at": shipped_at,
@@ -1250,38 +1250,38 @@ def super_update_delivery_record(
 def query_history_records(
     start_date: date,
     end_date: date,
-    station_id: Optional[str] = None
+    section_1_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     查询历史数据，包含当日计划量、实际使用量、损耗量、确认到货量、运输在途时间。
-    采用 FULL OUTER JOIN 将三张表在 (station_id, biz_date, pipe_model_id) 维度合并。
+    采用 FULL OUTER JOIN 将三张表在 (section_1_id, biz_date, pipe_model_id) 维度合并。
     """
     sql = text(
         """
         WITH p AS (
             SELECT
-                station_id,
+                section_1_id,
                 plan_date AS biz_date,
                 pipe_model_id,
                 SUM(plan_qty) AS total_plan_qty
             FROM tube.tube_daily_plan
             WHERE plan_date >= :start_date AND plan_date <= :end_date
-              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
-            GROUP BY station_id, plan_date, pipe_model_id
+              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
+            GROUP BY section_1_id, plan_date, pipe_model_id
         ), u AS (
             SELECT
-                station_id,
+                section_1_id,
                 usage_date AS biz_date,
                 pipe_model_id,
                 SUM(usage_qty) AS total_usage_qty,
                 SUM(loss_qty) AS total_loss_qty
             FROM tube.tube_daily_usage
             WHERE usage_date >= :start_date AND usage_date <= :end_date
-              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
-            GROUP BY station_id, usage_date, pipe_model_id
+              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
+            GROUP BY section_1_id, usage_date, pipe_model_id
         ), d AS (
             SELECT
-                station_id,
+                section_1_id,
                 (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
                 pipe_model_id,
                 SUM(arrived_qty) AS total_arrived_qty,
@@ -1293,12 +1293,12 @@ def query_history_records(
             WHERE arrived_confirm_at IS NOT NULL
               AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date 
               AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
-              AND (:station_id IS NULL OR :station_id = '' OR station_id = :station_id)
+              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
               AND status <> 'cancelled'
-            GROUP BY station_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+            GROUP BY section_1_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
         )
         SELECT
-            COALESCE(p.station_id, u.station_id, d.station_id) AS station_id,
+            COALESCE(p.section_1_id, u.section_1_id, d.section_1_id) AS section_1_id,
             COALESCE(p.biz_date, u.biz_date, d.biz_date) AS biz_date,
             COALESCE(p.pipe_model_id, u.pipe_model_id, d.pipe_model_id) AS pipe_model_id,
             COALESCE(p.total_plan_qty, 0) AS plan_qty,
@@ -1310,15 +1310,15 @@ def query_history_records(
             d.min_transit_seconds,
             d.max_transit_seconds
         FROM p
-        FULL OUTER JOIN u ON p.station_id = u.station_id AND p.biz_date = u.biz_date AND p.pipe_model_id = u.pipe_model_id
-        FULL OUTER JOIN d ON COALESCE(p.station_id, u.station_id) = d.station_id
+        FULL OUTER JOIN u ON p.section_1_id = u.section_1_id AND p.biz_date = u.biz_date AND p.pipe_model_id = u.pipe_model_id
+        FULL OUTER JOIN d ON COALESCE(p.section_1_id, u.section_1_id) = d.section_1_id
                          AND COALESCE(p.biz_date, u.biz_date) = d.biz_date
                          AND COALESCE(p.pipe_model_id, u.pipe_model_id) = d.pipe_model_id
         WHERE COALESCE(p.total_plan_qty, 0) <> 0
            OR COALESCE(u.total_usage_qty, 0) <> 0
            OR COALESCE(u.total_loss_qty, 0) <> 0
            OR COALESCE(d.total_arrived_qty, 0) <> 0
-        ORDER BY biz_date DESC, station_id, pipe_model_id
+        ORDER BY biz_date DESC, section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
@@ -1328,13 +1328,13 @@ def query_history_records(
             {
                 "start_date": start_date,
                 "end_date": end_date,
-                "station_id": station_id if station_id else None,
+                "section_1_id": section_1_id if section_1_id else None,
             }
         ).mappings().all()
         
         return [
             {
-                "station_id": _normalize_text(row["station_id"]),
+                "section_1_id": _normalize_text(row["section_1_id"]),
                 "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
                 "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
                 "plan_qty": float(row["plan_qty"]),

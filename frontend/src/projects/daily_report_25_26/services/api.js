@@ -240,8 +240,8 @@ export async function getTubeDemandManagementOptions(projectKey = 'insulation_pi
   return response.json()
 }
 
-export async function getTubeDemandManagementBaseline(projectKey, stationId) {
-  const params = new URLSearchParams({ station_id: String(stationId || '') })
+export async function getTubeDemandManagementBaseline(projectKey, section1Id) {
+  const params = new URLSearchParams({ section_1_id: String(section1Id || '') })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/baseline?${params.toString()}`, {
     headers: attachAuthHeaders(),
   })
@@ -252,9 +252,9 @@ export async function getTubeDemandManagementBaseline(projectKey, stationId) {
   return response.json()
 }
 
-export async function getTubeDemandManagementPlanMatrix(projectKey, stationId, anchorDate) {
+export async function getTubeDemandManagementPlanMatrix(projectKey, section1Id, anchorDate) {
   const params = new URLSearchParams({
-    station_id: String(stationId || ''),
+    section_1_id: String(section1Id || ''),
     anchor_date: String(anchorDate || ''),
   })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/plan-matrix?${params.toString()}`, {
@@ -280,9 +280,9 @@ export async function saveTubeDemandManagementPlanMatrix(projectKey, payload) {
   return response.json()
 }
 
-export async function getTubeDemandManagementUsageSheet(projectKey, stationId, usageDate) {
+export async function getTubeDemandManagementUsageSheet(projectKey, section1Id, usageDate) {
   const params = new URLSearchParams({
-    station_id: String(stationId || ''),
+    section_1_id: String(section1Id || ''),
     usage_date: String(usageDate || ''),
   })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/usage-sheet?${params.toString()}`, {
@@ -321,8 +321,8 @@ export async function submitTubeDemandManagementStationStatus(projectKey, payloa
   return response.json()
 }
 
-export async function getTubeDemandManagementPendingArrivals(projectKey, stationId) {
-  const params = new URLSearchParams({ station_id: String(stationId || '') })
+export async function getTubeDemandManagementPendingArrivals(projectKey, section1Id) {
+  const params = new URLSearchParams({ section_1_id: String(section1Id || '') })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/pending-arrivals?${params.toString()}`, {
     headers: attachAuthHeaders(),
   })
@@ -333,8 +333,8 @@ export async function getTubeDemandManagementPendingArrivals(projectKey, station
   return response.json()
 }
 
-export async function getTubeDemandManagementLogisticsRecords(projectKey, stationId, params = {}) {
-  const search = new URLSearchParams({ station_id: String(stationId || '') })
+export async function getTubeDemandManagementLogisticsRecords(projectKey, section1Id, params = {}) {
+  const search = new URLSearchParams({ section_1_id: String(section1Id || '') })
   if (params.orderNo) search.set('order_no', String(params.orderNo))
   if (params.shipmentNo) search.set('shipment_no', String(params.shipmentNo))
   if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
@@ -543,7 +543,7 @@ export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulat
 
 export async function getTubeSupplyManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
-  if (params.stationId) search.set('station_id', String(params.stationId))
+  if (params.stationId) search.set('section_1_id', String(params.stationId))
   if (params.status) search.set('status', String(params.status))
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   const suffix = search.toString() ? `?${search.toString()}` : ''
@@ -622,7 +622,7 @@ export async function getTubeWarehouseManagementOptions(projectKey = 'insulation
 
 export async function getTubeWarehouseManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
-  if (params.stationId) search.set('station_id', String(params.stationId))
+  if (params.stationId) search.set('section_1_id', String(params.stationId))
   if (params.status) search.set('status', String(params.status))
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
@@ -2176,7 +2176,7 @@ export async function getTubeHistoryData(projectKey, params) {
   const query = new URLSearchParams()
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
-  if (params.stationId) query.append('station_id', params.stationId)
+  if (params.stationId) query.append('section_1_id', params.stationId)
   
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history?${query.toString()}`, {
     headers: attachAuthHeaders(),
@@ -2192,7 +2192,7 @@ export async function exportTubeHistoryData(projectKey, params) {
   const query = new URLSearchParams()
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
-  if (params.stationId) query.append('station_id', params.stationId)
+  if (params.stationId) query.append('section_1_id', params.stationId)
   
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history/export?${query.toString()}`, {
     headers: attachAuthHeaders(),

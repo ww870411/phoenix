@@ -25,7 +25,7 @@
         </div>
         <div class="filter-grid">
           <div class="field custom-multi-select-container" ref="stationDropdownRef">
-            <span>{{ modeLabels.station }}</span>
+            <span>需求主体</span>
             <div class="custom-multi-select">
               <div class="select-trigger" @click="toggleDropdown('station')" :class="{ active: activeDropdown === 'station' }">
                 <span class="trigger-text" :class="{ placeholder: filters.stationIds.length === 0 }">
@@ -42,13 +42,13 @@
                   <div class="dropdown-list">
                     <div 
                       v-for="item in stationOptions" 
-                      :key="item.station_id" 
+                      :key="item.section_1_id" 
                       class="dropdown-item"
-                      :class="{ selected: filters.stationIds.includes(item.station_id) }"
-                      @click="toggleStation(item.station_id)"
+                      :class="{ selected: filters.stationIds.includes(item.section_1_id) }"
+                      @click="toggleStation(item.section_1_id)"
                     >
-                      <input type="checkbox" :checked="filters.stationIds.includes(item.station_id)" @click.stop="toggleStation(item.station_id)" />
-                      <span class="item-label">{{ item.station_name }}（{{ item.station_id }}）</span>
+                      <input type="checkbox" :checked="filters.stationIds.includes(item.section_1_id)" @click.stop="toggleStation(item.section_1_id)" />
+                      <span class="item-label">{{ item.section_1_name }}（{{ item.section_1_id }}）</span>
                     </div>
                   </div>
                 </div>
@@ -236,7 +236,7 @@
                 <th>运输车次号</th>
                 <th class="cell-plate-header">车牌号</th>
                 <th>供给主体</th>
-                <th>{{ modeLabels.station }}</th>
+                <th>需求主体</th>
                 <th>型号</th>
                 <th class="cell-number">发货量（米）</th>
                 <th class="cell-number">到货量（米）</th>
@@ -584,7 +584,7 @@ const exportColumns = computed(() => [
   { key: 'shipment_no', label: '运输车次号' },
   { key: 'vehicle_plate_no', label: '车牌号' },
   { key: 'supply_entity_name', label: '供给主体' },
-  { key: 'station_name', label: `装车接收${modeLabels.value.station}` },
+  { key: 'section_1_name', label: '装车接收需求主体' },
   { key: 'pipe_model_name', label: '保温管规格型号' },
   { key: 'shipped_qty', label: '发货量（米）' },
   { key: 'arrived_qty', label: '到货量（米）' },
@@ -667,12 +667,12 @@ const handleGlobalClick = (e) => {
 
 // 选中值格式化回显
 const displaySelectedStations = computed(() => {
-  if (filters.stationIds.length === 0) return '全部' + modeLabels.value.station
-  if (filters.stationIds.length === stationOptions.value.length) return '全部' + modeLabels.value.station + '（全选）'
+  if (filters.stationIds.length === 0) return '全部需求主体'
+  if (filters.stationIds.length === stationOptions.value.length) return '全部需求主体（全选）'
   const names = stationOptions.value
-    .filter(o => filters.stationIds.includes(o.station_id))
-    .map(o => o.station_name)
-  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个${modeLabels.value.station}`
+    .filter(o => filters.stationIds.includes(o.section_1_id))
+    .map(o => o.section_1_name)
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个需求主体`
 })
 
 const displaySelectedSupplyEntities = computed(() => {
@@ -709,7 +709,7 @@ const toggleStation = (id) => {
   else filters.stationIds.push(id)
 }
 const selectAllStations = () => {
-  filters.stationIds = stationOptions.value.map(o => o.station_id)
+  filters.stationIds = stationOptions.value.map(o => o.section_1_id)
 }
 const clearAllStations = () => {
   filters.stationIds = []
@@ -811,7 +811,7 @@ const selectedDeliveryAggregate = computed(() => {
   for (const row of selectedDeliveries.value) {
     if (row.shipment_no) shipmentSet.add(row.shipment_no)
     if (row.order_no || row.delivery_code || row.id) orderSet.add(row.order_no || row.delivery_code || String(row.id))
-    if (row.station_name || row.station_id) stationSet.add(row.station_name || row.station_id)
+    if (row.section_1_name || row.section_1_id) stationSet.add(row.section_1_name || row.section_1_id)
     if (row.pipe_model_name || row.pipe_model_id) pipeModelSet.add(row.pipe_model_name || row.pipe_model_id)
     if (row.vehicle_plate_no) vehiclePlateSet.add(row.vehicle_plate_no)
     const statusKey = row.status || 'unknown'
@@ -1032,7 +1032,7 @@ function toggleSelectAllPendingWarehouse(event) {
 async function loadOptions() {
   const payload = await getTubeWarehouseManagementOptions(projectKey)
   options.value = payload
-  const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+  const stationIdSet = new Set(stationOptions.value.map((item) => String(item.section_1_id || '')))
   const supplyEntityIdSet = new Set(supplyEntityOptions.value.map((item) => String(item.entity_id || '')))
   const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
   const deliveryStatusValueSet = new Set(deliveryStatusOptions.value.map((item) => String(item.value || '')))
@@ -1043,7 +1043,7 @@ async function loadOptions() {
   filters.statuses = filters.statuses.filter(val => deliveryStatusValueSet.has(val))
 
   if (filters.stationIds.length === 0 && stationOptions.value.length === 1) {
-    filters.stationIds = [stationOptions.value[0].station_id]
+    filters.stationIds = [stationOptions.value[0].section_1_id]
   }
 }
 

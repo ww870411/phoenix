@@ -1,3 +1,22 @@
+## 2026-07-14 管网项目新增现场主管用户账号及权限绑定
+
+- 变更文件：
+  - `backend_data/shared/auth/账户信息.json` (在 `tube_site_manager` 角色节点下新增了 `lot_1` 和 `lot_2` 账号数据)
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` (在 `manager_assignments` 分配中建立了 `lot_1` 对应 `lot_1` 标段、`lot_2` 对应 `lot_2` 标段的主管绑定关系)
+- 本轮处理与实现原理：
+  - 静态添加了 `lot_1` 和 `lot_2` 现场主管账户。
+  - 同时在项目配置文件 `tube_config.json` 中配置了与之匹配的主管映射映射。这样，当这两个账号登录时，后端鉴权逻辑 `resolve_accessible_section_1_ids` 可以成功解析出它们所分别对应的 `lot_1` 和 `lot_2` 标段 ID，实现数据权限的精确隔离绑定。
+
+## 2026-07-14 保温管供应管理通用施工组织维度重构 · 后端接口正名
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (对确认收货/到货及大管理员审批接口权限校验方法、历史报表读取与导出 API 中的 station 字段与返回参数完全正名为 section_1)
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (对发货订单号生成器 `build_order_no` 和 `build_delivery_code` 内的 `station_code` 物理更名为 `section_1_code`)
+- 本轮处理与实现原理：
+  1. 后端全面完成了从“以换热站(station_id)为物理键”到“以通用需求主体(section_1_id)为物理键”的接口升级。
+  2. 权限校验逻辑 `resolve_accessible_section_1_ids` 及 `_ensure_section_1_access` 均改用 `section_1_id` 主键校验，彻底隔离了业务名词，契约完全对齐。
+  3. 优化了历史报表 API 中的 CSV 标题写入，由“换热站”汉字表头改写为“需求主体”表头，导出流的分组计算和汇总完全应用了 `section_1` 维度。
+
 ## 2026-07-14 保温管管理模式动态切换后端接口实现
 
 - 变更文件：

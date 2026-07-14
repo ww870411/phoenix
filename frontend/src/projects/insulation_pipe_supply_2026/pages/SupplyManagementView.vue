@@ -201,11 +201,11 @@
 
                 <div class="form-row-2col">
                   <label class="field">
-                    <span>装车{{ modeLabels.station }}</span>
+                    <span>装车需求主体</span>
                     <select v-model="deliveryForm.stationId">
-                      <option value="" disabled>请选择{{ modeLabels.station }}</option>
-                      <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
-                        {{ station.station_name }}
+                      <option value="" disabled>请选择需求主体</option>
+                      <option v-for="station in stationOptions" :key="station.section_1_id" :value="station.section_1_id">
+                        {{ station.section_1_name }}
                       </option>
                     </select>
                   </label>
@@ -670,10 +670,10 @@
               <input v-model.trim="superEditForm.shipmentNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
             </label>
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收{{ modeLabels.station }}</span>
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收需求主体</span>
               <select v-model="superEditForm.stationId" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                <option v-for="st in stationOptions" :key="st.station_id" :value="st.station_id">
-                  {{ st.station_name }}
+                <option v-for="st in stationOptions" :key="st.section_1_id" :value="st.section_1_id">
+                  {{ st.section_1_name }}
                 </option>
               </select>
             </label>
@@ -921,10 +921,10 @@ const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
 const supplyDemandViewOptions = computed(() => [
   { value: 'summary', label: '整理汇总' },
-  { value: 'all_details', label: `全部${modeLabels.value.station}明细` },
+  { value: 'all_details', label: '全部需求主体明细' },
   ...stationOptions.value.map((station) => ({
-    value: station.station_id,
-    label: station.station_name,
+    value: station.section_1_id,
+    label: station.section_1_name,
   })),
 ])
 
@@ -961,7 +961,7 @@ const filteredSummaryRows = computed(() => {
 })
 
 const getStationPos = (stationId) => {
-  const idx = stationOptions.value.findIndex(item => item.station_id === stationId)
+  const idx = stationOptions.value.findIndex(item => item.section_1_id === stationId)
   return idx === -1 ? 9999 : idx
 }
 
@@ -1021,10 +1021,10 @@ const supplyDemandTableHint = computed(() => {
     return '当前以“整理汇总”方式按型号统计各项供需数量。计量单位：米。'
   }
   if (supplyDemandViewMode.value === 'all_details') {
-    return `当前展示全部${modeLabels.value.station}的逐站逐型号明细。计量单位：米。`
+    return '当前展示全部需求主体的逐个主体逐个型号明细。计量单位：米。'
   }
-  const matched = stationOptions.value.find((item) => item.station_id === supplyDemandViewMode.value)
-  return `当前仅展示 ${matched?.station_name || '所选' + modeLabels.value.station} 的各型号供需记录。计量单位：米。`
+  const matched = stationOptions.value.find((item) => item.section_1_id === supplyDemandViewMode.value)
+  return `当前仅展示 ${matched?.section_1_name || '所选需求主体'} 的各型号供需记录。计量单位：米。`
 })
 
 function createDefaultDeliveryForm() {
@@ -1044,8 +1044,8 @@ function createDefaultDeliveryForm() {
 }
 
 function getStationName(stationId) {
-  const matched = stationOptions.value.find((item) => item.station_id === stationId)
-  return matched?.station_name || stationId || '—'
+  const matched = stationOptions.value.find((item) => item.section_1_id === stationId)
+  return matched?.section_1_name || stationId || '—'
 }
 
 function getPipeModelName(pipeModelId) {
@@ -1112,8 +1112,8 @@ function normalizeOptionsPayload(response) {
 
 function normalizeSummaryRows(rows) {
   return (rows || []).map((row) => ({
-    stationId: row.station_id || '',
-    stationName: row.station_name || row.station_id || '未命名' + modeLabels.value.station,
+    stationId: row.section_1_id || '',
+    stationName: row.section_1_name || row.section_1_id || '未命名需求主体',
     pipeModelId: row.pipe_model_id || '',
     pipeModelName: row.pipe_model_name || row.pipe_model_id || '未命名型号',
     designQty: Number(row.design_qty ?? 0),
@@ -1139,8 +1139,8 @@ function normalizeDeliveryRows(rows) {
     vehiclePlateNo: row.vehicle_plate_no || '',
     supplyEntityId: row.supply_entity_id || '',
     supplyEntityName: row.supply_entity_name || row.supply_entity_id || '—',
-    stationId: row.station_id || '',
-    stationName: row.station_name || row.station_id || '—',
+    stationId: row.section_1_id || '',
+    stationName: row.section_1_name || row.section_1_id || '—',
     pipeModelId: row.pipe_model_id || '',
     pipeModelName: row.pipe_model_name || row.pipe_model_id || '—',
     shippedQty: Number(row.shipped_qty ?? 0),
@@ -1234,10 +1234,10 @@ async function loadOptions() {
     } else if (!deliveryForm.value.supplyEntityId && selectedSupplyEntityId.value) {
       deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
     }
-    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.section_1_id || '')))
     const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
     if (!stationIdSet.has(deliveryForm.value.stationId)) {
-      deliveryForm.value.stationId = stationOptions.value[0]?.station_id || ''
+      deliveryForm.value.stationId = stationOptions.value[0]?.section_1_id || ''
     }
     if (!pipeModelIdSet.has(deliveryForm.value.pipeModelId)) {
       deliveryForm.value.pipeModelId = pipeModelOptions.value[0]?.pipe_model_id || ''
@@ -1311,7 +1311,7 @@ async function submitDeliveryBatch() {
     return
   }
   const items = draftDeliveryItems.value.map((item) => ({
-    station_id: item.stationId,
+    section_1_id: item.stationId,
     pipe_model_id: item.pipeModelId,
     shipped_qty: Number(item.shippedQty || 0),
     ship_remark: item.shipRemark || '',
@@ -1588,7 +1588,7 @@ async function saveSuperEdit() {
     const warehouseConfirmAtIso = superEditForm.value.warehouseConfirmAt ? new Date(superEditForm.value.warehouseConfirmAt).toISOString() : null
 
     await superUpdateTubeSupplyManagementDelivery(PROJECT_KEY, superEditForm.value.deliveryId, {
-      station_id: superEditForm.value.stationId,
+      section_1_id: superEditForm.value.stationId,
       pipe_model_id: superEditForm.value.pipeModelId,
       shipped_qty: Number(superEditForm.value.shippedQty || 0),
       shipped_at: shippedAtIso,

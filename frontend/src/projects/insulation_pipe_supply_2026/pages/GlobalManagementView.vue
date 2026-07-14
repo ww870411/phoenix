@@ -29,8 +29,8 @@
             <strong class="meta-value">{{ supplyEntities.length }} 个注册主体</strong>
           </div>
           <div class="meta-card">
-            <span class="meta-label">管理的{{ modeLabels.station }}</span>
-            <strong class="meta-value">{{ demandEntities.length }} 个运营{{ modeLabels.station }}</strong>
+            <span class="meta-label">管理的需求主体</span>
+            <strong class="meta-value">{{ demandEntities.length }} 个运营需求主体</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">系统保温管型号</span>
@@ -41,8 +41,8 @@
             <strong class="meta-value">{{ planStartDate || '未设置' }}</strong>
           </div>
           <div class="meta-card highlight">
-            <span class="meta-label">{{ modeLabels.station }}提交状态</span>
-            <strong class="meta-value highlight-num">{{ submittedStationCount }} / {{ demandEntities.length }} 站已提交</strong>
+            <span class="meta-label">需求主体提交状态</span>
+            <strong class="meta-value highlight-num">{{ submittedStationCount }} / {{ demandEntities.length }} 已提交</strong>
           </div>
         </div>
       </section>
@@ -64,7 +64,7 @@
             :class="['sidebar-tab-btn', { active: activeTab === 'station' }]" 
             @click="activeTab = 'station'"
           >
-            📍 {{ modeLabels.station }}基础台账
+            📍 需求主体基础台账
           </button>
           <button 
             type="button" 
@@ -172,7 +172,7 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">{{ modeLabels.station }}昨日提交状态审计</div>
+                  <div class="card-header">需求主体昨日提交状态审计</div>
                   <p class="sub block-sub">审计昨日三日计划上报进度，判断昨日消耗数据及滚动计划是否全部锁盘入库。</p>
                 </div>
               </div>
@@ -180,7 +180,7 @@
                 <table class="table editor-table submission-table">
                   <thead>
                     <tr>
-                      <th>{{ modeLabels.station }}</th>
+                      <th>需求主体</th>
                       <th>提交状态</th>
                       <th>最近一次提交日期</th>
                       <th>提交完成物理时间</th>
@@ -188,8 +188,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="item in submissionStatusRows" :key="item.station_id">
-                      <td class="cell-text" :title="item.station_name || item.station_id">{{ item.station_name || item.station_id }}</td>
+                    <tr v-for="item in submissionStatusRows" :key="item.section_1_id">
+                      <td class="cell-text" :title="item.section_1_name || item.section_1_id">{{ item.section_1_name || item.section_1_id }}</td>
                       <td>
                         <span :class="['status-chip', item.is_submitted ? 'success' : 'pending']">
                           {{ item.is_submitted ? '✓ 已上报' : '⌛ 未上报' }}
@@ -207,37 +207,19 @@
 
           <!-- Tab 2: 换热站/标段基础台账 -->
           <div v-if="activeTab === 'station'" class="pane-content-wrapper">
-            <!-- 模式切换卡片 -->
-            <section class="card elevated section-card" style="margin-bottom: 24px;">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">施工管理维度设置</div>
-                  <p class="sub block-sub">根据当前项目实际，一键切换最小施工单元及其显示文案。</p>
-                </div>
-              </div>
-              <div style="display: flex; gap: 32px; margin-top: 16px; align-items: center; background: rgba(0, 0, 0, 0.02); padding: 16px; border-radius: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500;">
-                  <input type="radio" v-model="selectedManagementMode" value="station" @change="saveManagementMode" />
-                  <span>换热站模式（层级：区域 → 标段 → 换热站）</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500;">
-                  <input type="radio" v-model="selectedManagementMode" value="section" @change="saveManagementMode" />
-                  <span>标段模式（层级：区域 → 标段，忽略换热站）</span>
-                </label>
-              </div>
-            </section>
+
 
             <!-- 基础档案信息表格 -->
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">{{ modeLabels.station }}基础档案信息</div>
-                  <p class="sub block-sub">管理保温管物理覆盖的所有{{ modeLabels.station }}及所属区域映射。</p>
+                  <div class="card-header">需求主体基础档案信息</div>
+                  <p class="sub block-sub">管理保温管物理覆盖的所有需求主体及所属第二维度 (如所属区域) 映射。</p>
                 </div>
                 <div class="section-actions">
-                  <button class="btn ghost" type="button" @click="addDemandEntity">➕ 新增{{ modeLabels.station }}</button>
+                  <button class="btn ghost" type="button" @click="addDemandEntity">➕ 新增需求主体</button>
                   <button class="btn primary shadow-accent" type="button" :disabled="isSaving('demand_entities')" @click="saveSection('demand_entities')">
-                    {{ isSaving('demand_entities') ? '正在同步…' : `💾 保存${modeLabels.station}台账` }}
+                    {{ isSaving('demand_entities') ? '正在同步…' : '💾 保存需求主体台账' }}
                   </button>
                 </div>
               </div>
@@ -248,22 +230,22 @@
                 <table class="table editor-table">
                   <thead>
                     <tr>
-                      <th>{{ modeLabels.stationId }} (唯一)</th>
-                      <th>{{ modeLabels.station }}编码</th>
-                      <th>{{ modeLabels.station }}名称</th>
-                      <th>{{ modeLabels.region }}</th>
-                      <th v-if="selectedManagementMode !== 'section'">所属施工标段</th>
+                      <th>需求主体ID (唯一)</th>
+                      <th>需求主体编码</th>
+                      <th>需求主体名称</th>
+                      <th>第二维度 (如所属区域)</th>
+                      <th>第三维度 (如所属标段)</th>
                       <th>当前施工状态</th>
                       <th>物理移除</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in demandEntities" :key="`${item.station_id || 'new'}-${index}`">
-                      <td><input v-model.trim="item.station_id" class="input table-cell-input" type="text" /></td>
+                    <tr v-for="(item, index) in demandEntities" :key="index">
+                      <td><input v-model.trim="item.section_1_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 AA" /></td>
-                      <td><input v-model.trim="item.station_name" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.region" class="input table-cell-input" type="text" /></td>
-                      <td v-if="selectedManagementMode !== 'section'"><input v-model.trim="item.section" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.section_1_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.section_2" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.section_3" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.construction_status" class="input table-cell-input" type="text" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(demandEntities, index)">删除</button></td>
                     </tr>
@@ -304,7 +286,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in supplyEntities" :key="`${item.entity_id || 'new'}-${index}`">
+                    <tr v-for="(item, index) in supplyEntities" :key="index">
                       <td><input v-model.trim="item.entity_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 SA" /></td>
                       <td><input v-model.trim="item.entity_name" class="input table-cell-input" type="text" /></td>
@@ -344,7 +326,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in pipeModels" :key="`${item.pipe_model_id || 'new'}-${index}`">
+                    <tr v-for="(item, index) in pipeModels" :key="index">
                       <td><input v-model.trim="item.pipe_model_id" class="input table-cell-input" type="text" @change="syncPipeModelIdentity(item, 'id')" /></td>
                       <td><input v-model.trim="item.pipe_model_name" class="input table-cell-input" type="text" @change="syncPipeModelIdentity(item, 'name')" /></td>
                       <td><input v-model.trim="item.unit" class="input table-cell-input" type="text" /></td>
@@ -383,7 +365,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in productionCapacities" :key="`${item.supply_entity_name || 'supplier'}-${item.pipe_model_name || 'model'}-${index}`">
+                    <tr v-for="(item, index) in productionCapacities" :key="index">
                       <td><input v-model.trim="item.supply_entity_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.pipe_model_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.number="item.max_daily_output_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
@@ -402,7 +384,7 @@
               <div class="card-header-row">
                 <div>
                   <div class="card-header">现场主管负责人映射</div>
-                  <p class="sub block-sub">授权不同负责人账号所分管的{{ modeLabels.station }}列表。多个{{ modeLabels.station }}请用英文逗号(,)分隔。</p>
+                  <p class="sub block-sub">授权不同负责人账号所分管的需求主体列表。多个需求主体请用英文逗号(,)分隔。</p>
                 </div>
                 <div class="section-actions">
                   <button class="btn ghost" type="button" @click="addManagerAssignment">➕ 新增主管</button>
@@ -420,15 +402,15 @@
                     <tr>
                       <th>分管人账号ID (对应登录名)</th>
                       <th>分管负责人姓名</th>
-                      <th>所分管的{{ modeLabels.station }}ID列表 (逗号分隔)</th>
+                      <th>所分管的需求主体ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in managerAssignments" :key="`${item.manager_id || 'new'}-${index}`">
+                    <tr v-for="(item, index) in managerAssignments" :key="index">
                       <td><input v-model.trim="item.manager_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.manager_name" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" :placeholder="`如 ${selectedManagementMode === 'section' ? 'section_a, section_b' : 'station_a, station_b'}`" /></td>
+                      <td><input v-model.trim="item.section_1_ids_text" class="input table-cell-input" type="text" placeholder="如主体A, 主体B（逗号分隔）" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -439,8 +421,8 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">施工分包单位及站点映射</div>
-                  <p class="sub block-sub">配置各分包商基本联络方式及分管站点。多个{{ modeLabels.station }}请用英文逗号(,)分隔。</p>
+                  <div class="card-header">施工分包单位及需求主体映射</div>
+                  <p class="sub block-sub">配置各分包商基本联络方式及分管需求主体。多个需求主体请用英文逗号(,)分隔。</p>
                 </div>
                 <div class="section-actions">
                   <button class="btn ghost" type="button" @click="addConstructionUnit">➕ 新增分包商</button>
@@ -460,17 +442,17 @@
                       <th>施工单位名称</th>
                       <th>工地联系人</th>
                       <th>联系电话</th>
-                      <th>分管的{{ modeLabels.station }}ID列表 (逗号分隔)</th>
+                      <th>分管的需求主体ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, index) in constructionUnits" :key="`${item.unit_id || 'new'}-${index}`">
+                    <tr v-for="(item, index) in constructionUnits" :key="index">
                       <td><input v-model.trim="item.unit_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.unit_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" :placeholder="`如 ${selectedManagementMode === 'section' ? 'section_a, section_c' : 'station_a, station_c'}`" /></td>
+                      <td><input v-model.trim="item.section_1_ids_text" class="input table-cell-input" type="text" placeholder="如主体A, 主体C（逗号分隔）" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -484,15 +466,15 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">{{ modeLabels.station }}管线基准设计量</div>
-                  <p class="sub block-sub">维护特定{{ modeLabels.station }}的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择{{ modeLabels.station }}过滤。</p>
+                  <div class="card-header">需求主体管线基准设计量</div>
+                  <p class="sub block-sub">维护特定需求主体的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择需求主体过滤。</p>
                 </div>
                 <div class="section-actions baseline-actions-panel">
                   <div class="station-filter-inline">
-                    <span>过滤{{ modeLabels.station }}：</span>
+                    <span>过滤需求主体：</span>
                     <select v-model="selectedBaselineStationId" class="input inline-select">
-                      <option v-for="station in demandEntities" :key="station.station_id" :value="station.station_id">
-                        {{ station.station_name || station.station_id }}
+                      <option v-for="station in demandEntities" :key="station.section_1_id" :value="station.section_1_id">
+                        {{ station.section_1_name || station.section_1_id }}
                       </option>
                     </select>
                   </div>
@@ -526,7 +508,12 @@
                     <tr v-for="item in filteredBaselinePresets" :key="item.__row_key">
                       <td>
                         <select v-model="item.pipe_model_id" class="input table-cell-input" @change="syncBaselinePipeModelName(item)">
-                          <option v-for="model in pipeModels" :key="model.pipe_model_id" :value="model.pipe_model_id">
+                          <option 
+                            v-for="model in pipeModels" 
+                            :key="model.pipe_model_id" 
+                            :value="model.pipe_model_id"
+                            :disabled="filteredBaselinePresets.some(preset => preset.pipe_model_id === model.pipe_model_id && preset !== item)"
+                          >
                             {{ model.pipe_model_name || model.pipe_model_id }}
                           </option>
                         </select>
@@ -795,19 +782,19 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📊 {{ modeLabels.station }}填报与到货历史数据查询</div>
-                  <p class="sub block-sub">查询各{{ modeLabels.station }}每日保温管计划量、实际消耗、确认到货量及运输在途时长，包含时段内汇总统计。</p>
+                  <div class="card-header">📊 需求主体填报与到货历史数据查询</div>
+                  <p class="sub block-sub">查询各需求主体每日保温管计划量、实际消耗、确认到货量及运输在途时长，包含时段内汇总统计。</p>
                 </div>
               </div>
               
               <!-- 过滤查询栏 -->
               <div class="filter-panel" style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; flex-wrap: wrap;">
                 <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">选择{{ modeLabels.station }}</label>
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">选择需求主体</label>
                   <select v-model="historyFilter.stationId" class="select" style="min-width: 180px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
-                    <option value="">— 全部{{ modeLabels.station }} —</option>
-                    <option v-for="st in demandEntities" :key="st.station_id" :value="st.station_id">
-                      {{ st.station_name }}
+                    <option value="">— 全部需求主体 —</option>
+                    <option v-for="st in demandEntities" :key="st.section_1_id" :value="st.section_1_id">
+                      {{ st.section_1_name }}
                     </option>
                   </select>
                 </div>
@@ -842,7 +829,7 @@
                     <thead>
                       <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 10;">
                         <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">日期</th>
-                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">{{ modeLabels.station }}</th>
+                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">需求主体</th>
                         <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">管材型号</th>
                         <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日计划量 (米)</th>
                         <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日使用量 (米)</th>
@@ -854,7 +841,7 @@
                     <tbody>
                       <tr v-for="(row, idx) in historyRows" :key="idx" style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
                         <td style="padding: 12px 16px; vertical-align: middle; color: #475569; font-size: 13px; font-weight: 500;">{{ row.biz_date }}</td>
-                        <td style="padding: 12px 16px; vertical-align: middle; color: #1e293b; font-size: 13px; font-weight: 600;">{{ row.station_name || row.station_id }}</td>
+                        <td style="padding: 12px 16px; vertical-align: middle; color: #1e293b; font-size: 13px; font-weight: 600;">{{ row.section_1_name || row.section_1_id }}</td>
                         <td style="padding: 12px 16px; vertical-align: middle; color: #334155; font-size: 13px;">{{ row.pipe_model_name || row.pipe_model_id }}</td>
                         <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #475569;">{{ formatQty(row.plan_qty) }}</td>
                         <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #16a34a;">{{ formatQty(row.usage_qty) }}</td>
@@ -1063,7 +1050,6 @@ const {
 } = useTubePageShell('全局管理入口')
 
 const activeTab = ref('core')
-const selectedManagementMode = ref('station')
 
 // 操作审计日志相关 Ref 变量
 const auditLogs = ref([])
@@ -1152,22 +1138,7 @@ async function saveWeatherApiUrl() {
   }
 }
 
-async function saveManagementMode() {
-  clearGlobalMessage()
-  setSaving('management_mode', true)
-  try {
-    const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
-      section: 'management_mode',
-      data: selectedManagementMode.value,
-    })
-    applyConfig(response.config || {})
-    setGlobalMessage('success', '施工管理模式已成功更新并全局生效！')
-  } catch (error) {
-    setGlobalMessage('error', error?.message || '更新管理模式失败')
-  } finally {
-    setSaving('management_mode', false)
-  }
-}
+
 
 async function handleEvalWeatherImport() {
   clearGlobalMessage()
@@ -1300,23 +1271,17 @@ function resolvePipeModelBucket(value) {
 }
 
 function defaultQtyByPipeModel(pipeModelCode) {
-  const bucket = resolvePipeModelBucket(pipeModelCode)
-  if (bucket === 'medium') return 160
-  if (bucket === 'large') return 260
-  return 240
+  return null
 }
 
 function defaultRemarkByPipeModel(pipeModelCode) {
-  const bucket = resolvePipeModelBucket(pipeModelCode)
-  if (bucket === 'medium') return '演示预设-中管径偏低'
-  if (bucket === 'large') return '演示预设-大管径偏高'
-  return '演示预设-小口径偏高'
+  return ''
 }
 
 function normalizeAssignmentRows(rows, idKey, nameKey) {
   return cloneRows(rows).map((item) => ({
     ...item,
-    station_ids_text: listToText(item.station_ids),
+    section_1_ids_text: listToText(item.section_1_ids || item.station_ids),
     [idKey]: item[idKey] || '',
     [nameKey]: item[nameKey] || '',
   }))
@@ -1327,7 +1292,7 @@ function normalizeBaselineRows(rows) {
     ...item,
     pipe_model_id: normalizePipeModelCode(item.pipe_model_id),
     pipe_model_name: normalizePipeModelCode(item.pipe_model_name || item.pipe_model_id),
-    __row_key: `${item.station_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
+    __row_key: `${item.section_1_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
     design_qty: Number(item.design_qty || 0),
     purchase_plan_qty: Number(item.purchase_plan_qty || 0),
     remark: item.remark || '',
@@ -1336,7 +1301,8 @@ function normalizeBaselineRows(rows) {
 
 function normalizeSubmissionRows(rows) {
   return cloneRows(rows).map((item) => ({
-    station_id: item.station_id || '',
+    section_1_id: item.section_1_id || item.station_id || '',
+    section_1_name: item.section_1_name || item.station_name || '',
     data_submit_date: item.data_submit_date || '',
     submitted_at: item.submitted_at || '',
     submitted_by: item.submitted_by || '',
@@ -1349,7 +1315,7 @@ function normalizeSubmissionRows(rows) {
 function rebuildBaselineRowKeys() {
   baselinePresets.value = baselinePresets.value.map((item, index) => ({
     ...item,
-    __row_key: `${item.station_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
+    __row_key: `${item.section_1_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
   }))
 }
 
@@ -1374,7 +1340,7 @@ function syncPipeModelIdentity(row, source = 'id') {
 
 function syncSelectedBaselineStation() {
   const stationIds = demandEntities.value
-    .map((item) => String(item.station_id || '').trim())
+    .map((item) => String(item.section_1_id || '').trim())
     .filter(Boolean)
   if (!stationIds.length) {
     selectedBaselineStationId.value = ''
@@ -1405,7 +1371,6 @@ function applyConfig(config) {
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
   weatherApiUrl.value = config.weather_api_url || ''
-  selectedManagementMode.value = config.management_mode || 'station'
 }
 
 function getTodayDateString() {
@@ -1419,27 +1384,27 @@ function handleAutoPlanStartDateChange() {
 }
 
 const selectedBaselineStationName = computed(() => {
-  const matched = demandEntities.value.find((item) => item.station_id === selectedBaselineStationId.value)
-  return matched?.station_name || selectedBaselineStationId.value || '未选择'
+  const matched = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
+  return matched?.section_1_name || selectedBaselineStationId.value || '未选择'
 })
 
 const filteredBaselinePresets = computed(() =>
-  baselinePresets.value.filter((item) => item.station_id === selectedBaselineStationId.value),
+  baselinePresets.value.filter((item) => item.section_1_id === selectedBaselineStationId.value),
 )
 
 const submissionStatusRows = computed(() => {
   const latestByStationId = new Map(
     latestSubmissions.value
-      .filter((item) => item.station_id)
-      .map((item) => [String(item.station_id), item]),
+      .filter((item) => item.section_1_id)
+      .map((item) => [String(item.section_1_id), item]),
   )
   return demandEntities.value.map((station) => {
-    const stationId = String(station.station_id || '')
+    const stationId = String(station.section_1_id || '')
     const latest = latestByStationId.get(stationId) || {}
     const dataSubmitDate = String(latest.data_submit_date || '')
     return {
-      station_id: stationId,
-      station_name: station.station_name || stationId,
+      section_1_id: stationId,
+      section_1_name: station.section_1_name || stationId,
       data_submit_date: dataSubmitDate,
       submitted_at: latest.submitted_at || '',
       submitted_by: latest.submitted_by || '',
@@ -1478,11 +1443,11 @@ function buildSectionPayload(section) {
   }
   if (section === 'demand_entities') {
     return demandEntities.value.map((item) => ({
-      station_id: item.station_id || '',
+      section_1_id: item.section_1_id || '',
       code: String(item.code || '').trim().toUpperCase(),
-      station_name: item.station_name || '',
-      region: item.region || '',
-      section: item.section || '',
+      section_1_name: item.section_1_name || '',
+      section_2: item.section_2 || '',
+      section_3: item.section_3 || '',
       construction_status: item.construction_status || '',
     }))
   }
@@ -1508,7 +1473,7 @@ function buildSectionPayload(section) {
     return managerAssignments.value.map((item) => ({
       manager_id: item.manager_id || '',
       manager_name: item.manager_name || '',
-      station_ids: textToList(item.station_ids_text),
+      section_1_ids: textToList(item.section_1_ids_text),
     }))
   }
   if (section === 'construction_units') {
@@ -1517,15 +1482,13 @@ function buildSectionPayload(section) {
       unit_name: item.unit_name || '',
       contact_name: item.contact_name || '',
       contact_phone: item.contact_phone || '',
-      station_ids: textToList(item.station_ids_text),
+      section_1_ids: textToList(item.section_1_ids_text),
     }))
   }
   if (section === 'baseline_presets') {
     return baselinePresets.value.map((item) => ({
-      station_id: item.station_id || '',
-      station_name: item.station_name || '',
+      section_1_id: item.section_1_id || '',
       pipe_model_id: normalizePipeModelCode(item.pipe_model_id),
-      pipe_model_name: resolvePipeModelById(item.pipe_model_id)?.pipe_model_name || normalizePipeModelCode(item.pipe_model_name || item.pipe_model_id),
       design_qty: Number(item.design_qty || 0),
       purchase_plan_qty: Number(item.purchase_plan_qty || 0),
       remark: item.remark || '',
@@ -1737,11 +1700,11 @@ function addSupplyEntity() {
 
 function addDemandEntity() {
   demandEntities.value.push({
-    station_id: '',
+    section_1_id: '',
     code: '',
-    station_name: '',
-    region: '',
-    section: '',
+    section_1_name: '',
+    section_2: '',
+    section_3: '',
     construction_status: '',
   })
 }
@@ -1758,7 +1721,7 @@ function addManagerAssignment() {
   managerAssignments.value.push({
     manager_id: '',
     manager_name: '',
-    station_ids_text: '',
+    section_1_ids_text: '',
   })
 }
 
@@ -1786,7 +1749,7 @@ function addConstructionUnit() {
     unit_name: '',
     contact_name: '',
     contact_phone: '',
-    station_ids_text: '',
+    section_1_ids_text: '',
   })
 }
 
@@ -1812,17 +1775,21 @@ function syncBaselinePipeModelName(row) {
 }
 
 function addBaselinePreset() {
-  const currentStation = demandEntities.value.find((item) => item.station_id === selectedBaselineStationId.value)
-  const firstModel = pipeModels.value[0] || null
+  const currentStation = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
+  const usedModelIds = new Set(
+    baselinePresets.value
+      .filter((item) => item.section_1_id === selectedBaselineStationId.value)
+      .map((item) => item.pipe_model_id)
+  )
+  const unusedModel = pipeModels.value.find((model) => model.pipe_model_id && !usedModelIds.has(model.pipe_model_id)) || pipeModels.value[0] || null
+
   baselinePresets.value.push({
     __row_key: `new::${Date.now()}`,
-    station_id: selectedBaselineStationId.value || '',
-    station_name: currentStation?.station_name || '',
-    pipe_model_id: firstModel?.pipe_model_id || '',
-    pipe_model_name: firstModel?.pipe_model_name || '',
-    design_qty: defaultQtyByPipeModel(firstModel?.pipe_model_id),
-    purchase_plan_qty: defaultQtyByPipeModel(firstModel?.pipe_model_id),
-    remark: defaultRemarkByPipeModel(firstModel?.pipe_model_id),
+    section_1_id: selectedBaselineStationId.value || '',
+    pipe_model_id: unusedModel?.pipe_model_id || '',
+    design_qty: defaultQtyByPipeModel(unusedModel?.pipe_model_id),
+    purchase_plan_qty: defaultQtyByPipeModel(unusedModel?.pipe_model_id),
+    remark: defaultRemarkByPipeModel(unusedModel?.pipe_model_id),
   })
   rebuildBaselineRowKeys()
 }
@@ -1833,14 +1800,14 @@ function removeBaselinePreset(rowKey) {
 }
 
 function fillMissingPipeModelsForSelectedStation() {
-  const currentStation = demandEntities.value.find((item) => item.station_id === selectedBaselineStationId.value)
+  const currentStation = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
   if (!currentStation) {
-    setGlobalMessage('error', '请先选择一个有效换热站。')
+    setGlobalMessage('error', '请先选择一个有效需求主体。')
     return
   }
   const existingModelIds = new Set(
     baselinePresets.value
-      .filter((item) => item.station_id === selectedBaselineStationId.value)
+      .filter((item) => item.section_1_id === selectedBaselineStationId.value)
       .map((item) => item.pipe_model_id),
   )
   pipeModels.value.forEach((model) => {
@@ -1848,11 +1815,9 @@ function fillMissingPipeModelsForSelectedStation() {
       return
     }
     baselinePresets.value.push({
-      __row_key: `new::${currentStation.station_id}::${model.pipe_model_id}::${Date.now()}`,
-      station_id: currentStation.station_id,
-      station_name: currentStation.station_name || currentStation.station_id,
+      __row_key: `new::${currentStation.section_1_id}::${model.pipe_model_id}::${Date.now()}`,
+      section_1_id: currentStation.section_1_id,
       pipe_model_id: model.pipe_model_id,
-      pipe_model_name: model.pipe_model_name || model.pipe_model_id,
       design_qty: defaultQtyByPipeModel(model.pipe_model_id),
       purchase_plan_qty: defaultQtyByPipeModel(model.pipe_model_id),
       remark: defaultRemarkByPipeModel(model.pipe_model_id),
@@ -1865,8 +1830,6 @@ function fillMissingPipeModelsForSelectedStation() {
 onMounted(() => {
   loadConfig()
 })
-
-useTubeRealtimeRefresh(loadConfig)
 
 // ==================== 📜 操作审计日志 JS 业务逻辑 ====================
 

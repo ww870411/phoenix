@@ -44,11 +44,11 @@
 
         <div class="filter-grid compact-filter-grid">
           <label class="field">
-            <span>当前管理的{{ modeLabels.station }}</span>
+            <span>当前管理的需求主体</span>
             <select v-model="selectedStationId" :disabled="optionsLoading || !stationOptions.length">
-              <option value="" disabled>请选择要操作的{{ modeLabels.station }}</option>
-              <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
-                {{ station.station_name }}
+              <option value="" disabled>请选择要操作的需求主体</option>
+              <option v-for="station in stationOptions" :key="station.section_1_id" :value="station.section_1_id">
+                {{ station.section_1_name }}
               </option>
             </select>
           </label>
@@ -63,7 +63,7 @@
         <div class="meta-dashboard">
           <div class="meta-card">
             <span class="meta-label">授权范围</span>
-            <strong class="meta-value">{{ stationOptions.length }} 个站</strong>
+            <strong class="meta-value">{{ stationOptions.length }} 个主体</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">保温管型号</span>
@@ -1383,9 +1383,9 @@ async function loadOptions() {
     currentGroup.value = normalized.currentGroup
     showDate.value = normalized.showDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
-    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.station_id || '')))
+    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.section_1_id || '')))
     if (!selectedStationId.value || !stationIdSet.has(selectedStationId.value)) {
-      selectedStationId.value = stationOptions.value[0]?.station_id || ''
+      selectedStationId.value = stationOptions.value[0]?.section_1_id || ''
     }
     anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
     usageDate.value = normalized.usageCollectionDate || normalized.defaultUsageDate || getTodayString(-1)
@@ -1695,7 +1695,7 @@ async function savePlanMatrix() {
       })
     })
     await saveTubeDemandManagementPlanMatrix(PROJECT_KEY, {
-      station_id: selectedStationId.value,
+      section_1_id: selectedStationId.value,
       anchor_date: anchorDate.value,
       records
     })
@@ -1722,7 +1722,7 @@ async function saveUsageSheet() {
       remark: row.remarks || ''
     }))
     await saveTubeDemandManagementUsageSheet(PROJECT_KEY, {
-      station_id: selectedStationId.value,
+      section_1_id: selectedStationId.value,
       usage_date: usageDate.value,
       records
     })
@@ -1750,13 +1750,13 @@ async function handleStationSubmitClick() {
   clearActionMessage()
   try {
     const response = await submitTubeDemandManagementStationStatus(PROJECT_KEY, {
-      station_id: selectedStationId.value,
+      section_1_id: selectedStationId.value,
       remark: ''
     })
     const submittedDate = response?.submission?.data_submit_date || anchorDate.value || '未设置'
-    setActionMessage('success', `${modeLabels.value.station} ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}.`)
+    setActionMessage('success', `需求主体 ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}.`)
   } catch (error) {
-    setActionMessage('error', getErrorMessage(error, `提交${modeLabels.value.station}填报状态失败`))
+    setActionMessage('error', getErrorMessage(error, '提交需求主体填报状态失败'))
   } finally {
     submitStatusLoading.value = false
   }

@@ -141,6 +141,16 @@
         "username": "site_manager_b",
         "password": "site_manager_b123",
         "unit": "换热站C"
+      },
+      {
+        "username": "lot_1_manager",
+        "password": "lot_1_0714",
+        "unit": "lot_1"
+      },
+      {
+        "username": "lot_2_manager",
+        "password": "lot_2_0715",
+        "unit": "lot_2"
       }
     ],
     "tube_construction_unit": [

@@ -1,3 +1,86 @@
+## 2026-07-14 [修复需求侧管理入口因缺少 section_1_id 参数导致的 422 报错 Bug]
+- **任务结论**：修复了在进入需求侧管理页面时，由于前端 Axios API 请求参数仍然使用旧的 `station_id`，而重构后的后端路由强制接收 `section_1_id` 所引起的 HTTP 422 验证报错：
+  1. **参数更名**：在 `api.js` 中将 `getTubeDemandManagementBaseline`、`getTubeDemandManagementPlanMatrix`、`getTubeDemandManagementUsageSheet`、`getTubeDemandManagementPendingArrivals` 及 `getTubeDemandManagementLogisticsRecords` 这五个需求侧核心 API 的 URL 查询参数由 `station_id` 统一修改为 `section_1_id`。
+  2. **实际效果**：前端成功与后端新的接口契约对齐，消除了进入需求侧页面时的 422 阻断性报错。
+  3. **编译打包**：运行 `npm run build` 打包完全通过。
+- **改动清单**：
+  - [api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+
+## 2026-07-14 [新增管网现场主管用户账号及需求主体隔离绑定配置]
+- **任务结论**：在账号库与管网项目配置文件中，完成了两个现场主管新账号的注册与对应的标段（需求主体）绑定：
+  1. **账号注册**：在 `账户信息.json` 中配置了 `lot_1` (密码: `lot_1_0714`) 和 `lot_2` (密码: `lot_2_0715`) 两组 site_manager 账户。
+  2. **权限绑定**：在 `tube_config.json` 的负责人映射表 `manager_assignments` 中添加了对应的绑定记录：将用户名 `lot_1` 绑定到需求主体 `lot_1`（标段1），将用户名 `lot_2` 绑定到需求主体 `lot_2`（标段2）。这样这两个账号在登录后，后端鉴权逻辑将自动解析其拥有的数据隔离权限，使其仅能查看并填报各自管辖标段的数据。
+- **改动清单**：
+  - [账户信息.json](file:///D:/编程项目/phoenix/backend_data/shared/auth/%E8%B4%A6%E6%88%B7%E4%BF%A1%E6%81%AF.json)
+  - [tube_config.json](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+
+## 2026-07-14 [取消基准设计量新增行自动预设的设计量与采购量数值]
+- **任务结论**：移除了在基准设计量表格中新增规格行或自动补齐时默认填充的“设计量”和“计划采购量”数值：
+  1. **函数优化**：将 `defaultQtyByPipeModel()` 函数的返回值统一修改为 `null`。
+  2. **实际效果**：在基准量预设新增或补齐规格行时，“设计量(米)”与“计划采购总量(米)”将保持完全空白状态，便于管理员精确录入。
+  3. **编译打包**：运行 `npm run build` 打包完全通过。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-07-14 [取消基准设计量新增行自动预设说明备注]
+- **任务结论**：解决了基准设计量表格中新增规格行或补齐规格时自动生成“演示预设-小口径偏高”等演示备注数据的问题：
+  1. **函数优化**：将 `defaultRemarkByPipeModel()` 函数的返回值统一修改为空字符串 `''`。
+  2. **实际效果**：在基准量预设新增或补齐规格行时，说明备注列将保持干净的空白，不再默认填充任何演示干扰文本。
+  3. **编译打包**：运行 `npm run build` 打包完全通过。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-07-14 [修复基准预设管线设计量失焦自动刷新覆盖脏数据与规格重复录入 Bug]
+- **任务结论**：完成了对“需求主体管线基准设计量”模块的两大交互设计纠偏与体验优化：
+  1. **彻底解决失焦被动刷新覆盖未保存脏数据问题**：从 `GlobalManagementView.vue` 中移除了 `useTubeRealtimeRefresh(loadConfig)` 挂载。使全局配置后台脱离“窗口聚焦/失焦重新拉取并强制覆盖内存配置”的自动刷新逻辑，完美保护了用户未保存的配置修改。
+  2. **下拉选项已选型号禁用机制**：重构了管材型号基准下拉渲染 `<option>` 的禁用逻辑。配置了 `:disabled="filteredBaselinePresets.some(preset => preset.pipe_model_id === model.pipe_model_id && preset !== item)"` 动态计算。除当前行外，任何已存在于表格中的保温管规格均会在下拉菜单中置灰禁用，杜绝了重复添加规格的问题。
+  3. **新增行初始未用型号智能分配**：优化了 `addBaselinePreset()` 函数。新增规格行时，系统通过计算 `usedModelIds` 集合自动寻址并初始默认选中第一个尚未录入的管材规格，防止新增时带出已被禁用的重复型号导致体验受损。
+  4. **编译验证通过**：运行 `npm run build` 打包无任何错误。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-07-14 [修复全局管理各配置表格输入时浏览器频繁失焦的体验 Bug]
+- **任务结论**：解决了在全局管理（`GlobalManagementView.vue`）配置卡片内，管理员在各配置输入框中输入任何字符都会导致输入框频繁失去焦点（失焦）的问题：
+  1. **排查定位**：发现在 `tr` 列表渲染 `v-for` 的 `:key` 绑定中使用了拼接了双向绑定字段的动态键（如 `:key="`${item.section_1_id || 'new'}-${index}`"`）。一旦 input 修改了 ID 属性，列表行的 key 瞬间改变，Vue 触发虚拟 DOM diff 重绘并销毁重建了该行 DOM，导致浏览器焦点丢失。
+  2. **代码优化**：将 `demandEntities`、`supplyEntities`、`pipeModels`、`productionCapacities`、`managerAssignments` 和 `constructionUnits` 六大可编辑配置表格行的 `:key` 绑定均统一优化为索引值 `index`（或基于只读索引）。
+  3. **效果验证**：由于 index 只与行所在数组中的下标有关，不受任何输入内容影响，Vue 内部仅会进行局部 input 元素的 value 乐观更新而不再销毁重建 DOM，彻底保障了输入焦点的不丢失与丝滑输入体验。
+  4. **构建运行**：本地运行 `npm run build` 打包测试完全通过。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-07-14 [全局管理页面清理冗余“施工管理维度设置”卡片]
+- **任务结论**：在前端“需求主体”文案物理硬写、多维度自适应重构闭环后，从全局管理页面中彻底清理掉了已无实际效用的“施工管理维度设置”控制卡片及相关冗余代码：
+  1. **UI 元素清理**：移除了 `GlobalManagementView.vue` 界面中的模式切换控制区域；
+  2. **状态与函数清理**：删除了 `selectedManagementMode` 状态 ref 变量及负责向后端写回配置的 `saveManagementMode` 方法；
+  3. **数据初始化精简**：清理了 `applyConfig` 初始化中对 `management_mode` 值的绑定，完成了代码库的清洁去杂；
+  4. **编译验证通过**：运行 `npm run build` 顺利通过构建。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-07-14 [保温管供应管理通用施工组织维度重构 · 前端视图全面闭环]
+- **任务结论**：全面完成了保温管供应管理系统（`insulation_pipe_supply_2026`）的前端视图（发车登记、到货与消耗、库管台账、全局管理）和 API 层的 `station_id` / `station_name` 重构及去业务文案硬编码写死工作，确保前端与重构后的后端 API 契约和配置文件保持绝对一致：
+  1. **到货与消耗填报页 (DemandManagementView.vue)**：顶部过滤器及 label 完全物理硬编码写死为“需求主体”；将 `loadOptions` 及后端请求/提交接口中的 payload 键名完全由 `station_id` 正名为了 `section_1_id`。
+  2. **发车登记页 (SupplyManagementView.vue)**：将装车接收选择器的 label 硬编码写死为“需求主体”，选项绑定正名为了 `st.section_1_id` / `st.section_1_name`；重构了辅助 computed 和 filter 分组过滤逻辑。
+  3. **库管端台账页 (WarehouseManagementView.vue)**：筛选过滤网格与表头文案物理硬编码写死为“需求主体”；将过滤器的 checkbox 循环键值及初始化映射 `displaySelectedStations` 全面正名为 `section_1_id` / `section_1_name`；将导出列的 key 由原本错误的 `station_name` 变更为 `section_1_name`，完美对齐了后端返回数据对象的属性定义。
+  4. **管理员全局控制台 (GlobalManagementView.vue)**：审计卡片、基础台账卡片、负责人及施工方映射卡片、历史数据查询卡片与表格的静态文案全部硬写为“需求主体”；对新增、加载、同步修改、删除映射时的 payload 序列化字段进行了全面字段正名，完美对齐了 `tube_config.json` 的去业务化物理键名；
+  5. **API 请求层 (api.js)**：将 `getTubeSupplyManagementDeliveries`、`getTubeWarehouseManagementDeliveries`、`getTubeHistoryData`、`exportTubeHistoryData` 中的查询参数 `station_id` 物理重命名为 `section_1_id`，打通了前后端真实字段传输。
+  6. **本地验证通过**：在本地运行 `npm run build` 顺利通过构建，未产生任何类型或文件引用错误，前端重构方案完整就绪。
+- **改动清单**：
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - [api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+
+## 2026-07-14 [保温管标段模式演示工区数据预设完成]
+- **任务结论**：在 `tube_config.json` 配置文件中采用增量方案追加了“标段1”和“标段2”两个独立的演示工区（保留换热站A/B/C/D配置以供随时切回）：
+  1. **工区预设**：新增 `section_1` (标段1) 和 `section_2` (标段2)，区域字段留空。
+  2. **负责人与单位关联**：在管理员及施工方的 `station_ids` 中将标段 1 关联给负责人A、施工方A，标段 2 关联给负责人B、施工方B。
+  3. **初始基准量设计**：为标段1配置了 φ1120 和 φ377 各 500 米基准，为标段2配置了 φ1120 和 φ377 各 400 米基准，以便即刻开展计划上报与物流闭环测试。
+  4. **默认模式更新**：将默认 `management_mode` 修改为 `"section"`（标段模式）。
+- **改动清单**：
+  - [tube_config.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) (在 demand_entities, manager_assignments, construction_units 和 baseline_presets 字段中追加演示数据，并将 management_mode 修改为 section)
+
 ## 2026-07-14 [保温管最小施工管理单元（换热站 vs 标段）动态切换功能上线]
 - **任务结论**：成功实现了 `insulation_pipe_supply_2026` 项目中最小施工管理单元由“换热站模式”一键动态切换至“标段模式”的非侵入式自适应功能：
   1. **配置段扩展（管理模式定义）**：在 `tube_config.json` 及后端 API 白名单中增加了对 `management_mode` 的配置与修改支持，通过 `/workspace/config-summary` 吐给前端。

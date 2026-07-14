@@ -29,10 +29,10 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     get_config_list,
     get_usage_collection_date,
     load_tube_config,
-    load_station_submission_status,
+    load_section_1_submission_status,
     resolve_accessible_supply_entity_ids,
-    resolve_accessible_station_ids,
-    save_station_submission_status,
+    resolve_accessible_section_1_ids,
+    save_section_1_submission_status,
     save_tube_config,
 )
 from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import (
@@ -147,7 +147,7 @@ class DemandPlanRecordInput(BaseModel):
 
 
 class DemandPlanSavePayload(BaseModel):
-    station_id: str
+    section_1_id: str
     records: List[DemandPlanRecordInput] = []
 
 
@@ -159,13 +159,13 @@ class DemandUsageRecordInput(BaseModel):
 
 
 class DemandUsageSavePayload(BaseModel):
-    station_id: str
+    section_1_id: str
     usage_date: date
     records: List[DemandUsageRecordInput] = []
 
 
 class DemandStationSubmissionPayload(BaseModel):
-    station_id: str
+    section_1_id: str
     remark: str = ""
 
 
@@ -188,7 +188,7 @@ class WeatherImportPayload(BaseModel):
 
 class SupplyDeliveryCreatePayload(BaseModel):
     supply_entity_id: str
-    station_id: str
+    section_1_id: str
     pipe_model_id: str
     shipped_qty: float = Field(ge=0.01)
     shipped_at: datetime
@@ -200,7 +200,7 @@ class SupplyDeliveryCreatePayload(BaseModel):
 
 
 class SupplyDeliveryBatchItemInput(BaseModel):
-    station_id: str
+    section_1_id: str
     pipe_model_id: str
     shipped_qty: float = Field(ge=0.01)
     ship_remark: str = ""
@@ -221,7 +221,7 @@ class SupplyDeliveryCancelPayload(BaseModel):
 
 
 class SuperUpdateDeliveryPayload(BaseModel):
-    station_id: str
+    section_1_id: str
     pipe_model_id: str
     shipped_qty: float = Field(ge=0.01)
     shipped_at: datetime
@@ -267,24 +267,24 @@ def _normalize_pipe_model_id(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
-def _build_station_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
+def _build_section_1_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
     result: Dict[str, str] = {}
     for item in get_config_list(payload, "demand_entities"):
-        station_id = str(item.get("station_id") or "").strip()
-        if not station_id:
+        section_1_id = str(item.get("section_1_id") or "").strip()
+        if not section_1_id:
             continue
-        result[station_id] = str(item.get("station_name") or station_id)
+        result[section_1_id] = str(item.get("section_1_name") or section_1_id)
     return result
 
 
-def _build_station_code_map(payload: Dict[str, Any]) -> Dict[str, str]:
+def _build_section_1_code_map(payload: Dict[str, Any]) -> Dict[str, str]:
     result: Dict[str, str] = {}
     for index, item in enumerate(get_config_list(payload, "demand_entities")):
-        station_id = str(item.get("station_id") or "").strip()
-        if not station_id:
+        section_1_id = str(item.get("section_1_id") or "").strip()
+        if not section_1_id:
             continue
         explicit_code = str(item.get("code") or "").strip().upper()
-        result[station_id] = explicit_code or _index_to_letters(index)
+        result[section_1_id] = explicit_code or _index_to_letters(index)
     return result
 
 
@@ -384,12 +384,12 @@ def _ensure_warehouse_access(session: AuthSession) -> None:
         raise HTTPException(status_code=403, detail="当前账号无库管页面访问权限")
 
 
-def _build_baseline_preset_map(payload: Dict[str, Any], station_id: str) -> Dict[str, Dict[str, Any]]:
+def _build_baseline_preset_map(payload: Dict[str, Any], section_1_id: str) -> Dict[str, Dict[str, Any]]:
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "baseline_presets"):
-        normalized_station_id = str(item.get("station_id") or "").strip()
+        normalized_section_1_id = str(item.get("section_1_id") or "").strip()
         pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
-        if normalized_station_id != station_id or not pipe_model_id:
+        if normalized_section_1_id != section_1_id or not pipe_model_id:
             continue
         result[pipe_model_id] = {
             "design_qty": item.get("design_qty"),
@@ -455,27 +455,27 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     return payload
 
 
-def _ensure_station_access(station_id: str, accessible_station_ids: set[str]) -> None:
-    normalized_station_id = str(station_id or "").strip()
-    if not normalized_station_id:
-        raise HTTPException(status_code=422, detail="station_id 不能为空")
-    if normalized_station_id not in accessible_station_ids:
-        raise HTTPException(status_code=403, detail=f"当前账号无换热站 {normalized_station_id} 的访问权限")
+def _ensure_section_1_access(section_1_id: str, accessible_section_1_ids: set[str]) -> None:
+    normalized_section_1_id = str(section_1_id or "").strip()
+    if not normalized_section_1_id:
+        raise HTTPException(status_code=422, detail="section_1_id 不能为空")
+    if normalized_section_1_id not in accessible_section_1_ids:
+        raise HTTPException(status_code=403, detail=f"当前账号无需求主体 {normalized_section_1_id} 的访问权限")
 
 
-def _serialize_station_options(payload: Dict[str, Any], accessible_station_ids: set[str]) -> List[Dict[str, Any]]:
+def _serialize_section_1_options(payload: Dict[str, Any], accessible_section_1_ids: set[str]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for item in get_config_list(payload, "demand_entities"):
-        station_id = str(item.get("station_id") or "").strip()
-        if not station_id or station_id not in accessible_station_ids:
+        section_1_id = str(item.get("section_1_id") or "").strip()
+        if not section_1_id or section_1_id not in accessible_section_1_ids:
             continue
         rows.append(
             {
-                "station_id": station_id,
+                "section_1_id": section_1_id,
                 "code": str(item.get("code") or "").strip().upper(),
-                "station_name": item.get("station_name") or station_id,
-                "region": item.get("region") or "",
-                "section": item.get("section") or "",
+                "section_1_name": item.get("section_1_name") or section_1_id,
+                "section_2": item.get("section_2") or "",
+                "section_3": item.get("section_3") or "",
                 "construction_status": item.get("construction_status") or "",
             }
         )
@@ -489,8 +489,8 @@ def _normalize_submission_rows(rows: Any) -> List[Dict[str, Any]]:
     for item in rows:
         if not isinstance(item, dict):
             continue
-        station_id = str(item.get("station_id") or "").strip()
-        if not station_id:
+        section_1_id = str(item.get("section_1_id") or "").strip()
+        if not section_1_id:
             continue
         normalized_rows.append(dict(item))
     return normalized_rows
@@ -552,8 +552,8 @@ def _serialize_all_supply_entity_options(payload: Dict[str, Any]) -> List[Dict[s
 
 
 def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]]) -> None:
-    station_name_map = _build_station_name_map(payload)
-    station_code_map = _build_station_code_map(payload)
+    section_1_name_map = _build_section_1_name_map(payload)
+    section_1_code_map = _build_section_1_code_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     supply_entity_map = _build_supply_entity_map(payload)
     supply_entity_code_map = _build_supply_entity_code_map(payload)
@@ -561,12 +561,12 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
         shipped_at_value = datetime.fromisoformat(row["shipped_at"]) if row.get("shipped_at") else None
         arrived_confirm_at_value = datetime.fromisoformat(row["arrived_confirm_at"]) if row.get("arrived_confirm_at") else None
         supply_code = supply_entity_code_map.get(row["supply_entity_id"], "")
-        station_code = station_code_map.get(row["station_id"], "")
+        section_1_code = section_1_code_map.get(row["section_1_id"], "")
         row["order_no"] = row.get("order_no") or build_order_no(
             row["id"],
             shipped_at=shipped_at_value,
             supply_code=supply_code,
-            station_code=station_code,
+            station_code=section_1_code,
         )
         row["shipment_no"] = row.get("shipment_no") or build_shipment_no(
             row["id"],
@@ -581,7 +581,7 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
                 shipped_at_value,
                 arrived_confirm_at=arrived_confirm_at_value,
             )
-        row["station_name"] = station_name_map.get(row["station_id"], row["station_id"])
+        row["section_1_name"] = section_1_name_map.get(row["section_1_id"], row["section_1_id"])
         row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
         row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
 
@@ -626,7 +626,7 @@ def _create_supply_delivery_entry(
     config_payload: Dict[str, Any],
     session: AuthSession,
     supply_entity_id: str,
-    station_id: str,
+    section_1_id: str,
     pipe_model_id: str,
     shipped_qty: float,
     shipped_at: datetime,
@@ -637,15 +637,15 @@ def _create_supply_delivery_entry(
     requested_shipment_no: str = "",
 ) -> Dict[str, Any]:
     supply_entity_code_map = _build_supply_entity_code_map(config_payload)
-    station_code_map = _build_station_code_map(config_payload)
+    section_1_code_map = _build_section_1_code_map(config_payload)
     supply_code = supply_entity_code_map.get(supply_entity_id, "")
-    station_code = station_code_map.get(station_id, "")
+    section_1_code = section_1_code_map.get(section_1_id, "")
     delivery_id = create_delivery_record(
         supply_entity_id=supply_entity_id,
         order_no="",
         shipment_no="",
         vehicle_plate_no="",
-        station_id=station_id,
+        section_1_id=section_1_id,
         pipe_model_id=pipe_model_id,
         shipped_qty=shipped_qty,
         shipped_at=shipped_at,
@@ -662,7 +662,7 @@ def _create_supply_delivery_entry(
         next_order_sequence,
         shipped_at=shipped_at,
         supply_code=supply_code,
-        station_code=station_code,
+        station_code=section_1_code,
     )
     shipment_no, shipment_reused, resolved_vehicle_plate_no = _resolve_shipment_no_for_create(
         requested_shipment_no=requested_shipment_no,
@@ -748,7 +748,7 @@ def get_demand_management_options(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
     show_date = get_configured_show_date(payload)
     plan_start_date = get_configured_plan_start_date(payload)
     usage_collection_date = get_usage_collection_date(payload)
@@ -763,7 +763,7 @@ def get_demand_management_options(
             "group": session.group,
             "unit": session.unit,
         },
-        "stations": _serialize_station_options(payload, accessible_station_ids),
+        "stations": _serialize_section_1_options(payload, accessible_section_1_ids),
         "supply_entities": supply_entities,
         "pipe_models": _serialize_pipe_options(payload),
         "show_date": show_date.isoformat(),
@@ -788,7 +788,7 @@ def get_supply_management_options(
             "unit": session.unit,
         },
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
-        "stations": _serialize_station_options(payload, _build_station_name_map(payload).keys()),
+        "stations": _serialize_section_1_options(payload, _build_section_1_name_map(payload).keys()),
         "pipe_models": _serialize_pipe_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
@@ -799,7 +799,7 @@ def get_supply_management_demand_summary(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    station_name_map = _build_station_name_map(payload)
+    section_1_name_map = _build_section_1_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     show_date = get_configured_show_date(payload)
     plan_dates = build_plan_dates(show_date)
@@ -809,14 +809,14 @@ def get_supply_management_demand_summary(
     usage_total_map = list_usage_totals(show_date.isoformat())
 
     rows: List[Dict[str, Any]] = []
-    for station in get_config_list(payload, "demand_entities"):
-        station_id = str(station.get("station_id") or "").strip()
-        if not station_id:
+    for section_1 in get_config_list(payload, "demand_entities"):
+        section_1_id = str(section_1.get("section_1_id") or "").strip()
+        if not section_1_id:
             continue
-        station_baseline_preset_map = _build_baseline_preset_map(payload, station_id)
+        section_1_baseline_preset_map = _build_baseline_preset_map(payload, section_1_id)
         for pipe_model_id, pipe_model in pipe_model_map.items():
-            key = f"{station_id}::{pipe_model_id}"
-            baseline_row = station_baseline_preset_map.get(pipe_model_id) or {}
+            key = f"{section_1_id}::{pipe_model_id}"
+            baseline_row = section_1_baseline_preset_map.get(pipe_model_id) or {}
             plan_total_qty = float(plan_total_map.get(key, 0) or 0)
             delivery_aggregate = delivery_aggregate_map.get(key) or {}
             arrival_aggregate = arrival_aggregate_map.get(key) or {}
@@ -829,11 +829,11 @@ def get_supply_management_demand_summary(
             total_arrived_qty = float(arrival_aggregate.get("total_arrived_qty", 0) or 0)
             total_usage_qty = float(usage_aggregate.get("total_usage_qty", 0) or 0)
             total_loss_qty = float(usage_aggregate.get("total_loss_qty", 0) or 0)
-            station_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
+            section_1_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
             inbound_pipeline_qty = pending_arrival_qty
-            net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - station_inventory_qty, 0)
+            net_gap_qty = max(plan_total_qty - inbound_pipeline_qty - section_1_inventory_qty, 0)
             # 统一硬缺口计算：未来三日计划 - 现场库存（由于使用量已做硬性强拦截校验，正常业务下库存永不为负；若异常负值发生，硬缺口将真实包含历史亏空补齐）
-            hard_gap_qty = max(plan_total_qty - station_inventory_qty, 0.0)
+            hard_gap_qty = max(plan_total_qty - section_1_inventory_qty, 0.0)
             design_qty = float(baseline_row.get("design_qty", 0) or 0)
             purchase_plan_qty = float(baseline_row.get("purchase_plan_qty", 0) or 0)
             if (
@@ -841,15 +841,15 @@ def get_supply_management_demand_summary(
                 and purchase_plan_qty <= 0
                 and plan_total_qty <= 0
                 and inbound_pipeline_qty <= 0
-                and station_inventory_qty <= 0
+                and section_1_inventory_qty <= 0
                 and completed_qty <= 0
                 and total_shipped_qty <= 0
             ):
                 continue
             rows.append(
                 {
-                    "station_id": station_id,
-                    "station_name": station_name_map.get(station_id, station_id),
+                    "section_1_id": section_1_id,
+                    "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
                     "pipe_model_id": pipe_model_id,
                     "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
                     "unit": pipe_model.get("unit") or "",
@@ -864,7 +864,7 @@ def get_supply_management_demand_summary(
                     "total_arrived_qty": total_arrived_qty,
                     "total_usage_qty": total_usage_qty,
                     "total_loss_qty": total_loss_qty,
-                    "station_inventory_qty": station_inventory_qty,
+                    "section_1_inventory_qty": section_1_inventory_qty,
                     "inbound_pipeline_qty": inbound_pipeline_qty,
                     "net_gap_qty": net_gap_qty,
                     "hard_gap_qty": hard_gap_qty,
@@ -904,28 +904,28 @@ def get_supply_management_demand_summary(
     otd = round((on_time_count / completed_deliveries_count) * 100, 1) if completed_deliveries_count > 0 else 0.0
 
     # 2. 从已生成的 rows 中计算剩下的指标 (DOI, PCR, UCR, SSR)
-    total_inv = sum(row["station_inventory_qty"] for row in rows)
+    total_inv = sum(row["section_1_inventory_qty"] for row in rows)
     total_future_plan = sum(row["future_plan_qty"] for row in rows)
     daily_consume_plan = total_future_plan / 3.0 if total_future_plan > 0 else 0.0
     total_usage = sum(row["total_usage_qty"] for row in rows)
     total_arrived = sum(row["total_arrived_qty"] for row in rows)
 
     # 活跃工区：设计量大于0的站点的唯一集合
-    active_stations = {row["station_id"] for row in rows if row["design_qty"] > 0}
+    active_section_1s = {row["section_1_id"] for row in rows if row["design_qty"] > 0}
     # 提报计划工区：未来计划大于0的站点的唯一集合
-    stations_with_plan = {row["station_id"] for row in rows if row["future_plan_qty"] > 0}
-    submitted_station_count = len(stations_with_plan.intersection(active_stations))
+    section_1s_with_plan = {row["section_1_id"] for row in rows if row["future_plan_qty"] > 0}
+    submitted_section_1_count = len(section_1s_with_plan.intersection(active_section_1s))
     
     # 物理断料工区：硬缺口大于0的站点的唯一集合
-    gap_stations = {row["station_id"] for row in rows if row["hard_gap_qty"] > 0}
-    safe_station_count = len(active_stations - gap_stations)
+    gap_section_1s = {row["section_1_id"] for row in rows if row["hard_gap_qty"] > 0}
+    safe_section_1_count = len(active_section_1s - gap_section_1s)
 
     # 核心指标计算
     doi = round(total_inv / daily_consume_plan, 1) if daily_consume_plan > 0 else 0.0
     doi_score = round(min(100.0, max(0.0, 100.0 - max(doi - 3.2, 0.0) * 10.0)), 1) if daily_consume_plan > 0 else 0.0
-    pcr = round((submitted_station_count / len(active_stations)) * 100, 1) if len(active_stations) > 0 else 0.0
+    pcr = round((submitted_section_1_count / len(active_section_1s)) * 100, 1) if len(active_section_1s) > 0 else 0.0
     ucr = round((total_usage / total_arrived) * 100, 1) if total_arrived > 0 else 0.0
-    ssr = round((safe_station_count / len(active_stations)) * 100, 1) if len(active_stations) > 0 else 0.0
+    ssr = round((safe_section_1_count / len(active_section_1s)) * 100, 1) if len(active_section_1s) > 0 else 0.0
 
     metrics = {
         "otd": otd,
@@ -939,18 +939,18 @@ def get_supply_management_demand_summary(
         "totalFuturePlan": total_future_plan,
         
         "pcr": pcr,
-        "submittedStationCount": submitted_station_count,
-        "activeStationsCount": len(active_stations),
+        "submittedStationCount": submitted_section_1_count,
+        "activeStationsCount": len(active_section_1s),
         
         "ucr": ucr,
         "totalUsage": total_usage,
         "totalArrived": total_arrived,
         
         "ssr": ssr,
-        "safeStationCount": safe_station_count
+        "safeStationCount": safe_section_1_count
     }
 
-    rows.sort(key=lambda item: (item["station_id"], item["pipe_model_id"]))
+    rows.sort(key=lambda item: (item["section_1_id"], item["pipe_model_id"]))
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -962,7 +962,7 @@ def get_supply_management_demand_summary(
 
 @router.get("/supply-management/deliveries", summary="读取供给侧发货记录")
 def get_supply_management_deliveries(
-    station_id: str = "",
+    section_1_id: str = "",
     status: str = "",
     supply_entity_id: str = "",
     session: AuthSession = Depends(get_current_session),
@@ -982,7 +982,7 @@ def get_supply_management_deliveries(
 
     rows = list_delivery_records(
         supply_entity_ids=target_supply_entity_ids,
-        station_id=station_id,
+        section_1_id=section_1_id,
         status=status,
     )
     _decorate_delivery_rows(payload, rows)
@@ -1004,7 +1004,7 @@ def create_supply_management_delivery(
         config_payload=config_payload,
         session=session,
         supply_entity_id=payload.supply_entity_id,
-        station_id=payload.station_id,
+        section_1_id=payload.section_1_id,
         pipe_model_id=payload.pipe_model_id,
         shipped_qty=payload.shipped_qty,
         shipped_at=payload.shipped_at,
@@ -1029,7 +1029,7 @@ def create_supply_management_delivery(
             "shipment_no": created["shipment_no"],
             "vehicle_plate_no": created["vehicle_plate_no"],
             "supply_entity_id": payload.supply_entity_id,
-            "station_id": payload.station_id,
+            "section_1_id": payload.section_1_id,
             "pipe_model_id": payload.pipe_model_id,
             "shipped_qty": payload.shipped_qty,
             "shipped_at": payload.shipped_at.isoformat() if payload.shipped_at else None,
@@ -1068,7 +1068,7 @@ def create_supply_management_delivery_batch(
             config_payload=config_payload,
             session=session,
             supply_entity_id=payload.supply_entity_id,
-            station_id=item.station_id,
+            section_1_id=item.section_1_id,
             pipe_model_id=item.pipe_model_id,
             shipped_qty=item.shipped_qty,
             shipped_at=payload.shipped_at,
@@ -1096,7 +1096,7 @@ def create_supply_management_delivery_batch(
                 "shipment_no": created["shipment_no"],
                 "vehicle_plate_no": payload.vehicle_plate_no,
                 "supply_entity_id": payload.supply_entity_id,
-                "station_id": item.station_id,
+                "section_1_id": item.section_1_id,
                 "pipe_model_id": item.pipe_model_id,
                 "shipped_qty": item.shipped_qty,
                 "shipped_at": payload.shipped_at.isoformat() if payload.shipped_at else None,
@@ -1167,7 +1167,7 @@ def super_update_supply_management_delivery(
     
     super_update_delivery_record(
         delivery_id=delivery_id,
-        station_id=payload.station_id,
+        section_1_id=payload.section_1_id,
         pipe_model_id=payload.pipe_model_id,
         shipped_qty=payload.shipped_qty,
         shipped_at=payload.shipped_at,
@@ -1218,7 +1218,7 @@ def get_warehouse_management_options(
             "group": session.group,
             "unit": session.unit,
         },
-        "stations": _serialize_station_options(payload, set(_build_station_name_map(payload).keys())),
+        "stations": _serialize_section_1_options(payload, set(_build_section_1_name_map(payload).keys())),
         "pipe_models": _serialize_pipe_options(payload),
         "supply_entities": _serialize_all_supply_entity_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
@@ -1235,7 +1235,7 @@ def get_warehouse_management_options(
 
 @router.get("/warehouse-management/deliveries", summary="读取库管页发货记录")
 def get_warehouse_management_deliveries(
-    station_id: str = "",
+    section_1_id: str = "",
     status: str = "",
     supply_entity_id: str = "",
     pipe_model_id: str = "",
@@ -1249,7 +1249,7 @@ def get_warehouse_management_deliveries(
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
     
     # 逗号分隔解析多选值
-    selected_stations = {s.strip() for s in station_id.split(",") if s.strip()} if station_id else set()
+    selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
     selected_statuses = {s.strip() for s in status.split(",") if s.strip()} if status else set()
     selected_supply_entities = {s.strip() for s in supply_entity_id.split(",") if s.strip()} if supply_entity_id else set()
     selected_pipe_models = {_normalize_pipe_model_id(s) for s in pipe_model_id.split(",") if s.strip()} if pipe_model_id else set()
@@ -1257,7 +1257,7 @@ def get_warehouse_management_deliveries(
     # 在 SQL 层面，我们不传入单选 station_id 和 status，以便我们在 Python 内存中对大盘记录直接做高性能多选集合检索
     rows = list_delivery_records(
         supply_entity_ids=all_supply_entity_ids,
-        station_id="",
+        section_1_id="",
         status="",
     )
     _decorate_delivery_rows(payload, rows)
@@ -1272,7 +1272,7 @@ def get_warehouse_management_deliveries(
             continue
         if selected_pipe_models and _normalize_pipe_model_id(row["pipe_model_id"]) not in selected_pipe_models:
             continue
-        if selected_stations and row["station_id"] not in selected_stations:
+        if selected_section_1s and row["section_1_id"] not in selected_section_1s:
             continue
         if selected_statuses and row["status"] not in selected_statuses:
             continue
@@ -1317,16 +1317,16 @@ def confirm_warehouse_delivery_warehouse(
 
 @router.get("/demand-management/baseline", summary="读取需求侧基准数据")
 def get_demand_management_baseline(
-    station_id: str,
+    section_1_id: str,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    _ensure_station_access(station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
-    station_name_map = _build_station_name_map(payload)
+    section_1_name_map = _build_section_1_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
-    baseline_preset_map = _build_baseline_preset_map(payload, station_id)
+    baseline_preset_map = _build_baseline_preset_map(payload, section_1_id)
 
     rows: List[Dict[str, Any]] = []
     for pipe_model_id, pipe_model in pipe_model_map.items():
@@ -1346,8 +1346,8 @@ def get_demand_management_baseline(
         "ok": True,
         "project_key": PROJECT_KEY,
         "station": {
-            "station_id": station_id,
-            "station_name": station_name_map.get(station_id, station_id),
+            "section_1_id": section_1_id,
+            "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
         },
         "rows": rows,
     }
@@ -1355,20 +1355,20 @@ def get_demand_management_baseline(
 
 @router.get("/demand-management/plan-matrix", summary="读取需求侧三日计划矩阵")
 def get_demand_management_plan_matrix(
-    station_id: str,
+    section_1_id: str,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    _ensure_station_access(station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
     pipe_model_map = _build_pipe_model_map(payload)
-    matrix = list_plan_records(station_id, plan_dates)
+    matrix = list_plan_records(section_1_id, plan_dates)
     
     strict_planning_flow_control = bool(payload.get("strict_planning_flow_control", True))
     usage_date = get_usage_collection_date(payload)
-    usage_map = list_usage_records(station_id, usage_date)
+    usage_map = list_usage_records(section_1_id, usage_date)
     is_usage_submitted = len(usage_map) > 0
     
     show_date = get_configured_show_date(payload)
@@ -1386,7 +1386,7 @@ def get_demand_management_plan_matrix(
             cell_values[key] = float(record["plan_qty"]) if record and record.get("plan_qty") is not None else 0
             cell_remarks[key] = record.get("remark") if record else ""
             
-        agg_key = f"{station_id}::{pipe_model_id}"
+        agg_key = f"{section_1_id}::{pipe_model_id}"
         delivery_aggregate = delivery_aggregate_map.get(agg_key) or {}
         arrival_aggregate = arrival_aggregate_map.get(agg_key) or {}
         usage_aggregate = usage_total_map.get(agg_key) or {}
@@ -1399,7 +1399,7 @@ def get_demand_management_plan_matrix(
         total_loss_qty = float(usage_aggregate.get("total_loss_qty", 0) or 0)
         
         # 允许库存为负数，真实暴露管理问题，不强制锁死为 0
-        station_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
+        section_1_inventory_qty = total_arrived_qty - total_usage_qty - total_loss_qty
         inbound_pipeline_qty = pending_arrival_qty
         
         rows.append(
@@ -1407,7 +1407,7 @@ def get_demand_management_plan_matrix(
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
                 "unit": pipe_model.get("unit") or "",
-                "station_inventory_qty": station_inventory_qty,
+                "station_inventory_qty": section_1_inventory_qty,
                 "inbound_pipeline_qty": inbound_pipeline_qty,
                 "values": cell_values,
                 "remarks": cell_remarks,
@@ -1418,8 +1418,8 @@ def get_demand_management_plan_matrix(
         "ok": True,
         "project_key": PROJECT_KEY,
         "station": {
-            "station_id": station_id,
-            "station_name": _build_station_name_map(payload).get(station_id, station_id),
+            "section_1_id": section_1_id,
+            "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },
         "plan_dates": [item.isoformat() for item in plan_dates],
         "strict_planning_flow_control": strict_planning_flow_control,
@@ -1435,14 +1435,14 @@ def save_demand_management_plan_matrix(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
-    _ensure_station_access(payload.station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
     # 严格流程顺序锁后台强拦截
     strict_planning_flow_control = bool(config_payload.get("strict_planning_flow_control", True))
     if strict_planning_flow_control:
         usage_date = get_usage_collection_date(config_payload)
-        usage_map = list_usage_records(payload.station_id, usage_date)
+        usage_map = list_usage_records(payload.section_1_id, usage_date)
         if len(usage_map) == 0:
             plan_dates = build_plan_dates(get_configured_plan_start_date(config_payload))
             if len(plan_dates) >= 3:
@@ -1451,12 +1451,12 @@ def save_demand_management_plan_matrix(
                     if rec.plan_date.isoformat() == tail_date_str and rec.plan_qty > 0:
                         raise HTTPException(
                             status_code=400,
-                            detail="🚨 填报被顺序锁阻断：当前换热站前日实际消耗尚未结清上报！请先返回完成消耗上报，再填写并提交第三日计划量。"
+                            detail="🚨 填报被顺序锁阻断：当前前日实际消耗尚未结清上报！请先返回完成消耗上报，再填写并提交第三日计划量。"
                         )
  
     # 获取修改前快照
     plan_dates_list = [item.plan_date for item in payload.records]
-    before_records = list_plan_records(payload.station_id, plan_dates_list)
+    before_records = list_plan_records(payload.section_1_id, plan_dates_list)
     before_serialized = {}
     for k, v in before_records.items():
         before_serialized[k] = {
@@ -1465,13 +1465,13 @@ def save_demand_management_plan_matrix(
         }
  
     saved_count = save_plan_records(
-        station_id=payload.station_id,
+        section_1_id=payload.section_1_id,
         records=[item.model_dump() for item in payload.records],
         operator=session.username,
     )
  
     # 获取修改后快照
-    after_records = list_plan_records(payload.station_id, plan_dates_list)
+    after_records = list_plan_records(payload.section_1_id, plan_dates_list)
     after_serialized = {}
     for k, v in after_records.items():
         after_serialized[k] = {
@@ -1483,8 +1483,8 @@ def save_demand_management_plan_matrix(
         operator=session.username,
         operator_group=session.group,
         action_type="SAVE_PLAN",
-        action_desc=f"更新换热站【{payload.station_id}】三日计划量，共计 {saved_count} 条记录",
-        resource_id=payload.station_id,
+        action_desc=f"更新需求主体【{payload.section_1_id}】三日计划量，共计 {saved_count} 条记录",
+        resource_id=payload.section_1_id,
         before_value=before_serialized,
         after_value=after_serialized,
         client_ip=_get_client_ip(request)
@@ -1493,23 +1493,23 @@ def save_demand_management_plan_matrix(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station_id": payload.station_id,
+        "section_1_id": payload.section_1_id,
         "saved_count": saved_count,
     }
 
 
 @router.get("/demand-management/usage-sheet", summary="读取需求侧实际使用量表")
 def get_demand_management_usage_sheet(
-    station_id: str,
+    section_1_id: str,
     usage_date: date,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    _ensure_station_access(station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
  
     pipe_model_map = _build_pipe_model_map(payload)
-    usage_map = list_usage_records(station_id, usage_date)
+    usage_map = list_usage_records(section_1_id, usage_date)
     rows: List[Dict[str, Any]] = []
     for pipe_model_id, pipe_model in pipe_model_map.items():
         usage = usage_map.get(pipe_model_id) or {}
@@ -1528,8 +1528,8 @@ def get_demand_management_usage_sheet(
         "ok": True,
         "project_key": PROJECT_KEY,
         "station": {
-            "station_id": station_id,
-            "station_name": _build_station_name_map(payload).get(station_id, station_id),
+            "section_1_id": section_1_id,
+            "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },
         "usage_date": usage_date.isoformat(),
         "rows": rows,
@@ -1543,11 +1543,11 @@ def save_demand_management_usage_sheet(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
-    _ensure_station_access(payload.station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
     # 获取修改前快照
-    before_usages = list_usage_records(payload.station_id, payload.usage_date)
+    before_usages = list_usage_records(payload.section_1_id, payload.usage_date)
     before_serialized = {}
     for k, v in before_usages.items():
         before_serialized[k] = {
@@ -1557,14 +1557,14 @@ def save_demand_management_usage_sheet(
         }
  
     saved_count = save_usage_records(
-        station_id=payload.station_id,
+        section_1_id=payload.section_1_id,
         usage_date=payload.usage_date,
         records=[item.model_dump() for item in payload.records],
         operator=session.username,
     )
  
     # 获取修改后快照
-    after_usages = list_usage_records(payload.station_id, payload.usage_date)
+    after_usages = list_usage_records(payload.section_1_id, payload.usage_date)
     after_serialized = {}
     for k, v in after_usages.items():
         after_serialized[k] = {
@@ -1577,8 +1577,8 @@ def save_demand_management_usage_sheet(
         operator=session.username,
         operator_group=session.group,
         action_type="SUBMIT_USAGE",
-        action_desc=f"上报施工使用与损耗量: 换热站【{payload.station_id}】，消耗日期 {payload.usage_date.isoformat()}",
-        resource_id=payload.station_id,
+        action_desc=f"上报施工使用与损耗量: 需求主体【{payload.section_1_id}】，消耗日期 {payload.usage_date.isoformat()}",
+        resource_id=payload.section_1_id,
         before_value=before_serialized,
         after_value=after_serialized,
         client_ip=_get_client_ip(request)
@@ -1587,34 +1587,34 @@ def save_demand_management_usage_sheet(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station_id": payload.station_id,
+        "section_1_id": payload.section_1_id,
         "usage_date": payload.usage_date.isoformat(),
         "saved_count": saved_count,
     }
 
 
-@router.post("/demand-management/submission", summary="提交换热站填报完成状态")
+@router.post("/demand-management/submission", summary="提交填报完成状态")
 def submit_demand_management_station_status(
     payload: DemandStationSubmissionPayload,
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(config_payload, session.username, session.group)
-    _ensure_station_access(payload.station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
-    station_name_map = _build_station_name_map(config_payload)
+    section_1_name_map = _build_section_1_name_map(config_payload)
     plan_start_date = get_configured_plan_start_date(config_payload)
     show_date = get_configured_show_date(config_payload)
     usage_collection_date = get_usage_collection_date(config_payload)
-    current_status = load_station_submission_status()
+    current_status = load_section_1_submission_status()
     latest_submissions = _normalize_submission_rows(current_status.get("latest_submissions"))
     history_submissions = _normalize_submission_rows(current_status.get("history_submissions"))
  
     existing_latest: Optional[Dict[str, Any]] = None
     next_latest_submissions: List[Dict[str, Any]] = []
     for item in latest_submissions:
-        if str(item.get("station_id") or "").strip() == payload.station_id:
+        if str(item.get("section_1_id") or "").strip() == payload.section_1_id:
             existing_latest = item
             continue
         next_latest_submissions.append(item)
@@ -1623,8 +1623,8 @@ def submit_demand_management_station_status(
         history_submissions.insert(0, existing_latest)
  
     submission_record = {
-        "station_id": payload.station_id,
-        "station_name": station_name_map.get(payload.station_id, payload.station_id),
+        "section_1_id": payload.section_1_id,
+        "section_1_name": section_1_name_map.get(payload.section_1_id, payload.section_1_id),
         "data_submit_date": plan_start_date.isoformat(),
         "plan_start_date": plan_start_date.isoformat(),
         "show_date": show_date.isoformat(),
@@ -1635,9 +1635,9 @@ def submit_demand_management_station_status(
         "remark": payload.remark or "",
     }
     next_latest_submissions.append(submission_record)
-    next_latest_submissions.sort(key=lambda item: str(item.get("station_id") or ""))
+    next_latest_submissions.sort(key=lambda item: str(item.get("section_1_id") or ""))
  
-    save_station_submission_status(
+    save_section_1_submission_status(
         {
             "latest_submissions": next_latest_submissions,
             "history_submissions": history_submissions,
@@ -1648,8 +1648,8 @@ def submit_demand_management_station_status(
         operator=session.username,
         operator_group=session.group,
         action_type="SUBMIT_STATUS",
-        action_desc=f"确认提交换热站填报状态: 换热站【{payload.station_id}】，计划启用日期 {plan_start_date.isoformat()}，实际消耗日期 {usage_collection_date.isoformat()}",
-        resource_id=payload.station_id,
+        action_desc=f"确认提交填报完成状态: 需求主体【{payload.section_1_id}】，计划启用日期 {plan_start_date.isoformat()}，实际消耗日期 {usage_collection_date.isoformat()}",
+        resource_id=payload.section_1_id,
         before_value=existing_latest,
         after_value=submission_record,
         client_ip=_get_client_ip(request)
@@ -1658,7 +1658,7 @@ def submit_demand_management_station_status(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station_id": payload.station_id,
+        "section_1_id": payload.section_1_id,
         "submission": submission_record,
         "latest_submission_count": len(next_latest_submissions),
         "history_submission_count": len(history_submissions),
@@ -1667,22 +1667,22 @@ def submit_demand_management_station_status(
 
 @router.get("/demand-management/pending-arrivals", summary="读取待确认到货记录")
 def get_demand_management_pending_arrivals(
-    station_id: str,
+    section_1_id: str,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    _ensure_station_access(station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
-    rows = list_pending_arrivals(station_id)
+    rows = list_pending_arrivals(section_1_id)
     _decorate_delivery_rows(payload, rows)
-    station_name_map = _build_station_name_map(payload)
+    section_1_name_map = _build_section_1_name_map(payload)
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
         "station": {
-            "station_id": station_id,
-            "station_name": station_name_map.get(station_id, station_id),
+            "section_1_id": section_1_id,
+            "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
         },
         "rows": rows,
     }
@@ -1690,7 +1690,7 @@ def get_demand_management_pending_arrivals(
 
 @router.get("/demand-management/logistics-records", summary="读取需求侧物流确认记录")
 def get_demand_management_logistics_records(
-    station_id: str,
+    section_1_id: str,
     order_no: str = "",
     shipment_no: str = "",
     pipe_model_id: str = "",
@@ -1699,20 +1699,20 @@ def get_demand_management_logistics_records(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_station_ids = resolve_accessible_station_ids(payload, session.username, session.group)
-    _ensure_station_access(station_id, accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
     rows = list_delivery_records(
         supply_entity_ids=all_supply_entity_ids,
-        station_id=station_id,
+        section_1_id=section_1_id,
         status="",
     )
     _decorate_delivery_rows(payload, rows)
     filtered_rows = [
         row
         for row in rows
-        if row.get("station_id") == station_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve"}
+        if row.get("section_1_id") == section_1_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve"}
     ]
     normalized_order_no = str(order_no or "").strip().upper()
     normalized_shipment_no = str(shipment_no or "").strip().upper()
@@ -1745,8 +1745,8 @@ def get_demand_management_logistics_records(
         "ok": True,
         "project_key": PROJECT_KEY,
         "station": {
-            "station_id": station_id,
-            "station_name": _build_station_name_map(payload).get(station_id, station_id),
+            "section_1_id": section_1_id,
+            "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },
         "rows": filtered_rows,
     }
@@ -1775,8 +1775,8 @@ def confirm_demand_management_delivery_arrival(
     delivery = get_delivery_record_basic(delivery_id)
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
-    accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
-    _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     before_val = _to_json_serializable(delivery)
     
@@ -1814,8 +1814,8 @@ def confirm_demand_management_delivery_receipt(
     delivery = get_delivery_record_basic(delivery_id)
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
-    accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
-    _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     before_val = _to_json_serializable(delivery)
     
@@ -1860,8 +1860,8 @@ def approve_delivery_difference(
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
         
-    accessible_station_ids = resolve_accessible_station_ids(load_tube_config(), session.username, session.group)
-    _ensure_station_access(delivery["station_id"], accessible_station_ids)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     if delivery["status"] != 'pending_diff_approve':
         raise HTTPException(status_code=422, detail="该发货单不需要进行差异审批或已被审批")
@@ -1944,7 +1944,7 @@ def get_global_management_config(
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
     payload = load_tube_config()
-    submission_status = load_station_submission_status()
+    submission_status = load_section_1_submission_status()
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -2187,7 +2187,7 @@ def export_global_management_operation_logs(
 def get_global_management_history(
     start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
-    station_id: Optional[str] = Query(None, description="换热站ID"),
+    section_1_id: Optional[str] = Query(None, description="需求主体ID"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     group_lower = str(session.group or "").strip().lower()
@@ -2201,16 +2201,16 @@ def get_global_management_history(
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
     # 获取原始合并历史数据
-    rows = query_history_records(start_date=dt_start, end_date=dt_end, station_id=station_id)
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=section_1_id)
     
     # 载入配置以映射中文名
     config = load_tube_config()
     
     # 建立映射字典
-    station_map = {
-        item.get("station_id"): item.get("station_name")
+    section_1_map = {
+        item.get("section_1_id"): item.get("section_1_name")
         for item in config.get("demand_entities", [])
-        if item.get("station_id")
+        if item.get("section_1_id")
     }
     pipe_map = {
         item.get("pipe_model_id"): item.get("pipe_model_name")
@@ -2220,7 +2220,7 @@ def get_global_management_history(
     
     # 补充中文名
     for row in rows:
-        row["station_name"] = station_map.get(row["station_id"]) or row["station_id"]
+        row["section_1_name"] = section_1_map.get(row["section_1_id"]) or row["section_1_id"]
         row["pipe_model_name"] = pipe_map.get(row["pipe_model_id"]) or row["pipe_model_id"]
         
     return {
@@ -2234,7 +2234,7 @@ def get_global_management_history(
 def export_global_management_history(
     start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
-    station_id: Optional[str] = Query(None, description="换热站ID"),
+    section_1_id: Optional[str] = Query(None, description="需求主体ID"),
     session: AuthSession = Depends(get_current_session),
 ):
     group_lower = str(session.group or "").strip().lower()
@@ -2247,13 +2247,13 @@ def export_global_management_history(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
-    rows = query_history_records(start_date=dt_start, end_date=dt_end, station_id=station_id)
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=section_1_id)
     config = load_tube_config()
     
-    station_map = {
-        item.get("station_id"): item.get("station_name")
+    section_1_map = {
+        item.get("section_1_id"): item.get("section_1_name")
         for item in config.get("demand_entities", [])
-        if item.get("station_id")
+        if item.get("section_1_id")
     }
     pipe_map = {
         item.get("pipe_model_id"): item.get("pipe_model_name")
@@ -2265,26 +2265,26 @@ def export_global_management_history(
     output.write('\ufeff')  # UTF-8 BOM
     writer = csv.writer(output)
     
-    # 按换热站进行分组与排序
+    # 按需求主体进行分组与排序
     from collections import defaultdict
-    station_groups = defaultdict(list)
+    section_1_groups = defaultdict(list)
     for row in rows:
-        station_groups[row["station_id"]].append(row)
+        section_1_groups[row["section_1_id"]].append(row)
         
-    sorted_station_ids = sorted(station_groups.keys())
+    sorted_section_1_ids = sorted(section_1_groups.keys())
     
-    for st_id in sorted_station_ids:
-        # 1. 每个换热站块的头部写入相同的表头
+    for st_id in sorted_section_1_ids:
+        # 1. 每个需求主体块的头部写入相同的表头
         writer.writerow([
-            "日期", "换热站ID", "换热站名称", "管材型号ID", "管材型号名称", 
+            "日期", "需求主体ID", "需求主体名称", "管材型号ID", "管材型号名称", 
             "当日计划量 (米)", "当日使用量 (米)", "当日损耗量 (米)", 
             "确认到货量 (米)", "运输在途时间", "时间单位"
         ])
         
-        group_rows = station_groups[st_id]
+        group_rows = section_1_groups[st_id]
         # 按日期降序排序
         group_rows.sort(key=lambda x: x["biz_date"], reverse=True)
-        st_name = station_map.get(st_id) or st_id
+        st_name = section_1_map.get(st_id) or st_id
         
         # 2. 写入该站明细行
         for row in group_rows:
@@ -2300,7 +2300,7 @@ def export_global_management_history(
                 
             writer.writerow([
                 row["biz_date"],
-                row["station_id"],
+                row["section_1_id"],
                 st_name,
                 row["pipe_model_id"],
                 pm_name,
@@ -2363,7 +2363,7 @@ def export_global_management_history(
         writer.writerow(["施工消耗强度", f"{sub_daily_consumption_str} (施工 {sub_active_days_count} 天)"])
         writer.writerow(["物流配送效率区间", sub_overall_transit_str])
         
-        # 换热站之间空出 2 行
+        # 需求主体之间空出 2 行
         writer.writerow([])
         writer.writerow([])
         
@@ -2381,7 +2381,7 @@ def export_global_management_history(
     writer.writerow([
         "[全局大总计]",
         "-",
-        "所有查询换热站",
+        "所有查询需求主体",
         "-",
         "-",
         total_plan,

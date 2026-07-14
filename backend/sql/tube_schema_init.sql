@@ -15,7 +15,7 @@ COMMENT ON SCHEMA tube IS '保温管物流链管理项目专用 schema';
 CREATE TABLE IF NOT EXISTS tube.tube_daily_plan (
     id BIGSERIAL PRIMARY KEY,
     plan_date DATE NOT NULL,
-    station_id VARCHAR(64) NOT NULL,
+    section_1_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     plan_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
     filled_by VARCHAR(128),
@@ -33,10 +33,10 @@ COMMENT ON COLUMN tube.tube_daily_plan.plan_qty IS '计划使用量';
 COMMENT ON COLUMN tube.tube_daily_plan.filled_by IS '填报人，首版为现场负责人';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_plan_date_station_model
-    ON tube.tube_daily_plan (plan_date, station_id, pipe_model_id);
+    ON tube.tube_daily_plan (plan_date, section_1_id, pipe_model_id);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_station_date
-    ON tube.tube_daily_plan (station_id, plan_date);
+    ON tube.tube_daily_plan (section_1_id, plan_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_pipe_model_date
     ON tube.tube_daily_plan (pipe_model_id, plan_date);
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
     order_no VARCHAR(64),
     shipment_no VARCHAR(64),
     vehicle_plate_no VARCHAR(32),
-    station_id VARCHAR(64) NOT NULL,
+    section_1_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     shipped_qty NUMERIC(18, 2) NOT NULL,
     arrived_qty NUMERIC(18, 2),
@@ -107,7 +107,7 @@ COMMENT ON COLUMN tube.tube_delivery.supply_entity_id IS '供给主体 ID，对�
 COMMENT ON COLUMN tube.tube_delivery.order_no IS '订单号，由系统生成并落库，用于单条发货记录的展示、检索与统计';
 COMMENT ON COLUMN tube.tube_delivery.shipment_no IS '运输车次号，由系统自动生成，用于同一车次发货记录的筛选与分组展示';
 COMMENT ON COLUMN tube.tube_delivery.vehicle_plate_no IS '车牌号，按运输车次维度选填；同一 shipment_no 下应保持一致';
-COMMENT ON COLUMN tube.tube_delivery.station_id IS '换热站 ID';
+COMMENT ON COLUMN tube.tube_delivery.section_1_id IS '需求主体 ID';
 COMMENT ON COLUMN tube.tube_delivery.pipe_model_id IS '保温管型号 ID';
 COMMENT ON COLUMN tube.tube_delivery.shipped_qty IS '发货数量';
 COMMENT ON COLUMN tube.tube_delivery.arrived_qty IS '到货确认数量，允许小于发货数量';
@@ -124,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_tube_delivery_status
     ON tube.tube_delivery (status);
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_station
-    ON tube.tube_delivery (station_id);
+    ON tube.tube_delivery (section_1_id);
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_supply_entity
     ON tube.tube_delivery (supply_entity_id);
@@ -142,12 +142,12 @@ CREATE INDEX IF NOT EXISTS idx_tube_delivery_shipped_at
     ON tube.tube_delivery (shipped_at);
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_station_status
-    ON tube.tube_delivery (station_id, status);
+    ON tube.tube_delivery (section_1_id, status);
 
 CREATE TABLE IF NOT EXISTS tube.tube_daily_usage (
     id BIGSERIAL PRIMARY KEY,
     usage_date DATE NOT NULL,
-    station_id VARCHAR(64) NOT NULL,
+    section_1_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     usage_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
     loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
@@ -168,10 +168,10 @@ COMMENT ON COLUMN tube.tube_daily_usage.usage_qty IS '实际使用量';
 COMMENT ON COLUMN tube.tube_daily_usage.filled_by IS '填报人，首版为现场负责人';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_usage_date_station_model
-    ON tube.tube_daily_usage (usage_date, station_id, pipe_model_id);
+    ON tube.tube_daily_usage (usage_date, section_1_id, pipe_model_id);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_station_date
-    ON tube.tube_daily_usage (station_id, usage_date);
+    ON tube.tube_daily_usage (section_1_id, usage_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_pipe_model_date
     ON tube.tube_daily_usage (pipe_model_id, usage_date);
@@ -179,7 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_pipe_model_date
 CREATE TABLE IF NOT EXISTS tube.tube_inventory_adjustment (
     id BIGSERIAL PRIMARY KEY,
     adjust_date DATE NOT NULL,
-    station_id VARCHAR(64) NOT NULL,
+    section_1_id VARCHAR(64) NOT NULL,
     pipe_model_id VARCHAR(64) NOT NULL,
     adjust_qty NUMERIC(18, 2) NOT NULL,
     adjust_type VARCHAR(32) NOT NULL,
@@ -197,7 +197,7 @@ COMMENT ON COLUMN tube.tube_inventory_adjustment.adjust_type IS '调整类型，
 COMMENT ON COLUMN tube.tube_inventory_adjustment.reason IS '调整原因';
 
 CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_station_date
-    ON tube.tube_inventory_adjustment (station_id, adjust_date);
+    ON tube.tube_inventory_adjustment (section_1_id, adjust_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_pipe_model_date
     ON tube.tube_inventory_adjustment (pipe_model_id, adjust_date);

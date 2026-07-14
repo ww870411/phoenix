@@ -1,6 +1,6 @@
 {
-  "show_date": "2026-06-22",
-  "plan_start_date": "2026-06-22",
+  "show_date": "2026-07-14",
+  "plan_start_date": "2026-07-14",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "auto_update_plan_start_date": false,
   "plan_editable_days": 1,
@@ -22,345 +22,107 @@
   ],
   "demand_entities": [
     {
-      "station_id": "station_a",
-      "code": "A",
-      "station_name": "换热站A",
-      "region": "一区",
-      "section": "一标段",
+      "section_1_id": "lot_1",
+      "code": "L1",
+      "section_1_name": "标段1",
+      "section_2": "",
+      "section_3": "",
       "construction_status": "施工中"
     },
     {
-      "station_id": "station_b",
-      "code": "B",
-      "station_name": "换热站B",
-      "region": "一区",
-      "section": "一标段",
-      "construction_status": "施工中"
-    },
-    {
-      "station_id": "station_c",
-      "code": "C",
-      "station_name": "换热站C",
-      "region": "二区",
-      "section": "二标段",
-      "construction_status": "未开工"
-    },
-    {
-      "station_id": "station_d",
-      "code": "D",
-      "station_name": "换热站D",
-      "region": "二区",
-      "section": "二标段",
+      "section_1_id": "lot_2",
+      "code": "L2",
+      "section_1_name": "标段2",
+      "section_2": "",
+      "section_3": "",
       "construction_status": "施工中"
     }
   ],
   "pipe_models": [
     {
-      "pipe_model_id": "高温_φ1120×13/φ1260×16",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ1120×13/Φ1260×16",
+      "pipe_model_name": "Φ1120×13/Φ1260×16",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ1020×13/φ1155×14",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ1020×13/Φ1155×14",
+      "pipe_model_name": "Φ1020×13/Φ1155×14",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ920×11/φ1054×14",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ920×11/Φ1054×14",
+      "pipe_model_name": "Φ920×11/Φ1054×14",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ820×11/φ955×13",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ820×11/Φ955×13",
+      "pipe_model_name": "Φ820×11/Φ955×13",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ630×10/φ760×11.5",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ630×10/Φ760×11.5",
+      "pipe_model_name": "Φ630×10/Φ760×11.5",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ377×8/φ500×7.8",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ377×8/Φ500×7.8",
+      "pipe_model_name": "Φ377×8/Φ500×7.8",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ325×8/φ450×7.3",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ325×8/Φ450×7.3",
+      "pipe_model_name": "Φ325×8/Φ450×7.3",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ273×7/φ400×6.3",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ273×7/Φ400×6.3",
+      "pipe_model_name": "Φ273×7/Φ400×6.3",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ219×7/φ315×4.9",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ219×7/Φ315×4.9",
+      "pipe_model_name": "Φ219×7/Φ315×4.9",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ133×5/φ225×3.5",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
-      "temp_type": "高温",
+      "pipe_model_id": "Φ133×5/Φ225×3.5",
+      "pipe_model_name": "Φ133×5/Φ225×3.5",
       "unit": "米"
     },
     {
-      "pipe_model_id": "高温_φ57×5/φ140×3",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
-      "temp_type": "高温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ377×7.0/φ471×7.0",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ325×7.0/φ417×7.0",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ273×6.0/φ363×5.6",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ219×6.0/φ309×4.9",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ159×4.5/φ245×3.9",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ133×4.5/φ219×3.5",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ108×4.0/φ194×3.2",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ89×4.0/φ175×3.0",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ76×4.0/φ160×3.0",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ57×4.0/φ140×3.0",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ45×4.0/φ131×3.0",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ38×4.0/φ124×3.0",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
-      "temp_type": "低温",
-      "unit": "米"
-    },
-    {
-      "pipe_model_id": "低温_φ32×4.0/φ118×3.0",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
-      "temp_type": "低温",
+      "pipe_model_id": "Φ57×5/Φ140×3.0",
+      "pipe_model_name": "Φ57×5/Φ140×3.0",
       "unit": "米"
     }
   ],
-  "production_capacities": [
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
-      "max_daily_output_qty": 50,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
-      "max_daily_output_qty": 30,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂B",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
-      "max_daily_output_qty": 50,
-      "remark": "大口径管材，由管厂B负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    },
-    {
-      "supply_entity_name": "管厂A",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
-      "max_daily_output_qty": 50,
-      "remark": "小口径管材，由管厂A负责"
-    }
-  ],
+  "production_capacities": [],
   "manager_assignments": [
     {
-      "manager_id": "site_manager_a",
-      "manager_name": "现场负责人A",
-      "station_ids": [
-        "station_a",
-        "station_b"
+      "manager_id": "lot_1_manager",
+      "manager_name": "陶远辉",
+      "section_1_ids": [
+        "lot_1"
       ]
     },
     {
-      "manager_id": "site_manager_b",
-      "manager_name": "现场负责人B",
-      "station_ids": [
-        "station_c",
-        "station_d"
+      "manager_id": "lot_2_manager",
+      "manager_name": "卢军",
+      "section_1_ids": [
+        "lot_2"
+      ]
+    },
+    {
+      "manager_id": "lot_1",
+      "manager_name": "标段1主管",
+      "section_1_ids": [
+        "lot_1"
+      ]
+    },
+    {
+      "manager_id": "lot_2",
+      "manager_name": "标段2主管",
+      "section_1_ids": [
+        "lot_2"
       ]
     }
   ],
@@ -370,9 +132,10 @@
       "unit_name": "施工方A",
       "contact_name": "施工联系人A",
       "contact_phone": "13900000001",
-      "station_ids": [
+      "section_1_ids": [
         "station_a",
-        "station_c"
+        "station_c",
+        "section_1"
       ]
     },
     {
@@ -380,876 +143,825 @@
       "unit_name": "施工方B",
       "contact_name": "施工联系人B",
       "contact_phone": "13900000002",
-      "station_ids": [
+      "section_1_ids": [
         "station_b",
-        "station_d"
+        "station_d",
+        "section_2"
       ]
     }
   ],
   "baseline_presets": [
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ1120×13/φ1260×16",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ1020×13/φ1155×14",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ1020×13/Φ1155×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ920×11/φ1054×14",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ920×11/Φ1054×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ820×11/φ955×13",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ820×11/Φ955×13",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ630×10/φ760×11.5",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ630×10/Φ760×11.5",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ377×8/φ500×7.8",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ377×8/Φ500×7.8",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ325×8/φ450×7.3",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ325×8/Φ450×7.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ273×7/φ400×6.3",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ273×7/Φ400×6.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ219×7/φ315×4.9",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ219×7/Φ315×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ133×5/φ225×3.5",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ133×5/Φ225×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "高温_φ57×5/φ140×3",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
+      "section_1_id": "station_a",
+      "pipe_model_id": "高温_Φ57×5/Φ140×3",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ377×7.0/φ471×7.0",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ325×7.0/φ417×7.0",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ325×7.0/Φ417×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ273×6.0/φ363×5.6",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ273×6.0/Φ363×5.6",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ219×6.0/φ309×4.9",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ219×6.0/Φ309×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ159×4.5/φ245×3.9",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ159×4.5/Φ245×3.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ133×4.5/φ219×3.5",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ133×4.5/Φ219×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ108×4.0/φ194×3.2",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ108×4.0/Φ194×3.2",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ89×4.0/φ175×3.0",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ89×4.0/Φ175×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ76×4.0/φ160×3.0",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ76×4.0/Φ160×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ57×4.0/φ140×3.0",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ57×4.0/Φ140×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ45×4.0/φ131×3.0",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ45×4.0/Φ131×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ38×4.0/φ124×3.0",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ38×4.0/Φ124×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
-      "pipe_model_id": "低温_φ32×4.0/φ118×3.0",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
+      "section_1_id": "station_a",
+      "pipe_model_id": "低温_Φ32×4.0/Φ118×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站A 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ1120×13/φ1260×16",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ1020×13/φ1155×14",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ1020×13/Φ1155×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ920×11/φ1054×14",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ920×11/Φ1054×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ820×11/φ955×13",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ820×11/Φ955×13",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ630×10/φ760×11.5",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ630×10/Φ760×11.5",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ377×8/φ500×7.8",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ377×8/Φ500×7.8",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ325×8/φ450×7.3",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ325×8/Φ450×7.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ273×7/φ400×6.3",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ273×7/Φ400×6.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ219×7/φ315×4.9",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ219×7/Φ315×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ133×5/φ225×3.5",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ133×5/Φ225×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "高温_φ57×5/φ140×3",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
+      "section_1_id": "station_b",
+      "pipe_model_id": "高温_Φ57×5/Φ140×3",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ377×7.0/φ471×7.0",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ325×7.0/φ417×7.0",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ325×7.0/Φ417×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ273×6.0/φ363×5.6",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ273×6.0/Φ363×5.6",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ219×6.0/φ309×4.9",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ219×6.0/Φ309×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ159×4.5/φ245×3.9",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ159×4.5/Φ245×3.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ133×4.5/φ219×3.5",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ133×4.5/Φ219×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ108×4.0/φ194×3.2",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ108×4.0/Φ194×3.2",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ89×4.0/φ175×3.0",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ89×4.0/Φ175×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ76×4.0/φ160×3.0",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ76×4.0/Φ160×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ57×4.0/φ140×3.0",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ57×4.0/Φ140×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ45×4.0/φ131×3.0",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ45×4.0/Φ131×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ38×4.0/φ124×3.0",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ38×4.0/Φ124×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_b",
-      "station_name": "换热站B",
-      "pipe_model_id": "低温_φ32×4.0/φ118×3.0",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
+      "section_1_id": "station_b",
+      "pipe_model_id": "低温_Φ32×4.0/Φ118×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站B 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ1120×13/φ1260×16",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ1020×13/φ1155×14",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ1020×13/Φ1155×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ920×11/φ1054×14",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ920×11/Φ1054×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ820×11/φ955×13",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ820×11/Φ955×13",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ630×10/φ760×11.5",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ630×10/Φ760×11.5",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ377×8/φ500×7.8",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ377×8/Φ500×7.8",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ325×8/φ450×7.3",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ325×8/Φ450×7.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ273×7/φ400×6.3",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ273×7/Φ400×6.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ219×7/φ315×4.9",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ219×7/Φ315×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ133×5/φ225×3.5",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ133×5/Φ225×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "高温_φ57×5/φ140×3",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
+      "section_1_id": "station_c",
+      "pipe_model_id": "高温_Φ57×5/Φ140×3",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ377×7.0/φ471×7.0",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ325×7.0/φ417×7.0",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ325×7.0/Φ417×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ273×6.0/φ363×5.6",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ273×6.0/Φ363×5.6",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ219×6.0/φ309×4.9",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ219×6.0/Φ309×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ159×4.5/φ245×3.9",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ159×4.5/Φ245×3.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ133×4.5/φ219×3.5",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ133×4.5/Φ219×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ108×4.0/φ194×3.2",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ108×4.0/Φ194×3.2",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ89×4.0/φ175×3.0",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ89×4.0/Φ175×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ76×4.0/φ160×3.0",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ76×4.0/Φ160×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ57×4.0/φ140×3.0",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ57×4.0/Φ140×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ45×4.0/φ131×3.0",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ45×4.0/Φ131×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ38×4.0/φ124×3.0",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ38×4.0/Φ124×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_c",
-      "station_name": "换热站C",
-      "pipe_model_id": "低温_φ32×4.0/φ118×3.0",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
+      "section_1_id": "station_c",
+      "pipe_model_id": "低温_Φ32×4.0/Φ118×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站C 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ1120×13/φ1260×16",
-      "pipe_model_name": "高温_φ1120×13/φ1260×16",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ1020×13/φ1155×14",
-      "pipe_model_name": "高温_φ1020×13/φ1155×14",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ1020×13/Φ1155×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ920×11/φ1054×14",
-      "pipe_model_name": "高温_φ920×11/φ1054×14",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ920×11/Φ1054×14",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ820×11/φ955×13",
-      "pipe_model_name": "高温_φ820×11/φ955×13",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ820×11/Φ955×13",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ630×10/φ760×11.5",
-      "pipe_model_name": "高温_φ630×10/φ760×11.5",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ630×10/Φ760×11.5",
       "design_qty": 100,
       "purchase_plan_qty": 100,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ377×8/φ500×7.8",
-      "pipe_model_name": "高温_φ377×8/φ500×7.8",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ377×8/Φ500×7.8",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ325×8/φ450×7.3",
-      "pipe_model_name": "高温_φ325×8/φ450×7.3",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ325×8/Φ450×7.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ273×7/φ400×6.3",
-      "pipe_model_name": "高温_φ273×7/φ400×6.3",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ273×7/Φ400×6.3",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ219×7/φ315×4.9",
-      "pipe_model_name": "高温_φ219×7/φ315×4.9",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ219×7/Φ315×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ133×5/φ225×3.5",
-      "pipe_model_name": "高温_φ133×5/φ225×3.5",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ133×5/Φ225×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "高温_φ57×5/φ140×3",
-      "pipe_model_name": "高温_φ57×5/φ140×3",
+      "section_1_id": "station_d",
+      "pipe_model_id": "高温_Φ57×5/Φ140×3",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ377×7.0/φ471×7.0",
-      "pipe_model_name": "低温_φ377×7.0/φ471×7.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ325×7.0/φ417×7.0",
-      "pipe_model_name": "低温_φ325×7.0/φ417×7.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ325×7.0/Φ417×7.0",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ273×6.0/φ363×5.6",
-      "pipe_model_name": "低温_φ273×6.0/φ363×5.6",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ273×6.0/Φ363×5.6",
       "design_qty": 200,
       "purchase_plan_qty": 200,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ219×6.0/φ309×4.9",
-      "pipe_model_name": "低温_φ219×6.0/φ309×4.9",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ219×6.0/Φ309×4.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ159×4.5/φ245×3.9",
-      "pipe_model_name": "低温_φ159×4.5/φ245×3.9",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ159×4.5/Φ245×3.9",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ133×4.5/φ219×3.5",
-      "pipe_model_name": "低温_φ133×4.5/φ219×3.5",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ133×4.5/Φ219×3.5",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ108×4.0/φ194×3.2",
-      "pipe_model_name": "低温_φ108×4.0/φ194×3.2",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ108×4.0/Φ194×3.2",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ89×4.0/φ175×3.0",
-      "pipe_model_name": "低温_φ89×4.0/φ175×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ89×4.0/Φ175×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ76×4.0/φ160×3.0",
-      "pipe_model_name": "低温_φ76×4.0/φ160×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ76×4.0/Φ160×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ57×4.0/φ140×3.0",
-      "pipe_model_name": "低温_φ57×4.0/φ140×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ57×4.0/Φ140×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ45×4.0/φ131×3.0",
-      "pipe_model_name": "低温_φ45×4.0/φ131×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ45×4.0/Φ131×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ38×4.0/φ124×3.0",
-      "pipe_model_name": "低温_φ38×4.0/φ124×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ38×4.0/Φ124×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     },
     {
-      "station_id": "station_d",
-      "station_name": "换热站D",
-      "pipe_model_id": "低温_φ32×4.0/φ118×3.0",
-      "pipe_model_name": "低温_φ32×4.0/φ118×3.0",
+      "section_1_id": "station_d",
+      "pipe_model_id": "低温_Φ32×4.0/Φ118×3.0",
       "design_qty": 300,
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
+    },
+    {
+      "section_1_id": "section_1",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
+      "design_qty": 500,
+      "purchase_plan_qty": 500,
+      "remark": "标段1 预设规格初始化"
+    },
+    {
+      "section_1_id": "section_1",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
+      "design_qty": 500,
+      "purchase_plan_qty": 500,
+      "remark": "标段1 预设规格初始化"
+    },
+    {
+      "section_1_id": "section_2",
+      "pipe_model_id": "高温_Φ1120×13/Φ1260×16",
+      "design_qty": 400,
+      "purchase_plan_qty": 400,
+      "remark": "标段2 预设规格初始化"
+    },
+    {
+      "section_1_id": "section_2",
+      "pipe_model_id": "低温_Φ377×7.0/Φ471×7.0",
+      "design_qty": 400,
+      "purchase_plan_qty": 400,
+      "remark": "标段2 预设规格初始化"
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ1120×13/Φ1260×16",
+      "design_qty": 2616,
+      "purchase_plan_qty": 2616,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ1020×13/Φ1155×14",
+      "design_qty": 2543,
+      "purchase_plan_qty": 2543,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ630×10/Φ760×11.5",
+      "design_qty": 30,
+      "purchase_plan_qty": 30,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ377×8/Φ500×7.8",
+      "design_qty": 228,
+      "purchase_plan_qty": 228,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ325×8/Φ450×7.3",
+      "design_qty": 68,
+      "purchase_plan_qty": 68,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ273×7/Φ400×6.3",
+      "design_qty": 796,
+      "purchase_plan_qty": 796,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ219×7/Φ315×4.9",
+      "design_qty": 30,
+      "purchase_plan_qty": 30,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ133×5/Φ225×3.5",
+      "design_qty": 50,
+      "purchase_plan_qty": 50,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_1",
+      "pipe_model_id": "Φ57×5/Φ140×3.0",
+      "design_qty": 108,
+      "purchase_plan_qty": 108,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ1020×13/Φ1155×14",
+      "design_qty": 852,
+      "purchase_plan_qty": 852,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ920×11/Φ1054×14",
+      "design_qty": 3972,
+      "purchase_plan_qty": 3972,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ820×11/Φ955×13",
+      "design_qty": 252,
+      "purchase_plan_qty": 252,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ377×8/Φ500×7.8",
+      "design_qty": 78,
+      "purchase_plan_qty": 78,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ325×8/Φ450×7.3",
+      "design_qty": 156,
+      "purchase_plan_qty": 156,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ219×7/Φ315×4.9",
+      "design_qty": 36,
+      "purchase_plan_qty": 36,
+      "remark": ""
+    },
+    {
+      "section_1_id": "lot_2",
+      "pipe_model_id": "Φ57×5/Φ140×3.0",
+      "design_qty": 30,
+      "purchase_plan_qty": 30,
+      "remark": ""
     }
   ],
   "management_mode": "section"
