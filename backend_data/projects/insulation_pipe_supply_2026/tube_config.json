@@ -1251,5 +1251,6 @@
       "purchase_plan_qty": 300,
       "remark": "换热站D 全新管道规格初始化"
     }
-  ]
+  ],
+  "management_mode": "section"
 }

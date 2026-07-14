@@ -241,7 +241,7 @@
             </div>
             <div class="metric-saas-value">{{ realPCR }}%</div>
             <div class="metric-saas-label">三日计划提报达成率</div>
-            <p class="metric-saas-help">全标段所有换热站全面实施按日滚动催报，零漏报、零断供隐患</p>
+            <p class="metric-saas-help">全标段所有施工现场全面实施按日滚动催报，零漏报、零断供隐患</p>
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
@@ -285,7 +285,7 @@
               :class="{ active: pivotMode === 'station' }" 
               @click="pivotMode = 'station'"
             >
-              🏢 按换热站维度
+              🏢 按{{ modeLabels.station }}维度
             </button>
             <button 
               class="tab-btn" 
@@ -339,7 +339,7 @@
           <table class="pivot-table">
             <thead>
               <tr>
-                <th class="left-align text-col">{{ pivotMode === 'station' ? '换热站名称' : '保温管型号' }}</th>
+                <th class="left-align text-col">{{ pivotMode === 'station' ? modeLabels.stationName : '保温管型号' }}</th>
                 <th class="right-align num-col sortable" @click="handleSort('design_qty')">
                   设计量 {{ getSortSymbol('design_qty') }}
                 </th>
@@ -493,7 +493,7 @@
       :columns="exportColumns"
       :data="unfilteredTableData"
       :filtered-data="computedTableData"
-      :default-filename="pivotMode === 'station' ? '保温管供需分析透视表_按换热站' : '保温管供需分析透视表_按型号'"
+      :default-filename="pivotMode === 'station' ? '保温管供需分析透视表_按' + modeLabels.station : '保温管供需分析透视表_按型号'"
       @close="showExportModal = false"
     />
   </div>
@@ -522,6 +522,8 @@ const {
   breadcrumbItems,
   goProjectPages,
   reloadConfigSummary,
+  managementMode,
+  modeLabels,
 } = useTubePageShell('全局数据看板')
 
 // 业务汇总行与发货流水行
@@ -556,7 +558,7 @@ const showExportModal = ref(false)
 
 const exportColumns = computed(() => {
   return [
-    { key: 'name', label: pivotMode.value === 'station' ? '换热站名称' : '保温管型号' },
+    { key: 'name', label: pivotMode.value === 'station' ? modeLabels.value.stationName : '保温管型号' },
     { key: 'design_qty', label: '设计量 (米)' },
     { key: 'purchase_plan_qty', label: '计划采购 (米)' },
     { key: 'future_plan_qty', label: '三日计划量 (米)' },
@@ -700,9 +702,9 @@ function getMetricFormulaNumerator(key) {
   const nums = {
     otd: '24小时内确认到货的发货单数 (单)',
     doi: '全网在库管材总库存量 (米)',
-    pcr: '按时提报三日滚动计划的换热站数',
+    pcr: `按时提报三日滚动计划的${modeLabels.value.station}数`,
     ucr: '全网累计施工已消耗敷设长度 (米)',
-    ssr: '未发生物理硬缺口 (停工断料) 的活跃换热站数'
+    ssr: `未发生物理硬缺口 (停工断料) 的活跃${modeLabels.value.station}数`
   }
   return nums[key] || ''
 }
@@ -711,9 +713,9 @@ function getMetricFormulaDenominator(key) {
   const dens = {
     otd: '已确认到货且可计算时效的发货单数 (单)',
     doi: '未来三日全网日均滚动计划消耗量 (米/天)',
-    pcr: '当前处于活跃施工期的总换热站数',
+    pcr: `当前处于活跃施工期的总${modeLabels.value.station}数`,
     ucr: '全网累计已到货物理签收的总长度 (米)',
-    ssr: '当前处于活跃施工期的总换热站数'
+    ssr: `当前处于活跃施工期的总${modeLabels.value.station}数`
   }
   return dens[key] || ''
 }
@@ -787,7 +789,7 @@ function getMetricCalcVars(key) {
   if (key === 'pcr') {
     return {
       '分子 (按时提报站点)': `${metricSnapshot.value.submittedStationCount} 个工区 (存在滚动三日计划数据)`,
-      '分母 (活跃总工区数)': `${metricSnapshot.value.activeStations.size} 个换热站标段 (design_qty > 0 视为活跃站点)`,
+      '分母 (活跃总工区数)': `${metricSnapshot.value.activeStations.size} 个${modeLabels.value.station}标段 (design_qty > 0 视为活跃站点)`,
       '数字化纪律得分': `当前提报达成率 ${realPCR.value}%。数字化指令下达零延误、零漏报。`
     }
   }
@@ -801,7 +803,7 @@ function getMetricCalcVars(key) {
   if (key === 'ssr') {
     return {
       '分子 (安全在建工区)': `${metricSnapshot.value.safeStationCount} 个工区 (未面临物理断料风险)`,
-      '分母 (总活跃工区数)': `${metricSnapshot.value.activeStations.size} 个换热站标段 (全网在建全部活跃工区)`,
+      '分母 (总活跃工区数)': `${metricSnapshot.value.activeStations.size} 个${modeLabels.value.station}标段 (全网在建全部活跃工区)`,
       '缺口避让防线': `全要素缺口安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。`
     }
   }

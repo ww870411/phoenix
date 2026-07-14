@@ -44,9 +44,9 @@
 
         <div class="filter-grid compact-filter-grid">
           <label class="field">
-            <span>当前管理的换热站</span>
+            <span>当前管理的{{ modeLabels.station }}</span>
             <select v-model="selectedStationId" :disabled="optionsLoading || !stationOptions.length">
-              <option value="" disabled>请选择要操作的换热站</option>
+              <option value="" disabled>请选择要操作的{{ modeLabels.station }}</option>
               <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
                 {{ station.station_name }}
               </option>
@@ -144,7 +144,7 @@
               <span class="gateway-icon">🔒</span>
               <div class="gateway-desc">
                 <strong>首二日流程管控锁已激活</strong>
-                <span>由于当前换热站前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
+                <span>由于当前{{ modeLabels.station }}前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
               </div>
               <button type="button" class="gateway-link-btn" @click="activeTab = 'usage'">
                 👉 一键去上报前日消耗
@@ -302,14 +302,14 @@
           <section class="card elevated tab-card">
             <div class="panel-title-row">
               <div>
-                <h2>换热站设计与采购基准量</h2>
-                <span class="panel-hint">展示当前换热站的设计总量与全局计划采购总量，供日常对照。计量单位：米。</span>
+                <h2>{{ modeLabels.station }}设计与采购基准量</h2>
+                <span class="panel-hint">展示当前{{ modeLabels.station }}的设计总量与全局计划采购总量，供日常对照。计量单位：米。</span>
               </div>
             </div>
 
             <div v-if="baselineLoading" class="loading-text">正在加载基准量...</div>
             <div v-else-if="baselineError" class="error-box">{{ baselineError }}</div>
-            <div v-else-if="!baselineRows.length" class="empty-box">当前换热站暂无基准量记录。</div>
+            <div v-else-if="!baselineRows.length" class="empty-box">当前{{ modeLabels.station }}暂无基准量记录。</div>
             <div v-else class="table-wrap">
               <table class="data-table">
                 <thead>
@@ -517,8 +517,8 @@
       <section v-else class="card elevated select-hint-card">
         <div class="hint-content">
           <div class="hint-icon">📂</div>
-          <h3>请首先选择要操作的换热站</h3>
-          <p>在上方“工作台全局筛选”下拉框中选择具体的换热站后，系统将为您正式解锁三日滚动计划、使用量填报及到货到货确认等多标签管理模块。</p>
+          <h3>请首先选择要操作的{{ modeLabels.station }}</h3>
+          <p>在上方“工作台全局筛选”下拉框中选择具体的{{ modeLabels.station }}后，系统将为您正式解锁三日滚动计划、使用量填报及到货到货确认等多标签管理模块。</p>
         </div>
       </section>
 
@@ -928,7 +928,9 @@ const auth = useAuthStore()
 const {
   errorMessage,
   breadcrumbItems,
-  goProjectPages
+  goProjectPages,
+  managementMode,
+  modeLabels
 } = useTubePageShell('需求侧管理入口')
 
 const optionsLoading = ref(false)
@@ -1752,9 +1754,9 @@ async function handleStationSubmitClick() {
       remark: ''
     })
     const submittedDate = response?.submission?.data_submit_date || anchorDate.value || '未设置'
-    setActionMessage('success', `换热站 ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}。`)
+    setActionMessage('success', `${modeLabels.value.station} ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}.`)
   } catch (error) {
-    setActionMessage('error', getErrorMessage(error, '提交换热站填报状态失败'))
+    setActionMessage('error', getErrorMessage(error, `提交${modeLabels.value.station}填报状态失败`))
   } finally {
     submitStatusLoading.value = false
   }

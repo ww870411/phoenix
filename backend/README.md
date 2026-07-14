@@ -1,3 +1,11 @@
+## 2026-07-14 保温管管理模式动态切换后端接口实现
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 config_section 白名单及配置摘要中暴露 `management_mode` 属性支持)
+- 本轮处理与实现原理：
+  - 维持底表 schema 及 `station_id` 等核心鉴权与物流外键定义不发生物理重构，保证数据库绝对稳定。
+  - 支持对管理模式 section 进行单独的 JSON 写回和运行期摘要拉取。
+
 ## 2026-07-02 账户单角色单选与单位隔离 API 兼容控制
 
 - 变更文件：

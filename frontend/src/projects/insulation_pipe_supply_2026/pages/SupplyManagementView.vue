@@ -141,7 +141,7 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>{{ supplyDemandViewMode === 'summary' ? '统计范围' : '换热站' }}</th>
+                    <th>{{ supplyDemandViewMode === 'summary' ? '统计范围' : modeLabels.station }}</th>
                     <th>型号</th>
                     <th>设计总量（米）</th>
                     <th>计划采购总量（米）</th>
@@ -201,9 +201,9 @@
 
                 <div class="form-row-2col">
                   <label class="field">
-                    <span>装车换热站</span>
+                    <span>装车{{ modeLabels.station }}</span>
                     <select v-model="deliveryForm.stationId">
-                      <option value="" disabled>请选择换热站</option>
+                      <option value="" disabled>请选择{{ modeLabels.station }}</option>
                       <option v-for="station in stationOptions" :key="station.station_id" :value="station.station_id">
                         {{ station.station_name }}
                       </option>
@@ -287,7 +287,7 @@
                         ? currentReusedShipmentPlateLocked
                           ? `当前将继续装配运输车次号 ${deliveryForm.shipmentNo}，并沿用车牌号 ${deliveryForm.vehiclePlateNo}。`
                           : `当前将继续装配运输车次号 ${deliveryForm.shipmentNo}。若该车次尚未登记车牌号，可在本次一起补录。`
-                        : '当前将自动新建运输车次号；同一车次下可累积不同换热站/型号明细一并出发。'
+                        : '当前将自动新建运输车次号；同一车次下可累积不同' + modeLabels.station + '/型号明细一并出发。'
                     }}
                   </span>
                 </div>
@@ -328,7 +328,7 @@
                 <div v-if="!draftDeliveryItems.length" class="empty-box-split">
                   <div class="empty-icon-bubble">📦</div>
                   <strong class="empty-title">当前发车车厢为空</strong>
-                  <span class="empty-subtitle">请从左侧选择换热站、型号、发货米数，并点击“加入当前发货车次”进行装载。</span>
+                  <span class="empty-subtitle">请从左侧选择{{ modeLabels.station }}、型号、发货米数，并点击“加入当前发货车次”进行装载。</span>
                 </div>
                 <div v-else class="draft-items-card-list">
                   <div 
@@ -402,7 +402,7 @@
                     <th>运输车次号</th>
                     <th>车牌号</th>
                     <th>供给主体</th>
-                    <th>换热站</th>
+                    <th>{{ modeLabels.station }}</th>
                     <th>型号</th>
                     <th>发货量（米）</th>
                     <th>到货量（米）</th>
@@ -670,7 +670,7 @@
               <input v-model.trim="superEditForm.shipmentNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
             </label>
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收换热站</span>
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收{{ modeLabels.station }}</span>
               <select v-model="superEditForm.stationId" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
                 <option v-for="st in stationOptions" :key="st.station_id" :value="st.station_id">
                   {{ st.station_name }}
@@ -793,6 +793,8 @@ const {
   errorMessage,
   breadcrumbItems,
   goProjectPages,
+  managementMode,
+  modeLabels,
 } = useTubePageShell('供给侧管理入口')
 
 const optionsLoading = ref(false)
@@ -855,12 +857,12 @@ const deliveriesError = ref('')
 const deliveryRows = ref([])
 const allDeliveryRows = ref([])
 const showExportModal = ref(false)
-const exportColumns = [
+const exportColumns = computed(() => [
   { key: 'deliveryCode', label: '订单号' },
   { key: 'shipmentNo', label: '运输车次号' },
   { key: 'vehiclePlateNo', label: '车牌号' },
   { key: 'supplyEntityName', label: '供给主体' },
-  { key: 'stationName', label: '装车接收换热站' },
+  { key: 'stationName', label: `装车接收${modeLabels.value.station}` },
   { key: 'pipeModelName', label: '保温管规格型号' },
   { key: 'shippedQty', label: '发货量（米）' },
   { key: 'arrivedQty', label: '到货量（米）' },
@@ -868,7 +870,7 @@ const exportColumns = [
   { key: 'shippedAtDisplay', label: '发货时间' },
   { key: 'statusLabel', label: '状态' },
   { key: 'shipRemark', label: '备注' }
-]
+])
 const cancelLoadingIds = ref({})
 const nowTick = ref(Date.now())
 let nowTimer = null
@@ -919,7 +921,7 @@ const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
 const supplyDemandViewOptions = computed(() => [
   { value: 'summary', label: '整理汇总' },
-  { value: 'all_details', label: '全部换热站明细' },
+  { value: 'all_details', label: `全部${modeLabels.value.station}明细` },
   ...stationOptions.value.map((station) => ({
     value: station.station_id,
     label: station.station_name,
@@ -1019,10 +1021,10 @@ const supplyDemandTableHint = computed(() => {
     return '当前以“整理汇总”方式按型号统计各项供需数量。计量单位：米。'
   }
   if (supplyDemandViewMode.value === 'all_details') {
-    return '当前展示全部换热站的逐站逐型号明细。计量单位：米。'
+    return `当前展示全部${modeLabels.value.station}的逐站逐型号明细。计量单位：米。`
   }
   const matched = stationOptions.value.find((item) => item.station_id === supplyDemandViewMode.value)
-  return `当前仅展示 ${matched?.station_name || '所选换热站'} 的各型号供需记录。计量单位：米。`
+  return `当前仅展示 ${matched?.station_name || '所选' + modeLabels.value.station} 的各型号供需记录。计量单位：米。`
 })
 
 function createDefaultDeliveryForm() {
@@ -1111,7 +1113,7 @@ function normalizeOptionsPayload(response) {
 function normalizeSummaryRows(rows) {
   return (rows || []).map((row) => ({
     stationId: row.station_id || '',
-    stationName: row.station_name || row.station_id || '未命名换热站',
+    stationName: row.station_name || row.station_id || '未命名' + modeLabels.value.station,
     pipeModelId: row.pipe_model_id || '',
     pipeModelName: row.pipe_model_name || row.pipe_model_id || '未命名型号',
     designQty: Number(row.design_qty ?? 0),
@@ -1196,7 +1198,7 @@ function buildCurrentDraftItem() {
 
 function validateCurrentDeliveryForm() {
   if (!deliveryForm.value.supplyEntityId || !deliveryForm.value.stationId || !deliveryForm.value.pipeModelId) {
-    setActionMessage('error', '请先完整选择供给主体、换热站和保温管型号。')
+    setActionMessage('error', `请先完整选择供给主体、${modeLabels.value.station}和保温管型号。`)
     return false
   }
   if (Number(deliveryForm.value.shippedQty || 0) <= 0) {

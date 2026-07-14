@@ -415,6 +415,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "construction_units",
         "baseline_presets",
         "weather_api_url",
+        "management_mode",
     }
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
@@ -440,6 +441,11 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         payload[normalized_section] = normalized_editable_days
     elif normalized_section == "weather_api_url":
         payload[normalized_section] = str(data or "").strip()
+    elif normalized_section == "management_mode":
+        val = str(data or "").strip()
+        if val not in {"station", "section"}:
+            raise HTTPException(status_code=422, detail=f"不支持的管理模式：{val}")
+        payload[normalized_section] = val
     else:
         if not isinstance(data, list):
             raise HTTPException(status_code=422, detail=f"{normalized_section} 必须为数组")
@@ -704,6 +710,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "usage_collection_date": get_usage_collection_date(payload).isoformat(),
         "plan_editable_days": get_configured_plan_editable_days(payload),
+        "management_mode": payload.get("management_mode", "station"),
         "summary": {
             "supply_entity_count": len(supply_entities),
             "demand_entity_count": len(demand_entities),

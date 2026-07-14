@@ -1,3 +1,19 @@
+## 2026-07-14 [保温管最小施工管理单元（换热站 vs 标段）动态切换功能上线]
+- **任务结论**：成功实现了 `insulation_pipe_supply_2026` 项目中最小施工管理单元由“换热站模式”一键动态切换至“标段模式”的非侵入式自适应功能：
+  1. **配置段扩展（管理模式定义）**：在 `tube_config.json` 及后端 API 白名单中增加了对 `management_mode` 的配置与修改支持，通过 `/workspace/config-summary` 吐给前端。
+  2. **前端骨架自适应 label (shared.js)**：在 `shared.js` 的 `useTubePageShell` 全局逻辑中重构增加了 `modeLabels` 计算属性。在 `station`（换热站模式）和 `section`（标段模式）下动态输出映射词汇。
+  3. **五大页面 UI 文案动态适配**：大盘看板、发车登记、到货与消耗、库管台账、全局管理中硬编码的“换热站”、“管线所属区域”等所有中文全部替换为了自适应绑定，在标段模式下，角色（“现场负责人”）与库存（“现场可用库存”）名词保持不变，但在配置人员时其分管列表对应的在界面上自适应替换为标段，并使用 `v-if` 在表格中隐藏冗余的“所属施工标段”列。
+  4. **管理员控制台设置**：在全局管理后台“换热站/标段基础台账”上方新增“施工管理维度设置”单选开关，支持管理员随时保存修改，热重载生效。
+  5. **Vite 编译验证**：运行 `npm run build` 顺利通过，完美通过打包验证。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) (在 allowed_sections 白名单中增加 management_mode，并在 summary 接口中返回)
+  - [shared.js](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js) (在 useTubePageShell 中注入 managementMode 和 modeLabels 计算属性)
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) (增加维度切换 UI 开关，动态替换卡片/表格文字及自适应隐藏施工标段列)
+  - [DashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) (应用自适应绑定并替换公式等文本中的硬编码换热站)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) (解构并全面动态绑定换热站/标段文案，覆盖选择、报错、空占位符等区域)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) (模板发货站、表头及发车车厢等硬编码文案替换，重构 exportColumns 为 computed 以支持动态取值)
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue) (模板列名、筛选器回显及弹窗文本修改，重构 exportColumns 为 computed 引入自适应绑定)
+
 ## 2026-07-02 [账号控制台管理表格列居中样式对齐优化]
 - **任务结论**：完成了超管控制台账号管理表格的排版对齐优化，使整体视觉设计更加严整美观：
   1. **表格内容全面居中对齐**：在 CSS 中重构了 `.admin-table th` 与 `.admin-table td`，强制设置 `text-align: center !important`，使用户名、登录密码、归属单位、系统角色组等数据均在列正中央垂线对齐。

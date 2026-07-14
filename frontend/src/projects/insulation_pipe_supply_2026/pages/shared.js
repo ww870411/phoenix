@@ -76,6 +76,27 @@ export function useTubePageShell(currentLabel) {
     { label: currentLabel, to: null },
   ])
 
+  const managementMode = computed(() => configSummary.value?.management_mode || 'station')
+
+  const modeLabels = computed(() => {
+    if (managementMode.value === 'section') {
+      return {
+        station: '标段',
+        stationId: '标段ID',
+        stationName: '标段名称',
+        stationCode: '标段编码',
+        region: '所属区域',
+      }
+    }
+    return {
+      station: '换热站',
+      stationId: '换热站ID',
+      stationName: '换热站名称',
+      stationCode: '换热站编码',
+      region: '管线所属区域',
+    }
+  })
+
   function goProjectPages() {
     router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages`)
   }
@@ -106,6 +127,8 @@ export function useTubePageShell(currentLabel) {
     breadcrumbItems,
     goProjectPages,
     reloadConfigSummary: loadConfigSummary,
+    managementMode,
+    modeLabels,
   }
 }
 

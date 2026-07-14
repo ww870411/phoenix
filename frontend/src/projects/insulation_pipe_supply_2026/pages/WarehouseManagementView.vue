@@ -25,7 +25,7 @@
         </div>
         <div class="filter-grid">
           <div class="field custom-multi-select-container" ref="stationDropdownRef">
-            <span>换热站</span>
+            <span>{{ modeLabels.station }}</span>
             <div class="custom-multi-select">
               <div class="select-trigger" @click="toggleDropdown('station')" :class="{ active: activeDropdown === 'station' }">
                 <span class="trigger-text" :class="{ placeholder: filters.stationIds.length === 0 }">
@@ -236,7 +236,7 @@
                 <th>运输车次号</th>
                 <th class="cell-plate-header">车牌号</th>
                 <th>供给主体</th>
-                <th>换热站</th>
+                <th>{{ modeLabels.station }}</th>
                 <th>型号</th>
                 <th class="cell-number">发货量（米）</th>
                 <th class="cell-number">到货量（米）</th>
@@ -569,7 +569,7 @@ import {
 } from '../../daily_report_25_26/services/api'
 
 const projectKey = 'insulation_pipe_supply_2026'
-const { breadcrumbItems, goProjectPages, errorMessage: shellError } = useTubePageShell('库管员管理入口')
+const { breadcrumbItems, goProjectPages, errorMessage: shellError, managementMode, modeLabels } = useTubePageShell('库管员管理入口')
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -579,12 +579,12 @@ const options = ref(null)
 const deliveries = ref([])
 const allDeliveries = ref([])
 const showExportModal = ref(false)
-const exportColumns = [
+const exportColumns = computed(() => [
   { key: 'order_no', label: '订单号' },
   { key: 'shipment_no', label: '运输车次号' },
   { key: 'vehicle_plate_no', label: '车牌号' },
   { key: 'supply_entity_name', label: '供给主体' },
-  { key: 'station_name', label: '装车接收换热站' },
+  { key: 'station_name', label: `装车接收${modeLabels.value.station}` },
   { key: 'pipe_model_name', label: '保温管规格型号' },
   { key: 'shipped_qty', label: '发货量（米）' },
   { key: 'arrived_qty', label: '到货量（米）' },
@@ -603,7 +603,7 @@ const exportColumns = [
   { key: 'warehouse_confirm_by', label: '库管确认人' },
   { key: 'warehouseConfirmAtDisplay', label: '入库确认时间' },
   { key: 'warehouse_remark', label: '入库备注' }
-]
+])
 const exportWarehouseRows = computed(() => {
   return deliveries.value.map(row => ({
     ...row,
@@ -667,12 +667,12 @@ const handleGlobalClick = (e) => {
 
 // 选中值格式化回显
 const displaySelectedStations = computed(() => {
-  if (filters.stationIds.length === 0) return '全部换热站'
-  if (filters.stationIds.length === stationOptions.value.length) return '全部换热站（全选）'
+  if (filters.stationIds.length === 0) return '全部' + modeLabels.value.station
+  if (filters.stationIds.length === stationOptions.value.length) return '全部' + modeLabels.value.station + '（全选）'
   const names = stationOptions.value
     .filter(o => filters.stationIds.includes(o.station_id))
     .map(o => o.station_name)
-  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个站`
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个${modeLabels.value.station}`
 })
 
 const displaySelectedSupplyEntities = computed(() => {

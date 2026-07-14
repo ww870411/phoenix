@@ -29,8 +29,8 @@
             <strong class="meta-value">{{ supplyEntities.length }} 个注册主体</strong>
           </div>
           <div class="meta-card">
-            <span class="meta-label">管理的换热站</span>
-            <strong class="meta-value">{{ demandEntities.length }} 个运营站点</strong>
+            <span class="meta-label">管理的{{ modeLabels.station }}</span>
+            <strong class="meta-value">{{ demandEntities.length }} 个运营{{ modeLabels.station }}</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">系统保温管型号</span>
@@ -41,7 +41,7 @@
             <strong class="meta-value">{{ planStartDate || '未设置' }}</strong>
           </div>
           <div class="meta-card highlight">
-            <span class="meta-label">换热站提交状态</span>
+            <span class="meta-label">{{ modeLabels.station }}提交状态</span>
             <strong class="meta-value highlight-num">{{ submittedStationCount }} / {{ demandEntities.length }} 站已提交</strong>
           </div>
         </div>
@@ -64,7 +64,7 @@
             :class="['sidebar-tab-btn', { active: activeTab === 'station' }]" 
             @click="activeTab = 'station'"
           >
-            📍 换热站基础台账
+            📍 {{ modeLabels.station }}基础台账
           </button>
           <button 
             type="button" 
@@ -172,7 +172,7 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">换热站昨日提交状态审计</div>
+                  <div class="card-header">{{ modeLabels.station }}昨日提交状态审计</div>
                   <p class="sub block-sub">审计昨日三日计划上报进度，判断昨日消耗数据及滚动计划是否全部锁盘入库。</p>
                 </div>
               </div>
@@ -180,7 +180,7 @@
                 <table class="table editor-table submission-table">
                   <thead>
                     <tr>
-                      <th>换热站</th>
+                      <th>{{ modeLabels.station }}</th>
                       <th>提交状态</th>
                       <th>最近一次提交日期</th>
                       <th>提交完成物理时间</th>
@@ -205,18 +205,39 @@
             </section>
           </div>
 
-          <!-- Tab 2: 换热站基础台账 -->
+          <!-- Tab 2: 换热站/标段基础台账 -->
           <div v-if="activeTab === 'station'" class="pane-content-wrapper">
+            <!-- 模式切换卡片 -->
+            <section class="card elevated section-card" style="margin-bottom: 24px;">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">施工管理维度设置</div>
+                  <p class="sub block-sub">根据当前项目实际，一键切换最小施工单元及其显示文案。</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 32px; margin-top: 16px; align-items: center; background: rgba(0, 0, 0, 0.02); padding: 16px; border-radius: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500;">
+                  <input type="radio" v-model="selectedManagementMode" value="station" @change="saveManagementMode" />
+                  <span>换热站模式（层级：区域 → 标段 → 换热站）</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500;">
+                  <input type="radio" v-model="selectedManagementMode" value="section" @change="saveManagementMode" />
+                  <span>标段模式（层级：区域 → 标段，忽略换热站）</span>
+                </label>
+              </div>
+            </section>
+
+            <!-- 基础档案信息表格 -->
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">换热站基础档案信息</div>
-                  <p class="sub block-sub">管理保温管物理覆盖的所有换热站点、地理区域及标段映射。</p>
+                  <div class="card-header">{{ modeLabels.station }}基础档案信息</div>
+                  <p class="sub block-sub">管理保温管物理覆盖的所有{{ modeLabels.station }}及所属区域映射。</p>
                 </div>
                 <div class="section-actions">
-                  <button class="btn ghost" type="button" @click="addDemandEntity">➕ 新增站点</button>
+                  <button class="btn ghost" type="button" @click="addDemandEntity">➕ 新增{{ modeLabels.station }}</button>
                   <button class="btn primary shadow-accent" type="button" :disabled="isSaving('demand_entities')" @click="saveSection('demand_entities')">
-                    {{ isSaving('demand_entities') ? '正在同步…' : '💾 保存站点台账' }}
+                    {{ isSaving('demand_entities') ? '正在同步…' : `💾 保存${modeLabels.station}台账` }}
                   </button>
                 </div>
               </div>
@@ -227,11 +248,11 @@
                 <table class="table editor-table">
                   <thead>
                     <tr>
-                      <th>换热站ID (唯一)</th>
-                      <th>换热站编码</th>
-                      <th>换热站名称</th>
-                      <th>管线所属区域</th>
-                      <th>所属施工标段</th>
+                      <th>{{ modeLabels.stationId }} (唯一)</th>
+                      <th>{{ modeLabels.station }}编码</th>
+                      <th>{{ modeLabels.station }}名称</th>
+                      <th>{{ modeLabels.region }}</th>
+                      <th v-if="selectedManagementMode !== 'section'">所属施工标段</th>
                       <th>当前施工状态</th>
                       <th>物理移除</th>
                     </tr>
@@ -242,7 +263,7 @@
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 AA" /></td>
                       <td><input v-model.trim="item.station_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.region" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.section" class="input table-cell-input" type="text" /></td>
+                      <td v-if="selectedManagementMode !== 'section'"><input v-model.trim="item.section" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.construction_status" class="input table-cell-input" type="text" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(demandEntities, index)">删除</button></td>
                     </tr>
@@ -381,7 +402,7 @@
               <div class="card-header-row">
                 <div>
                   <div class="card-header">现场主管负责人映射</div>
-                  <p class="sub block-sub">授权不同负责人账号所分管的换热站列表。多个换热站请用英文逗号(,)分隔。</p>
+                  <p class="sub block-sub">授权不同负责人账号所分管的{{ modeLabels.station }}列表。多个{{ modeLabels.station }}请用英文逗号(,)分隔。</p>
                 </div>
                 <div class="section-actions">
                   <button class="btn ghost" type="button" @click="addManagerAssignment">➕ 新增主管</button>
@@ -399,7 +420,7 @@
                     <tr>
                       <th>分管人账号ID (对应登录名)</th>
                       <th>分管负责人姓名</th>
-                      <th>所分管的换热站ID列表 (逗号分隔)</th>
+                      <th>所分管的{{ modeLabels.station }}ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -407,7 +428,7 @@
                     <tr v-for="(item, index) in managerAssignments" :key="`${item.manager_id || 'new'}-${index}`">
                       <td><input v-model.trim="item.manager_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.manager_name" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" placeholder="如 station_a, station_b" /></td>
+                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" :placeholder="`如 ${selectedManagementMode === 'section' ? 'section_a, section_b' : 'station_a, station_b'}`" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -419,7 +440,7 @@
               <div class="card-header-row">
                 <div>
                   <div class="card-header">施工分包单位及站点映射</div>
-                  <p class="sub block-sub">配置各施工标段分包商基本联络方式及分管站点。多个换热站请用英文逗号(,)分隔。</p>
+                  <p class="sub block-sub">配置各分包商基本联络方式及分管站点。多个{{ modeLabels.station }}请用英文逗号(,)分隔。</p>
                 </div>
                 <div class="section-actions">
                   <button class="btn ghost" type="button" @click="addConstructionUnit">➕ 新增分包商</button>
@@ -439,7 +460,7 @@
                       <th>施工单位名称</th>
                       <th>工地联系人</th>
                       <th>联系电话</th>
-                      <th>分管的换热站ID列表 (逗号分隔)</th>
+                      <th>分管的{{ modeLabels.station }}ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -449,7 +470,7 @@
                       <td><input v-model.trim="item.unit_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" placeholder="如 station_a, station_c" /></td>
+                      <td><input v-model.trim="item.station_ids_text" class="input table-cell-input" type="text" :placeholder="`如 ${selectedManagementMode === 'section' ? 'section_a, section_c' : 'station_a, station_c'}`" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -463,12 +484,12 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">换热站管线基准设计量</div>
-                  <p class="sub block-sub">维护特定换热站的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择站点过滤。</p>
+                  <div class="card-header">{{ modeLabels.station }}管线基准设计量</div>
+                  <p class="sub block-sub">维护特定{{ modeLabels.station }}的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择{{ modeLabels.station }}过滤。</p>
                 </div>
                 <div class="section-actions baseline-actions-panel">
                   <div class="station-filter-inline">
-                    <span>过滤站点：</span>
+                    <span>过滤{{ modeLabels.station }}：</span>
                     <select v-model="selectedBaselineStationId" class="input inline-select">
                       <option v-for="station in demandEntities" :key="station.station_id" :value="station.station_id">
                         {{ station.station_name || station.station_id }}
@@ -774,17 +795,17 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📊 换热站填报与到货历史数据查询</div>
-                  <p class="sub block-sub">查询各换热站每日保温管计划量、实际消耗、确认到货量及运输在途时长，包含时段内汇总统计。</p>
+                  <div class="card-header">📊 {{ modeLabels.station }}填报与到货历史数据查询</div>
+                  <p class="sub block-sub">查询各{{ modeLabels.station }}每日保温管计划量、实际消耗、确认到货量及运输在途时长，包含时段内汇总统计。</p>
                 </div>
               </div>
               
               <!-- 过滤查询栏 -->
               <div class="filter-panel" style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; flex-wrap: wrap;">
                 <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">选择换热站</label>
+                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">选择{{ modeLabels.station }}</label>
                   <select v-model="historyFilter.stationId" class="select" style="min-width: 180px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
-                    <option value="">— 全部换热站 —</option>
+                    <option value="">— 全部{{ modeLabels.station }} —</option>
                     <option v-for="st in demandEntities" :key="st.station_id" :value="st.station_id">
                       {{ st.station_name }}
                     </option>
@@ -821,7 +842,7 @@
                     <thead>
                       <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 10;">
                         <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">日期</th>
-                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">换热站</th>
+                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">{{ modeLabels.station }}</th>
                         <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">管材型号</th>
                         <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日计划量 (米)</th>
                         <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日使用量 (米)</th>
@@ -1037,9 +1058,12 @@ const {
   errorMessage,
   breadcrumbItems,
   goProjectPages,
+  managementMode,
+  modeLabels,
 } = useTubePageShell('全局管理入口')
 
 const activeTab = ref('core')
+const selectedManagementMode = ref('station')
 
 // 操作审计日志相关 Ref 变量
 const auditLogs = ref([])
@@ -1125,6 +1149,23 @@ async function saveWeatherApiUrl() {
     setSectionMessage('weather_api_url', 'error', error?.message || '保存 API 失败')
   } finally {
     setSaving('weather_api_url', false)
+  }
+}
+
+async function saveManagementMode() {
+  clearGlobalMessage()
+  setSaving('management_mode', true)
+  try {
+    const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'management_mode',
+      data: selectedManagementMode.value,
+    })
+    applyConfig(response.config || {})
+    setGlobalMessage('success', '施工管理模式已成功更新并全局生效！')
+  } catch (error) {
+    setGlobalMessage('error', error?.message || '更新管理模式失败')
+  } finally {
+    setSaving('management_mode', false)
   }
 }
 
@@ -1364,6 +1405,7 @@ function applyConfig(config) {
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
   weatherApiUrl.value = config.weather_api_url || ''
+  selectedManagementMode.value = config.management_mode || 'station'
 }
 
 function getTodayDateString() {
