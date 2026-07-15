@@ -133,14 +133,9 @@
     ],
     "tube_site_manager": [
       {
-        "username": "site_manager_a",
-        "password": "site_manager_a123",
-        "unit": "换热站A"
-      },
-      {
-        "username": "site_manager_b",
-        "password": "site_manager_b123",
-        "unit": "换热站C"
+        "username": "lot_filler",
+        "password": "lot_filler_0715",
+        "unit": "lot_1,lot_2"
       },
       {
         "username": "lot_1_manager",

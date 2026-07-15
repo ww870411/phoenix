@@ -98,6 +98,13 @@
   "production_capacities": [],
   "manager_assignments": [
     {
+      "manager_id": "lot_filler",
+      "manager_name": "王玮",
+      "section_1_ids": [
+        "lot_1","lot_2"
+      ]
+    },
+    {
       "manager_id": "lot_1_manager",
       "manager_name": "陶远辉",
       "section_1_ids": [

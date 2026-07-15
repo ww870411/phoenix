@@ -25,7 +25,24 @@
         </label>
         <label class="field">
           <span>密码</span>
-          <input v-model="password" type="password" placeholder="输入密码" required />
+          <div class="password-input-wrapper">
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="输入密码" required />
+            <button 
+              type="button" 
+              class="toggle-password-btn" 
+              @click.stop.prevent="showPassword = !showPassword"
+              tabindex="-1"
+            >
+              <svg v-if="showPassword" class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg v-else class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
         </label>
         <label class="remember-toggle">
           <input v-model="rememberMe" type="checkbox" />
@@ -51,6 +68,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const username = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const rememberMe = ref(auth.rememberLogin)
 const errorMessage = ref('')
 const isLoading = computed(() => auth.loading)
@@ -92,19 +110,22 @@ async function onSubmit() {
   justify-content: center;
   padding: 60px 40px;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .visual-shapes {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
 }
 
 .shape {
   position: absolute;
   display: block;
   opacity: 0.35;
-  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.25));
+  will-change: transform;
+  transform: translate(0, 0);
 }
 
 .shape-circle {
@@ -114,6 +135,7 @@ async function onSubmit() {
   left: 10%;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.15);
   animation: float-slow 12s ease-in-out infinite;
 }
 
@@ -126,6 +148,7 @@ async function onSubmit() {
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
   border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.15);
   animation: float-medium 9s ease-in-out infinite;
 }
 
@@ -137,7 +160,6 @@ async function onSubmit() {
   border-left: 60px solid transparent;
   border-right: 60px solid transparent;
   border-bottom: 110px solid rgba(255, 255, 255, 0.2);
-  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.2));
   animation: float-fast 7s ease-in-out infinite;
 }
 
@@ -155,9 +177,8 @@ async function onSubmit() {
 .visual-overlay {
   position: relative;
   max-width: 420px;
-  z-index: 1;
-  backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.12);
+  z-index: 2;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.09));
   border-radius: 20px;
   padding: 44px 38px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
@@ -253,6 +274,42 @@ async function onSubmit() {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 40px !important;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8692a6;
+  transition: color 0.2s ease;
+}
+
+.toggle-password-btn:hover {
+  color: #374151;
+}
+
+.eye-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .remember-toggle {
   display: flex;
   align-items: center;
@@ -312,18 +369,18 @@ async function onSubmit() {
 }
 
 @keyframes float-slow {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(12px, -18px, 0); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(12px, -18px); }
 }
 
 @keyframes float-medium {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(18deg); }
-  50% { transform: translate3d(-16px, 12px, 0) rotate(24deg); }
+  0%, 100% { transform: translate(0, 0) rotate(18deg); }
+  50% { transform: translate(-16px, 12px) rotate(24deg); }
 }
 
 @keyframes float-fast {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(-12px, 16px, 0); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-12px, 16px); }
 }
 
 @keyframes slow-rotate {
@@ -333,6 +390,12 @@ async function onSubmit() {
 
 @media (max-width: 1024px) {
   .login-page {
+@media (prefers-reduced-motion: reduce) {
+  .shape {
+    animation: none;
+  }
+}
+
     flex-direction: column;
     background: linear-gradient(135deg, #325fbf 0%, #6aa6e9 100%);
   }

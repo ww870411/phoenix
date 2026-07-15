@@ -1,3 +1,33 @@
+## 2026-07-15 登录页左侧动画闪动修复
+
+- 变更文件：`frontend/src/pages/LoginView.vue`。
+- 左侧装饰图形保留纯 `transform` 动画，移除三角形和圆环的 `filter: drop-shadow()`；主视觉文字卡片由 `backdrop-filter` 毛玻璃改为固定半透明渐变，避免浏览器每帧重新采样运动背景。
+- `.visual-panel` 使用独立层叠上下文，且在系统偏好“减少动态效果”时停止装饰动画。登录表单、Pinia 鉴权和 `/login` 路由行为均未变更。
+
+## 2026-07-15 登录页 2D 硬件加速与 Stacking Context 层级防闪烁加固
+
+- 变更文件：
+  - `frontend/src/pages/LoginView.vue` (将位移动画由 3D 降级为 2D 变换；显式为 shapes 容器与文字 overlay 确立 `z-index` 层叠，并移除 overlay 自带的 `transform` 属性)
+- 本轮处理与实现原理：
+  - 彻底解决了在开启 `backdrop-filter: blur` 的磨砂卡片下方，做 3D 浮动动画（`translate3d`）的元素与卡片在 Z 轴深度上产生浮点精度冲突（Z-fighting）引发局部闪动的 Bug。
+  - 通过让动画元素完全留在 2D 变换平面内（`translate`），保留 `will-change: transform` 的 GPU 加速特性，并确立卡片为更高级别的绝对 2D 层级（`z-index: 2` 对比图形的 `z-index: 1`），让浏览器合成器无需高频计算三维深度重叠，消除了图层绘制错乱。
+
+## 2026-07-15 登录页 3D 浮动动画硬件加速与抗闪烁优化
+
+- 变更文件：
+  - `frontend/src/pages/LoginView.vue` (将圆形、正方形的 `filter` 改造为 `box-shadow`；对 `.shape` 和 `.visual-overlay` 应用 GPU 物理层隔离)
+- 本轮处理与实现原理：
+  - 为防止 Chromium 内核在处理 CSS 3D 变换动画（结合 `filter: drop-shadow` 及 `backdrop-filter: blur`）时引发整个页面的反复重绘（Repaint Flickering），在样式中引入 `will-change`，并显式指定 `transform: translate3d(0,0,0)` 强制提升渲染复合层。
+  - 将无物理穿透阴影必要的图形滤镜降级为高性能的标准 `box-shadow`，从源头消灭渲染闪屏 Bug。
+
+## 2026-07-15 登录页密码框新增显示隐藏“小眼睛”按钮
+
+- 变更文件：
+  - `frontend/src/pages/LoginView.vue` (增加 `showPassword` 状态及 SVG 眼睛切换按钮，补充相关 wrapper 布局及 hover 样式)
+- 本轮处理与实现原理：
+  - 在密码输入框增加相对定位的 `.password-input-wrapper` 包装层，动态绑定输入框类型（`type` 随显隐状态变换）。
+  - 右侧绝对定位高对比度的 SVG 图标按钮，使用户能够一键切换密码显示状态，符合人性化交互设计。
+
 ## 2026-07-14 修复需求侧管理入口因缺少 section_1_id 参数导致的 422 报错 Bug
 
 - 变更文件：

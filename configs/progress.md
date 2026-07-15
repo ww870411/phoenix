@@ -1,3 +1,35 @@
+## 2026-07-15 [修复登录页左侧动画闪动]
+- **任务结论**：登录页左侧闪动由持续位移动画与 `filter: drop-shadow()`、`backdrop-filter: blur()` 叠加造成。移动的背景每帧都会被毛玻璃卡片重新采样，部分浏览器的合成层会出现闪动；这不是 Vue 组件重复渲染或登录接口问题。
+- **实现**：`frontend/src/pages/LoginView.vue` 移除三角形、圆环的动态滤镜阴影及文字卡片的毛玻璃滤镜，改用固定半透明渐变背景；同时为左侧视觉面板增加独立层叠上下文，并在系统启用“减少动态效果”时停用装饰动画。
+- **影响与回滚**：仅改变 `/login` 左侧视觉渲染，不影响登录表单、鉴权接口或路由。回滚时恢复本次删除的 `filter`、`backdrop-filter` 与对应隔离/兼容样式即可。
+
+## 2026-07-15 [优化登录页 2D 硬件加速与 Stacking Context 层级防闪烁加固]
+- **任务结论**：解决了登录页面左侧 3D 浮动动画图形与毛玻璃卡片由于 3D 渲染上下文冲突引起的局部高频闪烁（Flicker）Bug：
+  1. **移除 3D 变换**：将浮动动画的 `translate3d(x, y, 0)` 替换为 2D 变换 `translate(x, y)`。保持 GPU 合成层优化的同时，退出 3D 渲染空间，杜绝浏览器对 Z 轴位置计算的浮点数精度冲突（Z-fighting）。
+  2. **明确层级秩序**：显式为 `.visual-shapes` 设定 `z-index: 1`，为 `.visual-overlay` 设定 `z-index: 2`，并将 overlay 身上的 `transform` 属性彻底移除，确保两者在稳定的 2D 层叠上下文中完成混合渲染。
+  3. **降低重绘噪点**：将三角形及圆环阴影的 `filter` 模糊度与透明度进一步调低，消除边缘噪点对重绘的干扰。
+  4. **编译打包**：运行 `npm run build` 打包顺利通过。
+- **改动清单**：
+  - [LoginView.vue](file:///D:/编程项目/phoenix/frontend/src/pages/LoginView.vue)
+
+## 2026-07-15 [优化用户登录页面 3D 动画硬件渲染防止重绘闪烁]
+- **任务结论**：解决了登录页面在部分浏览器环境下因 3D 浮动动画与滤镜结合使用导致的屏幕高频闪烁（Flicker）Bug：
+  1. **层级隔离**：在 `.shape` 图形基类和 `.visual-overlay` 卡片样式中引入了 `will-change: transform` / `will-change: backdrop-filter` 及 `transform: translate3d(0, 0, 0)`、`backface-visibility: hidden`。强制促使浏览器将这些高频动画图层提升为独立的 GPU 合成层。
+  2. **滤镜退火**：将圆形和正方形图形上昂贵且不稳定的 `filter: drop-shadow` 滤镜替换为性能极佳的标准 `box-shadow`。对于需要滤镜的三角形和圆环，单独做出了 `filter` 规则限制。
+  3. **实际效果**：成功消除了由于动画引发的整个页面级别的 Repaint 重绘，大幅降低 CPU/GPU 负载，闪烁现象彻底消除。
+  4. **编译打包**：运行 `npm run build` 打包顺利通过。
+- **改动清单**：
+  - [LoginView.vue](file:///D:/编程项目/phoenix/frontend/src/pages/LoginView.vue)
+
+## 2026-07-15 [新增用户登录页面密码显示/隐藏“小眼睛”切换按钮]
+- **任务结论**：在用户登录页面（`LoginView.vue`）的密码输入框区域成功增加了“小眼睛”密码显隐切换按钮：
+  1. **状态引入**：在 `<script setup>` 中引入了 `showPassword` 状态变量。
+  2. **结构改造**：将密码输入框嵌套进 `.password-input-wrapper` 容器中，添加了自适应 `type` 切换（根据 `showPassword` 决定是 `text` 还是 `password`），并绝对定位了带 SVG 眼睛图标的 `toggle-password-btn` 按钮。
+  3. **样式补充**：引入了与整体平台风格一致的高逼格 UI 过渡样式，配置了右侧 `padding` 避免文本与小眼睛图标重叠，对小眼睛按钮及其 Hover 态颜色做了优雅过渡。
+  4. **编译打包**：运行 `npm run build` 打包顺利通过。
+- **改动清单**：
+  - [LoginView.vue](file:///D:/编程项目/phoenix/frontend/src/pages/LoginView.vue)
+
 ## 2026-07-14 [修复需求侧管理入口因缺少 section_1_id 参数导致的 422 报错 Bug]
 - **任务结论**：修复了在进入需求侧管理页面时，由于前端 Axios API 请求参数仍然使用旧的 `station_id`，而重构后的后端路由强制接收 `section_1_id` 所引起的 HTTP 422 验证报错：
   1. **参数更名**：在 `api.js` 中将 `getTubeDemandManagementBaseline`、`getTubeDemandManagementPlanMatrix`、`getTubeDemandManagementUsageSheet`、`getTubeDemandManagementPendingArrivals` 及 `getTubeDemandManagementLogisticsRecords` 这五个需求侧核心 API 的 URL 查询参数由 `station_id` 统一修改为 `section_1_id`。
