@@ -407,6 +407,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "plan_start_date",
         "auto_update_plan_start_date",
         "plan_editable_days",
+        "strict_planning_flow_control",
         "supply_entities",
         "demand_entities",
         "pipe_models",
@@ -430,7 +431,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"{normalized_section} 非法：{normalized_date}") from exc
         payload[normalized_section] = normalized_date
-    elif normalized_section == "auto_update_plan_start_date":
+    elif normalized_section in {"auto_update_plan_start_date", "strict_planning_flow_control"}:
         payload[normalized_section] = bool(data)
     elif normalized_section == "plan_editable_days":
         try:

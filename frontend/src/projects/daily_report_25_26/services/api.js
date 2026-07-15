@@ -76,6 +76,29 @@ async function ensureSuperResponseOk(response, fallbackMessage) {
   throw new Error(message || fallbackMessage)
 }
 
+async function parseErrorDetail(response, fallbackMessage) {
+  try {
+    const data = await response.json()
+    if (data && data.detail) {
+      if (typeof data.detail === 'string') return data.detail
+      if (Array.isArray(data.detail)) {
+        return data.detail.map(err => err.msg || JSON.stringify(err)).join(', ')
+      }
+      return JSON.stringify(data.detail)
+    }
+    if (data && data.message) return data.message
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const text = await response.text()
+    if (text) return text
+  } catch (e) {
+    // ignore
+  }
+  return response.statusText || fallbackMessage
+}
+
 const normalized = (path) => `${API_BASE}${path}`
 
 const projectPath = (projectKey) => normalized(`/projects/${encodeURIComponent(projectKey)}`)

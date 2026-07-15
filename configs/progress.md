@@ -3,6 +3,27 @@
 - **实现**：`frontend/src/pages/LoginView.vue` 移除三角形、圆环的动态滤镜阴影及文字卡片的毛玻璃滤镜，改用固定半透明渐变背景；同时为左侧视觉面板增加独立层叠上下文，并在系统启用“减少动态效果”时停用装饰动画。
 - **影响与回滚**：仅改变 `/login` 左侧视觉渲染，不影响登录表单、鉴权接口或路由。回滚时恢复本次删除的 `filter`、`backdrop-filter` 与对应隔离/兼容样式即可。
 
+## 2026-07-15 [后端配置区块保存 strict_planning_flow_control 数据类型校验修复]
+- **任务结论**：修复了在全局管理核心控制参数保存时，因未指定其数据类型，导致布尔开关 `strict_planning_flow_control` 误入 `else` 数组类型检查进而报错的 Bug。
+  1. **明确数据类型校验**：在 `workspace.py` 中将 `strict_planning_flow_control` 与 `auto_update_plan_start_date` 合并，明确作为布尔（Boolean）值强制转换与保存。
+  2. **验证编译通过**：本地 python 静态编译通过。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-15 [后端配置区块保存允许 strict_planning_flow_control]
+- **任务结论**：修复了在全局管理核心控制参数保存时，后端拦截 `strict_planning_flow_control` 区块并报错的 Bug。
+  1. **放行白名单**：在 `workspace.py` 的 `_save_config_section` 白名单集合中添加了 `"strict_planning_flow_control"` 区块项。
+  2. **验证编译通过**：本地 python 静态编译通过。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-15 [前端全局配置保存 plan_editable_days 报错 ReferenceError 修复]
+- **任务结论**：修复了在保存计划天数等配置时因引用未定义函数 `parseErrorDetail` 导致保存挂起报错的 Bug：
+  1. **补全错误解析工具**：在 `api.js` 中新增了 `parseErrorDetail` 异步处理函数，从 API 错误响应中安全地提取并解构 `detail` / `message`，确保错误能被友好展示。
+  2. **打包验证通过**：Vite 生产构建打包成功。
+- **改动清单**：
+  - [api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+
 ## 2026-07-15 [物流卸车到货确认与施工物理接收处新增需求主体显示]
 - **任务结论**：在时光轴的“物流卸车到货确认”（第 2 节点）与“施工物理接收确认”（第 3 节点）卡片中，均补充了“需求主体”的渲染（如 `标段1 (lot_1)`），使流转过程中的物资流向目的地证据更加完整清晰。
   1. **行数据映射适配**：在 `DemandManagementView.vue` 转换流中补齐了 `section_1_id` 和 `section_1_name` 的映射。

@@ -1,9 +1,9 @@
 {
-  "show_date": "2026-07-14",
-  "plan_start_date": "2026-07-14",
+  "show_date": "2026-07-15",
+  "plan_start_date": "2026-07-15",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "auto_update_plan_start_date": false,
-  "plan_editable_days": 1,
+  "plan_editable_days": 3,
   "supply_entities": [
     {
       "entity_id": "supplier_a",
@@ -101,7 +101,8 @@
       "manager_id": "lot_filler",
       "manager_name": "王玮",
       "section_1_ids": [
-        "lot_1","lot_2"
+        "lot_1",
+        "lot_2"
       ],
       "contact_phone": "15640887356"
     },
@@ -953,5 +954,6 @@
       "purchase_plan_qty": 30,
       "remark": ""
     }
-  ]
+  ],
+  "strict_planning_flow_control": false
 }

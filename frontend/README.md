@@ -1,3 +1,10 @@
+## 2026-07-15 修复全局配置保存提示 ReferenceError 未定义问题
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (补全全局错误解析函数 parseErrorDetail 的具体异步抓取和解析方法)
+- 本轮处理与实现原理：
+  - 补充了前端接口文件内缺失的 `parseErrorDetail` 核心工具方法。该方法能够在后端请求返回失败状态码时，正确解构服务端吐出的 detail 异常描述并将其透传给外层，彻底修复了修改“计划可修改天数 (plan_editable_days)”等板块保存时引发的 JS 引擎 `parseErrorDetail is not defined` 阻断报错。
+
 ## 2026-07-15 物流卸车与施工接收阶段新增需求主体显示
 
 - 变更文件：

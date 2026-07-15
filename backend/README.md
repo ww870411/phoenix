@@ -1,3 +1,10 @@
+## 2026-07-15 修复全局核心参数保存严格强控流程字段被拦截问题
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 _save_config_section 的 allowed_sections 允许白名单集合中加入 strict_planning_flow_control 区块)
+- 本轮处理与实现原理：
+  - 修复了核心控制参数在提交保存时，因后端白名单遗漏 `"strict_planning_flow_control"` 导致的 422 业务校验异常错误。加入后该布尔开关能正常随板块一键落盘至配置文件。
+
 ## 2026-07-15 卸车到货与施工接收阶段需求主体字段解析适配说明
 
 - 本轮处理与实现原理：
