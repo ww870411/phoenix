@@ -102,35 +102,24 @@
       "manager_name": "王玮",
       "section_1_ids": [
         "lot_1","lot_2"
-      ]
+      ],
+      "contact_phone": "15640887356"
     },
     {
       "manager_id": "lot_1_manager",
       "manager_name": "陶远辉",
       "section_1_ids": [
         "lot_1"
-      ]
+      ],
+      "contact_phone": "13342290277"
     },
     {
       "manager_id": "lot_2_manager",
-      "manager_name": "卢军",
+      "manager_name": "卢君",
       "section_1_ids": [
         "lot_2"
-      ]
-    },
-    {
-      "manager_id": "lot_1",
-      "manager_name": "标段1主管",
-      "section_1_ids": [
-        "lot_1"
-      ]
-    },
-    {
-      "manager_id": "lot_2",
-      "manager_name": "标段2主管",
-      "section_1_ids": [
-        "lot_2"
-      ]
+      ],
+      "contact_phone": "13591176750"
     }
   ],
   "construction_units": [
@@ -140,21 +129,15 @@
       "contact_name": "施工联系人A",
       "contact_phone": "13900000001",
       "section_1_ids": [
-        "station_a",
-        "station_c",
-        "section_1"
+        "lot_1"
       ]
-    },
+    }
+  ],
+  "warehouse_keepers": [
     {
-      "unit_id": "construction_b",
-      "unit_name": "施工方B",
-      "contact_name": "施工联系人B",
-      "contact_phone": "13900000002",
-      "section_1_ids": [
-        "station_b",
-        "station_d",
-        "section_2"
-      ]
+      "keeper_id": "warehouse_keeper_a",
+      "keeper_name": "左巨",
+      "contact_phone": "13052765188"
     }
   ],
   "baseline_presets": [
@@ -970,6 +953,5 @@
       "purchase_plan_qty": 30,
       "remark": ""
     }
-  ],
-  "management_mode": "section"
+  ]
 }

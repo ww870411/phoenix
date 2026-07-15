@@ -3,6 +3,92 @@
 - **实现**：`frontend/src/pages/LoginView.vue` 移除三角形、圆环的动态滤镜阴影及文字卡片的毛玻璃滤镜，改用固定半透明渐变背景；同时为左侧视觉面板增加独立层叠上下文，并在系统启用“减少动态效果”时停用装饰动画。
 - **影响与回滚**：仅改变 `/login` 左侧视觉渲染，不影响登录表单、鉴权接口或路由。回滚时恢复本次删除的 `filter`、`backdrop-filter` 与对应隔离/兼容样式即可。
 
+## 2026-07-15 [物流卸车到货确认与施工物理接收处新增需求主体显示]
+- **任务结论**：在时光轴的“物流卸车到货确认”（第 2 节点）与“施工物理接收确认”（第 3 节点）卡片中，均补充了“需求主体”的渲染（如 `标段1 (lot_1)`），使流转过程中的物资流向目的地证据更加完整清晰。
+  1. **行数据映射适配**：在 `DemandManagementView.vue` 转换流中补齐了 `section_1_id` 和 `section_1_name` 的映射。
+  2. **弹窗传参补齐**：在 `SupplyManagementView.vue` 的 `openTimelineModal` 里将 `stationId` 和 `stationName` 传递给 modal 容器。
+  3. **各端 UI 更新**：更新了三端 Timeline 中到货与施工接收板块的 HTML 渲染，使“需求主体”字段物理下发并展示。
+  4. **编译与打包通过**：前后端项目构建 100% 成功。
+- **改动清单**：
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-07-15 [全局管理“库管人员设置”功能新增与时光轴库管信息分行展示]
+- **任务结论**：在全局配置及人员映射逻辑中新增了“库管人员设置”，并完成了从配置端到时光轴库管确认节点的信息分行闭环：
+  1. **配置字段管辖增强**：在项目主配置文件 `tube_config.json` 中，新增了 `"warehouse_keepers"` 节点，用来配置库管员账号 ID、姓名及联系电话。
+  2. **后端保存与列表装饰支持**：修改 `workspace.py`。在 `_save_config_section` 的 `allowed_sections` 集合中加入 `"warehouse_keepers"` 支持；在 `get_workspace_config_summary` 中加入其数据输出；在列表修饰器 `_decorate_delivery_rows` 中，通过库管账号 ID 匹配配置得出 `warehouse_confirm_name` 和 `warehouse_confirm_phone` 注入回传。
+  3. **全局配置页 UI 改装**：在 `GlobalManagementView.vue` 人员映射与施工页面底部，新增了“库管人员映射”配置卡片，支持了增加、删除、修改库管信息及保存的完整闭环。
+  4. **三端时光轴分行渲染**：在 `WarehouseManagementView.vue`、`DemandManagementView.vue` 和 `SupplyManagementView.vue` 中，对“库管确认手续结清”节点修改为“操作账号”、“经办人”与“联系电话”分行隔离独立渲染，且信息内容正确关联。
+  5. **构建及部署通过**：编译和 Vite 前端打包 100% 成功。
+- **改动清单**：
+  - [tube_config.json](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-07-15 [物流流转轨迹时光轴“操作账号”与“经办人”物理拆分]
+- **任务结论**：根据微调意见，将全生命周期时光轴（Timeline）中的操作账户名与物理负责人姓名正式进行了物理隔离分行展示，确保了界面结构的规范性与逻辑清晰度：
+  1. **结构化分行渲染**：改写了库管侧边栏、需求侧弹窗、供给侧弹窗中 Timeline 的发货、到货和接收节点。将原来拼接成 `物理名 (账户名)` 的一行拆分为独立的 `操作账号` 和 `经办人` 字段展示，使得数据一目了然。
+  2. **清除 DOM 冗余**：清理了 `SupplyManagementView.vue` 修改中可能遗留的重复 DOM，恢复文件最高工整度。
+  3. **编译构建通过**：前后端项目编译与 Vite 打包一键通过。
+- **改动清单**：
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-07-15 [物流全生命周期轨迹时光轴经办格式对齐与施工节点属性扩展]
+- **任务结论**：响应用户对物流轨迹节点显示规则的反馈，对时光轴装车发货、到货确认和施工接收三处进行了深度优化与视觉规范统一：
+  1. **施工单位信息后端解析**：在 `workspace.py` 的 `_decorate_delivery_rows` 函数中，新增了解析并建立 `construction_units` 缓存映射字典的逻辑。通过施工单位账号 ID（`received_confirm_by`）匹配解析得到施工单位联系人 `received_confirm_name` 和联系电话 `received_confirm_phone` 并注入数据行中。
+  2. **三端时光轴经办人格式规范化**：修改了 `WarehouseManagementView.vue`、`DemandManagementView.vue` 和 `SupplyManagementView.vue`，将“确认人”/“接收人”文案统一改为**“经办人”**。
+  3. **括号账户名与电话补齐**：
+     - 装车发货节点：显示为“经办人：物理名 (发货账户名)”，并同步透出联系电话。
+     - 到货确认节点：显示为“经办人：物理名 (到货确认账户名)”，并同步透出联系电话。
+     - 施工接收节点：显示为“经办人：物理名 (施工接收账户名)”，并同步透出接收联系电话。
+  4. **编译与打包校验**：前后端项目编译及 `npm run build` 构建顺利通过。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-07-15 [物流“全生命周期流转轨迹”时光轴字段增强显示]
+- **任务结论**：在发货单全生命周期流转轨迹（时光轴）的“发货”与“到货”节点中，补齐了更详细的操作人主体及联系电话信息，完成了从后端数据适配到多端前端视图的闭环联动：
+  1. **后端数据装饰器增强**：在 `workspace.py` 的 `_decorate_delivery_rows` 函数中，引入了 `manager_assignments` 的主管映射字典，在原有的 `arrived_confirm_by`（账号 ID）基础上，解析出主管姓名 `arrived_confirm_name` 和联系电话 `arrived_confirm_phone`。同时确保原有的供给方 `supply_entity_name` 及 `supply_entity_id` 均输出到前台。
+  2. **库管端（侧边栏）时光轴适配**：修改 `WarehouseManagementView.vue`，在发货阶段增加显示供给主体名称及 ID；在到货确认阶段，将确认人从账号 ID 替换为姓名，并新增显示其联系电话。
+  3. **需求侧与供给侧时光轴 Modal 适配**：同步修改 `DemandManagementView.vue` 和 `SupplyManagementView.vue` 的行转换机制（`normalizePendingRows` / `normalizeDeliveryRows`）及 Timeline 弹窗，补齐对这三个新字段的提取与渲染。
+  4. **编译与打包**：前后端项目静态校验及构建（`npm run build`）均一次性通过。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+  - [SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-07-15 [需求侧“现场到货与接收确认”表格调整“状态”列为左起第一列]
+- **任务结论**：在“需求侧管理入口”的“现场到货与接收确认”栏目中，成功将“状态”列调整为表格左起第一列，提高了到货状态和待办操作的视觉可读性：
+  1. **UI 列序调整**：在 `DemandManagementView.vue` 模板的待物流确认表格中，将状态表头 `<th class="cell-status">状态</th>` 及其对应的状态药丸标签渲染单元格 `<td class="cell-status">` 统一提至最前。
+  2. **编译打包**：运行 `npm run build` 打包顺利通过。
+- **改动清单**：
+  - [DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+
+## 2026-07-15 [修复发货提交接口因 build_order_no 命名不一致导致的 500 报错 Bug]
+- **任务结论**：修复了管厂用户在提交发货（无论是单车还是批量发货）时引发的 HTTP 500 Internal Server Error 报错：
+  1. **参数正名**：在 `workspace.py` 的 `_decorate_delivery_rows` 和 `_create_supply_delivery_entry` 函数中，调用订单号生成函数 `build_order_no` 时，将其中的关键字参数 `station_code` 纠正为了 `section_1_code`，完美对齐了重构后底层服务的参数命名契约。
+  2. **编译通过**：运行 `python -m py_compile` 顺利通过语法与编译静态检查。
+- **改动清单**：
+  - [workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-15 [全局管理“现场主管负责人映射”表格新增联系电话配置与保存逻辑]
+- **任务结论**：在全局管理大盘的“现场主管负责人映射”表格中成功增加了“联系电话”字段，打通了从 UI 编辑到配置文件写回的全链路：
+  1. **HTML 模板改造**：在 `GlobalManagementView.vue` 模板中的负责人列表表格里增加了“联系电话”一列，引入了 `<input>` 单元格绑定 `item.contact_phone`。
+  2. **新建行初始化**：在 `addManagerAssignment` 函数中新增了 `contact_phone: ''` 属性的初始化，确保新增主管记录时字段类型健全。
+  3. **保存与写回优化**：在 `buildSectionPayload` 的 `manager_assignments` 区块保存序列化逻辑里，补齐了对 `contact_phone: item.contact_phone || ''` 的序列化，确保用户保存时手机号字段能够完美写回 `tube_config.json`，不会被过滤丢失。
+  4. **编译打包**：运行 `npm run build` 打包顺利通过。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
 ## 2026-07-15 [优化登录页 2D 硬件加速与 Stacking Context 层级防闪烁加固]
 - **任务结论**：解决了登录页面左侧 3D 浮动动画图形与毛玻璃卡片由于 3D 渲染上下文冲突引起的局部高频闪烁（Flicker）Bug：
   1. **移除 3D 变换**：将浮动动画的 `translate3d(x, y, 0)` 替换为 2D 变换 `translate(x, y)`。保持 GPU 合成层优化的同时，退出 3D 渲染空间，杜绝浏览器对 Z 轴位置计算的浮点数精度冲突（Z-fighting）。

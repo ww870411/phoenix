@@ -513,7 +513,10 @@
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} 米</strong></div>
-                  <div>经办人：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
+                  <div style="grid-column: span 2;">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
+                  <div style="grid-column: span 2;">供给主体：<span>{{ deliveryDetailModalData.supplyEntityName || '—' }} ({{ deliveryDetailModalData.supplyEntityId || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">发货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
                 </div>
               </div>
@@ -535,7 +538,10 @@
                 </div>
                 <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} 米</strong></div>
-                  <div>确认人：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.arrivedConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.arrivedConfirmPhone }}</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.stationName || '—' }} ({{ deliveryDetailModalData.stationId || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedRemark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.arrivedRemark }}”</span></div>
                 </div>
               </div>
@@ -557,7 +563,10 @@
                 </div>
                 <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
-                  <div>接收人：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.receivedConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.receivedConfirmPhone }}</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.stationName || '—' }} ({{ deliveryDetailModalData.stationId || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedRemark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.receivedRemark }}”</span></div>
                   <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="deliveryDetailModalData.isTimeoutReceive">
                     🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
@@ -604,7 +613,9 @@
                 </div>
                 <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>入库日期：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
-                  <div>经办库管：<strong>{{ deliveryDetailModalData.warehouseConfirmBy }}</strong></div>
+                  <div>操作账号：<strong>{{ deliveryDetailModalData.warehouseConfirmBy || '—' }}</strong></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.warehouseConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.warehouseConfirmPhone }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
                 </div>
               </div>
@@ -825,21 +836,29 @@ const openTimelineModal = (row) => {
     isTimeoutReceive: Boolean(row.isTimeoutReceive),
     shippedQty: row.shippedQty,
     shippedAt: row.shippedAtDisplay || row.shippedAt,
+    stationId: row.stationId,
+    stationName: row.stationName,
     shipContactName: row.shipContactName,
     shipContactPhone: row.shipContactPhone,
     shipRemark: row.shipRemark,
     arrivedQty: row.arrivedQty,
     arrivedConfirmBy: row.arrivedConfirmBy,
+    arrivedConfirmName: row.arrivedConfirmName,
+    arrivedConfirmPhone: row.arrivedConfirmPhone,
     arrivedConfirmAt: row.arrivedConfirmAt,
     arrivedRemark: row.arrivedRemark,
     receivedQty: row.receivedQty,
     receivedConfirmBy: row.receivedConfirmBy,
+    receivedConfirmName: row.receivedConfirmName,
+    receivedConfirmPhone: row.receivedConfirmPhone,
     receivedConfirmAt: row.receivedConfirmAt,
     receivedRemark: row.receivedRemark,
     diffApproveBy: row.diffApproveBy,
     diffApproveAt: row.diffApproveAt,
     diffApproveRemark: row.diffApproveRemark,
     warehouseConfirmBy: row.warehouseConfirmBy,
+    warehouseConfirmName: row.warehouseConfirmName,
+    warehouseConfirmPhone: row.warehouseConfirmPhone,
     warehouseConfirmAt: row.warehouseConfirmAt,
     warehouseRemark: row.warehouseRemark,
     updatedBy: row.updatedBy || '',
@@ -1157,15 +1176,22 @@ function normalizeDeliveryRows(rows) {
     abnormalFlag: Boolean(row.abnormal_flag),
     cancelReason: row.cancel_reason || '',
     arrivedConfirmBy: row.arrived_confirm_by || '',
+    arrivedConfirmName: row.arrived_confirm_name || '',
+    arrivedConfirmPhone: row.arrived_confirm_phone || '',
     arrivedConfirmAt: row.arrived_confirm_at || '',
     arrivedRemark: row.arrived_remark || '',
     receivedConfirmBy: row.received_confirm_by || '',
+    receivedConfirmName: row.received_confirm_name || '',
+    receivedConfirmPhone: row.received_confirm_phone || '',
     receivedConfirmAt: row.received_confirm_at || '',
     receivedRemark: row.received_remark || '',
+    createdBy: row.created_by || '',
     diffApproveBy: row.diff_approve_by || '',
     diffApproveAt: row.diff_approve_at || '',
     diffApproveRemark: row.diff_approve_remark || '',
     warehouseConfirmBy: row.warehouse_confirm_by || '',
+    warehouseConfirmName: row.warehouse_confirm_name || '',
+    warehouseConfirmPhone: row.warehouse_confirm_phone || '',
     warehouseConfirmAt: row.warehouse_confirm_at || '',
     warehouseRemark: row.warehouse_remark || '',
     isTimeoutReceive: Boolean(row.is_timeout_receive),

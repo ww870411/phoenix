@@ -402,6 +402,7 @@
                     <tr>
                       <th>分管人账号ID (对应登录名)</th>
                       <th>分管负责人姓名</th>
+                      <th>联系电话</th>
                       <th>所分管的需求主体ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
@@ -410,6 +411,7 @@
                     <tr v-for="(item, index) in managerAssignments" :key="index">
                       <td><input v-model.trim="item.manager_id" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.manager_name" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="输入联系电话" /></td>
                       <td><input v-model.trim="item.section_1_ids_text" class="input table-cell-input" type="text" placeholder="如主体A, 主体B（逗号分隔）" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(managerAssignments, index)">删除</button></td>
                     </tr>
@@ -454,6 +456,44 @@
                       <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
                       <td><input v-model.trim="item.section_1_ids_text" class="input table-cell-input" type="text" placeholder="如主体A, 主体C（逗号分隔）" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(constructionUnits, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">库管人员映射</div>
+                  <p class="sub block-sub">配置库房管理员的真实姓名和联系电话等基本信息。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost" type="button" @click="addWarehouseKeeper">➕ 新增库管</button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('warehouse_keepers')" @click="saveSection('warehouse_keepers')">
+                    {{ isSaving('warehouse_keepers') ? '保存中…' : '💾 保存库管映射' }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="sectionMessage('warehouse_keepers')" :class="['section-tip', sectionMessage('warehouse_keepers').type]">
+                {{ sectionMessage('warehouse_keepers').text }}
+              </p>
+              <div class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr>
+                      <th>库管账号ID (对应登录名)</th>
+                      <th>库管员姓名</th>
+                      <th>联系电话</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in warehouseKeepers" :key="index">
+                      <td><input v-model.trim="item.keeper_id" class="input table-cell-input" type="text" placeholder="如 warehouse_keeper_a" /></td>
+                      <td><input v-model.trim="item.keeper_name" class="input table-cell-input" type="text" placeholder="输入姓名" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="输入联系电话" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(warehouseKeepers, index)">删除</button></td>
                     </tr>
                   </tbody>
                 </table>
@@ -1202,6 +1242,7 @@ const pipeModels = ref([])
 const productionCapacities = ref([])
 const managerAssignments = ref([])
 const constructionUnits = ref([])
+const warehouseKeepers = ref([])
 const baselinePresets = ref([])
 const submissionStatusPath = ref('')
 const latestSubmissions = ref([])
@@ -1368,6 +1409,11 @@ function applyConfig(config) {
   }))
   managerAssignments.value = normalizeAssignmentRows(config.manager_assignments, 'manager_id', 'manager_name')
   constructionUnits.value = normalizeAssignmentRows(config.construction_units, 'unit_id', 'unit_name')
+  warehouseKeepers.value = (config.warehouse_keepers || []).map((item) => ({
+    keeper_id: item.keeper_id || '',
+    keeper_name: item.keeper_name || '',
+    contact_phone: item.contact_phone || '',
+  }))
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   syncSelectedBaselineStation()
   weatherApiUrl.value = config.weather_api_url || ''
@@ -1473,6 +1519,7 @@ function buildSectionPayload(section) {
     return managerAssignments.value.map((item) => ({
       manager_id: item.manager_id || '',
       manager_name: item.manager_name || '',
+      contact_phone: item.contact_phone || '',
       section_1_ids: textToList(item.section_1_ids_text),
     }))
   }
@@ -1483,6 +1530,13 @@ function buildSectionPayload(section) {
       contact_name: item.contact_name || '',
       contact_phone: item.contact_phone || '',
       section_1_ids: textToList(item.section_1_ids_text),
+    }))
+  }
+  if (section === 'warehouse_keepers') {
+    return warehouseKeepers.value.map((item) => ({
+      keeper_id: item.keeper_id || '',
+      keeper_name: item.keeper_name || '',
+      contact_phone: item.contact_phone || '',
     }))
   }
   if (section === 'baseline_presets') {
@@ -1514,6 +1568,7 @@ const configPreviewText = computed(() =>
       production_capacities: buildSectionPayload('production_capacities'),
       manager_assignments: buildSectionPayload('manager_assignments'),
       construction_units: buildSectionPayload('construction_units'),
+      warehouse_keepers: buildSectionPayload('warehouse_keepers'),
       baseline_presets: buildSectionPayload('baseline_presets'),
       weather_api_url: weatherApiUrl.value || '',
     },
@@ -1721,6 +1776,7 @@ function addManagerAssignment() {
   managerAssignments.value.push({
     manager_id: '',
     manager_name: '',
+    contact_phone: '',
     section_1_ids_text: '',
   })
 }
@@ -1750,6 +1806,14 @@ function addConstructionUnit() {
     contact_name: '',
     contact_phone: '',
     section_1_ids_text: '',
+  })
+}
+
+function addWarehouseKeeper() {
+  warehouseKeepers.value.push({
+    keeper_id: '',
+    keeper_name: '',
+    contact_phone: '',
   })
 }
 

@@ -400,8 +400,10 @@
                     </div>
                     <div style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>发货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.shipped_qty) }} 米</strong></div>
-                      <div>经办人：<span>{{ selectedDelivery.ship_contact_name || '供给端系统' }}</span></div>
+                      <div>操作账号：<span>{{ selectedDelivery.created_by || '供给端系统' }}</span></div>
+                      <div>经办人：<span>{{ selectedDelivery.ship_contact_name || '—' }}</span></div>
                       <div style="grid-column: span 2;">联系电话：<span>{{ selectedDelivery.ship_contact_phone || '—' }}</span></div>
+                      <div style="grid-column: span 2;">供给主体：<span>{{ selectedDelivery.supply_entity_name || '—' }} ({{ selectedDelivery.supply_entity_id || '—' }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.ship_remark || selectedDelivery.cancel_reason">发货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.ship_remark || selectedDelivery.cancel_reason }}”</span></div>
                     </div>
                   </div>
@@ -424,7 +426,10 @@
                     </div>
                     <div v-if="selectedDelivery.arrived_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>到货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.arrived_qty) }} 米</strong></div>
-                      <div>确认人：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
+                      <div>操作账号：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
+                      <div>经办人：<span>{{ selectedDelivery.arrived_confirm_name || '—' }}</span></div>
+                      <div style="grid-column: span 2;" v-if="selectedDelivery.arrived_confirm_phone">联系电话：<span>{{ selectedDelivery.arrived_confirm_phone }}</span></div>
+                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.arrived_remark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.arrived_remark }}”</span></div>
                     </div>
                   </div>
@@ -448,7 +453,10 @@
                     </div>
                     <div v-if="selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve'" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>接收量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.received_qty) }} 米</strong></div>
-                      <div>经办人：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '施工填报人' }}</span></div>
+                      <div>操作账号：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
+                      <div>经办人：<span>{{ selectedDelivery.received_confirm_name || '—' }}</span></div>
+                      <div style="grid-column: span 2;" v-if="selectedDelivery.received_confirm_phone">联系电话：<span>{{ selectedDelivery.received_confirm_phone }}</span></div>
+                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.received_remark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.received_remark }}”</span></div>
                       <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="selectedDelivery.is_timeout_receive">
                         🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
@@ -497,7 +505,9 @@
                     </div>
                     <div v-if="selectedDelivery.warehouse_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>入库状态：<strong style="color: #0f766e;">✅ 入库手续已结清</strong></div>
-                      <div>经办人：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.warehouse_confirm_by || '—' }}</span></div>
+                      <div>操作账号：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.warehouse_confirm_by || '—' }}</span></div>
+                      <div>经办人：<span>{{ selectedDelivery.warehouse_confirm_name || '—' }}</span></div>
+                      <div style="grid-column: span 2;" v-if="selectedDelivery.warehouse_confirm_phone">联系电话：<span>{{ selectedDelivery.warehouse_confirm_phone }}</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.warehouse_remark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.warehouse_remark }}”</span></div>
                     </div>
                   </div>

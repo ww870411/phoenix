@@ -386,6 +386,7 @@
               <table class="data-table logistics-table">
                 <thead>
                   <tr>
+                    <th class="cell-status">状态</th>
                     <th>订单号</th>
                     <th>运输车次号</th>
                     <th>车牌号</th>
@@ -395,22 +396,12 @@
                     <th>发货时间</th>
                     <th>确认到货时间</th>
                     <th>在途时长</th>
-                    <th class="cell-status">状态</th>
                     <th>确认量（米）</th>
                     <th>确认操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in pendingRows" :key="row.deliveryId">
-                    <td class="cell-code">{{ row.deliveryCode || row.deliveryId }}</td>
-                    <td class="cell-code">{{ row.shipmentNo || '—' }}</td>
-                    <td class="cell-text" :title="row.vehiclePlateNo || '—'">{{ row.vehiclePlateNo || '—' }}</td>
-                    <td class="cell-text" :title="row.supplyEntityName">{{ row.supplyEntityName }}</td>
-                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
-                    <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
-                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
-                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</td>
-                    <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td class="cell-status">
                       <div class="status-pill-group">
                         <span 
@@ -426,6 +417,15 @@
                         </span>
                       </div>
                     </td>
+                    <td class="cell-code">{{ row.deliveryCode || row.deliveryId }}</td>
+                    <td class="cell-code">{{ row.shipmentNo || '—' }}</td>
+                    <td class="cell-text" :title="row.vehiclePlateNo || '—'">{{ row.vehiclePlateNo || '—' }}</td>
+                    <td class="cell-text" :title="row.supplyEntityName">{{ row.supplyEntityName }}</td>
+                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
+                    <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
+                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
+                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</td>
+                    <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td>
                       <div v-if="row.status === 'pending_arrival'" class="stack-controls">
                         <input
@@ -717,7 +717,10 @@
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} 米</strong></div>
-                  <div>经办人：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
+                  <div style="grid-column: span 2;">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
+                  <div style="grid-column: span 2;">供给主体：<span>{{ deliveryDetailModalData.supplyEntityName || '—' }} ({{ deliveryDetailModalData.supplyEntityId || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">发货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
                 </div>
               </div>
@@ -739,7 +742,10 @@
                 </div>
                 <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} 米</strong></div>
-                  <div>确认人：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.arrivedConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.arrivedConfirmPhone }}</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || '—' }} ({{ deliveryDetailModalData.section_1_id || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedRemark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.arrivedRemark }}”</span></div>
                 </div>
               </div>
@@ -761,7 +767,10 @@
                 </div>
                 <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
-                  <div>接收人：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.receivedConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.receivedConfirmPhone }}</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || '—' }} ({{ deliveryDetailModalData.section_1_id || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedRemark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.receivedRemark }}”</span></div>
                   <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="deliveryDetailModalData.isTimeoutReceive">
                     🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
@@ -808,7 +817,9 @@
                 </div>
                 <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>入库日期：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
-                  <div>经办库管：<strong>{{ deliveryDetailModalData.warehouseConfirmBy }}</strong></div>
+                  <div>操作账号：<strong>{{ deliveryDetailModalData.warehouseConfirmBy || '—' }}</strong></div>
+                  <div>经办人：<span>{{ deliveryDetailModalData.warehouseConfirmName || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.warehouseConfirmPhone }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
                 </div>
               </div>
@@ -1279,6 +1290,8 @@ function normalizePendingRows(rows) {
     vehiclePlateNo: row.vehicle_plate_no || row.vehiclePlateNo || '',
     supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
+    section_1_id: row.section_1_id || row.section1Id || '',
+    section_1_name: row.section_1_name || row.section1Name || '',
     status: row.status || '',
     isTimeoutReceive: Boolean(row.is_timeout_receive || row.isTimeoutReceive),
     statusLabel: getDeliveryStatusLabel(row.status, Boolean(row.is_timeout_receive || row.isTimeoutReceive)),
@@ -1296,8 +1309,18 @@ function normalizePendingRows(rows) {
     receiptRemark: row.received_remark || row.receivedRemark || '',
     createdBy: row.created_by || row.createdBy || '',
     shipRemark: row.ship_remark || row.shipRemark || '',
+    shipContactName: row.ship_contact_name || row.shipContactName || '',
+    shipContactPhone: row.ship_contact_phone || row.shipContactPhone || '',
+    supplyEntityId: row.supply_entity_id || row.supplyEntityId || '',
     arrivedConfirmBy: row.arrived_confirm_by || row.arrivedConfirmBy || '',
+    arrivedConfirmName: row.arrived_confirm_name || row.arrivedConfirmName || '',
+    arrivedConfirmPhone: row.arrived_confirm_phone || row.arrivedConfirmPhone || '',
     arrivedRemark: row.arrived_remark || row.arrivedRemark || '',
+    receivedConfirmBy: row.received_confirm_by || row.receivedConfirmBy || '',
+    receivedConfirmName: row.received_confirm_name || row.receivedConfirmName || '',
+    receivedConfirmPhone: row.received_confirm_phone || row.receivedConfirmPhone || '',
+    receivedConfirmAt: row.received_confirm_at || row.receivedConfirmAt || '',
+    receivedRemark: row.received_remark || row.receivedRemark || '',
     receivedConfirmBy: row.received_confirm_by || row.receivedConfirmBy || '',
     receivedConfirmAt: row.received_confirm_at || row.receivedConfirmAt || '',
     receivedRemark: row.received_remark || row.receivedRemark || '',
@@ -1305,6 +1328,8 @@ function normalizePendingRows(rows) {
     diffApproveAt: row.diff_approve_at || row.diffApproveAt || '',
     diffApproveRemark: row.diff_approve_remark || row.diffApproveRemark || '',
     warehouseConfirmBy: row.warehouse_confirm_by || row.warehouseConfirmBy || '',
+    warehouseConfirmName: row.warehouse_confirm_name || row.warehouseConfirmName || '',
+    warehouseConfirmPhone: row.warehouse_confirm_phone || row.warehouseConfirmPhone || '',
     warehouseConfirmAt: row.warehouse_confirm_at || row.warehouseConfirmAt || '',
     warehouseRemark: row.warehouse_remark || row.warehouseRemark || '',
     updatedBy: row.updated_by || row.updatedBy || '',

@@ -413,6 +413,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "production_capacities",
         "manager_assignments",
         "construction_units",
+        "warehouse_keepers",
         "baseline_presets",
         "weather_api_url",
         "management_mode",
@@ -557,6 +558,40 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
     pipe_model_map = _build_pipe_model_map(payload)
     supply_entity_map = _build_supply_entity_map(payload)
     supply_entity_code_map = _build_supply_entity_code_map(payload)
+    
+    # 建立负责人账号映射 (manager_id -> manager_name & contact_phone)
+    manager_assignments = payload.get("manager_assignments") or []
+    manager_map = {}
+    for item in manager_assignments:
+        m_id = str(item.get("manager_id") or "").strip()
+        if m_id:
+            manager_map[m_id] = {
+                "manager_name": item.get("manager_name") or "",
+                "contact_phone": item.get("contact_phone") or ""
+            }
+
+    # 建立施工单位映射 (unit_id -> contact_name & contact_phone)
+    construction_units = payload.get("construction_units") or []
+    construction_map = {}
+    for item in construction_units:
+        u_id = str(item.get("unit_id") or "").strip()
+        if u_id:
+            construction_map[u_id] = {
+                "contact_name": item.get("contact_name") or "",
+                "contact_phone": item.get("contact_phone") or ""
+            }
+
+    # 建立库管人员映射 (keeper_id -> keeper_name & contact_phone)
+    warehouse_keepers = payload.get("warehouse_keepers") or []
+    keeper_map = {}
+    for item in warehouse_keepers:
+        k_id = str(item.get("keeper_id") or "").strip()
+        if k_id:
+            keeper_map[k_id] = {
+                "keeper_name": item.get("keeper_name") or "",
+                "contact_phone": item.get("contact_phone") or ""
+            }
+
     for row in rows:
         shipped_at_value = datetime.fromisoformat(row["shipped_at"]) if row.get("shipped_at") else None
         arrived_confirm_at_value = datetime.fromisoformat(row["arrived_confirm_at"]) if row.get("arrived_confirm_at") else None
@@ -566,7 +601,7 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
             row["id"],
             shipped_at=shipped_at_value,
             supply_code=supply_code,
-            station_code=section_1_code,
+            section_1_code=section_1_code,
         )
         row["shipment_no"] = row.get("shipment_no") or build_shipment_no(
             row["id"],
@@ -584,6 +619,33 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
         row["section_1_name"] = section_1_name_map.get(row["section_1_id"], row["section_1_id"])
         row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
         row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
+        
+        # 填充到货确认的操作负责人姓名和电话
+        arrived_by = row.get("arrived_confirm_by")
+        if arrived_by and arrived_by in manager_map:
+            row["arrived_confirm_name"] = manager_map[arrived_by]["manager_name"]
+            row["arrived_confirm_phone"] = manager_map[arrived_by]["contact_phone"]
+        else:
+            row["arrived_confirm_name"] = arrived_by or ""
+            row["arrived_confirm_phone"] = ""
+
+        # 填充施工接收的操作负责人姓名和电话
+        received_by = row.get("received_confirm_by")
+        if received_by and received_by in construction_map:
+            row["received_confirm_name"] = construction_map[received_by]["contact_name"]
+            row["received_confirm_phone"] = construction_map[received_by]["contact_phone"]
+        else:
+            row["received_confirm_name"] = received_by or ""
+            row["received_confirm_phone"] = ""
+
+        # 填充库管确认的操作负责人姓名 and 电话
+        warehouse_by = row.get("warehouse_confirm_by")
+        if warehouse_by and warehouse_by in keeper_map:
+            row["warehouse_confirm_name"] = keeper_map[warehouse_by]["keeper_name"]
+            row["warehouse_confirm_phone"] = keeper_map[warehouse_by]["contact_phone"]
+        else:
+            row["warehouse_confirm_name"] = warehouse_by or ""
+            row["warehouse_confirm_phone"] = ""
 
 
 def _resolve_shipment_no_for_create(
@@ -662,7 +724,7 @@ def _create_supply_delivery_entry(
         next_order_sequence,
         shipped_at=shipped_at,
         supply_code=supply_code,
-        station_code=section_1_code,
+        section_1_code=section_1_code,
     )
     shipment_no, shipment_reused, resolved_vehicle_plate_no = _resolve_shipment_no_for_create(
         requested_shipment_no=requested_shipment_no,
@@ -701,6 +763,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
     production_capacities = get_config_list(payload, "production_capacities")
     manager_assignments = get_config_list(payload, "manager_assignments")
     construction_units = get_config_list(payload, "construction_units")
+    warehouse_keepers = get_config_list(payload, "warehouse_keepers")
     baseline_presets = get_config_list(payload, "baseline_presets")
 
     return {
@@ -718,6 +781,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
             "production_capacity_count": len(production_capacities),
             "manager_assignment_count": len(manager_assignments),
             "construction_unit_count": len(construction_units),
+            "warehouse_keeper_count": len(warehouse_keepers),
             "baseline_preset_count": len(baseline_presets),
         },
         "supply_entities": supply_entities,
@@ -726,6 +790,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         "production_capacities": production_capacities,
         "manager_assignments": manager_assignments,
         "construction_units": construction_units,
+        "warehouse_keepers": warehouse_keepers,
         "baseline_presets": baseline_presets,
     }
 

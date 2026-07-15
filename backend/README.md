@@ -1,3 +1,52 @@
+## 2026-07-15 卸车到货与施工接收阶段需求主体字段解析适配说明
+
+- 本轮处理与实现原理：
+  - 本轮改动属于前端大盘和详情 Timeline 的显示强化，后端发货单数据接口（`get_warehouse_management_deliveries` 等）已经包含了 `section_1_id` 及其对应的解析名称 `section_1_name`。后端无需做逻辑更改，保持平稳运行。
+
+## 2026-07-15 库管员人员信息映射及后端配置区块化保存支持
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `_decorate_delivery_rows` 中注入库管主管字典匹配，计算并注入 `warehouse_confirm_name` 和 `warehouse_confirm_phone`；同时在 `allowed_sections` 加上 `"warehouse_keepers"` 确保 API 保存畅通)
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` (初始化加入 `"warehouse_keepers"` 节点演示数据)
+- 本轮处理与实现原理：
+  - 打通了库房管理员的信息配置链。在配置保存白名单中追加了 `"warehouse_keepers"`。当接收到发货单列表查询或 Timeline 物流请求时，系统会自动抓取 `warehouse_confirm_by` (即执行入库确认的操作人员账号ID)，并解析对应库管员的真实姓名和联系电话，在第 4 确认入库节点进行透出。
+
+## 2026-07-15 轨迹时光轴分行渲染后端适配说明
+
+- 本轮处理与实现原理：
+  - 本轮物理分行渲染改动属于前端页面 Timeline 模板和数据流字段独立呈现适配，后端 `workspace.py` 已提供全部独立字段（`created_by` / `arrived_confirm_by` / `received_confirm_by` 与 `arrived_confirm_name` / `received_confirm_name`），后端无需重复改动，保持稳定运行。
+
+## 2026-07-15 发货记录装饰函数 _decorate_delivery_rows 施工单位负责人电话扩展
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (新增对施工分包单位 `construction_units` 的匹配映射处理，计算并注入 `received_confirm_name` 和 `received_confirm_phone`)
+- 本轮处理与实现原理：
+  - 扩展了物理发货单修饰流，建立了施工单位 ID (unit_id) 到工地联系人姓名 (contact_name) 和电话 (contact_phone) 的哈希匹配结构。对于已完成施工接收确认的行数据，系统会自动检索出具体接收单位的操作人手机及负责人姓名，供前端进行全节点覆盖渲染。
+
+## 2026-07-15 发货记录装饰函数 _decorate_delivery_rows 增强以透出到货主管姓名电话
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `_decorate_delivery_rows` 中增加主管联系表映射，计算并注入 `arrived_confirm_name` 和 `arrived_confirm_phone`)
+- 本轮处理与实现原理：
+  - 在后端公共的发货记录修饰流（所有发货单列表查询接口的基础处理链）中引入字典，解析配置文件里的现场主管映射配置。这让前端能够随时直接调用到经过解密核对后的“物流卸车到货确认”操作人的真实姓名及手机号，从而摆脱以前只能在凭证上查阅账号 ID 的限制。
+
+## 2026-07-15 现场到货与接收确认表调整状态列顺序说明
+
+- 本轮处理与实现原理：
+  - 本轮改造仅限于前端 `DemandManagementView.vue` 待处理物流表格 DOM 列顺序调整，后端相关接口（`/pending-arrivals` 和 `/logistics-records`）均未做任何物理代码或序列化改动。
+
+## 2026-07-15 发货提交接口因 build_order_no 传参不一致导致的 500 报错 Bug 修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (修改 `_decorate_delivery_rows` 和 `_create_supply_delivery_entry` 中 `build_order_no` 的关键字调用参数名，由 `station_code` 纠正为 `section_1_code`)
+- 本轮处理与实现原理：
+  - 彻底解决了由于重构中底层订单号构建接口 `build_order_no` 的第四参数由 `station_code` 正名为了 `section_1_code`，但上游 API 接口层依然传入旧的 `station_code=...` 导致的 `TypeError` 内部服务报错问题。
+
+## 2026-07-15 全局管理现场主管负责人映射表新增联系电话字段支持说明
+
+- 本轮处理与实现原理：
+  - 本轮改造仅限于前端 `GlobalManagementView.vue` 中有关 `manager_assignments` 区块字段的输入和保存序列化支持，后端由于使用 Any 动态参数结构已自然向下兼容该字段的读写及存储，后端无物理代码改动。
+
 ## 2026-07-15 登录页左侧动画闪动修复说明
 
 - 本轮仅调整 `frontend/src/pages/LoginView.vue` 的 CSS 合成渲染链，移除了与持续动画叠加的滤镜效果；后端接口、鉴权服务、数据库和配置文件均未改动。

@@ -1,3 +1,68 @@
+## 2026-07-15 物流卸车与施工接收阶段新增需求主体显示
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (在到货确认和施工物理接收两个流转节点的渲染区块中，追加了需求主体字段的展示)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在行转化函数 normalizePendingRows 中映射 section_1_id 和 section_1_name，并在弹窗对应的节点中渲染)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (在 openTimelineModal 传参中补充传递标段信息，并在 Timeline 到货和施工接收节点同步输出展示)
+- 本轮处理与实现原理：
+  - 在“物流卸车到货确认”与“施工物理接收确认”两个承接阶段，引入并呈现当前发货记录对应的需求主体 `名称 (标段ID)` 形式。该字段在三端被同步引入并渲染在经办人员或到货量下方，便于大盘及多端用户直接校对物流目的地。
+
+## 2026-07-15 全局管理“人员映射”页面支持库管人员管理
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在“人员映射与施工”子 Tab 页底部增设库管映射表，管理库管 ID、姓名和电话的加载和区块化保存)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (库管确认手续结清节点排版拆分为：操作账号、经办人、联系电话，使用后端解析下发的新字段渲染)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在 normalizePendingRows 转换流中提取库管的姓名与电话并注入，Timeline 弹窗改用分行隔离展示)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (在 normalizeDeliveryRows 和 openTimelineModal 中进行拷贝字段传递，Timeline 弹窗改用分行隔离展示)
+- 本轮处理与实现原理：
+  - 在全局管理中为库管人员的联络设定提供统一操作入口，直接与后端 `warehouse_keepers` 区块数据链打通。同时重构了多端发货单轨迹 Timeline 里的第四节点（确认入库阶段），将原始账号及刚映射出的姓名和电话分行物理渲染，使库管员层面的签认归档数据同样具备完整证据链。
+
+## 2026-07-15 轨迹时光轴“操作账号”与“经办人”字段分行隔离渲染
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (更新常驻时光轴模板，将 `created_by` / `arrived_confirm_by` / `received_confirm_by` 提取为独立字段)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (更新弹窗时光轴模板，将操作账号与负责人分行独立输出)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (更新弹窗时光轴模板，并清理了局部的 DOM 代码重复)
+- 本轮处理与实现原理：
+  - 将之前通过括号组合展示的 `姓名 (账号)` 改良为完全分行的独立属性渲染。在发货、到货和物理接收流转卡片中，分别支持了“操作账号”与“经办人”的多行显示，使得在视觉呈现上更为正规和利于审查。
+
+## 2026-07-15 全生命周期流转轨迹时光轴规范化展示与施工属性提取
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (经办人文案统一；规范化装车发货、到货确认和物理接收的账户括号以及施工联系电话的展示)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在 normalizePendingRows 中映射新增的施工联系人与电话，同步更新 Timeline 弹窗)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (在 normalizeDeliveryRows 和 openTimelineModal 中进行属性匹配传递，更新 Timeline 弹窗)
+- 本轮处理与实现原理：
+  - 统一将到货确认和物理接收两处的“确认人/接收人”改为“经办人”。对这三处统一对齐为 `真实姓名 (操作账户名)` 的拼装组合。此外，通过后端新下发的施工联系方式，在施工接收节点实现了对其 `contact_name` (负责人) 和 `contact_phone` (联系电话) 的全面渲染。
+
+## 2026-07-15 全生命周期轨迹时光轴展示字段增强
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue` (更新库管侧边栏时光轴模板以渲染供给方 ID/名称和到货确认人姓名/电话)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在 normalizePendingRows 中映射新增属性，更新 Timeline 弹窗模板)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (在 normalizeDeliveryRows 和 openTimelineModal 中进行属性传递映射，更新 Timeline 弹窗模板)
+- 本轮处理与实现原理：
+  - 增强了多端关于发货单时光轴 Timeline 的详情信息显示。使装车发货步骤能透出具体的供给主体 `supply_entity_name (supply_entity_id)`，到货确认步骤透出到货确认人（匹配 `manager_assignments`）的姓名和电话。
+
+## 2026-07-15 现场到货与接收确认表调整状态为第一列
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (调整 logistics-table 的 status 列的 th 和 td 位置)
+- 本轮处理与实现原理：
+  - 响应现场主管管理流程体验，将物流待确认列表表格的第一列调整为“状态”，使用户在载入页面时能第一时间从左侧扫视到哪些车次处于待确认（Pending）或者确认异常（Abnormal）状态。
+
+## 2026-07-15 发货提交接口 500 Bug 修复前端说明
+
+- 本轮处理与实现原理：
+  - 本轮改造仅限于后端 `workspace.py` 中对生成发货单订单号关键字传参的修改，前端提交逻辑、数据模型及 API 传参结构维持正常无改动。
+
+## 2026-07-15 全局管理现场主管负责人映射表新增联系电话字段
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在负责人列表的 HTML、保存数据包的 map 逻辑及新增主管的 Push 初始对象中补齐 `contact_phone` 支持)
+- 本轮处理与实现原理：
+  - 响应用户在 `tube_config.json` 中定义的主管联系电话信息，在前端“负责人映射表”中新开辟“联系电话”编辑列，并打通其到配置整体序列化保存写回后端的业务通路，防范字段丢失。
+
 ## 2026-07-15 登录页左侧动画闪动修复
 
 - 变更文件：`frontend/src/pages/LoginView.vue`。
