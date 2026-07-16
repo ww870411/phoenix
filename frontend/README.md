@@ -1,3 +1,59 @@
+## 2026-07-16 修改只读账户 Banner 部门名称影响说明
+
+- 本轮处理与实现原理：
+  - 本轮改动为纯后端账号配置调整。前端 Banner 顶端的用户展示组件会自动从会话数据中渲染最新 `session.unit`。修改后已完成自适应更新，无需前端进行任何物理代码重构。
+
+## 2026-07-16 修复只读用户组库管页面拦截影响说明
+
+- 本轮处理与实现原理：
+  - 本轮改动为纯后端库管只读数据放行。前端库管员管理页面已能顺利加载车辆发货状态明细，无需针对只读模式做前端物理代码改动。
+
+## 2026-07-16 修复只读用户组数据展示及历史查询拦截影响说明
+
+- 本轮处理与实现原理：
+  - 本轮改动为纯后端权限扩展。由于后端在 API 与服务层放开了数据可见性与历史查询鉴权限制，前端各页面（需求填报、供应填报、库管确认、历史查询）重新加载时已能顺利获取到完整的下拉框实体与历史数据，前端页面自动渲染就绪。
+
+## 2026-07-16 新增 tube_global_viewer 用户组前端影响说明
+
+- 本轮处理与实现原理：
+  - 本轮改动为纯配置文件级扩展。
+  - 前端路由与项目选择页会根据 `项目列表.json` 中的 `availability` 展示卡片。进入项目后，前台卡片列表会根据该角色的 `page_access` 清单安全生成（过滤掉了“全局管理”）。
+  - 各表单页面（需求填报、供应填报、库管确认）内的所有输入框与数据保存/提交按钮，会自动读取角色 `actions.can_submit = false` 的设置，并自动执行全局置灰与只读控制，无需为只读模式进行二次硬编码修改。
+
+## 2026-07-16 需求侧 Tab 切换脏数据检测守卫与数据自动刷新
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (将各 Tab 按钮和管控锁跳转绑定修改为 handleTabClick 拦截，同时实现原始数据深拷贝备份 backupPlanRows/backupUsageRows 及 isPlanDirty/isUsageDirty 计算属性)
+- 本轮处理与实现原理：
+  - **Tab 切换数据守卫**：在用户切换 Tab 或点击重置时，如果当前正在编辑的计划表或消耗表已被修改（Dirty 状态，即当前数据与原始加载时的序列化备份不同），系统会自动弹出二次确认对话框，提醒用户未保存的数据将会丢失。只有在确认丢弃或未进行修改时，才允许切换。
+  - **自动按需刷新**：当无脏数据且确认切换 Tab（或在当前 Tab 页面重复点击刷新按钮）时，前端会自动触发对应板块的查询加载 API（如 `loadPlanMatrix` 或 `loadUsageSheet` 等），确保前台展示的永远是服务器上最新、最准确的数据。
+
+## 2026-07-16 需求侧三日计划与每日消耗填报页面取消激活自动刷新
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (移除了 useTubeRealtimeRefresh 挂载监听，取消了窗口返回重新激活时调用 refreshRealtimeConfig 重新加载数据覆盖本地输入的行为；同时清理了相关的冗余导入)
+- 本轮处理与实现原理：
+  - 移除了在 `DemandManagementView.vue` 中对 `useTubeRealtimeRefresh` 的依赖注入，切断了在窗口激活（`focus` 与 `visibilitychange` 事件）时自动重新向后端发起拉取数据的业务指令。这完全杜绝了用户正在表格内填报、但尚未点击提交的数据，在切屏或失焦返回时被被动刷新清空覆盖的安全隐患。
+
+## 2026-07-16 每日消耗与损耗填报 Tab 新增 Excel 批量粘贴录入功能
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` (在消耗填报 Tab 顶部增加批量粘贴解析 HTML 区块，并在 JavaScript 逻辑中实现 handleUsageClipboardPaste 匹配填充函数)
+- 本轮处理与实现原理：
+  - 在需求侧管理的“实际消耗与损耗上报”（`usage`）面板中，引入了 Excel 智能批量粘贴录入。
+  - 用户从 Excel 等表格复制 `[型号, 实际使用量, 实际损耗量, 备注]` 后，在该粘贴区直接按 `Ctrl+V`，函数 `handleUsageClipboardPaste` 将会把数据解析并精准映射填报至对应的行，极大减轻了手工逐一填写的负担，且支持 2 到 4 列的模糊自适应提取填充。
+
+## 2026-07-16 保温管历史数据查询功能独立卡片化抽取
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue` (新创建的独立历史数据查询页面)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue` (导入并注册历史数据查询的路由映射)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (剥离并清理历史查询的冗余代码)
+- 本轮处理与实现原理：
+  - 新建了专用的历史数据明细与透视分析页面 `HistoryQueryView.vue`，从超管全局管理中剥离了历史数据查询表格。
+  - 重构了初始化获取需求主体的逻辑，由原来的需要超级管理员权限的“核心配置接口”，重构为调用免签公开的摘要配置接口（`getTubeWorkspaceConfigSummary`）以获取 `demand_entities` 选项列表。
+  - 在 `TubeProjectPageRouterView.vue` 中完成对新卡片路径 `history_query` 路由的直接挂载，并在全局管理入口中清洗了相关历史数据面板的冗余代码。
+
 ## 2026-07-15 修复全局配置保存提示 ReferenceError 未定义问题
 
 - 变更文件：

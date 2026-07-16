@@ -166,6 +166,13 @@
         "password": "warehouse_keeper_a123",
         "unit": "物资仓库"
       }
+    ],
+    "tube_global_viewer": [
+      {
+        "username": "tube_viewer",
+        "password": "tube_viewer123",
+        "unit": "项目全局浏览"
+      }
     ]
   }
 }

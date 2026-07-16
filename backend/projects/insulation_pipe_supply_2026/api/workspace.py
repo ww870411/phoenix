@@ -380,7 +380,7 @@ def _ensure_global_admin(session: AuthSession) -> None:
 
 def _ensure_warehouse_access(session: AuthSession) -> None:
     group = str(session.group or "").strip()
-    if group not in {"Global_admin", "tube_warehouse_keeper"}:
+    if group not in {"Global_admin", "tube_warehouse_keeper", "tube_global_viewer"}:
         raise HTTPException(status_code=403, detail="当前账号无库管页面访问权限")
 
 
@@ -1361,6 +1361,8 @@ def confirm_warehouse_delivery_warehouse(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
+    if str(session.group or "").strip() == "tube_global_viewer":
+        raise HTTPException(status_code=403, detail="只读账号无权提交数据")
     before_val = get_delivery_record_basic(delivery_id)
     update_delivery_warehouse_record(
         delivery_id=delivery_id,
@@ -2257,7 +2259,16 @@ def get_global_management_history(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     group_lower = str(session.group or "").strip().lower()
-    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+    allowed_groups = {
+        "global_admin",
+        "tube_warehouse_admin",
+        "tube_supplier",
+        "tube_site_manager",
+        "tube_construction_unit",
+        "tube_warehouse_keeper",
+        "tube_global_viewer",
+    }
+    if group_lower not in allowed_groups:
         raise HTTPException(status_code=403, detail="无权查看历史数据")
         
     try:
@@ -2304,7 +2315,16 @@ def export_global_management_history(
     session: AuthSession = Depends(get_current_session),
 ):
     group_lower = str(session.group or "").strip().lower()
-    if group_lower not in {"global_admin", "tube_warehouse_admin"}:
+    allowed_groups = {
+        "global_admin",
+        "tube_warehouse_admin",
+        "tube_supplier",
+        "tube_site_manager",
+        "tube_construction_unit",
+        "tube_warehouse_keeper",
+        "tube_global_viewer",
+    }
+    if group_lower not in allowed_groups:
         raise HTTPException(status_code=403, detail="无权导出历史数据")
         
     try:

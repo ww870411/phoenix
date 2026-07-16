@@ -127,7 +127,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
         for item in demand_entities
         if str(item.get("section_1_id") or "").strip()
     }
-    if normalized_group == "Global_admin":
+    if normalized_group in ("Global_admin", "tube_global_viewer"):
         return all_section_1_ids
 
     manager_assignments = get_config_list(payload, "manager_assignments")
@@ -170,7 +170,7 @@ def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str,
         for item in supply_entities
         if str(item.get("entity_id") or "").strip()
     }
-    if normalized_group == "Global_admin":
+    if normalized_group in ("Global_admin", "tube_global_viewer"):
         return all_entity_ids
 
     allowed_entity_ids: Set[str] = set()

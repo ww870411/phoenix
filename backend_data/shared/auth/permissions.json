@@ -136,6 +136,7 @@
         "insulation_pipe_supply_2026": {
           "page_access": [
             "dashboard",
+            "history_query",
             "global_management",
             "supply_management",
             "demand_management",
@@ -511,7 +512,8 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
-            "supply_management"
+            "supply_management",
+            "history_query"
           ],
           "sheet_rules": {},
           "units_access": [
@@ -537,7 +539,8 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
-            "demand_management"
+            "demand_management",
+            "history_query"
           ],
           "sheet_rules": {},
           "units_access": [
@@ -563,7 +566,8 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
-            "demand_management"
+            "demand_management",
+            "history_query"
           ],
           "sheet_rules": {},
           "units_access": [
@@ -589,7 +593,8 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
-            "warehouse_management"
+            "warehouse_management",
+            "history_query"
           ],
           "sheet_rules": {},
           "units_access": [
@@ -605,6 +610,36 @@
             "can_manage_ai_settings": false,
             "can_manage_ai_sheet_switch": false,
             "can_extract_xlsx": false,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
+    "tube_global_viewer": {
+      "hierarchy": 60,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "dashboard",
+            "history_query",
+            "supply_management",
+            "demand_management",
+            "warehouse_management"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": false,
+            "can_approve": false,
+            "can_revoke": false,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": true,
             "can_unlimited_ai_usage": false
           }
         }

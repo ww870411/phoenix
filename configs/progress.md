@@ -1,3 +1,89 @@
+## 2026-07-16 [修改只读示例账号 tube_viewer 网页 Banner 部门名称展示]
+- **任务结论**：成功根据用户要求，将网页 Banner 顶端的用户组展示名称从原有的 `“tube_viewer｜tube项目全局只读”` 优雅修改为 `“tube_viewer｜项目全局浏览”`。
+- **实现**：
+  1. **部门配置调整**：修改了配置文件 `账户信息.json`，将 `tube_viewer` 账户的所属单位属性 `"unit"` 由 `"tube项目全局只读"` 改为了 `"项目全局浏览"`。由此当用户使用此账号登录并加载会话后，前台 Banner 将会自动拉取最新 `unit` 变量完成自适应渲染展示。
+- **影响与回滚**：仅用于修改只读示例账号的 Banner 文本样式，不产生任何逻辑副作用。可通过 Git 直接撤销文件修改。
+- **改动清单**：
+  - [账户信息.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/%E8%B4%A6%E6%88%B7%E4%BF%A1%E6%81%AF.json)
+
+## 2026-07-16 [修复只读用户组 tube_global_viewer 库管页访问拦截与写接口安全强控]
+- **任务结论**：修复了在只读账号访问库管员管理页面时，因后端库管限制函数 `_ensure_warehouse_access` 硬编码未包含只读用户组，导致报错 403 “当前账号无库管页面访问权限” 的 Bug。同时对库管确认写接口实施了只读安全二次防御强控。
+- **实现**：
+  1. **放开库管数据获取**：在 `workspace.py` 的 `_ensure_warehouse_access` 函数中，追加放行 `"tube_global_viewer"`，使得只读账号能正常拉取和浏览库管员模块的车辆到货明细列表。
+  2. **写操作强控二次防御**：在确认手续闭环的 POST 写接口 `/warehouse-management/deliveries/{delivery_id}/warehouse` 中，增加针对 `"tube_global_viewer"` 的物理防守强控拦截。一旦该只读角色通过绕过前端按钮限制发送写请求，后端将强制返回 403 “只读账号无权提交数据”，确保数据库只读的绝对安全性。
+- **影响与回滚**：仅用于修复库管数据的加载展现及写操作安全拦截，不干扰其他日常角色。可通过 Git 快速回撤修改。
+- **改动清单**：
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-16 [修复只读用户组 tube_global_viewer 后端数据权限及历史查询接口拦截]
+- **任务结论**：修复了在新增 `tube_global_viewer` 用户组后，因后端 API 接口硬编码拦截和数据实体可见性范围未授权，导致该角色查看不到任何工地、管厂实体数据且历史查询接口报 403 越权的 Bug。
+- **实现**：
+  1. **实体数据可见性授权**：在 `config_service.py` 的 `resolve_accessible_section_1_ids` 和 `resolve_accessible_supply_entity_ids` 中，将只读用户组 `"tube_global_viewer"` 的数据匹配模式提升至与 `Global_admin` 一致的“全局可视范围”，使其可以正常加载并查看全部工地与管厂的数据。
+  2. **放宽历史接口鉴权**：在 `workspace.py` 的 `/global-management/history` 与 `/global-management/history/export` 接口中，将只读用户组 `"tube_global_viewer"` 加入 `allowed_groups` 鉴权白名单集合，允许其安全调取和导出历史数据明细。
+- **影响与回滚**：仅用于修复只读账户下的数据拉取完整性，不会对其他角色造成任何逻辑影响。可通过 Git 回滚本次修改的后端代码。
+- **改动清单**：
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [config_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+
+## 2026-07-16 [保温管物流链项目新增 tube_global_viewer 全局只读用户组及示例账号]
+- **任务结论**：成功在保温管物流链系统（`insulation_pipe_supply_2026`）中扩展了 `tube_global_viewer` 用户组。该用户组能够查看除全局超管配置外的任意卡片数据和筛选历史记录，但完全被剥夺了任何写提交数据库的行为。同时生成了示例测试账户。
+- **实现**：
+  1. **项目专属配置**：在专属文件 `insulation_pipe_supply_2026.json` 中，定义了 `"tube_global_viewer"` 的 `page_access` 卡片清单（除超管外全部放行），并将 `actions` 下除 `"can_extract_xlsx"` 允许导出外，其余 `can_submit` 等填报修改控制权全部强制设为 `false`。
+  2. **全局降级与项目可用性**：在大权限文件 `permissions.json` 的末尾同步追加了该用户组在对应项目下的权限定义；并将 `"tube_global_viewer"` 追加到了 `项目列表.json` 中对该项目的 `availability` 可见性名单中。
+  3. **测试账号生成**：在 `账户信息.json` 中，新增了测试账号 `tube_viewer` (密码为 `tube_viewer123`，标识部门为 `全局只读`) 并归属于 `"tube_global_viewer"` 用户组。
+- **影响与回滚**：仅用于新增只读用户权限，不影响原 5 个角色的日常运转。可通过 Git 快速回滚这 4 个 JSON 配置文件。
+- **改动清单**：
+  - [insulation_pipe_supply_2026.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+  - [permissions.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions.json)
+  - [项目列表.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/%E9%A1%B9%E7%9B%AE%E5%88%97%E8%A1%A8.json)
+  - [账户信息.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/%E8%B4%A6%E6%88%B7%E4%BF%A1%E6%81%AF.json)
+
+## 2026-07-16 [需求侧填报 Tab 切换自动刷新及未保存数据二次确认守卫上线]
+- **任务结论**：成功在需求侧管理的 Tab 标签页切换中加入了数据脏检测（Dirty check）和未保存修改的二次确认（丢弃/留在原处）拦截守卫；同时实现了切换标签页及重复点击当前 Tab 时的自动数据重载刷新逻辑。
+- **实现**：
+  1. **拦截机制**：在 `DemandManagementView.vue` 中把 4 个 Tab 按钮及流程管控横幅的点击事件统一改造为 `handleTabClick(targetTab)` 进行路由式守卫拦截。
+  2. **数据备份与脏检测**：分别在加载完计划（`loadPlanMatrix`）和消耗（`loadUsageSheet`）原始数据后，将其进行深拷贝序列化备份。通过计算属性 `isPlanDirty` 与 `isUsageDirty` 实时感应用户对表格的修改。
+  3. **跳转与刷新**：如果在有未保存修改（即脏数据）时切换 Tab，会调用浏览器标准 `confirm` 弹窗提醒。当用户选择“确认丢弃”或在无脏数据时，将顺利切换 Tab 并在加载目标 Tab 时自动执行刷新（如 `loadPlanMatrix()` 或 `loadUsageSheet()` 等），确保获取到服务器最新数据。
+- **影响与回滚**：仅用于填报板块的安全防丢与自动刷新交互，不更改接口定义，可通过 Git 轻易撤销修改。
+- **改动清单**：
+  - [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+
+## 2026-07-16 [需求侧三日计划与每日消耗填报页面取消激活自动刷新逻辑]
+- **任务结论**：彻底取消了需求侧管理中计划（`plan`）与消耗（`usage`）填报板块在窗口/标签页失焦重新返回激活时的自动刷新逻辑，完美防范了用户尚未保存的填报数据被被动刷新覆盖冲掉的问题。
+- **实现**：
+  1. **移除刷新钩子**：在 `DemandManagementView.vue` 脚本中移除了 `useTubeRealtimeRefresh(refreshRealtimeConfig)` 挂载调用，切断了窗口激活与配置数据重装的联动机制。
+  2. **清除导入依赖**：清理了 `useTubeRealtimeRefresh` 相关的冗余导入以维护代码体积健康度。
+- **影响与回滚**：此变动仅限本地输入时防护，不影响手动刷新与数据提交机制，可以通过 Git 轻易撤销。
+- **改动清单**：
+  - [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+
+## 2026-07-16 [需求侧每日消耗填报板块新增 Excel 智能粘贴录入功能]
+- **任务结论**：成功在需求侧管理的“实际消耗与损耗上报”（`usage`）板块中加入了智能 Excel 批量粘贴录入功能，与计划填报端的体验保持对齐。
+- **实现**：
+  1. **UI 增强**：在 `DemandManagementView.vue` 的每日消耗上报 Tab 顶部新增了智能 Excel 批量粘贴区域 `.paste-zone`。
+  2. **粘贴解析实现**：编写了专用的 `handleUsageClipboardPaste` 函数，智能切分用户从线下 Excel 复制的 `[型号, 使用量, 损耗量(可选), 备注(可选)]` 剪贴板文本。它不仅能自适应匹配对应的规格行，还具备高度的容错率（支持 2 至 4 列，并分别安全注入 `usedQty`、`lossQty` 和 `remarks` 中）。
+- **影响与回滚**：仅对消耗上报的前台输入数据包有辅助填充作用，不改变后端存储结构与提交接口。可通过 Git 直接撤销前端组件修改。
+- **改动清单**：
+  - [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+
+## 2026-07-16 [保温管物流链系统“历史数据查询”卡片化抽取与权限放宽上线]
+- **任务结论**：成功将全局管理中的“历史数据查询”功能进行了彻底的物理剥离，并作为独立功能卡片开放给子项目所有账号（共 5 个业务角色）使用。
+- **实现**：
+  1. **配置赋权**：在 `项目列表.json` 里的 `insulation_pipe_supply_2026` 追加 `"history_query"`，并在单体权限文件 `permissions.json` 以及项目专属权限配置 `insulation_pipe_supply_2026.json` 中向 `Global_admin` 及其他 4 个 `tube_*` 业务角色下派对应的 `page_access` 访问权。
+  2. **后端放宽鉴权**：在 `workspace.py` 中，将历史查询 API（`/global-management/history` 与 `/global-management/history/export`）的角色判断范围放宽，支持所有管网关联的 5 个分组和超管共同安全访问。
+  3. **前端代码抽取与解耦**：
+     - 新建独立页面组件 `HistoryQueryView.vue`，将原本的 HTML 面板、Ref 状态与查询/导出/汇总计算逻辑完全移植。将其中获取需求主体的数据源，由“超管配置接口”替换为公开免签的 `workspace/config-summary` 接口以避免越权。
+     - 在 `TubeProjectPageRouterView.vue` 中导入新页面，并注册路由映射，同时对 `GlobalManagementView.vue` 进行了冗余代码及 API 导入的彻底清洗。
+- **影响与回滚**：仅涉及历史查询面板展示的独立卡片化和后端鉴权放宽，不会对其他既有物流链流转功能造成影响。可通过 Git 回滚本次修改的配置及前端组件。
+- **改动清单**：
+  - [项目列表.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/%E9%A1%B9%E7%9B%AE%E5%88%97%E8%A1%A8.json)
+  - [permissions.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions.json)
+  - [insulation_pipe_supply_2026.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [HistoryQueryView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - [TubeProjectPageRouterView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)
+  - [GlobalManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
 ## 2026-07-15 [修复登录页左侧动画闪动]
 - **任务结论**：登录页左侧闪动由持续位移动画与 `filter: drop-shadow()`、`backdrop-filter: blur()` 叠加造成。移动的背景每帧都会被毛玻璃卡片重新采样，部分浏览器的合成层会出现闪动；这不是 Vue 组件重复渲染或登录接口问题。
 - **实现**：`frontend/src/pages/LoginView.vue` 移除三角形、圆环的动态滤镜阴影及文字卡片的毛玻璃滤镜，改用固定半透明渐变背景；同时为左侧视觉面板增加独立层叠上下文，并在系统启用“减少动态效果”时停用装饰动画。

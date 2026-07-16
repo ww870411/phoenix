@@ -12,12 +12,14 @@ import DemandManagementView from './DemandManagementView.vue'
 import GlobalManagementView from './GlobalManagementView.vue'
 import SupplyManagementView from './SupplyManagementView.vue'
 import WarehouseManagementView from './WarehouseManagementView.vue'
+import HistoryQueryView from './HistoryQueryView.vue'
 
 const route = useRoute()
 const pageKey = computed(() => String(route.params.pageKey || '').trim())
 
 const pageComponentMap = {
   dashboard: DashboardView,
+  history_query: HistoryQueryView,
   global_management: GlobalManagementView,
   demand_management: DemandManagementView,
   supply_management: SupplyManagementView,

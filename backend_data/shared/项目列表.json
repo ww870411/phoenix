@@ -137,7 +137,8 @@
       "tube_supplier",
       "tube_site_manager",
       "tube_construction_unit",
-      "tube_warehouse_keeper"
+      "tube_warehouse_keeper",
+      "tube_global_viewer"
     ],
     "project_name": "2026年度保温管物流链管理系统",
     "pages": {
@@ -145,6 +146,11 @@
         "页面名称": "全局数据看板",
         "数据源": "",
         "页面描述": "查看保温管供需关键指标与统计概览"
+      },
+      "history_query": {
+        "页面名称": "历史数据查询",
+        "数据源": "",
+        "页面描述": "灵活查询需求、使用及发货量历史明细"
       },
       "global_management": {
         "页面名称": "全局管理入口",

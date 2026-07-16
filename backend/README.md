@@ -1,3 +1,61 @@
+## 2026-07-16 更改只读示例账号 tube_viewer 的所属部门(unit)标识
+
+- 变更文件：
+  - `backend_data/shared/auth/账户信息.json` (将 tube_viewer 账户的 unit 属性由“tube项目全局只读”修改为“项目全局浏览”)
+- 本轮处理与实现原理：
+  - 登录后鉴权会话将加载该账户的最新 `unit` 变量。前台会话读取后在 Banner 优雅展现为 `“tube_viewer｜项目全局浏览”`。
+
+## 2026-07-16 修复只读用户组库管模块访问控制缺陷与写拦截
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 _ensure_warehouse_access 函数中放行了 tube_global_viewer 用户组以允许拉取列表，并在 /warehouse-management/deliveries/{delivery_id}/warehouse 确认手续闭环写接口中追加只读组防御校验，安全阻断只读用户的写操作)
+- 本轮处理与实现原理：
+  - 成功解决了库管页面的数据拉取报错 403 故障，并完善了该模块写操作的数据闭环防御。
+
+## 2026-07-16 修复只读用户组数据拉取完整性与历史接口拦截
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py` (在 resolve_accessible_section_1_ids 和 resolve_accessible_supply_entity_ids 中对 tube_global_viewer 放行全部工地和管厂的可见性，对齐 Global_admin 级别的数据提取广度)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在历史查询 /global-management/history 与导出接口的 allowed_groups 校验中追加了 tube_global_viewer 角色放行，解决 403 越权 Bug)
+- 本轮处理与实现原理：
+  - 本轮改动彻底修复了由于角色数据可视白名单及 API 路由鉴权白名单未包含 `tube_global_viewer`，导致新注册账号显示空数据且历史查询卡片越权的故障。
+
+## 2026-07-16 新增 tube_global_viewer 全局只读用户组及示例账号
+
+- 变更文件：
+  - `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json` (专属文件，在末尾定义该角色的 page_access 与 actions 权限，can_submit 等所有写权限均硬强控为 false，只放开 can_extract_xlsx)
+  - `backend_data/shared/auth/permissions.json` (大文件备份，同步在 projects 下追加该用户组只读鉴权定义)
+  - `backend_data/shared/项目列表.json` (将 tube_global_viewer 组追加到 insulation_pipe_supply_2026 项目的可用性可用性列表 availability 中，实现卡片入口正常显示)
+  - `backend_data/shared/auth/账户信息.json` (新增 tube_global_viewer 测试账号账户)
+- 本轮处理与实现原理：
+  - 在后端数据网关及鉴权机制中，新增了 `"tube_global_viewer"` 只读用户组。
+  - 后端通过加载 `账户信息.json` 完成身份匹配。鉴权模块与前端权限控制逻辑依靠我们在专属 JSON 中将所有写操作标志配置为 `false` 进行全局拦截强控，确保其完全无法执行数据的提交与写入。
+
+## 2026-07-16 需求侧填报 Tab 切换自动刷新及数据守卫后端适配说明
+
+- 本轮处理与实现原理：
+  - 本轮改动为纯前端逻辑。当用户切换 Tab 时，前台会在无修改时自动重新拉取对应的获取接口（`/plan-matrix`，`/usage-sheet` 等），接口定义和逻辑均保持稳定无需改动。
+
+## 2026-07-16 需求侧填报板块取消被动刷新后端适配说明
+
+- 本轮处理与实现原理：
+  - 本轮改动属于纯前端交互防数据丢失优化，不改变后端计划及消耗数据的任何保存与查询 API，后端服务保持原状态平稳运行。
+
+## 2026-07-16 每日消耗与损耗填报 Excel 智能粘贴后端适配说明
+
+- 本轮处理与实现原理：
+  - 本轮改动属于纯前端交互功能增强，用户在前端通过 Excel 智能粘贴直接填报表格，最终提交给后端的 JSON 结构以及后端逻辑均保持原契约（无需物理代码变动）。
+
+## 2026-07-16 保温管历史数据查询与导出接口权限放宽
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (修改 get_global_management_history 和 export_global_management_history，将 group 校验白名单放宽，包含该子项目下的所有角色)
+  - `backend_data/shared/项目列表.json` (在 insulation_pipe_supply_2026 项目下新增 history_query 独立页面配置，置于 dashboard 看板卡片之后)
+  - `backend_data/shared/auth/permissions.json` (在与管网关联的 5 个角色 page_access 中分发 history_query 访问权限)
+- 本轮处理与实现原理：
+  - 配合前端把历史查询功能剥离为独立卡片的调整，后端正式下放了数据获取权限。在历史数据查询 `/global-management/history` 与导出 `/global-management/history/export` 两个 GET 接口中，将原先仅放行 `global_admin` 的条件，扩充为允许子项目所有的 5 个关联业务角色（管厂、现场负责人、施工单位、物资库管员、超管）均能安全访问。
+  - 在全局项目与权限配置文件中，派发了 `history_query` 页面的可访问控制状态，确保用户鉴权拉取页面配置时能看见卡片并允许路由加载。
+
 ## 2026-07-15 修复全局核心参数保存严格强控流程字段被拦截问题
 
 - 变更文件：

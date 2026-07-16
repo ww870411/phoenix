@@ -90,28 +90,28 @@
           <button 
             type="button" 
             :class="{ active: activeTab === 'usage' }" 
-            @click="activeTab = 'usage'"
+            @click="handleTabClick('usage')"
           >
             📊 每日使用消耗填报
           </button>
           <button 
             type="button" 
             :class="{ active: activeTab === 'plan' }" 
-            @click="activeTab = 'plan'"
+            @click="handleTabClick('plan')"
           >
             🕒 三日滚动计划填报
           </button>
           <button 
             type="button" 
             :class="{ active: activeTab === 'logistics' }" 
-            @click="activeTab = 'logistics'"
+            @click="handleTabClick('logistics')"
           >
             🚚 现场到货与接收确认
           </button>
           <button 
             type="button" 
             :class="{ active: activeTab === 'baseline' }" 
-            @click="activeTab = 'baseline'"
+            @click="handleTabClick('baseline')"
           >
             📋 基准设计量台账
           </button>
@@ -146,7 +146,7 @@
                 <strong>首二日流程管控锁已激活</strong>
                 <span>由于当前{{ modeLabels.station }}前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
               </div>
-              <button type="button" class="gateway-link-btn" @click="activeTab = 'usage'">
+              <button type="button" class="gateway-link-btn" @click="handleTabClick('usage')">
                 👉 一键去上报前日消耗
               </button>
             </div>
@@ -243,6 +243,20 @@
               >
                 {{ saveUsageLoading ? '提交中...' : '提交消耗与损耗数据' }}
               </button>
+            </div>
+
+            <!-- 批量粘贴解析利器 -->
+            <div 
+              class="paste-zone" 
+              tabindex="0" 
+              title="点击激活后直接按 Ctrl+V 粘贴"
+              @paste="handleUsageClipboardPaste"
+            >
+              <div class="paste-icon">📋</div>
+              <div class="paste-desc">
+                <strong>智能 Excel 批量粘贴录入区</strong>
+                <span>在 Excel 中选中 [型号, 使用量, 损耗量(可选), 备注(可选)] 数据块复制后，点击此虚线框内直接按 <b>Ctrl + V</b>，系统将智能提取并匹配填充下方表格</span>
+              </div>
             </div>
 
             <div v-if="usageLoading" class="loading-text">正在加载实际使用数据...</div>
@@ -917,7 +931,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeDemandManagementDeliveryArrival,
@@ -1101,6 +1115,63 @@ function handleClipboardPaste(event) {
   }
 }
 
+function handleUsageClipboardPaste(event) {
+  if (!selectedStationId.value || activeTab.value !== 'usage') {
+    return
+  }
+  const clipboardData = event.clipboardData || window.clipboardData
+  const pastedText = clipboardData.getData('text')
+  if (!pastedText) return
+
+  // 按换行符切分行
+  const lines = pastedText.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (!lines.length) return
+
+  let successCount = 0
+  lines.forEach(line => {
+    // 按 Tab 键切分列
+    const parts = line.split(/\t/).map(p => p.trim())
+    if (parts.length < 2) return
+
+    const pipeModelInput = parts[0].toUpperCase()
+
+    // 匹配前台 usageRows 里的保温管型号名称或 ID
+    const targetRow = usageRows.value.find(row => 
+      row.pipeModelName.toUpperCase() === pipeModelInput || 
+      row.pipeModelId.toUpperCase() === pipeModelInput
+    )
+
+    if (targetRow) {
+      // 第一列是型号，第二列是使用量
+      const usedQtyVal = Number(parts[1])
+      if (!isNaN(usedQtyVal) && usedQtyVal >= 0) {
+        targetRow.usedQty = usedQtyVal
+        successCount++
+      }
+
+      // 第三列是损耗量（如果有的话）
+      if (parts[2] !== undefined && parts[2] !== '') {
+        const lossQtyVal = Number(parts[2])
+        if (!isNaN(lossQtyVal) && lossQtyVal >= 0) {
+          targetRow.lossQty = lossQtyVal
+          successCount++
+        }
+      }
+
+      // 第四列是备注（如果有的话）
+      if (parts[3] !== undefined && parts[3] !== '') {
+        targetRow.remarks = parts[3]
+      }
+    }
+  })
+
+  if (successCount > 0) {
+    setActionMessage('success', `智能粘贴解析成功！已为您智能匹配并自动填报 ${successCount} 个消耗/损耗单元格。`)
+  } else {
+    setActionMessage('error', '未在剪贴板中匹配出有效的保温管型号，请确认从 Excel 中复制了 [型号, 实际使用量, (可选)实际损耗量, (可选)备注] 等数据。')
+  }
+}
+
 const showDate = ref('')
 const anchorDate = ref('')
 const usageDate = ref('')
@@ -1122,6 +1193,24 @@ const usageLoading = ref(false)
 const usageError = ref('')
 const usageRows = ref([])
 const saveUsageLoading = ref(false)
+
+const originalPlanRowsJson = ref('')
+function backupPlanRows() {
+  originalPlanRowsJson.value = JSON.stringify(planRows.value)
+}
+const isPlanDirty = computed(() => {
+  if (!planRows.value.length) return false
+  return originalPlanRowsJson.value !== JSON.stringify(planRows.value)
+})
+
+const originalUsageRowsJson = ref('')
+function backupUsageRows() {
+  originalUsageRowsJson.value = JSON.stringify(usageRows.value)
+}
+const isUsageDirty = computed(() => {
+  if (!usageRows.value.length) return false
+  return originalUsageRowsJson.value !== JSON.stringify(usageRows.value)
+})
 const submitStatusLoading = ref(false)
 
 const pendingLoading = ref(false)
@@ -1452,6 +1541,7 @@ async function loadPlanMatrix() {
     const dates = response.plan_dates || []
     planDates.value = dates
     planRows.value = normalizePlanRows(response.rows, dates)
+    backupPlanRows()
     strictPlanningFlowControl.value = response.strict_planning_flow_control ?? true
     isUsageSubmitted.value = response.is_usage_submitted ?? false
   } catch (error) {
@@ -1473,6 +1563,7 @@ async function loadUsageSheet() {
   try {
     const response = await getTubeDemandManagementUsageSheet(PROJECT_KEY, selectedStationId.value, usageDate.value)
     usageRows.value = normalizeUsageRows(response.rows)
+    backupUsageRows()
   } catch (error) {
     usageError.value = error?.message || '加载实际使用数据失败'
     usageRows.value = []
@@ -1805,7 +1896,41 @@ onMounted(async () => {
   await refreshRealtimeConfig()
 })
 
-useTubeRealtimeRefresh(refreshRealtimeConfig)
+function handleTabClick(targetTab) {
+  if (activeTab.value === targetTab) {
+    refreshCurrentTabData(targetTab)
+    return
+  }
+
+  if (activeTab.value === 'plan' && isPlanDirty.value) {
+    const confirmDiscard = confirm('您在“三日滚动计划填报”中有未保存的修改，确定要离开并丢弃修改吗？')
+    if (!confirmDiscard) {
+      return
+    }
+  }
+
+  if (activeTab.value === 'usage' && isUsageDirty.value) {
+    const confirmDiscard = confirm('您在“每日使用消耗填报”中有未保存的修改，确定要离开并丢弃修改吗？')
+    if (!confirmDiscard) {
+      return
+    }
+  }
+
+  activeTab.value = targetTab
+  refreshCurrentTabData(targetTab)
+}
+
+function refreshCurrentTabData(tab) {
+  if (tab === 'plan') {
+    loadPlanMatrix()
+  } else if (tab === 'usage') {
+    loadUsageSheet()
+  } else if (tab === 'baseline') {
+    loadBaseline()
+  } else if (tab === 'logistics') {
+    loadLogisticsRecords()
+  }
+}
 
 onBeforeUnmount(() => {
   if (nowTimer) {
