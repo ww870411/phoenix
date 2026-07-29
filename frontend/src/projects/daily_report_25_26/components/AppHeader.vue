@@ -108,41 +108,49 @@ async function logout() {
 .btn-admin:hover {
   background: rgba(251, 191, 36, 0.28);
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .app-header__inner {
-    padding: 8px 10px 10px;
-    gap: 8px;
-    align-items: stretch;
-    flex-direction: column;
+    padding: 6px 10px;
+    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    box-sizing: border-box;
+    overflow: hidden;
   }
   .brand {
-    gap: 8px;
-    width: 100%;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
   }
   .brand-name {
-    font-size: 15px;
+    font-size: 13px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .brand-sub {
-    font-size: 11px;
+    display: none; /* 手机模式下隐藏亚标题，节省纵向与横向空间 */
   }
   .brand-text {
-    gap: 1px;
+    gap: 0;
+    min-width: 0;
   }
   .nav {
-    gap: 6px;
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    gap: 5px;
+    flex-shrink: 0;
+    align-items: center;
   }
   .user-info {
-    order: -1;
-    width: 100%;
-    font-size: 12px;
-    opacity: 0.82;
+    display: none; /* 手机模式下导航栏隐藏用户名，避免挤占右侧空间 */
   }
   .btn {
-    padding: 0 10px;
-    font-size: 12px;
+    height: 26px;
+    padding: 0 8px;
+    font-size: 11px;
+    border-radius: 6px;
   }
 }
 </style>

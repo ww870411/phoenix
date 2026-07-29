@@ -62,15 +62,6 @@
               <span class="stat-label">监控表计点位</span>
               <span class="stat-value text-amber">{{ totalMetersCount }} <small>处</small></span>
             </div>
-            <div class="stat-actions">
-              <button 
-                :class="['btn', isPickingPoint ? 'warning' : 'primary']" 
-                type="button" 
-                @click="togglePickPointMode"
-              >
-                {{ isPickingPoint ? '✕ 正在点选(点击地图即可设点)' : '🎯 鼠标点击地图设置坐标' }}
-              </button>
-            </div>
           </div>
 
           <!-- 地图提示条 (点选模式激活或有待保存草稿点位时) -->
@@ -166,22 +157,22 @@
 
               <!-- 导出当前筛选表格 XLSX 按钮 -->
               <button 
-                class="btn ghost small-btn" 
+                class="btn ghost small-btn control-action-btn" 
                 type="button" 
                 :disabled="filteredMarkers.length === 0"
                 title="按当前多维筛选结果导出 Excel 文件"
                 @click="exportFilteredMarkersToXlsx"
               >
-                📥 导出表格 (.xlsx)
+                📥 导出表格
               </button>
 
               <!-- 管道连线显隐按钮 -->
               <button 
-                :class="['btn', showPipeline ? 'primary' : 'ghost', 'small-btn']" 
+                :class="['btn', showPipeline ? 'primary' : 'ghost', 'small-btn', 'control-action-btn']" 
                 type="button" 
                 @click="togglePipelineVisibility"
               >
-                {{ showPipeline ? '👁️ 管道连线：已显示' : '🙈 管道连线：已隐藏' }}
+                {{ showPipeline ? '👁️ 管道连线' : '🙈 隐藏连线' }}
               </button>
             </div>
           </div>
@@ -2314,12 +2305,35 @@ onUnmounted(() => {
   width: 100%;
 }
 
-/* 移动端 (手机屏幕 <= 768px) 全响应式自适应适配 */
+/* 移动端 (手机屏幕 <= 768px) 全响应式自适应与全宽度 Full-Bleed 铺满 */
 @media (max-width: 768px) {
+  /* 1. 取消外层容器固定外边距与大内边距 */
+  .gis-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 6px 4px 20px 4px;
+  }
+
+  /* 2. 取消主卡片边框与圆角限制，在手机端 100% 铺满横向视野 */
+  .gis-main-container {
+    border-radius: 6px;
+    margin: 0;
+    width: 100%;
+    border-left: none;
+    border-right: none;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  }
+
   .page-title-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 10px;
+    padding: 0 6px;
+  }
+
+  .subtitle {
+    font-size: 12px;
   }
 
   .coord-inputs-grid {
@@ -2352,8 +2366,8 @@ onUnmounted(() => {
   .gis-stats-bar {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px 14px;
-    padding: 12px;
+    gap: 8px 10px;
+    padding: 10px;
   }
 
   .stat-divider {
@@ -2362,14 +2376,28 @@ onUnmounted(() => {
 
   .legend-bar {
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 8px 10px;
   }
 
+  /* 手机端按钮组允许自动弹性收缩，防止溢出屏幕 */
   .control-btn-group {
     margin-left: 0;
     width: 100%;
-    justify-content: space-between;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .control-action-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    padding: 4px 6px;
+    white-space: nowrap;
+    text-align: center;
+    justify-content: center;
   }
 
   /* 手机端悬浮筛选框转为居中弹框，防止溢出屏幕 */
@@ -2385,35 +2413,48 @@ onUnmounted(() => {
     z-index: 2000;
   }
 
-  /* 地图与右侧面板由双列重构为单列上图下列表流动布局 */
+  /* 地图视口与列表充分利用手机全宽度 */
   .gis-body-grid {
     grid-template-columns: 1fr;
     height: auto;
     min-height: auto;
+    width: 100%;
   }
 
   .map-wrapper, .amap-box {
+    width: 100%;
     height: 380px;
     min-height: 380px;
+    overflow: hidden;
   }
 
   .gis-side-panel {
+    width: 100%;
     border-left: none;
     border-top: 2px solid #cbd5e1;
   }
 
   .panel-content {
+    padding: 10px 8px;
     max-height: 520px;
   }
 
-  .location-btn-row {
-    flex-direction: column;
-    width: 100%;
-    gap: 6px;
+  .location-card-box {
+    padding: 10px;
   }
+}
 
-  .location-btn-row .btn {
-    width: 100%;
-  }
+/* 隐藏高德地图在移动端撑爆宽度的版权与Logo节点 */
+:deep(.amap-logo), :deep(.amap-copyright) {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* 移动端强行全屏锁死溢出，防双指放大与偏斜 */
+.gis-map-view, .gis-container, .gis-main-container {
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
 }
 </style>
