@@ -13,6 +13,7 @@ import GlobalManagementView from './GlobalManagementView.vue'
 import SupplyManagementView from './SupplyManagementView.vue'
 import WarehouseManagementView from './WarehouseManagementView.vue'
 import HistoryQueryView from './HistoryQueryView.vue'
+import GisMapView from './GisMapView.vue'
 
 const route = useRoute()
 const pageKey = computed(() => String(route.params.pageKey || '').trim())
@@ -20,6 +21,7 @@ const pageKey = computed(() => String(route.params.pageKey || '').trim())
 const pageComponentMap = {
   dashboard: DashboardView,
   history_query: HistoryQueryView,
+  gis_map: GisMapView,
   global_management: GlobalManagementView,
   demand_management: DemandManagementView,
   supply_management: SupplyManagementView,

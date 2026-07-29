@@ -346,16 +346,18 @@ function pageDescription(page) {
 }
 
 function openPage(page) {
+  const currentProjectKey = String(route.params.projectKey || projectKey || '').trim()
+
   // 支持“专用调试页面”：若后端 pages 的键是形如 "/debug/..."，则直接导航到该路径
   if (typeof page?.page_url === 'string' && page.page_url.startsWith('/')) {
     return router.push({ path: page.page_url })
   }
-  if (projectKey === 'insulation_pipe_supply_2026') {
+  if (currentProjectKey === 'insulation_pipe_supply_2026') {
     return router.push({
-      path: `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`,
+      path: `/projects/${encodeURIComponent(currentProjectKey)}/pages/${encodeURIComponent(page.page_key)}`,
     })
   }
-  const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(page.page_key)}`
+  const base = `/projects/${encodeURIComponent(currentProjectKey)}/pages/${encodeURIComponent(page.page_key)}`
   const normalizedKey = String(page?.page_key ?? page?.page_url ?? '').toLowerCase()
   const isDashboard = normalizedKey === 'dashboard'
   if (isDashboard) {

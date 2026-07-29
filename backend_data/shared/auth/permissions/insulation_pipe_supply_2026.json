@@ -5,6 +5,7 @@
       "page_access": [
         "dashboard",
         "history_query",
+        "gis_map",
         "global_management",
         "supply_management",
         "demand_management",

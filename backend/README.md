@@ -1,3 +1,22 @@
+## 2026-07-29 新增 tube.tube_gis 焊口与表计 GIS 持久化数据库表 DDL 及 CRUD API
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (在 PostgreSQL tube schema 下追加 tube_gis 建表 DDL 与 7 条种子示例数据的 INSERT 语句)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (新增 /gis/markers 接口全套：GET 拉取全表打点、POST 数据库新增点位、PUT 数据库更新及拖拽坐标同步、DELETE 数据库物理删除点位)
+- 本轮处理与实现原理：
+  - 成功建立了保温管工程焊口探伤点位与监控表计 GIS 空间打点数据存储规范。支持根据 pipeline_name (管道名称/编号) 对管线节点进行独立分组与聚类连线。
+  - 提供了完整的 Restful API 读写通道，实现了点位从鼠标点选到 PostgreSQL 数据库持久化的闭环。
+
+## 2026-07-29 新增焊口与表计 GIS 空间地图卡片配置与权限派发
+
+- 变更文件：
+  - `backend_data/shared/项目列表.json` (在 insulation_pipe_supply_2026 项目下新增 gis_map 页面卡片配置，页面名称为“焊口与表计 GIS 地图标注”)
+  - `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json` (在 Global_admin 及所有 tube_* 业务角色的 page_access 清单中派发 gis_map 页面访问权)
+  - `backend_data/shared/auth/permissions.json` (同步在全局鉴权字典中派发 gis_map 卡片的路由与访问权)
+- 本轮处理与实现原理：
+  - 在配置中心派发了 `gis_map` (“焊口与表计 GIS 地图标注”) 页面卡片，并向全局管理员及各保温管业务角色开放页面访问权限。
+  - 用户登录并加载会话配置后，前台主页能动态生成新的 GIS 大屏卡片并导航加载。
+
 ## 2026-07-16 更改只读示例账号 tube_viewer 的所属部门(unit)标识
 
 - 变更文件：

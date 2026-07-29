@@ -1,3 +1,32 @@
+## 2026-07-29 [新增焊口与表计 GIS 空间地图标注大屏、地点搜索及数据编辑功能上线]
+- **任务结论**：成功在子项目 `insulation_pipe_supply_2026` 中开发并升华了“焊口与表计 GIS 空间地图标注”页面。实现了以**大连市香炉礁**为默认中心定位、地点搜索定位（基于 AMap.Geocoder 与 AMap.PlaceSearch 双引擎）、**施工标段 (section_name) 全链路拓展与数据库 schema 物理升级**、**按【施工标段】和【管道名称/编号】的组合多维动态高级筛选器 (自动提取已存在选项与自定义兼顾)**、**示例数据物理入库 `tube.tube_gis`**、**后端 CRUD API 开发 (/gis/markers)**、**地图点击点位与右侧列表卡片的双向联动高亮与平滑滚动 (scrollIntoView)**、**拖拽大头针坐标变更二次弹窗确认与取消归位机制**、**修复 401 路由拦截、ES Module 未导出函数 SyntaxError、Pinia 解耦及 openPage 路由参数动态求值，彻底恢复全子项目页面顺畅点击与加载**、**【管道名称/编号】分组独立连线**、剔除不必要的实时采样字眼与繁复文案、新增点位表单全留空由用户全权自主输入、精密下尖针大头针 (Pin) 锚点精确定位、点选实时生成草稿 Marker 图标、鼠标拖拽设置坐标以及点位数据的在线编辑修改与删除管理。访问权限仅归属于 `Global_admin`。
+- **实现**：
+  1. **施工标段 (section_name) 全链路拓展与权威动态配置**：查阅权威配置文件 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`，将系统设定的 `demand_entities` 官方标段（`标段1`、`标段2`）全量打通。后端 API 在 `/gis/markers` 中增加了动态读取 `tube_config.json` 的 `systemSections` 节点；在 `tube.tube_gis` 数据库物理表中更新修正了种子数据，彻底清除了任何非官方推测的括号后缀；前端 `existingSectionOptions` 动态融合了权威配置与用户新建标段。
+  7. **经纬度定位区域大厂级卡片美化重构**：将原本臃肿拥挤的经纬度表单栏重构为浅灰色 `location-card-box` 专属美化卡片。将经纬度数值拆分为带 `coord-prefix` 的专属网格输入框（`121.604771` / `38.928491`），将设点与 GPS 按钮重构为宽敞的大按键网格（`location-action-btns`），并配有浅蓝左边框软贴提示卡片，消除了一切拥挤感。
+  2. **拖拽大头针二次弹窗确认与取消归位**：在 `GisMapView.vue` 的 `marker.on('dragend')` 事件处理中加入了坐标对比与二次确认弹窗。松开大头针时，展示原坐标与新落点坐标对比：若用户点击【取消】，大头针精准自动归位复原回拖拽前位置；若用户点击【确认】，才更新坐标并持久化。物理剔除了对话框、加载提示与提交按钮中的 `PostgreSQL` 技术细节词汇，文案更加简洁优雅。
+  2. **示例数据物理入库与后端 CRUD API**：在 `phoenix_db` 数据库容器与 `backend/sql/tube_schema_init.sql` 中物理插入了 7 条打点记录，并实现了 `/gis/markers` 的 GET/POST/PUT/DELETE CRUD API 闭环。
+  2. **修复 ES Module 导出 SyntaxError**：排查用户提交的浏览器控制台日志 `The requested module '/src/projects/daily_report_25_26/services/api.js' does not provide an export named 'authAwareFetch'`。已在 `GisMapView.vue` 中移除了未导出的 API 引入，定义了本地防爆的 `authAwareFetch` 封装，彻底消除了 ES 模块语法解析崩溃；
+  3. **openPage 动态路由求值与 Pinia 解耦**：在 `PageSelectView.vue` 的 `openPage` 函数中改用动态计算的 `currentProjectKey`，修复了因静态变量捕获导致的 `insulation_pipe_supply_2026` 路由误判落入 `/sheets` 错误路径的问题；在 `GisMapView.vue` 中移除了对 Pinia `useAuthStore()` 的强依赖，改用同步安全的 `getSafeAuthToken()` 函数，彻底消除了点击卡片页面无反应的问题。
+  3. **物理生成 GIS 持久化数据库表 `tube.tube_gis`**：在 `backend/sql/tube_schema_init.sql` 中编写并物理执行了 `tube.tube_gis` 建表 DDL，包含 16 个精细字段及唯一约束，验证成功。
+  2. **新增表单彻底置空 (全自主填写)**：去除了在点击“➕ 新增点位”时默认预填的管道名称、编号与经纬度坐标，所有文本框与经纬度保持全空白（`""` / `null`），全由用户自行输入或点击地图取点填入。
+  3. **按【管道名称/编号】分组独立连线**：在新增/编辑点位时增加了 `管道名称/编号` 输入框。系统自动将属于相同管道名称（如“香炉礁主干线”、“鞍山路分支线”）的焊口顺次连成独立的管道折线，不同管道采用不同颜色区分，互不混乱交叉。
+  3. **界面文案与提示瘦身**：彻底删除了“实时流量/供水压力”等实时采样假数据字眼；移除了冗长的连线提示框；将标注下拉框文案统一精简为纯粹的“管道焊口”与“计量表计”。
+  3. **管道连线显隐与顺序灵活调整**：图例栏新增 **`👁️ 管道连线：显示/隐藏`** 切换按钮；列表卡片配备 **`⬆️ 上移` / `⬇️ 下移`** 按钮，可随时调整连线顺序。
+  2. **大连香炉礁中心定位与地图初始化**：将高德地图中心点坐标设为大连香炉礁 (`121.606771, 38.930491`)，并初始化了大连香炉礁热电厂出厂管网、香工街沿线焊口及表计测试示例数据。
+  3. **精密下尖针大头针 (Pin Marker) 视效重构**：将原本的块状矩形胶囊替换为专业的 **GIS 下尖针 Pin 结构**，采用 `anchor: 'bottom-center'` 锚点设定。针尖底端精确指在物理地图坐标原点，杜绝了遮挡地表物理落点的问题。
+  4. **地名搜索引擎升级 (AMap.plugin 双保险)**：改用高德 API 2.0 标准 `AMap.plugin` 异步加载机制。引入了 `AMap.Geocoder` (标准地址) + `AMap.PlaceSearch` (POI 区域/地名/热电厂/车站/商业区) 双引擎，用户输入“香炉礁”、“大连港”、“中山区”、“周水子”等地名时能 100% 精准定位并平移缩放地图。
+  5. **点位数据编辑修改与删除**：在点位列表卡片及 InfoWindow 弹窗中加入了 `✏️ 编辑修改` 与 `🗑️ 删除` 按钮。支持随时修改焊口的编号、名称、坐标、探伤状态、保温管规格及备注，并实时联动更新地图打点与 Polyline 管线。
+  5. **大屏布局与权限隔离**：解除了通用 `.container` 限制其为 `1160px` 的宽度束缚，支持最大 `1720px` 宽屏显示；仅向超级管理员 `Global_admin` 角色开启访问权。
+- **影响与回滚**：此功能作为独立增量模块存在，完全解耦且不改动保温管既有的需求、发货、到货确认及库管主流程逻辑。可通过 Git 快速回退。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+  - [TubeProjectPageRouterView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)
+  - [项目列表.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/%E9%A1%B9%E7%9B%AE%E5%88%97%E8%A1%A8.json)
+  - [insulation_pipe_supply_2026.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+  - [permissions.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions.json)
+  - [frontend/README.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/README.md)
+  - [backend/README.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/README.md)
+
 ## 2026-07-16 [修改只读示例账号 tube_viewer 网页 Banner 部门名称展示]
 - **任务结论**：成功根据用户要求，将网页 Banner 顶端的用户组展示名称从原有的 `“tube_viewer｜tube项目全局只读”` 优雅修改为 `“tube_viewer｜项目全局浏览”`。
 - **实现**：

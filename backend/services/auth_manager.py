@@ -2837,3 +2837,16 @@ def get_current_session(authorization: str = Header(None, alias="Authorization")
 
     return auth_manager.require_session_from_header(authorization)
 
+
+def get_current_session_optional(authorization: str = Header(None, alias="Authorization")) -> Optional[AuthSession]:
+    """
+    FastAPI 软依赖：若包含合法 Authorization Bearer 头则返回会话，无头或过期返回 None
+    """
+    if not authorization:
+        return None
+    try:
+        return auth_manager.require_session_from_header(authorization)
+    except Exception:
+        return None
+
+

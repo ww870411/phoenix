@@ -1,3 +1,14 @@
+## 2026-07-29 新增焊口与表计 GIS 空间地图功能 (含地点搜索、大连香炉礁默认定位、管道分组连线及数据持久化表结构)
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (基于高德地图 JS API 2.0 新建的 GIS 空间地图标注大屏组件)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue` (注册 gis_map 路由页面组件)
+- 本轮处理与实现原理：
+  - **地图引擎与大连定位**：在 `GisMapView.vue` 中配置了高德地图 API Key 与安全密钥。默认定位中心调校为大连市香炉礁 (`121.606771, 38.930491`)，并初始化了大连香炉礁供暖管网示例点位。
+  - **地点搜索与大头针锚点**：集成高德 `AMap.Geocoder` + `AMap.PlaceSearch` 异步双引擎；采用专业的 GIS 下尖大头针 (Pin) 结构，`anchor: 'bottom-center'` 锚点精准扣在物理坐标点上。
+  - **管道分组独立连线**：点位增加 `pipelineName` (管道名称/编号) 属性。系统自动将同一管道名称的焊口顺次连成独立的折线，并用不同颜色区分。
+  - **点选所见即所得与空表单**：点选地图瞬间渲染草稿大头针；新增点位时保持表单完全空白，由用户完全自主填写或点选。
+
 ## 2026-07-16 修改只读账户 Banner 部门名称影响说明
 
 - 本轮处理与实现原理：

@@ -18,7 +18,7 @@ def _get_client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
-from backend.services.auth_manager import AuthSession, get_current_session
+from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
     CONFIG_PATH,
     PROJECT_KEY,
@@ -2530,6 +2530,229 @@ def format_delivery_elapsed_seconds(total_seconds: float) -> str:
     if minutes > 0:
         return f"{minutes}分{seconds}秒"
     return f"{seconds}秒"
+
+
+# =========================================================================
+# GIS 地图标注点位管线数据库 CRUD 交互 API
+# 表: tube.tube_gis
+# =========================================================================
+
+class GisMarkerCreatePayload(BaseModel):
+    type: str = Field(..., alias="type", description="weld 或 meter")
+    section_name: Optional[str] = Field(default="", alias="sectionName", description="施工标段名称")
+    pipeline_name: str = Field(..., alias="pipelineName", description="管道名称/编号")
+    code: str = Field(..., description="点位唯一编号")
+    name: str = Field(..., description="名称描述")
+    lng: float = Field(..., description="经度 Lng")
+    lat: float = Field(..., description="纬度 Lat")
+    status: str = Field(default="passed")
+    spec: Optional[str] = None
+    remarks: Optional[str] = None
+    sort_order: int = Field(default=0, alias="sortOrder")
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+@public_router.get("/gis/markers")
+def list_gis_markers():
+    """
+    拉取 PostgreSQL tube.tube_gis 数据库表中持久化的所有焊口与表计标注
+    同时动态读取 tube_config.json 设定的官方系统标段列表 (demand_entities.section_1_name)
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+    from backend.projects.insulation_pipe_supply_2026.services.config_service import load_tube_config
+
+    db_session = SessionLocal()
+    try:
+        # 动态读取系统权威配置文件 tube_config.json
+        config = load_tube_config() or {}
+        system_sections = []
+        for item in config.get("demand_entities", []):
+            sec_name = str(item.get("section_1_name") or "").strip()
+            if sec_name and sec_name not in system_sections:
+                system_sections.append(sec_name)
+
+        query_sql = text("""
+            SELECT id, project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order
+            FROM tube.tube_gis
+            WHERE project_key = :project_key
+            ORDER BY sort_order ASC, id ASC
+        """)
+        rows = db_session.execute(query_sql, {"project_key": PROJECT_KEY}).fetchall()
+
+        markers = []
+        for r in rows:
+            status_text = '探伤合格'
+            status_class = 'tag-success'
+            if r.marker_type == 'weld':
+                if r.status == 'pending':
+                    status_text = '待探伤'
+                    status_class = 'tag-warning'
+                elif r.status == 'failed':
+                    status_text = '待复焊'
+                    status_class = 'tag-danger'
+            else:
+                status_text = '运行正常'
+                status_class = 'tag-info'
+
+            markers.append({
+                "id": r.id,
+                "type": r.marker_type,
+                "sectionName": r.section_name or "",
+                "pipelineName": r.pipeline_name,
+                "code": r.code,
+                "name": r.name,
+                "lng": float(r.lng),
+                "lat": float(r.lat),
+                "status": r.status,
+                "statusText": status_text,
+                "statusClass": status_class,
+                "spec": r.spec or "",
+                "remarks": r.remarks or "",
+                "sortOrder": r.sort_order
+            })
+
+        return {"ok": True, "data": markers, "systemSections": system_sections}
+    finally:
+        db_session.close()
+
+
+@public_router.post("/gis/markers")
+def create_gis_marker(
+    payload: GisMarkerCreatePayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    """
+    新增标注点位并持久化到 PostgreSQL tube.tube_gis 数据库表中
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    db_session = SessionLocal()
+    user_name = session.username if session else 'Global_admin'
+    try:
+        insert_sql = text("""
+            INSERT INTO tube.tube_gis 
+            (project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order, created_by, updated_by)
+            VALUES
+            (:project_key, :marker_type, :section_name, :pipeline_name, :code, :name, :lng, :lat, :status, :spec, :remarks, :sort_order, :user, :user)
+            RETURNING id;
+        """)
+
+        res = db_session.execute(insert_sql, {
+            "project_key": PROJECT_KEY,
+            "marker_type": payload.type,
+            "section_name": payload.section_name or "",
+            "pipeline_name": payload.pipeline_name,
+            "code": payload.code,
+            "name": payload.name,
+            "lng": payload.lng,
+            "lat": payload.lat,
+            "status": payload.status,
+            "spec": payload.spec,
+            "remarks": payload.remarks,
+            "sort_order": payload.sort_order,
+            "user": user_name
+        })
+        new_id = res.fetchone()[0]
+        db_session.commit()
+        return {"ok": True, "id": new_id, "message": "保存点位到数据库成功"}
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=400, detail=f"保存到数据库失败: {str(e)}")
+    finally:
+        db_session.close()
+
+
+@public_router.put("/gis/markers/{marker_id}")
+def update_gis_marker(
+    marker_id: int,
+    payload: GisMarkerCreatePayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    """
+    更新 PostgreSQL tube.tube_gis 数据库表中的点位标注信息
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    db_session = SessionLocal()
+    user_name = session.username if session else 'Global_admin'
+    try:
+        update_sql = text("""
+            UPDATE tube.tube_gis
+            SET marker_type = :marker_type,
+                section_name = :section_name,
+                pipeline_name = :pipeline_name,
+                code = :code,
+                name = :name,
+                lng = :lng,
+                lat = :lat,
+                status = :status,
+                spec = :spec,
+                remarks = :remarks,
+                sort_order = :sort_order,
+                updated_by = :user,
+                updated_at = NOW()
+            WHERE id = :id AND project_key = :project_key;
+        """)
+
+        db_session.execute(update_sql, {
+            "id": marker_id,
+            "project_key": PROJECT_KEY,
+            "marker_type": payload.type,
+            "section_name": payload.section_name or "",
+            "pipeline_name": payload.pipeline_name,
+            "code": payload.code,
+            "name": payload.name,
+            "lng": payload.lng,
+            "lat": payload.lat,
+            "status": payload.status,
+            "spec": payload.spec,
+            "remarks": payload.remarks,
+            "sort_order": payload.sort_order,
+            "user": user_name
+        })
+        db_session.commit()
+        return {"ok": True, "message": "更新点位数据库成功"}
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=400, detail=f"数据库更新失败: {str(e)}")
+    finally:
+        db_session.close()
+
+
+@public_router.delete("/gis/markers/{marker_id}")
+def delete_gis_marker(
+    marker_id: int,
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    """
+    从 PostgreSQL tube.tube_gis 数据库表中删除指定点位
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    db_session = SessionLocal()
+    try:
+        delete_sql = text("""
+            DELETE FROM tube.tube_gis
+            WHERE id = :id AND project_key = :project_key;
+        """)
+        db_session.execute(delete_sql, {
+            "id": marker_id,
+            "project_key": PROJECT_KEY
+        })
+        db_session.commit()
+        return {"ok": True, "message": "点位已从数据库彻底删除"}
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=400, detail=f"数据库删除失败: {str(e)}")
+    finally:
+        db_session.close()
+
 
 
 

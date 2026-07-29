@@ -121,9 +121,9 @@
     ],
     "tube_supplier": [
       {
-        "username": "supplier_a",
-        "password": "supplier_a123",
-        "unit": "管厂A"
+        "username": "kaiyuan",
+        "password": "kaiyuan_123",
+        "unit": "大连开元热力管道股份有限公司"
       },
       {
         "username": "supplier_b",
@@ -135,6 +135,11 @@
       {
         "username": "lot_filler",
         "password": "lot_filler_0715",
+        "unit": "lot_1,lot_2"
+      },
+      {
+        "username": "lot_all_manager",
+        "password": "lot_all_manager_0716",
         "unit": "lot_1,lot_2"
       },
       {

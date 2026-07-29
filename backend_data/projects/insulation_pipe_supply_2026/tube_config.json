@@ -1,16 +1,16 @@
 {
-  "show_date": "2026-07-15",
-  "plan_start_date": "2026-07-15",
+  "show_date": "2026-07-28",
+  "plan_start_date": "2026-07-29",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "auto_update_plan_start_date": false,
   "plan_editable_days": 3,
   "supply_entities": [
     {
-      "entity_id": "supplier_a",
+      "entity_id": "kaiyuan",
       "code": "SA",
-      "entity_name": "管厂A",
-      "contact_name": "供给联系人A",
-      "contact_phone": "13800000001"
+      "entity_name": "大连开元热力管道股份有限公司",
+      "contact_name": "",
+      "contact_phone": ""
     },
     {
       "entity_id": "supplier_b",
@@ -105,6 +105,15 @@
         "lot_2"
       ],
       "contact_phone": "15640887356"
+    },
+    {
+      "manager_id": "lot_all_manager",
+      "manager_name": "李绍",
+      "section_1_ids": [
+        "lot_1",
+        "lot_2"
+      ],
+      "contact_phone": "13644969968"
     },
     {
       "manager_id": "lot_1_manager",
