@@ -1,3 +1,31 @@
+## 2026-07-30 GIS 时间控件超紧凑 UI 优化与水平溢出滚动条消除
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (引入 date-filter-grid 与 date-input-compact 类，重构日期框尺寸；悬浮 Popover 面板添加 overflow-x: hidden 双保险锁定)
+- 本轮处理与实现原理：
+  - **极致简洁 UI**：解决原生 input[type=date] 在 320px 窄弹窗中的溢出冲突，全面恢复纯净精美的视觉外观。
+
+## 2026-07-30 GIS 标注点位记录时间范围多维筛选新增
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (在筛选 Popover 中增加📅 点位记录时间范围选择器；默认不限；更新 filteredMarkers 计算属性与导出 XLSX 逻辑)
+- 本轮处理与实现原理：
+  - **时间多维过滤**：实现由 `startDateFilter` 到 `endDateFilter` 的日期比对，与点位分类、标段、管道名称协同生效。
+
+## 2026-07-30 GIS 轨迹连线算法修正（消除盲目串联引起的假闭环成圈 Bug）
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (更正 Polyline 绘制算法，新增 hasAnyParentConfig 逻辑保护，防止无 parentCode 起点被误接末端节点)
+- 本轮处理与实现原理：
+  - **拓扑准确性**：严格按照 `parentCode` 真实树状链路画线，彻底消除几何首尾闭合圈。
+
+## 2026-07-30 GIS 连线拖拽重构功能回退与标准点位编辑逻辑恢复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (遵照用户指令彻底回退清理连线拖拽重构按钮、橡皮筋虚线手势及 TopologyConfirmModal，恢复标准 Pin Marker 实例化与点击拖拽体验)
+- 本轮处理与实现原理：
+  - **稳定性恢复**：彻底清除了 DOM 抓手手势监听，恢复最可靠的标准渲染链路。
+
 ## 2026-07-30 GIS 编辑入口草稿覆盖物异常隔离修复
 
 - `GisMapView.vue` 的 `startEditMarker` 已调整为先填充点位表单并切至编辑标签，再清理新增草稿覆盖物，避免地图对象异常导致用户无法进入编辑栏。

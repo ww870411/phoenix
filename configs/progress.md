@@ -5,6 +5,43 @@
 - **验证结果**：本地 Vite 服务编译结果保留了编辑按钮到 `startEditMarker(item)` 的事件绑定；后续以 `npm run build` 验证生产构建。
 - **影响与回滚**：只影响 GIS 新增草稿与编辑入口，未调整后端 API 或数据库；回滚时恢复本条中所述前端函数逻辑即可。
 
+## 2026-07-30 [重构时间范围控件样式，消灭溢出水平滚动条]
+- **任务结论**：成功重构了下拉筛选面板中的时间控件 UI 布局：
+  1. **响应式紧凑 Flex 网格**：将日期选择框改写为超紧凑 `date-filter-grid` 结构，配合 `min-width: 0` 与 `box-sizing: border-box`，彻底清除了因原生 Date 控件宽度过大挤压出的水平滚动条。
+  2. **容器防爆双保险**：在 Popover 悬浮面板 `.filter-popover-panel` 与 `.popover-body` 容器上锁定了 `overflow-x: hidden; max-width: calc(100vw - 32px)`，保障整洁优雅的极致体验。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [新增 GIS 标注点位记录时间范围多维筛选功能]
+- **任务结论**：成功在顶部多维筛选控制栏面板中增加了点位记录时间范围（`startDateFilter` ~ `endDateFilter`）筛选：
+  1. **默认不限制**：控制栏默认时间为空（不限制时间范围），点击下拉弹窗可快捷指定起止日期。
+  2. **精确联动**：`filteredMarkers` 自动按 `createdAt` 字段比对筛选，同时联动影响地图点位呈现、侧边栏列表及 Excel (`.xlsx`) 导出结果。
+  3. **快捷清空与重置**：支持在时间项右上角一键“清空时间”，且“重置默认”自动将时间恢复为不限状态。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [排查鞍山路预制管线拓扑连线，修复算法误将无 ParentCode 起点与末尾串联的假闭环 Bug]
+- **任务结论**：成功精准定位并消除了管线被“连成一个圈”的轨迹绘制 Bug：
+  1. **数据库拓扑排查**：核查数据库中鞍山路 4 个点位的数据链条为：`W-AS-003(无父节点/起点) -> W-AS-001 -> T-AS-001 -> W-AS-002`，数据本身没有任何死循环或倒置。
+  2. **轨迹绘制算法 Bug 根源**：原前端连线算法中含有 `else if (lastNodePos)` 的保底逻辑。当管线中已有部分节点指定了 `parentCode`，但起点节点 `W-AS-003` 没有 `parentCode` 且在数组末尾被遍历时，旧算法误用 `lastNodePos`（即末端 `W-AS-002` 的坐标）与 `W-AS-003` 强行连线，导致在地图几何上首尾相连形成了一个闭合的大圈。
+  3. **更正算法**：引入 `hasAnyParentConfig` 判定；一旦管线中存在任何父节点配置，严格按照 `parentCode` 的真实树状拓扑绘制，决不再盲目串联无 parentCode 的节点，圈已被彻底清除。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [排查并修复 PUT 接口 HTTP 400 Bad Request 绑参缺失与重名定义 Bug]
+- **任务结论**：成功精准定位并彻底解决了点位修改保存时报 `PUT /gis/markers/{id} 400 (Bad Request)` 的后端缺陷：
+  1. **遗漏绑参修复**：修复了 `update_gis_marker` 函数在 SQL 语句中含有 `remarks = :remarks` 但 SQLAlchemy 参数字典中缺失 `"remarks": payload.remarks or ""` 绑参导致的 `StatementError: A value is required for bind parameter 'remarks'` 错误。
+  2. **重复函数定义与 Session 鉴权防护**：彻底清理了 `workspace.py` 文件末尾历史遗留的重复 `update_gis_marker` 函数定义，并将 `user_name` 提取更正为 `session.username if session and hasattr(session, 'username') else 'Global_admin'` 排除 AttributeError。
+- **改动清单**：
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-30 [遵照用户指示回退连线拖拽重构功能，恢复经典稳定交互]
+- **任务结论**：遵照用户的明确要求，已彻底将系统回退并清理掉“连线拖拽重构”相关的高德地图 Marker 抓手、橡皮筋手势与拓扑确认 Modal 弹窗代码：
+  1. **移除手势阻断**：彻底清洗了 `pin-drag-handle` 与橡皮筋手势监听，排除了对高德地图默认 Marker 点击与坐标拖拽定位的底层干扰。
+  2. **保持核心有效改进**：保留了三通父节点 (`parentCode`) 拓扑关联支持、“父节点”统一命名、全量 6 种点位默认选型、以及气泡弹窗快捷编辑功能。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
 ## 2026-07-30 [GIS 修正 action 按钮冒泡修饰符、绑定 nextTick 表单平滑置顶与地图平移]
 - **任务结论**：成功定位并解决了卡片“编辑”按钮点击可能被父级拦截无响应的问题：
   1. **事件冒泡拦截重构**：移除了 `marker-card-actions` 容器上的通用 `@click.stop`，将其显式准确地挂载在各个子按钮 `<button @click.stop="startEditMarker(item)">` 上，确保点击事件 100% 被函数捕获执行。

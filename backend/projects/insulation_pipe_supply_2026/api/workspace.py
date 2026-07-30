@@ -2606,7 +2606,7 @@ def create_gis_marker(
     from backend.db.database_daily_report_25_26 import SessionLocal
 
     db_session = SessionLocal()
-    user_name = session.username if session else 'Global_admin'
+    user_name = session.username if session and hasattr(session, 'username') else 'Global_admin'
     try:
         insert_sql = text("""
             INSERT INTO tube.tube_gis 
@@ -2655,7 +2655,7 @@ def update_gis_marker(
     from backend.db.database_daily_report_25_26 import SessionLocal
 
     db_session = SessionLocal()
-    user_name = session.username if session else 'Global_admin'
+    user_name = session.username if session and hasattr(session, 'username') else 'Global_admin'
     try:
         update_sql = text("""
             UPDATE tube.tube_gis
@@ -2688,6 +2688,7 @@ def update_gis_marker(
             "lat": payload.lat,
             "status": payload.status,
             "spec": payload.spec,
+            "remarks": payload.remarks or "",
             "sort_order": payload.sort_order,
             "parent_code": payload.parent_code or None,
             "user": user_name,
@@ -2697,111 +2698,6 @@ def update_gis_marker(
     except Exception as e:
         db_session.rollback()
         raise HTTPException(status_code=400, detail=f"更新点位失败: {str(e)}")
-    finally:
-        db_session.close()
-
-
-@public_router.post("/gis/markers")
-def create_gis_marker(
-    payload: GisMarkerCreatePayload,
-    session: Optional[AuthSession] = Depends(get_current_session_optional)
-):
-    """
-    新增标注点位并持久化到 PostgreSQL tube.tube_gis 数据库表中
-    """
-    from sqlalchemy import text
-    from backend.db.database_daily_report_25_26 import SessionLocal
-
-    db_session = SessionLocal()
-    user_name = session.username if session else 'Global_admin'
-    try:
-        insert_sql = text("""
-            INSERT INTO tube.tube_gis 
-            (project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order, created_by, updated_by)
-            VALUES
-            (:project_key, :marker_type, :section_name, :pipeline_name, :code, :name, :lng, :lat, :status, :spec, :remarks, :sort_order, :user, :user)
-            RETURNING id;
-        """)
-
-        res = db_session.execute(insert_sql, {
-            "project_key": PROJECT_KEY,
-            "marker_type": payload.type,
-            "section_name": payload.section_name or "",
-            "pipeline_name": payload.pipeline_name,
-            "code": payload.code,
-            "name": payload.name,
-            "lng": payload.lng,
-            "lat": payload.lat,
-            "status": payload.status,
-            "spec": payload.spec,
-            "remarks": payload.remarks,
-            "sort_order": payload.sort_order,
-            "user": user_name
-        })
-        new_id = res.fetchone()[0]
-        db_session.commit()
-        return {"ok": True, "id": new_id, "message": "保存点位到数据库成功"}
-    except Exception as e:
-        db_session.rollback()
-        raise HTTPException(status_code=400, detail=f"保存到数据库失败: {str(e)}")
-    finally:
-        db_session.close()
-
-
-@public_router.put("/gis/markers/{marker_id}")
-def update_gis_marker(
-    marker_id: int,
-    payload: GisMarkerCreatePayload,
-    session: Optional[AuthSession] = Depends(get_current_session_optional)
-):
-    """
-    更新 PostgreSQL tube.tube_gis 数据库表中的点位标注信息
-    """
-    from sqlalchemy import text
-    from backend.db.database_daily_report_25_26 import SessionLocal
-
-    db_session = SessionLocal()
-    user_name = session.username if session else 'Global_admin'
-    try:
-        update_sql = text("""
-            UPDATE tube.tube_gis
-            SET marker_type = :marker_type,
-                section_name = :section_name,
-                pipeline_name = :pipeline_name,
-                code = :code,
-                name = :name,
-                lng = :lng,
-                lat = :lat,
-                status = :status,
-                spec = :spec,
-                remarks = :remarks,
-                sort_order = :sort_order,
-                updated_by = :user,
-                updated_at = NOW()
-            WHERE id = :id AND project_key = :project_key;
-        """)
-
-        db_session.execute(update_sql, {
-            "id": marker_id,
-            "project_key": PROJECT_KEY,
-            "marker_type": payload.type,
-            "section_name": payload.section_name or "",
-            "pipeline_name": payload.pipeline_name,
-            "code": payload.code,
-            "name": payload.name,
-            "lng": payload.lng,
-            "lat": payload.lat,
-            "status": payload.status,
-            "spec": payload.spec,
-            "remarks": payload.remarks,
-            "sort_order": payload.sort_order,
-            "user": user_name
-        })
-        db_session.commit()
-        return {"ok": True, "message": "更新点位数据库成功"}
-    except Exception as e:
-        db_session.rollback()
-        raise HTTPException(status_code=400, detail=f"数据库更新失败: {str(e)}")
     finally:
         db_session.close()
 

@@ -161,6 +161,33 @@
                         </label>
                       </div>
                     </div>
+
+                    <!-- 4. 点位记录时间范围筛选 (默认不限) -->
+                    <div class="filter-section-group">
+                      <div class="group-title-row">
+                        <span class="group-title">📅 记录时间范围 (默认不限)：</span>
+                        <button v-if="startDateFilter || endDateFilter" class="text-link-btn text-danger" type="button" @click="clearDateFilter">
+                          清空时间
+                        </button>
+                      </div>
+                      <div class="date-filter-grid">
+                        <input 
+                          type="date" 
+                          v-model="startDateFilter" 
+                          class="date-input-compact"
+                          title="选择起始日期"
+                          @change="onFilterChange"
+                        />
+                        <span class="date-separator">~</span>
+                        <input 
+                          type="date" 
+                          v-model="endDateFilter" 
+                          class="date-input-compact"
+                          title="选择结束日期"
+                          @change="onFilterChange"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div class="popover-footer">
@@ -181,16 +208,6 @@
                 📥 导出表格
               </button>
 
-              <!-- 连线拖拽重构模式按钮 -->
-              <button 
-                :class="['btn', isTopologyDragMode ? 'danger' : 'ghost', 'small-btn', 'control-action-btn']" 
-                type="button" 
-                title="开启连线重构模式：按住焊口/三通图标上的 🔗 抓手拖出虚线放开到目标节点即可修改父节点"
-                @click="toggleTopologyDragMode"
-              >
-                {{ isTopologyDragMode ? '✕ 退出连线拖拽' : '🔗 连线拖拽重构' }}
-              </button>
-
               <!-- 管道连线显隐按钮 -->
               <button 
                 :class="['btn', showPipeline ? 'primary' : 'ghost', 'small-btn', 'control-action-btn']" 
@@ -206,12 +223,6 @@
           <div class="gis-body-grid">
             <!-- 地图视图区 -->
             <div class="map-wrapper">
-              <!-- 拖拽重构模式顶部提示浮层条 -->
-              <div v-if="isTopologyDragMode" class="topology-drag-banner animated-pulse" style="position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:100; background:#be123c; color:#ffffff; font-size:13px; font-weight:600; padding:8px 18px; border-radius:20px; box-shadow:0 10px 15px -3px rgba(190,18,60,0.3); display:flex; align-items:center; gap:8px;">
-                <span>🔗 连线拖拽模式已激活：按住焊口/三通图标上的 🔗 抓手拖出粉色虚线，松开放至目标节点即可重置父节点！</span>
-                <button type="button" style="background:transparent; border:none; color:#ffffff; cursor:pointer; font-weight:bold; font-size:14px;" @click="isTopologyDragMode = false">✕</button>
-              </div>
-
               <div v-if="mapLoading" class="map-loading-overlay">
                 <div class="spinner"></div>
                 <div class="loading-text">高德地图加载中，正在读取管网点位数据...</div>
@@ -220,44 +231,6 @@
                 ⚠️ 地图加载失败：{{ mapError }}
               </div>
               <div id="amap-container" class="amap-box"></div>
-            </div>
-
-            <!-- 连线重构二次确认 Modal 弹窗 -->
-            <div v-if="topologyConfirmData.show" class="modal-backdrop" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.65); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-              <div class="card elevated" style="width:460px; max-width:92vw; padding:24px; border-radius:12px; background:#ffffff; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
-                <h3 style="margin:0 0 16px 0; font-size:18px; color:#0f172a; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
-                  🔗 确认更新管线拓扑走向？
-                </h3>
-                
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px;">
-                  <div style="margin-bottom:10px;">
-                    <span style="color:#64748b;">修改节点：</span>
-                    <strong style="color:#0284c7;">{{ getMarkerTypeIcon(topologyConfirmData.sourceNode?.type) }} {{ topologyConfirmData.sourceNode?.code }} ({{ topologyConfirmData.sourceNode?.name }})</strong>
-                  </div>
-                  <div style="display:flex; align-items:center; justify-content:space-between; background:#ffffff; border:1px dashed #cbd5e1; border-radius:6px; padding:10px 14px; margin-top:8px;">
-                    <div>
-                      <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">原父节点</div>
-                      <strong style="color:#64748b;">{{ topologyConfirmData.sourceNode?.parentCode || '(起点/无)' }}</strong>
-                    </div>
-                    <div style="font-size:18px; color:#ec4899; font-weight:bold;">➡️</div>
-                    <div>
-                      <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">新父节点</div>
-                      <strong style="color:#059669;">{{ getMarkerTypeIcon(topologyConfirmData.targetNode?.type) }} {{ topologyConfirmData.targetNode?.code }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <p style="margin:0 0 20px 0; font-size:12px; color:#475569; line-height:1.5;">
-                  此操作将把 <strong>{{ topologyConfirmData.sourceNode?.code }}</strong> 的父节点更新为 <strong>{{ topologyConfirmData.targetNode?.code }}</strong>，重绘管线连接轨迹线段，并保存至数据库。
-                </p>
-
-                <div style="display:flex; justify-content:flex-end; gap:12px;">
-                  <button class="btn ghost" type="button" @click="cancelTopologyConfirm">取消</button>
-                  <button class="btn primary" type="button" :disabled="saving" @click="executeTopologyConfirm">
-                    {{ saving ? '保存中...' : '确认更新并保存' }}
-                  </button>
-                </div>
-              </div>
             </div>
 
             <!-- 右侧标注管理面板 -->
@@ -619,11 +592,16 @@ const hasDraftMarker = ref(false)
 // 点位实时数据列表，全量从 PostgreSQL 数据库异步拉取
 const markersList = ref([])
 
+// 点位记录时间范围筛选变量 (默认不限: '')
+const startDateFilter = ref('')
+const endDateFilter = ref('')
+
 // 是否激活了任何过滤规则
 const hasActiveFilter = computed(() => {
   if (selectedTypes.value.length < ALL_TYPES.length) return true
   if (selectedSections.value.length > 0) return true
   if (selectedPipelines.value.length > 0) return true
+  if (startDateFilter.value || endDateFilter.value) return true
   return false
 })
 
@@ -662,7 +640,7 @@ const passRate = computed(() => {
   return Math.round((passed / welds.length) * 100)
 })
 
-// 组合多维多选筛选后的点位清单 (按勾选的类型、标段、管道名称过滤)
+// 组合多维多选筛选后的点位清单 (按勾选的类型、标段、管道名称、记录时间范围过滤)
 const filteredMarkers = computed(() => {
   return markersList.value.filter(m => {
     // 1. 类型多选过滤
@@ -683,6 +661,18 @@ const filteredMarkers = computed(() => {
         return false
       }
     }
+    // 4. 点位记录时间范围过滤 (默认不限: startDateFilter ~ endDateFilter)
+    if (startDateFilter.value || endDateFilter.value) {
+      if (!m.createdAt) return false
+      // m.createdAt 格式示例 "2026-07-30 15:30:00"
+      const createdDateStr = m.createdAt.slice(0, 10)
+      if (startDateFilter.value && createdDateStr < startDateFilter.value) {
+        return false
+      }
+      if (endDateFilter.value && createdDateStr > endDateFilter.value) {
+        return false
+      }
+    }
     return true
   })
 })
@@ -692,11 +682,20 @@ const onFilterChange = () => {
   renderMapElements()
 }
 
-// 重置全部过滤器到默认全选状态
+// 单独清空时间范围过滤
+const clearDateFilter = () => {
+  startDateFilter.value = ''
+  endDateFilter.value = ''
+  renderMapElements()
+}
+
+// 重置全部过滤器到默认状态
 const resetAllFilters = () => {
   selectedTypes.value = [...ALL_TYPES]
   selectedSections.value = []
   selectedPipelines.value = []
+  startDateFilter.value = ''
+  endDateFilter.value = ''
   renderMapElements()
 }
 
@@ -1099,73 +1098,8 @@ const existingParentNodeOptions = computed(() => {
   return markersList.value.filter(m => m.type === 'weld' || m.type === 'tee')
 })
 
-// 连线拖拽重构模式状态与确认 Modal 数据
-const isTopologyDragMode = ref(false)
-const topologyConfirmData = ref({
-  show: false,
-  sourceNode: null,
-  targetNode: null
-})
-
-let rubberBandPolyline = null
-let activeDragSourceNode = null
-
-const toggleTopologyDragMode = () => {
-  isTopologyDragMode.value = !isTopologyDragMode.value
-  renderMapElements()
-}
-
-const cancelTopologyConfirm = () => {
-  topologyConfirmData.value = {
-    show: false,
-    sourceNode: null,
-    targetNode: null
-  }
-}
-
-// 拖拽完放开确认后，通过 PUT 接口保存新的 parentCode 并重新渲染折线网
-const executeTopologyConfirm = async () => {
-  const src = topologyConfirmData.value.sourceNode
-  const tgt = topologyConfirmData.value.targetNode
-  if (!src || !tgt) return
-
-  saving.value = true
-  try {
-    const payload = {
-      type: src.type,
-      section_name: src.sectionName,
-      pipeline_name: src.pipelineName,
-      code: src.code,
-      name: src.name,
-      lng: src.lng,
-      lat: src.lat,
-      status: src.status,
-      spec: src.spec,
-      remarks: src.remarks,
-      parent_code: tgt.code
-    }
-
-    const res = await fetch(`${API_BASE_URL}/projects/insulation_pipe_supply_2026/gis/markers/${src.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (!res.ok) {
-      const errJson = await res.json()
-      throw new Error(errJson.detail || '更新父节点拓扑失败')
-    }
-
-    // 更新本地内存模型并刷新轨迹网
-    src.parentCode = tgt.code
-    cancelTopologyConfirm()
-    renderMapElements()
-  } catch (err) {
-    alert(`更新拓扑失败: ${err.message}`)
-  } finally {
-    saving.value = false
-  }
-}
+// 自动推荐的上级节点 Code
+const autoSuggestedParentCode = ref('')
 
 // 智能推导算法：根据传入的经纬度坐标 (lng, lat)，在现有焊口与三通中自动计算距离最近的点位作为推荐上级
 const findNearestParentNode = (lng, lat, ignoreCode = '') => {
@@ -1192,19 +1126,14 @@ const findNearestParentNode = (lng, lat, ignoreCode = '') => {
   return nearestCode
 }
 
-// 构造精密的下尖大头针（GIS Pin Marker）HTML (支持 🔗 连线拖拽重构抓手)
-const createPinMarkerElement = (bgColor, pointerColor, iconSymbol, labelCode, isDraft = false, canDragHandle = false) => {
+// 构造精密的下尖大头针（GIS Pin Marker）HTML
+const createPinMarkerElement = (bgColor, pointerColor, iconSymbol, labelCode, isDraft = false) => {
   const containerDiv = document.createElement('div')
   containerDiv.className = isDraft ? 'gis-pin-marker draft-pin-animated' : 'gis-pin-marker'
-  
-  const dragHandleHtml = canDragHandle 
-    ? `<span class="pin-drag-handle animated-pulse" title="按住拖出虚线放至目标节点以改变父节点" style="position:absolute; top:-8px; right:-8px; background:#ec4899; color:#fff; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; cursor:crosshair; box-shadow:0 2px 4px rgba(0,0,0,0.3); border:1.5px solid #fff;">🔗</span>`
-    : ''
 
   containerDiv.innerHTML = `
-    <div class="pin-head" style="background-color: ${bgColor}; position:relative;">
+    <div class="pin-head" style="background-color: ${bgColor};">
       <span>${iconSymbol}</span> <span>${labelCode}</span>
-      ${dragHandleHtml}
     </div>
     <div class="pin-pointer" style="border-top-color: ${pointerColor};"></div>
   `
@@ -1255,17 +1184,20 @@ const renderMapElements = () => {
         }
       })
 
+      // 检查当前管线是否已有显式配置了父节点的节点
+      const hasAnyParentConfig = allConnectNodes.some(n => n.parentCode && nodeMap.has(n.parentCode))
+
       const segments = []
       let lastNodePos = null
 
       allConnectNodes.forEach(n => {
         const currentPos = [n.lng, n.lat]
-        // 核心拓扑规则：如果节点 N (焊口或三通) 显式声明了 parentCode 且能匹配到上级焊口/三通 P
+        // 核心拓扑规则：若节点显式声明了 parentCode 且匹配到上级，按拓扑连线
         if ((n.type === 'weld' || n.type === 'tee') && n.parentCode && nodeMap.has(n.parentCode)) {
           const parentNode = nodeMap.get(n.parentCode)
           segments.push([[parentNode.lng, parentNode.lat], currentPos])
-        } else if (lastNodePos) {
-          // 如果没有 parentCode，且前面有上一连线节点，则顺次连接
+        } else if (!hasAnyParentConfig && lastNodePos) {
+          // 仅当整条管线没有任何 parentCode 配置时，才按 sortOrder 顺次连接
           segments.push([lastNodePos, currentPos])
         }
         lastNodePos = currentPos
@@ -1316,90 +1248,15 @@ const renderMapElements = () => {
       }
     }
 
-    const canDragHandle = isTopologyDragMode.value && (item.type === 'weld' || item.type === 'tee')
-    const pinElement = createPinMarkerElement(bgColor, pointerColor, iconSymbol, item.code, false, canDragHandle)
-
-    if (canDragHandle) {
-      setTimeout(() => {
-        const handleEl = pinElement.querySelector('.pin-drag-handle')
-        if (handleEl) {
-          handleEl.addEventListener('mousedown', (e) => {
-            e.stopPropagation()
-            e.preventDefault()
-
-            activeDragSourceNode = item
-            const startPos = [item.lng, item.lat]
-
-            if (rubberBandPolyline) {
-              mapInstance.remove(rubberBandPolyline)
-            }
-
-            rubberBandPolyline = new amapObject.Polyline({
-              path: [startPos, startPos],
-              strokeColor: '#ec4899',
-              strokeOpacity: 0.9,
-              strokeWeight: 4,
-              strokeStyle: 'dashed',
-              strokeDasharray: [8, 8],
-              zIndex: 200
-            })
-            mapInstance.add(rubberBandPolyline)
-
-            const onMouseMove = (moveEvt) => {
-              if (!activeDragSourceNode || !rubberBandPolyline) return
-              const containerRect = mapInstance.getContainer().getBoundingClientRect()
-              const pixel = new amapObject.Pixel(moveEvt.clientX - containerRect.left, moveEvt.clientY - containerRect.top)
-              const currentLngLat = mapInstance.containerToLngLat(pixel)
-              const endPos = [currentLngLat.getLng(), currentLngLat.getLat()]
-              rubberBandPolyline.setPath([startPos, endPos])
-            }
-
-            const onMouseUp = (upEvt) => {
-              window.removeEventListener('mousemove', onMouseMove)
-              window.removeEventListener('mouseup', onMouseUp)
-
-              if (rubberBandPolyline) {
-                mapInstance.remove(rubberBandPolyline)
-                rubberBandPolyline = null
-              }
-
-              if (!activeDragSourceNode) return
-
-              const containerRect = mapInstance.getContainer().getBoundingClientRect()
-              const pixel = new amapObject.Pixel(upEvt.clientX - containerRect.left, upEvt.clientY - containerRect.top)
-              const dropLngLat = mapInstance.containerToLngLat(pixel)
-              const dropLng = dropLngLat.getLng()
-              const dropLat = dropLngLat.getLat()
-
-              // 查找距离释放点最近的焊口或三通目标节点
-              const targetCode = findNearestParentNode(dropLng, dropLat, activeDragSourceNode.code)
-              if (targetCode) {
-                const targetNodeObj = markersList.value.find(m => m.code === targetCode)
-                if (targetNodeObj && targetNodeObj.code !== activeDragSourceNode.parentCode) {
-                  topologyConfirmData.value = {
-                    show: true,
-                    sourceNode: activeDragSourceNode,
-                    targetNode: targetNodeObj
-                  }
-                }
-              }
-              activeDragSourceNode = null
-            }
-
-            window.addEventListener('mousemove', onMouseMove)
-            window.addEventListener('mouseup', onMouseUp)
-          })
-        }
-      }, 50)
-    }
+    const pinElement = createPinMarkerElement(bgColor, pointerColor, iconSymbol, item.code)
 
     const marker = new amapObject.Marker({
       position: [item.lng, item.lat],
       content: pinElement,
-      draggable: !isTopologyDragMode.value,
+      draggable: true,
       anchor: 'bottom-center',
       offset: new amapObject.Pixel(0, 0),
-      title: isTopologyDragMode.value ? `连线模式：按住 🔗 图标拖出虚线放开到目标节点重设父节点` : `按住针脚可直接拖拽调整 ${item.code} 坐标`
+      title: `按住针脚可直接拖拽调整 ${item.code} 坐标`
     })
 
     marker.on('click', () => {
@@ -2127,12 +1984,14 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   right: 0;
   width: 320px;
+  max-width: calc(100vw - 32px);
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
   z-index: 1000;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .popover-header {
@@ -2163,9 +2022,55 @@ onUnmounted(() => {
   padding: 12px 14px;
   max-height: 380px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  box-sizing: border-box;
+}
+
+.date-filter-grid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.date-input-compact {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 2px 4px;
+  font-size: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s;
+}
+
+.date-input-compact:focus {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.date-input-compact::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0;
+  margin: 0;
+}
+
+.date-separator {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .filter-section-group {

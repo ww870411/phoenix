@@ -1,3 +1,10 @@
+## 2026-07-30 GIS 修改点位 PUT 接口 HTTP 400 异常与绑参补全修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (补齐 update_gis_marker 中缺失的 remarks 参数绑定字典项；清理文件尾部多余重复的旧 update_gis_marker 定义；加强 session.username 校验保护)
+- 本轮处理与实现原理：
+  - **SQL 参数解包完整性**：解决 SQLAlchemy 缺参报错；消除同名路由处理函数的覆写。
+
 ## 2026-07-30 GIS 编辑入口前端异常隔离修复（后端无改动）
 
 - 本轮仅调整 `GisMapView.vue` 的草稿点位清理与编辑表单切换顺序，消除高德地图临时覆盖物异常对前端编辑入口的阻断。
