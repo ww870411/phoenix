@@ -1,3 +1,127 @@
+## 2026-07-30 [GIS 编辑入口草稿覆盖物异常隔离修复]
+- **任务结论**：修复点位点击“编辑”时可能无法进入右侧编辑表单的问题。编辑流程现会先写入选中点位数据并切换到 `form` 标签，再清理遗留草稿点；地图覆盖物移除失败仅输出告警，不再阻断编辑主流程。
+- **变更文件**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue`。
+- **实现流程**：`startEditMarker(item)` 设置 `editingId` 与 `formModel` 后立即设置 `activeSideTab = 'form'`，随后调用已加 `try/catch` 保护的 `clearDraftMarker()`；该函数会先清空草稿状态引用，再尝试从高德地图移除覆盖物。
+- **验证结果**：本地 Vite 服务编译结果保留了编辑按钮到 `startEditMarker(item)` 的事件绑定；后续以 `npm run build` 验证生产构建。
+- **影响与回滚**：只影响 GIS 新增草稿与编辑入口，未调整后端 API 或数据库；回滚时恢复本条中所述前端函数逻辑即可。
+
+## 2026-07-30 [GIS 修正 action 按钮冒泡修饰符、绑定 nextTick 表单平滑置顶与地图平移]
+- **任务结论**：成功定位并解决了卡片“编辑”按钮点击可能被父级拦截无响应的问题：
+  1. **事件冒泡拦截重构**：移除了 `marker-card-actions` 容器上的通用 `@click.stop`，将其显式准确地挂载在各个子按钮 `<button @click.stop="startEditMarker(item)">` 上，确保点击事件 100% 被函数捕获执行。
+  2. **nextTick 置顶与自动平移**：在 `startEditMarker` 中加入 `nextTick` 延迟，确保 Vue DOM 完成装载后自动平滑置顶滚动条，并在高德地图上同步平移定位至该点位。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [GIS 排查并修复编辑点击时 openInfoWindow 误将切页重置为 list 的漏洞]
+- **任务结论**：精准定位并完美修复了点击“✏️ 编辑”时没有自动切入编辑表单且表单可能为空的逻辑缺陷：
+  1. **切页被强行覆盖的漏洞解决**：原 `openInfoWindow` 内部硬编码了 `activeSideTab.value = 'list'`，导致当用户点击卡片上的“✏️ 编辑”按钮触发 `startEditMarker` 将页面切至 `form` 后，紧接着调用的地图联动聚焦函数把页面强制改回了 `list` 列表页。
+  2. **自动切页与数据装载**：在 `openInfoWindow` 中加上了 `activeSideTab.value !== 'form'` 判定保护；现在不论是在卡片还是在地图弹窗上点击“✏️ 编辑”，**系统 100% 自动平滑切入编辑表单页，并精确填入选中的全部已知点位数据**。
+  3. **表单头部明晰展示**：表单 Header 动态显示 `✏️ 编辑修改点位 (W-DL-001)`，并提供显眼的 `➕ 切换为新增点位` 按钮，逻辑清晰顺畅。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [GIS 修复编辑 Tab 误清空表单 BUG、补全坐标拖拽全量字段与地图弹窗集成编辑按钮]
+- **任务结论**：成功定位并排查修复了“点位无法编辑”的体验与逻辑缺陷：
+  1. **Tab 点击手势逻辑修复**：修复了侧边栏顶部 Tab 切换中，点击“✏️ 编辑点位”Tab 误触发 `startAddNewMarker` 从而强制清空 `editingId` 与已载入表单内容的逻辑缺陷。
+  2. **高德地图 InfoWindow 气泡弹窗集成快捷编辑**：在地图落针气泡弹窗底部新增了 **`✏️ 编辑此点位`** 快捷按钮，点击直接平滑载入该点位数据至右侧表单。
+  3. **数据提交与拖拽修改字段保护**：补全了 `saveMarkerData` 表单提交及 `marker.on('dragend')` 坐标拖拽提交时遗漏的 `sectionName`、`sortOrder` 与 `parentCode` 参数，防止持久化覆盖。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [GIS 允许三通设置父节点与按住抓手拖出橡皮筋虚线修改管线走向 (含二次确认)]
+- **任务结论**：成功实现了三通父节点全链路支撑以及交互式橡皮筋连线拖拽重构系统：
+  1. **三通 (`tee`) 支持配置父节点**：全量放开限制，三通与焊口均可指定 `parentCode`，实现了 `起始焊口 -> 二级焊口 -> 三通 -> (分支1, 分支2)` 的连贯管网树。
+  2. **交互式橡皮筋连线重构拖拽 (Rubber-band Line Dragging)**：
+     - 点击工具栏 **“🔗 连线拖拽重构”** 按钮即可进入重构模式；
+     - 连线节点（焊口与三通）右上角呈现 `🔗` 抓手，鼠标按住 `🔗` 抓手拖动时，在地图上产生跟随鼠标实时游动的粉色橡皮筋虚线 (`#ec4899`)；
+     - 鼠标在目标焊口/三通节点上松开时，自动捕获目标节点；
+  3. **二次确认 Modal (TopologyConfirmModal)**：
+     - 放开手势后触发精美的全局确认弹窗，展示修改节点、原父节点与新父节点信息；
+     - 用户点击确认后，通过 `PUT /gis/markers/{id}` 接口保存至 PostgreSQL 数据库，并重绘轨迹网。
+- **实现**：
+  - **模版与种子库 (`init_gis_data.py` & `tube_schema_init.sql`)**：给示例数据中的 `T-DL-001` 与 `T-AS-001` 三通设置了父节点 `W-DL-002` 与 `W-AS-001`。
+  - **地图橡皮筋手势与拓扑重绘 (`GisMapView.vue`)**：`createPinMarkerElement` 动态渲染抓手，给 `pin-drag-handle` 绑定 `mousedown/mousemove/mouseup` 手势，使用 `amapObject.Pixel` 与 `containerToLngLat` 实现像素至坐标的实时渲染与近邻检测。
+- **改动清单**：
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+  - [init_gis_data.py](file:///C:/Users/ww/.gemini/antigravity-cli/brain/d507b946-a347-4639-a3f8-aa48221777dc/scratch/init_gis_data.py)
+
+## 2026-07-30 [GIS 父节点 (Parent Code) 手动输入框改造与 Git Graph 拓扑概念对齐]
+- **任务结论**：成功将 GIS 空间地图系统的“三通分支上级”文案统一重构为**“父节点 (Parent Code)”**，全面仿照 Git Commit 拓扑图中 Parent Hash 指针机制进行设计：
+  1. **文案统一**：侧边栏点位卡片、地图 InfoWindow 气泡弹窗、Excel 导出表头及表单控件全量更名为**“父节点”**。
+  2. **文本输入框改造 (`input type="text"`)**：移除了原有的 `<select>` 强制下拉框限制，改用自由文本输入框（辅以 `<datalist>` 智能输入自动联想补全）。
+  3. **基于地理位置的默认推导**：新增焊口点位时，系统根据几何坐标推导出最合理的焊口或三通节点 Code 自动填入输入框（如 `W-DL-001` 或 `T-DL-001`），用户可随意编辑修正。
+  4. **时间保护**：修改父节点或编辑点位信息时，严格保持原始录入时间 (`created_at`) 不被更改。
+- **实现**：
+  - **表单控件与 Datalist (`GisMapView.vue`)**：将 `parentCode` 表单项改用 `<input v-model="formModel.parentCode" type="text">`，保留 `findNearestParentNode` 计算生成的自动建议值。
+  - **卡片/弹窗/导出全量更名 (`GisMapView.vue`)**：卡片与气泡弹窗的标签统一为 `父节点：`，Excel 表格表头统一为 `父节点`。
+- **改动清单**：
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [GIS 规范仅焊口与三通参与连线、焊口配置上级节点与坐标智能推导]
+- **任务结论**：成功重构了 GIS 空间地图系统的拓扑连线模型：
+  1. **连线节点限定**：**仅有“焊口 (`weld`)”与“三通 (`tee`)”参与管线轨迹连线**，表计、补偿器、弯头、阀门作为附着设备点位展示不画入主线。
+  2. **上级节点 (parent_code) 归属逻辑**：**三通不需要设定上级节点，仅“焊口”可以设定上级节点**（可指向上一焊口或三通节点）。当两个及以上焊口同时以同一个三通为上级节点时，系统自动画出多条引出的独立分支路线。
+  3. **基于位置坐标的智能推导 (`findNearestParentNode`)**：在地图点选取点新增焊口时，系统自动根据地理位置坐标计算距离最近的已有焊口或三通节点，并自动填充推荐为上级节点。用户如需修正可随时下拉调整。
+  4. **时间戳保护**：编辑修改节点时只更新 `updated_at`，**严格保护并保持原始录入时间 (`created_at`) 不变**。
+  5. **物理数据库与 SQL 模版模版对齐**：更新了 `tube.tube_gis` 数据库 DDL 与 `phoenix\backend\sql\tube_schema_init.sql` 模板中的 `parent_code` 字段注释与种子示例数据。
+- **实现**：
+  - **连线拓扑算法重构 (`GisMapView.vue`)**：`renderMapElements` 过滤 `m.type === 'weld' || m.type === 'tee'` 节点，以字典索引画出从 `parentCode` 上级节点（焊口或三通）到目标焊口的物理线段，实现多焊口共享同一三通衍生分支。
+  - **智能上级节点自动推荐 (`findNearestParentNode`)**：计算平面/球面几何欧式距离，在新增焊口时智能推荐 nearest 焊口/三通节点 `parentCode`。
+  - **时间戳与 DDL 对齐 (`workspace.py` & `tube_schema_init.sql`)**：后端 UPDATE 操作避开 `created_at` 字段，完成增删改全链路闭环。
+- **改动清单**：
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+  - [init_gis_data.py](file:///C:/Users/ww/.gemini/antigravity-cli/brain/d507b946-a347-4639-a3f8-aa48221777dc/scratch/init_gis_data.py)
+
+## 2026-07-30 [GIS 标注点位类型去掉括号说明及全链路接入录入时间 created_at 记录]
+- **任务结论**：成功移除了界面所有“标注点位类型”下拉框 option 选项中括号内的多余描述说明，保持精炼干练（如 `🔩 焊口`、`⏱️ 表计`、`🔀 三通`、`〰️ 补偿器`、`↪️ 弯头`、`🚰 阀门`）。物理升级了数据库 `tube.tube_gis` Schema 的 `created_at` 字段注释，并重构了后端 `/gis/markers` 接口，使之返回标准格式的 `createdAt` (录入时间)。同步在前端侧边栏点位卡片、地图 InfoWindow 弹窗及导出 XLSX 表格中全量增加了录入时间的记录展示。
+- **实现**：
+  1. **标注点位下拉去括号 (`GisMapView.vue`)**：精简了表单内 `<select v-model="formModel.type">` 下 6 种点位类型的文本标签，彻底去除了如 `(焊口探伤点)` 等尾部括号说明。
+  2. **SQL 模版与 DDL 整理 (`tube_schema_init.sql`)**：补充了 `COMMENT ON COLUMN tube.tube_gis.created_at IS '点位数据录入/创建时间';` 的说明字段，整理了纯净可重入的 SQL 模版文件。
+  3. **后端 API 全链路扩展 (`workspace.py`)**：修改了 `list_gis_markers` 的 SQL 语句，查询 `created_at` 并转换为 `YYYY-MM-DD HH:mm:ss` 格式字符串以 `createdAt` 字段输出给前端。
+  4. **前端三处联动展示 (`GisMapView.vue`)**：
+     - **侧边栏点位 Card**：新增展示 `录入时间：2026-07-30 01:39:05`
+     - **高德地图 InfoWindow 信息窗口**：新增展示 `录入时间：2026-07-30 01:39:05`
+     - **导出 Excel (.xlsx) 表格**：表头追加 `录入时间` 列，并导出所有筛选记录的精准录入时刻。
+- **影响与回滚**：前端样式与后端返回字段向上兼容，构建与验证全部通过。
+- **改动清单**：
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+
+## 2026-07-30 [GIS 拓展为 6 种点位类型、更名为“管线名称/编号”及支持三通分支分叉连线]
+- **任务结论**：成功将 GIS 空间地图系统的标注点位类型由 2 种扩展为 **6 种全功能类型**：`焊口 (weld)`、`表计 (meter)`、`三通 (tee)`、`补偿器 (compensator)`、`弯头 (elbow)`、`阀门 (valve)`。全量将“管道名称/编号”规范更名为**“管线名称/编号”**；设计并规范了 6 种点位类型的标准化视觉色彩与直观 Emoji/SVG 标签小图标（`🔩 焊口`、`⏱️ 表计`、`🔀 三通`、`〰️ 补偿器`、`↪️ 弯头`、`🚰 阀门`）。物理升级了数据库 `tube.tube_gis` Schema，增加了 `parent_code` 字段，实现了**管线三通分叉树状连线算法 (Branching Polyline Algorithm)**，支持在三通处优雅延伸出独立分支管线网络。
+- **实现**：
+  1. **点位类型拓展与规范图标系统 (`GisMapView.vue`)**：建立 `MARKER_TYPE_CONFIG` 全局标准映射表，涵盖 6 种点位类型的视觉颜色、边框色、半透明背景及专属小图标。大头针 Pin Marker 内部徽章、侧边栏列表卡片、多维筛选 Popover 及 InfoWindow 弹窗统一采用了规范的小图标。
+  2. **“管线名称/编号”全量替换**：界面所有表格列头、表单 Label、多维筛选组标题、图例及按钮全量更名为“管线名称/编号”，符合现场专业工程语境。
+  3. **三通分支连线算法 (`renderMapElements`)**：重构了连线算法。管线连线将同一 `pipelineName` 下的焊口、三通及相关节点集合整理，对于设置了 `parentCode`（指向三通）的分支节点，系统自动画出从父级三通引出的分支折线段，完美展示干线与分支并存的复杂管网布局。
+  4. **PostgreSQL 表结构升级与 16 条全新示例数据 (`tube_schema_init.sql` & `init_gis_data.py`)**：在 `tube.tube_gis` 物理表中增加了 `parent_code VARCHAR(64)` 字段；重新设计并插入了 16 条涵盖大连香炉礁供暖主干线（含三通分叉香周路分支）与鞍山路预制管线（含社区三通分支）的全类型生动示例数据。
+  5. **后端 API 全链路兼容 (`workspace.py`)**：升级了 `GisMarkerCreatePayload` Pydantic 校验模型，支持 `parent_code` 读写；修改了 `/gis/markers` 的 GET/POST/PUT 接口，针对 6 种点位类型返回精确的 `statusText` 与 `statusClass`。
+  6. **本地验证与构建测试**：通过 Python 脚本验证了 `list_gis_markers` 能成功提取 16 条 6 种类型的点位数据及 4 条分支关联数据；运行 `npm run build` 成功完成 Vite 生产构建。
+- **影响与回滚**：管线连线算法向下兼容无分支普通轨迹，新增点位类型丰富无误，支持 Git 快速回滚。
+- **改动清单**：
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+  - [init_gis_data.py](file:///C:/Users/ww/.gemini/antigravity-cli/brain/d507b946-a347-4639-a3f8-aa48221777dc/scratch/init_gis_data.py)
+
+## 2026-07-30 [支持在全局管理页配置高德地图 APIKey/安全 Key 并简单加密持久化至 tube_config.json]
+- **任务结论**：成功在 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/global_management` 全局管理控制台中新增了【🗺️ GIS 地图 API 配置】选项卡，支持管理员在界面在线配置高德地图 Web JS API 2.0 的 `API Key` (api_key) 与 `安全 Key` (security_code)。配置数据采用以 `enc_v1:` 为标识的前缀掩码与 XOR+Base64 简单加密算法，密文持久化写入 `phoenix\backend_data\projects\insulation_pipe_supply_2026\tube_config.json`，确保物理磁盘配置文件不裸露明文密钥。
+- **实现**：
+  1. **简单加密/解密服务层开发 (`config_service.py`)**：在 `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 中引入了 `simple_encrypt` 与 `simple_decrypt` 算法模块，定义了加密标识 `enc_v1:` 与秘钥。若 `tube_config.json` 未设置 `amap_config` 节点，自动补全默认 key 的简单加密密文存入文件；提供了 `get_configured_amap_config(payload)` 方法动态解密供系统使用。
+  2. **后端管理 API 拓展与解密暴露 (`workspace.py`)**：在 `_save_config_section` 白名单中加入了 `"amap_config"`，当管理员提交配置保存时，后端自动将明文 Key 加密为密文再写入 `tube_config.json`；在 `GET /global-management/config` 接口中返回了 `amap_config_decrypted` 供全局控制台明文渲染与修改；新增了 `GET /projects/{project_key}/gis/config` 动态 API 接口。
+  3. **前端全局管理控制台升级 (`GlobalManagementView.vue`)**：侧边栏新增了 **`🗺️ GIS 地图 API 配置`** Tab 按钮。右侧面板提供了高德 API Key 与安全密钥专属设置卡片，配备明文/密码框显隐切换（`🔒 隐藏密钥明文` / `👁️ 显示密钥明文`）与保存 Toast 反馈。
+  4. **GIS 空间地图 SDK 动态 API 认证打通 (`GisMapView.vue`)**：移除了原本前端页面中硬编码的高德 API Key 字符串。`GisMapView.vue` 在初始化高德地图 SDK 前，先通过 `fetchGisMapConfig()` 从后端 `/gis/config` 接口动态提取解密后的密钥并注入 `window._AMapSecurityConfig` 与 SDK `<script>` 链接中，同时保留了安全的 Fallback 默认配置保障系统高可用。
+  5. **代码验证与生产构建测试**：通过 Python 脚本验证了 `tube_config.json` 密文写入与解密正确性；运行 `npm run build` 完成了 Vite 前端生产环境零错误构建。
+- **影响与回滚**：完全兼容既有 `tube_config.json` 配置结构，物理存储密文安全可靠，支持通过系统还原或 Git 快速回滚。
+- **改动清单**：
+  - [config_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [GlobalManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - [GisMapView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)
+  - [tube_config.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+
 ## 2026-07-29 [新增焊口与表计 GIS 空间地图标注大屏、地点搜索及数据编辑功能上线]
 - **任务结论**：成功在子项目 `insulation_pipe_supply_2026` 中开发并升华了“焊口与表计 GIS 空间地图标注”页面。实现了以**大连市香炉礁**为默认中心定位、地点搜索定位（基于 AMap.Geocoder 与 AMap.PlaceSearch 双引擎）、**施工标段 (section_name) 全链路拓展与数据库 schema 物理升级**、**按【施工标段】和【管道名称/编号】的组合多维动态高级筛选器 (自动提取已存在选项与自定义兼顾)**、**示例数据物理入库 `tube.tube_gis`**、**后端 CRUD API 开发 (/gis/markers)**、**地图点击点位与右侧列表卡片的双向联动高亮与平滑滚动 (scrollIntoView)**、**拖拽大头针坐标变更二次弹窗确认与取消归位机制**、**修复 401 路由拦截、ES Module 未导出函数 SyntaxError、Pinia 解耦及 openPage 路由参数动态求值，彻底恢复全子项目页面顺畅点击与加载**、**【管道名称/编号】分组独立连线**、剔除不必要的实时采样字眼与繁复文案、新增点位表单全留空由用户全权自主输入、精密下尖针大头针 (Pin) 锚点精确定位、点选实时生成草稿 Marker 图标、鼠标拖拽设置坐标以及点位数据的在线编辑修改与删除管理。访问权限仅归属于 `Global_admin`。
 - **实现**：

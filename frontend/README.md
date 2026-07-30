@@ -1,3 +1,82 @@
+## 2026-07-30 GIS 编辑入口草稿覆盖物异常隔离修复
+
+- `GisMapView.vue` 的 `startEditMarker` 已调整为先填充点位表单并切至编辑标签，再清理新增草稿覆盖物，避免地图对象异常导致用户无法进入编辑栏。
+- `clearDraftMarker` 现在先释放本地草稿状态，并对高德地图 `remove` 调用实施异常隔离；清理失败只记录浏览器告警，不影响新增、取消和编辑主流程。
+- 后端接口及数据表均未变更；点位编辑仍复用既有 `PUT /api/v1/projects/insulation_pipe_supply_2026/gis/markers/{id}`。
+
+## 2026-07-30 GIS 卡片操作按钮事件拦截重构与 DOM 渲染平滑置顶
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (移除容器级的 @click.stop，直接给子按钮挂载 @click.stop；在 startEditMarker 中增加 nextTick 表单滚动置顶)
+- 本轮处理与实现原理：
+  - **点击事件精确捕获**：避免外层 DOM 拦截事件，保证点击编辑按钮 100% 触发 startEditMarker 并自动滚动置顶载入数据。
+
+## 2026-07-30 GIS 点击编辑自动切至表单页与 openInfoWindow 切页防篡改修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (在 openInfoWindow 中加上 activeSideTab.value !== 'form' 防篡改保护，修复点击编辑后没有自动切入编辑表单页的 bug，表单头部动态展示当前正在编辑的点位 Code)
+- 本轮处理与实现原理：
+  - **切页连贯性**：消除了 `openInfoWindow` 内部把 `activeSideTab` 改写为 `list` 的并发冲突，实现点击编辑 100% 自动切入表单页并自动填满现有数据。
+
+## 2026-07-30 GIS 点位编辑逻辑排查与全链路体验修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (修复编辑 Tab 误触发 startAddNewMarker 重置表单的 bug；高德地图 InfoWindow 气泡弹窗新增 ✏️ 编辑此点位 按钮；补全 saveMarkerData 与 dragend 中的 sortOrder, parentCode, sectionName 参数)
+- 本轮处理与实现原理：
+  - **编辑状态保持**：修正 Tab 切换行为，点击编辑 Tab 不再强制清空表单与 `editingId`。
+  - **地图快捷编辑**：气泡弹窗注入快捷编辑按钮，提升可视化操作效率。
+
+## 2026-07-30 GIS 交互式橡皮筋虚线拖拽重构走向、二次确认 Modal 与三通父节点全支持
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (在工具栏增加连线拖拽模式按钮，Pin Marker 上渲染 🔗 抓手，实现 mousedown/mousemove/mouseup 橡皮筋虚线拖拽手势，放开自动捕获最近父节点并弹出 TopologyConfirmModal 确认对话框，同步请求后端更新)
+- 本轮处理与实现原理：
+  - **三通拓扑闭环**：允许三通 `tee` 设置父节点，形成 `起始焊口 -> 二级焊口 -> 三通 -> (分支1, 分支2)` 的连贯网络。
+  - **橡皮筋拖拽重连 (Option B Drag-and-Drop)**：按住 `🔗` 抓手拖出粉色虚线，高德地图全局像素坐标转换为经纬度，目标松开后弹出二次确认 Modal，确认后通过 API 保存并同步刷新 Polyline 连线网。
+
+## 2026-07-30 GIS 父节点 (Parent Code) 改造为自由文本输入框并全量更名
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (将 parentCode 改用 input type="text" + datalist 输入框呈现，添加取点时默认自动推荐最合理父节点，并将卡片、弹窗与 Excel 导出表头的文案统一更名为“父节点”)
+- 本轮处理与实现原理：
+  - **文案与理念对齐**：全界面更名为“父节点 (Parent Code)”，理念对标 Git Commit Parent 节点拓扑链。
+  - **文本输入与智能填充**：移除 `<select>` 下拉框，采用 `<input v-model="formModel.parentCode">`，点选新增时默认生成距离最近的焊口/三通编号，用户可手动自由修改。
+
+## 2026-07-30 GIS 连线拓扑算法重构 (仅焊口/三通连线)、焊口上级节点智能推导与多路线分叉支持
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (限定仅 weld/tee 参与连线，为焊口配置 parentCode 表单控件，编写 findNearestParentNode 算法实现新增焊口时根据经纬度自动推荐最近上级节点，编辑节点时不改动 created_at)
+- 本轮处理与实现原理：
+  - **连线节点限定**：仅有 `weld` (焊口) 与 `tee` (三通) 参与轨迹连线，表计、补偿器、弯头、阀门做设备点位落针，不画入线段。
+  - **焊口上级节点与三通分支**：三通不需要指定上级，仅焊口需要配置 `parentCode` 上级节点（焊口或三通）。当多个焊口指向同一个三通时，自动从三通画出引出的多条分支线段。
+  - **基于坐标的智能推导**：新增焊口点选坐标时，算法自动检索最近的焊口或三通作为 `parentCode`，并提供高亮提示。
+
+## 2026-07-30 GIS 标注点位类型去掉括号说明及侧边栏/地图弹窗/Excel 导出展示录入时间
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (精简表单下拉菜单点位类型文字去处括号内容，侧边栏 Card、InfoWindow 弹窗与 Excel 导出新增 createdAt 录入时间展示)
+- 本轮处理与实现原理：
+  - **下拉类型精简去括号**：去除了表单 select option 中如 `(焊口探伤点)`、`(监测/计量表计)` 等补充文本，精简呈现 6 种类型。
+  - **三处全方位展示录入时间**：侧边栏点位卡片、地图 InfoWindow 气泡及导出的 XLSX 表格中均全量接入并展示了点位数据的 `createdAt` 录入时刻。
+
+## 2026-07-30 GIS 空间地图拓展 6 种点位类型、更名“管线名称/编号”及支持三通分支分叉连线
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (建立 MARKER_TYPE_CONFIG 映射表，支持 6 种点位类型、图标定义与管线三通分支分叉 Polyline 连线算法，全量更名“管线名称/编号”，增加 parentCode 选择框)
+- 本轮处理与实现原理：
+  - **扩展 6 种点位类型与规范图标系统**：定义了 `weld` (焊口 🔩), `meter` (表计 ⏱️), `tee` (三通 🔀), `compensator` (补偿器 〰️), `elbow` (弯头 ↪️), `valve` (阀门 🚰) 6 种类型的全局映射字典与主题色，大头针 Pin Marker、列表 Card、信息窗口均包含规范直观的小图标。
+  - **管线三通分叉连线算法 (`renderMapElements`)**：同一 `pipelineName` 下节点按 `sortOrder` 排序，对于标注了 `parentCode`（父上级三通）的节点自动画出引出的分支折线段，支持多分支延伸。
+  - **“管线名称/编号”全量更名**：全界面更名为“管线名称/编号”，统一工程现场口径。
+
+## 2026-07-30 全局管理页新增高德地图 API 配置面板及动态 Key 认证集成
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (增加 GIS 地图 API 配置 Tab 选项卡、密钥显隐切换、amap_config 配置提交与 Toast 反馈)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (移除硬编码密钥，改用 fetchGisMapConfig 动态从后端获取解密后的 AMap Key 与 Security Code 进行高德 SDK 2.0 初始化)
+- 本轮处理与实现原理：
+  - **全局控制台配置接入**：在 `GlobalManagementView.vue` 中新增了 `🗺️ GIS 地图 API 配置` 侧边栏面板。管理员可以在界面配置高德地图 API Key 与安全 Code，并支持密码框掩码与明文显隐切换。
+  - **动态 SDK 认证**：在 `GisMapView.vue` 中接入了 `/api/v1/projects/insulation_pipe_supply_2026/gis/config` 接口，地图组件初始化时先动态拉取配置再载入高德 Web JS SDK 2.0，同时保留防爆 Fallback 默认值保障可用性。
+
 ## 2026-07-29 新增焊口与表计 GIS 空间地图功能 (含地点搜索、大连香炉礁默认定位、管道分组连线及数据持久化表结构)
 
 - 变更文件：

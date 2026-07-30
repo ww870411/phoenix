@@ -279,8 +279,7 @@ COMMENT ON COLUMN tube.operation_logs.after_value IS '变更后 JSON 快照';
 
 
 -- =========================================================================
--- GIS 地图焊口与表计标注持久化表 (2026-07-29 增补)
--- 用于存储保温管管网焊口探伤状态、监控表计点位及管道轨迹连线坐标
+-- GIS 地图标注持久化表 (支持 6 种点位类型与三通分支)
 -- =========================================================================
 
 CREATE TABLE IF NOT EXISTS tube.tube_gis (
@@ -297,25 +296,28 @@ CREATE TABLE IF NOT EXISTS tube.tube_gis (
     spec VARCHAR(128),
     remarks TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    parent_code VARCHAR(64),
     created_by VARCHAR(128),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by VARCHAR(128),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-COMMENT ON TABLE tube.tube_gis IS '管网焊口探伤与监控表计 GIS 地图标注点位存储表';
+COMMENT ON TABLE tube.tube_gis IS '管网焊口、三通、补偿器、弯头、阀门与表计 GIS 地图标注点位存储表';
 COMMENT ON COLUMN tube.tube_gis.project_key IS '项目标识';
-COMMENT ON COLUMN tube.tube_gis.marker_type IS '标注点位类型: weld (焊口) / meter (表计)';
+COMMENT ON COLUMN tube.tube_gis.marker_type IS '标注点位类型: weld (焊口) / meter (表计) / tee (三通) / compensator (补偿器) / elbow (弯头) / valve (阀门)';
 COMMENT ON COLUMN tube.tube_gis.section_name IS '工程施工标段名称 (如: 标段1, 标段2)';
-COMMENT ON COLUMN tube.tube_gis.pipeline_name IS '管道名称/编号，同一名称焊口自动连成同一条管道轨迹';
-COMMENT ON COLUMN tube.tube_gis.code IS '点位唯一编号/标识 (如 W-DL-001 或 M-DL-001)';
+COMMENT ON COLUMN tube.tube_gis.pipeline_name IS '管线名称/编号，同一名称管线自动连成轨迹';
+COMMENT ON COLUMN tube.tube_gis.code IS '点位唯一编号/标识 (如 W-DL-001 或 T-DL-001)';
 COMMENT ON COLUMN tube.tube_gis.name IS '点位名称或地理描述';
 COMMENT ON COLUMN tube.tube_gis.lng IS '高德地图精准经度坐标 Lng (保留6位小数)';
 COMMENT ON COLUMN tube.tube_gis.lat IS '高德地图精准纬度坐标 Lat (保留6位小数)';
-COMMENT ON COLUMN tube.tube_gis.status IS '状态: passed(合格)/pending(待探伤)/failed(待复焊) 或 normal(正常)/warning(预警)';
+COMMENT ON COLUMN tube.tube_gis.status IS '状态: passed(合格)/pending(待探伤)/failed(待复焊) 或 normal(正常)/warning(预警)/closed(关闭)/open(开启)';
 COMMENT ON COLUMN tube.tube_gis.spec IS '关联保温管规格型号 (如 DN400 预制直埋保温管)';
 COMMENT ON COLUMN tube.tube_gis.remarks IS '备注说明与质检记录';
-COMMENT ON COLUMN tube.tube_gis.sort_order IS '连线/管道节点排序号';
+COMMENT ON COLUMN tube.tube_gis.sort_order IS '连线/管线节点排序号';
+COMMENT ON COLUMN tube.tube_gis.parent_code IS '上级节点编号 (仅焊口设定，指向上一焊口或三通节点；若多个焊口指向同一三通则自动分出多条路线)';
+COMMENT ON COLUMN tube.tube_gis.created_at IS '点位数据录入/创建时间';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_gis_project_code
     ON tube.tube_gis (project_key, code);
@@ -329,19 +331,32 @@ CREATE INDEX IF NOT EXISTS idx_tube_gis_pipeline
 CREATE INDEX IF NOT EXISTS idx_tube_gis_marker_type
     ON tube.tube_gis (project_key, marker_type);
 
--- 初始示例种子数据 (大连香炉礁主干线及鞍山路分支线)
+-- 全新 6 种点位类型与三通分支种子示例数据 (大连香炉礁供暖管网)
 INSERT INTO tube.tube_gis 
-(project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order)
+(project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order, parent_code)
 VALUES
-('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁主干线', 'W-DL-001', '香炉礁热电厂出厂主干线1号焊口', 121.604771, 38.928491, 'passed', 'DN400 预制直埋保温管', '大连热力集团施工组：探伤超声波100%合格签认', 1),
-('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁主干线', 'W-DL-002', '香工街沿线供暖主网2号焊口', 121.608771, 38.931491, 'pending', 'DN400 预制直埋保温管', '2026-07-28 氩弧打底完成，等待安监质检组探伤', 2),
-('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁主干线', 'W-DL-003', '东北路与香工街交汇处3号焊口', 121.611771, 38.934491, 'passed', 'DN400 预制直埋保温管', '主干线段顺利合拢', 3),
-('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路分支线', 'W-DL-101', '鞍山路分支线1号焊口', 121.612771, 38.931491, 'pending', 'DN300 聚氨酯保温管', '分支管线首个对接焊口', 1),
-('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路分支线', 'W-DL-102', '鞍山路分支线2号焊口', 121.615771, 38.929491, 'failed', 'DN300 聚氨酯保温管', '射线探伤发现微小气孔，安排返修复焊', 2),
-('insulation_pipe_supply_2026', 'meter', '标段1', '香炉礁主干线', 'M-DL-001', '香炉礁换热站入口流量计', 121.602771, 38.927491, 'normal', 'DN300 高精度热网流量表', '热网进口监测设备', 0),
-('insulation_pipe_supply_2026', 'meter', '标段2', '鞍山路分支线', 'M-DL-002', '鞍山路分支网压力监测点', 121.617771, 38.928491, 'normal', '智能数字压力表', '分支网压差控制监测点', 0)
-ON CONFLICT (project_key, code) DO NOTHING;
+-- 管线 1：香炉礁供暖主干线 (包含表计、阀门、弯头、三通、补偿器及焊口，并在三通处分叉)
+('insulation_pipe_supply_2026', 'meter', '标段1', '香炉礁供暖主干线', 'M-DL-001', '香炉礁热电厂出口主热表', 121.602771, 38.927491, 'normal', 'DN400 高精度热网流量计', '厂区主热源出口总监测表计', 1, NULL),
+('insulation_pipe_supply_2026', 'valve', '标段1', '香炉礁供暖主干线', 'V-DL-001', '1号主供水切断阀门', 121.603771, 38.927891, 'open', 'DN400 蝶阀电动执行机构', '厂外主供水管网控制阀', 2, NULL),
+('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁供暖主干线', 'W-DL-001', '香炉礁热电厂出厂1号焊口', 121.604771, 38.928491, 'passed', 'DN400 预制直埋保温管', '大连热力施工组：探伤100%合格签认', 3, NULL),
+('insulation_pipe_supply_2026', 'elbow', '标段1', '香炉礁供暖主干线', 'E-DL-001', '香工街转角弯头节点', 121.606771, 38.929891, 'normal', 'DN400 90度无缝冲压弯头', '香工街拐弯转向管道节点', 4, NULL),
+('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁供暖主干线', 'W-DL-002', '香工街沿线2号对接焊口', 121.608771, 38.931491, 'pending', 'DN400 预制直埋保温管', '氩弧打底完成，等待安监质检组探伤', 5, 'W-DL-001'),
+('insulation_pipe_supply_2026', 'tee', '标段1', '香炉礁供暖主干线', 'T-DL-001', '香工街与香周路分叉三通', 121.610771, 38.933491, 'normal', 'DN400/DN300 异径无缝三通', '关键管网分叉节点，引出香周路分支', 6, 'W-DL-002'),
+('insulation_pipe_supply_2026', 'compensator', '标段1', '香炉礁供暖主干线', 'C-DL-001', '主线轴向波纹管补偿器', 121.611771, 38.934491, 'normal', 'DN400 轴向外压波纹补偿器', '吸收管线热膨胀伸缩应力', 7, NULL),
+('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁供暖主干线', 'W-DL-003', '东北路交汇末端合拢焊口', 121.613771, 38.936491, 'passed', 'DN400 预制直埋保温管', '主干线施工完工合拢焊口', 8, 'T-DL-001'),
 
+-- 管线 1 的分支：从 T-DL-001 (三通) 引出到香周路分支
+('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁供暖主干线', 'W-DL-004', '香周路分支1号对接焊口', 121.613271, 38.931891, 'passed', 'DN300 预制直埋保温管', '三通分支引出首段焊口', 9, 'T-DL-001'),
+('insulation_pipe_supply_2026', 'valve', '标段1', '香炉礁供暖主干线', 'V-DL-002', '香周路分支隔离切断阀', 121.614871, 38.930491, 'open', 'DN300 手动阀门', '分支网维保检修控制阀', 10, 'W-DL-004'),
+('insulation_pipe_supply_2026', 'weld', '标段1', '香炉礁供暖主干线', 'W-DL-005', '香周路分支末端焊口', 121.616771, 38.929091, 'pending', 'DN300 预制直埋保温管', '等待末端换热站对接', 11, 'V-DL-002'),
+
+-- 管线 2：鞍山路预制管线 (含三通分叉)
+('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路预制管线', 'W-AS-001', '鞍山路管网起点对接焊口', 121.612771, 38.927491, 'pending', 'DN300 聚氨酯保温管', '标段2施工首段', 1, NULL),
+('insulation_pipe_supply_2026', 'tee', '标段2', '鞍山路预制管线', 'T-AS-001', '鞍山路社区三通分流点', 121.614771, 38.929091, 'normal', 'DN300 等径三通', '社区二级供热网分流节点', 2, NULL),
+('insulation_pipe_supply_2026', 'compensator', '标段2', '鞍山路预制管线', 'C-AS-001', '鞍山路中段波纹补偿器', 121.616771, 38.930091, 'normal', 'DN300 波纹管补偿器', '吸收管段位移', 3, NULL),
+('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路预制管线', 'W-AS-002', '鞍山路主线末端焊口', 121.618771, 38.931091, 'failed', 'DN300 聚氨酯保温管', '探伤微小瑕疵，安排复焊', 4, NULL),
+('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路预制管线', 'W-AS-003', '鞍山路社区小区分支焊口', 121.616771, 38.927091, 'passed', 'DN200 保温管', '从 T-AS-001 三通引出的小区分支焊口', 5, 'T-AS-001')
+ON CONFLICT (project_key, code) DO NOTHING;
 
 COMMIT;
 

@@ -77,12 +77,15 @@
           <!-- 图例说明与控制条 -->
           <div class="legend-bar">
             <span class="legend-title">🗺️ 地图图例与控制：</span>
-            <span class="legend-item"><i class="dot dot-passed"></i> 焊口 (探伤合格)</span>
-            <span class="legend-item"><i class="dot dot-pending"></i> 焊口 (待探伤)</span>
-            <span class="legend-item"><i class="dot dot-failed"></i> 焊口 (待复焊)</span>
-            <span class="legend-item"><i class="dot dot-meter"></i> 计量表计</span>
-            <span class="legend-item"><i class="dot dot-draft"></i> 待保存草稿针点</span>
-            <span class="legend-item"><i class="line-sample"></i> 管道轨迹</span>
+            <span class="legend-item"><i class="dot dot-passed"></i> 🔩 焊口 (合格)</span>
+            <span class="legend-item"><i class="dot dot-pending"></i> 🔩 焊口 (待探伤)</span>
+            <span class="legend-item"><i class="dot dot-failed"></i> 🔩 焊口 (待复焊)</span>
+            <span class="legend-item"><i class="dot dot-meter"></i> ⏱️ 表计</span>
+            <span class="legend-item"><i class="dot dot-tee"></i> 🔀 三通</span>
+            <span class="legend-item"><i class="dot dot-compensator"></i> 〰️ 补偿器</span>
+            <span class="legend-item"><i class="dot dot-elbow"></i> ↪️ 弯头</span>
+            <span class="legend-item"><i class="dot dot-valve"></i> 🚰 阀门</span>
+            <span class="legend-item"><i class="line-sample"></i> 管线轨迹</span>
 
             <!-- 显隐切换与多维筛选控制按钮组 -->
             <div class="control-btn-group">
@@ -104,15 +107,27 @@
                   </div>
 
                   <div class="popover-body">
-                    <!-- 1. 点位分类多选 -->
+                    <!-- 1. 点位分类多选 (6种类型) -->
                     <div class="filter-section-group">
                       <div class="group-title">📌 标注点位分类：</div>
                       <div class="checkbox-grid">
                         <label class="checkbox-label">
-                          <input type="checkbox" value="weld" v-model="selectedTypes" @change="onFilterChange" /> 管道焊口
+                          <input type="checkbox" value="weld" v-model="selectedTypes" @change="onFilterChange" /> 🔩 焊口
                         </label>
                         <label class="checkbox-label">
-                          <input type="checkbox" value="meter" v-model="selectedTypes" @change="onFilterChange" /> 计量表计
+                          <input type="checkbox" value="meter" v-model="selectedTypes" @change="onFilterChange" /> ⏱️ 表计
+                        </label>
+                        <label class="checkbox-label">
+                          <input type="checkbox" value="tee" v-model="selectedTypes" @change="onFilterChange" /> 🔀 三通
+                        </label>
+                        <label class="checkbox-label">
+                          <input type="checkbox" value="compensator" v-model="selectedTypes" @change="onFilterChange" /> 〰️ 补偿器
+                        </label>
+                        <label class="checkbox-label">
+                          <input type="checkbox" value="elbow" v-model="selectedTypes" @change="onFilterChange" /> ↪️ 弯头
+                        </label>
+                        <label class="checkbox-label">
+                          <input type="checkbox" value="valve" v-model="selectedTypes" @change="onFilterChange" /> 🚰 阀门
                         </label>
                       </div>
                     </div>
@@ -132,10 +147,10 @@
                       </div>
                     </div>
 
-                    <!-- 3. 管道名称/编号多选 -->
+                    <!-- 3. 管线名称/编号多选 -->
                     <div v-if="existingPipelineOptions.length > 0" class="filter-section-group">
                       <div class="group-title-row">
-                        <span class="group-title">🚰 管道名称/编号 (打勾多选)：</span>
+                        <span class="group-title">🚰 管线名称/编号 (打勾多选)：</span>
                         <button class="text-link-btn" type="button" @click="toggleAllPipelines">
                           {{ selectedPipelines.length === existingPipelineOptions.length ? '清空' : '全选' }}
                         </button>
@@ -166,13 +181,23 @@
                 📥 导出表格
               </button>
 
+              <!-- 连线拖拽重构模式按钮 -->
+              <button 
+                :class="['btn', isTopologyDragMode ? 'danger' : 'ghost', 'small-btn', 'control-action-btn']" 
+                type="button" 
+                title="开启连线重构模式：按住焊口/三通图标上的 🔗 抓手拖出虚线放开到目标节点即可修改父节点"
+                @click="toggleTopologyDragMode"
+              >
+                {{ isTopologyDragMode ? '✕ 退出连线拖拽' : '🔗 连线拖拽重构' }}
+              </button>
+
               <!-- 管道连线显隐按钮 -->
               <button 
                 :class="['btn', showPipeline ? 'primary' : 'ghost', 'small-btn', 'control-action-btn']" 
                 type="button" 
                 @click="togglePipelineVisibility"
               >
-                {{ showPipeline ? '👁️ 管道连线' : '🙈 隐藏连线' }}
+                {{ showPipeline ? '👁️ 管线连线' : '🙈 隐藏连线' }}
               </button>
             </div>
           </div>
@@ -181,6 +206,12 @@
           <div class="gis-body-grid">
             <!-- 地图视图区 -->
             <div class="map-wrapper">
+              <!-- 拖拽重构模式顶部提示浮层条 -->
+              <div v-if="isTopologyDragMode" class="topology-drag-banner animated-pulse" style="position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:100; background:#be123c; color:#ffffff; font-size:13px; font-weight:600; padding:8px 18px; border-radius:20px; box-shadow:0 10px 15px -3px rgba(190,18,60,0.3); display:flex; align-items:center; gap:8px;">
+                <span>🔗 连线拖拽模式已激活：按住焊口/三通图标上的 🔗 抓手拖出粉色虚线，松开放至目标节点即可重置父节点！</span>
+                <button type="button" style="background:transparent; border:none; color:#ffffff; cursor:pointer; font-weight:bold; font-size:14px;" @click="isTopologyDragMode = false">✕</button>
+              </div>
+
               <div v-if="mapLoading" class="map-loading-overlay">
                 <div class="spinner"></div>
                 <div class="loading-text">高德地图加载中，正在读取管网点位数据...</div>
@@ -189,6 +220,44 @@
                 ⚠️ 地图加载失败：{{ mapError }}
               </div>
               <div id="amap-container" class="amap-box"></div>
+            </div>
+
+            <!-- 连线重构二次确认 Modal 弹窗 -->
+            <div v-if="topologyConfirmData.show" class="modal-backdrop" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.65); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+              <div class="card elevated" style="width:460px; max-width:92vw; padding:24px; border-radius:12px; background:#ffffff; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+                <h3 style="margin:0 0 16px 0; font-size:18px; color:#0f172a; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
+                  🔗 确认更新管线拓扑走向？
+                </h3>
+                
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px;">
+                  <div style="margin-bottom:10px;">
+                    <span style="color:#64748b;">修改节点：</span>
+                    <strong style="color:#0284c7;">{{ getMarkerTypeIcon(topologyConfirmData.sourceNode?.type) }} {{ topologyConfirmData.sourceNode?.code }} ({{ topologyConfirmData.sourceNode?.name }})</strong>
+                  </div>
+                  <div style="display:flex; align-items:center; justify-content:space-between; background:#ffffff; border:1px dashed #cbd5e1; border-radius:6px; padding:10px 14px; margin-top:8px;">
+                    <div>
+                      <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">原父节点</div>
+                      <strong style="color:#64748b;">{{ topologyConfirmData.sourceNode?.parentCode || '(起点/无)' }}</strong>
+                    </div>
+                    <div style="font-size:18px; color:#ec4899; font-weight:bold;">➡️</div>
+                    <div>
+                      <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">新父节点</div>
+                      <strong style="color:#059669;">{{ getMarkerTypeIcon(topologyConfirmData.targetNode?.type) }} {{ topologyConfirmData.targetNode?.code }}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <p style="margin:0 0 20px 0; font-size:12px; color:#475569; line-height:1.5;">
+                  此操作将把 <strong>{{ topologyConfirmData.sourceNode?.code }}</strong> 的父节点更新为 <strong>{{ topologyConfirmData.targetNode?.code }}</strong>，重绘管线连接轨迹线段，并保存至数据库。
+                </p>
+
+                <div style="display:flex; justify-content:flex-end; gap:12px;">
+                  <button class="btn ghost" type="button" @click="cancelTopologyConfirm">取消</button>
+                  <button class="btn primary" type="button" :disabled="saving" @click="executeTopologyConfirm">
+                    {{ saving ? '保存中...' : '确认更新并保存' }}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- 右侧标注管理面板 -->
@@ -204,7 +273,7 @@
                 <button 
                   :class="['tab-btn', activeSideTab === 'form' ? 'active' : '']" 
                   type="button" 
-                  @click="startAddNewMarker"
+                  @click="handleFormTabClick"
                 >
                   {{ editingId ? '✏️ 编辑点位' : '➕ 新增点位' }}
                 </button>
@@ -222,8 +291,8 @@
                     @click="focusMarkerOnMap(item)"
                   >
                     <div class="marker-card-header">
-                      <span :class="['badge', item.type === 'weld' ? 'badge-weld' : 'badge-meter']">
-                        {{ item.type === 'weld' ? '焊口' : '表计' }}
+                      <span :class="['badge', 'badge-' + (item.type || 'weld')]">
+                        {{ getMarkerTypeLabel(item.type) }}
                       </span>
                       <span class="marker-code">{{ item.code }}</span>
                       <span :class="['status-tag', item.statusClass]">{{ item.statusText }}</span>
@@ -234,12 +303,18 @@
                         <span class="val text-indigo font-bold">{{ item.sectionName }}</span>
                       </div>
                       <div class="info-row">
-                        <span class="label">管道名称/编号：</span>
-                        <span class="val text-blue font-bold">{{ item.pipelineName || '未指定管道' }}</span>
+                        <span class="label">管线名称/编号：</span>
+                        <span class="val text-blue font-bold">{{ item.pipelineName || '未指定管线' }}</span>
                       </div>
                       <div class="info-row">
                         <span class="label">名称描述：</span>
                         <span class="val">{{ item.name }}</span>
+                      </div>
+                      <div v-if="item.parentCode" class="info-row">
+                        <span class="label">父节点：</span>
+                        <span class="val text-amber font-bold" :title="getParentNodeTitle(item.parentCode)">
+                          {{ getParentNodeDisplay(item.parentCode) }}
+                        </span>
                       </div>
                       <div class="info-row">
                         <span class="label">经纬度坐标：</span>
@@ -249,18 +324,22 @@
                         <span class="label">关联保温管：</span>
                         <span class="val">{{ item.spec }}</span>
                       </div>
+                      <div v-if="item.createdAt" class="info-row">
+                        <span class="label">录入时间：</span>
+                        <span class="val text-mono text-slate-500">{{ item.createdAt }}</span>
+                      </div>
                     </div>
 
                     <!-- 点位操作与连线顺序调整按钮列 -->
-                    <div class="marker-card-actions" @click.stop>
-                      <div v-if="item.type === 'weld'" class="order-btn-group">
-                        <button class="order-btn" title="上移连线顺序" type="button" @click="moveWeldOrder(idx, 'up')">⬆️</button>
-                        <button class="order-btn" title="下移连线顺序" type="button" @click="moveWeldOrder(idx, 'down')">⬇️</button>
+                    <div class="marker-card-actions">
+                      <div v-if="item.type === 'weld' || item.type === 'tee'" class="order-btn-group">
+                        <button class="order-btn" title="上移连线顺序" type="button" @click.stop="moveWeldOrder(idx, 'up')">⬆️</button>
+                        <button class="order-btn" title="下移连线顺序" type="button" @click.stop="moveWeldOrder(idx, 'down')">⬇️</button>
                       </div>
-                      <button class="action-btn edit-btn" type="button" @click="startEditMarker(item)">
+                      <button class="action-btn edit-btn" type="button" @click.stop="startEditMarker(item)">
                         ✏️ 编辑
                       </button>
-                      <button class="action-btn delete-btn" type="button" @click="deleteMarker(item)">
+                      <button class="action-btn delete-btn" type="button" @click.stop="deleteMarker(item)">
                         🗑️ 删除
                       </button>
                     </div>
@@ -274,18 +353,22 @@
               <!-- Tab 2: 新增/编辑表单区 -->
               <div v-if="activeSideTab === 'form'" class="panel-content">
                 <div class="form-header-bar">
-                  <h4>{{ editingId ? '✏️ 编辑修改标注点位' : '➕ 录入新增标注点位' }}</h4>
+                  <h4>{{ editingId ? `✏️ 编辑修改点位 (${formModel.code || ''})` : '➕ 录入新增标注点位' }}</h4>
                   <button v-if="editingId || hasDraftMarker" class="btn ghost small-btn" type="button" @click="startAddNewMarker">
-                    重置/重新新增
+                    ➕ 切换为新增点位
                   </button>
                 </div>
 
                 <form class="add-marker-form" @submit.prevent="saveMarkerData">
                   <div class="form-group">
-                    <label>标注类型 <span class="required">*</span></label>
+                    <label>标注点位类型 <span class="required">*</span></label>
                     <select v-model="formModel.type" class="select-input" required @change="updateDraftMarkerIcon">
-                      <option value="weld">管道焊口</option>
-                      <option value="meter">计量表计</option>
+                      <option value="weld">🔩 焊口</option>
+                      <option value="meter">⏱️ 表计</option>
+                      <option value="tee">🔀 三通</option>
+                      <option value="compensator">〰️ 补偿器</option>
+                      <option value="elbow">↪️ 弯头</option>
+                      <option value="valve">🚰 阀门</option>
                     </select>
                   </div>
 
@@ -297,7 +380,7 @@
                       type="text" 
                       class="text-input" 
                       list="existing-sections-list"
-                      placeholder="选择或输入标段 (例: 一标段 (香炉礁主线段))" 
+                      placeholder="选择或输入标段 (例: 标段1 (香炉礁主线段))" 
                       required 
                     />
                     <datalist id="existing-sections-list">
@@ -305,21 +388,42 @@
                     </datalist>
                   </div>
 
-                  <!-- 管道名称/编号 (可从已有管道中选择，也可自主输入) -->
+                  <!-- 管线名称/编号 (可从已有管线中选择，也可自主输入) -->
                   <div class="form-group">
-                    <label>管道名称/编号 <span class="required">*</span></label>
+                    <label>管线名称/编号 <span class="required">*</span></label>
                     <input 
                       v-model="formModel.pipelineName" 
                       type="text" 
                       class="text-input" 
                       list="existing-pipelines-list"
-                      placeholder="例: 香炉礁主干线 或 鞍山路分支线" 
+                      placeholder="例: 香炉礁供暖主干线 或 鞍山路预制管线" 
                       required 
                     />
                     <datalist id="existing-pipelines-list">
                       <option v-for="pipe in existingPipelineOptions" :key="pipe" :value="pipe" />
                     </datalist>
-                    <small class="field-tip">仅同一管道名称/编号的焊口会自动连成一条管道轨迹线</small>
+                    <small class="field-tip">属于同一管线名称/编号的焊口与三通将自动连成管线轨迹网络</small>
+                  </div>
+
+                  <!-- 父节点 (焊口与三通均可设定父节点，类似 Git Commit Parent) -->
+                  <div v-if="formModel.type === 'weld' || formModel.type === 'tee'" class="form-group">
+                    <label>父节点 (Parent Code)</label>
+                    <input 
+                      v-model="formModel.parentCode" 
+                      type="text" 
+                      class="text-input" 
+                      list="existing-parents-list"
+                      placeholder="例: W-DL-001 或 T-DL-001 (置空则作为起点)" 
+                    />
+                    <datalist id="existing-parents-list">
+                      <option v-for="pNode in existingParentNodeOptions" :key="pNode.code" :value="pNode.code">
+                        {{ pNode.type === 'tee' ? '🔀 三通' : '🔩 焊口' }} - {{ pNode.name }}
+                      </option>
+                    </datalist>
+                    <small class="field-tip">指向上一焊口或三通父节点。三通节点连接父节点后再继续分出多条路线线段！</small>
+                    <div v-if="autoSuggestedParentCode" class="smart-tip-box" style="margin-top:4px; font-size:12px; color:#059669; background:#ecfdf5; padding:4px 8px; border-radius:4px; border:1px solid #a7f3d0;">
+                      ✨ 已根据物理坐标为您默认生成最合理父节点：<strong>{{ autoSuggestedParentCode }}</strong>
+                    </div>
                   </div>
 
                   <div class="form-group">
@@ -469,9 +573,12 @@ import { getAuthToken } from '../../daily_report_25_26/services/api.js'
 const router = useRouter()
 const selectedMarkerId = ref(null)
 
-// 高德地图注册认证密钥
-const AMAP_KEY = 'f49ff8e523dd739fecc6d8bfb4209f22'
-const AMAP_SECURITY_CODE = '7573fa30e86735d98bafb40466822b3a'
+// 高德地图注册认证密钥 (支持从后端获取全局配置)
+const DEFAULT_AMAP_KEY = 'f49ff8e523dd739fecc6d8bfb4209f22'
+const DEFAULT_AMAP_SECURITY_CODE = '7573fa30e86735d98bafb40466822b3a'
+
+const currentAmapKey = ref(DEFAULT_AMAP_KEY)
+const currentAmapSecurityCode = ref(DEFAULT_AMAP_SECURITY_CODE)
 
 // 大连市香炉礁默认中心点坐标
 const CENTER_LNG = 121.606771
@@ -499,7 +606,8 @@ const activeSideTab = ref('list')
 
 // 浓缩多维筛选 Popover 显隐与选中的数组
 const showFilterPopover = ref(false)
-const selectedTypes = ref(['weld', 'meter']) // 标注类型多选：默认全选
+const ALL_TYPES = ['weld', 'meter', 'tee', 'compensator', 'elbow', 'valve']
+const selectedTypes = ref([...ALL_TYPES]) // 标注类型多选：默认全选 6 种点位
 const selectedSections = ref([]) // 施工标段多选：为空表示不限/全选
 const selectedPipelines = ref([]) // 管道名称多选：为空表示不限/全选
 
@@ -513,7 +621,7 @@ const markersList = ref([])
 
 // 是否激活了任何过滤规则
 const hasActiveFilter = computed(() => {
-  if (selectedTypes.value.length < 2) return true
+  if (selectedTypes.value.length < ALL_TYPES.length) return true
   if (selectedSections.value.length > 0) return true
   if (selectedPipelines.value.length > 0) return true
   return false
@@ -586,7 +694,7 @@ const onFilterChange = () => {
 
 // 重置全部过滤器到默认全选状态
 const resetAllFilters = () => {
-  selectedTypes.value = ['weld', 'meter']
+  selectedTypes.value = [...ALL_TYPES]
   selectedSections.value = []
   selectedPipelines.value = []
   renderMapElements()
@@ -625,13 +733,15 @@ const exportFilteredMarkersToXlsx = () => {
     '点位编号',
     '标注类型',
     '施工标段',
-    '管道名称/编号',
+    '管线名称/编号',
+    '父节点',
     '名称描述',
     '经度 (Lng)',
     '纬度 (Lat)',
     '质检/运行状态',
     '关联保温管规格',
     '轨迹连线顺序',
+    '录入时间',
     '备注说明'
   ]
 
@@ -651,19 +761,21 @@ const exportFilteredMarkersToXlsx = () => {
   // 数据数据行
   rows.forEach((r, idx) => {
     const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc'
-    const typeLabel = r.type === 'weld' ? '管道焊口' : '计量表计'
+    const typeLabel = MARKER_TYPE_CONFIG[r.type]?.label || '点位'
     tableHtml += `<tr style="background-color:${bg};">`
     tableHtml += `<td style="padding:6px 10px; mso-number-format:'\\@';">${r.code || ''}</td>`
     tableHtml += `<td style="padding:6px 10px; text-align:center;">${typeLabel}</td>`
     tableHtml += `<td style="padding:6px 10px; color:#4f46e5; font-weight:600;">${r.sectionName || ''}</td>`
     tableHtml += `<td style="padding:6px 10px; color:#0284c7; font-weight:600;">${r.pipelineName || ''}</td>`
+    tableHtml += `<td style="padding:6px 10px; color:#d97706; text-align:center;">${r.parentCode || ''}</td>`
     tableHtml += `<td style="padding:6px 10px;">${r.name || ''}</td>`
-    tableHtml += `<td style="padding:6px 10px; mso-number-format:'0\\.000000'; text-align:right;">${r.lng}</td>`
-    tableHtml += `<td style="padding:6px 10px; mso-number-format:'0\\.000000'; text-align:right;">${r.lat}</td>`
-    tableHtml += `<td style="padding:6px 10px; text-align:center;">${r.statusText || ''}</td>`
+    tableHtml += `<td style="padding:6px 10px; text-align:right;">${r.lng}</td>`
+    tableHtml += `<td style="padding:6px 10px; text-align:right;">${r.lat}</td>`
+    tableHtml += `<td style="padding:6px 10px; text-align:center;">${r.statusText || r.status || ''}</td>`
     tableHtml += `<td style="padding:6px 10px;">${r.spec || ''}</td>`
     tableHtml += `<td style="padding:6px 10px; text-align:center;">${r.sortOrder || 0}</td>`
-    tableHtml += `<td style="padding:6px 10px; color:#64748b;">${r.remarks || ''}</td>`
+    tableHtml += `<td style="padding:6px 10px; text-align:center;">${r.createdAt || ''}</td>`
+    tableHtml += `<td style="padding:6px 10px;">${r.remarks || ''}</td>`
     tableHtml += '</tr>'
   })
 
@@ -872,6 +984,21 @@ const moveWeldOrder = (index, direction) => {
   renderMapElements()
 }
 
+// 动态从后端拉取加密解密后的高德地图 Key 配置
+const fetchGisMapConfig = async () => {
+  try {
+    const headers = buildAuthHeaders({ 'Accept': 'application/json' })
+    const res = await authAwareFetch('/api/v1/projects/insulation_pipe_supply_2026/gis/config', { headers })
+    const json = await res.json()
+    if (json && json.ok && json.api_key) {
+      currentAmapKey.value = json.api_key
+      currentAmapSecurityCode.value = json.security_code || ''
+    }
+  } catch (err) {
+    console.warn('动态拉取高德地图配置失败，回退默认配置:', err)
+  }
+}
+
 // 异步加载高德地图 JS SDK 2.0
 const loadAMapScript = () => {
   return new Promise((resolve, reject) => {
@@ -881,12 +1008,12 @@ const loadAMapScript = () => {
     }
 
     window._AMapSecurityConfig = {
-      securityJsCode: AMAP_SECURITY_CODE
+      securityJsCode: currentAmapSecurityCode.value || DEFAULT_AMAP_SECURITY_CODE
     }
 
     const script = document.createElement('script')
     script.type = 'text/javascript'
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&plugin=AMap.Scale,AMap.ToolBar,AMap.ControlBar,AMap.Geocoder,AMap.PlaceSearch`
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${currentAmapKey.value || DEFAULT_AMAP_KEY}&plugin=AMap.Scale,AMap.ToolBar,AMap.ControlBar,AMap.Geocoder,AMap.PlaceSearch`
     script.onerror = () => reject(new Error('高德地图 SDK 网络请求失败，请检查 API Key 或网络'))
     script.onload = () => {
       if (window.AMap) {
@@ -904,6 +1031,8 @@ const initMap = async () => {
   mapLoading.value = true
   mapError.value = ''
   try {
+    // 动态拉取后台加密配置的高德 Key
+    await fetchGisMapConfig()
     amapObject = await loadAMapScript()
 
     mapInstance = new amapObject.Map('amap-container', {
@@ -927,21 +1056,162 @@ const initMap = async () => {
   }
 }
 
-// 构造精密的下尖大头针（GIS Pin Marker）HTML
-const createPinMarkerElement = (bgColor, pointerColor, iconSymbol, labelCode, isDraft = false) => {
+// 6 种点位类型的标准化图标、视觉颜色与主题定义
+const MARKER_TYPE_CONFIG = {
+  weld: { label: '焊口', icon: '🔩', color: '#2563eb', pointerColor: '#1d4ed8', bgColor: '#2563eb' },
+  meter: { label: '表计', icon: '⏱️', color: '#0284c7', pointerColor: '#0369a1', bgColor: '#0284c7' },
+  tee: { label: '三通', icon: '🔀', color: '#d97706', pointerColor: '#b45309', bgColor: '#d97706' },
+  compensator: { label: '补偿器', icon: '〰️', color: '#059669', pointerColor: '#047857', bgColor: '#059669' },
+  elbow: { label: '弯头', icon: '↪️', color: '#7c3aed', pointerColor: '#6d28d9', bgColor: '#7c3aed' },
+  valve: { label: '阀门', icon: '🚰', color: '#e11d48', pointerColor: '#be123c', bgColor: '#e11d48' },
+}
+
+function getMarkerTypeLabel(type) {
+  return MARKER_TYPE_CONFIG[type]?.label || '点位'
+}
+
+function getMarkerTypeIcon(type) {
+  return MARKER_TYPE_CONFIG[type]?.icon || '📌'
+}
+
+// 辅助展示父节点富文本信息
+function getParentNodeDisplay(parentCode) {
+  if (!parentCode) return ''
+  const parent = markersList.value.find(m => m.code === parentCode)
+  if (parent) {
+    const icon = getMarkerTypeIcon(parent.type)
+    return `${icon} ${parent.code} (${parent.name})`
+  }
+  return parentCode
+}
+
+function getParentNodeTitle(parentCode) {
+  if (!parentCode) return ''
+  const parent = markersList.value.find(m => m.code === parentCode)
+  if (parent) {
+    return `父节点: ${parent.code} | 名称: ${parent.name} | 管线: ${parent.pipelineName}`
+  }
+  return `父节点: ${parentCode}`
+}
+
+// 提取当前可作为【上级节点】的点位列表 (仅包含焊口与三通)
+const existingParentNodeOptions = computed(() => {
+  return markersList.value.filter(m => m.type === 'weld' || m.type === 'tee')
+})
+
+// 连线拖拽重构模式状态与确认 Modal 数据
+const isTopologyDragMode = ref(false)
+const topologyConfirmData = ref({
+  show: false,
+  sourceNode: null,
+  targetNode: null
+})
+
+let rubberBandPolyline = null
+let activeDragSourceNode = null
+
+const toggleTopologyDragMode = () => {
+  isTopologyDragMode.value = !isTopologyDragMode.value
+  renderMapElements()
+}
+
+const cancelTopologyConfirm = () => {
+  topologyConfirmData.value = {
+    show: false,
+    sourceNode: null,
+    targetNode: null
+  }
+}
+
+// 拖拽完放开确认后，通过 PUT 接口保存新的 parentCode 并重新渲染折线网
+const executeTopologyConfirm = async () => {
+  const src = topologyConfirmData.value.sourceNode
+  const tgt = topologyConfirmData.value.targetNode
+  if (!src || !tgt) return
+
+  saving.value = true
+  try {
+    const payload = {
+      type: src.type,
+      section_name: src.sectionName,
+      pipeline_name: src.pipelineName,
+      code: src.code,
+      name: src.name,
+      lng: src.lng,
+      lat: src.lat,
+      status: src.status,
+      spec: src.spec,
+      remarks: src.remarks,
+      parent_code: tgt.code
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/insulation_pipe_supply_2026/gis/markers/${src.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (!res.ok) {
+      const errJson = await res.json()
+      throw new Error(errJson.detail || '更新父节点拓扑失败')
+    }
+
+    // 更新本地内存模型并刷新轨迹网
+    src.parentCode = tgt.code
+    cancelTopologyConfirm()
+    renderMapElements()
+  } catch (err) {
+    alert(`更新拓扑失败: ${err.message}`)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 智能推导算法：根据传入的经纬度坐标 (lng, lat)，在现有焊口与三通中自动计算距离最近的点位作为推荐上级
+const findNearestParentNode = (lng, lat, ignoreCode = '') => {
+  if (!lng || !lat || !markersList.value.length) return ''
+  
+  // 筛选出非当前的焊口与三通
+  const candidates = markersList.value.filter(m => (m.type === 'weld' || m.type === 'tee') && m.code !== ignoreCode)
+  if (candidates.length === 0) return ''
+
+  let minDistance = Infinity
+  let nearestCode = ''
+
+  candidates.forEach(m => {
+    const dLng = m.lng - lng
+    const dLat = m.lat - lat
+    // 欧式经纬度近似距离计算
+    const dist = dLng * dLng + dLat * dLat
+    if (dist < minDistance) {
+      minDistance = dist
+      nearestCode = m.code
+    }
+  })
+
+  return nearestCode
+}
+
+// 构造精密的下尖大头针（GIS Pin Marker）HTML (支持 🔗 连线拖拽重构抓手)
+const createPinMarkerElement = (bgColor, pointerColor, iconSymbol, labelCode, isDraft = false, canDragHandle = false) => {
   const containerDiv = document.createElement('div')
   containerDiv.className = isDraft ? 'gis-pin-marker draft-pin-animated' : 'gis-pin-marker'
   
+  const dragHandleHtml = canDragHandle 
+    ? `<span class="pin-drag-handle animated-pulse" title="按住拖出虚线放至目标节点以改变父节点" style="position:absolute; top:-8px; right:-8px; background:#ec4899; color:#fff; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; cursor:crosshair; box-shadow:0 2px 4px rgba(0,0,0,0.3); border:1.5px solid #fff;">🔗</span>`
+    : ''
+
   containerDiv.innerHTML = `
-    <div class="pin-head" style="background-color: ${bgColor};">
+    <div class="pin-head" style="background-color: ${bgColor}; position:relative;">
       <span>${iconSymbol}</span> <span>${labelCode}</span>
+      ${dragHandleHtml}
     </div>
     <div class="pin-pointer" style="border-top-color: ${pointerColor};"></div>
   `
   return containerDiv
 }
 
-// 按【管道名称/编号】分组独立绘制 Polyline 管线
+// 按【管线名称/编号】分组独立绘制 Polyline 管线轨迹 (仅焊口与三通参与连线，三通引出分支)
 const renderMapElements = () => {
   if (!mapInstance || !amapObject) return
 
@@ -951,69 +1221,185 @@ const renderMapElements = () => {
   pipelinePolylines.forEach(p => mapInstance.remove(p))
   pipelinePolylines = []
 
-  // 1. 按【管道名称/编号】分组独立绘制 Polyline (依据多维筛选后的点位)
+  // 1. 按【管线名称/编号】分组绘制 Polyline 连线 (仅焊口 weld 和三通 tee 参与连线)
   if (showPipeline.value) {
     const pipeGroups = {}
     
     filteredMarkers.value.forEach(m => {
-      if (m.type === 'weld' && m.pipelineName && m.pipelineName.trim()) {
+      // 核心业务规则：只有焊口 (weld) 和三通 (tee) 参与管线连线
+      if ((m.type === 'weld' || m.type === 'tee') && m.pipelineName && m.pipelineName.trim()) {
         const pipeKey = m.pipelineName.trim()
         if (!pipeGroups[pipeKey]) {
           pipeGroups[pipeKey] = []
         }
-        pipeGroups[pipeKey].push([m.lng, m.lat])
+        pipeGroups[pipeKey].push(m)
       }
     })
 
-    const pipeColors = ['#0284c7', '#4f46e5', '#7c3aed', '#059669', '#d97706']
+    const pipeColors = ['#0284c7', '#4f46e5', '#7c3aed', '#059669', '#d97706', '#dc2626']
     let colorIdx = 0
 
     Object.keys(pipeGroups).forEach(pipeName => {
-      const path = pipeGroups[pipeName]
-      if (path.length >= 2) {
-        const currentColor = pipeColors[colorIdx % pipeColors.length]
-        colorIdx++
+      const allConnectNodes = pipeGroups[pipeName]
+      if (allConnectNodes.length < 2) return
 
+      // 按 sortOrder 排序
+      allConnectNodes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+
+      // 构建该管线下所有连线节点的 ID/Code 索引字典
+      const nodeMap = new Map()
+      // 全局字典：便于跨管线引用三通
+      markersList.value.forEach(n => {
+        if (n.type === 'weld' || n.type === 'tee') {
+          nodeMap.set(n.code, n)
+        }
+      })
+
+      const segments = []
+      let lastNodePos = null
+
+      allConnectNodes.forEach(n => {
+        const currentPos = [n.lng, n.lat]
+        // 核心拓扑规则：如果节点 N (焊口或三通) 显式声明了 parentCode 且能匹配到上级焊口/三通 P
+        if ((n.type === 'weld' || n.type === 'tee') && n.parentCode && nodeMap.has(n.parentCode)) {
+          const parentNode = nodeMap.get(n.parentCode)
+          segments.push([[parentNode.lng, parentNode.lat], currentPos])
+        } else if (lastNodePos) {
+          // 如果没有 parentCode，且前面有上一连线节点，则顺次连接
+          segments.push([lastNodePos, currentPos])
+        }
+        lastNodePos = currentPos
+      })
+
+      const currentColor = pipeColors[colorIdx % pipeColors.length]
+      colorIdx++
+
+      segments.forEach(path => {
         const polyline = new amapObject.Polyline({
           path: path,
           isOutline: true,
           outlineColor: '#0f172a',
           borderWeight: 2,
           strokeColor: currentColor,
-          strokeOpacity: 0.95,
+          strokeOpacity: 0.92,
           strokeWeight: 6,
           strokeStyle: 'solid',
-          lineJoin: 'round'
+          lineJoin: 'round',
+          lineCap: 'round',
+          zIndex: 50,
         })
         mapInstance.add(polyline)
         pipelinePolylines.push(polyline)
-      }
+      })
     })
   }
 
-  // 2. 渲染筛选后的焊口及表计 Marker
+  // 2. 渲染 6 种类型的 Marker 点位
   filteredMarkers.value.forEach(item => {
-    let pinColor = '#10b981'
-    let iconSymbol = '📍'
+    const cfg = MARKER_TYPE_CONFIG[item.type] || MARKER_TYPE_CONFIG.weld
+    let bgColor = cfg.bgColor
+    let pointerColor = cfg.pointerColor
+    let iconSymbol = cfg.icon
+
     if (item.type === 'weld') {
-      if (item.status === 'passed') pinColor = '#10b981'
-      else if (item.status === 'pending') pinColor = '#f59e0b'
-      else pinColor = '#ef4444'
-      iconSymbol = '🔩'
-    } else {
-      pinColor = '#3b82f6'
-      iconSymbol = '⏱️'
+      if (item.status === 'pending') {
+        bgColor = '#d97706'
+        pointerColor = '#b45309'
+      } else if (item.status === 'failed') {
+        bgColor = '#dc2626'
+        pointerColor = '#b91c1c'
+      }
+    } else if (item.type === 'valve') {
+      if (item.status === 'closed') {
+        bgColor = '#d97706'
+        pointerColor = '#b45309'
+      }
     }
 
-    const pinElement = createPinMarkerElement(pinColor, pinColor, iconSymbol, item.code)
+    const canDragHandle = isTopologyDragMode.value && (item.type === 'weld' || item.type === 'tee')
+    const pinElement = createPinMarkerElement(bgColor, pointerColor, iconSymbol, item.code, false, canDragHandle)
+
+    if (canDragHandle) {
+      setTimeout(() => {
+        const handleEl = pinElement.querySelector('.pin-drag-handle')
+        if (handleEl) {
+          handleEl.addEventListener('mousedown', (e) => {
+            e.stopPropagation()
+            e.preventDefault()
+
+            activeDragSourceNode = item
+            const startPos = [item.lng, item.lat]
+
+            if (rubberBandPolyline) {
+              mapInstance.remove(rubberBandPolyline)
+            }
+
+            rubberBandPolyline = new amapObject.Polyline({
+              path: [startPos, startPos],
+              strokeColor: '#ec4899',
+              strokeOpacity: 0.9,
+              strokeWeight: 4,
+              strokeStyle: 'dashed',
+              strokeDasharray: [8, 8],
+              zIndex: 200
+            })
+            mapInstance.add(rubberBandPolyline)
+
+            const onMouseMove = (moveEvt) => {
+              if (!activeDragSourceNode || !rubberBandPolyline) return
+              const containerRect = mapInstance.getContainer().getBoundingClientRect()
+              const pixel = new amapObject.Pixel(moveEvt.clientX - containerRect.left, moveEvt.clientY - containerRect.top)
+              const currentLngLat = mapInstance.containerToLngLat(pixel)
+              const endPos = [currentLngLat.getLng(), currentLngLat.getLat()]
+              rubberBandPolyline.setPath([startPos, endPos])
+            }
+
+            const onMouseUp = (upEvt) => {
+              window.removeEventListener('mousemove', onMouseMove)
+              window.removeEventListener('mouseup', onMouseUp)
+
+              if (rubberBandPolyline) {
+                mapInstance.remove(rubberBandPolyline)
+                rubberBandPolyline = null
+              }
+
+              if (!activeDragSourceNode) return
+
+              const containerRect = mapInstance.getContainer().getBoundingClientRect()
+              const pixel = new amapObject.Pixel(upEvt.clientX - containerRect.left, upEvt.clientY - containerRect.top)
+              const dropLngLat = mapInstance.containerToLngLat(pixel)
+              const dropLng = dropLngLat.getLng()
+              const dropLat = dropLngLat.getLat()
+
+              // 查找距离释放点最近的焊口或三通目标节点
+              const targetCode = findNearestParentNode(dropLng, dropLat, activeDragSourceNode.code)
+              if (targetCode) {
+                const targetNodeObj = markersList.value.find(m => m.code === targetCode)
+                if (targetNodeObj && targetNodeObj.code !== activeDragSourceNode.parentCode) {
+                  topologyConfirmData.value = {
+                    show: true,
+                    sourceNode: activeDragSourceNode,
+                    targetNode: targetNodeObj
+                  }
+                }
+              }
+              activeDragSourceNode = null
+            }
+
+            window.addEventListener('mousemove', onMouseMove)
+            window.addEventListener('mouseup', onMouseUp)
+          })
+        }
+      }, 50)
+    }
 
     const marker = new amapObject.Marker({
       position: [item.lng, item.lat],
       content: pinElement,
-      draggable: true,
+      draggable: !isTopologyDragMode.value,
       anchor: 'bottom-center',
       offset: new amapObject.Pixel(0, 0),
-      title: `按住针脚可直接拖拽调整 ${item.code} 坐标`
+      title: isTopologyDragMode.value ? `连线模式：按住 🔗 图标拖出虚线放开到目标节点重设父节点` : `按住针脚可直接拖拽调整 ${item.code} 坐标`
     })
 
     marker.on('click', () => {
@@ -1061,14 +1447,17 @@ const renderMapElements = () => {
           headers,
           body: JSON.stringify({
             type: item.type,
-            pipelineName: item.pipelineName,
+            sectionName: item.sectionName || '',
+            pipelineName: item.pipelineName || '',
             code: item.code,
             name: item.name,
             lng: item.lng,
             lat: item.lat,
             status: item.status,
-            spec: item.spec,
-            remarks: item.remarks
+            spec: item.spec || '',
+            remarks: item.remarks || '',
+            sortOrder: item.sortOrder || 0,
+            parentCode: item.parentCode || ''
           })
         })
       } catch (err) {
@@ -1133,11 +1522,18 @@ const renderOrUpdateDraftMarker = (lng, lat) => {
 
 // 清除草稿 Marker
 const clearDraftMarker = () => {
-  if (draftMarkerObject && mapInstance) {
-    mapInstance.remove(draftMarkerObject)
-    draftMarkerObject = null
-  }
+  const markerToRemove = draftMarkerObject
+  draftMarkerObject = null
   hasDraftMarker.value = false
+
+  if (!markerToRemove || !mapInstance) return
+
+  try {
+    mapInstance.remove(markerToRemove)
+  } catch (err) {
+    // 地图覆盖物异常不能中断新增、取消或编辑点位的主流程。
+    console.warn('清理 GIS 草稿点位失败，已跳过地图覆盖物移除：', err)
+  }
 }
 
 // 更改表单字段时更新草稿 Marker 内容
@@ -1183,29 +1579,38 @@ const openInfoWindow = (item, position) => {
 
   if (item && item.id) {
     selectedMarkerId.value = item.id
-    activeSideTab.value = 'list'
-
-    // 若当前多选过滤未勾选此项目，自动重置以确保卡片在 DOM 中成功呈现
-    if (selectedTypes.value.length > 0 && !selectedTypes.value.includes(item.type)) {
-      selectedTypes.value.push(item.type)
+    // 若当前未处于表单编辑界面，才联动滚动侧边栏卡片
+    if (activeSideTab.value !== 'form') {
+      activeSideTab.value = 'list'
+      if (selectedTypes.value.length > 0 && !selectedTypes.value.includes(item.type)) {
+        selectedTypes.value.push(item.type)
+      }
+      scrollToTargetCard(item.id)
     }
-
-    // 触发居中平滑滚动露出卡片
-    scrollToTargetCard(item.id)
   }
+
+  const cfg = MARKER_TYPE_CONFIG[item.type] || MARKER_TYPE_CONFIG.weld
+  const typeTitle = item.type === 'search' ? '📍 搜索结果' : `${cfg.icon} ${cfg.label}`
 
   const infoHtml = `
     <div style="padding:10px 6px; font-family: sans-serif; min-width:240px;">
       <h4 style="margin:0 0 6px 0; font-size:14px; color:#0f172a; display:flex; align-items:center; gap:6px;">
-        ${item.type === 'weld' ? '🔩 管道焊口' : item.type === 'search' ? '📍 搜索结果' : '⏱️ 计量表计'} <span style="color:#0284c7;">${item.code}</span>
+        ${typeTitle} <span style="color:#0284c7;">${item.code}</span>
       </h4>
       ${item.sectionName ? `<p style="margin:4px 0; font-size:12px; color:#4f46e5;"><strong>施工标段：</strong>${item.sectionName}</p>` : ''}
-      ${item.pipelineName ? `<p style="margin:4px 0; font-size:12px; color:#0284c7;"><strong>管道名称/编号：</strong>${item.pipelineName}</p>` : ''}
+      ${item.pipelineName ? `<p style="margin:4px 0; font-size:12px; color:#0284c7;"><strong>管线名称/编号：</strong>${item.pipelineName}</p>` : ''}
+      ${item.parentCode ? `<p style="margin:4px 0; font-size:12px; color:#d97706;"><strong>父节点：</strong>${getParentNodeDisplay(item.parentCode)}</p>` : ''}
       <p style="margin:4px 0; font-size:12px; color:#475569;"><strong>名称描述：</strong>${item.name}</p>
       <p style="margin:4px 0; font-size:12px; color:#475569;"><strong>状态：</strong><span style="font-weight:600; color:${item.status === 'passed' ? '#10b981' : '#0284c7'};">${item.statusText}</span></p>
       ${item.spec ? `<p style="margin:4px 0; font-size:12px; color:#475569;"><strong>关联保温管：</strong>${item.spec}</p>` : ''}
+      ${item.createdAt ? `<p style="margin:4px 0; font-size:11px; color:#64748b;"><strong>录入时间：</strong>${item.createdAt}</p>` : ''}
       <p style="margin:4px 0; font-size:11px; color:#64748b; font-family:monospace;"><strong>精准坐标：</strong>${Number(position[0]).toFixed(6)}, ${Number(position[1]).toFixed(6)}</p>
       ${item.remarks ? `<p style="margin:6px 0 0 0; font-size:11px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px;">${item.remarks}</p>` : ''}
+      ${item.id ? `
+        <div style="margin-top:10px; padding-top:8px; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:8px;">
+          <button id="infowindow-edit-btn-${item.id}" type="button" style="background:#0284c7; color:#ffffff; border:none; border-radius:4px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer;">✏️ 编辑此点位</button>
+        </div>
+      ` : ''}
     </div>
   `
 
@@ -1215,6 +1620,18 @@ const openInfoWindow = (item, position) => {
   })
 
   infoWindow.open(mapInstance, position)
+
+  if (item.id) {
+    setTimeout(() => {
+      const editBtn = document.getElementById(`infowindow-edit-btn-${item.id}`)
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          infoWindow.close()
+          startEditMarker(item)
+        })
+      }
+    }, 60)
+  }
 }
 
 // 辅助函数：在地图上展示搜索 Marker 提示弹窗
@@ -1287,7 +1704,7 @@ const handleSearchLocation = () => {
   })
 }
 
-// 点击地图拾取坐标：生成草稿针
+// 点击地图拾取坐标：生成草稿针并自动智能推导上级节点
 const handleMapClick = (e) => {
   if (!isPickingPoint.value) return
 
@@ -1296,6 +1713,15 @@ const handleMapClick = (e) => {
 
   formModel.value.lng = Number(lng.toFixed(6))
   formModel.value.lat = Number(lat.toFixed(6))
+
+  // 在新增点位模式且类型为焊口时，自动基于物理坐标智能推导最近的上级节点 (焊口或三通)
+  if (!editingId.value && formModel.value.type === 'weld') {
+    const suggested = findNearestParentNode(formModel.value.lng, formModel.value.lat)
+    if (suggested) {
+      autoSuggestedParentCode.value = suggested
+      formModel.value.parentCode = suggested
+    }
+  }
 
   renderOrUpdateDraftMarker(formModel.value.lng, formModel.value.lat)
 
@@ -1329,9 +1755,19 @@ const focusMarkerOnMap = (item) => {
   openInfoWindow(item, [item.lng, item.lat])
 }
 
+// 手动点击表单 Tab 时的无缝处理
+const handleFormTabClick = () => {
+  activeSideTab.value = 'form'
+  // 若既非编辑模式也未开辟草稿填报，自动初始化新增表单
+  if (!editingId.value && !formModel.value.code && !formModel.value.lng) {
+    startAddNewMarker()
+  }
+}
+
 // 启动新增模式
 const startAddNewMarker = () => {
   editingId.value = null
+  autoSuggestedParentCode.value = ''
   clearDraftMarker()
   activeSideTab.value = 'form'
   formModel.value = {
@@ -1344,26 +1780,50 @@ const startAddNewMarker = () => {
     lat: '',
     status: 'passed',
     spec: '',
-    remarks: ''
+    remarks: '',
+    parentCode: ''
   }
 }
 
-// 启动编辑现有点位模式
+// 启动编辑现有点位模式 (保持原始 created_at 与 parentCode 不变)
 const startEditMarker = (item) => {
+  if (!item) return
   editingId.value = item.id
-  clearDraftMarker()
-  activeSideTab.value = 'form'
+  selectedMarkerId.value = item.id
+  autoSuggestedParentCode.value = ''
+
   formModel.value = {
-    type: item.type,
+    type: item.type || 'weld',
     sectionName: item.sectionName || '',
     pipelineName: item.pipelineName || '',
-    code: item.code,
-    name: item.name,
+    code: item.code || '',
+    name: item.name || '',
     lng: item.lng,
     lat: item.lat,
-    status: item.status,
+    status: item.status || 'passed',
     spec: item.spec || '',
-    remarks: item.remarks || ''
+    remarks: item.remarks || '',
+    sortOrder: item.sortOrder || 0,
+    parentCode: item.parentCode || ''
+  }
+
+  // 1. 先切换到编辑表单，保证地图草稿清理异常不会阻断编辑入口。
+  activeSideTab.value = 'form'
+
+  // 2. 再清理可能遗留的新增草稿点位；该操作内部已隔离地图覆盖物异常。
+  clearDraftMarker()
+
+  // 3. 双保险：在 nextTick 延迟中重置滚动条置顶，确保 Vue 视图彻底完成表单渲染呈现
+  nextTick(() => {
+    const sideContentEl = document.querySelector('.gis-side-panel .panel-content')
+    if (sideContentEl) {
+      sideContentEl.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  })
+
+  // 4. 地图联动平移定位
+  if (mapInstance && item.lng && item.lat) {
+    mapInstance.setZoomAndCenter(16, [item.lng, item.lat])
   }
 }
 
@@ -1392,7 +1852,9 @@ const saveMarkerData = async () => {
     lat: Number(formModel.value.lat),
     status: formModel.value.status,
     spec: formModel.value.spec,
-    remarks: formModel.value.remarks
+    remarks: formModel.value.remarks,
+    sortOrder: formModel.value.sortOrder || 0,
+    parentCode: formModel.value.parentCode || ''
   }
 
   try {

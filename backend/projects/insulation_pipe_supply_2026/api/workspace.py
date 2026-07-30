@@ -23,6 +23,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     CONFIG_PATH,
     PROJECT_KEY,
     SUBMISSION_STATUS_PATH,
+    get_configured_amap_config,
     get_configured_plan_editable_days,
     get_configured_plan_start_date,
     get_configured_show_date,
@@ -34,6 +35,8 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     resolve_accessible_section_1_ids,
     save_section_1_submission_status,
     save_tube_config,
+    simple_decrypt,
+    simple_encrypt,
 )
 from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import (
     build_plan_dates,
@@ -418,6 +421,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "baseline_presets",
         "weather_api_url",
         "management_mode",
+        "amap_config",
     }
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
@@ -448,6 +452,15 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         if val not in {"station", "section"}:
             raise HTTPException(status_code=422, detail=f"不支持的管理模式：{val}")
         payload[normalized_section] = val
+    elif normalized_section == "amap_config":
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=422, detail="amap_config 必须为对象")
+        api_key_plain = str(data.get("api_key") or "").strip()
+        security_code_plain = str(data.get("security_code") or "").strip()
+        payload[normalized_section] = {
+            "api_key": simple_encrypt(api_key_plain),
+            "security_code": simple_encrypt(security_code_plain),
+        }
     else:
         if not isinstance(data, list):
             raise HTTPException(status_code=422, detail=f"{normalized_section} 必须为数组")
@@ -2013,10 +2026,12 @@ def get_global_management_config(
     _ensure_global_admin(session)
     payload = load_tube_config()
     submission_status = load_section_1_submission_status()
+    amap_config_decrypted = get_configured_amap_config(payload)
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
         "config": payload,
+        "amap_config_decrypted": amap_config_decrypted,
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "usage_collection_date": get_usage_collection_date(payload).isoformat(),
@@ -2452,95 +2467,11 @@ def export_global_management_history(
         # 需求主体之间空出 2 行
         writer.writerow([])
         writer.writerow([])
-        
-    # 5. 写入全局大总计行
-    total_plan = sum(r["plan_qty"] for r in rows)
-    total_usage = sum(r["usage_qty"] for r in rows)
-    total_loss = sum(r["loss_qty"] for r in rows)
-    total_arrived = sum(r["arrived_qty"] for r in rows)
-    total_transit = sum(r["total_transit_seconds"] for r in rows)
-    total_batches = sum(r["arrived_batch_count"] for r in rows)
-    
-    overall_avg_transit_val = round(total_transit / 60 / total_batches, 1) if total_batches > 0 else ""
-    overall_unit_val = "分钟" if total_batches > 0 else ""
-    
-    writer.writerow([
-        "[全局大总计]",
-        "-",
-        "所有查询需求主体",
-        "-",
-        "-",
-        total_plan,
-        total_usage,
-        total_loss,
-        total_arrived,
-        overall_avg_transit_val,
-        overall_unit_val
-    ])
-    
-    # 6. 计算并写入全局决策辅助透视统计（两列纯文本形式）
-    active_dates = {r["biz_date"] for r in rows if r["usage_qty"] > 0 and r["biz_date"]}
-    active_days_count = len(active_dates)
-    
-    valid_mins = [r["min_transit_seconds"] for r in rows if r.get("min_transit_seconds") is not None]
-    valid_maxs = [r["max_transit_seconds"] for r in rows if r.get("max_transit_seconds") is not None]
-    min_transit_val = min(valid_mins) if valid_mins else None
-    max_transit_val = max(valid_maxs) if valid_maxs else None
-    
-    fulfillment_rate_str = f"{(total_arrived / total_plan * 100):.1f}%" if total_plan > 0 else "-"
-    plan_usage_alignment_str = f"{(total_usage / total_plan * 100):.1f}%" if total_plan > 0 else "-"
-    loss_rate_str = f"{(total_loss / (total_usage + total_loss) * 100):.1f}%" if (total_usage + total_loss) > 0 else "-"
-    daily_consumption_str = f"{(total_usage / active_days_count):.1f} 米/天" if active_days_count > 0 else "-"
-    
-    min_transit_str = format_delivery_elapsed_seconds(min_transit_val) if min_transit_val is not None else "-"
-    max_transit_str = format_delivery_elapsed_seconds(max_transit_val) if max_transit_val is not None else "-"
-    avg_transit_str = format_delivery_elapsed_seconds(total_transit / total_batches) if total_batches > 0 else "-"
-    overall_transit_str = f"最快 {min_transit_str} / 最慢 {max_transit_str} (平均 {avg_transit_str}, 共 {total_batches} 批)"
-    
-    writer.writerow([])
-    writer.writerow([])
-    writer.writerow(["--- 全局决策辅助透视统计 ---"])
-    writer.writerow(["指标名称", "指标值/计算细节"])
-    writer.writerow(["物资综合保障率", f"{fulfillment_rate_str} (计划 {total_plan:.1f} 米 / 到货 {total_arrived:.1f} 米)"])
-    writer.writerow(["计划消耗契合度", f"{plan_usage_alignment_str} (实际消耗 {total_usage:.1f} 米 / 计划 {total_plan:.1f} 米)"])
-    writer.writerow(["施工综合损耗率", f"{loss_rate_str} (消耗 {total_usage:.1f} 米 / 损耗 {total_loss:.1f} 米)"])
-    writer.writerow(["施工消耗强度", f"{daily_consumption_str} (施工 {active_days_count} 天)"])
-    writer.writerow(["物流配送效率区间", overall_transit_str])
-        
-    output.seek(0)
-    
-    response = StreamingResponse(
-        iter([output.getvalue()]), 
-        media_type="text/csv"
-    )
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    response.headers["Content-Disposition"] = f"attachment; filename=history_records_{timestamp}.csv"
-    return response
-
-
-def format_delivery_elapsed_seconds(total_seconds: float) -> str:
-    seconds_int = max(int(total_seconds), 0)
-    days, remainder = divmod(seconds_int, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if days > 0:
-        return f"{days}天{hours}小时{minutes}分"
-    if hours > 0:
-        return f"{hours}小时{minutes}分"
-    if minutes > 0:
-        return f"{minutes}分{seconds}秒"
-    return f"{seconds}秒"
-
-
-# =========================================================================
-# GIS 地图标注点位管线数据库 CRUD 交互 API
-# 表: tube.tube_gis
-# =========================================================================
 
 class GisMarkerCreatePayload(BaseModel):
-    type: str = Field(..., alias="type", description="weld 或 meter")
+    type: str = Field(..., alias="type", description="点位类型: weld, meter, tee, compensator, elbow, valve")
     section_name: Optional[str] = Field(default="", alias="sectionName", description="施工标段名称")
-    pipeline_name: str = Field(..., alias="pipelineName", description="管道名称/编号")
+    pipeline_name: str = Field(..., alias="pipelineName", description="管线名称/编号")
     code: str = Field(..., description="点位唯一编号")
     name: str = Field(..., description="名称描述")
     lng: float = Field(..., description="经度 Lng")
@@ -2549,15 +2480,31 @@ class GisMarkerCreatePayload(BaseModel):
     spec: Optional[str] = None
     remarks: Optional[str] = None
     sort_order: int = Field(default=0, alias="sortOrder")
+    parent_code: Optional[str] = Field(default="", alias="parentCode", description="父级三通/节点编号")
 
     class Config:
         allow_population_by_field_name = True
 
 
+@public_router.get("/gis/config", summary="获取 GIS 高德地图 SDK API Key 配置")
+def get_gis_map_config() -> Dict[str, Any]:
+    """
+    提供解密后的高德地图 API Key 与安全 Key 供前端 SDK 动态加载
+    """
+    payload = load_tube_config()
+    amap_cfg = get_configured_amap_config(payload)
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "api_key": amap_cfg["api_key"],
+        "security_code": amap_cfg["security_code"]
+    }
+
+
 @public_router.get("/gis/markers")
 def list_gis_markers():
     """
-    拉取 PostgreSQL tube.tube_gis 数据库表中持久化的所有焊口与表计标注
+    拉取 PostgreSQL tube.tube_gis 数据库表中持久化的所有焊口、三通、表计等标注
     同时动态读取 tube_config.json 设定的官方系统标段列表 (demand_entities.section_1_name)
     """
     from sqlalchemy import text
@@ -2575,7 +2522,7 @@ def list_gis_markers():
                 system_sections.append(sec_name)
 
         query_sql = text("""
-            SELECT id, project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order
+            SELECT id, project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order, parent_code, created_at
             FROM tube.tube_gis
             WHERE project_key = :project_key
             ORDER BY sort_order ASC, id ASC
@@ -2584,22 +2531,48 @@ def list_gis_markers():
 
         markers = []
         for r in rows:
-            status_text = '探伤合格'
+            mtype = r.marker_type or 'weld'
+            status_text = '运行正常'
             status_class = 'tag-success'
-            if r.marker_type == 'weld':
+            if mtype == 'weld':
                 if r.status == 'pending':
                     status_text = '待探伤'
                     status_class = 'tag-warning'
                 elif r.status == 'failed':
                     status_text = '待复焊'
                     status_class = 'tag-danger'
-            else:
-                status_text = '运行正常'
+                else:
+                    status_text = '探伤合格'
+                    status_class = 'tag-success'
+            elif mtype == 'meter':
+                if r.status == 'warning':
+                    status_text = '压差预警'
+                    status_class = 'tag-warning'
+                else:
+                    status_text = '运行正常'
+                    status_class = 'tag-info'
+            elif mtype == 'tee':
+                status_text = '三通分叉点'
+                status_class = 'tag-warning'
+            elif mtype == 'compensator':
+                status_text = '吸收变形中'
                 status_class = 'tag-info'
+            elif mtype == 'elbow':
+                status_text = '转向弯头'
+                status_class = 'tag-purple'
+            elif mtype == 'valve':
+                if r.status == 'closed':
+                    status_text = '阀门常闭'
+                    status_class = 'tag-warning'
+                else:
+                    status_text = '开启状态'
+                    status_class = 'tag-success'
+
+            created_at_str = r.created_at.strftime("%Y-%m-%d %H:%M:%S") if getattr(r, 'created_at', None) else ""
 
             markers.append({
                 "id": r.id,
-                "type": r.marker_type,
+                "type": mtype,
                 "sectionName": r.section_name or "",
                 "pipelineName": r.pipeline_name,
                 "code": r.code,
@@ -2611,10 +2584,119 @@ def list_gis_markers():
                 "statusClass": status_class,
                 "spec": r.spec or "",
                 "remarks": r.remarks or "",
-                "sortOrder": r.sort_order
+                "sortOrder": r.sort_order,
+                "parentCode": r.parent_code or "",
+                "createdAt": created_at_str
             })
 
         return {"ok": True, "data": markers, "systemSections": system_sections}
+    finally:
+        db_session.close()
+
+
+@public_router.post("/gis/markers")
+def create_gis_marker(
+    payload: GisMarkerCreatePayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    """
+    新增标注点位并持久化到 PostgreSQL tube.tube_gis 数据库表中
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    db_session = SessionLocal()
+    user_name = session.username if session else 'Global_admin'
+    try:
+        insert_sql = text("""
+            INSERT INTO tube.tube_gis 
+            (project_key, marker_type, section_name, pipeline_name, code, name, lng, lat, status, spec, remarks, sort_order, parent_code, created_by, updated_by)
+            VALUES
+            (:project_key, :marker_type, :section_name, :pipeline_name, :code, :name, :lng, :lat, :status, :spec, :remarks, :sort_order, :parent_code, :user, :user)
+            RETURNING id;
+        """)
+
+        res = db_session.execute(insert_sql, {
+            "project_key": PROJECT_KEY,
+            "marker_type": payload.type,
+            "section_name": payload.section_name or "",
+            "pipeline_name": payload.pipeline_name,
+            "code": payload.code,
+            "name": payload.name,
+            "lng": payload.lng,
+            "lat": payload.lat,
+            "status": payload.status,
+            "spec": payload.spec,
+            "remarks": payload.remarks,
+            "sort_order": payload.sort_order,
+            "parent_code": payload.parent_code or None,
+            "user": user_name
+        })
+        new_id = res.fetchone()[0]
+        db_session.commit()
+        return {"ok": True, "id": new_id, "message": "保存点位到数据库成功"}
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=400, detail=f"保存到数据库失败: {str(e)}")
+    finally:
+        db_session.close()
+
+
+@public_router.put("/gis/markers/{marker_id}")
+def update_gis_marker(
+    marker_id: int,
+    payload: GisMarkerCreatePayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    """
+    更新 PostgreSQL tube.tube_gis 数据库表中的点位标注信息
+    """
+    from sqlalchemy import text
+    from backend.db.database_daily_report_25_26 import SessionLocal
+
+    db_session = SessionLocal()
+    user_name = session.username if session else 'Global_admin'
+    try:
+        update_sql = text("""
+            UPDATE tube.tube_gis
+            SET marker_type = :marker_type,
+                section_name = :section_name,
+                pipeline_name = :pipeline_name,
+                code = :code,
+                name = :name,
+                lng = :lng,
+                lat = :lat,
+                status = :status,
+                spec = :spec,
+                remarks = :remarks,
+                sort_order = :sort_order,
+                parent_code = :parent_code,
+                updated_by = :user,
+                updated_at = NOW()
+            WHERE id = :id AND project_key = :project_key;
+        """)
+
+        db_session.execute(update_sql, {
+            "id": marker_id,
+            "project_key": PROJECT_KEY,
+            "marker_type": payload.type,
+            "section_name": payload.section_name or "",
+            "pipeline_name": payload.pipeline_name,
+            "code": payload.code,
+            "name": payload.name,
+            "lng": payload.lng,
+            "lat": payload.lat,
+            "status": payload.status,
+            "spec": payload.spec,
+            "sort_order": payload.sort_order,
+            "parent_code": payload.parent_code or None,
+            "user": user_name,
+        })
+        db_session.commit()
+        return {"ok": True, "message": "更新点位成功"}
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=400, detail=f"更新点位失败: {str(e)}")
     finally:
         db_session.close()
 

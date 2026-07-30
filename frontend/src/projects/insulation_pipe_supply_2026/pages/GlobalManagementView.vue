@@ -96,6 +96,13 @@
           </button>
           <button 
             type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'gis' }]" 
+            @click="activeTab = 'gis'"
+          >
+            🗺️ GIS 地图 API 配置
+          </button>
+          <button 
+            type="button" 
             :class="['sidebar-tab-btn', { active: activeTab === 'json' }]" 
             @click="activeTab = 'json'"
           >
@@ -648,6 +655,67 @@
             </section>
           </div>
 
+          <!-- Tab 5.8: 高德地图 GIS API 配置 -->
+          <div v-if="activeTab === 'gis'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">🗺️ 高德地图 (AMap API & Security Key) 配置</div>
+                  <p class="sub block-sub">
+                    设置高德地图 Web JS API 2.0 的 API Key 与安全密钥 (Security Code)。
+                    系统将以简单 XOR+Base64 加密算法存入 <code>tube_config.json</code>，确保物理磁盘配置文件不裸露明文密钥。
+                  </p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('amap_config')" @click="saveSection('amap_config')">
+                    {{ isSaving('amap_config') ? '保存中…' : '💾 保存高德地图配置' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="field-grid core-field-grid">
+                <label class="field field-span-2">
+                  <span>高德地图 API Key (api_key)</span>
+                  <div class="input-with-action" style="display: flex; gap: 8px; width: 100%;">
+                    <input 
+                      v-model="amapApiKey" 
+                      :type="showAmapKeys ? 'text' : 'password'" 
+                      class="input" 
+                      placeholder="请输入高德地图应用 Key (如: f49ff8e523dd...)" 
+                    />
+                  </div>
+                  <small class="field-help">用于前端调用高德 Web JS API 2.0 渲染地图、搜寻 POI 与绘制管道连线。</small>
+                </label>
+                
+                <label class="field field-span-2">
+                  <span>高德地图安全密钥 (security_code / securityJsCode)</span>
+                  <div class="input-with-action" style="display: flex; gap: 8px; width: 100%;">
+                    <input 
+                      v-model="amapSecurityCode" 
+                      :type="showAmapKeys ? 'text' : 'password'" 
+                      class="input" 
+                      placeholder="请输入高德地图安全 Key (如: 7573fa30e86...)" 
+                    />
+                  </div>
+                  <small class="field-help">用于高德 API 2.0 安全校验 (window._AMapSecurityConfig.securityJsCode)。</small>
+                </label>
+              </div>
+
+              <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                <button class="btn ghost compact-btn" type="button" @click="showAmapKeys = !showAmapKeys">
+                  {{ showAmapKeys ? '🔒 隐藏密钥明文' : '👁️ 显示密钥明文' }}
+                </button>
+                <span style="font-size: 12px; color: #64748b;">
+                  存储加密协议：<code>enc_v1: [XOR+Base64]</code> 存入 <code>tube_config.json</code>
+                </span>
+              </div>
+
+              <p v-if="sectionMessage('amap_config')" :class="['section-tip', sectionMessage('amap_config').type]">
+                {{ sectionMessage('amap_config').text }}
+              </p>
+            </section>
+          </div>
+
           <!-- Tab 6: 原始 JSON 预览 -->
           <div v-if="activeTab === 'json'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -1006,6 +1074,11 @@ const evalLoading = ref(false)
 const importLoading = ref(false)
 const showEvalModal = ref(false)
 const evalResult = ref(null)
+
+// 高德地图 GIS 配置 Ref 变量
+const amapApiKey = ref('')
+const amapSecurityCode = ref('')
+const showAmapKeys = ref(false)
 
 async function loadWeatherConfig() {
   try {
@@ -1416,6 +1489,12 @@ function buildSectionPayload(section) {
   if (section === 'weather_api_url') {
     return weatherApiUrl.value || ''
   }
+  if (section === 'amap_config') {
+    return {
+      api_key: amapApiKey.value || '',
+      security_code: amapSecurityCode.value || '',
+    }
+  }
   return null
 }
 
@@ -1436,6 +1515,7 @@ const configPreviewText = computed(() =>
       warehouse_keepers: buildSectionPayload('warehouse_keepers'),
       baseline_presets: buildSectionPayload('baseline_presets'),
       weather_api_url: weatherApiUrl.value || '',
+      amap_config: buildSectionPayload('amap_config'),
     },
     null,
     2,
@@ -1509,6 +1589,12 @@ async function loadConfig() {
     historySubmissions.value = normalizeSubmissionRows(response.submission_status?.history_submissions || [])
     applyConfig(config)
     await loadWeatherConfig()
+
+    if (response.amap_config_decrypted) {
+      amapApiKey.value = response.amap_config_decrypted.api_key || ''
+      amapSecurityCode.value = response.amap_config_decrypted.security_code || ''
+    }
+
     if (response.show_date) {
       showDate.value = response.show_date
     }

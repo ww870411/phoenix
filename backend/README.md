@@ -1,3 +1,57 @@
+## 2026-07-30 GIS 编辑入口前端异常隔离修复（后端无改动）
+
+- 本轮仅调整 `GisMapView.vue` 的草稿点位清理与编辑表单切换顺序，消除高德地图临时覆盖物异常对前端编辑入口的阻断。
+- `GET /gis/markers` 与 `PUT /gis/markers/{id}` 的接口契约、鉴权、数据库表结构和数据均未变更。
+
+## 2026-07-30 种子示例 SQL 增加三通父节点关联
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (升级种子数据 `T-DL-001` 指向 `W-DL-002`，`T-AS-001` 指向 `W-AS-001`)
+- 本轮处理与实现原理：
+  - **三通拓扑连贯性**：物理初始化数据中补充三通节点 parent_code，完美对接多路径树状连线。
+
+## 2026-07-30 Parent Code 概念对齐与编辑保护
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (对齐 parent_code 逻辑，编辑时严防改变 created_at)
+- 本轮处理与实现原理：
+  - **Git 拓扑理念对齐**：API 支持接收自由输入的 `parentCode` 字符串，并在编辑操作中严格保护 `created_at` 不被二次重置。
+
+## 2026-07-30 tube.tube_gis 表 parent_code 拓扑注释规范与编辑 created_at 时间保护
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (规范 `parent_code` 字段注释为：上级节点编号（仅焊口设定，指向上一焊口或三通节点；若多个焊口指向同一三通则自动分出多条路线）)
+- 本轮处理与实现原理：
+  - **拓扑逻辑与 Schema 规范**：更新了建表 DDL 与种子数据逻辑，三通不设 parent_code，焊口允许指定 parent_code，在 UPDATE 操作中严防修改原始 `created_at` 录入时间。
+
+## 2026-07-30 SQL 模版文件 created_at 注释规范与 GET /gis/markers 接口返回录入时间
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (规范 `tube.tube_gis.created_at` 字段注释与 SQL 模版)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `list_gis_markers` SELECT 语句中补充 created_at，并格式化为 YYYY-MM-DD HH:mm:ss 字符串返回给前端 createdAt 字段)
+- 本轮处理与实现原理：
+  - **后端 SQL 模版整理**：在建表 DDL 中规范了 `created_at` 录入时间列的 COMMENT 说明。
+  - **API 数据通道透传**：`GET /gis/markers` 接口查询并序列化 `created_at` 为前端通用的 `createdAt` 字符串。
+
+## 2026-07-30 GIS 空间地图扩展 6 种点位类型与 parent_code 分支关联 DDL & CRUD API
+
+- 变更文件：
+  - `backend/sql/tube_schema_init.sql` (在 PostgreSQL `tube.tube_gis` 表结构中追加 `parent_code VARCHAR(64)` 字段 DDL，并更新为 16 条涵盖焊口、表计、三通、补偿器、弯头、阀门及三通分支线的种子示例数据)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (更新 Pydantic payload 模型 `GisMarkerCreatePayload` 包含 parent_code；重构 `/gis/markers` GET/POST/PUT CRUD 接口支持 6 种点位类型的 statusText/statusClass 映射与 parent_code 读写)
+- 本轮处理与实现原理：
+  - **数据库 Schema 升级**：为 `tube.tube_gis` 增加了 `parent_code` 存储列，用于记录三通分支的父节点 code 标识，为三通分叉树状连线提供支撑。
+  - **后端 CRUD API 全兼容**：扩展了 `GisMarkerCreatePayload` Pydantic 校验模型，使 `/gis/markers` 接口能接受 `weld`, `meter`, `tee`, `compensator`, `elbow`, `valve` 6 种类型与 `parentCode` 分支字段，并根据不同类型计算精准的状态标签文字与 CSS 样式。
+
+## 2026-07-30 新增高德地图 API 配置 XOR+Base64 简单加密存储与动态配置 API
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py` (新增 simple_encrypt、simple_decrypt、get_configured_amap_config 方法与 enc_v1: 加密标识，实现 tube_config.json 的密文读写)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 _save_config_section 白名单中补充 amap_config 区块支持与简单加密写入；get_global_management_config 返回解密明文供前端控制台修改；新增 GET /gis/config 动态获取 API 接口)
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` (自动初始化写入加密后的 amap_config 节点)
+- 本轮处理与实现原理：
+  - **物理文件简单加密**：采用带前缀 `enc_v1:` 的 XOR 异或 + Base64 算法对 `api_key` 和 `security_code` 进行加密处理，密文存储在 `tube_config.json` 中，磁盘文件不再出现裸露的明文 Key。
+  - **管理 API 与 SDK 配置服务**：`save_global_management_config_section` 接收前端提交的明文 key 并自动加密存储；`GET /global-management/config` 向管理员返回解密值供预览/编辑；`GET /gis/config` 供前端 GIS 地图组件动态解密加载 SDK 2.0 认证参数。
+
 ## 2026-07-29 新增 tube.tube_gis 焊口与表计 GIS 持久化数据库表 DDL 及 CRUD API
 
 - 变更文件：

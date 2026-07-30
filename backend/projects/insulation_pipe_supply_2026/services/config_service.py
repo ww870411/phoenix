@@ -5,6 +5,7 @@ tube 项目配置读取服务。
 
 from __future__ import annotations
 
+import base64
 import json
 from datetime import date, timedelta
 from typing import Any, Dict, List, Set
@@ -18,6 +19,75 @@ PROJECT_DATA_DIR = get_project_root(PROJECT_KEY)
 CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
 SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "section_1_submission_status.json"
 
+ENCRYPT_PREFIX = "enc_v1:"
+AMAP_SECRET_KEY = "phoenix_amap_key_2026"
+
+DEFAULT_AMAP_KEY = "f49ff8e523dd739fecc6d8bfb4209f22"
+DEFAULT_AMAP_SECURITY_CODE = "7573fa30e86735d98bafb40466822b3a"
+
+
+def simple_encrypt(plain_text: str) -> str:
+    """
+    简单 XOR + Base64 加密算法，返回以 enc_v1: 为前缀的加密字符串
+    """
+    if not plain_text:
+        return ""
+    str_val = str(plain_text).strip()
+    if str_val.startswith(ENCRYPT_PREFIX):
+        return str_val
+    
+    key_bytes = AMAP_SECRET_KEY.encode('utf-8')
+    text_bytes = str_val.encode('utf-8')
+    xored = bytearray()
+    for i, b in enumerate(text_bytes):
+        xored.append(b ^ key_bytes[i % len(key_bytes)])
+    
+    encoded = base64.b64encode(xored).decode('utf-8')
+    return f"{ENCRYPT_PREFIX}{encoded}"
+
+
+def simple_decrypt(cipher_text: str) -> str:
+    """
+    简单 XOR + Base64 解密算法，将以 enc_v1: 为前缀的加密字符串还原为明文
+    """
+    if not cipher_text:
+        return ""
+    raw_str = str(cipher_text).strip()
+    if not raw_str.startswith(ENCRYPT_PREFIX):
+        return raw_str
+    
+    encoded = raw_str[len(ENCRYPT_PREFIX):]
+    try:
+        xored = base64.b64decode(encoded.encode('utf-8'))
+        key_bytes = AMAP_SECRET_KEY.encode('utf-8')
+        text_bytes = bytearray()
+        for i, b in enumerate(xored):
+            text_bytes.append(b ^ key_bytes[i % len(key_bytes)])
+        return text_bytes.decode('utf-8')
+    except Exception:
+        return raw_str
+
+
+def get_configured_amap_config(payload: Dict[str, Any]) -> Dict[str, str]:
+    """
+    从 tube_config.json 提取解密后的高德地图 API 配置
+    若未配置则使用默认值并可进行初始化加密存储
+    """
+    raw_config = payload.get("amap_config")
+    if not isinstance(raw_config, dict):
+        raw_config = {}
+    
+    api_key_cipher = str(raw_config.get("api_key") or "").strip()
+    security_code_cipher = str(raw_config.get("security_code") or "").strip()
+    
+    api_key = simple_decrypt(api_key_cipher) if api_key_cipher else DEFAULT_AMAP_KEY
+    security_code = simple_decrypt(security_code_cipher) if security_code_cipher else DEFAULT_AMAP_SECURITY_CODE
+    
+    return {
+        "api_key": api_key,
+        "security_code": security_code,
+    }
+
 
 def load_tube_config() -> Dict[str, Any]:
     if not CONFIG_PATH.exists():
@@ -28,6 +98,18 @@ def load_tube_config() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"tube_config.json 格式错误：{exc}") from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=500, detail="tube_config.json 顶层必须为对象")
+    
+    # 确保 amap_config 节点存在并密文存储
+    if "amap_config" not in payload:
+        payload["amap_config"] = {
+            "api_key": simple_encrypt(DEFAULT_AMAP_KEY),
+            "security_code": simple_encrypt(DEFAULT_AMAP_SECURITY_CODE),
+        }
+        try:
+            save_tube_config(payload)
+        except Exception:
+            pass
+
     return payload
 
 

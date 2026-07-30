@@ -964,5 +964,9 @@
       "remark": ""
     }
   ],
-  "strict_planning_flow_control": false
+  "strict_planning_flow_control": false,
+  "amap_config": {
+    "api_key": "enc_v1:FlxWAwhRHWpTXgUUaFhcHzpRUwRSSAoJB1pbSGYHX1M=",
+    "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="
+  }
 }
