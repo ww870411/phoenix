@@ -5,6 +5,25 @@
 - **验证结果**：本地 Vite 服务编译结果保留了编辑按钮到 `startEditMarker(item)` 的事件绑定；后续以 `npm run build` 验证生产构建。
 - **影响与回滚**：只影响 GIS 新增草稿与编辑入口，未调整后端 API 或数据库；回滚时恢复本条中所述前端函数逻辑即可。
 
+## 2026-07-30 [二次更名重构：Schema 更名为 logs，表名更名为 tube_operation_logs]
+- **任务结论**：成功按指令将操作审计日志表进一步重命名并无损迁移至 `logs.tube_operation_logs`：
+  1. **Schema 与表物理更名**：在 Postgres 执行 `CREATE SCHEMA IF NOT EXISTS logs;`，将表转移并重命名为 `logs.tube_operation_logs`，原表中全部 140 条历史数据与物理索引无损转移；同时清理了临时 `public_logs` Schema。
+  2. **后端代码全量同步**：同步更新了 `audit_log_service.py`、`workspace.py` (run_db_migration hook) 和 `tube_schema_init.sql`，后续审计日志将全量持久化至 `logs.tube_operation_logs`。
+- **改动清单**：
+  - [audit_log_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+
+## 2026-07-30 [重构审计日志 Schema 架构，新建 public_logs Schema 并完成物理平滑迁移]
+- **任务结论**：成功在 PostgreSQL 中新建了专门的 `public_logs` Schema 架构，并将操作审计日志表及其全量历史数据无损转移到了 `public_logs.operation_logs` 表中：
+  1. ** Schema 创建与数据无损迁移**：成功在 Postgres 执行 `CREATE SCHEMA IF NOT EXISTS public_logs;` 与 `ALTER TABLE tube.operation_logs SET SCHEMA public_logs;`，原表中全部 140 条历史审计日志数据及相关索引完美转移至新 Schema。
+  2. **后端读写与 Migration Hook 升级**：更新了 `audit_log_service.py` 内部全部 `INSERT` 和 `SELECT` 语句为 `public_logs.operation_logs`；并在 `workspace.py` 的启动 hook 中加入了 `CREATE SCHEMA IF NOT EXISTS public_logs;` 与 `public_logs.operation_logs` 物理表结构/索引自动维护。
+  3. **SQL 初始化脚本同步**：更新了 `backend/sql/tube_schema_init.sql` 建表语句为 `public_logs.operation_logs`。
+- **改动清单**：
+  - [audit_log_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql)
+
 ## 2026-07-30 [同步更新方案进度计划文档，新增 GIS 空间地图系统第 33 方案章节]
 - **任务结论**：成功按指令更新了 [5.24_tube项目完整构建流程计划_v5.2执行版.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/configs/5.24_tube%E9%A1%B9%E7%9B%AE%E5%AE%8C%E6%95%B4%E6%9E%84%E5%BB%BA%E6%B5%81%E7%A8%8B%E8%AE%A1%E5%88%92_v5.2%E6%89%A7%E8%A1%8C%E7%89%88.md)：
   1. **入口列表增补**：在“3. 当前项目页面与入口”中增补了 `gis_map`（GIS 空间地图系统）页面与可视化定位说明；

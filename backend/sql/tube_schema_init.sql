@@ -249,10 +249,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_weather_hourly_datetime
 
 
 -- =========================================================================
--- 操作审计日志表 (2026-06-15 追加)
+-- 操作审计日志表 (2026-06-15 追加 & 2026-07-30 转移至 logs.tube_operation_logs)
 -- =========================================================================
 
-CREATE TABLE IF NOT EXISTS tube.operation_logs (
+CREATE SCHEMA IF NOT EXISTS logs;
+
+CREATE TABLE IF NOT EXISTS logs.tube_operation_logs (
     id SERIAL PRIMARY KEY,
     project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
     operator VARCHAR(100) NOT NULL,
@@ -266,16 +268,16 @@ CREATE TABLE IF NOT EXISTS tube.operation_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_tube_op_logs_operator ON tube.operation_logs(operator);
-CREATE INDEX IF NOT EXISTS idx_tube_op_logs_action_type ON tube.operation_logs(action_type);
-CREATE INDEX IF NOT EXISTS idx_tube_op_logs_created_at ON tube.operation_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_tube_op_operator ON logs.tube_operation_logs(operator);
+CREATE INDEX IF NOT EXISTS idx_logs_tube_op_action_type ON logs.tube_operation_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_logs_tube_op_created_at ON logs.tube_operation_logs(created_at DESC);
 
-COMMENT ON TABLE tube.operation_logs IS '保温管供需管理系统操作审计日志表';
-COMMENT ON COLUMN tube.operation_logs.operator IS '操作人用户名';
-COMMENT ON COLUMN tube.operation_logs.action_type IS '操作动作类型';
-COMMENT ON COLUMN tube.operation_logs.action_desc IS '中文业务语义操作描述';
-COMMENT ON COLUMN tube.operation_logs.before_value IS '变更前 JSON 快照';
-COMMENT ON COLUMN tube.operation_logs.after_value IS '变更后 JSON 快照';
+COMMENT ON TABLE logs.tube_operation_logs IS '保温管供需管理系统操作审计日志表';
+COMMENT ON COLUMN logs.tube_operation_logs.operator IS '操作人用户名';
+COMMENT ON COLUMN logs.tube_operation_logs.action_type IS '操作动作类型';
+COMMENT ON COLUMN logs.tube_operation_logs.action_desc IS '中文业务语义操作描述';
+COMMENT ON COLUMN logs.tube_operation_logs.before_value IS '变更前 JSON 快照';
+COMMENT ON COLUMN logs.tube_operation_logs.after_value IS '变更后 JSON 快照';
 
 
 -- =========================================================================

@@ -1,3 +1,21 @@
+## 2026-07-30 操作审计日志表更名至 logs.tube_operation_logs
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py` (SQL 读写表名更名为 logs.tube_operation_logs)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (run_db_migration hook 升级支持 logs.tube_operation_logs)
+  - `backend/sql/tube_schema_init.sql` (归档建表语句更新为 logs.tube_operation_logs)
+- 本轮处理与实现原理：
+  - **规范化更名**：PostgreSQL 物理更名完成，Schema 为 `logs`，表名为 `tube_operation_logs`，原表中全部 140 条历史记录完美保留。
+
+## 2026-07-30 操作审计日志表迁移至 public_logs.operation_logs 架构
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py` (SQL 读写表名更新为 public_logs.operation_logs)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (run_db_migration hook 升级支持 public_logs 模式自动建表)
+  - `backend/sql/tube_schema_init.sql` (归档建表语句更新为 public_logs.operation_logs)
+- 本轮处理与实现原理：
+  - **Schema 物理隔离与平滑迁移**：成功在 Postgres 执行物理 ALTER SCHEMA 转移，将原 tube.operation_logs 中的全部 140 条历史数据完美移入 public_logs.operation_logs，以后审计日志统一持久化至 public_logs 架构。
+
 ## 2026-07-30 供给主体需求查看切片隔离与越权发货 403 强拦截补齐
 
 - 变更文件：

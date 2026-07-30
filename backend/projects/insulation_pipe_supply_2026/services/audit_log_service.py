@@ -23,7 +23,7 @@ def save_operation_log(
     """
     sql = text(
         """
-        INSERT INTO tube.operation_logs (
+        INSERT INTO logs.tube_operation_logs (
             operator, operator_group, action_type, action_desc, 
             resource_id, before_value, after_value, client_ip
         ) VALUES (
@@ -95,13 +95,13 @@ def query_operation_logs(
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
         
-    count_sql = text(f"SELECT COUNT(*) FROM tube.operation_logs {where_clause}")
+    count_sql = text(f"SELECT COUNT(*) FROM logs.tube_operation_logs {where_clause}")
     
     list_sql = text(
         f"""
         SELECT id, operator, operator_group, action_type, action_desc, 
                resource_id, before_value, after_value, client_ip, created_at
-        FROM tube.operation_logs 
+        FROM logs.tube_operation_logs 
         {where_clause}
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset

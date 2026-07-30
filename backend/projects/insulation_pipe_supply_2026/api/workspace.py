@@ -95,9 +95,10 @@ def run_db_migration():
             ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
         """))
         
-        # 2026-06-15 操作审计日志表自动初始化
+        # 2026-06-15 & 2026-07-30 操作审计日志表自动初始化与 logs Schema / tube_operation_logs 转移
+        session.execute(text("CREATE SCHEMA IF NOT EXISTS logs;"))
         session.execute(text("""
-            CREATE TABLE IF NOT EXISTS tube.operation_logs (
+            CREATE TABLE IF NOT EXISTS logs.tube_operation_logs (
                 id SERIAL PRIMARY KEY,
                 project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
                 operator VARCHAR(100) NOT NULL,
@@ -111,9 +112,9 @@ def run_db_migration():
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_operator ON tube.operation_logs(operator);"))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_action_type ON tube.operation_logs(action_type);"))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_tube_op_logs_created_at ON tube.operation_logs(created_at DESC);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_operator ON logs.tube_operation_logs(operator);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_action_type ON logs.tube_operation_logs(action_type);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_created_at ON logs.tube_operation_logs(created_at DESC);"))
         
         # 2026-06-23 新增差异审批与超时接收字段
         session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
