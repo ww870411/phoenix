@@ -1,3 +1,19 @@
+## 2026-07-30 供给主体需求查看切片隔离与越权发货 403 强拦截补齐
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py` (在 resolve_accessible_section_1_ids 中包含供给主体配额标段映射解析，并提供 resolve_supply_entity_allowed_section_ids 辅助函数)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 get_supply_management_options、get_supply_management_demand_summary 中进行标段切片隔离，并在 _create_supply_delivery_entry 中注入 403 强拦截)
+- 本轮处理与实现原理：
+  - **发货鉴权防爆**：彻底消除供给主体账号（如 kaiyuan）跨标段查看需求与违规向非配额标段（如 lot_2）发货的安全漏洞。
+
+## 2026-07-30 供给主体序列化接口增加 section_1_ids 需求主体映射支持
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 _serialize_supply_entity_options 与 _serialize_all_supply_entity_options 中输出 section_1_ids 属性)
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` (初始化供给主体 SA/SB 的示范 section_1_ids)
+- 本轮处理与实现原理：
+  - **供货防错隔离**：让前端与系统在请求供给主体信息时，能直接解析出其对应的供货需求主体标段。
+
 ## 2026-07-30 GIS 修改点位 PUT 接口 HTTP 400 异常与绑参补全修复
 
 - 变更文件：

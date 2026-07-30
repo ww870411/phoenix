@@ -1,3 +1,10 @@
+## 2026-07-30 全局控制台供给主体指定需求主体 (供货标段) 映射支持
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在【🚚 供给主体与产能】表格中增加“对应的需求主体 (供货标段)”列，更新 applyConfig 与 buildSectionPayload 的 section_1_ids 序列化)
+- 本轮处理与实现原理：
+  - **供货标段绑定**：在控制台中打通供给主体到需求主体标段的绑定，提高供货防错能力。
+
 ## 2026-07-30 GIS 时间控件超紧凑 UI 优化与水平溢出滚动条消除
 
 - 变更文件：

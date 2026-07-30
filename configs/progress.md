@@ -5,6 +5,32 @@
 - **验证结果**：本地 Vite 服务编译结果保留了编辑按钮到 `startEditMarker(item)` 的事件绑定；后续以 `npm run build` 验证生产构建。
 - **影响与回滚**：只影响 GIS 新增草稿与编辑入口，未调整后端 API 或数据库；回滚时恢复本条中所述前端函数逻辑即可。
 
+## 2026-07-30 [同步更新方案进度计划文档，新增 GIS 空间地图系统第 33 方案章节]
+- **任务结论**：成功按指令更新了 [5.24_tube项目完整构建流程计划_v5.2执行版.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/configs/5.24_tube%E9%A1%B9%E7%9B%AE%E5%AE%8C%E6%95%B4%E6%9E%84%E5%BB%BA%E6%B5%81%E7%A8%8B%E8%AE%A1%E5%88%92_v5.2%E6%89%A7%E8%A1%8C%E7%89%88.md)：
+  1. **入口列表增补**：在“3. 当前项目页面与入口”中增补了 `gis_map`（GIS 空间地图系统）页面与可视化定位说明；
+  2. **新增第 33 方案章节**：在文档末尾追加了 `## 33. GIS 空间地图系统构建方案与迭代进度（2026-07-30 迭代收官）`；
+  3. **全方数据留痕**：详细记载了技术选型（高德地图 JS API 2.0 + Vue3）、数据库物理设计 (`tube.tube_gis`)、`parentCode` 拓扑有向树及“假闭环”算法修补、InfoWindow 快捷编辑闭环与后端 PUT API 修复、以及多维时间范围无滚动筛选方案。
+- **改动清单**：
+  - [5.24_tube项目完整构建流程计划_v5.2执行版.md](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/configs/5.24_tube%E9%A1%B9%E7%9B%AE%E5%AE%8C%E6%95%B4%E6%9E%84%E5%BB%BA%E6%B5%81%E7%A8%8B%E8%AE%A1%E5%88%92_v5.2%E6%89%A7%E8%A1%8C%E7%89%88.md)
+
+## 2026-07-30 [彻底修复供给主体账号越权看标段需求及越权发货的安全与鉴权隔离 Bug]
+- **任务结论**：成功补齐了供给主体（如 `kaiyuan`）配额标段映射在后端查看与发货登记环节的全套权限强隔离：
+  1. **需求标段查看切片隔离 (`resolve_accessible_section_1_ids`)**：在 `config_service.py` 中补齐了供给主体的配额标段解析，当 `kaiyuan` 账号登录后，系统会自动隐形过滤非配额标段（如 `lot_2`），页面选框和需求缺口汇总表只展示其有权配额的 `lot_1` 标段。
+  2. **发货登记入口 HTTP 403 强拦截 (`_create_supply_delivery_entry`)**：在发货记录创建的底端注入了 `allowed_section_ids` 拦截校验。即使通过 API 越权尝试为非配额标段（如 `lot_2`）发货，后端会强行拒绝并抛出 403 明确警示："供给主体 [大连开元热力管道股份有限公司] 无权为需求标段 [高温水_标段2] 登记发货"。
+- **改动清单**：
+  - [config_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+
+## 2026-07-30 [升级供给主体档案模型，支持为供给主体指定对应的需求主体 (供货标段)]
+- **任务结论**：成功在 `insulation_pipe_supply_2026` 项目中升级了供给主体（供货厂家）的数据模型与台账控制台：
+  1. **数据模型扩展 (`section_1_ids`)**：在 `tube_config.json` 及后端 API 序列化中为每个供给主体增加 `section_1_ids` 字段，实现了供给主体与需求主体（供货标段）的高效绑定映射。
+  2. **系统控制台 UI 升级**：在【系统全局控制台】的【🚚 供给主体与产能】管理板块中增加了 **“对应的需求主体 (供货标段)”** 列，支持按标段 ID / 标段名称（逗号分隔）维护供货范围。
+  3. **后端与种子数据打通**：后端 `_serialize_supply_entity_options` 与 `_serialize_all_supply_entity_options` 同步输出该映射，并在种子配置中初始化了开元管厂 (`kaiyuan -> lot_1`) 与管厂B (`supplier_b -> lot_2`) 的示范关联。
+- **改动清单**：
+  - [GlobalManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - [tube_config.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+
 ## 2026-07-30 [重构时间范围控件样式，消灭溢出水平滚动条]
 - **任务结论**：成功重构了下拉筛选面板中的时间控件 UI 布局：
   1. **响应式紧凑 Flex 网格**：将日期选择框改写为超紧凑 `date-filter-grid` 结构，配合 `min-width: 0` 与 `box-sizing: border-box`，彻底清除了因原生 Date 控件宽度过大挤压出的水平滚动条。

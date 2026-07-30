@@ -10,21 +10,27 @@
       "code": "SA",
       "entity_name": "大连开元热力管道股份有限公司",
       "contact_name": "",
-      "contact_phone": ""
+      "contact_phone": "",
+      "section_1_ids": [
+        "lot_1"
+      ]
     },
     {
       "entity_id": "supplier_b",
       "code": "SB",
       "entity_name": "管厂B",
       "contact_name": "供给联系人B",
-      "contact_phone": "13800000002"
+      "contact_phone": "13800000002",
+      "section_1_ids": [
+        "lot_2"
+      ]
     }
   ],
   "demand_entities": [
     {
       "section_1_id": "lot_1",
       "code": "L1",
-      "section_1_name": "标段1",
+      "section_1_name": "高温水_标段1",
       "section_2": "",
       "section_3": "",
       "construction_status": "施工中"
@@ -32,7 +38,7 @@
     {
       "section_1_id": "lot_2",
       "code": "L2",
-      "section_1_name": "标段2",
+      "section_1_name": "高温水_标段2",
       "section_2": "",
       "section_3": "",
       "construction_status": "施工中"

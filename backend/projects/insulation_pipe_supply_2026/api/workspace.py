@@ -543,6 +543,7 @@ def _serialize_supply_entity_options(
                 "entity_name": item.get("entity_name") or entity_id,
                 "contact_name": item.get("contact_name") or "",
                 "contact_phone": item.get("contact_phone") or "",
+                "section_1_ids": item.get("section_1_ids") or [],
             }
         )
     return rows
@@ -561,6 +562,7 @@ def _serialize_all_supply_entity_options(payload: Dict[str, Any]) -> List[Dict[s
                 "entity_name": item.get("entity_name") or entity_id,
                 "contact_name": item.get("contact_name") or "",
                 "contact_phone": item.get("contact_phone") or "",
+                "section_1_ids": item.get("section_1_ids") or [],
             }
         )
     return rows
@@ -710,8 +712,18 @@ def _create_supply_delivery_entry(
     ship_contact_phone: str,
     ship_remark: str,
     vehicle_plate_no: str = "",
-    requested_shipment_no: str = "",
 ) -> Dict[str, Any]:
+    allowed_section_ids = resolve_supply_entity_allowed_section_ids(config_payload, supply_entity_id)
+    if allowed_section_ids and section_1_id not in allowed_section_ids:
+        section_map = _build_section_1_name_map(config_payload)
+        allowed_names = [section_map.get(sid, sid) for sid in allowed_section_ids]
+        supply_name_map = {item.get("entity_id"): item.get("entity_name") for item in get_config_list(config_payload, "supply_entities")}
+        supply_name = supply_name_map.get(supply_entity_id, supply_entity_id)
+        raise HTTPException(
+            status_code=403,
+            detail=f"供给主体 [{supply_name}] 无权为需求标段 [{section_map.get(section_1_id, section_1_id)}] 登记发货，该供给主体仅供货于: {', '.join(allowed_names)}"
+        )
+
     supply_entity_code_map = _build_supply_entity_code_map(config_payload)
     section_1_code_map = _build_section_1_code_map(config_payload)
     supply_code = supply_entity_code_map.get(supply_entity_id, "")
@@ -858,6 +870,7 @@ def get_supply_management_options(
 ) -> Dict[str, Any]:
     payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -867,7 +880,7 @@ def get_supply_management_options(
             "unit": session.unit,
         },
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
-        "stations": _serialize_section_1_options(payload, _build_section_1_name_map(payload).keys()),
+        "stations": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
@@ -878,6 +891,7 @@ def get_supply_management_demand_summary(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
     section_1_name_map = _build_section_1_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     show_date = get_configured_show_date(payload)
@@ -890,7 +904,7 @@ def get_supply_management_demand_summary(
     rows: List[Dict[str, Any]] = []
     for section_1 in get_config_list(payload, "demand_entities"):
         section_1_id = str(section_1.get("section_1_id") or "").strip()
-        if not section_1_id:
+        if not section_1_id or section_1_id not in accessible_section_1_ids:
             continue
         section_1_baseline_preset_map = _build_baseline_preset_map(payload, section_1_id)
         for pipe_model_id, pipe_model in pipe_model_map.items():

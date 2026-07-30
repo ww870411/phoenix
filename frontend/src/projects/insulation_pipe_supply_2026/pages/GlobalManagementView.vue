@@ -280,6 +280,7 @@
                       <th>主体ID (唯一)</th>
                       <th>主体编码</th>
                       <th>供给主体名称</th>
+                      <th>对应的需求主体 (供货标段)</th>
                       <th>发货联系人</th>
                       <th>联系电话</th>
                       <th>物理移除</th>
@@ -287,11 +288,20 @@
                   </thead>
                   <tbody>
                     <tr v-for="(item, index) in supplyEntities" :key="index">
-                      <td><input v-model.trim="item.entity_id" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.entity_id" class="input table-cell-input" type="text" placeholder="如 supplier_a" /></td>
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 SA" /></td>
-                      <td><input v-model.trim="item.entity_name" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" /></td>
-                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" /></td>
+                      <td><input v-model.trim="item.entity_name" class="input table-cell-input" type="text" placeholder="供给主体名称" /></td>
+                      <td>
+                        <input 
+                          v-model.trim="item.section_1_ids_text" 
+                          class="input table-cell-input text-indigo font-bold" 
+                          type="text" 
+                          placeholder="输入需求主体ID/标段名称（逗号分隔）" 
+                          :title="`对应需求主体: ${item.section_1_ids_text || '暂未指定'}`"
+                        />
+                      </td>
+                      <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" placeholder="联系人" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="联系电话" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(supplyEntities, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -1336,7 +1346,10 @@ function applyConfig(config) {
   autoUpdatePlanStartDate.value = Boolean(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
   strictPlanningFlowControl.value = config.strict_planning_flow_control ?? true
-  supplyEntities.value = cloneRows(config.supply_entities)
+  supplyEntities.value = cloneRows(config.supply_entities).map(item => ({
+    ...item,
+    section_1_ids_text: listToText(item.section_1_ids),
+  }))
   demandEntities.value = cloneRows(config.demand_entities)
   pipeModels.value = normalizePipeModelRows(config.pipe_models)
   productionCapacities.value = cloneRows(config.production_capacities).map((item) => ({
@@ -1423,6 +1436,7 @@ function buildSectionPayload(section) {
       entity_name: item.entity_name || '',
       contact_name: item.contact_name || '',
       contact_phone: item.contact_phone || '',
+      section_1_ids: textToList(item.section_1_ids_text),
     }))
   }
   if (section === 'demand_entities') {
@@ -1699,6 +1713,7 @@ function addSupplyEntity() {
     entity_id: '',
     code: '',
     entity_name: '',
+    section_1_ids_text: '',
     contact_name: '',
     contact_phone: '',
   })
