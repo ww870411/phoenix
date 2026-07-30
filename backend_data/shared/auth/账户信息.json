@@ -143,14 +143,14 @@
         "unit": "lot_1,lot_2"
       },
       {
-        "username": "lot_1_manager",
-        "password": "lot_1_0714",
-        "unit": "lot_1"
+        "username": "high_lot_1_manager",
+        "password": "high_lot_1_0714",
+        "unit": "high_lot_1"
       },
       {
-        "username": "lot_2_manager",
-        "password": "lot_2_0715",
-        "unit": "lot_2"
+        "username": "high_lot_2_manager",
+        "password": "high_lot_2_0715",
+        "unit": "high_lot_2"
       }
     ],
     "tube_construction_unit": [
