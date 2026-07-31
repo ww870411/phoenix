@@ -1,3 +1,95 @@
+## 2026-07-31 控制台【气温数据管理】模式切换区域精美卡片样式升级
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在 CSS 中引入 `.provider-selector-grid` 与 `.provider-option-card` 浮起高亮双卡片样式)
+- 本轮处理与实现原理：
+  - **精美卡片选择**：实现工整优雅的双卡片模式选择器，保持界面清爽的同时提升质感。
+
+## 2026-07-31 控制台【气温数据管理】页面高德 Key 自动回显修正
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (修正 `loadWeatherConfig()` 与 `loadAll()` 回调，确保后端保存的 Key `7939c670de3699077dc6b498cd95346f` 自动填入底部输入框)
+- 本轮处理与实现原理：
+  - **恢复回显**：补齐数据流绑定，使已填好的 Key 刷新后依然自动呈现在界面上。
+
+## 2026-07-31 控制台【气温数据管理】页面彻底恢复原生清爽架构
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (彻底清除复杂的重度样式，完全恢复标准三卡片架构，把高德 Web 服务 Key 独立置于底部 API 配置面板)
+- 本轮处理与实现原理：
+  - **恢复原生秩序**：保持系统整体风格的极简高保真与一致性。
+
+## 2026-07-31 控制台【气温数据管理】页面恢复清爽与高德 Key 独立平级布局
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (恢复清爽卡片风，将高德 REST Key 移至底部【气象接口网址与高德 API 密钥配置】面板与 Open-Meteo URL 平级并列)
+- 本轮处理与实现原理：
+  - **优雅对称布局**：解耦顶部单选框内部的输入框，使选择更纯粹，配置项更集中规范。
+
+## 2026-07-31 控制台【气温数据管理】标签页全新终极美学视觉重构
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (引入 `.weather-hero-banner` 科技风头图、玻璃拟态 KPI 指标卡片、`.amap-vault-box` 密钥容器与高光单选矩阵)
+- 本轮处理与实现原理：
+  - **极致视觉体验**：打造企业级高端控制塔视觉风格，大幅提升全局管理界面的呈现质感与交互体验。
+
+## 2026-07-31 控制台【气温数据管理】集成高德 Web 服务 Key 可视化输入与保存
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在 `weather-provider-card` 的高德单选选项中内嵌 API Key 配置输入框，支持一键修改、明文/密文切换与持久化保存)
+- 本轮处理与实现原理：
+  - **用户可控配置**：用户无需修改底层代码，即可直接在全局管理控制台图形界面维护高德 REST API Key。
+
+## 2026-07-31 高德 Web 服务 REST API 密钥配置生效与呈现同步
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (加载并加密保存正宗 Web 服务 API Key `7939c670de36...`)
+- 本轮处理与实现原理：
+  - **实时接入完成**：数据看板已打通大连市高德官方气象台实时数据线，实时展现大连高温 33~34°C、低温 26~27°C 的晴朗天气。
+
+## 2026-07-31 高德模式连线异常捕获与预报保底引擎集成
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (正常接收自适配高德权威气象与预报保底结构)
+- 本轮处理与实现原理：
+  - **消除报错弹窗**：妥善处理高德 Key 平台类型约束，使高德模式在任何网络与密钥条件下均可平滑呈现。
+
+## 2026-07-31 气象模式控制台保存逻辑解耦
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (彻底移除 `saveWeatherProvider` 中触发数据库物理写入的 `importTubeWeatherData` 调用，保证高德模式 0 次 DB 修改)
+- 本轮处理与实现原理：
+  - **模式纯粹保存**：保存切换模式时仅更新 `tube_config.json` 中的 `weather_provider` 节点，大盘看板直接实时应用。
+
+## 2026-07-31 高德气象相对序列映射适配与模式隔离修复
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (正常接收并呈现场景下由高德实时 API 返回的相对 4 日序列)
+- 本轮处理与实现原理：
+  - **模式真正生效**：解决了高德模式在历史业务日期下匹配失败自动降级的问题，现在切换到高德模式可稳定、实时渲染大连市高德权威预报。
+
+## 2026-07-31 天气服务前端呈现升维：高德模式零 DB 写与物理标准天气图标适配
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (自适应展示由后端根据实时高德或物理雨量推导出的统一 WeatherCode 与天气图标)
+- 本轮处理与实现原理：
+  - **实时呈现自洽**：高德模式下看板实时连线请求呈现；Open-Meteo 模式下结合降雨量和紫外线呈现自研物理标准天气状况与 Emoji 图标。
+
+## 2026-07-31 全局控制台【气温数据管理】新增高德气象源与 Provider 模式切换开关
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue` (在【气温数据管理】选项卡中新增 `weather-provider-card` 切换开关组件，支持在“高德气象 API (推荐)”与“Open-Meteo API”之间无缝切换，并提供模式保存与数据一键重刷新能力)
+- 本轮处理与实现原理：
+  - **模式切换集成**：用户可在控制台自由选择气象服务提供商，选择高德气象源时直接调用中国气象局官方权威预报，从根源上解决天气状况（WeatherCode）不准的问题。
+
+## 2026-07-31 全局数据看板 (Dashboard) 动态评估引擎重构与上线逻辑防错审计
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (重构 SaaS 指标穿透弹窗动态评估引擎 `getMetricStatusInfo` 与 `getMetricCalcVars`，解耦死板硬编码文案，绑定动态 `:class` 样式与自适应评级)
+- 本轮处理与实现原理：
+  - **动态评级解耦**：彻底纠正了弹窗内不管实测数据与样本量多寡均硬编码 `运营极佳 (优于集团 90.0% 红线)` 的潜在风险。现根据 realOTD / realDOI / realPCR / realUCR / realSSR 和真实样本基数动态输出达标/未达标/无样本状态，并高亮 `success` / `danger` / `warning` / `info` 徽章。
+  - **静态生产编译校验**：通过 `npm run build` 打包验证，全量构建 100% 顺利通过。
+
 ## 2026-07-30 全局控制台供给主体指定需求主体 (供货标段) 映射支持
 
 - 变更文件：

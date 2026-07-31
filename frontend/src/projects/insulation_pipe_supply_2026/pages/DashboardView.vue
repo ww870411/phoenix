@@ -471,8 +471,8 @@
                     <span class="target-val blue">{{ getMetricResultText(activeMetric) }}</span>
                   </div>
                   <div class="target-status">
-                    <span class="status-badge success">
-                      {{ getMetricStatusText(activeMetric) }}
+                    <span :class="['status-badge', getMetricStatusInfo(activeMetric).badgeClass]">
+                      {{ getMetricStatusInfo(activeMetric).text }}
                     </span>
                   </div>
                 </div>
@@ -773,38 +773,58 @@ function getMetricResultText(key) {
 
 function getMetricCalcVars(key) {
   if (key === 'otd') {
+    const total = metricSnapshot.value.completedDeliveries.length
+    const statusNotice = total === 0 
+      ? '目前尚无确认到货的发货单样本。' 
+      : (realOTD.value >= 90.0 ? '24小时到货履约率高于集团90%红线，时效管控良好。' : '24小时到货履约率未达90%基准，建议督促物流加快运输。')
     return {
       '分子 (24小时内到货)': `${metricSnapshot.value.onTimeCount} 单 (发货至到货确认不超过 24 小时)`,
-      '分母 (可计算样本数)': `${metricSnapshot.value.completedDeliveries.length} 单 (已确认到货且具备完整发货/到货时间)`,
-      '判定规则': '以发货时间到到货确认时间的小时差 <= 24 视为准时'
+      '分母 (可计算样本数)': `${total} 单 (已确认到货且具备完整发货/到货时间)`,
+      '判定与建议': statusNotice
     }
   }
   if (key === 'doi') {
+    const daily = metricSnapshot.value.dailyConsumePlan
+    const statusNotice = daily === 0
+      ? '暂无未来三日滚动消耗计划折算，DOI按0.0天计。'
+      : (realDOI.value < 5.0 ? `周转天数 ${realDOI.value} 天在安全红线（5天）以内，积压管控良好。` : `周转天数 ${realDOI.value} 天超出5天红线，现场存在囤料滞纳风险。`)
     return {
       '分子 (现场在库库存)': `${metricSnapshot.value.totalInv.toFixed(1)} 米 (全网在库实测管材之和)`,
-      '分母 (日均计划消耗)': `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天 (由未来三日滚动计划 ${metricSnapshot.value.totalFuturePlan.toFixed(1)} 米折算)`,
-      'DOI 说明': `DOI = 在库库存 / 日均计划消耗。本指标单位为“天”，不乘以 100%。当前雷达折算得分：${realDOIScore.value} 分。`
+      '分母 (日均计划消耗)': `${daily.toFixed(1)} 米/天 (由未来三日滚动计划 ${metricSnapshot.value.totalFuturePlan.toFixed(1)} 米折算)`,
+      'DOI 说明': `DOI = 在库库存 / 日均计划消耗。${statusNotice} 当前雷达折算得分：${realDOIScore.value} 分。`
     }
   }
   if (key === 'pcr') {
+    const active = metricSnapshot.value.activeStations.size
+    const statusNotice = active === 0 
+      ? '暂无活跃需求主体。' 
+      : (realPCR.value >= 95.0 ? `提报达成率 ${realPCR.value}%，数字化指令下达零延误、零漏报。` : `提报达成率 ${realPCR.value}%，部分工区未按时提报未来三日计划。`)
     return {
       '分子 (按时提报站点)': `${metricSnapshot.value.submittedStationCount} 个工区 (存在滚动三日计划数据)`,
-      '分母 (活跃总工区数)': `${metricSnapshot.value.activeStations.size} 个需求主体 (design_qty > 0 视为活跃站点)`,
-      '数字化纪律得分': `当前提报达成率 ${realPCR.value}%。数字化指令下达零延误、零漏报。`
+      '分母 (活跃总工区数)': `${active} 个需求主体 (design_qty > 0 视为活跃站点)`,
+      '数字化纪律得分': statusNotice
     }
   }
   if (key === 'ucr') {
+    const arrived = metricSnapshot.value.totalArrived
+    const statusNotice = arrived === 0
+      ? '暂无到货签收记录。'
+      : (realUCR.value >= 80.0 ? `全网累计 ${realUCR.value}% 的到货管材已转化为施工实体，转化高效。` : `施工消耗转化率 ${realUCR.value}% 偏低，请关注施工进度。`)
     return {
       '分子 (实际消耗敷设)': `${metricSnapshot.value.totalUsage.toFixed(1)} 米 (槽下物理铺设焊接完毕并经确认的长度)`,
-      '分母 (签到到货总量)': `${metricSnapshot.value.totalArrived.toFixed(1)} 米 (现场负责人确认到货的累计长度)`,
-      '转化成效评估': `全网累计 ${realUCR.value}% 的到货管材已立即转化为空中或槽下物理管道实体，流转效率极优。`
+      '分母 (签到到货总量)': `${arrived.toFixed(1)} 米 (现场负责人确认到货的累计长度)`,
+      '转化成效评估': statusNotice
     }
   }
   if (key === 'ssr') {
+    const active = metricSnapshot.value.activeStations.size
+    const statusNotice = active === 0
+      ? '暂无活跃需求主体。'
+      : (realSSR.value >= 90.0 ? `安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。` : `安全覆盖度 ${realSSR.value}% 偏低，部分工区存在物理硬缺口待解决。`)
     return {
       '分子 (安全在建工区)': `${metricSnapshot.value.safeStationCount} 个工区 (未面临物理断料风险)`,
-      '分母 (总活跃工区数)': `${metricSnapshot.value.activeStations.size} 个需求主体 (全网在建全部活跃工区)`,
-      '缺口避让防线': `全要素缺口安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。`
+      '分母 (总活跃工区数)': `${active} 个需求主体 (全网在建全部活跃工区)`,
+      '缺口避让防线': statusNotice
     }
   }
   return {}
@@ -821,15 +841,53 @@ function getMetricTargetVal(key) {
   return targets[key] || ''
 }
 
-function getMetricStatusText(key) {
-  const texts = {
-    otd: '运营极佳 (优于集团 90.0% 红线)',
-    doi: '流转优异 (优于集团 5.0 天红线)',
-    pcr: '纪律极佳 (优于集团 95.0% 红线)',
-    ucr: '转化高效 (优于集团 80.0% 红线)',
-    ssr: '安全在控 (优于集团 90.0% 红线)'
+function getMetricStatusInfo(key) {
+  if (key === 'otd') {
+    const total = metricSnapshot.value.completedDeliveries.length
+    if (total === 0) return { text: '⚪ 暂无到货确认样本', badgeClass: 'info' }
+    const pass = realOTD.value >= 90.0
+    return {
+      text: pass ? `🟢 履约达标 (实测 ${realOTD.value}% ≥ 集团 90.0% 基准)` : `🔴 履约未达标 (实测 ${realOTD.value}% < 集团 90.0% 基准)`,
+      badgeClass: pass ? 'success' : 'danger'
+    }
   }
-  return texts[key] || ''
+  if (key === 'doi') {
+    const daily = metricSnapshot.value.dailyConsumePlan
+    if (daily === 0) return { text: '⚪ 暂无滚动消耗计划', badgeClass: 'info' }
+    const pass = realDOI.value < 5.0
+    return {
+      text: pass ? `🟢 周转高效 (实测 ${realDOI.value}天 < 集团 5.0天 基准)` : `🔴 周转偏慢 (实测 ${realDOI.value}天 ≥ 集团 5.0天 基准)`,
+      badgeClass: pass ? 'success' : 'warning'
+    }
+  }
+  if (key === 'pcr') {
+    const active = metricSnapshot.value.activeStations.size
+    if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
+    const pass = realPCR.value >= 95.0
+    return {
+      text: pass ? `🟢 纪律达标 (实测 ${realPCR.value}% ≥ 集团 95.0% 基准)` : `🔴 提报未达标 (实测 ${realPCR.value}% < 集团 95.0% 基准)`,
+      badgeClass: pass ? 'success' : 'danger'
+    }
+  }
+  if (key === 'ucr') {
+    const arrived = metricSnapshot.value.totalArrived
+    if (arrived === 0) return { text: '⚪ 暂无到货签收量', badgeClass: 'info' }
+    const pass = realUCR.value >= 80.0
+    return {
+      text: pass ? `🟢 转化高效 (实测 ${realUCR.value}% ≥ 集团 80.0% 基准)` : `🔴 转化偏低 (实测 ${realUCR.value}% < 集团 80.0% 基准)`,
+      badgeClass: pass ? 'success' : 'warning'
+    }
+  }
+  if (key === 'ssr') {
+    const active = metricSnapshot.value.activeStations.size
+    if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
+    const pass = realSSR.value >= 90.0
+    return {
+      text: pass ? `🟢 供应安全 (实测 ${realSSR.value}% ≥ 集团 90.0% 基准)` : `🚨 缺口警报 (实测 ${realSSR.value}% < 集团 90.0% 基准)`,
+      badgeClass: pass ? 'success' : 'danger'
+    }
+  }
+  return { text: '', badgeClass: 'info' }
 }
 
 // ECharts 挂载节点

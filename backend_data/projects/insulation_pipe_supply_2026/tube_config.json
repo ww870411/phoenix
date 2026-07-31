@@ -1,7 +1,8 @@
 {
-  "show_date": "2026-07-28",
-  "plan_start_date": "2026-07-29",
+  "show_date": "2026-07-30",
+  "plan_start_date": "2026-07-31",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
+  "weather_provider": "amap",
   "auto_update_plan_start_date": false,
   "plan_editable_days": 3,
   "supply_entities": [
@@ -272,7 +273,7 @@
   ],
   "strict_planning_flow_control": false,
   "amap_config": {
-    "api_key": "enc_v1:FlxWAwhRHWpTXgUUaFhcHzpRUwRSSAoJB1pbSGYHX1M=",
+    "api_key": "enc_v1:R1FcXA1fT28FCFJGZlJVTmhWUwRURFFXBgpQTWxVWwc=",
     "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="
   }
 }

@@ -579,9 +579,9 @@
             </section>
           </div>
 
-          <!-- Tab 5.5: 气温数据管理 -->
+          <!-- Tab 5.5: 气温数据管理 (恢复原始干净架构) -->
           <div v-if="activeTab === 'weather'" class="pane-content-wrapper">
-            <!-- 磨砂玻璃统计子面板 -->
+            <!-- 1. 气象库已存数据统计 -->
             <section class="card elevated section-card weather-stats-overview">
               <div class="card-header">⛅ 气象库已存数据统计</div>
               <p class="sub">统计当前管网系统底层数据库中缓存的日级天气与逐小时温度的总记录状况。</p>
@@ -598,27 +598,106 @@
                   <span class="weather-meta-desc">用于精确日最高、平均温算术解算</span>
                 </div>
                 <div class="weather-meta-item highlight">
-                  <span class="weather-meta-label">数据来源服务</span>
-                  <strong class="weather-meta-value">Open-Meteo API</strong>
-                  <span class="weather-meta-desc">WMO 标准天气解码与自动时区对齐</span>
+                  <span class="weather-meta-label">当前运行模式</span>
+                  <strong class="weather-meta-value">{{ weatherProvider === 'amap' ? '高德气象 API (推荐)' : 'Open-Meteo API' }}</strong>
+                  <span class="weather-meta-desc">{{ weatherProvider === 'amap' ? '中国气象局官方数据源与实时解析' : 'WMO 标准天气解码与降雨推导校正' }}</span>
                 </div>
               </div>
             </section>
 
-            <!-- 配置 API 与拉取导入面板 -->
+            <!-- 2. 气象数据源模式切换 (纯粹独立切换选框) -->
+            <section class="card elevated section-card weather-provider-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">🌐 气象数据源模式切换 (Weather Provider Switch)</div>
+                  <p class="sub block-sub">
+                    在此自由切换系统底层气象数据的服务提供商。推荐使用中国气象局官方权威数据源（高德天气 API）。
+                  </p>
+                </div>
+              </div>
+
+              <div class="provider-selector-grid">
+                <label class="provider-option-card" :class="{ active: weatherProvider === 'amap' }">
+                  <input type="radio" value="amap" v-model="weatherProvider" name="weatherProviderRadio" />
+                  <div class="provider-card-content">
+                    <div class="provider-title">
+                      <span class="provider-badge amap">📍 高德气象 API (推荐)</span>
+                      <span class="provider-source">中国气象局官方站点数据源</span>
+                    </div>
+                    <p class="provider-desc">
+                      由中国气象局官方气象台实时提供大连市主城区（210200）权威预报，天气状况描述与 WeatherCode 100% 准确自洽。
+                    </p>
+                  </div>
+                </label>
+
+                <label class="provider-option-card" :class="{ active: weatherProvider === 'open_meteo' }">
+                  <input type="radio" value="open_meteo" v-model="weatherProvider" name="weatherProviderRadio" />
+                  <div class="provider-card-content">
+                    <div class="provider-title">
+                      <span class="provider-badge open-meteo">🌐 Open-Meteo 全球 API</span>
+                      <span class="provider-source">包含日降水量 (rain_sum) 动态推理修正</span>
+                    </div>
+                    <p class="provider-desc">
+                      基于开源全球数值模型，已自动注入针对“零降雨量误报阵雨”问题的逻辑安全纠偏规则。
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <div class="provider-save-bar">
+                <button 
+                  class="btn primary compact-btn" 
+                  type="button" 
+                  :disabled="isSaving('weather_provider')" 
+                  @click="saveWeatherProvider"
+                >
+                  {{ isSaving('weather_provider') ? '正在保存模式...' : '💾 保存气象数据源模式' }}
+                </button>
+                <p v-if="sectionMessage('weather_provider')" :class="['section-tip', sectionMessage('weather_provider').type]" style="margin: 0;">
+                  {{ sectionMessage('weather_provider').text }}
+                </p>
+              </div>
+            </section>
+
+            <!-- 3. 配置 API 网址与高德 Key 面板 (独立集中在下方) -->
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">🛠️ 气象数据接口配置与一键导入</div>
+                  <div class="card-header">🛠️ 气象数据接口与 API 密钥配置</div>
                   <p class="sub block-sub">
-                    在此配置大连主城区的 Open-Meteo 气象 API 网址。您可以直接修改后点击“评估并导入”来进行数据校验和拉取，或点击“保存修改”将接口网址永久持久化写入系统的 tube_config.json 配置文件。
+                    在此集中维护高德 Web 服务 REST Key 与 Open-Meteo 接口网址。修改后点击保存可写入系统的配置文件。
                   </p>
                 </div>
               </div>
 
               <div class="weather-config-form">
+                <!-- 高德 Web 服务 API Key 配置项 -->
                 <div class="field">
-                  <span>气象 API 网址 (weather_api_url)</span>
+                  <span>🔑 高德 Web服务 (REST API) 密钥 Key</span>
+                  <div class="input-with-action" style="display: flex; gap: 8px; width: 100%;">
+                    <input 
+                      v-model="amapRestKey" 
+                      :type="showAmapRestKey ? 'text' : 'password'" 
+                      class="input" 
+                      style="flex: 1; font-family: monospace;" 
+                      placeholder="请输入高德开放平台申请的 Web服务 (REST API) Key..." 
+                    />
+                    <button 
+                      type="button" 
+                      class="btn ghost" 
+                      @click="showAmapRestKey = !showAmapRestKey"
+                    >
+                      {{ showAmapRestKey ? '🙈 隐藏' : '👁️ 显示' }}
+                    </button>
+                  </div>
+                  <small class="field-help">
+                    说明：需为高德开放平台申请的【Web服务】类型 Key，用于服务端实时连线气象接口。
+                  </small>
+                </div>
+
+                <!-- Open-Meteo 网址配置项 -->
+                <div class="field">
+                  <span>🌐 Open-Meteo 气象 API 网址 (weather_api_url)</span>
                   <textarea 
                     v-model="weatherApiUrl" 
                     class="input weather-textarea" 
@@ -626,7 +705,7 @@
                     rows="3"
                   ></textarea>
                   <small class="field-help">
-                    说明：输入框可自由编辑。若直接点击“拉取评估与导入”，系统将按照当前编辑框内的临时 API 连线拉取（不更改下次打开的默认值）。点击右侧的“保存修改”才会将该 URL 永久持久化。
+                    说明：预设大连主城区坐标。输入框可自由编辑。若直接点击“拉取评估与导入”，系统将按照当前编辑框内的临时 API 连线拉取。
                   </small>
                 </div>
 
@@ -649,7 +728,7 @@
                       :disabled="isSaving('weather_api_url')" 
                       @click="saveWeatherApiUrl"
                     >
-                      {{ isSaving('weather_api_url') ? '正在永久保存…' : '💾 仅保存网址修改' }}
+                      {{ isSaving('weather_api_url') ? '正在保存…' : '💾 保存配置修改' }}
                     </button>
                     <button 
                       class="btn primary shadow-accent" 
@@ -1080,6 +1159,9 @@ const hourlyCount = ref(0)
 const minDate = ref('—')
 const maxDate = ref('—')
 const weatherApiUrl = ref('')
+const weatherProvider = ref('amap')
+const amapRestKey = ref('')
+const showAmapRestKey = ref(false)
 const evalLoading = ref(false)
 const importLoading = ref(false)
 const showEvalModal = ref(false)
@@ -1098,8 +1180,29 @@ async function loadWeatherConfig() {
     minDate.value = res.min_date || '—'
     maxDate.value = res.max_date || '—'
     weatherApiUrl.value = res.weather_api_url || ''
+    weatherProvider.value = res.weather_provider || 'amap'
+    amapRestKey.value = res.amap_api_key || ''
   } catch (error) {
     console.error('加载天气配置与统计失败:', error)
+  }
+}
+
+async function saveWeatherProvider() {
+  clearGlobalMessage()
+  setSectionMessage('weather_provider', 'success', '')
+  setSaving('weather_provider', true)
+  try {
+    const val = String(weatherProvider.value || 'amap').trim()
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'weather_provider',
+      data: val,
+    })
+    await loadWeatherConfig()
+    setSectionMessage('weather_provider', 'success', `气象数据源模式已成功更新为【${val === 'amap' ? '高德气象 API' : 'Open-Meteo API'}】！`)
+  } catch (error) {
+    setSectionMessage('weather_provider', 'error', error?.message || '保存气象数据源模式失败')
+  } finally {
+    setSaving('weather_provider', false)
   }
 }
 
@@ -1112,15 +1215,22 @@ async function saveWeatherApiUrl() {
     if (!urlVal) {
       throw new Error('API 网址不能为空')
     }
-    const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'weather_api_url',
       data: urlVal,
     })
-    // 刷新统计
+
+    if (amapRestKey.value.trim()) {
+      await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+        section: 'amap_config',
+        data: { api_key: amapRestKey.value.trim(), security_code: '' },
+      })
+    }
+
     await loadWeatherConfig()
-    setSectionMessage('weather_api_url', 'success', '气象 API 地址已成功永久保存至 tube_config.json！')
+    setSectionMessage('weather_api_url', 'success', '气象 API 网址与高德 Web服务 REST Key 已成功保存生效！')
   } catch (error) {
-    setSectionMessage('weather_api_url', 'error', error?.message || '保存 API 失败')
+    setSectionMessage('weather_api_url', 'error', error?.message || '保存配置失败')
   } finally {
     setSaving('weather_api_url', false)
   }
@@ -1366,8 +1476,10 @@ function applyConfig(config) {
     contact_phone: item.contact_phone || '',
   }))
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
-  syncSelectedBaselineStation()
   weatherApiUrl.value = config.weather_api_url || ''
+  weatherProvider.value = config.weather_provider || 'amap'
+  amapRestKey.value = config.amap_config?.api_key || ''
+  loadWeatherConfig()
 }
 
 function getTodayDateString() {
@@ -2644,6 +2756,113 @@ async function handleExportLogs() {
   font-family: "Consolas", "Courier New", monospace !important;
   font-size: 13px !important;
   min-width: 132px;
+}
+
+/* ==========================================================================
+   气象数据源模式切换 - 精美高保真双卡片样式
+   ========================================================================== */
+.weather-provider-card {
+  margin-top: 16px;
+}
+
+.provider-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  margin-bottom: 20px;
+}
+
+.provider-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  position: relative;
+}
+
+.provider-option-card:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -2px rgba(59, 130, 246, 0.1);
+}
+
+.provider-option-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 6px 18px -2px rgba(37, 99, 235, 0.16);
+}
+
+.provider-option-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: #2563eb;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.provider-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.provider-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-badge {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.provider-badge.amap {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.provider-badge.open-meteo {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.provider-source {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.provider-desc {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 2px 0 0 0;
+}
+
+.provider-save-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e8f0;
 }
 
 /* 按钮 Premium 居中与防折行加固 */

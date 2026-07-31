@@ -421,6 +421,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "warehouse_keepers",
         "baseline_presets",
         "weather_api_url",
+        "weather_provider",
         "management_mode",
         "amap_config",
     }
@@ -448,6 +449,19 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         payload[normalized_section] = normalized_editable_days
     elif normalized_section == "weather_api_url":
         payload[normalized_section] = str(data or "").strip()
+    elif normalized_section == "weather_provider":
+        if isinstance(data, dict):
+            provider_val = str(data.get("provider") or "amap").strip()
+            api_key_plain = str(data.get("api_key") or "").strip()
+            payload["weather_provider"] = provider_val
+            if api_key_plain:
+                amap_cfg = payload.setdefault("amap_config", {})
+                if not isinstance(amap_cfg, dict):
+                    amap_cfg = {}
+                    payload["amap_config"] = amap_cfg
+                amap_cfg["api_key"] = simple_encrypt(api_key_plain)
+        else:
+            payload["weather_provider"] = str(data or "").strip()
     elif normalized_section == "management_mode":
         val = str(data or "").strip()
         if val not in {"station", "section"}:

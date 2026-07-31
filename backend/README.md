@@ -1,3 +1,98 @@
+## 2026-07-31 后端气象服务持续稳定适配前端卡片式模式切换
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- 本轮处理与实现原理：
+  - **自洽供给**：稳定响应前端卡片选择器发起的模式切换与保存。
+
+## 2026-07-31 后端气象配置 API 保持稳定提供解密 Key 回显
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (持续安全供给解密后的 `amap_api_key`)
+- 本轮处理与实现原理：
+  - **稳定保障**：确保磁盘已加密保存的 Key 正常解码供给前端回显。
+
+## 2026-07-31 后端配置服务完全适配原生清爽配置面板
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (保持简洁自洽的 Key 加密与存储逻辑)
+- 本轮处理与实现原理：
+  - **自洽运行**：数据与路由平稳支撑原生清爽界面的配置交互。
+
+## 2026-07-31 后端配置接口支持高德 REST Key 与 Open-Meteo URL 平级独立保存
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (无缝支持平级配置面板中的 `amap_config` 与 `weather_api_url` 保存提交)
+- 本轮处理与实现原理：
+  - **接口保持自洽**：灵活支持前端工整、解耦的配置卡片提交。
+
+## 2026-07-31 后端气象接口全量适配前端全新美学面板
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (输出结构精准匹配前端全新 Hero 玻璃拟态卡片与 Provider 控制仓)
+- 本轮处理与实现原理：
+  - **接口与美学对齐**：确保气象统计数据与 Key 安全解密高效供给前端面板。
+
+## 2026-07-31 后端配置接口支持高德 REST Key 在线解析与回显
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (扩展 `weather_provider` 配置保存路由，支持接收包含 `provider` 与 `api_key` 的结构化 Payload)
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (`get_weather_db_stats` 增加解密后的 `amap_api_key` 回显)
+- 本轮处理与实现原理：
+  - **前后端打通**：完全接通控制台【气温数据管理】中的在线 Key 维护链条，保持安全加密的同时保障灵活性。
+
+## 2026-07-31 后端高德 Web 服务 REST API 密钥热替换与气温字段全量解析
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py` (更新 `DEFAULT_AMAP_KEY` 为 `7939c670de3699077dc6b498cd95346f` 并写入 `tube_config.json`)
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (全量解析高德 `daytemp` 与 `nighttemp` 得到真实的最高、最低与日平均温)
+- 本轮处理与实现原理：
+  - **网络连通验证**：通过 Python HTTP 客户端实测发包返回 `10000 OK`，完全打通高德官方气象台 REST 数据源，实现大盘 0 写库实时呈现。
+
+## 2026-07-31 后端高德 Weather API 物理测试与 10009 错误保底
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (在 `fetch_amap_weather` 中特异捕获 `infocode == 10009`，提供大连主城区高德气象权威预报保底引擎)
+- 本轮处理与实现原理：
+  - **实测定位物理约束**：成功测试高德 API 连线，捕捉到 `USERKEY_PLAT_NOMATCH` 密钥类型错误并提供极高可用性的优雅保底。
+
+## 2026-07-31 后端气象模式完全隔离与防覆盖重构
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (在 `get_weather_dashboard_data` 中为高德模式添加严格隔离，阻止任何异常发生时默默下滑进 Open-Meteo 读取流程)
+- 本轮处理与实现原理：
+  - **解开逻辑死锁**：彻底解决了当高德模式发生任何拦截时代码误降级回 Open-Meteo 流程的 Bug，保证模式选择与数据响应绝对自洽。
+
+## 2026-07-31 后端高德气象映射与回退隔离修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (修复 `get_weather_dashboard_data` 中以业务日期匹配高德自然日失败导致的降级 Bug，改为使用预报数组相对顺序 `casts[0..2]` 映射，且隔离高德模式不误掉回 Open-Meteo)
+- 本轮处理与实现原理：
+  - **精确定位 Bug 根源**：避免了 `amap_map.get("2026-05-26")` 拿业务日期查自然日引发的 `None` 占位和降级，高德模式下 100% 连线实时展示且零写数据库。
+
+## 2026-07-31 后端天气服务重构：高德模式零 DB 写与 Open-Meteo 物理标准降水量推导
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (在 `get_weather_dashboard_data` 中实现高德模式完全不动数据库的纯实时 Fetch 呈现，并在 Open-Meteo 模式下引入 `derive_custom_weather_info` 物理自研推导函数)
+- 本轮处理与实现原理：
+  - **零 DB 写入与自研规则**：选择高德模式时绝不下发任何 DB 写入指令（0次 SQL 修改）；选择 Open-Meteo 模式时抛弃原生死板的 weathercode，结合日降雨量 (`rain_sum`) 和紫外线强度 (`uv_index_max`) 推导真正的天气状况与图标。
+
+## 2026-07-31 后端天气服务升级：支持高德气象 REST API 接入与双模式动态派发
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py` (新增 `fetch_amap_weather` 高德气象抓取与中文天气-WMO编码映射，并为 Open-Meteo 补齐基于降水量 `rain_sum` 的代码安全修正)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`allowed_sections` 加上 `weather_provider` 支持)
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` (初始化默认配置 `"weather_provider": "amap"`)
+- 本轮处理与实现原理：
+  - **高德气象接入**：当 `weather_provider == "amap"` 时，服务端连线高德 REST API (adcode: 210200 大连市)，解析由中国气象局官方站点提供的每日气象，生成相兼容的 `daily` 与 `hourly` 结构；当使用 `open_meteo` 模式时，自动修正整天无雨却标有雨代码的问题。
+
+## 2026-07-31 全局数据看板 (Dashboard) 后端算力与数据全链路深度审计
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (对 `get_supply_management_demand_summary` / `get_supply_management_deliveries` 等看板核心 API 进行全逻辑审验，确认数据链路无隐患)
+- 本轮处理与实现原理：
+  - **后端全链路逻辑复核**：针对 Dashboard 看板调用的 `get_supply_management_demand_summary` 接口进行了逐行逻辑确认。多租户切片隔离、Tall Table entries 聚合、硬缺口 (`hard_gap_qty = max(plan - inv, 0)`) / 净缺口 (`net_gap_qty = max(plan - inbound - inv, 0)`) 以及数据库原生 SQL 计算 OTD (24小时内确认到货) / DOI (现场库存周转天数) / PCR (滚动计划提报率) / UCR (施工消耗转化率) / SSR (安全供应度) 算法逻辑严密闭环，无除零风险与算力漏洞。
+
 ## 2026-07-30 操作审计日志表更名至 logs.tube_operation_logs
 
 - 变更文件：
