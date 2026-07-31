@@ -2184,6 +2184,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "Consolas", sans-serif;
 }
 
 :deep(.pin-pointer) {

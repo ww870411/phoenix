@@ -34,7 +34,9 @@
         </div>
       </header>
 
-      <p v-if="errorMessage" class="page-error">{{ errorMessage }}</p>
+      <p v-if="errorMessage || dashboardErrorMessage" class="page-error">
+        {{ dashboardErrorMessage || errorMessage }}
+      </p>
 
       <!-- 第一区：四大全局核心指标 HSL 磨砂卡片大盘 -->
       <section class="stats-grid">
@@ -500,7 +502,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
@@ -530,6 +532,8 @@ const {
 const summaryRows = ref([])
 const deliveries = ref([])
 const loadingSummary = ref(false)
+const dashboardErrorMessage = ref('')
+const summaryDataState = ref('loading')
 
 // 前端过滤与排序配置
 const pivotMode = ref('station') // 'station' / 'model'
@@ -909,19 +913,44 @@ async function refreshAllData() {
 // 拉取后端真实数据
 async function loadDashboardData() {
   loadingSummary.value = true
+  summaryDataState.value = 'loading'
+  dashboardErrorMessage.value = ''
   try {
-    const summaryRes = await getTubeSupplyManagementDemandSummary(projectKey.value)
-    summaryRows.value = summaryRes?.rows || []
-    backendMetrics.value = summaryRes?.metrics || null
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const showDate = configSummary.value?.show_date || todayStr
+    const summaryRes = await getTubeSupplyManagementDemandSummary(projectKey.value, { show_date: showDate })
+    if (!Array.isArray(summaryRes?.rows)) {
+      throw new Error('看板汇总响应异常：缺少 rows 数组，未展示零值。')
+    }
 
-    const deliveriesRes = await getTubeSupplyManagementDeliveries(projectKey.value)
-    deliveries.value = Array.isArray(deliveriesRes?.rows) ? deliveriesRes.rows : []
-    
+    summaryRows.value = summaryRes.rows.map((row, index) => {
+      const inventoryQty = Number(row?.station_inventory_qty)
+      if (!Number.isFinite(inventoryQty)) {
+        throw new Error(`看板汇总响应异常：第 ${index + 1} 行缺少 station_inventory_qty，未展示零值。`)
+      }
+      return { ...row, station_inventory_qty: inventoryQty }
+    })
+    backendMetrics.value = summaryRes?.metrics || null
+    summaryDataState.value = 'ready'
+
+    try {
+      const deliveriesRes = await getTubeSupplyManagementDeliveries(projectKey.value)
+      deliveries.value = Array.isArray(deliveriesRes?.rows) ? deliveriesRes.rows : []
+    } catch (error) {
+      // 发货流水不参与当前顶部指标计算，不能覆盖已成功加载的汇总数据。
+      console.error('拉取 tube 发货流水失败:', error)
+    }
+
     // 数据加载完毕后渲染图表
     nextTick(() => {
       renderCharts()
     })
   } catch (error) {
+    summaryRows.value = []
+    backendMetrics.value = null
+    summaryDataState.value = 'error'
+    dashboardErrorMessage.value = error instanceof Error ? error.message : '读取看板汇总失败，未展示零值。'
     console.error('拉取 tube 汇总数据失败:', error)
   } finally {
     loadingSummary.value = false
@@ -962,9 +991,9 @@ function formatTime(isoStr) {
 
 // 格式化展示量（数值以 m 为单位）
 function formatQty(val) {
-  if (val === null || val === undefined) return '0'
+  if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) return '—'
   const num = Number(val)
-  return isNaN(num) ? '0' : num.toFixed(0)
+  return Number.isFinite(num) ? num.toFixed(0) : '—'
 }
 
 function getPercent(n, total) {
@@ -998,6 +1027,24 @@ function handleSort(key) {
 
 // 1. KPI 大盘计算
 const kpi = computed(() => {
+  if (summaryDataState.value !== 'ready') {
+    return {
+      design: null,
+      purchase: null,
+      plan: null,
+      shipped: null,
+      pendingArrival: null,
+      pendingReceive: null,
+      pendingWarehouse: null,
+      completed: null,
+      arrived: null,
+      usage: null,
+      inventory: null,
+      netGap: null,
+      hardGap: null
+    }
+  }
+
   let design = 0
   let purchase = 0
   let plan = 0
@@ -1117,19 +1164,36 @@ const computedTableData = computed(() => {
   return list
 })
 
-// 获取气象代码对应的 Emoji 图标
-function getWeatherIcon(code) {
-  const codeVal = code !== undefined && code !== null ? Number(code) : 0
-  if (codeVal === 0) return '☀️'
-  if ([1, 2].includes(codeVal)) return '⛅'
-  if (codeVal === 3) return '☁️'
-  if ([45, 48].includes(codeVal)) return '🌫️'
-  if ([51, 53, 55, 56, 57].includes(codeVal)) return '🌦️'
-  if ([61, 63, 65, 66, 67].includes(codeVal)) return '🌧️'
-  if ([71, 73, 75, 77].includes(codeVal)) return '❄️'
-  if ([80, 81, 82].includes(codeVal)) return '🌦️'
-  if ([85, 86].includes(codeVal)) return '🌨️'
-  if ([95, 96, 99].includes(codeVal)) return '⛈️'
+// 获取气象代码或中文字符串对应的 Emoji 图标 (高德 API 与 Open-Meteo 双向无缝兼容)
+function getWeatherIcon(code, text) {
+  const textStr = String(text || '').trim()
+
+  // 1. 优先按中文字符串智能正则匹配 (高德天气 API / 中文填报)
+  if (textStr) {
+    if (/雷阵雨|冰雹|强雷/.test(textStr)) return '⛈️'
+    if (/雨夹雪|暴雪|大雪|中雪|小雪|阵雪|雪/.test(textStr)) return '🌨️'
+    if (/大雨|暴雨|特大暴雨|大到暴雨|中到大雨/.test(textStr)) return '🌧️'
+    if (/小雨|中雨|阵雨|小到中雨|雨/.test(textStr)) return '🌦️'
+    if (/雾|霾|沙尘|浮尘|扬沙/.test(textStr)) return '🌫️'
+    if (/阴|多云|少云/.test(textStr)) return '⛅'
+    if (/晴/.test(textStr)) return '☀️'
+  }
+
+  // 2. 按数字 WMO 代码匹配 (Open-Meteo API)
+  const codeVal = code !== undefined && code !== null && code !== '' ? Number(code) : NaN
+  if (!Number.isNaN(codeVal)) {
+    if (codeVal === 0) return '☀️'
+    if ([1, 2].includes(codeVal)) return '⛅'
+    if (codeVal === 3) return '☁️'
+    if ([45, 48].includes(codeVal)) return '🌫️'
+    if ([51, 53, 55, 56, 57].includes(codeVal)) return '🌦️'
+    if ([61, 63, 65, 66, 67].includes(codeVal)) return '🌧️'
+    if ([71, 73, 75, 77].includes(codeVal)) return '❄️'
+    if ([80, 81, 82].includes(codeVal)) return '🌦️'
+    if ([85, 86].includes(codeVal)) return '🌨️'
+    if ([95, 96, 99].includes(codeVal)) return '⛈️'
+  }
+
   return '☀️'
 }
 
@@ -1171,7 +1235,7 @@ async function fetchWeatherData() {
         }
 
         // 智能气象状态与图标、施工建议判定
-        const weatherIcon = getWeatherIcon(day.weather_code)
+        const weatherIcon = getWeatherIcon(day.weather_code, day.weather_text)
         const statusText = day.weather_text || '未知'
         
         let themeClass = 'fine'
@@ -1440,19 +1504,25 @@ watch([summaryRows, pivotMode], () => {
   })
 }, { deep: true })
 
-// 监听业务日期变化，自动刷新气象数据
+// 监听业务日期变化，自动刷新大盘与气象数据
 watch(() => configSummary.value?.show_date, (newVal) => {
   if (newVal) {
+    loadDashboardData()
     fetchWeatherData()
   }
 })
 
-onMounted(() => {
-  Promise.all([
+onMounted(async () => {
+  await reloadConfigSummary()
+  await Promise.all([
     loadDashboardData(),
     fetchWeatherData()
   ])
   window.addEventListener('resize', handleResize)
+})
+
+onActivated(() => {
+  loadDashboardData()
 })
 
 onBeforeUnmount(() => {
@@ -1887,6 +1957,7 @@ onBeforeUnmount(() => {
 .weather-icon-large {
   font-size: 28px;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.06));
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "Android Emoji", sans-serif;
 }
 
 .weather-metrics-grid {

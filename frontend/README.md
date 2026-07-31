@@ -1,3 +1,40 @@
+## 2026-07-31 数据看板支持任意访问用户查看全量大盘
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (支撑无障碍全量大盘渲染)
+- 本轮处理与实现原理：
+  - **全量无死角**：全量展现所有标段与全盘现场总库存。
+
+## 2026-07-31 看板 `onMounted` 时序对齐与今日日期兜底
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (在 `onMounted` 中 `await reloadConfigSummary()` 优先加载配置，加入 `todayStr` 日期兜底)
+- 本轮处理与实现原理：
+  - **消除空字符串传参**：确保 `show_date` 在首屏和挂载时 100% 传递有效日期，防止后端因空入参回退至历史旧日期导致库存算出来为 0。
+
+## 2026-07-31 数据看板需求汇总 API 补齐 `show_date` 查询参数
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/services/api.js` (升级 `getTubeSupplyManagementDemandSummary` 支持 `show_date` 参数)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (在拉取需求汇总时传入 `show_date`)
+- 本轮处理与实现原理：
+  - **链路打通**：将页面选择的业务基准日期传入 API，使后端准确返回该时间节点及之前的现场总库存。
+
+## 2026-07-31 数据看板卡片【全局现场总库存】核算逻辑口径对齐
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (在 `kpi` computed 属性中实时累加 `station_inventory_qty`)
+- 本轮处理与实现原理：
+  - **实时呈现**：看板第 3 张卡片精确拉取后端截至当前 23:59:59 的确认到货量与实际使用量之差。
+
+## 2026-07-31 生产环境天气图标与 Emoji 跨平台字体保障全量升级
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue` (升级 `getWeatherIcon(code, text)` 智能中英文数字兼容)
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue` (引入跨平台无损 Emoji 字体族)
+- 本轮处理与实现原理：
+  - **图标高保障**：彻底打通了高德天气 API 返回中文文本时的图标呈现，消除了生产环境下服务器缺少 Emoji 字体引发的黑框乱码。
+
 ## 2026-07-31 供给管理页面【物流发货记录】不断刷新与闪烁优化
 
 - 变更文件：
@@ -7492,3 +7529,9 @@ docker compose up -d --build
   - 需求页实际使用量输入框缺少只读禁用态属于真实界面缺口，但更偏前端约束不足，不宜上升为“系统级致命安全问题”
   - 供给页 watcher 死循环、库管页在途时长无限累加等表述存在夸大或已过时情况
 - 因此该审计文档可作为前端问题线索，但不能不经复核直接当作现状结论。
+
+## 2026-07-31 保温管全局看板库存展示
+
+- `DashboardView.vue` 的库存卡、透视表、导出和型号图统一使用后端契约字段 `station_inventory_qty`。
+- 汇总数据加载仅在接口响应结构完整且每行库存字段可转为有限数值时进入“就绪”状态；接口失败或字段缺失显示明确错误及“—”，不会再以 0 掩盖异常。
+- 发货流水加载失败不会覆盖已成功加载的汇总 KPI。

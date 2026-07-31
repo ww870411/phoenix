@@ -1,3 +1,38 @@
+## 2026-07-31 后端 `get_supply_management_demand_summary` 移除了标段权限切片过滤
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- 本轮处理与实现原理：
+  - **全量无阻碍**：遵从用户命令，任意登录账号访问看板汇总接口时，均返回全量标段大盘数据。
+
+## 2026-07-31 后端需求汇总支撑前端 `show_date` 今日日期兜底与实时切片
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- 本轮处理与实现原理：
+  - **切片无缝配合**：配合前端传入的今日日期 (`YYYY-MM-DD`) 准确切片输出 10 米到货与现场库存。
+
+## 2026-07-31 后端需求汇总 API `/supply-management/demand-summary` 支持 `show_date` 动态 Query 解析
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `get_supply_management_demand_summary` 中解析 `show_date: Optional[str] = Query(None)`)
+- 本轮处理与实现原理：
+  - **动态解耦**：允许前端透传具体查看日期，避免无参数时被迫退回 `tube_config.json` 历史默认旧日期。
+
+## 2026-07-31 后端 `list_arrival_aggregates` 确认到货截止时间 SQL 判定修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (修复 `arrived_confirm_at <= :cutoff_time`)
+- 本轮处理与实现原理：
+  - **解冻确认到货**：彻底解决了当天执行“确认到货”因 `< :show_date` 符号导致到货量被过滤为 0 的 Bug。
+
+## 2026-07-31 后端气象服务双数据源（高德/Open-Meteo）前端图标完美匹配保障
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- 本轮处理与实现原理：
+  - **精准映射**：支持后端透出的中文天气状态 (`weather_text`) 与代码 (`weather_code`) 在前端 100% 精准转换图标。
+
 ## 2026-07-31 后端发货台账 API 稳定支撑前端静默更新
 
 - 变更文件：
@@ -6103,4 +6138,10 @@
   - `show_date` 用于供给侧滚动三日计划量汇总并不是 bug，而是当前已拍板并写入执行版文档的正式业务口径
   - `username` 缺失导致普通角色“恒为空白”的说法过度绝对；当前配置确实未普遍维护 `username`，但解析函数还会匹配 `manager_id / manager_name / entity_id / entity_name`，因此这是条件性风险，不是无条件必现故障
   - JSON 文件并发写回无锁这一条从工程稳健性角度有依据，但更接近并发一致性隐患，不宜直接等同为当前高频已复现业务故障
+
+## 2026-07-31 保温管全局看板库存接口契约
+
+- `GET /api/v1/projects/insulation_pipe_supply_2026/supply-management/demand-summary` 的汇总行对外使用 `station_inventory_qty` 表示现场可用库存。
+- `totalInv` 由同一字段聚合，避免接口明细与指标总量使用不同命名导致前端读到空值并显示 0。
+- 该字段的计算口径保持为：已确认到货量 − 累计实际使用量 − 累计损耗量。
 - 结论：该审计文档对后端的价值在于暴露了若干真实缺口，但严重度和适用范围需要按当前代码重新评级。

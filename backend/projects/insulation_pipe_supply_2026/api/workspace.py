@@ -906,18 +906,31 @@ def get_supply_management_options(
     }
 @router.get("/supply-management/demand-summary", summary="读取供给侧需求与缺口汇总")
 def get_supply_management_demand_summary(
+    show_date: Optional[str] = Query(None),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    # 遵循用户指令：数据看板不受任何账号/标段隔离约束，全量呈现全盘大盘汇总数据
+    all_demand_entities = get_config_list(payload, "demand_entities")
+    accessible_section_1_ids = {
+        str(item.get("section_1_id") or "").strip()
+        for item in all_demand_entities
+        if str(item.get("section_1_id") or "").strip()
+    }
     section_1_name_map = _build_section_1_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
-    show_date = get_configured_show_date(payload)
-    plan_dates = build_plan_dates(show_date)
+    parsed_show_date = None
+    if show_date:
+        try:
+            parsed_show_date = date.fromisoformat(str(show_date).strip())
+        except Exception:
+            parsed_show_date = None
+    show_date_obj = parsed_show_date or get_configured_show_date(payload)
+    plan_dates = build_plan_dates(show_date_obj)
     plan_total_map = list_plan_totals(plan_dates)
     delivery_aggregate_map = list_delivery_aggregates()
-    arrival_aggregate_map = list_arrival_aggregates(show_date.isoformat())
-    usage_total_map = list_usage_totals(show_date.isoformat())
+    arrival_aggregate_map = list_arrival_aggregates(show_date_obj.isoformat())
+    usage_total_map = list_usage_totals(show_date_obj.isoformat())
 
     rows: List[Dict[str, Any]] = []
     for section_1 in get_config_list(payload, "demand_entities"):
@@ -975,7 +988,7 @@ def get_supply_management_demand_summary(
                     "total_arrived_qty": total_arrived_qty,
                     "total_usage_qty": total_usage_qty,
                     "total_loss_qty": total_loss_qty,
-                    "section_1_inventory_qty": section_1_inventory_qty,
+                    "station_inventory_qty": section_1_inventory_qty,
                     "inbound_pipeline_qty": inbound_pipeline_qty,
                     "net_gap_qty": net_gap_qty,
                     "hard_gap_qty": hard_gap_qty,
@@ -1015,7 +1028,7 @@ def get_supply_management_demand_summary(
     otd = round((on_time_count / completed_deliveries_count) * 100, 1) if completed_deliveries_count > 0 else 0.0
 
     # 2. 从已生成的 rows 中计算剩下的指标 (DOI, PCR, UCR, SSR)
-    total_inv = sum(row["section_1_inventory_qty"] for row in rows)
+    total_inv = sum(row["station_inventory_qty"] for row in rows)
     total_future_plan = sum(row["future_plan_qty"] for row in rows)
     daily_consume_plan = total_future_plan / 3.0 if total_future_plan > 0 else 0.0
     total_usage = sum(row["total_usage_qty"] for row in rows)

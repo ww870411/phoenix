@@ -553,8 +553,11 @@ export async function getTubeSupplyManagementOptions(projectKey = 'insulation_pi
   return response.json()
 }
 
-export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulation_pipe_supply_2026') {
-  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/demand-summary`, {
+export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const search = new URLSearchParams()
+  if (params?.show_date) search.set('show_date', String(params.show_date))
+  const queryStr = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/demand-summary${queryStr}`, {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {

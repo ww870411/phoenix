@@ -1,5 +1,5 @@
 {
-  "show_date": "2026-07-30",
+  "show_date": "2026-07-31",
   "plan_start_date": "2026-07-31",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "weather_provider": "amap",

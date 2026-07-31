@@ -130,6 +130,7 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
 
 def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
     auto_process_timeout_deliveries()
+    cutoff_time = f"{str(show_date).split('T')[0]} 23:59:59"
     sql = text(
         """
         SELECT
@@ -138,8 +139,8 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
             SUM(
                 CASE
                     WHEN status <> 'cancelled'
-                         AND COALESCE(arrived_qty, 0) > 0
-                         AND arrived_confirm_at < :show_date
+                         AND arrived_confirm_at IS NOT NULL
+                         AND arrived_confirm_at <= :cutoff_time
                         THEN 
                             CASE 
                                 WHEN status = 'pending_receive' THEN COALESCE(arrived_qty, shipped_qty)
@@ -154,7 +155,7 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
     )
     session = SessionLocal()
     try:
-        rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
+        rows = session.execute(sql, {"cutoff_time": cutoff_time}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             key = f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"
