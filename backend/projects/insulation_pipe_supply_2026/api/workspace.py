@@ -170,7 +170,7 @@ class DemandUsageSavePayload(BaseModel):
     records: List[DemandUsageRecordInput] = []
 
 
-class DemandStationSubmissionPayload(BaseModel):
+class DemandSection1SubmissionPayload(BaseModel):
     section_1_id: str
     remark: str = ""
 
@@ -466,7 +466,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             payload["weather_provider"] = str(data or "").strip()
     elif normalized_section == "management_mode":
         val = str(data or "").strip()
-        if val not in {"station", "section"}:
+        if val != "section_1":
             raise HTTPException(status_code=422, detail=f"不支持的管理模式：{val}")
         payload[normalized_section] = val
     elif normalized_section == "amap_config":
@@ -817,7 +817,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "usage_collection_date": get_usage_collection_date(payload).isoformat(),
         "plan_editable_days": get_configured_plan_editable_days(payload),
-        "management_mode": payload.get("management_mode", "station"),
+        "management_mode": payload.get("management_mode", "section_1"),
         "summary": {
             "supply_entity_count": len(supply_entities),
             "demand_entity_count": len(demand_entities),
@@ -872,7 +872,7 @@ def get_demand_management_options(
             "group": session.group,
             "unit": session.unit,
         },
-        "stations": _serialize_section_1_options(payload, accessible_section_1_ids),
+        "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "supply_entities": supply_entities,
         "pipe_models": _serialize_pipe_options(payload),
         "show_date": show_date.isoformat(),
@@ -898,7 +898,7 @@ def get_supply_management_options(
             "unit": session.unit,
         },
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
-        "stations": _serialize_section_1_options(payload, accessible_section_1_ids),
+        "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
@@ -988,7 +988,7 @@ def get_supply_management_demand_summary(
                     "total_arrived_qty": total_arrived_qty,
                     "total_usage_qty": total_usage_qty,
                     "total_loss_qty": total_loss_qty,
-                    "station_inventory_qty": section_1_inventory_qty,
+                    "section_1_inventory_qty": section_1_inventory_qty,
                     "inbound_pipeline_qty": inbound_pipeline_qty,
                     "net_gap_qty": net_gap_qty,
                     "hard_gap_qty": hard_gap_qty,
@@ -1028,7 +1028,7 @@ def get_supply_management_demand_summary(
     otd = round((on_time_count / completed_deliveries_count) * 100, 1) if completed_deliveries_count > 0 else 0.0
 
     # 2. 从已生成的 rows 中计算剩下的指标 (DOI, PCR, UCR, SSR)
-    total_inv = sum(row["station_inventory_qty"] for row in rows)
+    total_inv = sum(row["section_1_inventory_qty"] for row in rows)
     total_future_plan = sum(row["future_plan_qty"] for row in rows)
     daily_consume_plan = total_future_plan / 3.0 if total_future_plan > 0 else 0.0
     total_usage = sum(row["total_usage_qty"] for row in rows)
@@ -1063,15 +1063,15 @@ def get_supply_management_demand_summary(
         "totalFuturePlan": total_future_plan,
         
         "pcr": pcr,
-        "submittedStationCount": submitted_section_1_count,
-        "activeStationsCount": len(active_section_1s),
+        "submitted_section_1_count": submitted_section_1_count,
+        "active_section_1_count": len(active_section_1s),
         
         "ucr": ucr,
         "totalUsage": total_usage,
         "totalArrived": total_arrived,
         
         "ssr": ssr,
-        "safeStationCount": safe_section_1_count
+        "safe_section_1_count": safe_section_1_count
     }
 
     rows.sort(key=lambda item: (item["section_1_id"], item["pipe_model_id"]))
@@ -1342,7 +1342,7 @@ def get_warehouse_management_options(
             "group": session.group,
             "unit": session.unit,
         },
-        "stations": _serialize_section_1_options(payload, set(_build_section_1_name_map(payload).keys())),
+        "section_1s": _serialize_section_1_options(payload, set(_build_section_1_name_map(payload).keys())),
         "pipe_models": _serialize_pipe_options(payload),
         "supply_entities": _serialize_all_supply_entity_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
@@ -1378,7 +1378,7 @@ def get_warehouse_management_deliveries(
     selected_supply_entities = {s.strip() for s in supply_entity_id.split(",") if s.strip()} if supply_entity_id else set()
     selected_pipe_models = {_normalize_pipe_model_id(s) for s in pipe_model_id.split(",") if s.strip()} if pipe_model_id else set()
 
-    # 在 SQL 层面，我们不传入单选 station_id 和 status，以便我们在 Python 内存中对大盘记录直接做高性能多选集合检索
+    # 在 SQL 层面，我们不传入单选 section_1_id 和 status，以便我们在 Python 内存中对大盘记录直接做高性能多选集合检索
     rows = list_delivery_records(
         supply_entity_ids=all_supply_entity_ids,
         section_1_id="",
@@ -1471,7 +1471,7 @@ def get_demand_management_baseline(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station": {
+        "section_1": {
             "section_1_id": section_1_id,
             "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
         },
@@ -1533,7 +1533,7 @@ def get_demand_management_plan_matrix(
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
                 "unit": pipe_model.get("unit") or "",
-                "station_inventory_qty": section_1_inventory_qty,
+                "section_1_inventory_qty": section_1_inventory_qty,
                 "inbound_pipeline_qty": inbound_pipeline_qty,
                 "values": cell_values,
                 "remarks": cell_remarks,
@@ -1543,7 +1543,7 @@ def get_demand_management_plan_matrix(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station": {
+        "section_1": {
             "section_1_id": section_1_id,
             "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },
@@ -1653,7 +1653,7 @@ def get_demand_management_usage_sheet(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station": {
+        "section_1": {
             "section_1_id": section_1_id,
             "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },
@@ -1720,8 +1720,8 @@ def save_demand_management_usage_sheet(
 
 
 @router.post("/demand-management/submission", summary="提交填报完成状态")
-def submit_demand_management_station_status(
-    payload: DemandStationSubmissionPayload,
+def submit_demand_management_section_1_status(
+    payload: DemandSection1SubmissionPayload,
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
@@ -1806,7 +1806,7 @@ def get_demand_management_pending_arrivals(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station": {
+        "section_1": {
             "section_1_id": section_1_id,
             "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
         },
@@ -1870,7 +1870,7 @@ def get_demand_management_logistics_records(
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "station": {
+        "section_1": {
             "section_1_id": section_1_id,
             "section_1_name": _build_section_1_name_map(payload).get(section_1_id, section_1_id),
         },

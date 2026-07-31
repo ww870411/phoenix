@@ -31,7 +31,7 @@
           <div class="filter-panel" style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; flex-wrap: wrap;">
             <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
               <label style="font-size: 12px; color: #64748b; font-weight: 500;">选择需求主体</label>
-              <select v-model="historyFilter.stationId" class="select" style="min-width: 180px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
+              <select v-model="historyFilter.section1Id" class="select" style="min-width: 180px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
                 <option value="">— 全部需求主体 —</option>
                 <option v-for="st in demandEntities" :key="st.section_1_id" :value="st.section_1_id">
                   {{ st.section_1_name }}
@@ -157,7 +157,7 @@ const getTodayStr = () => {
 }
 
 const historyFilter = ref({
-  stationId: '',
+  section1Id: '',
   startDate: getPastDateStr(30),
   endDate: getTodayStr(),
 })
@@ -167,7 +167,7 @@ async function handleHistoryQuery() {
   historyLoading.value = true
   try {
     const res = await getTubeHistoryData(PROJECT_KEY, {
-      stationId: historyFilter.value.stationId,
+      section1Id: historyFilter.value.section1Id,
       startDate: historyFilter.value.startDate,
       endDate: historyFilter.value.endDate,
     })
@@ -187,7 +187,7 @@ async function handleHistoryExport() {
   historyExportLoading.value = true
   try {
     const blob = await exportTubeHistoryData(PROJECT_KEY, {
-      stationId: historyFilter.value.stationId,
+      section1Id: historyFilter.value.section1Id,
       startDate: historyFilter.value.startDate,
       endDate: historyFilter.value.endDate,
     })

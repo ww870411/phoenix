@@ -1,3 +1,7 @@
+## 2026-07-31 保温管需求主体 section_1 接口契约
+
+保温管需求主体主键、名称、选项集合和库存汇总统一为 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`。供给、需求、库管和看板接口不再输出 `station` / `stations` / `station_inventory_qty`。
+
 ## 2026-07-31 后端 `get_supply_management_demand_summary` 移除了标段权限切片过滤
 
 - 变更文件：

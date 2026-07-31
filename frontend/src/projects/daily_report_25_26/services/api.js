@@ -331,7 +331,7 @@ export async function saveTubeDemandManagementUsageSheet(projectKey, payload) {
   return response.json()
 }
 
-export async function submitTubeDemandManagementStationStatus(projectKey, payload) {
+export async function submitTubeDemandManagementSection1Status(projectKey, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/submission`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
@@ -569,7 +569,7 @@ export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulat
 
 export async function getTubeSupplyManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
-  if (params.stationId) search.set('section_1_id', String(params.stationId))
+  if (params.section1Id) search.set('section_1_id', String(params.section1Id))
   if (params.status) search.set('status', String(params.status))
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   const suffix = search.toString() ? `?${search.toString()}` : ''
@@ -648,7 +648,7 @@ export async function getTubeWarehouseManagementOptions(projectKey = 'insulation
 
 export async function getTubeWarehouseManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
-  if (params.stationId) search.set('section_1_id', String(params.stationId))
+  if (params.section1Id) search.set('section_1_id', String(params.section1Id))
   if (params.status) search.set('status', String(params.status))
   if (params.supplyEntityId) search.set('supply_entity_id', String(params.supplyEntityId))
   if (params.pipeModelId) search.set('pipe_model_id', String(params.pipeModelId))
@@ -2202,7 +2202,7 @@ export async function getTubeHistoryData(projectKey, params) {
   const query = new URLSearchParams()
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
-  if (params.stationId) query.append('section_1_id', params.stationId)
+  if (params.section1Id) query.append('section_1_id', params.section1Id)
   
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history?${query.toString()}`, {
     headers: attachAuthHeaders(),
@@ -2218,7 +2218,7 @@ export async function exportTubeHistoryData(projectKey, params) {
   const query = new URLSearchParams()
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
-  if (params.stationId) query.append('section_1_id', params.stationId)
+  if (params.section1Id) query.append('section_1_id', params.section1Id)
   
   const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/history/export?${query.toString()}`, {
     headers: attachAuthHeaders(),

@@ -32,10 +32,10 @@ COMMENT ON COLUMN tube.tube_daily_plan.plan_date IS '计划日期，按自然日
 COMMENT ON COLUMN tube.tube_daily_plan.plan_qty IS '计划使用量';
 COMMENT ON COLUMN tube.tube_daily_plan.filled_by IS '填报人，首版为现场负责人';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_plan_date_station_model
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_plan_date_section_1_model
     ON tube.tube_daily_plan (plan_date, section_1_id, pipe_model_id);
 
-CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_station_date
+CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_section_1_date
     ON tube.tube_daily_plan (section_1_id, plan_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_plan_pipe_model_date
@@ -123,7 +123,7 @@ COMMENT ON COLUMN tube.tube_delivery.is_timeout_receive IS '是否因到货确�
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_status
     ON tube.tube_delivery (status);
 
-CREATE INDEX IF NOT EXISTS idx_tube_delivery_station
+CREATE INDEX IF NOT EXISTS idx_tube_delivery_section_1
     ON tube.tube_delivery (section_1_id);
 
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_supply_entity
@@ -141,7 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_tube_delivery_pipe_model
 CREATE INDEX IF NOT EXISTS idx_tube_delivery_shipped_at
     ON tube.tube_delivery (shipped_at);
 
-CREATE INDEX IF NOT EXISTS idx_tube_delivery_station_status
+CREATE INDEX IF NOT EXISTS idx_tube_delivery_section_1_status
     ON tube.tube_delivery (section_1_id, status);
 
 CREATE TABLE IF NOT EXISTS tube.tube_daily_usage (
@@ -167,10 +167,10 @@ COMMENT ON COLUMN tube.tube_daily_usage.usage_date IS '实际使用日期，按�
 COMMENT ON COLUMN tube.tube_daily_usage.usage_qty IS '实际使用量';
 COMMENT ON COLUMN tube.tube_daily_usage.filled_by IS '填报人，首版为现场负责人';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_usage_date_station_model
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_usage_date_section_1_model
     ON tube.tube_daily_usage (usage_date, section_1_id, pipe_model_id);
 
-CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_station_date
+CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_section_1_date
     ON tube.tube_daily_usage (section_1_id, usage_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_daily_usage_pipe_model_date
@@ -196,7 +196,7 @@ COMMENT ON COLUMN tube.tube_inventory_adjustment.adjust_qty IS '调整数量，�
 COMMENT ON COLUMN tube.tube_inventory_adjustment.adjust_type IS '调整类型，如盘盈、盘亏、退库、调剂、破损、纠错';
 COMMENT ON COLUMN tube.tube_inventory_adjustment.reason IS '调整原因';
 
-CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_station_date
+CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_section_1_date
     ON tube.tube_inventory_adjustment (section_1_id, adjust_date);
 
 CREATE INDEX IF NOT EXISTS idx_tube_inventory_adjustment_pipe_model_date

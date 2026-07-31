@@ -24,30 +24,30 @@
           <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
         </div>
         <div class="filter-grid">
-          <div class="field custom-multi-select-container" ref="stationDropdownRef">
+          <div class="field custom-multi-select-container" ref="section1DropdownRef">
             <span>需求主体</span>
             <div class="custom-multi-select">
-              <div class="select-trigger" @click="toggleDropdown('station')" :class="{ active: activeDropdown === 'station' }">
-                <span class="trigger-text" :class="{ placeholder: filters.stationIds.length === 0 }">
-                  {{ displaySelectedStations }}
+              <div class="select-trigger" @click="toggleDropdown('section1')" :class="{ active: activeDropdown === 'section1' }">
+                <span class="trigger-text" :class="{ placeholder: filters.section1Ids.length === 0 }">
+                  {{ displaySelectedSection1s }}
                 </span>
                 <span class="trigger-arrow">▼</span>
               </div>
               <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'station'" class="select-dropdown">
+                <div v-if="activeDropdown === 'section1'" class="select-dropdown">
                   <div class="dropdown-actions">
-                    <button type="button" class="action-btn" @click="selectAllStations">全选</button>
-                    <button type="button" class="action-btn" @click="clearAllStations">清空</button>
+                    <button type="button" class="action-btn" @click="selectAllSection1s">全选</button>
+                    <button type="button" class="action-btn" @click="clearAllSection1s">清空</button>
                   </div>
                   <div class="dropdown-list">
                     <div 
-                      v-for="item in stationOptions" 
+                      v-for="item in section1Options" 
                       :key="item.section_1_id" 
                       class="dropdown-item"
-                      :class="{ selected: filters.stationIds.includes(item.section_1_id) }"
-                      @click="toggleStation(item.section_1_id)"
+                      :class="{ selected: filters.section1Ids.includes(item.section_1_id) }"
+                      @click="toggleSection1(item.section_1_id)"
                     >
-                      <input type="checkbox" :checked="filters.stationIds.includes(item.section_1_id)" @click.stop="toggleStation(item.section_1_id)" />
+                      <input type="checkbox" :checked="filters.section1Ids.includes(item.section_1_id)" @click.stop="toggleSection1(item.section_1_id)" />
                       <span class="item-label">{{ item.section_1_name }}（{{ item.section_1_id }}）</span>
                     </div>
                   </div>
@@ -213,7 +213,7 @@
               <col class="col-shipment" />
               <col class="col-plate" />
               <col class="col-supply" />
-              <col class="col-station" />
+              <col class="col-section1" />
               <col class="col-model" />
               <col class="col-qty" />
               <col class="col-qty" />
@@ -272,7 +272,7 @@
                   <span class="plate-badge">{{ row.vehicle_plate_no || '—' }}</span>
                 </td>
                 <td class="cell-supply" :title="row.supply_entity_name">{{ row.supply_entity_name }}</td>
-                <td class="cell-station" :title="row.station_name">{{ row.station_name }}</td>
+                <td class="cell-section1" :title="row.section_1_name">{{ row.section_1_name }}</td>
                 <td class="cell-model" :title="row.pipe_model_name">{{ row.pipe_model_name }}</td>
                 <td class="cell-number">{{ formatAmount(row.shipped_qty) }}</td>
                 <td class="cell-number">{{ formatOptionalAmount(row.arrived_qty) }}</td>
@@ -640,7 +640,7 @@ const selectedDeliveryId = ref('')
 const selectedDeliveryIds = ref([])
 
 const filters = reactive({
-  stationIds: [],
+  section1Ids: [],
   supplyEntityIds: [],
   pipeModelIds: [],
   statuses: [],
@@ -651,7 +651,7 @@ const filters = reactive({
 
 // 多选下拉组件状态与控制
 const activeDropdown = ref('')
-const stationDropdownRef = ref(null)
+const section1DropdownRef = ref(null)
 const supplyDropdownRef = ref(null)
 const pipeDropdownRef = ref(null)
 const statusDropdownRef = ref(null)
@@ -661,7 +661,7 @@ const toggleDropdown = (name) => {
 }
 
 const handleGlobalClick = (e) => {
-  if (activeDropdown.value === 'station' && stationDropdownRef.value && !stationDropdownRef.value.contains(e.target)) {
+  if (activeDropdown.value === 'section1' && section1DropdownRef.value && !section1DropdownRef.value.contains(e.target)) {
     activeDropdown.value = ''
   }
   if (activeDropdown.value === 'supplier' && supplyDropdownRef.value && !supplyDropdownRef.value.contains(e.target)) {
@@ -676,11 +676,11 @@ const handleGlobalClick = (e) => {
 }
 
 // 选中值格式化回显
-const displaySelectedStations = computed(() => {
-  if (filters.stationIds.length === 0) return '全部需求主体'
-  if (filters.stationIds.length === stationOptions.value.length) return '全部需求主体（全选）'
-  const names = stationOptions.value
-    .filter(o => filters.stationIds.includes(o.section_1_id))
+const displaySelectedSection1s = computed(() => {
+  if (filters.section1Ids.length === 0) return '全部需求主体'
+  if (filters.section1Ids.length === section1Options.value.length) return '全部需求主体（全选）'
+  const names = section1Options.value
+    .filter(o => filters.section1Ids.includes(o.section_1_id))
     .map(o => o.section_1_name)
   return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个需求主体`
 })
@@ -713,16 +713,16 @@ const displaySelectedStatuses = computed(() => {
 })
 
 // 复选操作函数
-const toggleStation = (id) => {
-  const idx = filters.stationIds.indexOf(id)
-  if (idx > -1) filters.stationIds.splice(idx, 1)
-  else filters.stationIds.push(id)
+const toggleSection1 = (id) => {
+  const idx = filters.section1Ids.indexOf(id)
+  if (idx > -1) filters.section1Ids.splice(idx, 1)
+  else filters.section1Ids.push(id)
 }
-const selectAllStations = () => {
-  filters.stationIds = stationOptions.value.map(o => o.section_1_id)
+const selectAllSection1s = () => {
+  filters.section1Ids = section1Options.value.map(o => o.section_1_id)
 }
-const clearAllStations = () => {
-  filters.stationIds = []
+const clearAllSection1s = () => {
+  filters.section1Ids = []
 }
 
 const toggleSupplyEntity = (id) => {
@@ -767,7 +767,7 @@ const warehouseForm = reactive({
 const nowTick = ref(Date.now())
 let nowTimer = null
 
-const stationOptions = computed(() => options.value?.stations || [])
+const section1Options = computed(() => options.value?.section_1s || [])
 const supplyEntityOptions = computed(() => options.value?.supply_entities || [])
 const pipeModelOptions = computed(() => options.value?.pipe_models || [])
 const deliveryStatusOptions = computed(() => options.value?.delivery_status_options || [])
@@ -807,7 +807,7 @@ const hasPartialPendingWarehouseSelection = computed(() => {
 const selectedDeliveryAggregate = computed(() => {
   const shipmentSet = new Set()
   const orderSet = new Set()
-  const stationSet = new Set()
+  const section1Set = new Set()
   const pipeModelSet = new Set()
   const vehiclePlateSet = new Set()
   const statusCountMap = new Map()
@@ -821,7 +821,7 @@ const selectedDeliveryAggregate = computed(() => {
   for (const row of selectedDeliveries.value) {
     if (row.shipment_no) shipmentSet.add(row.shipment_no)
     if (row.order_no || row.delivery_code || row.id) orderSet.add(row.order_no || row.delivery_code || String(row.id))
-    if (row.section_1_name || row.section_1_id) stationSet.add(row.section_1_name || row.section_1_id)
+    if (row.section_1_name || row.section_1_id) section1Set.add(row.section_1_name || row.section_1_id)
     if (row.pipe_model_name || row.pipe_model_id) pipeModelSet.add(row.pipe_model_name || row.pipe_model_id)
     if (row.vehicle_plate_no) vehiclePlateSet.add(row.vehicle_plate_no)
     const statusKey = row.status || 'unknown'
@@ -849,7 +849,7 @@ const selectedDeliveryAggregate = computed(() => {
     pendingWarehouseCount: pendingWarehouseSelectedDeliveries.value.length,
     shipmentCount: shipmentSet.size,
     orderCount: orderSet.size,
-    stationCount: stationSet.size,
+    section1Count: section1Set.size,
     pipeModelCount: pipeModelSet.size,
     totalShippedQty,
     totalArrivedQty,
@@ -1042,18 +1042,18 @@ function toggleSelectAllPendingWarehouse(event) {
 async function loadOptions() {
   const payload = await getTubeWarehouseManagementOptions(projectKey)
   options.value = payload
-  const stationIdSet = new Set(stationOptions.value.map((item) => String(item.section_1_id || '')))
+  const section1IdSet = new Set(section1Options.value.map((item) => String(item.section_1_id || '')))
   const supplyEntityIdSet = new Set(supplyEntityOptions.value.map((item) => String(item.entity_id || '')))
   const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))
   const deliveryStatusValueSet = new Set(deliveryStatusOptions.value.map((item) => String(item.value || '')))
   
-  filters.stationIds = filters.stationIds.filter(id => stationIdSet.has(id))
+  filters.section1Ids = filters.section1Ids.filter(id => section1IdSet.has(id))
   filters.supplyEntityIds = filters.supplyEntityIds.filter(id => supplyEntityIdSet.has(id))
   filters.pipeModelIds = filters.pipeModelIds.filter(id => pipeModelIdSet.has(id))
   filters.statuses = filters.statuses.filter(val => deliveryStatusValueSet.has(val))
 
-  if (filters.stationIds.length === 0 && stationOptions.value.length === 1) {
-    filters.stationIds = [stationOptions.value[0].section_1_id]
+  if (filters.section1Ids.length === 0 && section1Options.value.length === 1) {
+    filters.section1Ids = [section1Options.value[0].section_1_id]
   }
 }
 
@@ -1071,7 +1071,7 @@ async function loadDeliveries() {
   pageError.value = ''
   try {
     const payload = await getTubeWarehouseManagementDeliveries(projectKey, {
-      stationId: filters.stationIds.join(','),
+      section1Id: filters.section1Ids.join(','),
       supplyEntityId: filters.supplyEntityIds.join(','),
       pipeModelId: filters.pipeModelIds.join(','),
       status: filters.statuses.join(','),
@@ -1120,7 +1120,7 @@ async function reloadAll() {
 }
 
 async function resetFilters() {
-  filters.stationIds = []
+  filters.section1Ids = []
   filters.supplyEntityIds = []
   filters.pipeModelIds = []
   filters.statuses = []
@@ -1298,7 +1298,7 @@ onBeforeUnmount(() => {
 .col-shipment { width: 120px !important; }
 .col-plate { width: 100px !important; }
 .col-supply { width: 160px !important; }
-.col-station { width: 160px !important; }
+.col-section1 { width: 160px !important; }
 .col-model { width: 130px !important; }
 .col-qty { width: 105px !important; }
 .col-status { width: 150px !important; }
@@ -1358,7 +1358,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   letter-spacing: 0.5px;
 }
-.cell-supply, .cell-station {
+.cell-supply, .cell-section1 {
   max-width: 160px !important;
   min-width: 120px !important;
   white-space: nowrap !important;

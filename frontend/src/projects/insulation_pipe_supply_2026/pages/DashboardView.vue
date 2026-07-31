@@ -284,8 +284,8 @@
           <div class="tab-workbench">
             <button 
               class="tab-btn" 
-              :class="{ active: pivotMode === 'station' }" 
-              @click="pivotMode = 'station'"
+              :class="{ active: pivotMode === 'section_1' }" 
+              @click="pivotMode = 'section_1'"
             >
               🏢 按需求主体维度
             </button>
@@ -302,7 +302,7 @@
         <div class="search-filter-bar">
           <div class="filter-item">
             <label>过滤需求主体：</label>
-            <select v-model="filterStationId">
+            <select v-model="filterSection1Id">
               <option value="">全部需求主体</option>
               <option 
                 v-for="st in configSummary?.demand_entities || []" 
@@ -341,7 +341,7 @@
           <table class="pivot-table">
             <thead>
               <tr>
-                <th class="left-align text-col">{{ pivotMode === 'station' ? '需求主体名称' : '保温管型号' }}</th>
+                <th class="left-align text-col">{{ pivotMode === 'section_1' ? '需求主体名称' : '保温管型号' }}</th>
                 <th class="right-align num-col sortable" @click="handleSort('design_qty')">
                   设计量 {{ getSortSymbol('design_qty') }}
                 </th>
@@ -357,8 +357,8 @@
                 <th class="right-align num-col sortable" @click="handleSort('pending_arrival_qty')">
                   在途在管 {{ getSortSymbol('pending_arrival_qty') }}
                 </th>
-                <th class="right-align num-col sortable highlight-th-green" @click="handleSort('station_inventory_qty')">
-                  现场库存 {{ getSortSymbol('station_inventory_qty') }}
+                <th class="right-align num-col sortable highlight-th-green" @click="handleSort('section_1_inventory_qty')">
+                  现场库存 {{ getSortSymbol('section_1_inventory_qty') }}
                 </th>
                 <th class="right-align num-col sortable" @click="handleSort('total_usage_qty')">
                   累计使用 {{ getSortSymbol('total_usage_qty') }}
@@ -381,7 +381,7 @@
                 <td class="right-align num-col font-bold">{{ formatQty(item.future_plan_qty) }}</td>
                 <td class="right-align num-col">{{ formatQty(item.total_shipped_qty) }}</td>
                 <td class="right-align num-col">{{ formatQty(item.pending_arrival_qty) }}</td>
-                <td class="right-align num-col highlight-cell-green">{{ formatQty(item.station_inventory_qty) }}</td>
+                <td class="right-align num-col highlight-cell-green">{{ formatQty(item.section_1_inventory_qty) }}</td>
                 <td class="right-align num-col">{{ formatQty(item.total_usage_qty) }}</td>
                 <td class="right-align num-col highlight-cell-red" :class="{ 'danger-text': item.hard_gap_qty > 0 }">
                   {{ formatQty(item.hard_gap_qty) }}
@@ -495,7 +495,7 @@
       :columns="exportColumns"
       :data="unfilteredTableData"
       :filtered-data="computedTableData"
-      :default-filename="pivotMode === 'station' ? '保温管供需分析透视表_按需求主体' : '保温管供需分析透视表_按型号'"
+      :default-filename="pivotMode === 'section_1' ? '保温管供需分析透视表_按需求主体' : '保温管供需分析透视表_按型号'"
       @close="showExportModal = false"
     />
   </div>
@@ -536,10 +536,10 @@ const dashboardErrorMessage = ref('')
 const summaryDataState = ref('loading')
 
 // 前端过滤与排序配置
-const pivotMode = ref('station') // 'station' / 'model'
+const pivotMode = ref('section_1') // 'section_1' / 'model'
 const sortKey = ref('')
 const sortOrder = ref('desc')
-const filterStationId = ref('')
+const filterSection1Id = ref('')
 const filterPipeModelId = ref('')
 
 // 大连市气象防汛施工时效沙盘数据
@@ -562,7 +562,7 @@ const showExportModal = ref(false)
 
 const exportColumns = computed(() => {
   return [
-    { key: 'name', label: pivotMode.value === 'station' ? '需求主体名称' : '保温管型号' },
+    { key: 'name', label: pivotMode.value === 'section_1' ? '需求主体名称' : '保温管型号' },
     { key: 'design_qty', label: '设计量 (米)' },
     { key: 'purchase_plan_qty', label: '计划采购 (米)' },
     { key: 'future_plan_qty', label: '三日计划量 (米)' },
@@ -573,19 +573,19 @@ const exportColumns = computed(() => {
     { key: 'completed_qty', label: '已确认入库 (米)' },
     { key: 'total_arrived_qty', label: '累计到货 (米)' },
     { key: 'total_usage_qty', label: '累计实际使用 (米)' },
-    { key: 'station_inventory_qty', label: '现场可用在库 (米)' },
+    { key: 'section_1_inventory_qty', label: '现场可用在库 (米)' },
     { key: 'net_gap_qty', label: '三日净缺口 (米)' },
     { key: 'hard_gap_qty', label: '三日硬缺口 (米)' }
   ]
 })
 
 const unfilteredTableData = computed(() => {
-  const isStationMode = pivotMode.value === 'station'
+  const isSection1Mode = pivotMode.value === 'section_1'
   const groups = {}
 
   summaryRows.value.forEach(row => {
-    const groupKey = isStationMode ? row.section_1_id : row.pipe_model_id
-    const groupName = isStationMode ? row.section_1_name : row.pipe_model_name
+    const groupKey = isSection1Mode ? row.section_1_id : row.pipe_model_id
+    const groupName = isSection1Mode ? row.section_1_name : row.pipe_model_name
 
     if (!groups[groupKey]) {
       groups[groupKey] = {
@@ -601,7 +601,7 @@ const unfilteredTableData = computed(() => {
         completed_qty: 0,
         total_arrived_qty: 0,
         total_usage_qty: 0,
-        station_inventory_qty: 0,
+        section_1_inventory_qty: 0,
         net_gap_qty: 0,
         hard_gap_qty: 0,
       }
@@ -618,7 +618,7 @@ const unfilteredTableData = computed(() => {
     g.completed_qty += row.completed_qty || 0
     g.total_arrived_qty += row.total_arrived_qty || 0
     g.total_usage_qty += row.total_usage_qty || 0
-    g.station_inventory_qty += row.station_inventory_qty || 0
+    g.section_1_inventory_qty += row.section_1_inventory_qty || 0
     g.net_gap_qty += row.net_gap_qty || 0
     g.hard_gap_qty += row.hard_gap_qty || 0
   })
@@ -639,9 +639,9 @@ const metricSnapshot = computed(() => {
     dailyConsumePlan: m?.dailyConsumePlan || 0,
     totalUsage: m?.totalUsage || 0,
     totalArrived: m?.totalArrived || 0,
-    activeStations: { size: m?.activeStationsCount || 0 }, // 兼容 PCR/SSR activeStations
-    submittedStationCount: m?.submittedStationCount || 0,
-    safeStationCount: m?.safeStationCount || 0,
+    activeSection1s: { size: m?.active_section_1_count || 0 }, // 兼容 PCR/SSR activeSection1s
+    submittedSection1Count: m?.submitted_section_1_count || 0,
+    safeSection1Count: m?.safe_section_1_count || 0,
     otd: m?.otd || 0,
     doi: m?.doi || 0,
     doiScore: m?.doiScore || 0,
@@ -736,13 +736,13 @@ function getMetricCalcNumerator(key) {
     return `${metricSnapshot.value.totalInv.toFixed(1)} 米`
   }
   if (key === 'pcr') {
-    return `${metricSnapshot.value.submittedStationCount} 个工区`
+    return `${metricSnapshot.value.submittedSection1Count} 个工区`
   }
   if (key === 'ucr') {
     return `${metricSnapshot.value.totalUsage.toFixed(1)} 米`
   }
   if (key === 'ssr') {
-    return `${metricSnapshot.value.safeStationCount} 个站点`
+    return `${metricSnapshot.value.safeSection1Count} 个站点`
   }
   return ''
 }
@@ -755,13 +755,13 @@ function getMetricCalcDenominator(key) {
     return `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天`
   }
   if (key === 'pcr') {
-    return `${metricSnapshot.value.activeStations.size} 个工区`
+    return `${metricSnapshot.value.activeSection1s.size} 个工区`
   }
   if (key === 'ucr') {
     return `${metricSnapshot.value.totalArrived.toFixed(1)} 米`
   }
   if (key === 'ssr') {
-    return `${metricSnapshot.value.activeStations.size} 个工区`
+    return `${metricSnapshot.value.activeSection1s.size} 个工区`
   }
   return ''
 }
@@ -799,12 +799,12 @@ function getMetricCalcVars(key) {
     }
   }
   if (key === 'pcr') {
-    const active = metricSnapshot.value.activeStations.size
+    const active = metricSnapshot.value.activeSection1s.size
     const statusNotice = active === 0 
       ? '暂无活跃需求主体。' 
       : (realPCR.value >= 95.0 ? `提报达成率 ${realPCR.value}%，数字化指令下达零延误、零漏报。` : `提报达成率 ${realPCR.value}%，部分工区未按时提报未来三日计划。`)
     return {
-      '分子 (按时提报站点)': `${metricSnapshot.value.submittedStationCount} 个工区 (存在滚动三日计划数据)`,
+      '分子 (按时提报站点)': `${metricSnapshot.value.submittedSection1Count} 个工区 (存在滚动三日计划数据)`,
       '分母 (活跃总工区数)': `${active} 个需求主体 (design_qty > 0 视为活跃站点)`,
       '数字化纪律得分': statusNotice
     }
@@ -821,12 +821,12 @@ function getMetricCalcVars(key) {
     }
   }
   if (key === 'ssr') {
-    const active = metricSnapshot.value.activeStations.size
+    const active = metricSnapshot.value.activeSection1s.size
     const statusNotice = active === 0
       ? '暂无活跃需求主体。'
       : (realSSR.value >= 90.0 ? `安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。` : `安全覆盖度 ${realSSR.value}% 偏低，部分工区存在物理硬缺口待解决。`)
     return {
-      '分子 (安全在建工区)': `${metricSnapshot.value.safeStationCount} 个工区 (未面临物理断料风险)`,
+      '分子 (安全在建工区)': `${metricSnapshot.value.safeSection1Count} 个工区 (未面临物理断料风险)`,
       '分母 (总活跃工区数)': `${active} 个需求主体 (全网在建全部活跃工区)`,
       '缺口避让防线': statusNotice
     }
@@ -865,7 +865,7 @@ function getMetricStatusInfo(key) {
     }
   }
   if (key === 'pcr') {
-    const active = metricSnapshot.value.activeStations.size
+    const active = metricSnapshot.value.activeSection1s.size
     if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
     const pass = realPCR.value >= 95.0
     return {
@@ -883,7 +883,7 @@ function getMetricStatusInfo(key) {
     }
   }
   if (key === 'ssr') {
-    const active = metricSnapshot.value.activeStations.size
+    const active = metricSnapshot.value.activeSection1s.size
     if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
     const pass = realSSR.value >= 90.0
     return {
@@ -925,11 +925,11 @@ async function loadDashboardData() {
     }
 
     summaryRows.value = summaryRes.rows.map((row, index) => {
-      const inventoryQty = Number(row?.station_inventory_qty)
+      const inventoryQty = Number(row?.section_1_inventory_qty)
       if (!Number.isFinite(inventoryQty)) {
-        throw new Error(`看板汇总响应异常：第 ${index + 1} 行缺少 station_inventory_qty，未展示零值。`)
+        throw new Error(`看板汇总响应异常：第 ${index + 1} 行缺少 section_1_inventory_qty，未展示零值。`)
       }
-      return { ...row, station_inventory_qty: inventoryQty }
+      return { ...row, section_1_inventory_qty: inventoryQty }
     })
     backendMetrics.value = summaryRes?.metrics || null
     summaryDataState.value = 'ready'
@@ -958,7 +958,7 @@ async function loadDashboardData() {
 }
 
 // HSL 名字映射解析
-function stationName(id) {
+function section1Name(id) {
   const list = configSummary.value?.demand_entities || []
   const item = list.find(x => String(x.section_1_id) === String(id))
   return item ? item.section_1_name : id
@@ -1004,7 +1004,7 @@ function getPercent(n, total) {
 
 // 重置过滤
 function resetFilters() {
-  filterStationId.value = ''
+  filterSection1Id.value = ''
   filterPipeModelId.value = ''
   sortKey.value = ''
 }
@@ -1070,7 +1070,7 @@ const kpi = computed(() => {
     completed += row.completed_qty || 0
     arrived += row.total_arrived_qty || 0
     usage += row.total_usage_qty || 0
-    inventory += row.station_inventory_qty || 0
+    inventory += row.section_1_inventory_qty || 0
     netGap += row.net_gap_qty || 0
     
     // 硬缺口统一使用后端计算，防范负库存导致的公式膨胀
@@ -1096,12 +1096,12 @@ const kpi = computed(() => {
 
 // 2. 透视（Pivot）与排序、全局条件过滤
 const computedTableData = computed(() => {
-  const isStationMode = pivotMode.value === 'station'
+  const isSection1Mode = pivotMode.value === 'section_1'
   const groups = {}
 
   summaryRows.value.forEach(row => {
     // 过滤逻辑：站点过滤
-    if (filterStationId.value && String(row.section_1_id) !== String(filterStationId.value)) {
+    if (filterSection1Id.value && String(row.section_1_id) !== String(filterSection1Id.value)) {
       return
     }
     // 过滤逻辑：管径型号过滤
@@ -1109,8 +1109,8 @@ const computedTableData = computed(() => {
       return
     }
 
-    const groupKey = isStationMode ? row.section_1_id : row.pipe_model_id
-    const groupName = isStationMode ? row.section_1_name : row.pipe_model_name
+    const groupKey = isSection1Mode ? row.section_1_id : row.pipe_model_id
+    const groupName = isSection1Mode ? row.section_1_name : row.pipe_model_name
 
     if (!groups[groupKey]) {
       groups[groupKey] = {
@@ -1126,7 +1126,7 @@ const computedTableData = computed(() => {
         completed_qty: 0,
         total_arrived_qty: 0,
         total_usage_qty: 0,
-        station_inventory_qty: 0,
+        section_1_inventory_qty: 0,
         net_gap_qty: 0,
         hard_gap_qty: 0,
       }
@@ -1143,7 +1143,7 @@ const computedTableData = computed(() => {
     g.completed_qty += row.completed_qty || 0
     g.total_arrived_qty += row.total_arrived_qty || 0
     g.total_usage_qty += row.total_usage_qty || 0
-    g.station_inventory_qty += row.station_inventory_qty || 0
+    g.section_1_inventory_qty += row.section_1_inventory_qty || 0
     g.net_gap_qty += row.net_gap_qty || 0
     
     // 硬缺口统一使用后端计算，规避前端分散逻辑
@@ -1301,7 +1301,7 @@ function renderCharts() {
           netGap: 0
         }
       }
-      modelsMap[modelId].inventory += row.station_inventory_qty || 0
+      modelsMap[modelId].inventory += row.section_1_inventory_qty || 0
       modelsMap[modelId].pending += row.pending_arrival_qty || 0
       modelsMap[modelId].netGap += row.net_gap_qty || 0
     })

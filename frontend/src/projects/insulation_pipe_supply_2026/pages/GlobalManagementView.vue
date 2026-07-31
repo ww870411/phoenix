@@ -42,7 +42,7 @@
           </div>
           <div class="meta-card highlight">
             <span class="meta-label">需求主体提交状态</span>
-            <strong class="meta-value highlight-num">{{ submittedStationCount }} / {{ demandEntities.length }} 已提交</strong>
+            <strong class="meta-value highlight-num">{{ submittedSection1Count }} / {{ demandEntities.length }} 已提交</strong>
           </div>
         </div>
       </section>
@@ -61,8 +61,8 @@
           </button>
           <button 
             type="button" 
-            :class="['sidebar-tab-btn', { active: activeTab === 'station' }]" 
-            @click="activeTab = 'station'"
+            :class="['sidebar-tab-btn', { active: activeTab === 'section1' }]" 
+            @click="activeTab = 'section1'"
           >
             📍 需求主体基础台账
           </button>
@@ -206,7 +206,7 @@
           </div>
 
           <!-- Tab 2: 换热站/标段基础台账 -->
-          <div v-if="activeTab === 'station'" class="pane-content-wrapper">
+          <div v-if="activeTab === 'section1'" class="pane-content-wrapper">
 
 
             <!-- 基础档案信息表格 -->
@@ -520,16 +520,16 @@
                   <p class="sub block-sub">维护特定需求主体的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择需求主体过滤。</p>
                 </div>
                 <div class="section-actions baseline-actions-panel">
-                  <div class="station-filter-inline">
+                  <div class="section1-filter-inline">
                     <span>过滤需求主体：</span>
-                    <select v-model="selectedBaselineStationId" class="input inline-select">
-                      <option v-for="station in demandEntities" :key="station.section_1_id" :value="station.section_1_id">
-                        {{ station.section_1_name || station.section_1_id }}
+                    <select v-model="selectedBaselineSection1Id" class="input inline-select">
+                      <option v-for="section1 in demandEntities" :key="section1.section_1_id" :value="section1.section_1_id">
+                        {{ section1.section_1_name || section1.section_1_id }}
                       </option>
                     </select>
                   </div>
                   <button class="btn ghost" type="button" @click="addBaselinePreset">➕ 新增型号行</button>
-                  <button class="btn ghost btn-action-tool" type="button" @click="fillMissingPipeModelsForSelectedStation">补齐缺失规格</button>
+                  <button class="btn ghost btn-action-tool" type="button" @click="fillMissingPipeModelsForSelectedSection1">补齐缺失规格</button>
                   <button class="btn primary shadow-accent" type="button" :disabled="isSaving('baseline_presets')" @click="saveSection('baseline_presets')">
                     {{ isSaving('baseline_presets') ? '保存中…' : '💾 保存设计基准' }}
                   </button>
@@ -539,7 +539,7 @@
                 {{ sectionMessage('baseline_presets').text }}
               </p>
               <div class="summary-row baseline-summary">
-                <span class="summary-chip">当前站点：{{ selectedBaselineStationName }}</span>
+                <span class="summary-chip">当前站点：{{ selectedBaselineSection1Name }}</span>
                 <span class="summary-chip">当前显示：{{ filteredBaselinePresets.length }} 条</span>
                 <span class="summary-chip">全量预设：{{ baselinePresets.length }} 条</span>
               </div>
@@ -1305,7 +1305,7 @@ const baselinePresets = ref([])
 const submissionStatusPath = ref('')
 const latestSubmissions = ref([])
 const historySubmissions = ref([])
-const selectedBaselineStationId = ref('')
+const selectedBaselineSection1Id = ref('')
 
 function setGlobalMessage(type, text) {
   globalMessage.value = { type, text }
@@ -1380,7 +1380,7 @@ function defaultRemarkByPipeModel(pipeModelCode) {
 function normalizeAssignmentRows(rows, idKey, nameKey) {
   return cloneRows(rows).map((item) => ({
     ...item,
-    section_1_ids_text: listToText(item.section_1_ids || item.station_ids),
+    section_1_ids_text: listToText(item.section_1_ids),
     [idKey]: item[idKey] || '',
     [nameKey]: item[nameKey] || '',
   }))
@@ -1391,7 +1391,7 @@ function normalizeBaselineRows(rows) {
     ...item,
     pipe_model_id: normalizePipeModelCode(item.pipe_model_id),
     pipe_model_name: normalizePipeModelCode(item.pipe_model_name || item.pipe_model_id),
-    __row_key: `${item.section_1_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
+    __row_key: `${item.section_1_id || 'section1'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
     design_qty: Number(item.design_qty || 0),
     purchase_plan_qty: Number(item.purchase_plan_qty || 0),
     remark: item.remark || '',
@@ -1400,8 +1400,8 @@ function normalizeBaselineRows(rows) {
 
 function normalizeSubmissionRows(rows) {
   return cloneRows(rows).map((item) => ({
-    section_1_id: item.section_1_id || item.station_id || '',
-    section_1_name: item.section_1_name || item.station_name || '',
+    section_1_id: item.section_1_id || '',
+    section_1_name: item.section_1_name || '',
     data_submit_date: item.data_submit_date || '',
     submitted_at: item.submitted_at || '',
     submitted_by: item.submitted_by || '',
@@ -1414,7 +1414,7 @@ function normalizeSubmissionRows(rows) {
 function rebuildBaselineRowKeys() {
   baselinePresets.value = baselinePresets.value.map((item, index) => ({
     ...item,
-    __row_key: `${item.section_1_id || 'station'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
+    __row_key: `${item.section_1_id || 'section1'}::${normalizePipeModelCode(item.pipe_model_id) || 'model'}::${index}`,
   }))
 }
 
@@ -1437,16 +1437,16 @@ function syncPipeModelIdentity(row, source = 'id') {
   row.unit = String(row.unit || '米').trim() || '米'
 }
 
-function syncSelectedBaselineStation() {
-  const stationIds = demandEntities.value
+function syncSelectedBaselineSection1() {
+  const section1Ids = demandEntities.value
     .map((item) => String(item.section_1_id || '').trim())
     .filter(Boolean)
-  if (!stationIds.length) {
-    selectedBaselineStationId.value = ''
+  if (!section1Ids.length) {
+    selectedBaselineSection1Id.value = ''
     return
   }
-  if (!stationIds.includes(selectedBaselineStationId.value)) {
-    selectedBaselineStationId.value = stationIds[0]
+  if (!section1Ids.includes(selectedBaselineSection1Id.value)) {
+    selectedBaselineSection1Id.value = section1Ids[0]
   }
 }
 
@@ -1492,28 +1492,28 @@ function handleAutoPlanStartDateChange() {
   }
 }
 
-const selectedBaselineStationName = computed(() => {
-  const matched = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
-  return matched?.section_1_name || selectedBaselineStationId.value || '未选择'
+const selectedBaselineSection1Name = computed(() => {
+  const matched = demandEntities.value.find((item) => item.section_1_id === selectedBaselineSection1Id.value)
+  return matched?.section_1_name || selectedBaselineSection1Id.value || '未选择'
 })
 
 const filteredBaselinePresets = computed(() =>
-  baselinePresets.value.filter((item) => item.section_1_id === selectedBaselineStationId.value),
+  baselinePresets.value.filter((item) => item.section_1_id === selectedBaselineSection1Id.value),
 )
 
 const submissionStatusRows = computed(() => {
-  const latestByStationId = new Map(
+  const latestBySection1Id = new Map(
     latestSubmissions.value
       .filter((item) => item.section_1_id)
       .map((item) => [String(item.section_1_id), item]),
   )
-  return demandEntities.value.map((station) => {
-    const stationId = String(station.section_1_id || '')
-    const latest = latestByStationId.get(stationId) || {}
+  return demandEntities.value.map((section1) => {
+    const section1Id = String(section1.section_1_id || '')
+    const latest = latestBySection1Id.get(section1Id) || {}
     const dataSubmitDate = String(latest.data_submit_date || '')
     return {
-      section_1_id: stationId,
-      section_1_name: station.section_1_name || stationId,
+      section_1_id: section1Id,
+      section_1_name: section1.section_1_name || section1Id,
       data_submit_date: dataSubmitDate,
       submitted_at: latest.submitted_at || '',
       submitted_by: latest.submitted_by || '',
@@ -1522,8 +1522,8 @@ const submissionStatusRows = computed(() => {
   })
 })
 
-const submittedStationCount = computed(() => submissionStatusRows.value.filter((item) => item.is_submitted).length)
-const pendingStationCount = computed(() => submissionStatusRows.value.filter((item) => !item.is_submitted).length)
+const submittedSection1Count = computed(() => submissionStatusRows.value.filter((item) => item.is_submitted).length)
+const pendingSection1Count = computed(() => submissionStatusRows.value.filter((item) => !item.is_submitted).length)
 
 function buildSectionPayload(section) {
   if (section === 'show_date') {
@@ -1917,17 +1917,17 @@ function syncBaselinePipeModelName(row) {
 }
 
 function addBaselinePreset() {
-  const currentStation = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
+  const currentSection1 = demandEntities.value.find((item) => item.section_1_id === selectedBaselineSection1Id.value)
   const usedModelIds = new Set(
     baselinePresets.value
-      .filter((item) => item.section_1_id === selectedBaselineStationId.value)
+      .filter((item) => item.section_1_id === selectedBaselineSection1Id.value)
       .map((item) => item.pipe_model_id)
   )
   const unusedModel = pipeModels.value.find((model) => model.pipe_model_id && !usedModelIds.has(model.pipe_model_id)) || pipeModels.value[0] || null
 
   baselinePresets.value.push({
     __row_key: `new::${Date.now()}`,
-    section_1_id: selectedBaselineStationId.value || '',
+    section_1_id: selectedBaselineSection1Id.value || '',
     pipe_model_id: unusedModel?.pipe_model_id || '',
     design_qty: defaultQtyByPipeModel(unusedModel?.pipe_model_id),
     purchase_plan_qty: defaultQtyByPipeModel(unusedModel?.pipe_model_id),
@@ -1941,15 +1941,15 @@ function removeBaselinePreset(rowKey) {
   rebuildBaselineRowKeys()
 }
 
-function fillMissingPipeModelsForSelectedStation() {
-  const currentStation = demandEntities.value.find((item) => item.section_1_id === selectedBaselineStationId.value)
-  if (!currentStation) {
+function fillMissingPipeModelsForSelectedSection1() {
+  const currentSection1 = demandEntities.value.find((item) => item.section_1_id === selectedBaselineSection1Id.value)
+  if (!currentSection1) {
     setGlobalMessage('error', '请先选择一个有效需求主体。')
     return
   }
   const existingModelIds = new Set(
     baselinePresets.value
-      .filter((item) => item.section_1_id === selectedBaselineStationId.value)
+      .filter((item) => item.section_1_id === selectedBaselineSection1Id.value)
       .map((item) => item.pipe_model_id),
   )
   pipeModels.value.forEach((model) => {
@@ -1957,8 +1957,8 @@ function fillMissingPipeModelsForSelectedStation() {
       return
     }
     baselinePresets.value.push({
-      __row_key: `new::${currentStation.section_1_id}::${model.pipe_model_id}::${Date.now()}`,
-      section_1_id: currentStation.section_1_id,
+      __row_key: `new::${currentSection1.section_1_id}::${model.pipe_model_id}::${Date.now()}`,
+      section_1_id: currentSection1.section_1_id,
       pipe_model_id: model.pipe_model_id,
       design_qty: defaultQtyByPipeModel(model.pipe_model_id),
       purchase_plan_qty: defaultQtyByPipeModel(model.pipe_model_id),

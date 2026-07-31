@@ -1,3 +1,7 @@
+## 2026-07-31 保温管需求主体 section_1 命名
+
+保温管项目对外接口统一采用 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`；页面内部局部状态采用 `section1Id` 等 JavaScript 驼峰形式，不再读取或传递 `station*` 字段。
+
 ## 2026-07-31 数据看板支持任意访问用户查看全量大盘
 
 - 变更文件：

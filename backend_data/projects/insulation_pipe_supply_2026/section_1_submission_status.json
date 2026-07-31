@@ -1,8 +1,8 @@
 {
   "latest_submissions": [
     {
-      "station_id": "station_a",
-      "station_name": "换热站A",
+      "section_1_id": "section_1_a",
+      "section_1_name": "需求主体A",
       "data_submit_date": "2026-05-25",
       "plan_start_date": "2026-05-26",
       "show_date": "2026-05-26",

@@ -19,8 +19,8 @@
           <button
             type="button"
             class="btn primary submit-status-button"
-            :disabled="!selectedStationId || !canSubmitCurrentProject || submitStatusLoading"
-            @click="handleStationSubmitClick"
+            :disabled="!selectedSection1Id || !canSubmitCurrentProject || submitStatusLoading"
+            @click="handleSection1SubmitClick"
           >
             {{ submitStatusLoading ? '提交中...' : '提交本站填报状态' }}
           </button>
@@ -45,10 +45,10 @@
         <div class="filter-grid compact-filter-grid">
           <label class="field">
             <span>当前管理的需求主体</span>
-            <select v-model="selectedStationId" :disabled="optionsLoading || !stationOptions.length">
+            <select v-model="selectedSection1Id" :disabled="optionsLoading || !section1Options.length">
               <option value="" disabled>请选择要操作的需求主体</option>
-              <option v-for="station in stationOptions" :key="station.section_1_id" :value="station.section_1_id">
-                {{ station.section_1_name }}
+              <option v-for="section1 in section1Options" :key="section1.section_1_id" :value="section1.section_1_id">
+                {{ section1.section_1_name }}
               </option>
             </select>
           </label>
@@ -63,7 +63,7 @@
         <div class="meta-dashboard">
           <div class="meta-card">
             <span class="meta-label">授权范围</span>
-            <strong class="meta-value">{{ stationOptions.length }} 个主体</strong>
+            <strong class="meta-value">{{ section1Options.length }} 个主体</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">保温管型号</span>
@@ -85,7 +85,7 @@
       </section>
 
       <!-- 选项卡导航 (Responsive Tabs Header) -->
-      <div class="tube-tabs-header-wrap" v-if="selectedStationId">
+      <div class="tube-tabs-header-wrap" v-if="selectedSection1Id">
         <div class="tube-tabs-header">
           <button 
             type="button" 
@@ -119,7 +119,7 @@
       </div>
 
       <!-- Tab内容区域 -->
-      <div class="tube-tab-content-wrap" v-if="selectedStationId">
+      <div class="tube-tab-content-wrap" v-if="selectedSection1Id">
         
         <!-- Tab 1: 三日计划填报 -->
         <div v-if="activeTab === 'plan'" class="tab-pane">
@@ -132,7 +132,7 @@
               <button
                 type="button"
                 class="primary-button"
-                :disabled="planLoading || savePlanLoading || !selectedStationId || !canSubmitCurrentProject || planEditableDays <= 0"
+                :disabled="planLoading || savePlanLoading || !selectedSection1Id || !canSubmitCurrentProject || planEditableDays <= 0"
                 @click="savePlanMatrix"
               >
                 {{ savePlanLoading ? '提交中...' : '提交三日计划量' }}
@@ -144,7 +144,7 @@
               <span class="gateway-icon">🔒</span>
               <div class="gateway-desc">
                 <strong>首二日流程管控锁已激活</strong>
-                <span>由于当前{{ modeLabels.station }}前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
+                <span>由于当前{{ modeLabels.section_1 }}前日实际消耗尚未结清上报，为保证盈缺预测100%可靠，滚动第三日填报已被自动锁定。</span>
               </div>
               <button type="button" class="gateway-link-btn" @click="handleTabClick('usage')">
                 👉 一键去上报前日消耗
@@ -238,7 +238,7 @@
               <button
                 type="button"
                 class="primary-button"
-                :disabled="usageLoading || saveUsageLoading || !selectedStationId || !canSubmitCurrentProject"
+                :disabled="usageLoading || saveUsageLoading || !selectedSection1Id || !canSubmitCurrentProject"
                 @click="saveUsageSheet"
               >
                 {{ saveUsageLoading ? '提交中...' : '提交消耗与损耗数据' }}
@@ -316,14 +316,14 @@
           <section class="card elevated tab-card">
             <div class="panel-title-row">
               <div>
-                <h2>{{ modeLabels.station }}设计与采购基准量</h2>
-                <span class="panel-hint">展示当前{{ modeLabels.station }}的设计总量与全局计划采购总量，供日常对照。计量单位：米。</span>
+                <h2>{{ modeLabels.section_1 }}设计与采购基准量</h2>
+                <span class="panel-hint">展示当前{{ modeLabels.section_1 }}的设计总量与全局计划采购总量，供日常对照。计量单位：米。</span>
               </div>
             </div>
 
             <div v-if="baselineLoading" class="loading-text">正在加载基准量...</div>
             <div v-else-if="baselineError" class="error-box">{{ baselineError }}</div>
-            <div v-else-if="!baselineRows.length" class="empty-box">当前{{ modeLabels.station }}暂无基准量记录。</div>
+            <div v-else-if="!baselineRows.length" class="empty-box">当前{{ modeLabels.section_1 }}暂无基准量记录。</div>
             <div v-else class="table-wrap">
               <table class="data-table">
                 <thead>
@@ -357,7 +357,7 @@
               </div>
               <div class="toolbar-actions" style="display: flex; gap: 8px;">
                 <button type="button" class="btn ghost" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
-                <button type="button" class="primary-button" :disabled="pendingLoading || !selectedStationId" @click="applyPendingFilters">
+                <button type="button" class="primary-button" :disabled="pendingLoading || !selectedSection1Id" @click="applyPendingFilters">
                   {{ pendingLoading ? '查询中...' : '筛选记录' }}
                 </button>
                 <button v-if="pendingRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
@@ -531,8 +531,8 @@
       <section v-else class="card elevated select-hint-card">
         <div class="hint-content">
           <div class="hint-icon">📂</div>
-          <h3>请首先选择要操作的{{ modeLabels.station }}</h3>
-          <p>在上方“工作台全局筛选”下拉框中选择具体的{{ modeLabels.station }}后，系统将为您正式解锁三日滚动计划、使用量填报及到货到货确认等多标签管理模块。</p>
+          <h3>请首先选择要操作的{{ modeLabels.section_1 }}</h3>
+          <p>在上方“工作台全局筛选”下拉框中选择具体的{{ modeLabels.section_1 }}后，系统将为您正式解锁三日滚动计划、使用量填报及到货到货确认等多标签管理模块。</p>
         </div>
       </section>
 
@@ -897,7 +897,7 @@
           <div class="metric-row">
             <span class="metric-label">现场可用在库：</span>
             <span class="metric-val text-bold">
-              {{ strictPlanningFlowControl && !isUsageSubmitted ? '待结算' : `${activeSandboxRow.stationInventoryQty} 米` }}
+              {{ strictPlanningFlowControl && !isUsageSubmitted ? '待结算' : `${activeSandboxRow.section1InventoryQty} 米` }}
             </span>
           </div>
           <div class="metric-row">
@@ -944,7 +944,7 @@ import {
   getTubeDemandManagementUsageSheet,
   saveTubeDemandManagementPlanMatrix,
   saveTubeDemandManagementUsageSheet,
-  submitTubeDemandManagementStationStatus
+  submitTubeDemandManagementSection1Status
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -960,11 +960,11 @@ const {
 
 const optionsLoading = ref(false)
 const optionsError = ref('')
-const stationOptions = ref([])
+const section1Options = ref([])
 const pipeModelOptions = ref([])
 const currentGroup = ref('')
 
-const selectedStationId = ref('')
+const selectedSection1Id = ref('')
 const activeTab = ref('usage')
 const showExportModal = ref(false)
 const blockModalVisible = ref(false)
@@ -1062,7 +1062,7 @@ const exportAllPendingRows = computed(() => {
 
 // 智能 Excel 一键粘贴解析函数
 function handleClipboardPaste(event) {
-  if (!selectedStationId.value || activeTab.value !== 'plan') {
+  if (!selectedSection1Id.value || activeTab.value !== 'plan') {
     return
   }
   const clipboardData = event.clipboardData || window.clipboardData
@@ -1116,7 +1116,7 @@ function handleClipboardPaste(event) {
 }
 
 function handleUsageClipboardPaste(event) {
-  if (!selectedStationId.value || activeTab.value !== 'usage') {
+  if (!selectedSection1Id.value || activeTab.value !== 'usage') {
     return
   }
   const clipboardData = event.clipboardData || window.clipboardData
@@ -1354,7 +1354,7 @@ function normalizePlanRows(rows, dates) {
     return {
       pipeModelId: row.pipe_model_id || row.pipeModelId,
       pipeModelName: row.pipe_model_name || row.pipeModelName || row.model_name || '未命名型号',
-      stationInventoryQty: Number(row.station_inventory_qty ?? row.stationInventoryQty ?? 0),
+      section1InventoryQty: Number(row.section_1_inventory_qty ?? row.section1InventoryQty ?? 0),
       inboundPipelineQty: Number(row.inbound_pipeline_qty ?? row.inboundPipelineQty ?? 0),
       values: valueMap
     }
@@ -1474,7 +1474,7 @@ function getDeliveryStatusLabel(status, isTimeout = false) {
 
 function normalizeOptionsPayload(response) {
   return {
-    stationOptions: response.station_options || response.stations || [],
+    section1Options: response.section_1s || [],
     pipeModelOptions: response.pipe_model_options || response.pipe_models || [],
     currentGroup: response.current_group || response.user?.group || '',
     showDate: response.show_date || response.biz_date || '',
@@ -1492,14 +1492,14 @@ async function loadOptions() {
   try {
     const response = await getTubeDemandManagementOptions(PROJECT_KEY)
     const normalized = normalizeOptionsPayload(response)
-    stationOptions.value = normalized.stationOptions
+    section1Options.value = normalized.section1Options
     pipeModelOptions.value = normalized.pipeModelOptions
     currentGroup.value = normalized.currentGroup
     showDate.value = normalized.showDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
-    const stationIdSet = new Set(stationOptions.value.map((item) => String(item.section_1_id || '')))
-    if (!selectedStationId.value || !stationIdSet.has(selectedStationId.value)) {
-      selectedStationId.value = stationOptions.value[0]?.section_1_id || ''
+    const section1IdSet = new Set(section1Options.value.map((item) => String(item.section_1_id || '')))
+    if (!selectedSection1Id.value || !section1IdSet.has(selectedSection1Id.value)) {
+      selectedSection1Id.value = section1Options.value[0]?.section_1_id || ''
     }
     anchorDate.value = normalized.planStartDate || normalized.defaultAnchorDate || getTodayString()
     usageDate.value = normalized.usageCollectionDate || normalized.defaultUsageDate || getTodayString(-1)
@@ -1511,14 +1511,14 @@ async function loadOptions() {
 }
 
 async function loadBaseline() {
-  if (!selectedStationId.value) {
+  if (!selectedSection1Id.value) {
     baselineRows.value = []
     return
   }
   baselineLoading.value = true
   baselineError.value = ''
   try {
-    const response = await getTubeDemandManagementBaseline(PROJECT_KEY, selectedStationId.value)
+    const response = await getTubeDemandManagementBaseline(PROJECT_KEY, selectedSection1Id.value)
     baselineRows.value = normalizeBaselineRows(response.rows)
   } catch (error) {
     baselineError.value = error?.message || '加载基准量失败'
@@ -1529,7 +1529,7 @@ async function loadBaseline() {
 }
 
 async function loadPlanMatrix() {
-  if (!selectedStationId.value || !anchorDate.value) {
+  if (!selectedSection1Id.value || !anchorDate.value) {
     planDates.value = []
     planRows.value = []
     return
@@ -1537,7 +1537,7 @@ async function loadPlanMatrix() {
   planLoading.value = true
   planError.value = ''
   try {
-    const response = await getTubeDemandManagementPlanMatrix(PROJECT_KEY, selectedStationId.value, anchorDate.value)
+    const response = await getTubeDemandManagementPlanMatrix(PROJECT_KEY, selectedSection1Id.value, anchorDate.value)
     const dates = response.plan_dates || []
     planDates.value = dates
     planRows.value = normalizePlanRows(response.rows, dates)
@@ -1554,14 +1554,14 @@ async function loadPlanMatrix() {
 }
 
 async function loadUsageSheet() {
-  if (!selectedStationId.value || !usageDate.value) {
+  if (!selectedSection1Id.value || !usageDate.value) {
     usageRows.value = []
     return
   }
   usageLoading.value = true
   usageError.value = ''
   try {
-    const response = await getTubeDemandManagementUsageSheet(PROJECT_KEY, selectedStationId.value, usageDate.value)
+    const response = await getTubeDemandManagementUsageSheet(PROJECT_KEY, selectedSection1Id.value, usageDate.value)
     usageRows.value = normalizeUsageRows(response.rows)
     backupUsageRows()
   } catch (error) {
@@ -1573,12 +1573,12 @@ async function loadUsageSheet() {
 }
 
 async function loadAllPendingLogistics() {
-  if (!selectedStationId.value) {
+  if (!selectedSection1Id.value) {
     allPendingRows.value = []
     return
   }
   try {
-    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value, {})
+    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedSection1Id.value, {})
     allPendingRows.value = normalizePendingRows(response.rows)
   } catch (error) {
     console.error('Failed to load all pending logistics for export:', error)
@@ -1586,7 +1586,7 @@ async function loadAllPendingLogistics() {
 }
 
 async function loadLogisticsRecords() {
-  if (!selectedStationId.value) {
+  if (!selectedSection1Id.value) {
     pendingRows.value = []
     pendingError.value = ''
     pendingLoading.value = false
@@ -1595,7 +1595,7 @@ async function loadLogisticsRecords() {
   pendingLoading.value = true
   pendingError.value = ''
   try {
-    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedStationId.value, {
+    const response = await getTubeDemandManagementLogisticsRecords(PROJECT_KEY, selectedSection1Id.value, {
       orderNo: pendingFilters.orderNo || '',
       shipmentNo: pendingFilters.shipmentNo || '',
       pipeModelId: pendingFilters.pipeModelId || '',
@@ -1755,7 +1755,7 @@ async function handleDiffApprove(row, approved) {
   }
 }
 
-async function reloadStationData() {
+async function reloadSection1Data() {
   if (
     receiptRemarkModalVisible.value ||
     deliveryDetailModalVisible.value ||
@@ -1784,12 +1784,12 @@ async function refreshRealtimeConfig() {
     return
   }
   await loadOptions()
-  await reloadStationData()
+  await reloadSection1Data()
 }
 
 
 async function savePlanMatrix() {
-  if (!selectedStationId.value || !planDates.value.length || planEditableDays.value <= 0) {
+  if (!selectedSection1Id.value || !planDates.value.length || planEditableDays.value <= 0) {
     return
   }
   savePlanLoading.value = true
@@ -1811,7 +1811,7 @@ async function savePlanMatrix() {
       })
     })
     await saveTubeDemandManagementPlanMatrix(PROJECT_KEY, {
-      section_1_id: selectedStationId.value,
+      section_1_id: selectedSection1Id.value,
       anchor_date: anchorDate.value,
       records
     })
@@ -1825,7 +1825,7 @@ async function savePlanMatrix() {
 }
 
 async function saveUsageSheet() {
-  if (!selectedStationId.value || !usageDate.value) {
+  if (!selectedSection1Id.value || !usageDate.value) {
     return
   }
   saveUsageLoading.value = true
@@ -1838,7 +1838,7 @@ async function saveUsageSheet() {
       remark: row.remarks || ''
     }))
     await saveTubeDemandManagementUsageSheet(PROJECT_KEY, {
-      section_1_id: selectedStationId.value,
+      section_1_id: selectedSection1Id.value,
       usage_date: usageDate.value,
       records
     })
@@ -1858,19 +1858,19 @@ async function saveUsageSheet() {
   }
 }
 
-async function handleStationSubmitClick() {
-  if (!selectedStationId.value || !canSubmitCurrentProject.value) {
+async function handleSection1SubmitClick() {
+  if (!selectedSection1Id.value || !canSubmitCurrentProject.value) {
     return
   }
   submitStatusLoading.value = true
   clearActionMessage()
   try {
-    const response = await submitTubeDemandManagementStationStatus(PROJECT_KEY, {
-      section_1_id: selectedStationId.value,
+    const response = await submitTubeDemandManagementSection1Status(PROJECT_KEY, {
+      section_1_id: selectedSection1Id.value,
       remark: ''
     })
     const submittedDate = response?.submission?.data_submit_date || anchorDate.value || '未设置'
-    setActionMessage('success', `需求主体 ${selectedStationId.value} 已标记为提交完成，提交日期为 ${submittedDate}.`)
+    setActionMessage('success', `需求主体 ${selectedSection1Id.value} 已标记为提交完成，提交日期为 ${submittedDate}.`)
   } catch (error) {
     setActionMessage('error', getErrorMessage(error, '提交需求主体填报状态失败'))
   } finally {
@@ -1878,12 +1878,12 @@ async function handleStationSubmitClick() {
   }
 }
 
-watch(selectedStationId, () => {
-  reloadStationData()
+watch(selectedSection1Id, () => {
+  reloadSection1Data()
 })
 
 watch(usageDate, (value, oldValue) => {
-  if (!selectedStationId.value || !value || value === oldValue) {
+  if (!selectedSection1Id.value || !value || value === oldValue) {
     return
   }
   loadUsageSheet()
@@ -1951,7 +1951,7 @@ function getPrevTwoDaysPlanSum(row) {
 
 // 预测尾部一日开工时的可用库存量 = 现场在库 + 在途总量 - 前两日计划需求之和
 function getTailDayPrediction(row) {
-  const stock = Number(row.stationInventoryQty || 0)
+  const stock = Number(row.section1InventoryQty || 0)
   const transit = Number(row.inboundPipelineQty || 0)
   const prevDemand = getPrevTwoDaysPlanSum(row)
   return stock + transit - prevDemand
