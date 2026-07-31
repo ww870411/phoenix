@@ -1,3 +1,10 @@
+## 2026-07-31 后端发货台账 API 稳定支撑前端静默更新
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (保持平稳高效 API 支撑)
+- 本轮处理与实现原理：
+  - **平稳供给**：支撑前端后台无缝更新，减少不必要的并发请求击穿。
+
 ## 2026-07-31 后端批量发货接口 `resolve_supply_entity_allowed_section_ids` 导入补齐
 
 - 变更文件：

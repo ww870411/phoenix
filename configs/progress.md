@@ -1,3 +1,14 @@
+## 2026-07-31 [彻底根治【物流发货记录】标签页频繁刷新与DOM闪烁问题]
+- **物理根因定位**：
+  1. **数据拉取与 DOM 销毁绑定 (破坏性 Loading)**：在 [SupplyManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue#L378) 中，原本使用 `v-if="deliveriesLoading"` 逻辑。只要发起数据加载，原本的表格就会被物理卸载销毁，替换为“正在加载发货记录...”，接口返回后重新挂载 DOM，在眼皮底下造成极其剧烈的整表拔掉抖动错觉；
+  2. **`useTubeRealtimeRefresh` 窗口 Focus 焦点频发**：挂载了全局 Focus/VisibilityChange 监听，只要用户鼠标在页面点击、切标签页或失焦重新激活窗口，都会静默触发 `refreshRealtimeConfig()` -> `loadDeliveries()`；
+  3. **`watch(selectedSupplyEntityId)` 选项重载连发**：配置重载触发选框变动，导致瞬间并发发起了两次数据拉取。
+- **物理修复动作**：
+  - **优雅静默更新**：改为 `deliveriesLoading && !deliveryRows.length` 判定，已经渲染的表格在后台静默更新时保持展示，彻底解决 DOM 拔掉重绘闪烁；
+  - **移除焦点自动被动重刷新**：移除了 `useTubeRealtimeRefresh` 监听，仅在显式点击按钮或提交表单时拉取更新；
+  - **消除了 `watch` 选项初始化重复连发**。
+- **验证结果**：前端 Vite 构建 100% 成功，界面恢复静止优雅。
+
 ## 2026-07-31 [【批量发货】与【单条发货】500 崩溃彻底根治 + Vue Router 别名告警清理]
 - **问题排查**：
   1. **批量发货 `NameError`**：调用 `/supply-management/deliveries/batch` 接口时，后端 [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L33) 的顶部 import 列表中遗漏导入了 `resolve_supply_entity_allowed_section_ids` 函数，导致内部防越权校验时触发 `NameError: name 'resolve_supply_entity_allowed_section_ids' is not defined` 崩溃；另外 `_get_client_ip` 未对空 `request` 做防空保护。

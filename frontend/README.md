@@ -1,3 +1,10 @@
+## 2026-07-31 供给管理页面【物流发货记录】不断刷新与闪烁优化
+
+- 变更文件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` (优化发货台账模板 `v-if` 条件，移除 `useTubeRealtimeRefresh` Focus 事件拦截)
+- 本轮处理与实现原理：
+  - **优雅静默加载**：数据后侧更新时不再卸载/重绘已生成的 DOM 表格，消除了失焦与重新切屏引起的自动抖动重载。
+
 ## 2026-07-31 Vue Router 控制台路由别名匹配 Warning 净化
 
 - 变更文件：

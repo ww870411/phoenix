@@ -375,8 +375,8 @@
               </div>
             </div>
 
-            <div v-if="deliveriesLoading" class="loading-text">正在加载发货记录...</div>
-            <div v-else-if="deliveriesError" class="error-box">{{ deliveriesError }}</div>
+            <div v-if="deliveriesLoading && !deliveryRows.length" class="loading-text">正在加载发货记录...</div>
+            <div v-else-if="deliveriesError && !deliveryRows.length" class="error-box">{{ deliveriesError }}</div>
             <div v-else-if="!deliveryRows.length" class="empty-box">当前没有发货记录。</div>
             <div v-else class="table-wrap">
               <table class="data-table delivery-record-table">
@@ -1469,7 +1469,7 @@ watch(selectedSupplyEntityId, (value) => {
     }
     loadDeliveries()
   }
-}, { immediate: true })
+})
 
 function formatElapsedLabel(shippedAt) {
   if (!shippedAt) return ''
@@ -1498,7 +1498,7 @@ onMounted(async () => {
   await refreshRealtimeConfig()
 })
 
-useTubeRealtimeRefresh(refreshRealtimeConfig)
+
 
 onBeforeUnmount(() => {
   if (nowTimer) {
