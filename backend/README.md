@@ -6179,6 +6179,12 @@
   - `username` 缺失导致普通角色“恒为空白”的说法过度绝对；当前配置确实未普遍维护 `username`，但解析函数还会匹配 `manager_id / manager_name / entity_id / entity_name`，因此这是条件性风险，不是无条件必现故障
   - JSON 文件并发写回无锁这一条从工程稳健性角度有依据，但更接近并发一致性隐患，不宜直接等同为当前高频已复现业务故障
 
+## 2026-07-31 新服务器镜像构建耗时观测
+
+- `lo1_new_server.ps1` 为构建和 Docker Hub 推送增加阶段计时与逐层构建日志。
+- 本次后端 ARM64 镜像构建耗时 6.0 秒；`pip install` 依赖层命中 Docker 缓存，未构成当前瓶颈。
+- 本轮未修改后端镜像、接口或运行逻辑；服务器侧容器拉取和启动未执行。
+
 ## 2026-07-31 保温管全局看板库存接口契约
 
 - `GET /api/v1/projects/insulation_pipe_supply_2026/supply-management/demand-summary` 的汇总行对外使用 `section_1_inventory_qty` 表示现场可用库存。
