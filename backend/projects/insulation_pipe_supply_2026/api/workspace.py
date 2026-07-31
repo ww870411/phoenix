@@ -11,12 +11,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
-def _get_client_ip(request: Request) -> str:
-    # 优先从 X-Forwarded-For 获取（代理情况）
-    forwarded = request.headers.get("x-forwarded-for")
+def _get_client_ip(request: Optional[Request]) -> str:
+    if not request:
+        return "127.0.0.1"
+    forwarded = request.headers.get("x-forwarded-for") if hasattr(request, "headers") and request.headers else None
     if forwarded:
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return request.client.host if hasattr(request, "client") and request.client else "unknown"
 
 from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
@@ -33,6 +34,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     load_section_1_submission_status,
     resolve_accessible_supply_entity_ids,
     resolve_accessible_section_1_ids,
+    resolve_supply_entity_allowed_section_ids,
     save_section_1_submission_status,
     save_tube_config,
     simple_decrypt,
@@ -727,6 +729,7 @@ def _create_supply_delivery_entry(
     ship_contact_phone: str,
     ship_remark: str,
     vehicle_plate_no: str = "",
+    requested_shipment_no: str = "",
 ) -> Dict[str, Any]:
     allowed_section_ids = resolve_supply_entity_allowed_section_ids(config_payload, supply_entity_id)
     if allowed_section_ids and section_1_id not in allowed_section_ids:

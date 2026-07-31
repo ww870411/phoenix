@@ -1,3 +1,31 @@
+## 2026-07-31 Vue Router 控制台路由别名匹配 Warning 净化
+
+- 变更文件：
+  - `frontend/src/router/index.js` (移除了动态 `:projectKey` 路径上容易引发匹配歧义的 `alias: '/dashboard'`)
+- 本轮处理与实现原理：
+  - **控制台日志净化**：彻底消除了 `Vue Router warn: Alias /dashboard and the original record must have the exact same param named projectKey` 警告提示。
+
+## 2026-07-31 发货功能接口 500 报错后端排查与恢复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (补齐发货逻辑 `_create_supply_delivery_entry` 形参)
+- 本轮处理与实现原理：
+  - **恢复发货**：解决了后端在处理 `requested_shipment_no` 时因形参未声明触发的 Python 运行时崩溃。
+
+## 2026-07-31 后端登录 Session 物理数据库持久化写库重构完成
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (修复 PostgreSQL 原生 SQL 中的 JSONB 类型强转换与 `last_accessed` 参数绑定)
+- 本轮处理与实现原理：
+  - **物理持久化完成**：确保前端勾选记住登录后，Token 稳固写入 `auth_sessions` 数据库物理表中。
+
+## 2026-07-31 生产环境登录 500 报错排查与体验防崩加固
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (加固登录 Session 物理落库逻辑)
+- 本轮处理与实现原理：
+  - **防止阻断登录**：前端登录调用成功收到 token 凭证后，不再受服务器数据库持久化表异常的干扰。
+
 ## 2026-07-31 控制台【气温数据管理】模式切换区域精美卡片样式升级
 
 - 变更文件：

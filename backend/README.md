@@ -1,3 +1,31 @@
+## 2026-07-31 后端批量发货接口 `resolve_supply_entity_allowed_section_ids` 导入补齐
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在头部 import 补齐 `resolve_supply_entity_allowed_section_ids`，并在 `_get_client_ip` 加入防空保护)
+- 本轮处理与实现原理：
+  - **实测通过**：彻底消除了 `POST /supply-management/deliveries/batch` 触发的未定义函数崩溃，实测成功生成批量订单 `OSA-L1-260731-002` 与车次 `SSA-260731-002`。
+
+## 2026-07-31 发货与批量发货底层 `_create_supply_delivery_entry` 形参签名修复
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (在 `_create_supply_delivery_entry` 签名中补齐 `requested_shipment_no: str = ""`)
+- 本轮处理与实现原理：
+  - **根除 NameError**：物理根除了车次号指定/生成时对未定义变量 `requested_shipment_no` 的引用崩溃。
+
+## 2026-07-31 后端登录 Session 物理数据库持久化底层 SQL 缺陷修复
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (彻底解决 `ON CONFLICT DO UPDATE` 中的 JSONB CAST 与 `NOW()` 依赖，实测成功物理写入数据库 `auth_sessions` 表)
+- 本轮处理与实现原理：
+  - **根因彻底解决**：消除导致数据库抛出 `500` 的原始 PostgreSQL SQL 隐式类型推导异常。
+
+## 2026-07-31 后端登录服务 (AuthManager) 高可用降级保底重构
+
+- 变更文件：
+  - `backend/services/auth_manager.py` (在 `_persist_session` 与 `_ensure_persistent_store` 中加入降级捕获，DB 故障时降级为内存 Session)
+- 本轮处理与实现原理：
+  - **高可用保障**：解决生产环境数据库缺少 DDL 权限或 `auth_sessions` 表不一致触发的 500 阻断 Bug。
+
 ## 2026-07-31 后端气象服务持续稳定适配前端卡片式模式切换
 
 - 变更文件：

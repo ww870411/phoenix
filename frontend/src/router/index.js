@@ -49,7 +49,6 @@ const routes = [
   {
     path: '/projects/:projectKey/pages/:pageKey/dashboard',
     component: () => import('../projects/daily_report_25_26/pages/DashBoard.vue'),
-    alias: '/dashboard'
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets/:sheetKey',

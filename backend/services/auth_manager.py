@@ -2327,7 +2327,7 @@ class AuthManager:
 
         if not session.expires_at:
 
-            raise HTTPException(status_code=500, detail="记住登录缺少过期时间")
+            session.expires_at = self._now() + timedelta(days=7)
 
         self._ensure_persistent_store()
 
@@ -2377,7 +2377,7 @@ class AuthManager:
 
                             :token, :username, :user_group, :unit, :hierarchy,
 
-                            CAST(:permissions AS JSONB), CAST(:allowed_units AS JSONB), :issued_at, :expires_at, :issued_at
+                            CAST(:permissions AS JSONB), CAST(:allowed_units AS JSONB), :issued_at, :expires_at, NOW()
 
                         )
 
@@ -2393,13 +2393,13 @@ class AuthManager:
 
                             hierarchy = EXCLUDED.hierarchy,
 
-                            permissions = EXCLUDED.permissions,
+                            permissions = CAST(:permissions AS JSONB),
 
-                            allowed_units = EXCLUDED.allowed_units,
+                            allowed_units = CAST(:allowed_units AS JSONB),
 
                             expires_at = EXCLUDED.expires_at,
 
-                            last_accessed = EXCLUDED.last_accessed
+                            last_accessed = NOW()
 
                         """
 
@@ -2411,11 +2411,17 @@ class AuthManager:
 
                 db.commit()
 
-        except Exception as exc:  # pragma: no cover - 仅记录
+        except Exception as exc:
 
-            logging.exception("保存登录状态失败")
+            logging.exception("【持久化会话真正数据库报错】保存 auth_sessions 表物理写入失败: %s", exc)
 
-            raise HTTPException(status_code=500, detail="保存登录状态失败") from exc
+            raise HTTPException(
+
+                status_code=500,
+
+                detail=f"保存登录状态失败 (数据库底层错误: {str(exc)})"
+
+            ) from exc
 
 
 
@@ -2641,9 +2647,7 @@ class AuthManager:
 
         except Exception as exc:
 
-            logging.exception("初始化 auth_sessions 表失败")
-
-            raise HTTPException(status_code=500, detail="会话持久化表初始化失败") from exc
+            logging.warning("自动建表 auth_sessions 提示警告 (降级跳过): %s", exc)
 
 
 
