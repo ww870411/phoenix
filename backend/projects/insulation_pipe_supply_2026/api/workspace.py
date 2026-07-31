@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
 from pydantic import BaseModel, Field
 
 def _get_client_ip(request: Optional[Request]) -> str:
@@ -2775,6 +2775,55 @@ def delete_gis_marker(
         raise HTTPException(status_code=400, detail=f"数据库删除失败: {str(e)}")
     finally:
         db_session.close()
+
+
+# ==================== 在线用户心跳与 Presence 模块 ====================
+
+@public_router.post("/presence/heartbeat", summary="用户静默心跳上报")
+def handle_presence_heartbeat(
+    payload: Dict[str, Any] = Body(default={}),
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    from backend.projects.insulation_pipe_supply_2026.services.presence_service import record_user_heartbeat
+    is_valid_session = session and hasattr(session, "username") and isinstance(session.username, str)
+    username = session.username if is_valid_session else payload.get("username", "guest")
+    display_name = session.unit if is_valid_session else payload.get("display_name", "")
+    unit = session.unit if is_valid_session else payload.get("unit", "")
+    group = session.group if is_valid_session else payload.get("group", "")
+    current_page = payload.get("current_page", "")
+
+    return record_user_heartbeat(
+        username=username,
+        display_name=display_name,
+        unit=unit,
+        group=group,
+        current_page=current_page,
+    )
+
+
+@public_router.get("/presence/online-users", summary="获取当前在线用户数量与列表")
+def get_online_users_presence(
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    from backend.projects.insulation_pipe_supply_2026.services.presence_service import get_online_users_list
+    users = get_online_users_list()
+    return {
+        "ok": True,
+        "online_count": len(users),
+        "users": users,
+    }
+
+
+@public_router.post("/presence/logout", summary="主动显式标记下线")
+def handle_presence_logout(
+    payload: Dict[str, Any] = Body(default={}),
+    session: Optional[AuthSession] = Depends(get_current_session_optional)
+):
+    from backend.projects.insulation_pipe_supply_2026.services.presence_service import record_user_logout
+    is_valid_session = session and hasattr(session, "username") and isinstance(session.username, str)
+    username = session.username if is_valid_session else payload.get("username", "")
+    record_user_logout(username)
+    return {"ok": True}
 
 
 

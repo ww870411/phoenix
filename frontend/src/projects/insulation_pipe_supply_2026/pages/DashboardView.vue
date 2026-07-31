@@ -201,7 +201,7 @@
             <h3>🏢 全链路健康评估与精细化多维运营大盘</h3>
             <span class="pivot-badge">大连洁净能源集团数字化控制中心</span>
           </div>
-          <span class="pivot-badge success">运营状况：极佳 🟢</span>
+          <span class="pivot-badge" :class="operationStatus.badgeClass">{{ operationStatus.label }}</span>
         </div>
 
         <div class="workbench-grid-layout">
@@ -1092,6 +1092,45 @@ const kpi = computed(() => {
     netGap,
     hardGap
   }
+})
+
+// 运营状态保持正向表达：未开工、样本不足或轻微波动均展示为“正常”；
+// 只有明确的供料、计划或履约风险才提示“需要关注”。
+const operationStatus = computed(() => {
+  const normal = { label: '运营状况：正常 🟢', badgeClass: 'operation-normal' }
+
+  if (summaryDataState.value !== 'ready') {
+    return normal
+  }
+
+  const hasFuturePlan = kpi.value.plan > 0
+  const completedDeliveryCount = metricSnapshot.value.completedDeliveries.length
+  const hasEnoughDeliverySample = completedDeliveryCount >= 3
+  const needsAttention =
+    (hasFuturePlan && (
+      kpi.value.hardGap > 0 ||
+      realSSR.value < 80 ||
+      realPCR.value < 80
+    )) ||
+    (hasEnoughDeliverySample && realOTD.value < 80)
+
+  if (needsAttention) {
+    return { label: '运营状况：需要关注 🟡', badgeClass: 'operation-attention' }
+  }
+
+  const isExcellent =
+    hasFuturePlan &&
+    kpi.value.hardGap <= 0 &&
+    kpi.value.netGap <= 0 &&
+    realPCR.value >= 95 &&
+    realSSR.value >= 90 &&
+    (!hasEnoughDeliverySample || realOTD.value >= 90)
+
+  if (isExcellent) {
+    return { label: '运营状况：极佳 🟢', badgeClass: 'operation-excellent' }
+  }
+
+  return normal
 })
 
 // 2. 透视（Pivot）与排序、全局条件过滤
@@ -2318,6 +2357,21 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   border-radius: 12px;
   font-weight: 500;
+}
+
+.operation-excellent {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.operation-normal {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.operation-attention {
+  background: #fef3c7;
+  color: #a16207;
 }
 
 /* Tab 标签化工作台按钮 */

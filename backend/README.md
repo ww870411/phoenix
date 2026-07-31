@@ -2,6 +2,42 @@
 
 保温管需求主体主键、名称、选项集合和库存汇总统一为 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`。供给、需求、库管和看板接口不再输出 `station` / `stations` / `station_inventory_qty`。
 
+## 2026-07-31 后端 Presence 完美支撑移动端置顶与全屏蒙层展示
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/presence_service.py`
+- 本轮处理与实现原理：
+  - **移动支撑**：数据流稳定配合移动端 Modal 卡片渲染。
+
+## 2026-07-31 Presence 服务响应支撑前端“用户名、用户组、当前位置”精简呈现
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/presence_service.py`
+- 本轮处理与实现原理：
+  - **字段匹配**：输出包含 `username`、`group` 和 `current_page` 的标准 JSON。
+
+## 2026-07-31 后端 `workspace.py` 修复并注册 `/presence/heartbeat` 路由
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (引入 `Body`，注册路由并加入 Session 容错)
+- 本轮处理与实现原理：
+  - **接口畅通**：彻底消除前端 404 隐患，心跳上报与在线人员列表实时查询正常输出。
+
+## 2026-07-31 Presence 心跳完整保证包含当前登录者
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/presence_service.py`
+- 本轮处理与实现原理：
+  - **包含自己**：心跳上报记录即时存入，返回包含当前用户的全量在线列表。
+
+## 2026-07-31 后端增加在线用户 Presence 心跳与超时清理服务
+
+- 变更文件：
+  - `backend/projects/insulation_pipe_supply_2026/services/presence_service.py` (内存在线用户哈希表与超时清理)
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (新增 `/presence/heartbeat`、`/presence/online-users` 和 `/presence/logout` 路由)
+- 本轮处理与实现原理：
+  - **高效稳定**：采用线程安全字典与 65s 超时清理，支持上报及查询当前全平台活跃在线用户。
+
 ## 2026-07-31 后端 `get_supply_management_demand_summary` 移除了标段权限切片过滤
 
 - 变更文件：
@@ -6145,7 +6181,8 @@
 
 ## 2026-07-31 保温管全局看板库存接口契约
 
-- `GET /api/v1/projects/insulation_pipe_supply_2026/supply-management/demand-summary` 的汇总行对外使用 `station_inventory_qty` 表示现场可用库存。
+- `GET /api/v1/projects/insulation_pipe_supply_2026/supply-management/demand-summary` 的汇总行对外使用 `section_1_inventory_qty` 表示现场可用库存。
 - `totalInv` 由同一字段聚合，避免接口明细与指标总量使用不同命名导致前端读到空值并显示 0。
 - 该字段的计算口径保持为：已确认到货量 − 累计实际使用量 − 累计损耗量。
+- 前端运营状态分级仅消费该汇总接口既有的指标与明细字段，未新增或变更后端接口。
 - 结论：该审计文档对后端的价值在于暴露了若干真实缺口，但严重度和适用范围需要按当前代码重新评级。

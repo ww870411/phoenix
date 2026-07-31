@@ -1,3 +1,40 @@
+## 2026-07-31 [手机端在线人员弹窗适配与 `overflow: visible` 修复]
+- **物理原因诊断**：
+  - 手机端 CSS 媒体查询中 `.app-header__inner` 原先设置了 `overflow: hidden`，导致绝位定位的下拉弹窗向下溢出部分被物理裁剪掉；
+  - 手机屏幕宽度较窄，原绝对定位易产生右侧溢出越界。
+- **物理修复动作**：
+  - 在 [AppHeader.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue#L564) 中把移动端 `overflow: hidden` 修正为 `overflow: visible`；
+  - 在手机屏幕上升级为 `position: fixed` 的 Glassmorphism 全屏置顶遮罩卡片 (`.presence-backdrop` + 屏幕中央弹窗)，触控极其舒适。
+- **验证结果**：Vite 生产构建 100% 物理通过。
+
+## 2026-07-31 [在线人员列表展示字段精简 — 仅保留“用户名、用户组、当前位置”]
+- **用户指令贯彻**：极简呈现，删去单位标签，在线列表项仅包含：
+  1. **用户名** (`username`) 
+  2. **用户组** (`group` 格式化标签)
+  3. **当前位置** (📍 `current_page` 页面名)
+- **验证结果**：前端 Vite 构建 100% 成功。
+
+## 2026-07-31 [在线用户 Presence 路由在 `workspace.py` 接入死穴排除]
+- **物理根因定位**：
+  - 后端 [workspace.py:L2780](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L2780) 中的 `/presence/heartbeat` 和 `/presence/online-users` 路由先前未成功注册进 router，导致前端请求报 `404 Not Found` 并显示“当前无活跃人员”。
+- **物理修复动作**：
+  - 在 `workspace.py` 导入 `Body` 并完整补齐心跳与在线列表 3 个路由，加上 `is_valid_session` 降级容错；
+  - 物理终端单元测试返回 `{'ok': True, 'online_count': 1}`，成功解决 404 及列表为空问题。
+- **验证结果**：Python 终端接口调测与 Vite 生产打包 100% 物理通过。
+
+## 2026-07-31 [在线用户列表添加“我自己”强置顶与专属高亮标识]
+- **用户体验优化**：
+  - 在 [AppHeader.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue#L38) 的在线成员弹窗中，自动识别并强行置顶当前登录账号（Self-First Sorting）；
+  - 为“我自己”添加发光翡翠绿 Avatar 与 `我` 专属 Tag 徽章。
+- **验证结果**：前端 Vite 编译 100% 成功。
+
+## 2026-07-31 [在线用户 Presence 心跳与全局导航栏发光胶囊功能落地]
+- **需求方案对齐**：按照用户选择的“方案 A”，在全局通用导航栏 (`AppHeader`) 右上角植入“在线用户发光胶囊”与“Glassmorphic 弹出卡片”，全平台跨所有子项目通用。
+- **物理实现细节**：
+  1. **后端服务 (`presence_service.py` & `workspace.py`)**：新增线程安全内存在线用户哈希表与 30s 心跳接口 `POST /presence/heartbeat`、`GET /presence/online-users` 和离线接口 `POST /presence/logout`；
+  2. **前端通用组件 (`AppHeader.vue`)**：实现 30 秒静默心跳上报、`🟢 在线 X 人` 绿点脉冲胶囊按钮、切屏 `visibilitychange` 优化、下线 `sendBeacon`，以及点击展示包含用户名、单位、当前所在页面及更新时间的 Glassmorphism 悬浮面板。
+- **验证结果**：Python 单元测试与 Vite 编译 100% 物理成功。
+
 ## 2026-07-31 [数据看板解除标段数据隔离约束 — 全量用户开放全貌大盘]
 - **用户指令贯彻**：数据看板为全局公开大盘展示，不受任何账号/标段隔离约束。只要有权限访问数据看板，均可查看全量无死角的数据看板全貌大盘。
 - **物理修改点**：
@@ -964,6 +1001,12 @@
 - 需求主体接口字段统一为 `section_1_id`、`section_1_name`、`section_1s` 与 `section_1_inventory_qty`。
 - 看板、需求、供给、库管和历史查询同步改用统一字段，消除 `station` 字段错配。
 - 验证：前端构建通过；运行中后端返回库存与总库存均为 `10.0`。
+
+# 2026-07-31 保温管看板运营状态动态分级
+
+- 将“运营状况”从固定“极佳”改为实时三档：极佳、正常、需要关注。
+- 极佳要求存在未来三日计划、无硬缺口和净缺口、PCR 不低于 95%、SSR 不低于 90%，且三单以上履约样本时 OTD 不低于 90%。
+- 未开工、样本不足或轻微波动统一展示“正常”；仅在存在硬缺口、计划提报或安全供应度低于 80%、或三单以上 OTD 低于 80% 时展示“需要关注”。
 
 # 2026-07-31 保温管全局看板库存字段契约修复
 

@@ -2,6 +2,41 @@
 
 保温管项目对外接口统一采用 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`；页面内部局部状态采用 `section1Id` 等 JavaScript 驼峰形式，不再读取或传递 `station*` 字段。
 
+## 2026-07-31 手机端 AppHeader 在线人员置顶遮罩卡片适配
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` (增加 `.presence-backdrop` 移动端蒙层，定位升级为 `position: fixed`)
+- 本轮处理与实现原理：
+  - **移动端好用**：彻底解决手机屏元素被裁剪问题，单手触控流畅顺滑。
+
+## 2026-07-31 在线人员面板精简为“用户名、用户组、当前位置”
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 本轮处理与实现原理：
+  - **精简美观**：纯粹保留三项核心身份与位置字段，提升卡片可读性。
+
+## 2026-07-31 在线人员面板排除 404 恢复心跳通信
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 本轮处理与实现原理：
+  - **通畅联动**：与后端 `/presence/heartbeat` 和 `/presence/online-users` 成功连通。
+
+## 2026-07-31 在线人员面板当前登录用户置顶与高亮
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` (在线列表中添加当前用户 `is-me` 样式与 `我` 徽章)
+- 本轮处理与实现原理：
+  - **自我感知**：方便当前操作人员第一眼看到自己的在线状态与所在页面。
+
+## 2026-07-31 全局 AppHeader 集成在线用户发光胶囊与悬浮列表
+
+- 变更文件：
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue` (集成 30s 自动心跳、在线人数绿点脉冲胶囊与 Glassmorphic 在线成员弹窗)
+- 本轮处理与实现原理：
+  - **全局通用**：全平台任意页面自动上报所在页面并展示在线人数。
+
 ## 2026-07-31 数据看板支持任意访问用户查看全量大盘
 
 - 变更文件：
@@ -7534,8 +7569,9 @@ docker compose up -d --build
   - 供给页 watcher 死循环、库管页在途时长无限累加等表述存在夸大或已过时情况
 - 因此该审计文档可作为前端问题线索，但不能不经复核直接当作现状结论。
 
-## 2026-07-31 保温管全局看板库存展示
+## 2026-07-31 保温管全局看板库存与运营状态展示
 
-- `DashboardView.vue` 的库存卡、透视表、导出和型号图统一使用后端契约字段 `station_inventory_qty`。
+- `DashboardView.vue` 的库存卡、透视表、导出和型号图统一使用后端契约字段 `section_1_inventory_qty`。
 - 汇总数据加载仅在接口响应结构完整且每行库存字段可转为有限数值时进入“就绪”状态；接口失败或字段缺失显示明确错误及“—”，不会再以 0 掩盖异常。
 - 发货流水加载失败不会覆盖已成功加载的汇总 KPI。
+- “运营状况”按实时数据展示“极佳 / 正常 / 需要关注”：未开工、样本不足或轻微波动维持正常；存在硬缺口、计划或安全供应指标明显不足、或履约样本持续偏低时才提示需要关注。
