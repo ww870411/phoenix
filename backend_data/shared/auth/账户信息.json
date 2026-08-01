@@ -133,42 +133,42 @@
     ],
     "tube_site_manager": [
       {
-        "username": "lot_filler",
-        "password": "lot_filler_0715",
+        "username": "王玮",
+        "password": "wangwei_123",
         "unit": "lot_1,lot_2"
       },
       {
-        "username": "lot_all_manager",
-        "password": "lot_all_manager_0716",
+        "username": "李绍",
+        "password": "lishao_0801",
         "unit": "lot_1,lot_2"
       },
       {
-        "username": "high_lot_1_manager",
-        "password": "high_lot_1_0714",
+        "username": "陶远辉",
+        "password": "taoyuanhui_0715",
         "unit": "high_lot_1"
       },
       {
-        "username": "high_lot_2_manager",
-        "password": "high_lot_2_0715",
+        "username": "卢君",
+        "password": "lujun_0715",
         "unit": "high_lot_2"
       }
     ],
     "tube_construction_unit": [
       {
-        "username": "construction_a",
-        "password": "construction_a123",
-        "unit": "施工方A"
+        "username": "翁永鑫",
+        "password": "wengyongxin_0801",
+        "unit": "high_lot_1"
       },
       {
-        "username": "construction_b",
-        "password": "construction_b123",
-        "unit": "施工方B"
+        "username": "任强",
+        "password": "renqiang_0801",
+        "unit": "high_lot_2"
       }
     ],
     "tube_warehouse_keeper": [
       {
-        "username": "warehouse_keeper_a",
-        "password": "warehouse_keeper_a123",
+        "username": "库管",
+        "password": "kuguan_123",
         "unit": "物资仓库"
       }
     ],

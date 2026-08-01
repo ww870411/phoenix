@@ -105,7 +105,7 @@
   "production_capacities": [],
   "manager_assignments": [
     {
-      "manager_id": "lot_filler",
+      "manager_id": "王玮",
       "manager_name": "王玮",
       "contact_phone": "15640887356",
       "section_1_ids": [
@@ -114,7 +114,7 @@
       ]
     },
     {
-      "manager_id": "lot_all_manager",
+      "manager_id": "李绍",
       "manager_name": "李绍",
       "contact_phone": "13644969968",
       "section_1_ids": [
@@ -123,7 +123,7 @@
       ]
     },
     {
-      "manager_id": "high_lot_1_manager",
+      "manager_id": "陶远辉",
       "manager_name": "陶远辉",
       "contact_phone": "13342290277",
       "section_1_ids": [
@@ -131,7 +131,7 @@
       ]
     },
     {
-      "manager_id": "high_lot_2_manager",
+      "manager_id": "卢君",
       "manager_name": "卢君",
       "contact_phone": "13591176750",
       "section_1_ids": [
@@ -141,18 +141,27 @@
   ],
   "construction_units": [
     {
-      "unit_id": "construction_a",
-      "unit_name": "施工方A",
-      "contact_name": "施工联系人A",
-      "contact_phone": "13900000001",
+      "unit_id": "翁永鑫",
+      "unit_name": "鹤城建设集团股份公司",
+      "contact_name": "翁永鑫",
+      "contact_phone": "18104288999",
       "section_1_ids": [
         "high_lot_1"
+      ]
+    },
+    {
+      "unit_id": "任强",
+      "unit_name": "大连大通建设工程有限公司",
+      "contact_name": "任强",
+      "contact_phone": "15840698999",
+      "section_1_ids": [
+        "high_lot_2"
       ]
     }
   ],
   "warehouse_keepers": [
     {
-      "keeper_id": "warehouse_keeper_a",
+      "keeper_id": "库管",
       "keeper_name": "左巨",
       "contact_phone": "13052765188"
     }
