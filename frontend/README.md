@@ -1,3 +1,23 @@
+## 2026-08-03 当前位置匹配逻辑精准重构 (修复“项目选择页”误显示 Bug)
+
+- 变更文件：`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 实现原理：
+  - **精细分级匹配**：重构 `getCurrentPageName()`，移除了对 `/projects` 字符串的通配判断，引入固定页面路由判定、动作后缀（`/data-analysis`、`/sheets`、`/dashboard`）判定、`pageKey` 词表映射与项目首页精确比对，确保每名在线人员所在页面位置的真实准确体现。
+
+## 2026-08-03 跨子项目在线检测逻辑核验说明
+
+- 关联组件：`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 逻辑确认：
+  - **全平台跨子项目通用检测**：`AppHeader.vue` 为跨子项目共用的统一 Header 导航组件。当用户处于任意其他子项目（如 `daily_report_25_26`、`monthly_data_show` 等）页面时，心跳依然定时上报，且自动带上当前子项目页面名称（如 `current_page`），确保全平台在线检测无死角。
+
+## 2026-08-03 在线用户显示机制技术复盘
+
+- 关联组件：`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- 实现原理：
+  - **30 秒轮询心跳**：导航栏挂载时启动 `setInterval` 定时器，每 30 秒向 `/presence/heartbeat` 发送静默请求，上报 `username` 及 `current_page`（当前路由名称）。
+  - **在线人员拉取与置顶**：当用户点击导航栏“🟢 在线 X 人”胶囊时，触发 `fetchOnlineUsers()` 请求 `/presence/online-users`，前端对结果进行二次处理，将“我自己”强行排在最顶部并添加专属高亮标识。
+  - **离线无缝通知**：用户关闭页面或登出时，借助 `navigator.sendBeacon` 向 `/presence/logout` 发送离线信号，确保实时性。
+
 ## 2026-07-31 保温管需求主体 section_1 命名
 
 保温管项目对外接口统一采用 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`；页面内部局部状态采用 `section1Id` 等 JavaScript 驼峰形式，不再读取或传递 `station*` 字段。

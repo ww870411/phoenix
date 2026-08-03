@@ -123,7 +123,29 @@ function getGroupLabel(group) {
 
 function getCurrentPageName() {
   if (route.meta?.title) return route.meta.title
-  if (route.params?.pageKey) {
+
+  const path = route.path || ''
+  const pageKey = route.params?.pageKey
+
+  // 1. 特殊固定业务页面与工具页判定
+  if (path.includes('/spring-dashboard')) return '春节专刊大盘'
+  if (path.includes('/import-workspace')) return '月度数据导入'
+  if (path.includes('/query-tool')) return '月度数据查询'
+  if (path.includes('/page_showcase')) return '案例组件展示'
+  if (path.includes('/admin-console')) return '后台管理控制台'
+  if (path.includes('/admin-file-editor')) return '系统文件编辑器'
+  if (path.includes('/debug/runtime-eval')) return '调测诊断工作台'
+
+  // 2. 业务页面功能动作优先匹配
+  if (path.includes('/data-analysis')) return '数据分析看板'
+  if (path.includes('/display')) return '动态展示看板'
+  if (path.includes('/approval')) return '数据审核页'
+  if (path.includes('/sheets/')) return '数据填报工作区'
+  if (path.includes('/dashboard')) return '数据看板'
+  if (path.includes('/pages') && !pageKey && path.endsWith('/pages')) return '页面选择列表'
+
+  // 3. 动态 pageKey 词表映射
+  if (pageKey) {
     const pageMap = {
       dashboard: '数据看板',
       demand_management: '需求管理',
@@ -132,11 +154,28 @@ function getCurrentPageName() {
       global_management: '全局大盘配置',
       gis_map: 'GIS地图看板',
       history_query: '历史综合查询',
+      analysis: '数据分析看板',
+      approval: '数据审核',
     }
-    return pageMap[route.params.pageKey] || route.params.pageKey
+    if (pageMap[pageKey]) return pageMap[pageKey]
+    return pageKey
   }
-  if (route.path.includes('/projects')) return '项目选择页'
-  if (route.path.includes('/admin-console')) return '后台管理'
+
+  // 4. 仅当路径正好为项目大口径/首页时才判定为项目入口或选择页
+  if (path === '/projects' || path === '/projects/') return '项目选择页'
+  if (route.params?.projectKey) {
+    const projectMap = {
+      daily_report_25_26: '25-26采暖季日报',
+      daily_report_spring_festval_2026: '2026春节保供专刊',
+      monthly_data_pull: '月度数据拉取',
+      monthly_data_show: '月度数据展示',
+      insulation_pipe_supply_2026: '2026保温管供给大盘',
+      page_showcase: '页面展示中心'
+    }
+    const name = projectMap[route.params.projectKey]
+    return name ? `${name}入口` : '项目入口'
+  }
+
   return document.title || '工作区'
 }
 

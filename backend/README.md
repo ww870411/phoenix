@@ -1,3 +1,17 @@
+## 2026-08-03 Presence 全局跨项目共享机制确认
+
+- 关联服务：`backend/projects/insulation_pipe_supply_2026/services/presence_service.py`
+- 逻辑确认：
+  - **全局单例存储**：`presence_service.py` 维护的 `_ONLINE_USERS` 是单例内存在线表，超越单个子项目界限。无论前端从哪个子项目的路由切入调用心跳 API，在线状态都会统一汇总保存，并在列表查询接口中跨项目完整返回。
+
+## 2026-08-03 在线用户 Presence 核心服务技术复盘
+
+- 关联模块：`backend/projects/insulation_pipe_supply_2026/services/presence_service.py` & `workspace.py`
+- 实现原理：
+  - **内存哈希表维护**：通过线程安全对象 `_ONLINE_USERS` (带 `threading.Lock`) 记录账号的心跳状态、单位组别、页面位置与最后活跃时间戳。
+  - **65 秒自动超时驱逐**：每次查询在线人员列表 `get_online_users_list()` 时，自动检查上次心跳间隔；超过 65 秒未刷新的用户判定为离线并从内存中弹出清理。
+  - **路由暴露**：在 `workspace.py` 暴露 `/presence/heartbeat`、`/presence/online-users` 和 `/presence/logout` 三大轻量 API。
+
 ## 2026-07-31 保温管需求主体 section_1 接口契约
 
 保温管需求主体主键、名称、选项集合和库存汇总统一为 `section_1_id`、`section_1_name`、`section_1s`、`section_1_inventory_qty`。供给、需求、库管和看板接口不再输出 `station` / `stations` / `station_inventory_qty`。

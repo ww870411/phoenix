@@ -996,6 +996,34 @@
   3. **超时自动接收**：到货确认后 12 小时未接收，列表拉取与库存计算时自动触发清算，状态自动扭转为超时接收（`SYSTEM_TIMEOUT`），并在数据库中标记为 `is_timeout_receive`，各端列表渲染为“超时确认”。
   4. **P0漏洞修复**：优化了保存实际使用量接口的 N+1 数据库查询（改用批量查询与内存比对）；修复了数据库迁移异常捕获后继续静默启动的运维隐患。
 
+## 2026-08-03 [当前位置显示“项目选择页”误判 Bug 修复]
+- **物理根因定位**：
+  - 在 [`AppHeader.vue:L138`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue#L138) 原先代码中存在粗暴判断 `if (route.path.includes('/projects')) return '项目选择页'`。
+  - 由于绝大多数子项目业务页面路径均带有 `/projects/...` 前缀，当 `route.params.pageKey` 为空或页面未配置 `meta.title` 时，路由全部被误判拦截并返回“项目选择页”。
+- **物理修复动作**：
+  - 重构 [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue#L124) 中的 `getCurrentPageName()` 函数，建立分类匹配优先级：
+    1. 特殊工具/大盘页（`/spring-dashboard`、`/import-workspace`、`/query-tool`、`/admin-console` 等）；
+    2. 业务动作子路由（`/data-analysis` 动态分析看板、`/sheets/` 填报工作区、`/dashboard` 看板等）；
+    3. `pageKey` 中文映射字典（`demand_management` -> `需求管理`、`supply_management` -> `供给管理` 等）；
+    4. 严格匹配 `path === '/projects'` 或 `projectKey` 入口大盘名称，彻底消除全员误判。
+- **验证结果**：前端 Vite 生产构建验证进行中。
+
+## 2026-08-03 [跨子项目在线用户检测机制确认与核验]
+- **需求/问题**：用户确认若用户处于非 `insulation_pipe_supply_2026` 的其他子项目页面中，是否能被正常检测并显示为在线用户。
+- **架构核验与结论**：
+  - **✅ 会被正常检测并全局显示**。
+  - **前端维度**：`AppHeader.vue` 为全平台通用顶栏组件，只要用户在任意子项目页面中浏览，`setInterval` 心跳就会自动带上当前路由页面名称并上报。
+  - **后端维度**：`presence_service.py` 维护的是全局单例线程安全内存字典 `_ONLINE_USERS`（跨项目共享），在线人员列表中会动态呈现所有子项目中活跃用户的账号、组别及📍 当前所在页面。
+- **改动范围**：架构核验与逻辑确认，完成进度留痕。
+
+## 2026-08-03 [在线用户显示机制架构复盘与咨询解答]
+- **需求/问题**：用户咨询平台在线用户显示功能的具体实现流程与技术架构。
+- **架构核验与复盘总结**：
+  - **核心机制**：前端静默心跳轮询（30s 周期）+ 后端内存线程安全 Presence 状态服务（65s 自动超时清理）。
+  - **前端交互**：由通用导航栏组件 `AppHeader.vue` 调度定时器，定时触发 `/presence/heartbeat` 并拉取 `/presence/online-users`，离线时触发 `sendBeacon` 调用 `/presence/logout`。
+  - **后端服务**：由 `presence_service.py` 维护全局 `_ONLINE_USERS` 哈希表，使用 `threading.Lock` 保证多线程并发安全。
+- **改动范围**：无物理代码改动，完成架构厘清与技术解答。
+
 ## 2026-07-31 保温管需求主体 section_1 命名统一
 
 - 需求主体接口字段统一为 `section_1_id`、`section_1_name`、`section_1s` 与 `section_1_inventory_qty`。
