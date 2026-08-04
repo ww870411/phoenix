@@ -1,3 +1,10 @@
+## 2026-08-04 需求侧管理页面 `saveTubeGlobalManagementConfigSection` 函数导入修复
+
+- 关联页面与组件：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- 本轮处理与实现原理：
+  - **API 显式导入补全**：在 `DemandManagementView.vue` 顶部的 API `import { ... }` 声明中补充了 `saveTubeGlobalManagementConfigSection` 函数，修复了调整消耗采集日期时触发的 JavaScript 变量未定义引用异常。
+
 ## 2026-08-04 全局管理后台数据库在线编辑器 UI/UX 防重叠与长文本放大弹窗重构
 
 - 关联页面与组件：

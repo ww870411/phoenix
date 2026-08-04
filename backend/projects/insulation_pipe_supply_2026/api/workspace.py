@@ -5,7 +5,7 @@ insulation_pipe_supply_2026 工作台基础接口。
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
@@ -410,6 +410,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     normalized_section = str(section or "").strip()
     allowed_sections = {
         "show_date",
+        "usage_collection_date",
         "plan_start_date",
         "auto_update_plan_start_date",
         "plan_editable_days",
@@ -430,7 +431,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
 
-    if normalized_section in {"show_date", "plan_start_date"}:
+    if normalized_section in {"show_date", "usage_collection_date", "plan_start_date"}:
         normalized_date = str(data or "").strip()
         if not normalized_date:
             raise HTTPException(status_code=422, detail=f"{normalized_section} 不能为空")

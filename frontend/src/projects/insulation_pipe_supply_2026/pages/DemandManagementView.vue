@@ -54,8 +54,8 @@
           </label>
 
           <label class="field">
-            <span>展示截止日期</span>
-            <input v-model="showDate" type="date" :disabled="!isGlobalAdmin" />
+            <span>消耗采集日期</span>
+            <input v-model="usageDate" type="date" :disabled="!isGlobalAdmin" @change="handleUsageDateChange" />
           </label>
         </div>
 
@@ -233,7 +233,7 @@
             <div class="panel-title-row">
               <div>
                 <h2>实际消耗与损耗上报</h2>
-                <span class="panel-hint">登记业务日（{{ usageDate || '今日' }}）各保温管型号的实际施工消耗与现场损耗。计量单位：米。</span>
+                <span class="panel-hint">登记采集日（{{ usageDate || '今日' }}）各保温管型号的实际施工消耗与现场损耗。计量单位：米。</span>
               </div>
               <button
                 type="button"
@@ -952,6 +952,7 @@ import {
   getTubeDemandManagementUsageSheet,
   saveTubeDemandManagementPlanMatrix,
   saveTubeDemandManagementUsageSheet,
+  saveTubeGlobalManagementConfigSection,
   submitTubeDemandManagementSection1Status
 } from '../../daily_report_25_26/services/api'
 
@@ -1905,6 +1906,20 @@ async function handleSection1SubmitClick() {
 watch(selectedSection1Id, () => {
   reloadSection1Data()
 })
+
+async function handleUsageDateChange() {
+  if (!usageDate.value || !isGlobalAdmin.value) return
+  try {
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'usage_collection_date',
+      data: usageDate.value,
+    })
+    setActionMessage('success', `消耗采集日期已保存更新为 ${usageDate.value}`)
+    await loadUsageSheet()
+  } catch (err) {
+    setActionMessage('error', err?.message || '保存消耗采集日期失败')
+  }
+}
 
 watch(usageDate, (value, oldValue) => {
   if (!selectedSection1Id.value || !value || value === oldValue) {

@@ -179,6 +179,15 @@ def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
 
 
 def get_usage_collection_date(payload: Dict[str, Any]) -> date:
+    auto_update = bool(payload.get("auto_update_plan_start_date"))
+    if auto_update:
+        return get_configured_plan_start_date(payload) - timedelta(days=1)
+    raw_value = str(payload.get("usage_collection_date") or "").strip()
+    if raw_value:
+        try:
+            return date.fromisoformat(raw_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=f"tube_config.json 中 usage_collection_date 非法：{raw_value}") from exc
     return get_configured_plan_start_date(payload) - timedelta(days=1)
 
 

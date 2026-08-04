@@ -1,3 +1,10 @@
+## 2026-08-04 数据看板需求汇总接口 (`/demand-summary`) timedelta 缺失导入修复说明
+
+- 变更文件：
+  - [backend/projects/insulation_pipe_supply_2026/api/workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L8)
+- 本轮处理与实现原理：
+  - **模块导入补全**：在 `workspace.py` 顶部 `from datetime import date, datetime` 中补充导入 `timedelta`，彻底解决了请求 `GET /demand-summary` 接口时因未定义 `timedelta` 抛出 HTTP 500 的运行时异常。
+
 ## 2026-08-04 全局管理后台数据库在线编辑 (Admin DB API) 不限 Schema 全量解封
 
 - 变更文件：

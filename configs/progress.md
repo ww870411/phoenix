@@ -1,3 +1,33 @@
+## 2026-08-04 [需求侧实际消耗与损耗上报提示文案精准微调]
+- **文案微调**：
+  - 在 [DemandManagementView.vue:L236](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L236) 中，将实际消耗上报面板提示文案从“登记业务日（...）”精准微调更新为**“登记采集日（...）各保温管型号的实际施工消耗与现场损耗。计量单位：米。”**，概念更加严密清爽。
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功。
+
+## 2026-08-04 [修复 DemandManagementView.vue 调整消耗采集日期报 is not defined 的前端 Import 缺失 Bug]
+- **Bug 根因诊断**：
+  - 在需求侧页面 [DemandManagementView.vue:L952](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L952) 的 `handleUsageDateChange` 中调用了配置保存函数 `saveTubeGlobalManagementConfigSection`，但在文件顶部的 API import 声明中未显式导入该函数，导致触发日期修改时抛出 JavaScript `ReferenceError: saveTubeGlobalManagementConfigSection is not defined` 异常。
+- **物理修复方案**：
+  - 在 [DemandManagementView.vue:L955](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L955) 的 API 导入清单中加入 `saveTubeGlobalManagementConfigSection` 函数。
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功。
+
+## 2026-08-04 [核心日期管控解耦 — 全局管理页加入 usage_collection_date 设定 & 需求填报页切换为消耗采集日期控件]
+- **业务对齐与架构设计**：
+  - **消耗采集日期独立管控**：在全局管理页面（`GlobalManagementView.vue:L140`）核心控制参数区域中，正式在 `show_date` 设定后紧跟加入对 `usage_collection_date` (消耗采集日期) 的独立控制与输入控件，支持非自动平推时的独立手动设定与保存；
+  - **后端配置解耦支持**：在 [config_service.py:L181](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py#L181) 与 [workspace.py:L410](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L410) 中，允许在保存核心区块时对 `usage_collection_date` 进行合法 ISO 日期校验与读写覆盖；
+  - **需求填报页控件精准对齐**：在需求填报页面（`DemandManagementView.vue:L57`）上方，将原先对“展示截止日期”的控制控件与显示，替换为对**“消耗采集日期”**（`usageDate`）的控制与显示，管理者改变该日期时自动触发消耗表单重载与保存。
+- **验证结果**：
+  - 后端 Python `py_compile` 及前端 Vite 生产构建 100% 成功。
+
+## 2026-08-04 [修复看板接口 GET /supply-management/demand-summary 报 NameError: name timedelta is not defined 的 Bug]
+- **Bug 根因诊断**：
+  - 之前的重构中在 [workspace.py:L929](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L929) 使用了 `show_date_obj + timedelta(days=1)` 推导未来三日滚动计划起始点，但在文件顶部模块导入中未显式导入 `timedelta`，导致调用看板 GET `/demand-summary` 接口时抛出 HTTP 500 `NameError: name 'timedelta' is not defined` 异常。
+- **物理修复方案**：
+  - 在 [workspace.py:L8](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L8) 从 `datetime` 模块补充导入 `timedelta` 类。
+- **验证结果**：
+  - Python `py_compile` 语法校验 100% 成功。
+
 ## 2026-08-04 [全局超管后台数据库在线编辑表格样式完整还原]
 - **还原物理动作**：
   - 响应用户指令，将 [AdminConsoleView.vue:L188](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue#L188) 的表格 HTML 结构、表头渲染方式以及对应的 CSS 样式完全还原为原本简约干净的默认版本；

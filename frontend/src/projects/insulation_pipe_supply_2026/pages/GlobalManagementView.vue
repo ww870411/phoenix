@@ -138,6 +138,11 @@
                   <small class="field-help">决定大盘看板及历史消耗数据统计的宏观切断视界。</small>
                 </label>
                 <label class="field">
+                  <span>消耗采集日期 (usage_collection_date)</span>
+                  <input v-model="usageCollectionDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
+                  <small class="field-help">需求侧施工队上报实际施工消耗与现场损耗的基准日期。</small>
+                </label>
+                <label class="field">
                   <span>滚动计划起始日期 (plan_start_date)</span>
                   <input v-model="planStartDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
                   <small class="field-help">未来三日计划采集的物理起始日期锚点（滚动计划 T 日）。</small>
@@ -1283,6 +1288,7 @@ async function handleConfirmWeatherImport() {
   }
 }
 const showDate = ref('')
+const usageCollectionDate = ref('')
 const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
 const planEditableDays = ref(3)
@@ -1452,6 +1458,7 @@ function syncSelectedBaselineSection1() {
 
 function applyConfig(config) {
   showDate.value = config.show_date || config.biz_date || ''
+  usageCollectionDate.value = config.usage_collection_date || ''
   planStartDate.value = config.plan_start_date || showDate.value || ''
   autoUpdatePlanStartDate.value = Boolean(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
@@ -1776,6 +1783,10 @@ async function saveCoreDatesSection() {
       data: showDate.value || '',
     })
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'usage_collection_date',
+      data: usageCollectionDate.value || '',
+    })
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_start_date',
       data: planStartDate.value || '',
     })
@@ -1794,6 +1805,9 @@ async function saveCoreDatesSection() {
     applyConfig(response.config || {})
     if (response.show_date) {
       showDate.value = response.show_date
+    }
+    if (response.usage_collection_date) {
+      usageCollectionDate.value = response.usage_collection_date
     }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
