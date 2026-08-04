@@ -1,3 +1,25 @@
+## 2026-08-04 [修复大表撑宽全局后台页面并收敛水平滚动区域]
+- **问题根因**：
+  - RevoGrid 大表的列总宽度通过 CSS Grid 子项默认的最小内容宽度向外传递，导致 `db-editor-card`、`content-block` 和全局后台页面被一起撑宽；同时 `.db-grid-wrap` 使用 `overflow: hidden`，没有明确承担水平滚动。
+- **修复实现**：
+  - 为 `.admin-console-main`、`.top-shell`、`.content-block`、`.db-editor-card` 建立 `width/max-width: 100%`、`min-width: 0` 与 `box-sizing: border-box` 的完整收缩链路。
+  - `.db-editor-card` 隔离外部溢出；`.db-grid-wrap` 改为 `overflow-x: auto`，并用 `contain: inline-size` 阻止表格固有宽度继续影响页面。
+- **结果与验证**：
+  - 页面宽度保持不变，大表横向滚动限定在数据库表格区域；`npm run build` 通过，139 个模块、零编译错误。
+
+## 2026-08-04 [全局后台数据库表编辑器紧凑网格与完整值抽屉升级]
+- **前置与范围**：
+  - 用户确认采用“紧凑数据网格 + 长内容专注编辑”方案；本轮仅修改全局后台数据库标签页前端交互，不调整数据库结构和后端接口。
+- **结构与实现**：
+  - `AdminConsoleView.vue` 的普通 HTML 表格替换为项目既有 RevoGrid，固定 34px 行高，支持虚拟滚动、列宽拖动、区域选择与主键列左侧固定。
+  - 根据 PostgreSQL `data_type`、字段名及前 40 行样本计算 100px～320px 初始列宽；表头和内容保持单行省略，悬停可查看完整值。
+  - 新增右侧完整编辑抽屉，明确展示字段名、类型、原始值、`NULL` 状态；布尔值使用枚举选择，JSON 支持格式化和保存前校验。
+  - 修改单元格与修改计数使用橙色状态反馈，支持当前字段恢复原值及撤销全部未保存修改；保存仍复用原有按主键批量差异提交。
+- **验证结果**：
+  - `frontend npm run build` 通过：Vite 7.1.10，139 个模块完成转换，零编译错误。
+- **未完成验收**：
+  - 当前浏览器自动化连接异常，仍需在登录态下人工确认主键固定列、双击抽屉和横向滚动的实际视觉效果。
+
 ## 2026-08-04 [需求侧实际消耗与损耗上报提示文案精准微调]
 - **文案微调**：
   - 在 [DemandManagementView.vue:L236](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L236) 中，将实际消耗上报面板提示文案从“登记业务日（...）”精准微调更新为**“登记采集日（...）各保温管型号的实际施工消耗与现场损耗。计量单位：米。”**，概念更加严密清爽。

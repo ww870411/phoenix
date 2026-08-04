@@ -183,31 +183,50 @@
                 </div>
               </div>
             </div>
-            <p class="subtext">支持全部数据表查询；保存修改仍要求目标表存在主键。主键字段只读。</p>
+            <div class="db-grid-help">
+              <p class="subtext">支持全部数据表查询；保存修改仍要求目标表存在主键。主键字段固定在左侧且只读。</p>
+              <div class="db-grid-status">
+                <span>共 {{ dbRowsDraft.length }} 行 / {{ dbColumns.length }} 列</span>
+                <span v-if="dbDirtyStats.dirtyCells" class="db-dirty-badge">
+                  已修改 {{ dbDirtyStats.dirtyRows }} 行、{{ dbDirtyStats.dirtyCells }} 个字段
+                </span>
+                <button
+                  class="btn ghost db-compact-btn"
+                  type="button"
+                  :disabled="!dbFocusedCell.columnName"
+                  @click="openFocusedDbCellEditor"
+                >
+                  完整编辑当前单元格
+                </button>
+                <button
+                  class="btn ghost db-compact-btn"
+                  type="button"
+                  :disabled="!dbDirtyStats.dirtyCells"
+                  @click="resetAllDbChanges"
+                >
+                  撤销全部修改
+                </button>
+              </div>
+            </div>
             <p v-if="dbMessage" class="message">{{ dbMessage }}</p>
-            <div v-if="dbRowsDraft.length" class="db-table-wrap">
-              <table class="audit-table db-edit-table">
-                <thead>
-                  <tr>
-                    <th v-for="col in dbColumns" :key="`h-${col.name}`">
-                      {{ col.name }}
-                      <span v-if="isDbPkColumn(col.name)" class="db-pk-tag">PK</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, rowIndex) in dbRowsDraft" :key="buildDbRowKey(row, rowIndex)">
-                    <td v-for="col in dbColumns" :key="`c-${rowIndex}-${col.name}`">
-                      <input
-                        v-model="row[col.name]"
-                        :disabled="isDbPkColumn(col.name)"
-                        type="text"
-                        class="db-cell-input"
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div v-if="dbRowsDraft.length" class="db-grid-wrap">
+              <RevoGrid
+                :key="dbGridRenderKey"
+                :row-headers="true"
+                :hide-attribution="true"
+                :stretch="false"
+                :auto-size-column="false"
+                :row-size="34"
+                :resize="true"
+                :range="true"
+                :apply-on-close="true"
+                :columns="dbGridColumns"
+                :source="dbGridSource"
+                class="db-data-grid"
+                @afterfocus="handleDbGridFocus"
+                @afteredit="handleDbGridAfterEdit"
+                @dblclick="openFocusedDbCellEditor"
+              />
             </div>
             <div v-else class="panel-state">暂无数据，请先设置条件后点击“查询数据”。</div>
           </section>
@@ -1193,12 +1212,98 @@
       :save-settings="saveAiSettingsPayload"
       :test-settings="testAiSettingsPayload"
     />
+    <div
+      v-if="dbCellEditor.visible"
+      class="db-cell-editor-mask"
+      role="presentation"
+      @click.self="closeDbCellEditor"
+    >
+      <aside class="db-cell-editor-drawer" role="dialog" aria-modal="true" aria-labelledby="db-cell-editor-title">
+        <header class="db-cell-editor-header">
+          <div>
+            <p class="db-cell-editor-kicker">第 {{ dbCellEditor.rowIndex + 1 }} 行</p>
+            <h3 id="db-cell-editor-title">{{ dbCellEditor.columnName }}</h3>
+            <div class="db-cell-editor-meta">
+              <span>{{ dbCellEditor.dataType || 'unknown' }}</span>
+              <span v-if="isDbPkColumn(dbCellEditor.columnName)" class="db-pk-tag">PK · 只读</span>
+              <span v-if="isCurrentDbCellDirty" class="db-dirty-badge">已修改</span>
+            </div>
+          </div>
+          <button class="close-btn" type="button" aria-label="关闭完整编辑" @click="closeDbCellEditor">×</button>
+        </header>
+        <main class="db-cell-editor-body">
+          <label class="db-null-toggle" :class="{ disabled: isDbPkColumn(dbCellEditor.columnName) }">
+            <input
+              v-model="dbCellEditor.isNull"
+              type="checkbox"
+              :disabled="isDbPkColumn(dbCellEditor.columnName)"
+            />
+            <span>将该字段设为 NULL</span>
+          </label>
+
+          <label class="field db-full-editor-field">
+            <span>修改值</span>
+            <select
+              v-if="isDbBooleanType(dbCellEditor.dataType) && !dbCellEditor.isNull"
+              v-model="dbCellEditor.value"
+              :disabled="isDbPkColumn(dbCellEditor.columnName)"
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+            <textarea
+              v-else
+              v-model="dbCellEditor.value"
+              :disabled="dbCellEditor.isNull || isDbPkColumn(dbCellEditor.columnName)"
+              :placeholder="dbCellEditor.isNull ? '保存后写入 NULL' : '输入完整字段值'"
+              rows="14"
+            />
+          </label>
+
+          <div v-if="isDbJsonType(dbCellEditor.dataType) && !dbCellEditor.isNull" class="db-json-actions">
+            <button class="btn ghost db-compact-btn" type="button" @click="formatDbCellJson">格式化 JSON</button>
+            <span>保存前会校验 JSON 语法。</span>
+          </div>
+          <p v-if="dbCellEditor.error" class="db-cell-editor-error">{{ dbCellEditor.error }}</p>
+
+          <section class="db-original-value">
+            <div class="db-original-value-head">
+              <strong>数据库原值</strong>
+              <span>{{ formatDbValueSummary(dbCellEditor.originalValue) }}</span>
+            </div>
+            <pre>{{ formatDbEditorValue(dbCellEditor.originalValue) }}</pre>
+          </section>
+        </main>
+        <footer class="db-cell-editor-footer">
+          <button
+            class="btn ghost"
+            type="button"
+            :disabled="isDbPkColumn(dbCellEditor.columnName) || !isCurrentDbCellDirty"
+            @click="resetCurrentDbCell"
+          >
+            恢复原值
+          </button>
+          <div class="inline-actions">
+            <button class="btn ghost" type="button" @click="closeDbCellEditor">取消</button>
+            <button
+              class="btn primary"
+              type="button"
+              :disabled="isDbPkColumn(dbCellEditor.columnName)"
+              @click="applyDbCellEditor"
+            >
+              应用到待保存修改
+            </button>
+          </div>
+        </footer>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import AiChatWorkspace from '../components/AiChatWorkspace.vue'
@@ -1369,6 +1474,23 @@ const dbOrderBy = ref('')
 const dbOrderDir = ref('asc')
 const dbFilters = ref([])
 dbFilters.value = [{ column: '', op: 'contains', value: '' }]
+const dbGridColumns = ref([])
+const dbGridSource = ref([])
+const dbGridRenderKey = ref(0)
+const dbFocusedCell = reactive({
+  rowIndex: -1,
+  columnName: '',
+})
+const dbCellEditor = reactive({
+  visible: false,
+  rowIndex: -1,
+  columnName: '',
+  dataType: '',
+  originalValue: null,
+  value: '',
+  isNull: false,
+  error: '',
+})
 
 const projects = ref([])
 const selectedProjectKey = ref(TARGET_PROJECT_KEY)
@@ -1660,7 +1782,11 @@ const dbColumnTypeMap = computed(() => {
 })
 const dbDirtyStats = computed(() => {
   const updates = collectDbUpdates()
-  return { dirtyRows: updates.length, updates }
+  const dirtyCells = updates.reduce((total, item) => total + Object.keys(item?.changes || {}).length, 0)
+  return { dirtyRows: updates.length, dirtyCells, updates }
+})
+const isCurrentDbCellDirty = computed(() => {
+  return isDbCellDirty(dbCellEditor.rowIndex, dbCellEditor.columnName)
 })
 
 function asTopList(record, limit = 5) {
@@ -2122,6 +2248,278 @@ function buildDbRowKey(row, fallbackIndex = 0) {
   return pkCols.map((col) => `${col}=${JSON.stringify(row?.[col] ?? null)}`).join('|')
 }
 
+function isDbJsonType(dataType) {
+  return String(dataType || '').toLowerCase().includes('json')
+}
+
+function isDbBooleanType(dataType) {
+  return String(dataType || '').toLowerCase().includes('bool')
+}
+
+function isDbNumericType(dataType) {
+  const type = String(dataType || '').toLowerCase()
+  return ['int', 'numeric', 'double', 'real', 'decimal'].some((token) => type.includes(token))
+}
+
+function isDbDateType(dataType) {
+  const type = String(dataType || '').toLowerCase()
+  return type.includes('date') || type.includes('time')
+}
+
+function cloneDbValue(value) {
+  if (value === null || value === undefined || typeof value !== 'object') return value
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch (_error) {
+    return value
+  }
+}
+
+function formatDbEditorValue(value) {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch (_error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function formatDbGridValue(value) {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch (_error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function formatDbValueSummary(value) {
+  if (value === null || value === undefined) return 'NULL'
+  const text = formatDbGridValue(value)
+  return `${text.length} 个字符`
+}
+
+function getDbColumnMeta(columnName) {
+  return (dbColumns.value || []).find((item) => String(item?.name || '') === String(columnName || '')) || null
+}
+
+function isDbCellDirty(rowIndex, columnName) {
+  if (rowIndex < 0 || !columnName || isDbPkColumn(columnName)) return false
+  const original = dbRowsOriginal.value?.[rowIndex]
+  const draft = dbRowsDraft.value?.[rowIndex]
+  const meta = getDbColumnMeta(columnName)
+  if (!original || !draft || !meta) return false
+  const normalizedDraft = normalizeDbDraftValue(draft[columnName], meta.data_type)
+  return JSON.stringify(original[columnName]) !== JSON.stringify(normalizedDraft)
+}
+
+function estimateDbColumnWidth(column) {
+  const name = String(column?.name || '')
+  const type = String(column?.data_type || '').toLowerCase()
+  const sampleRows = (dbRowsDraft.value || []).slice(0, 40)
+  let longest = Array.from(name).length + (isDbPkColumn(name) ? 5 : 0)
+  for (const row of sampleRows) {
+    const text = formatDbGridValue(row?.[name])
+    longest = Math.max(longest, Math.min(Array.from(text).length, 46))
+  }
+  const measured = longest * 7.2 + 34
+  if (isDbBooleanType(type)) return 100
+  if (isDbDateType(type)) return Math.max(176, Math.min(220, measured))
+  if (isDbNumericType(type)) return Math.max(120, Math.min(180, measured))
+  if (isDbJsonType(type) || type.includes('text')) return Math.max(210, Math.min(320, measured))
+  return Math.max(140, Math.min(280, measured))
+}
+
+function buildDbGridColumns() {
+  return (dbColumns.value || []).map((column) => {
+    const columnName = String(column?.name || '')
+    const dataType = String(column?.data_type || '')
+    const isPk = isDbPkColumn(columnName)
+    return {
+      prop: columnName,
+      name: isPk ? `${columnName}  PK` : columnName,
+      size: estimateDbColumnWidth(column),
+      minSize: isPk ? 120 : 100,
+      maxSize: 420,
+      readonly: isPk,
+      pin: isPk ? 'colPinStart' : undefined,
+      columnProperties: () => ({
+        title: `${columnName}（${dataType || 'unknown'}）`,
+      }),
+      cellProperties: ({ rowIndex, value }) => ({
+        className: isDbCellDirty(rowIndex, columnName)
+          ? 'db-grid-cell db-grid-cell--dirty'
+          : 'db-grid-cell',
+        title: value === '' ? '空值或 NULL；双击可打开完整编辑' : String(value),
+      }),
+    }
+  })
+}
+
+function refreshDbGrid(options = {}) {
+  const { rebuildColumns = true, forceRender = true } = options
+  dbGridSource.value = (dbRowsDraft.value || []).map((row, rowIndex) => {
+    const mapped = {
+      __dbRowIndex: rowIndex,
+      __dbRowKey: buildDbRowKey(row, rowIndex),
+    }
+    for (const column of dbColumns.value || []) {
+      const columnName = String(column?.name || '')
+      if (!columnName) continue
+      mapped[columnName] = formatDbGridValue(row?.[columnName])
+    }
+    return mapped
+  })
+  if (rebuildColumns) {
+    dbGridColumns.value = buildDbGridColumns()
+  } else {
+    dbGridColumns.value = [...buildDbGridColumns()]
+  }
+  if (forceRender) {
+    dbGridRenderKey.value += 1
+  }
+}
+
+function syncDbGridCell(rowIndex, columnName) {
+  const source = [...(dbGridSource.value || [])]
+  if (!source[rowIndex]) return
+  source[rowIndex] = {
+    ...source[rowIndex],
+    [columnName]: formatDbGridValue(dbRowsDraft.value?.[rowIndex]?.[columnName]),
+  }
+  dbGridSource.value = source
+  dbGridColumns.value = [...buildDbGridColumns()]
+}
+
+function applyDbGridEdit(rowIndex, columnName, value) {
+  if (rowIndex < 0 || !columnName || isDbPkColumn(columnName)) return
+  const row = dbRowsDraft.value?.[rowIndex]
+  if (!row || !getDbColumnMeta(columnName)) return
+  dbRowsDraft.value[rowIndex] = {
+    ...row,
+    [columnName]: value,
+  }
+  dbFocusedCell.rowIndex = rowIndex
+  dbFocusedCell.columnName = columnName
+}
+
+function handleDbGridFocus(event) {
+  const detail = event?.detail || {}
+  const columnName = String(detail?.column?.prop || '')
+  if (!columnName || !getDbColumnMeta(columnName)) return
+  dbFocusedCell.rowIndex = Number(detail.rowIndex)
+  dbFocusedCell.columnName = columnName
+}
+
+function handleDbGridAfterEdit(event) {
+  const detail = event?.detail || {}
+  if (Number.isInteger(detail.rowIndex) && detail.prop !== undefined) {
+    applyDbGridEdit(Number(detail.rowIndex), String(detail.prop), detail.val)
+    dbGridColumns.value = [...buildDbGridColumns()]
+    return
+  }
+  if (detail.data && typeof detail.data === 'object') {
+    for (const [rowKey, changes] of Object.entries(detail.data)) {
+      const rowIndex = Number(rowKey)
+      if (!Number.isInteger(rowIndex) || !changes || typeof changes !== 'object') continue
+      for (const [columnName, value] of Object.entries(changes)) {
+        applyDbGridEdit(rowIndex, columnName, value)
+      }
+    }
+    dbGridColumns.value = [...buildDbGridColumns()]
+  }
+}
+
+function openFocusedDbCellEditor() {
+  const rowIndex = Number(dbFocusedCell.rowIndex)
+  const columnName = String(dbFocusedCell.columnName || '')
+  const draft = dbRowsDraft.value?.[rowIndex]
+  const original = dbRowsOriginal.value?.[rowIndex]
+  const meta = getDbColumnMeta(columnName)
+  if (!draft || !original || !meta) return
+  const currentValue = draft[columnName]
+  dbCellEditor.visible = true
+  dbCellEditor.rowIndex = rowIndex
+  dbCellEditor.columnName = columnName
+  dbCellEditor.dataType = String(meta.data_type || '')
+  dbCellEditor.originalValue = cloneDbValue(original[columnName])
+  dbCellEditor.value = formatDbEditorValue(currentValue)
+  dbCellEditor.isNull = currentValue === null || currentValue === undefined
+  dbCellEditor.error = ''
+}
+
+function closeDbCellEditor() {
+  dbCellEditor.visible = false
+  dbCellEditor.error = ''
+}
+
+function formatDbCellJson() {
+  try {
+    const parsed = JSON.parse(String(dbCellEditor.value || ''))
+    dbCellEditor.value = JSON.stringify(parsed, null, 2)
+    dbCellEditor.error = ''
+  } catch (_error) {
+    dbCellEditor.error = 'JSON 格式不正确，请修正后再应用。'
+  }
+}
+
+function applyDbCellEditor() {
+  const rowIndex = Number(dbCellEditor.rowIndex)
+  const columnName = String(dbCellEditor.columnName || '')
+  const row = dbRowsDraft.value?.[rowIndex]
+  if (!row || !columnName || isDbPkColumn(columnName)) return
+  let nextValue = dbCellEditor.isNull ? null : dbCellEditor.value
+  if (!dbCellEditor.isNull && isDbJsonType(dbCellEditor.dataType)) {
+    try {
+      nextValue = JSON.parse(String(dbCellEditor.value || ''))
+    } catch (_error) {
+      dbCellEditor.error = 'JSON 格式不正确，请修正后再应用。'
+      return
+    }
+  }
+  dbRowsDraft.value[rowIndex] = {
+    ...row,
+    [columnName]: nextValue,
+  }
+  syncDbGridCell(rowIndex, columnName)
+  closeDbCellEditor()
+}
+
+function resetCurrentDbCell() {
+  const rowIndex = Number(dbCellEditor.rowIndex)
+  const columnName = String(dbCellEditor.columnName || '')
+  const row = dbRowsDraft.value?.[rowIndex]
+  const original = dbRowsOriginal.value?.[rowIndex]
+  if (!row || !original || !columnName || isDbPkColumn(columnName)) return
+  dbRowsDraft.value[rowIndex] = {
+    ...row,
+    [columnName]: cloneDbValue(original[columnName]),
+  }
+  syncDbGridCell(rowIndex, columnName)
+  openFocusedDbCellEditor()
+}
+
+function resetAllDbChanges() {
+  if (!dbDirtyStats.value.dirtyCells) return
+  if (typeof window !== 'undefined' && !window.confirm('确定撤销当前表格中的全部未保存修改吗？')) return
+  dbRowsDraft.value = (dbRowsOriginal.value || []).map((row) => {
+    const cloned = {}
+    for (const [key, value] of Object.entries(row || {})) {
+      cloned[key] = cloneDbValue(value)
+    }
+    return cloned
+  })
+  closeDbCellEditor()
+  refreshDbGrid()
+  dbMessage.value = '已撤销全部未保存修改'
+}
+
 function normalizeDbDraftValue(rawValue, dataType) {
   const type = String(dataType || '').toLowerCase()
   if (rawValue === null || rawValue === undefined) return null
@@ -2258,6 +2656,9 @@ function onSchemaChange() {
 function onTableNameChange() {
   dbOffset.value = 0
   dbOrderBy.value = ''
+  dbFocusedCell.rowIndex = -1
+  dbFocusedCell.columnName = ''
+  closeDbCellEditor()
   resetDbFilters()
   if (dbSelectedTable.value) {
     loadDbRows()
@@ -2291,6 +2692,10 @@ async function loadDbRows() {
     dbRowsOriginal.value = rows
     dbRowsDraft.value = rows.map((row) => ({ ...row }))
     dbTotal.value = Number(payload?.total || 0)
+    dbFocusedCell.rowIndex = -1
+    dbFocusedCell.columnName = ''
+    closeDbCellEditor()
+    refreshDbGrid()
     dbMessage.value = `已加载 ${rows.length} 行（总计 ${dbTotal.value}）`
   } catch (err) {
     console.error(err)
@@ -2298,6 +2703,9 @@ async function loadDbRows() {
     dbRowsDraft.value = []
     dbColumns.value = []
     dbPkColumns.value = []
+    dbGridColumns.value = []
+    dbGridSource.value = []
+    dbGridRenderKey.value += 1
     dbTotal.value = 0
     dbMessage.value = err instanceof Error ? err.message : '读取表数据失败'
   } finally {
@@ -3418,14 +3826,23 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
 <style scoped>
 .admin-console-main {
-  padding: 24px;
+  width: 100%;
+  min-width: 0;
   max-width: 1280px;
   margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
   display: grid;
   gap: 16px;
 }
 
-.top-shell { padding-bottom: 8px; }
+.top-shell {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 8px;
+}
 
 .top-header {
   display: flex;
@@ -3458,7 +3875,13 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.content-block { padding: 8px 0; }
+.content-block {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
 
 .subtext {
   margin: 6px 0 0;
@@ -3853,7 +4276,12 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 }
 
 .db-editor-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-top: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .db-toolbar {
@@ -3896,16 +4324,95 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   width: 100%;
 }
 
-.db-table-wrap {
-  margin-top: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  max-height: 420px;
-  overflow: auto;
+.db-grid-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 10px;
 }
 
-.db-edit-table {
-  min-width: 980px;
+.db-grid-help .subtext {
+  margin: 0;
+}
+
+.db-grid-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.db-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.db-compact-btn {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.db-grid-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  contain: inline-size;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.db-data-grid {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: clamp(380px, 58vh, 620px);
+  font-size: 12px;
+}
+
+.db-grid-wrap :deep(revo-grid) {
+  width: 100%;
+  height: 100%;
+  --rgRowBorderColor: #e5e7eb;
+  --rgHeaderBackground: #f8fafc;
+  --rgHeaderColor: #334155;
+}
+
+.db-grid-wrap :deep(.rg-header-cell) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+}
+
+.db-grid-wrap :deep(.db-grid-cell) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 34px;
+}
+
+.db-grid-wrap :deep(.db-grid-cell--dirty) {
+  background: #fff7ed !important;
+  box-shadow: inset 3px 0 0 #f59e0b;
 }
 
 .db-pk-tag {
@@ -3920,20 +4427,166 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   border: 1px solid #bfdbfe;
 }
 
-.db-cell-input {
-  width: 100%;
-  min-width: 120px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 4px 6px;
-  font-size: 12px;
-  line-height: 1.3;
-  background: #ffffff;
+.db-cell-editor-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(2px);
 }
 
-.db-cell-input:disabled {
-  background: #f3f4f6;
-  color: #6b7280;
+.db-cell-editor-drawer {
+  width: min(680px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-left: 1px solid #cbd5e1;
+  box-shadow: -18px 0 44px rgba(15, 23, 42, 0.2);
+}
+
+.db-cell-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.db-cell-editor-header h3 {
+  margin: 3px 0 0;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.db-cell-editor-kicker {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.db-cell-editor-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.db-cell-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 20px 22px;
+}
+
+.db-null-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.db-null-toggle.disabled {
+  color: #94a3b8;
+}
+
+.db-full-editor-field {
+  min-width: 0;
+}
+
+.db-full-editor-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 240px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.db-full-editor-field textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.db-full-editor-field textarea:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.db-json-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.db-cell-editor-error {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.db-original-value {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.db-original-value-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.db-original-value pre {
+  max-height: 210px;
+  margin: 0;
+  padding: 11px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #334155;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.db-cell-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
 }
 
 .super-card {
@@ -4285,6 +4938,37 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
   .db-filter-item {
     grid-template-columns: 1fr;
+  }
+
+  .db-grid-help {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .db-grid-status {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .db-cell-editor-drawer {
+    width: 100vw;
+  }
+
+  .db-cell-editor-header,
+  .db-cell-editor-body,
+  .db-cell-editor-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .db-cell-editor-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .db-cell-editor-footer .inline-actions {
+    justify-content: flex-end;
   }
 }
 .cache-worker-grid {

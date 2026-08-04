@@ -1,3 +1,25 @@
+## 2026-08-04 全局管理后台大表宽度隔离与表格区域水平滚动修复
+
+- 关联页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`。
+- 宽度约束链路：
+  - 页面根容器、顶层卡片、标签内容块和数据库编辑卡片统一增加 `min-width: 0`、`max-width: 100%`，允许 Grid/Flex 子项在视口内收缩。
+  - 数据库编辑卡片使用 `overflow: hidden` 阻止大表宽度影响全局页面。
+  - `.db-grid-wrap` 使用 `overflow-x: auto` 与 `contain: inline-size`，横向滚动只发生在数据表区域。
+- 验证：`npm run build` 通过，Vite 转换 139 个模块，零编译错误。
+
+## 2026-08-04 全局管理后台数据库编辑器紧凑网格与完整值抽屉
+
+- 关联页面：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 生效结构与流程：
+  - 数据查询结果先保留在 `dbRowsOriginal/dbRowsDraft`，再由 `refreshDbGrid` 转换为 RevoGrid 数据源；`buildDbGridColumns` 按字段类型、字段名和样本内容生成智能列宽，主键列固定且只读。
+  - `afterfocus` 记录当前单元格，`afteredit` 将网格编辑同步回草稿；双击或点击“完整编辑当前单元格”打开右侧抽屉。
+  - 抽屉支持完整多行内容、原值对照、显式 `NULL`、布尔选择、JSON 格式化/语法校验、恢复原值；网格始终保持 34px 紧凑行高。
+  - `dbDirtyStats` 同时统计修改行数和字段数，修改单元格高亮；最终保存继续调用既有 `batchUpdateAdminDbTable` 差异保存接口。
+- 验证：
+  - `npm run build` 通过，Vite 7.1.10 共转换 139 个模块，零编译错误。
+  - 登录态视觉验收待补：主键固定、横向滚动、双击打开抽屉和小屏抽屉布局。
+
 ## 2026-08-04 需求侧管理页面 `saveTubeGlobalManagementConfigSection` 函数导入修复
 
 - 关联页面与组件：

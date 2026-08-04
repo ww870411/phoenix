@@ -1,3 +1,17 @@
+## 2026-08-04 全局管理后台大表宽度隔离修复的后端同步说明
+
+- 本轮仅调整前端容器宽度和数据库表区域水平滚动，后端代码、Admin DB API、查询分页、字段元数据及批量保存协议均未变化。
+- 大表仍由现有 `POST /admin/db/table/query` 分页返回，前端仅将列宽溢出限制在 RevoGrid 区域，不改变请求参数或响应结构。
+
+## 2026-08-04 全局管理后台数据库编辑器前端网格升级的后端契约说明
+
+- 本轮后端代码和数据库结构均未修改。
+- 前端继续复用 `GET /admin/db/tables`、`POST /admin/db/table/query`、`POST /admin/db/table/batch-update`：
+  - 查询响应已有的 `columns[].name`、`columns[].data_type`、`pk_columns` 用于智能列宽、类型提示、主键固定及类型化完整编辑。
+  - 保存协议仍为 `{ table, updates: [{ key, changes }] }`，主键只用于定位记录，不允许被前端修改。
+- 兼容结果：
+  - 无接口迁移、无数据库迁移；回滚前端网格不会影响既有查询和批量更新能力。
+
 ## 2026-08-04 数据看板需求汇总接口 (`/demand-summary`) timedelta 缺失导入修复说明
 
 - 变更文件：
