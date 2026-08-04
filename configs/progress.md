@@ -20,6 +20,16 @@
 - **未完成验收**：
   - 当前浏览器自动化连接异常，仍需在登录态下人工确认主键固定列、双击抽屉和横向滚动的实际视觉效果。
 
+## 2026-08-04 [数据看板访问权限开放 — 解封 tube 四大核心业务角色数据看板查看权限]
+- **权限配置开放物理动作**：
+  - 在 [insulation_pipe_supply_2026.json:L33](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json#L33) 与 [permissions.json:L515](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions.json#L515) 中，正式为以下 4 个业务角色追加数据看板 `dashboard` 页面访问权限 (`page_access`)：
+    1. **`tube_supplier`** (保温管供应商/管厂)
+    2. **`tube_site_manager`** (现场项目经理)
+    3. **`tube_construction_unit`** (施工单位/需求侧)
+    4. **`tube_warehouse_keeper`** (库管员)
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功，账号登录后即可无障碍直接进入数据看板页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/dashboard` 查看全盘汇总大盘。
+
 ## 2026-08-04 [需求侧实际消耗与损耗上报提示文案精准微调]
 - **文案微调**：
   - 在 [DemandManagementView.vue:L236](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L236) 中，将实际消耗上报面板提示文案从“登记业务日（...）”精准微调更新为**“登记采集日（...）各保温管型号的实际施工消耗与现场损耗。计量单位：米。”**，概念更加严密清爽。

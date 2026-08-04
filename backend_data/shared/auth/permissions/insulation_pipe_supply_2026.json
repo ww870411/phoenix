@@ -31,6 +31,7 @@
     },
     "tube_supplier": {
       "page_access": [
+        "dashboard",
         "supply_management",
         "history_query"
       ],
@@ -54,6 +55,7 @@
     },
     "tube_site_manager": {
       "page_access": [
+        "dashboard",
         "demand_management",
         "history_query"
       ],
@@ -77,6 +79,7 @@
     },
     "tube_construction_unit": {
       "page_access": [
+        "dashboard",
         "demand_management",
         "history_query"
       ],
@@ -100,6 +103,7 @@
     },
     "tube_warehouse_keeper": {
       "page_access": [
+        "dashboard",
         "warehouse_management",
         "history_query"
       ],

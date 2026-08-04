@@ -12,6 +12,19 @@
 - 兼容结果：
   - 无接口迁移、无数据库迁移；回滚前端网格不会影响既有查询和批量更新能力。
 
+## 2026-08-04 解封 tube 四大核心业务角色数据看板 (`dashboard`) 访问权限说明
+
+- 变更权限配置文件：
+  - [backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json#L33)
+  - [backend_data/shared/auth/permissions.json](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions.json#L515)
+- 本轮处理与实现原理：
+  - 在 `insulation_pipe_supply_2026` 项目权限矩阵中，正式为以下四个业务角色的 `page_access` 访问清单中追加 `"dashboard"`：
+    1. `tube_supplier` (保温管供应商)
+    2. `tube_site_manager` (现场项目经理)
+    3. `tube_construction_unit` (施工单位/需求侧)
+    4. `tube_warehouse_keeper` (库管员)
+  - 用户以任意上述账号身份登录系统后，即可在保温管项目功能页及直接访问 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/dashboard` 无障碍查看数据看板全盘汇总。
+
 ## 2026-08-04 数据看板需求汇总接口 (`/demand-summary`) timedelta 缺失导入修复说明
 
 - 变更文件：

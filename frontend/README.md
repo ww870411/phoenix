@@ -20,6 +20,12 @@
   - `npm run build` 通过，Vite 7.1.10 共转换 139 个模块，零编译错误。
   - 登录态视觉验收待补：主键固定、横向滚动、双击打开抽屉和小屏抽屉布局。
 
+## 2026-08-04 解封 tube 四大核心业务角色数据看板 (`dashboard`) 访问权限说明
+
+- 本轮处理与实现原理：
+  - 更新权限矩阵，为 `tube_supplier` (保温管供应商)、`tube_site_manager` (现场项目经理)、`tube_construction_unit` (施工单位/需求侧) 以及 `tube_warehouse_keeper` (库管员) 开放 `dashboard` 页面路由访问权限；
+  - 登录相应账号后，即可在项目入口直接看到并进入数据看板页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/dashboard` 无碍查阅统计宏观大盘。
+
 ## 2026-08-04 需求侧管理页面 `saveTubeGlobalManagementConfigSection` 函数导入修复
 
 - 关联页面与组件：

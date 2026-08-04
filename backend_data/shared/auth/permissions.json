@@ -513,6 +513,7 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
+            "dashboard",
             "supply_management",
             "history_query"
           ],
@@ -540,6 +541,7 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
+            "dashboard",
             "demand_management",
             "history_query"
           ],
@@ -567,6 +569,7 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
+            "dashboard",
             "demand_management",
             "history_query"
           ],
@@ -594,6 +597,7 @@
       "projects": {
         "insulation_pipe_supply_2026": {
           "page_access": [
+            "dashboard",
             "warehouse_management",
             "history_query"
           ],
