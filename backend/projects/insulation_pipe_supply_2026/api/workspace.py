@@ -926,7 +926,7 @@ def get_supply_management_demand_summary(
         except Exception:
             parsed_show_date = None
     show_date_obj = parsed_show_date or get_configured_show_date(payload)
-    plan_dates = build_plan_dates(show_date_obj)
+    plan_dates = build_plan_dates(show_date_obj + timedelta(days=1))
     plan_total_map = list_plan_totals(plan_dates)
     delivery_aggregate_map = list_delivery_aggregates()
     arrival_aggregate_map = list_arrival_aggregates(show_date_obj.isoformat())

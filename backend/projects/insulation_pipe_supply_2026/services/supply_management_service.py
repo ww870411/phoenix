@@ -130,7 +130,8 @@ def list_delivery_aggregates() -> Dict[str, Dict[str, Any]]:
 
 def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
     auto_process_timeout_deliveries()
-    cutoff_time = f"{str(show_date).split('T')[0]} 23:59:59"
+    show_date_clean = str(show_date).split('T')[0]
+    cutoff_time = f"{show_date_clean} 23:59:59"
     sql = text(
         """
         SELECT
@@ -168,6 +169,7 @@ def list_arrival_aggregates(show_date: str) -> Dict[str, Dict[str, Any]]:
 
 
 def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
+    show_date_clean = str(show_date).split('T')[0]
     sql = text(
         """
         SELECT
@@ -176,13 +178,13 @@ def list_usage_totals(show_date: str) -> Dict[str, Dict[str, Any]]:
             SUM(usage_qty) AS total_usage_qty,
             SUM(loss_qty) AS total_loss_qty
         FROM tube.tube_daily_usage
-        WHERE usage_date < :show_date
+        WHERE usage_date <= :show_date
         GROUP BY section_1_id, pipe_model_id
         """
     )
     session = SessionLocal()
     try:
-        rows = session.execute(sql, {"show_date": str(show_date)}).mappings().all()
+        rows = session.execute(sql, {"show_date": show_date_clean}).mappings().all()
         result: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             key = f"{_normalize_text(row['section_1_id'])}::{_normalize_pipe_model_id(row['pipe_model_id'])}"

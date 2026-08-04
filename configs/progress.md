@@ -1,3 +1,24 @@
+## 2026-08-04 [“show_date 业务日”数据体系全盘重构与四天气象卡片精准重命名]
+- **业务对齐与架构设计**：
+  - 明确 `show_date` 为**“业务日 / 数据截止日”**（如真实今日为 8月4日，`show_date` 设为 8月3日）；
+  - **历史数据全量对齐 (`<= show_date`)**：截至 `show_date` 业务日日终，【累计到货量】(`arrived_confirm_at <= show_date 23:59:59`) 与 【累计实际使用量】(`usage_date <= show_date`) 和 【累计现场损耗量】全量统一使用小于等于 `show_date` 的时间窗结算，计算出截至业务日日终的物理静态现场总库存；
+  - **三日滚动计划接力 (`show_date + 1`)**：未来三日滚动计划接力从 `show_date + 1` 起算（包含真实今日 `show_date + 1`、明日 `show_date + 2`、后日 `show_date + 3`），与历史使用量零重复、零漏洞无缝接轨；
+  - **气象四天卡片重命名**：气象决策面板四天卡片重新映射标注为：**“前一日”** (`show_date - 1`)、**“业务日”** (`show_date`)、**“今日”** (`show_date + 1`)、**“明日”** (`show_date + 2`)。
+- **涉及修改物理文件**：
+  - 后端：[supply_management_service.py:L131](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py#L131) (`list_arrival_aggregates` 修正为 `<= show_date 23:59:59`；`list_usage_totals` 修正为 `usage_date <= :show_date`)；[workspace.py:L929](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L929) (`plan_dates` 起算点修正为 `show_date_obj + 1`)；[weather_service.py:L577](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py#L577) (`labels` 修正为 `["前一日", "业务日", "今日", "明日"]`)。
+  - 前端：[DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L236) (修正面板提示文案为“登记业务日实际施工消耗与现场损耗”)。
+- **验证结果**：
+  - 后端 Python `py_compile` 及前端 Vite 生产构建 100% 成功通过。
+
+## 2026-08-04 [数据看板累计到货量与累计使用量时间切片窗口 100% 严格对齐物理重构]
+- **问题诊断与逻辑一致性提升**：
+  - 先前的累计到货量算法中，`cutoff_time` 设为 `show_date 23:59:59`（多包含了 `show_date` 当天到货），而累计使用量限制为 `usage_date < show_date`（截至前一日 23:59:59），导致进项与销项在时间窗口上存在 1 天的时差与算力错位。
+- **物理重构动作**：
+  - 在 [supply_management_service.py:L131](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py#L131) 的 `list_arrival_aggregates` 中，将到货量的截止时间戳 `cutoff_time` 统一调整为 `(show_date - 1) 23:59:59`；
+  - **产生结果**：使得累计到货量、累计使用量和累计损耗量三者全量定格在 `show_date` 前一日 23:59:59（即 `show_date` 00:00:00 晨间开工时刻），计算出的【现场总库存】物理完美体现 `show_date` 晨间绝对静止可用的库存余量。
+- **验证结果**：
+  - Python `py_compile` 单元语法校验 100% 成功。
+
 ## 2026-08-04 [需求侧现场到货与接收确认表格整行点击弹窗 & 干净表格布局]
 - **用户需求调整**：
   - 移除单独的超链接样式和操作列的【🔍 凭证】按钮，要求整体表格保持干净利落，直接实现整条记录点击弹出全生命周期凭证小窗。

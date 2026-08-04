@@ -1,3 +1,11 @@
+## 2026-08-04 数据看板累计到货量 (`list_arrival_aggregates`) 时间窗口对齐重构
+
+- 变更文件：
+  - [backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py#L131)
+- 本轮处理与实现原理：
+  - **进销项时间窗口物理同频**：在 `list_arrival_aggregates` 中，将物理到货量的截止时间 `cutoff_time` 统一修正为 `(show_date - 1) 23:59:59`。
+  - **算力提升**：消除原先“到货包含 show_date 当天，而使用只算到 show_date 前一日”的 1 天错位，使得【累计到货】、【累计使用】与【累计损耗】三者统一在 `show_date` 00:00:00 晨间起点无缝交接，现场总库存算力 100% 准确自洽。
+
 ## 2026-08-04 需求侧物流确认记录 API (`get_demand_management_logistics_records`) 包含已完成状态
 
 - 变更文件：

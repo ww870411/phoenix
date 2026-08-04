@@ -233,7 +233,7 @@
             <div class="panel-title-row">
               <div>
                 <h2>实际消耗与损耗上报</h2>
-                <span class="panel-hint">登记昨日（{{ usageDate || '今日' }}）各保温管型号的实际施工消耗与现场损耗。计量单位：米。</span>
+                <span class="panel-hint">登记业务日（{{ usageDate || '今日' }}）各保温管型号的实际施工消耗与现场损耗。计量单位：米。</span>
               </div>
               <button
                 type="button"
