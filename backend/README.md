@@ -1,3 +1,42 @@
+## 2026-08-04 管件车次号与订单号自动编号逻辑升级 (insulation_pipe_supply_2026)
+
+- **关联 API/服务模块**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **自动编号格式升级**：
+  - 自动编号解析 `supply_entities` 规则中的 `code` 缩写（如 `kaiyuan` 解析为 `SA`，`supplier_b` 解析为 `SB`）。
+  - 管件车次号格式：`FS{entity_code}-{YYMMDD}-{seq}` (如 `FSSA-260804-001`)。
+  - 管件订单号格式：`FO{entity_code}-{section_code}-{YYMMDD}-{seq}-{idx}` (如 `FOSA-L1-260804-001-01`)。
+
+## 2026-08-04 管件发货接口路由前缀对齐 (insulation_pipe_supply_2026)
+
+- **关联 API 模块**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **修补路由**：
+  - `POST /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit`
+  - `GET /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/list`
+- **问题原因与解决**：
+  - 补充了 `@public_router` 映射路径中缺失的 `/workspace` 前缀，解决前端提交时 404 Not Found 报错。
+
+## 2026-08-04 供给主体账号 (kaiyuan) 配额标段解析与数据模型增强 (insulation_pipe_supply_2026)
+
+- **关联服务与文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+- **排查与修复点**：
+  - `_extract_normalized_ids()`：增强了对配置中 `section_1_ids` 字段的解包兼容逻辑，无论是逗号分隔字符串还是 JSON 数组均可精准拆分并去重。解决了开元厂 `kaiyuan` 登录后获取不到配额标段下拉选项的问题。
+
+## 2026-08-04 管件发货明细表与接口说明 (insulation_pipe_supply_2026)
+
+- **数据库结构**：
+  - 在 `tube` Schema 中新增数据表 `tube.tube_fitting_delivery`，并在 [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql) 中添加持久化表结构与索引模板。
+- **服务层与接口**：
+  - [supply_management_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py)：
+    - `submit_fitting_delivery`：接收整车管件明细数组，自动校验并生成管件车次号（如 `FSBH-260804-001`）和明细订单号（如 `FOBH-A-260804-001-01`），完成事务写入。
+    - `list_fitting_deliveries`：支持按标段、关键字检索历史管件发货记录。
+  - [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)：
+    - `POST /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit`
+    - `GET /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/list`
+
 ## 2026-08-04 全局管理后台大表宽度隔离修复的后端同步说明
 
 - 本轮仅调整前端容器宽度和数据库表区域水平滚动，后端代码、Admin DB API、查询分页、字段元数据及批量保存协议均未变化。

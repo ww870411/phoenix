@@ -71,6 +71,8 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     update_delivery_warehouse_record,
     super_update_delivery_record,
     query_history_records,
+    submit_fitting_delivery,
+    list_fitting_deliveries,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
@@ -2825,6 +2827,30 @@ def handle_presence_logout(
     username = session.username if is_valid_session else payload.get("username", "")
     record_user_logout(username)
     return {"ok": True}
+
+
+@public_router.post("/workspace/fitting_deliveries/submit", summary="提交管件发货记录表")
+def handle_submit_fitting_delivery(
+    payload: Dict[str, Any] = Body(...),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    operator = session.username if (session and getattr(session, "username", None)) else "GUEST"
+    return submit_fitting_delivery(payload, operator=operator)
+
+
+@public_router.get("/workspace/fitting_deliveries/list", summary="查询管件发货记录")
+def handle_list_fitting_deliveries(
+    section_1_id: str = Query("", description="接收标段/工程ID"),
+    search_keyword: str = Query("", description="搜索关键字"),
+    limit: int = Query(100, description="限制返回数量"),
+):
+    items = list_fitting_deliveries(
+        section_1_id=section_1_id,
+        search_keyword=search_keyword,
+        limit=limit,
+    )
+    return {"ok": True, "items": items}
+
 
 
 

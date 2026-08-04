@@ -19,17 +19,36 @@
 
       <p v-if="errorMessage" class="page-error">{{ errorMessage }}</p>
 
-      <!-- 磨砂玻璃态数据微看板 (Quick Dashboard) -->
-      <section class="card elevated quick-dashboard-card" v-if="selectedSupplyEntityId">
-        <div class="meta-dashboard">
-          <div class="meta-card">
-            <span class="meta-label">当前供给主体</span>
-            <strong class="meta-value">{{ currentSupplyEntityLabel }}</strong>
+      <!-- 磨砂玻璃态数据微看板及上方独立控制行 (Quick Dashboard) -->
+      <div v-if="selectedSupplyEntityId" class="quick-dashboard-section" style="margin-bottom: 16px;">
+        <!-- 管理员专属：供给主体控制行 (位于卡片正上方) -->
+        <div v-if="canSwitchSupplyEntity && supplyEntityOptions.length > 0" class="entity-control-bar" style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: #334155;">🏭 切换当前供给主体：</span>
+            <select
+              v-model="selectedSupplyEntityId"
+              class="input"
+              style="font-weight: bold; color: #4f46e5; border: 1px solid #c7d2fe; background: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 13.5px; cursor: pointer; min-width: 220px;"
+              @change="handleGlobalSupplyEntityChange($event.target.value)"
+            >
+              <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
+                {{ entity.entity_name }} ({{ entity.entity_id }})
+              </option>
+            </select>
           </div>
-          <div class="meta-card">
-            <span class="meta-label">展示/业务日期</span>
-            <strong class="meta-value">{{ showDate || '—' }}</strong>
-          </div>
+          <span style="font-size: 12px; color: #64748b;">(全局管理员特权：切换后将自动更新下方微看板及各 Tab 业务数据)</span>
+        </div>
+
+        <section class="card elevated quick-dashboard-card">
+          <div class="meta-dashboard">
+            <div class="meta-card">
+              <span class="meta-label">当前供给主体</span>
+              <strong class="meta-value">{{ currentSupplyEntityLabel }}</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">展示/业务日期</span>
+              <strong class="meta-value">{{ showDate || '—' }}</strong>
+            </div>
           <div class="meta-card">
             <span class="meta-label">待提交车次明细</span>
             <strong class="meta-value highlight-num">{{ draftDeliveryItems.length }} 条</strong>
@@ -44,6 +63,7 @@
           </div>
         </div>
       </section>
+    </div>
 
       <!-- 选项卡导航 (Responsive Tabs Header) -->
       <div class="tube-tabs-header-wrap" v-if="selectedSupplyEntityId">
@@ -68,6 +88,13 @@
             @click="activeTab = 'history'"
           >
             📋 物流发货记录
+          </button>
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'fitting' }" 
+            @click="activeTab = 'fitting'"
+          >
+            🔧 管件发货记录
           </button>
         </div>
       </div>
@@ -473,6 +500,172 @@
           </section>
         </div>
 
+        <!-- Tab 4: 管件发货记录 -->
+        <div v-if="activeTab === 'fitting'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row">
+              <div>
+                <h2>🔧 管件整车发货填报</h2>
+                <span class="panel-hint">以每一车辆为一个发货批次，可自由输入或直接从 Excel 粘贴多行管件发货明细。系统将自动生成管件车次号及管件订单号。</span>
+              </div>
+              <div class="toolbar-actions" style="display: flex; gap: 8px;">
+                <button type="button" class="btn ghost" @click="downloadFittingTemplate" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600;">📥 下载标准填报模板 (.xlsx)</button>
+                <button type="button" class="btn ghost" @click="showExcelPasteModal = true">📋 粘贴 Excel 数据</button>
+                <button type="button" class="btn primary" :disabled="submitFittingLoading" @click="submitFittingForm">🚀 提交整车管件发货单</button>
+              </div>
+            </div>
+
+            <div v-if="fittingActionMsg" :class="['action-message', fittingActionMsg.type]" style="margin-bottom: 12px;">{{ fittingActionMsg.text }}</div>
+
+            <!-- 表头信息区（全横向紧凑网格，备注不再另起一行） -->
+            <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; background: #f8fafc; padding: 12px 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 14px; align-items: end;">
+              <label class="field">
+                <span style="font-weight: bold; color: #1e293b; font-size: 13px;">运输车牌号 <span style="color: #ef4444;">*</span></span>
+                <input v-model.trim="fittingForm.vehiclePlateNo" type="text" placeholder="例如: 鲁B-88888" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              </label>
+
+              <label class="field">
+                <span style="font-weight: bold; color: #1e293b; font-size: 13px;">接收标段 <span style="color: #ef4444;">*</span></span>
+                <select v-model="fittingForm.section1Id" class="input" style="padding: 6px 10px; font-size: 13px;">
+                  <option value="">-- 请选择接收标段 --</option>
+                  <option v-for="st in section1Options" :key="st.section_1_id" :value="st.section_1_id">
+                    {{ st.section_1_name }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span style="font-weight: bold; color: #1e293b; font-size: 13px;">发货时间</span>
+                <input v-model="fittingForm.shippedAt" type="datetime-local" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              </label>
+
+              <label class="field">
+                <span style="font-size: 13px;">发货主体</span>
+                <input :value="currentSupplyEntityLabel" type="text" disabled class="input" style="background: #f1f5f9; color: #64748b; padding: 6px 10px; font-size: 13px;" />
+              </label>
+
+              <label class="field">
+                <span style="font-size: 13px;">发货经办人</span>
+                <input v-model.trim="fittingForm.shipContactName" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              </label>
+
+              <label class="field">
+                <span style="font-size: 13px;">联系电话</span>
+                <input v-model.trim="fittingForm.shipContactPhone" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              </label>
+
+              <label class="field" style="grid-column: span 2;">
+                <span style="font-size: 13px;">整车发货备注</span>
+                <input v-model.trim="fittingForm.shipRemark" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              </label>
+            </div>
+
+            <!-- 明细填报 RevoGrid 电子表格 -->
+            <div class="panel-sub-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="margin: 0; font-size: 14px; color: #334155; display: flex; align-items: center; gap: 6px;">
+                📊 本车管件发货电子表格
+                <span style="font-size: 12px; font-weight: normal; color: #64748b;">(双击单元格输入，直接按方向键切换，或在网格区域按下 Ctrl+V 快捷粘贴 Excel 矩阵)</span>
+              </h3>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn ghost btn-sm" @click="addFittingGridRows(5)">+ 追加 5 行空行</button>
+                <button type="button" class="btn ghost btn-sm" style="color: #ef4444;" @click="clearFittingGrid">清空电子表格</button>
+              </div>
+            </div>
+
+            <div class="table-wrap card" style="min-height: 280px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff;">
+              <RevoGrid
+                ref="fittingGridRef"
+                :row-headers="true"
+                :hide-attribution="true"
+                :stretch="true"
+                :row-size="32"
+                :resize="true"
+                :range="true"
+                :can-focus="true"
+                :apply-on-close="true"
+                :columns="fittingGridColumns"
+                :source="fittingGridSource"
+                style="height: 320px; width: 100%;"
+                @afteredit="handleFittingGridAfterEdit"
+                @afterEdit="handleFittingGridAfterEdit"
+              />
+            </div>
+
+            <!-- 可选管件下拉匹配提示词 -->
+            <datalist id="fitting-type-list">
+              <option value="弯头" />
+              <option value="三通" />
+              <option value="异径管(大小头)" />
+              <option value="固定节" />
+              <option value="补偿器" />
+              <option value="接头套管" />
+              <option value="焊接球阀" />
+              <option value="蝶阀" />
+              <option value="发泡料/辅料" />
+            </datalist>
+          </section>
+
+          <!-- 下半部分：历史管件发货记录 -->
+          <section class="card elevated tab-card" style="margin-top: 20px;">
+            <div class="panel-title-row">
+              <div>
+                <h2>📋 已提交管件发货记录台账</h2>
+                <span class="panel-hint">显示已录入系统的管件发货明细，按发货时间倒序排列。</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select v-model="fittingTableSectionFilter" class="input" style="width: 160px; font-size: 13px;" @change.prevent.stop="loadFittingDeliveries">
+                  <option value="">全部接收标段</option>
+                  <option v-for="st in section1Options" :key="st.section_1_id" :value="st.section_1_id">
+                    {{ st.section_1_name }}
+                  </option>
+                </select>
+                <input v-model.trim="fittingSearchKw" type="text" placeholder="搜索车牌号/单号/管件类型..." class="input" style="width: 220px;" @keyup.enter="loadFittingDeliveries" />
+                <button type="button" class="btn ghost" :disabled="fittingLoading" @click="loadFittingDeliveries">刷新列表</button>
+                <button v-if="fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="downloadFittingHistoryExcel">📥 导出台账 (.xlsx)</button>
+              </div>
+            </div>
+
+            <div class="table-wrap" style="position: relative; min-height: 140px;">
+              <!-- 局部平滑加载中遮罩 (不销毁 DOM) -->
+              <div v-if="fittingLoading" class="loading-overlay" style="position: absolute; inset: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); z-index: 10; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #4f46e5;">
+                ⚡ 正在更新台账数据...
+              </div>
+
+              <table class="data-table fitting-record-table">
+                <thead>
+                  <tr>
+                    <th style="width: 140px;">管件车次号</th>
+                    <th style="width: 160px;">管件订单号</th>
+                    <th style="width: 110px;">车牌号</th>
+                    <th style="width: 110px;">接收标段</th>
+                    <th style="width: 120px;">管件类型</th>
+                    <th style="min-width: 240px;">型号/规格</th>
+                    <th style="width: 100px; text-align: right;">发货数量</th>
+                    <th style="width: 150px;">发货时间</th>
+                    <th style="width: 90px; text-align: center;">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!fittingDeliveries.length && !fittingLoading">
+                    <td colspan="9" style="text-align: center; padding: 40px 0; color: #94a3b8;">暂无符合条件的管件发货记录。</td>
+                  </tr>
+                  <tr v-for="row in fittingDeliveries" :key="row.id">
+                    <td><strong style="color: #4f46e5; font-family: monospace;">{{ row.shipment_no }}</strong></td>
+                    <td><span style="font-family: monospace; font-size: 12px; color: #475569;">{{ row.order_no }}</span></td>
+                    <td><span class="plate-badge">{{ row.vehicle_plate_no }}</span></td>
+                    <td>{{ getSection1Name(row.section_1_id) }}</td>
+                    <td><span class="tag-badge primary">{{ row.fitting_type }}</span></td>
+                    <td><strong>{{ row.model_spec }}</strong></td>
+                    <td style="text-align: right; font-weight: bold; color: #059669;">{{ row.shipped_qty }} {{ row.unit }}</td>
+                    <td><span style="font-size: 12px; color: #64748b;">{{ formatDateTimeDisplay(row.shipped_at) }}</span></td>
+                    <td style="text-align: center;"><span class="status-badge shipped">已发货</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
       </div>
     </main>
 
@@ -779,11 +972,44 @@
       default-filename="保温管物流发货历史台账"
       @close="showExportModal = false"
     />
+
+    <!-- Excel 批量粘贴模态框 -->
+    <Transition name="fade">
+      <div v-if="showExcelPasteModal" class="block-modal-overlay" @click.self="showExcelPasteModal = false">
+        <div class="block-modal-container" style="max-width: 550px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%) !important;">
+            <span class="block-warning-icon">📋</span>
+            <h3 style="margin-top: 5px; color: #fff;">批量粘贴 Excel 发货数据</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">从 Excel 中复制多行数据（包含：管件类型、规格型号、数量），直接粘贴至下方文本域</p>
+          </div>
+          
+          <div style="padding: 20px;">
+            <textarea
+              v-model="excelPasteText"
+              rows="8"
+              class="input"
+              style="width: 100%; box-sizing: border-box; font-family: monospace; font-size: 13px; line-height: 1.5; padding: 10px;"
+              placeholder="例如从 Excel 复制如下多行数据：&#10;弯头&#9;DN500 90度&#9;10&#10;三通&#9;DN500等径&#9;5&#10;异径管&#9;DN500x300&#9;2"
+            ></textarea>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+              <span style="font-size: 12px; color: #64748b;">格式说明：每行一项，用 Tab 键隔开列</span>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn ghost" @click="showExcelPasteModal = false">取消</button>
+                <button type="button" class="btn primary" @click="confirmExcelPaste">确认解析并追加</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import RevoGrid from '@revolist/vue3-datagrid'
+import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
@@ -822,6 +1048,248 @@ const selectedSupplyEntityId = ref('')
 const activeTab = ref('demand')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
+
+// --- 管件发货记录 Tab 专用变量与逻辑 ---
+const getNowISOString = () => {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+  return now.toISOString().slice(0, 16)
+}
+
+const fittingForm = ref({
+  vehiclePlateNo: '',
+  section1Id: '',
+  shippedAt: getNowISOString(),
+  shipContactName: '',
+  shipContactPhone: '',
+  shipRemark: '',
+})
+
+const fittingGridRef = ref(null)
+const fittingGridColumns = ref([
+  { prop: 'fitting_type', name: '管件类型', size: 180, readonly: false },
+  { prop: 'model_spec', name: '型号/规格', size: 380, readonly: false },
+  { prop: 'shipped_qty', name: '发货数量', size: 120, readonly: false },
+  { prop: 'unit', name: '单位', size: 90, readonly: false },
+  { prop: 'remark', name: '明细备注', size: 200, readonly: false },
+])
+
+const createEmptyFittingRows = (count = 10) => {
+  const rows = []
+  for (let i = 0; i < count; i++) {
+    rows.push({
+      fitting_type: '',
+      model_spec: '',
+      shipped_qty: '',
+      unit: '',
+      remark: '',
+    })
+  }
+  return rows
+}
+
+const fittingGridSource = ref(createEmptyFittingRows(10))
+
+const showExcelPasteModal = ref(false)
+const excelPasteText = ref('')
+const submitFittingLoading = ref(false)
+const fittingActionMsg = ref(null)
+const fittingLoading = ref(false)
+const fittingDeliveries = ref([])
+const fittingSearchKw = ref('')
+
+const addFittingGridRows = (count = 5) => {
+  fittingGridSource.value = [...fittingGridSource.value, ...createEmptyFittingRows(count)]
+}
+
+const clearFittingGrid = () => {
+  fittingGridSource.value = createEmptyFittingRows(10)
+}
+
+const handleFittingGridAfterEdit = (e) => {
+  if (e && e.detail) {
+    const { model, prop, val } = e.detail
+    if (model && prop) {
+      model[prop] = val
+    }
+  }
+}
+
+const confirmExcelPaste = () => {
+  if (!excelPasteText.value.trim()) {
+    showExcelPasteModal.value = false
+    return
+  }
+  const lines = excelPasteText.value.trim().split('\n')
+  const newRows = []
+  lines.forEach(line => {
+    const parts = line.split('\t').map(s => s.trim())
+    if (parts.length >= 2 && parts[0]) {
+      const qty = parseFloat(parts[2]) || parseFloat(parts[1]) || 1
+      const spec = parts.length >= 3 ? parts[1] : parts[0]
+      const type = parts.length >= 3 ? parts[0] : '管件'
+      newRows.push({
+        fitting_type: type,
+        model_spec: spec,
+        shipped_qty: qty,
+        unit: parts[3] || '',
+        remark: parts[4] || '',
+      })
+    }
+  })
+  if (newRows.length) {
+    fittingGridSource.value = [...newRows, ...fittingGridSource.value]
+    fittingActionMsg.value = { type: 'success', text: `成功从 Excel 解析并插入了 ${newRows.length} 行管件明细` }
+    setTimeout(() => { fittingActionMsg.value = null }, 3000)
+  }
+  excelPasteText.value = ''
+  showExcelPasteModal.value = false
+}
+
+const downloadFittingTemplate = () => {
+  const headers = [['管件类型', '型号/规格', '发货数量', '单位', '备注']]
+  const worksheet = XLSX.utils.aoa_to_sheet(headers)
+
+  worksheet['!cols'] = [
+    { wch: 16 },
+    { wch: 25 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 30 }
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '管件发货清单模板')
+  XLSX.writeFile(workbook, '管件发货清单填报模板.xlsx')
+}
+
+const downloadFittingHistoryExcel = () => {
+  if (!fittingDeliveries.value || !fittingDeliveries.value.length) {
+    alert('当前没有可导出的管件发货记录')
+    return
+  }
+
+  const exportData = fittingDeliveries.value.map(row => ({
+    '管件车次号': row.shipment_no,
+    '管件订单号': row.order_no,
+    '车牌号': row.vehicle_plate_no,
+    '接收标段': getSection1Name(row.section_1_id),
+    '管件类型': row.fitting_type,
+    '型号/规格': row.model_spec,
+    '发货数量': row.shipped_qty,
+    '单位': row.unit || '个',
+    '发货时间': formatDateTimeDisplay(row.shipped_at),
+    '发货经办人': row.ship_contact_name || '—',
+    '联系电话': row.ship_contact_phone || '—',
+    '备注': row.ship_remark || '—',
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData)
+  worksheet['!cols'] = [
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 12 },
+    { wch: 8 },
+    { wch: 20 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 25 }
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '已发货管件台账')
+  const dateStr = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(workbook, `已发货管件历史台账_${dateStr}.xlsx`)
+}
+
+const fittingTableSectionFilter = ref('')
+
+const loadFittingDeliveries = async () => {
+  fittingLoading.value = true
+  try {
+    const params = new URLSearchParams({
+      section_1_id: fittingTableSectionFilter.value || '',
+      search_keyword: fittingSearchKw.value || '',
+      limit: '100',
+    })
+    const res = await fetch(`/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/list?${params}`)
+    const data = await res.json()
+    if (data.ok) {
+      fittingDeliveries.value = data.items || []
+    }
+  } catch (err) {
+    console.error('加载管件发货记录失败:', err)
+  } finally {
+    fittingLoading.value = false
+  }
+}
+
+const submitFittingForm = async () => {
+  if (!fittingForm.value.vehiclePlateNo) {
+    fittingActionMsg.value = { type: 'error', text: '请填写运输车牌号' }
+    return
+  }
+  if (!fittingForm.value.section1Id) {
+    fittingActionMsg.value = { type: 'error', text: '请选择接收工程/施工标段' }
+    return
+  }
+
+  const validItems = (fittingGridSource.value || []).filter(it => 
+    it && 
+    String(it.fitting_type || '').trim() && 
+    String(it.model_spec || '').trim() && 
+    Number(it.shipped_qty) > 0
+  )
+
+  if (!validItems.length) {
+    fittingActionMsg.value = { type: 'error', text: '请至少在电子表格中填写一行有效的管件发货明细（包含类型、型号及大于0的数量）' }
+    return
+  }
+
+  submitFittingLoading.value = true
+  fittingActionMsg.value = null
+  try {
+    const payload = {
+      supply_entity_id: selectedSupplyEntityId.value || 'BH',
+      vehicle_plate_no: fittingForm.value.vehiclePlateNo,
+      section_1_id: fittingForm.value.section1Id,
+      shipped_at: fittingForm.value.shippedAt,
+      ship_contact_name: fittingForm.value.shipContactName,
+      ship_contact_phone: fittingForm.value.shipContactPhone,
+      ship_remark: fittingForm.value.shipRemark,
+      items: validItems,
+    }
+
+    const res = await fetch('/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      fittingActionMsg.value = { type: 'success', text: `🎉 提交成功！已成功录入管件发货单 [${data.shipment_no}]，包含 ${data.count} 项明细` }
+      fittingGridSource.value = createEmptyFittingRows(10)
+      loadFittingDeliveries()
+    } else {
+      fittingActionMsg.value = { type: 'error', text: data.detail || '提交失败' }
+    }
+  } catch (err) {
+    fittingActionMsg.value = { type: 'error', text: `网络或系统异常: ${err.message}` }
+  } finally {
+    submitFittingLoading.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'fitting') {
+    loadFittingDeliveries()
+  }
+})
+
 
 const deliveryDetailModalVisible = ref(false)
 const deliveryDetailModalData = ref(null)
@@ -902,6 +1370,16 @@ const deliveryForm = ref(createDefaultDeliveryForm())
 
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
 const canSwitchSupplyEntity = computed(() => currentGroup.value === 'Global_admin')
+
+const handleGlobalSupplyEntityChange = (newVal) => {
+  selectedSupplyEntityId.value = newVal
+  deliveryForm.value.supplyEntityId = newVal
+  loadDemandSummary()
+  loadDeliveries()
+  if (activeTab.value === 'fitting') {
+    loadFittingDeliveries()
+  }
+}
 
 const currentGroupLabel = computed(() => {
   if (!currentGroup.value) return '未识别'
@@ -1956,6 +2434,16 @@ async function saveSuperEdit() {
 
 .data-table tr:last-child td {
   border-bottom: none;
+}
+
+.fitting-record-table {
+  min-width: 1120px;
+}
+
+.fitting-record-table th,
+.fitting-record-table td {
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .delivery-record-table {

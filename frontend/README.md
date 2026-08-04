@@ -1,3 +1,82 @@
+## 2026-08-04 管件发货台账筛选无感静默更新优化 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **体验与 DOM 调优**：
+  - 移除了台账区域原有的 `v-if="fittingLoading"` 破坏性 DOM 销毁结构，改为表格常驻 + 局部毛玻璃 Loading 遮罩模式。切换标段或检索时页面布局零抖动、全屏零闪烁。
+
+## 2026-08-04 管件订单号表头重命名与列名统一 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **显示重构**：
+  - 将原“明细订单号”统一重命名为“管件订单号”，并同步更新 Excel 导出表头与表单提示。
+
+## 2026-08-04 管件发货历史台账单行不折行与水平滚动优化 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **样式调优**：
+  - 为已提交管件台账表格 `.fitting-record-table` 增加 `white-space: nowrap;` CSS 规则，确保车次号、订单号、标段与规格型号单行横向排布；设置 `min-width: 1120px;` 在外层 `.table-wrap` 自动响应水平滚动条。
+
+## 2026-08-04 管件型号/规格列宽拓宽调优 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **显示调优**：
+  - 将 RevoGrid 电子表格中的 `model_spec` 列宽增加至 `380px`，并将历史台账数据表中的该列调大至 `min-width: 240px`，解决长规格型号挤压变形或截断的问题。
+
+## 2026-08-04 管件历史台账与拟发货表单彻底解耦 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **解耦优化点**：
+  - 将 `loadFittingDeliveries` 函数中误绑定的拟发货表单字段 `fittingForm.value.section1Id` 移除，并在历史台账标题栏工具区新增独立的 `fittingTableSectionFilter` 下拉筛选框，彻底分离发货填报与历史查阅职责。
+
+## 2026-08-04 管件发货标准 XLSX 填报模板下载与台账导出功能 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **新增功能点**：
+  - `downloadFittingTemplate()`：前端接入 `xlsx` 库，为文员提供【📥 下载标准填报模板 (.xlsx)】按钮，点击即生成包含规范列头 (`管件类型` | `型号/规格` | `发货数量` | `单位` | `备注`) 的 Excel 模板。
+  - `downloadFittingHistoryExcel()`：在管件台账卡片提供【📥 导出台账 (.xlsx)】功能，可将数据库中已记录的管件明细导出为 Excel。
+
+## 2026-08-04 供给主体选择器移至微看板卡片正上方控制行说明 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **布局调整说明**：
+  - 在【当前供给主体】微看板卡片行的正上方新增 `.entity-control-bar` 专属控制行，符合“先控制选择、后展示微看板”的自上而下视觉流，同时保持了卡片本身 100% 精致的样式。
+
+## 2026-08-04 供给主体切换器视觉美学升级 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **视觉优化要点**：
+  1. **恢复 Quick Dashboard 原始精美排版**：移除微看板卡片内的临时下拉框，100% 还原磨砂玻璃微卡片的统一文本与数字视觉。
+  2. **顶栏右上角胶囊切换器 (`.admin-entity-switcher`)**：将管理员特有的供给主体选择器移至工作台顶部 Header (`topbar-actions`)，采用紫蓝调高颜值胶囊背景、毛玻璃模糊与微阴影，完美融于顶部工具栏。
+
+## 2026-08-04 管件发货升级为 RevoGrid 电子表格与紧凑单排表头说明 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **升级要点**：
+  1. **表头区域布局对齐**：消除了“整车发货备注”独立成行的换行，将其与车牌号、接收标段、时间、经办人等合并为横向单排网格。
+  2. **全面替换为 RevoGrid 网格组件**：
+     - 使用 `<RevoGrid :columns="fittingGridColumns" :source="fittingGridSource" ... />` 替代传统 `<input>` 列表。
+     - 支持 Excel 式键盘方向键移动、双击编辑，以及选中单元格区域直接按下 `Ctrl+V` 批量粘贴 Excel 矩阵。
+     - 提供【+ 追加 5 行空行】与【清空电子表格】交互功能，并自动过滤出有效行提交后端。
+
+## 2026-08-04 供给侧管理页面新增【🔧 管件发货记录】Tab 说明 (insulation_pipe_supply_2026)
+
+- **关联页面与实现**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **新增交互与功能**：
+  - 在【📋 物流发货记录】Tab 之后加入第四个 Tab 选项卡：`🔧 管件发货记录` (`activeTab === 'fitting'`)。
+  - **整车发货明细填报**：提供车牌号、接收标段、发货时间、经办人、发货主体与明细表格（支持增加/删除行与 datalist 快捷补全）。
+  - **Excel 批量粘贴**：提供 `showExcelPasteModal` 粘贴模态框，可从 Excel 复制 Tab 隔开的多行管件数据直接解析并追加至发货清单。
+  - **后端联动**：提交时打包整车发送至 `/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit`，并提供已提交管件发货台账的高效查询与刷新。
+
 ## 2026-08-04 全局管理后台大表宽度隔离与表格区域水平滚动修复
 
 - 关联页面：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`。

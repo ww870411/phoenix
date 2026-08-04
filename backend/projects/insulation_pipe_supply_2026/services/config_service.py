@@ -209,6 +209,29 @@ def get_config_list(payload: Dict[str, Any], key: str) -> List[Dict[str, Any]]:
     return value if isinstance(value, list) else []
 
 
+def _extract_normalized_ids(raw_value: Any) -> Set[str]:
+    result: Set[str] = set()
+    if not raw_value:
+        return result
+    if isinstance(raw_value, str):
+        parts = raw_value.split(",")
+    elif isinstance(raw_value, (list, tuple, set)):
+        parts = []
+        for sub in raw_value:
+            if isinstance(sub, str):
+                parts.extend(sub.split(","))
+            else:
+                parts.append(str(sub))
+    else:
+        parts = [str(raw_value)]
+
+    for part in parts:
+        cleaned = str(part or "").strip()
+        if cleaned:
+            result.add(cleaned)
+    return result
+
+
 def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
     normalized_group = str(group or "").strip()
     normalized_username = str(username or "").strip()
@@ -233,12 +256,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
             str(item.get("username") or "").strip(),
         }
         if normalized_username in candidate_keys:
-            bound_section_1_ids = item.get("section_1_ids") or []
-            if bound_section_1_ids:
-                for section_1_id in bound_section_1_ids:
-                    normalized_section_1_id = str(section_1_id or "").strip()
-                    if normalized_section_1_id:
-                        allowed_section_1_ids.add(normalized_section_1_id)
+            allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
 
     for item in manager_assignments:
         candidate_keys = {
@@ -248,10 +266,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
         }
         if normalized_username not in candidate_keys:
             continue
-        for section_1_id in item.get("section_1_ids") or []:
-            normalized_section_1_id = str(section_1_id or "").strip()
-            if normalized_section_1_id:
-                allowed_section_1_ids.add(normalized_section_1_id)
+        allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
 
     construction_units = get_config_list(payload, "construction_units")
     for item in construction_units:
@@ -262,10 +277,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
         }
         if normalized_username not in candidate_keys:
             continue
-        for section_1_id in item.get("section_1_ids") or []:
-            normalized_section_1_id = str(section_1_id or "").strip()
-            if normalized_section_1_id:
-                allowed_section_1_ids.add(normalized_section_1_id)
+        allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
     return allowed_section_1_ids
 
 
@@ -277,8 +289,7 @@ def resolve_supply_entity_allowed_section_ids(payload: Dict[str, Any], supply_en
     for item in supply_entities:
         entity_id = str(item.get("entity_id") or "").strip()
         if entity_id == normalized_id:
-            bound_ids = item.get("section_1_ids") or []
-            return {str(s).strip() for s in bound_ids if str(s).strip()}
+            return _extract_normalized_ids(item.get("section_1_ids"))
     return set()
 
 

@@ -1,3 +1,96 @@
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 拓宽管件“型号/规格”列展示宽度]
+- **界面与样式调优**：
+  1. **RevoGrid 电子表格宽度拓宽**：将 `model_spec`（型号/规格）列的基础宽度由 280px 调大至 380px，支持长规格描述（如 `DN1200x1000 PN1.6 补强三通`）横向无障碍完整显示。
+  2. **已提交记录台账宽度拓宽**：将历史台账表格中的 `<th>型号/规格</th>` 设定 `min-width: 240px`，确保列宽自适应伸展不挤压。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 6.75s 完成，展示无截断报错。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 修复管件历史台账筛选时DOM销毁跳跃与整页闪烁Bug]
+- **交互与 DOM 优化**：
+  1. **根因定位**：原本台账使用 `v-if="fittingLoading"` 条件渲染，当用户在下拉框切换标段导致 `fittingLoading` 变为 `true` 时，整个 `<div class="table-wrap">` DOM 被 Vue 彻底 Unmount 卸载销毁，接口响应后又重新 Mount，导致页面产生严重的整体闪烁、滚动位置丢失与布局跳跃。
+  2. **升级无感静默更新架构**：保持 `.table-wrap` 与 `<table class="data-table">` 节点常驻 Mount，仅在表格层上方叠加轻量毛玻璃 Loading 遮罩，标段切换时 DOM 节点零抖动、数据静默平滑更新。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 7.04s 零报错通过。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 管件订单号与车次号升级主体编码 SA 并重命名表头]
+- **编码与命名重构**：
+  1. **管件订单号重命名**：将页面提示、表格 `<th>` 及 Excel 导出列名中的“明细订单号”统一重命名为更准确的 **“管件订单号”**。
+  2. **升级主体简写编码 (Code)**：修改后端 `submit_fitting_delivery` 自动编号规则，从 `tube_config.json` 的 `supply_entities` 中动态查找解析供给主体的配置编码 `code`（如开元厂 `kaiyuan -> SA`）。
+     - 生成的车次号格式：**`FSSA-260804-001`**（代替原来的 `FSKAIYUAN-260804-001`）。
+     - 生成的管件订单号格式：**`FOSA-L1-260804-001-01`**（代替原来的 `FOKAIYUAN-L1-260804-001-01`）。
+- **验证结果**：
+  - 后端 Python 接口单测生成 `FSSA-260804-001` 成功。
+  - 前端静态构建 `npm run build` 7.09s 零报错通过。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 已提交管件发货记录台账禁止单行折行与水平滚动条支持]
+- **样式与体验优化**：
+  1. **禁止单元格折行 (`white-space: nowrap`)**：为 `.fitting-record-table` 中的所有 `th` 与 `td` 添加 `white-space: nowrap` 并且强制 `vertical-align: middle`，保证管件车次号、订单号、车牌号、接收标段、管件类型与型号规格单行对齐、整齐划一。
+  2. **设定最小表格宽幅并响应式水平滚动**：设定 `.fitting-record-table` 最小总宽为 `1120px`，当屏幕或卡片容器宽度不足时在 `.table-wrap` 层自动触发精致的水平滚动条，消除挤压与折行卡顿。
+- **验证结果**：
+  - 前端静态编译 `npm run build` 6.39s 构建通过。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 已提交管件发货历史台账与拟提交表单解耦]
+- **业务逻辑重构与解耦**：
+  1. **彻底解耦**：移除了 `loadFittingDeliveries` 函数中误绑定的拟发货表单字段 `fittingForm.value.section1Id`，解决在上方选发货标段导致下方历史台账无端被联动过滤的问题。
+  2. **独立台账筛选**：在下方【已提交管件发货记录台账】卡片标题栏增加独立的 `fittingTableSectionFilter`（`全部接收标段`）下拉框。发货填报与历史查阅职责分离、互不干扰。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 7.33s 通过。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 修复管件提交/查询接口 /workspace 前缀缺失导致404的Bug]
+- **问题排查与修复**：
+  1. **根因定位**：前端 `SupplyManagementView.vue` 调用的后端提交/查询接口路径为 `/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit`，而后端 `workspace.py` 中误写为 `@public_router.post("/fitting_deliveries/submit")`（缺少中间的 `/workspace` 前缀），导致全局路由映射时产生 404 Not Found。
+  2. **路由前缀补齐**：在 `workspace.py` 中将路由路径修正为 `/workspace/fitting_deliveries/submit` 和 `/workspace/fitting_deliveries/list`。
+- **验证结果**：
+  - 使用 TestClient 接口级联测试，GET 和 POST 请求均 100% 成功返回 HTTP 200 OK，并成功生成 `shipment_no` (如 `FSBH-260804-001`) 写入数据库。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 修复供给主体账号 (kaiyuan) 配额标段解析Bug]
+- **问题排查与修复**：
+  1. **根因定位**：在 `tube_config.json` 中，开元厂 (`kaiyuan`) 的关联标段配额原写作包含逗号的单字符串 `["high_lot_1,high_lot_2"]`，而后端 `config_service.py` 内部使用直接遍历，导致解析出的标段 ID 变成了包含逗号的字面量 `'high_lot_1,high_lot_2'`，无法匹配系统中的 `high_lot_1` 和 `high_lot_2` 标段，致使 `kaiyuan` 账号登录后获取到的标段下拉选项为空。
+  2. **后端健壮性增强**：在 `config_service.py` 中新增 `_extract_normalized_ids` 函数，自动兼容字符串/逗号分隔/列表数组等多种配置格式，并标准化 `tube_config.json`。
+- **验证结果**：
+  - Python 脚本实测 `resolve_accessible_section_1_ids(config, 'kaiyuan', 'tube_supplier')` 成功且精准返回 `{'high_lot_1', 'high_lot_2'}`。
+  - `kaiyuan` 账号登录后可自由选择 `高温水_标段1` 和 `高温水_标段2` 进行管件与保温管发货登记。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 新增管件发货标准 XLSX 模板下载与历史台账导出]
+- **功能特性**：
+  1. **【📥 下载标准填报模板 (.xlsx)】**：在管件发货卡片顶部新增绿色主题按钮，点击后利用前端 `xlsx` 库自动动态生成包含【管件类型、型号/规格、发货数量、单位、备注】标准表头与示例列宽的 `.xlsx` 模板文件（`管件发货清单填报模板.xlsx`）并触发浏览器下载。
+  2. **【📥 导出台账 (.xlsx)】**：在底部已提交管件发货记录卡片中，提供一键导出已录入全部管件发货历史明细的能力。
+- **验证结果**：
+  - 前端 `npm run build` 7.37s 构建成功，零编译错误。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 供给主体选择器移至微看板正上方控制行]
+- **布局调整**：
+  1. **Quick Dashboard 正上方独立控制行 (`.entity-control-bar`)**：为管理员在“当前供给主体”微看板卡片的正上方提供专属控制小行。按自上而下的逻辑，管理员先在正上方下拉选择供给主体，下方 4 块微看板卡片及全局业务数据实时同步响应。
+  2. **顶栏 Header 恢复干净**：顶栏不再有多余元素，Quick Dashboard 卡片 100% 保持原有精致样式与排版。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 7.53s 完成，无编译与样式错误。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 恢复 Quick Dashboard 磨砂卡片美感与顶栏切换器重构]
+- **视觉美学重构**：
+  1. **恢复 Quick Dashboard 100% 原始卡片美感**：撤出了原先强行塞入 `meta-card` 的默认 `<select>` 标签，恢复 `strong` 精致文本对齐与磨砂玻璃卡片排版。
+  2. **顶栏右上角高颜值胶囊切换组件**：在高级工作台 Header (`topbar-actions`) 的“返回功能页”旁，为 `Global_admin` 角色新增了紫蓝高颜值胶囊组件 (`.admin-entity-switcher`)。既满足了超级管理员自由切换任意供给主体的功能，又保持了整个工作台极致的现代化设计美感。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 7.63s 转换 139 个模块通过，无任何语法与样式报错。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 管件发货升级为 RevoGrid 数据网格与单排紧凑表头]
+- **交互与布局重构**：
+  1. **表头单排紧凑对齐**：消除“整车发货备注”单独占一行的空间浪费，将车牌号、接收标段、发货时间、发货主体、经办人、电话与整车发货备注统一步局为横向响应式网格 (`grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))`)，大幅提升垂直空间利用率。
+  2. **全面引入 RevoGrid 电子表格组件**：将原先原生的 HTML `<input>` 列表彻底替换为项目统一的 `RevoGrid` 数据网格组件（包含行号、单元格键盘导航、双击输入与多单元格区域选择）。
+  3. **真正的矩阵式 Ctrl+V 粘贴**：支持文员直接在 RevoGrid 网格中选中任意单元格，按 `Ctrl+V` 将从 Excel 中复制的多行多列数据矩阵快速一键贴入电子表格。
+- **验证结果**：
+  - 前端静态构建 `npm run build` 7.22s 转换 139 个模块完成，零编译与语法错误。
+
+## 2026-08-04 [子项目 insulation_pipe_supply_2026 新增管件发货记录功能模块与数据库设计]
+- **改动缘由与设计思考**：
+  - 工程主线为保温管，但随车混装的管件（弯头、三通、异径管、固定节、补偿器等）数量大、种类多。为保证保温管主线逻辑稳定，将管件发货从主线完全隔离，作为独立发货记录模块管理。
+  - 支持按整车（车次号 + 车牌号）批量填报发货明细，并对齐保温管生成 `FSBH-260804-001`（车次号）和 `FOBH-A-260804-001-01`（明细单号）。
+- **具体改动**：
+  1. **数据库**：建立 `tube.tube_fitting_delivery` 表并在 [tube_schema_init.sql](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/sql/tube_schema_init.sql) 中补充 DDL 定义与索引。
+  2. **后端 API**：在 [supply_management_service.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py) 中新增 `submit_fitting_delivery` 和 `list_fitting_deliveries`，在 [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 暴露 `/fitting_deliveries/submit` 及 `/fitting_deliveries/list`。
+  3. **前端 UI**：在 [SupplyManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 的【物流发货记录】之后新增【🔧 管件发货记录】Tab 子页，包含整车发货明细填报表、Excel 粘贴解析模态框以及已提交记录列表。
+- **验证结果**：
+  - 数据库建表成功，后端 API 批量提交与查询测试全部通过（单号生成、关联写入与数据检索验证均正常）。
+
 ## 2026-08-04 [修复大表撑宽全局后台页面并收敛水平滚动区域]
 - **问题根因**：
   - RevoGrid 大表的列总宽度通过 CSS Grid 子项默认的最小内容宽度向外传递，导致 `db-editor-card`、`content-block` 和全局后台页面被一起撑宽；同时 `.db-grid-wrap` 使用 `overflow: hidden`，没有明确承担水平滚动。

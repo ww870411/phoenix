@@ -360,5 +360,43 @@ VALUES
 ('insulation_pipe_supply_2026', 'weld', '标段2', '鞍山路预制管线', 'W-AS-003', '鞍山路社区小区分支焊口', 121.616771, 38.927091, 'passed', 'DN200 保温管', '从 T-AS-001 三通引出的小区分支焊口', 5, 'T-AS-001')
 ON CONFLICT (project_key, code) DO NOTHING;
 
+-- 管件发货明细表
+CREATE TABLE IF NOT EXISTS tube.tube_fitting_delivery (
+    id BIGSERIAL PRIMARY KEY,
+    supply_entity_id VARCHAR(64) NOT NULL,
+    shipment_no VARCHAR(64) NOT NULL,
+    order_no VARCHAR(64) NOT NULL,
+    vehicle_plate_no VARCHAR(32) NOT NULL,
+    section_1_id VARCHAR(64) NOT NULL,
+    fitting_type VARCHAR(64) NOT NULL,
+    model_spec VARCHAR(128) NOT NULL,
+    shipped_qty NUMERIC(18, 2) NOT NULL,
+    unit VARCHAR(32) NOT NULL DEFAULT '个',
+    shipped_at TIMESTAMPTZ NOT NULL,
+    ship_contact_name VARCHAR(128),
+    ship_contact_phone VARCHAR(64),
+    ship_remark TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'shipped',
+    created_by VARCHAR(128),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by VARCHAR(128),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_tube_fitting_shipped_qty_positive CHECK (shipped_qty > 0)
+);
+
+COMMENT ON TABLE tube.tube_fitting_delivery IS '管件发货明细表';
+COMMENT ON COLUMN tube.tube_fitting_delivery.shipment_no IS '管件发货车次号';
+COMMENT ON COLUMN tube.tube_fitting_delivery.order_no IS '管件明细订单号';
+COMMENT ON COLUMN tube.tube_fitting_delivery.vehicle_plate_no IS '发货车牌号';
+COMMENT ON COLUMN tube.tube_fitting_delivery.fitting_type IS '管件类型';
+COMMENT ON COLUMN tube.tube_fitting_delivery.model_spec IS '管件型号/规格描述';
+
+CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_no
+    ON tube.tube_fitting_delivery (shipment_no);
+
+CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_section_1_shipped
+    ON tube.tube_fitting_delivery (section_1_id, shipped_at);
+
 COMMIT;
+
 

@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.insulation_pipe_supply_2026.services.config_service import load_tube_config, get_config_list
 
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -1353,6 +1354,212 @@ def query_history_records(
         ]
     finally:
         session.close()
+
+
+def submit_fitting_delivery(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+) -> Dict[str, Any]:
+    raw_supply_entity_id = _normalize_text(payload.get("supply_entity_id") or "BH")
+    supply_entity_id = raw_supply_entity_id.upper()
+    vehicle_plate_no = _normalize_text(payload.get("vehicle_plate_no"))
+    section_1_id = _normalize_text(payload.get("section_1_id"))
+    shipped_at_str = payload.get("shipped_at")
+    ship_contact_name = _normalize_text(payload.get("ship_contact_name"))
+    ship_contact_phone = _normalize_text(payload.get("ship_contact_phone"))
+    ship_remark = _normalize_text(payload.get("ship_remark"))
+    items = payload.get("items") or []
+
+    if not vehicle_plate_no:
+        raise HTTPException(status_code=400, detail="发货车牌号不能为空")
+    if not section_1_id:
+        raise HTTPException(status_code=400, detail="接收标段/工程不能为空")
+    if not items:
+        raise HTTPException(status_code=400, detail="发货明细不能为空")
+
+    shipped_at_dt = None
+    if shipped_at_str:
+        try:
+            shipped_at_dt = datetime.fromisoformat(str(shipped_at_str).replace('Z', '+00:00'))
+        except Exception:
+            shipped_at_dt = datetime.now(BEIJING_TZ)
+    else:
+        shipped_at_dt = datetime.now(BEIJING_TZ)
+
+    beijing_dt = _to_beijing_time(shipped_at_dt)
+    date_part = beijing_dt.strftime("%y%m%d")
+
+    # 从配置中解析该供给主体的简写 code (例如 kaiyuan -> SA, supplier_b -> SB, BH -> BH)
+    config_payload = load_tube_config()
+    entity_code = supply_entity_id
+    for entity in get_config_list(config_payload, "supply_entities"):
+        e_id = str(entity.get("entity_id") or "").strip().lower()
+        if e_id == raw_supply_entity_id.lower():
+            code = str(entity.get("code") or "").strip().upper()
+            if code:
+                entity_code = code
+            break
+
+    session = SessionLocal()
+    try:
+        count_sql = text(
+            """
+            SELECT COUNT(DISTINCT shipment_no) AS batch_cnt
+            FROM tube.tube_fitting_delivery
+            WHERE supply_entity_id = :supply_entity_id
+              AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date = :shipped_date
+            """
+        )
+        batch_cnt = session.execute(
+            count_sql,
+            {
+                "supply_entity_id": raw_supply_entity_id,
+                "shipped_date": beijing_dt.date(),
+            }
+        ).scalar() or 0
+        
+        seq_num = batch_cnt + 1
+        shipment_no = f"FS{entity_code}-{date_part}-{seq_num:03d}"
+
+        insert_sql = text(
+            """
+            INSERT INTO tube.tube_fitting_delivery (
+                supply_entity_id, shipment_no, order_no, vehicle_plate_no,
+                section_1_id, fitting_type, model_spec, shipped_qty, unit,
+                shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
+                status, created_by, updated_by
+            ) VALUES (
+                :supply_entity_id, :shipment_no, :order_no, :vehicle_plate_no,
+                :section_1_id, :fitting_type, :model_spec, :shipped_qty, :unit,
+                :shipped_at, :ship_contact_name, :ship_contact_phone, :ship_remark,
+                'shipped', :created_by, :updated_by
+            )
+            RETURNING id
+            """
+        )
+
+        created_ids = []
+        for idx, item in enumerate(items, 1):
+            fitting_type = _normalize_text(item.get("fitting_type"))
+            model_spec = _normalize_text(item.get("model_spec"))
+            shipped_qty_raw = item.get("shipped_qty")
+            unit = _normalize_text(item.get("unit")) or "个"
+            item_remark = _normalize_text(item.get("remark"))
+
+            if not fitting_type or not model_spec:
+                continue
+
+            try:
+                shipped_qty = float(shipped_qty_raw)
+            except (ValueError, TypeError):
+                continue
+
+            if shipped_qty <= 0:
+                continue
+
+            section_code = section_1_id[0].upper() if section_1_id else "X"
+            order_no = f"FO{entity_code}-{section_code}-{date_part}-{seq_num:03d}-{idx:02d}"
+
+            res = session.execute(
+                insert_sql,
+                {
+                    "supply_entity_id": supply_entity_id,
+                    "shipment_no": shipment_no,
+                    "order_no": order_no,
+                    "vehicle_plate_no": vehicle_plate_no,
+                    "section_1_id": section_1_id,
+                    "fitting_type": fitting_type,
+                    "model_spec": model_spec,
+                    "shipped_qty": shipped_qty,
+                    "unit": unit,
+                    "shipped_at": shipped_at_dt,
+                    "ship_contact_name": ship_contact_name,
+                    "ship_contact_phone": ship_contact_phone,
+                    "ship_remark": item_remark or ship_remark,
+                    "created_by": operator,
+                    "updated_by": operator,
+                }
+            )
+            row_id = res.scalar()
+            created_ids.append(row_id)
+
+        session.commit()
+        return {
+            "ok": True,
+            "shipment_no": shipment_no,
+            "count": len(created_ids),
+            "created_ids": created_ids,
+        }
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"保存管件发货记录失败: {str(e)}")
+    finally:
+        session.close()
+
+
+def list_fitting_deliveries(
+    section_1_id: str = "",
+    search_keyword: str = "",
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    sql = text(
+        """
+        SELECT
+            id, supply_entity_id, shipment_no, order_no, vehicle_plate_no,
+            section_1_id, fitting_type, model_spec, shipped_qty, unit,
+            shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
+            status, created_at
+        FROM tube.tube_fitting_delivery
+        WHERE (:section_1_id = '' OR section_1_id = :section_1_id)
+          AND (
+            :keyword = '' OR
+            shipment_no ILIKE :kw_like OR
+            order_no ILIKE :kw_like OR
+            vehicle_plate_no ILIKE :kw_like OR
+            fitting_type ILIKE :kw_like OR
+            model_spec ILIKE :kw_like
+          )
+        ORDER BY shipped_at DESC, id DESC
+        LIMIT :limit
+        """
+    )
+    session = SessionLocal()
+    try:
+        kw = _normalize_text(search_keyword)
+        rows = session.execute(
+            sql,
+            {
+                "section_1_id": _normalize_text(section_1_id),
+                "keyword": kw,
+                "kw_like": f"%{kw}%",
+                "limit": limit,
+            }
+        ).mappings().all()
+
+        return [
+            {
+                "id": row["id"],
+                "supply_entity_id": _normalize_text(row["supply_entity_id"]),
+                "shipment_no": _normalize_text(row["shipment_no"]),
+                "order_no": _normalize_text(row["order_no"]),
+                "vehicle_plate_no": _normalize_text(row["vehicle_plate_no"]),
+                "section_1_id": _normalize_text(row["section_1_id"]),
+                "fitting_type": _normalize_text(row["fitting_type"]),
+                "model_spec": _normalize_text(row["model_spec"]),
+                "shipped_qty": float(row["shipped_qty"]),
+                "unit": _normalize_text(row["unit"]),
+                "shipped_at": row["shipped_at"].isoformat() if row["shipped_at"] else "",
+                "ship_contact_name": _normalize_text(row["ship_contact_name"]),
+                "ship_contact_phone": _normalize_text(row["ship_contact_phone"]),
+                "ship_remark": _normalize_text(row["ship_remark"]),
+                "status": _normalize_text(row["status"]),
+                "created_at": row["created_at"].isoformat() if row["created_at"] else "",
+            }
+            for row in rows
+        ]
+    finally:
+        session.close()
+
 
 
 
