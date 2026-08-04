@@ -1,3 +1,11 @@
+## 2026-08-04 全局管理后台数据库在线编辑 (Admin DB API) 不限 Schema 全量解封
+
+- 变更文件：
+  - [backend/api/v1/admin_console.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/api/v1/admin_console.py#L801)
+- 本轮处理与实现原理：
+  - **不限 Schema 表清单检索**：修改 `list_database_tables` 接口，自动排除 `pg_catalog` / `information_schema` 等系统表，全量扫描列出包含 `public` 和 `tube` 在内的所有业务数据表。
+  - **动态 `schema.table` 转义与主键识别**：重构 `_load_table_meta` 与 `_quote_identifier`，支持动态拆分与引用转义 `"tube"."tube_delivery"`，使得超级管理员可在后台直接对任意 schema 中的业务表进行在线检索、筛选与按主键批量保存修改。
+
 ## 2026-08-04 数据看板累计到货量 (`list_arrival_aggregates`) 时间窗口对齐重构
 
 - 变更文件：

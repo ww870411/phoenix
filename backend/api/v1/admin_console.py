@@ -168,11 +168,24 @@ def _is_safe_identifier(name: str) -> bool:
     return bool(IDENTIFIER_PATTERN.fullmatch(str(name or "").strip()))
 
 
+def _parse_schema_and_table(raw_name: str) -> tuple[str, str]:
+    clean_name = str(raw_name or "").strip()
+    if "." in clean_name:
+        parts = clean_name.split(".", 1)
+        return parts[0], parts[1]
+    return "public", clean_name
+
+
 def _quote_identifier(name: str) -> str:
     raw = str(name or "").strip()
+    if "." in raw:
+        schema_part, table_part = _parse_schema_and_table(raw)
+        if not _is_safe_identifier(schema_part) or not _is_safe_identifier(table_part):
+            raise HTTPException(status_code=400, detail=f"非法标识符：{raw}")
+        return f'"{schema_part}"."{table_part}"'
     if not _is_safe_identifier(raw):
         raise HTTPException(status_code=400, detail=f"非法标识符：{raw}")
-    return f"\"{raw}\""
+    return f'"{raw}"'
 
 
 def _to_json_value(value: Any) -> Any:
@@ -191,7 +204,8 @@ def _to_json_value(value: Any) -> Any:
 
 def _load_table_meta(db, table: str) -> Dict[str, Any]:
     safe_table = str(table or "").strip()
-    if not _is_safe_identifier(safe_table):
+    schema_name, table_name = _parse_schema_and_table(safe_table)
+    if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
         raise HTTPException(status_code=400, detail="表名不合法。")
 
     columns_sql = text(
@@ -200,12 +214,12 @@ def _load_table_meta(db, table: str) -> Dict[str, Any]:
             c.column_name,
             c.data_type
         FROM information_schema.columns c
-        WHERE c.table_schema = 'public'
+        WHERE c.table_schema = :schema
           AND c.table_name = :table
         ORDER BY c.ordinal_position
         """
     )
-    columns_rows = db.execute(columns_sql, {"table": safe_table}).mappings().all()
+    columns_rows = db.execute(columns_sql, {"schema": schema_name, "table": table_name}).mappings().all()
     if not columns_rows:
         raise HTTPException(status_code=404, detail="数据表不存在或无字段。")
     columns = [
@@ -221,16 +235,19 @@ def _load_table_meta(db, table: str) -> Dict[str, Any]:
         JOIN pg_class t ON t.oid = i.indrelid
         JOIN pg_namespace n ON n.oid = t.relnamespace
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
-        WHERE n.nspname = 'public'
+        WHERE n.nspname = :schema
           AND t.relname = :table
           AND i.indisprimary
         ORDER BY array_position(i.indkey, a.attnum)
         """
     )
-    pk_rows = db.execute(pk_sql, {"table": safe_table}).mappings().all()
+    pk_rows = db.execute(pk_sql, {"schema": schema_name, "table": table_name}).mappings().all()
     pk_columns = [str(row.get("column_name") or "") for row in pk_rows if row.get("column_name")]
+    full_table = f"{schema_name}.{table_name}" if schema_name != "public" else table_name
     return {
-        "table": safe_table,
+        "table": full_table,
+        "raw_table": table_name,
+        "schema": schema_name,
         "columns": columns,
         "column_names": column_names,
         "pk_columns": pk_columns,
@@ -789,16 +806,34 @@ def list_database_tables(session: AuthSession = Depends(get_current_session)):
     with SessionLocal() as db:
         stmt = text(
             """
-            SELECT table_name
+            SELECT table_schema, table_name
             FROM information_schema.tables
-            WHERE table_schema = 'public'
+            WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
               AND table_type = 'BASE TABLE'
-            ORDER BY table_name
+            ORDER BY table_schema, table_name
             """
         )
         rows = db.execute(stmt).mappings().all()
-    tables = [str(row.get("table_name") or "") for row in rows if row.get("table_name")]
-    return {"ok": True, "tables": tables}
+
+    tables: List[str] = []
+    schemas_map: Dict[str, List[str]] = {}
+    for row in rows:
+        schema = str(row.get("table_schema") or "public")
+        table_name = str(row.get("table_name") or "")
+        if not table_name:
+            continue
+        full_name = f"{schema}.{table_name}" if schema != "public" else table_name
+        tables.append(full_name)
+        if schema not in schemas_map:
+            schemas_map[schema] = []
+        schemas_map[schema].append(table_name)
+
+    return {
+        "ok": True,
+        "tables": tables,
+        "schemas": list(schemas_map.keys()),
+        "schema_tables_map": schemas_map,
+    }
 
 
 @router.post("/admin/db/table/query", summary="查询数据表内容")

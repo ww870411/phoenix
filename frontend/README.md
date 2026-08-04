@@ -1,3 +1,20 @@
+## 2026-08-04 全局管理后台数据库在线编辑器 UI/UX 防重叠与长文本放大弹窗重构
+
+- 关联页面与组件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 本轮处理与实现原理：
+  - **动态列宽计算**：表格列引入 `getDbColumnMinWidth(col)`，根据 `col.name` 字符长度自动分配 `170px ~ 350px` 的安全最小宽度，且设置 `white-space: nowrap` 彻底解决长列名挤压打架；
+  - **吸顶表头与数据类型徽章**：表头以 Flex Box 格式展现字段名、主键 `PK` 徽章与 PostgreSQL 数据类型徽章（如 `text` / `bigint` / `timestamp`），并实现 `sticky` 滚动吸顶；
+  - **长文本与 JSON 放大编辑弹窗**：单元格提供全量内容 `:title` 原生悬浮提示，并在内容较长或包含 JSON 时提供 `🔍` 放大按钮，点击弹窗包含代码字体多行 Textarea 的 Cell Modal，方便高能编辑大文本与 JSON。
+
+## 2026-08-04 全局管理后台数据库在线编辑组件无缝支持多 Schema 业务表
+
+- 关联页面与组件：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- 本轮处理与实现原理：
+  - **全量业务表呈现**：后台数据库编辑 Tab 调用的 `listAdminDbTables()` 现已解除 `public` schema 限制，自动无缝列出所有业务 schema 下的数据表（包括 `tube.tube_delivery`、`tube.tube_daily_plan` 等）。
+  - **在线检索与修改**：前端组件无缝支持全表列自动匹配、主键解析、字段模糊检索及改动行批量保存。
+
 ## 2026-08-04 数据看板到货量与使用量累计切片时间窗口 100% 同步重构说明
 
 - 关联页面与组件：

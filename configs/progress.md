@@ -1,3 +1,53 @@
+## 2026-08-04 [全局超管后台数据库在线编辑表格样式完整还原]
+- **还原物理动作**：
+  - 响应用户指令，将 [AdminConsoleView.vue:L188](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue#L188) 的表格 HTML 结构、表头渲染方式以及对应的 CSS 样式完全还原为原本简约干净的默认版本；
+  - 保留并兼容了用户认可的 **“先选 Schema，再选 Table”** 两级级联下拉框核心功能以及后端多 schema 完美查询/保存的底层能力。
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功通过。
+
+## 2026-08-04 [全局超管后台数据库在线编辑器 UI/UX 极致紧凑自适应重构]
+- **交互与样式重构**：
+  - **紧凑屏幕列宽适配**：将 [AdminConsoleView.vue:L1367](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue#L1367) 的最小列宽开缩至 `100px ~ 180px` 之间，去除全局物理漫长伸展；
+  - **表头长文本优雅省略**：表头 `.th-col-name` 调整为单行紧凑 Flex 布局，超出自动 `text-overflow: ellipsis` 截断，鼠标悬浮在表头上即浮现全量完整列名与类型提示；
+  - **自适应容器**：`.db-edit-table` 贴合全屏卡片 `min-width: 100%`，既保留超长文本 `🔍` 放大弹窗，又绝不产生漫长难拖拽的横向滚动条，整体极其精致舒展。
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功通过。
+
+## 2026-08-04 [全局超管后台数据库在线编辑器 UI/UX 工业级全面重构与防重叠设计]
+- **交互与样式重构**：
+  - **动态自适应列宽**：在 [AdminConsoleView.vue:L190](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue#L190) 基于 `col.name` 字符长度通过 `getDbColumnMinWidth` 智能计算最小安全宽度（`170px ~ 350px`），配合 `white-space: nowrap` 彻底解决多列或长列名被挤压重叠打架的问题；
+  - **表头吸顶与信息丰富化**：表头新增行号 `#` 列，并将列名与 PostgreSQL 数据类型 Pill 徽章（`text` / `integer` / `timestamp` 等）及主键 `PK` 徽章以紧凑纵向 Flex Box 排布，表头加设吸顶 `position: sticky; top: 0`；
+  - **长文本与 JSON 悬浮提示与放大编辑器**：单元格绑定 `:title` 悬浮显示全量未截断文本；长文本/JSON/多行数据自动提供 `🔍` 放大按钮，点击弹窗弹出基于 monospace 字体的高级多行 Textarea 浮窗（Cell Modal），方便阅读与改写；
+  - **表格自适应横向滚动**：`table-layout: auto; min-width: max-content` 配合高级边框与 Hover 高亮，彻底消除重叠感。
+- **验证结果**：
+  - 前端 Vite 生产构建 100% 成功通过。
+
+## 2026-08-04 [超级管理员后台数据库在线编辑界面重构 — Schema 与 Table 两级级联下拉选择器]
+- **交互与功能重构**：
+  - 将后台数据库在线编辑页（`AdminConsoleView.vue`）原先单数据表下拉框升级重构为**两级联动选择框**（先选 Schema 架构，级联列出对应数据表 Table）；
+  - **后端 API 响应升级**：在 [admin_console.py:L801](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/api/v1/admin_console.py#L801) 的 `list_database_tables` 响应中新增 `schemas` 列表与按 Schema 分组的 `schema_tables_map` 字典；
+  - **前端级联联动**：在 [AdminConsoleView.vue:L110](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue#L110) 实现 `dbSelectedSchema` 与 `dbSelectedTableName` 的两级级联，计算属性 `dbSelectedTable` 自动安全合成 `schema.table` 格式提交给后端查询与保存。
+- **验证结果**：
+  - 后端 Python `py_compile` 及前端 Vite 生产打包 100% 成功。
+
+## 2026-08-04 [修复后台数据库在线编辑中带 Schema 表名（如 tube.tube_delivery）抛“表名不合法”的校验 Bug]
+- **Bug 根因定位**：
+  - 前端下拉框发送 `tube.tube_delivery` 表名时，后端 [admin_console.py:L201](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/api/v1/admin_console.py#L201) 先直接对完整的 `tube.tube_delivery` 字符串调用了 `_is_safe_identifier`。由于默认标识符正则 `^[A-Za-z_][A-Za-z0-9_]*$` 不含点号 `.`，导致点号匹配失败直接抛出 HTTP 400 `表名不合法` 异常。
+- **物理修复方案**：
+  - 重构 `_load_table_meta` 与 `_quote_identifier`：先调用 `_parse_schema_and_table` 将 `tube.tube_delivery` 优雅拆分为 `schema_name = "tube"` 与 `table_name = "tube_delivery"`，然后分别独立校验两段的安全性，并安全拼装转义为 SQL ` "tube"."tube_delivery"`。
+- **验证结果**：
+  - 后端 Python `py_compile` 语法校验 100% 成功。
+
+## 2026-08-04 [超级管理员后台数据库在线编辑扩展 — 不限 Schema 全量支持所有业务数据表]
+- **需求简述与问题诊断**：
+  - 用户反馈全局超管后台（`AdminConsoleView.vue`）的“数据库表编辑”功能中只能看到少量数据表，属于保温管项目的 `tube` 命名空间下 5 张核心数据表（`tube_delivery` / `tube_daily_plan` / `tube_daily_usage` / `tube_weather_daily` / `tube_audit_log`）物理缺失；
+  - 物理根因定位：后端 [admin_console.py:L809](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/api/v1/admin_console.py#L809) 与 `_load_table_meta` 中硬编码限定了 `table_schema = 'public'`。
+- **物理重构与扩展动作**：
+  1. **无界 Schema 数据库表提取**：更新 [admin_console.py:L801](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/api/v1/admin_console.py#L801) 的 `list_database_tables`，排除数据库内部 `pg_catalog` / `information_schema` / `pg_toast` 系统保留表后，动态全量提取所有业务 schema 下的 BASE TABLE 列表（如 `public.monthly_data_show`、`tube.tube_delivery` 等）；
+  2. **智能 `schema.table` 标识符转义**：升级 `IDENTIFIER_PATTERN` 正则与 `_quote_identifier` 以及 `_load_table_meta`，自动解析并精准读取/修改任何 schema 下数据表的主键列、数据类型及分页查询记录。
+- **验证结果**：
+  - 后端 Python `py_compile` 语法校验 100% 成功。
+
 ## 2026-08-04 [“show_date 业务日”数据体系全盘重构与四天气象卡片精准重命名]
 - **业务对齐与架构设计**：
   - 明确 `show_date` 为**“业务日 / 数据截止日”**（如真实今日为 8月4日，`show_date` 设为 8月3日）；

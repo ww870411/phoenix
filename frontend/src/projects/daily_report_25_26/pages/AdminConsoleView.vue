@@ -108,9 +108,15 @@
             </header>
             <div class="toolbar db-toolbar">
               <label class="field">
-                <span>数据表</span>
-                <select v-model="dbSelectedTable">
-                  <option v-for="name in dbTables" :key="name" :value="name">{{ name }}</option>
+                <span>Schema (架构)</span>
+                <select v-model="dbSelectedSchema" @change="onSchemaChange">
+                  <option v-for="s in dbSchemas" :key="s" :value="s">{{ s }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>数据表 (Table)</span>
+                <select v-model="dbSelectedTableName" @change="onTableNameChange">
+                  <option v-for="t in currentSchemaTables" :key="t" :value="t">{{ t }}</option>
                 </select>
               </label>
               <label class="field grow">
@@ -1333,7 +1339,21 @@ const fileUploading = ref(false)
 const fileDeleting = ref(false)
 const adminFileUploadInputRef = ref(null)
 const dbTables = ref([])
-const dbSelectedTable = ref('monthly_data_show')
+const dbSchemas = ref([])
+const dbSchemaTablesMap = ref({})
+const dbSelectedSchema = ref('public')
+const dbSelectedTableName = ref('')
+
+const currentSchemaTables = computed(() => {
+  return dbSchemaTablesMap.value[dbSelectedSchema.value] || []
+})
+
+const dbSelectedTable = computed(() => {
+  if (!dbSelectedSchema.value || !dbSelectedTableName.value) return ''
+  return dbSelectedSchema.value === 'public'
+    ? dbSelectedTableName.value
+    : `${dbSelectedSchema.value}.${dbSelectedTableName.value}`
+})
 const dbColumns = ref([])
 const dbPkColumns = ref([])
 const dbRowsOriginal = ref([])
@@ -2203,16 +2223,44 @@ async function loadDbTables() {
     const payload = await listAdminDbTables()
     const tables = Array.isArray(payload?.tables) ? payload.tables : []
     dbTables.value = tables
-    if (tables.length === 0) {
-      dbSelectedTable.value = ''
+    const rawMap = payload?.schema_tables_map || {}
+    const rawSchemas = Array.isArray(payload?.schemas) ? payload.schemas : Object.keys(rawMap)
+    
+    dbSchemaTablesMap.value = rawMap
+    dbSchemas.value = rawSchemas
+
+    if (rawSchemas.length === 0) {
+      dbSelectedSchema.value = ''
+      dbSelectedTableName.value = ''
       return
     }
-    if (!tables.includes(dbSelectedTable.value)) {
-      dbSelectedTable.value = tables.includes('monthly_data_show') ? 'monthly_data_show' : tables[0]
+
+    if (!dbSelectedSchema.value || !rawSchemas.includes(dbSelectedSchema.value)) {
+      dbSelectedSchema.value = rawSchemas.includes('public') ? 'public' : rawSchemas[0]
+    }
+
+    const tablesInSchema = rawMap[dbSelectedSchema.value] || []
+    if (!dbSelectedTableName.value || !tablesInSchema.includes(dbSelectedTableName.value)) {
+      dbSelectedTableName.value = tablesInSchema[0] || ''
     }
   } catch (err) {
     console.error(err)
     dbMessage.value = err instanceof Error ? err.message : '加载数据库表失败'
+  }
+}
+
+function onSchemaChange() {
+  const tables = dbSchemaTablesMap.value[dbSelectedSchema.value] || []
+  dbSelectedTableName.value = tables[0] || ''
+  onTableNameChange()
+}
+
+function onTableNameChange() {
+  dbOffset.value = 0
+  dbOrderBy.value = ''
+  resetDbFilters()
+  if (dbSelectedTable.value) {
+    loadDbRows()
   }
 }
 
