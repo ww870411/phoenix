@@ -415,14 +415,18 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in pendingRows" :key="row.deliveryId">
+                  <tr 
+                    v-for="row in pendingRows" 
+                    :key="row.deliveryId" 
+                    class="logistics-table-row" 
+                    title="点击整行可查看单据全生命周期凭证与发货备注"
+                    @click="handleLogisticsRowClick($event, row)"
+                  >
                     <td class="cell-status">
                       <div class="status-pill-group">
                         <span 
                           class="status-pill clickable-pill" 
                           :class="row.status === 'pending_diff_approve' ? 'pending_receive' : (row.isTimeoutReceive ? 'pending_warehouse' : row.status)"
-                          title="点击查看全生命周期流转备注详情"
-                          @click="showDeliveryDetail(row)"
                         >
                           {{ row.statusLabel }}
                         </span>
@@ -714,6 +718,10 @@
               <span class="lbl">规格型号</span>
               <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
             </div>
+            <div v-if="deliveryDetailModalData.shipRemark" class="metric-block-card" style="grid-column: span 3; background: #eff6ff; border: 1px solid #bfdbfe; text-align: left; padding: 8px 12px; border-radius: 6px;">
+              <span class="lbl" style="color: #1d4ed8; font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 4px;">📝 供给侧发货备注</span>
+              <span class="val" style="font-size: 12px; color: #1e3a8a; font-weight: 500; white-space: pre-wrap; word-break: break-all; margin-top: 2px;">{{ deliveryDetailModalData.shipRemark }}</span>
+            </div>
           </div>
 
           <!-- 时光轴内容 Timeline -->
@@ -986,6 +994,22 @@ const deliveryDetailModalData = ref(null)
 function showDeliveryDetail(row) {
   deliveryDetailModalData.value = row
   deliveryDetailModalVisible.value = true
+}
+
+function handleLogisticsRowClick(event, row) {
+  const target = event.target
+  if (!target) return
+  if (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'BUTTON' ||
+    target.tagName === 'SELECT' ||
+    target.closest('button') ||
+    target.closest('.stack-controls') ||
+    target.closest('.action-stack')
+  ) {
+    return
+  }
+  showDeliveryDetail(row)
 }
 
 
@@ -2451,6 +2475,15 @@ function jumpToUsageTab() {
 
 .logistics-table {
   min-width: 1460px;
+}
+
+.logistics-table-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.logistics-table-row:hover {
+  background-color: #f1f5f9 !important;
 }
 
 .logistics-table th {

@@ -1,3 +1,11 @@
+## 2026-08-04 需求侧物流确认记录 API (`get_demand_management_logistics_records`) 包含已完成状态
+
+- 变更文件：
+  - [backend/projects/insulation_pipe_supply_2026/api/workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L1838)
+- 本轮处理与实现原理：
+  - 在 `get_demand_management_logistics_records` 接口中，修改状态过滤条件白名单，由原先的 `{"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve"}` 调整为加入 `"completed"`（`{"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve", "completed"}`）。
+  - 确保即使单据经过库管确认或完成物理接收（`status` 切换为 `completed`），记录在前端页面中依然可见，支持追溯和历史信息查看。
+
 ## 2026-08-03 Presence 全局跨项目共享机制确认
 
 - 关联服务：`backend/projects/insulation_pipe_supply_2026/services/presence_service.py`

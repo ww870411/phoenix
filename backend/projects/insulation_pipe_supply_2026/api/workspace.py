@@ -1838,7 +1838,7 @@ def get_demand_management_logistics_records(
     filtered_rows = [
         row
         for row in rows
-        if row.get("section_1_id") == section_1_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve"}
+        if row.get("section_1_id") == section_1_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve", "completed"}
     ]
     normalized_order_no = str(order_no or "").strip().upper()
     normalized_shipment_no = str(shipment_no or "").strip().upper()

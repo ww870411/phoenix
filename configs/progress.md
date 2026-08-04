@@ -1,3 +1,13 @@
+## 2026-08-04 [需求侧现场到货与接收确认表格整行点击弹窗 & 干净表格布局]
+- **用户需求调整**：
+  - 移除单独的超链接样式和操作列的【🔍 凭证】按钮，要求整体表格保持干净利落，直接实现整条记录点击弹出全生命周期凭证小窗。
+- **物理实现细节**：
+  - 在 [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L415-L545) 中，为整行 `<tr>` 绑定 `handleLogisticsRowClick($event, row)` 及手型悬浮高亮 `.logistics-table-row`；
+  - 智能防误触过滤：在 `handleLogisticsRowClick` 中自动识别并排除了用户在 `input` 框填数或点击【确认到货】/【施工接收】/【同意/驳回差异】按钮时的事件冒泡，使得操作填报不受干扰；
+  - 界面恢复纯净：去除多余按钮与超链接，整行点击均可完美展开淡蓝框高亮【📝 供给侧发货备注】的 6 节点流转凭证 Modal。
+- **验证结果**：
+  - Vite 生产构建 100% 成功通过。
+
 ## 2026-07-31 [手机端在线人员弹窗适配与 `overflow: visible` 修复]
 - **物理原因诊断**：
   - 手机端 CSS 媒体查询中 `.app-header__inner` 原先设置了 `overflow: hidden`，导致绝位定位的下拉弹窗向下溢出部分被物理裁剪掉；

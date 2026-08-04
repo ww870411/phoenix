@@ -1,3 +1,13 @@
+## 2026-08-04 需求侧现场到货与接收确认页面支持整行点击弹窗 & 展示已完成 (completed) 记录
+
+- 关联页面与组件：
+  - [DemandManagementView.vue](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue#L415-L545)
+- 本轮处理与实现原理：
+  - **整行点击交互**：为物流表格的 `<tr>` 绑定 `handleLogisticsRowClick($event, row)` 并在 CSS 中配置 `.logistics-table-row` 鼠标手型和 hover 浅灰色背景，点击整行任意非输入框/非按钮区域即可弹窗。
+  - **防误触隔离机制**：`handleLogisticsRowClick` 智能判别点击源，自动剔除 `INPUT` 填数框和操作按钮，避免正常到货确认或接收填报被弹窗打断。
+  - **布局极简纯净**：保持表格整洁利落，不占用额外的操作按钮空间或改变单号样式。
+  - **后端配合扩展**：数据接口 `get_demand_management_logistics_records` 包含 `completed` 状态白名单，使得已归库/已接收完的记录默认展示且可整行点击查阅。
+
 ## 2026-08-03 当前位置匹配逻辑精准重构 (修复“项目选择页”误显示 Bug)
 
 - 变更文件：`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
