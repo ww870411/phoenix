@@ -231,7 +231,7 @@
                     <span>装车需求主体</span>
                     <select v-model="deliveryForm.section1Id">
                       <option value="" disabled>请选择需求主体</option>
-                      <option v-for="section1 in section1Options" :key="section1.section_1_id" :value="section1.section_1_id">
+                      <option v-for="section1 in currentAssignedSection1Options" :key="section1.section_1_id" :value="section1.section_1_id">
                         {{ section1.section_1_name }}
                       </option>
                     </select>
@@ -240,8 +240,8 @@
                   <label class="field">
                     <span>保温管型号</span>
                     <select v-model="deliveryForm.pipeModelId">
-                      <option value="" disabled>{{ pipeModelOptions.length ? '请选择型号' : '所辖需求标段暂无采购需求型号' }}</option>
-                      <option v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" :value="pipe.pipe_model_id">
+                      <option value="" disabled>{{ deliveryFormPipeModelOptions.length ? '请选择型号' : '所辖水质标段暂无采购需求型号' }}</option>
+                      <option v-for="pipe in deliveryFormPipeModelOptions" :key="pipe.pipe_model_id" :value="pipe.pipe_model_id">
                         {{ pipe.pipe_model_name }}
                       </option>
                     </select>
@@ -527,7 +527,7 @@
                 <span style="font-weight: bold; color: #1e293b; font-size: 13px;">接收标段 <span style="color: #ef4444;">*</span></span>
                 <select v-model="fittingForm.section1Id" class="input" style="padding: 6px 10px; font-size: 13px;">
                   <option value="">-- 请选择接收标段 --</option>
-                  <option v-for="st in section1Options" :key="st.section_1_id" :value="st.section_1_id">
+                  <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
                     {{ st.section_1_name }}
                   </option>
                 </select>
@@ -628,7 +628,7 @@
                 </button>
                 <select v-model="fittingTableSectionFilter" class="input" style="width: 150px; font-size: 13px;" @change.prevent.stop="loadFittingDeliveries">
                   <option value="">全部接收标段</option>
-                  <option v-for="st in section1Options" :key="st.section_1_id" :value="st.section_1_id">
+                  <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
                     {{ st.section_1_name }}
                   </option>
                 </select>
@@ -990,7 +990,7 @@
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收需求主体</span>
               <select v-model="superEditForm.section1Id" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                <option v-for="st in section1Options" :key="st.section_1_id" :value="st.section_1_id">
+                <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
                   {{ st.section_1_name }}
                 </option>
               </select>
@@ -1882,6 +1882,54 @@ const currentAssignedSection1Options = computed(() => {
   return section1Options.value.filter((s) => allowedSet.has(s.section_1_id))
 })
 
+function parsePipeModelDiameters(modelCode) {
+  if (!modelCode) return { main: 0, outer: 0 }
+  const str = String(modelCode).trim()
+  const parts = str.split('/')
+  const leftStr = parts[0] || ''
+  const rightStr = parts[1] || ''
+  const leftMatch = leftStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const rightMatch = rightStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const main = leftMatch ? parseFloat(leftMatch[1]) || 0 : 0
+  const outer = rightMatch ? parseFloat(rightMatch[1]) || 0 : 0
+  return { main, outer }
+}
+
+function sortPipeModelsByDiameterDesc(modelList) {
+  return [...modelList].sort((a, b) => {
+    const codeA = a.pipe_model_id || a.pipe_model_name
+    const codeB = b.pipe_model_id || b.pipe_model_name
+    const dA = parsePipeModelDiameters(codeA)
+    const dB = parsePipeModelDiameters(codeB)
+    if (dB.main !== dA.main) {
+      return dB.main - dA.main
+    }
+    if (dB.outer !== dA.outer) {
+      return dB.outer - dA.outer
+    }
+    return String(codeA || '').localeCompare(String(codeB || ''))
+  })
+}
+
+const fullPipeModelOptions = computed(() => {
+  const modelMap = new Map()
+  allPipeModelOptions.value.forEach((item) => {
+    if (item && item.pipe_model_id) {
+      modelMap.set(item.pipe_model_id, item)
+    }
+  })
+  summaryRows.value.forEach((row) => {
+    if (row && row.pipeModelId && !modelMap.has(row.pipeModelId)) {
+      modelMap.set(row.pipeModelId, {
+        pipe_model_id: row.pipeModelId,
+        pipe_model_name: row.pipeModelName || row.pipeModelId,
+        unit: '米',
+      })
+    }
+  })
+  return Array.from(modelMap.values())
+})
+
 const currentAssignedPipeModelIds = computed(() => {
   const allowedSections = currentAssignedSection1Ids.value
   const modelSet = new Set()
@@ -1895,7 +1943,13 @@ const currentAssignedPipeModelIds = computed(() => {
 
 const pipeModelOptions = computed(() => {
   const allowedSet = currentAssignedPipeModelIds.value
-  return allPipeModelOptions.value.filter((item) => allowedSet.has(item.pipe_model_id))
+  const unfiltered = fullPipeModelOptions.value.filter((item) => allowedSet.has(item.pipe_model_id))
+  return sortPipeModelsByDiameterDesc(unfiltered)
+})
+
+const deliveryFormPipeModelOptions = computed(() => {
+  // 发货选择中展示当前供给主体管辖水质标段的全量型号并集（按管径从大到小严格排列）
+  return pipeModelOptions.value
 })
 
 const supplyDemandViewOptions = computed(() => [
@@ -2430,6 +2484,16 @@ watch(selectedSupplyEntityId, (value) => {
     if (!validValues.has(supplyDemandViewMode.value)) {
       supplyDemandViewMode.value = 'summary'
     }
+    const validSectionIds = currentAssignedSection1Ids.value
+    if (!validSectionIds.has(deliveryForm.value.section1Id)) {
+      deliveryForm.value.section1Id = currentAssignedSection1Options.value[0]?.section_1_id || ''
+    }
+    if (!validSectionIds.has(fittingForm.value.section1Id)) {
+      fittingForm.value.section1Id = currentAssignedSection1Options.value[0]?.section_1_id || ''
+    }
+    if (fittingTableSectionFilter.value && !validSectionIds.has(fittingTableSectionFilter.value)) {
+      fittingTableSectionFilter.value = ''
+    }
     loadDeliveries()
     loadFittingDeliveries()
   } else {
@@ -2438,13 +2502,28 @@ watch(selectedSupplyEntityId, (value) => {
 })
 
 watch(
-  pipeModelOptions,
+  deliveryFormPipeModelOptions,
   (options) => {
-    if (!options || !options.length) return
+    if (!options || !options.length) {
+      deliveryForm.value.pipeModelId = ''
+      return
+    }
     const validIds = new Set(options.map((item) => item.pipe_model_id))
     if (!validIds.has(deliveryForm.value.pipeModelId)) {
       deliveryForm.value.pipeModelId = options[0]?.pipe_model_id || ''
     }
+  },
+  { immediate: true }
+)
+
+watch(
+  pipeModelOptions,
+  (options) => {
+    if (!options || !options.length) {
+      selectedPipeModelIds.value = []
+      return
+    }
+    const validIds = new Set(options.map((item) => item.pipe_model_id))
     const currentSelected = selectedPipeModelIds.value.filter((id) => validIds.has(id))
     if (currentSelected.length === 0 || currentSelected.length !== selectedPipeModelIds.value.length) {
       selectedPipeModelIds.value = currentSelected.length > 0 ? currentSelected : options.map((item) => item.pipe_model_id)

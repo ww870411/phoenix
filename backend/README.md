@@ -1,3 +1,78 @@
+## 2026-08-05 后端全服务底层 pipe_model_map 动态收集设计预设量实现全系统闭环 (insulation_pipe_supply_2026)
+
+- **底盘映射强化**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的底层 `_build_pipe_model_map` 函数，除了读取静态 `pipe_models` 字典外，自动搜集 `baseline_presets` 中定义的所有型选，确保全系统基础映射完全覆盖。
+  - 同步更新 `/supply-management/demand-summary` 大盘接口，全量动态按水质总并集输出与降序比对。
+
+## 2026-08-05 后端库管选项 API 组名纯净化为“高温水网”与“低温水网” (insulation_pipe_supply_2026)
+
+- **文案微调**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的 `_serialize_pipe_options`；
+  - 移除了具体供给主体厂商名称（如“大连开元”/“河北鑫瑞得”），在返回的 `category_group` 中统一采用更加纯粹与专业的 **“高温水网”** 与 **“低温水网”** 属性分类。
+
+## 2026-08-05 后端库管选项 API 实现保温管型号分水质分类并集与降序输出 (insulation_pipe_supply_2026)
+
+- **逻辑解绑与分类并集**：
+  - 重构 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的 `_serialize_pipe_options` 函数；
+  - 遍历 `supply_entities`（大连开元 / 河北鑫瑞得），分别获取高温水标段组与低温水标段组在 `baseline_presets` 中定义的设计量全量并集；
+  - 每组内严格调用双重管径比对规则进行从大到小降序排列，并带上 `category_group` 分组标记供前端视图渲染。
+
+## 2026-08-05 后端需求侧 API 实现同水质归属标段全量型号并集输出 (insulation_pipe_supply_2026)
+
+- **水质分类并集实现**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 中的 `_resolve_section_1_sorted_pipe_model_ids`；
+  - 自动通过 `supply_entities` 解析 `section_1_id` 所属供给主体的全量同水质兄弟标段（`peer_section_ids`），合并所有同水质标段在 `baseline_presets` 中出现的型号并集，兼顾同水质型选完整性与跨水质完全隔离。
+
+## 2026-08-05 后端需求侧 API 增加条件兜底保护彻底隔离高温水字典混入 (insulation_pipe_supply_2026)
+
+- **逻辑隔离修复**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 中的 `_resolve_section_1_sorted_pipe_model_ids`；
+  - 增加 `if not model_ids:` 判断：仅在当前需求标段完全未配置 `baseline_presets` 时才回退兜底静态字典，彻底防止处理低温水标段请求时错误附带高温水字典型号。
+
+## 2026-08-05 后端需求侧工作台 API 彻底解绑静态字典并支持基准设计表动态加载 (insulation_pipe_supply_2026)
+
+- **接口及服务解绑**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的 `/demand-management/baseline`、`/demand-management/plan-matrix` 与 `/demand-management/usage-sheet` 接口；
+  - 引入 `_resolve_section_1_sorted_pipe_model_ids` 组合抽样，全量获取该需求主体在 `baseline_presets` 中定义的所有降序规格，支持不同需求标段动态呈现各自的基准量与填报矩阵。
+
+## 2026-08-05 前端型号排序算法升级为工作管径(/左)与外套管径(/右)二级降序 (insulation_pipe_supply_2026)
+
+- **前端展示契约**：
+  - 前端 `SupplyManagementView.vue` 与 `GlobalManagementView.vue` 正式升级 `parsePipeModelDiameters` 解析比对算法：优先比对 “/” 左侧工作钢管外径大小；当左侧数字相同时（如 `Φ219×6.0/Φ309×4.9` 与 `Φ219×6.0/Φ306×4.9`），再按 “/” 右侧外套管开始数字降序排列。
+
+## 2026-08-05 前端发货型选合并后增加工作钢管外径浮点数降序强排序 (insulation_pipe_supply_2026)
+
+- **前端展示契约**：
+  - 前端 `SupplyManagementView.vue` 在求得水质分类总并集后，统一通过正则解析工作钢管外径并调用 `sortPipeModelsByDiameterDesc`，保证并集结果 100% 严格按管径从大到小排列（如 Φ377 -> Φ325 -> ... -> Φ32）。
+
+## 2026-08-05 前端发货型选按管辖水质做总并集且严格保留 tube_config 顺序 (insulation_pipe_supply_2026)
+
+- **前端展示约束**：
+  - 前端 `SupplyManagementView.vue` 统一按供给主体管辖的水质分类做型号总并集（高温水标段共享高温水型号并集，低温水标段共享低温水型号并集），并且严格按 `tube_config.json` 中定义的顺位（管径降序）输出，解决单一标段缺型号导致发货拦截的问题。
+
+## 2026-08-05 保温管发货型选全量包含预设模型并实现装车标段二次联动 (insulation_pipe_supply_2026)
+
+- **前端跨端契约**：
+  - 前端 `SupplyManagementView.vue` 将基础型号数据源合并包含 `summaryRows` 中明细条目的全部规格，并建立 `deliveryFormPipeModelOptions`，实现发货表单随选定【装车需求主体】`section_1_id` 精准联动呈现其所属管模列表。
+
+## 2026-08-05 前端发货与管件登记表单需求主体管辖联动 (insulation_pipe_supply_2026)
+
+- **前端跨端契约**：
+  - 前端页面 `SupplyManagementView.vue` 统一将批量发货表单、管件发货填报、历史列表筛选及修改弹窗中的需求主体下拉选择框限定为供给主体对应的 `section_1_ids`（即 `currentAssignedSection1Options`），防止发生跨管辖发货。
+
+## 2026-08-05 tube_config.json 低温水标段预设量按管径从大到小重新排序 (insulation_pipe_supply_2026)
+
+- **配置更新**：
+  - 更新 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 的 `baseline_presets`，对 `low_lot_1`、`low_lot_2` 和 `low_lot_3` 标段的预设条目按工作钢管外径（从 Φ377 / Φ273 到 Φ32）统一降序重排，确保前后端展示顺序严谨。
+
+## 2026-08-05 解绑静态 pipe_models 字典强限制：API 遍历完全以设计预设表与实际数据为准 (insulation_pipe_supply_2026)
+
+- **关联 API 模块**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_supply_management_demand_summary`, `_build_baseline_preset_map`)
+- **逻辑解绑**：
+  1. 重构 `/supply-management/demand-summary` 模型迭代逻辑，收集 `baseline_presets` 及在途量/库存/计划数据中出现的所有型号集合，彻底消除原先仅遍历静态字典 `pipe_models` 导致的预设量漏计问题；
+  2. 保持 `_build_baseline_preset_map` 中的 `pipe_model_id` 为去空格原始值，支持任意自由形态的新型号录入。
+
 ## 2026-08-05 保温管型号按管辖标段需求动态联动与未录入阻断修正 (insulation_pipe_supply_2026)
 
 - **前端联动约束**：修正前端 `pipeModelOptions` 的回退逻辑，当供给主体管辖标段尚未录入需求记录时，型号列表严格返回空集合并提示“所辖需求标段暂无采购需求型号”，杜绝跨主体/越权呈现高温水或无关型号。

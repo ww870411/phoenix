@@ -67,7 +67,7 @@
           </div>
           <div class="meta-card">
             <span class="meta-label">保温管型号</span>
-            <strong class="meta-value">{{ pipeModelOptions.length }} 种</strong>
+            <strong class="meta-value">{{ currentPipeModelOptions.length }} 种</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">当前角色</span>
@@ -385,7 +385,7 @@
                 <span>过滤型号</span>
                 <select v-model="pendingFilters.pipeModelId">
                   <option value="">全部型号</option>
-                  <option v-for="model in pipeModelOptions" :key="model.pipe_model_id" :value="model.pipe_model_id">
+                  <option v-for="model in currentPipeModelOptions" :key="model.pipe_model_id" :value="model.pipe_model_id">
                     {{ model.pipe_model_name || model.pipe_model_id }}
                   </option>
                 </select>
@@ -1671,18 +1671,48 @@ function formatNumber(value) {
   return Number.isFinite(numericValue) ? numericValue.toLocaleString('zh-CN') : '0'
 }
 
+function parsePipeModelDiameters(modelCode) {
+  if (!modelCode) return { main: 0, outer: 0 }
+  const str = String(modelCode).trim()
+  const parts = str.split('/')
+  const leftStr = parts[0] || ''
+  const rightStr = parts[1] || ''
+  const leftMatch = leftStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const rightMatch = rightStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const main = leftMatch ? parseFloat(leftMatch[1]) || 0 : 0
+  const outer = rightMatch ? parseFloat(rightMatch[1]) || 0 : 0
+  return { main, outer }
+}
+
+function sortPipeModelsByDiameterDesc(modelList) {
+  return [...modelList].sort((a, b) => {
+    const codeA = a.pipe_model_id || a.pipeModelId || a.pipe_model_name || a.pipeModelName
+    const codeB = b.pipe_model_id || b.pipeModelId || b.pipe_model_name || b.pipeModelName
+    const dA = parsePipeModelDiameters(codeA)
+    const dB = parsePipeModelDiameters(codeB)
+    if (dB.main !== dA.main) {
+      return dB.main - dA.main
+    }
+    if (dB.outer !== dA.outer) {
+      return dB.outer - dA.outer
+    }
+    return String(codeA || '').localeCompare(String(codeB || ''))
+  })
+}
+
 function normalizeBaselineRows(rows) {
-  return (rows || []).map((row) => ({
+  const list = (rows || []).map((row) => ({
     pipeModelId: row.pipe_model_id || row.pipeModelId,
     pipeModelName: row.pipe_model_name || row.pipeModelName || row.model_name || '未命名型号',
     designQuantity: row.design_total_qty || row.designQuantity || row.design_qty || 0,
     purchaseQuantity: row.purchase_total_qty || row.purchaseQuantity || row.purchase_qty || row.purchase_plan_qty || 0,
     remarks: row.remarks || row.remark || ''
   }))
+  return sortPipeModelsByDiameterDesc(list)
 }
 
 function normalizePlanRows(rows, dates) {
-  return (rows || []).map((row) => {
+  const list = (rows || []).map((row) => {
     const valueMap = {}
     const sourceMap = row.values || row.plan_values || {}
     const remarksMap = row.remarks || row.remark_map || {}
@@ -1709,17 +1739,34 @@ function normalizePlanRows(rows, dates) {
       values: valueMap
     }
   })
+  return sortPipeModelsByDiameterDesc(list)
 }
 
 function normalizeUsageRows(rows) {
-  return (rows || []).map((row) => ({
+  const list = (rows || []).map((row) => ({
     pipeModelId: row.pipe_model_id || row.pipeModelId,
     pipeModelName: row.pipe_model_name || row.pipeModelName || row.model_name || '未命名型号',
     usedQty: Number(row.usage_qty ?? row.used_qty ?? row.usedQty ?? 0),
     lossQty: Number(row.loss_qty ?? row.lossQty ?? 0),
     remarks: row.remark || row.remarks || ''
   }))
+  return sortPipeModelsByDiameterDesc(list)
 }
+
+const currentPipeModelOptions = computed(() => {
+  if (baselineRows.value && baselineRows.value.length > 0) {
+    const list = baselineRows.value.map((b) => ({
+      pipe_model_id: b.pipeModelId,
+      pipe_model_name: b.pipeModelName || b.pipeModelId,
+    }))
+    return sortPipeModelsByDiameterDesc(list)
+  }
+  const list = pipeModelOptions.value.map((m) => ({
+    pipe_model_id: m.pipe_model_id,
+    pipe_model_name: m.pipe_model_name || m.pipe_model_id,
+  }))
+  return sortPipeModelsByDiameterDesc(list)
+})
 
 function normalizePendingRows(rows) {
   return (rows || []).map((row) => ({

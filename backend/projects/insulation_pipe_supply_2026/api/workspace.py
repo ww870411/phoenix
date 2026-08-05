@@ -5,8 +5,9 @@ insulation_pipe_supply_2026 工作台基础接口。
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
 from pydantic import BaseModel, Field
@@ -314,6 +315,14 @@ def _build_pipe_model_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             "pipe_model_id": pipe_model_id,
             "pipe_model_name": str(item.get("pipe_model_name") or pipe_model_id).strip() or pipe_model_id,
         }
+    for item in get_config_list(payload, "baseline_presets"):
+        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
+        if pipe_model_id and pipe_model_id not in result:
+            result[pipe_model_id] = {
+                "pipe_model_id": pipe_model_id,
+                "pipe_model_name": pipe_model_id,
+                "unit": "米",
+            }
     return result
 
 
@@ -409,7 +418,7 @@ def _build_baseline_preset_map(payload: Dict[str, Any], section_1_id: str) -> Di
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "baseline_presets"):
         normalized_section_1_id = str(item.get("section_1_id") or "").strip()
-        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
+        pipe_model_id = str(item.get("pipe_model_id") or "").strip()
         if normalized_section_1_id != section_1_id or not pipe_model_id:
             continue
         result[pipe_model_id] = {
@@ -418,6 +427,51 @@ def _build_baseline_preset_map(payload: Dict[str, Any], section_1_id: str) -> Di
             "remark": item.get("remark") or "",
         }
     return result
+
+
+def _parse_pipe_model_diameters(model_code: str) -> Tuple[float, float]:
+    if not model_code:
+        return (0.0, 0.0)
+    parts = str(model_code).strip().split('/')
+    left_str = parts[0] if len(parts) > 0 else ""
+    right_str = parts[1] if len(parts) > 1 else ""
+    left_match = re.search(r'(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)', left_str, re.I)
+    right_match = re.search(r'(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)', right_str, re.I)
+    main_d = float(left_match.group(1)) if left_match else 0.0
+    outer_d = float(right_match.group(1)) if right_match else 0.0
+    return (main_d, outer_d)
+
+
+def _resolve_section_1_sorted_pipe_model_ids(payload: Dict[str, Any], section_1_id: str) -> List[str]:
+    peer_section_ids = [section_1_id]
+    supply_entities = get_config_list(payload, "supply_entities")
+    for entity in supply_entities:
+        sec_ids = entity.get("section_1_ids") or []
+        if section_1_id in sec_ids:
+            peer_section_ids = sec_ids
+            break
+
+    seen = set()
+    model_ids: List[str] = []
+    for sec_id in peer_section_ids:
+        preset_map = _build_baseline_preset_map(payload, sec_id)
+        for pm_id in preset_map.keys():
+            if pm_id and pm_id not in seen:
+                model_ids.append(pm_id)
+                seen.add(pm_id)
+            
+    if not model_ids:
+        pipe_model_map = _build_pipe_model_map(payload)
+        for pm_id in pipe_model_map.keys():
+            if pm_id and pm_id not in seen:
+                model_ids.append(pm_id)
+                seen.add(pm_id)
+            
+    def sort_key(pm_id: str):
+        main_d, outer_d = _parse_pipe_model_diameters(pm_id)
+        return (-main_d, -outer_d, pm_id)
+        
+    return sorted(model_ids, key=sort_key)
 
 
 def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
@@ -545,19 +599,68 @@ def _normalize_submission_rows(rows: Any) -> List[Dict[str, Any]]:
 
 
 def _serialize_pipe_options(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    for item in get_config_list(payload, "pipe_models"):
-        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
-        if not pipe_model_id:
-            continue
-        rows.append(
-            {
-                "pipe_model_id": pipe_model_id,
-                "pipe_model_name": item.get("pipe_model_name") or pipe_model_id,
-                "unit": item.get("unit") or "",
-            }
-        )
-    return rows
+    supply_entities = get_config_list(payload, "supply_entities")
+    pipe_model_map = _build_pipe_model_map(payload)
+    
+    seen = set()
+    result_rows: List[Dict[str, Any]] = []
+    
+    for entity in supply_entities:
+        entity_id = str(entity.get("entity_id") or "").strip()
+        entity_name = entity.get("entity_name") or entity_id
+        sec_ids = entity.get("section_1_ids") or []
+        
+        group_model_ids: List[str] = []
+        group_seen = set()
+        for sec_id in sec_ids:
+            preset_map = _build_baseline_preset_map(payload, sec_id)
+            for pm_id in preset_map.keys():
+                if pm_id and pm_id not in group_seen:
+                    group_model_ids.append(pm_id)
+                    group_seen.add(pm_id)
+                    
+        if not group_model_ids:
+            for pm_id in pipe_model_map.keys():
+                if pm_id and pm_id not in group_seen:
+                    group_model_ids.append(pm_id)
+                    group_seen.add(pm_id)
+                    
+        def sort_key(pm_id: str):
+            main_d, outer_d = _parse_pipe_model_diameters(pm_id)
+            return (-main_d, -outer_d, pm_id)
+            
+        sorted_group_ids = sorted(group_model_ids, key=sort_key)
+        if "low" in entity_id.lower() or any("low" in str(s).lower() for s in sec_ids) or "xinruide" in entity_id.lower():
+            group_label = "低温水网"
+        else:
+            group_label = "高温水网"
+        
+        for pm_id in sorted_group_ids:
+            if pm_id not in seen:
+                pipe_model = pipe_model_map.get(pm_id) or {}
+                result_rows.append(
+                    {
+                        "pipe_model_id": pm_id,
+                        "pipe_model_name": pipe_model.get("pipe_model_name") or pm_id,
+                        "unit": pipe_model.get("unit") or "米",
+                        "category_group": group_label,
+                    }
+                )
+                seen.add(pm_id)
+                
+    for pm_id, pipe_model in pipe_model_map.items():
+        if pm_id not in seen:
+            result_rows.append(
+                {
+                    "pipe_model_id": pm_id,
+                    "pipe_model_name": pipe_model.get("pipe_model_name") or pm_id,
+                    "unit": pipe_model.get("unit") or "米",
+                    "category_group": "其他",
+                }
+            )
+            seen.add(pm_id)
+            
+    return result_rows
 
 
 def _serialize_supply_entity_options(
@@ -961,7 +1064,21 @@ def get_supply_management_demand_summary(
         if not section_1_id or section_1_id not in accessible_section_1_ids:
             continue
         section_1_baseline_preset_map = _build_baseline_preset_map(payload, section_1_id)
-        for pipe_model_id, pipe_model in pipe_model_map.items():
+        
+        all_model_ids_for_section = _resolve_section_1_sorted_pipe_model_ids(payload, section_1_id)
+        added_set = set(all_model_ids_for_section)
+        
+        sec_prefix = f"{section_1_id}::"
+        for map_item in (plan_total_map, delivery_aggregate_map, arrival_aggregate_map, usage_total_map):
+            for k in map_item.keys():
+                if k.startswith(sec_prefix):
+                    pm_id = k.split("::", 1)[1]
+                    if pm_id and pm_id not in added_set:
+                        all_model_ids_for_section.append(pm_id)
+                        added_set.add(pm_id)
+
+        for pipe_model_id in all_model_ids_for_section:
+            pipe_model = pipe_model_map.get(pipe_model_id) or {}
             key = f"{section_1_id}::{pipe_model_id}"
             baseline_row = section_1_baseline_preset_map.get(pipe_model_id) or {}
             plan_total_qty = float(plan_total_map.get(key, 0) or 0)
@@ -1476,15 +1593,17 @@ def get_demand_management_baseline(
     section_1_name_map = _build_section_1_name_map(payload)
     pipe_model_map = _build_pipe_model_map(payload)
     baseline_preset_map = _build_baseline_preset_map(payload, section_1_id)
+    model_ids = _resolve_section_1_sorted_pipe_model_ids(payload, section_1_id)
 
     rows: List[Dict[str, Any]] = []
-    for pipe_model_id, pipe_model in pipe_model_map.items():
+    for pipe_model_id in model_ids:
+        pipe_model = pipe_model_map.get(pipe_model_id) or {}
         baseline = baseline_preset_map.get(pipe_model_id) or {}
         rows.append(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
-                "unit": pipe_model.get("unit") or "",
+                "unit": pipe_model.get("unit") or "米",
                 "design_qty": baseline.get("design_qty"),
                 "purchase_plan_qty": baseline.get("purchase_plan_qty"),
                 "remark": baseline.get("remark") or "",
@@ -1525,8 +1644,10 @@ def get_demand_management_plan_matrix(
     arrival_aggregate_map = list_arrival_aggregates(show_date.isoformat())
     usage_total_map = list_usage_totals(show_date.isoformat())
     
+    model_ids = _resolve_section_1_sorted_pipe_model_ids(payload, section_1_id)
     rows: List[Dict[str, Any]] = []
-    for pipe_model_id, pipe_model in pipe_model_map.items():
+    for pipe_model_id in model_ids:
+        pipe_model = pipe_model_map.get(pipe_model_id) or {}
         cell_values: Dict[str, Any] = {}
         cell_remarks: Dict[str, str] = {}
         for plan_date in plan_dates:
@@ -1555,7 +1676,7 @@ def get_demand_management_plan_matrix(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
-                "unit": pipe_model.get("unit") or "",
+                "unit": pipe_model.get("unit") or "米",
                 "section_1_inventory_qty": section_1_inventory_qty,
                 "inbound_pipeline_qty": inbound_pipeline_qty,
                 "values": cell_values,
@@ -1659,14 +1780,16 @@ def get_demand_management_usage_sheet(
  
     pipe_model_map = _build_pipe_model_map(payload)
     usage_map = list_usage_records(section_1_id, usage_date)
+    model_ids = _resolve_section_1_sorted_pipe_model_ids(payload, section_1_id)
     rows: List[Dict[str, Any]] = []
-    for pipe_model_id, pipe_model in pipe_model_map.items():
+    for pipe_model_id in model_ids:
+        pipe_model = pipe_model_map.get(pipe_model_id) or {}
         usage = usage_map.get(pipe_model_id) or {}
         rows.append(
             {
                 "pipe_model_id": pipe_model_id,
                 "pipe_model_name": pipe_model.get("pipe_model_name") or pipe_model_id,
-                "unit": pipe_model.get("unit") or "",
+                "unit": pipe_model.get("unit") or "米",
                 "usage_qty": float(usage.get("usage_qty", 0) or 0),
                 "loss_qty": float(usage.get("loss_qty", 0) or 0),
                 "remark": usage.get("remark") or "",

@@ -157,16 +157,22 @@
                     <button type="button" class="action-btn" @click="clearAllPipeModels">清空</button>
                   </div>
                   <div class="dropdown-list">
-                    <div 
-                      v-for="item in pipeModelOptions" 
-                      :key="item.pipe_model_id" 
-                      class="dropdown-item"
-                      :class="{ selected: filters.pipeModelIds.includes(item.pipe_model_id) }"
-                      @click="togglePipeModel(item.pipe_model_id)"
-                    >
-                      <input type="checkbox" :checked="filters.pipeModelIds.includes(item.pipe_model_id)" @click.stop="togglePipeModel(item.pipe_model_id)" />
-                      <span class="item-label">{{ item.pipe_model_name }}</span>
-                    </div>
+                    <template v-for="group in groupedPipeModelOptions" :key="group.name">
+                      <div class="dropdown-group-header" style="padding: 6px 10px; background: #f8fafc; font-size: 11px; font-weight: bold; color: #4f46e5; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+                        <span>♨️ {{ group.name }}</span>
+                        <span style="font-size: 10px; color: #64748b; font-weight: normal;">共 {{ group.items.length }} 种规格</span>
+                      </div>
+                      <div 
+                        v-for="item in group.items" 
+                        :key="item.pipe_model_id" 
+                        class="dropdown-item"
+                        :class="{ selected: filters.pipeModelIds.includes(item.pipe_model_id) }"
+                        @click="togglePipeModel(item.pipe_model_id)"
+                      >
+                        <input type="checkbox" :checked="filters.pipeModelIds.includes(item.pipe_model_id)" @click.stop="togglePipeModel(item.pipe_model_id)" />
+                        <span class="item-label">{{ item.pipe_model_name }}</span>
+                      </div>
+                    </template>
                   </div>
                 </div>
               </transition>
@@ -1221,6 +1227,24 @@ let nowTimer = null
 const section1Options = computed(() => options.value?.section_1s || [])
 const supplyEntityOptions = computed(() => options.value?.supply_entities || [])
 const pipeModelOptions = computed(() => options.value?.pipe_models || [])
+const groupedPipeModelOptions = computed(() => {
+  const groups = []
+  let currentGroup = null
+  
+  pipeModelOptions.value.forEach((item) => {
+    const groupName = item.category_group || '保温管型选并集'
+    if (!currentGroup || currentGroup.name !== groupName) {
+      currentGroup = {
+        name: groupName,
+        items: [],
+      }
+      groups.push(currentGroup)
+    }
+    currentGroup.items.push(item)
+  })
+  
+  return groups
+})
 const deliveryStatusOptions = computed(() => options.value?.delivery_status_options || [])
 const deliveryStatusLabelMap = computed(() => {
   const result = {}

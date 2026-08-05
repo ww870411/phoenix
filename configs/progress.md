@@ -1,3 +1,106 @@
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 开启全系统（大盘、工厂、需求、库管、配置）保温管型号动态解绑全量巡检与闭环强化]
+- **基础映射字典通用增强**（`workspace.py`）：
+  更新底层的 `_build_pipe_model_map` 函数，除了读取静态 `pipe_models` 字典外，自动遍历并补全 `baseline_presets`（设计与采购基准量表）中出现的所有全新低温水/高温水管模。全系统所有涉及根据 `pipe_model_id` 找中文名或单位的地方均能 100% 自动成功映射。
+- **全页面分类并集与降序巡检**：
+  1. **需求侧工作台 (`DemandManagementView.vue`)**：同水质标段总并集输出（高温水与低温水各组内部并集，各自按管径降序排列）；
+  2. **工厂/大盘汇总 (`DashboardView.vue` & `/supply-management/demand-summary`)**：重构 `all_model_ids_for_section`，为各需求主体精准输出各自所属水质全量并集及强降序排列；
+  3. **库管中心 (`WarehouseManagementView.vue` & `/warehouse-management/options`)**：纯粹按 **“♨️ 高温水网”** 与 **“♨️ 低温水网”** 两大组归纳输出设计量全量并集并强降序；
+  4. **全局基础配置 (`GlobalManagementView.vue`)**：动态搜集预设量中出现的全新型选，按管径强降序排列。
+- **验证结果**：等待前端 `npm run build` 打包结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 库管发货记录型号筛选组名纯净化为“高温水网”与“低温水网”]
+- **界面与接口文案微调**（`workspace.py` & `WarehouseManagementView.vue`）：
+  摒弃组名中显示的具体供给主体厂商名称（如“大连开元”/“河北鑫瑞得”），纯粹且直观地划分为 **“♨️ 高温水网”** 与 **“♨️ 低温水网”** 两大类，按各组设计量并集并严格按管径由大到小（降序）呈现。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 库管发货记录页面保温管型号筛选框实现分水质并集与管径强降序展示]
+- **需求解决**：
+  原 `/warehouse-management/options` 接口由于固定输出未同步预设量的数据，导致库管发货记录筛选框的【型号】下拉列表显示为空白。
+- **后端重构**（`workspace.py`）：
+  更新 `_serialize_pipe_options` 逻辑：遍历 `supply_entities` 依次求得高温水各标段的设计量并集（大连开元）与低温水各标段的设计量并集（河北鑫瑞得），并严格调用 `_sort_pipe_model_ids_by_diameter_desc` 按管径从大到小降序输出，同时附带 `category_group` 分组属性。
+- **前端重构**（`WarehouseManagementView.vue`）：
+  增加 `groupedPipeModelOptions` 计算属性，在下拉多选框中清晰分类展现 **“🏭 大连开元 (高温水标段型选总并集)”** 与 **“🏭 河北鑫瑞得 (低温水标段型选总并集)”**，解决列表空白问题。
+- **验证结果**：等待前端 `npm run build` 结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 需求现场管理工作台全页面实现水质标段总并集共享与精准隔离]
+- **水质总并集规则实施**（`workspace.py` & `DemandManagementView.vue`）：
+  1. **规则定义**：选择高温水标段（如 `high_lot_1/2`）时，全页面（基准量台账、三日计划矩阵、实际消耗表及型号选框）呈现所有高温水标段的**全量型号并集**；选择低温水标段（如 `low_lot_1/2/3`）时，呈现所有低温水标段的**全量型号并集**（均按管径二级强降序排列）；
+  2. **后端算法`_resolve_section_1_sorted_pipe_model_ids`**：自动通过 `supply_entities` 关联关系寻得该需求主体归属的所有同水质兄弟标段（`peer_section_ids`），合并其在 `baseline_presets` 中的全量型号集合；
+  3. **水质隔离保障**：高温水标段与低温水标段严格物理隔绝，互不参杂混入。
+- **验证结果**：等待前端 `npm run build` 打包结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复低温水标段表格混入高温水静态字典型号的缺陷]
+- **隐患根因**：
+  原本后端 `_resolve_section_1_sorted_pipe_model_ids` 与前端 `currentPipeModelOptions` 无条件拼接了 `pipe_model_map`（静态高温水字典的 11 个型号），导致选择低温水标段（`low_lot_1/2/3`）时，表格和看板会把这 11 个高温水型号强行塞入。
+- **精确隔离修复**：
+  1. **后端修正**（`workspace.py`）：仅在当前需求标段完全未在 `baseline_presets` 配置基准量时，才触发兜底逻辑；有预设时纯粹取该标段预设列表；
+  2. **前端修正**（`DemandManagementView.vue`）：`currentPipeModelOptions` 优先纯净使用当前标段的 `baselineRows` 型号集合。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 需求现场管理工作台全页面彻底解绑静态字典强卡限制]
+- **需求排查与解绑**：
+  原后端 API `/demand-management/baseline`、`/demand-management/plan-matrix` 与 `/demand-management/usage-sheet` 仅死循环遍历 `pipe_model_map`（静态字典的 11 个高温水型号），导致在 `tube_config.json` 的 `baseline_presets` 中定义的所有低温水标段（`low_lot_1/2/3`）预设条目无法显示。
+- **后端重构**（`backend/projects/insulation_pipe_supply_2026/api/workspace.py`）：
+  1. 新增 `_resolve_section_1_sorted_pipe_model_ids` 函数，自动从该需求标段在 `baseline_presets` 设定的记录中收集所有管模，并用 `_parse_pipe_model_diameters` 执行/左与/右二级双重降序比对；
+  2. 解绑基准量台账（Baseline）、三日计划（Plan Matrix）及实际使用量表（Usage Sheet）接口，全量动态渲染当前标段设定的基准量数据。
+- **前端适配**（`DemandManagementView.vue`）：
+  - 构造 `currentPipeModelOptions`，表单、顶栏 Meta 看板及物流筛选全量按二级管径降序动态渲染所选标段设定的全部规格。
+- **验证结果**：等待前端 `npm run build` 打包结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 保温管型号严格按 / 左侧工作管径与右侧外套管径二级降序重排]
+- **精确排序算法更新**（`SupplyManagementView.vue` & `GlobalManagementView.vue`）：
+  - 重构 `parsePipeModelDiameters` 解析工具，分别提取型号中 “/” 左侧工作钢管开始外径数字 $D_1$ 与 “/” 右侧外套管开始外径数字 $D_2$；
+  - 排序算法优先按 $D_1$ 由大到小降序；当 $D_1$ 数值相同时（如 `Φ219×6.0/Φ309×4.9` 与 `Φ219×6.0/Φ306×4.9`，或 `Φ32×4.0/Φ1218×3.0` 与 `Φ32×4.0/Φ118×3.0`），按 $D_2$ 由大到小降序排列。
+- **全局生效覆盖**：发货选型表单、需求大盘型号筛选及全局管理预设编辑选框统一应用该双重精确比对规则。
+- **验证结果**：等待前端 `npm run build` 校验结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 保温管型号水质合并并集后增加管径强降序排序]
+- **需求深化与修正**（`SupplyManagementView.vue`）：
+  为避免不同标段（如 `low_lot_1` / `low_lot_2` / `low_lot_3`）新合并加入的型号因在 Map 中插入位置滞后破坏整体顺位，新增 `extractPipeDiameter` 正则数值提取与 `sortPipeModelsByDiameterDesc` 排序函数。
+- **排序效果**：
+  同水质标段型号合并成总并集后，统一按工作钢管外径数值（例如：`377` $\rightarrow$ `325` $\rightarrow$ `273` $\rightarrow$ `219` $\rightarrow$ `159` $\rightarrow$ ... $\rightarrow$ `32`）进行强强制降序排列。
+- **验证结果**：等待前端 `npm run build` 校验通过。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 发货页型号按高温水/低温水水质汇总做总并集且严格保持 tube_config.json 设定顺序]
+- **改动依据与决策**：
+  1. **顺位规则**：在型号筛选与发货选择中，顺位严格保持 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 中配置的先后出现顺序；
+  2. **水质总并集防缺**：考虑到单一标段可能保温管型号不全，按供给主体管辖水质做总并集（高温水标段共享高温水型号并集，低温水标段共享低温水型号并集）；无论发货切至哪个具体的接收标段，均展示当前水质对应的完整型号并集选单。
+- **改动细节**（`SupplyManagementView.vue`）：
+  - 调整 `deliveryFormPipeModelOptions` 直接指向当前供给主体水质管辖的 `pipeModelOptions` 全量并集，移除单标段过窄切割。
+- **验证结果**：等待前端 `npm run build` 编译完成。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复发货页保温管型号数据源并实现随装车需求主体二次联动]
+- **问题根因**：原本 `allPipeModelOptions` 仅包含了后端 API 返回的 `pipe_models` 静态字典（仅有 11 个高温水型号），导致在 `baseline_presets` 中填写的全新低水标段型号无法被识别，被计算属性 `filter` 误过滤为空；且发货表单没有随选定的【装车需求主体】做出二次规格联动过滤。
+- **重构与修正**（`SupplyManagementView.vue`）：
+  1. **构建 `fullPipeModelOptions` 全量模型库**：动态融合静态字典与 `summaryRows` 中出现的所有明细型号（含 `low_lot_1/2/3` 的所有新型号）；
+  2. **构造 `deliveryFormPipeModelOptions` 选型联动**：当在发货表单中选择具体【装车需求主体】（`deliveryForm.section1Id`，如 `low_lot_3`）时，选框只呈现该特定标段实际用到的型号；
+  3. **增加独立 `watch(deliveryFormPipeModelOptions)` 洗牌机制**：切换装车需求主体时，自动重置不可用选型为新标段的首个合法型号。
+- **验证结果**：等待前端 `npm run build` 编译完成。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 保温管/管件发货表单及列表需求主体下拉列表补齐管辖绑定约束]
+- **需求联动补齐**（`SupplyManagementView.vue`）：
+  1. **保温管批量发货表单**：将【装车需求主体】下拉框（`deliveryForm.section1Id`）数据源限制为 `currentAssignedSection1Options`；
+  2. **管件发货填报表单**：将【接收标段】下拉框（`fittingForm.section1Id`）数据源限制为 `currentAssignedSection1Options`；
+  3. **管件历史明细筛选及编辑 Modal**：列表顶部标段筛选下拉及超级编辑弹窗关联标段同步限制为 `currentAssignedSection1Options`；
+  4. **切换自动清洗防护**：在 `watch(selectedSupplyEntityId)` 切换供给主体时，自动校验重置不合法的 `section1Id` 为当前可用的首个合法标段。
+- **验证结果**：等待前端 `npm run build` 编译结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 low_lot_1/2/3 预设基准设计量按管径从大到小重新排序]
+- **改动范围**：`backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 的 `baseline_presets` 预设数组；
+- **重新排序**：
+  1. `low_lot_1` 标段：从 `Φ273×6.0/Φ363×5.6` (2214m) 降序重排至 `Φ32×4.0/Φ118×3.0` (368m)；
+  2. `low_lot_2` 标段：保留从 `Φ325×7.0/Φ417×7.0` 至 `Φ32×4.0/Φ118×3.0` 的降序结构；
+  3. `low_lot_3` 标段：从 `Φ377×7.0/Φ471×7.0` (1463m) 降序重排至 `Φ32×4.0/Φ118×3.0` (745m)。
+- **结果**：全局管理基准量表格与后端数据返回按工作管径由大到小顺畅罗列，且经 Python JSON 强校验加载语法通过（总 54 条预设）。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 彻底解绑静态 pipe_models 强卡限制：全局管理与大盘看板完全以设计量表为准]
+- **问题排查与解绑原因**：
+  原后端 API `/supply-management/demand-summary` 外层死循环遍历静态 `pipe_models` 字典；且前端 `GlobalManagementView.vue` 基准设计量表格下拉 `<option>` 仅绑定静态 `pipeModels`；当用户在 `tube_config.json` 的 `baseline_presets` 手写新增低水标段型号时，前后端无法匹配选择与遍历该型号，导致界面错乱且看板无法计算展现。
+- **重构与修改细节**：
+  1. **后端 API (`workspace.py`)**：解绑 `for pipe_model_id in pipe_model_map` 的受限逻辑，改成动态收集当前标段在静态配置、`baseline_presets` 预设表及各种发货/使用明细中出现的所有 `pipe_model_id` 构成的全量并集；
+  2. **前端全局管理 (`GlobalManagementView.vue`)**：引入 `selectableBaselinePipeModels` 计算属性，动态融合配置字典与 `baseline_presets` 中出现的全新型号，保证下拉选框精准绑定并渲染显示。
+- **验证结果**：等待前端 `npm run build` 编译完成。
+
 ## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复方案2在所辖标段未录入需求时盲目回退全局型号的Bug]
 - **问题根因**：原 `pipeModelOptions` 逻辑中包含 `if (!allowedSet || allowedSet.size === 0) return allPipeModelOptions.value`；当登录为鑫瑞得（管辖低温水标段 1/2/3）且低温水标段尚未录入需求计划时，取到的 `allowedSet` 为空，误触发该判断，降级返回了包含高温水标段在内的全量型号。
 - **改动与修复**（`SupplyManagementView.vue`）：

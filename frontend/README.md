@@ -1,3 +1,109 @@
+## 2026-08-05 保温管供应项目全系统页面保温管型选动态生成完成全量排查与闭环强化 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `SupplyManagementView.vue` (供给侧工厂工作台)
+  - `DemandManagementView.vue` (需求侧现场工作台)
+  - `WarehouseManagementView.vue` (现场库管中心)
+  - `DashboardView.vue` (需求大盘与分析看板)
+  - `GlobalManagementView.vue` (基础配置与基准预设调整)
+  - `HistoryQueryView.vue` (历史数据聚合查询)
+- **排查结果**：除 GIS 地图页面外，全项目所有页面、筛选框、表单及报表视图中的保温管型号已 100% 彻底基于 `tube_config.json` 中的 `baseline_presets` 设计使用量表动态加载生成，且全线统一遵循 “/” 左侧与右侧数字二级降序排列规范！
+
+## 2026-08-05 现场库管中心 (Warehouse) 发货记录型选下拉框组名精简为“高温水网”与“低温水网” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **呈现微调**：
+  - 型号下拉框内纯粹呈现 **“♨️ 高温水网”** 与 **“♨️ 低温水网”** 分割表头，隐藏供给厂商名称，提升界面的规范性与一致性。
+
+## 2026-08-05 现场库管中心 (Warehouse) 发货记录型选下拉框实现分水质分组与管径降序展现 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **分组渲染优化**：
+  - 增加 `groupedPipeModelOptions` 计算属性，在保温管发货记录筛选框的【型号】下拉菜单中以 **“🏭 大连开元” (高温水标段型选总并集)** 和 **“🏭 河北鑫瑞得” (低温水标段型选总并集)** 两大分组展现，解决原列表空白问题。
+
+## 2026-08-05 现场管理工作台 (需求侧) 全面实现同水质标段全量型号并集展示 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **并集渲染**：
+  - 高温水标段展现高温水各标段的并集型号，低温水标段展现低温水各标段的并集型号（均按 “/” 左侧与右侧数字二级降序排列），保障需求侧日常计划与消耗填报的全规格自由覆盖。
+
+## 2026-08-05 现场管理工作台 (需求侧) 选型看板与过滤彻底隔离无关水质字典型号 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **隔离修正**：
+  - 重构 `currentPipeModelOptions` 计算属性，在 `baselineRows` 有效加载时纯净采用当前标段预设规格列表，彻底排除静态高温水字典的混入干扰。
+
+## 2026-08-05 现场管理工作台 (需求侧) 动态对接基准量设计用量表 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **动态联动表现**：
+  1. **基准量台账 Tab**：全量响应后端动态解绑后的 `/demand-management/baseline`，按管径二级降序直观展示当前标段在 `baseline_presets` 中定义的设计与采购基准数据；
+  2. **填报矩阵自适应**：三日滚动计划与实际消耗填报矩阵自适应加载当前标段设定的规格清单；
+  3. **顶栏 Meta 与筛选**：顶栏 Meta 各种类计数及物流筛选下拉菜单采用 `currentPipeModelOptions` 动态汇总呈现。
+
+## 2026-08-05 保温管型号排序升级为 “/” 左侧与右侧数字二级降序排列 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **算法细节**：
+  1. **第一级比较**：按 “/” 左侧工作钢管开始外径数字 $D_1$ 严格由大到小降序；
+  2. **第二级比较**：若 $D_1$ 数字相同，则拆解 “/” 右侧外套管开始外径数字 $D_2$ 严格由大到小降序；
+  3. **效果示例**：`Φ219×6.0/Φ309×4.9` 排在 `Φ219×6.0/Φ306×4.9` 前面，`Φ32×4.0/Φ1218×3.0` 排在 `Φ32×4.0/Φ118×3.0` 前面。
+
+## 2026-08-05 保温管发货型选合并后增加工作钢管外径浮点数降序强排序 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **排序逻辑强约束**：
+  - 新增 `extractPipeDiameter` 正则数值解析函数与 `sortPipeModelsByDiameterDesc` 降序比较函数；
+  - 水质全量型号求得总并集后，强制按工作钢管外径数值由大到小（降序）排列，彻底规避跨标段合并时新出现的型号位置插在末尾的倒错隐患。
+
+## 2026-08-05 保温管发货型选按管辖水质总并集展示且保留 tube_config 设定顺序 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **选型逻辑演进**：
+  1. **管径设定顺序**：列表与下拉选框中的型号顺位严格按 `tube_config.json` 配置文件的先后顺序（即管径从大到小）排列展示；
+  2. **水质分类总并集**：为防止单一标段型选缺失，同一供给主体管辖水质下的所有标段做型选总并集（高温水标段共享高温水型选并集，低温水标段共享低温水型选并集），发货时任意接收标段均可便捷选择同水质全量规格。
+
+## 2026-08-05 保温管发货页型号数据源动态修正与装车需求主体二次联动 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **重构要点**：
+  1. **全量模型合并库 `fullPipeModelOptions`**：合并 `allPipeModelOptions` 与 `summaryRows` 中提取到的全量型号，确保所有未在静态字典中登记的新型号（如低温水各规格）不被遗漏丢弃；
+  2. **装车标段二次联动选型 `deliveryFormPipeModelOptions`**：当选择具体【装车需求主体】（`deliveryForm.section1Id`，如 `low_lot_3`）时，下拉菜单仅呈现在该特定标段有需求预设的 15 个型号规格；
+  3. **自适应重置与清洗**：增加 `watch(deliveryFormPipeModelOptions)`，当重选装车标段时自动重置为新标段可用的首个合法型号。
+
+## 2026-08-05 保温管与管件发货登记表单全面限定供给主体管辖需求主体 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **联动控制点**：
+  1. **批量发货表单**：【装车需求主体】下拉框限定绑定 `currentAssignedSection1Options`；
+  2. **管件发货登记**：【接收标段】下拉框限定绑定 `currentAssignedSection1Options`；
+  3. **历史筛选与编辑 Modal**：列表过滤选框及弹窗选框同步限定绑定 `currentAssignedSection1Options`；
+  4. **切换自动重置**：在 `watch(selectedSupplyEntityId)` 切换供给主体时自动清洗并重置选中的 `section1Id` 为当前可用的合法标段。
+
+## 2026-08-05 低温水标段基准预设量按管径从大到小重新排序展示 (insulation_pipe_supply_2026)
+
+- **前端展示影响**：
+  - 联动 `tube_config.json` 的 `baseline_presets` 更新，全局管理入口中 `low_lot_1`、`low_lot_2` 和 `low_lot_3` 需求的基准量表按管径从大到小由上至下有序罗列。
+
+## 2026-08-05 全局管理基准量表格支持自适应解析预设表新规格 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **动态选型解绑**：
+  - 新增 `selectableBaselinePipeModels` 计算属性，融合 `pipe_models` 字典与 `baseline_presets` 中填写的全量型号；
+  - 需求主体基准量编辑表格的型号下拉 `<select>` 控件绑定动态型号数据集，确保手写追加的新规格（如低温水规格）能在管理表格中精准选中并展示。
+
 ## 2026-08-05 修复所辖标段未录入需求时盲目回退全量型号的逻辑漏洞 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

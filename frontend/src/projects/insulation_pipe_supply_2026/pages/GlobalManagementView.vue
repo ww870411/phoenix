@@ -564,7 +564,7 @@
                       <td>
                         <select v-model="item.pipe_model_id" class="input table-cell-input" @change="syncBaselinePipeModelName(item)">
                           <option 
-                            v-for="model in pipeModels" 
+                            v-for="model in selectableBaselinePipeModels" 
                             :key="model.pipe_model_id" 
                             :value="model.pipe_model_id"
                             :disabled="filteredBaselinePresets.some(preset => preset.pipe_model_id === model.pipe_model_id && preset !== item)"
@@ -1909,9 +1909,55 @@ function addWarehouseKeeper() {
   })
 }
 
+function parsePipeModelDiameters(modelCode) {
+  if (!modelCode) return { main: 0, outer: 0 }
+  const str = String(modelCode).trim()
+  const parts = str.split('/')
+  const leftStr = parts[0] || ''
+  const rightStr = parts[1] || ''
+  const leftMatch = leftStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const rightMatch = rightStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const main = leftMatch ? parseFloat(leftMatch[1]) || 0 : 0
+  const outer = rightMatch ? parseFloat(rightMatch[1]) || 0 : 0
+  return { main, outer }
+}
+
+function sortPipeModelsByDiameterDesc(modelList) {
+  return [...modelList].sort((a, b) => {
+    const codeA = a.pipe_model_id || a.pipe_model_name
+    const codeB = b.pipe_model_id || b.pipe_model_name
+    const dA = parsePipeModelDiameters(codeA)
+    const dB = parsePipeModelDiameters(codeB)
+    if (dB.main !== dA.main) {
+      return dB.main - dA.main
+    }
+    if (dB.outer !== dA.outer) {
+      return dB.outer - dA.outer
+    }
+    return String(codeA || '').localeCompare(String(codeB || ''))
+  })
+}
+
+const selectableBaselinePipeModels = computed(() => {
+  const modelMap = new Map()
+  pipeModels.value.forEach((m) => {
+    if (m && m.pipe_model_id) modelMap.set(m.pipe_model_id, m)
+  })
+  baselinePresets.value.forEach((b) => {
+    if (b && b.pipe_model_id && !modelMap.has(b.pipe_model_id)) {
+      modelMap.set(b.pipe_model_id, {
+        pipe_model_id: b.pipe_model_id,
+        pipe_model_name: b.pipe_model_id,
+        unit: '米',
+      })
+    }
+  })
+  return sortPipeModelsByDiameterDesc(Array.from(modelMap.values()))
+})
+
 function resolvePipeModelById(pipeModelId) {
   const normalizedCode = normalizePipeModelCode(pipeModelId)
-  return pipeModels.value.find((item) => normalizePipeModelCode(item.pipe_model_id) === normalizedCode) || null
+  return selectableBaselinePipeModels.value.find((item) => normalizePipeModelCode(item.pipe_model_id) === normalizedCode) || null
 }
 
 function syncBaselinePipeModelName(row) {
@@ -1937,7 +1983,7 @@ function addBaselinePreset() {
       .filter((item) => item.section_1_id === selectedBaselineSection1Id.value)
       .map((item) => item.pipe_model_id)
   )
-  const unusedModel = pipeModels.value.find((model) => model.pipe_model_id && !usedModelIds.has(model.pipe_model_id)) || pipeModels.value[0] || null
+  const unusedModel = selectableBaselinePipeModels.value.find((model) => model.pipe_model_id && !usedModelIds.has(model.pipe_model_id)) || selectableBaselinePipeModels.value[0] || null
 
   baselinePresets.value.push({
     __row_key: `new::${Date.now()}`,
