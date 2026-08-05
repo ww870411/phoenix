@@ -240,7 +240,7 @@
                   <label class="field">
                     <span>保温管型号</span>
                     <select v-model="deliveryForm.pipeModelId">
-                      <option value="" disabled>请选择型号</option>
+                      <option value="" disabled>{{ pipeModelOptions.length ? '请选择型号' : '所辖需求标段暂无采购需求型号' }}</option>
                       <option v-for="pipe in pipeModelOptions" :key="pipe.pipe_model_id" :value="pipe.pipe_model_id">
                         {{ pipe.pipe_model_name }}
                       </option>
@@ -1121,7 +1121,7 @@ const optionsLoading = ref(false)
 const optionsError = ref('')
 const supplyEntityOptions = ref([])
 const section1Options = ref([])
-const pipeModelOptions = ref([])
+const allPipeModelOptions = ref([])
 const currentGroup = ref('')
 const currentSupplyEntityIds = ref([])
 const showDate = ref('')
@@ -1882,6 +1882,22 @@ const currentAssignedSection1Options = computed(() => {
   return section1Options.value.filter((s) => allowedSet.has(s.section_1_id))
 })
 
+const currentAssignedPipeModelIds = computed(() => {
+  const allowedSections = currentAssignedSection1Ids.value
+  const modelSet = new Set()
+  summaryRows.value.forEach((row) => {
+    if (allowedSections.has(row.section1Id) && row.pipeModelId) {
+      modelSet.add(row.pipeModelId)
+    }
+  })
+  return modelSet
+})
+
+const pipeModelOptions = computed(() => {
+  const allowedSet = currentAssignedPipeModelIds.value
+  return allPipeModelOptions.value.filter((item) => allowedSet.has(item.pipe_model_id))
+})
+
 const supplyDemandViewOptions = computed(() => [
   { value: 'summary', label: '整理汇总' },
   ...currentAssignedSection1Options.value.map((section1) => ({
@@ -2186,7 +2202,7 @@ async function loadOptions() {
     currentGroup.value = normalized.currentGroup
     supplyEntityOptions.value = normalized.supplyEntities
     section1Options.value = normalized.section_1s
-    pipeModelOptions.value = normalized.pipeModels
+    allPipeModelOptions.value = normalized.pipeModels
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
     showDate.value = normalized.showDate
     planStartDate.value = normalized.planStartDate
@@ -2420,6 +2436,22 @@ watch(selectedSupplyEntityId, (value) => {
     fittingDeliveries.value = []
   }
 })
+
+watch(
+  pipeModelOptions,
+  (options) => {
+    if (!options || !options.length) return
+    const validIds = new Set(options.map((item) => item.pipe_model_id))
+    if (!validIds.has(deliveryForm.value.pipeModelId)) {
+      deliveryForm.value.pipeModelId = options[0]?.pipe_model_id || ''
+    }
+    const currentSelected = selectedPipeModelIds.value.filter((id) => validIds.has(id))
+    if (currentSelected.length === 0 || currentSelected.length !== selectedPipeModelIds.value.length) {
+      selectedPipeModelIds.value = currentSelected.length > 0 ? currentSelected : options.map((item) => item.pipe_model_id)
+    }
+  },
+  { immediate: true }
+)
 
 function formatElapsedLabel(shippedAt) {
   if (!shippedAt) return ''

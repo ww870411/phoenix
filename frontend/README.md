@@ -1,3 +1,20 @@
+## 2026-08-05 修复所辖标段未录入需求时盲目回退全量型号的逻辑漏洞 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **修复点**：
+  1. 移除 `pipeModelOptions` 当匹配型号为空集时无脑回退 `allPipeModelOptions` 的代码判断；
+  2. 严格按所辖标段实际需求的型号并集过滤；若所辖标段（如鑫瑞得负责的低温水标段）尚未录入需求，列表精准展示空项并配合选择框占位文案 `所辖需求标段暂无采购需求型号`，彻底解决跨属性误选漏洞。
+
+## 2026-08-05 保温管型号列表按供给主体管辖标段需求并集动态提取上线 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **型号联动重构**：
+  1. 保留全局全量型号大表 `allPipeModelOptions`，基于 `currentAssignedSection1Ids` 从 `summaryRows` 中提取当前供给主体管辖标段实际用到的 `currentAssignedPipeModelIds` 并集；
+  2. 看板顶部的【型号筛选】复选框与发货表单里的【保温管型号】下拉选择框统一重构绑定为 `pipeModelOptions` 动态计算属性，仅呈现该供给主体真实用到的型号规格；
+  3. 增加 `watch(pipeModelOptions)` 自动清洗机制，在切换主体时若原型号不在新范围内自动设为首个合法型号。
+
 ## 2026-08-05 重构“需求与缺口看板”：限定供给主体所辖标段与整理汇总范围 (insulation_pipe_supply_2026)
 
 - **关联前端组件**：

@@ -1,3 +1,20 @@
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复方案2在所辖标段未录入需求时盲目回退全局型号的Bug]
+- **问题根因**：原 `pipeModelOptions` 逻辑中包含 `if (!allowedSet || allowedSet.size === 0) return allPipeModelOptions.value`；当登录为鑫瑞得（管辖低温水标段 1/2/3）且低温水标段尚未录入需求计划时，取到的 `allowedSet` 为空，误触发该判断，降级返回了包含高温水标段在内的全量型号。
+- **改动与修复**（`SupplyManagementView.vue`）：
+  1. 移除 `allowedSet.size === 0` 时的降级无脑回退逻辑，严格仅返回属于该主体管辖标段实际需要的型号并集；若未录入需求，则精确返回空集合 `[]`；
+  2. 优化保温管发货表单型号下拉占位提示，无规格时友好显示 `“所辖需求标段暂无采购需求型号”`，彻底阻断跨属性/越权型号的选择。
+- **验证结果**：等待前端 `npm run build` 校验结果。
+
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 方案2：保温管型号列表按供给主体管辖标段需求并集动态提取]
+- **需求背景与业务决策**：
+  高温水标段与低温水标段所用的保温管型号各不相同；采纳方案 2（数据驱动 Data-Driven），不再手动配置属性，而是动态读取当前供给主体所管辖标段在需求明细 (`summaryRows`) 中的保温管型号并集。
+- **改动与实现细节**（`SupplyManagementView.vue`）：
+  1. **全局型号存储**：将拉取自后端的全部型号列表保存至 `allPipeModelOptions`；
+  2. **管辖标段型号并集提取**：定义 `currentAssignedPipeModelIds` 提取属于 `currentAssignedSection1Ids` 标段范围的型号并集；重构 `pipeModelOptions` 计算属性动态返回所属型号；
+  3. **发货与筛选全联动**：保温管发货表单（`deliveryForm.pipeModelId`）及看板顶部【型号筛选】复选框统一联动为 `pipeModelOptions`，实现只呈现该供给主体真实用到的型号；
+  4. **切换自动清洗**：新增 `watch(pipeModelOptions)` 自动清洗非法选型并智能设为首个合规型号。
+- **验证结果**：等待前端 `npm run build` 编译完成。
+
 ## 2026-08-05 [子项目 insulation_pipe_supply_2026 重构需求与缺口看板：限定供给主体所辖标段与整理汇总范围]
 - **需求背景与业务逻辑**：
   原“需求与缺口看板”中的“整理汇总”为项目全局大盘统计，非当前登录/选中的供给主体专属范围；现重构为根据供给主体（`selectedSupplyEntityId`）对应的 `section_1_ids` 范围精确约束看板统计与下拉列表。
