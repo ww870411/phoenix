@@ -23,7 +23,7 @@ def _to_beijing_time(dt: Optional[datetime]) -> Optional[datetime]:
         return None
     if dt.tzinfo is not None:
         return dt.astimezone(BEIJING_TZ)
-    return dt
+    return dt.replace(tzinfo=BEIJING_TZ)
 
 
 def _normalize_text(value: Any) -> str:
@@ -1472,7 +1472,7 @@ def submit_fitting_delivery(
                     "model_spec": model_spec,
                     "shipped_qty": shipped_qty,
                     "unit": unit,
-                    "shipped_at": shipped_at_dt,
+                    "shipped_at": beijing_dt,
                     "ship_contact_name": ship_contact_name,
                     "ship_contact_phone": ship_contact_phone,
                     "ship_remark": item_remark or ship_remark,
@@ -1593,12 +1593,12 @@ def list_fitting_deliveries(
                 "model_spec": _normalize_text(row["model_spec"]),
                 "shipped_qty": float(row["shipped_qty"]),
                 "unit": _normalize_text(row["unit"]),
-                "shipped_at": row["shipped_at"].isoformat() if row["shipped_at"] else "",
+                "shipped_at": _to_beijing_time(row["shipped_at"]).isoformat() if row["shipped_at"] else "",
                 "ship_contact_name": _normalize_text(row["ship_contact_name"]),
                 "ship_contact_phone": _normalize_text(row["ship_contact_phone"]),
                 "ship_remark": _normalize_text(row["ship_remark"]),
                 "status": _normalize_text(row["status"]),
-                "created_at": row["created_at"].isoformat() if row["created_at"] else "",
+                "created_at": _to_beijing_time(row["created_at"]).isoformat() if row["created_at"] else "",
             }
             for row in rows
         ]

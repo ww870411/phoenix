@@ -1,3 +1,12 @@
+## 2026-08-05 管件发货时区处理与数据库 TIMESTAMPTZ 规范化 (insulation_pipe_supply_2026)
+
+- **关联 API/服务模块**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (`_to_beijing_time`, `submit_fitting_delivery`, `list_fitting_deliveries`)
+- **时区错位问题修复**：
+  - 增强 `_to_beijing_time` 对 naive datetime (无时区时间对象) 的防护，缺省无时区时间自动附加上 `BEIJING_TZ` (`+08:00`)；
+  - 修正 `submit_fitting_delivery` 提交数据库时的 SQL 绑定参数，将 `:shipped_at` 指定为带时区的 `beijing_dt`，消除写入 PostgreSQL `TIMESTAMPTZ` 时产生的 8 小时相差；
+  - 规范 `list_fitting_deliveries` 查询列表中 `shipped_at` 与 `created_at` 的 ISO 输出格式，始终格式化为包含 `+08:00` 偏移的东八区标准时间字符串。
+
 ## 2026-08-05 前端开发容器依赖卷同步说明 (insulation_pipe_supply_2026)
 
 - **后端影响**：无后端代码、API、数据库或容器变更。

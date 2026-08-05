@@ -1,3 +1,10 @@
+## 2026-08-05 管件发货时区跨端一致性与展示对齐 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **发货时间展示规范**：
+  - 接入后端最新的包含 `+08:00` 东八区偏移量的标准 ISO 时间响应，`formatDateTimeDisplay` 精确解析并呈现用户本地发货时间（如 `2026-08-05 14:51`），彻底消除列表与填报输入框间 8 小时的时差。
+
 ## 2026-08-05 开发容器补装 xlsx-js-style 并恢复 Vite 模块解析 (insulation_pipe_supply_2026)
 
 - **故障原因**：宿主机 `frontend/node_modules` 与容器 `/app/node_modules` 并非同一目录；后者由 `phoenix_frontend_node_modules` 命名卷提供，运行中的容器没有自动获得新依赖。

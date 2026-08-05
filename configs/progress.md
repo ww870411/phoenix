@@ -1,3 +1,13 @@
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复管件发货提交与查询列表的时间与数据库时区偏差问题]
+- **根因分析**：
+  1. 后端 `supply_management_service.py` 中的 `_to_beijing_time` 函数对于传入的无时区 (naive) `datetime` 对象（如前端 `datetime-local` 提交的 `"2026-08-05T14:51"`），未设置 `BEIJING_TZ` 时区属性（`+08:00`）；
+  2. `submit_fitting_delivery` 在写入 `tube.tube_fitting_delivery` 的 `shipped_at` (`TIMESTAMPTZ`) 列时使用原始无时区 `shipped_at_dt`，导致 PostgreSQL 数据库将其当作 UTC 或缺省服务器时区时间保存，查询回填时被前端解析为 `+8小时`（如 14:51 变为 22:51）的时差。
+- **改动与修复点**：
+  1. 在 `_to_beijing_time` 函数中增加 `return dt.replace(tzinfo=BEIJING_TZ)`，保证无时区时间能显式带上北京东八区属性；
+  2. 在 `submit_fitting_delivery` 的 SQL 插入参数中，将 `"shipped_at": shipped_at_dt` 修正为经过时区安全处理的 `"shipped_at": beijing_dt`；
+  3. 在 `list_fitting_deliveries` 查询列表中，使用 `_to_beijing_time(row["shipped_at"]).isoformat()` 强约束输出带 `+08:00` 的 ISO 字符串，实现跨端与前后端时间表示统一。
+- **影响范围与结果**：后端 `supply_management_service.py`；重新提交与查询管件发货记录时，页面展示时间与数据库存储及东八区时间完全一致。
+
 ## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复开发容器 xlsx-js-style 导入失败]
 - **根因**：`frontend` 源码绑定挂载到容器 `/app`，但 `/app/node_modules` 使用独立命名卷 `phoenix_frontend_node_modules`；宿主机新增依赖后，已运行容器的命名卷未自动同步，导致 Vite 报 `Failed to resolve import "xlsx-js-style"`。
 - **处理**：在 `phoenix_frontend` 容器执行 `npm install --no-audit --progress=false`，向命名卷补装 `xlsx-js-style`；无需修改 `docker-compose.yml`，因为容器启动命令本身已包含 `npm install`。
