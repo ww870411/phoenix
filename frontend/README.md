@@ -1,3 +1,336 @@
+## 2026-08-05 开发容器补装 xlsx-js-style 并恢复 Vite 模块解析 (insulation_pipe_supply_2026)
+
+- **故障原因**：宿主机 `frontend/node_modules` 与容器 `/app/node_modules` 并非同一目录；后者由 `phoenix_frontend_node_modules` 命名卷提供，运行中的容器没有自动获得新依赖。
+- **恢复方式**：在 `phoenix_frontend` 内执行 `npm install` 同步命名卷；Vite 已能生成 `xlsx-js-style` 预构建依赖，容器内生产构建通过。
+- **长期行为**：`docker-compose.yml` 的前端启动命令为 `npm install && npm run dev`，后续正常重建或重新创建容器时会按锁文件自动安装，无需额外编排改动。
+
+## 2026-08-05 管件标准填报模板真实边框与示例规格更新 (insulation_pipe_supply_2026)
+
+- **关联页面与函数**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue` 的 `downloadFittingTemplate`。
+- **模板行为**：
+  - 使用支持样式写出的 `xlsx-js-style` 生成 Sheet 1，确保 A1:E20 全部单元格（包含空白填报行）均显示边框；
+  - 示例数据更新为弯头 `90°DN1100 R=1.5DN`、三通 `DN1000/DN900`、大小头 `DN1000/DN800`（5 个）、直缝弯管 `DN1100 5°R=138.7 L=12m`（10 个）。
+
+## 2026-08-05 供给侧管件填报模板 Sheet 1 给 A1:E20 区域增加显示网格边框 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **样式与边框强化**：
+  - 为下载的标准填报 Excel 第 1 张 Sheet 的 A1:E20 范围内的所有单元格挂载了全网格细边框与格式样式，使用户一眼直观识别标准填报表格区。
+
+## 2026-08-05 移除供给侧管件填报页面“粘贴 Excel 数据”功能及弹窗按钮 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **代码与 UI 裁撤**：
+  - 彻底下线“📋 粘贴 Excel 数据”按钮、弹窗遮罩 Modal 及其后台多行字符串解析逻辑。
+
+## 2026-08-05 管件模板 Sheet 3 规则顺序对调与解析文案精准修改 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **顺序与措词调整**：
+  - 对调 Sheet 3 中“3. 空行与不完整行过滤”与“4. 类型识别与提示逻辑”顺位；
+  - 精确修改文案为“系统解析记录时，会自动识别并彻底剔除全空行...”。
+
+## 2026-08-05 管件模板 Sheet 3 修正强修正单位“个”及不完整行自动删除规则 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **说明逻辑修正**：
+  - 修正 Sheet 3 中单位说明：管件单位统一且强纠为“个”；
+  - 补充说明“4. 空行与不完整行过滤”剔除规则。
+
+## 2026-08-05 管件填报模板 Sheet 3 精炼聚焦为《校验规则与单位修正提示》 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **规则提炼与聚焦**：
+  - 重构 Sheet 3 为《校验规则与单位修正提示》，剔除杂余描述，聚焦于“1. 数据校验规则”、“2. 单位修正逻辑”、“3. 类型识别与提示逻辑”三大核心板块。
+
+## 2026-08-05 供给侧管件标准填报模板新增 Sheet 3《操作说明与检验规则》 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **模板 Excel 结构扩充**：
+  - 在下载的标准模板 Excel 文件中追加第 3 个 Sheet（`操作说明与检验规则`），涵盖如何向下插入新增多行填报、多品类混合车次分组规则、数值校验与标准管件类型匹配识别说明。
+
+## 2026-08-05 库管员工作台页面文案与导出按钮入口净化 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **视觉净化与文案精简**：
+  - 清理 Tabs 栏右侧状态 Tag 说明；
+  - 精简锁定框文案为 `不可选`，并在管件视图下静默隐藏顶栏筛选框里的保温管导出按钮，统一使用下方专属导出。
+
+## 2026-08-05 库管员工作台管件视图锁死顶部筛选工具栏导出按钮 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **导出按钮锁死与分流引导**：
+  - 在“🔧 管件发货记录”视图下，顶栏筛选区的“📥 导出 Excel”按钮显示为 `🔒 导出 Excel (管件视图锁死)`，引导库管员统一使用下方管件卡片右侧的专属导出功能。
+
+## 2026-08-05 库管员工作台管件视图锁定“型号”与“状态”筛选框 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **交互锁死与提醒**：
+  - 处于“🔧 管件发货记录”标签页时，多选框“型号”与“状态”呈置灰锁定状态（`🔒 不可选（仅适用于保温管）`），禁用点击弹出与手势响应。
+
+## 2026-08-05 库管员工作台 Tabs 置顶至筛选框上方并重绘现代化分段控件 UI (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **层级与视觉提升**：
+  - 将 Tabs 置于“库管台账筛选”卡片顶部正上方；
+  - 重绘为现代化分段胶囊面板 (Segmented Control Pills)，支持选中态白底阴影与交互过渡效果。
+
+## 2026-08-05 库管员工作台新增【🔧 管件发货记录】折叠标签页 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **双物资类型分流**：
+  - 重构页面布局为 Tabs 架构：`🔥 保温管发货记录`（Tab 1）与 `🔧 管件发货记录`（Tab 2）；
+  - Tab 2 全量集成按发货车次折叠卡片化展陈（默认收起）、库管统计透视卡片、台账刷新、表格 Excel 导出与流转凭证时光轴查看功能。
+
+## 2026-08-05 管件发货记录分组卡片默认状态调整为折叠状态 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **默认折叠优化**：
+  - 调整管件发货记录数据加载时的初始展开集合为空 Set，页面加载后默认呈现收起状态，点击任意车次或顶部一键展开按钮即可开启明细视图。
+
+## 2026-08-05 管件发货台账升维【按发货车次分组折叠/展开】UI (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **折叠卡片化展陈**：
+  - 将繁杂的多行管件明细按发货车次号分组收纳为运单卡片，展示车次、车牌、收发主体、包含物资种数、总件数与全周期流转凭证，支持一键切换展开/折叠。
+
+## 2026-08-05 现场管理工作台(供给侧) 管件发货台账过滤绑定 selectedSupplyEntityId (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **过滤隔离与联动**：
+  - 修复 `loadFittingDeliveries` 遗漏 `supply_entity_id` 参数的问题，并在 `watch(selectedSupplyEntityId)` 与 `refreshRealtimeConfig` 中补上数据刷新触发，实现不同供给主体间发货台账数据的精确隔离与联动展现。
+
+## 2026-08-05 现场管理工作台(需求侧) 移除只读提示 Banner 框 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **UI 精简**：
+  - 删除了管件发货记录面板顶部的提示 Banner 文本框。
+
+## 2026-08-05 现场管理工作台(需求侧) Tab 5 文案统一为【🔧 管件发货记录】 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **界面名称优化**：
+  - 将 Tab 按钮及区段大标题修饰文案更新为 `🔧 管件发货记录`。
+
+## 2026-08-05 现场管理工作台(需求侧)新增【🔧 本标段管件发货台账】只读 Tab (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **零操作需求侧管件到货对账**：
+  - 在 Tabs 导航中增加只读对账 Tab 5（`activeTab === 'fitting'`），自动拉取属于 `selectedSection1Id` 的管件发货与在途数据；
+  - 提供检索过滤、数据导出与【🚚 流转凭证】时光轴查看。
+
+## 2026-08-05 优化历史管件查询供给主体别名对齐与中文名展示 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **过滤与名修饰增强**：
+  - 在后端接入 `possible_supply_ids` 多向同义别名（`entity_id` ↔ `code`），解决选择“开元”等主体时查不出数据的问题；
+  - 接入 `_decorate_delivery_rows` 返回中文主体名称与标段名称。
+
+## 2026-08-05 修复 api.js 语法碎片与 Vite import-analysis 解析报错 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **构建解析修复**：
+  - 移除了 `api.js` 中关掉花括号后残留的悬空多余语句，Vite 7.18s 顺利完成构建。
+
+## 2026-08-05 撤销 IME 首字母特殊处理器并恢复原状 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **完全恢复系统原状**：
+  - 清理所有全局捕获监听器；
+  - 恢复 `<RevoGrid>` 组件标签属性与事件绑定至修改前最稳定状态。
+
+## 2026-08-05 采用 focusin target.select() 选定替换机制解决脏首字母 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **电子表格自动全选覆盖方案**：
+  - 在 `focusin` 阶段捕获 RevoGrid 生成的输入框，触发 `select()` 全选预填内容；
+  - 拼音打字的第一个字母 `w` 在全选选中态中直接覆写替换，完美保留完整的拼音声母音节与完整的中文合成词。
+
+## 2026-08-05 彻底兼顾首字母完整性与拼音中文合成的 setCellEdit 唤醒机制 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **无损唤醒方案**：
+  - 关闭 RevoGrid 的 `:auto-edit` 强推单字行为；
+  - 拦截键盘击键并触发 `setCellEdit()` 直接聚焦至输入框，由操作系统 IME 全权完整接收 `w`+`a`+`n`+`t`+`o`+`u`，保证拼音合成 100% 完整无缺。
+
+## 2026-08-05 强化 IME compositionstart/update 自动解包剥离脏首字母 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **拼音输入首字母清洗**：
+  - 在 `compositionstart` 阶段强行把网格刚创建的单字 `input.value` 恢复归零；
+  - 在 `compositionupdate` 阶段裁切残留的前导单英文字母，保证输入法获得 clean input 空间。
+
+## 2026-08-05 补齐 nextTick 引入并收敛 onMounted 生命周期 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **运行时报错修复**：
+  - 从 `vue` 中补齐 `nextTick` 导出，消除 `ReferenceError: nextTick is not defined` 引发的组件空白渲染异常。
+
+## 2026-08-05 攻克 RevoGrid 中文拼音输入法首字母吃字与异常问题 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **IME 组合事件追踪与清洗**：
+  - 在 `window` 捕获阶段监听 `compositionstart` / `keyCode 229` / `Process` 识别拼音开编状态；
+  - 在 `beforeedit` 与容器网格微任务阶段自动清洗被 RevoGrid 误塞进输入框的单英文字母，保证中文拼音 100% 完整合成。
+
+## 2026-08-05 数据更正与强校验提示全盘一次性透传展示 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **零二次提交排查协同**：
+  - 点击提交时，格式更正（删行/更正单位）与发货数量非法数字校验全盘并行，一次性汇总并在 Modal 弹窗和顶部条带中全盘提示，免去二次提交才能看到业务报错的问题。
+
+## 2026-08-05 接入“表格格式自动修整提示”专属 Modal 弹窗 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **弹窗与校验双轨协同**：
+  - 保留 `fittingActionMsg` 条带用于显示未填车牌、发货数量非法等强校验错误；
+  - 增加 `showFittingFormatNoticeModal` 专用 Modal 弹窗，当触发半空缺行擦除或单位自动修正时沉浸式弹出，引导用户核对修改。
+
+## 2026-08-05 增加数据更正阻断警示弹窗与二次核对机制 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **提交流程阻断警示**：
+  - 若提交清洗时触发了删行或单位更正，刷新 RevoGrid UI 并弹窗阻断本次提交，列明具体的更正行号与原因，要求文员核对无误后重新提交。
+
+## 2026-08-05 点击提交时第一时间自动擦除清空半缺失废行 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **清洗规则**：
+  - 第一时间自动擦除【管件类型】、【型号/规格】、【发货数量】三者中存在至少一处空缺的行，界面即刻同步清空该行并只留存完全填全的合规明细。
+
+## 2026-08-05 单位自动修补升级为点击提交时的第一顺位动作 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **提交校验流顺序调整**：
+  - 将表格数据源 `unit = '个'` 的修补与 RevoGrid 重刷前置为提交响应的第一瞬间（Step 0），早于发货数量与管件类型等一切业务校验。
+
+## 2026-08-05 点击提交时自动同步修正电子表格格内单位为“个” (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **显示与数据源同步**：
+  - 点击提交时自动遍历 `fittingGridSource` 中所有已填数据行，更正写回 `unit = '个'` 属性并刷新 UI。
+
+## 2026-08-05 接入 RevoGrid 官方 cellProperties 内联样式映射 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **样式机制升级**：
+  - 改用官方 `cellProperties` 返回内联 `style: { backgroundColor: '#fee2e2', color: '#b91c1c' }`；
+  - 完美绕过了基于 Stencil.js 的 Web Component 在 class 解析层面对外部样式隔离封印的问题。
+
+## 2026-08-05 驱动 RevoGrid cellClass 实时重刷与穿透样式注入 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **样式与重刷修复**：
+  - 在 `@afteredit` 编辑事件中更新 `fittingGridSource` 数组引用，驱动 RevoGrid 实时计算与激活 `cellClass`；
+  - 增加未受 scoped 限制的顶层 `revo-grid .rgCell.rg-cell-error` 全局样式覆盖，确保 Web Component Shadow/Light DOM 内层单元格 100% 渲染红框/黄框背景！
+
+## 2026-08-05 补全 fittingLoading / fittingDeliveries 响应式变量声明 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **Bug 修复**：
+  - 恢复并补全缺失的 `fittingLoading` / `fittingDeliveries` 状态声明，彻底解决 `ReferenceError` 和 `.length` 读取空异常。
+
+## 2026-08-05 升级 RevoGrid 原生 cellClass 高亮并修复 Tab 点击卡死问题 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **重构与 Bug 修复**：
+  - 将单元格视觉高亮底层方案重构为 RevoGrid 官方极速原生 `cellClass` 函数 + 深度选择器 `:deep(.rg-cell-xxx)`；
+  - 彻底解决了因 `cellTemplate` VNode 执行异常导致【🔧 管件发货记录】Tab 点击无反应的渲染阻断 Bug。
+
+## 2026-08-05 电子表格单元格动态校验颜色高亮 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **视觉与单元格高亮调优**：
+  - 通过 `cellTemplate` 实现单元格颜色高亮：
+    - 🔴 数量非法或漏填：浅红背景 (`#fee2e2`) + 警示红字 (`#b91c1c`) + 鼠标气泡提示；
+    - 🟠 非常用管件类型：暖黄背景 (`#fff7ed`) + 暖橙文字 (`#c2410c`)；
+    - 🔵 单位修正提示：显示标准“个”并提示提交自动修正。
+
+## 2026-08-05 单位自动修补“个”与正整数数量强校验 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **提交校验增强**：
+  - 强行将发货单位归一化修复为“个”。
+  - 发货数量必须为大于 0 的纯正整数（非整数或 <= 0 拦截阻断提示），并与管件类型二次确认弹窗无缝结合。
+
+## 2026-08-04 管件发货明细入库自动去除首尾空格 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **数据清洗防护**：
+  - 增加前端自动 `.trim()` 规范化清洗，提交发货明细前强行剔除管件类型、型号规格、单位及备注的前后隐藏空格。
+
+## 2026-08-04 下载模板移除“推荐填写示例”列 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **显示调优**：
+  - 彻底移除了下载标准 `.xlsx` 模板对照表中的“推荐填写示例”列，仅保留“标准管件类型”与“说明与兼容别名”两列。
+
+## 2026-08-04 下载标准 XLSX 填报模板增加 7 大管件类型说明 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **下载模板优化**：
+  - 在下载的标准 `.xlsx` 文件中新增 Sheet 1 右侧规范说明及 Sheet 2【7大标准管件类型对照表】，列明弯头、三通、大小头、封头、直缝弯管、补偿器、固定节等 7 大标准类型与填报示例。
+
+## 2026-08-04 电子表格默认 8 行空行与非标管件类型二次确认弹窗 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **体验与交互重构**：
+  - 默认空行数调优为 8 行。
+  - 提交发货单时加入非标准管件类型的交互式二次确认弹窗，显示具体的非标行明细，兼顾规范拦截提醒与紧急发货放行需求。
+
+## 2026-08-04 标准管件类型 7 大枚举库与非阻断表内提示 (insulation_pipe_supply_2026)
+
+- **关联页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **校验与提示机制**：
+  - 确定 7 大标准管件类型：弯头、三通、大小头、封头、直缝弯管、补偿器、固定节（支持异径管等别名识别）。
+  - 采取非阻断模式：允许非常用/非标管件正常提交发货，但在台账表格内以 `⚠️ 非标类型` 橙黄色标签直观标识。
+
 ## 2026-08-04 管件发货台账筛选无感静默更新优化 (insulation_pipe_supply_2026)
 
 - **关联页面与组件**：

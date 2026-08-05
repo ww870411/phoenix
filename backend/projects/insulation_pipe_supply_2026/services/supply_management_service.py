@@ -1443,19 +1443,19 @@ def submit_fitting_delivery(
             fitting_type = _normalize_text(item.get("fitting_type"))
             model_spec = _normalize_text(item.get("model_spec"))
             shipped_qty_raw = item.get("shipped_qty")
-            unit = _normalize_text(item.get("unit")) or "个"
+            unit = "个"  # 单位强行归一化修正为“个”
             item_remark = _normalize_text(item.get("remark"))
 
             if not fitting_type or not model_spec:
                 continue
 
             try:
-                shipped_qty = float(shipped_qty_raw)
+                shipped_qty_val = float(shipped_qty_raw)
+                if shipped_qty_val <= 0 or not shipped_qty_val.is_integer():
+                    raise HTTPException(status_code=400, detail=f"第 {idx} 行发货数量必须为大于0的纯正整数数字（当前输入: {shipped_qty_raw}）")
+                shipped_qty = float(int(shipped_qty_val))
             except (ValueError, TypeError):
-                continue
-
-            if shipped_qty <= 0:
-                continue
+                raise HTTPException(status_code=400, detail=f"第 {idx} 行发货数量格式无效")
 
             section_code = section_1_id[0].upper() if section_1_id else "X"
             order_no = f"FO{entity_code}-{section_code}-{date_part}-{seq_num:03d}-{idx:02d}"
@@ -1499,9 +1499,38 @@ def submit_fitting_delivery(
 
 def list_fitting_deliveries(
     section_1_id: str = "",
+    supply_entity_id: str = "",
+    start_date: str = "",
+    end_date: str = "",
     search_keyword: str = "",
-    limit: int = 100,
+    limit: int = 200,
 ) -> List[Dict[str, Any]]:
+    clean_supply_id = _normalize_text(supply_entity_id)
+    clean_section_id = _normalize_text(section_1_id)
+    cfg = load_tube_config()
+
+    possible_supply_ids = []
+    if clean_supply_id:
+        p_set = {clean_supply_id.lower()}
+        for ent in get_config_list(cfg, "supply_entities"):
+            e_id = str(ent.get("entity_id") or "").strip().lower()
+            code = str(ent.get("code") or "").strip().lower()
+            if clean_supply_id.lower() in (e_id, code):
+                if e_id: p_set.add(e_id)
+                if code: p_set.add(code)
+        possible_supply_ids = list(p_set)
+
+    possible_section_ids = []
+    if clean_section_id:
+        p_set = {clean_section_id.lower()}
+        for ent in get_config_list(cfg, "demand_entities"):
+            s_id = str(ent.get("section_1_id") or "").strip().lower()
+            code = str(ent.get("code") or "").strip().lower()
+            if clean_section_id.lower() in (s_id, code):
+                if s_id: p_set.add(s_id)
+                if code: p_set.add(code)
+        possible_section_ids = list(p_set)
+
     sql = text(
         """
         SELECT
@@ -1510,14 +1539,18 @@ def list_fitting_deliveries(
             shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
             status, created_at
         FROM tube.tube_fitting_delivery
-        WHERE (:section_1_id = '' OR section_1_id = :section_1_id)
+        WHERE (:has_section_filter = FALSE OR LOWER(TRIM(section_1_id)) = ANY(:section_ids))
+          AND (:has_supply_filter = FALSE OR LOWER(TRIM(supply_entity_id)) = ANY(:supply_ids))
+          AND (:start_date = '' OR shipped_at >= CAST(:start_date_ts AS TIMESTAMP))
+          AND (:end_date = '' OR shipped_at <= CAST(:end_date_ts AS TIMESTAMP))
           AND (
             :keyword = '' OR
             shipment_no ILIKE :kw_like OR
             order_no ILIKE :kw_like OR
             vehicle_plate_no ILIKE :kw_like OR
             fitting_type ILIKE :kw_like OR
-            model_spec ILIKE :kw_like
+            model_spec ILIKE :kw_like OR
+            ship_remark ILIKE :kw_like
           )
         ORDER BY shipped_at DESC, id DESC
         LIMIT :limit
@@ -1526,17 +1559,29 @@ def list_fitting_deliveries(
     session = SessionLocal()
     try:
         kw = _normalize_text(search_keyword)
+        clean_start = _normalize_text(start_date)
+        clean_end = _normalize_text(end_date)
+        start_ts = f"{clean_start} 00:00:00" if clean_start else "1970-01-01 00:00:00"
+        end_ts = f"{clean_end} 23:59:59" if clean_end else "2099-12-31 23:59:59"
+
         rows = session.execute(
             sql,
             {
-                "section_1_id": _normalize_text(section_1_id),
+                "has_section_filter": bool(possible_section_ids),
+                "section_ids": possible_section_ids if possible_section_ids else [""],
+                "has_supply_filter": bool(possible_supply_ids),
+                "supply_ids": possible_supply_ids if possible_supply_ids else [""],
+                "start_date": clean_start,
+                "start_date_ts": start_ts,
+                "end_date": clean_end,
+                "end_date_ts": end_ts,
                 "keyword": kw,
                 "kw_like": f"%{kw}%",
                 "limit": limit,
             }
         ).mappings().all()
 
-        return [
+        items = [
             {
                 "id": row["id"],
                 "supply_entity_id": _normalize_text(row["supply_entity_id"]),
@@ -1557,6 +1602,8 @@ def list_fitting_deliveries(
             }
             for row in rows
         ]
+
+        return items
     finally:
         session.close()
 

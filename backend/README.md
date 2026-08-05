@@ -1,3 +1,43 @@
+## 2026-08-05 前端开发容器依赖卷同步说明 (insulation_pipe_supply_2026)
+
+- **后端影响**：无后端代码、API、数据库或容器变更。
+- **运行环境说明**：本轮仅向 `phoenix_frontend_node_modules` 命名卷补装前端 `xlsx-js-style`，修复 Vite import-analysis 失败；后端服务保持原状态。
+
+## 2026-08-05 前端管件标准填报模板边框与示例更新同步说明 (insulation_pipe_supply_2026)
+
+- **后端影响**：无代码、接口或数据库变更。
+- **跨端契约说明**：前端 Sheet 1 仍使用既有五列协议（管件类型、型号/规格、发货数量、单位、备注），本轮仅保证 A1:E20 边框真实写出并更新四条示例记录，后端解析与单位归一化流程保持不变。
+
+## 2026-08-05 优化 workspace.py 中实体中文名称映射字典 (insulation_pipe_supply_2026)
+
+- **关联 API 模块**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **中文名称修饰**：
+  - 为 `_build_supply_entity_map` 和 `_build_section_1_name_map` 增加 `code` 简码的各种大小写转换别名索引，保证数据库存入简码（如 `KY`）时也能准确渲染全局管理中配置的“供给主体中文名称”（如“开元管道”）。
+
+## 2026-08-05 修复 _decorate_delivery_rows KeyError: pipe_model_id 多物资类型兼容 (insulation_pipe_supply_2026)
+
+- **关联 API 模块**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **通用防护优化**：
+  - 在 `_decorate_delivery_rows` 中为 `pipe_model_id` / `supply_entity_id` / `section_1_id` 等属性访问加上安全 `.get()` 防护，管件发货模式下自动回退拼合类型与规格名。
+
+## 2026-08-05 修正 workspace.py API 层与 supply_management_service 名字修饰器解耦 (insulation_pipe_supply_2026)
+
+- **关联 API/服务模块**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **运行时报错修复**：
+  - 将 `_decorate_delivery_rows` 的调用收敛回 `workspace.py` 路由处理入口中，解决 `NameError: name '_decorate_delivery_rows' is not defined` 崩溃。
+
+## 2026-08-05 单位归一化与发货数量纯正整数后端强校验 (insulation_pipe_supply_2026)
+
+- **关联 API/服务模块**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **规则强化**：
+  - 入库单位强行归一化修正为 `"个"`。
+  - 校验 `shipped_qty` 必须为大于 0 的纯正整数（例如 `2.5` 等小数在后端抛出 400 校验阻断响应）。
+
 ## 2026-08-04 管件车次号与订单号自动编号逻辑升级 (insulation_pipe_supply_2026)
 
 - **关联 API/服务模块**：

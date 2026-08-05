@@ -279,9 +279,16 @@ def _build_section_1_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
     result: Dict[str, str] = {}
     for item in get_config_list(payload, "demand_entities"):
         section_1_id = str(item.get("section_1_id") or "").strip()
-        if not section_1_id:
-            continue
-        result[section_1_id] = str(item.get("section_1_name") or section_1_id)
+        code = str(item.get("code") or "").strip()
+        name = str(item.get("section_1_name") or section_1_id)
+        if section_1_id:
+            result[section_1_id] = name
+            result[section_1_id.lower()] = name
+            result[section_1_id.upper()] = name
+        if code:
+            result[code] = name
+            result[code.lower()] = name
+            result[code.upper()] = name
     return result
 
 
@@ -314,9 +321,15 @@ def _build_supply_entity_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any
     result: Dict[str, Dict[str, Any]] = {}
     for item in get_config_list(payload, "supply_entities"):
         entity_id = str(item.get("entity_id") or "").strip()
-        if not entity_id:
-            continue
-        result[entity_id] = item
+        code = str(item.get("code") or "").strip()
+        if entity_id:
+            result[entity_id] = item
+            result[entity_id.lower()] = item
+            result[entity_id.upper()] = item
+        if code:
+            result[code] = item
+            result[code.lower()] = item
+            result[code.upper()] = item
     return result
 
 
@@ -631,20 +644,23 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
     for row in rows:
         shipped_at_value = datetime.fromisoformat(row["shipped_at"]) if row.get("shipped_at") else None
         arrived_confirm_at_value = datetime.fromisoformat(row["arrived_confirm_at"]) if row.get("arrived_confirm_at") else None
-        supply_code = supply_entity_code_map.get(row["supply_entity_id"], "")
-        section_1_code = section_1_code_map.get(row["section_1_id"], "")
+        supply_entity_id = row.get("supply_entity_id") or ""
+        section_1_id = row.get("section_1_id") or ""
+        row_id = row.get("id") or 0
+        supply_code = supply_entity_code_map.get(supply_entity_id, "")
+        section_1_code = section_1_code_map.get(section_1_id, "")
         row["order_no"] = row.get("order_no") or build_order_no(
-            row["id"],
+            row_id,
             shipped_at=shipped_at_value,
             supply_code=supply_code,
             section_1_code=section_1_code,
         )
         row["shipment_no"] = row.get("shipment_no") or build_shipment_no(
-            row["id"],
+            row_id,
             shipped_at=shipped_at_value,
             supply_code=supply_code,
         )
-        row["delivery_code"] = row["order_no"]
+        row["delivery_code"] = row.get("order_no") or row.get("shipment_no") or ""
         if row.get("status") == "cancelled":
             row["delivery_elapsed_label"] = ""
         else:
@@ -652,9 +668,13 @@ def _decorate_delivery_rows(payload: Dict[str, Any], rows: List[Dict[str, Any]])
                 shipped_at_value,
                 arrived_confirm_at=arrived_confirm_at_value,
             )
-        row["section_1_name"] = section_1_name_map.get(row["section_1_id"], row["section_1_id"])
-        row["pipe_model_name"] = pipe_model_map.get(row["pipe_model_id"], {}).get("pipe_model_name") or row["pipe_model_id"]
-        row["supply_entity_name"] = supply_entity_map.get(row["supply_entity_id"], {}).get("entity_name") or row["supply_entity_id"]
+        row["section_1_name"] = section_1_name_map.get(section_1_id, section_1_id)
+        pipe_model_id = row.get("pipe_model_id")
+        if pipe_model_id:
+            row["pipe_model_name"] = pipe_model_map.get(pipe_model_id, {}).get("pipe_model_name") or pipe_model_id
+        else:
+            row["pipe_model_name"] = f"{row.get('fitting_type', '')} ({row.get('model_spec', '')})".strip()
+        row["supply_entity_name"] = supply_entity_map.get(supply_entity_id, {}).get("entity_name") or supply_entity_id
         
         # 填充到货确认的操作负责人姓名和电话
         arrived_by = row.get("arrived_confirm_by")
@@ -2841,14 +2861,22 @@ def handle_submit_fitting_delivery(
 @public_router.get("/workspace/fitting_deliveries/list", summary="查询管件发货记录")
 def handle_list_fitting_deliveries(
     section_1_id: str = Query("", description="接收标段/工程ID"),
+    supply_entity_id: str = Query("", description="供给主体ID"),
+    start_date: str = Query("", description="开始时间/日期"),
+    end_date: str = Query("", description="结束时间/日期"),
     search_keyword: str = Query("", description="搜索关键字"),
-    limit: int = Query(100, description="限制返回数量"),
+    limit: int = Query(200, description="限制返回数量"),
 ):
     items = list_fitting_deliveries(
         section_1_id=section_1_id,
+        supply_entity_id=supply_entity_id,
+        start_date=start_date,
+        end_date=end_date,
         search_keyword=search_keyword,
         limit=limit,
     )
+    payload = load_tube_config()
+    _decorate_delivery_rows(payload, items)
     return {"ok": True, "items": items}
 
 

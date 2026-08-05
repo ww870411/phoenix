@@ -18,6 +18,54 @@
       <p v-if="pageError || shellError" class="page-error">{{ pageError || shellError }}</p>
       <p v-if="pageMessage" class="page-success">{{ pageMessage }}</p>
 
+      <!-- Segmented Control Tabs 导航 (位于“库管台账筛选”卡片正上方) -->
+      <div style="margin-top: 16px; margin-bottom: 16px; display: flex; align-items: center;">
+        <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 4px; display: inline-flex; gap: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);">
+          <button 
+            type="button" 
+            :style="activeTab === 'pipe' ? {
+              background: '#ffffff',
+              color: '#4f46e5',
+              fontWeight: '700',
+              boxShadow: '0 2px 8px rgba(79, 70, 229, 0.15)',
+              border: '1px solid #c7d2fe',
+              borderRadius: '8px'
+            } : {
+              background: 'transparent',
+              color: '#64748b',
+              fontWeight: '500',
+              border: '1px solid transparent',
+              borderRadius: '8px'
+            }"
+            style="padding: 10px 24px; font-size: 14.5px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; gap: 8px;"
+            @click="activeTab = 'pipe'"
+          >
+            <span style="font-size: 16px;">🔥</span> 保温管发货记录
+          </button>
+          <button 
+            type="button" 
+            :style="activeTab === 'fitting' ? {
+              background: '#ffffff',
+              color: '#2563eb',
+              fontWeight: '700',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px'
+            } : {
+              background: 'transparent',
+              color: '#64748b',
+              fontWeight: '500',
+              border: '1px solid transparent',
+              borderRadius: '8px'
+            }"
+            style="padding: 10px 24px; font-size: 14.5px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; gap: 8px;"
+            @click="handleSwitchToFittingTab"
+          >
+            <span style="font-size: 16px;">🔧</span> 管件发货记录
+          </button>
+        </div>
+      </div>
+
       <section class="card elevated">
         <div class="card-header">
           <span>库管台账筛选</span>
@@ -91,14 +139,19 @@
           <div class="field custom-multi-select-container" ref="pipeDropdownRef">
             <span>型号</span>
             <div class="custom-multi-select">
-              <div class="select-trigger" @click="toggleDropdown('pipeModel')" :class="{ active: activeDropdown === 'pipeModel' }">
-                <span class="trigger-text" :class="{ placeholder: filters.pipeModelIds.length === 0 }">
+              <div 
+                class="select-trigger" 
+                :class="{ active: activeDropdown === 'pipeModel', disabled: activeTab === 'fitting' }"
+                :style="activeTab === 'fitting' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, borderColor: '#e2e8f0' } : {}"
+                @click="toggleDropdown('pipeModel')"
+              >
+                <span class="trigger-text" :class="{ placeholder: filters.pipeModelIds.length === 0 || activeTab === 'fitting' }">
                   {{ displaySelectedPipeModels }}
                 </span>
-                <span class="trigger-arrow">▼</span>
+                <span class="trigger-arrow">{{ activeTab === 'fitting' ? '🔒' : '▼' }}</span>
               </div>
               <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'pipeModel'" class="select-dropdown">
+                <div v-if="activeDropdown === 'pipeModel' && activeTab !== 'fitting'" class="select-dropdown">
                   <div class="dropdown-actions">
                     <button type="button" class="action-btn" @click="selectAllPipeModels">全选</button>
                     <button type="button" class="action-btn" @click="clearAllPipeModels">清空</button>
@@ -123,14 +176,19 @@
           <div class="field custom-multi-select-container" ref="statusDropdownRef">
             <span>状态</span>
             <div class="custom-multi-select">
-              <div class="select-trigger" @click="toggleDropdown('status')" :class="{ active: activeDropdown === 'status' }">
-                <span class="trigger-text" :class="{ placeholder: filters.statuses.length === 0 }">
+              <div 
+                class="select-trigger" 
+                :class="{ active: activeDropdown === 'status', disabled: activeTab === 'fitting' }"
+                :style="activeTab === 'fitting' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, borderColor: '#e2e8f0' } : {}"
+                @click="toggleDropdown('status')"
+              >
+                <span class="trigger-text" :class="{ placeholder: filters.statuses.length === 0 || activeTab === 'fitting' }">
                   {{ displaySelectedStatuses }}
                 </span>
-                <span class="trigger-arrow">▼</span>
+                <span class="trigger-arrow">{{ activeTab === 'fitting' ? '🔒' : '▼' }}</span>
               </div>
               <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'status'" class="select-dropdown">
+                <div v-if="activeDropdown === 'status' && activeTab !== 'fitting'" class="select-dropdown">
                   <div class="dropdown-actions">
                     <button type="button" class="action-btn" @click="selectAllStatuses">全选</button>
                     <button type="button" class="action-btn" @click="clearAllStatuses">清空</button>
@@ -167,12 +225,22 @@
         <div class="filter-actions" style="display: flex; gap: 8px;">
           <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
           <button class="btn ghost" type="button" :disabled="loading" @click="resetFilters">重置</button>
-          <button v-if="deliveries.length > 0" class="btn primary" type="button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
+          <button 
+            v-if="activeTab === 'pipe' && deliveries.length > 0" 
+            class="btn primary" 
+            type="button" 
+            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" 
+            @click="showExportModal = true"
+          >
+            📥 导出 Excel
+          </button>
         </div>
       </section>
 
-      <section class="card elevated stats-card">
-        <div class="card-header">台账概览</div>
+      <!-- Tab 1: 保温管发货记录 -->
+      <div v-if="activeTab === 'pipe'">
+        <section class="card elevated stats-card">
+          <div class="card-header">台账概览</div>
         <div class="stats-grid">
           <div class="stat-box">
             <span>记录总数</span>
@@ -555,7 +623,215 @@
           </div>
         </div>
       </section>
+    </div>
+
+      <!-- Tab 2: 管件发货记录 -->
+      <div v-if="activeTab === 'fitting'">
+        <section class="card elevated">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;">
+            <div>
+              <span style="font-size: 16px; font-weight: 700; color: #0f172a;">🔧 管件发货记录台账</span>
+              <span style="font-size: 12.5px; color: #64748b; margin-left: 8px;">按多条件与发货车次折叠展现归档历史记录。</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button
+                type="button"
+                class="btn ghost btn-sm"
+                style="font-size: 12px; height: 32px; padding: 0 10px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                @click="toggleAllFittingGroups(true)"
+              >
+                📖 展开全车次
+              </button>
+              <button
+                type="button"
+                class="btn ghost btn-sm"
+                style="font-size: 12px; height: 32px; padding: 0 10px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                @click="toggleAllFittingGroups(false)"
+              >
+                📕 折叠全车次
+              </button>
+              <button
+                type="button"
+                class="btn ghost"
+                style="height: 32px; padding: 0 14px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                @click="loadWarehouseFittingDeliveries"
+              >
+                🔄 刷新台账
+              </button>
+              <button
+                type="button"
+                class="btn ghost"
+                :disabled="fittingExportLoading || !fittingRows.length"
+                style="height: 32px; padding: 0 14px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                @click="exportWarehouseFittingExcel"
+              >
+                📥 导出管件台账 (.xlsx)
+              </button>
+            </div>
+          </div>
+
+          <!-- 管件透视概览指标 -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🚚 累计发货车次</span>
+              <strong style="font-size: 18px; color: #0f172a;">{{ warehouseFittingBatches }} 车/批</strong>
+            </div>
+            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">📦 发货管件总数</span>
+              <strong style="font-size: 18px; color: #2563eb;">{{ warehouseFittingTotalQty }} 个</strong>
+            </div>
+            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🟢 常用标准管件</span>
+              <strong style="font-size: 18px; color: #16a34a;">{{ warehouseFittingStandardQty }} 个</strong>
+            </div>
+            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🟧 非常用/异形件</span>
+              <strong style="font-size: 18px; color: #ea580c;">{{ warehouseFittingNonStandardQty }} 个</strong>
+            </div>
+          </div>
+
+          <!-- 折叠车次列表 (默认收起) -->
+          <div style="padding: 16px 20px; min-height: 160px; position: relative;">
+            <div v-if="fittingLoading" class="loading-text">正在加载管件发货记录...</div>
+            <div v-else-if="!groupedWarehouseFittingRows.length" class="empty-box">当前筛选条件下暂无管件发货记录。</div>
+            <div v-else style="display: flex; flex-direction: column; gap: 12px;">
+              <div 
+                v-for="group in groupedWarehouseFittingRows" 
+                :key="group.groupKey"
+                style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: all 0.2s ease;"
+              >
+                <!-- 表头汇总行 (支持点击展开/折叠) -->
+                <div 
+                  style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0;"
+                  @click="toggleFittingGroup(group.groupKey)"
+                >
+                  <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <span style="font-size: 14px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold;" :style="{ transform: isFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
+                      ▶
+                    </span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
+                      <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
+                    </div>
+                    <span class="plate-badge" style="margin-left: 4px;">{{ group.vehiclePlateNo }}</span>
+                    <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px;">
+                      <span style="color: #94a3b8;">🏭 供给主体:</span>
+                      <strong>{{ group.supplyEntityName }}</strong>
+                    </div>
+                    <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px;">
+                      <span style="color: #94a3b8;">➡️ 需求主体:</span>
+                      <strong>{{ group.section1Name }}</strong>
+                    </div>
+                    <span style="font-size: 11.5px; color: #64748b; font-family: monospace;">{{ formatDateTime(group.shippedAt) }}</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="text-align: right;">
+                      <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
+                      <strong style="font-size: 14px; color: #2563eb;">装货总数: {{ group.totalQty }} 个</strong>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="btn ghost btn-sm" 
+                      style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer;"
+                      @click.stop="openDeliveryDetailModal(group.items[0])"
+                    >
+                      🚚 流转凭证
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 明细展开区 -->
+                <div v-show="isFittingGroupExpanded(group.groupKey)" style="padding: 12px 16px; background: #ffffff;">
+                  <div v-if="group.shipRemark" style="font-size: 12px; color: #475569; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                    <span>📝 整车发货备注：</span>
+                    <span style="color: #0f172a;">{{ group.shipRemark }}</span>
+                  </div>
+
+                  <table class="data-table" style="margin: 0; width: 100%; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                    <thead style="background: #f8fafc;">
+                      <tr>
+                        <th style="width: 45px; text-align: center;">#</th>
+                        <th style="width: 140px;">管件类型</th>
+                        <th>型号 / 规格描述</th>
+                        <th style="width: 110px; text-align: right;">发货件数</th>
+                        <th style="width: 140px;">订单号</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(item, idx) in group.items" :key="item.id">
+                        <td style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                        <td>
+                          <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ item.fitting_type }}</span>
+                          <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
+                        </td>
+                        <td><strong style="color: #1e293b;">{{ item.model_spec }}</strong></td>
+                        <td style="text-align: right; font-weight: bold; color: #2563eb;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
+                        <td><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
     </main>
+
+    <!-- 管件订单流转凭证 Modal 弹窗 -->
+    <Transition name="fade">
+      <div v-if="deliveryDetailModalVisible && deliveryDetailModalData" class="block-modal-overlay" @click.self="deliveryDetailModalVisible = false">
+        <div class="block-modal-container" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%) !important;">
+            <span class="block-warning-icon">🚚</span>
+            <h3 style="margin-top: 5px; color: #fff;">管件运单全生命周期凭证</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">单号：{{ deliveryDetailModalData.deliveryCode }}</p>
+          </div>
+          
+          <div style="padding: 20px 24px; text-align: left; background: #fff;">
+            <!-- 基本运单属性汇总卡块 -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 12.5px;">
+              <div>规格品类：<strong style="color: #1e293b;">{{ deliveryDetailModalData.pipeModelName }}</strong></div>
+              <div>发货件数：<strong style="color: #2563eb;">{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit }}</strong></div>
+              <div>运输车牌：<span class="plate-badge">{{ deliveryDetailModalData.vehiclePlateNo }}</span></div>
+              <div>供给主体：<strong>{{ deliveryDetailModalData.supplyEntityName }}</strong></div>
+              <div style="grid-column: span 2;">接收标段：<strong>{{ deliveryDetailModalData.section1Name }}</strong></div>
+            </div>
+
+            <!-- 时光轴记录 -->
+            <div style="position: relative; padding-left: 20px; margin-left: 4px; border-left: 2px dashed #cbd5e1;">
+              <!-- 1. 发货阶段 -->
+              <div style="position: relative; margin-bottom: 20px;">
+                <span style="position: absolute; left: -26px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #4f46e5; border: 2px solid #fff; box-shadow: 0 0 0 2px #4f46e5;"></span>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: bold; color: #1e293b;">📦 供给侧装车发货</span>
+                    <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.shippedAt) }}</span>
+                  </div>
+                  <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                    <div>发货件数：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit }}</strong></div>
+                    <div>调度经办：<span>{{ deliveryDetailModalData.shipContactName || deliveryDetailModalData.createdBy }}</span></div>
+                    <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipContactPhone">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone }}</span></div>
+                    <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">整车备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn primary"
+              style="width: 100%; margin-top: 10px; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
+              @click="deliveryDetailModalVisible = false"
+            >
+              已阅并关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
     <!-- 导出配置与 XLSX 导出组件 -->
     <ExportSettingsModal
       :show="showExportModal"
@@ -570,16 +846,186 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import * as XLSX from 'xlsx'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeWarehouseDeliveryWarehouse,
   getTubeWarehouseManagementDeliveries,
   getTubeWarehouseManagementOptions,
+  getFittingDeliveriesList,
 } from '../../daily_report_25_26/services/api'
 
 const projectKey = 'insulation_pipe_supply_2026'
 const { breadcrumbItems, goProjectPages, errorMessage: shellError, managementMode, modeLabels } = useTubePageShell('库管员管理入口')
+
+const activeTab = ref('pipe')
+
+// 管件发货台账状态
+const fittingRows = ref([])
+const fittingLoading = ref(false)
+const fittingExportLoading = ref(false)
+const expandedWarehouseFittingGroupKeys = ref(new Set())
+
+// 流转凭证弹窗数据
+const deliveryDetailModalVisible = ref(false)
+const deliveryDetailModalData = ref(null)
+
+function openDeliveryDetailModal(row) {
+  deliveryDetailModalData.value = {
+    deliveryCode: row.shipment_no || row.order_no || String(row.id),
+    vehiclePlateNo: row.vehicle_plate_no || '—',
+    pipeModelName: `${row.fitting_type} (${row.model_spec || '未填'})`,
+    shippedQty: row.shipped_qty,
+    unit: row.unit || '个',
+    shippedAt: row.shipped_at,
+    createdBy: row.operator || row.created_by || '供给端调度',
+    shipContactName: row.ship_contact_name,
+    shipContactPhone: row.ship_contact_phone,
+    supplyEntityName: row.supply_entity_name || row.supply_entity_id,
+    supplyEntityId: row.supply_entity_id,
+    section1Name: row.section_1_name || row.section_1_id,
+    section1Id: row.section_1_id,
+    shipRemark: row.ship_remark,
+    status: row.status || 'shipped',
+  }
+  deliveryDetailModalVisible.value = true
+}
+
+const toggleFittingGroup = (groupKey) => {
+  const next = new Set(expandedWarehouseFittingGroupKeys.value)
+  if (next.has(groupKey)) {
+    next.delete(groupKey)
+  } else {
+    next.add(groupKey)
+  }
+  expandedWarehouseFittingGroupKeys.value = next
+}
+
+const isFittingGroupExpanded = (groupKey) => {
+  return expandedWarehouseFittingGroupKeys.value.has(groupKey)
+}
+
+const toggleAllFittingGroups = (expandAll = true) => {
+  if (expandAll) {
+    expandedWarehouseFittingGroupKeys.value = new Set(groupedWarehouseFittingRows.value.map(g => g.groupKey))
+  } else {
+    expandedWarehouseFittingGroupKeys.value = new Set()
+  }
+}
+
+const groupedWarehouseFittingRows = computed(() => {
+  const map = new Map()
+  for (const item of fittingRows.value) {
+    const groupKey = item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
+    if (!map.has(groupKey)) {
+      map.set(groupKey, {
+        groupKey,
+        shipmentNo: item.shipment_no || item.order_no || '—',
+        orderNo: item.order_no || '—',
+        vehiclePlateNo: item.vehicle_plate_no || '—',
+        shippedAt: item.shipped_at,
+        supplyEntityId: item.supply_entity_id,
+        supplyEntityName: item.supply_entity_name || item.supply_entity_id || '—',
+        section1Id: item.section_1_id,
+        section1Name: item.section_1_name || item.section_1_id || '—',
+        shipRemark: item.ship_remark || '',
+        status: item.status || 'shipped',
+        totalQty: 0,
+        items: []
+      })
+    }
+    const group = map.get(groupKey)
+    group.items.push(item)
+    group.totalQty += (Number(item.shipped_qty) || 0)
+  }
+  return Array.from(map.values())
+})
+
+const STANDARD_FITTING_TYPES = ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节']
+function isStandardFittingType(typeStr) {
+  if (!typeStr) return true
+  return STANDARD_FITTING_TYPES.includes(String(typeStr).trim())
+}
+
+const warehouseFittingTotalQty = computed(() => {
+  return fittingRows.value.reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
+})
+
+const warehouseFittingBatches = computed(() => {
+  const set = new Set(fittingRows.value.map(r => r.shipment_no || r.id))
+  return set.size
+})
+
+const warehouseFittingStandardQty = computed(() => {
+  return fittingRows.value
+    .filter(r => isStandardFittingType(r.fitting_type))
+    .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
+})
+
+const warehouseFittingNonStandardQty = computed(() => {
+  return Math.max(0, warehouseFittingTotalQty.value - warehouseFittingStandardQty.value)
+})
+
+const loadWarehouseFittingDeliveries = async () => {
+  expandedWarehouseFittingGroupKeys.value = new Set()
+  fittingLoading.value = true
+  try {
+    const res = await getFittingDeliveriesList(projectKey, {
+      section1Id: filters.section1Ids.length === 1 ? filters.section1Ids[0] : undefined,
+      supplyEntityId: filters.supplyEntityIds.length === 1 ? filters.supplyEntityIds[0] : undefined,
+      searchKeyword: filters.shipmentNo || filters.orderNo || filters.vehiclePlateNo || '',
+      limit: 300,
+    })
+    if (res && res.ok) {
+      fittingRows.value = res.items || []
+    }
+  } catch (err) {
+    console.error('加载库管管件发货记录失败:', err)
+  } finally {
+    fittingLoading.value = false
+  }
+}
+
+const handleSwitchToFittingTab = () => {
+  activeTab.value = 'fitting'
+  loadWarehouseFittingDeliveries()
+}
+
+function exportWarehouseFittingExcel() {
+  if (!fittingRows.value.length) {
+    alert('当前暂无管件发货记录可导出')
+    return
+  }
+  fittingExportLoading.value = true
+  try {
+    const exportData = fittingRows.value.map(r => ({
+      '发货时间': formatDateTime(r.shipped_at),
+      '发货车次号': r.shipment_no || '—',
+      '订单号': r.order_no || '—',
+      '运输车牌号': r.vehicle_plate_no || '—',
+      '供给主体': r.supply_entity_name || r.supply_entity_id || '—',
+      '需求主体': r.section_1_name || r.section_1_id || '—',
+      '管件类型': r.fitting_type || '—',
+      '型号/规格': r.model_spec || '—',
+      '发货数量': r.shipped_qty ?? '—',
+      '单位': r.unit || '个',
+      '整车备注': r.ship_remark || '—',
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, '库管管件发货记录台账')
+
+    const dateStr = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `库管管件发货记录台账_${dateStr}.xlsx`)
+  } catch (error) {
+    console.error('导出管件到货台账失败:', error)
+    alert('导出管件到货台账失败')
+  } finally {
+    fittingExportLoading.value = false
+  }
+}
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -657,6 +1103,9 @@ const pipeDropdownRef = ref(null)
 const statusDropdownRef = ref(null)
 
 const toggleDropdown = (name) => {
+  if (activeTab.value === 'fitting' && (name === 'pipeModel' || name === 'status')) {
+    return
+  }
   activeDropdown.value = activeDropdown.value === name ? '' : name
 }
 
@@ -695,6 +1144,7 @@ const displaySelectedSupplyEntities = computed(() => {
 })
 
 const displaySelectedPipeModels = computed(() => {
+  if (activeTab.value === 'fitting') return '不可选'
   if (filters.pipeModelIds.length === 0) return '全部型号'
   if (filters.pipeModelIds.length === pipeModelOptions.value.length) return '全部型号（全选）'
   const names = pipeModelOptions.value
@@ -704,6 +1154,7 @@ const displaySelectedPipeModels = computed(() => {
 })
 
 const displaySelectedStatuses = computed(() => {
+  if (activeTab.value === 'fitting') return '不可选'
   if (filters.statuses.length === 0) return '全部状态'
   if (filters.statuses.length === deliveryStatusOptions.value.length) return '全部状态（全选）'
   const labels = deliveryStatusOptions.value
@@ -1070,6 +1521,9 @@ async function loadDeliveries() {
   loading.value = true
   pageError.value = ''
   try {
+    if (activeTab.value === 'fitting') {
+      await loadWarehouseFittingDeliveries()
+    }
     const payload = await getTubeWarehouseManagementDeliveries(projectKey, {
       section1Id: filters.section1Ids.join(','),
       supplyEntityId: filters.supplyEntityIds.join(','),

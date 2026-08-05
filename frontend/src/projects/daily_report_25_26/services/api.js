@@ -548,7 +548,26 @@ export async function getTubeSupplyManagementOptions(projectKey = 'insulation_pi
   })
   if (!response.ok) {
     const message = await response.text()
-    throw new Error(message || `读取供给侧页面选项失败: ${response.status}`)
+    throw new Error(message || '读取管件发货关联配置失败')
+  }
+  return response.json()
+}
+
+export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_supply_2026', query = {}) {
+  const params = new URLSearchParams()
+  if (query.section1Id) params.append('section_1_id', query.section1Id)
+  if (query.supplyEntityId) params.append('supply_entity_id', query.supplyEntityId)
+  if (query.startDate) params.append('start_date', query.startDate)
+  if (query.endDate) params.append('end_date', query.endDate)
+  if (query.searchKeyword) params.append('search_keyword', query.searchKeyword)
+  if (query.limit) params.append('limit', String(query.limit || 200))
+
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/list?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '查询管件发货记录失败')
+    throw new Error(detail)
   }
   return response.json()
 }
