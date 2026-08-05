@@ -126,21 +126,26 @@
         "unit": "大连开元热力管道股份有限公司"
       },
       {
-        "username": "supplier_b",
-        "password": "supplier_b123",
-        "unit": "管厂B"
+        "username": "xinruide",
+        "password": "xinruide_123",
+        "unit": "河北鑫瑞得管道设备有限公司"
       }
     ],
     "tube_site_manager": [
       {
         "username": "王玮",
         "password": "wangwei_123",
-        "unit": "high_lot_1,high_lot_2"
+        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
       },
       {
         "username": "李绍",
         "password": "lishao_0801",
-        "unit": "high_lot_1,high_lot_2"
+        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
+      },
+      {
+        "username": "张亮",
+        "password": "zhangliang_0805",
+        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
       },
       {
         "username": "陶远辉",

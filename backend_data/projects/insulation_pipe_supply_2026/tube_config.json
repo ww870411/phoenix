@@ -10,28 +10,30 @@
       "entity_id": "kaiyuan",
       "code": "SA",
       "entity_name": "大连开元热力管道股份有限公司",
-      "contact_name": "",
-      "contact_phone": "",
+      "contact_name": "薛向新",
+      "contact_phone": "13998603445",
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2"
       ]
     },
     {
-      "entity_id": "supplier_b",
+      "entity_id": "xinruide",
       "code": "SB",
-      "entity_name": "管厂B",
-      "contact_name": "供给联系人B",
-      "contact_phone": "13800000002",
+      "entity_name": "河北鑫瑞得管道设备有限公司",
+      "contact_name": "刘宁",
+      "contact_phone": "18230465777",
       "section_1_ids": [
-        "high_lot_2"
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
       ]
     }
   ],
   "demand_entities": [
     {
       "section_1_id": "high_lot_1",
-      "code": "L1",
+      "code": "H1",
       "section_1_name": "高温水_标段1",
       "section_2": "",
       "section_3": "",
@@ -39,8 +41,32 @@
     },
     {
       "section_1_id": "high_lot_2",
-      "code": "L2",
+      "code": "H2",
       "section_1_name": "高温水_标段2",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "施工中"
+    },
+    {
+      "section_1_id": "low_lot_1",
+      "code": "L1",
+      "section_1_name": "低温水_标段1",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "施工中"
+    },
+    {
+      "section_1_id": "low_lot_2",
+      "code": "L2",
+      "section_1_name": "低温水_标段2",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "施工中"
+    },
+    {
+      "section_1_id": "low_lot_3",
+      "code": "L3",
+      "section_1_name": "低温水_标段3",
       "section_2": "",
       "section_3": "",
       "construction_status": "施工中"
@@ -111,7 +137,10 @@
       "contact_phone": "15640887356",
       "section_1_ids": [
         "high_lot_1",
-        "high_lot_2"
+        "high_lot_2",
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
       ]
     },
     {
@@ -120,7 +149,22 @@
       "contact_phone": "13644969968",
       "section_1_ids": [
         "high_lot_1",
-        "high_lot_2"
+        "high_lot_2",
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
+      ]
+    },
+    {
+      "manager_id": "张亮",
+      "manager_name": "张亮",
+      "contact_phone": "15504945661",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
       ]
     },
     {

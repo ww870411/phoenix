@@ -1,3 +1,13 @@
+## 2026-08-05 [子项目 insulation_pipe_supply_2026 重构需求与缺口看板：限定供给主体所辖标段与整理汇总范围]
+- **需求背景与业务逻辑**：
+  原“需求与缺口看板”中的“整理汇总”为项目全局大盘统计，非当前登录/选中的供给主体专属范围；现重构为根据供给主体（`selectedSupplyEntityId`）对应的 `section_1_ids` 范围精确约束看板统计与下拉列表。
+- **改动与实现细节**（`SupplyManagementView.vue`）：
+  1. **管辖标段计算**：从 `supplyEntityOptions` 中提取 `selectedSupplyEntityId` 对应的 `section_1_ids` 构建 `currentAssignedSection1Ids`；
+  2. **整理汇总与明细计算**：重构 `filteredSummaryRows` 仅保留属于该主体管辖的需求标段行，使“整理汇总”（`aggregatedSummaryRows`）仅累计计算该供给主体负责的需求主体（标段）数据；
+  3. **下拉菜单与提示限制**：重构 `supplyDemandViewOptions` 移除全全局明细与无关标段选项，仅提供“整理汇总”及该主体管辖的具体标段；提示文字同步标识【当前供给主体】；
+  4. **视图模式重置防护**：在 `watch(selectedSupplyEntityId)` 切换供给主体时，增加当前 `supplyDemandViewMode` 合法性检查，非法时自动还原为 `'summary'`。
+- **验证结果**：等待前端 `npm run build` 校验通过。
+
 ## 2026-08-05 [子项目 insulation_pipe_supply_2026 修复管件发货提交与查询列表的时间与数据库时区偏差问题]
 - **根因分析**：
   1. 后端 `supply_management_service.py` 中的 `_to_beijing_time` 函数对于传入的无时区 (naive) `datetime` 对象（如前端 `datetime-local` 提交的 `"2026-08-05T14:51"`），未设置 `BEIJING_TZ` 时区属性（`+08:00`）；

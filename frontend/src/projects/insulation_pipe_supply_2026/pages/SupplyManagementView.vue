@@ -1869,10 +1869,22 @@ const currentReusedShipmentPlateLocked = computed(() => Boolean(currentReusedShi
 
 const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
+const currentAssignedSection1Ids = computed(() => {
+  const entity = supplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
+  if (entity && Array.isArray(entity.section_1_ids) && entity.section_1_ids.length > 0) {
+    return new Set(entity.section_1_ids)
+  }
+  return new Set(section1Options.value.map((s) => s.section_1_id))
+})
+
+const currentAssignedSection1Options = computed(() => {
+  const allowedSet = currentAssignedSection1Ids.value
+  return section1Options.value.filter((s) => allowedSet.has(s.section_1_id))
+})
+
 const supplyDemandViewOptions = computed(() => [
   { value: 'summary', label: '整理汇总' },
-  { value: 'all_details', label: '全部需求主体明细' },
-  ...section1Options.value.map((section1) => ({
+  ...currentAssignedSection1Options.value.map((section1) => ({
     value: section1.section_1_id,
     label: section1.section_1_name,
   })),
@@ -1904,10 +1916,12 @@ const pipeModelFilteredSummaryRows = computed(() => {
 })
 
 const filteredSummaryRows = computed(() => {
-  if (supplyDemandViewMode.value === 'summary' || supplyDemandViewMode.value === 'all_details') {
-    return pipeModelFilteredSummaryRows.value
+  const allowedSectionIds = currentAssignedSection1Ids.value
+  const assignedRows = pipeModelFilteredSummaryRows.value.filter((row) => allowedSectionIds.has(row.section1Id))
+  if (supplyDemandViewMode.value === 'summary') {
+    return assignedRows
   }
-  return pipeModelFilteredSummaryRows.value.filter((row) => row.section1Id === supplyDemandViewMode.value)
+  return assignedRows.filter((row) => row.section1Id === supplyDemandViewMode.value)
 })
 
 const getSection1Pos = (section1Id) => {
@@ -1967,11 +1981,9 @@ const supplyDemandTableRows = computed(() => {
 })
 
 const supplyDemandTableHint = computed(() => {
+  const entityName = currentSupplyEntityLabel.value || '当前供给主体'
   if (supplyDemandViewMode.value === 'summary') {
-    return '当前以“整理汇总”方式按型号统计各项供需数量。计量单位：米。'
-  }
-  if (supplyDemandViewMode.value === 'all_details') {
-    return '当前展示全部需求主体的逐个主体逐个型号明细。计量单位：米。'
+    return `当前以“整理汇总”方式按型号统计【${entityName}】所辖需求主体的各项供需合计。计量单位：米。`
   }
   const matched = section1Options.value.find((item) => item.section_1_id === supplyDemandViewMode.value)
   return `当前仅展示 ${matched?.section_1_name || '所选需求主体'} 的各型号供需记录。计量单位：米。`
@@ -2397,6 +2409,10 @@ watch(selectedSupplyEntityId, (value) => {
       if (!deliveryForm.value.shipContactPhone) {
         deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''
       }
+    }
+    const validValues = new Set(supplyDemandViewOptions.value.map((opt) => opt.value))
+    if (!validValues.has(supplyDemandViewMode.value)) {
+      supplyDemandViewMode.value = 'summary'
     }
     loadDeliveries()
     loadFittingDeliveries()

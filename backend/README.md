@@ -1,3 +1,8 @@
+## 2026-08-05 需求与缺口看板按供给主体范围计算联动说明 (insulation_pipe_supply_2026)
+
+- **后端影响**：后端 API `/supply-management/demand-summary` 继续保留全量全标段大盘明细输出契约，无后端代码与数据结构变更。
+- **前端跨端联动**：前端基于 `supply_entities` 中返回的 `section_1_ids` 进行管辖范围圈定，实现供给侧“整理汇总”仅包含当前主体管辖标段，无需改动后端接口接口签名。
+
 ## 2026-08-05 管件发货时区处理与数据库 TIMESTAMPTZ 规范化 (insulation_pipe_supply_2026)
 
 - **关联 API/服务模块**：
