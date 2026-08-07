@@ -2977,6 +2977,10 @@ def handle_submit_fitting_delivery(
     payload: Dict[str, Any] = Body(...),
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ):
+    if session and getattr(session, "group", None):
+        group_str = str(session.group).strip().lower()
+        if group_str in ("tube_global_viewer", "tube_viewer"):
+            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权操作管件发货")
     operator = session.username if (session and getattr(session, "username", None)) else "GUEST"
     return submit_fitting_delivery(payload, operator=operator)
 

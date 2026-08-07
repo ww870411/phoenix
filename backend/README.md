@@ -1,3 +1,19 @@
+## 2026-08-07 后端管件发货接口增加 tube_global_viewer / tube_viewer 物理 403 阻断 (insulation_pipe_supply_2026)
+
+- **权限防护**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 中的 `handle_submit_fitting_delivery`；
+  - 增加对 `session.group` 的校验，当登录角色为全局只读观察员 (`tube_global_viewer` / `tube_viewer`) 时拒绝写入并抛出 403 错误，确保只读权责严肃闭环。
+
+## 2026-08-06 修复 Dockerfile.prod 基础镜像代理源 401 Unauthorized 阻断 (运维工程)
+
+- **脚本修复**：
+  - 更新 [`backend/Dockerfile.prod`](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/Dockerfile.prod) 与 [`deploy/Dockerfile.web`](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/deploy/Dockerfile.web)，移除失效的第三方 `docker.m.daocloud.io` 前缀，回归使用标准 Docker 官方镜像 `python:3.12-slim`、`node:20-alpine` 及 `nginx:1.27-alpine`。
+
+## 2026-08-05 后端 Dockerfile.prod 优化 Debian 13 APT 源判空处理 (运维工程)
+
+- **脚本优化**：
+  - 更新 [`backend/Dockerfile.prod`](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/Dockerfile.prod) 中的换源逻辑，添加 `[ -f /etc/apt/sources.list ]` 文件防护逻辑，消灭 Debian 13 "trixie" 下关于旧版本 `sources.list` 文件缺失的非致命 Warning 输出。
+
 ## 2026-08-05 后端全服务底层 pipe_model_map 动态收集设计预设量实现全系统闭环 (insulation_pipe_supply_2026)
 
 - **底盘映射强化**：

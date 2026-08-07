@@ -1,3 +1,57 @@
+## 2026-08-07 恢复需求侧 (Demand) 与库管侧 (Warehouse) Tab 标题为“管件发货记录”，仅保留供给侧 (Supply) 为“管件发货与记录” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **精准隔离**：
+  - 还原需求侧与库管侧页面的 Tab 标签为 `🔧 管件发货记录`；仅保留供给侧页面 `SupplyManagementView.vue` 的 Tab 4 为 `🔧 管件发货与记录`。
+
+## 2026-08-07 保温管项目全服务页面 (Supply / Demand / Warehouse) 管件 Tab 统一更名为“管件发货与记录” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **全局更名**：
+  - 将所有页面的管件主标签页统一步调更名为 `🔧 管件发货与记录`。
+
+## 2026-08-07 供给侧 (Supply) Tab 4 选项卡更名为“管件发货与记录” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **界面修改**：
+  - 选项卡标签由原来的 `🔧 管件发货记录` 正式更新为 `🔧 管件发货与记录`。
+
+## 2026-08-07 供给侧 (Supply) 修复全局管理员切换供给主体时发货联系人与联系电话无联动 Bug (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **缺陷修复**：
+  - 在 `watch(selectedSupplyEntityId)` 移除 `!shipContactName` 阻卡逻辑。当 `Global_admin` 或可切换主体账号下拉更改管厂时，保温管与管件表单的发货联系人及联系电话将实时自动联动更新为目标管厂的预设联系人与电话。
+
+## 2026-08-07 供给侧 (Supply) 发货提交按钮双重防线死锁禁用 (pointer-events 屏蔽 + 方法头防线) (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **安全防护升维**：
+  1. 扩展 `isReadOnlyViewer` 的多维度识别算法（同时支持 `currentGroup` / `auth.user.group` / `username` 等视角名如 `tube_viewer` / `tube_global_viewer`）；
+  2. 按钮在 `isReadOnlyViewer` 为 true 时注入内联样式 `pointerEvents: 'none !important'` 与 `:disabled="true"`，物理隔绝鼠标点击；
+  3. `submitFittingForm` 方法入口注入硬隔离防护死封，彻底解决可点击隐患。
+
+## 2026-08-07 供给侧 (Supply) 发货提交按钮对只读观察员 (tube_global_viewer) 界面置灰禁用 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **UI 交互防护**：
+  - 管件发货选项卡的【🚀 提交整车管件发货单】及保温管发货区【🚀 一键提交当前发货车次】按钮已全面加入 `isReadOnlyViewer` 判断。当观察员账号登录时，按钮呈现半透明置灰、鼠标显示禁用手势 (`not-allowed`)，且文字切换为 **“🔒 观察员模式禁止提交发货”**。
+
+## 2026-08-07 供给侧 (Supply) 管件发货闭环防护：只读观察员 (tube_global_viewer) 严禁写发货 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **安全加固**：
+  - `tube_global_viewer` / `tube_viewer` 作为全局只读观察员，在管件发货记录中仅能调阅台账及导出 Excel 报表，无法操作及提交发货，后端接口提供 403 强拦截防护。
+
 ## 2026-08-05 保温管供应项目全系统页面保温管型选动态生成完成全量排查与闭环强化 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

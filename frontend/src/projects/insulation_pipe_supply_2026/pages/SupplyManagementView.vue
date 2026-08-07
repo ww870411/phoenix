@@ -94,7 +94,7 @@
             :class="{ active: activeTab === 'fitting' }" 
             @click="activeTab = 'fitting'"
           >
-            🔧 管件发货记录
+            🔧 管件发货与记录
           </button>
         </div>
       </div>
@@ -342,10 +342,12 @@
                 <button
                   type="button"
                   class="primary-button btn-large shadow-accent"
-                  :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId || !draftDeliveryItems.length"
+                  :disabled="submitDeliveryLoading || !canSubmitCurrentProject || !selectedSupplyEntityId || !draftDeliveryItems.length || isReadOnlyViewer"
+                  :style="isReadOnlyViewer ? { opacity: 0.5, pointerEvents: 'none !important', cursor: 'not-allowed', background: '#94a3b8 !important', borderColor: '#94a3b8 !important', color: '#ffffff !important' } : {}"
+                  :title="isReadOnlyViewer ? '全局观察员角色仅具备只读权限，已被禁止提交发货' : '点击物理发车提交当前车次'"
                   @click="submitDeliveryBatch"
                 >
-                  {{ submitDeliveryLoading ? '🚀 提交当前车次中...' : '🚀 一键提交当前发货车次' }}
+                  {{ isReadOnlyViewer ? '🔒 观察员模式禁止提交发货' : (submitDeliveryLoading ? '🚀 提交当前车次中...' : '🚀 一键提交当前发货车次') }}
                 </button>
               </div>
 
@@ -510,7 +512,16 @@
               </div>
               <div class="toolbar-actions" style="display: flex; gap: 8px;">
                 <button type="button" class="btn ghost" @click="downloadFittingTemplate" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600;">📥 下载标准填报模板 (.xlsx)</button>
-                <button type="button" class="btn primary" :disabled="submitFittingLoading" @click="submitFittingForm">🚀 提交整车管件发货单</button>
+                <button 
+                  type="button" 
+                  class="btn primary" 
+                  :disabled="submitFittingLoading || isReadOnlyViewer" 
+                  :style="isReadOnlyViewer ? { opacity: 0.5, pointerEvents: 'none !important', cursor: 'not-allowed', background: '#94a3b8 !important', borderColor: '#94a3b8 !important', color: '#ffffff !important' } : {}"
+                  :title="isReadOnlyViewer ? '全局观察员角色仅具备只读权限，已被禁止提交发货' : '点击提交整车管件发货单'"
+                  @click="submitFittingForm"
+                >
+                  {{ isReadOnlyViewer ? '🔒 观察员模式禁止提交发货' : '🚀 提交整车管件发货单' }}
+                </button>
               </div>
             </div>
 
@@ -1561,6 +1572,11 @@ const loadFittingDeliveries = async () => {
 const submitFittingForm = async () => {
   fittingActionMsg.value = null
 
+  if (isReadOnlyViewer.value) {
+    fittingActionMsg.value = { type: 'error', text: '🔒 只读观察员角色无权操作或提交管件发货记录！' }
+    return
+  }
+
   if (!fittingForm.value.vehiclePlateNo) {
     fittingActionMsg.value = { type: 'error', text: '请填写运输车牌号' }
     return
@@ -1823,6 +1839,16 @@ const deliveryForm = ref(createDefaultDeliveryForm())
 
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
 const canSwitchSupplyEntity = computed(() => currentGroup.value === 'Global_admin')
+const isReadOnlyViewer = computed(() => {
+  const g1 = String(currentGroup.value || '').trim().toLowerCase()
+  const g2 = String(auth.user?.group || auth.session?.group || '').trim().toLowerCase()
+  const u1 = String(auth.user?.username || auth.session?.username || '').trim().toLowerCase()
+  
+  const viewerGroups = new Set(['tube_global_viewer', 'tube_viewer', 'group_viewer', 'viewer'])
+  const viewerUsers = new Set(['tube_viewer', 'viewer', 'guest'])
+  
+  return viewerGroups.has(g1) || viewerGroups.has(g2) || viewerUsers.has(u1)
+})
 
 const handleGlobalSupplyEntityChange = (newVal) => {
   selectedSupplyEntityId.value = newVal
@@ -2471,14 +2497,13 @@ function handleSupplyEntityChange(value) {
 watch(selectedSupplyEntityId, (value) => {
   if (value) {
     deliveryForm.value.supplyEntityId = value
+    fittingForm.value.supplyEntityId = value
     const matchedEntity = supplyEntityOptions.value.find((item) => item.entity_id === value)
     if (matchedEntity) {
-      if (!deliveryForm.value.shipContactName) {
-        deliveryForm.value.shipContactName = matchedEntity.contact_name || ''
-      }
-      if (!deliveryForm.value.shipContactPhone) {
-        deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''
-      }
+      deliveryForm.value.shipContactName = matchedEntity.contact_name || ''
+      deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''
+      fittingForm.value.shipContactName = matchedEntity.contact_name || ''
+      fittingForm.value.shipContactPhone = matchedEntity.contact_phone || ''
     }
     const validValues = new Set(supplyDemandViewOptions.value.map((opt) => opt.value))
     if (!validValues.has(supplyDemandViewMode.value)) {

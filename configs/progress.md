@@ -1,3 +1,59 @@
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 恢复需求侧与库管侧 Tab 标题为“管件发货记录”，仅保留供给侧为“管件发货与记录”]
+- **界面范围精准对齐**：
+  应用户明确要求，将 `DemandManagementView.vue` 与 `WarehouseManagementView.vue` 的 Tab 按钮文案还原回 **“🔧 管件发货记录”**；仅严格保留 `SupplyManagementView.vue`（供给侧）的 Tab 4 标签名称为 **“🔧 管件发货与记录”**。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 全页面（供给侧、需求侧、库管侧）管件 Tab 统一更名为“管件发货与记录”]
+- **排查与修正**：
+  同步更新了 `DemandManagementView.vue` 与 `WarehouseManagementView.vue`，使供给侧、需求侧和库管侧全流程 Tab 按钮统一更名为 **“🔧 管件发货与记录”**。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 供给侧 Tab 选项卡文案更名为“管件发货与记录”]
+- **界面文案微调**（`SupplyManagementView.vue`）：
+  将供给侧工作台第四个选项卡的标签由 **“🔧 管件发货记录”** 更新为 **“🔧 管件发货与记录”**。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 修复全局管理员切换供给主体时发货联系人与电话无联动 Bug]
+- **Bug 根因与排查**（`SupplyManagementView.vue`）：
+  `watch(selectedSupplyEntityId)` 侦听器中原代码带有非空门禁 `if (!deliveryForm.value.shipContactName)`。导致切换管厂时因为原输入框中已有旧管厂的联系人数据，不会自动联动刷新为新管厂的预设联系人与电话。
+- **修复方案**：
+  移除非空门禁阻卡，使切换 `selectedSupplyEntityId` 时强制将 `deliveryForm`（保温管）与 `fittingForm`（管件）表单的发货联系人及联系电话同步联动更新为新管厂预设的 `contact_name` 与 `contact_phone`。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 彻底死锁禁用只读观察员发货提交按钮 (包含 pointer-events 屏蔽与方法头硬阻断)]
+- **死锁防线强化**（`SupplyManagementView.vue`）：
+  1. **规则泛化**：扩充 `isReadOnlyViewer` 计算属性，同时对 `currentGroup`、`auth.user.group` 以及 `username`（`tube_viewer` / `viewer` / `group_viewer` / `tube_global_viewer`）执行精确判断；
+  2. **指针与交互封死**：为提交发货按钮注入 CSS 内联属性 `pointerEvents: 'none !important'` 和 `opacity: 0.5`，使浏览器底层彻底屏蔽针对该按钮的鼠标点击事件；
+  3. **函数头兜底**：在 `submitFittingForm` 方法入口首行加入 `if (isReadOnlyViewer.value) return` 防护死封，从视图与逻辑双重层面杜绝任何触发表单提交的可能性。
+- **验证结果**：等待前端 `npm run build` 打包。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 供给侧发货按钮对全局只读观察员 (tube_global_viewer) 实施置灰禁用]
+- **前端交互置灰与禁用**（`SupplyManagementView.vue`）：
+  定义 `isReadOnlyViewer` 计算属性。在管件发货选项卡下的 【🚀 提交整车管件发货单】 按钮及保温管发货区【🚀 一键提交当前发货车次】按钮上，当检测到当前登录角色为 `tube_global_viewer` 或 `tube_viewer` 时，自动开启 `:disabled="true"` 物理禁用，按钮文字动态切换为 **“🔒 观察员模式禁止提交发货”** 并应用灰度遮罩与悬浮提示，实现体验与安全双重对齐。
+- **验证结果**：等待前端 `npm run build` 打包结果。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 增强管件发货接口对全局只读观察员 (tube_global_viewer) 的拦截防护]
+- **隐患排查与补封**：
+  原本 `/workspace/fitting_deliveries/submit` 作为公共接收路由，未对只读观察员进行强拦截。
+- **只读闭环**（`workspace.py`）：
+  在 `handle_submit_fitting_delivery` 提交接口中增加 `session.group` 校验，当用户为 `tube_global_viewer` 或 `tube_viewer` 时，显式拦截并抛出 `HTTP 403 Forbidden` 异常（`全局观察员角色仅具备只读权限，无权操作管件发货`），彻底封禁其写权限。
+- **验证结果**：等待前端 `npm run build` 打包结果。
+
+## 2026-08-06 [运维工程] 修复 Dockerfile 中 daocloud 镜像代理源 401 Unauthorized 报错
+
+- **现象与排查**：
+  运行脚本 `.\lo1_new_server.ps1` 批量打包镜像时，由于 `docker.m.daocloud.io` 镜像代理源失效并返回 `401 Unauthorized` 鉴权失败，导致构建直接中断。
+- **修复措施**：
+  - 更新 `backend/Dockerfile.prod`：将 `docker.m.daocloud.io/library/python:3.12-slim` 还原为标准的官方基础镜像 `python:3.12-slim`；
+  - 更新 `deploy/Dockerfile.web`：将 `node` 与 `nginx` 镜像源还原为标准的官方镜像 `node:20-alpine` 与 `nginx:1.27-alpine`。
+
+## 2026-08-05 [运维工程] 优化 backend/Dockerfile.prod 中的 APT 换源容错判断
+
+- **现象与分析**：
+  构建 `python:3.12-slim` 镜像（基于 Debian 13 "trixie"）时，系统不再包含旧版 `/etc/apt/sources.list` 文件，使得 `sed` 在尝试读取该路径时输出 Warning。尽管包含 `|| true` 不阻断任务，但会带来干扰信息。
+- **优化解决**：
+  在 `backend/Dockerfile.prod` 的换源命令前增加 `[ -f /etc/apt/sources.list ] && ...` 物理文件存在判断，消灭控制台警告日志，保持构建日志纯净。
+
 ## 2026-08-05 [子项目 insulation_pipe_supply_2026 开启全系统（大盘、工厂、需求、库管、配置）保温管型号动态解绑全量巡检与闭环强化]
 - **基础映射字典通用增强**（`workspace.py`）：
   更新底层的 `_build_pipe_model_map` 函数，除了读取静态 `pipe_models` 字典外，自动遍历并补全 `baseline_presets`（设计与采购基准量表）中出现的所有全新低温水/高温水管模。全系统所有涉及根据 `pipe_model_id` 找中文名或单位的地方均能 100% 自动成功映射。

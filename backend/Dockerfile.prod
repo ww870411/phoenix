@@ -1,4 +1,4 @@
-FROM docker.m.daocloud.io/library/python:3.12-slim AS builder
+FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,10 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
-    && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+RUN [ -f /etc/apt/sources.list ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
+    && [ -f /etc/apt/sources.list ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
+    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
     && apt-get update -o Acquire::Retries=5 \
     && apt-get install -y --fix-missing --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -20,7 +20,7 @@ COPY backend/requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --prefix=/install -r requirements.txt
 
-FROM docker.m.daocloud.io/library/python:3.12-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 ARG BUILD_TIMESTAMP="unknown"
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -30,10 +30,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
-    && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+RUN [ -f /etc/apt/sources.list ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
+    && [ -f /etc/apt/sources.list ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
+    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
     && apt-get update -o Acquire::Retries=5 \
     && apt-get install -y --fix-missing --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/*
