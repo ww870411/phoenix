@@ -29,6 +29,30 @@
         "can_extract_xlsx": true
       }
     },
+    "tube_supplier_admin": {
+      "page_access": [
+        "dashboard",
+        "supply_management",
+        "history_query"
+      ],
+      "sheet_rules": {},
+      "units_access": [
+        "*"
+      ],
+      "actions": {
+        "can_revoke": true,
+        "can_publish": false,
+        "can_unlimited_ai_usage": false,
+        "can_submit": true,
+        "can_manage_ai_sheet_switch": false,
+        "can_access_admin_console": false,
+        "can_approve": false,
+        "can_manage_modularization": false,
+        "can_manage_validation": false,
+        "can_manage_ai_settings": false,
+        "can_extract_xlsx": true
+      }
+    },
     "tube_supplier": {
       "page_access": [
         "dashboard",

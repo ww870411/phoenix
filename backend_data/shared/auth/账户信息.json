@@ -119,6 +119,13 @@
         "unit": "Group"
       }
     ],
+    "tube_supplier_admin": [
+      {
+        "username": "吴近",
+        "password": "wujin_0808",
+        "unit": "能源集团保温管厂"
+      }
+    ],
     "tube_supplier": [
       {
         "username": "kaiyuan",

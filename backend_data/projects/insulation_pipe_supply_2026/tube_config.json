@@ -28,6 +28,20 @@
         "low_lot_2",
         "low_lot_3"
       ]
+    },
+    {
+      "entity_id": "吴近",
+      "code": "SC",
+      "entity_name": "能源集团保温管厂",
+      "contact_name": "吴近",
+      "contact_phone": "13998473933",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
+      ]
     }
   ],
   "demand_entities": [

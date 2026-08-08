@@ -134,6 +134,7 @@
   {
     "availability": [
       "Global_admin",
+      "tube_supplier_admin",
       "tube_supplier",
       "tube_site_manager",
       "tube_construction_unit",

@@ -1,3 +1,11 @@
+## 2026-08-08 供给侧 (Supply) 支持“供给方管理员”(tube_supplier_admin) 多主体切换与数据编辑覆盖最高特权 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **功能提升**：
+  - 将 `canSwitchSupplyEntity`、自定义发货时间输入以及数据超级编辑覆盖（`openSuperEdit`）的权限从仅限 `Global_admin` 扩展为支持 `tube_supplier_admin`（供给方管理员）。
+  - 用户“吴近”登录后可在供给侧管理页面中以“供给方管理员”身份自由切换所有保温管厂主体、全盘掌控5个标段的供需发货数据。
+
 ## 2026-08-07 恢复需求侧 (Demand) 与库管侧 (Warehouse) Tab 标题为“管件发货记录”，仅保留供给侧 (Supply) 为“管件发货与记录” (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

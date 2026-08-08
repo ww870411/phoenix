@@ -29,6 +29,9 @@
     "Group_viewer": {
       "hierarchy": 50
     },
+    "tube_supplier_admin": {
+      "hierarchy": 66
+    },
     "tube_supplier": {
       "hierarchy": 65
     },

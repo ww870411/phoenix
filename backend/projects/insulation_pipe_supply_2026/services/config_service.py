@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Set
 
 from fastapi import HTTPException
@@ -18,6 +18,12 @@ PROJECT_KEY = "insulation_pipe_supply_2026"
 PROJECT_DATA_DIR = get_project_root(PROJECT_KEY)
 CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
 SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "section_1_submission_status.json"
+
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def _get_beijing_today() -> date:
+    return datetime.now(BEIJING_TZ).date()
 
 ENCRYPT_PREFIX = "enc_v1:"
 AMAP_SECRET_KEY = "phoenix_amap_key_2026"
@@ -168,14 +174,14 @@ def get_configured_show_date(payload: Dict[str, Any]) -> date:
 def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
     auto_update = bool(payload.get("auto_update_plan_start_date"))
     if auto_update:
-        return date.today()
+        return _get_beijing_today()
     raw_value = str(payload.get("plan_start_date") or "").strip()
     if raw_value:
         try:
             return date.fromisoformat(raw_value)
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=f"tube_config.json 中 plan_start_date 非法：{raw_value}") from exc
-    return date.today()
+    return _get_beijing_today()
 
 
 def get_usage_collection_date(payload: Dict[str, Any]) -> date:
@@ -241,7 +247,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
         for item in demand_entities
         if str(item.get("section_1_id") or "").strip()
     }
-    if normalized_group in ("Global_admin", "tube_global_viewer"):
+    if normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
         return all_section_1_ids
 
     manager_assignments = get_config_list(payload, "manager_assignments")
@@ -302,7 +308,7 @@ def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str,
         for item in supply_entities
         if str(item.get("entity_id") or "").strip()
     }
-    if normalized_group in ("Global_admin", "tube_global_viewer"):
+    if normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
         return all_entity_ids
 
     allowed_entity_ids: Set[str] = set()

@@ -1,3 +1,19 @@
+## 2026-08-08 [子项目 insulation_pipe_supply_2026 新增“供给方管理员”权限组并调整账号“吴近”权限]
+- **改动缘由**：
+  应业务需求，新增“供给方管理员”（`tube_supplier_admin`）用户组。使属于该组的供给侧管理账号在供给侧页面中具备与 `Global_admin` 同等最高控制权限（支持自由切换供给主体、修改自定义发货时间、数据编辑覆盖等操作）。
+- **主要改动点与报错修复**：
+  1. `backend_data/shared/auth/permissions.json` & `permissions/global.json` & `permissions/insulation_pipe_supply_2026.json`：全量补齐 `tube_supplier_admin` 权限组定义（支持 `supply_management` 页面高级控制与 Excel 导出，彻底解决后端鉴权机制抛出的“用户组 tube_supplier_admin 未配置权限”阻断问题）。
+  2. `backend_data/shared/项目列表.json`：在 `insulation_pipe_supply_2026` 项目卡片的 `availability` 可用组列表中加入 `tube_supplier_admin`，解决新角色登录后获取可进项目列表提示“无法加载项目列表”的问题。
+  3. `backend_data/shared/auth/账户信息.json`：将账号“吴近”归属组从 `tube_supplier` 升级为 `tube_supplier_admin`。
+  4. `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 与 `api/workspace.py`：在 `resolve_accessible_section_1_ids` 及 `resolve_accessible_supply_entity_ids` 中补充 `tube_supplier_admin`，使其享有全量供给主体与全标段视角及历史数据查询接口权限。
+  5. `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`：在前端页面中将 `canSwitchSupplyEntity`、自定义发货时间、超级编辑覆盖等管理员控制点放开给 `tube_supplier_admin`，并将其身份标签正确展示为“供给方管理员”。
+
+## 2026-08-07 [子项目 insulation_pipe_supply_2026 开启起始日期自动随今天变化时的触发机制与北京时间零点精算保障]
+- **触发机制**：
+  日期的自动更新基于后端即时算子（On-the-fly Calculation），无需任何后台定时轮询任务在夜间写磁盘文件。在前端发起 API 请求被后端响应的瞬间，系统即时推算 `datetime.now(BEIJING_TZ).date()`。
+- **时区死锁对齐**（`config_service.py`）：
+  引入 `BEIJING_TZ`（UTC+8）。无论服务器 Docker 宿主机部署在任何时区，每日在**北京时间凌晨 00:00:00** 的瞬间，下一个发起的 API 请求 100% 稳定、无滞后地跨入新的一天。
+
 ## 2026-08-07 [子项目 insulation_pipe_supply_2026 恢复需求侧与库管侧 Tab 标题为“管件发货记录”，仅保留供给侧为“管件发货与记录”]
 - **界面范围精准对齐**：
   应用户明确要求，将 `DemandManagementView.vue` 与 `WarehouseManagementView.vue` 的 Tab 按钮文案还原回 **“🔧 管件发货记录”**；仅严格保留 `SupplyManagementView.vue`（供给侧）的 Tab 4 标签名称为 **“🔧 管件发货与记录”**。

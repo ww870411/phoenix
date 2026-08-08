@@ -2468,6 +2468,7 @@ def get_global_management_history(
     allowed_groups = {
         "global_admin",
         "tube_warehouse_admin",
+        "tube_supplier_admin",
         "tube_supplier",
         "tube_site_manager",
         "tube_construction_unit",
@@ -2524,6 +2525,7 @@ def export_global_management_history(
     allowed_groups = {
         "global_admin",
         "tube_warehouse_admin",
+        "tube_supplier_admin",
         "tube_supplier",
         "tube_site_manager",
         "tube_construction_unit",

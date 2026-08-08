@@ -508,6 +508,34 @@
         }
       }
     },
+    "tube_supplier_admin": {
+      "hierarchy": 66,
+      "projects": {
+        "insulation_pipe_supply_2026": {
+          "page_access": [
+            "dashboard",
+            "supply_management",
+            "history_query"
+          ],
+          "sheet_rules": {},
+          "units_access": [
+            "*"
+          ],
+          "actions": {
+            "can_submit": true,
+            "can_approve": false,
+            "can_revoke": true,
+            "can_publish": false,
+            "can_manage_modularization": false,
+            "can_manage_validation": false,
+            "can_manage_ai_settings": false,
+            "can_manage_ai_sheet_switch": false,
+            "can_extract_xlsx": true,
+            "can_unlimited_ai_usage": false
+          }
+        }
+      }
+    },
     "tube_supplier": {
       "hierarchy": 65,
       "projects": {

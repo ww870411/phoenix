@@ -257,7 +257,7 @@
                   <label class="field">
                     <span>发货时间</span>
                     <input 
-                      v-if="currentGroup === 'Global_admin'" 
+                      v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" 
                       v-model="deliveryForm.customShippedAt" 
                       type="datetime-local" 
                       class="input"
@@ -467,7 +467,7 @@
                     <td>
                       <div class="action-stack">
                         <button
-                          v-if="currentGroup === 'Global_admin'"
+                          v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)"
                           type="button"
                           class="btn primary"
                           style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important;"
@@ -492,7 +492,7 @@
                         >
                           {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
                         </button>
-                        <span v-else-if="currentGroup !== 'Global_admin'" class="muted-text">不可撤销</span>
+                        <span v-else-if="!['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" class="muted-text">不可撤销</span>
                       </div>
                     </td>
                   </tr>
@@ -982,7 +982,7 @@
     <div v-if="showSuperEditModal" class="modal-overlay">
       <div class="modal-card elevated" style="max-width: 680px; width: 90%; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
         <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #1e293b;">⚙️ 超级数据编辑覆盖 (Global_admin 专属)</h3>
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #1e293b;">⚙️ 数据编辑覆盖 (供给方管理员/全局管理员)</h3>
           <button type="button" class="close-btn" @click="showSuperEditModal = false" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">×</button>
         </div>
         <div class="modal-body" style="padding: 20px; max-height: 60vh; overflow-y: auto;">
@@ -1838,7 +1838,7 @@ const draftDeliveryItems = ref([])
 const deliveryForm = ref(createDefaultDeliveryForm())
 
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
-const canSwitchSupplyEntity = computed(() => currentGroup.value === 'Global_admin')
+const canSwitchSupplyEntity = computed(() => ['Global_admin', 'tube_supplier_admin'].includes(currentGroup.value))
 const isReadOnlyViewer = computed(() => {
   const g1 = String(currentGroup.value || '').trim().toLowerCase()
   const g2 = String(auth.user?.group || auth.session?.group || '').trim().toLowerCase()
@@ -1863,6 +1863,7 @@ const handleGlobalSupplyEntityChange = (newVal) => {
 const currentGroupLabel = computed(() => {
   if (!currentGroup.value) return '未识别'
   if (currentGroup.value === 'Global_admin') return '全局管理员'
+  if (currentGroup.value === 'tube_supplier_admin') return '供给方管理员'
   if (currentGroup.value === 'tube_supplier') return '供给主体'
   return currentGroup.value
 })

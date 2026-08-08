@@ -1,3 +1,16 @@
+## 2026-08-08 后端视角解析与权限校验支持“供给方管理员”(tube_supplier_admin) (insulation_pipe_supply_2026)
+
+- **权限解析扩展**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/services/config_service.py` 中的 `resolve_accessible_section_1_ids` 及 `resolve_accessible_supply_entity_ids` 函数，加入 `tube_supplier_admin`。
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 中的历史数据查询与导出接口白名单 `allowed_groups`。
+  - 允许供给方管理员访问与管控所有保温管供给主体与全部5个标段的供需数据。
+
+## 2026-08-07 后端配置服务升级北京时间 (UTC+8) 日期动态算子 (insulation_pipe_supply_2026)
+
+- **计算精准度保障**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/services/config_service.py`；
+  - 引入 `BEIJING_TZ` 确保在 `auto_update_plan_start_date: true` 模式下，每日在**北京时间 00:00:00** 零延迟翻页，无需异步定时任务写盘。
+
 ## 2026-08-07 后端管件发货接口增加 tube_global_viewer / tube_viewer 物理 403 阻断 (insulation_pipe_supply_2026)
 
 - **权限防护**：
