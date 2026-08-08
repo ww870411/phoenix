@@ -1,3 +1,44 @@
+## 2026-08-08 后端气象服务纠偏 labels 映射，对齐当下物理今日 (insulation_pipe_supply_2026)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **纠偏说明**：
+  - 修正了后端 `labels` 序列为 `["前一日", "今日", "明日", "后日", "大后日", "大大后日"]`，消除了先前将当下物理今日挂载为“业务日”导致的标签与物理公历日期位移错乱。
+
+## 2026-08-08 后端气象服务扩充输出 6 天链路 (前一日 + 从今日起算的 5 天预报) (insulation_pipe_supply_2026)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **调整说明**：
+  - `get_weather_dashboard_data` 扩充输出天数序列为 `[前一日, 业务日, 今日, 明日, 后日, 大后日]`，同时支撑前端沙盘 4 卡片历史对比呈现与 WSI 5 天精算算子。
+
+## 2026-08-08 后端气象服务恢复“前一日、业务日、今日、明日”沙盘4日链路 (insulation_pipe_supply_2026)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **调整说明**：
+  - `get_weather_dashboard_data` 恢复为完整输出包含“前一日”历史数据及当下与未来的 4 日结构，保障底层决策沙盘展开展现。
+
+## 2026-08-08 后端气象服务调整为精准连线输出未来 4 天实时预报 (insulation_pipe_supply_2026)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **调整说明**：
+  - 在 `get_weather_dashboard_data` 中将返回数据对齐为高德 REST API 原生的 `[今日, 明日, 后日, 大后日]` 未来 4 天真实权威天气预报。
+
+## 2026-08-08 后端工作台 API 升级 PCR 与 SSR 算子，自动根据 construction_status 剔除未开工工区 (insulation_pipe_supply_2026)
+
+- **算子升维**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的 `get_supply_management_demand_summary`；
+  - 读取各需求主体的 `construction_status`，仅保留处于 `"施工中"` / `"在建"` 状态的标段进入 `active_section_1s` 考核分母，4 个状态为 `"未开工"` 的标段不再拉低全网 PCR 及 SSR 达成率；
+  - 并在 `metrics` 中同步返回 `unstarted_section_1_count` 字段供前端透明渲染。
+
+## 2026-08-08 后端工作台 API 重构 doi_score 为安全备料缓冲期区间打分算法 (insulation_pipe_supply_2026)
+
+- **算法重构**：
+  - 更新 `backend/projects/insulation_pipe_supply_2026/api/workspace.py` 的 `get_supply_management_demand_summary` 接口中的 `doi_score` 计算公式；
+  - 由旧的“越小得分越高（>3.2天即扣分）”重构为“以 3.0~7.0 天为满分 100 分安全缓冲区间，小于 3.0 天扣分防窝工，大于 7.0 天保持高备料分”的现实工程算子。
+
 ## 2026-08-08 后端视角解析与权限校验支持“供给方管理员”(tube_supplier_admin) (insulation_pipe_supply_2026)
 
 - **权限解析扩展**：

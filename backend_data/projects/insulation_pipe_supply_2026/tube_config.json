@@ -1,9 +1,9 @@
 {
-  "show_date": "2026-08-04",
-  "plan_start_date": "2026-08-05",
+  "show_date": "2026-08-07",
+  "plan_start_date": "2026-08-08",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "weather_provider": "amap",
-  "auto_update_plan_start_date": true,
+  "auto_update_plan_start_date": false,
   "plan_editable_days": 3,
   "supply_entities": [
     {
@@ -59,7 +59,7 @@
       "section_1_name": "高温水_标段2",
       "section_2": "",
       "section_3": "",
-      "construction_status": "施工中"
+      "construction_status": "未开工"
     },
     {
       "section_1_id": "low_lot_1",
@@ -67,7 +67,7 @@
       "section_1_name": "低温水_标段1",
       "section_2": "",
       "section_3": "",
-      "construction_status": "施工中"
+      "construction_status": "未开工"
     },
     {
       "section_1_id": "low_lot_2",
@@ -75,7 +75,7 @@
       "section_1_name": "低温水_标段2",
       "section_2": "",
       "section_3": "",
-      "construction_status": "施工中"
+      "construction_status": "未开工"
     },
     {
       "section_1_id": "low_lot_3",
@@ -83,7 +83,7 @@
       "section_1_name": "低温水_标段3",
       "section_2": "",
       "section_3": "",
-      "construction_status": "施工中"
+      "construction_status": "未开工"
     }
   ],
   "production_capacities": [],
@@ -121,7 +121,6 @@
         "high_lot_2",
         "low_lot_1",
         "low_lot_2",
-        
         "low_lot_3"
       ]
     },
@@ -554,5 +553,5 @@
     "api_key": "enc_v1:R1FcXA1fT28FCFJGZlJVTmhWUwRURFFXBgpQTWxVWwc=",
     "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="
   },
-  "usage_collection_date": "2026-08-04"
+  "usage_collection_date": "2026-08-07"
 }

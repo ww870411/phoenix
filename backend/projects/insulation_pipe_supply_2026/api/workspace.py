@@ -1174,8 +1174,24 @@ def get_supply_management_demand_summary(
     total_usage = sum(row["total_usage_qty"] for row in rows)
     total_arrived = sum(row["total_arrived_qty"] for row in rows)
 
-    # 活跃工区：设计量大于0的站点的唯一集合
-    active_section_1s = {row["section_1_id"] for row in rows if row["design_qty"] > 0}
+    # 读取各工区的物理施工状态
+    construction_status_map = {
+        str(item.get("section_1_id") or "").strip(): str(item.get("construction_status") or "").strip()
+        for item in get_config_list(payload, "demand_entities")
+        if str(item.get("section_1_id") or "").strip()
+    }
+
+    # 在建施工工区：状态为“施工中”或未特别标注的处于真正在建状态的工区集合（自动排除“未开工”、“暂停”或“完工”等非活跃在建状态）
+    under_construction_set = {
+        sec_id for sec_id, status in construction_status_map.items()
+        if status in ("施工中", "在建", "")
+    }
+
+    # 活跃考核工区：处于在建状态且设计量大于0的站点的唯一集合
+    active_section_1s = {
+        row["section_1_id"] for row in rows 
+        if row["design_qty"] > 0 and (row["section_1_id"] in under_construction_set)
+    }
     # 提报计划工区：未来计划大于0的站点的唯一集合
     section_1s_with_plan = {row["section_1_id"] for row in rows if row["future_plan_qty"] > 0}
     submitted_section_1_count = len(section_1s_with_plan.intersection(active_section_1s))
@@ -1186,7 +1202,19 @@ def get_supply_management_demand_summary(
 
     # 核心指标计算
     doi = round(total_inv / daily_consume_plan, 1) if daily_consume_plan > 0 else 0.0
-    doi_score = round(min(100.0, max(0.0, 100.0 - max(doi - 3.2, 0.0) * 10.0)), 1) if daily_consume_plan > 0 else 0.0
+    if daily_consume_plan <= 0:
+        doi_score = 0.0
+    elif 3.0 <= doi <= 7.0:
+        doi_score = 100.0
+    elif 1.0 <= doi < 3.0:
+        doi_score = round(60.0 + (doi - 1.0) / 2.0 * 40.0, 1)
+    elif doi < 1.0:
+        doi_score = round(max(0.0, doi * 60.0), 1)
+    elif 7.0 < doi <= 12.0:
+        doi_score = round(max(90.0, 100.0 - (doi - 7.0) * 2.0), 1)
+    else:
+        doi_score = round(max(50.0, 90.0 - (doi - 12.0) * 4.0), 1)
+
     pcr = round((submitted_section_1_count / len(active_section_1s)) * 100, 1) if len(active_section_1s) > 0 else 0.0
     ucr = round((total_usage / total_arrived) * 100, 1) if total_arrived > 0 else 0.0
     ssr = round((safe_section_1_count / len(active_section_1s)) * 100, 1) if len(active_section_1s) > 0 else 0.0
@@ -1205,6 +1233,7 @@ def get_supply_management_demand_summary(
         "pcr": pcr,
         "submitted_section_1_count": submitted_section_1_count,
         "active_section_1_count": len(active_section_1s),
+        "unstarted_section_1_count": len({sec_id for sec_id, status in construction_status_map.items() if status == "未开工"}),
         
         "ucr": ucr,
         "totalUsage": total_usage,

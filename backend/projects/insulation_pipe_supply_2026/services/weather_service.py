@@ -571,10 +571,12 @@ def get_weather_dashboard_data(show_date_str: str) -> Dict[str, Any]:
     today = base_date
     tomorrow = base_date + timedelta(days=1)
     after_tomorrow = base_date + timedelta(days=2)
+    after_2_tomorrow = base_date + timedelta(days=3)
+    after_3_tomorrow = base_date + timedelta(days=4)
 
-    target_dates = [yesterday, today, tomorrow, after_tomorrow]
+    target_dates = [yesterday, today, tomorrow, after_tomorrow, after_2_tomorrow, after_3_tomorrow]
     target_dates_str = [d.isoformat() for d in target_dates]
-    labels = ["前一日", "业务日", "今日", "明日"]
+    labels = ["前一日", "今日", "明日", "后日", "大后日", "大大后日"]
 
     # =========================================================================
     # 模式一：高德地图气象源（零写数据库！纯实时请求高德 REST API 并呈现）
@@ -621,7 +623,7 @@ def get_weather_dashboard_data(show_date_str: str) -> Dict[str, Any]:
                 session.close()
 
             weather_days_list = []
-            # 相对序列映射：index 0 -> 前一日, index 1 -> 当日, index 2 -> 明日, index 3 -> 后日
+            # 相对序列映射：index 0 -> 前一日, index 1..5 -> 业务日(今日)起的 5 天预报
             for idx, d_str in enumerate(target_dates_str):
                 if idx == 0:
                     # 前一日
@@ -648,7 +650,7 @@ def get_weather_dashboard_data(show_date_str: str) -> Dict[str, Any]:
                             **parsed_amap_items[0]
                         })
                 else:
-                    # 当日 (idx=1 -> amap[0]), 明日 (idx=2 -> amap[1]), 后日 (idx=3 -> amap[2])
+                    # 当日及未来预报 (idx=1 -> amap[0], idx=2 -> amap[1], idx=3 -> amap[2], idx=4 -> amap[3])
                     amap_idx = idx - 1
                     if amap_idx < len(parsed_amap_items):
                         weather_days_list.append({

@@ -1,3 +1,144 @@
+## 2026-08-08 全局数据看板 (Dashboard) 修正气象标签对齐真正的物理今日 (08-08) 起算 5 天明细 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **修正对齐**：
+  - WSI 穿透 Modal 弹窗已准确对齐为从真正的物理**今日 (08-08)** 起算至 **大大后日 (08-12)** 的 5 天气象预报明细。
+
+## 2026-08-08 全局数据看板 (Dashboard) 气象防汛沙盘维持4日原貌，WSI 卡片实现从今日起算 5 天精算 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **逻辑隔离对齐**：
+  - 气象沙盘 `.slice(0, 4)` 维持原本的【前一日、业务日、今日、明日】4日结构；
+  - 五维图 WSI 卡片与 Modal 弹窗自动抓取 `业务日/今日` 起算向上整整 5 天的预报数据，精准计算可施工比例。
+
+## 2026-08-08 全局数据看板 (Dashboard) 气象防汛沙盘恢复原始4日呈现，WSI 独立精算未来预报 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **说明**：
+  - 气象沙盘维持原本的【前一日、业务日、今日、明日】4日全貌；
+  - 五维图 WSI 卡片独立过滤“前一日”数据，仅对当下及未来的预测天数精准计算适宜施工占比。
+
+## 2026-08-08 全局数据看板 (Dashboard) 重构 WSI 为“从今日起算未来4天”真实气象预报 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **对齐内容**：
+  - 将 WSI 重构更正为从今日（实际）算起的 **未来 4 天**（今日、明日、后日、大后日）；
+  - 穿透 Modal 弹窗直接列出这 4 天逐日的真凭实据公历日期、降雨量与判定标签。
+
+## 2026-08-08 全局数据看板 (Dashboard) 彻底清理 SFC 冗余代码，解决 compiler-sfc 'return' 报错 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **修复说明**：
+  - 清理了 885-945 行重复的死代码段与括号闭合问题，消除了 SFC 编译在浏览器构建阶段抛出的错误。
+
+## 2026-08-08 全局数据看板 (Dashboard) 恢复 5 大 SaaS 卡片点击穿透 Modal 弹窗功能 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **修复说明**：
+  - 将 JS 穿透函数名与 `activeMetric` 弹窗模板完全恢复对齐，5 个 SaaS 卡片（包含全新的 WSI 施工气象适宜度）已全面恢复点击查看计算过程功能。
+
+## 2026-08-08 全局数据看板 (Dashboard) 修复雷达图 WSI 数据绑定并恢复渲染 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **修复说明**：
+  - 修正了 ECharts `renderCharts` 雷达图中的变量绑定（`realUCR.value` ➔ `realWSI.value`），恢复五维健康度评估雷达图正常渲染。
+
+## 2026-08-08 全局数据看板 (Dashboard) 重构 UCR 为“WSI 施工气象适宜度 (五日良好占比)” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **重构内容**：
+  - 将卡片4从 UCR 重构为 **`WSI 施工气象适宜度 (五日良好占比)`**，基于近 5 日大连气象推算晴天及小雨（含）天数占比；
+  - 五维雷达图同步接入 `WSI|施工气象适宜度` 指标与穿透 Modal。
+
+## 2026-08-08 全局数据看板 (Dashboard) 精简 SSR 卡片辅助文案 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **文案优化**：
+  - 移除了 SSR 卡片说明中“仅个别站点偏紧”字样。
+
+## 2026-08-08 全局数据看板 (Dashboard) 净化卡片1底部进度条文本，移除 (在建/未开工) 挂件 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **样式细节优化**：
+  - 移除了进度条旁边的括号在建/未开工标注，使底部辅助文字更加纯粹集中。
+
+## 2026-08-08 全局数据看板 (Dashboard) 重构卡片1为“项目总设计量 / 系统标段总量”双指标 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **动态渲染**：
+  - 动态计算并展示系统内配置的标段总数（`totalSections`）；
+  - 将卡片1升级为 `项目总设计量 / 系统标段总量` 双栏对比与在建/未开工分布提示，保持顶部大盘四个卡片格式绝对统一。
+
+## 2026-08-08 全局数据看板 (Dashboard) 调大卡片底部进度条辅助文本字号至 13px (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **可读性优化**：
+  - `.progress-bar-text` 字体调整为 `13px / 600 SemiBold`，使全网覆盖率与在途占比数据更清晰易读。
+
+## 2026-08-08 全局数据看板 (Dashboard) 移除气象防汛沙盘业务日卡片的 TODAY 伪元素标签 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **样式净化**：
+  - 删除了 `.weather-day-card.current-day::before` 对应的 `TODAY` 挂件伪元素，保留纯粹的高亮外边框聚焦。
+
+## 2026-08-08 全局数据看板 (Dashboard) 更新“项目总设计量”展示单位为 km 并保留两位小数 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **格式化提升**：
+  - 引入 `formatKm` 格式化算子，卡片1的“项目总设计量”显示单位升级为 `km`，数值自动换算并精确保留两位小数展示。
+
+## 2026-08-08 全局数据看板 (Dashboard) 重构卡片1与透视表，移除重复“计划采购” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **重构内容**：
+  - 将卡片1升级为单值 **`项目总设计量`** 核心指标，进度条展示 **全网累计发货覆盖率**（发货量 / 设计量 %）；
+  - 多维透视表中同步删除了冗余的“计划采购”列，消除了视觉和口径上的重复感。
+
+## 2026-08-08 全局数据看板 (Dashboard) 升级 PCR/SSR 穿透明细，透视支持显示“已剔除未开工工区” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **业务对齐**：
+  - `metricSnapshot` 解析后端返回的 `unstarted_section_1_count`；
+  - PCR 与 SSR 的穿透 Modal 弹窗在考核分母上自动带出 `(已剔除 N 个未开工工区)` 注解，确保指标权威严密。
+
+## 2026-08-08 全局数据看板 (Dashboard) 统一雷达图 OTD 维度名称为“24小时到货达成率” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **口径一致**：
+  - 以卡片文本为准，将 ECharts 雷达图中的 OTD 维度名称统一修饰更新为 **`OTD|24小时到货达成率`**。
+
+## 2026-08-08 全局数据看板 (Dashboard) 规范 IBD 指标文案为“施工备料缓冲天数” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **界面精简**：
+  - 将大盘卡片、ECharts 雷达图及穿透 Modal 中的标题统一精简更新为 **`IBD 施工备料缓冲天数`**，说明副标题更新为 **`在库存量支撑施工天数 (基准区间 3.0~7.0天)`**。
+
+## 2026-08-08 全局数据看板 (Dashboard) 重构 DOI 卡片与雷达图为“IBD/DOI 现场安全备料缓冲天数” (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **重构内容**：
+  - 卡片标签升级为 `IBD / DOI 安全备料`，雷达图维度更名为 `IBD|安全备料缓冲天数`；
+  - 数据穿透 Modal 中的建议判定调整为：以 3.0~7.0 天为最合适缓冲区间，低于 3.0 天提示断料风险，高于 12.0 天提示场地占用。
+
 ## 2026-08-08 供给侧 (Supply) 支持“供给方管理员”(tube_supplier_admin) 多主体切换与数据编辑覆盖最高特权 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

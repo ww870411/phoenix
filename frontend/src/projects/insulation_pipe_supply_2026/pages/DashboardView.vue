@@ -40,20 +40,20 @@
 
       <!-- 第一区：四大全局核心指标 HSL 磨砂卡片大盘 -->
       <section class="stats-grid">
-        <!-- 卡片1：采购与覆盖率 -->
+        <!-- 卡片1：项目总设计量 / 系统标段总量 -->
         <div class="stat-card">
           <div class="stat-card__icon">📐</div>
-          <div class="stat-card__label">项目总设计量 / 计划采购</div>
+          <div class="stat-card__label">项目总设计量 / 系统标段总量</div>
           <div class="stat-card__value">
-            {{ formatQty(kpi.design) }} <span class="stat-card__unit">m</span>
+            {{ formatKm(kpi.design) }} <span class="stat-card__unit">km</span>
             <span class="stat-card__separator">/</span>
-            <span class="highlight-blue">{{ formatQty(kpi.purchase) }}</span> <span class="stat-card__unit">m</span>
+            <span class="highlight-blue">{{ kpi.totalSections }}</span> <span class="stat-card__unit">个</span>
           </div>
           <div class="stat-card__progress">
             <div class="progress-bar-bg">
-              <div class="progress-bar-fill blue" :style="{ width: getPercent(kpi.purchase, kpi.design) + '%' }"></div>
+              <div class="progress-bar-fill blue" :style="{ width: getPercent(kpi.shipped, kpi.design) + '%' }"></div>
             </div>
-            <div class="progress-bar-text">计划采购率：{{ getPercent(kpi.purchase, kpi.design) }}%</div>
+            <div class="progress-bar-text">全网累计发货覆盖率：{{ getPercent(kpi.shipped, kpi.design) }}%</div>
           </div>
         </div>
 
@@ -135,7 +135,7 @@
             </div>
             
             <div class="weather-days-grid" v-if="weatherDays.length > 0">
-              <div v-for="(day, dIdx) in weatherDays" :key="dIdx" class="weather-day-card" :class="[day.themeClass, { 'current-day': dIdx === 1 }]">
+              <div v-for="(day, dIdx) in weatherDays.slice(0, 4)" :key="dIdx" class="weather-day-card" :class="[day.themeClass, { 'current-day': dIdx === 1 }]">
                 <div class="weather-day-header">
                   <span class="weather-label">{{ day.dateLabel }}</span>
                   <span class="weather-date">{{ day.formattedDate }}</span>
@@ -223,15 +223,15 @@
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
-          <!-- 卡片 2：DOI (占用 6 号格子) -->
+          <!-- 卡片 2：IBD (占用 6 号格子) -->
           <div class="metric-saas-card doi cell-6" @click="openMetricModal('doi')" title="点击查看计算公式与数据穿透">
             <div class="metric-saas-header">
-              <span class="metric-abbr">DOI</span>
-              <span class="metric-badge warning">周转效率</span>
+              <span class="metric-abbr">IBD</span>
+              <span class="metric-badge success">安全备料</span>
             </div>
             <div class="metric-saas-value">{{ realDOI }} <span class="metric-saas-unit">天</span></div>
-            <div class="metric-saas-label">现场平均库存周转天数</div>
-            <p class="metric-saas-help">物资现场超高速周转，场地积压与资金沉淀控制优良 (运营基准 &lt; 5天)</p>
+            <div class="metric-saas-label">施工备料缓冲天数</div>
+            <p class="metric-saas-help">在库存量支撑施工天数，3~7天为最佳安全缓冲区间</p>
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
@@ -247,15 +247,15 @@
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
-          <!-- 卡片 4：UCR (占用 8 号格子) -->
-          <div class="metric-saas-card ucr cell-8" @click="openMetricModal('ucr')" title="点击查看计算公式与数据穿透">
+          <!-- 卡片 4：WSI (占用 8 号格子) -->
+          <div class="metric-saas-card wsi cell-8" @click="openMetricModal('wsi')" title="点击查看计算公式与数据穿透">
             <div class="metric-saas-header">
-              <span class="metric-abbr">UCR</span>
-              <span class="metric-badge success">消耗转化</span>
+              <span class="metric-abbr">WSI</span>
+              <span class="metric-badge success">气象风控</span>
             </div>
-            <div class="metric-saas-value">{{ realUCR }}%</div>
-            <div class="metric-saas-label">到货施工消耗转化率</div>
-            <p class="metric-saas-help">卸车到货后立即向物理实体高效率转化，施工现场零物料囤积滞纳</p>
+            <div class="metric-saas-value">{{ realWSI }}%</div>
+            <div class="metric-saas-label">施工气象适宜度 (五日良好占比)</div>
+            <p class="metric-saas-help">从今日（实际）起算未来 5 天，晴天及小雨以下（含）的可施工天数比例</p>
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
 
@@ -267,7 +267,7 @@
             </div>
             <div class="metric-saas-value">{{ realSSR }}%</div>
             <div class="metric-saas-label">安全供应度 (缺口规避率)</div>
-            <p class="metric-saas-help">全标段断料窝工风险极低，仅个别站点偏紧 (集团基准线 >=90%)</p>
+            <p class="metric-saas-help">全标段断料窝工风险极低 (集团基准线 >=90%)</p>
             <div class="metric-saas-interactive-tip">💡 点击查看计算过程</div>
           </div>
         </div>
@@ -344,9 +344,6 @@
                 <th class="left-align text-col">{{ pivotMode === 'section_1' ? '需求主体名称' : '保温管型号' }}</th>
                 <th class="right-align num-col sortable" @click="handleSort('design_qty')">
                   设计量 {{ getSortSymbol('design_qty') }}
-                </th>
-                <th class="right-align num-col sortable" @click="handleSort('purchase_plan_qty')">
-                  计划采购 {{ getSortSymbol('purchase_plan_qty') }}
                 </th>
                 <th class="right-align num-col sortable" @click="handleSort('future_plan_qty')">
                   三日计划 {{ getSortSymbol('future_plan_qty') }}
@@ -632,45 +629,44 @@ const backendMetrics = ref(null)
 const metricSnapshot = computed(() => {
   const m = backendMetrics.value
   return {
-    completedDeliveries: { length: m?.completedDeliveriesCount || 0 }, // 兼容 OTD modal
+    completedDeliveries: { length: m?.completedDeliveriesCount || 0 },
     onTimeCount: m?.onTimeCount || 0,
     totalInv: m?.totalInv || 0,
     totalFuturePlan: m?.totalFuturePlan || 0,
     dailyConsumePlan: m?.dailyConsumePlan || 0,
     totalUsage: m?.totalUsage || 0,
     totalArrived: m?.totalArrived || 0,
-    activeSection1s: { size: m?.active_section_1_count || 0 }, // 兼容 PCR/SSR activeSection1s
+    activeSection1s: { size: m?.active_section_1_count || 0 },
     submittedSection1Count: m?.submitted_section_1_count || 0,
     safeSection1Count: m?.safe_section_1_count || 0,
+    unstartedSection1Count: m?.unstarted_section_1_count || 0,
     otd: m?.otd || 0,
     doi: m?.doi || 0,
     doiScore: m?.doiScore || 0,
     pcr: m?.pcr || 0,
-    ucr: m?.ucr || 0,
     ssr: m?.ssr || 0
   }
 })
 
 const realOTD = computed(() => metricSnapshot.value.otd)
-
 const realDOI = computed(() => metricSnapshot.value.doi)
-
-// DOI 转换雷达图百分制得分（天数越低得分越高；无有效分母时不使用演示值）
 const realDOIScore = computed(() => metricSnapshot.value.doiScore)
-
 const realPCR = computed(() => metricSnapshot.value.pcr)
-
-const realUCR = computed(() => metricSnapshot.value.ucr)
-
+const realWSI = computed(() => {
+  if (!weatherDays.value || weatherDays.value.length === 0) return 100.0
+  const next5Days = weatherDays.value.slice(0, 5)
+  const suitableDays = next5Days.filter(d => (d.rainVal !== undefined ? d.rainVal <= 2.0 : true) || d.themeClass === 'fine' || d.themeClass === 'light-rain')
+  const total = next5Days.length || 5
+  return Number(((suitableDays.length / total) * 100).toFixed(1))
+})
 const realSSR = computed(() => metricSnapshot.value.ssr)
 
-// --- SaaS 指标穿透详情数据解析 (系统数据动态穿透) ---
 function getMetricTitle(key) {
   const titles = {
     otd: 'OTD 物流履约度 (24小时到货达成率)',
-    doi: 'DOI 周转效率 (在库库存周转天数)',
+    doi: 'IBD 施工备料缓冲天数',
     pcr: 'PCR 计划达成度 (三日滚动计划提报率)',
-    ucr: 'UCR 消耗转化度 (到货施工消耗转化率)',
+    wsi: 'WSI 施工气象适宜度 (五日良好占比)',
     ssr: 'SSR 安全供应度 (缺口规避率)'
   }
   return titles[key] || ''
@@ -679,9 +675,9 @@ function getMetricTitle(key) {
 function getMetricSubtitle(key) {
   const subs = {
     otd: 'On-Time Delivery - 已确认到货样本的 24 小时时效履约指标',
-    doi: 'Days of Inventory - 换热站物资现场周转与场地占用管控指标',
+    doi: 'Inventory Buffer Days - 在库存量支撑施工天数 (基准区间 3.0~7.0天)',
     pcr: 'Plan Commitment Ratio - 数字化报表管理纪律与滚动计划管控指标',
-    ucr: 'Utilization Conversion Ratio - 到货接收向实体工程的高效转化指标',
+    wsi: 'Weather Suitability Index - 结合大连气象预报精算未来 5 天晴天及小雨（含）施工窗口期比例',
     ssr: 'Supply Security Ratio - 避免断料停工与项目窝工风险安全保障指标'
   }
   return subs[key] || ''
@@ -693,11 +689,11 @@ function getMetricAbbr(key) {
 
 function getMetricDesc(key) {
   const descs = {
-    otd: '物流履约度当前按已确认到货样本计算，衡量发货记录从发货到到货确认是否在 24 小时内完成。该指标反映运输履约时效，不再混用演示口径或人工估算值。',
-    doi: '在库库存周转天数是反映工程现场资金利用效率与物资积压情况的生命线指标。它代表当前的在库管材库存，在没有新发货补充的情况下，能够支持工区施工开挖敷设多少天。天数越低说明周转越快、资金占用越少。',
+    otd: 'OTD 衡量保温管发货后 24 小时内送达工区并由现场接收确认的物流效率。高准时率代表厂家生产与运力调度响应极其敏捷。',
+    doi: 'IBD 支撑天数反映现场当前在库库存对于未完成计划的物理安全垫覆盖周期。基准线在 3.0 ~ 7.0 天之间，兼顾防断料与防现场积压。',
     pcr: '三日滚动计划提报率是集团落实“以消定供、精细化平衡”的数字化治理核心纪律。它强力考核各工区施工现场负责人是否按照“按日滚动提报未来三日需求计划”的规范操作。零漏报代表数字化执行力达标。',
-    ucr: '到货施工消耗转化率主要用于杜绝工区“只到货、不敷设”的只囤不建现象。该指标衡量运抵现场并物理签收确认的管材，有多大比例已真正转化为实体工程中的管道消耗敷设，保证资金及时形成物理产值。',
-    ssr: '安全供应度（缺口规避率）是全网保通车、防窝工的核心风险防御指标。它衡量在所有活跃施工站点中，有多少换热站未发生由于管材供应不足而造成的“物理硬缺口”或实际停工待料情况。'
+    wsi: '施工气象适宜度是现场开挖、下沟焊接与热熔补口等关键工序防汛避险的核心决策指标。它精算从今日起算未来 5 天大连预报中降雨量 <= 2.0mm (含晴天、多云、小雨) 的适宜施工天数占比，为施工调度与防汛避险提供科学决策支撑。',
+    ssr: '安全供应度直接反映在建工区免于发生断料停工风险的覆盖比例。安全工区即为“硬缺口”等于 0 的工区，100% 代表全网无任何在建工区因缺少物料而停工。'
   }
   return descs[key] || ''
 }
@@ -706,20 +702,20 @@ function getMetricFormulaNumerator(key) {
   const nums = {
     otd: '24小时内确认到货的发货单数 (单)',
     doi: '全网在库管材总库存量 (米)',
-    pcr: '按时提报三日滚动计划的需求主体数',
-    ucr: '全网累计施工已消耗敷设长度 (米)',
-    ssr: '未发生物理硬缺口 (停工断料) 的活跃需求主体数'
+    pcr: '按时提报三日计划的在建工区数 (个)',
+    wsi: '从今日起算未来 5 天晴天及小雨以下（含）适宜施工天数 (天)',
+    ssr: '未发生物理硬缺口 (停工断料) 的在建工区数 (个)'
   }
   return nums[key] || ''
 }
 
 function getMetricFormulaDenominator(key) {
   const dens = {
-    otd: '已确认到货且可计算时效的发货单数 (单)',
-    doi: '未来三日全网日均滚动计划消耗量 (米/天)',
-    pcr: '当前处于活跃施工期的总需求主体数',
-    ucr: '全网累计已到货物理签收的总长度 (米)',
-    ssr: '当前处于活跃施工期的总需求主体数'
+    otd: '累计已确认到货完成的物流运单总量 (单)',
+    doi: '由未来三日滚动计划折算的日均消耗量 (米/天)',
+    pcr: '全网真正在建施工的考核工区总数 (个)',
+    wsi: '气象防汛风控决策推算窗口总天数 (5 天)',
+    ssr: '全网真正在建施工的考核工区总数 (个)'
   }
   return dens[key] || ''
 }
@@ -729,48 +725,35 @@ function getMetricMultiplier(key) {
 }
 
 function getMetricCalcNumerator(key) {
-  if (key === 'otd') {
-    return `${metricSnapshot.value.onTimeCount} 单`
+  if (key === 'otd') return `${metricSnapshot.value.onTimeCount} 单`
+  if (key === 'doi') return `${metricSnapshot.value.totalInv.toFixed(1)} 米`
+  if (key === 'pcr') return `${metricSnapshot.value.submittedSection1Count} 个工区`
+  if (key === 'wsi') {
+    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    const count = forecastDays.filter(d => (d.rainVal !== undefined ? d.rainVal <= 2.0 : true) || d.themeClass === 'fine' || d.themeClass === 'light-rain').length
+    return `${count} 天`
   }
-  if (key === 'doi') {
-    return `${metricSnapshot.value.totalInv.toFixed(1)} 米`
-  }
-  if (key === 'pcr') {
-    return `${metricSnapshot.value.submittedSection1Count} 个工区`
-  }
-  if (key === 'ucr') {
-    return `${metricSnapshot.value.totalUsage.toFixed(1)} 米`
-  }
-  if (key === 'ssr') {
-    return `${metricSnapshot.value.safeSection1Count} 个站点`
-  }
+  if (key === 'ssr') return `${metricSnapshot.value.safeSection1Count} 个工区`
   return ''
 }
 
 function getMetricCalcDenominator(key) {
-  if (key === 'otd') {
-    return `${metricSnapshot.value.completedDeliveries.length} 单`
+  if (key === 'otd') return `${metricSnapshot.value.completedDeliveries.length} 单`
+  if (key === 'doi') return `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天`
+  if (key === 'pcr') return `${metricSnapshot.value.activeSection1s.size} 个工区`
+  if (key === 'wsi') {
+    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    return `${forecastDays.length || 5} 天`
   }
-  if (key === 'doi') {
-    return `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天`
-  }
-  if (key === 'pcr') {
-    return `${metricSnapshot.value.activeSection1s.size} 个工区`
-  }
-  if (key === 'ucr') {
-    return `${metricSnapshot.value.totalArrived.toFixed(1)} 米`
-  }
-  if (key === 'ssr') {
-    return `${metricSnapshot.value.activeSection1s.size} 个工区`
-  }
+  if (key === 'ssr') return `${metricSnapshot.value.activeSection1s.size} 个工区`
   return ''
 }
 
 function getMetricResultText(key) {
   if (key === 'otd') return `${realOTD.value}%`
-  if (key === 'doi') return `${realDOI.value} 天`
+  if (key === 'doi') return `${realDOI.value} 天 (雷达按区间换算 ${realDOIScore.value} 分)`
   if (key === 'pcr') return `${realPCR.value}%`
-  if (key === 'ucr') return `${realUCR.value}%`
+  if (key === 'wsi') return `${realWSI.value}%`
   if (key === 'ssr') return `${realSSR.value}%`
   return ''
 }
@@ -779,55 +762,80 @@ function getMetricCalcVars(key) {
   if (key === 'otd') {
     const total = metricSnapshot.value.completedDeliveries.length
     const statusNotice = total === 0 
-      ? '目前尚无确认到货的发货单样本。' 
-      : (realOTD.value >= 90.0 ? '24小时到货履约率高于集团90%红线，时效管控良好。' : '24小时到货履约率未达90%基准，建议督促物流加快运输。')
+      ? '暂无到货确认物理运单数据。' 
+      : (realOTD.value >= 90.0 ? `24 小时交付达标率 ${realOTD.value}%，物流响应敏捷度符合集团基准。` : `交付达标率 ${realOTD.value}%，部分运输超时，建议优化运力调度。`)
     return {
-      '分子 (24小时内到货)': `${metricSnapshot.value.onTimeCount} 单 (发货至到货确认不超过 24 小时)`,
-      '分母 (可计算样本数)': `${total} 单 (已确认到货且具备完整发货/到货时间)`,
-      '判定与建议': statusNotice
+      '分子 (准时交付样本)': `${metricSnapshot.value.onTimeCount} 单 (已确认到货且发货到确认间隔 <= 24小时)`,
+      '分母 (完成交付样本)': `${total} 单 (剔除已取消运单，且包含确凿发货与物理确认时间的样本总数)`,
+      '供应链时效评估': statusNotice
     }
   }
   if (key === 'doi') {
     const daily = metricSnapshot.value.dailyConsumePlan
-    const statusNotice = daily === 0
-      ? '暂无未来三日滚动消耗计划折算，DOI按0.0天计。'
-      : (realDOI.value < 5.0 ? `周转天数 ${realDOI.value} 天在安全红线（5天）以内，积压管控良好。` : `周转天数 ${realDOI.value} 天超出5天红线，现场存在囤料滞纳风险。`)
+    const val = realDOI.value
+    let statusNotice = ''
+    if (daily <= 0) {
+      statusNotice = '未来三日需求计划暂未填报，无法折算日均消耗。'
+    } else if (val >= 3.0 && val <= 7.0) {
+      statusNotice = `现场备料 ${val} 天，精准处于集团 3.0 ~ 7.0 天安全黄金缓冲区间！`
+    } else if (val < 1.0) {
+      statusNotice = `现场备料极度匮乏 (仅支撑 ${val} 天)，已进入断料预警危机状态！`
+    } else if (val < 3.0) {
+      statusNotice = `现场备料仅 ${val} 天 (小于 3 天警报线)，存在断料窝工风险，请急件催发！`
+    } else {
+      statusNotice = `现场备料 ${val} 天，储备极充沛，请关注堆场物理容纳与搬运空间。`
+    }
     return {
       '分子 (现场在库库存)': `${metricSnapshot.value.totalInv.toFixed(1)} 米 (全网在库实测管材之和)`,
       '分母 (日均计划消耗)': `${daily.toFixed(1)} 米/天 (由未来三日滚动计划 ${metricSnapshot.value.totalFuturePlan.toFixed(1)} 米折算)`,
-      'DOI 说明': `DOI = 在库库存 / 日均计划消耗。${statusNotice} 当前雷达折算得分：${realDOIScore.value} 分。`
+      'IBD 理念说明': `重点考核工程“不窝工、管材够用”。在库存量支撑施工天数 (基准区间 3.0~7.0天)。当前雷达折算得分：${realDOIScore.value} 分。`,
+      '保供评估判定': statusNotice
     }
   }
   if (key === 'pcr') {
     const active = metricSnapshot.value.activeSection1s.size
+    const unstarted = metricSnapshot.value.unstartedSection1Count || 0
+    const unstartedTip = unstarted > 0 ? ` (已剔除 ${unstarted} 个未开工工区)` : ''
     const statusNotice = active === 0 
-      ? '暂无活跃需求主体。' 
-      : (realPCR.value >= 95.0 ? `提报达成率 ${realPCR.value}%，数字化指令下达零延误、零漏报。` : `提报达成率 ${realPCR.value}%，部分工区未按时提报未来三日计划。`)
+      ? '暂无处于施工中状态的需求主体。' 
+      : (realPCR.value >= 95.0 ? `提报达成率 ${realPCR.value}%，数字化指令下达零延误、零漏报。` : `提报达成率 ${realPCR.value}%，部分在建工区未按时提报未来三日计划。`)
     return {
-      '分子 (按时提报站点)': `${metricSnapshot.value.submittedSection1Count} 个工区 (存在滚动三日计划数据)`,
-      '分母 (活跃总工区数)': `${active} 个需求主体 (design_qty > 0 视为活跃站点)`,
+      '分子 (按时提报站点)': `${metricSnapshot.value.submittedSection1Count} 个工区 (存在未来三日滚动计划数据)`,
+      '分母 (在建考核总工区数)': `${active} 个需求主体${unstartedTip}`,
       '数字化纪律得分': statusNotice
     }
   }
-  if (key === 'ucr') {
-    const arrived = metricSnapshot.value.totalArrived
-    const statusNotice = arrived === 0
-      ? '暂无到货签收记录。'
-      : (realUCR.value >= 80.0 ? `全网累计 ${realUCR.value}% 的到货管材已转化为施工实体，转化高效。` : `施工消耗转化率 ${realUCR.value}% 偏低，请关注施工进度。`)
-    return {
-      '分子 (实际消耗敷设)': `${metricSnapshot.value.totalUsage.toFixed(1)} 米 (槽下物理铺设焊接完毕并经确认的长度)`,
-      '分母 (签到到货总量)': `${arrived.toFixed(1)} 米 (现场负责人确认到货的累计长度)`,
-      '转化成效评估': statusNotice
+  if (key === 'wsi') {
+    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    const suitableDays = forecastDays.filter(d => (d.rainVal !== undefined ? d.rainVal <= 2.0 : true) || d.themeClass === 'fine' || d.themeClass === 'light-rain').length
+    const total = forecastDays.length || 5
+    const statusNotice = realWSI.value >= 80.0
+      ? `从今日（物理实际）起算未来 5 天适宜施工占比 ${realWSI.value}%，大连近期天气整体良好，宜抓紧管沟开挖与焊接敷设。`
+      : `从今日（物理实际）起算未来 5 天适宜施工占比仅 ${realWSI.value}%，中雨/暴雨天气偏多，请做好现场防汛及堆场防水淹。`
+    
+    const details = {
+      '分子 (适宜施工天数)': `${suitableDays} 天 (晴天、多云及降雨量 <= 2.0mm 的小雨以下天数)`,
+      '分母 (气象预报窗口)': `${total} 天 (从今日起算的未来 5 天大连权威预报)`,
     }
+
+    forecastDays.forEach((d) => {
+      const tag = (d.rainVal <= 2.0 || d.themeClass === 'fine' || d.themeClass === 'light-rain') ? '适宜施工 🟢' : '受雨水影响 🌧️'
+      details[`📅 预报明细 [${d.dateLabel || d.formattedDate}] (${d.formattedDate})`] = `${d.statusText}，实测日降雨水深 ${d.rainVal} mm ➔ ${tag}`
+    })
+
+    details['气象风控决策判定'] = statusNotice
+    return details
   }
   if (key === 'ssr') {
     const active = metricSnapshot.value.activeSection1s.size
+    const unstarted = metricSnapshot.value.unstartedSection1Count || 0
+    const unstartedTip = unstarted > 0 ? ` (已剔除 ${unstarted} 个未开工工区)` : ''
     const statusNotice = active === 0
-      ? '暂无活跃需求主体。'
-      : (realSSR.value >= 90.0 ? `安全覆盖度达 ${realSSR.value}%，整体处于安全达标区间。` : `安全覆盖度 ${realSSR.value}% 偏低，部分工区存在物理硬缺口待解决。`)
+      ? '暂无处于施工中状态的需求主体。'
+      : (realSSR.value >= 90.0 ? `安全覆盖度达 ${realSSR.value}%，在建工区整体处于安全达标防线。` : `安全覆盖度 ${realSSR.value}% 偏低，部分在建工区面临物理硬缺口风险。`)
     return {
       '分子 (安全在建工区)': `${metricSnapshot.value.safeSection1Count} 个工区 (未面临物理断料风险)`,
-      '分母 (总活跃工区数)': `${active} 个需求主体 (全网在建全部活跃工区)`,
+      '分母 (在建考核总工区数)': `${active} 个需求主体${unstartedTip}`,
       '缺口避让防线': statusNotice
     }
   }
@@ -837,9 +845,9 @@ function getMetricCalcVars(key) {
 function getMetricTargetVal(key) {
   const targets = {
     otd: '≥ 90.0%',
-    doi: '< 5.0 天',
+    doi: '3.0 ~ 7.0 天',
     pcr: '≥ 95.0%',
-    ucr: '≥ 80.0%',
+    wsi: '≥ 80.0%',
     ssr: '≥ 90.0%'
   }
   return targets[key] || ''
@@ -847,8 +855,6 @@ function getMetricTargetVal(key) {
 
 function getMetricStatusInfo(key) {
   if (key === 'otd') {
-    const total = metricSnapshot.value.completedDeliveries.length
-    if (total === 0) return { text: '⚪ 暂无到货确认样本', badgeClass: 'info' }
     const pass = realOTD.value >= 90.0
     return {
       text: pass ? `🟢 履约达标 (实测 ${realOTD.value}% ≥ 集团 90.0% 基准)` : `🔴 履约未达标 (实测 ${realOTD.value}% < 集团 90.0% 基准)`,
@@ -856,42 +862,95 @@ function getMetricStatusInfo(key) {
     }
   }
   if (key === 'doi') {
-    const daily = metricSnapshot.value.dailyConsumePlan
-    if (daily === 0) return { text: '⚪ 暂无滚动消耗计划', badgeClass: 'info' }
-    const pass = realDOI.value < 5.0
+    const val = realDOI.value
+    const inRange = val >= 3.0 && val <= 7.0
     return {
-      text: pass ? `🟢 周转高效 (实测 ${realDOI.value}天 < 集团 5.0天 基准)` : `🔴 周转偏慢 (实测 ${realDOI.value}天 ≥ 集团 5.0天 基准)`,
-      badgeClass: pass ? 'success' : 'warning'
+      text: inRange 
+        ? `🟢 安全合理 (实测 ${val} 天处于 3.0~7.0天 黄金线)` 
+        : (val < 3.0 ? `🔴 偏紧风险 (实测 ${val} 天 < 3.0天 安全线下限)` : `🟡 积压偏高 (实测 ${val} 天 > 7.0天 备料周期)`),
+      badgeClass: inRange ? 'success' : (val < 3.0 ? 'danger' : 'warning')
     }
   }
   if (key === 'pcr') {
-    const active = metricSnapshot.value.activeSection1s.size
-    if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
     const pass = realPCR.value >= 95.0
     return {
-      text: pass ? `🟢 纪律达标 (实测 ${realPCR.value}% ≥ 集团 95.0% 基准)` : `🔴 提报未达标 (实测 ${realPCR.value}% < 集团 95.0% 基准)`,
-      badgeClass: pass ? 'success' : 'danger'
+      text: pass ? `🟢 纪律达标 (实测 ${realPCR.value}% ≥ 集团 95.0% 基准)` : `🟡 存在漏报 (实测 ${realPCR.value}% < 集团 95.0% 基准)`,
+      badgeClass: pass ? 'success' : 'warning'
     }
   }
-  if (key === 'ucr') {
-    const arrived = metricSnapshot.value.totalArrived
-    if (arrived === 0) return { text: '⚪ 暂无到货签收量', badgeClass: 'info' }
-    const pass = realUCR.value >= 80.0
+  if (key === 'wsi') {
+    const pass = realWSI.value >= 80.0
     return {
-      text: pass ? `🟢 转化高效 (实测 ${realUCR.value}% ≥ 集团 80.0% 基准)` : `🔴 转化偏低 (实测 ${realUCR.value}% < 集团 80.0% 基准)`,
+      text: pass ? `🟢 窗口良好 (实测 ${realWSI.value}% ≥ 80.0% 适宜基准)` : `🟡 降雨防汛预警 (实测 ${realWSI.value}% < 80.0% 适宜基准)`,
       badgeClass: pass ? 'success' : 'warning'
     }
   }
   if (key === 'ssr') {
-    const active = metricSnapshot.value.activeSection1s.size
-    if (active === 0) return { text: '⚪ 暂无活跃需求主体', badgeClass: 'info' }
     const pass = realSSR.value >= 90.0
     return {
-      text: pass ? `🟢 供应安全 (实测 ${realSSR.value}% ≥ 集团 90.0% 基准)` : `🚨 缺口警报 (实测 ${realSSR.value}% < 集团 90.0% 基准)`,
+      text: pass ? `🟢 供应安全 (实测 ${realSSR.value}% ≥ 集团 90.0% 基准)` : `🔴 存在硬缺口 (实测 ${realSSR.value}% < 集团 90.0% 基准)`,
       badgeClass: pass ? 'success' : 'danger'
     }
   }
-  return { text: '', badgeClass: 'info' }
+  return { text: '⚪ 暂无数据', badgeClass: 'info' }
+}
+
+function getMetricBenchmark(key) {
+  const benchmarks = {
+    otd: '≥ 90.0%',
+    doi: '3.0 ~ 7.0 天',
+    pcr: '≥ 95.0%',
+    wsi: '≥ 80.0%',
+    ssr: '≥ 90.0%'
+  }
+  return benchmarks[key] || ''
+}
+
+function getMetricEvaluation(key) {
+  if (key === 'otd') {
+    const pass = realOTD.value >= 90.0
+    return {
+      pass,
+      text: pass ? `🟢 履约良好 (实测 ${realOTD.value}% ≥ 集团 90.0% 基准)` : `🔴 履约偏低 (实测 ${realOTD.value}% < 集团 90.0% 基准)`,
+      tagClass: pass ? 'success' : 'danger'
+    }
+  }
+  if (key === 'doi') {
+    const val = realDOI.value
+    const inRange = val >= 3.0 && val <= 7.0
+    return {
+      pass: inRange,
+      text: inRange 
+        ? `🟢 安全合理 (实测 ${val} 天处于 3.0~7.0天 黄金线)` 
+        : (val < 3.0 ? `🔴 偏紧风险 (实测 ${val} 天 < 3.0天 安全线下限)` : `🟡 积压偏高 (实测 ${val} 天 > 7.0天 备料周期)`),
+      tagClass: inRange ? 'success' : (val < 3.0 ? 'danger' : 'warning')
+    }
+  }
+  if (key === 'pcr') {
+    const pass = realPCR.value >= 95.0
+    return {
+      pass,
+      text: pass ? `🟢 纪律严明 (实测 ${realPCR.value}% ≥ 集团 95.0% 基准)` : `🟡 存在漏报 (实测 ${realPCR.value}% < 95.0% 基准)`,
+      tagClass: pass ? 'success' : 'warning'
+    }
+  }
+  if (key === 'wsi') {
+    const pass = realWSI.value >= 80.0
+    return {
+      pass,
+      text: pass ? `🟢 窗口良好 (实测 ${realWSI.value}% ≥ 80.0% 适宜基准)` : `🟡 降雨防汛预警 (实测 ${realWSI.value}% < 80.0% 适宜基准)`,
+      tagClass: pass ? 'success' : 'warning'
+    }
+  }
+  if (key === 'ssr') {
+    const pass = realSSR.value >= 90.0
+    return {
+      pass,
+      text: pass ? `🟢 防线稳固 (实测 ${realSSR.value}% ≥ 集团 90.0% 基准)` : `🔴 存在硬缺口 (实测 ${realSSR.value}% < 集团 90.0% 基准)`,
+      tagClass: pass ? 'success' : 'danger'
+    }
+  }
+  return { pass: false, text: '无数据', tagClass: 'warning' }
 }
 
 // ECharts 挂载节点
@@ -938,11 +997,9 @@ async function loadDashboardData() {
       const deliveriesRes = await getTubeSupplyManagementDeliveries(projectKey.value)
       deliveries.value = Array.isArray(deliveriesRes?.rows) ? deliveriesRes.rows : []
     } catch (error) {
-      // 发货流水不参与当前顶部指标计算，不能覆盖已成功加载的汇总数据。
       console.error('拉取 tube 发货流水失败:', error)
     }
 
-    // 数据加载完毕后渲染图表
     nextTick(() => {
       renderCharts()
     })
@@ -957,43 +1014,18 @@ async function loadDashboardData() {
   }
 }
 
-// HSL 名字映射解析
-function section1Name(id) {
-  const list = configSummary.value?.demand_entities || []
-  const item = list.find(x => String(x.section_1_id) === String(id))
-  return item ? item.section_1_name : id
-}
-
-// 保温管型号名映射
-function pipeModelName(id) {
-  const list = configSummary.value?.pipe_models || []
-  const item = list.find(x => String(x.pipe_model_id) === String(id))
-  return item ? item.pipe_model_name : id
-}
-
-// 供给主体映射
-function supplyEntityName(id) {
-  const list = configSummary.value?.supply_entities || []
-  const item = list.find(x => String(x.entity_id) === String(id))
-  return item ? item.entity_name : id
-}
-
-// 格式化时间
-function formatTime(isoStr) {
-  if (!isoStr) return ''
-  try {
-    const d = new Date(isoStr)
-    return `${d.getMonth() + 1}-${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  } catch (e) {
-    return isoStr
-  }
-}
-
 // 格式化展示量（数值以 m 为单位）
 function formatQty(val) {
   if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) return '—'
   const num = Number(val)
   return Number.isFinite(num) ? num.toFixed(0) : '—'
+}
+
+// 格式化为千米（km），保留两位小数
+function formatKm(val) {
+  if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) return '—'
+  const num = Number(val)
+  return Number.isFinite(num) ? (num / 1000).toFixed(2) : '—'
 }
 
 function getPercent(n, total) {
@@ -1041,7 +1073,8 @@ const kpi = computed(() => {
       usage: null,
       inventory: null,
       netGap: null,
-      hardGap: null
+      hardGap: null,
+      totalSections: 0
     }
   }
 
@@ -1072,10 +1105,10 @@ const kpi = computed(() => {
     usage += row.total_usage_qty || 0
     inventory += row.section_1_inventory_qty || 0
     netGap += row.net_gap_qty || 0
-    
-    // 硬缺口统一使用后端计算，防范负库存导致的公式膨胀
     hardGap += row.hard_gap_qty || 0
   })
+
+  const totalSections = new Set(summaryRows.value.map(row => row.section_1_id)).size
 
   return {
     design,
@@ -1090,18 +1123,15 @@ const kpi = computed(() => {
     usage,
     inventory,
     netGap,
-    hardGap
+    hardGap,
+    totalSections
   }
 })
 
-// 运营状态保持正向表达：未开工、样本不足或轻微波动均展示为“正常”；
-// 只有明确的供料、计划或履约风险才提示“需要关注”。
+// 运营状态表达
 const operationStatus = computed(() => {
   const normal = { label: '运营状况：正常 🟢', badgeClass: 'operation-normal' }
-
-  if (summaryDataState.value !== 'ready') {
-    return normal
-  }
+  if (summaryDataState.value !== 'ready') return normal
 
   const hasFuturePlan = kpi.value.plan > 0
   const completedDeliveryCount = metricSnapshot.value.completedDeliveries.length
@@ -1139,11 +1169,9 @@ const computedTableData = computed(() => {
   const groups = {}
 
   summaryRows.value.forEach(row => {
-    // 过滤逻辑：站点过滤
     if (filterSection1Id.value && String(row.section_1_id) !== String(filterSection1Id.value)) {
       return
     }
-    // 过滤逻辑：管径型号过滤
     if (filterPipeModelId.value && String(row.pipe_model_id) !== String(filterPipeModelId.value)) {
       return
     }
@@ -1184,14 +1212,11 @@ const computedTableData = computed(() => {
     g.total_usage_qty += row.total_usage_qty || 0
     g.section_1_inventory_qty += row.section_1_inventory_qty || 0
     g.net_gap_qty += row.net_gap_qty || 0
-    
-    // 硬缺口统一使用后端计算，规避前端分散逻辑
     g.hard_gap_qty += row.hard_gap_qty || 0
   })
 
   const list = Object.values(groups)
 
-  // 排序逻辑
   if (sortKey.value) {
     list.sort((a, b) => {
       const valA = a[sortKey.value] || 0
@@ -1436,10 +1461,10 @@ function renderCharts() {
       },
       radar: {
         indicator: [
-          { name: 'OTD|供应链发货准时率', max: 100 },
-          { name: 'DOI|现场在库周转天数', max: 100 },
+          { name: 'OTD|24小时到货达成率', max: 100 },
+          { name: 'IBD|施工备料缓冲天数', max: 100 },
           { name: 'PCR|三日滚动计划达成率', max: 100 },
-          { name: 'UCR|施工消耗转化率', max: 100 },
+          { name: 'WSI|施工气象适宜度', max: 100 },
           { name: 'SSR|安全供应防线', max: 100 }
         ],
         center: ['50%', '54%'],
@@ -1497,7 +1522,7 @@ function renderCharts() {
           type: 'radar',
           data: [
             {
-              value: [realOTD.value, realDOIScore.value, realPCR.value, realUCR.value, realSSR.value],
+              value: [realOTD.value, realDOIScore.value, realPCR.value, realWSI.value, realSSR.value],
               name: '全要素实测得分',
               symbol: 'circle',
               symbolSize: 6,
@@ -1775,9 +1800,9 @@ onBeforeUnmount(() => {
 
 .progress-bar-text {
   margin-top: 6px;
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 500;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
   display: flex;
   justify-content: space-between;
 }
@@ -1949,18 +1974,6 @@ onBeforeUnmount(() => {
 /* 高亮突出当日卡片 */
 .weather-day-card.current-day {
   box-shadow: 0 0 0 2px #3b82f6;
-}
-.weather-day-card.current-day::before {
-  content: 'TODAY';
-  position: absolute;
-  top: 0;
-  right: 0;
-  background: #3b82f6;
-  color: #ffffff;
-  font-size: 8px;
-  font-weight: 800;
-  padding: 1px 5px;
-  border-bottom-left-radius: 4px;
 }
 
 .weather-day-header {
