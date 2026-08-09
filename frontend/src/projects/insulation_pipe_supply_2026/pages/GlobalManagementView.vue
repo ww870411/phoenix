@@ -312,26 +312,27 @@
               <div class="field-grid core-field-grid">
                 <label class="field">
                   <span>展示/业务日期 (show_date)</span>
-                  <input v-model="showDate" type="date" class="input" />
+                  <input v-model="showDate" type="date" class="input" :disabled="isAllDatesAutoUpdateEnabled" />
                   <small class="field-help">决定大盘看板及历史消耗数据统计的宏观切断视界。</small>
                 </label>
                 <label class="field">
                   <span>消耗采集日期 (usage_collection_date)</span>
-                  <input v-model="usageCollectionDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
+                  <input v-model="usageCollectionDate" type="date" class="input" :disabled="isPlanDateAutoUpdateEnabled" />
                   <small class="field-help">需求侧施工队上报实际施工消耗与现场损耗的基准日期。</small>
                 </label>
                 <label class="field">
                   <span>滚动计划起始日期 (plan_start_date)</span>
-                  <input v-model="planStartDate" type="date" class="input" :disabled="autoUpdatePlanStartDate" />
+                  <input v-model="planStartDate" type="date" class="input" :disabled="isPlanDateAutoUpdateEnabled" />
                   <small class="field-help">未来三日计划采集的物理起始日期锚点（滚动计划 T 日）。</small>
                 </label>
                 <label class="field">
                   <span>起始日期是否自动随今天变化</span>
                   <select v-model="autoUpdatePlanStartDate" class="input" @change="handleAutoPlanStartDateChange">
                     <option :value="false">否 (手动维护起始日期)</option>
-                    <option :value="true">是 (每天随日期自动后移)</option>
+                    <option :value="true">是 (计划与消耗日期自动后移)</option>
+                    <option value="all">全部是 (三个日期均自动后移)</option>
                   </select>
-                  <small class="field-help">开启自动更新后，该日期会随物理时间每天自动向后平推。</small>
+                  <small class="field-help">北京时间每日 06:30 换日；“全部是”还会把展示/业务日期自动设为业务当天的昨日。</small>
                 </label>
                 <label class="field">
                   <span>计划可填报修改天数 (plan_editable_days)</span>
@@ -1547,6 +1548,8 @@ const showDate = ref('')
 const usageCollectionDate = ref('')
 const planStartDate = ref('')
 const autoUpdatePlanStartDate = ref(false)
+const isPlanDateAutoUpdateEnabled = computed(() => autoUpdatePlanStartDate.value !== false)
+const isAllDatesAutoUpdateEnabled = computed(() => autoUpdatePlanStartDate.value === 'all')
 const planEditableDays = ref(3)
 const strictPlanningFlowControl = ref(true)
 const globalMessage = ref(null)
@@ -1716,7 +1719,7 @@ function applyConfig(config) {
   showDate.value = config.show_date || config.biz_date || ''
   usageCollectionDate.value = config.usage_collection_date || ''
   planStartDate.value = config.plan_start_date || showDate.value || ''
-  autoUpdatePlanStartDate.value = Boolean(config.auto_update_plan_start_date)
+  autoUpdatePlanStartDate.value = normalizeAutoUpdateSetting(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
   strictPlanningFlowControl.value = config.strict_planning_flow_control ?? true
   supplyEntities.value = cloneRows(config.supply_entities).map(item => ({
@@ -1745,14 +1748,43 @@ function applyConfig(config) {
   loadWeatherConfig()
 }
 
-function getTodayDateString() {
-  return new Date().toISOString().slice(0, 10)
+function normalizeAutoUpdateSetting(value) {
+  if (value === 'all') return 'all'
+  return value === true
+}
+
+function getBeijingBusinessDateString(offsetDays = 0) {
+  const now = new Date()
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now).map(part => [part.type, part.value]),
+  )
+  const hour = Number(parts.hour || 0)
+  const minute = Number(parts.minute || 0)
+  const switched = hour > 6 || (hour === 6 && minute >= 30)
+  const baseDate = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day))
+  const businessDate = baseDate + (switched ? 0 : -86400000) + Number(offsetDays || 0) * 86400000
+  return new Date(businessDate).toISOString().slice(0, 10)
+}
+
+function syncAutoDateFields() {
+  if (!isPlanDateAutoUpdateEnabled.value) return
+  planStartDate.value = getBeijingBusinessDateString()
+  usageCollectionDate.value = getBeijingBusinessDateString(-1)
+  if (isAllDatesAutoUpdateEnabled.value) {
+    showDate.value = getBeijingBusinessDateString(-1)
+  }
 }
 
 function handleAutoPlanStartDateChange() {
-  if (autoUpdatePlanStartDate.value) {
-    planStartDate.value = getTodayDateString()
-  }
+  syncAutoDateFields()
 }
 
 const selectedBaselineSection1Name = computed(() => {
@@ -1796,7 +1828,7 @@ function buildSectionPayload(section) {
     return planStartDate.value || ''
   }
   if (section === 'auto_update_plan_start_date') {
-    return Boolean(autoUpdatePlanStartDate.value)
+    return normalizeAutoUpdateSetting(autoUpdatePlanStartDate.value)
   }
   if (section === 'plan_editable_days') {
     return Number(planEditableDays.value ?? 3)
@@ -1892,8 +1924,9 @@ const configPreviewText = computed(() =>
   JSON.stringify(
     {
       show_date: showDate.value || '',
+      usage_collection_date: usageCollectionDate.value || '',
       plan_start_date: planStartDate.value || '',
-      auto_update_plan_start_date: Boolean(autoUpdatePlanStartDate.value),
+      auto_update_plan_start_date: normalizeAutoUpdateSetting(autoUpdatePlanStartDate.value),
       plan_editable_days: Number(planEditableDays.value ?? 3),
       strict_planning_flow_control: Boolean(strictPlanningFlowControl.value),
       supply_entities: buildSectionPayload('supply_entities'),
@@ -1988,6 +2021,9 @@ async function loadConfig() {
     if (response.show_date) {
       showDate.value = response.show_date
     }
+    if (response.usage_collection_date) {
+      usageCollectionDate.value = response.usage_collection_date
+    }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
     }
@@ -2014,6 +2050,9 @@ async function saveSection(section) {
     if (response.show_date) {
       showDate.value = response.show_date
     }
+    if (response.usage_collection_date) {
+      usageCollectionDate.value = response.usage_collection_date
+    }
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
     }
@@ -2032,9 +2071,7 @@ async function saveCoreDatesSection() {
   clearGlobalMessage()
   setSaving('core_dates', true)
   try {
-    if (autoUpdatePlanStartDate.value) {
-      planStartDate.value = getTodayDateString()
-    }
+    syncAutoDateFields()
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'show_date',
       data: showDate.value || '',
@@ -2049,7 +2086,7 @@ async function saveCoreDatesSection() {
     })
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'auto_update_plan_start_date',
-      data: Boolean(autoUpdatePlanStartDate.value),
+      data: normalizeAutoUpdateSetting(autoUpdatePlanStartDate.value),
     })
     await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'strict_planning_flow_control',
@@ -2069,7 +2106,7 @@ async function saveCoreDatesSection() {
     if (response.plan_start_date) {
       planStartDate.value = response.plan_start_date
     }
-    autoUpdatePlanStartDate.value = Boolean(response.config?.auto_update_plan_start_date)
+    autoUpdatePlanStartDate.value = normalizeAutoUpdateSetting(response.config?.auto_update_plan_start_date)
     if (response.plan_editable_days !== undefined) {
       planEditableDays.value = Number(response.plan_editable_days ?? 3)
     }

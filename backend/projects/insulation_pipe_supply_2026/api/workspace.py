@@ -517,7 +517,14 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"{normalized_section} 非法：{normalized_date}") from exc
         payload[normalized_section] = normalized_date
-    elif normalized_section in {"auto_update_plan_start_date", "strict_planning_flow_control"}:
+    elif normalized_section == "auto_update_plan_start_date":
+        if data == "all":
+            payload[normalized_section] = "all"
+        elif isinstance(data, bool):
+            payload[normalized_section] = data
+        else:
+            raise HTTPException(status_code=422, detail="auto_update_plan_start_date 仅支持 false、true 或 all")
+    elif normalized_section == "strict_planning_flow_control":
         payload[normalized_section] = bool(data)
     elif normalized_section == "plan_editable_days":
         try:

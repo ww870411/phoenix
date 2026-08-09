@@ -20,10 +20,44 @@ CONFIG_PATH = PROJECT_DATA_DIR / "tube_config.json"
 SUBMISSION_STATUS_PATH = PROJECT_DATA_DIR / "section_1_submission_status.json"
 
 BEIJING_TZ = timezone(timedelta(hours=8))
+BUSINESS_DATE_SWITCH_HOUR = 6
+BUSINESS_DATE_SWITCH_MINUTE = 30
+AUTO_UPDATE_MODE_MANUAL = "manual"
+AUTO_UPDATE_MODE_PLAN_USAGE = "plan_usage"
+AUTO_UPDATE_MODE_ALL = "all"
 
 
-def _get_beijing_today() -> date:
-    return datetime.now(BEIJING_TZ).date()
+def _get_beijing_business_date(now: datetime | None = None) -> date:
+    """返回以北京时间 06:30 为换日点的业务当天。"""
+    current = now or datetime.now(BEIJING_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=BEIJING_TZ)
+    else:
+        current = current.astimezone(BEIJING_TZ)
+    switch_time = current.replace(
+        hour=BUSINESS_DATE_SWITCH_HOUR,
+        minute=BUSINESS_DATE_SWITCH_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if current < switch_time:
+        return current.date() - timedelta(days=1)
+    return current.date()
+
+
+def get_date_auto_update_mode(payload: Dict[str, Any]) -> str:
+    """兼容旧布尔值，并识别新增的“全部是”模式。"""
+    raw_value = payload.get("auto_update_plan_start_date")
+    if isinstance(raw_value, str):
+        normalized_value = raw_value.strip().lower()
+        if normalized_value == AUTO_UPDATE_MODE_ALL:
+            return AUTO_UPDATE_MODE_ALL
+        if normalized_value in {"true", "1", "yes", AUTO_UPDATE_MODE_PLAN_USAGE}:
+            return AUTO_UPDATE_MODE_PLAN_USAGE
+        return AUTO_UPDATE_MODE_MANUAL
+    if bool(raw_value):
+        return AUTO_UPDATE_MODE_PLAN_USAGE
+    return AUTO_UPDATE_MODE_MANUAL
 
 ENCRYPT_PREFIX = "enc_v1:"
 AMAP_SECRET_KEY = "phoenix_amap_key_2026"
@@ -162,6 +196,8 @@ def save_section_1_submission_status(payload: Dict[str, Any]) -> None:
 
 
 def get_configured_show_date(payload: Dict[str, Any]) -> date:
+    if get_date_auto_update_mode(payload) == AUTO_UPDATE_MODE_ALL:
+        return _get_beijing_business_date() - timedelta(days=1)
     raw_value = str(payload.get("show_date") or payload.get("biz_date") or "").strip()
     if raw_value:
         try:
@@ -172,21 +208,19 @@ def get_configured_show_date(payload: Dict[str, Any]) -> date:
 
 
 def get_configured_plan_start_date(payload: Dict[str, Any]) -> date:
-    auto_update = bool(payload.get("auto_update_plan_start_date"))
-    if auto_update:
-        return _get_beijing_today()
+    if get_date_auto_update_mode(payload) != AUTO_UPDATE_MODE_MANUAL:
+        return _get_beijing_business_date()
     raw_value = str(payload.get("plan_start_date") or "").strip()
     if raw_value:
         try:
             return date.fromisoformat(raw_value)
         except ValueError as exc:
             raise HTTPException(status_code=500, detail=f"tube_config.json 中 plan_start_date 非法：{raw_value}") from exc
-    return _get_beijing_today()
+    return _get_beijing_business_date()
 
 
 def get_usage_collection_date(payload: Dict[str, Any]) -> date:
-    auto_update = bool(payload.get("auto_update_plan_start_date"))
-    if auto_update:
+    if get_date_auto_update_mode(payload) != AUTO_UPDATE_MODE_MANUAL:
         return get_configured_plan_start_date(payload) - timedelta(days=1)
     raw_value = str(payload.get("usage_collection_date") or "").strip()
     if raw_value:
