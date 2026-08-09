@@ -1,3 +1,20 @@
+## 2026-08-09 后端新增 GET /global-management/submission-logs 接口与专有主体提交数据检索算子 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **新增方法与 API 路由**：
+  - 在 `audit_log_service.py` 中实现 `query_submission_logs` 检索函数，严格将操作类型限制为需求主体、供给主体与库管主体的数据提交写入行为（`SAVE_PLAN`、`SUBMIT_USAGE`、`SUBMIT_STATUS`、`CONFIRM_ARRIVAL`、`CONFIRM_CONSTRUCTION`、`DIFF_APPROVE`、`CREATE_DELIVERY`、`CREATE_DELIVERY_BATCH`、`CANCEL_DELIVERY`、`CREATE_CUSTOM_ENTITY`、`CONFIRM_WAREHOUSE`）；
+  - 同时在底层 SQL 层面计算全网最新的提交物理时间戳 `latest_submitted_at` 与近 24h 内全网/需求侧/供给侧提交小计数；
+  - 在 `workspace.py` 中新增 `GET /global-management/submission-logs` 路由，并绑定角色鉴权（`global_admin`, `tube_warehouse_admin`, `tube_supplier_admin`, `tube_demand_admin`），完美支撑环境间新旧数据对比防护。
+
+## 2026-08-09 保温管平台上线运行情况报告文档留痕
+
+- 已生成 `configs/2026年度保温管供需管理平台上线运行情况报告.docx`，数据口径来自 `insulation_pipe_supply_2026` 业务表、`logs.tube_operation_logs`、项目配置及当前容器运行状态。
+- 报告汇总计划、使用与损耗、发货、到货、施工接收、仓库确认、库存和审计动作，并明确 OTD/PCR/DOI/UCR/SSR 的口径限制。
+- 经业务确认，GIS 功能尚未上线；报告已排除 GIS 点位、质量状态及相关展示内容，不将其作为后端已上线能力或数据规模依据。
+- 本轮未修改后端 API、服务、数据库结构或运行配置；文档使用的是 2026-08-09 11:40 数据快照，后续业务录入会使数值动态变化。
+
 ## 2026-08-09 后端 KPI 服务重构 IBD (doi_score) 计算算子取消 >7.0天 降分扣分约束 (insulation_pipe_supply_2026)
 
 - **关联后端服务**：
@@ -6527,3 +6544,11 @@
 - 该字段的计算口径保持为：已确认到货量 − 累计实际使用量 − 累计损耗量。
 - 前端运营状态分级仅消费该汇总接口既有的指标与明细字段，未新增或变更后端接口。
 - 结论：该审计文档对后端的价值在于暴露了若干真实缺口，但严重度和适用范围需要按当前代码重新评级。
+
+## 2026-08-09 保温管全局管理“提交记录”前端排版同步
+
+- 本轮仅整理 `GlobalManagementView.vue` 的提交记录展示、筛选区和分页区，不修改后端代码。
+- 提交日志现有查询接口、账号与操作类型过滤、时间范围参数、分页响应和字段口径保持不变。
+- 无数据库迁移、配置变更或部署步骤；后端回滚不涉及任何操作。
+- 前端生产构建与页面回归均已通过，因此本轮无需追加后端联调或接口回归。
+- 后续文案微调仅删除前端“提交记录”标题说明，不涉及后端接口、服务或数据。

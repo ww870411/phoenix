@@ -79,6 +79,7 @@ from backend.projects.insulation_pipe_supply_2026.services import weather_servic
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
     save_operation_log,
     query_operation_logs,
+    query_submission_logs,
 )
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
@@ -2452,6 +2453,46 @@ def _to_json_serializable(snap: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
         else:
             res[k] = v
     return res
+
+
+@router.get("/global-management/submission-logs", summary="读取主体数据提交记录")
+def get_global_management_submission_logs(
+    entity_type: Optional[str] = None,
+    action_type: Optional[str] = None,
+    operator: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in {"global_admin", "tube_warehouse_admin", "tube_supplier_admin", "tube_demand_admin"}:
+        raise HTTPException(status_code=403, detail="无权查看主体提交行为记录")
+        
+    offset = (page - 1) * limit
+    result = query_submission_logs(
+        entity_type=entity_type,
+        action_type=action_type,
+        operator=operator,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        offset=offset
+    )
+    
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "total": result["total"],
+        "page": page,
+        "limit": limit,
+        "latest_submitted_at": result.get("latest_submitted_at"),
+        "recent_24h_count": result.get("recent_24h_count", 0),
+        "demand_24h_count": result.get("demand_24h_count", 0),
+        "supply_24h_count": result.get("supply_24h_count", 0),
+        "rows": result["logs"]
+    }
 
 
 @router.get("/global-management/operation-logs", summary="读取操作审计日志")

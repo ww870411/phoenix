@@ -423,6 +423,26 @@ export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pip
   return response.json()
 }
 
+export async function getTubeSubmissionLogs(projectKey, params) {
+  const query = new URLSearchParams()
+  if (params.entityType) query.append('entity_type', params.entityType)
+  if (params.actionType) query.append('action_type', params.actionType)
+  if (params.operator) query.append('operator', params.operator)
+  if (params.startDate) query.append('start_date', params.startDate)
+  if (params.endDate) query.append('end_date', params.endDate)
+  query.append('page', params.page || 1)
+  query.append('limit', params.limit || 50)
+  
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/submission-logs?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '读取主体提交数据记录失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
 export async function getTubeAuditLogs(projectKey, params) {
   const query = new URLSearchParams()
   if (params.actionType) query.append('action_type', params.actionType)

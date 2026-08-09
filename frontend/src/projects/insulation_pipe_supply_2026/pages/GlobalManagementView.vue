@@ -54,6 +54,13 @@
         <aside class="admin-sidebar">
           <button 
             type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'submissions' }]"
+            @click="activeTab = 'submissions'; fetchSubmissionLogs(1)"
+          >
+            📥 提交记录
+          </button>
+          <button
+            type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'core' }]" 
             @click="activeTab = 'core'"
           >
@@ -120,6 +127,177 @@
         <!-- 右侧当前选中的配置主卡片 -->
         <div class="admin-content-pane">
           
+          <!-- Tab 0: 提交记录 (放在第一个位置) -->
+          <div v-if="activeTab === 'submissions'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">📥 提交记录</div>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost compact-btn" type="button" @click="fetchSubmissionLogs(1)">
+                    🔄 刷新提交记录
+                  </button>
+                </div>
+              </div>
+
+              <!-- 数据新旧核对面板 -->
+              <div class="submission-overview">
+                <div class="submission-overview__lead">
+                  <div class="submission-overview__icon" aria-hidden="true">⏱️</div>
+                  <div class="submission-overview__copy">
+                    <div class="submission-overview__label">数据库最新提交物理时间</div>
+                    <div class="submission-overview__time">
+                      <span>{{ submissionLatestTime ? formatDateTime(submissionLatestTime) : '尚无提交记录' }}</span>
+                      <span
+                        v-if="submissionLatestTime"
+                        class="submission-overview__age"
+                        :style="getTimeAgoBadgeStyle(submissionLatestTime)"
+                      >
+                        {{ formatTimeAgo(submissionLatestTime) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 24h 提交小计数看板 -->
+                <div class="submission-metrics">
+                  <div class="submission-metric submission-metric--total">
+                    <div class="submission-metric__label">24h 提交总量</div>
+                    <div class="submission-metric__value">{{ recent24hCount }} <span>笔</span></div>
+                  </div>
+                  <div class="submission-metric submission-metric--demand">
+                    <div class="submission-metric__label">需求侧提交</div>
+                    <div class="submission-metric__value">{{ demand24hCount }} <span>笔</span></div>
+                  </div>
+                  <div class="submission-metric submission-metric--supply">
+                    <div class="submission-metric__label">供给侧发货</div>
+                    <div class="submission-metric__value">{{ supply24hCount }} <span>笔</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 两行三列过滤控制面板，避免日期控件挤出卡片边界 -->
+              <div class="submission-filter-panel">
+                <label class="submission-filter-item">
+                  <span>提交主体分类</span>
+                  <select v-model="submissionFilters.entityType" class="select" @change="fetchSubmissionLogs(1)">
+                    <option value="">全部主体</option>
+                    <option value="demand">📍 需求主体 (施工队)</option>
+                    <option value="supply">🚚 供给主体 (厂家)</option>
+                    <option value="warehouse">🏢 库管主体</option>
+                  </select>
+                </label>
+
+                <label class="submission-filter-item">
+                  <span>具体提交行为</span>
+                  <select v-model="submissionFilters.actionType" class="select">
+                    <option value="">全部提交行为</option>
+                    <option value="SAVE_PLAN">📅 保存三日计划</option>
+                    <option value="SUBMIT_USAGE">🔋 上报施工消耗</option>
+                    <option value="SUBMIT_STATUS">✅ 提交填报完成</option>
+                    <option value="CONFIRM_ARRIVAL">👷 到货签收</option>
+                    <option value="CONFIRM_CONSTRUCTION">👷 施工接收</option>
+                    <option value="CREATE_DELIVERY">🚚 厂家发货</option>
+                    <option value="CREATE_DELIVERY_BATCH">🚚 批量发货</option>
+                    <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
+                    <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
+                  </select>
+                </label>
+
+                <label class="submission-filter-item">
+                  <span>提交账号/操作人</span>
+                  <input v-model.trim="submissionFilters.operator" class="input" type="text" placeholder="搜索账号或姓名" />
+                </label>
+
+                <label class="submission-filter-item">
+                  <span>开始日期</span>
+                  <input v-model="submissionFilters.startDate" class="input" type="date" />
+                </label>
+
+                <label class="submission-filter-item">
+                  <span>结束日期</span>
+                  <input v-model="submissionFilters.endDate" class="input" type="date" />
+                </label>
+
+                <div class="submission-filter-actions">
+                  <button class="btn primary submission-query-btn" type="button" @click="fetchSubmissionLogs(1)">
+                    🔍 查询记录
+                  </button>
+                </div>
+              </div>
+
+              <!-- 提交记录明细列表 -->
+              <div v-if="submissionLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">数据提交记录加载中...</div>
+              <div v-else-if="submissionLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何主体提交的数据记录。</div>
+              <div v-else>
+                <div class="submission-table-wrap">
+                  <table class="table editor-table submission-log-table">
+                    <colgroup>
+                      <col class="submission-col-time" />
+                      <col class="submission-col-operator" />
+                      <col class="submission-col-action" />
+                      <col class="submission-col-detail" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>提交时间与来源 IP</th>
+                        <th>提交主体 / 操作人</th>
+                        <th>行为类型</th>
+                        <th>数据提交内容与详情说明</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="log in submissionLogs" :key="log.id">
+                        <td class="submission-time-cell">
+                          <div class="submission-time-value">
+                            {{ formatDateTime(log.created_at) }}
+                          </div>
+                          <div class="submission-time-meta">
+                            <span v-if="isRecent24h(log.created_at)" class="submission-recent-badge">
+                              🔥 新提交
+                            </span>
+                            <span v-if="log.client_ip" class="submission-ip">
+                              IP: {{ log.client_ip }}
+                            </span>
+                          </div>
+                        </td>
+                        <td class="submission-operator-cell">
+                          <div class="submission-operator-name">{{ log.operator }}</div>
+                          <div v-if="log.operator_group" class="submission-operator-meta">
+                            <span class="submission-group-chip">
+                              {{ log.operator_group }}
+                            </span>
+                          </div>
+                        </td>
+                        <td class="submission-action-cell">
+                          <span class="badge submission-action-badge" :style="getActionTypeBadgeStyle(log.action_type)">
+                            {{ translateActionType(log.action_type) }}
+                          </span>
+                        </td>
+                        <td class="submission-detail-cell">
+                          <div class="submission-detail-text">
+                            {{ log.action_desc }}
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- 分页栏 -->
+                <div class="submission-pagination">
+                  <span class="submission-pagination__summary">共计 <strong>{{ submissionTotal }}</strong> 条数据提交记录</span>
+                  <div class="submission-pagination__controls">
+                    <button class="btn ghost compact-btn submission-page-btn" type="button" :disabled="submissionPage <= 1" @click="fetchSubmissionLogs(submissionPage - 1)">上一页</button>
+                    <span>第 <strong>{{ submissionPage }}</strong> 页 / 共 <strong>{{ Math.ceil(submissionTotal / submissionLimit) || 1 }}</strong> 页</span>
+                    <button class="btn ghost compact-btn submission-page-btn" type="button" :disabled="submissionPage >= Math.ceil(submissionTotal / submissionLimit)" @click="fetchSubmissionLogs(submissionPage + 1)">下一页</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
           <!-- Tab 1: 核心参数与提交状态 -->
           <div v-if="activeTab === 'core'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -1180,6 +1358,7 @@ import {
   getTubeWeatherConfig,
   evaluateTubeWeatherImport,
   importTubeWeatherData,
+  getTubeSubmissionLogs,
   getTubeAuditLogs,
   exportTubeAuditLogs,
 } from '../../daily_report_25_26/services/api'
@@ -1195,7 +1374,25 @@ const {
   modeLabels,
 } = useTubePageShell('全局管理入口')
 
-const activeTab = ref('core')
+const activeTab = ref('submissions')
+
+// 📥 主体数据提交记录相关 Ref 变量
+const submissionLogs = ref([])
+const submissionTotal = ref(0)
+const submissionLoading = ref(false)
+const submissionPage = ref(1)
+const submissionLimit = ref(15)
+const submissionLatestTime = ref(null)
+const recent24hCount = ref(0)
+const demand24hCount = ref(0)
+const supply24hCount = ref(0)
+const submissionFilters = ref({
+  entityType: '',
+  actionType: '',
+  operator: '',
+  startDate: '',
+  endDate: '',
+})
 
 // 操作审计日志相关 Ref 变量
 const auditLogs = ref([])
@@ -2108,9 +2305,63 @@ function fillMissingPipeModelsForSelectedSection1() {
   setSectionMessage('baseline_presets', 'success', '已为当前换热站补齐缺失型号。记得点击“保存本区块”。')
 }
 
-onMounted(() => {
-  loadConfig()
+onMounted(async () => {
+  await loadConfig()
+  if (activeTab.value === 'submissions') {
+    fetchSubmissionLogs(1)
+  }
 })
+
+// ==================== 📥 主体数据提交记录 JS 业务逻辑 ====================
+
+async function fetchSubmissionLogs(page = 1) {
+  submissionLoading.value = true
+  submissionPage.value = page
+  try {
+    const res = await getTubeSubmissionLogs(PROJECT_KEY, {
+      entityType: submissionFilters.value.entityType,
+      actionType: submissionFilters.value.actionType,
+      operator: submissionFilters.value.operator,
+      startDate: submissionFilters.value.startDate,
+      endDate: submissionFilters.value.endDate,
+      page: submissionPage.value,
+      limit: submissionLimit.value,
+    })
+    submissionLogs.value = res.rows || []
+    submissionTotal.value = res.total || 0
+    submissionLatestTime.value = res.latest_submitted_at || null
+    recent24hCount.value = res.recent_24h_count || 0
+    demand24hCount.value = res.demand_24h_count || 0
+    supply24hCount.value = res.supply_24h_count || 0
+  } catch (error) {
+    console.error('加载主体提交数据记录失败:', error)
+  } finally {
+    submissionLoading.value = false
+  }
+}
+
+function isRecent24h(isoString) {
+  if (!isoString) return false
+  const t = new Date(isoString).getTime()
+  return (Date.now() - t) <= 24 * 60 * 60 * 1000
+}
+
+function formatTimeAgo(isoString) {
+  if (!isoString) return ''
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000)
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  return `${Math.floor(diff / 86400)} 天前`
+}
+
+function getTimeAgoBadgeStyle(isoString) {
+  if (!isoString) return {}
+  const hours = (Date.now() - new Date(isoString).getTime()) / (3600 * 1000)
+  if (hours <= 2) return { background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }
+  if (hours <= 24) return { background: '#fffbe3', color: '#b45309', border: '1px solid #fde68a' }
+  return { background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }
+}
 
 // ==================== 📜 操作审计日志 JS 业务逻辑 ====================
 
@@ -2759,6 +3010,367 @@ async function handleExportLogs() {
 
 .section-card {
   margin: 0 !important;
+}
+
+/* ==================== 📥 提交记录排版 ==================== */
+.submission-overview {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(360px, 1.1fr);
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f4f7fb 100%);
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.025);
+}
+.submission-overview__lead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.submission-overview__icon {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 20px;
+}
+.submission-overview__copy {
+  min-width: 0;
+}
+.submission-overview__label {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.submission-overview__time {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.submission-overview__age {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+}
+.submission-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+.submission-metric {
+  min-width: 0;
+  padding: 9px 12px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe4ef;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+}
+.submission-metric__label {
+  margin-bottom: 2px;
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.submission-metric__value {
+  color: #2563eb;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.submission-metric__value span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}
+.submission-metric--demand .submission-metric__value { color: #059669; }
+.submission-metric--supply .submission-metric__value { color: #d97706; }
+
+.submission-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+}
+.submission-filter-item {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.submission-filter-item > span {
+  color: #526276;
+  font-size: 12px;
+  font-weight: 650;
+}
+.submission-filter-item .input,
+.submission-filter-item .select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.submission-filter-item .input:focus,
+.submission-filter-item .select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.submission-filter-actions {
+  grid-column: span 2;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.submission-query-btn {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 18px;
+  border-radius: 7px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.submission-table-wrap {
+  max-height: 600px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: #fff;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+}
+.submission-log-table {
+  width: 100%;
+  min-width: 960px;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.submission-col-time { width: 230px; }
+.submission-col-operator { width: 180px; }
+.submission-col-action { width: 165px; }
+.submission-col-detail { width: auto; }
+.submission-log-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 16px;
+  text-align: left;
+  color: #475569;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.submission-log-table tbody td {
+  padding: 14px 16px;
+  vertical-align: top;
+  border-bottom: 1px solid #e8edf3;
+}
+.submission-log-table tbody tr {
+  background: #fff;
+  transition: background-color 0.18s;
+}
+.submission-log-table tbody tr:nth-child(even) {
+  background: #fbfdff;
+}
+.submission-log-table tbody tr:hover {
+  background: #f5f9ff;
+}
+.submission-log-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.submission-time-cell {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.submission-time-value {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.submission-time-meta {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 6px;
+}
+.submission-recent-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  color: #dc2626;
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.submission-ip {
+  min-width: 0;
+  color: #64748b;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.submission-operator-cell {
+  line-height: 1.5;
+}
+.submission-operator-name {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+}
+.submission-operator-meta {
+  margin-top: 6px;
+}
+.submission-group-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 2px 7px;
+  color: #526276;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.submission-action-cell {
+  line-height: 1.5;
+}
+.submission-action-badge {
+  display: inline-flex !important;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px !important;
+  border-radius: 7px !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  white-space: nowrap;
+}
+.submission-detail-cell {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.submission-detail-text {
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  color: #1e293b;
+  background: #f8fafc;
+  border-left: 3px solid #bfdbfe;
+  border-radius: 0 7px 7px 0;
+}
+.submission-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 11px 14px;
+  color: #526276;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.submission-pagination strong {
+  color: #0f172a;
+}
+.submission-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.submission-page-btn {
+  padding: 5px 12px !important;
+  color: #334155 !important;
+  background: #fff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+}
+.submission-page-btn:disabled {
+  color: #94a3b8 !important;
+  background: #f1f5f9 !important;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .submission-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .submission-filter-panel {
+    grid-template-columns: 1fr;
+  }
+  .submission-filter-item,
+  .submission-filter-actions {
+    grid-column: 1 / -1;
+  }
+  .submission-metrics {
+    grid-template-columns: 1fr;
+  }
+  .submission-pagination {
+    align-items: stretch;
+  }
+  .submission-pagination__summary {
+    width: 100%;
+  }
+  .submission-pagination__controls {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
 
 .table-cell-input {
