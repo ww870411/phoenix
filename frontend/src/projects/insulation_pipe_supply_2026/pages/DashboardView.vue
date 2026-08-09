@@ -676,7 +676,7 @@ function getMetricTitle(key) {
 function getMetricSubtitle(key) {
   const subs = {
     otd: 'On-Time Delivery - 已确认到货样本的 24 小时时效履约指标',
-    doi: 'Inventory Buffer Days - 在库存量支撑施工天数 (基准区间 3.0~7.0天)',
+    doi: 'Inventory Buffer Days - 在库存量支撑施工天数 (基准线 ≥ 3.0天，不设上限)',
     pcr: 'Plan Commitment Ratio - 数字化报表管理纪律与滚动计划管控指标',
     wsi: 'Weather Suitability Index - 结合大连气象预报精算未来 5 天晴天及小雨（含）施工窗口期比例',
     ssr: 'Supply Security Ratio - 避免断料停工与项目窝工风险安全保障指标'
@@ -691,7 +691,7 @@ function getMetricAbbr(key) {
 function getMetricDesc(key) {
   const descs = {
     otd: 'OTD 衡量保温管发货后 24 小时内送达工区并由现场接收确认的物流效率。高准时率代表厂家生产与运力调度响应极其敏捷。',
-    doi: 'IBD 支撑天数反映现场当前在库库存对于未完成计划的物理安全垫覆盖周期。基准线在 3.0 ~ 7.0 天之间，兼顾防断料与防现场积压。',
+    doi: 'IBD 支撑天数反映现场当前在库库存对于未完成计划的物理安全垫覆盖周期。基准线在 ≥ 3.0 天，不设上限，充足备料保障不断料不窝工。',
     pcr: '三日滚动计划提报率是集团落实“以消定供、精细化平衡”的数字化治理核心纪律。它强力考核各工区施工现场负责人是否按照“按日滚动提报未来三日需求计划”的规范操作。零漏报代表数字化执行力达标。',
     wsi: '施工气象适宜度是现场开挖、下沟焊接与热熔补口等关键工序防汛避险的核心决策指标。它精算从今日起算未来 5 天大连预报中降雨量 <= 2.0mm (含晴天、多云、小雨) 的适宜施工天数占比，为施工调度与防汛避险提供科学决策支撑。',
     ssr: '安全供应度直接反映在建工区免于发生断料停工风险的覆盖比例。安全工区即为“硬缺口”等于 0 的工区，100% 代表全网无任何在建工区因缺少物料而停工。'
@@ -777,19 +777,17 @@ function getMetricCalcVars(key) {
     let statusNotice = ''
     if (daily <= 0) {
       statusNotice = '未来三日需求计划暂未填报，无法折算日均消耗。'
-    } else if (val >= 3.0 && val <= 7.0) {
-      statusNotice = `现场备料 ${val} 天，精准处于集团 3.0 ~ 7.0 天安全黄金缓冲区间！`
+    } else if (val >= 3.0) {
+      statusNotice = `现场备料 ${val} 天 (≥ 3.0天 安全线)，储备充沛，防窝工效果极佳！`
     } else if (val < 1.0) {
       statusNotice = `现场备料极度匮乏 (仅支撑 ${val} 天)，已进入断料预警危机状态！`
-    } else if (val < 3.0) {
-      statusNotice = `现场备料仅 ${val} 天 (小于 3 天警报线)，存在断料窝工风险，请急件催发！`
     } else {
-      statusNotice = `现场备料 ${val} 天，储备极充沛，请关注堆场物理容纳与搬运空间。`
+      statusNotice = `现场备料仅 ${val} 天 (小于 3 天警报线)，存在断料窝工风险，请急件催发！`
     }
     return {
       '分子 (现场在库库存)': `${metricSnapshot.value.totalInv.toFixed(1)} 米 (全网在库实测管材之和)`,
       '分母 (日均计划消耗)': `${daily.toFixed(1)} 米/天 (由未来三日滚动计划 ${metricSnapshot.value.totalFuturePlan.toFixed(1)} 米折算)`,
-      'IBD 理念说明': `重点考核工程“不窝工、管材够用”。在库存量支撑施工天数 (基准区间 3.0~7.0天)。当前雷达折算得分：${realDOIScore.value} 分。`,
+      'IBD 理念说明': `重点考核工程“不窝工、管材够用”。在库存量支撑施工天数 (基准线 ≥ 3.0天，不设上限)。当前雷达折算得分：${realDOIScore.value} 分。`,
       '保供评估判定': statusNotice
     }
   }
@@ -846,7 +844,7 @@ function getMetricCalcVars(key) {
 function getMetricTargetVal(key) {
   const targets = {
     otd: '≥ 90.0%',
-    doi: '3.0 ~ 7.0 天',
+    doi: '≥ 3.0 天',
     pcr: '≥ 95.0%',
     wsi: '≥ 80.0%',
     ssr: '≥ 90.0%'
@@ -864,12 +862,12 @@ function getMetricStatusInfo(key) {
   }
   if (key === 'doi') {
     const val = realDOI.value
-    const inRange = val >= 3.0 && val <= 7.0
+    const pass = val >= 3.0
     return {
-      text: inRange 
-        ? `🟢 安全合理 (实测 ${val} 天处于 3.0~7.0天 黄金线)` 
-        : (val < 3.0 ? `🔴 偏紧风险 (实测 ${val} 天 < 3.0天 安全线下限)` : `🟡 积压偏高 (实测 ${val} 天 > 7.0天 备料周期)`),
-      badgeClass: inRange ? 'success' : (val < 3.0 ? 'danger' : 'warning')
+      text: pass 
+        ? `🟢 安全合理 (实测 ${val} 天 ≥ 3.0天 基准，不设上限)` 
+        : (val < 1.0 ? `🔴 极度匮乏 (实测 ${val} 天 < 1.0天 底线)` : `🟡 偏紧预警 (实测 ${val} 天 < 3.0天 安全线)`),
+      badgeClass: pass ? 'success' : (val < 1.0 ? 'danger' : 'warning')
     }
   }
   if (key === 'pcr') {
@@ -899,7 +897,7 @@ function getMetricStatusInfo(key) {
 function getMetricBenchmark(key) {
   const benchmarks = {
     otd: '≥ 90.0%',
-    doi: '3.0 ~ 7.0 天',
+    doi: '≥ 3.0 天',
     pcr: '≥ 95.0%',
     wsi: '≥ 80.0%',
     ssr: '≥ 90.0%'
@@ -918,13 +916,13 @@ function getMetricEvaluation(key) {
   }
   if (key === 'doi') {
     const val = realDOI.value
-    const inRange = val >= 3.0 && val <= 7.0
+    const pass = val >= 3.0
     return {
-      pass: inRange,
-      text: inRange 
-        ? `🟢 安全合理 (实测 ${val} 天处于 3.0~7.0天 黄金线)` 
-        : (val < 3.0 ? `🔴 偏紧风险 (实测 ${val} 天 < 3.0天 安全线下限)` : `🟡 积压偏高 (实测 ${val} 天 > 7.0天 备料周期)`),
-      tagClass: inRange ? 'success' : (val < 3.0 ? 'danger' : 'warning')
+      pass,
+      text: pass 
+        ? `🟢 安全合理 (实测 ${val} 天 ≥ 3.0天 基准，不设上限)` 
+        : (val < 1.0 ? `🔴 极度匮乏 (实测 ${val} 天 < 1.0天 底线)` : `🟡 偏紧预警 (实测 ${val} 天 < 3.0天 安全线)`),
+      tagClass: pass ? 'success' : (val < 1.0 ? 'danger' : 'warning')
     }
   }
   if (key === 'pcr') {

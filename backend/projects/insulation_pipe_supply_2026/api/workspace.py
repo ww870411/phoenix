@@ -1284,17 +1284,13 @@ def get_supply_management_demand_summary(
     # 核心指标计算
     doi = round(total_inv / daily_consume_plan, 1) if daily_consume_plan > 0 else 0.0
     if daily_consume_plan <= 0:
-        doi_score = 0.0
-    elif 3.0 <= doi <= 7.0:
+        doi_score = 100.0 if total_inv > 0 else 0.0
+    elif doi >= 3.0:
         doi_score = 100.0
     elif 1.0 <= doi < 3.0:
         doi_score = round(60.0 + (doi - 1.0) / 2.0 * 40.0, 1)
-    elif doi < 1.0:
-        doi_score = round(max(0.0, doi * 60.0), 1)
-    elif 7.0 < doi <= 12.0:
-        doi_score = round(max(90.0, 100.0 - (doi - 7.0) * 2.0), 1)
     else:
-        doi_score = round(max(50.0, 90.0 - (doi - 12.0) * 4.0), 1)
+        doi_score = round(max(0.0, doi * 60.0), 1)
 
     pcr = round((submitted_section_1_count / len(active_section_1s)) * 100, 1) if len(active_section_1s) > 0 else 0.0
     ucr = round((total_usage / total_arrived) * 100, 1) if total_arrived > 0 else 0.0

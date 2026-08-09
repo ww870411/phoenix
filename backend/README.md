@@ -1,3 +1,10 @@
+## 2026-08-09 后端 KPI 服务重构 IBD (doi_score) 计算算子取消 >7.0天 降分扣分约束 (insulation_pipe_supply_2026)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **实现说明**：
+  - 重构 `_calculate_full_chain_kpis` 中的 `doi_score` 扣分规则：取消对 `doi > 7.0 天` 的大库存倒扣分逻辑，更新为只要现场在库支撑天数 `≥ 3.0 天`，直接给予 **100.0 分满分**（不设上限，绝不随天数增加而衰减降分）。
+
 ## 2026-08-09 后端工作台 API 增加自定义供给主体自动持久化接口与管理员权限放行 (insulation_pipe_supply_2026)
 
 - **关联后端 API**：
