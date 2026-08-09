@@ -229,6 +229,13 @@ class SupplyDeliveryCancelPayload(BaseModel):
     cancel_reason: str = ""
 
 
+class CustomSupplyEntityPayload(BaseModel):
+    entity_name: str
+    contact_name: str = ""
+    contact_phone: str = ""
+
+
+
 class SuperUpdateDeliveryPayload(BaseModel):
     section_1_id: str
     pipe_model_id: str
@@ -663,6 +670,10 @@ def _serialize_pipe_options(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return result_rows
 
 
+def _is_admin_or_supplier_admin(group: str) -> bool:
+    normalized_group = str(group or "").strip()
+    return normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin")
+
 def _serialize_supply_entity_options(
     payload: Dict[str, Any],
     accessible_supply_entity_ids: set[str],
@@ -680,6 +691,7 @@ def _serialize_supply_entity_options(
                 "contact_name": item.get("contact_name") or "",
                 "contact_phone": item.get("contact_phone") or "",
                 "section_1_ids": item.get("section_1_ids") or [],
+                "is_custom": bool(item.get("is_custom")),
             }
         )
     return rows
@@ -1030,6 +1042,75 @@ def get_supply_management_options(
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "current_supply_entity_ids": sorted(accessible_supply_entity_ids),
     }
+
+
+@router.post("/supply-management/custom-entities", summary="快速添加/持久化自定义供给主体")
+def create_custom_supply_entity(
+    payload: CustomSupplyEntityPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    if session.group not in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
+        raise HTTPException(status_code=403, detail="仅全局管理员或供给方管理员可添加自定义供给主体")
+
+    raw_name = str(payload.entity_name or "").strip()
+    if not raw_name:
+        raise HTTPException(status_code=422, detail="自定义供给主体名称不能为空")
+
+    config = load_tube_config()
+    supply_entities = config.get("supply_entities") or []
+
+    for item in supply_entities:
+        e_id = str(item.get("entity_id") or "").strip()
+        e_name = str(item.get("entity_name") or "").strip()
+        if raw_name in (e_id, e_name):
+            return {
+                "ok": True,
+                "created": False,
+                "message": "已存在相同名称的供给主体",
+                "entity": item,
+            }
+
+    existing_codes = [str(item.get("code") or "") for item in supply_entities]
+    max_seq = 0
+    for c in existing_codes:
+        if c.startswith("CUST_"):
+            try:
+                max_seq = max(max_seq, int(c.split("CUST_")[-1]))
+            except ValueError:
+                pass
+    next_code = f"CUST_{max_seq + 1:02d}"
+    new_entity = {
+        "entity_id": raw_name,
+        "code": next_code,
+        "entity_name": raw_name,
+        "contact_name": str(payload.contact_name or "").strip(),
+        "contact_phone": str(payload.contact_phone or "").strip(),
+        "section_1_ids": [],
+        "is_custom": True,
+    }
+
+    supply_entities.append(new_entity)
+    config["supply_entities"] = supply_entities
+    save_tube_config(config)
+
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="CREATE_CUSTOM_SUPPLY_ENTITY",
+        action_desc=f"添加自定义供给主体: {raw_name}",
+        resource_id=raw_name,
+        before_value=None,
+        after_value=new_entity,
+        client_ip=_get_client_ip(request),
+    )
+
+    return {
+        "ok": True,
+        "created": True,
+        "message": f"成功持久化保存自定义供给主体: {raw_name}",
+        "entity": new_entity,
+    }
 @router.get("/supply-management/demand-summary", summary="读取供给侧需求与缺口汇总")
 def get_supply_management_demand_summary(
     show_date: Optional[str] = Query(None),
@@ -1267,7 +1348,7 @@ def get_supply_management_deliveries(
 
     requested_supply_entity_id = str(supply_entity_id or "").strip()
     if requested_supply_entity_id:
-        if requested_supply_entity_id not in accessible_supply_entity_ids:
+        if requested_supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
             raise HTTPException(status_code=403, detail="当前账号无该供给主体的访问权限")
         target_supply_entity_ids = [requested_supply_entity_id]
     else:
@@ -1291,7 +1372,7 @@ def create_supply_management_delivery(
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
-    if payload.supply_entity_id not in accessible_supply_entity_ids:
+    if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
     created = _create_supply_delivery_entry(
         config_payload=config_payload,
@@ -1348,7 +1429,7 @@ def create_supply_management_delivery_batch(
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
-    if payload.supply_entity_id not in accessible_supply_entity_ids:
+    if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
     items = list(payload.items or [])
     if not items:
@@ -1421,10 +1502,13 @@ def cancel_supply_management_delivery(
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
     
     before_val = get_delivery_record_basic(delivery_id)
+    allowed_ids = set(accessible_supply_entity_ids)
+    if _is_admin_or_supplier_admin(session.group) and before_val.get("supply_entity_id"):
+        allowed_ids.add(before_val["supply_entity_id"])
     
     cancel_delivery_record(
         delivery_id=delivery_id,
-        allowed_supply_entity_ids=sorted(accessible_supply_entity_ids),
+        allowed_supply_entity_ids=sorted(allowed_ids),
         operator=session.username,
         cancel_reason=payload.cancel_reason,
     )

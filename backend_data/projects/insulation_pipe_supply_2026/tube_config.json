@@ -1,6 +1,6 @@
 {
-  "show_date": "2026-08-07",
-  "plan_start_date": "2026-08-08",
+  "show_date": "2026-08-08",
+  "plan_start_date": "2026-08-09",
   "weather_api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&timezone=Asia%2FSingapore&daily=weather_code,rain_sum,uv_index_max&hourly=temperature_2m&past_days=5",
   "weather_provider": "amap",
   "auto_update_plan_start_date": false,
@@ -15,7 +15,8 @@
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2"
-      ]
+      ],
+      "is_custom": false
     },
     {
       "entity_id": "xinruide",
@@ -27,7 +28,8 @@
         "low_lot_1",
         "low_lot_2",
         "low_lot_3"
-      ]
+      ],
+      "is_custom": false
     },
     {
       "entity_id": "吴近",
@@ -41,7 +43,8 @@
         "low_lot_1",
         "low_lot_2",
         "low_lot_3"
-      ]
+      ],
+      "is_custom": false
     }
   ],
   "demand_entities": [
@@ -553,5 +556,5 @@
     "api_key": "enc_v1:R1FcXA1fT28FCFJGZlJVTmhWUwRURFFXBgpQTWxVWwc=",
     "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="
   },
-  "usage_collection_date": "2026-08-07"
+  "usage_collection_date": "2026-08-08"
 }

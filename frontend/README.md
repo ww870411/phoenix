@@ -1,3 +1,24 @@
+## 2026-08-09 全局数据看板 (DashboardView) 修复多维穿透透视表漏写“计划采购”表头导致的整表向左错位与末列无标题Bug (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **修复与更名说明**：
+  - 补全 `<thead>` 中漏写的 `计划采购` (`purchase_plan_qty`) 表头列，消除表头与表体列数不对齐（9列 vs 10列）引起的整表错位与右侧多出未命名 0 数据列的问题；
+  - 将透视表表头及 ECharts 图表图例中的“在途在管”字段统一更名为 **`运输在途`**；
+  - 移除透视表大标题旁的 `已包含 show_date 上限截断` 小标签与第二区标题右侧的 `支持型号多维供需对比 ＆ 物理实时降雨防汛施工沙盘联动` 副标题；
+  - 将气象沙盘卡片标题更名为 **`🌧️ 大连气象与施工条件沙盘`**。
+
+## 2026-08-09 现场管理工作台 (SupplyManagementView) 与全局配置管理 (GlobalManagementView) 增加自定义供给主体自动持久化与专属管理区块 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 顶栏微看板操控行与发货登记表单新增手动输入/自定义供给主体功能，移除外置冗余按钮，统一由下拉框底层选项引导触发输入，输入后自动持久化存入后端 JSON 配置文件；
+  - 优化下拉选项展示与排序：自定义供给主体统一展示为 `xxx（自定义）`，并按 `isCustom` 标记强制整体排列在所有系统内置非自定义主体的下方；
+  - 重构 `SupplyManagementView.vue` 顶栏微看板“发货记录总数”为 `(保温管发货数+管件发货数)` 拆分笔数模式，并精简移除冗余的“待提交车次明细”卡片；
+  - `GlobalManagementView.vue` 上方微看板更名为 `供给主体数 (正常+自定义)`，并重构为 **`N+M`** 分开统计呈现模式，并在“供给主体与产能”页签中新增 `🏷️ 现场补录 / 自定义供给主体档案` 专属管理卡片。
+
 ## 2026-08-08 全局数据看板 (Dashboard) 修正气象标签对齐真正的物理今日 (08-08) 起算 5 天明细 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

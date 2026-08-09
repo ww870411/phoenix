@@ -1,3 +1,12 @@
+## 2026-08-09 后端工作台 API 增加自定义供给主体自动持久化接口与管理员权限放行 (insulation_pipe_supply_2026)
+
+- **关联后端 API**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **实现说明**：
+  - 新增 `POST /supply-management/custom-entities` 接口，全域管理员手填自定义供给主体时自动将其写回物理磁盘配置文件 `D:\编程项目\phoenix\backend_data\projects\insulation_pipe_supply_2026\tube_config.json`；
+  - 增加 `_is_admin_or_supplier_admin` 权限判定，允许 `Global_admin` / 管理员组使用手填的自定义 `supply_entity_id`；
+  - 适配 `GET/POST /supply-management/deliveries`、批量发货与撤销发货 API，消除手填主体被误拒 403 的风险。
+
 ## 2026-08-08 后端气象服务纠偏 labels 映射，对齐当下物理今日 (insulation_pipe_supply_2026)
 
 - **关联后端服务**：

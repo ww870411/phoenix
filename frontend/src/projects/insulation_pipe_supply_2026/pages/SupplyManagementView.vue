@@ -22,21 +22,51 @@
       <!-- 磨砂玻璃态数据微看板及上方独立控制行 (Quick Dashboard) -->
       <div v-if="selectedSupplyEntityId" class="quick-dashboard-section" style="margin-bottom: 16px;">
         <!-- 管理员专属：供给主体控制行 (位于卡片正上方) -->
-        <div v-if="canSwitchSupplyEntity && supplyEntityOptions.length > 0" class="entity-control-bar" style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; margin-bottom: 10px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
+        <div v-if="canSwitchSupplyEntity && (supplyEntityOptions.length > 0 || isCustomInputMode)" class="entity-control-bar" style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <span style="font-size: 13px; font-weight: 700; color: #334155;">🏭 切换当前供给主体：</span>
-            <select
-              v-model="selectedSupplyEntityId"
-              class="input"
-              style="font-weight: bold; color: #4f46e5; border: 1px solid #c7d2fe; background: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 13.5px; cursor: pointer; min-width: 220px;"
-              @change="handleGlobalSupplyEntityChange($event.target.value)"
-            >
-              <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
-                {{ entity.entity_name }} ({{ entity.entity_id }})
-              </option>
-            </select>
+            <template v-if="!isCustomInputMode">
+              <select
+                v-model="selectedSupplyEntityId"
+                class="input"
+                style="font-weight: bold; color: #4f46e5; border: 1px solid #c7d2fe; background: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 13.5px; cursor: pointer; min-width: 220px;"
+                @change="handleSelectSupplyEntityChange($event.target.value)"
+              >
+                <option v-for="entity in allSupplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
+                  {{ entity.entity_name }} {{ entity.isCustom ? '（自定义）' : (entity.entity_id ? `(${entity.entity_id})` : '') }}
+                </option>
+                <option value="__ENTER_CUSTOM_MODE__">✍️ 手动输入自定义供给方...</option>
+              </select>
+            </template>
+
+            <template v-else>
+              <input
+                v-model="customEntityInput"
+                type="text"
+                class="input"
+                placeholder="请输入临时/自定义供给主体名称"
+                style="font-weight: bold; color: #4f46e5; border: 1px solid #818cf8; background: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 13.5px; min-width: 240px;"
+                @keyup.enter="applyCustomEntityInput"
+              />
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                style="font-size: 12.5px; padding: 4px 12px; background: #4f46e5; color: #ffffff; border: none; border-radius: 6px; cursor: pointer;"
+                @click="applyCustomEntityInput"
+              >
+                确定应用
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                style="font-size: 12.5px; padding: 4px 10px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;"
+                @click="cancelCustomMode"
+              >
+                取消
+              </button>
+            </template>
           </div>
-          <span style="font-size: 12px; color: #64748b;">(全局管理员特权：切换后将自动更新下方微看板及各 Tab 业务数据)</span>
+          <span style="font-size: 12px; color: #64748b;">(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)</span>
         </div>
 
         <section class="card elevated quick-dashboard-card">
@@ -49,17 +79,13 @@
               <span class="meta-label">展示/业务日期</span>
               <strong class="meta-value">{{ showDate || '—' }}</strong>
             </div>
-          <div class="meta-card">
-            <span class="meta-label">待提交车次明细</span>
-            <strong class="meta-value highlight-num">{{ draftDeliveryItems.length }} 条</strong>
-          </div>
           <div class="meta-card highlight">
             <span class="meta-label">计划起始日期</span>
             <strong class="meta-value">{{ planStartDate || '—' }}</strong>
           </div>
           <div class="meta-card highlight">
-            <span class="meta-label">发货记录总数</span>
-            <strong class="meta-value">{{ deliveryRows.length }} 笔</strong>
+            <span class="meta-label">发货记录总数 (保温管+管件)</span>
+            <strong class="meta-value">{{ deliveryRows.length }}+{{ fittingDeliveries.length }} 笔</strong>
           </div>
         </div>
       </section>
@@ -220,8 +246,8 @@
                   />
                   <!-- 绑定显式单向同步事件，打破 watcher 闭环死锁 -->
                   <select v-else v-model="deliveryForm.supplyEntityId" @change="handleSupplyEntityChange($event.target.value)" :disabled="!selectedSupplyEntityId || !canSwitchSupplyEntity">
-                    <option v-for="entity in supplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
-                      {{ entity.entity_name }}
+                    <option v-for="entity in allSupplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
+                      {{ entity.entity_name }} {{ entity.isCustom ? '（自定义）' : '' }}
                     </option>
                   </select>
                 </label>
@@ -1113,6 +1139,7 @@ import {
   getTubeSupplyManagementDeliveries,
   getTubeSupplyManagementDemandSummary,
   getTubeSupplyManagementOptions,
+  createCustomSupplyEntity,
   superUpdateTubeSupplyManagementDelivery,
 } from '../../daily_report_25_26/services/api'
 
@@ -1131,6 +1158,40 @@ const {
 const optionsLoading = ref(false)
 const optionsError = ref('')
 const supplyEntityOptions = ref([])
+const customSupplyEntities = ref([])
+const isCustomInputMode = ref(false)
+const customEntityInput = ref('')
+
+const allSupplyEntityOptions = computed(() => {
+  const rawFromBackend = supplyEntityOptions.value || []
+  const rawFromCustom = customSupplyEntities.value || []
+
+  const allMap = new Map()
+
+  for (const item of rawFromBackend) {
+    if (!item || !item.entity_id) continue
+    allMap.set(item.entity_id, {
+      ...item,
+      isCustom: Boolean(item.isCustom || item.is_custom),
+    })
+  }
+
+  for (const item of rawFromCustom) {
+    if (!item || !item.entity_id) continue
+    if (!allMap.has(item.entity_id)) {
+      allMap.set(item.entity_id, {
+        ...item,
+        isCustom: true,
+      })
+    }
+  }
+
+  const allList = Array.from(allMap.values())
+  const regularEntities = allList.filter((item) => !item.isCustom)
+  const customEntities = allList.filter((item) => item.isCustom)
+
+  return [...regularEntities, ...customEntities]
+})
 const section1Options = ref([])
 const allPipeModelOptions = ref([])
 const currentGroup = ref('')
@@ -1850,14 +1911,53 @@ const isReadOnlyViewer = computed(() => {
   return viewerGroups.has(g1) || viewerGroups.has(g2) || viewerUsers.has(u1)
 })
 
+const switchToCustomMode = () => {
+  isCustomInputMode.value = true
+  customEntityInput.value = ''
+}
+
+const cancelCustomMode = () => {
+  isCustomInputMode.value = false
+  customEntityInput.value = ''
+}
+
+const applyCustomEntityInput = async () => {
+  const val = customEntityInput.value.trim()
+  if (!val) {
+    alert('请输入有效的供给主体名称')
+    return
+  }
+  try {
+    const res = await createCustomSupplyEntity(PROJECT_KEY, { entity_name: val })
+    if (res && res.entity) {
+      selectedSupplyEntityId.value = res.entity.entity_id || val
+    } else {
+      selectedSupplyEntityId.value = val
+    }
+  } catch (err) {
+    console.warn('持久化保存自定义供给主体失败，已降级为临时视图模式:', err)
+    selectedSupplyEntityId.value = val
+  }
+  isCustomInputMode.value = false
+  handleGlobalSupplyEntityChange(selectedSupplyEntityId.value)
+  // 重新刷新全局配置 options
+  loadOptions()
+}
+
+const handleSelectSupplyEntityChange = (val) => {
+  if (val === '__ENTER_CUSTOM_MODE__') {
+    switchToCustomMode()
+    return
+  }
+  handleGlobalSupplyEntityChange(val)
+}
+
 const handleGlobalSupplyEntityChange = (newVal) => {
   selectedSupplyEntityId.value = newVal
   deliveryForm.value.supplyEntityId = newVal
   loadDemandSummary()
   loadDeliveries()
-  if (activeTab.value === 'fitting') {
-    loadFittingDeliveries()
-  }
+  loadFittingDeliveries()
 }
 
 const currentGroupLabel = computed(() => {
@@ -1869,13 +1969,13 @@ const currentGroupLabel = computed(() => {
 })
 
 const currentSupplyEntityLabel = computed(() => {
-  const matched = supplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
-  return matched?.entity_name || '未识别'
+  const matched = allSupplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
+  return matched?.entity_name || selectedSupplyEntityId.value || '未识别'
 })
 
 const currentDeliverySupplyEntityLabel = computed(() => {
-  const matched = supplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)
-  return matched?.entity_name || currentSupplyEntityLabel.value
+  const matched = allSupplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)
+  return matched?.entity_name || deliveryForm.value.supplyEntityId || currentSupplyEntityLabel.value
 })
 
 const currentShipmentDisplay = computed(() => {
@@ -1897,7 +1997,7 @@ const currentReusedShipmentPlateLocked = computed(() => Boolean(currentReusedShi
 const deliveryOrderNoPreview = computed(() => '提交后由系统自动生成')
 
 const currentAssignedSection1Ids = computed(() => {
-  const entity = supplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
+  const entity = allSupplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value)
   if (entity && Array.isArray(entity.section_1_ids) && entity.section_1_ids.length > 0) {
     return new Set(entity.section_1_ids)
   }
@@ -2287,7 +2387,10 @@ async function loadOptions() {
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
     showDate.value = normalized.showDate
     planStartDate.value = normalized.planStartDate
-    const availableSupplyEntityIds = normalized.currentSupplyEntityIds
+    const availableSupplyEntityIds = [
+      ...normalized.currentSupplyEntityIds,
+      ...customSupplyEntities.value.map((c) => c.entity_id),
+    ]
     if (!availableSupplyEntityIds.includes(selectedSupplyEntityId.value)) {
       selectedSupplyEntityId.value = availableSupplyEntityIds[0] || ''
     } else if (!canSwitchSupplyEntity.value && normalized.currentSupplyEntityIds.length) {
@@ -2499,7 +2602,7 @@ watch(selectedSupplyEntityId, (value) => {
   if (value) {
     deliveryForm.value.supplyEntityId = value
     fittingForm.value.supplyEntityId = value
-    const matchedEntity = supplyEntityOptions.value.find((item) => item.entity_id === value)
+    const matchedEntity = allSupplyEntityOptions.value.find((item) => item.entity_id === value)
     if (matchedEntity) {
       deliveryForm.value.shipContactName = matchedEntity.contact_name || ''
       deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''

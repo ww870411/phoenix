@@ -553,6 +553,21 @@ export async function getTubeSupplyManagementOptions(projectKey = 'insulation_pi
   return response.json()
 }
 
+export async function createCustomSupplyEntity(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/custom-entities`, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const message = await parseErrorMessage(response)
+    throw new Error(message || '保存自定义供给主体失败')
+  }
+  return response.json()
+}
+
 export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_supply_2026', query = {}) {
   const params = new URLSearchParams()
   if (query.section1Id) params.append('section_1_id', query.section1Id)

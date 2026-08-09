@@ -117,7 +117,6 @@
       <section class="charts-grid card elevated">
         <div class="charts-section-header">
           <h3>📊 供需分析与大连气象工效决策沙盘</h3>
-          <span class="charts-tip">支持型号多维供需对比 ＆ 物理实时降雨防汛施工沙盘联动</span>
         </div>
         <div class="charts-container">
           <!-- 图表一：各保温管型号供需堆叠柱状图 -->
@@ -130,7 +129,7 @@
           <!-- 大连气象环境与防汛施工决策沙盘 -->
           <div class="chart-wrapper weather-decision-panel">
             <div class="weather-title-group">
-              <div class="chart-title">🌧️ 大连气象环境与施工防汛决策沙盘</div>
+              <div class="chart-title">🌧️ 大连气象与施工条件沙盘</div>
               <span class="weather-location-badge">📍 大连市主城区</span>
             </div>
             
@@ -278,7 +277,6 @@
         <div class="card-header pivot-header">
           <div class="pivot-title-group">
             <h3>🏢 供需全链路多维穿透透视表</h3>
-            <span class="pivot-badge">已包含 show_date 上限截断</span>
           </div>
           <!-- 透视切换 Tab -->
           <div class="tab-workbench">
@@ -345,6 +343,9 @@
                 <th class="right-align num-col sortable" @click="handleSort('design_qty')">
                   设计量 {{ getSortSymbol('design_qty') }}
                 </th>
+                <th class="right-align num-col sortable" @click="handleSort('purchase_plan_qty')">
+                  计划采购 {{ getSortSymbol('purchase_plan_qty') }}
+                </th>
                 <th class="right-align num-col sortable" @click="handleSort('future_plan_qty')">
                   三日计划 {{ getSortSymbol('future_plan_qty') }}
                 </th>
@@ -352,7 +353,7 @@
                   累计发货 {{ getSortSymbol('total_shipped_qty') }}
                 </th>
                 <th class="right-align num-col sortable" @click="handleSort('pending_arrival_qty')">
-                  在途在管 {{ getSortSymbol('pending_arrival_qty') }}
+                  运输在途 {{ getSortSymbol('pending_arrival_qty') }}
                 </th>
                 <th class="right-align num-col sortable highlight-th-green" @click="handleSort('section_1_inventory_qty')">
                   现场库存 {{ getSortSymbol('section_1_inventory_qty') }}
@@ -1381,7 +1382,7 @@ function renderCharts() {
         axisPointer: { type: 'shadow' }
       },
       legend: {
-        data: ['现场库存', '在途在管', '三日净缺口'],
+        data: ['现场库存', '运输在途', '三日净缺口'],
         bottom: 0,
         textStyle: { color: '#475569', fontWeight: 600 }
       },
@@ -1419,7 +1420,7 @@ function renderCharts() {
           itemStyle: { color: '#10b981', borderRadius: [2, 2, 0, 0] }
         },
         {
-          name: '在途在管',
+          name: '运输在途',
           type: 'bar',
           stack: 'total',
           emphasis: { focus: 'series' },

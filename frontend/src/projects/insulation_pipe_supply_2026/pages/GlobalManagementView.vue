@@ -25,8 +25,8 @@
       <section class="card elevated quick-dashboard-card">
         <div class="meta-dashboard">
           <div class="meta-card">
-            <span class="meta-label">供给主体数</span>
-            <strong class="meta-value">{{ supplyEntities.length }} 个注册主体</strong>
+            <span class="meta-label">供给主体数 (正常+自定义)</span>
+            <strong class="meta-value">{{ normalSupplyEntitiesCount }}+{{ customSupplyEntitiesCount }} 个注册主体</strong>
           </div>
           <div class="meta-card">
             <span class="meta-label">管理的需求主体</span>
@@ -308,6 +308,65 @@
                       <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" placeholder="联系人" /></td>
                       <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="联系电话" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(supplyEntities, index)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- 专属卡片：现场补录/自定义供给主体档案 -->
+            <section class="card elevated section-card" style="border: 1px dashed #818cf8; background: #faf5ff;">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header" style="color: #6b21a8; display: flex; align-items: center; gap: 8px;">
+                    🏷️ 现场补录 / 自定义供给主体档案
+                    <span class="badge" style="font-size: 12px; font-weight: normal; padding: 2px 10px; border-radius: 12px; background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe;">
+                      共 {{ customSupplyEntitiesList.length }} 个补录主体
+                    </span>
+                  </div>
+                  <p class="sub block-sub">配置在现场发货工作台中由管理员手填补录的临时/自定义供给主体，可在此补充联系人信息或物理清退。</p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('supply_entities')" @click="saveSection('supply_entities')">
+                    {{ isSaving('supply_entities') ? '保存中…' : '💾 保存自定义主体设置' }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="customSupplyEntitiesList.length === 0" class="empty-placeholder" style="padding: 24px; text-align: center; color: #9333ea; font-size: 13.5px; background: #ffffff; border-radius: 8px; border: 1px dashed #e9d5ff;">
+                🌱 当前暂无手动录入的自定义供给主体。在现场管理工作台中选择“手动输入自定义供给方”后将自动保存并同步至此。
+              </div>
+
+              <div v-else class="table-wrap">
+                <table class="table editor-table">
+                  <thead>
+                    <tr style="background: #f3e8ff;">
+                      <th>主体ID (唯一)</th>
+                      <th>主体编码</th>
+                      <th>自定义供给主体名称</th>
+                      <th>供货需求主体 (标段)</th>
+                      <th>发货联系人</th>
+                      <th>联系电话</th>
+                      <th>物理清退</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in customSupplyEntitiesList" :key="item.entity_id">
+                      <td><span style="font-weight: bold; color: #7e22ce;">{{ item.entity_id }}</span></td>
+                      <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="12" placeholder="如 CUST_01" /></td>
+                      <td><input v-model.trim="item.entity_name" class="input table-cell-input font-bold" type="text" placeholder="主体名称" /></td>
+                      <td>
+                        <input 
+                          v-model.trim="item.section_1_ids_text" 
+                          class="input table-cell-input text-indigo font-bold" 
+                          type="text" 
+                          placeholder="需求主体ID/标段名称（逗号分隔）" 
+                          :title="`对应需求主体: ${item.section_1_ids_text || '暂未指定'}`"
+                        />
+                      </td>
+                      <td><input v-model.trim="item.contact_name" class="input table-cell-input" type="text" placeholder="联系人" /></td>
+                      <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="联系电话" /></td>
+                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeCustomEntity(item)">清退</button></td>
                     </tr>
                   </tbody>
                 </table>
@@ -1556,6 +1615,7 @@ function buildSectionPayload(section) {
       contact_name: item.contact_name || '',
       contact_phone: item.contact_phone || '',
       section_1_ids: textToList(item.section_1_ids_text),
+      is_custom: Boolean(item.is_custom),
     }))
   }
   if (section === 'demand_entities') {
@@ -1831,6 +1891,25 @@ function removeRow(targetRef, index) {
   }
   if (targetRef && Array.isArray(targetRef.value)) {
     targetRef.value.splice(index, 1)
+  }
+}
+
+const normalSupplyEntitiesCount = computed(() => {
+  return supplyEntities.value.filter((item) => !item.is_custom).length
+})
+
+const customSupplyEntitiesCount = computed(() => {
+  return supplyEntities.value.filter((item) => item.is_custom).length
+})
+
+const customSupplyEntitiesList = computed(() => {
+  return supplyEntities.value.filter((item) => item.is_custom)
+})
+
+const removeCustomEntity = (item) => {
+  const idx = supplyEntities.value.indexOf(item)
+  if (idx !== -1) {
+    supplyEntities.value.splice(idx, 1)
   }
 }
 
