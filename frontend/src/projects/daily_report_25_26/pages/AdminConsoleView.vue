@@ -17,6 +17,7 @@
             <button class="tab-btn" :class="{ active: activeTab === 'system' }" type="button" @click="activeTab = 'system'">服务器管理</button>
             <button class="tab-btn" :class="{ active: activeTab === 'audit' }" type="button" @click="activeTab = 'audit'">操作日志</button>
             <button class="tab-btn" :class="{ active: activeTab === 'accounts' }" type="button" @click="activeTab = 'accounts'">账户与权限管理</button>
+            <button class="tab-btn" :class="{ active: activeTab === 'db_backup' }" type="button" @click="activeTab = 'db_backup'">💾 数据库备份与恢复</button>
           </div>
         </header>
 
@@ -1197,6 +1198,248 @@
             </div>
           </div>
         </section>
+
+        <!-- 数据库备份与恢复 Tab -->
+        <section v-else-if="activeTab === 'db_backup'" class="content-block db-backup-block">
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 12px;">
+              <div>
+                <h3 style="margin: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                  <span>💾 数据库全量备份与按选高级还原中心</span>
+                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">PostgreSQL Custom Dump</span>
+                </h3>
+                <p style="margin: 6px 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+                  默认备份目录：<code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #0f172a;">{{ backupDirInfo || 'phoenix\\backend_data\\shared\\db_backup' }}</code>
+                </p>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button
+                  class="btn primary"
+                  type="button"
+                  :disabled="backupCreating || backupListLoading"
+                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; cursor: pointer;"
+                  @click="handleCreateBackup"
+                >
+                  <span>{{ backupCreating ? '⏳ 正在全量导出中...' : '⚡ 立即创建备份 (.dump)' }}</span>
+                </button>
+                
+                <button
+                  class="btn ghost"
+                  type="button"
+                  :disabled="backupUploading"
+                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; background: #fff; border-color: #cbd5e1; cursor: pointer;"
+                  @click="triggerBackupUpload"
+                >
+                  <span>{{ backupUploading ? '正在上传...' : '📤 上传本地备份包' }}</span>
+                </button>
+                <input
+                  ref="backupUploadInputRef"
+                  type="file"
+                  accept=".dump,.sql,.gz,.tar"
+                  style="display: none;"
+                  @change="handleBackupFileUpload"
+                />
+                
+                <button
+                  class="btn ghost"
+                  type="button"
+                  style="height: 36px; padding: 0 12px; border-radius: 6px; background: #fff; border-color: #cbd5e1; cursor: pointer;"
+                  @click="loadBackupList"
+                >
+                  🔄 刷新
+                </button>
+              </div>
+            </div>
+
+            <div style="font-size: 12px; color: #475569; background: #fff; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 6px; display: flex; gap: 25px; flex-wrap: wrap;">
+              <span>📦 备份存档数量：<strong>{{ backupList.length }} 个文件</strong></span>
+              <span>💾 已占用存储：<strong>{{ totalBackupSizeFormatted }}</strong></span>
+              <span>🛠️ 导出命令工具：<code>pg_dump -Fc (Custom Format)</code></span>
+            </div>
+          </div>
+
+          <!-- 备份列表表格 -->
+          <div class="inner-card">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 14px; color: #1e293b;">📋 历史备份存档列表</h4>
+            </div>
+
+            <div v-if="backupListLoading" class="panel-state">正在加载备份列表…</div>
+            <div v-else-if="!backupList.length" class="panel-state">备份目录中暂无任何备份文件。点击右上角“⚡ 立即创建备份”即可生成！</div>
+            <div v-else class="table-wrap" style="max-height: 520px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;">
+              <table class="db-backup-table" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed;">
+                <thead>
+                  <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; position: sticky; top: 0; z-index: 5;">
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 38%;">备份文件名</th>
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 14%;">格式类型</th>
+                    <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; width: 14%;">文件大小</th>
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 18%;">生成时间</th>
+                    <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; width: 16%;">操作选项</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="b in backupList" :key="b.filename" style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 12px 16px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="b.filename">
+                      <span style="margin-right: 6px;">📄</span>
+                      <span>{{ b.filename }}</span>
+                    </td>
+                    <td style="padding: 12px 16px; vertical-align: middle;">
+                      <span v-if="b.format === 'custom'" style="background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Custom (.dump)</span>
+                      <span v-else style="background: #64748b; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Plain (.sql)</span>
+                    </td>
+                    <td style="padding: 12px 16px; text-align: right; font-weight: 500; color: #334155; vertical-align: middle;">{{ b.file_size_h }}</td>
+                    <td style="padding: 12px 16px; color: #64748b; vertical-align: middle; white-space: nowrap;">{{ b.created_at }}</td>
+                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
+                      <div style="display: flex; gap: 6px; justify-content: center; align-items: center; white-space: nowrap;">
+                        <button class="btn ghost btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="下载到本地" @click="handleDownloadBackup(b.filename)">
+                          📥 下载
+                        </button>
+                        <button class="btn primary btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="高级恢复控制" @click="openRestoreModal(b)">
+                          🔄 恢复...
+                        </button>
+                        <button class="btn danger btn-sm" type="button" style="padding: 2px 6px; height: 26px; font-size: 12px;" title="删除备份" @click="handleDeleteBackup(b.filename)">
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 高级数据库恢复配置 Modal (使用 Teleport 脱离父节点全局置顶浮动) -->
+        <Teleport to="body">
+          <div v-if="restoreModalVisible" class="dialog-mask" role="presentation" @click.self="restoreModalVisible = false">
+            <div class="dialog-card" style="max-width: 680px; text-align: left;">
+              <header class="dialog-header" style="background: #f8fafc; border-bottom: 1px solid #cbd5e1; padding: 14px 20px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 15px; color: #0f172a;">🔄 高级数据库还原配置控制台</h3>
+                  <p style="margin: 4px 0 0; font-size: 12px; color: #64748b;">
+                    源备份文件：<strong style="color: #0284c7;">{{ restoreTargetFilename }}</strong>
+                  </p>
+                </div>
+                <button class="close-btn" type="button" @click="restoreModalVisible = false">×</button>
+              </header>
+
+              <main class="dialog-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                <!-- 恢复模式 -->
+                <div style="margin-bottom: 18px;">
+                  <label style="font-weight: 600; font-size: 13px; color: #334155; display: block; margin-bottom: 8px;">1. 选择还原模式 (Restore Mode)</label>
+                  <div style="display: flex; gap: 15px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                      <input type="radio" value="full" v-model="restoreForm.restore_mode" />
+                      <span>🟢 全量还原 (结构与数据)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                      <input type="radio" value="schema_only" v-model="restoreForm.restore_mode" />
+                      <span>🔵 仅恢复表结构 (Schema Only)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                      <input type="radio" value="data_only" v-model="restoreForm.restore_mode" />
+                      <span>🟠 仅恢复数据记录 (Data Only)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 清理选项 -->
+                <div style="margin-bottom: 18px; background: #fffbe0; border: 1px solid #ffe58f; padding: 10px 12px; border-radius: 6px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d46b08; font-weight: 500;">
+                    <input type="checkbox" v-model="restoreForm.clean_first" />
+                    <span>还原前自动清理删除现有同名对象 (--clean --if-exists)</span>
+                  </label>
+                </div>
+
+                <!-- Schema 与 表解析结果高级筛选 -->
+                <div style="margin-bottom: 15px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label style="font-weight: 600; font-size: 13px; color: #334155;">2. 选择指定的模式 (Schema) 或表 (Table)</label>
+                    <span v-if="inspectLoading" style="font-size: 12px; color: #0284c7;">正在深入解析备份包...</span>
+                  </div>
+                  <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; background: #f1f5f9; padding: 6px 10px; border-radius: 4px;">
+                    💡 <strong>快捷勾选逻辑</strong>：勾选顶部的 Schema 将自动联动批量选中其下属的所有数据表；恢复范围<strong>100% 仅由下方的被勾选数据表列表决定</strong>。
+                  </div>
+
+                  <div v-if="inspectResult && inspectResult.is_custom_dump" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; background: #fafafa;">
+                    <div v-if="inspectResult.schemas && inspectResult.schemas.length > 0" style="margin-bottom: 12px;">
+                      <span style="font-size: 12px; color: #64748b; font-weight: 600; display: block; margin-bottom: 6px;">按 Schema 快捷联动勾选：</span>
+                      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <label v-for="sch in inspectResult.schemas" :key="sch" style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
+                          <input type="checkbox" :checked="isSchemaChecked(sch)" @change="handleToggleSchema(sch)" />
+                          <code>{{ sch }}</code>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 12px; color: #64748b; font-weight: 600;">数据表恢复选择清单 (不勾选默认恢复全库表)：</span>
+                        <div style="font-size: 11px; display: flex; gap: 8px;">
+                          <button type="button" style="color: #0284c7; background: none; border: none; cursor: pointer;" @click="selectAllInspectTables">全选</button>
+                          <button type="button" style="color: #64748b; background: none; border: none; cursor: pointer;" @click="restoreForm.selected_tables = []; restoreForm.selected_schemas = [];">清空</button>
+                        </div>
+                      </div>
+                      
+                      <div style="max-height: 160px; overflow-y: auto; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-size: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px;">
+                        <label v-for="t in inspectResult.tables" :key="t.full_name" style="display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          <input type="checkbox" :value="t.full_name" v-model="restoreForm.selected_tables" />
+                          <span>{{ t.full_name }}</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else style="font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                    该备份为纯文本 SQL 或未解析出定制 TOC，将默认执行全量 SQL 导入。
+                  </div>
+                </div>
+              </main>
+
+              <footer class="dialog-footer" style="background: #f8fafc; border-top: 1px solid #cbd5e1; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn ghost" type="button" @click="restoreModalVisible = false">取消</button>
+                <button class="btn primary" type="button" :disabled="restoreStarting" @click="handleExecuteRestore">
+                  🚀 开始数据库还原
+                </button>
+              </footer>
+            </div>
+          </div>
+
+          <!-- 专业控制台日志打字机 Modal -->
+          <div v-if="restoreJobModalVisible" class="dialog-mask" role="presentation" @click.self="closeRestoreJobModal">
+            <div class="dialog-card" style="max-width: 760px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
+              <header class="dialog-header" style="background: #1e293b; border-bottom: 1px solid #334155; padding: 12px 20px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                    <span>💻 PostgreSQL 数据库还原实时控制台终端</span>
+                    <span v-if="restoreJobStatus === 'running'" style="font-size: 11px; background: #eab308; color: #000; padding: 1px 6px; border-radius: 4px; font-weight: bold;">正在恢复中...</span>
+                    <span v-else-if="restoreJobStatus === 'completed'" style="font-size: 11px; background: #22c55e; color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: bold;">恢复已成功完成</span>
+                    <span v-else style="font-size: 11px; background: #ef4444; color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: bold;">异常失败</span>
+                  </h3>
+                </div>
+                <button class="close-btn" type="button" style="color: #94a3b8;" @click="closeRestoreJobModal">×</button>
+              </header>
+
+              <main style="padding: 16px;">
+                <div ref="terminalLogBoxRef" style="height: 360px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.6; color: #4ade80;">
+                  <div v-for="(log, idx) in restoreJobLogs" :key="idx" style="white-space: pre-wrap; word-break: break-all;">
+                    {{ log }}
+                  </div>
+                  <div v-if="restoreJobStatus === 'running'" style="color: #eab308; font-weight: bold; margin-top: 8px;">
+                    ⏳ 进度执行中，正在接收 pg_restore 标准数据流...
+                  </div>
+                </div>
+              </main>
+
+              <footer style="background: #1e293b; padding: 12px 20px; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 12px; color: #94a3b8;">如恢复全量表，推荐完成后刷新页面加载最新数据。</span>
+                <button class="btn primary" type="button" style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px;" @click="closeRestoreJobModal">
+                  完成并关闭
+                </button>
+              </footer>
+            </div>
+          </div>
+        </Teleport>
       </section>
     </main>
     <AiChatWorkspace
@@ -1328,6 +1571,13 @@ import {
   listAdminDbTables,
   listAdminFileDirectories,
   listAdminFiles,
+  getAdminDatabaseBackups,
+  createAdminDatabaseBackup,
+  deleteAdminDatabaseBackup,
+  uploadAdminDatabaseBackup,
+  inspectAdminDatabaseBackup,
+  startAdminDatabaseRestore,
+  getAdminDatabaseRestoreJob,
   listAdminProjects,
   listSuperFiles,
   makeSuperDirectory,
@@ -1356,6 +1606,232 @@ import {
 } from '../services/api'
 
 const TARGET_PROJECT_KEY = 'daily_report_25_26'
+
+// --------------------------------------------------------------------------
+// 数据库备份与高级还原响应式 State 与 Methods
+// --------------------------------------------------------------------------
+const backupList = ref([])
+const backupListLoading = ref(false)
+const backupCreating = ref(false)
+const backupUploading = ref(false)
+const backupDirInfo = ref('')
+const backupUploadInputRef = ref(null)
+
+const restoreModalVisible = ref(false)
+const restoreTargetFilename = ref('')
+const inspectLoading = ref(false)
+const inspectResult = ref(null)
+const restoreStarting = ref(false)
+
+const restoreForm = reactive({
+  restore_mode: 'full',
+  clean_first: true,
+  selected_schemas: [],
+  selected_tables: [],
+})
+
+const restoreJobModalVisible = ref(false)
+const restoreJobId = ref('')
+const restoreJobStatus = ref('running')
+const restoreJobLogs = ref([])
+const terminalLogBoxRef = ref(null)
+let restorePollTimer = null
+
+const totalBackupSizeFormatted = computed(() => {
+  const total = backupList.value.reduce((sum, item) => sum + (item.file_size || 0), 0)
+  const sizeMb = total / (1024 * 1024)
+  return sizeMb >= 1 ? `${sizeMb.toFixed(2)} MB` : `${(total / 1024).toFixed(1)} KB`
+})
+
+async function loadBackupList() {
+  backupListLoading.value = true
+  try {
+    const res = await getAdminDatabaseBackups()
+    if (res && res.ok) {
+      backupList.value = res.backups || []
+      backupDirInfo.value = res.backup_dir || ''
+    }
+  } catch (err) {
+    console.error('加载备份列表失败:', err)
+  } finally {
+    backupListLoading.value = false
+  }
+}
+
+async function handleCreateBackup() {
+  backupCreating.value = true
+  try {
+    const res = await createAdminDatabaseBackup()
+    if (res && res.ok) {
+      alert(`🎉 数据库备份成功！已写入 ${res.filename} (${res.file_size_h})`)
+      await loadBackupList()
+    }
+  } catch (err) {
+    console.error('备份数据库失败:', err)
+    alert(err?.message || '创建数据库备份失败')
+  } finally {
+    backupCreating.value = false
+  }
+}
+
+function handleDownloadBackup(filename) {
+  const authStore = useAuthStore()
+  const token = authStore.token || ''
+  const downloadUrl = `/api/v1/admin/database/backup/download/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`
+  window.open(downloadUrl, '_blank')
+}
+
+async function handleDeleteBackup(filename) {
+  if (!confirm(`确定要删除备份文件 ${filename} 吗？`)) return
+  try {
+    const res = await deleteAdminDatabaseBackup(filename)
+    if (res && res.ok) {
+      await loadBackupList()
+    }
+  } catch (err) {
+    alert(err?.message || '删除备份文件失败')
+  }
+}
+
+function triggerBackupUpload() {
+  if (backupUploadInputRef.value) {
+    backupUploadInputRef.value.click()
+  }
+}
+
+async function handleBackupFileUpload(e) {
+  const files = e.target?.files
+  if (!files || !files.length) return
+  const file = files[0]
+  backupUploading.value = true
+  try {
+    const res = await uploadAdminDatabaseBackup(file)
+    if (res && res.ok) {
+      alert(`🎉 成功上传备份包 ${res.filename}`)
+      await loadBackupList()
+    }
+  } catch (err) {
+    alert(err?.message || '上传备份包失败')
+  } finally {
+    backupUploading.value = false
+    if (e.target) e.target.value = ''
+  }
+}
+
+async function openRestoreModal(backupItem) {
+  restoreTargetFilename.value = backupItem.filename
+  restoreForm.restore_mode = 'full'
+  restoreForm.clean_first = true
+  restoreForm.selected_schemas = []
+  restoreForm.selected_tables = []
+  inspectResult.value = null
+  restoreModalVisible.value = true
+
+  inspectLoading.value = true
+  try {
+    const res = await inspectAdminDatabaseBackup(backupItem.filename)
+    if (res && res.ok) {
+      inspectResult.value = res
+    }
+  } catch (err) {
+    console.warn('解析备份内容提示:', err)
+  } finally {
+    inspectLoading.value = false
+  }
+}
+
+function isSchemaChecked(sch) {
+  if (!inspectResult.value || !inspectResult.value.tables) return false
+  const schTables = inspectResult.value.tables.filter(t => t.schema === sch)
+  if (!schTables.length) return false
+  return schTables.every(t => restoreForm.selected_tables.includes(t.full_name))
+}
+
+function handleToggleSchema(sch) {
+  if (!inspectResult.value || !inspectResult.value.tables) return
+  const schTableNames = inspectResult.value.tables
+    .filter(t => t.schema === sch)
+    .map(t => t.full_name)
+    
+  const currentlyChecked = isSchemaChecked(sch)
+  if (currentlyChecked) {
+    restoreForm.selected_tables = restoreForm.selected_tables.filter(name => !schTableNames.includes(name))
+    restoreForm.selected_schemas = restoreForm.selected_schemas.filter(s => s !== sch)
+  } else {
+    const newSet = new Set([...restoreForm.selected_tables, ...schTableNames])
+    restoreForm.selected_tables = Array.from(newSet)
+    if (!restoreForm.selected_schemas.includes(sch)) {
+      restoreForm.selected_schemas.push(sch)
+    }
+  }
+}
+
+function selectAllInspectTables() {
+  if (inspectResult.value && inspectResult.value.tables) {
+    restoreForm.selected_tables = inspectResult.value.tables.map(t => t.full_name)
+    if (inspectResult.value.schemas) {
+      restoreForm.selected_schemas = [...inspectResult.value.schemas]
+    }
+  }
+}
+
+async function handleExecuteRestore() {
+  restoreStarting.value = true
+  try {
+    const payload = {
+      filename: restoreTargetFilename.value,
+      restore_mode: restoreForm.restore_mode,
+      clean_first: restoreForm.clean_first,
+      selected_schemas: restoreForm.selected_schemas.length ? restoreForm.selected_schemas : null,
+      selected_tables: restoreForm.selected_tables.length ? restoreForm.selected_tables : null,
+    }
+    const res = await startAdminDatabaseRestore(payload)
+    if (res && res.ok) {
+      restoreModalVisible.value = false
+      restoreJobId.value = res.job_id
+      restoreJobStatus.value = 'running'
+      restoreJobLogs.value = ['🚀 后台全量恢复进程已拉起，正在同步接收标准输出...']
+      restoreJobModalVisible.value = true
+      startRestoreJobPolling(res.job_id)
+    }
+  } catch (err) {
+    alert(err?.message || '启动数据库还原任务失败')
+  } finally {
+    restoreStarting.value = false
+  }
+}
+
+function startRestoreJobPolling(jobId) {
+  if (restorePollTimer) clearInterval(restorePollTimer)
+  restorePollTimer = setInterval(async () => {
+    try {
+      const res = await getAdminDatabaseRestoreJob(jobId)
+      if (res && res.ok) {
+        restoreJobLogs.value = res.logs || []
+        restoreJobStatus.value = res.status
+        nextTick(() => {
+          if (terminalLogBoxRef.value) {
+            terminalLogBoxRef.value.scrollTop = terminalLogBoxRef.value.scrollHeight
+          }
+        })
+        if (res.status === 'completed' || res.status === 'failed') {
+          clearInterval(restorePollTimer)
+          restorePollTimer = null
+        }
+      }
+    } catch (err) {
+      console.error('轮询恢复状态失败:', err)
+    }
+  }, 600)
+}
+
+function closeRestoreJobModal() {
+  if (restorePollTimer) {
+    clearInterval(restorePollTimer)
+    restorePollTimer = null
+  }
+  restoreJobModalVisible.value = false
+}
 const MONTHLY_DATA_SHOW_PROJECT_KEY = 'monthly_data_show'
 const MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY = 'projects_monthly_data_show_query_tool'
 const METRIC_HISTORY_LIMIT = 60
@@ -5655,6 +6131,50 @@ input:checked + .switch-slider:before {
   display: flex !important;
   gap: 0.5rem !important;
   justify-content: center !important; /* 强制按钮居中对齐 */
+}
+
+/* 全局置顶磨砂玻璃 Modal 遮罩层 */
+.dialog-mask {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+}
+
+.dialog-card {
+  position: relative !important;
+  z-index: 100000 !important;
+  width: 100% !important;
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 90vh !important;
+  animation: modalPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes modalPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 </style>

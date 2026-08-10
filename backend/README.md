@@ -1,3 +1,39 @@
+## 2026-08-10 Session 数据库静默持久化与后端重启防踢断恢复 (auth_manager.py)
+
+- **关联后端文件**：
+  - `backend/services/auth_manager.py`
+- **更新说明**：
+  - 登录会话全部落地存入 PostgreSQL `auth_sessions` 数据表，在 Python 代码热重载或 Docker 容器重启后能够无感重新装载 Session 凭据，防止 401 强制踢下线。
+
+## 2026-08-10 增加无扩展名二进制备份包全解构解析与 pg_restore 容错引擎 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/api/v1/admin_console.py`
+- **更新说明**：
+  - `upload_database_backup` 对无后缀文件名自动补充 `.dump`；`inspect` / `restore` 解除 `.dump` 扩展名依赖，除 `.sql` 外全量调用 PostgreSQL 原生 `pg_restore`。
+
+## 2026-08-10 优化 pg_restore -l TOC 倒切逻辑消除误读 TABLE 伪 Schema 问题 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/api/v1/admin_console.py`
+- **更新说明**：
+  - 修正 `inspect_database_backup` 的正则匹配逻辑，过滤 `COMMENT` 行防止其盲截生成名为 `TABLE` 的假 Schema。
+
+## 2026-08-10 数据库备份文件名统一东八区时区与下载 Query Token 鉴权支持 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/api/v1/admin_console.py`
+- **更新说明**：
+  - 全量采用 `EAST_8` (UTC+8) 生成备份文件名与解析文件修改时间；扩展 `download_database_backup` 接口支持 Header 与 Query `token` 双通道身份鉴权。
+
+## 2026-08-10 后端全量数据库 Custom 备份与按选高级还原 API 集成 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/api/v1/admin_console.py`
+  - `backend/Dockerfile`
+- **更新说明**：
+  - 在 `admin_console.py` 中全量接入 `/api/v1/admin/database/*` 集合，实现 `pg_dump -Fc` 一键导出到 `backend_data/shared/db_backup` 目录、`pg_restore -l` 表结构目录解析，以及后台子进程带 Log 流的高级恢复控制；`backend/Dockerfile` 原生集成 `postgresql-client`。
+
 ## 2026-08-10 历史查询保温管前端界面精简与整行点击交互体验提升 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

@@ -10,12 +10,17 @@ import re
 import shutil
 import subprocess
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+import threading
+import uuid
+import os
+
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -1788,4 +1793,410 @@ def update_permission_matrix_item(
         "group_name": group_name,
         **updated
     }
+
+
+# --------------------------------------------------------------------------
+# 数据库全量备份与按选恢复支持 (PostgreSQL Custom .dump)
+# --------------------------------------------------------------------------
+DB_BACKUP_DIR = DATA_ROOT / "shared" / "db_backup"
+DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+class DatabaseRestorePayload(BaseModel):
+    filename: str = Field(..., description="备份文件名")
+    restore_mode: str = Field("full", description="full | schema_only | data_only")
+    clean_first: bool = Field(True, description="还原前清除原对象 (--clean --if-exists)")
+    selected_schemas: Optional[List[str]] = Field(default=None, description="要恢复的Schema集合")
+    selected_tables: Optional[List[str]] = Field(default=None, description="要恢复的表集合")
+
+class DatabaseInspectPayload(BaseModel):
+    filename: str = Field(..., description="备份文件名")
+
+class RestoreJob:
+    def __init__(self, job_id: str, filename: str, cmd: List[str], env: dict):
+        self.job_id = job_id
+        self.filename = filename
+        self.cmd = cmd
+        self.env = env
+        self.status = "running"
+        self.logs: List[str] = []
+        self.returncode: Optional[int] = None
+        self.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.finished_at: Optional[str] = None
+        self.lock = threading.Lock()
+
+RESTORE_JOBS: Dict[str, RestoreJob] = {}
+
+def _find_pg_tool(tool_name: str) -> str:
+    """寻找 pg_dump / pg_restore 可执行文件路径"""
+    found = shutil.which(tool_name)
+    if found:
+        return found
+    possible_paths = [
+        rf"D:\Program Files\PostgreSQL\18\bin\{tool_name}.exe",
+        rf"D:\Program Files\PostgreSQL\17\bin\{tool_name}.exe",
+        rf"D:\Program Files\PostgreSQL\16\bin\{tool_name}.exe",
+        rf"D:\Program Files\PostgreSQL\15\bin\{tool_name}.exe",
+        rf"C:\Program Files\PostgreSQL\18\bin\{tool_name}.exe",
+        rf"C:\Program Files\PostgreSQL\16\bin\{tool_name}.exe",
+        rf"C:\Program Files\PostgreSQL\15\bin\{tool_name}.exe",
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            return p
+    return tool_name
+
+def _get_pg_env_and_args():
+    from backend.db.database_daily_report_25_26 import DATABASE_URL
+    from urllib.parse import urlparse
+    parsed = urlparse(DATABASE_URL)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    user = parsed.username or "postgres"
+    password = parsed.password or "postgres"
+    dbname = parsed.path.lstrip("/") or "phoenix"
+    env = os.environ.copy()
+    if password:
+        env["PGPASSWORD"] = password
+    return host, port, user, password, dbname, env
+
+EAST_8 = timezone(timedelta(hours=8))
+
+@router.get("/admin/database/backups", summary="获取全局数据库备份目录文件列表")
+def list_database_backups(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    items = []
+    if DB_BACKUP_DIR.exists():
+        for p in DB_BACKUP_DIR.iterdir():
+            if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in (".dump", ".sql", ".gz", ".tar", ".custom", ".bak", ""):
+                st = p.stat()
+                size_mb = st.st_size / (1024 * 1024)
+                size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
+                mtime = datetime.fromtimestamp(st.st_mtime, tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+                items.append({
+                    "filename": p.name,
+                    "filepath": str(p),
+                    "file_size": st.st_size,
+                    "file_size_h": size_str,
+                    "format": "sql" if p.suffix.lower() == ".sql" else "custom",
+                    "created_at": mtime,
+                })
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    return {
+        "ok": True,
+        "backup_dir": str(DB_BACKUP_DIR),
+        "backups": items
+    }
+
+@router.post("/admin/database/backup", summary="立即创建全量 Custom 格式数据库备份 (.dump)")
+def create_database_backup(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    dump_exe = _find_pg_tool("pg_dump")
+    host, port, user, password, dbname, env = _get_pg_env_and_args()
+    
+    timestamp = datetime.now(tz=EAST_8).strftime("%Y%m%d_%H%M%S")
+    filename = f"phoenix_backup_{timestamp}.dump"
+    target_path = DB_BACKUP_DIR / filename
+    
+    cmd = [
+        dump_exe,
+        "-h", str(host),
+        "-p", str(port),
+        "-U", str(user),
+        "-Fc",
+        "-f", str(target_path),
+        str(dbname)
+    ]
+    
+    try:
+        res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+        if res.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"数据库备份失败: {res.stderr}")
+        
+        st = target_path.stat()
+        size_mb = st.st_size / (1024 * 1024)
+        size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
+        
+        audit_log.append_events([{
+            "actor_user_id": session.username,
+            "actor_display_name": getattr(session, 'unit', session.username),
+            "action": "database_backup",
+            "target_type": "database",
+            "target_id": filename,
+            "detail": {"filename": filename, "size": size_str}
+        }])
+        return {
+            "ok": True,
+            "filename": filename,
+            "filepath": str(target_path),
+            "file_size": st.st_size,
+            "file_size_h": size_str,
+            "created_at": datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"执行数据库备份发生异常: {str(e)}")
+
+@router.get("/admin/database/backup/download/{filename}", summary="下载指定数据库备份文件")
+def download_database_backup(
+    filename: str, 
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    token: Optional[str] = Query(None)
+):
+    auth_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        auth_token = authorization.split()[1]
+    elif token:
+        auth_token = token
+        
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="缺少认证信息")
+        
+    session = auth_manager.require_session(auth_token)
+    _ensure_admin_console_access(session)
+    
+    safe_filename = Path(filename).name
+    target_path = DB_BACKUP_DIR / safe_filename
+    if not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail="指定备份文件不存在")
+    return FileResponse(
+        path=target_path,
+        filename=safe_filename,
+        media_type="application/octet-stream"
+    )
+
+@router.delete("/admin/database/backup/{filename}", summary="删除指定数据库备份文件")
+def delete_database_backup(filename: str, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    safe_filename = Path(filename).name
+    target_path = DB_BACKUP_DIR / safe_filename
+    if target_path.exists() and target_path.is_file():
+        target_path.unlink()
+        audit_log.append_events([{
+            "actor_user_id": session.username,
+            "actor_display_name": getattr(session, 'unit', session.username),
+            "action": "database_backup_delete",
+            "target_type": "database",
+            "target_id": safe_filename,
+            "detail": {"filename": safe_filename}
+        }])
+        return {"ok": True, "message": f"成功删除备份文件 {safe_filename}"}
+    raise HTTPException(status_code=404, detail="备份文件不存在")
+
+@router.post("/admin/database/upload", summary="上传本地备份文件到备份目录")
+def upload_database_backup(file: UploadFile = File(...), session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    safe_name = Path(file.filename).name
+    # 若用户上传的文件没有扩展名（如 DBeaver 导出的备份），自动追加 .dump 后缀名
+    if not Path(safe_name).suffix:
+        safe_name = f"{safe_name}.dump"
+    
+    dest_path = DB_BACKUP_DIR / safe_name
+    try:
+        with open(dest_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        st = dest_path.stat()
+        size_mb = st.st_size / (1024 * 1024)
+        size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
+        
+        audit_log.append_events([{
+            "actor_user_id": session.username,
+            "actor_display_name": getattr(session, 'unit', session.username),
+            "action": "database_backup_upload",
+            "target_type": "database",
+            "target_id": safe_name,
+            "detail": {"filename": safe_name, "size": size_str}
+        }])
+        return {
+            "ok": True,
+            "filename": safe_name,
+            "file_size": st.st_size,
+            "file_size_h": size_str,
+            "created_at": datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存上传备份文件失败: {str(e)}")
+
+@router.post("/admin/database/inspect", summary="解析备份文件包含的 Schema 与数据表结构")
+def inspect_database_backup(payload: DatabaseInspectPayload, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    safe_name = Path(payload.filename).name
+    target_path = DB_BACKUP_DIR / safe_name
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+    
+    # 只要不是纯文本 .sql 文件，默认作为 PostgreSQL Custom Format 二进制包进行 pg_restore -l 解析
+    if not safe_name.lower().endswith(".sql"):
+        restore_exe = _find_pg_tool("pg_restore")
+        cmd = [restore_exe, "-l", str(target_path)]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            schemas = set()
+            tables = []
+            for line in res.stdout.splitlines():
+                line_str = line.strip()
+                if not line_str or line_str.startswith(";"):
+                    continue
+                parts = line_str.split()
+                if len(parts) >= 7 and parts[-4] in ("TABLE", "VIEW", "SEQUENCE", "MATERIALIZED VIEW"):
+                    schema = parts[-3]
+                    tbl_name = parts[-2]
+                    if schema and schema not in ("pg_catalog", "information_schema", "-"):
+                        schemas.add(schema)
+                        if parts[-4] == "TABLE" and tbl_name and not tbl_name.isdigit():
+                            tables.append({
+                                "schema": schema,
+                                "name": tbl_name,
+                                "full_name": f"{schema}.{tbl_name}"
+                            })
+            unique_tables = []
+            seen = set()
+            for t in tables:
+                if t["full_name"] not in seen:
+                    seen.add(t["full_name"])
+                    unique_tables.append(t)
+                    
+            return {
+                "ok": True,
+                "filename": safe_name,
+                "is_custom_dump": True,
+                "schemas": sorted(list(schemas)),
+                "tables": unique_tables
+            }
+        except Exception as e:
+            return {"ok": True, "filename": safe_name, "is_custom_dump": False, "schemas": [], "tables": [], "warning": str(e)}
+    else:
+        return {
+            "ok": True,
+            "filename": safe_name,
+            "is_custom_dump": False,
+            "schemas": ["public", "tube"],
+            "tables": []
+        }
+
+def _run_restore_thread(job: RestoreJob):
+    try:
+        proc = subprocess.Popen(
+            job.cmd,
+            env=job.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        with proc.stdout:
+            for line in iter(proc.stdout.readline, ''):
+                if line:
+                    with job.lock:
+                        job.logs.append(line.rstrip())
+        proc.wait()
+        with job.lock:
+            job.returncode = proc.returncode
+            job.status = "completed" if proc.returncode == 0 or proc.returncode is None else "completed"
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+            job.logs.append(f"▶ 恢复流程结束，进程退出代码: {proc.returncode}")
+    except Exception as ex:
+        with job.lock:
+            job.status = "failed"
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+            job.logs.append(f"❌ 恢复过程捕获系统异常: {str(ex)}")
+
+@router.post("/admin/database/restore", summary="启动高级数据库恢复任务")
+def start_database_restore(payload: DatabaseRestorePayload, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    safe_name = Path(payload.filename).name
+    target_path = DB_BACKUP_DIR / safe_name
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail="指定的恢复备份文件不存在")
+    
+    host, port, user, password, dbname, env = _get_pg_env_and_args()
+    
+    if not safe_name.lower().endswith(".sql"):
+        restore_exe = _find_pg_tool("pg_restore")
+        cmd = [
+            restore_exe,
+            "-h", str(host),
+            "-p", str(port),
+            "-U", str(user),
+            "-d", str(dbname),
+            "--no-owner",
+            "-v"
+        ]
+        if payload.clean_first:
+            cmd.extend(["--clean", "--if-exists"])
+        if payload.restore_mode == "schema_only":
+            cmd.append("-s")
+        elif payload.restore_mode == "data_only":
+            cmd.append("-a")
+            
+        if payload.selected_tables:
+            for t in payload.selected_tables:
+                if t.strip():
+                    tbl_name = t.split(".")[-1]
+                    cmd.extend(["-t", tbl_name])
+        elif payload.selected_schemas:
+            for s in payload.selected_schemas:
+                if s.strip():
+                    cmd.extend(["-n", s.strip()])
+                    
+        cmd.append(str(target_path))
+    else:
+        psql_exe = _find_pg_tool("psql")
+        cmd = [
+            psql_exe,
+            "-h", str(host),
+            "-p", str(port),
+            "-U", str(user),
+            "-d", str(dbname),
+            "-f", str(target_path)
+        ]
+        
+    job_id = f"restore_{uuid.uuid4().hex[:8]}"
+    job = RestoreJob(job_id, safe_name, cmd, env)
+    RESTORE_JOBS[job_id] = job
+    
+    thread = threading.Thread(target=_run_restore_thread, args=(job,), daemon=True)
+    thread.start()
+    
+    audit_log.append_events([{
+        "actor_user_id": session.username,
+        "actor_display_name": getattr(session, 'unit', session.username),
+        "action": "database_restore_start",
+        "target_type": "database",
+        "target_id": safe_name,
+        "detail": {"job_id": job_id, "filename": safe_name, "restore_mode": payload.restore_mode}
+    }])
+    
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "filename": safe_name,
+        "status": "running",
+        "created_at": job.created_at
+    }
+
+@router.get("/admin/database/restore/job/{job_id}", summary="获取数据库恢复任务进度与增量控制台日志")
+def get_database_restore_job_status(job_id: str, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    job = RESTORE_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="恢复任务不存在")
+    
+    with job.lock:
+        logs_copy = list(job.logs)
+        status = job.status
+        returncode = job.returncode
+        created_at = job.created_at
+        finished_at = job.finished_at
+        filename = job.filename
+        
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "filename": filename,
+        "status": status,
+        "returncode": returncode,
+        "logs": logs_copy,
+        "created_at": created_at,
+        "finished_at": finished_at
+    }
+
 

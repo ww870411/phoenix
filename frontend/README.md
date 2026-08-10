@@ -1,3 +1,38 @@
+## 2026-08-10 支持上传与识别 DBeaver 无扩展名 Custom 备份包 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 支持直接拖拽或选择无扩展名的 DBeaver 导出的 Custom 备份包进行上传与解析还原。
+
+## 2026-08-10 全屏 Teleport 浮动 Modal 弹窗升级 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 将数据库还原控制台及 Log 终端重构成 `<Teleport to="body">` 全局 Modal 浮窗，增加暗色模糊蒙层，点击“恢复...”时在页面正中全屏弹出。
+
+## 2026-08-10 数据库高级还原模态框 Schema 目录净化支持 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 净化还原配置面板中的 Schema 勾选列表与表格目录，过滤掉虚假伪 Schema，提升选表体验。
+
+## 2026-08-10 修复备份下载按钮携带 Auth Token 参数 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 在备份下载链接中自动附带当前 Session Token，确保浏览器在新窗口发起下载时无缝校验安全身份。
+
+## 2026-08-10 上线管理后台数据库备份与按选还原控制中心 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 在 `/admin-console` 管理后台新增“数据库备份与恢复”标签页，支持以 `.dump` 格式一键离线全量备份到 `backend_data/shared/db_backup`、本地备份文件直接拖拽上传、解析 Table/Schema 高级过滤还原，以及控制台终端实时 Log 打字机流展现。
+
 ## 2026-08-10 历史查询保温管表格移除“操作”列并支持整行点击查看明细 (insulation_pipe_supply_2026)
 
 - **关联前端页面**：

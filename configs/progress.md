@@ -1,3 +1,47 @@
+## 2026-08-10 [严格还原由用户界面勾选状态决定 Session 是否写入数据库持久化]
+- **规则纯粹化与用户控制权对齐 (`auth_manager.py` / `LoginView.vue`)**：
+  - **登录页默认打勾 (`LoginView.vue`)**：登录页面默认初始化为勾选“记住我的登录状态” (`rememberMe = true`)；
+  - **服务端按选定持久化 (`auth_manager.py`)**：后端恢复 `persistent = bool(remember)` 的条件判定。只有当用户登录时保持勾选状态，Token 才会写入 `auth_sessions` 数据库并在重启后无感恢复；若用户主动取消勾选“记住我”，Session 将遵循非持久化内存逻辑，重启后自然销毁。
+
+## 2026-08-10 [根治修改系统后被强制踢下线问题：全面开启 Session 数据库静默持久化与恢复]
+- **架构诊断分析与防踢优化 (`auth_manager.py` / `LoginView.vue`)**：
+  - **因由根源**：过去在开发调试过程中对系统进行修改（如 Python 代码热重载或 Docker 容器重启）时，默认的内存 Session 会随 Python 进程销毁而清空，后续请求触发 `401 Unauthorized` 导致前端清除凭据强制返回登录页；
+  - **全量无感持久化 (`auth_manager.py`)**：修改登录持久化逻辑，无论是否勾选“记住登录”，服务端在用户登录时均将 Session 自动同步写入 Postgres `auth_sessions` 数据库，同时优化 SQL 插入语法为通用 `DELETE+INSERT` 兼容模式；
+  - **重启自动兜底**：即便 Python 后端服务重启或重启 Docker 容器，后端收到请求时会自动查库无感恢复该 Session 凭据，彻底告别开发调试时频频被剔除下线的困扰。
+
+## 2026-08-10 [支持无扩展名备份包 (如 DBeaver 离线导出) 的上传、列出与 Custom 解构恢复]
+- **兼容无后缀扩展名与通用容错 (`admin_console.py`)**：
+  - 更新 `upload_database_backup` 接口：允许直接选择没有后缀扩展名的离线备份文件上传，系统自动为其补全 `.dump` 后缀，防止因扩展名丢失导致被拒绝；
+  - 更新 `list_database_backups` 扫描匹配策略：解除严格后缀锁定，无扩展名文件自动打上 Custom (`.dump`) 格式标印呈现；
+  - 更新 `inspect_database_backup` 与 `start_database_restore`：除明确的 `.sql` 文本外，其余无扩展名二进制包统一默认调起 `pg_restore -l` 与 `pg_restore` 恢复，彻底打通 DBeaver 无扩展名导出备份的导入导出链路。
+
+## 2026-08-10 [升级数据库高级还原与控制台 Log 为全屏 Teleport 浮动磨砂 Modal 弹窗]
+- **交互与样式全屏增强 (`AdminConsoleView.vue`)**：
+  - 使用 Vue3 `<Teleport to="body">` 容器将“数据库高级还原配置 Modal”与“Linux 还原 Log 终端 Modal”挂载至 `document.body` 根节点，脱离局部 Flex/Grid 布局卡片限制；
+  - 在 CSS 中完整注入 `.dialog-mask`（`position: fixed; z-index: 99999; backdrop-filter: blur(4px)`）与 `.dialog-card` 动效样式，点击“🔄 恢复...”时在全屏中心弹出优雅置顶悬浮窗，视觉与交互完美升级。
+
+## 2026-08-10 [修复数据库 Custom 备份包 TOC 解析误将 COMMENT 类型解析为 TABLE Schema 问题]
+- **TOC 算法格式化精准解析 (`admin_console.py`)**：
+  - 更新 `inspect_database_backup` 的 TOC 分词解析逻辑，从按尾部相对索引盲切升级为按 `pg_restore -l` 倒数第四位置标注的严格对象类型（`TABLE` / `VIEW` / `SEQUENCE` / `MATERIALIZED VIEW`）进行精准过滤；
+  - 彻底过滤解决了包含数据库字段注释（`COMMENT`）行被错误截取生成名为 `TABLE` 的伪 Schema 及其下属虚假复制表的问题，保证结构树只展示真正的数据库 Schema（如 `logs`, `public`, `tube`）。
+
+## 2026-08-10 [修复数据库备份文件名东八区 (UTC+8) 时区与下载鉴权凭据透传]
+- **备份时区与时间戳纠偏 (`admin_console.py`)**：
+  - 将数据库备份文件名 `phoenix_backup_YYYYMMDD_HHMMSS.dump` 生成逻辑及后端所有备份文件的创建/修改时间从默认系统 UTC 纠偏为显式 **中国标准时间 (UTC+8)**，解决容器镜像内置时区导致的时间比实际北京时间慢 8 小时的问题。
+- **离线下载安全凭据透传 (`admin_console.py` & `AdminConsoleView.vue`)**：
+  - 后端下载接口 `download_database_backup` 扩展支持从 Query 参数（`?token=xxx`）中校验 Session 凭据；
+  - 前端点击【📥 下载】时自动附带当前 Auth Session Token，彻底修复浏览器直接打开下载链接时提示 `{"detail":"缺少认证信息"}` 401 错的问题。
+
+## 2026-08-10 [上线全局管理后台一键全量 Custom 备份与按选还原控制中心]
+- **备份与还原 API 模组 (`admin_console.py`)**：
+  - 后端新增全套 `/api/v1/admin/database/*` 端点，支持一键调用 PostgreSQL 原生 `pg_dump -Fc` 创建精细 Custom (`.dump`) 格式压缩备份文件，全量收纳存储至用户指定路径 `backend_data/shared/db_backup`（对应磁盘物理路径 `D:\编程项目\phoenix\backend_data\shared\db_backup`）；
+  - 支持解析 Custom 备份包包含的 Schema 和数据表目录（`inspect`）；
+  - 新增高级恢复任务管理器（`RestoreJob`），支持全量覆盖还原、仅结构还原 (Schema Only)、仅数据还原 (Data Only)、清理覆盖（`--clean`）以及按指定 Schema/Table 进行过滤还原；
+  - 内部具备增量日志捕获流，支持前端打字机终端实时展现还原进度。
+- **管理控制台界面升级 (`AdminConsoleView.vue`)**：
+  - 在 `/admin-console` 控制台新增 **`💾 数据库备份与恢复`** 专属标签栏，展示默认路径看板、离线一键导出、本地备份包直接上传、离线下载与在线删除；
+  - 提供高级恢复配置 Modals 与 Linux 控制台打字机实时 Terminal Log 日志终端，无缝摆脱 DBeaver。
+
 ## 2026-08-10 [子项目 insulation_pipe_supply_2026 历史查询保温管表格取消独立“操作”列改为整行点击弹窗]
 - **交互提升 (`HistoryQueryView.vue`)**：
   - 取消保温管历史台账最后一列“操作”表头及按钮，将弹出分型号明细 Modal 的事件直接绑定为全行点击动作 (`@click="openPipeDetailModal(row)"`)；

@@ -8,6 +8,9 @@ WORKDIR /app
 # 可选：加速国内源（按需启用）
 # RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
+# 安装 postgresql-client 工具包以支持全量备份 pg_dump 与恢复 pg_restore
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+
 # 复制依赖文件并优先安装，便于充分利用缓存
 COPY backend/requirements.txt /tmp/backend_requirements.txt
 RUN pip install --no-cache-dir -r /tmp/backend_requirements.txt

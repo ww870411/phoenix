@@ -172,11 +172,15 @@ export async function fetchSession() {
     headers: attachAuthHeaders(),
   })
   if (response.status === 401) {
-    throw new Error('登录状态已过期')
+    const err = new Error('登录状态已过期')
+    err.status = 401
+    throw err
   }
   if (!response.ok) {
     const message = await response.text()
-    throw new Error(message || '获取登录信息失败')
+    const err = new Error(message || '获取登录信息失败')
+    err.status = response.status
+    throw err
   }
   return response.json()
 }
@@ -2341,4 +2345,92 @@ export async function updateAdminPermissionMatrixItem(payload) {
   }
   return response.json()
 }
+
+export async function getAdminDatabaseBackups() {
+  const response = await authAwareFetch(normalized('/admin/database/backups'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '获取数据库备份列表失败')
+  }
+  return response.json()
+}
+
+export async function createAdminDatabaseBackup() {
+  const response = await authAwareFetch(normalized('/admin/database/backup'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '创建数据库备份失败')
+  }
+  return response.json()
+}
+
+export async function deleteAdminDatabaseBackup(filename) {
+  const response = await authAwareFetch(normalized(`/admin/database/backup/${encodeURIComponent(filename)}`), {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '删除备份文件失败')
+  }
+  return response.json()
+}
+
+export async function uploadAdminDatabaseBackup(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await authAwareFetch(normalized('/admin/database/upload'), {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+    body: formData,
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '上传备份文件失败')
+  }
+  return response.json()
+}
+
+export async function inspectAdminDatabaseBackup(filename) {
+  const response = await authAwareFetch(normalized('/admin/database/inspect'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ filename }),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '解析备份结构失败')
+  }
+  return response.json()
+}
+
+export async function startAdminDatabaseRestore(payload) {
+  const response = await authAwareFetch(normalized('/admin/database/restore'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '启动数据库恢复任务失败')
+  }
+  return response.json()
+}
+
+export async function getAdminDatabaseRestoreJob(jobId) {
+  const response = await authAwareFetch(normalized(`/admin/database/restore/job/${encodeURIComponent(jobId)}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '获取恢复进度日志失败')
+  }
+  return response.json()
+}
+
 

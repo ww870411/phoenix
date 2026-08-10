@@ -2104,9 +2104,7 @@ class AuthManager:
 
 
         issued_at = self._now()
-
         persistent = bool(remember)
-
         expires_at = self._compute_expiry(issued_at, persistent)
 
         token = secrets.token_urlsafe(32)
@@ -2360,55 +2358,21 @@ class AuthManager:
         try:
 
             with SessionLocal() as db:
-
+                db.execute(text("DELETE FROM auth_sessions WHERE token = :token"), {"token": session.token})
                 db.execute(
-
                     text(
-
                         """
-
                         INSERT INTO auth_sessions (
-
                             token, username, user_group, unit, hierarchy,
-
                             permissions, allowed_units, issued_at, expires_at, last_accessed
-
                         ) VALUES (
-
                             :token, :username, :user_group, :unit, :hierarchy,
-
                             CAST(:permissions AS JSONB), CAST(:allowed_units AS JSONB), :issued_at, :expires_at, NOW()
-
                         )
-
-                        ON CONFLICT (token) DO UPDATE
-
-                        SET
-
-                            username = EXCLUDED.username,
-
-                            user_group = EXCLUDED.user_group,
-
-                            unit = EXCLUDED.unit,
-
-                            hierarchy = EXCLUDED.hierarchy,
-
-                            permissions = CAST(:permissions AS JSONB),
-
-                            allowed_units = CAST(:allowed_units AS JSONB),
-
-                            expires_at = EXCLUDED.expires_at,
-
-                            last_accessed = NOW()
-
                         """
-
                     ),
-
                     params,
-
                 )
-
                 db.commit()
 
         except Exception as exc:

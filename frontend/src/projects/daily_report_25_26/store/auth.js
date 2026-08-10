@@ -166,7 +166,11 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
         persist(rememberLogin.value)
       } catch (err) {
         console.warn('刷新登录状态失败', err)
-        clearSession()
+        // 防误杀机制：仅在明确返回 401 (身份完全失效/不存在) 时清除本地缓存并注销。
+        // 若为网络波动、后端服务重启、Failed to fetch 或 500 等异常，保留本地 Token 凭据，防止被误剔除登录
+        if (err?.status === 401 || (err?.message && err.message.includes('已过期'))) {
+          clearSession()
+        }
       }
     }
     initialized.value = true

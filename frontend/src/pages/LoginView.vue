@@ -69,7 +69,7 @@ const router = useRouter()
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
-const rememberMe = ref(auth.rememberLogin)
+const rememberMe = ref(auth.rememberLogin ?? true)
 const errorMessage = ref('')
 const isLoading = computed(() => auth.loading)
 
