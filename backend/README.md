@@ -1,3 +1,74 @@
+## 2026-08-10 管件发货查询 API (/workspace/fitting_deliveries/list) 权限判别与大小写匹配修复 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 规范 `resolve_accessible_section_1_ids` 及 `resolve_accessible_supply_entity_ids` 的组名与用户名小写匹配机制，修复 `supply_entity_id` 大小写阻断问题，确保全量管理员与库管组精准拉取管件发货记录。
+
+## 2026-08-10 历史查询保温管前端数据归并显示与原生 XLSX 导出同步 (insulation_pipe_supply_2026)
+
+- **关联前端与接口**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 前端完美实现了保温管历史数据的按日归并展示、弹出层细节浏览与前端原生 XLSX 导出，后端接口无缝兼容配合。
+
+## 2026-08-10 历史数据查询与导出 API 支持多选标段集合与权限隔离 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 更新 `get_global_management_history` 与 `export_global_management_history` 路由，解析 `section_1_id` 逗号分隔集合参数，全面支撑前端历史查询多选展示。
+
+## 2026-08-10 库管工作台管件概览卡片精简布局同步 (insulation_pipe_supply_2026)
+
+- **关联前端与配置**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 前端库管工作台移除“非常用/异形件”卡片；后端核心管件数据统计逻辑与 API 数据结构保持稳健兼容。
+
+## 2026-08-10 库管页 API (/options 及 /deliveries) 补齐身份权责边界与下拉选项物理隔离 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 在 `get_warehouse_management_options` 中调用 `resolve_accessible_section_1_ids`，使下拉菜单仅返回当前账号有权管辖的标段列表；
+  - 在 `get_warehouse_management_deliveries` 中增加针对 `accessible_section_1_ids` 的必经拦截逻辑，保证即便前端不传参数或全选时也不会越权泄露其他标段的保温管发货记录。
+
+## 2026-08-10 管件发货记录查询接口 GET /workspace/fitting_deliveries/list 补齐权限解析与标段隔离 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 在 `handle_list_fitting_deliveries` 中注入 `session: AuthSession = Depends(get_current_session_optional)`；
+  - 根据登录账号身份解析 `accessible_section_1_ids` 及 `accessible_supply_entity_ids`；
+  - 对查询返回的管件发货记录实行严格的标段多租户切片过滤，防止越权展示非责任范围内的管件数据。
+
+## 2026-08-10 批量添加 9 位库管人员账号与标段分配关系 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend_data/shared/auth/账户信息.json`
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+- **更新说明**：
+  - 在账户集中配置 9 位库管员登录账号（密码格式为 `拼音_0810`）；
+  - 在 `tube_config.json` 的 `demand_entities` 中扩充了高温水 3/4 标段与低温水 4/5/6 标段，并在 `warehouse_keepers` 中完成了全量 9 位人员与其责任标段的映射关联。
+
+## 2026-08-10 后端权限解析与库管接口支持库管人员账号分配分管需求主体/标段 (insulation_pipe_supply_2026)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+- **更新说明**：
+  - 在 `config_service.py` 的 `resolve_accessible_section_1_ids` 解析算子中引入 `warehouse_keepers` 的 `section_1_ids` 匹配映射；
+  - 在 `workspace.py` 中的 `GET /warehouse-management/options` 与 `GET /warehouse-management/deliveries` 接口中加入基于库管员分管标段的切片检索与切片选项返回，物理隔离越权标段。
+
+## 2026-08-10 agy Serena MCP 配置环境排查与文档更新
+
+- **配置更新**：
+  - 修复 `C:\Users\ww\.gemini\config\mcp_config.json` 空配置文件问题，写入正确的 Serena MCP 工具服务启动参数；
+  - 后端 Python 核心业务逻辑与 API 接口保持一致，代码无破坏性改动。
+
 ## 2026-08-09 后端新增 GET /global-management/submission-logs 接口与专有主体提交数据检索算子 (insulation_pipe_supply_2026)
 
 - **关联后端文件**：

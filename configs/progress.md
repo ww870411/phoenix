@@ -1,3 +1,75 @@
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 修复管件发货历史列表权限判定及大小写失配BUG]
+- **问题排查与修复 (`config_service.py` & `workspace.py`)**：
+  - 深度排查发觉在 `resolve_accessible_section_1_ids` 及 `resolve_accessible_supply_entity_ids` 中，组别比对未转小写（如 `global_admin` 未匹配 `Global_admin`），且未对 `tube_warehouse_admin` 与 `tube_warehouse_keeper` 赋予全局管件供给主体查询视角；
+  - 同时发觉数据库中 `supply_entity_id` 存放为大写格式（如 `'KAIYUAN'`），与比对集合大小写冲突被过滤抛弃；
+  - 已完成上述比对逻辑的全量大小写脱敏与库管组别全视角放行，管件历史记录已恢复正常精准查询。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 历史查询保温管记录按日/标段归并一行及原生 XLSX 导出修复]
+- **表格结构与交互改版 (`HistoryQueryView.vue`)**：
+  - 将保温管历史表格按 `(biz_date, section_1_id)` 进行一日一行汇总展示，表格行中显示所含管材型号概览与汇总指标，并提供【🔍 查看型号明细】独立弹窗，点击可全盘查阅该日该标段分规格型号的各项数据。
+- **XLSX 导出修复与全型号明细展现**：
+  - 重构 `handleHistoryExport` 函数，基于前端原生 `xlsx` 库的 `XLSX.utils.json_to_sheet` 和 `XLSX.writeFile` 生成正宗 `.xlsx` 工作簿，彻底修复浏览器无法下载或格式失配问题，并在导出的 Excel 工作簿中将每个保温管规格型号独立成行，完整包含全部字段。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 历史查询页面 (HistoryQueryView) 需求主体/接收标段支持勾选多选]
+- **需求改进与组件升级**：
+  - 在历史数据查询页面 (`HistoryQueryView.vue`) 的保温管历史数据和管件发货历史数据两个 Tab 栏中，将原单选下拉框升级为多选勾选面板 (`section1Ids: []`)，支持全选、清空以及动态数量显示。
+- **后端服务与导出支持 (`workspace.py`)**：
+  - 更新 `GET /global-management/history` 与 `GET /global-management/history/export` 路由，解析逗号分隔的 `section_1_id` 字符串参数，实现底层数据的高性能多标段切片汇总与导出，同时严格实施用户身份权责边界防护。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 库管员工作台移除“非常用/异形件”卡片]
+- **需求改进与 UI 优化**：
+  - 在库管员工作台 (`WarehouseManagementView.vue`) 的“管件发货记录”页签透视概览区，彻底移除“非常用/异形件”卡片；
+  - 概览区网格布局同步优化为 `repeat(3, 1fr)` 3 列均分形式（累计发货车次、发货管件总数、常用标准管件）。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 库管员工作台下拉选项与保温管发货记录全量越权泄漏彻底修补]
+- **Bug 排查与透彻诊断**：
+  - 用户测试反馈“李春”（分管低温水 1,2 标段）登录库管页面后，依然能在下拉选项中看到 1-6 全量标段，且未选择特定标段时能看到全量保温管发货记录。
+  - 深度定位发觉：
+    1) 后端 `GET /warehouse-management/options` 接口此前固定序列化全量标段 `set(_build_section_1_name_map(payload).keys())`，未调用 `resolve_accessible_section_1_ids`；
+    2) 后端 `GET /warehouse-management/deliveries` 接口此前仅当 `selected_section_1s` 非空时才过滤，当未勾选筛选或传递为空时绕过了校验，直接放行了越权记录。
+- **后端物理隔离与权限收紧 (`workspace.py`)**：
+  - 在 `get_warehouse_management_options` 中使用 `resolve_accessible_section_1_ids` 动态切片并仅返回用户有权访问的 `section_1s` 下拉选项（如李春仅返回低温水 1、2 标段）；
+  - 在 `get_warehouse_management_deliveries` 中引入 `accessible_section_1_ids` 强制比对，实现不管前端传参与否均严格实行底层多租户隔离。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 管件发货记录补全库管员/各角色分管标段权限隔离切片]
+- **Bug 排查与发现**：
+  - 用户反馈在库管员管理页面中，保温管发货记录已实现按登录账号的分管标段过滤隔离，但“管件发货记录”仍能看见授权范围外的跨标段记录。
+  - 经排查：后端 `GET /workspace/fitting_deliveries/list` 路由此前漏加了 `session: AuthSession = Depends(get_current_session_optional)` 身份解析，未对记录进行 `accessible_section_1_ids` 及 `accessible_supply_entity_ids` 权限判断。
+- **后端修复与安全收拢 (`workspace.py`)**：
+  - 在 `handle_list_fitting_deliveries` 中补充 `session` 获取，解析登录用户的合法标段与供给主体集合；
+  - 支持多标段逗号分割拼接查询，强制校验并切片过滤越权记录。
+- **前端跟进 (`WarehouseManagementView.vue`)**：
+  - 更新 `loadWarehouseFittingDeliveries`，在多选或单选标段时将 `filters.section1Ids` 以逗号拼接传递给后端接口。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 批量录入 9 位库管人员登录账号与标段映射配置并保留通用“库管”账号]
+- **需求变动**：
+  - 依照工程现场项目划分（高温水一至四标段，低温水一至六标段），批量录入 9 位库管人员账号与映射关系，同时完整保留系统原有全标段通用的调试账号“库管” (`kuguan_123`)。
+- **账号配置更新 (`backend_data/shared/auth/账户信息.json`)**：
+  - 在 `tube_warehouse_keeper` 中完整保留 `username: "库管"`（密码 `kuguan_123`），并追加录入 9 位个人账号：左巨 (`zuoju_0810`)、赫心彤 (`hexintong_0810`)、李春 (`lichun_0810`)、李海 (`lihai_0810`)、王世博 (`wangshibo_0810`)、王晟楠 (`wangshengnan_0810`)、辛宇满 (`xinyuman_0810`)、杨毅 (`yangyi_0810`)、孟广胜 (`mengguangsheng_0810`)。
+- **项目配置更新 (`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`)**：
+  - 在 `demand_entities` 补齐 `high_lot_3`, `high_lot_4`, `low_lot_4`, `low_lot_5`, `low_lot_6` 的标准标段声明；
+  - 在 `warehouse_keepers` 中完整配置通用“库管”账号与 9 位库管员的真实姓名、电话与分管标段集合 (`section_1_ids`)。
+
+## 2026-08-10 [子项目 insulation_pipe_supply_2026 库管人员账号支持分配分管需求主体/标段 (section_1_ids)]
+- **需求背景与实现**：
+  - 提升系统多库管员与多仓库/标段独立核算的权责划分能力，支持为库管人员账号独立分配分管的需求主体/标段。
+- **后端更新 (`config_service.py` & `workspace.py`)**：
+  - 在 `config_service.py` 的 `resolve_accessible_section_1_ids` 函数中引入对 `warehouse_keepers` 及其 `section_1_ids` 的动态解析与映射；
+  - 更新 `workspace.py` 中的 `get_warehouse_management_options` 与 `get_warehouse_management_deliveries` 接口，根据库管登录账号的分管标段范围自动切片过滤 `section_1s` 选项和发货记录明细。
+- **前端更新 (`GlobalManagementView.vue`)**：
+  - 在全局管理配置页面中的“库管人员映射”编辑表格中新增“分管的需求主体ID列表 (逗号分隔)”列，支持填入如 `high_lot_1, low_lot_1` 等关联标段；
+  - 在加载配置与整体提交 Payload 中完整序列化与反序列化 `section_1_ids`。
+- **配置与数据跟进 (`tube_config.json`)**：
+  - `tube_config.json` 中已同步为缺省库管账号追加全量 5 个标段绑定（`high_lot_1, high_lot_2, low_lot_1, low_lot_2, low_lot_3`），确保历史数据无缝兼容。
+
+## 2026-08-10 [排查并修复 agy 全局 Serena MCP 配置]
+- **需求背景与排查**：
+  - 用户在 Antigravity CLI (`agy`) 中通过 `/mcp` 尝试启动 Serena 时，Serena 无法正常工作。
+  - 经系统排查发现：全局 MCP 配置文件 `C:\Users\ww\.gemini\config\mcp_config.json` 原为 0 字节的空文件，导致 agy 无法正确加载 Serena 工具服务。
+- **解决方案与生效配置**：
+  - 使用 native 工具将正确的 Serena MCP 参数写入 `C:\Users\ww\.gemini\config\mcp_config.json`；
+  - 确保指定 `--context ide-assistant`，适配 IDE 及 AI Agent 场景。
+
 ## 2026-08-09 [子项目 insulation_pipe_supply_2026 全局管理页面新增“📥 主体数据提交记录 (数据核对视窗)”第一标签页]
 - **需求背景与改进目的**：
   - 管理员在本地开发环境下优化程序时，生产环境持续有需求主体（现场施工队/标段）与供给主体（供货厂家/运输队）提交真实业务数据。

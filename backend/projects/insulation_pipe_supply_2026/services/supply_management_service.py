@@ -1258,8 +1258,12 @@ def query_history_records(
 ) -> List[Dict[str, Any]]:
     """
     查询历史数据，包含当日计划量、实际使用量、损耗量、确认到货量、运输在途时间。
-    采用 FULL OUTER JOIN 将三张表在 (section_1_id, biz_date, pipe_model_id) 维度合并。
+    按 (section_1_id, biz_date, pipe_model_id) 维度合并，只保留真正产生计划、消耗、损耗或到货的记录。
     """
+    selected_section_ids = set()
+    if section_1_id:
+        selected_section_ids = {s.strip() for s in str(section_1_id).split(",") if s.strip()}
+
     sql = text(
         """
         WITH p AS (
@@ -1270,7 +1274,7 @@ def query_history_records(
                 SUM(plan_qty) AS total_plan_qty
             FROM tube.tube_daily_plan
             WHERE plan_date >= :start_date AND plan_date <= :end_date
-              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
+              AND plan_qty IS NOT NULL AND plan_qty <> 0
             GROUP BY section_1_id, plan_date, pipe_model_id
         ), u AS (
             SELECT
@@ -1281,7 +1285,10 @@ def query_history_records(
                 SUM(loss_qty) AS total_loss_qty
             FROM tube.tube_daily_usage
             WHERE usage_date >= :start_date AND usage_date <= :end_date
-              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
+              AND (
+                (usage_qty IS NOT NULL AND usage_qty <> 0)
+                OR (loss_qty IS NOT NULL AND loss_qty <> 0)
+              )
             GROUP BY section_1_id, usage_date, pipe_model_id
         ), d AS (
             SELECT
@@ -1297,14 +1304,20 @@ def query_history_records(
             WHERE arrived_confirm_at IS NOT NULL
               AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date 
               AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
-              AND (:section_1_id IS NULL OR :section_1_id = '' OR section_1_id = :section_1_id)
               AND status <> 'cancelled'
+              AND arrived_qty IS NOT NULL AND arrived_qty <> 0
             GROUP BY section_1_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+        ), keys AS (
+            SELECT section_1_id, biz_date, pipe_model_id FROM p
+            UNION
+            SELECT section_1_id, biz_date, pipe_model_id FROM u
+            UNION
+            SELECT section_1_id, biz_date, pipe_model_id FROM d
         )
         SELECT
-            COALESCE(p.section_1_id, u.section_1_id, d.section_1_id) AS section_1_id,
-            COALESCE(p.biz_date, u.biz_date, d.biz_date) AS biz_date,
-            COALESCE(p.pipe_model_id, u.pipe_model_id, d.pipe_model_id) AS pipe_model_id,
+            k.section_1_id,
+            k.biz_date,
+            k.pipe_model_id,
             COALESCE(p.total_plan_qty, 0) AS plan_qty,
             COALESCE(u.total_usage_qty, 0) AS usage_qty,
             COALESCE(u.total_loss_qty, 0) AS loss_qty,
@@ -1313,16 +1326,11 @@ def query_history_records(
             COALESCE(d.arrived_batch_count, 0) AS arrived_batch_count,
             d.min_transit_seconds,
             d.max_transit_seconds
-        FROM p
-        FULL OUTER JOIN u ON p.section_1_id = u.section_1_id AND p.biz_date = u.biz_date AND p.pipe_model_id = u.pipe_model_id
-        FULL OUTER JOIN d ON COALESCE(p.section_1_id, u.section_1_id) = d.section_1_id
-                         AND COALESCE(p.biz_date, u.biz_date) = d.biz_date
-                         AND COALESCE(p.pipe_model_id, u.pipe_model_id) = d.pipe_model_id
-        WHERE COALESCE(p.total_plan_qty, 0) <> 0
-           OR COALESCE(u.total_usage_qty, 0) <> 0
-           OR COALESCE(u.total_loss_qty, 0) <> 0
-           OR COALESCE(d.total_arrived_qty, 0) <> 0
-        ORDER BY biz_date DESC, section_1_id, pipe_model_id
+        FROM keys k
+        LEFT JOIN p ON k.section_1_id = p.section_1_id AND k.biz_date = p.biz_date AND k.pipe_model_id = p.pipe_model_id
+        LEFT JOIN u ON k.section_1_id = u.section_1_id AND k.biz_date = u.biz_date AND k.pipe_model_id = u.pipe_model_id
+        LEFT JOIN d ON k.section_1_id = d.section_1_id AND k.biz_date = d.biz_date AND k.pipe_model_id = d.pipe_model_id
+        ORDER BY k.biz_date DESC, k.section_1_id, k.pipe_model_id
         """
     )
     session = SessionLocal()
@@ -1332,13 +1340,16 @@ def query_history_records(
             {
                 "start_date": start_date,
                 "end_date": end_date,
-                "section_1_id": section_1_id if section_1_id else None,
             }
         ).mappings().all()
         
-        return [
-            {
-                "section_1_id": _normalize_text(row["section_1_id"]),
+        results = []
+        for row in rows:
+            sec_id = _normalize_text(row["section_1_id"])
+            if selected_section_ids and sec_id not in selected_section_ids:
+                continue
+            results.append({
+                "section_1_id": sec_id,
                 "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
                 "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
                 "plan_qty": float(row["plan_qty"]),
@@ -1349,9 +1360,8 @@ def query_history_records(
                 "arrived_batch_count": int(row["arrived_batch_count"]),
                 "min_transit_seconds": float(row["min_transit_seconds"]) if row["min_transit_seconds"] is not None else None,
                 "max_transit_seconds": float(row["max_transit_seconds"]) if row["max_transit_seconds"] is not None else None,
-            }
-            for row in rows
-        ]
+            })
+        return results
     finally:
         session.close()
 

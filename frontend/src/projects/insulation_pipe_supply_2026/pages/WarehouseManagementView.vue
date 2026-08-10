@@ -677,7 +677,7 @@
           </div>
 
           <!-- 管件透视概览指标 -->
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
             <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
               <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🚚 累计发货车次</span>
               <strong style="font-size: 18px; color: #0f172a;">{{ warehouseFittingBatches }} 车/批</strong>
@@ -689,10 +689,6 @@
             <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
               <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🟢 常用标准管件</span>
               <strong style="font-size: 18px; color: #16a34a;">{{ warehouseFittingStandardQty }} 个</strong>
-            </div>
-            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🟧 非常用/异形件</span>
-              <strong style="font-size: 18px; color: #ea580c;">{{ warehouseFittingNonStandardQty }} 个</strong>
             </div>
           </div>
 
@@ -978,8 +974,8 @@ const loadWarehouseFittingDeliveries = async () => {
   fittingLoading.value = true
   try {
     const res = await getFittingDeliveriesList(projectKey, {
-      section1Id: filters.section1Ids.length === 1 ? filters.section1Ids[0] : undefined,
-      supplyEntityId: filters.supplyEntityIds.length === 1 ? filters.supplyEntityIds[0] : undefined,
+      section1Id: filters.section1Ids.length > 0 ? filters.section1Ids.join(',') : undefined,
+      supplyEntityId: filters.supplyEntityIds.length > 0 ? filters.supplyEntityIds.join(',') : undefined,
       searchKeyword: filters.shipmentNo || filters.orderNo || filters.vehiclePlateNo || '',
       limit: 300,
     })

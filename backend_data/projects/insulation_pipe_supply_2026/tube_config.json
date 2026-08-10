@@ -65,6 +65,22 @@
       "construction_status": "未开工"
     },
     {
+      "section_1_id": "high_lot_3",
+      "code": "H3",
+      "section_1_name": "高温水_标段3",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "未开工"
+    },
+    {
+      "section_1_id": "high_lot_4",
+      "code": "H4",
+      "section_1_name": "高温水_标段4",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "未开工"
+    },
+    {
       "section_1_id": "low_lot_1",
       "code": "L1",
       "section_1_name": "低温水_标段1",
@@ -84,6 +100,30 @@
       "section_1_id": "low_lot_3",
       "code": "L3",
       "section_1_name": "低温水_标段3",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "未开工"
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "code": "L4",
+      "section_1_name": "低温水_标段4",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "未开工"
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "code": "L5",
+      "section_1_name": "低温水_标段5",
+      "section_2": "",
+      "section_3": "",
+      "construction_status": "未开工"
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "code": "L6",
+      "section_1_name": "低温水_标段6",
       "section_2": "",
       "section_3": "",
       "construction_status": "未开工"
@@ -167,8 +207,107 @@
   "warehouse_keepers": [
     {
       "keeper_id": "库管",
+      "keeper_name": "全局通用库管员",
+      "contact_phone": "13052765188",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "high_lot_3",
+        "high_lot_4",
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "keeper_id": "左巨",
       "keeper_name": "左巨",
-      "contact_phone": "13052765188"
+      "contact_phone": "13052765188",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "high_lot_3",
+        "high_lot_4"
+      ]
+    },
+    {
+      "keeper_id": "赫心彤",
+      "keeper_name": "赫心彤",
+      "contact_phone": "13604098699",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "high_lot_3",
+        "high_lot_4"
+      ]
+    },
+    {
+      "keeper_id": "李春",
+      "keeper_name": "李春",
+      "contact_phone": "15940835639",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2"
+      ]
+    },
+    {
+      "keeper_id": "李海",
+      "keeper_name": "李海",
+      "contact_phone": "13500781011",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2"
+      ]
+    },
+    {
+      "keeper_id": "王世博",
+      "keeper_name": "王世博",
+      "contact_phone": "13704941850",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "keeper_id": "王晟楠",
+      "keeper_name": "王晟楠",
+      "contact_phone": "13941141287",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "keeper_id": "辛宇满",
+      "keeper_name": "辛宇满",
+      "contact_phone": "18842818979",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "keeper_id": "杨毅",
+      "keeper_name": "杨毅",
+      "contact_phone": "13909845001",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "keeper_id": "孟广胜",
+      "keeper_name": "孟广胜",
+      "contact_phone": "13214288219",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
     }
   ],
   "baseline_presets": [

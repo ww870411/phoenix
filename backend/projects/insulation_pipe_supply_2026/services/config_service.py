@@ -273,15 +273,15 @@ def _extract_normalized_ids(raw_value: Any) -> Set[str]:
 
 
 def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
-    normalized_group = str(group or "").strip()
-    normalized_username = str(username or "").strip()
+    normalized_group = str(group or "").strip().lower()
+    normalized_username = str(username or "").strip().lower()
     demand_entities = get_config_list(payload, "demand_entities")
     all_section_1_ids = {
         str(item.get("section_1_id") or "").strip()
         for item in demand_entities
         if str(item.get("section_1_id") or "").strip()
     }
-    if normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
+    if normalized_group in ("global_admin", "tube_global_viewer", "tube_supplier_admin", "tube_warehouse_admin"):
         return all_section_1_ids
 
     manager_assignments = get_config_list(payload, "manager_assignments")
@@ -291,18 +291,18 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
     for item in supply_entities:
         entity_id = str(item.get("entity_id") or "").strip()
         candidate_keys = {
-            entity_id,
-            str(item.get("entity_name") or "").strip(),
-            str(item.get("username") or "").strip(),
+            entity_id.lower(),
+            str(item.get("entity_name") or "").strip().lower(),
+            str(item.get("username") or "").strip().lower(),
         }
         if normalized_username in candidate_keys:
             allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
 
     for item in manager_assignments:
         candidate_keys = {
-            str(item.get("manager_id") or "").strip(),
-            str(item.get("manager_name") or "").strip(),
-            str(item.get("username") or "").strip(),
+            str(item.get("manager_id") or "").strip().lower(),
+            str(item.get("manager_name") or "").strip().lower(),
+            str(item.get("username") or "").strip().lower(),
         }
         if normalized_username not in candidate_keys:
             continue
@@ -311,47 +311,59 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
     construction_units = get_config_list(payload, "construction_units")
     for item in construction_units:
         candidate_keys = {
-            str(item.get("unit_id") or "").strip(),
-            str(item.get("unit_name") or "").strip(),
-            str(item.get("username") or "").strip(),
+            str(item.get("unit_id") or "").strip().lower(),
+            str(item.get("unit_name") or "").strip().lower(),
+            str(item.get("username") or "").strip().lower(),
         }
         if normalized_username not in candidate_keys:
             continue
         allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
+
+    warehouse_keepers = get_config_list(payload, "warehouse_keepers")
+    for item in warehouse_keepers:
+        candidate_keys = {
+            str(item.get("keeper_id") or "").strip().lower(),
+            str(item.get("keeper_name") or "").strip().lower(),
+            str(item.get("username") or "").strip().lower(),
+        }
+        if normalized_username not in candidate_keys:
+            continue
+        allowed_section_1_ids.update(_extract_normalized_ids(item.get("section_1_ids")))
+
     return allowed_section_1_ids
 
 
 def resolve_supply_entity_allowed_section_ids(payload: Dict[str, Any], supply_entity_id: str) -> Set[str]:
-    normalized_id = str(supply_entity_id or "").strip()
+    normalized_id = str(supply_entity_id or "").strip().lower()
     if not normalized_id:
         return set()
     supply_entities = get_config_list(payload, "supply_entities")
     for item in supply_entities:
         entity_id = str(item.get("entity_id") or "").strip()
-        if entity_id == normalized_id:
+        if entity_id.lower() == normalized_id:
             return _extract_normalized_ids(item.get("section_1_ids"))
     return set()
 
 
 def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
-    normalized_group = str(group or "").strip()
-    normalized_username = str(username or "").strip()
+    normalized_group = str(group or "").strip().lower()
+    normalized_username = str(username or "").strip().lower()
     supply_entities = get_config_list(payload, "supply_entities")
     all_entity_ids = {
         str(item.get("entity_id") or "").strip()
         for item in supply_entities
         if str(item.get("entity_id") or "").strip()
     }
-    if normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
+    if normalized_group in ("global_admin", "tube_global_viewer", "tube_supplier_admin", "tube_warehouse_admin", "tube_warehouse_keeper"):
         return all_entity_ids
 
     allowed_entity_ids: Set[str] = set()
     for item in supply_entities:
         entity_id = str(item.get("entity_id") or "").strip()
         candidate_keys = {
-            entity_id,
-            str(item.get("entity_name") or "").strip(),
-            str(item.get("username") or "").strip(),
+            entity_id.lower(),
+            str(item.get("entity_name") or "").strip().lower(),
+            str(item.get("username") or "").strip().lower(),
         }
         if normalized_username in candidate_keys and entity_id:
             allowed_entity_ids.add(entity_id)

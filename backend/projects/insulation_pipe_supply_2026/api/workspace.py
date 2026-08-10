@@ -1591,6 +1591,10 @@ def get_warehouse_management_options(
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
     payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
+
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -1599,7 +1603,7 @@ def get_warehouse_management_options(
             "group": session.group,
             "unit": session.unit,
         },
-        "section_1s": _serialize_section_1_options(payload, set(_build_section_1_name_map(payload).keys())),
+        "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
         "supply_entities": _serialize_all_supply_entity_options(payload),
         "show_date": get_configured_show_date(payload).isoformat(),
@@ -1629,6 +1633,10 @@ def get_warehouse_management_deliveries(
     payload = load_tube_config()
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
     
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
+
     # 逗号分隔解析多选值
     selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
     selected_statuses = {s.strip() for s in status.split(",") if s.strip()} if status else set()
@@ -1649,11 +1657,16 @@ def get_warehouse_management_deliveries(
     
     filtered_rows: List[Dict[str, Any]] = []
     for row in rows:
+        sec_id = str(row.get("section_1_id") or "").strip()
+
+        # 核心拦截：账号分管标段范围边界过滤
+        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
+            continue
         if selected_supply_entities and row["supply_entity_id"] not in selected_supply_entities:
             continue
         if selected_pipe_models and _normalize_pipe_model_id(row["pipe_model_id"]) not in selected_pipe_models:
             continue
-        if selected_section_1s and row["section_1_id"] not in selected_section_1s:
+        if selected_section_1s and sec_id not in selected_section_1s:
             continue
         if selected_statuses and row["status"] not in selected_statuses:
             continue
@@ -2618,7 +2631,7 @@ def export_global_management_operation_logs(
 def get_global_management_history(
     start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
-    section_1_id: Optional[str] = Query(None, description="需求主体ID"),
+    section_1_id: Optional[str] = Query(None, description="需求主体ID (支持逗号分隔多选)"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     group_lower = str(session.group or "").strip().lower()
@@ -2641,33 +2654,43 @@ def get_global_management_history(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
+    payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
+
+    selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
+
     # 获取原始合并历史数据
-    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=section_1_id)
-    
-    # 载入配置以映射中文名
-    config = load_tube_config()
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=None)
     
     # 建立映射字典
     section_1_map = {
         item.get("section_1_id"): item.get("section_1_name")
-        for item in config.get("demand_entities", [])
+        for item in payload.get("demand_entities", [])
         if item.get("section_1_id")
     }
     pipe_map = {
         item.get("pipe_model_id"): item.get("pipe_model_name")
-        for item in config.get("pipe_models", [])
+        for item in payload.get("pipe_models", [])
         if item.get("pipe_model_id")
     }
     
-    # 补充中文名
+    filtered_rows = []
     for row in rows:
-        row["section_1_name"] = section_1_map.get(row["section_1_id"]) or row["section_1_id"]
-        row["pipe_model_name"] = pipe_map.get(row["pipe_model_id"]) or row["pipe_model_id"]
+        sec_id = str(row.get("section_1_id") or "").strip()
+        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
+            continue
+        if selected_section_1s and sec_id not in selected_section_1s:
+            continue
+        row["section_1_name"] = section_1_map.get(sec_id) or sec_id
+        row["pipe_model_name"] = pipe_map.get(row.get("pipe_model_id")) or row.get("pipe_model_id")
+        filtered_rows.append(row)
         
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
-        "rows": rows
+        "rows": filtered_rows
     }
 
 
@@ -2675,7 +2698,7 @@ def get_global_management_history(
 def export_global_management_history(
     start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
-    section_1_id: Optional[str] = Query(None, description="需求主体ID"),
+    section_1_id: Optional[str] = Query(None, description="需求主体ID (支持逗号分隔多选)"),
     session: AuthSession = Depends(get_current_session),
 ):
     group_lower = str(session.group or "").strip().lower()
@@ -2698,17 +2721,33 @@ def export_global_management_history(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
-    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=section_1_id)
-    config = load_tube_config()
+    payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
+
+    selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
+
+    rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=None)
+
+    filtered_rows = []
+    for row in rows:
+        sec_id = str(row.get("section_1_id") or "").strip()
+        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
+            continue
+        if selected_section_1s and sec_id not in selected_section_1s:
+            continue
+        filtered_rows.append(row)
+    rows = filtered_rows
     
     section_1_map = {
         item.get("section_1_id"): item.get("section_1_name")
-        for item in config.get("demand_entities", [])
+        for item in payload.get("demand_entities", [])
         if item.get("section_1_id")
     }
     pipe_map = {
         item.get("pipe_model_id"): item.get("pipe_model_name")
-        for item in config.get("pipe_models", [])
+        for item in payload.get("pipe_models", [])
         if item.get("pipe_model_id")
     }
     
@@ -3152,18 +3191,49 @@ def handle_list_fitting_deliveries(
     end_date: str = Query("", description="结束时间/日期"),
     search_keyword: str = Query("", description="搜索关键字"),
     limit: int = Query(200, description="限制返回数量"),
+    session: AuthSession = Depends(get_current_session_optional),
 ):
+    payload = load_tube_config()
     items = list_fitting_deliveries(
-        section_1_id=section_1_id,
-        supply_entity_id=supply_entity_id,
+        section_1_id="",
+        supply_entity_id="",
         start_date=start_date,
         end_date=end_date,
         search_keyword=search_keyword,
         limit=limit,
     )
-    payload = load_tube_config()
     _decorate_delivery_rows(payload, items)
-    return {"ok": True, "items": items}
+
+    accessible_section_1_ids: Set[str] = set()
+    accessible_supply_entity_ids: Set[str] = set()
+    if session and getattr(session, "username", None):
+        accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+        if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+            accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
+        accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+
+    selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
+    selected_supply_entities = {s.strip() for s in supply_entity_id.split(",") if s.strip()} if supply_entity_id else set()
+
+    filtered_items: List[Dict[str, Any]] = []
+    acc_sup_upper = {x.upper() for x in accessible_supply_entity_ids} if accessible_supply_entity_ids else set()
+    sel_sup_upper = {x.upper() for x in selected_supply_entities} if selected_supply_entities else set()
+
+    for item in items:
+        sec_id = str(item.get("section_1_id") or "").strip()
+        sup_id = str(item.get("supply_entity_id") or "").strip()
+
+        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
+            continue
+        if acc_sup_upper and sup_id.upper() not in acc_sup_upper:
+            continue
+        if selected_section_1s and sec_id not in selected_section_1s:
+            continue
+        if sel_sup_upper and sup_id.upper() not in sel_sup_upper:
+            continue
+        filtered_items.append(item)
+
+    return {"ok": True, "items": filtered_items}
 
 
 

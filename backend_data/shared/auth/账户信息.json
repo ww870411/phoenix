@@ -182,6 +182,51 @@
         "username": "库管",
         "password": "kuguan_123",
         "unit": "物资仓库"
+      },
+      {
+        "username": "左巨",
+        "password": "zuoju_0810",
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4"
+      },
+      {
+        "username": "赫心彤",
+        "password": "hexintong_0810",
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4"
+      },
+      {
+        "username": "李春",
+        "password": "lichun_0810",
+        "unit": "low_lot_1,low_lot_2"
+      },
+      {
+        "username": "李海",
+        "password": "lihai_0810",
+        "unit": "low_lot_1,low_lot_2"
+      },
+      {
+        "username": "王世博",
+        "password": "wangshibo_0810",
+        "unit": "low_lot_3,low_lot_4,low_lot_5,low_lot_6"
+      },
+      {
+        "username": "王晟楠",
+        "password": "wangshengnan_0810",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "辛宇满",
+        "password": "xinyuman_0810",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "杨毅",
+        "password": "yangyi_0810",
+        "unit": "low_lot_5,low_lot_6"
+      },
+      {
+        "username": "孟广胜",
+        "password": "mengguangsheng_0810",
+        "unit": "low_lot_5,low_lot_6"
       }
     ],
     "tube_global_viewer": [

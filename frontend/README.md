@@ -1,3 +1,67 @@
+## 2026-08-10 管件发货历史数据列表权限过滤及大小写兼容修复 (insulation_pipe_supply_2026)
+
+- **关联前端页面与接口**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 前端调用的管件发货查询 API 完成了后端大小写兼容与库管组视角修复，管件发货历史记录恢复正常查询展示。
+
+## 2026-08-10 历史查询保温管记录一日一行归并、型号明细弹窗与原生 XLSX 导出修复 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 保温管历史数据表格改版为按日和需求主体归并显示，增加“查看型号明细”弹窗；重构 `handleHistoryExport` 使用原生 `XLSX.writeFile` 导出完整的 `.xlsx` 文件，在 Excel 中全量呈现各规格型号明细数据。
+
+## 2026-08-10 历史数据查询 (HistoryQueryView) 需求主体/接收标段支持多选勾选面板 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 将保温管与管件 Tab 中的“需求主体/接收标段”下拉框升级为与系统规范一致的复选框勾选面板，支持多选并自动拼接 `section1Ids.join(',')` 请求后端。
+
+## 2026-08-10 库管工作台 (WarehouseManagementView) 管件发货页签移除“非常用/异形件”透视卡片 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 移除“非常用/异形件”冗余统计卡片，并将头部管件概览卡片区调整为 3 列响应式网格布局。
+
+## 2026-08-10 库管工作台 (WarehouseManagementView) 授权下拉选项与多租户隔离约束跟进 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 接入后端 `options` 接口动态切片后的 `section_1s` 选项列表，确保前端下拉筛选菜单只展示登录账号所分管的标段，避免显示越权数据选项。
+
+## 2026-08-10 库管工作台 (WarehouseManagementView) 管件发货记录多选标段关联与后端切片隔离跟进 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 调整 `loadWarehouseFittingDeliveries` 函数，在多选/筛选标段及供给主体时，将数组使用逗号拼接成字符串传递给后端 `fitting_deliveries/list` 接口，配合后端物理隔离超越权管件记录。
+
+## 2026-08-10 批量导入 9 位库管员账号与分管需求主体属性映射 (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **配置说明**：
+  - 全局管理台账与系统配置中已完成左巨、赫心彤、李春、李海、王世博、王晟楠、辛宇满、杨毅、孟广胜共 9 位库管员的标段绑定，库管工作台已能根据登录身份自动切片显示授权标段。
+
+## 2026-08-10 全局控制台 (GlobalManagementView) 库管人员映射卡片支持配置分管需求主体列表 (section_1_ids) (insulation_pipe_supply_2026)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 扩展全局控制台“库管人员映射”编辑表格，新增“分管的需求主体ID列表 (逗号分隔)”一列；
+  - 自动在配置读取 (`loadConfig`) 与保存 (`buildSectionPayload`) 时将用户的逗号分隔字符串解析转为 `section_1_ids` 数组。
+
+## 2026-08-10 agy Serena MCP 配置环境排查与文档更新
+
+- **配置更新**：
+  - 补全全局 MCP 配置文件 `C:\Users\ww\.gemini\config\mcp_config.json` 中的 Serena MCP 服务定义；
+  - 本轮改动涉及全局环境配置与文档同步，前端组件与逻辑代码均未改变。
+
 ## 2026-08-09 全局控制台 (GlobalManagementView) 在 Sidebar 第一位置上线“📥 提交记录”标签页并完成排版优化 (insulation_pipe_supply_2026)
 
 - **关联前端文件**：

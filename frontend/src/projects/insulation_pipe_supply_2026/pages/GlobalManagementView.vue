@@ -738,6 +738,7 @@
                       <th>库管账号ID (对应登录名)</th>
                       <th>库管员姓名</th>
                       <th>联系电话</th>
+                      <th>分管的需求主体ID列表 (逗号分隔)</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -746,6 +747,7 @@
                       <td><input v-model.trim="item.keeper_id" class="input table-cell-input" type="text" placeholder="如 warehouse_keeper_a" /></td>
                       <td><input v-model.trim="item.keeper_name" class="input table-cell-input" type="text" placeholder="输入姓名" /></td>
                       <td><input v-model.trim="item.contact_phone" class="input table-cell-input" type="text" placeholder="输入联系电话" /></td>
+                      <td><input v-model.trim="item.section_1_ids_text" class="input table-cell-input" type="text" placeholder="如 high_lot_1, low_lot_1（逗号分隔）" /></td>
                       <td><button class="btn danger-ghost compact-btn" type="button" @click="removeRow(warehouseKeepers, index)">删除</button></td>
                     </tr>
                   </tbody>
@@ -1740,6 +1742,7 @@ function applyConfig(config) {
     keeper_id: item.keeper_id || '',
     keeper_name: item.keeper_name || '',
     contact_phone: item.contact_phone || '',
+    section_1_ids_text: listToText(item.section_1_ids),
   }))
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
   weatherApiUrl.value = config.weather_api_url || ''
@@ -1897,6 +1900,7 @@ function buildSectionPayload(section) {
       keeper_id: item.keeper_id || '',
       keeper_name: item.keeper_name || '',
       contact_phone: item.contact_phone || '',
+      section_1_ids: textToList(item.section_1_ids_text),
     }))
   }
   if (section === 'baseline_presets') {
@@ -2219,6 +2223,7 @@ function addWarehouseKeeper() {
     keeper_id: '',
     keeper_name: '',
     contact_phone: '',
+    section_1_ids_text: '',
   })
 }
 
