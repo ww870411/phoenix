@@ -114,32 +114,35 @@
                     <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">需求主体</th>
                     <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">包含管材型号概览</th>
                     <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日总计划量 (米)</th>
+                    <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日总发货量 (米)</th>
                     <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日总使用量 (米)</th>
                     <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">当日总损耗量 (米)</th>
                     <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">确认总到货量 (米)</th>
                     <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">平均在途时间</th>
-                    <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px; background: #f8fafc;">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, idx) in groupedHistoryRows" :key="idx" style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                  <tr 
+                    v-for="(row, idx) in groupedHistoryRows" 
+                    :key="idx" 
+                    style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s; cursor: pointer;" 
+                    onmouseover="this.style.backgroundColor='#f1f5f9'" 
+                    onmouseout="this.style.backgroundColor='transparent'"
+                    @click="openPipeDetailModal(row)"
+                  >
                     <td style="padding: 12px 16px; vertical-align: middle; color: #475569; font-size: 13px; font-weight: 500;">{{ row.biz_date }}</td>
                     <td style="padding: 12px 16px; vertical-align: middle; color: #1e293b; font-size: 13px; font-weight: 600;">{{ row.section_1_name }}</td>
-                    <td style="padding: 12px 16px; vertical-align: middle; color: #334155; font-size: 13px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.pipe_models_summary">
+                    <td style="padding: 12px 16px; vertical-align: middle; color: #334155; font-size: 13px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`${row.pipe_models_summary} (点击可查看分型号数据)`">
                       <span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 6px; font-weight: 600;">{{ row.models.length }}个型号</span>
                       <span>{{ row.pipe_models_summary }}</span>
                     </td>
                     <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #475569;">{{ formatQty(row.plan_qty) }}</td>
+                    <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #0284c7;">{{ formatQty(row.shipped_qty) }}</td>
                     <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #16a34a;">{{ formatQty(row.usage_qty) }}</td>
                     <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #dc2626;">{{ formatQty(row.loss_qty) }}</td>
                     <td style="text-align: right; padding: 12px 16px; vertical-align: middle; font-weight: 500; font-size: 13px; color: #2563eb;">{{ formatQty(row.arrived_qty) }}</td>
                     <td style="padding: 12px 16px; vertical-align: middle; color: #475569; font-size: 13px;">
                       {{ row.arrived_batch_count > 0 ? formatSeconds(row.total_transit_seconds / row.arrived_batch_count) : '-' }}
-                    </td>
-                    <td style="padding: 12px 16px; vertical-align: middle; text-align: center;">
-                      <button type="button" class="btn secondary" style="height: 28px; padding: 0 10px; font-size: 12px; border-radius: 4px; cursor: pointer; white-space: nowrap;" @click="openPipeDetailModal(row)">
-                        🔍 查看型号明细
-                      </button>
                     </td>
                   </tr>
                   
@@ -147,11 +150,11 @@
                   <tr style="background: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1; position: sticky; bottom: 0; z-index: 5;">
                     <td colspan="3" style="padding: 14px 16px; font-size: 13px; color: #1e293b; background: #f1f5f9;">📊 历史时段内汇总统计</td>
                     <td style="text-align: right; padding: 14px 16px; font-size: 13px; color: #1e293b; background: #f1f5f9;">{{ formatQty(totalPlan) }}</td>
+                    <td style="text-align: right; padding: 14px 16px; font-size: 13px; color: #0284c7; background: #f1f5f9;">{{ formatQty(totalShipped) }}</td>
                     <td style="text-align: right; padding: 14px 16px; font-size: 13px; color: #16a34a; background: #f1f5f9;">{{ formatQty(totalUsage) }}</td>
                     <td style="text-align: right; padding: 14px 16px; font-size: 13px; color: #dc2626; background: #f1f5f9;">{{ formatQty(totalLoss) }}</td>
                     <td style="text-align: right; padding: 14px 16px; font-size: 13px; color: #2563eb; background: #f1f5f9;">{{ formatQty(totalArrived) }}</td>
                     <td style="padding: 14px 16px; font-size: 13px; color: #1e293b; background: #f1f5f9;">{{ overallAvgTransit }}</td>
-                    <td style="background: #f1f5f9;"></td>
                   </tr>
                 </tbody>
               </table>
@@ -164,6 +167,7 @@
               </div>
               <div style="display: flex; flex-wrap: wrap; gap: 10px 30px;">
                 <span>🟢 物资综合保障率：<strong style="color: #0f172a;">{{ fulfillmentRate }}</strong> (计划 {{ formatQty(totalPlan) }} 米 / 到货 {{ formatQty(totalArrived) }} 米)</span>
+                <span>📦 累计发货总量：<strong style="color: #0284c7;">{{ formatQty(totalShipped) }} 米</strong></span>
                 <span>📅 计划消耗契合度：<strong style="color: #0f172a;">{{ planUsageAlignment }}</strong> (实际消耗 {{ formatQty(totalUsage) }} 米 / 计划 {{ formatQty(totalPlan) }} 米)</span>
                 <span>🔴 施工综合损耗率：<strong style="color: #dc2626;">{{ lossRate }}</strong> (消耗 {{ formatQty(totalUsage) }} 米 / 损耗 {{ formatQty(totalLoss) }} 米)</span>
                 <span>🔵 施工消耗强度：<strong style="color: #2563eb;">{{ dailyConsumption }} 米/天</strong> (实际施工 {{ activeDays }} 天)</span>
@@ -335,8 +339,9 @@
           </div>
 
           <div style="padding: 20px;">
-            <div style="margin-bottom: 14px; font-size: 13px; color: #475569; display: flex; gap: 20px; background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <div style="margin-bottom: 14px; font-size: 13px; color: #475569; display: flex; gap: 18px; background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; flex-wrap: wrap;">
               <span>当日总计划：<strong style="color: #0f172a;">{{ formatQty(pipeDetailModalData.plan_qty) }} 米</strong></span>
+              <span>当日总发货：<strong style="color: #0284c7;">{{ formatQty(pipeDetailModalData.shipped_qty) }} 米</strong></span>
               <span>当日总使用：<strong style="color: #16a34a;">{{ formatQty(pipeDetailModalData.usage_qty) }} 米</strong></span>
               <span>当日总损耗：<strong style="color: #dc2626;">{{ formatQty(pipeDetailModalData.loss_qty) }} 米</strong></span>
               <span>确认总到货：<strong style="color: #2563eb;">{{ formatQty(pipeDetailModalData.arrived_qty) }} 米</strong></span>
@@ -347,6 +352,7 @@
                 <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
                   <th style="text-align: left; padding: 10px 12px; color: #475569; font-weight: 600;">管材型号</th>
                   <th style="text-align: right; padding: 10px 12px; color: #475569; font-weight: 600;">当日计划量 (米)</th>
+                  <th style="text-align: right; padding: 10px 12px; color: #475569; font-weight: 600;">当日发货量 (米)</th>
                   <th style="text-align: right; padding: 10px 12px; color: #475569; font-weight: 600;">当日使用量 (米)</th>
                   <th style="text-align: right; padding: 10px 12px; color: #475569; font-weight: 600;">当日损耗量 (米)</th>
                   <th style="text-align: right; padding: 10px 12px; color: #475569; font-weight: 600;">确认到货量 (米)</th>
@@ -360,6 +366,9 @@
                   </td>
                   <td style="padding: 10px 12px; text-align: right; color: #334155;">
                     {{ formatQty(sub.plan_qty) }}
+                  </td>
+                  <td style="padding: 10px 12px; text-align: right; color: #0284c7; font-weight: 500;">
+                    {{ formatQty(sub.shipped_qty) }}
                   </td>
                   <td style="padding: 10px 12px; text-align: right; color: #16a34a; font-weight: 500;">
                     {{ formatQty(sub.usage_qty) }}
@@ -592,6 +601,7 @@ const groupedHistoryRows = computed(() => {
         section_1_id: row.section_1_id,
         section_1_name: row.section_1_name || row.section_1_id,
         plan_qty: 0,
+        shipped_qty: 0,
         usage_qty: 0,
         loss_qty: 0,
         arrived_qty: 0,
@@ -602,6 +612,7 @@ const groupedHistoryRows = computed(() => {
     }
     const item = map.get(key)
     item.plan_qty += (row.plan_qty || 0)
+    item.shipped_qty += (row.shipped_qty || 0)
     item.usage_qty += (row.usage_qty || 0)
     item.loss_qty += (row.loss_qty || 0)
     item.arrived_qty += (row.arrived_qty || 0)
@@ -614,6 +625,7 @@ const groupedHistoryRows = computed(() => {
     const modelSummaries = group.models.map(m => {
       const parts = []
       if (m.plan_qty > 0) parts.push(`计划:${m.plan_qty}m`)
+      if (m.shipped_qty > 0) parts.push(`发:${m.shipped_qty}m`)
       if (m.usage_qty > 0) parts.push(`用:${m.usage_qty}m`)
       if (m.arrived_qty > 0) parts.push(`到货:${m.arrived_qty}m`)
       const desc = parts.length ? ` (${parts.join(', ')})` : ''
@@ -685,6 +697,7 @@ function handleHistoryExport() {
       '需求主体': r.section_1_name || r.section_1_id || '—',
       '保温管型号': r.pipe_model_name || r.pipe_model_id || '—',
       '当日计划量(米)': r.plan_qty ?? 0,
+      '当日发货量(米)': r.shipped_qty ?? 0,
       '当日使用量(米)': r.usage_qty ?? 0,
       '当日损耗量(米)': r.loss_qty ?? 0,
       '确认到货量(米)': r.arrived_qty ?? 0,
@@ -790,6 +803,7 @@ function formatSeconds(totalSeconds) {
 
 // 保温管计算属性
 const totalPlan = computed(() => historyRows.value.reduce((sum, r) => sum + (r.plan_qty || 0), 0))
+const totalShipped = computed(() => historyRows.value.reduce((sum, r) => sum + (r.shipped_qty || 0), 0))
 const totalUsage = computed(() => historyRows.value.reduce((sum, r) => sum + (r.usage_qty || 0), 0))
 const totalLoss = computed(() => historyRows.value.reduce((sum, r) => sum + (r.loss_qty || 0), 0))
 const totalArrived = computed(() => historyRows.value.reduce((sum, r) => sum + (r.arrived_qty || 0), 0))

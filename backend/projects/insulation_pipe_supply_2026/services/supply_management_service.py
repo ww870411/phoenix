@@ -1257,8 +1257,8 @@ def query_history_records(
     section_1_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    查询历史数据，包含当日计划量、实际使用量、损耗量、确认到货量、运输在途时间。
-    按 (section_1_id, biz_date, pipe_model_id) 维度合并，只保留真正产生计划、消耗、损耗或到货的记录。
+    查询历史数据，包含当日计划量、当日发货量、实际使用量、损耗量、确认到货量、运输在途时间。
+    按 (section_1_id, biz_date, pipe_model_id) 维度合并，只保留真正产生计划、发货、消耗、损耗或到货的记录。
     """
     selected_section_ids = set()
     if section_1_id:
@@ -1276,6 +1276,19 @@ def query_history_records(
             WHERE plan_date >= :start_date AND plan_date <= :end_date
               AND plan_qty IS NOT NULL AND plan_qty <> 0
             GROUP BY section_1_id, plan_date, pipe_model_id
+        ), s AS (
+            SELECT
+                section_1_id,
+                (shipped_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
+                pipe_model_id,
+                SUM(shipped_qty) AS total_shipped_qty
+            FROM tube.tube_delivery
+            WHERE shipped_at IS NOT NULL
+              AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date
+              AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
+              AND status <> 'cancelled'
+              AND shipped_qty IS NOT NULL AND shipped_qty <> 0
+            GROUP BY section_1_id, (shipped_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
         ), u AS (
             SELECT
                 section_1_id,
@@ -1310,6 +1323,8 @@ def query_history_records(
         ), keys AS (
             SELECT section_1_id, biz_date, pipe_model_id FROM p
             UNION
+            SELECT section_1_id, biz_date, pipe_model_id FROM s
+            UNION
             SELECT section_1_id, biz_date, pipe_model_id FROM u
             UNION
             SELECT section_1_id, biz_date, pipe_model_id FROM d
@@ -1319,6 +1334,7 @@ def query_history_records(
             k.biz_date,
             k.pipe_model_id,
             COALESCE(p.total_plan_qty, 0) AS plan_qty,
+            COALESCE(s.total_shipped_qty, 0) AS shipped_qty,
             COALESCE(u.total_usage_qty, 0) AS usage_qty,
             COALESCE(u.total_loss_qty, 0) AS loss_qty,
             COALESCE(d.total_arrived_qty, 0) AS arrived_qty,
@@ -1328,6 +1344,7 @@ def query_history_records(
             d.max_transit_seconds
         FROM keys k
         LEFT JOIN p ON k.section_1_id = p.section_1_id AND k.biz_date = p.biz_date AND k.pipe_model_id = p.pipe_model_id
+        LEFT JOIN s ON k.section_1_id = s.section_1_id AND k.biz_date = s.biz_date AND k.pipe_model_id = s.pipe_model_id
         LEFT JOIN u ON k.section_1_id = u.section_1_id AND k.biz_date = u.biz_date AND k.pipe_model_id = u.pipe_model_id
         LEFT JOIN d ON k.section_1_id = d.section_1_id AND k.biz_date = d.biz_date AND k.pipe_model_id = d.pipe_model_id
         ORDER BY k.biz_date DESC, k.section_1_id, k.pipe_model_id
@@ -1353,6 +1370,7 @@ def query_history_records(
                 "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
                 "pipe_model_id": _normalize_pipe_model_id(row["pipe_model_id"]),
                 "plan_qty": float(row["plan_qty"]),
+                "shipped_qty": float(row["shipped_qty"]),
                 "usage_qty": float(row["usage_qty"]),
                 "loss_qty": float(row["loss_qty"]),
                 "arrived_qty": float(row["arrived_qty"]),
