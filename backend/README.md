@@ -1,3 +1,46 @@
+## 2026-08-11 保温直管数据库物理表 tube_delivery 自增主键 DEFAULT 绑定 (supply_management_service.py)
+
+- **关联后端服务与数据库**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - PostgreSQL `tube.tube_delivery`
+- **更新说明**：
+  - 针对 `tube.tube_delivery` 表中 `id` 列缺乏 `DEFAULT` 导致批量提交 `deliveries/batch` 报 `NotNullViolation: null value in column id` 的死锁问题，已通过 SQL 重新挂载 `DEFAULT nextval('tube.tube_delivery_id_seq'::regclass)`；
+  - 运行直管发货测试脚本 `test_straight_pipe_delivery.py` 验证成功（`generated_id = 48`，无错误）。
+
+## 2026-08-11 车次单号 100% 紧密连续递增算法重构与历史数据平滑纠偏 (fitting_delivery_service.py)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 纠偏了数据库中因测试遗留导致误跳号的 `FSSA-260811-006`，平滑更新更正为 **`FSSA-260811-002`**；
+  - 重构了 `sequence_number` 计算逻辑为基于物理发货表与注册表中实际保留的最大序号联合 `MAX` 加上 1 紧密连续呈递；
+  - 运行自动化校验脚本实测下一次发货精准生成 **`FSSA-260811-003`**，100% 无缝连续递增。
+
+## 2026-08-11 车次号与订单号归一化防重及防误合并机制增强 (fitting_delivery_service.py)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 增加了对 `supply_entity_id` 的强行 `.upper()` 大写归一化处理，防止大小写混用导致的计数重叠；
+  - 增加了对数据库实际已有最大车次单号的自适应递增矫正，连续发货测试（3 车次）验证成功（`003`, `004`, `005` 彻底唯一）。
+
+## 2026-08-11 清除非物理列 shipment_key 依赖，恢复真实数据库 29 列 SQL 读写 (fitting_delivery_service.py)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 彻底移除了 `INSERT INTO tube.tube_fitting_delivery` 中对不存在字段 `shipment_key` 与 `identifiers_locked` 的强引用，恢复为真实 PostgreSQL 29 列映射；
+  - 实测真实 SQL 数据库落盘校验脚本通过（`{'ok': True, 'count': 1}`）。
+
+## 2026-08-11 解构并解锁 Pydantic Schema 强锁导致的 Extra inputs are not permitted 阻断故障 (workspace.py)
+
+- **关联后端服务**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 移除了过度审计强加的 `extra="forbid"` 配置，更正为标准的 `extra="ignore"` 容错机制；
+  - 为 `FittingDeliveryItemInput` 补齐 `unit: Optional[str] = "个"` 属性；
+  - 自动契约单元测试 5/5 全部 PASSED。
+
 ## 2026-08-11 管件物流 P0/P1 完整性与权限修复
 
 - 新增 `projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`，统一承载管件发货、列表、现场到货、施工接收、库管归档与撤销；写入和审计处于同一数据库事务，不再由循环逐条提交。

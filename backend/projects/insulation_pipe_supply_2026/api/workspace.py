@@ -268,6 +268,191 @@ class WarehouseArrivalConfirmPayload(BaseModel):
     remark: str = ""
 
 
+from backend.projects.insulation_pipe_supply_2026.services import weather_service
+from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
+    save_operation_log,
+    query_operation_logs,
+    query_submission_logs,
+)
+from sqlalchemy import text
+from backend.db.database_daily_report_25_26 import SessionLocal
+
+router = APIRouter(tags=[PROJECT_KEY])
+public_router = APIRouter(tags=[PROJECT_KEY])
+
+
+def run_db_migration():
+    session = SessionLocal()
+    try:
+        session.execute(text("ALTER TABLE tube.tube_daily_usage ADD COLUMN IF NOT EXISTS loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0;"))
+        session.execute(text("""
+            ALTER TABLE tube.tube_daily_usage 
+            DROP CONSTRAINT IF EXISTS chk_tube_daily_usage_loss_qty_nonnegative;
+        """))
+        session.execute(text("""
+            ALTER TABLE tube.tube_daily_usage 
+            ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
+        """))
+        
+        # 2026-06-15 & 2026-07-30 操作审计日志表自动初始化与 logs Schema / tube_operation_logs 转移
+        session.execute(text("CREATE SCHEMA IF NOT EXISTS logs;"))
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS logs.tube_operation_logs (
+                id SERIAL PRIMARY KEY,
+                project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
+                operator VARCHAR(100) NOT NULL,
+                operator_group VARCHAR(100),
+                action_type VARCHAR(50) NOT NULL,
+                action_desc TEXT NOT NULL,
+                resource_id VARCHAR(100),
+                before_value JSONB,
+                after_value JSONB,
+                client_ip VARCHAR(50),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_operator ON logs.tube_operation_logs(operator);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_action_type ON logs.tube_operation_logs(action_type);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_created_at ON logs.tube_operation_logs(created_at DESC);"))
+        
+        # 2026-06-23 新增差异审批与超时接收字段
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_at TIMESTAMPTZ;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_remark TEXT;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE;"))
+        
+        # 更新 CHECK 约束以支持 'pending_diff_approve' 状态
+        session.execute(text("ALTER TABLE tube.tube_delivery DROP CONSTRAINT IF EXISTS chk_tube_delivery_status;"))
+        session.execute(text("""
+            ALTER TABLE tube.tube_delivery ADD CONSTRAINT chk_tube_delivery_status 
+            CHECK (status IN ('pending_arrival', 'cancelled', 'pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'));
+        """))
+        
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        import logging
+        logger = logging.getLogger("uvicorn.error")
+        logger.error(f"数据库初始化迁移失败: {e}", exc_info=True)
+        raise RuntimeError(f"数据库初始化迁移失败，应用无法启动: {e}") from e
+    finally:
+        session.close()
+
+run_db_migration()
+
+
+
+class DemandPlanRecordInput(BaseModel):
+    plan_date: date
+    pipe_model_id: str
+    plan_qty: float = Field(default=0, ge=0)
+    remark: str = ""
+
+
+class DemandPlanSavePayload(BaseModel):
+    section_1_id: str
+    records: List[DemandPlanRecordInput] = []
+
+
+class DemandUsageRecordInput(BaseModel):
+    pipe_model_id: str
+    usage_qty: float = Field(default=0, ge=0)
+    loss_qty: float = Field(default=0, ge=0)
+    remark: str = ""
+
+
+class DemandUsageSavePayload(BaseModel):
+    section_1_id: str
+    usage_date: date
+    records: List[DemandUsageRecordInput] = []
+
+
+class DemandSection1SubmissionPayload(BaseModel):
+    section_1_id: str
+    remark: str = ""
+
+
+class TubeConfigSavePayload(BaseModel):
+    config: Dict[str, Any]
+
+
+class TubeConfigSectionSavePayload(BaseModel):
+    section: str
+    data: Any
+
+
+class WeatherEvalPayload(BaseModel):
+    api_url: Optional[str] = None
+
+
+class WeatherImportPayload(BaseModel):
+    api_url: Optional[str] = None
+
+
+class SupplyDeliveryCreatePayload(BaseModel):
+    supply_entity_id: str
+    section_1_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    shipped_at: datetime
+    shipment_no: str = ""
+    vehicle_plate_no: str = ""
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    ship_remark: str = ""
+
+
+class SupplyDeliveryBatchItemInput(BaseModel):
+    section_1_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    ship_remark: str = ""
+
+
+class SupplyDeliveryBatchCreatePayload(BaseModel):
+    supply_entity_id: str
+    shipped_at: datetime
+    shipment_no: str = ""
+    vehicle_plate_no: str = ""
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    items: List[SupplyDeliveryBatchItemInput]
+
+
+class SupplyDeliveryCancelPayload(BaseModel):
+    cancel_reason: str = ""
+
+
+class CustomSupplyEntityPayload(BaseModel):
+    entity_name: str
+    contact_name: str = ""
+    contact_phone: str = ""
+
+
+
+class SuperUpdateDeliveryPayload(BaseModel):
+    section_1_id: str
+    pipe_model_id: str
+    shipped_qty: float = Field(ge=0.01)
+    shipped_at: datetime
+    vehicle_plate_no: str = ""
+    ship_remark: str = ""
+    status: str
+    order_no: str = ""
+    shipment_no: str = ""
+    arrived_qty: Optional[float] = None
+    received_qty: Optional[float] = None
+    arrived_confirm_at: Optional[datetime] = None
+    received_confirm_at: Optional[datetime] = None
+    warehouse_confirm_at: Optional[datetime] = None
+
+
+
+class WarehouseArrivalConfirmPayload(BaseModel):
+    arrived_qty: float = Field(ge=0.01)
+    remark: str = ""
+
+
 class WarehouseReceiptConfirmPayload(BaseModel):
     received_qty: float = Field(ge=0.01)
     remark: str = ""
@@ -282,45 +467,51 @@ class DiffApprovePayload(BaseModel):
     remark: str = ""
 
 
-PositiveFittingInt = conint(strict=True, gt=0)
+PositiveFittingInt = conint(gt=0)
 
 
 class StrictFittingPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
 
-class FittingDeliveryItemInput(StrictFittingPayload):
+class FittingDeliveryItemInput(BaseModel):
     fitting_type: str = Field(min_length=1)
     model_spec: str = Field(min_length=1)
     shipped_qty: PositiveFittingInt
-    remark: str = ""
+    unit: Optional[str] = "个"
+    remark: Optional[str] = ""
+    model_config = ConfigDict(extra="ignore")
 
 
-class FittingDeliverySubmitPayload(StrictFittingPayload):
+class FittingDeliverySubmitPayload(BaseModel):
     supply_entity_id: str = Field(min_length=1)
     vehicle_plate_no: str = Field(min_length=1)
     section_1_id: str = Field(min_length=1)
     shipped_at: datetime
-    ship_contact_name: str = ""
-    ship_contact_phone: str = ""
-    ship_remark: str = ""
-    items: List[FittingDeliveryItemInput] = Field(min_items=1)
+    ship_contact_name: Optional[str] = ""
+    ship_contact_phone: Optional[str] = ""
+    ship_remark: Optional[str] = ""
+    items: List[FittingDeliveryItemInput] = Field(min_length=1)
+    model_config = ConfigDict(extra="ignore")
 
 
-class FittingArrivalConfirmPayload(StrictFittingPayload):
-    ids: List[PositiveFittingInt] = Field(min_items=1)
+class FittingArrivalConfirmPayload(BaseModel):
+    ids: List[PositiveFittingInt] = Field(min_length=1)
     arrived_qty_map: Dict[str, PositiveFittingInt] = Field(default_factory=dict)
-    remark: str = ""
+    remark: Optional[str] = ""
+    model_config = ConfigDict(extra="ignore")
 
 
-class FittingConfirmPayload(StrictFittingPayload):
-    ids: List[PositiveFittingInt] = Field(min_items=1)
-    remark: str = ""
+class FittingConfirmPayload(BaseModel):
+    ids: List[PositiveFittingInt] = Field(min_length=1)
+    remark: Optional[str] = ""
+    model_config = ConfigDict(extra="ignore")
 
 
-class FittingCancelPayload(StrictFittingPayload):
-    ids: List[PositiveFittingInt] = Field(min_items=1)
+class FittingCancelPayload(BaseModel):
+    ids: List[PositiveFittingInt] = Field(min_length=1)
     remark: str = Field(min_length=2)
+    model_config = ConfigDict(extra="ignore")
 
 
 def _ensure_site_manager_access(session: AuthSession) -> None:
@@ -3274,7 +3465,8 @@ def handle_confirm_fitting_delivery_arrival(
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_site_manager"}, "管件到货确认")
     rows = get_fitting_deliveries_by_ids(payload.ids)
-    if len(rows) != len(set(payload.ids)):
+    found_ids = {int(row["id"]) for row in rows}
+    if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
     return confirm_fitting_delivery_arrival(payload.model_dump(), operator=session.username, operator_group=session.group)
@@ -3287,7 +3479,8 @@ def handle_confirm_fitting_delivery_construction(
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_construction_unit"}, "管件施工接收确认")
     rows = get_fitting_deliveries_by_ids(payload.ids)
-    if len(rows) != len(set(payload.ids)):
+    found_ids = {int(row["id"]) for row in rows}
+    if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
     return confirm_fitting_delivery_construction(payload.model_dump(), operator=session.username, operator_group=session.group)
@@ -3300,7 +3493,8 @@ def handle_confirm_fitting_delivery_warehouse(
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}, "管件库管入库确认")
     rows = get_fitting_deliveries_by_ids(payload.ids)
-    if len(rows) != len(set(payload.ids)):
+    found_ids = {int(row["id"]) for row in rows}
+    if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
     return confirm_fitting_delivery_warehouse(payload.model_dump(), operator=session.username, operator_group=session.group)
@@ -3313,7 +3507,8 @@ def handle_cancel_fitting_delivery(
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货撤销")
     rows = get_fitting_deliveries_by_ids(payload.ids)
-    if len(rows) != len(set(payload.ids)):
+    found_ids = {int(row["id"]) for row in rows}
+    if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_supply_access(rows, session)
     return cancel_fitting_delivery(payload.model_dump(), operator=session.username, operator_group=session.group)

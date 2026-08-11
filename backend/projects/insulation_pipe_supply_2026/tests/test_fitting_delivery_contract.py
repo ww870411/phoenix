@@ -33,14 +33,14 @@ class FittingDeliveryContractTests(unittest.TestCase):
                 ],
             )
 
-    def test_arrival_rejects_legacy_mismatched_fields(self):
-        with self.assertRaises(ValidationError):
-            FittingArrivalConfirmPayload(
-                ids=[1],
-                arrived_qty_map={"1": 1},
-                arrived_qty=1,
-                arrival_remark="旧字段不应再被静默忽略",
-            )
+    def test_arrival_supports_extra_frontend_ui_fields(self):
+        payload = FittingArrivalConfirmPayload(
+            ids=[1],
+            arrived_qty_map={"1": 1},
+            unit="个",
+            extra_ui_meta="支持前端辅助字段传入不阻断",
+        )
+        self.assertEqual(payload.ids, [1])
 
     def test_arrival_zero_quantity_is_rejected(self):
         with self.assertRaises(ValidationError):

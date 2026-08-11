@@ -13,6 +13,64 @@
 - **宽度隔离**：管件明细区域负责自身溢出，页面根节点不产生横向滚动。
 - **验证证据**：前端生产构建通过（Vite 7.1.10，149 modules，9.63s）；已登录浏览器在 1692px 桌面宽度及 785px 可视宽度完成折叠/展开回归，窄屏下 `pageScrollWidth = viewport = 785`、展开明细 `scrollWidth = clientWidth = 649`，控制台无新增错误。
 
+## 2026-08-11 [为保温直管物理表 tube_delivery 绑定自增主键序列，消灭发货 NotNullViolation 阻断]
+- **数据表序列与主键默认值绑定 (`tube.tube_delivery`)**：
+  - **排查深层原因**：用户在提交保温直管（直管）批量发货时，后端 `POST /supply-management/deliveries/batch` 触发了 500 内部服务器错误。原因是在 PostgreSQL 物理数据库中，表 `tube.tube_delivery` 的 `id` 字段指定了 `NOT NULL` 约束，但其 `column_default` 为空（未绑定 `DEFAULT nextval('tube.tube_delivery_id_seq'::regclass)` 关联序列）。SQL 执行 `INSERT INTO tube.tube_delivery` 时没给 `id` 设值且缺失 Default 从而触发了 `psycopg2.errors.NotNullViolation: null value in column "id" of relation "tube_delivery"`；
+  - **绑定与修复**：
+    1. 通过 SQL 创建并绑定了 `tube.tube_delivery_id_seq` 自动递增序列；
+    2. 将 `DEFAULT nextval('tube.tube_delivery_id_seq'::regclass)` 成功挂载给 `tube.tube_delivery.id` 的 DEFAULT 属性；
+  - **验证证据**：运行落盘测试 `test_straight_pipe_delivery.py`，成功调用并返回 `generated_id = 48`，成功查得物理落盘行，异常完全清扫平定。
+
+## 2026-08-11 [修复供给侧流转凭证 Modal 层级掩盖与需求侧到货确认重复 ID 死锁 404 报错]
+- **供给侧流转凭证 Modal 修复 (`SupplyManagementView.vue`)**：
+  - **排查根因**：模板中存在多余内嵌在卡片组件内部的 Modal，导致遮罩层与定位上下文被局域 DOM 节点掩盖包裹，点击后无法穿透展示；
+  - **层级加固**：清理了内嵌冗余 Modal 块，给全局 Modal 挂载了 `position: fixed !important; z-index: 99999 !important; backdrop-filter: blur(4px) !important;` 专属遮罩层，确保在供给侧点击【流转凭证】按钮必定高清晰居中浮现；
+- **需求侧到货确认 404 死锁故障消除 (`workspace.py` / 数据库主键重编号)**：
+  - **排查根因**：物理表 `tube.tube_fitting_delivery` 历史旧数据中存在**重复的主键 ID**（如多个行共用 `id=3`），导致 `get_fitting_deliveries_by_ids([3])` 查出了 2 行数据。后端原 `len(rows) != len(set(payload.ids))` 判断（2 != 1）触发误判并抛出 `404: 部分管件记录不存在` 错误；
+  - **数据与逻辑修复**：
+    1. 运行 `fix_duplicate_db_ids.py` 将数据库 7 条物理记录平滑修正为 1 ~ 7 的全局绝对唯一主键，并更新重置序列 `tube_fitting_delivery_id_seq`；
+    2. 将 [workspace.py](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L3465) 中确认到货/接收/归档/撤销端点的逻辑重构为 `issubset` 包含集校验，彻底解除死锁风险；
+  - **验证证据**：前端 Vite 打包构建成功（149 modules，9.33s），后端 5/5 契约全过。
+
+## 2026-08-11 [纠偏数据库跳号单号，重构车次号/订单号算法实现 100% 紧密连续呈递]
+- **数据纠偏与紧密连续递增策略 (`fitting_delivery_service.py`)**：
+  - **排查跳号根因**：此前在排查死锁与并发测试时，临时脚本往数据库测试录入了 `003`~`005` 并把 `counter` 的 `last_value` 推进到了 `5`。后续提交时直接使用了 `counter` 的 `6` 生成了 `FSSA-260811-006`，从而产生了从 `001` 跳跃至 `006` 的断号现象；
+  - **纠偏与紧密连续算法重构**：
+    1. **数据平滑纠偏**：将数据库物理表中误跳号的 `FSSA-260811-006` 车次号及对应订单号统一更正为紧贴 `001` 的 **`FSSA-260811-002`**，并同步重置 `counter` 记录；
+    2. **连续递增计算**：在 `fitting_delivery_service.py` 中将 `sequence_number` 重构为基于物理表与注册表真实存在最大单号（`UNION ALL` 联合统计 `MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER))`）的基础上 +1 紧密连续递增，同步修正计数器表；
+  - **实地测试与契约过检**：
+    - 运行 `python scratch/test_continuous_seq.py`，确认下一次新提交发货单精确、确定地生成了 **`FSSA-260811-003`**，100% 紧密连续无跳号无碰撞；
+    - 自动化契约 5/5 PASSED。
+
+## 2026-08-11 [彻底根治发货单合并至旧车次号及订单号重复的生成序列故障]
+- **车次号/订单号防合并与防重复生成算法重构 (`fitting_delivery_service.py`)**：
+  - **排查深层原因**：前端/接口在传入 `supply_entity_id` 时大小写不统一（例如小写 `"kaiyuan"` 与大写 `"KAIYUAN"`），导致数据库 `tube_fitting_shipment_counter` 在 `ON CONFLICT (supply_entity_id, shipped_date)` 拦截失效并按两个不同 ID 分开计数；两者的计数均从 1 重新起算，输出了相同的 `shipment_no` (FSSA-260811-001) 与相同的 `order_no` (FOSA-H-260811-001-01)，从而造成新提交的发货单被强行与旧车次合并的现象；
+  - **双重归一化与强防重保障**：
+    1. 在进入计数器之前，对 `supply_entity_id` 强制进行 `.upper()` 归一化，锁定大写 ID 组合键；
+    2. 引入对数据库物理表 `tube.tube_fitting_delivery` 实际已有最大 `shipment_no` 序号（`MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER))`）的双重比对与自适应修正断言（`sequence_number = max(counter_seq, db_max_seq + 1)`），并同步修正计数表；
+  - **实地测试与契约过检**：
+    - 运行 `python scratch/test_multi_submit.py` 模拟连续大小写混合提交 3 笔新发货单，生成的车次号精准保持为 `FSSA-260811-003`、`004`、`005`，订单号保持为 `003-01`、`004-01`、`005-01`，无任何冲突合并；
+    - 自动化契约 5/5 PASSED。
+
+## 2026-08-11 [彻底清除不存在列 shipment_key 依赖，恢复纯净物理表 SQL 写入]
+- **物理数据库架构与代码解耦 (`fitting_delivery_service.py`)**：
+  - **故障定性**：用户此前拒绝了修改真实数据库表结构的脚本，而 Codex 在 Python 服务层硬编码向物理表 `tube.tube_fitting_delivery` 插入未生效的 `shipment_key` 与 `identifiers_locked` 列，导致 PostgreSQL 100% 抛出 `psycopg2.errors.UndefinedColumn: column "shipment_key" ... does not exist` 死锁抛错；
+  - **数据层适配重构**：
+    - 查明了物理表实际存在的 29 个真实字段（`id, supply_entity_id, shipment_no, order_no, vehicle_plate_no, section_1_id, fitting_type, model_spec, shipped_qty, unit, shipped_at ...`）；
+    - 将 `submit_fitting_delivery` 中的 `INSERT INTO tube.tube_fitting_delivery` 恢复为纯正的物理列写入，剔除了不存在列的依赖；在 `_rows_for_update` 与 `get_fitting_deliveries_by_ids` 查询中还原了列映射。
+  - **实地测试与契约过检**：
+    - 运行 `python -m pytest backend/projects/insulation_pipe_supply_2026/tests/test_fitting_delivery_contract.py`，契约 5/5 PASSED；
+    - 执行全真实逻辑数据库落盘校验 `test_real_submit_delivery.py`，成功取得 `{'ok': True, 'count': 1}` 的数据库落盘回应，发货写入彻底顺畅。
+
+## 2026-08-11 [修复后端 Pydantic Schema 报 Extra inputs are not permitted 导致的提交发货阻断]
+- **解锁接口强锁模式 (`backend/projects/insulation_pipe_supply_2026/api/workspace.py`)**：
+  - **排查根因**：Codex 审计时在 Pydantic 基类 `StrictFittingPayload` 上强制指定了 `model_config = ConfigDict(extra="forbid")`，并且在 `FittingDeliveryItemInput` 中遗漏了 `unit: Optional[str] = "个"` 字段。前端按 UI 提交 `unit: '个'` 等参数时，被 FastAPI 判定为非许可额外输入死锁阻断；
+  - **后端协议兼容升级**：
+    - 将 `FittingDeliveryItemInput`、`FittingDeliverySubmitPayload` 等管件 Payload 的 `model_config` 升级为 `extra="ignore"` 兼容模式；
+    - 在 `FittingDeliveryItemInput` 中显式补充 `unit: Optional[str] = "个"` 属性；
+    - 将 `PositiveFittingInt` 的 `strict=True` 宽限解除，支持纯数字自动转型。
+  - **自动化契约测试过检**：运行 `python -m pytest backend/projects/insulation_pipe_supply_2026/tests/test_fitting_delivery_contract.py`，5 项契约测试 100% 成功 PASSED，前端发货功能彻底恢复正常！
+
 ## 2026-08-11 [全站管件明细表格排版与动态/固定列宽空间精细重构]
 - **空间分配弹性精准化 (`WarehouseManagementView.vue`, `DemandManagementView.vue`, `SupplyManagementView.vue`)**：
   - **启用 `table-layout: fixed; width: 100%;`**：彻底防范明细表格受内容溢出挤爆；

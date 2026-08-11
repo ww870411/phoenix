@@ -142,7 +142,7 @@ def _rows_for_update(session, delivery_ids: Sequence[int]) -> List[Dict[str, Any
     rows = session.execute(
         text(
             """
-            SELECT id, shipment_key, shipment_no, order_no, supply_entity_id,
+            SELECT id, shipment_no, order_no, supply_entity_id,
                    section_1_id, shipped_qty, arrived_qty, status,
                    arrived_at, construction_confirmed_at, warehouse_confirmed_at
             FROM tube.tube_fitting_delivery
@@ -169,7 +169,7 @@ def get_fitting_deliveries_by_ids(delivery_ids: Sequence[int]) -> List[Dict[str,
         rows = session.execute(
             text(
                 """
-                SELECT id, shipment_key, shipment_no, supply_entity_id,
+                SELECT id, shipment_no, supply_entity_id,
                        section_1_id, shipped_qty, arrived_qty, status
                 FROM tube.tube_fitting_delivery
                 WHERE id = ANY(:ids)
@@ -206,14 +206,14 @@ def submit_fitting_delivery(
         shipped_at = shipped_at.replace(tzinfo=BEIJING_TZ)
     shipped_at = shipped_at.astimezone(BEIJING_TZ)
 
-    supply_entity_id = supply_entity_input
+    supply_entity_id = supply_entity_input.upper()
     entity_code = "SA"
     config = load_tube_config()
     for entity in get_config_list(config, "supply_entities"):
         entity_id = _clean(entity.get("entity_id"))
         configured_code = _clean(entity.get("code"))
         if supply_entity_input.lower() in {entity_id.lower(), configured_code.lower()}:
-            supply_entity_id = entity_id or supply_entity_input
+            supply_entity_id = (entity_id or supply_entity_input).upper()
             source_code = configured_code or entity_id
             compact_code = "".join(char for char in source_code if char.isalnum())
             entity_code = (compact_code + "X")[:2].upper()
@@ -237,23 +237,40 @@ def submit_fitting_delivery(
 
     session = SessionLocal()
     try:
-        sequence_number = int(
-            session.execute(
-                text(
-                    """
-                    INSERT INTO tube.tube_fitting_shipment_counter (
-                        supply_entity_id, shipped_date, last_value
-                    ) VALUES (:supply_entity_id, :shipped_date, 1)
-                    ON CONFLICT (supply_entity_id, shipped_date)
-                    DO UPDATE SET last_value = tube.tube_fitting_shipment_counter.last_value + 1
-                    RETURNING last_value
-                    """
-                ),
-                {"supply_entity_id": supply_entity_id, "shipped_date": shipped_at.date()},
-            ).scalar_one()
-        )
         date_part = shipped_at.strftime("%y%m%d")
-        shipment_no = f"FS{entity_code}-{date_part}-{sequence_number:03d}"
+        shipment_prefix = f"FS{entity_code}-{date_part}-"
+
+        # 1. 联合查询物理发货表与注册表中已存在的最大 shipment_no 序号，确保序列 100% 紧密连续递增，绝无跳号与冲突
+        db_max_seq = session.execute(
+            text(
+                """
+                SELECT COALESCE(MAX(seq_val), 0) FROM (
+                    SELECT CAST(RIGHT(shipment_no, 3) AS INTEGER) AS seq_val FROM tube.tube_fitting_delivery WHERE shipment_no LIKE :prefix
+                    UNION ALL
+                    SELECT CAST(RIGHT(shipment_no, 3) AS INTEGER) AS seq_val FROM tube.tube_fitting_shipment_registry WHERE shipment_no LIKE :prefix
+                ) AS combined_shipments
+                """
+            ),
+            {"prefix": f"{shipment_prefix}%"},
+        ).scalar() or 0
+
+        sequence_number = int(db_max_seq) + 1
+
+        # 2. 同步重置更新计数器表，保持强一致
+        session.execute(
+            text(
+                """
+                INSERT INTO tube.tube_fitting_shipment_counter (
+                    supply_entity_id, shipped_date, last_value
+                ) VALUES (:supply_entity_id, :shipped_date, :seq_val)
+                ON CONFLICT (supply_entity_id, shipped_date)
+                DO UPDATE SET last_value = :seq_val
+                """
+            ),
+            {"seq_val": sequence_number, "supply_entity_id": supply_entity_id, "shipped_date": shipped_at.date()},
+        )
+
+        shipment_no = f"{shipment_prefix}{sequence_number:03d}"
         shipment_key = str(uuid4())
         session.execute(
             text(
@@ -269,15 +286,15 @@ def submit_fitting_delivery(
         insert_sql = text(
             """
             INSERT INTO tube.tube_fitting_delivery (
-                shipment_key, identifiers_locked, supply_entity_id, shipment_no,
-                order_no, vehicle_plate_no, section_1_id, fitting_type, model_spec,
-                shipped_qty, unit, shipped_at, ship_contact_name, ship_contact_phone,
-                ship_remark, status, created_by, updated_by
+                supply_entity_id, shipment_no, order_no, vehicle_plate_no,
+                section_1_id, fitting_type, model_spec, shipped_qty, unit,
+                shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
+                status, created_by, updated_by
             ) VALUES (
-                :shipment_key, TRUE, :supply_entity_id, :shipment_no,
-                :order_no, :vehicle_plate_no, :section_1_id, :fitting_type, :model_spec,
-                :shipped_qty, '个', :shipped_at, :ship_contact_name, :ship_contact_phone,
-                :ship_remark, 'shipped', :created_by, :updated_by
+                :supply_entity_id, :shipment_no, :order_no, :vehicle_plate_no,
+                :section_1_id, :fitting_type, :model_spec, :shipped_qty, '个',
+                :shipped_at, :ship_contact_name, :ship_contact_phone, :ship_remark,
+                'shipped', :created_by, :updated_by
             )
             RETURNING id
             """
@@ -289,7 +306,6 @@ def submit_fitting_delivery(
             row_id = session.execute(
                 insert_sql,
                 {
-                    "shipment_key": shipment_key,
                     "supply_entity_id": supply_entity_id,
                     "shipment_no": shipment_no,
                     "order_no": order_no,

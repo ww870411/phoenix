@@ -1,3 +1,13 @@
+## 2026-08-11 流转凭证 Modal 层级优化与到货确认 404 异常彻底消除 (SupplyManagementView.vue / DemandManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 清理了 `SupplyManagementView.vue` 中内嵌的重复 Modal 块，对流转凭证全局 Modal 挂载了 `position: fixed !important; z-index: 99999 !important;` 悬浮 CSS，确保在供给侧点击【流转凭证】必定瞬间居中高清晰弹出；
+  - 配合后端进行了物理表 ID 主键平滑重编号与 `issubset` 校验算法重构，彻底排除了需求侧到货确认时因重复 ID 误杀抛出的 `部分管件记录不存在` 错误；
+  - 前端生产打包构建成功（Vite 7.1.10，149 modules，9.33s）。
+
 ## 2026-08-11 管件发货显示与确认契约收口
 
 - `DemandManagementView.vue`：现场到货只提交正整数且不得超过发货数，批量请求统一使用 `arrived_qty_map`；施工接收只允许已到货记录，并统一透传 `remark`。
