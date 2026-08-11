@@ -13,6 +13,23 @@
 - **宽度隔离**：管件明细区域负责自身溢出，页面根节点不产生横向滚动。
 - **验证证据**：前端生产构建通过（Vite 7.1.10，149 modules，9.63s）；已登录浏览器在 1692px 桌面宽度及 785px 可视宽度完成折叠/展开回归，窄屏下 `pageScrollWidth = viewport = 785`、展开明细 `scrollWidth = clientWidth = 649`，控制台无新增错误。
 
+## 2026-08-11 [彻底清退拿发货量 shipped_qty 充当实到量 arrived_qty 的偷懒逻辑，确保 100% 真实取自数据库]
+- **实到数量物理列绑定纠偏 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue`)**：
+  - **排查深层原因**：此前流转凭证 Modal 与聚合列表计算中，旧代码偷懒写了 `: (it.shipped_qty || it.shippedQty)` 的假 fallback 逻辑。当到货未确认或到货数据有损耗/尚未存入时，旧代码直接拿发货量冒充实到量；
+  - **纠偏与严肃落地**：
+    1. 彻底拔除全套前端页面中所有拿 `shipped_qty` 偷充 `arrived_qty` 的保底 fallback 逻辑；
+    2. 实到长度/件数 100% 且仅能读取 PostgreSQL 数据库中落盘的 `arrived_qty` 真实物理字段；
+    3. 若数据库中 `arrived_qty` 字段为空/尚未确认到货，前端一律严肃展示 **`—`**；若数据库落盘了损耗后的真实数（如发货 96 米、实到 94 米），前端准确如实反映 **`94 米`**；
+  - **验证证据**：前端生产打包编译 Vite 7.1.10 成功 PASSED。
+
+## 2026-08-11 [重构凭证 Modal 实到数量渲染门禁：未确认到货前严格显示为 '—']
+- **实到数量/长度渲染门禁加固 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue`)**：
+  - **排查深层原因**：此前的 `v-if` 条件错将 `(it.arrived_qty !== undefined)` 逻辑单测包含在判定内，且在 `SupplyManagementView.vue` 中漏挂了 `v-if` 条件。在保温管直管等缺失 `arrived_qty` 属性的新发货物资处于等待到货阶段（`status = 'pending_arrival'` / `'shipped'`）时，错将发货长度（如 96 米）无条件作为实到长度回填展示；
+  - **门禁精准更正**：
+    1. 引入强到货状态校验：`Boolean(deliveryDetailModalData.arrivedConfirmAt || (status !== 'shipped' && status !== 'pending_arrival'))`；
+    2. 当且仅当目标车次/物品具备明确的到货确认记录及已妥投状态时，才展示实到长度/件数；未确认前 100% 坚决显示为 **`—`**；
+  - **验证证据**：前端生产构建 Vite 7.1.10 成功编译。
+
 ## 2026-08-11 [加固凭证 Modal 表格 DOM 容器，解决装载明细被 Flex 压缩变矮不可见的问题]
 - **表格容器防压缩加固 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue`)**：
   - **排查深层原因**：凭证 Modal `block-modal-container` 的 Flex 布局受限于垂直滚动条与视口高度约束时，外层装载明细 `<div>` 缺乏高度保护，导致其在小屏或弹窗高度收紧时被 `flex-shrink` 强制压缩变矮，内部 `<table>` 被裁剪遮挡；

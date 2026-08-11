@@ -1,3 +1,26 @@
+## 2026-08-11 彻底拔除 shipped_qty 冒充 arrived_qty 逻辑，实到数量 100% 纯粹绑定数据库物理字段 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 彻底拔除了以前 Codex 遗留的所有 `: (it.shipped_qty || it.shippedQty)` 的假代替保底逻辑；
+  - 凭证 Modal 与列表中的【实到长度 / 实到件数】100% 严谨且只能从 PostgreSQL 数据库中真实存取的 `arrived_qty` 物理列中读取；
+  - 未确认到货（数据库存为 null）时一律呈现 **“—”**，确认到货存入损耗实到量（如 94 米）时如实精准呈现为 **“94 米”**；
+  - Vite 7.1.10 打包构建通过（149 modules，9.02s）。
+
+## 2026-08-11 凭证 Modal 实到数量/长度展示门禁重构：未确认到货坚决显示为 '—' (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 加固了到货确认状态校验门禁：`Boolean(deliveryDetailModalData.arrivedConfirmAt || (status !== 'shipped' && status !== 'pending_arrival'))`；
+  - 保障任何处于“等待卸车到货/运输中”的保温管及管件发货单，其凭证中【实到长度 / 实到件数】均 100% 坚决显示为 **“—”**，彻底消灭了提前拿发货数回填填充的视觉 Bug；
+  - Vite 7.1.10 打包构建通过（149 modules，9.91s）。
+
 ## 2026-08-11 凭证 Modal 明细表格容器防挤压与高度撑开加固 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
 
 - **关联前端页面**：

@@ -913,8 +913,8 @@
                   <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ it.shipped_qty || it.shippedQty }} {{ isFittingDeliveryModal ? '个' : '米' }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
-                    <span v-if="it.status && it.status !== 'shipped' && it.status !== 'pending_arrival'" style="color: #059669;">
-                      {{ it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : it.shipped_qty || it.shippedQty) }} {{ isFittingDeliveryModal ? '个' : '米' }}
+                    <span v-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
+                      {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ isFittingDeliveryModal ? '个' : '米' }}
                     </span>
                     <span v-else style="color: #94a3b8; font-weight: normal;">—</span>
                   </td>
@@ -1103,7 +1103,10 @@ function showDeliveryDetail(input) {
   const warehouseRemark = mainRow.warehouse_remark || mainRow.warehouseRemark || ''
 
   const totalShippedQty = itemsList.reduce((sum, it) => sum + (Number(it.shipped_qty !== undefined ? it.shipped_qty : it.shippedQty) || 0), 0)
-  const totalArrivedQty = itemsList.reduce((sum, it) => sum + (Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty))) || 0), 0)
+  const totalArrivedQty = itemsList.reduce((sum, it) => {
+    const val = (it.arrived_qty !== undefined && it.arrived_qty !== null) ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : null)
+    return sum + (val !== null ? Number(val) : 0)
+  }, 0)
 
   deliveryDetailModalData.value = {
     ...mainRow,
