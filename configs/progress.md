@@ -1,3 +1,9 @@
+## 2026-08-11 [修复管件发货凭据缺失导致记录为 GUEST 及动作类型显示为英文缺陷]
+- **管件发货鉴权 Header 透传与转译补充 (`SupplyManagementView.vue` / `api.js` / `GlobalManagementView.vue` / `workspace.py` / `supply_management_service.py`)**：
+  - **GUEST 归因诊断**：前端 `SupplyManagementView.vue` 提交管件发货使用原生 `fetch` 未透传 Auth Header，导致后端无法接收 `AuthSession` 而兜底降级写入 `GUEST`；现封装为带 `attachAuthHeaders` 的 `submitFittingDelivery` 函数，并在后端添加多级 payload 兜底，确保准确提取真正的登录用户（如 `kaiyuan`）；
+  - **审计日志全链路确证 (`tube_operation_logs`)**：对 `logs.tube_operation_logs` 的写入逻辑进行了全链路复核，将 `operator_group` 成功从 `AuthSession` 透传至 `save_operation_log`，保障未来的 `logs.tube_operation_logs` 审计记录能精确收录真实发货账号与所属权限组；
+  - **行为英文归因诊断**：全局管理及后端日志中转译映射字典缺失 `SUBMIT_FITTING_DELIVERY` 与 `DELETE_FITTING_DELIVERY`；现已在 `GlobalManagementView.vue` 与 `workspace.py` 中补全为 `'🔩 提交管件发货'` / `'🗑️ 撤销管件发货'` 中文映射与高亮 Badge 样式。
+
 ## 2026-08-11 [数据库在线编辑支持实时动态显示底层物理库信息及视觉排版全面重构]
 - **界面视觉重构与表格高度 750px 强制穿透锁定 (`AdminConsoleView.vue`)**：
   - **因由诊断**：因 Vue Scoped CSS `data-v-` 作用域与 Web Component (`revo-grid`) 内部视口（Shadow DOM / `.revo-viewport`）的隔离阻断，导致先前的外部类名高度设定未穿透至底层组件视口，出现“觉得视野没变”现象；

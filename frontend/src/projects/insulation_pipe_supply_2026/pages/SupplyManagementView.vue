@@ -1141,6 +1141,8 @@ import {
   getTubeSupplyManagementOptions,
   createCustomSupplyEntity,
   superUpdateTubeSupplyManagementDelivery,
+  getFittingDeliveriesList,
+  submitFittingDelivery,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -1612,15 +1614,13 @@ const loadFittingDeliveries = async () => {
   }
   fittingLoading.value = true
   try {
-    const params = new URLSearchParams({
-      supply_entity_id: selectedSupplyEntityId.value || '',
-      section_1_id: fittingTableSectionFilter.value || '',
-      search_keyword: fittingSearchKw.value || '',
-      limit: '200',
+    const data = await getFittingDeliveriesList(PROJECT_KEY, {
+      supplyEntityId: selectedSupplyEntityId.value || '',
+      section1Id: fittingTableSectionFilter.value || '',
+      searchKeyword: fittingSearchKw.value || '',
+      limit: 200,
     })
-    const res = await fetch(`/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/list?${params}`)
-    const data = await res.json()
-    if (data.ok) {
+    if (data && data.ok) {
       fittingDeliveries.value = data.items || []
     }
   } catch (err) {
@@ -1783,21 +1783,21 @@ const submitFittingForm = async () => {
 }
 
 const doRealSubmitFittingForm = async (directPayload = null) => {
-  const payload = directPayload || pendingSubmitPayload.value
-  if (!payload) return
+  const basePayload = directPayload || pendingSubmitPayload.value
+  if (!basePayload) return
+
+  const payload = {
+    ...basePayload,
+    operator: auth.user?.username || auth.user?.name || auth.username || '',
+  }
 
   submitFittingLoading.value = true
   fittingActionMsg.value = null
   showFittingTypeConfirmModal.value = false
 
   try {
-    const res = await fetch('/api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const data = await res.json()
-    if (data.ok) {
+    const data = await submitFittingDelivery(PROJECT_KEY, payload)
+    if (data && data.ok) {
       fittingActionMsg.value = { type: 'success', text: `🎉 提交成功！已成功录入管件发货单 [${data.shipment_no}]，包含 ${data.count} 项明细` }
       fittingGridSource.value = createEmptyFittingRows(8)
       fittingForm.value.vehiclePlateNo = ''
@@ -1805,7 +1805,7 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
       pendingSubmitPayload.value = null
       loadFittingDeliveries()
     } else {
-      fittingActionMsg.value = { type: 'error', text: data.detail || '提交失败' }
+      fittingActionMsg.value = { type: 'error', text: data?.detail || '提交失败' }
     }
   } catch (err) {
     fittingActionMsg.value = { type: 'error', text: `网络或系统异常: ${err.message}` }

@@ -1,3 +1,13 @@
+## 2026-08-11 补充导出审计日志管件动作中文转译映射与 operator_group 透传 (workspace.py / supply_management_service.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`
+- **更新说明**：
+  - 在 `workspace.py` 导出 CSV 审计日志的 `action_type_map` 中补充 `SUBMIT_FITTING_DELIVERY`（`提交管件发货`）与 `DELETE_FITTING_DELIVERY`（`撤销管件发货`）中文转译；
+  - 增强 `handle_submit_fitting_delivery` 提取用户身份逻辑，将 `session.group` 权限组同步透传至 `logs.tube_operation_logs` 表。
+
 ## 2026-08-11 扩展 list_database_tables API 支持底层数据库元数据透传与表数据量精准扫描 (admin_console.py)
 
 - **关联后端文件**：

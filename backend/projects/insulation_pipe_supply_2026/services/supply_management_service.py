@@ -1387,6 +1387,7 @@ def query_history_records(
 def submit_fitting_delivery(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
 ) -> Dict[str, Any]:
     raw_supply_entity_id = _normalize_text(payload.get("supply_entity_id") or "BH")
     supply_entity_id = raw_supply_entity_id.upper()
@@ -1527,7 +1528,7 @@ def submit_fitting_delivery(
             from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
             save_operation_log(
                 operator=operator,
-                operator_group="tube_supplier",
+                operator_group=operator_group or "tube_supplier",
                 action_type="SUBMIT_FITTING_DELIVERY",
                 action_desc=f"操作管件发货：发货单号【{shipment_no}】，共 {len(created_ids)} 项明细（车牌: {vehicle_plate_no}，接收标段: {section_1_id}）",
                 resource_id=shipment_no,

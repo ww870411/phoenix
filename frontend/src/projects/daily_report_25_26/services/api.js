@@ -29,8 +29,23 @@ let cachedProjectsToken = null
 
 function attachAuthHeaders(baseHeaders = {}, skipAuth = false) {
   const headers = { ...(baseHeaders || {}) }
-  if (!skipAuth && authToken) {
-    headers.Authorization = `Bearer ${authToken}`
+  if (!skipAuth) {
+    let tokenToUse = authToken
+    if (!tokenToUse && typeof window !== 'undefined') {
+      try {
+        const rawState = localStorage.getItem('phoenix_auth_state') || sessionStorage.getItem('phoenix_auth_state')
+        if (rawState) {
+          const parsed = JSON.parse(rawState)
+          if (parsed && parsed.token) {
+            tokenToUse = parsed.token
+            setAuthToken(parsed.token)
+          }
+        }
+      } catch (e) {}
+    }
+    if (tokenToUse) {
+      headers.Authorization = `Bearer ${tokenToUse}`
+    }
   }
   return headers
 }
@@ -606,6 +621,19 @@ export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_sup
   })
   if (!response.ok) {
     const detail = await parseErrorDetail(response, '查询管件发货记录失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function submitFittingDelivery(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/submit`, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '提交管件发货记录失败')
     throw new Error(detail)
   }
   return response.json()

@@ -2594,6 +2594,8 @@ def export_global_management_operation_logs(
         "SUBMIT_STATUS": "提交填报状态",
         "UPDATE_CONFIG": "配置修改",
         "SUPER_UPDATE_DELIVERY": "超管强改",
+        "SUBMIT_FITTING_DELIVERY": "提交管件发货",
+        "DELETE_FITTING_DELIVERY": "撤销管件发货",
     }
     
     for log in logs:
@@ -3179,8 +3181,15 @@ def handle_submit_fitting_delivery(
         group_str = str(session.group).strip().lower()
         if group_str in ("tube_global_viewer", "tube_viewer"):
             raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权操作管件发货")
-    operator = session.username if (session and getattr(session, "username", None)) else "GUEST"
-    return submit_fitting_delivery(payload, operator=operator)
+    operator = (
+        (session.username if (session and getattr(session, "username", None)) else None)
+        or str(payload.get("operator") or "").strip()
+        or str(payload.get("username") or "").strip()
+        or str(payload.get("created_by") or "").strip()
+        or "GUEST"
+    )
+    operator_group = getattr(session, "group", None) if session else None
+    return submit_fitting_delivery(payload, operator=operator, operator_group=operator_group)
 
 
 @public_router.get("/workspace/fitting_deliveries/list", summary="查询管件发货记录")

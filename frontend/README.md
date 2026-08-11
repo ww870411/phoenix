@@ -1,3 +1,13 @@
+## 2026-08-11 修复管件发货凭据丢失致 GUEST 及行为显示英文缺陷 (SupplyManagementView / GlobalManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **更新说明**：
+  - 在 `api.js` 中新增 `submitFittingDelivery` 与 `getFittingDeliveriesList` 函数，全量附带 `attachAuthHeaders` 标头，解决发货提交时因无法识别 Token 而被记为 `GUEST` 的缺陷；
+  - 在 `GlobalManagementView.vue` 提交记录及审计日志中补充 `SUBMIT_FITTING_DELIVERY`（`🔩 提交管件发货`）与 `DELETE_FITTING_DELIVERY`（`🗑️ 撤销管件发货`）的中文映射字典、筛选下拉菜单及样式 Badge。
+
 ## 2026-08-11 数据库在线编辑视图排版重构与表格高度 750px 强规则锁定 (AdminConsoleView)
 
 - **关联前端页面**：

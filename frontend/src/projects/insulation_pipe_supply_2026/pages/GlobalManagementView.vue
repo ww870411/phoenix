@@ -202,6 +202,8 @@
                     <option value="CREATE_DELIVERY_BATCH">🚚 批量发货</option>
                     <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
                     <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
+                    <option value="SUBMIT_FITTING_DELIVERY">🔩 管件发货</option>
+                    <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
                   </select>
                 </label>
 
@@ -1113,6 +1115,8 @@
                     <option value="SUBMIT_STATUS">✅ 提交填报状态</option>
                     <option value="UPDATE_CONFIG">⚙️ 配置修改</option>
                     <option value="SUPER_UPDATE_DELIVERY">🚨 超管强改</option>
+                    <option value="SUBMIT_FITTING_DELIVERY">🔩 提交管件发货</option>
+                    <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
                   </select>
                 </div>
                 
@@ -2482,6 +2486,8 @@ function translateActionType(type) {
     SUBMIT_STATUS: '✅ 提交填报状态',
     UPDATE_CONFIG: '⚙️ 配置修改',
     SUPER_UPDATE_DELIVERY: '🚨 超管强改',
+    SUBMIT_FITTING_DELIVERY: '🔩 提交管件发货',
+    DELETE_FITTING_DELIVERY: '🗑️ 撤销管件发货',
   }
   return dict[type] || type
 }
@@ -2498,6 +2504,8 @@ function getActionTypeBadgeStyle(type) {
     SUBMIT_STATUS: { bg: '#e8f7f0', color: '#2dca73' },
     UPDATE_CONFIG: { bg: '#f4f5f7', color: '#5a6b82' },
     SUPER_UPDATE_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
+    SUBMIT_FITTING_DELIVERY: { bg: '#eef2ff', color: '#4f46e5' },
+    DELETE_FITTING_DELIVERY: { bg: '#fff1f2', color: '#e11d48' },
   }
   const match = colors[type] || { bg: '#f4f5f7', color: '#5a6b82' }
   return {
