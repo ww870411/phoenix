@@ -13,6 +13,42 @@
 - **宽度隔离**：管件明细区域负责自身溢出，页面根节点不产生横向滚动。
 - **验证证据**：前端生产构建通过（Vite 7.1.10，149 modules，9.63s）；已登录浏览器在 1692px 桌面宽度及 785px 可视宽度完成折叠/展开回归，窄屏下 `pageScrollWidth = viewport = 785`、展开明细 `scrollWidth = clientWidth = 649`，控制台无新增错误。
 
+## 2026-08-11 [加固凭证 Modal 表格 DOM 容器，解决装载明细被 Flex 压缩变矮不可见的问题]
+- **表格容器防压缩加固 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue`)**：
+  - **排查深层原因**：凭证 Modal `block-modal-container` 的 Flex 布局受限于垂直滚动条与视口高度约束时，外层装载明细 `<div>` 缺乏高度保护，导致其在小屏或弹窗高度收紧时被 `flex-shrink` 强制压缩变矮，内部 `<table>` 被裁剪遮挡；
+  - **防护与加固**：
+    1. 给明细包裹 `<div>` 挂载 `flex-shrink: 0 !important; min-height: 120px !important;` 专属防护样式；
+    2. 给内嵌 `<table>` 指定 `min-width: 480px; min-height: 70px;`，保障无论 Modal 怎么缩放，明细清单行均能以最饱满、最清晰的方式撑开展示；
+  - **验证证据**：前端生产构建 Vite 7.1.10 成功编译。
+
+## 2026-08-11 [统一凭证 Modal 文案称谓：将“保温直管”统一更正为“保温管”]
+- **凭证 Modal 描述统一更正 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue`)**：
+  - 将流转凭证 Modal 物资类别列中默认显示的 `'保温直管'` 统一更新替换为 **`'保温管'`**；
+  - 验证证据：前端生产打包构建 Vite 7.1.10 一次性 PASSED。
+
+## 2026-08-11 [全量解耦直管与管件流转凭证 Modal 呈现形态，消除保温直管中混入“管件”表头与单位的重度 Bug]
+- **直管 Modal vs 管件 Modal 彻底隔离解耦 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue` / `HistoryQueryView.vue`)**：
+  - **排查深层原因**：此前流转凭证 Modal 的 HTML 表格模板表头被硬编码写死了 `📦 本车次搭载管件清单及履约明细` 与 `<th...: 管件类型>`、`<td...: 个>`。导致用户在需求侧或供给侧点击**保温直管**发货记录时，凭证弹窗中错误混入了“管件”二字与“个”等误导性列标题；
+  - **两套形态智能隔离重构**：
+    1. 在前端全量 4 个视图中引入 `isFittingDeliveryModal` 计算属性；
+    2. **保温直管模式 (`isFittingDeliveryModal` 为 false)**：
+       - 区块标题：`📦 本车次保温管发货及履约明细`；
+       - 表头列名：`# | 物资类别 | 保温管规格描述 | 发货长度 | 实到长度 | 备注`；
+       - 行内单元格：`保温直管 | Φ1120×13/Φ1260×16 | 30 米 | 30 米`；
+    3. **管件模式 (`isFittingDeliveryModal` 为 true)**：
+       - 区块标题：`📦 本车次搭载管件清单及履约明细`；
+       - 表头列名：`# | 管件类型 | 规格型号 | 发货件数 | 实到件数 | 备注`；
+       - 行内单元格：`弯头 | DN1000 | 2 个 | 2 个`；
+  - **验证证据**：前端生产构建 Vite 7.1.10 顺利通过。
+
+## 2026-08-11 [重构流转凭证 Modal 计量单位智能识别算法，消除保温直管硬编码为 '个' 的故障]
+- **流转凭证 Modal 智能单位推导 (`DemandManagementView.vue` / `SupplyManagementView.vue` / `WarehouseManagementView.vue` / `HistoryQueryView.vue`)**：
+  - **排查根因**：全套前端页面的 `showDeliveryDetail` 函数中，之前审计兜底时硬编码写死了 `unit: mainRow.unit || '个'`。因为 PostgreSQL 物理表 `tube_delivery`（保温直管）记录未存储 `unit` 字段（直管统一为“米”），导致直管记录在弹出流转凭证 Modal 时被强行降级兜底显示为了 **“个”**；
+  - **智能推导更正**：
+    1. 在 `showDeliveryDetail` 的赋值中增加了对直管型号属性（`pipe_model_id` / `pipe_model_name`）的判定；
+    2. 当检测到直管模型时，默认计量单位智能赋予 **“米”**；当检测到管件模型（`fitting_type`）时，赋予 **“个”**，彻底实现了直管（米）与管件（个）单位的完美分流与准确渲染；
+  - **验证证据**：前端打包构建 Vite 7.1.10 顺利 compile 通过。
+
 ## 2026-08-11 [为保温直管物理表 tube_delivery 绑定自增主键序列，消灭发货 NotNullViolation 阻断]
 - **数据表序列与主键默认值绑定 (`tube.tube_delivery`)**：
   - **排查深层原因**：用户在提交保温直管（直管）批量发货时，后端 `POST /supply-management/deliveries/batch` 触发了 500 内部服务器错误。原因是在 PostgreSQL 物理数据库中，表 `tube.tube_delivery` 的 `id` 字段指定了 `NOT NULL` 约束，但其 `column_default` 为空（未绑定 `DEFAULT nextval('tube.tube_delivery_id_seq'::regclass)` 关联序列）。SQL 执行 `INSERT INTO tube.tube_delivery` 时没给 `id` 设值且缺失 Default 从而触发了 `psycopg2.errors.NotNullViolation: null value in column "id" of relation "tube_delivery"`；

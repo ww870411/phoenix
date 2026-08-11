@@ -887,34 +887,34 @@
             </div>
           </div>
 
-          <!-- 本车装载物品管件明细清单 -->
-          <div v-if="deliveryDetailModalData.itemsList && deliveryDetailModalData.itemsList.length" style="padding: 12px 15px; background: #ffffff; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; overflow-x: auto;">
-            <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-              <span>📦 本车次搭载管件清单及履约明细</span>
-              <span style="font-size: 11px; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 99px; border: 1px solid #c7d2fe;">
-                共 {{ deliveryDetailModalData.totalTypesCount }} 种规格 / 合计 {{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}
+          <!-- 本车装载物品明细清单（区分管件模式与直管模式） -->
+          <div v-if="deliveryDetailModalData.itemsList && deliveryDetailModalData.itemsList.length" style="padding: 14px 15px; background: #ffffff; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: 120px !important; overflow-x: auto;">
+            <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <span>{{ isFittingDeliveryModal ? '📦 本车次搭载管件清单及履约明细' : '📦 本车次保温管发货及履约明细' }}</span>
+              <span style="font-size: 11px; color: #4f46e5; background: #eef2ff; padding: 3px 10px; border-radius: 99px; border: 1px solid #c7d2fe; font-weight: 600;">
+                {{ isFittingDeliveryModal ? `共 ${deliveryDetailModalData.totalTypesCount} 种规格 / 合计 ${deliveryDetailModalData.shippedQty} 个` : `装载总长度 ${deliveryDetailModalData.shippedQty} 米` }}
               </span>
             </div>
-            <table style="margin: 0; width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #edf2f7; border-radius: 6px; font-size: 11.5px; box-sizing: border-box;">
+            <table style="margin: 0; width: 100%; min-width: 480px; min-height: 70px; table-layout: fixed; border-collapse: collapse; border: 1px solid #edf2f7; border-radius: 6px; font-size: 11.5px; box-sizing: border-box;">
               <thead>
                 <tr style="background: #f1f5f9; color: #475569;">
                   <th style="padding: 6px 4px; text-align: center; width: 28px;">#</th>
-                  <th style="padding: 6px 6px; text-align: left; width: 100px;">管件类型</th>
-                  <th style="padding: 6px 6px; text-align: left; width: 140px;">规格型号</th>
-                  <th style="padding: 6px 6px; text-align: right; width: 65px;">发货数</th>
-                  <th style="padding: 6px 6px; text-align: right; width: 65px;">实到数</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 110px;">{{ isFittingDeliveryModal ? '管件类型' : '物资类别' }}</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 140px;">{{ isFittingDeliveryModal ? '规格型号' : '保温管规格描述' }}</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">{{ isFittingDeliveryModal ? '发货件数' : '发货长度' }}</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">{{ isFittingDeliveryModal ? '实到件数' : '实到长度' }}</th>
                   <th style="padding: 6px 6px; text-align: left;">备注</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(it, idx) in deliveryDetailModalData.itemsList" :key="it.id || idx" style="border-bottom: 1px solid #f1f5f9;">
                   <td style="padding: 6px 4px; text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ it.fitting_type || it.fittingType || '管件' }}</td>
-                  <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ it.model_spec || it.modelSpec || '—' }}</td>
-                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ it.shipped_qty || it.shippedQty }} {{ it.unit || '个' }}</td>
+                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}</td>
+                  <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ it.shipped_qty || it.shippedQty }} {{ isFittingDeliveryModal ? '个' : '米' }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
-                    <span v-if="it.status && it.status !== 'shipped'" style="color: #059669;">
-                      {{ it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : it.shipped_qty || it.shippedQty) }} {{ it.unit || '个' }}
+                    <span v-if="it.status && it.status !== 'shipped' && it.status !== 'pending_arrival'" style="color: #059669;">
+                      {{ it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : it.shipped_qty || it.shippedQty) }} {{ isFittingDeliveryModal ? '个' : '米' }}
                     </span>
                     <span v-else style="color: #94a3b8; font-weight: normal;">—</span>
                   </td>
@@ -1061,6 +1061,15 @@ const fittingActionMsg = ref(null)
 // 凭证 Modal 对话框
 const deliveryDetailModalVisible = ref(false)
 const deliveryDetailModalData = ref(null)
+
+const isFittingDeliveryModal = computed(() => {
+  if (!deliveryDetailModalData.value) return false
+  const data = deliveryDetailModalData.value
+  if (data.fitting_type || data.fittingType || data.isFittingDelivery) return true
+  if (data.pipe_model_id || data.pipe_model_name || data.pipeModelId || data.pipeModelName || data.isStraightPipe) return false
+  if (data.itemsList && data.itemsList.length && (data.itemsList[0].fitting_type || data.itemsList[0].fittingType)) return true
+  return false
+})
 
 function showDeliveryDetail(input) {
   if (!input) return

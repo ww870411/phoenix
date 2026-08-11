@@ -1,3 +1,38 @@
+## 2026-08-11 凭证 Modal 明细表格容器防挤压与高度撑开加固 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 挂载了 `flex-shrink: 0 !important; min-height: 120px !important;` 专属防压缩防护样式；
+  - 内嵌表格加上 `min-width: 480px; min-height: 70px;`，保障保温管发货明细行在任何视口下均能清晰饱满展开；
+  - Vite 7.1.10 打包构建通过（149 modules，8.80s）。
+
+## 2026-08-11 统一凭证 Modal 文案称谓：将“保温直管”更正为“保温管” (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 将流转凭证 Modal 物资类别列中默认显示的 `'保温直管'` 统一更正为 **`'保温管'`**；
+  - Vite 7.1.10 打包构建通过（149 modules，9.30s）。
+
+## 2026-08-11 直管与管件流转凭证 Modal 双形态彻底解耦 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 彻底解决了保温直管凭证 Modal 混入“管件”表头与“个”字等描述错乱问题；
+  - 重构了 `isFittingDeliveryModal` 计算属性分流机制：
+    - **直管 Modal** 专属展示：`📦 本车次保温管发货及履约明细`、表头 `物资类别` | `保温管规格描述` | `发货长度` | `实到长度`，数据行 `保温直管` | `Φ1120×13/Φ1260×16` | `30 米` | `30 米`；
+    - **管件 Modal** 专属展示：`📦 本车次搭载管件清单及履约明细`、表头 `管件类型` | `规格型号` | `发货件数` | `实到件数`，数据行 `弯头` | `DN1000` | `2 个` | `2 个`；
+  - Vite 7.1.10 打包构建通过（149 modules，10.14s）。
+
 ## 2026-08-11 流转凭证 Modal 层级优化与到货确认 404 异常彻底消除 (SupplyManagementView.vue / DemandManagementView.vue)
 
 - **关联前端页面**：

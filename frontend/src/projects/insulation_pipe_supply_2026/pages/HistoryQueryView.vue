@@ -432,7 +432,7 @@
                   <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.shippedAt) }}</span>
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>发货数量：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
+                  <div>发货数量：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
                   <div>操作账号：<span>{{ deliveryDetailModalData.createdBy || '供给端调度' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
                   <div>联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
@@ -645,7 +645,7 @@ function openDeliveryDetailModal(row) {
     vehiclePlateNo: row.vehicle_plate_no || '—',
     pipeModelName: `${row.fitting_type} (${row.model_spec || '未填'})`,
     shippedQty: row.shipped_qty,
-    unit: row.unit || '个',
+    unit: row.unit || ((row.pipe_model_id || row.pipe_model_name || row.pipeModelId || row.pipeModelName) ? '米' : (row.fitting_type ? '个' : '米')),
     shippedAt: row.shipped_at,
     createdBy: row.operator || row.created_by || '供给端调度',
     shipContactName: row.ship_contact_name,
