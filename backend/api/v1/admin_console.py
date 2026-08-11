@@ -809,36 +809,82 @@ def delete_backend_directory(
 def list_database_tables(session: AuthSession = Depends(get_current_session)):
     _ensure_admin_console_access(session)
     with SessionLocal() as db:
+        url = db.get_bind().url
+        db_host = str(url.host or "localhost")
+        db_port = str(url.port or 5432)
+        db_name = str(url.database or "phoenix")
+        db_user = str(url.username or "postgres")
+
+        db_info_stmt = text("SELECT current_database() AS db_name, version() AS db_version")
+        db_info_row = db.execute(db_info_stmt).mappings().first() or {}
+        real_db_name = str(db_info_row.get("db_name") or db_name)
+        db_version_raw = str(db_info_row.get("db_version") or "")
+        db_version_short = db_version_raw.split(",")[0] if db_version_raw else "PostgreSQL"
+
         stmt = text(
             """
-            SELECT table_schema, table_name
-            FROM information_schema.tables
-            WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-              AND table_type = 'BASE TABLE'
-            ORDER BY table_schema, table_name
+            SELECT 
+                t.table_schema, 
+                t.table_name,
+                COALESCE(c.reltuples::bigint, 0) AS estimated_rows,
+                pg_size_pretty(pg_total_relation_size(quote_ident(t.table_schema) || '.' || quote_ident(t.table_name))) AS size_pretty
+            FROM information_schema.tables t
+            LEFT JOIN pg_class c ON c.relname = t.table_name
+            LEFT JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
+            WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              AND t.table_type = 'BASE TABLE'
+            ORDER BY t.table_schema, t.table_name
             """
         )
         rows = db.execute(stmt).mappings().all()
 
-    tables: List[str] = []
-    schemas_map: Dict[str, List[str]] = {}
-    for row in rows:
-        schema = str(row.get("table_schema") or "public")
-        table_name = str(row.get("table_name") or "")
-        if not table_name:
-            continue
-        full_name = f"{schema}.{table_name}" if schema != "public" else table_name
-        tables.append(full_name)
-        if schema not in schemas_map:
-            schemas_map[schema] = []
-        schemas_map[schema].append(table_name)
+        tables: List[str] = []
+        schemas_map: Dict[str, List[str]] = {}
+        table_meta_map: Dict[str, Dict[str, Any]] = {}
+
+        for row in rows:
+            schema = str(row.get("table_schema") or "public")
+            table_name = str(row.get("table_name") or "")
+            if not table_name:
+                continue
+            full_name = f"{schema}.{table_name}" if schema != "public" else table_name
+
+            try:
+                real_count_stmt = text(f'SELECT count(*) FROM "{schema}"."{table_name}"')
+                real_count = db.execute(real_count_stmt).scalar() or 0
+            except Exception:
+                real_count = int(row.get("estimated_rows") or 0)
+
+            size_pretty = str(row.get("size_pretty") or "0 B")
+            table_meta_map[full_name] = {
+                "schema": schema,
+                "table_name": table_name,
+                "full_name": full_name,
+                "row_count": real_count,
+                "size_pretty": size_pretty,
+            }
+
+            tables.append(full_name)
+            if schema not in schemas_map:
+                schemas_map[schema] = []
+            schemas_map[schema].append(table_name)
 
     return {
         "ok": True,
+        "db_info": {
+            "database_name": real_db_name,
+            "host": db_host,
+            "port": db_port,
+            "user": db_user,
+            "database_version": db_version_short,
+            "total_tables": len(tables),
+        },
         "tables": tables,
         "schemas": list(schemas_map.keys()),
         "schema_tables_map": schemas_map,
+        "table_meta_map": table_meta_map,
     }
+
 
 
 @router.post("/admin/db/table/query", summary="查询数据表内容")
@@ -1828,22 +1874,49 @@ RESTORE_JOBS: Dict[str, RestoreJob] = {}
 
 def _find_pg_tool(tool_name: str) -> str:
     """寻找 pg_dump / pg_restore 可执行文件路径"""
+    # 1. 优先检查自定义环境变量 (如 PG_DUMP_PATH / PG_RESTORE_PATH)
+    env_key = f"{tool_name.upper()}_PATH"
+    if os.environ.get(env_key) and os.path.exists(os.environ[env_key]):
+        return os.environ[env_key]
+
+    # 2. 从 PATH 中检索
     found = shutil.which(tool_name)
     if found:
         return found
+
+    # 3. 常见系统默认安装位置 (Linux & Windows)
     possible_paths = [
+        # Linux
+        f"/usr/bin/{tool_name}",
+        f"/usr/local/bin/{tool_name}",
+        f"/usr/lib/postgresql/17/bin/{tool_name}",
+        f"/usr/lib/postgresql/16/bin/{tool_name}",
+        f"/usr/lib/postgresql/15/bin/{tool_name}",
+        f"/usr/lib/postgresql/14/bin/{tool_name}",
+        f"/usr/pgsql-16/bin/{tool_name}",
+        f"/usr/pgsql-15/bin/{tool_name}",
+        # Windows
         rf"D:\Program Files\PostgreSQL\18\bin\{tool_name}.exe",
         rf"D:\Program Files\PostgreSQL\17\bin\{tool_name}.exe",
         rf"D:\Program Files\PostgreSQL\16\bin\{tool_name}.exe",
         rf"D:\Program Files\PostgreSQL\15\bin\{tool_name}.exe",
         rf"C:\Program Files\PostgreSQL\18\bin\{tool_name}.exe",
+        rf"C:\Program Files\PostgreSQL\17\bin\{tool_name}.exe",
         rf"C:\Program Files\PostgreSQL\16\bin\{tool_name}.exe",
         rf"C:\Program Files\PostgreSQL\15\bin\{tool_name}.exe",
     ]
     for p in possible_paths:
         if os.path.exists(p):
             return p
-    return tool_name
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"服务器未找到 PostgreSQL 客户端工具 `{tool_name}`。\n"
+               f"💡 快速解决指引：\n"
+               f"1. 如果使用 Docker 部署，请重新构建后端镜像 `docker compose build backend` (已包含 postgresql-client)；\n"
+               f"2. 如果是 Linux 服务器原生部署，请运行：sudo apt-get install -y postgresql-client (Ubuntu/Debian) 或 sudo yum install -y postgresql (CentOS)；\n"
+               f"3. 或在环境变量中添加 `{env_key}` 指向该可执行文件的绝对路径。"
+    )
 
 def _get_pg_env_and_args():
     from backend.db.database_daily_report_25_26 import DATABASE_URL

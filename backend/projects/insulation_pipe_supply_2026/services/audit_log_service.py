@@ -39,6 +39,15 @@ def save_operation_log(
     
     session = SessionLocal()
     try:
+        # 自动保底防护：确保 logs.tube_operation_logs 的 id 字段配置有 Sequence 默认值
+        try:
+            session.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS logs.tube_operation_logs_id_seq;
+                ALTER TABLE logs.tube_operation_logs ALTER COLUMN id SET DEFAULT nextval('logs.tube_operation_logs_id_seq');
+            """))
+            session.commit()
+        except Exception:
+            session.rollback()
         session.execute(
             sql,
             {
@@ -141,7 +150,8 @@ DEMAND_SUBMISSION_ACTIONS = [
     "CONFIRM_ARRIVAL", "CONFIRM_CONSTRUCTION", "DIFF_APPROVE"
 ]
 SUPPLY_SUBMISSION_ACTIONS = [
-    "CREATE_DELIVERY", "CREATE_DELIVERY_BATCH", "CANCEL_DELIVERY", "CREATE_CUSTOM_ENTITY"
+    "CREATE_DELIVERY", "CREATE_DELIVERY_BATCH", "CANCEL_DELIVERY", "CREATE_CUSTOM_ENTITY",
+    "SUBMIT_FITTING_DELIVERY", "DELETE_FITTING_DELIVERY"
 ]
 WAREHOUSE_SUBMISSION_ACTIONS = [
     "CONFIRM_WAREHOUSE"

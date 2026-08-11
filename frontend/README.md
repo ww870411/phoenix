@@ -1,3 +1,27 @@
+## 2026-08-11 数据库在线编辑视图排版重构与表格高度 750px 强规则锁定 (AdminConsoleView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 在 HTML 模板及 CSS 深度选择器中对数据库网格（RevoGrid 及其底层视口 `.revo-viewport`）设置最高的 `750px` 优先高度强规则锁（`style="height: 750px; min-height: 700px;"`），彻底突破 Web Component 的隔离遮罩，大幅展开垂直可视视野；
+  - 彻底根治“数据库表在线编辑”头部按钮换行错位问题；
+  - 物理终端参数改用轻量级 Pill Tag 状态条展示；
+  - 重构数据表定位选择器与过滤/翻页控制层为分栏卡片面板，提升界面层次感与输入框交互体验。
+
+- **关联前端页面**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`
+- **更新说明**：
+  - 在“数据库表编辑”卡片顶栏新增物理终端信息 Banner（实时展示如 `localhost:5432/phoenix`、连接用户、PostgreSQL 版本与 Schema 总体分布）；
+  - 数据表下拉选择框中为每个数据表动态标注实时精确行数（如 `auth_sessions (280行)`）；
+  - 解除了 Tab 切换时旧有的 `if (!dbTables.value.length)` 阻断缓存逻辑，并在数据库还原完成后自动强刷表状态，做到真正的实时动态同步。
+
+## 2026-08-10 全局管理“提交记录”标签页集成管件发货操作日志 (GlobalManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 管件发货提交日志全面落盘并集成到全局管理界面的“提交记录”列表中，支持供给侧筛选与明细查看。
+
 ## 2026-08-10 支持上传与识别 DBeaver 无扩展名 Custom 备份包 (AdminConsoleView)
 
 - **关联前端页面**：

@@ -1430,6 +1430,15 @@ def submit_fitting_delivery(
 
     session = SessionLocal()
     try:
+        # 自动防错防护：确保 tube.tube_fitting_delivery 的 id 字段具备自增 Sequence 默认值
+        try:
+            session.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq;
+                ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq');
+            """))
+            session.commit()
+        except Exception:
+            session.rollback()
         count_sql = text(
             """
             SELECT COUNT(DISTINCT shipment_no) AS batch_cnt
@@ -1512,6 +1521,29 @@ def submit_fitting_delivery(
             created_ids.append(row_id)
 
         session.commit()
+
+        # 记录审计日志
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
+            save_operation_log(
+                operator=operator,
+                operator_group="tube_supplier",
+                action_type="SUBMIT_FITTING_DELIVERY",
+                action_desc=f"操作管件发货：发货单号【{shipment_no}】，共 {len(created_ids)} 项明细（车牌: {vehicle_plate_no}，接收标段: {section_1_id}）",
+                resource_id=shipment_no,
+                after_value={
+                    "shipment_no": shipment_no,
+                    "vehicle_plate_no": vehicle_plate_no,
+                    "section_1_id": section_1_id,
+                    "supply_entity_id": supply_entity_id,
+                    "shipped_at": beijing_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "items_count": len(created_ids),
+                    "items": items,
+                }
+            )
+        except Exception as log_ex:
+            print(f"[Operation Log Warning] 记录管件发货日志失败: {log_ex}")
+
         return {
             "ok": True,
             "shipment_no": shipment_no,

@@ -1,3 +1,27 @@
+## 2026-08-11 [数据库在线编辑支持实时动态显示底层物理库信息及视觉排版全面重构]
+- **界面视觉重构与表格高度 750px 强制穿透锁定 (`AdminConsoleView.vue`)**：
+  - **因由诊断**：因 Vue Scoped CSS `data-v-` 作用域与 Web Component (`revo-grid`) 内部视口（Shadow DOM / `.revo-viewport`）的隔离阻断，导致先前的外部类名高度设定未穿透至底层组件视口，出现“觉得视野没变”现象；
+  - **最高优先级双重锁定**：在 HTML 模板 DOM (`.db-grid-wrap` / `<RevoGrid>`) 上增加最高优先级内联内插 `:style="{ height: '750px' }"` 属性，同时在 CSS 选择器深度穿透 `:deep(.revo-viewport)` 与 `:deep(.main-viewport)` 加上 `height: 100% !important; min-height: 700px !important;` 强规则，彻底将表格渲染视野拉开到 750px 宽阔状态；
+  - **按钮错位根治**：重构 `.db-header-row` 为 Flex 双列结构，设置固高与 `white-space: nowrap`，彻底解决“刷新/查询/保存修改”按钮被换行压缩引起的文字偏移错位缺陷；
+  - **物理终端信息徽章条**：将原有的长段 subtext 改为精致的 Pill 标签条 (`.db-status-bar`)，独立展示 `Host:Port`、`DB`、`User`、`物理表数` 与 `Schema 集合`；
+  - **分组控件面板 (`.db-control-panel`)**：将“Schema / 数据表选择”定位层与“关键字搜索 / 排序 / 翻页”控制层分栏布局，输入框新增放大镜图标，下拉框与输入框统一高质感交互焦点阴影，整体排版紧凑美观。
+- **底层数据库元数据透传与行数角标 (`admin_console.py` / `AdminConsoleView.vue`)**：
+  - **因由诊断**：在控制台“数据库表编辑”标签页中，前端先前存在内存缓存阻断逻辑（`if (!dbTables.value.length)`），导致在数据库发生覆盖还原或表变更后切回 Tab 不重新获取最新数据库镜像；且缺乏对当前底层真实数据库名称、版本和单表实时行数的明细透传，导致用户误认为系统展示了非真实库表；
+  - **后端 API 响应增强 (`admin_console.py`)**：扩展 `GET /api/v1/admin/db/tables` 端点，透传连接的物理 Endpoint（`host:port/database` 与用户名），实时查出当前连接的 `database_name`、`database_version`，并精确扫描统计每个物理表的 `row_count`（真实记录数）与 `size_pretty`（占用空间）；
+  - **前端视图与无感实时同步 (`AdminConsoleView.vue`)**：在“数据库表编辑”头部加入“物理终端信息 Banner”（显示如 `localhost:5432/phoenix`），数据表下拉框显示行数角标（如 `auth_sessions (280行)`），并解除旧版前端阻断缓存逻辑，在 Tab 切换与数据库还原完成时强制无感刷新最新数据库全貌。
+
+## 2026-08-10 [修复管件发货提交日志未落盘及表主键自增序列未绑定缺陷]
+- **管件发货审计日志补全与从属统计集成 (`supply_management_service.py` / `audit_log_service.py`)**：
+  - **因由诊断**：在 `submit_fitting_delivery` 提交管件发货后未调用日志保存函数，且 `logs.tube_operation_logs` 审计日志表与 `tube.tube_fitting_delivery` 业务表在某些环境中缺失 `id` 自增序列默认值，导致写入时静默或显式抛出 `null value in column "id"` 主键非空冲突；
+  - **自增序列双重防错修复 (`fix_tube_fitting_delivery_id_seq.sql` & `fix_tube_operation_logs_id_seq.sql`)**：在 Python 逻辑层加入 `CREATE SEQUENCE IF NOT EXISTS` 与 `ALTER TABLE ... SET DEFAULT nextval(...)` 自动防错绑定，保障多环境部署可靠性；
+  - **提交记录接口闭环 (`audit_log_service.py`)**：将 `SUBMIT_FITTING_DELIVERY` 和 `DELETE_FITTING_DELIVERY` 动作枚举纳入 `SUPPLY_SUBMISSION_ACTIONS` 供给侧统计清单，全面覆盖管件发货日志落盘与 `/global-management/submission-logs` 的展示和计数。
+
+## 2026-08-10 [解决服务器部署缺失 pg_dump / pg_restore 导致的 [Errno 2] No such file 异常]
+- **生产容器镜像与多平台软链适配 (`Dockerfile.prod` / `admin_console.py`)**：
+  - **因由诊断**：后端生产镜像 `backend/Dockerfile.prod` 在 `runtime` 阶段只安装了 `libpq5` 基础驱动库，缺少 `postgresql-client` 客户端包（即 `pg_dump` 与 `pg_restore` 可执行文件）；且旧版 `_find_pg_tool` 只探测 Windows 路径；
+  - **Docker 生产镜像修复 (`backend/Dockerfile.prod`)**：在 `runtime` 阶段的 `apt-get install` 明确引入 `postgresql-client`，确保生产构建容器具备物理工具；
+  - **多平台路径匹配与友好排障 (`admin_console.py`)**：拓展 `_find_pg_tool` 函数，增加 Linux 常见 `/usr/bin/pg_dump` / `/usr/lib/postgresql/*/bin/` 安装路径，支持环境变量 `PG_DUMP_PATH` / `PG_RESTORE_PATH` 自定义重定向，并在找不到时抛出详细操作指南。
+
 ## 2026-08-10 [严格还原由用户界面勾选状态决定 Session 是否写入数据库持久化]
 - **规则纯粹化与用户控制权对齐 (`auth_manager.py` / `LoginView.vue`)**：
   - **登录页默认打勾 (`LoginView.vue`)**：登录页面默认初始化为勾选“记住我的登录状态” (`rememberMe = true`)；

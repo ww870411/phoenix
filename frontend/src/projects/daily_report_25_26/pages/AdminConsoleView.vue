@@ -95,57 +95,101 @@
 
         <section v-else-if="activeTab === 'database'" class="content-block">
           <section class="inner-card db-editor-card">
-            <header class="section-header">
-              <h3>数据库表在线编辑</h3>
-              <div class="system-actions">
-                <button class="btn ghost" type="button" :disabled="dbLoading || dbSaving" @click="loadDbTables">刷新表清单</button>
-                <button class="btn primary" type="button" :disabled="dbLoading || dbSaving || !dbSelectedTable" @click="loadDbRows">
-                  {{ dbLoading ? '加载中…' : '查询数据' }}
+            <!-- 头部：主标题与操作按钮组，彻底防错位 -->
+            <header class="db-header-row">
+              <div class="db-title-group">
+                <h3>数据库表在线编辑</h3>
+                <p class="subtext">支持对底层物理数据库全表进行结构化检索与数据在线编辑</p>
+              </div>
+              <div class="db-header-actions">
+                <button class="btn ghost" type="button" :disabled="dbLoading || dbSaving" @click="loadDbTables">
+                  🔄 刷新表清单
                 </button>
-                <button class="btn primary" type="button" :disabled="dbSaving || dbDirtyStats.dirtyRows === 0" @click="saveDbRows">
-                  {{ dbSaving ? '保存中…' : `保存修改（${dbDirtyStats.dirtyRows}行）` }}
+                <button class="btn primary" type="button" :disabled="dbLoading || dbSaving || !dbSelectedTable" @click="loadDbRows">
+                  🔍 {{ dbLoading ? '加载中…' : '查询数据' }}
+                </button>
+                <button class="btn success" type="button" :disabled="dbSaving || dbDirtyStats.dirtyRows === 0" @click="saveDbRows">
+                  💾 {{ dbSaving ? '保存中…' : `保存修改 (${dbDirtyStats.dirtyRows}行)` }}
                 </button>
               </div>
             </header>
-            <div class="toolbar db-toolbar">
-              <label class="field">
-                <span>Schema (架构)</span>
-                <select v-model="dbSelectedSchema" @change="onSchemaChange">
-                  <option v-for="s in dbSchemas" :key="s" :value="s">{{ s }}</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>数据表 (Table)</span>
-                <select v-model="dbSelectedTableName" @change="onTableNameChange">
-                  <option v-for="t in currentSchemaTables" :key="t" :value="t">{{ t }}</option>
-                </select>
-              </label>
-              <label class="field grow">
-                <span>关键字检索</span>
-                <input v-model.trim="dbSearchText" type="text" placeholder="在全字段文本中模糊匹配" />
-              </label>
-              <label class="field">
-                <span>排序字段</span>
-                <select v-model="dbOrderBy">
-                  <option value="">主键默认</option>
-                  <option v-for="col in dbColumns" :key="`sort-${col.name}`" :value="col.name">{{ col.name }}</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>排序方向</span>
-                <select v-model="dbOrderDir">
-                  <option value="asc">升序</option>
-                  <option value="desc">降序</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>每页行数</span>
-                <input v-model.number="dbLimit" type="number" min="1" max="1000" />
-              </label>
-              <label class="field">
-                <span>偏移量</span>
-                <input v-model.number="dbOffset" type="number" min="0" />
-              </label>
+
+            <!-- 物理终端信息徽章条 (Glass Status Chips) -->
+            <div v-if="dbInfo.database_name" class="db-status-bar">
+              <span class="db-chip highlight">
+                <span class="chip-label">🖥️ 物理终端:</span>
+                <strong>{{ dbInfo.host }}:{{ dbInfo.port }}</strong>
+              </span>
+              <span class="db-chip">
+                <span class="chip-label">💾 数据库:</span>
+                <strong>{{ dbInfo.database_name }}</strong>
+              </span>
+              <span class="db-chip">
+                <span class="chip-label">👤 用户:</span>
+                <code>{{ dbInfo.user }}</code>
+              </span>
+              <span class="db-chip">
+                <span class="chip-label">📊 物理表:</span>
+                <strong>{{ dbInfo.total_tables }} 张</strong>
+              </span>
+              <span class="db-chip">
+                <span class="chip-label">🏷️ Schema:</span>
+                <span>{{ dbSchemas.join(', ') }}</span>
+              </span>
+            </div>
+
+            <!-- 分组工具栏 1：数据源定位与检索翻页区 -->
+            <div class="db-control-panel">
+              <div class="db-selector-group">
+                <label class="db-field">
+                  <span class="field-label">Schema (架构)</span>
+                  <select v-model="dbSelectedSchema" class="db-select" @change="onSchemaChange">
+                    <option v-for="s in dbSchemas" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </label>
+                <label class="db-field table-grow">
+                  <span class="field-label">数据表 (Table)</span>
+                  <select v-model="dbSelectedTableName" class="db-select highlight-select" @change="onTableNameChange">
+                    <option v-for="t in currentSchemaTables" :key="t" :value="t">{{ t }} {{ getTableBadgeText(t) }}</option>
+                  </select>
+                </label>
+              </div>
+
+              <!-- 分组工具栏 2：检索与排序翻页控制区 -->
+              <div class="db-filter-row">
+                <label class="db-field search-grow">
+                  <span class="field-label">关键字模糊检索</span>
+                  <div class="input-with-icon">
+                    <span class="search-icon">🔍</span>
+                    <input v-model.trim="dbSearchText" type="text" class="db-input search-input" placeholder="在全字段文本中模糊匹配记录…" />
+                  </div>
+                </label>
+
+                <div class="db-sub-controls">
+                  <label class="db-field-compact">
+                    <span>排序</span>
+                    <select v-model="dbOrderBy" class="db-select-sm">
+                      <option value="">默认主键</option>
+                      <option v-for="col in dbColumns" :key="`sort-${col.name}`" :value="col.name">{{ col.name }}</option>
+                    </select>
+                  </label>
+                  <label class="db-field-compact">
+                    <span>方向</span>
+                    <select v-model="dbOrderDir" class="db-select-sm">
+                      <option value="asc">↑ 升序</option>
+                      <option value="desc">↓ 降序</option>
+                    </select>
+                  </label>
+                  <label class="db-field-compact">
+                    <span>每页</span>
+                    <input v-model.number="dbLimit" type="number" min="1" max="1000" class="db-input-sm" />
+                  </label>
+                  <label class="db-field-compact">
+                    <span>偏移</span>
+                    <input v-model.number="dbOffset" type="number" min="0" class="db-input-sm" />
+                  </label>
+                </div>
+              </div>
             </div>
             <div class="db-filter-wrap">
               <div class="db-filter-head">
@@ -210,7 +254,7 @@
               </div>
             </div>
             <p v-if="dbMessage" class="message">{{ dbMessage }}</p>
-            <div v-if="dbRowsDraft.length" class="db-grid-wrap">
+            <div v-if="dbRowsDraft.length" class="db-grid-wrap" style="height: 750px; min-height: 700px;">
               <RevoGrid
                 :key="dbGridRenderKey"
                 :row-headers="true"
@@ -224,6 +268,7 @@
                 :columns="dbGridColumns"
                 :source="dbGridSource"
                 class="db-data-grid"
+                style="height: 100% !important; min-height: 700px;"
                 @afterfocus="handleDbGridFocus"
                 @afteredit="handleDbGridAfterEdit"
                 @dblclick="openFocusedDbCellEditor"
@@ -1817,6 +1862,11 @@ function startRestoreJobPolling(jobId) {
         if (res.status === 'completed' || res.status === 'failed') {
           clearInterval(restorePollTimer)
           restorePollTimer = null
+          if (res.status === 'completed') {
+            dbTables.value = []
+            dbRowsDraft.value = []
+            loadDbTables()
+          }
         }
       }
     } catch (err) {
@@ -1924,6 +1974,19 @@ const dbSchemas = ref([])
 const dbSchemaTablesMap = ref({})
 const dbSelectedSchema = ref('public')
 const dbSelectedTableName = ref('')
+const dbInfo = ref({ database_name: '', database_version: '', total_tables: 0 })
+const dbTableMetaMap = ref({})
+
+function getTableBadgeText(tableName) {
+  const full = dbSelectedSchema.value === 'public'
+    ? tableName
+    : `${dbSelectedSchema.value}.${tableName}`
+  const meta = dbTableMetaMap.value[full]
+  if (meta && typeof meta.row_count === 'number') {
+    return `(${meta.row_count.toLocaleString()}行)`
+  }
+  return ''
+}
 
 const currentSchemaTables = computed(() => {
   return dbSchemaTablesMap.value[dbSelectedSchema.value] || []
@@ -3097,6 +3160,10 @@ async function loadDbTables() {
     const payload = await listAdminDbTables()
     const tables = Array.isArray(payload?.tables) ? payload.tables : []
     dbTables.value = tables
+    if (payload?.db_info) {
+      dbInfo.value = payload.db_info
+    }
+    dbTableMetaMap.value = payload?.table_meta_map || {}
     const rawMap = payload?.schema_tables_map || {}
     const rawSchemas = Array.isArray(payload?.schemas) ? payload.schemas : Object.keys(rawMap)
     
@@ -4055,10 +4122,8 @@ watch(
     }
     if (tab === 'database') {
       stopSystemTimer()
-      if (!dbTables.value.length) {
-        await loadDbTables()
-      }
-      if (!dbRowsDraft.value.length && dbSelectedTable.value) {
+      await loadDbTables()
+      if (dbSelectedTable.value) {
         await loadDbRows()
       }
       return
@@ -4758,10 +4823,228 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   margin-top: 12px;
   box-sizing: border-box;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
 }
 
-.db-toolbar {
+.db-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.db-title-group h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.db-title-group .subtext {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.db-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.db-header-actions .btn {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn.success {
+  background: #10b981;
+  color: #ffffff;
+  border: 1px solid #059669;
+}
+
+.btn.success:hover:not(:disabled) {
+  background: #059669;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.db-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
+  padding: 8px 12px;
+  margin: 12px 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.db-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #475569;
+  background: #ffffff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.db-chip.highlight {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.chip-label {
+  color: #64748b;
+}
+
+.db-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.db-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.db-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.table-grow {
+  flex: 1;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.db-select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.db-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.highlight-select {
+  font-weight: 600;
+  color: #0f172a;
+  border-color: #93c5fd;
+}
+
+.db-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-grow {
+  flex: 1;
+  min-width: 240px;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.db-input.search-input {
+  width: 100%;
+  height: 36px;
+  padding-left: 30px;
+  padding-right: 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.db-input.search-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.db-sub-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-field-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.db-select-sm,
+.db-input-sm {
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.db-input-sm {
+  width: 64px;
+  text-align: center;
 }
 
 .db-filter-wrap {
@@ -4844,13 +5127,13 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  height: 750px !important;
+  min-height: 700px !important;
   margin-top: 10px;
   border: 1px solid #dbe3ef;
   border-radius: 10px;
   box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: hidden;
-  contain: inline-size;
+  overflow: hidden;
   background: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
@@ -4860,13 +5143,19 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: clamp(380px, 58vh, 620px);
+  height: 100% !important;
+  min-height: 700px !important;
   font-size: 12px;
 }
 
-.db-grid-wrap :deep(revo-grid) {
-  width: 100%;
-  height: 100%;
+.db-grid-wrap :deep(revo-grid),
+.db-grid-wrap :deep(.revo-viewport),
+.db-grid-wrap :deep(.main-viewport),
+.db-grid-wrap :deep(.rg-view-wrap),
+.db-grid-wrap :deep(revogr-viewport-template) {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 700px !important;
   --rgRowBorderColor: #e5e7eb;
   --rgHeaderBackground: #f8fafc;
   --rgHeaderColor: #334155;

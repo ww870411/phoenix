@@ -1,3 +1,29 @@
+## 2026-08-11 扩展 list_database_tables API 支持底层数据库元数据透传与表数据量精准扫描 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/api/v1/admin_console.py`
+- **更新说明**：
+  - 更新 `GET /api/v1/admin/db/tables` 响应，增加 `db_info` 字段（透传 `host`、`port`、`user`、`database_name`、`database_version` 及 `total_tables`）；
+  - 增加 `table_meta_map` 映射字典，针对查询出来的每个物理表动态计算并输出实时精确数据行数（`row_count`）与格式化占用空间（`size_pretty`），提供真实精准的底层物理视图。
+
+## 2026-08-10 管件发货审计日志落盘 & tube_operation_logs 序列自动绑定 (supply_management_service.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`
+  - `backend/sql/fix_tube_fitting_delivery_id_seq.sql`
+  - `backend/sql/fix_tube_operation_logs_id_seq.sql`
+- **更新说明**：
+  - 在 `submit_fitting_delivery` 中接入 `save_operation_log`，在 `audit_log_service.py` 的 `SUPPLY_SUBMISSION_ACTIONS` 白名单中补充 `SUBMIT_FITTING_DELIVERY`，并补全数据库自增 sequence 防扣。
+
+## 2026-08-10 生产环境 Dockerfile.prod 集成 postgresql-client & 多平台 pg_dump 自动检索 (admin_console.py)
+
+- **关联后端文件**：
+  - `backend/Dockerfile.prod`
+  - `backend/api/v1/admin_console.py`
+- **更新说明**：
+  - 补充 `backend/Dockerfile.prod` 安装 `postgresql-client`；在 `admin_console.py` 中增加 Linux 目录扫描和环境变量重定向，彻底解决 Linux 服务器及 Docker 生产镜像下 `No such file or directory: 'pg_dump'` 报错。
+
 ## 2026-08-10 Session 数据库静默持久化与后端重启防踢断恢复 (auth_manager.py)
 
 - **关联后端文件**：

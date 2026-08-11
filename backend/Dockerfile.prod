@@ -35,7 +35,7 @@ RUN [ -f /etc/apt/sources.list ] && sed -i 's/deb.debian.org/mirrors.tuna.tsingh
     && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
     && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
     && apt-get update -o Acquire::Retries=5 \
-    && apt-get install -y --fix-missing --no-install-recommends libpq5 \
+    && apt-get install -y --fix-missing --no-install-recommends libpq5 postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local
