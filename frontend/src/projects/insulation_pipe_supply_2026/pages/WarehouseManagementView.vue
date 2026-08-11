@@ -750,6 +750,8 @@
                     <span v-else-if="group.status === 'arrived'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
                     <span v-else-if="group.status === 'construction_confirmed' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管归档</span>
                     <span v-else-if="group.status === 'warehouse_confirmed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已归档</span>
+                    <span v-else-if="group.status === 'cancelled'" class="fitting-status-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">❌ 已撤销</span>
+                    <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="fitting-status-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;">⚠️ 含已撤销明细</span>
 
                     <!-- 包含待归档项时显示“整车一键归档”按钮 -->
                     <button 
@@ -826,6 +828,7 @@
                           <span v-else-if="item.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
                           <span v-else-if="item.status === 'construction_confirmed' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
                           <span v-else-if="item.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
+                          <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
                         </td>
 
                         <!-- 库管单项归档操作列 -->
@@ -842,6 +845,7 @@
                             </button>
                           </div>
                           <span v-else-if="item.status === 'warehouse_confirmed'" style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 已完成归档</span>
+                          <span v-else-if="item.status === 'cancelled'" style="font-size: 11px; color: #b91c1c; font-weight: 600;">已撤销</span>
                           <span v-else style="font-size: 11px; color: #94a3b8;">⏳ 待前置完成</span>
                         </td>
                       </tr>
@@ -1034,10 +1038,7 @@ import {
   getTubeWarehouseManagementDeliveries,
   getTubeWarehouseManagementOptions,
   getFittingDeliveriesList,
-  confirmFittingDeliveryArrival,
-  confirmFittingDeliveryConstruction,
   confirmFittingDeliveryWarehouse,
-  cancelFittingDelivery,
 } from '../../daily_report_25_26/services/api'
 
 const auth = useAuthStore()
@@ -1054,7 +1055,6 @@ const expandedWarehouseFittingGroupKeys = ref(new Set())
 const fittingSubTab = ref('all') // 'all' | 'pending_arrival' | 'pending_construction' | 'pending_warehouse' | 'completed'
 
 // 管件勾选与流转处置
-const selectedFittingIds = ref([])
 const fittingActionLoading = ref(false)
 const fittingActionMsg = ref(null)
 
@@ -1156,7 +1156,7 @@ const toggleAllFittingGroups = (expandAll = true) => {
 const groupedWarehouseFittingRows = computed(() => {
   const map = new Map()
   for (const item of fittingRows.value) {
-    const groupKey = item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
+    const groupKey = item.shipment_key || item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
     if (!map.has(groupKey)) {
       map.set(groupKey, {
         groupKey,
@@ -1190,9 +1190,15 @@ const groupedWarehouseFittingRows = computed(() => {
 
   const result = Array.from(map.values())
   for (const group of result) {
+    const activeItems = group.items.filter(item => (item.status || 'shipped') !== 'cancelled')
+    group.hasCancelled = activeItems.length !== group.items.length
+    if (!activeItems.length) {
+      group.status = 'cancelled'
+      continue
+    }
     let minRank = 999
     let minStatus = 'shipped'
-    for (const item of group.items) {
+    for (const item of activeItems) {
       const st = item.status || 'shipped'
       const r = statusRankMap[st] !== undefined ? statusRankMap[st] : 0
       if (r < minRank) {
@@ -1299,71 +1305,18 @@ const loadWarehouseFittingDeliveries = async () => {
   }
 }
 
-function openFittingArrivalModal(items) {
-  if (!items || !items.length) return
-  fittingArrivalModalItems.value = items
-  const map = {}
-  items.forEach(it => {
-    map[it.id] = it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty
-  })
-  fittingArrivalQtyMap.value = map
-  fittingArrivalRemark.value = ''
-  showFittingArrivalModal.value = true
-}
-
-async function handleConfirmFittingArrival() {
-  if (!fittingArrivalModalItems.value.length) return
-  fittingActionLoading.value = true
-  fittingActionMsg.value = null
-  try {
-    const ids = fittingArrivalModalItems.value.map(it => it.id)
-    const res = await confirmFittingDeliveryArrival(projectKey, {
-      ids,
-      arrived_qty_map: fittingArrivalQtyMap.value,
-      remark: fittingArrivalRemark.value,
-    })
-    if (res && res.ok) {
-      fittingActionMsg.value = { type: 'success', text: `🎉 成功确认到货 ${res.updated_count} 项管件！` }
-      showFittingArrivalModal.value = false
-      selectedFittingIds.value = []
-      loadWarehouseFittingDeliveries()
-    }
-  } catch (err) {
-    fittingActionMsg.value = { type: 'error', text: `确认到货失败: ${err.message}` }
-  } finally {
-    fittingActionLoading.value = false
-  }
-}
-
-async function handleConfirmFittingConstruction(items) {
-  if (!items || !items.length) return
-  fittingActionLoading.value = true
-  fittingActionMsg.value = null
-  try {
-    const ids = items.map(it => it.id)
-    const res = await confirmFittingDeliveryConstruction(projectKey, { ids })
-    if (res && res.ok) {
-      fittingActionMsg.value = { type: 'success', text: `🎉 成功完成施工单位接收确认 ${res.updated_count} 项管件！` }
-      selectedFittingIds.value = []
-      loadWarehouseFittingDeliveries()
-    }
-  } catch (err) {
-    fittingActionMsg.value = { type: 'error', text: `施工接收确认失败: ${err.message}` }
-  } finally {
-    fittingActionLoading.value = false
-  }
-}
-
 async function handleConfirmFittingWarehouse(items) {
   if (!items || !items.length) return
   fittingActionLoading.value = true
   fittingActionMsg.value = null
   try {
     const ids = items.map(it => it.id)
-    const res = await confirmFittingDeliveryWarehouse(projectKey, { ids })
+    const res = await confirmFittingDeliveryWarehouse(projectKey, {
+      ids,
+      remark: '库管批量核对明细入库归档',
+    })
     if (res && res.ok) {
       fittingActionMsg.value = { type: 'success', text: `🎉 成功完成库管最终入库确认 ${res.updated_count} 项管件！` }
-      selectedFittingIds.value = []
       loadWarehouseFittingDeliveries()
     }
   } catch (err) {
@@ -1375,13 +1328,11 @@ async function handleConfirmFittingWarehouse(items) {
 
 async function handleConfirmSingleFittingWarehouse(item) {
   if (!item || !item.id) return
-  const currentUsername = (auth.user && auth.user.username) ? auth.user.username : '库管员'
   item.submitting = true
   try {
     const res = await confirmFittingDeliveryWarehouse(projectKey, {
       ids: [item.id],
-      warehouse_remark: '库管核对明细入库归档',
-      warehouse_confirm_by: currentUsername
+      remark: '库管核对明细入库归档'
     })
     if (res && res.ok) {
       alert(`✅ 单项管件【${item.fitting_type || '管件'} (${item.model_spec || ''})】库管归档成功！`)
@@ -1392,26 +1343,6 @@ async function handleConfirmSingleFittingWarehouse(item) {
     alert(`归档失败: ${err.message || '系统开小差了'}`)
   } finally {
     item.submitting = false
-  }
-}
-
-async function handleCancelFitting(items) {
-  if (!items || !items.length) return
-  if (!confirm('确定要撤销发货选中的管件发货单吗？此操作无法撤销。')) return
-  fittingActionLoading.value = true
-  fittingActionMsg.value = null
-  try {
-    const ids = items.map(it => it.id)
-    const res = await cancelFittingDelivery(projectKey, { ids })
-    if (res && res.ok) {
-      fittingActionMsg.value = { type: 'success', text: `成功撤销 ${res.updated_count} 项管件发货单` }
-      selectedFittingIds.value = []
-      loadWarehouseFittingDeliveries()
-    }
-  } catch (err) {
-    fittingActionMsg.value = { type: 'error', text: `撤销失败: ${err.message}` }
-  } finally {
-    fittingActionLoading.value = false
   }
 }
 

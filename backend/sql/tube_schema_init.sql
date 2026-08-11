@@ -363,6 +363,8 @@ ON CONFLICT (project_key, code) DO NOTHING;
 -- 管件发货明细表
 CREATE TABLE IF NOT EXISTS tube.tube_fitting_delivery (
     id BIGSERIAL PRIMARY KEY,
+    shipment_key VARCHAR(64) NOT NULL,
+    identifiers_locked BOOLEAN NOT NULL DEFAULT TRUE,
     supply_entity_id VARCHAR(64) NOT NULL,
     shipment_no VARCHAR(64) NOT NULL,
     order_no VARCHAR(64) NOT NULL,
@@ -381,7 +383,22 @@ CREATE TABLE IF NOT EXISTS tube.tube_fitting_delivery (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by VARCHAR(128),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_tube_fitting_shipped_qty_positive CHECK (shipped_qty > 0)
+    arrived_qty NUMERIC,
+    arrived_at TIMESTAMPTZ,
+    arrived_by TEXT,
+    arrival_remark TEXT,
+    construction_confirmed_at TIMESTAMPTZ,
+    construction_confirmed_by TEXT,
+    construction_remark TEXT,
+    warehouse_confirmed_at TIMESTAMPTZ,
+    warehouse_confirmed_by TEXT,
+    warehouse_remark TEXT,
+    cancelled_at TIMESTAMPTZ,
+    cancelled_by TEXT,
+    cancel_reason TEXT,
+    CONSTRAINT chk_tube_fitting_shipped_qty_positive CHECK (shipped_qty > 0 AND shipped_qty = TRUNC(shipped_qty)),
+    CONSTRAINT chk_tube_fitting_arrived_qty_range CHECK (arrived_qty IS NULL OR (arrived_qty > 0 AND arrived_qty <= shipped_qty AND arrived_qty = TRUNC(arrived_qty))),
+    CONSTRAINT chk_tube_fitting_status CHECK (status IN ('shipped', 'arrived', 'construction_confirmed', 'warehouse_confirmed', 'cancelled'))
 );
 
 COMMENT ON TABLE tube.tube_fitting_delivery IS '管件发货明细表';
@@ -396,6 +413,31 @@ CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_no
 
 CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_section_1_shipped
     ON tube.tube_fitting_delivery (section_1_id, shipped_at);
+
+CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_key
+    ON tube.tube_fitting_delivery (shipment_key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_fitting_delivery_new_order_no
+    ON tube.tube_fitting_delivery (order_no)
+    WHERE identifiers_locked;
+
+CREATE TABLE IF NOT EXISTS tube.tube_fitting_shipment_counter (
+    supply_entity_id VARCHAR(64) NOT NULL,
+    shipped_date DATE NOT NULL,
+    last_value INTEGER NOT NULL CHECK (last_value > 0),
+    PRIMARY KEY (supply_entity_id, shipped_date)
+);
+
+CREATE TABLE IF NOT EXISTS tube.tube_fitting_shipment_registry (
+    shipment_key VARCHAR(64) PRIMARY KEY,
+    shipment_no VARCHAR(64) NOT NULL,
+    is_legacy BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_fitting_new_shipment_no
+    ON tube.tube_fitting_shipment_registry (shipment_no)
+    WHERE is_legacy = FALSE;
 
 COMMIT;
 

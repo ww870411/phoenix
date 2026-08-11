@@ -608,22 +608,39 @@ export async function createCustomSupplyEntity(projectKey = 'insulation_pipe_sup
 }
 
 export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_supply_2026', query = {}) {
-  const params = new URLSearchParams()
-  if (query.section1Id) params.append('section_1_id', query.section1Id)
-  if (query.supplyEntityId) params.append('supply_entity_id', query.supplyEntityId)
-  if (query.startDate) params.append('start_date', query.startDate)
-  if (query.endDate) params.append('end_date', query.endDate)
-  if (query.searchKeyword) params.append('search_keyword', query.searchKeyword)
-  if (query.limit) params.append('limit', String(query.limit || 200))
+  const pageSize = Math.min(Math.max(Number(query.limit || 200), 1), 500)
+  const allItems = []
+  let page = 1
+  let latestResult = { ok: true, total: 0, page: 1, page_size: pageSize, has_more: false }
 
-  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/list?${params.toString()}`, {
-    headers: attachAuthHeaders(),
-  })
-  if (!response.ok) {
-    const detail = await parseErrorDetail(response, '查询管件发货记录失败')
-    throw new Error(detail)
+  do {
+    const params = new URLSearchParams()
+    if (query.section1Id) params.append('section_1_id', query.section1Id)
+    if (query.supplyEntityId) params.append('supply_entity_id', query.supplyEntityId)
+    if (query.startDate) params.append('start_date', query.startDate)
+    if (query.endDate) params.append('end_date', query.endDate)
+    if (query.searchKeyword) params.append('search_keyword', query.searchKeyword)
+    params.append('page', String(page))
+    params.append('limit', String(pageSize))
+
+    const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/list?${params.toString()}`, {
+      headers: attachAuthHeaders(),
+    })
+    if (!response.ok) {
+      const detail = await parseErrorDetail(response, '查询管件发货记录失败')
+      throw new Error(detail)
+    }
+    latestResult = await response.json()
+    allItems.push(...(latestResult.items || []))
+    page += 1
+  } while (latestResult.has_more && page <= 1000)
+
+  return {
+    ...latestResult,
+    items: allItems,
+    total: Number(latestResult.total ?? allItems.length),
+    has_more: false,
   }
-  return response.json()
 }
 
 export async function submitFittingDelivery(projectKey = 'insulation_pipe_supply_2026', payload = {}) {

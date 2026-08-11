@@ -541,7 +541,7 @@
                 <button 
                   type="button" 
                   class="btn primary" 
-                  :disabled="submitFittingLoading || isReadOnlyViewer" 
+                  :disabled="submitFittingLoading || isReadOnlyViewer || !canSubmitCurrentProject"
                   :style="isReadOnlyViewer ? { opacity: 0.5, pointerEvents: 'none !important', cursor: 'not-allowed', background: '#94a3b8 !important', borderColor: '#94a3b8 !important', color: '#ffffff !important' } : {}"
                   :title="isReadOnlyViewer ? '全局观察员角色仅具备只读权限，已被禁止提交发货' : '点击提交整车管件发货单'"
                   @click="submitFittingForm"
@@ -723,6 +723,18 @@
                       <span v-else-if="group.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
                       <span v-else-if="group.status === 'construction_confirmed' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管归档</span>
                       <span v-else-if="group.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已归档</span>
+                      <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11.5px;">❌ 已撤销</span>
+                      <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
+
+                      <button
+                        v-if="group.status === 'shipped' && ['Global_admin', 'tube_supplier_admin', 'tube_supplier'].includes(currentGroup)"
+                        type="button"
+                        class="btn ghost btn-sm"
+                        style="padding: 4px 10px; font-size: 12px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer;"
+                        @click.stop="handleCancelFittingGroup(group)"
+                      >
+                        撤销发货
+                      </button>
 
                       <button 
                         type="button" 
@@ -1343,6 +1355,7 @@ import {
   superUpdateTubeSupplyManagementDelivery,
   getFittingDeliveriesList,
   submitFittingDelivery,
+  cancelFittingDelivery,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -1853,7 +1866,7 @@ const toggleAllFittingGroups = (expandAll = true) => {
 const groupedFittingDeliveries = computed(() => {
   const map = new Map()
   for (const item of fittingDeliveries.value) {
-    const groupKey = item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
+    const groupKey = item.shipment_key || item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
     if (!map.has(groupKey)) {
       map.set(groupKey, {
         groupKey,
@@ -1887,9 +1900,15 @@ const groupedFittingDeliveries = computed(() => {
 
   const result = Array.from(map.values())
   for (const group of result) {
+    const activeItems = group.items.filter(item => (item.status || 'shipped') !== 'cancelled')
+    group.hasCancelled = activeItems.length !== group.items.length
+    if (!activeItems.length) {
+      group.status = 'cancelled'
+      continue
+    }
     let minRank = 999
     let minStatus = 'shipped'
-    for (const item of group.items) {
+    for (const item of activeItems) {
       const st = item.status || 'shipped'
       const r = statusRankMap[st] !== undefined ? statusRankMap[st] : 0
       if (r < minRank) {
@@ -1927,11 +1946,38 @@ const loadFittingDeliveries = async () => {
   }
 }
 
+const handleCancelFittingGroup = async (group) => {
+  const cancellableItems = (group?.items || []).filter(item => (item.status || 'shipped') === 'shipped')
+  if (!cancellableItems.length) return
+  const reason = window.prompt(`请输入撤销发货原因（车次 ${group.shipmentNo}）：`, '')
+  if (reason === null) return
+  if (String(reason).trim().length < 2) {
+    fittingActionMsg.value = { type: 'error', text: '撤销原因至少填写 2 个字符' }
+    return
+  }
+  fittingActionMsg.value = null
+  try {
+    const result = await cancelFittingDelivery(PROJECT_KEY, {
+      ids: cancellableItems.map(item => item.id),
+      remark: String(reason).trim(),
+    })
+    fittingActionMsg.value = { type: 'success', text: `已撤销 ${result.updated_count} 项管件发货记录` }
+    await loadFittingDeliveries()
+  } catch (error) {
+    fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
+  }
+}
+
 const submitFittingForm = async () => {
   fittingActionMsg.value = null
 
   if (isReadOnlyViewer.value) {
     fittingActionMsg.value = { type: 'error', text: '🔒 只读观察员角色无权操作或提交管件发货记录！' }
+    return
+  }
+
+  if (!canSubmitCurrentProject.value) {
+    fittingActionMsg.value = { type: 'error', text: '当前账号没有本项目的管件发货提交权限。' }
     return
   }
 
@@ -2083,10 +2129,7 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
   const basePayload = directPayload || pendingSubmitPayload.value
   if (!basePayload) return
 
-  const payload = {
-    ...basePayload,
-    operator: auth.user?.username || auth.user?.name || auth.username || '',
-  }
+  const payload = { ...basePayload }
 
   submitFittingLoading.value = true
   fittingActionMsg.value = null

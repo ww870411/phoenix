@@ -635,10 +635,12 @@
                     <span v-else-if="group.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
                     <span v-else-if="group.status === 'construction_confirmed' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管归档</span>
                     <span v-else-if="group.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已归档</span>
+                    <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11.5px;">❌ 已撤销</span>
+                    <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
 
                     <div style="text-align: right; margin-left: 4px;">
                       <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                      <strong style="font-size: 14px; color: #2563eb;">到货总计: {{ group.totalQty }} 个</strong>
+                      <strong style="font-size: 14px; color: #2563eb;">发货 {{ group.totalShippedQty }} 个 / 已确认到货 {{ group.totalArrivedQty }} 个</strong>
                     </div>
 
                     <!-- 流转凭证按钮 -->
@@ -691,7 +693,10 @@
                             <input 
                               type="number" 
                               v-model.number="item.tempArrivedQty"
-                              min="0"
+                              min="1"
+                              :max="item.shipped_qty"
+                              step="1"
+                              :disabled="!canConfirmArrival"
                               style="width: 60px; padding: 2px 4px; border: 1px solid #059669; border-radius: 4px; text-align: right; font-weight: bold; color: #047857; font-size: 12px;"
                             />
                             <span style="font-size: 11px; color: #64748b;">{{ item.unit || '个' }}</span>
@@ -707,6 +712,7 @@
                           <span v-else-if="item.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
                           <span v-else-if="item.status === 'construction_confirmed' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
                           <span v-else-if="item.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
+                          <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
                         </td>
 
                         <!-- 明细项独立确认操作列 -->
@@ -717,7 +723,8 @@
                               type="button" 
                               class="btn primary btn-sm" 
                               style="padding: 2px 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer;"
-                              :disabled="item.submitting"
+                              :disabled="item.submitting || !canConfirmArrival"
+                              :title="canConfirmArrival ? '确认现场到货' : '仅现场负责人可确认到货'"
                               @click.stop="handleConfirmSingleItemArrival(item)"
                             >
                               {{ item.submitting ? '提交中...' : '🚚 确认到货' }}
@@ -727,6 +734,7 @@
                               class="btn ghost btn-sm" 
                               style="padding: 2px 6px; font-size: 11.5px; color: #059669; border-color: #a7f3d0;"
                               @click.stop="openFittingArrivalModalForSingle(item, group)"
+                              :disabled="!canConfirmArrival"
                               title="补充到货备注"
                             >
                               💬 备注
@@ -739,7 +747,8 @@
                               type="button" 
                               class="btn primary btn-sm" 
                               style="padding: 2px 8px; font-size: 11.5px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer;"
-                              :disabled="item.submitting"
+                              :disabled="item.submitting || !canConfirmReceipt"
+                              :title="canConfirmReceipt ? '确认施工接收' : '仅施工单位可确认接收'"
                               @click.stop="handleConfirmSingleItemConstruction(item)"
                             >
                               {{ item.submitting ? '提交中...' : '👷 施工接收' }}
@@ -749,6 +758,7 @@
                               class="btn ghost btn-sm" 
                               style="padding: 2px 6px; font-size: 11.5px; color: #7c3aed; border-color: #ddd6fe;"
                               @click.stop="openFittingConstructionModalForSingle(item, group)"
+                              :disabled="!canConfirmReceipt"
                               title="补充领用备注"
                             >
                               💬 备注
@@ -1518,16 +1528,21 @@ function openFittingArrivalModal(group) {
 
 async function handleFittingArrivalSubmit() {
   if (!fittingArrivalForm.value.items.length) return
+  if (!canConfirmArrival.value) {
+    alert('当前账号无管件到货确认权限。')
+    return
+  }
   fittingArrivalSubmitting.value = true
   try {
-    for (const item of fittingArrivalForm.value.items) {
-      await confirmFittingDeliveryArrival(PROJECT_KEY, {
-        id: item.id,
-        arrived_qty: item.arrived_qty,
-        arrival_remark: fittingArrivalForm.value.arrivalRemark,
-        arrived_by: fittingArrivalForm.value.operatorName
-      })
-    }
+    const ids = fittingArrivalForm.value.items.map(item => item.id)
+    const arrivedQtyMap = Object.fromEntries(
+      fittingArrivalForm.value.items.map(item => [String(item.id), Number(item.arrived_qty)])
+    )
+    await confirmFittingDeliveryArrival(PROJECT_KEY, {
+      ids,
+      arrived_qty_map: arrivedQtyMap,
+      remark: fittingArrivalForm.value.arrivalRemark
+    })
     alert('✅ 现场卸车到货确认成功！数据已更新。')
     fittingArrivalModalVisible.value = false
     await handleFittingQuery()
@@ -1573,15 +1588,16 @@ function openFittingConstructionModal(group) {
 
 async function handleFittingConstructionSubmit() {
   if (!fittingConstructionForm.value.items.length) return
+  if (!canConfirmReceipt.value) {
+    alert('当前账号无管件施工接收确认权限。')
+    return
+  }
   fittingConstructionSubmitting.value = true
   try {
-    for (const item of fittingConstructionForm.value.items) {
-      await confirmFittingDeliveryConstruction(PROJECT_KEY, {
-        id: item.id,
-        construction_remark: fittingConstructionForm.value.constructionRemark,
-        construction_confirmed_by: fittingConstructionForm.value.operatorName
-      })
-    }
+    await confirmFittingDeliveryConstruction(PROJECT_KEY, {
+      ids: fittingConstructionForm.value.items.map(item => item.id),
+      remark: fittingConstructionForm.value.constructionRemark
+    })
     alert('✅ 施工单位领用接收确认成功！数据已更新。')
     fittingConstructionModalVisible.value = false
     await handleFittingQuery()
@@ -1688,7 +1704,7 @@ const toggleAllDemandFittingGroups = (expandAll = true) => {
 const groupedDemandFittingRows = computed(() => {
   const map = new Map()
   for (const item of fittingRows.value) {
-    const groupKey = item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
+    const groupKey = item.shipment_key || item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
     if (!map.has(groupKey)) {
       map.set(groupKey, {
         groupKey,
@@ -1702,13 +1718,17 @@ const groupedDemandFittingRows = computed(() => {
         section1Name: item.section_1_name || item.section_1_id || '—',
         shipRemark: item.ship_remark || '',
         status: item.status || 'shipped',
-        totalQty: 0,
+        totalShippedQty: 0,
+        totalArrivedQty: 0,
         items: []
       })
     }
     const group = map.get(groupKey)
     group.items.push(item)
-    group.totalQty += (Number(item.shipped_qty) || 0)
+    group.totalShippedQty += (Number(item.shipped_qty) || 0)
+    if (['arrived', 'construction_confirmed', 'received', 'warehouse_confirmed'].includes(item.status) && item.arrived_qty !== null && item.arrived_qty !== undefined) {
+      group.totalArrivedQty += (Number(item.arrived_qty) || 0)
+    }
   }
 
   // 短板状态判定原则：若多条明细中有任何一条状态落后于其它条目，外层 group.status 展现该落后状态
@@ -1722,9 +1742,15 @@ const groupedDemandFittingRows = computed(() => {
 
   const result = Array.from(map.values())
   for (const group of result) {
+    const activeItems = group.items.filter(item => (item.status || 'shipped') !== 'cancelled')
+    group.hasCancelled = activeItems.length !== group.items.length
+    if (!activeItems.length) {
+      group.status = 'cancelled'
+      continue
+    }
     let minRank = 999
     let minStatus = 'shipped'
-    for (const item of group.items) {
+    for (const item of activeItems) {
       const st = item.status || 'shipped'
       const r = statusRankMap[st] !== undefined ? statusRankMap[st] : 0
       if (r < minRank) {
@@ -1777,19 +1803,22 @@ const handleFittingQuery = async () => {
 
 async function handleConfirmSingleItemArrival(item) {
   if (!item || !item.id) return
-  const currentUsername = (auth.user && auth.user.username) ? auth.user.username : '需求侧现场负责人'
+  if (!canConfirmArrival.value) {
+    alert('当前账号无管件到货确认权限。')
+    return
+  }
   const qtyToConfirm = Number(item.tempArrivedQty !== undefined ? item.tempArrivedQty : item.shipped_qty)
-  if (isNaN(qtyToConfirm) || qtyToConfirm < 0) {
-    alert('到货确认数量必须是非负数字！')
+  const shippedQty = Number(item.shipped_qty || 0)
+  if (!Number.isInteger(qtyToConfirm) || qtyToConfirm <= 0 || qtyToConfirm > shippedQty) {
+    alert(`到货确认数量必须是 1 至 ${shippedQty} 的正整数！`)
     return
   }
   item.submitting = true
   try {
     await confirmFittingDeliveryArrival(PROJECT_KEY, {
-      id: item.id,
-      arrived_qty: qtyToConfirm,
-      arrival_remark: item.ship_remark ? `现场核对签收 (发货备注: ${item.ship_remark})` : '现场清点签收到货',
-      arrived_by: currentUsername
+      ids: [item.id],
+      arrived_qty_map: { [String(item.id)]: qtyToConfirm },
+      remark: item.ship_remark ? `现场核对签收 (发货备注: ${item.ship_remark})` : '现场清点签收到货'
     })
     alert(`✅ 单项管件【${item.fitting_type || '管件'} (${item.model_spec || ''})】到货确认成功！确认到货数: ${qtyToConfirm}`)
     await handleFittingQuery()
@@ -1823,13 +1852,15 @@ function openFittingArrivalModalForSingle(item, group) {
 
 async function handleConfirmSingleItemConstruction(item) {
   if (!item || !item.id) return
-  const currentUsername = (auth.user && auth.user.username) ? auth.user.username : '施工现场负责人'
+  if (!canConfirmReceipt.value) {
+    alert('当前账号无管件施工接收确认权限。')
+    return
+  }
   item.submitting = true
   try {
     await confirmFittingDeliveryConstruction(PROJECT_KEY, {
-      id: item.id,
-      construction_remark: '施工班组核对领用入库',
-      construction_confirmed_by: currentUsername
+      ids: [item.id],
+      remark: '施工班组核对领用接收'
     })
     alert(`✅ 单项管件【${item.fitting_type || '管件'} (${item.model_spec || ''})】施工接收领用成功！`)
     await handleFittingQuery()

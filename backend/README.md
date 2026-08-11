@@ -1,3 +1,12 @@
+## 2026-08-11 管件物流 P0/P1 完整性与权限修复
+
+- 新增 `projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`，统一承载管件发货、列表、现场到货、施工接收、库管归档与撤销；写入和审计处于同一数据库事务，不再由循环逐条提交。
+- `api/workspace.py` 的管件接口从公开可选会话路由改为强制认证路由，并按供给、现场、施工、库管职责校验角色及供给主体/需求主体范围；Pydantic 请求模型采用 `extra='forbid'`，旧字段或未知字段返回 422，不再被静默忽略。
+- 流转状态严格限制为 `shipped → arrived → construction_confirmed → warehouse_confirmed`；撤销只允许 `shipped`，到货量必须为正整数且不超过发货量，批量操作必须完整命中全部 ID。
+- `sql/migrate_tube_fitting_delivery_integrity.sql` 修复历史重复 ID，新增 `shipment_key`、主键、序列、状态/数量检查约束、查询索引、并发车次计数表与业务单号登记表。历史业务单号保持不变，未来单号由原子计数生成。
+- 正式库迁移前已创建 `tube.tube_fitting_delivery_backup_20260811_p0p1`（8 行）；迁移后仍为 8 行、8 个唯一 ID、6 个批次。`FSSA-260811-001` 保留显示但对应 2 个不同内部批次。
+- 列表查询对 `shipment_key` 与撤销字段提供迁移前兼容表达式，避免发布顺序短暂不一致时整页 500。当前服务实查返回 8 条，登录态列表端点连续返回 `200 OK`；隔离/正式迁移核对、9 个单元测试、Python 编译均通过。
+
 ## 2026-08-11 库管侧管件发货记录排版调整（后端契约无变更）
 
 - 本轮仅调整 `WarehouseManagementView.vue` 的折叠车次卡片与展开明细表排版。

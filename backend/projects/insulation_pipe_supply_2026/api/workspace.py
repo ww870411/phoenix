@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, conint
 
 def _get_client_ip(request: Optional[Request]) -> str:
     if not request:
@@ -72,12 +72,16 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     update_delivery_warehouse_record,
     super_update_delivery_record,
     query_history_records,
-    submit_fitting_delivery,
+)
+from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_service import (
+    cancel_fitting_delivery,
     confirm_fitting_delivery_arrival,
     confirm_fitting_delivery_construction,
     confirm_fitting_delivery_warehouse,
-    cancel_fitting_delivery,
+    get_fitting_deliveries_by_ids,
     list_fitting_deliveries,
+    normalize_delivery_ids,
+    submit_fitting_delivery,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
@@ -276,6 +280,47 @@ class WarehouseConfirmPayload(BaseModel):
 class DiffApprovePayload(BaseModel):
     approved: bool
     remark: str = ""
+
+
+PositiveFittingInt = conint(strict=True, gt=0)
+
+
+class StrictFittingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class FittingDeliveryItemInput(StrictFittingPayload):
+    fitting_type: str = Field(min_length=1)
+    model_spec: str = Field(min_length=1)
+    shipped_qty: PositiveFittingInt
+    remark: str = ""
+
+
+class FittingDeliverySubmitPayload(StrictFittingPayload):
+    supply_entity_id: str = Field(min_length=1)
+    vehicle_plate_no: str = Field(min_length=1)
+    section_1_id: str = Field(min_length=1)
+    shipped_at: datetime
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    ship_remark: str = ""
+    items: List[FittingDeliveryItemInput] = Field(min_items=1)
+
+
+class FittingArrivalConfirmPayload(StrictFittingPayload):
+    ids: List[PositiveFittingInt] = Field(min_items=1)
+    arrived_qty_map: Dict[str, PositiveFittingInt] = Field(default_factory=dict)
+    remark: str = ""
+
+
+class FittingConfirmPayload(StrictFittingPayload):
+    ids: List[PositiveFittingInt] = Field(min_items=1)
+    remark: str = ""
+
+
+class FittingCancelPayload(StrictFittingPayload):
+    ids: List[PositiveFittingInt] = Field(min_items=1)
+    remark: str = Field(min_length=2)
 
 
 def _ensure_site_manager_access(session: AuthSession) -> None:
@@ -3180,172 +3225,139 @@ def handle_presence_logout(
     return {"ok": True}
 
 
-@public_router.post("/workspace/fitting_deliveries/submit", summary="提交管件发货记录表")
+def _ensure_fitting_role(session: AuthSession, allowed_groups: Set[str], action_name: str) -> None:
+    group = str(session.group or "").strip().lower()
+    if group not in allowed_groups:
+        raise HTTPException(status_code=403, detail=f"当前账号无{action_name}权限")
+
+
+def _normalized_access_ids(values: Set[str]) -> Set[str]:
+    return {str(value or "").strip().lower() for value in values if str(value or "").strip()}
+
+
+def _ensure_fitting_section_access(rows: List[Dict[str, Any]], session: AuthSession) -> None:
+    config = load_tube_config()
+    allowed_ids = _normalized_access_ids(resolve_accessible_section_1_ids(config, session.username, session.group))
+    denied = sorted({str(row.get("section_1_id") or "").strip() for row in rows if str(row.get("section_1_id") or "").strip().lower() not in allowed_ids})
+    if denied:
+        raise HTTPException(status_code=403, detail=f"当前账号无以下标段的管件操作权限：{', '.join(denied)}")
+
+
+def _ensure_fitting_supply_access(rows: List[Dict[str, Any]], session: AuthSession) -> None:
+    config = load_tube_config()
+    allowed_ids = _normalized_access_ids(resolve_accessible_supply_entity_ids(config, session.username, session.group))
+    denied = sorted({str(row.get("supply_entity_id") or "").strip() for row in rows if str(row.get("supply_entity_id") or "").strip().lower() not in allowed_ids})
+    if denied:
+        raise HTTPException(status_code=403, detail=f"当前账号无以下供给主体的管件操作权限：{', '.join(denied)}")
+
+
+@router.post("/workspace/fitting_deliveries/submit", summary="提交管件发货记录表")
 def handle_submit_fitting_delivery(
-    payload: Dict[str, Any] = Body(...),
-    session: Optional[AuthSession] = Depends(get_current_session_optional),
-):
-    if session and getattr(session, "group", None):
-        group_str = str(session.group).strip().lower()
-        if group_str in ("tube_global_viewer", "tube_viewer"):
-            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权操作管件发货")
-    operator = (
-        (session.username if (session and getattr(session, "username", None)) else None)
-        or str(payload.get("operator") or "").strip()
-        or str(payload.get("username") or "").strip()
-        or str(payload.get("created_by") or "").strip()
-        or "GUEST"
-    )
-    operator_group = getattr(session, "group", None) if session else None
-    return submit_fitting_delivery(payload, operator=operator, operator_group=operator_group)
+    payload: FittingDeliverySubmitPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货")
+    config = load_tube_config()
+    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, session.group)
+    if payload.supply_entity_id.strip().lower() not in _normalized_access_ids(accessible_supply_ids):
+        raise HTTPException(status_code=403, detail="当前账号无该供给主体的管件发货权限")
+    allowed_section_ids = resolve_supply_entity_allowed_section_ids(config, payload.supply_entity_id)
+    if allowed_section_ids and payload.section_1_id.strip().lower() not in _normalized_access_ids(allowed_section_ids):
+        raise HTTPException(status_code=403, detail="当前供给主体无该标段的管件发货权限")
+    return submit_fitting_delivery(payload.model_dump(), operator=session.username, operator_group=session.group)
 
 
-@public_router.post("/workspace/fitting_deliveries/confirm_arrival", summary="确认管件现场到货")
+@router.post("/workspace/fitting_deliveries/confirm_arrival", summary="确认管件现场到货")
 def handle_confirm_fitting_delivery_arrival(
-    payload: Dict[str, Any] = Body(...),
-    session: Optional[AuthSession] = Depends(get_current_session_optional),
-):
-    if session and getattr(session, "group", None):
-        group_str = str(session.group).strip().lower()
-        if group_str in ("tube_global_viewer", "tube_viewer"):
-            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权确认到货")
-    operator = (
-        (session.username if (session and getattr(session, "username", None)) else None)
-        or str(payload.get("operator") or "").strip()
-        or str(payload.get("username") or "").strip()
-        or "GUEST"
-    )
-    operator_group = getattr(session, "group", None) if session else None
-    return confirm_fitting_delivery_arrival(payload, operator=operator, operator_group=operator_group)
+    payload: FittingArrivalConfirmPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_site_manager"}, "管件到货确认")
+    rows = get_fitting_deliveries_by_ids(payload.ids)
+    if len(rows) != len(set(payload.ids)):
+        raise HTTPException(status_code=404, detail="部分管件记录不存在")
+    _ensure_fitting_section_access(rows, session)
+    return confirm_fitting_delivery_arrival(payload.model_dump(), operator=session.username, operator_group=session.group)
 
 
-@public_router.post("/workspace/fitting_deliveries/confirm_construction", summary="施工单位确认接收管件")
+@router.post("/workspace/fitting_deliveries/confirm_construction", summary="施工单位确认接收管件")
 def handle_confirm_fitting_delivery_construction(
-    payload: Dict[str, Any] = Body(...),
-    session: Optional[AuthSession] = Depends(get_current_session_optional),
-):
-    if session and getattr(session, "group", None):
-        group_str = str(session.group).strip().lower()
-        if group_str in ("tube_global_viewer", "tube_viewer"):
-            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权确认接收")
-    operator = (
-        (session.username if (session and getattr(session, "username", None)) else None)
-        or str(payload.get("operator") or "").strip()
-        or str(payload.get("username") or "").strip()
-        or "GUEST"
-    )
-    operator_group = getattr(session, "group", None) if session else None
-    return confirm_fitting_delivery_construction(payload, operator=operator, operator_group=operator_group)
+    payload: FittingConfirmPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_construction_unit"}, "管件施工接收确认")
+    rows = get_fitting_deliveries_by_ids(payload.ids)
+    if len(rows) != len(set(payload.ids)):
+        raise HTTPException(status_code=404, detail="部分管件记录不存在")
+    _ensure_fitting_section_access(rows, session)
+    return confirm_fitting_delivery_construction(payload.model_dump(), operator=session.username, operator_group=session.group)
 
 
-@public_router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件入库")
+@router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件入库")
 def handle_confirm_fitting_delivery_warehouse(
-    payload: Dict[str, Any] = Body(...),
-    session: Optional[AuthSession] = Depends(get_current_session_optional),
-):
-    if session and getattr(session, "group", None):
-        group_str = str(session.group).strip().lower()
-        if group_str in ("tube_global_viewer", "tube_viewer"):
-            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权操作库管入库")
-    operator = (
-        (session.username if (session and getattr(session, "username", None)) else None)
-        or str(payload.get("operator") or "").strip()
-        or str(payload.get("username") or "").strip()
-        or "GUEST"
-    )
-    operator_group = getattr(session, "group", None) if session else None
-    return confirm_fitting_delivery_warehouse(payload, operator=operator, operator_group=operator_group)
+    payload: FittingConfirmPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}, "管件库管入库确认")
+    rows = get_fitting_deliveries_by_ids(payload.ids)
+    if len(rows) != len(set(payload.ids)):
+        raise HTTPException(status_code=404, detail="部分管件记录不存在")
+    _ensure_fitting_section_access(rows, session)
+    return confirm_fitting_delivery_warehouse(payload.model_dump(), operator=session.username, operator_group=session.group)
 
 
-@public_router.post("/workspace/fitting_deliveries/cancel", summary="撤销管件发货单")
+@router.post("/workspace/fitting_deliveries/cancel", summary="撤销管件发货单")
 def handle_cancel_fitting_delivery(
-    payload: Dict[str, Any] = Body(...),
-    session: Optional[AuthSession] = Depends(get_current_session_optional),
-):
-    if session and getattr(session, "group", None):
-        group_str = str(session.group).strip().lower()
-        if group_str in ("tube_global_viewer", "tube_viewer"):
-            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权撤销发货")
-    operator = (
-        (session.username if (session and getattr(session, "username", None)) else None)
-        or str(payload.get("operator") or "").strip()
-        or str(payload.get("username") or "").strip()
-        or "GUEST"
-    )
-    operator_group = getattr(session, "group", None) if session else None
-    return cancel_fitting_delivery(payload, operator=operator, operator_group=operator_group)
+    payload: FittingCancelPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货撤销")
+    rows = get_fitting_deliveries_by_ids(payload.ids)
+    if len(rows) != len(set(payload.ids)):
+        raise HTTPException(status_code=404, detail="部分管件记录不存在")
+    _ensure_fitting_supply_access(rows, session)
+    return cancel_fitting_delivery(payload.model_dump(), operator=session.username, operator_group=session.group)
 
 
-@public_router.get("/workspace/fitting_deliveries/list", summary="查询管件发货记录")
+@router.get("/workspace/fitting_deliveries/list", summary="分页查询管件发货记录")
 def handle_list_fitting_deliveries(
-    section_1_id: str = Query("", description="接收标段/工程ID"),
+    section_1_id: str = Query("", description="接收标段/工程ID，多个值以逗号分隔"),
     supply_entity_id: str = Query("", description="供给主体ID"),
     start_date: str = Query("", description="开始时间/日期"),
     end_date: str = Query("", description="结束时间/日期"),
     search_keyword: str = Query("", description="搜索关键字"),
-    limit: int = Query(200, description="限制返回数量"),
-    session: AuthSession = Depends(get_current_session_optional),
-):
-    clean_sec_id = section_1_id if isinstance(section_1_id, str) else ""
-    clean_sup_id = supply_entity_id if isinstance(supply_entity_id, str) else ""
-    clean_start = start_date if isinstance(start_date, str) else ""
-    clean_end = end_date if isinstance(end_date, str) else ""
-    clean_kw = search_keyword if isinstance(search_keyword, str) else ""
-    clean_limit = limit if isinstance(limit, int) else 200
-
-    payload = load_tube_config()
-    items = list_fitting_deliveries(
-        section_1_id=clean_sec_id,
-        supply_entity_id=clean_sup_id,
-        start_date=clean_start,
-        end_date=clean_end,
-        search_keyword=clean_kw,
-        limit=clean_limit,
+    page: int = Query(1, ge=1),
+    limit: int = Query(200, ge=1, le=500),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config = load_tube_config()
+    group = str(session.group or "").strip().lower()
+    _ensure_fitting_role(
+        session,
+        {
+            "global_admin", "tube_supplier_admin", "tube_supplier",
+            "tube_site_manager", "tube_construction_unit",
+            "tube_warehouse_admin", "tube_warehouse_keeper", "tube_global_viewer",
+        },
+        "管件发货记录查询",
     )
-    _decorate_delivery_rows(payload, items)
-
-    accessible_section_1_ids: Set[str] = set()
-    accessible_supply_entity_ids: Set[str] = set()
-    if session and getattr(session, "username", None):
-        accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
-        if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
-            accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
-        accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
-
-    ext_acc_sec: Set[str] = set()
-    for s in accessible_section_1_ids:
-        s_clean = s.strip().lower()
-        if s_clean: ext_acc_sec.add(s_clean)
-        for ent in get_config_list(payload, "demand_entities"):
-            e_sec = str(ent.get("section_1_id") or "").strip().lower()
-            e_code = str(ent.get("code") or "").strip().lower()
-            if s_clean in (e_sec, e_code):
-                if e_sec: ext_acc_sec.add(e_sec)
-                if e_code: ext_acc_sec.add(e_code)
-
-    ext_acc_sup: Set[str] = set()
-    for p in accessible_supply_entity_ids:
-        p_clean = p.strip().lower()
-        if p_clean: ext_acc_sup.add(p_clean)
-        for ent in get_config_list(payload, "supply_entities"):
-            e_id = str(ent.get("entity_id") or "").strip().lower()
-            e_code = str(ent.get("code") or "").strip().lower()
-            if p_clean in (e_id, e_code):
-                if e_id: ext_acc_sup.add(e_id)
-                if e_code: ext_acc_sup.add(e_code)
-
-    filtered_items: List[Dict[str, Any]] = []
-    for item in items:
-        sec_id = str(item.get("section_1_id") or "").strip().lower()
-        sup_id = str(item.get("supply_entity_id") or "").strip().lower()
-
-        if ext_acc_sec and sec_id not in ext_acc_sec:
-            continue
-        if ext_acc_sup and sup_id not in ext_acc_sup:
-            continue
-        filtered_items.append(item)
-
-    return {"ok": True, "items": filtered_items}
+    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, session.group)
+    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, session.group)
+    section_scoped_groups = {"tube_supplier", "tube_site_manager", "tube_construction_unit", "tube_warehouse_keeper"}
+    supply_scoped_groups = {"tube_supplier"}
+    result = list_fitting_deliveries(
+        section_1_id=section_1_id,
+        supply_entity_id=supply_entity_id,
+        start_date=start_date,
+        end_date=end_date,
+        search_keyword=search_keyword,
+        page=page,
+        page_size=limit,
+        allowed_section_ids=sorted(accessible_section_ids) if group in section_scoped_groups else None,
+        allowed_supply_ids=sorted(accessible_supply_ids) if group in supply_scoped_groups else None,
+    )
+    _decorate_delivery_rows(config, result["items"])
+    return {"ok": True, **result}
 
 
 
