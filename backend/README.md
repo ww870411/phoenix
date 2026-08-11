@@ -1,3 +1,9 @@
+## 2026-08-11 库管侧管件发货记录排版调整（后端契约无变更）
+
+- 本轮仅调整 `WarehouseManagementView.vue` 的折叠车次卡片与展开明细表排版。
+- 管件发货记录查询、状态流转、单项/整车归档接口、请求参数和响应字段均未修改；现有后端服务与数据库结构保持兼容。
+- 前端仍复用既有 `list_fitting_deliveries` 数据及 `confirm_warehouse` 归档链路，无迁移要求。
+
 ## 2026-08-11 修复 submit_fitting_delivery 车次号重复生成与 list_fitting_deliveries 查询字段缺失 (supply_management_service.py)
 
 - **关联服务文件**：

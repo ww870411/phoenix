@@ -1,3 +1,85 @@
+## 2026-08-11 [库管侧管件发货记录折叠与展开排版重构]
+- **影响文件**：`frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`。
+- **折叠态重排**：车次与车牌、供需流向、规格数量与履约状态拆分为稳定信息区，顶部补充“车次/明细/管件”总量，并让操作按钮、四节点概览按可用宽度自动换行。
+- **展开态修正**：桌面端用 `colgroup + table-layout: fixed` 固定序号、管件类型、数量、状态和操作列，型号列吸收剩余空间；900px 以下将每条明细改为三段式行卡片，完整展示管件类型、型号、发货/实到数量、状态和操作，不再横向裁切。
+- **宽度隔离**：管件明细区域负责自身溢出，页面根节点不产生横向滚动。
+- **验证证据**：前端生产构建通过（Vite 7.1.10，149 modules，9.63s）；已登录浏览器在 1692px 桌面宽度及 785px 可视宽度完成折叠/展开回归，窄屏下 `pageScrollWidth = viewport = 785`、展开明细 `scrollWidth = clientWidth = 649`，控制台无新增错误。
+
+## 2026-08-11 [全站管件明细表格排版与动态/固定列宽空间精细重构]
+- **空间分配弹性精准化 (`WarehouseManagementView.vue`, `DemandManagementView.vue`, `SupplyManagementView.vue`)**：
+  - **启用 `table-layout: fixed; width: 100%;`**：彻底防范明细表格受内容溢出挤爆；
+  - **缩减冗余列**：将原先占据 150px-165px 的“操作列”精简为 120px-135px（空间缩减 20%~30%）；将 `#` 序号列统一微调为 38px；
+  - **倾斜扩宽核心文本列**：将释放出的横向宝贵空间全量倾斜赋予【型号 / 规格描述】（设置 `min-width: 200px` 吸收全部剩余剩余弹力空间），并为“发货件数/实到件数”保留 95px-115px 的清晰右对齐排版空间，彻底解决长规格换行挤压、操作列空白过大的失衡现象。
+  - **Header 主体防撑开**：为 Header 内的供给/需求主体增加 `max-width` 与 `text-overflow: ellipsis;`，保障车牌号与时间字样在任何分辨率下保持工整对齐。
+
+## 2026-08-11 [彻底重构实到件数显示条件，只基于真实履约状态进行判定]
+- **底层数据逻辑解耦 (`WarehouseManagementView.vue`, `DemandManagementView.vue`, `SupplyManagementView.vue`)**：
+  - **定位底层深层原因**：后端在装车发货落盘时，历史或接口默认将 `arrived_qty` 也塞入了发货件数默认值，导致前端单纯校验 `arrived_qty !== null` 时恒成立，依然渲染出了具体件数数字；
+  - **重构判定条件**：将前端所有展开明细表与凭证 Modal 的【实到件数】展示条件重构为**仅基于状态 `item.status && item.status !== 'shipped'` 触发**！只要项目还在 `shipped` 待到货状态，无论后端 `arrived_qty` 是否有预设值，前端一律强制遮蔽并展示为 `—`（或提供现场清点确认框），彻底解决未到货却展现假数字的问题。
+
+## 2026-08-11 [更正未确认到货管件在明细列表中误显“发货数量”的问题]
+- **实际到货量显示严格业务逻辑化 (`WarehouseManagementView.vue`, `DemandManagementView.vue`, `SupplyManagementView.vue`)**：
+  - **消除假性到货展示**：修复了先前三元表达式中在处于 `shipped` 待到货状态下直接把 `item.shipped_qty` 发货数降级回退当作实到件数填充的问题；
+  - **明确区分业务状态**：现针对在途/待到货状态（`shipped`），只读展示列中的【实到件数】严格展示为 `—`（破折号未到货），只有当现场完成确认到货后（状态跃升为 `arrived` 或之后），才正式呈现实际到货件数。
+
+## 2026-08-11 [彻底修复流转凭证 Modal 掉落至页面底部的 CSS 定位异常]
+- **悬浮置顶样式全量补全 (`WarehouseManagementView.vue`, `SupplyManagementView.vue`, `DemandManagementView.vue`)**：
+  - 为 `WarehouseManagementView.vue` 补全了 `.block-modal-overlay` 悬浮遮罩及 `.block-modal-container` 居中窗口的 CSS 规则；
+  - 强制设置 `position: fixed !important; top:0; left:0; width:100vw; height:100vh; z-index: 99999 !important; backdrop-filter: blur(4px) !important;`，消除了原本弹窗掉落在 `<main>` 文档流末尾导致页面最下方发胀的问题，弹窗现在完美处于视口正中央居中悬浮展现。
+
+## 2026-08-11 [修正 WarehouseManagementView 中 useAuthStore 的导入路径]
+- **导入路径精准修正 (`WarehouseManagementView.vue`)**：
+  - 将多退了一层的 `../../../daily_report_25_26/stores/auth` 相对路径更正为标准的 `../../daily_report_25_26/store/auth`（修正退层层级与 store 单数词根）；
+  - 彻底解决了 Vite 打包构建与 Docker 运行时的 `Failed to resolve import` 编译抛错。
+
+## 2026-08-11 [库管侧归档确认操作下沉至展开明细，支持逐条独立归档]
+- **明细精细化归档交互 (`WarehouseManagementView.vue`)**：
+  - **跨端体验 100% 统一**：与需求侧逐项到货/接收对齐，库管侧也将归档操作下沉至展开后的每一行管件明细中；
+  - **单项独立按钮**：明细表格中新增“库管单项归档操作”列，对于属于 `construction_confirmed / received`（即 `👷 待库管归档`）的明细行，提供独立的 **【🏢 归档入库】** 按钮，允许库管员精细化挑选逐项归档；
+  - **联动短板算法**：随着单条明细被库管确认归档，车次整体外层 Badge 将通过短板算法自动计算动态跃进。
+
+## 2026-08-11 [库管侧收回现场到货核对与施工接收按键，精简为仅在“待库管归档”时呈现确认按钮]
+- **角色权责严格解耦 (`WarehouseManagementView.vue`)**：
+  - **移出现场到货核对区域**：完全从库管侧页面删除了“现场确认管件到货与实到数量核对”的 Modal 弹窗及相关的到货件数修改框，清点责任彻底归需求侧现场负责人；
+  - **精简确认操作**：收回了跨权力的现场确认到货和施工接收按钮，**只当全车次/明细处于 `construction_confirmed / received`（即 `👷 待库管归档`）时，才显示【🏢 确认归档入库】**，使库管界面极为干练纯粹。
+
+## 2026-08-11 [彻底修复库管侧 selectedSection1Id 未定义变量异常]
+- **Bug 彻底消除 (`WarehouseManagementView.vue`)**：
+  - 将 `loadWarehouseFittingDeliveries` 函数中误用的 `selectedSection1Id.value` 改为库管侧正确的多标段匹配参数 `filters.section1Ids.join(',')`；
+  - 彻底解决了库管页面选择标段或切 Tab 时抛出 `selectedSection1Id is not defined` 的异常，全量构建测试成功。
+
+## 2026-08-11 [修复库管页面 loadWarehouseFittingDeliveries 未定义 JavaScript 异常]
+- **Bug 彻底修复 (`WarehouseManagementView.vue`)**：
+  - 补充实现了 `loadWarehouseFittingDeliveries` 具名加载函数，完成了与 `getFittingDeliveriesList` 后端 API 的透传；
+  - 为库管管件列表行初始化 `tempArrivedQty` 到货数与短板状态计算支持，彻底解决了库管页面中点击“管件”发货记录标签触发 `loadWarehouseFittingDeliveries is not defined` 阻断的缺陷。
+
+## 2026-08-11 [全站统一管件履约流转状态简明文案]
+- **全文案契约升级 (`shared.js`, `DemandManagementView.vue`, `SupplyManagementView.vue`, `WarehouseManagementView.vue`)**：
+  - **`arrived` 统一更新为**：**`✅ 待施工接收`**；
+  - **`construction_confirmed / received` 统一更新为**：**`👷 待库管归档`**；
+  - 彻底完成了全流程 4 节点简明指向文案约定：`🚚 待到货确认` ➔ `✅ 待施工接收` ➔ `👷 待库管归档` ➔ `🏢 库管已归档`。
+
+## 2026-08-11 [车次卡片外层状态引入“短板状态判定原则”]
+- **短板计算算法 (`DemandManagementView.vue`, `SupplyManagementView.vue`, `WarehouseManagementView.vue`)**：
+  - 在三个角色的页面中，对车次组 `group` 的外层汇总 `group.status` 赋予最严密的安全校验：定义状态等级（`shipped: 0`, `arrived: 1`, `construction_confirmed: 2`, `warehouse_confirmed: 3`）；
+  - 遍历整车中的每一条明细项，取全员中**最落后/等级最低的明细状态**作为整个车次卡片外层的显示状态；
+  - 确保只要车次内尚有一条明细处于 `shipped` 待到货，整个外层绝不虚夸，严格守候在 `🚚 待到货确认`，极大提升了工业防差错治理能力。
+
+## 2026-08-11 [重构需求侧管件到货与领用确认移至记录展开明细行并支持单项微调]
+- **车次状态 Badge 精简 (`DemandManagementView.vue`)**：
+  - 将管件车次卡片头部的未到货状态由 `🚚 在途 / 待到货确认` 修改为更精炼的 **`🚚 待到货确认`**；
+- **明细行细粒度独立确认 UI/UX 重构 (`DemandManagementView.vue`)**：
+  - 将到货确认与施工领用操作下沉至车次展开后的**每一行管件明细**，允许现场只针对特定选中的管件行做精细化确认；
+  - **确认数量默认与发货数一致**：在明细表格的“到货确认数”列中放置快捷数字框 `tempArrivedQty`，默认自动带入 `shipped_qty`（发货件数），现场人员可以直接编辑改数；
+  - **单项快捷提交**：明细行右侧放置 **【🚚 确认到货】** 与 **【💬 备注】** 按钮，点击一键提交该管件明细到货；已到货行则展现 **【👷 施工接收】** 按钮，实现了超高效率的细粒度流转。
+
+## 2026-08-11 [需求侧正式上线“现场卸车到货确认”与“施工领用接收确认”交互 Modal]
+- **需求侧操作交互接入 (`DemandManagementView.vue`)**：
+  - **车次卡片状态 Badge 升级**：在管件车次卡片头部展现全生命周期状态 Badge（`🚚 在途/待到货确认` / `✅ 现场已到货` / `👷 施工已接收` / `🏢 库管已归档`）；
+  - **🚚 现场到货确认 Modal**：提供“实际到货数量”在线清点修改（默认出厂数，支持到货损耗微调）、“现场到货备注”与操作账号录入，提交联动后端 `confirm_arrival` 过程；
+  - **👷 施工领用确认 Modal**：提供施工现场“接收领用说明 / 差异说明”填报，提交联动后端 `confirm_construction` 过程；
+  - 库管侧 `WarehouseManagementView.vue` 亦配套拥有“归档入库确认”控制流，全链路闭环就绪。
+
 ## 2026-08-11 [优化凭证 Modal 管件明细表格 CSS 防溢出排版]
 - **CSS 响应式与受控排版 (`DemandManagementView.vue` & `SupplyManagementView.vue`)**：
   - 为凭证 Modal 内部的【📦 本车次搭载管件清单及履约明细】表格重新设计样式，摆脱全局 `.data-table` 强制不换行的干预；

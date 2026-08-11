@@ -1,3 +1,116 @@
+## 2026-08-11 WarehouseManagementView 管件发货记录折叠/展开响应式排版
+
+- **关联页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **结构与行为**：
+  - 折叠车次行改为“车次主信息 + 供需流向 + 数量/状态/操作”三块结构，供给主体与需求主体不再和车牌、时间、按钮挤在同一文本行；
+  - 台账头部同步展示车次数、明细数、管件总数，操作按钮和四节点概览支持响应式换行；
+  - 展开明细在桌面端使用固定列宽表格；可视宽度小于等于 900px 时，每条明细自动切换为三段式行卡片，保留全部字段与归档操作；
+  - 明细宽度限制在车次卡片内部，不改变页面整体宽度。
+- **验证**：
+  - `npm --prefix D:\\编程项目\\phoenix\\frontend run build` 通过（149 modules，9.63s）；
+  - 已登录页面完成 1692px 与 785px 两档宽度回归；窄屏页面无横向溢出，展开明细完整可读。
+
+## 2026-08-11 全站管件明细表格排版与固定/弹性列宽精细化优化 (WarehouseManagementView, DemandManagementView, SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 为三个页面明细表格引入 `table-layout: fixed; width: 100%;`；
+  - 缩减“操作列”多余宽度（从 150-165px 减至 120-135px），全量倾斜补充给【型号/规格描述】列（`min-width: 200px` 吸收全部自适应空间），解决长文本挤压与空白浪费问题。
+
+## 2026-08-11 全站管件明细【实到件数】判定条件重构为状态驱动 (WarehouseManagementView, DemandManagementView, SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 将【实到件数】的展示条件由原本校验字段非空彻底改写为按状态驱动 `item.status && item.status !== 'shipped'` 触发，屏蔽后端历史预设数据影响。
+
+## 2026-08-11 全站管件明细【实到件数】未到货状态展示逻辑更正 (WarehouseManagementView, DemandManagementView, SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 修正了只读明细表格与凭证 Modal 中关于【实到件数】的计算判定：对于未完成确认到货（`shipped` 待到货）的管件，实到件数统一展示为 `—`，防止混淆。
+
+## 2026-08-11 WarehouseManagementView 补全凭证 Modal 悬浮居中 CSS 规则 (WarehouseManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 在 `<style scoped>` 中全量注入了 `.block-modal-overlay` 悬浮遮罩及居中弹窗 CSS 规则，确保弹窗强制置顶悬浮于屏幕中央。
+
+## 2026-08-11 WarehouseManagementView 修正 useAuthStore 模块导入路径 (WarehouseManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 将 import 路径从误写的 `../../../daily_report_25_26/stores/auth` 修正为标准规范的 `../../daily_report_25_26/store/auth`，解决 Vite 导入模块失败抛错。
+
+## 2026-08-11 WarehouseManagementView 库管确认归档下沉至展开明细逐项控制 (WarehouseManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 在展开的管件明细表格中新增“库管单项归档操作”列，针对处于待归档状态的行提供 **【🏢 归档入库】** 独立按钮，实现细粒度精细归档。
+
+## 2026-08-11 WarehouseManagementView 库管界面收回非库管按钮，仅待归档状态允许确认入库 (WarehouseManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 完全移除了“现场确认管件到货与实到数量核对”的 Modal 弹窗及修数区域；
+  - 精简卡片操作按钮，只在管件处于“待库管归档”状态时，呈现 **【🏢 确认归档入库】** 操作。
+
+## 2026-08-11 WarehouseManagementView 修正 selectedSection1Id 未定义参数报错 (WarehouseManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 将 `loadWarehouseFittingDeliveries` 函数内部参数绑定修正为 `filters.section1Ids.join(',')`，彻底解决未定义变量抛错。
+
+## 2026-08-11 全站管件履约流转状态 Badge 统一指向性文案更新 (DemandManagementView, SupplyManagementView, WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 将 `arrived` 状态统一更新为 **`✅ 待施工接收`**；
+  - 将 `construction_confirmed` 状态统一更新为 **`👷 待库管归档`**。
+
+## 2026-08-11 车次卡片外层状态重构：引入“短板状态判定原则” (DemandManagementView, SupplyManagementView, WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 定义流转状态安全等级（`shipped: 0` < `arrived: 1` < `construction_confirmed: 2` < `warehouse_confirmed: 3`）；
+  - 遍历组合车次包含的所有明细行，自动取其中最落后的一条状态做为车次卡片外层汇总 Badge，严防假进度。
+
+## 2026-08-11 DemandManagementView 管件确认下沉至展开明细行并支持单条微调 (DemandManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 将未到货状态 Badge 修改为 **`🚚 待到货确认`**；
+  - 到货确认与施工领用操作下沉入展开后的管件明细表格中，增加“到货确认数”快捷输入框（默认等于发货件数 `shipped_qty`）及单行操作按钮，支持仅对部分明细项进行独立确认。
+
+## 2026-08-11 需求侧 DemandManagementView 正式上线现场卸车到货确认与施工领用接收确认 Modal (DemandManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 在管件车次折叠卡片上增加状态 Badge 标签及“🚚 现场到货确认”、“👷 施工领用确认”交互按钮；
+  - 新增管件现场卸车到货清点 Modal（支持各管件实际到货数量清点与到货备注）与施工单位接收确认 Modal（支持施工说明与经办人操作）。
+
 ## 2026-08-11 优化 DemandManagementView 与 SupplyManagementView 凭证 Modal 中的管件明细表格样式排版 (DemandManagementView & SupplyManagementView)
 
 - **关联前端页面**：

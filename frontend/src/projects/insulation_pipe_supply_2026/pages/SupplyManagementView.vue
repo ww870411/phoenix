@@ -705,12 +705,12 @@
                         <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
                         <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
                       </div>
-                      <span class="plate-badge" style="margin-left: 4px;">{{ group.vehiclePlateNo }}</span>
-                      <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px;">
-                        <span style="color: #94a3b8;">➡️ 发往:</span>
-                        <strong>{{ group.section1Name }}</strong>
+                      <span class="plate-badge" style="margin-left: 4px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
+                      <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`发往标段: ${group.section1Name}`">
+                        <span style="color: #94a3b8; flex-shrink: 0;">➡️ 发往:</span>
+                        <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ group.section1Name }}</strong>
                       </div>
-                      <span style="font-size: 11.5px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
+                      <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 16px;">
@@ -718,7 +718,20 @@
                         <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
                         <strong style="font-size: 14px; color: #059669;">发货总计: {{ group.totalQty }} 个</strong>
                       </div>
-                      <span class="status-badge shipped" style="padding: 2px 8px; font-size: 11.5px;">已发货</span>
+                      <!-- 状态 Badge -->
+                      <span v-if="group.status === 'shipped' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
+                      <span v-else-if="group.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
+                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管归档</span>
+                      <span v-else-if="group.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已归档</span>
+
+                      <button 
+                        type="button" 
+                        class="btn ghost btn-sm" 
+                        style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer;"
+                        @click.stop="showDeliveryDetail(group)"
+                      >
+                        📜 流转凭证
+                      </button>
                     </div>
                   </div>
 
@@ -729,14 +742,14 @@
                       <span style="color: #0f172a;">{{ group.shipRemark }}</span>
                     </div>
 
-                    <table class="data-table" style="margin: 0; width: 100%; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                    <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
                       <thead style="background: #f8fafc;">
                         <tr>
-                          <th style="width: 45px; text-align: center;">#</th>
-                          <th style="width: 140px;">管件类型</th>
-                          <th>型号 / 规格描述</th>
-                          <th style="width: 110px; text-align: right;">发货件数</th>
-                          <th style="width: 140px;">订单号</th>
+                          <th style="width: 38px; text-align: center;">#</th>
+                          <th style="width: 110px;">管件类型</th>
+                          <th style="min-width: 220px;">型号 / 规格描述</th>
+                          <th style="width: 95px; text-align: right;">发货件数</th>
+                          <th style="width: 150px;">订单号</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -761,6 +774,161 @@
 
       </div>
     </main>
+
+    <!-- 订单流转备注及全生命周期详情弹窗 -->
+    <Transition name="fade">
+      <div v-if="deliveryDetailModalVisible && deliveryDetailModalData" class="block-modal-overlay" @click.self="deliveryDetailModalVisible = false">
+        <div class="block-modal-container" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%) !important;">
+            <span class="block-warning-icon">🚚</span>
+            <h3 style="margin-top: 5px; color: #fff;">订单全生命周期流转凭证</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">单号：{{ deliveryDetailModalData.deliveryCode || deliveryDetailModalData.deliveryId }}</p>
+          </div>
+          
+          <!-- 信息概述 -->
+          <div class="block-modal-metrics" style="grid-template-columns: repeat(3, 1fr); padding: 15px; gap: 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div class="metric-block-card">
+              <span class="lbl">车牌号</span>
+              <span class="val" style="font-size: 13px; font-weight: bold; color: #1e293b;">{{ deliveryDetailModalData.vehiclePlateNo || '—' }}</span>
+            </div>
+            <div class="metric-block-card" style="grid-column: span 2;">
+              <span class="lbl">规格型号</span>
+              <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
+            </div>
+            <div v-if="deliveryDetailModalData.shipRemark" class="metric-block-card" style="grid-column: span 3; background: #eff6ff; border: 1px solid #bfdbfe; text-align: left; padding: 8px 12px; border-radius: 6px;">
+              <span class="lbl" style="color: #1d4ed8; font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 4px;">📝 供给侧发货备注</span>
+              <span class="val" style="font-size: 12px; color: #1e3a8a; font-weight: 500; white-space: pre-wrap; word-break: break-all; margin-top: 2px;">{{ deliveryDetailModalData.shipRemark }}</span>
+            </div>
+          </div>
+
+          <!-- 本车装载物品管件明细清单 -->
+          <div v-if="deliveryDetailModalData.itemsList && deliveryDetailModalData.itemsList.length" style="padding: 12px 15px; background: #ffffff; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; overflow-x: auto;">
+            <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <span>📦 本车次搭载管件清单及履约明细</span>
+              <span style="font-size: 11px; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 99px; border: 1px solid #c7d2fe;">
+                共 {{ deliveryDetailModalData.totalTypesCount }} 种规格 / 合计 {{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}
+              </span>
+            </div>
+            <table style="margin: 0; width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #edf2f7; border-radius: 6px; font-size: 11.5px; box-sizing: border-box;">
+              <thead>
+                <tr style="background: #f1f5f9; color: #475569;">
+                  <th style="padding: 6px 4px; text-align: center; width: 28px;">#</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 100px;">管件类型</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 140px;">规格型号</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">发货数</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">实到数</th>
+                  <th style="padding: 6px 6px; text-align: left;">备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(it, idx) in deliveryDetailModalData.itemsList" :key="it.id || idx" style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 6px 4px; text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ it.fitting_type || it.fittingType || '管件' }}</td>
+                  <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ it.model_spec || it.modelSpec || '—' }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ it.shipped_qty || it.shippedQty }} {{ it.unit || '个' }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
+                    <span v-if="(it.status && it.status !== 'shipped') || (it.arrived_qty !== undefined && it.arrived_qty !== null) || (it.arrivedQty !== undefined && it.arrivedQty !== null)" style="color: #059669;">
+                      {{ it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty)) }} {{ it.unit || '个' }}
+                    </span>
+                    <span v-else style="color: #94a3b8; font-weight: normal;">—</span>
+                  </td>
+                  <td style="padding: 6px 6px; color: #64748b; font-style: italic; word-break: break-word;">{{ it.ship_remark || it.shipRemark || it.arrival_remark || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 时光轴内容 Timeline -->
+          <div style="padding: 25px 25px 15px 35px; text-align: left; position: relative; width: 100%; box-sizing: border-box;">
+            <!-- 时光轴中轴线 -->
+            <div style="position: absolute; left: 17px; top: 30px; bottom: 30px; width: 2px; border-left: 2px dashed #cbd5e1;"></div>
+
+            <!-- 1. 发货阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #4f46e5; border: 2px solid #fff; box-shadow: 0 0 0 2px #4f46e5; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #1e293b;">🏭 供给侧装车发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.shippedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>发货总数：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
+                  <div>调度经办：<span>{{ deliveryDetailModalData.shipContactName || deliveryDetailModalData.createdBy }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipContactPhone">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 现场确认到货阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span 
+                style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff; display: inline-block;"
+                :style="{ background: deliveryDetailModalData.arrivedAt ? '#059669' : '#cbd5e1', boxShadow: deliveryDetailModalData.arrivedAt ? '0 0 0 2px #059669' : '0 0 0 2px #cbd5e1' }"
+              ></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.arrivedAt ? '#059669' : '#94a3b8' }">🚚 2. 现场确认到货</span>
+                  <span v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.arrivedAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8;">(待到货确认)</span>
+                </div>
+                <div v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #475569; background: #ecfdf5; padding: 6px 10px; border-radius: 6px; border: 1px solid #a7f3d0;">
+                  <div>实际到货总数：<strong style="color: #047857;">{{ deliveryDetailModalData.arrivedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
+                  <div>现场确认人：<span>{{ deliveryDetailModalData.arrivedBy || '现场负责人' }}</span></div>
+                  <div v-if="deliveryDetailModalData.arrivalRemark">到货备注：<span style="color: #047857;">“{{ deliveryDetailModalData.arrivalRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 施工确认接收阶段 -->
+            <div style="position: relative; margin-bottom: 20px;">
+              <span 
+                style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff; display: inline-block;"
+                :style="{ background: deliveryDetailModalData.constructionConfirmedAt ? '#2563eb' : '#cbd5e1', boxShadow: deliveryDetailModalData.constructionConfirmedAt ? '0 0 0 2px #2563eb' : '0 0 0 2px #cbd5e1' }"
+              ></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.constructionConfirmedAt ? '#2563eb' : '#94a3b8' }">👷 3. 施工单位领用接收</span>
+                  <span v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.constructionConfirmedAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8;">(待施工接收)</span>
+                </div>
+                <div v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #475569; background: #eff6ff; padding: 6px 10px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                  <div>施工领用接收人：<span>{{ deliveryDetailModalData.constructionConfirmedBy || '施工人员' }}</span></div>
+                  <div v-if="deliveryDetailModalData.constructionRemark">接收备注：<span>“{{ deliveryDetailModalData.constructionRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 库管入库归档阶段 -->
+            <div style="position: relative;">
+              <span 
+                style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff; display: inline-block;"
+                :style="{ background: deliveryDetailModalData.warehouseConfirmedAt ? '#16a34a' : '#cbd5e1', boxShadow: deliveryDetailModalData.warehouseConfirmedAt ? '0 0 0 2px #16a34a' : '0 0 0 2px #cbd5e1' }"
+              ></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.warehouseConfirmedAt ? '#16a34a' : '#94a3b8' }">🏢 4. 库管入库归档</span>
+                  <span v-if="deliveryDetailModalData.warehouseConfirmedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.warehouseConfirmedAt) }}</span>
+                  <span v-else style="font-size: 11px; color: #94a3b8;">(待库管归档)</span>
+                </div>
+                <div v-if="deliveryDetailModalData.warehouseConfirmedAt" style="font-size: 11px; color: #475569; background: #f0fdf4; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                  <div>库管归档经办人：<span>{{ deliveryDetailModalData.warehouseConfirmedBy || '库管员' }}</span></div>
+                  <div v-if="deliveryDetailModalData.warehouseRemark">归档备注：<span>“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn primary"
+            style="width: 100%; margin-top: 15px; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
+            @click="deliveryDetailModalVisible = false"
+          >
+            已阅并关闭流转凭证
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 非标准管件类型二次确认 Modal 弹窗 -->
     <Transition name="fade">
@@ -1245,6 +1413,10 @@ const getNowISOString = () => {
   return now.toISOString().slice(0, 16)
 }
 
+const openTimelineModal = (input) => {
+  showDeliveryDetail(input)
+}
+
 const fittingForm = ref({
   vehiclePlateNo: '',
   section1Id: '',
@@ -1439,6 +1611,74 @@ const fittingGridColumns = ref([
   },
   { prop: 'remark', name: '明细备注', size: 200, readonly: false },
 ])
+
+const deliveryDetailModalVisible = ref(false)
+const deliveryDetailModalData = ref(null)
+
+function showDeliveryDetail(input) {
+  if (!input) return
+  const isGroup = Boolean(input.items && Array.isArray(input.items))
+  const itemsList = isGroup ? input.items : [input]
+  const mainRow = itemsList[0] || input
+
+  const shipmentNo = input.shipmentNo || input.shipment_no || mainRow.shipment_no || mainRow.shipmentNo || mainRow.order_no || mainRow.orderNo || String(mainRow.id || '')
+  const vehiclePlateNo = input.vehiclePlateNo || input.vehicle_plate_no || mainRow.vehicle_plate_no || mainRow.vehiclePlateNo || '—'
+  const shippedAt = input.shippedAt || input.shipped_at || mainRow.shipped_at || mainRow.shippedAt || ''
+  const supplyEntityId = input.supplyEntityId || input.supply_entity_id || mainRow.supply_entity_id || mainRow.supplyEntityId || ''
+  const supplyEntityName = input.supplyEntityName || input.supply_entity_name || mainRow.supply_entity_name || mainRow.supplyEntityName || supplyEntityId
+  const section1Id = input.section1Id || input.section_1_id || mainRow.section_1_id || mainRow.section1Id || ''
+  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || section1Id
+
+  const shipContactName = mainRow.ship_contact_name || mainRow.shipContactName || input.shipContactName || mainRow.created_by || '发货负责人'
+  const shipContactPhone = mainRow.ship_contact_phone || mainRow.shipContactPhone || input.shipContactPhone || '—'
+  const createdBy = mainRow.created_by || mainRow.createdBy || mainRow.operator || input.createdBy || '发货操作员'
+  const shipRemark = input.shipRemark || mainRow.ship_remark || mainRow.shipRemark || ''
+
+  const arrivedConfirmAt = mainRow.arrived_at || mainRow.arrivedConfirmAt || ''
+  const arrivedConfirmBy = mainRow.arrived_by || mainRow.arrivedConfirmBy || (arrivedConfirmAt ? '现场到货负责人' : '')
+  const arrivedRemark = mainRow.arrival_remark || mainRow.arrivedRemark || ''
+
+  const constructionConfirmedAt = mainRow.construction_confirmed_at || mainRow.receivedConfirmAt || ''
+  const constructionConfirmedBy = mainRow.construction_confirmed_by || mainRow.receivedConfirmBy || (constructionConfirmedAt ? '施工接收负责人' : '')
+  const constructionRemark = mainRow.construction_remark || mainRow.receivedRemark || ''
+
+  const warehouseConfirmedAt = mainRow.warehouse_confirmed_at || mainRow.warehouseConfirmAt || ''
+  const warehouseConfirmedBy = mainRow.warehouse_confirmed_by || mainRow.warehouseConfirmBy || (warehouseConfirmedAt ? '库管员' : '')
+  const warehouseRemark = mainRow.warehouse_remark || mainRow.warehouseRemark || ''
+
+  const totalShippedQty = itemsList.reduce((sum, it) => sum + (Number(it.shipped_qty !== undefined ? it.shipped_qty : it.shippedQty) || 0), 0)
+  const totalArrivedQty = itemsList.reduce((sum, it) => sum + (Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty))) || 0), 0)
+
+  deliveryDetailModalData.value = {
+    ...mainRow,
+    ...input,
+    itemsList,
+    totalTypesCount: itemsList.length,
+    deliveryCode: shipmentNo,
+    vehiclePlateNo,
+    shippedAt,
+    shippedQty: totalShippedQty,
+    arrivedQty: totalArrivedQty,
+    unit: mainRow.unit || '个',
+    pipeModelName: itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`,
+    supplyEntityName,
+    section1Name,
+    shipContactName,
+    shipContactPhone,
+    createdBy,
+    shipRemark,
+    arrivedAt: arrivedConfirmAt,
+    arrivedBy: arrivedConfirmBy,
+    arrivalRemark: arrivedRemark,
+    constructionConfirmedAt,
+    constructionConfirmedBy,
+    constructionRemark,
+    warehouseConfirmedAt,
+    warehouseConfirmedBy,
+    warehouseRemark
+  }
+  deliveryDetailModalVisible.value = true
+}
 
 const downloadFittingTemplate = () => {
   // Sheet 1: 主填报清单 (包含 A1 到 E20 完整标准边框区)
@@ -1635,7 +1875,32 @@ const groupedFittingDeliveries = computed(() => {
     group.items.push(item)
     group.totalQty += (Number(item.shipped_qty) || 0)
   }
-  return Array.from(map.values())
+
+  // 短板状态判定原则：若多条明细中有任何一条状态落后于其它条目，外层 group.status 展现该落后状态
+  const statusRankMap = {
+    'shipped': 0,
+    'arrived': 1,
+    'construction_confirmed': 2,
+    'received': 2,
+    'warehouse_confirmed': 3
+  }
+
+  const result = Array.from(map.values())
+  for (const group of result) {
+    let minRank = 999
+    let minStatus = 'shipped'
+    for (const item of group.items) {
+      const st = item.status || 'shipped'
+      const r = statusRankMap[st] !== undefined ? statusRankMap[st] : 0
+      if (r < minRank) {
+        minRank = r
+        minStatus = st
+      }
+    }
+    group.status = minStatus
+  }
+
+  return result
 })
 
 const loadFittingDeliveries = async () => {
@@ -1851,81 +2116,6 @@ watch(activeTab, (tab) => {
     loadFittingDeliveries()
   }
 })
-
-
-const deliveryDetailModalVisible = ref(false)
-const deliveryDetailModalData = ref(null)
-const openTimelineModal = (input) => {
-  if (!input) return
-  const isGroup = Boolean(input.items && Array.isArray(input.items))
-  const itemsList = isGroup ? input.items : [input]
-  const mainRow = itemsList[0] || input
-
-  const shipmentNo = input.shipmentNo || input.shipment_no || mainRow.shipment_no || mainRow.shipmentNo || mainRow.order_no || mainRow.orderNo || String(mainRow.id || '')
-  const vehiclePlateNo = input.vehiclePlateNo || input.vehicle_plate_no || mainRow.vehicle_plate_no || mainRow.vehiclePlateNo || '—'
-  const shippedAt = input.shippedAt || input.shipped_at || mainRow.shipped_at || mainRow.shippedAt || ''
-  const supplyEntityId = input.supplyEntityId || input.supply_entity_id || mainRow.supply_entity_id || mainRow.supplyEntityId || ''
-  const supplyEntityName = input.supplyEntityName || input.supply_entity_name || mainRow.supply_entity_name || mainRow.supplyEntityName || supplyEntityId
-  const section1Id = input.section1Id || input.section_1_id || mainRow.section_1_id || mainRow.section1Id || ''
-  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || section1Id
-
-  const shipContactName = mainRow.ship_contact_name || mainRow.shipContactName || input.shipContactName || mainRow.created_by || '发货负责人'
-  const shipContactPhone = mainRow.ship_contact_phone || mainRow.shipContactPhone || input.shipContactPhone || '—'
-  const createdBy = mainRow.created_by || mainRow.createdBy || mainRow.operator || input.createdBy || '发货操作员'
-  const shipRemark = input.shipRemark || mainRow.ship_remark || mainRow.shipRemark || ''
-
-  const arrivedConfirmAt = mainRow.arrived_at || mainRow.arrivedConfirmAt || ''
-  const arrivedConfirmBy = mainRow.arrived_by || mainRow.arrivedConfirmBy || (arrivedConfirmAt ? '现场到货负责人' : '')
-  const arrivedRemark = mainRow.arrival_remark || mainRow.arrivedRemark || ''
-
-  const constructionConfirmedAt = mainRow.construction_confirmed_at || mainRow.receivedConfirmAt || ''
-  const constructionConfirmedBy = mainRow.construction_confirmed_by || mainRow.receivedConfirmBy || (constructionConfirmedAt ? '施工接收负责人' : '')
-  const constructionRemark = mainRow.construction_remark || mainRow.receivedRemark || ''
-
-  const warehouseConfirmedAt = mainRow.warehouse_confirmed_at || mainRow.warehouseConfirmAt || ''
-  const warehouseConfirmedBy = mainRow.warehouse_confirmed_by || mainRow.warehouseConfirmBy || (warehouseConfirmedAt ? '库管员' : '')
-  const warehouseRemark = mainRow.warehouse_remark || mainRow.warehouseRemark || ''
-
-  const totalShippedQty = itemsList.reduce((sum, it) => sum + (Number(it.shipped_qty !== undefined ? it.shipped_qty : it.shippedQty) || 0), 0)
-  const totalArrivedQty = itemsList.reduce((sum, it) => sum + (Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty))) || 0), 0)
-
-  deliveryDetailModalData.value = {
-    ...mainRow,
-    ...input,
-    itemsList,
-    totalTypesCount: itemsList.length,
-    deliveryCode: shipmentNo,
-    vehiclePlateNo,
-    shippedAt,
-    shippedQty: totalShippedQty,
-    arrivedQty: totalArrivedQty,
-    receivedQty: totalArrivedQty,
-    unit: mainRow.unit || '个',
-    pipeModelName: itemsList.length === 1 
-      ? (mainRow.pipe_model_name || mainRow.pipeModelName || `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})`)
-      : `组合装车共包含 ${itemsList.length} 种规格管件`,
-    createdBy,
-    shipContactName,
-    shipContactPhone,
-    shipRemark,
-    supplyEntityName,
-    supplyEntityId,
-    section_1_name: section1Name,
-    section_1_id: section1Id,
-    section1Name,
-    section1Id,
-    arrivedConfirmAt,
-    arrivedConfirmBy,
-    arrivedRemark,
-    receivedConfirmAt: constructionConfirmedAt,
-    receivedConfirmBy: constructionConfirmedBy,
-    receivedRemark: constructionRemark,
-    warehouseConfirmAt: warehouseConfirmedAt,
-    warehouseConfirmBy: warehouseConfirmedBy,
-    warehouseRemark,
-  }
-  deliveryDetailModalVisible.value = true
-}
 
 const summaryLoading = ref(false)
 const summaryError = ref('')
@@ -2911,30 +3101,36 @@ async function saveSuperEdit() {
 
 /* Premium Usage Block Modal */
 .block-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: none;
-  z-index: 2000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 16px !important;
+  box-sizing: border-box !important;
 }
 
 .block-modal-container {
-  width: 90%;
-  max-width: 620px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 16px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  width: 90% !important;
+  max-width: 620px !important;
+  max-height: 85vh !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+  margin: auto !important;
 }
 
 .block-modal-header {
