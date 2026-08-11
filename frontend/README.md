@@ -1,3 +1,27 @@
+## 2026-08-11 适配大连气象与施工条件沙盘“前日、当日、今日、明日”时效卡片标签 (DashboardView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **更新说明**：
+  - 配合后端气象序列升级，更新 `wsi` 适宜施工占比指标分子与分母中剔除历史前日数据的匹配正则（兼容匹配 `'前日'` 与 `'前一日'`）。
+
+## 2026-08-11 供需全链路多维穿透透视表“需求主体”与“型号”过滤框升级为多选 Popover 控件 (DashboardView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **更新说明**：
+  - 将单选 `select` 下拉框升格为支持多选复选框（Checkbox）的 Popover 菜单；
+  - 菜单内置模糊快搜输入框、全选/清空快捷控制与数量高亮 Chip 徽章；
+  - 升级 `computedTableData` 算法支持多条件交集匹配与全局遮罩自动收起。
+
+## 2026-08-11 修复供需全链路多维穿透透视表过滤型号失效缺陷 (DashboardView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`
+- **更新说明**：
+  - 给“过滤型号”下拉选择器增加了键名回退机制（兼容 `pipe_model_id` / `id` / `pipe_model_name`）；
+  - 在 `computedTableData` 计算属性中引入忽略大小写、去空与智能包含等容错比较算法，彻底修复因为字符串拼写/大小写格式差异导致的透视表型号过滤失效缺陷。
+
 ## 2026-08-11 修复管件发货凭据丢失致 GUEST 及行为显示英文缺陷 (SupplyManagementView / GlobalManagementView)
 
 - **关联前端页面**：

@@ -1,3 +1,20 @@
+## 2026-08-11 [修正气象与施工条件沙盘卡片日期标签为“前日、当日、今日、明日”]
+- **气象沙盘相对序列映射矫正 (`weather_service.py` / `DashboardView.vue`)**：
+  - **因由诊断**：业务基准日 `show_date` 代表业务填报的核心“当日”，而后端之前将 `index 1` 错填为“今日”，导致时效概念混淆错位；
+  - **后端相对映射更新 (`weather_service.py`)**：将序列标签 `labels` 修正为 `["前日", "当日", "今日", "明日", "后日", "大后日"]`，确保 4 张气象卡片与 `show_date` 业务基准保持完美语义一致；
+  - **前端算法适配 (`DashboardView.vue`)**：更新 wsi 气象预测分子分母计算对 `['前日', '前一日']` 标签的兼容剔除。
+
+## 2026-08-11 [供需全链路多维穿透透视表支持“需求主体”与“型号”多选勾选框 Popover 过滤]
+- **多选 Popover 控件与多元数组组合交集筛选 (`DashboardView.vue`)**：
+  - **多选交互升格**：将透视表的单选下拉框升级为交互精致的多选 Popover 下拉菜单（支持多项 Checkbox 勾选、快速模糊搜索框、一键全选/清空及选定数量 Chip 徽章）；
+  - **数组级条件包含比对 (`computedTableData`)**：将 `filterSection1Ids` 与 `filterPipeModelIds` 改为数组，在计算属性中实现对多项勾选组合的忽略大小写交集匹配，同时添加全局外点击自动收起 Popover 监听。
+
+## 2026-08-11 [修复供需全链路多维穿透透视表“过滤型号”筛选失效缺陷]
+- **透视表型号匹配算法增强与规范化序列化 (`DashboardView.vue` / `workspace.py`)**：
+  - **因由诊断**：后端原 `/workspace/config-summary` 接口返回未序列化的原始 `pipe_models`，且前端比对时采用硬判等（`String(row.pipe_model_id) !== String(filterPipeModelId.value)`），因大小写差异（`DN200` vs `dn200`）及键名差异导致透视表过滤比对失效；
+  - **后端规范化 (`workspace.py`)**：在 `get_workspace_config_summary` 端点中将 `pipe_models` 改为使用 `_serialize_pipe_options(payload)` 统一规范化输出；
+  - **前端容错过滤 (`DashboardView.vue`)**：给下拉框选择器增加 `pipe_model_id` / `id` / `pipe_model_name` 键名回退解析，并在 `computedTableData` 计算属性中增加忽略大小写、去空与包含比对，使型号过滤 100% 灵敏响应。
+
 ## 2026-08-11 [修复管件发货凭据缺失导致记录为 GUEST 及动作类型显示为英文缺陷]
 - **管件发货鉴权 Header 透传与转译补充 (`SupplyManagementView.vue` / `api.js` / `GlobalManagementView.vue` / `workspace.py` / `supply_management_service.py`)**：
   - **GUEST 归因诊断**：前端 `SupplyManagementView.vue` 提交管件发货使用原生 `fetch` 未透传 Auth Header，导致后端无法接收 `AuthSession` 而兜底降级写入 `GUEST`；现封装为带 `attachAuthHeaders` 的 `submitFittingDelivery` 函数，并在后端添加多级 payload 兜底，确保准确提取真正的登录用户（如 `kaiyuan`）；

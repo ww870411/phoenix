@@ -976,7 +976,7 @@ def get_workspace_config_summary() -> Dict[str, Any]:
         },
         "supply_entities": supply_entities,
         "demand_entities": demand_entities,
-        "pipe_models": pipe_models,
+        "pipe_models": _serialize_pipe_options(payload),
         "production_capacities": production_capacities,
         "manager_assignments": manager_assignments,
         "construction_units": construction_units,

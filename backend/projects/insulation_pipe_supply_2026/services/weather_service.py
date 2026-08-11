@@ -576,7 +576,7 @@ def get_weather_dashboard_data(show_date_str: str) -> Dict[str, Any]:
 
     target_dates = [yesterday, today, tomorrow, after_tomorrow, after_2_tomorrow, after_3_tomorrow]
     target_dates_str = [d.isoformat() for d in target_dates]
-    labels = ["前一日", "今日", "明日", "后日", "大后日", "大大后日"]
+    labels = ["前日", "当日", "今日", "明日", "后日", "大后日"]
 
     # =========================================================================
     # 模式一：高德地图气象源（零写数据库！纯实时请求高德 REST API 并呈现）

@@ -298,32 +298,85 @@
         </div>
 
         <div class="search-filter-bar">
-          <div class="filter-item">
+          <!-- 多选需求主体 -->
+          <div class="filter-item popover-filter-item">
             <label>过滤需求主体：</label>
-            <select v-model="filterSection1Id">
-              <option value="">全部需求主体</option>
-              <option 
-                v-for="st in configSummary?.demand_entities || []" 
-                :key="st.section_1_id" 
-                :value="st.section_1_id"
+            <div class="popover-wrapper">
+              <button 
+                class="btn popover-trigger-btn" 
+                type="button" 
+                @click.stop="section1DropdownOpen = !section1DropdownOpen; pipeModelDropdownOpen = false"
               >
-                {{ st.section_1_name }}
-              </option>
-            </select>
+                <span>{{ section1TriggerText }}</span>
+                <span class="chip-badge" v-if="filterSection1Ids.length">{{ filterSection1Ids.length }}</span>
+                <span class="arrow-icon">{{ section1DropdownOpen ? '▲' : '▼' }}</span>
+              </button>
+
+              <div v-if="section1DropdownOpen" class="popover-dropdown-menu" @click.stop>
+                <div class="popover-menu-header">
+                  <input v-model.trim="section1SearchKw" type="text" class="popover-search-input" placeholder="🔍 快速模糊搜索需求主体…" />
+                  <div class="popover-actions">
+                    <button type="button" class="btn link-btn" @click="toggleAllSection1">
+                      {{ filterSection1Ids.length === (configSummary?.demand_entities?.length || 0) ? '取消全选' : '全选' }}
+                    </button>
+                    <button type="button" class="btn link-btn" @click="filterSection1Ids = []">清空</button>
+                  </div>
+                </div>
+                <div class="popover-options-list">
+                  <label 
+                    v-for="st in filteredDemandEntities" 
+                    :key="st.section_1_id" 
+                    class="popover-option-row"
+                  >
+                    <input type="checkbox" :value="st.section_1_id" v-model="filterSection1Ids" />
+                    <span class="option-label-text">{{ st.section_1_name }}</span>
+                  </label>
+                  <div v-if="filteredDemandEntities.length === 0" class="popover-empty">未匹配到主体</div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="filter-item">
+
+          <!-- 多选保温管型号 -->
+          <div class="filter-item popover-filter-item">
             <label>过滤型号：</label>
-            <select v-model="filterPipeModelId">
-              <option value="">全部型号</option>
-              <option 
-                v-for="pm in configSummary?.pipe_models || []" 
-                :key="pm.pipe_model_id" 
-                :value="pm.pipe_model_id"
+            <div class="popover-wrapper">
+              <button 
+                class="btn popover-trigger-btn" 
+                type="button" 
+                @click.stop="pipeModelDropdownOpen = !pipeModelDropdownOpen; section1DropdownOpen = false"
               >
-                {{ pm.pipe_model_name }}
-              </option>
-            </select>
+                <span>{{ pipeModelTriggerText }}</span>
+                <span class="chip-badge" v-if="filterPipeModelIds.length">{{ filterPipeModelIds.length }}</span>
+                <span class="arrow-icon">{{ pipeModelDropdownOpen ? '▲' : '▼' }}</span>
+              </button>
+
+              <div v-if="pipeModelDropdownOpen" class="popover-dropdown-menu" @click.stop>
+                <div class="popover-menu-header">
+                  <input v-model.trim="pipeModelSearchKw" type="text" class="popover-search-input" placeholder="🔍 快速模糊搜索型号规格…" />
+                  <div class="popover-actions">
+                    <button type="button" class="btn link-btn" @click="toggleAllPipeModels">
+                      {{ filterPipeModelIds.length === (configSummary?.pipe_models?.length || 0) ? '取消全选' : '全选' }}
+                    </button>
+                    <button type="button" class="btn link-btn" @click="filterPipeModelIds = []">清空</button>
+                  </div>
+                </div>
+                <div class="popover-options-list">
+                  <label 
+                    v-for="pm in filteredPipeModels" 
+                    :key="pm.pipe_model_id || pm.id || pm.pipe_model_name" 
+                    class="popover-option-row"
+                  >
+                    <input type="checkbox" :value="pm.pipe_model_id || pm.id || pm.pipe_model_name" v-model="filterPipeModelIds" />
+                    <span class="option-label-text">{{ pm.pipe_model_name || pm.pipe_model_id || pm.id }}</span>
+                    <span v-if="pm.category_group" class="popover-group-tag">{{ pm.category_group }}</span>
+                  </label>
+                  <div v-if="filteredPipeModels.length === 0" class="popover-empty">未匹配到型号规格</div>
+                </div>
+              </div>
+            </div>
           </div>
+
           <button class="btn link-btn" @click="resetFilters">重置过滤</button>
           <button 
             class="btn primary compact-btn export-pivot-btn" 
@@ -539,6 +592,64 @@ const sortKey = ref('')
 const sortOrder = ref('desc')
 const filterSection1Id = ref('')
 const filterPipeModelId = ref('')
+const filterSection1Ids = ref([])
+const filterPipeModelIds = ref([])
+
+const section1DropdownOpen = ref(false)
+const pipeModelDropdownOpen = ref(false)
+const section1SearchKw = ref('')
+const pipeModelSearchKw = ref('')
+
+const section1TriggerText = computed(() => {
+  if (!filterSection1Ids.value.length) return '全部需求主体'
+  if (filterSection1Ids.value.length === 1) {
+    const target = configSummary.value?.demand_entities?.find(st => st.section_1_id === filterSection1Ids.value[0])
+    return target ? target.section_1_name : '已选择 1 项'
+  }
+  return `已选择 ${filterSection1Ids.value.length} 项主体`
+})
+
+const pipeModelTriggerText = computed(() => {
+  if (!filterPipeModelIds.value.length) return '全部型号'
+  if (filterPipeModelIds.value.length === 1) {
+    const id = filterPipeModelIds.value[0]
+    const target = configSummary.value?.pipe_models?.find(pm => (pm.pipe_model_id || pm.id || pm.pipe_model_name) === id)
+    return target ? (target.pipe_model_name || target.pipe_model_id) : '已选择 1 项'
+  }
+  return `已选择 ${filterPipeModelIds.value.length} 项型号`
+})
+
+const filteredDemandEntities = computed(() => {
+  const list = configSummary.value?.demand_entities || []
+  if (!section1SearchKw.value) return list
+  const kw = section1SearchKw.value.toLowerCase()
+  return list.filter(st => String(st.section_1_name || '').toLowerCase().includes(kw) || String(st.section_1_id || '').toLowerCase().includes(kw))
+})
+
+const filteredPipeModels = computed(() => {
+  const list = configSummary.value?.pipe_models || []
+  if (!pipeModelSearchKw.value) return list
+  const kw = pipeModelSearchKw.value.toLowerCase()
+  return list.filter(pm => String(pm.pipe_model_name || pm.pipe_model_id || pm.id || '').toLowerCase().includes(kw))
+})
+
+function toggleAllSection1() {
+  const allIds = (configSummary.value?.demand_entities || []).map(st => st.section_1_id)
+  if (filterSection1Ids.value.length === allIds.length) {
+    filterSection1Ids.value = []
+  } else {
+    filterSection1Ids.value = [...allIds]
+  }
+}
+
+function toggleAllPipeModels() {
+  const allModels = (configSummary.value?.pipe_models || []).map(pm => pm.pipe_model_id || pm.id || pm.pipe_model_name)
+  if (filterPipeModelIds.value.length === allModels.length) {
+    filterPipeModelIds.value = []
+  } else {
+    filterPipeModelIds.value = [...allModels]
+  }
+}
 
 // 大连市气象防汛施工时效沙盘数据
 const weatherDays = ref([])
@@ -730,7 +841,7 @@ function getMetricCalcNumerator(key) {
   if (key === 'doi') return `${metricSnapshot.value.totalInv.toFixed(1)} 米`
   if (key === 'pcr') return `${metricSnapshot.value.submittedSection1Count} 个工区`
   if (key === 'wsi') {
-    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    const forecastDays = weatherDays.value.filter(d => !['前日', '前一日'].includes(d.dateLabel)).slice(0, 5)
     const count = forecastDays.filter(d => (d.rainVal !== undefined ? d.rainVal <= 2.0 : true) || d.themeClass === 'fine' || d.themeClass === 'light-rain').length
     return `${count} 天`
   }
@@ -743,7 +854,7 @@ function getMetricCalcDenominator(key) {
   if (key === 'doi') return `${metricSnapshot.value.dailyConsumePlan.toFixed(1)} 米/天`
   if (key === 'pcr') return `${metricSnapshot.value.activeSection1s.size} 个工区`
   if (key === 'wsi') {
-    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    const forecastDays = weatherDays.value.filter(d => !['前日', '前一日'].includes(d.dateLabel)).slice(0, 5)
     return `${forecastDays.length || 5} 天`
   }
   if (key === 'ssr') return `${metricSnapshot.value.activeSection1s.size} 个工区`
@@ -805,7 +916,7 @@ function getMetricCalcVars(key) {
     }
   }
   if (key === 'wsi') {
-    const forecastDays = weatherDays.value.filter(d => d.dateLabel !== '前一日').slice(0, 5)
+    const forecastDays = weatherDays.value.filter(d => !['前日', '前一日'].includes(d.dateLabel)).slice(0, 5)
     const suitableDays = forecastDays.filter(d => (d.rainVal !== undefined ? d.rainVal <= 2.0 : true) || d.themeClass === 'fine' || d.themeClass === 'light-rain').length
     const total = forecastDays.length || 5
     const statusNotice = realWSI.value >= 80.0
@@ -1035,9 +1146,13 @@ function getPercent(n, total) {
 
 // 重置过滤
 function resetFilters() {
+  filterSection1Ids.value = []
+  filterPipeModelIds.value = []
   filterSection1Id.value = ''
   filterPipeModelId.value = ''
   sortKey.value = ''
+  section1SearchKw.value = ''
+  pipeModelSearchKw.value = ''
 }
 
 // 排序符号
@@ -1168,11 +1283,40 @@ const computedTableData = computed(() => {
   const groups = {}
 
   summaryRows.value.forEach(row => {
-    if (filterSection1Id.value && String(row.section_1_id) !== String(filterSection1Id.value)) {
-      return
+    // 多选需求主体过滤：若配置了需求主体集合，则需命中其中之一
+    if (filterSection1Ids.value.length > 0) {
+      const rowSecId = String(row.section_1_id || '').trim().toUpperCase()
+      const rowSecCode = String(row.code || '').trim().toUpperCase()
+      const matchedSec = filterSection1Ids.value.some(id => {
+        const target = String(id || '').trim().toUpperCase()
+        return rowSecId === target || rowSecCode === target
+      })
+      if (!matchedSec) return
+    } else if (filterSection1Id.value) {
+      const targetSec = String(filterSection1Id.value).trim().toUpperCase()
+      const rowSecId = String(row.section_1_id || '').trim().toUpperCase()
+      const rowSecCode = String(row.code || '').trim().toUpperCase()
+      if (rowSecId !== targetSec && rowSecCode !== targetSec) {
+        return
+      }
     }
-    if (filterPipeModelId.value && String(row.pipe_model_id) !== String(filterPipeModelId.value)) {
-      return
+
+    // 多选型号规格过滤：若配置了型号集合，则需命中其中之一
+    if (filterPipeModelIds.value.length > 0) {
+      const rowModelId = String(row.pipe_model_id || '').trim().toUpperCase()
+      const rowModelName = String(row.pipe_model_name || '').trim().toUpperCase()
+      const matchedModel = filterPipeModelIds.value.some(id => {
+        const target = String(id || '').trim().toUpperCase()
+        return rowModelId === target || rowModelName === target || rowModelId.includes(target) || rowModelName.includes(target)
+      })
+      if (!matchedModel) return
+    } else if (filterPipeModelId.value) {
+      const targetModel = String(filterPipeModelId.value).trim().toUpperCase()
+      const rowModelId = String(row.pipe_model_id || '').trim().toUpperCase()
+      const rowModelName = String(row.pipe_model_name || '').trim().toUpperCase()
+      if (rowModelId !== targetModel && rowModelName !== targetModel && !rowModelId.includes(targetModel) && !rowModelName.includes(targetModel)) {
+        return
+      }
     }
 
     const groupKey = isSection1Mode ? row.section_1_id : row.pipe_model_id
@@ -1575,6 +1719,11 @@ watch(() => configSummary.value?.show_date, (newVal) => {
   }
 })
 
+function handleGlobalClick() {
+  section1DropdownOpen.value = false
+  pipeModelDropdownOpen.value = false
+}
+
 onMounted(async () => {
   await reloadConfigSummary()
   await Promise.all([
@@ -1582,6 +1731,7 @@ onMounted(async () => {
     fetchWeatherData()
   ])
   window.addEventListener('resize', handleResize)
+  window.addEventListener('click', handleGlobalClick)
 })
 
 onActivated(() => {
@@ -1590,6 +1740,7 @@ onActivated(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('click', handleGlobalClick)
   chartInstance1?.dispose()
   chartInstance2?.dispose()
 })
@@ -2859,6 +3010,162 @@ onBeforeUnmount(() => {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
+}
+
+/* 多选 Popover 下拉选择框样式 */
+.popover-filter-item {
+  position: relative;
+}
+
+.popover-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.popover-trigger-btn {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.popover-trigger-btn:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.1);
+}
+
+.chip-badge {
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.arrow-icon {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.popover-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  width: 280px;
+  max-height: 360px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.popover-menu-header {
+  padding: 10px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popover-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.popover-actions .link-btn {
+  font-size: 12px;
+  padding: 0;
+  height: auto;
+  color: #2563eb;
+}
+
+.popover-options-list {
+  padding: 6px;
+  overflow-y: auto;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.popover-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  transition: background 0.15s ease;
+}
+
+.popover-option-row:hover {
+  background: #f1f5f9;
+}
+
+.popover-option-row input[type="checkbox"] {
+  accent-color: #2563eb;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.option-label-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover-group-tag {
+  font-size: 10px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.popover-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 @media (max-width: 640px) {

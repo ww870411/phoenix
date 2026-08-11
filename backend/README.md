@@ -1,3 +1,17 @@
+## 2026-08-11 纠正气象沙盘序列标签为“前日、当日、今日、明日”对齐 show_date 业务基准 (weather_service.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **更新说明**：
+  - 将 `/workspace/weather` 接口返回的相对序列 `labels` 改为 `["前日", "当日", "今日", "明日", "后日", "大后日"]`，确保以 `show_date` 为核心的“当日”与前后日期在前端展现时概念完全一致。
+
+## 2026-08-11 规范化 config-summary 接口的 pipe_models 选项结构 (workspace.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 在 `/workspace/config-summary` 接口中，将 `pipe_models` 返回字段统一修改为调用 `_serialize_pipe_options(payload)`，与系统其他 Options 端点对齐输出规范化的管道型号列表。
+
 ## 2026-08-11 补充导出审计日志管件动作中文转译映射与 operator_group 透传 (workspace.py / supply_management_service.py)
 
 - **关联后端文件**：
