@@ -1431,11 +1431,21 @@ def submit_fitting_delivery(
 
     session = SessionLocal()
     try:
-        # 自动防错防护：确保 tube.tube_fitting_delivery 的 id 字段具备自增 Sequence 默认值
+        # 自动防错防护：确保 tube.tube_fitting_delivery 的 id 字段具备自增 Sequence 默认值，并追加流转留痕字段
         try:
             session.execute(text("""
                 CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq;
                 ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq');
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_qty NUMERIC;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMP WITH TIME ZONE;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_by TEXT;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrival_remark TEXT;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_at TIMESTAMP WITH TIME ZONE;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_by TEXT;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_remark TEXT;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_at TIMESTAMP WITH TIME ZONE;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_by TEXT;
+                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_remark TEXT;
             """))
             session.commit()
         except Exception:
@@ -1444,14 +1454,14 @@ def submit_fitting_delivery(
             """
             SELECT COUNT(DISTINCT shipment_no) AS batch_cnt
             FROM tube.tube_fitting_delivery
-            WHERE supply_entity_id = :supply_entity_id
+            WHERE LOWER(TRIM(supply_entity_id)) = LOWER(TRIM(:supply_entity_id))
               AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date = :shipped_date
             """
         )
         batch_cnt = session.execute(
             count_sql,
             {
-                "supply_entity_id": raw_supply_entity_id,
+                "supply_entity_id": supply_entity_id,
                 "shipped_date": beijing_dt.date(),
             }
         ).scalar() or 0
@@ -1566,6 +1576,29 @@ def list_fitting_deliveries(
     search_keyword: str = "",
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
+    # 自动防错防护：确保 tube.tube_fitting_delivery 拥有全量留痕字段
+    _init_session = SessionLocal()
+    try:
+        _init_session.execute(text("""
+            CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq;
+            ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq');
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_qty NUMERIC;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_by TEXT;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrival_remark TEXT;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_at TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_by TEXT;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_remark TEXT;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_at TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_by TEXT;
+            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_remark TEXT;
+        """))
+        _init_session.commit()
+    except Exception:
+        _init_session.rollback()
+    finally:
+        _init_session.close()
+
     clean_supply_id = _normalize_text(supply_entity_id)
     clean_section_id = _normalize_text(section_1_id)
     cfg = load_tube_config()
@@ -1598,7 +1631,9 @@ def list_fitting_deliveries(
             id, supply_entity_id, shipment_no, order_no, vehicle_plate_no,
             section_1_id, fitting_type, model_spec, shipped_qty, unit,
             shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
-            status, created_at
+            status, created_at, created_by, arrived_qty, arrived_at, arrived_by, arrival_remark,
+            construction_confirmed_at, construction_confirmed_by, construction_remark,
+            warehouse_confirmed_at, warehouse_confirmed_by, warehouse_remark
         FROM tube.tube_fitting_delivery
         WHERE (:has_section_filter = FALSE OR LOWER(TRIM(section_1_id)) = ANY(:section_ids))
           AND (:has_supply_filter = FALSE OR LOWER(TRIM(supply_entity_id)) = ANY(:supply_ids))
@@ -1660,11 +1695,346 @@ def list_fitting_deliveries(
                 "ship_remark": _normalize_text(row["ship_remark"]),
                 "status": _normalize_text(row["status"]),
                 "created_at": _to_beijing_time(row["created_at"]).isoformat() if row["created_at"] else "",
+                "created_by": _normalize_text(row["created_by"]),
+                "operator": _normalize_text(row["created_by"]),
+                "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else float(row["shipped_qty"]),
+                "arrived_at": _to_beijing_time(row["arrived_at"]).isoformat() if row["arrived_at"] else "",
+                "arrived_by": _normalize_text(row["arrived_by"]),
+                "arrival_remark": _normalize_text(row["arrival_remark"]),
+                "construction_confirmed_at": _to_beijing_time(row["construction_confirmed_at"]).isoformat() if row["construction_confirmed_at"] else "",
+                "construction_confirmed_by": _normalize_text(row["construction_confirmed_by"]),
+                "construction_remark": _normalize_text(row["construction_remark"]),
+                "warehouse_confirmed_at": _to_beijing_time(row["warehouse_confirmed_at"]).isoformat() if row["warehouse_confirmed_at"] else "",
+                "warehouse_confirmed_by": _normalize_text(row["warehouse_confirmed_by"]),
+                "warehouse_remark": _normalize_text(row["warehouse_remark"]),
             }
             for row in rows
         ]
 
         return items
+    finally:
+        session.close()
+
+
+def confirm_fitting_delivery_arrival(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+) -> Dict[str, Any]:
+    delivery_ids = payload.get("ids") or []
+    if not delivery_ids and payload.get("id"):
+        delivery_ids = [payload.get("id")]
+    if not delivery_ids:
+        raise HTTPException(status_code=400, detail="缺失待确认到货的管件记录 ID 列表")
+
+    arrived_qty_map = payload.get("arrived_qty_map") or {}
+    remark = _normalize_text(payload.get("remark"))
+    now_dt = datetime.now(BEIJING_TZ)
+
+    session = SessionLocal()
+    try:
+        updated_count = 0
+        shipment_nos = set()
+        for d_id in delivery_ids:
+            try:
+                int_id = int(d_id)
+            except (ValueError, TypeError):
+                continue
+            
+            # 读取原有记录
+            fetch_sql = text("SELECT id, shipment_no, shipped_qty, status FROM tube.tube_fitting_delivery WHERE id = :id")
+            row = session.execute(fetch_sql, {"id": int_id}).mappings().first()
+            if not row:
+                continue
+            
+            shipment_nos.add(row["shipment_no"])
+            target_arrived_qty = float(row["shipped_qty"])
+            if str(int_id) in arrived_qty_map or int_id in arrived_qty_map:
+                try:
+                    val = float(arrived_qty_map.get(str(int_id)) or arrived_qty_map.get(int_id))
+                    if val >= 0:
+                        target_arrived_qty = val
+                except (ValueError, TypeError):
+                    pass
+
+            upd_sql = text("""
+                UPDATE tube.tube_fitting_delivery
+                SET status = 'arrived',
+                    arrived_qty = :arrived_qty,
+                    arrived_at = :arrived_at,
+                    arrived_by = :arrived_by,
+                    arrival_remark = :arrival_remark,
+                    updated_by = :updated_by
+                WHERE id = :id
+            """)
+            session.execute(
+                upd_sql,
+                {
+                    "id": int_id,
+                    "arrived_qty": target_arrived_qty,
+                    "arrived_at": now_dt,
+                    "arrived_by": operator,
+                    "arrival_remark": remark,
+                    "updated_by": operator,
+                }
+            )
+            updated_count += 1
+        
+        session.commit()
+
+        # 审计日志
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
+            save_operation_log(
+                operator=operator,
+                operator_group=operator_group or "site_manager",
+                action_type="CONFIRM_FITTING_ARRIVAL",
+                action_desc=f"现场确认管件到货：共确认 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
+                resource_id=", ".join(list(shipment_nos)[:3]),
+                after_value={
+                    "updated_count": updated_count,
+                    "arrived_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "remark": remark,
+                }
+            )
+        except Exception as log_ex:
+            print(f"[Operation Log Warning] 确认管件到货日志保存失败: {log_ex}")
+
+        return {"ok": True, "updated_count": updated_count}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"确认管件到货失败: {e}")
+    finally:
+        session.close()
+
+
+def confirm_fitting_delivery_construction(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+) -> Dict[str, Any]:
+    delivery_ids = payload.get("ids") or []
+    if not delivery_ids and payload.get("id"):
+        delivery_ids = [payload.get("id")]
+    if not delivery_ids:
+        raise HTTPException(status_code=400, detail="缺失待施工确认接收的管件记录 ID 列表")
+
+    remark = _normalize_text(payload.get("remark"))
+    now_dt = datetime.now(BEIJING_TZ)
+
+    session = SessionLocal()
+    try:
+        updated_count = 0
+        shipment_nos = set()
+        for d_id in delivery_ids:
+            try:
+                int_id = int(d_id)
+            except (ValueError, TypeError):
+                continue
+            
+            fetch_sql = text("SELECT id, shipment_no FROM tube.tube_fitting_delivery WHERE id = :id")
+            row = session.execute(fetch_sql, {"id": int_id}).mappings().first()
+            if not row:
+                continue
+            
+            shipment_nos.add(row["shipment_no"])
+            upd_sql = text("""
+                UPDATE tube.tube_fitting_delivery
+                SET status = 'construction_confirmed',
+                    construction_confirmed_at = :confirmed_at,
+                    construction_confirmed_by = :confirmed_by,
+                    construction_remark = :remark,
+                    updated_by = :updated_by
+                WHERE id = :id
+            """)
+            session.execute(
+                upd_sql,
+                {
+                    "id": int_id,
+                    "confirmed_at": now_dt,
+                    "confirmed_by": operator,
+                    "remark": remark,
+                    "updated_by": operator,
+                }
+            )
+            updated_count += 1
+        
+        session.commit()
+
+        # 审计日志
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
+            save_operation_log(
+                operator=operator,
+                operator_group=operator_group or "construction_unit",
+                action_type="CONFIRM_FITTING_CONSTRUCTION",
+                action_desc=f"施工单位确认接收管件：共确认 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
+                resource_id=", ".join(list(shipment_nos)[:3]),
+                after_value={
+                    "updated_count": updated_count,
+                    "construction_confirmed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "remark": remark,
+                }
+            )
+        except Exception as log_ex:
+            print(f"[Operation Log Warning] 施工确认管件日志保存失败: {log_ex}")
+
+        return {"ok": True, "updated_count": updated_count}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"施工确认管件接收失败: {e}")
+    finally:
+        session.close()
+
+
+def confirm_fitting_delivery_warehouse(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+) -> Dict[str, Any]:
+    delivery_ids = payload.get("ids") or []
+    if not delivery_ids and payload.get("id"):
+        delivery_ids = [payload.get("id")]
+    if not delivery_ids:
+        raise HTTPException(status_code=400, detail="缺失待库管确认入库的管件记录 ID 列表")
+
+    remark = _normalize_text(payload.get("remark"))
+    now_dt = datetime.now(BEIJING_TZ)
+
+    session = SessionLocal()
+    try:
+        updated_count = 0
+        shipment_nos = set()
+        for d_id in delivery_ids:
+            try:
+                int_id = int(d_id)
+            except (ValueError, TypeError):
+                continue
+            
+            fetch_sql = text("SELECT id, shipment_no FROM tube.tube_fitting_delivery WHERE id = :id")
+            row = session.execute(fetch_sql, {"id": int_id}).mappings().first()
+            if not row:
+                continue
+            
+            shipment_nos.add(row["shipment_no"])
+            upd_sql = text("""
+                UPDATE tube.tube_fitting_delivery
+                SET status = 'warehouse_confirmed',
+                    warehouse_confirmed_at = :confirmed_at,
+                    warehouse_confirmed_by = :confirmed_by,
+                    warehouse_remark = :remark,
+                    updated_by = :updated_by
+                WHERE id = :id
+            """)
+            session.execute(
+                upd_sql,
+                {
+                    "id": int_id,
+                    "confirmed_at": now_dt,
+                    "confirmed_by": operator,
+                    "remark": remark,
+                    "updated_by": operator,
+                }
+            )
+            updated_count += 1
+        
+        session.commit()
+
+        # 审计日志
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
+            save_operation_log(
+                operator=operator,
+                operator_group=operator_group or "warehouse_keeper",
+                action_type="CONFIRM_FITTING_WAREHOUSE",
+                action_desc=f"库管确认管件入库完结：共确认 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
+                resource_id=", ".join(list(shipment_nos)[:3]),
+                after_value={
+                    "updated_count": updated_count,
+                    "warehouse_confirmed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "remark": remark,
+                }
+            )
+        except Exception as log_ex:
+            print(f"[Operation Log Warning] 库管确认管件日志保存失败: {log_ex}")
+
+        return {"ok": True, "updated_count": updated_count}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"库管确认管件入库失败: {e}")
+    finally:
+        session.close()
+
+
+def cancel_fitting_delivery(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+) -> Dict[str, Any]:
+    delivery_ids = payload.get("ids") or []
+    if not delivery_ids and payload.get("id"):
+        delivery_ids = [payload.get("id")]
+    if not delivery_ids:
+        raise HTTPException(status_code=400, detail="缺失待撤销的管件记录 ID 列表")
+
+    remark = _normalize_text(payload.get("remark"))
+    now_dt = datetime.now(BEIJING_TZ)
+
+    session = SessionLocal()
+    try:
+        updated_count = 0
+        shipment_nos = set()
+        for d_id in delivery_ids:
+            try:
+                int_id = int(d_id)
+            except (ValueError, TypeError):
+                continue
+            
+            fetch_sql = text("SELECT id, shipment_no, status FROM tube.tube_fitting_delivery WHERE id = :id")
+            row = session.execute(fetch_sql, {"id": int_id}).mappings().first()
+            if not row or row["status"] in ("warehouse_confirmed", "cancelled"):
+                continue
+            
+            shipment_nos.add(row["shipment_no"])
+            upd_sql = text("""
+                UPDATE tube.tube_fitting_delivery
+                SET status = 'cancelled',
+                    updated_by = :updated_by
+                WHERE id = :id
+            """)
+            session.execute(
+                upd_sql,
+                {
+                    "id": int_id,
+                    "updated_by": operator,
+                }
+            )
+            updated_count += 1
+        
+        session.commit()
+
+        # 审计日志
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
+            save_operation_log(
+                operator=operator,
+                operator_group=operator_group or "tube_supplier",
+                action_type="CANCEL_FITTING_DELIVERY",
+                action_desc=f"撤销管件发货单：撤销 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
+                resource_id=", ".join(list(shipment_nos)[:3]),
+                after_value={
+                    "updated_count": updated_count,
+                    "cancelled_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "remark": remark,
+                }
+            )
+        except Exception as log_ex:
+            print(f"[Operation Log Warning] 撤销管件日志保存失败: {log_ex}")
+
+        return {"ok": True, "updated_count": updated_count}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"撤销管件发货失败: {e}")
     finally:
         session.close()
 

@@ -1,3 +1,51 @@
+## 2026-08-11 [优化凭证 Modal 管件明细表格 CSS 防溢出排版]
+- **CSS 响应式与受控排版 (`DemandManagementView.vue` & `SupplyManagementView.vue`)**：
+  - 为凭证 Modal 内部的【📦 本车次搭载管件清单及履约明细】表格重新设计样式，摆脱全局 `.data-table` 强制不换行的干预；
+  - 设置 `table-layout: fixed; width: 100%; border-collapse: collapse;`，为各个列配置精细权值（`#` 28px、`类型` 100px、`规格` 140px、`发货/到货数` 65px、`备注` 自动伸缩并自动折行 `word-break: break-word;`）；
+  - 外层容器加上 `overflow-x: auto; width: 100%; box-sizing: border-box;` 双重卷轴保护，彻底解决表格内容溢出突破弹窗右侧边缘的排版缺陷。
+
+## 2026-08-11 [彻底解决凭证 Modal 信息丢失与属性映射失效缺陷]
+- **归一化字段安全抹平 (`DemandManagementView.vue` & `SupplyManagementView.vue`)**：
+  - 重构 `showDeliveryDetail` 与 `openTimelineModal` 函数，使其无论接收车次组 `group` 对象还是单行 `row` 对象、无论是小驼峰 `camelCase` 还是下划线 `snake_case`（如 `vehicle_plate_no` 与 `vehiclePlateNo`），均做全量兜底转换；
+  - 完美修复了车牌号、发货时间、供给主体、发货经办人、到货确认时间与各节点状态因数据格式微异导致的“信息全丢”问题。
+
+## 2026-08-11 [重构凭证 Modal 增加【📦 本车次搭载管件清单及履约明细】展示区]
+- **整车多规格明细解析 (`DemandManagementView.vue` & `SupplyManagementView.vue`)**：
+  - 将流转凭证按钮触发传参由单项物品升格为整车 `group` 组合对象，支持按车次自动汇总搭载管件规格种类与整车件数；
+  - 在凭证 Modal 中增加了专属的 **“📦 本车次搭载管件清单及履约明细”** 数据表格，清晰呈现本车次搭载的各种管件类型、规格型号、发货件数、实际到货件数及单项备注，解决了一车多货时凭证信息显示过简或脱节的问题。
+
+## 2026-08-11 [彻底修复发货操作账号/经办人显示异常与管件发货车次序列号重复合并缺陷]
+- **车次序列号防合并计算修正 (`supply_management_service.py`)**：
+  - 修正发货保存 `submit_fitting_delivery` 逻辑中按日期和主体计算当日批次号 `COUNT(DISTINCT shipment_no)` 的 SQL 条件，增加 `LOWER(TRIM(...))` 容错，彻底解决因格式/大小写差异导致 `batch_cnt` 永远被算为 0 并将所有发货单强行归入 `-001` 车次并合并在同一卡片里的严重问题；
+- **操作账号与经办人渲染修补 (`supply_management_service.py` & Vue 页面)**：
+  - 在 `get_fitting_deliveries_list` 数据库查询中补齐 `created_by` 字段解析；
+  - 增强 `showDeliveryDetail` 的字段绑定，优先取发货提交人账号 (`created_by` / `operator`) 与经办人姓名 (`ship_contact_name`)、联系电话 (`ship_contact_phone`)，彻底解决弹窗错显示为“供给端系统”和经办人缺失的问题。
+
+## 2026-08-11 [修复凭证 Modal 数据解构错位与管件单位误显为“米”缺陷]
+- **数据解构与渲染单位修正 (`DemandManagementView.vue` & `SupplyManagementView.vue`)**：
+  - **动态单位修正**：将凭证 Modal 模板中的静态硬编码单位“米”替换为 `{{ deliveryDetailModalData.unit || '米' }}`，准确呈现管件“个/套”数量单位；
+  - **字段解构降级转换**：在 `showDeliveryDetail` 和 `openTimelineModal` 数据映射中，补齐 `arrived_at` / `arrived_by` / `arrival_remark` / `construction_confirmed_at` / `construction_confirmed_by` / `construction_remark` / `warehouse_confirmed_at` / `warehouse_confirmed_by` / `warehouse_remark` 的全维度多映射兼容，解决管件凭证在到货、接收及库管阶段误显“等待中”的异常。
+
+## 2026-08-11 [修复需求侧 DemandManagementView 管件流转凭证点击无响应缺陷]
+- **事件响应映射修复 (`DemandManagementView.vue`)**：
+  - 将需求侧管件发货卡片中“🚚 流转凭证”按钮绑定的未定义函数名 `@click.stop="openDeliveryDetailModal(...)"` 修正为组件声明的 `showDeliveryDetail(...)`；
+  - 增强 `showDeliveryDetail` 的字段补全与安全防错，在凭证时光轴中完美展示管件到货数量、现场到货备注、施工接收及库管确认时间节点。
+
+## 2026-08-11 [保温管件升级全闭环三级流转管理：支持现场确认到货(填报到货数量)、施工确认接收与库管确认入库]
+- **业务需求演进**：保温管件品类繁多、价值高，原仅发货模式易产生在途与现场存量脱节、责权不清问题。全面升格管件履约流转闭环；
+- **数据库扩充 (`supply_management_service.py`)**：在 `tube.tube_fitting_delivery` 追加 `arrived_qty` / `arrived_at` / `arrived_by` / `arrival_remark` / `construction_confirmed_at` / `construction_confirmed_by` / `construction_remark` / `warehouse_confirmed_at` / `warehouse_confirmed_by` / `warehouse_remark` 10 个留痕字段；
+- **后端 API & 服务端逻辑 (`workspace.py` / `supply_management_service.py`)**：
+  - 新增 `confirm_fitting_delivery_arrival` (现场确认到货，支持传 `arrived_qty_map` 修正各管件实到数量及备注)；
+  - 新增 `confirm_fitting_delivery_construction` (施工单位确认接收)；
+  - 新增 `confirm_fitting_delivery_warehouse` (库管确认最终入库完结)；
+  - 新增 `cancel_fitting_delivery` (撤销管件发货单)；
+  - 自动落盘 `logs.tube_operation_logs` 审计日志，并追加导出转译词条字典。
+- **前端管理工作台升格 (`WarehouseManagementView.vue` / `api.js` / `GlobalManagementView.vue`)**：
+  - 增加管件到货与流转 4 维度统计面板（待到货、待施工接收、待库管确认、已入库完结）；
+  - 增加【现场确认到货与到货数修正 Modal 对话框】，允许现场核对并调整实际到货数量；
+  - 升级【管件运单全生命周期凭证 Modal】，提供 `1. 厂家发货` ➔ `2. 现场确认到货(到货数量与备注)` ➔ `3. 施工单位接收` ➔ `4. 库管入库完结` 4 节点时光轴；
+  - 在全局管理视图配置 `CONFIRM_FITTING_ARRIVAL` / `CONFIRM_FITTING_CONSTRUCTION` / `CONFIRM_FITTING_WAREHOUSE` / `CANCEL_FITTING_DELIVERY` 4 种动作 Badge 中文样式转译。
+
 ## 2026-08-11 [修正气象与施工条件沙盘卡片日期标签为“前日、当日、今日、明日”]
 - **气象沙盘相对序列映射矫正 (`weather_service.py` / `DashboardView.vue`)**：
   - **因由诊断**：业务基准日 `show_date` 代表业务填报的核心“当日”，而后端之前将 `index 1` 错填为“今日”，导致时效概念混淆错位；

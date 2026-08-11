@@ -1,3 +1,29 @@
+## 2026-08-11 修复 submit_fitting_delivery 车次号重复生成与 list_fitting_deliveries 查询字段缺失 (supply_management_service.py)
+
+- **关联服务文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **更新说明**：
+  - 在 `submit_fitting_delivery` 车次计数 `COUNT(DISTINCT shipment_no)` SQL 中加入 `LOWER(TRIM(...))` 容错，解决车次号永远判定为 `-001` 的重叠 Bug；
+  - 在 `list_fitting_deliveries` 查询中补齐 `created_by` 字段解析。
+
+## 2026-08-11 保温管件三级确认流转后端服务扩展 (supply_management_service.py & workspace.py)pply_management_service.py & workspace.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+{{ ... }}
+
+## 2026-08-11 保温管件全闭环三级确认流转与数据库字段扩充 (supply_management_service.py & workspace.py)
+
+- **关联后端文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 在 `tube.tube_fitting_delivery` 表中自动防错追加 10 个管件流转留痕字段 (`arrived_qty` / `arrived_at` / `arrived_by` / `arrival_remark` / `construction_confirmed_at` / `construction_confirmed_by` / `construction_remark` / `warehouse_confirmed_at` / `warehouse_confirmed_by` / `warehouse_remark`)；
+  - 增加 4 个后端服务处理函数与 API 端点：`confirm_arrival` (现场确认到货与实到数量修改)、`confirm_construction` (施工接收确认)、`confirm_warehouse` (库管入库完结) 以及 `cancel` (撤销发货单)；
+  - 审计日志 `logs.tube_operation_logs` 同步落盘对应动作并配置全局转译字典。
+
 ## 2026-08-11 纠正气象沙盘序列标签为“前日、当日、今日、明日”对齐 show_date 业务基准 (weather_service.py)
 
 - **关联后端文件**：

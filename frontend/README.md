@@ -1,3 +1,66 @@
+## 2026-08-11 优化 DemandManagementView 与 SupplyManagementView 凭证 Modal 中的管件明细表格样式排版 (DemandManagementView & SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 将嵌套表格重构为 `table-layout: fixed; width: 100%;` 并加上各列精准权值；
+  - 容器追加 `box-sizing: border-box; overflow-x: auto;` 防止表格撑开溢出突破弹窗右侧边缘。
+
+## 2026-08-11 凭证 Modal 全量输入解构归一化重构 (DemandManagementView & SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 彻底抹平 `group` 车次组与 `row` 单行对象传入差异，同时做 `camelCase` / `snake_case` 双向全覆盖兼容；
+  - 恢复全量运单信息（车牌号、发货时间、经办人、到货确认时间、库管确认）及嵌套管件明细清单。
+
+## 2026-08-11 凭证 Modal 重构追加【📦 本车次搭载管件清单及履约明细】展示区 (DemandManagementView & SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 流转凭证弹窗触发传参升格支持整车 `group` 结构，自动统计车次包含的规格种类与整车发货/实到数量；
+  - 在 Modal 中嵌套新增本车搭载物品清单 Table，逐项列明管件类型、型号规格、发货件数、到货件数及单项备注。
+
+## 2026-08-11 补充 DemandManagementView 凭证 Modal 中的操作账号、经办人姓名与联系电话透传 (DemandManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 在 `showDeliveryDetail` 中增强对 `created_by` / `operator` / `ship_contact_name` / `ship_contact_phone` 的属性抓取，准确展现真实操作账号与发货经办人。
+
+## 2026-08-11 修正 DemandManagementView 与 SupplyManagementView 凭证 Modal 的管件动态单位与多节点时光轴映射 (DemandManagementView & SupplyManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 将凭证 Modal 中静态硬编码的“米”替换为动态 `unit` 变量（正确展现“个/件/套”）；
+  - 增强 `showDeliveryDetail` 和 `openTimelineModal` 对管件专属 `arrived_at` / `construction_confirmed_at` / `warehouse_confirmed_at` 等时间戳与备注的解构透传。
+
+## 2026-08-11 修复 DemandManagementView 页面管件流转凭证点击无响应问题 (DemandManagementView.vue)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 将管件折叠卡片中“🚚 流转凭证”按钮绑定的监听函数更新为 `showDeliveryDetail(group.items[0])`；
+  - 增强 `showDeliveryDetail` 对管件到货数量（`arrivedQty`）及多节点流转备注的解析。
+
+## 2026-08-11 保温管件三级确认流转与到货数量修正 Modal (WarehouseManagementView & GlobalManagementView)
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **更新说明**：
+  - 在 `WarehouseManagementView.vue` 管件台账区域增加了待到货、待接收、待库管及已完结 4 维度统计卡片；
+  - 增加【现场确认到货与到货数修正 Modal 对话框】，允许现场核对并调整实际到货数量；
+  - 升级【管件运单全生命周期凭证 Modal】为 4 阶段闭环时光轴呈现；
+  - 在 `GlobalManagementView.vue` 中配置了管件 4 种动作的 Badge 高亮样式与中文转译。
+
 ## 2026-08-11 适配大连气象与施工条件沙盘“前日、当日、今日、明日”时效卡片标签 (DashboardView)
 
 - **关联前端页面**：

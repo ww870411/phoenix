@@ -677,23 +677,31 @@
           </div>
 
           <!-- 管件透视概览指标 -->
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <!-- 管件透视概览指标 (四节点流转) -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
             <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🚚 累计发货车次</span>
-              <strong style="font-size: 18px; color: #0f172a;">{{ warehouseFittingBatches }} 车/批</strong>
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🚚 待现场到货</span>
+              <strong style="font-size: 18px; color: #d97706;">{{ fittingSummary.pendingArrival }} 项</strong>
             </div>
             <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">📦 发货管件总数</span>
-              <strong style="font-size: 18px; color: #2563eb;">{{ warehouseFittingTotalQty }} 个</strong>
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🏗️ 待施工接收</span>
+              <strong style="font-size: 18px; color: #2563eb;">{{ fittingSummary.pendingConstruction }} 项</strong>
             </div>
             <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🟢 常用标准管件</span>
-              <strong style="font-size: 18px; color: #16a34a;">{{ warehouseFittingStandardQty }} 个</strong>
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">🏢 待库管确认</span>
+              <strong style="font-size: 18px; color: #8e44ad;">{{ fittingSummary.pendingWarehouse }} 项</strong>
+            </div>
+            <div style="background: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;">✅ 库管已入库完结</span>
+              <strong style="font-size: 18px; color: #16a34a;">{{ fittingSummary.completed }} 项</strong>
             </div>
           </div>
 
           <!-- 折叠车次列表 (默认收起) -->
           <div style="padding: 16px 20px; min-height: 160px; position: relative;">
+            <div v-if="fittingActionMsg" :class="['alert', fittingActionMsg.type === 'error' ? 'alert-danger' : 'alert-success']" style="margin-bottom: 12px;">
+              {{ fittingActionMsg.text }}
+            </div>
             <div v-if="fittingLoading" class="loading-text">正在加载管件发货记录...</div>
             <div v-else-if="!groupedWarehouseFittingRows.length" class="empty-box">当前筛选条件下暂无管件发货记录。</div>
             <div v-else style="display: flex; flex-direction: column; gap: 12px;">
@@ -727,11 +735,41 @@
                     <span style="font-size: 11.5px; color: #64748b; font-family: monospace;">{{ formatDateTime(group.shippedAt) }}</span>
                   </div>
 
-                  <div style="display: flex; align-items: center; gap: 16px;">
+                  <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="text-align: right;">
                       <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                      <strong style="font-size: 14px; color: #2563eb;">装货总数: {{ group.totalQty }} 个</strong>
+                      <strong style="font-size: 14px; color: #2563eb;">发货件数: {{ group.totalQty }} 个</strong>
                     </div>
+
+                    <!-- 动态流转按键组 -->
+                    <button 
+                      v-if="group.items.some(i => (i.status || 'shipped') === 'shipped')"
+                      type="button" 
+                      class="btn primary btn-sm"
+                      style="background: #d97706; border-color: #d97706; font-size: 12px; height: 28px; padding: 0 10px;"
+                      @click.stop="openFittingArrivalModal(group.items)"
+                    >
+                      👷 现场确认到货
+                    </button>
+                    <button 
+                      v-else-if="group.items.some(i => i.status === 'arrived')"
+                      type="button" 
+                      class="btn primary btn-sm"
+                      style="background: #2563eb; border-color: #2563eb; font-size: 12px; height: 28px; padding: 0 10px;"
+                      @click.stop="handleConfirmFittingConstruction(group.items)"
+                    >
+                      🏗️ 施工单位接收
+                    </button>
+                    <button 
+                      v-else-if="group.items.some(i => i.status === 'construction_confirmed')"
+                      type="button" 
+                      class="btn primary btn-sm"
+                      style="background: #8e44ad; border-color: #8e44ad; font-size: 12px; height: 28px; padding: 0 10px;"
+                      @click.stop="handleConfirmFittingWarehouse(group.items)"
+                    >
+                      🏢 库管确认入库
+                    </button>
+
                     <button 
                       type="button" 
                       class="btn ghost btn-sm" 
@@ -756,7 +794,9 @@
                         <th style="width: 45px; text-align: center;">#</th>
                         <th style="width: 140px;">管件类型</th>
                         <th>型号 / 规格描述</th>
-                        <th style="width: 110px; text-align: right;">发货件数</th>
+                        <th style="width: 100px; text-align: right;">发货件数</th>
+                        <th style="width: 100px; text-align: right;">实到件数</th>
+                        <th style="width: 120px; text-align: center;">当前状态</th>
                         <th style="width: 140px;">订单号</th>
                       </tr>
                     </thead>
@@ -768,7 +808,13 @@
                           <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
                         </td>
                         <td><strong style="color: #1e293b;">{{ item.model_spec }}</strong></td>
-                        <td style="text-align: right; font-weight: bold; color: #2563eb;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
+                        <td style="text-align: right; font-weight: bold; color: #64748b;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
+                        <td style="text-align: right; font-weight: bold; color: #2563eb;">{{ item.arrived_qty !== undefined && item.arrived_qty !== null ? item.arrived_qty : item.shipped_qty }} {{ item.unit || '个' }}</td>
+                        <td style="text-align: center;">
+                          <span class="status-pill" :class="statusClass(item.status || 'shipped')">
+                            {{ deliveryStatusLabelMap[item.status || 'shipped'] || item.status }}
+                          </span>
+                        </td>
                         <td><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
                       </tr>
                     </tbody>
@@ -802,14 +848,14 @@
               <div style="grid-column: span 2;">接收标段：<strong>{{ deliveryDetailModalData.section1Name }}</strong></div>
             </div>
 
-            <!-- 时光轴记录 -->
+            <!-- 时光轴记录 (4 节点闭环) -->
             <div style="position: relative; padding-left: 20px; margin-left: 4px; border-left: 2px dashed #cbd5e1;">
               <!-- 1. 发货阶段 -->
               <div style="position: relative; margin-bottom: 20px;">
                 <span style="position: absolute; left: -26px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #4f46e5; border: 2px solid #fff; box-shadow: 0 0 0 2px #4f46e5;"></span>
                 <div style="display: flex; flex-direction: column; gap: 4px;">
                   <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 13px; font-weight: bold; color: #1e293b;">📦 供给侧装车发货</span>
+                    <span style="font-size: 13px; font-weight: bold; color: #1e293b;">📦 1. 厂家发货与车次调度</span>
                     <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.shippedAt) }}</span>
                   </div>
                   <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
@@ -820,15 +866,129 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 2. 现场确认到货阶段 -->
+              <div style="position: relative; margin-bottom: 20px;">
+                <span 
+                  style="position: absolute; left: -26px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff;"
+                  :style="{ background: deliveryDetailModalData.arrivedAt ? '#d97706' : '#cbd5e1', boxShadow: deliveryDetailModalData.arrivedAt ? '0 0 0 2px #d97706' : '0 0 0 2px #cbd5e1' }"
+                ></span>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.arrivedAt ? '#d97706' : '#94a3b8' }">👷 2. 现场负责人确认到货</span>
+                    <span v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.arrivedAt) }}</span>
+                    <span v-else style="font-size: 11px; color: #94a3b8;">(待到货)</span>
+                  </div>
+                  <div v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #475569; background: #fffbe6; padding: 6px 10px; border-radius: 6px; border: 1px solid #ffe58f;">
+                    <div>实际到货件数：<strong style="color: #d97706; font-size: 12.5px;">{{ deliveryDetailModalData.arrivedQty }} {{ deliveryDetailModalData.unit }}</strong></div>
+                    <div>确认操作人：<span>{{ deliveryDetailModalData.arrivedBy || '现场人员' }}</span></div>
+                    <div v-if="deliveryDetailModalData.arrivalRemark">现场到货备注：<span style="color: #855800;">“{{ deliveryDetailModalData.arrivalRemark }}”</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 施工确认接收阶段 -->
+              <div style="position: relative; margin-bottom: 20px;">
+                <span 
+                  style="position: absolute; left: -26px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff;"
+                  :style="{ background: deliveryDetailModalData.constructionConfirmedAt ? '#2563eb' : '#cbd5e1', boxShadow: deliveryDetailModalData.constructionConfirmedAt ? '0 0 0 2px #2563eb' : '0 0 0 2px #cbd5e1' }"
+                ></span>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.constructionConfirmedAt ? '#2563eb' : '#94a3b8' }">🏗️ 3. 施工单位确认接收</span>
+                    <span v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.constructionConfirmedAt) }}</span>
+                    <span v-else style="font-size: 11px; color: #94a3b8;">(待接收)</span>
+                  </div>
+                  <div v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #475569; background: #eff6ff; padding: 6px 10px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                    <div>确认接收人：<span>{{ deliveryDetailModalData.constructionConfirmedBy || '施工负责人' }}</span></div>
+                    <div v-if="deliveryDetailModalData.constructionRemark">施工接收备注：<span>“{{ deliveryDetailModalData.constructionRemark }}”</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 库管入库阶段 -->
+              <div style="position: relative;">
+                <span 
+                  style="position: absolute; left: -26px; top: 2px; width: 12px; height: 12px; border-radius: 99px; border: 2px solid #fff;"
+                  :style="{ background: deliveryDetailModalData.warehouseConfirmedAt ? '#16a34a' : '#cbd5e1', boxShadow: deliveryDetailModalData.warehouseConfirmedAt ? '0 0 0 2px #16a34a' : '0 0 0 2px #cbd5e1' }"
+                ></span>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: bold;" :style="{ color: deliveryDetailModalData.warehouseConfirmedAt ? '#16a34a' : '#94a3b8' }">🏢 4. 库管员入库完结</span>
+                    <span v-if="deliveryDetailModalData.warehouseConfirmedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.warehouseConfirmedAt) }}</span>
+                    <span v-else style="font-size: 11px; color: #94a3b8;">(待入库)</span>
+                  </div>
+                  <div v-if="deliveryDetailModalData.warehouseConfirmedAt" style="font-size: 11px; color: #475569; background: #f0fdf4; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                    <div>库管员账号：<span>{{ deliveryDetailModalData.warehouseConfirmedBy || '库管员' }}</span></div>
+                    <div v-if="deliveryDetailModalData.warehouseRemark">库管入库备注：<span>“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <button
               type="button"
               class="btn primary"
-              style="width: 100%; margin-top: 10px; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
+              style="width: 100%; margin-top: 20px; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
               @click="deliveryDetailModalVisible = false"
             >
-              已阅并关闭
+              已阅并关闭凭证
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 现场管件到货数量确认 Modal 弹窗 -->
+    <Transition name="fade">
+      <div v-if="showFittingArrivalModal" class="block-modal-overlay" @click.self="showFittingArrivalModal = false">
+        <div class="block-modal-container" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;">
+            <span class="block-warning-icon">👷</span>
+            <h3 style="margin-top: 5px; color: #fff;">现场确认管件到货与实到数量核对</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">请核对每项管件的实际到货数量（如有破损丢货请修改实到数）</p>
+          </div>
+          
+          <div style="padding: 20px 24px; text-align: left; background: #fff;">
+            <table class="data-table" style="margin-bottom: 16px; width: 100%; border: 1px solid #e2e8f0; font-size: 13px;">
+              <thead style="background: #f8fafc;">
+                <tr>
+                  <th>管件品类与规格</th>
+                  <th style="width: 100px; text-align: right;">发货件数</th>
+                  <th style="width: 130px; text-align: center;">实际到货件数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in fittingArrivalModalItems" :key="item.id">
+                  <td>
+                    <strong>{{ item.fitting_type }}</strong>
+                    <span style="color: #64748b; font-size: 12px; display: block;">{{ item.model_spec }}</span>
+                  </td>
+                  <td style="text-align: right; color: #64748b; font-weight: bold;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
+                  <td style="text-align: center;">
+                    <input 
+                      v-model.number="fittingArrivalQtyMap[item.id]" 
+                      type="number" 
+                      min="0" 
+                      step="1"
+                      class="input" 
+                      style="width: 90px; text-align: center; font-weight: bold; color: #2563eb; height: 32px; font-size: 14px;" 
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">✍️ 现场到货确认备注 (选填)</span>
+              <textarea v-model="fittingArrivalRemark" class="textarea" rows="3" placeholder="例如：1个弯头保温层运输磨损已登记，其余完好实到签收..." style="font-size: 13px;"></textarea>
+            </label>
+          </div>
+
+          <div class="modal-footer" style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn ghost" type="button" @click="showFittingArrivalModal = false">取消</button>
+            <button class="btn primary" type="button" :disabled="fittingActionLoading" @click="handleConfirmFittingArrival" style="background: #d97706; border-color: #d97706;">
+              {{ fittingActionLoading ? '⏳ 正在提交...' : '✅ 确认提交现场到货' }}
             </button>
           </div>
         </div>
@@ -856,6 +1016,10 @@ import {
   getTubeWarehouseManagementDeliveries,
   getTubeWarehouseManagementOptions,
   getFittingDeliveriesList,
+  confirmFittingDeliveryArrival,
+  confirmFittingDeliveryConstruction,
+  confirmFittingDeliveryWarehouse,
+  cancelFittingDelivery,
 } from '../../daily_report_25_26/services/api'
 
 const projectKey = 'insulation_pipe_supply_2026'
@@ -868,10 +1032,18 @@ const fittingRows = ref([])
 const fittingLoading = ref(false)
 const fittingExportLoading = ref(false)
 const expandedWarehouseFittingGroupKeys = ref(new Set())
+const fittingSubTab = ref('all') // 'all' | 'pending_arrival' | 'pending_construction' | 'pending_warehouse' | 'completed'
 
-// 流转凭证弹窗数据
-const deliveryDetailModalVisible = ref(false)
-const deliveryDetailModalData = ref(null)
+// 管件勾选与流转处置
+const selectedFittingIds = ref([])
+const fittingActionLoading = ref(false)
+const fittingActionMsg = ref(null)
+
+// 到货确认 Modal 对话框
+const showFittingArrivalModal = ref(false)
+const fittingArrivalModalItems = ref([])
+const fittingArrivalQtyMap = ref({})
+const fittingArrivalRemark = ref('')
 
 function openDeliveryDetailModal(row) {
   deliveryDetailModalData.value = {
@@ -879,6 +1051,7 @@ function openDeliveryDetailModal(row) {
     vehiclePlateNo: row.vehicle_plate_no || '—',
     pipeModelName: `${row.fitting_type} (${row.model_spec || '未填'})`,
     shippedQty: row.shipped_qty,
+    arrivedQty: row.arrived_qty !== undefined && row.arrived_qty !== null ? row.arrived_qty : row.shipped_qty,
     unit: row.unit || '个',
     shippedAt: row.shipped_at,
     createdBy: row.operator || row.created_by || '供给端调度',
@@ -890,6 +1063,15 @@ function openDeliveryDetailModal(row) {
     section1Id: row.section_1_id,
     shipRemark: row.ship_remark,
     status: row.status || 'shipped',
+    arrivedAt: row.arrived_at,
+    arrivedBy: row.arrived_by,
+    arrivalRemark: row.arrival_remark,
+    constructionConfirmedAt: row.construction_confirmed_at,
+    constructionConfirmedBy: row.construction_confirmed_by,
+    constructionRemark: row.construction_remark,
+    warehouseConfirmedAt: row.warehouse_confirmed_at,
+    warehouseConfirmedBy: row.warehouse_confirmed_by,
+    warehouseRemark: row.warehouse_remark,
   }
   deliveryDetailModalVisible.value = true
 }
@@ -969,23 +1151,140 @@ const warehouseFittingNonStandardQty = computed(() => {
   return Math.max(0, warehouseFittingTotalQty.value - warehouseFittingStandardQty.value)
 })
 
-const loadWarehouseFittingDeliveries = async () => {
-  expandedWarehouseFittingGroupKeys.value = new Set()
-  fittingLoading.value = true
+const fittingSummary = computed(() => {
+  const total = fittingRows.value.length
+  let pendingArrival = 0
+  let pendingConstruction = 0
+  let pendingWarehouse = 0
+  let completed = 0
+  let cancelled = 0
+
+  for (const r of fittingRows.value) {
+    const st = r.status || 'shipped'
+    if (st === 'shipped') pendingArrival++
+    else if (st === 'arrived') pendingConstruction++
+    else if (st === 'construction_confirmed') pendingWarehouse++
+    else if (st === 'warehouse_confirmed') completed++
+    else if (st === 'cancelled') cancelled++
+  }
+
+  return {
+    total,
+    pendingArrival,
+    pendingConstruction,
+    pendingWarehouse,
+    completed,
+    cancelled,
+  }
+})
+
+const filteredFittingRows = computed(() => {
+  if (fittingSubTab.value === 'pending_arrival') {
+    return fittingRows.value.filter(r => (r.status || 'shipped') === 'shipped')
+  }
+  if (fittingSubTab.value === 'pending_construction') {
+    return fittingRows.value.filter(r => r.status === 'arrived')
+  }
+  if (fittingSubTab.value === 'pending_warehouse') {
+    return fittingRows.value.filter(r => r.status === 'construction_confirmed')
+  }
+  if (fittingSubTab.value === 'completed') {
+    return fittingRows.value.filter(r => r.status === 'warehouse_confirmed')
+  }
+  return fittingRows.value
+})
+
+function openFittingArrivalModal(items) {
+  if (!items || !items.length) return
+  fittingArrivalModalItems.value = items
+  const map = {}
+  items.forEach(it => {
+    map[it.id] = it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty
+  })
+  fittingArrivalQtyMap.value = map
+  fittingArrivalRemark.value = ''
+  showFittingArrivalModal.value = true
+}
+
+async function handleConfirmFittingArrival() {
+  if (!fittingArrivalModalItems.value.length) return
+  fittingActionLoading.value = true
+  fittingActionMsg.value = null
   try {
-    const res = await getFittingDeliveriesList(projectKey, {
-      section1Id: filters.section1Ids.length > 0 ? filters.section1Ids.join(',') : undefined,
-      supplyEntityId: filters.supplyEntityIds.length > 0 ? filters.supplyEntityIds.join(',') : undefined,
-      searchKeyword: filters.shipmentNo || filters.orderNo || filters.vehiclePlateNo || '',
-      limit: 300,
+    const ids = fittingArrivalModalItems.value.map(it => it.id)
+    const res = await confirmFittingDeliveryArrival(projectKey, {
+      ids,
+      arrived_qty_map: fittingArrivalQtyMap.value,
+      remark: fittingArrivalRemark.value,
     })
     if (res && res.ok) {
-      fittingRows.value = res.items || []
+      fittingActionMsg.value = { type: 'success', text: `🎉 成功确认到货 ${res.updated_count} 项管件！` }
+      showFittingArrivalModal.value = false
+      selectedFittingIds.value = []
+      loadWarehouseFittingDeliveries()
     }
   } catch (err) {
-    console.error('加载库管管件发货记录失败:', err)
+    fittingActionMsg.value = { type: 'error', text: `确认到货失败: ${err.message}` }
   } finally {
-    fittingLoading.value = false
+    fittingActionLoading.value = false
+  }
+}
+
+async function handleConfirmFittingConstruction(items) {
+  if (!items || !items.length) return
+  fittingActionLoading.value = true
+  fittingActionMsg.value = null
+  try {
+    const ids = items.map(it => it.id)
+    const res = await confirmFittingDeliveryConstruction(projectKey, { ids })
+    if (res && res.ok) {
+      fittingActionMsg.value = { type: 'success', text: `🎉 成功完成施工单位接收确认 ${res.updated_count} 项管件！` }
+      selectedFittingIds.value = []
+      loadWarehouseFittingDeliveries()
+    }
+  } catch (err) {
+    fittingActionMsg.value = { type: 'error', text: `施工接收确认失败: ${err.message}` }
+  } finally {
+    fittingActionLoading.value = false
+  }
+}
+
+async function handleConfirmFittingWarehouse(items) {
+  if (!items || !items.length) return
+  fittingActionLoading.value = true
+  fittingActionMsg.value = null
+  try {
+    const ids = items.map(it => it.id)
+    const res = await confirmFittingDeliveryWarehouse(projectKey, { ids })
+    if (res && res.ok) {
+      fittingActionMsg.value = { type: 'success', text: `🎉 成功完成库管最终入库确认 ${res.updated_count} 项管件！` }
+      selectedFittingIds.value = []
+      loadWarehouseFittingDeliveries()
+    }
+  } catch (err) {
+    fittingActionMsg.value = { type: 'error', text: `库管入库确认失败: ${err.message}` }
+  } finally {
+    fittingActionLoading.value = false
+  }
+}
+
+async function handleCancelFitting(items) {
+  if (!items || !items.length) return
+  if (!confirm('确定要撤销发货选中的管件发货单吗？此操作无法撤销。')) return
+  fittingActionLoading.value = true
+  fittingActionMsg.value = null
+  try {
+    const ids = items.map(it => it.id)
+    const res = await cancelFittingDelivery(projectKey, { ids })
+    if (res && res.ok) {
+      fittingActionMsg.value = { type: 'success', text: `成功撤销 ${res.updated_count} 项管件发货单` }
+      selectedFittingIds.value = []
+      loadWarehouseFittingDeliveries()
+    }
+  } catch (err) {
+    fittingActionMsg.value = { type: 'error', text: `撤销失败: ${err.message}` }
+  } finally {
+    fittingActionLoading.value = false
   }
 }
 

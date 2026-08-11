@@ -638,7 +638,7 @@
                       type="button" 
                       class="btn ghost btn-sm" 
                       style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer;"
-                      @click.stop="openDeliveryDetailModal(group.items[0])"
+                      @click.stop="showDeliveryDetail(group)"
                     >
                       🚚 流转凭证
                     </button>
@@ -889,6 +889,38 @@
             </div>
           </div>
 
+          <!-- 本车装载物品管件明细清单 -->
+          <div v-if="deliveryDetailModalData.itemsList && deliveryDetailModalData.itemsList.length" style="padding: 12px 15px; background: #ffffff; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; overflow-x: auto;">
+            <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <span>📦 本车次搭载管件清单及履约明细</span>
+              <span style="font-size: 11px; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 99px; border: 1px solid #c7d2fe;">
+                共 {{ deliveryDetailModalData.totalTypesCount }} 种规格 / 合计 {{ formatNumber(deliveryDetailModalData.shippedQty) }} {{ deliveryDetailModalData.unit || '个' }}
+              </span>
+            </div>
+            <table style="margin: 0; width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #edf2f7; border-radius: 6px; font-size: 11.5px; box-sizing: border-box;">
+              <thead>
+                <tr style="background: #f1f5f9; color: #475569;">
+                  <th style="padding: 6px 4px; text-align: center; width: 28px;">#</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 100px;">管件类型</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 140px;">规格型号</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">发货数</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 65px;">实到数</th>
+                  <th style="padding: 6px 6px; text-align: left;">备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(it, idx) in deliveryDetailModalData.itemsList" :key="it.id || idx" style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 6px 4px; text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ it.fitting_type || it.fittingType || '管件' }}</td>
+                  <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ it.model_spec || it.modelSpec || '—' }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || '个' }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #059669; white-space: nowrap;">{{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty))) }} {{ it.unit || '个' }}</td>
+                  <td style="padding: 6px 6px; color: #64748b; font-style: italic; word-break: break-word;">{{ it.ship_remark || it.shipRemark || it.arrival_remark || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
           <!-- 时光轴内容 Timeline -->
           <div style="padding: 25px 25px 15px 35px; text-align: left; position: relative; width: 100%; box-sizing: border-box;">
             <!-- 时光轴中轴线 -->
@@ -903,7 +935,7 @@
                   <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.shippedAt) }}</span>
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} 米</strong></div>
+                  <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
                   <div>操作账号：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
                   <div style="grid-column: span 2;">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
@@ -928,11 +960,11 @@
                   <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待卸车到货...</span>
                 </div>
                 <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} 米</strong></div>
+                  <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
                   <div>操作账号：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.arrivedConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.arrivedConfirmPhone }}</span></div>
-                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || '—' }} ({{ deliveryDetailModalData.section_1_id || '—' }})</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || deliveryDetailModalData.section1Name || '—' }} ({{ deliveryDetailModalData.section_1_id || deliveryDetailModalData.section1Id || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedRemark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.arrivedRemark }}”</span></div>
                 </div>
               </div>
@@ -953,11 +985,11 @@
                   <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待施工接收...</span>
                 </div>
                 <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
+                  <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
                   <div>操作账号：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.receivedConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.receivedConfirmPhone }}</span></div>
-                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || '—' }} ({{ deliveryDetailModalData.section_1_id || '—' }})</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section_1_name || deliveryDetailModalData.section1Name || '—' }} ({{ deliveryDetailModalData.section_1_id || deliveryDetailModalData.section1Id || '—' }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedRemark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.receivedRemark }}”</span></div>
                   <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="deliveryDetailModalData.isTimeoutReceive">
                     🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
@@ -1159,8 +1191,75 @@ const receiptRemarkModalData = ref({
 const deliveryDetailModalVisible = ref(false)
 const deliveryDetailModalData = ref(null)
 
-function showDeliveryDetail(row) {
-  deliveryDetailModalData.value = row
+function showDeliveryDetail(input) {
+  if (!input) return
+  const isGroup = Boolean(input.items && Array.isArray(input.items))
+  const itemsList = isGroup ? input.items : [input]
+  const mainRow = itemsList[0] || input
+
+  const shipmentNo = input.shipmentNo || input.shipment_no || mainRow.shipment_no || mainRow.shipmentNo || mainRow.order_no || mainRow.orderNo || String(mainRow.id || '')
+  const vehiclePlateNo = input.vehiclePlateNo || input.vehicle_plate_no || mainRow.vehicle_plate_no || mainRow.vehiclePlateNo || '—'
+  const shippedAt = input.shippedAt || input.shipped_at || mainRow.shipped_at || mainRow.shippedAt || ''
+  const supplyEntityId = input.supplyEntityId || input.supply_entity_id || mainRow.supply_entity_id || mainRow.supplyEntityId || ''
+  const supplyEntityName = input.supplyEntityName || input.supply_entity_name || mainRow.supply_entity_name || mainRow.supplyEntityName || supplyEntityId
+  const section1Id = input.section1Id || input.section_1_id || mainRow.section_1_id || mainRow.section1Id || ''
+  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || section1Id
+
+  const shipContactName = mainRow.ship_contact_name || mainRow.shipContactName || input.shipContactName || mainRow.created_by || '发货负责人'
+  const shipContactPhone = mainRow.ship_contact_phone || mainRow.shipContactPhone || input.shipContactPhone || '—'
+  const createdBy = mainRow.created_by || mainRow.createdBy || mainRow.operator || input.createdBy || '发货操作员'
+  const shipRemark = input.shipRemark || mainRow.ship_remark || mainRow.shipRemark || ''
+
+  const arrivedConfirmAt = mainRow.arrived_at || mainRow.arrivedConfirmAt || ''
+  const arrivedConfirmBy = mainRow.arrived_by || mainRow.arrivedConfirmBy || (arrivedConfirmAt ? '现场到货负责人' : '')
+  const arrivedRemark = mainRow.arrival_remark || mainRow.arrivedRemark || ''
+
+  const constructionConfirmedAt = mainRow.construction_confirmed_at || mainRow.receivedConfirmAt || ''
+  const constructionConfirmedBy = mainRow.construction_confirmed_by || mainRow.receivedConfirmBy || (constructionConfirmedAt ? '施工接收负责人' : '')
+  const constructionRemark = mainRow.construction_remark || mainRow.receivedRemark || ''
+
+  const warehouseConfirmedAt = mainRow.warehouse_confirmed_at || mainRow.warehouseConfirmAt || ''
+  const warehouseConfirmedBy = mainRow.warehouse_confirmed_by || mainRow.warehouseConfirmBy || (warehouseConfirmedAt ? '库管员' : '')
+  const warehouseRemark = mainRow.warehouse_remark || mainRow.warehouseRemark || ''
+
+  const totalShippedQty = itemsList.reduce((sum, it) => sum + (Number(it.shipped_qty !== undefined ? it.shipped_qty : it.shippedQty) || 0), 0)
+  const totalArrivedQty = itemsList.reduce((sum, it) => sum + (Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined ? it.arrivedQty : (it.shipped_qty || it.shippedQty))) || 0), 0)
+
+  deliveryDetailModalData.value = {
+    ...mainRow,
+    ...input,
+    itemsList,
+    totalTypesCount: itemsList.length,
+    deliveryCode: shipmentNo,
+    vehiclePlateNo,
+    shippedAt,
+    shippedQty: totalShippedQty,
+    arrivedQty: totalArrivedQty,
+    receivedQty: totalArrivedQty,
+    unit: mainRow.unit || '个',
+    pipeModelName: itemsList.length === 1 
+      ? (mainRow.pipe_model_name || mainRow.pipeModelName || `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})`)
+      : `组合装车共包含 ${itemsList.length} 种规格管件`,
+    createdBy,
+    shipContactName,
+    shipContactPhone,
+    shipRemark,
+    supplyEntityName,
+    supplyEntityId,
+    section_1_name: section1Name,
+    section_1_id: section1Id,
+    section1Name,
+    section1Id,
+    arrivedConfirmAt,
+    arrivedConfirmBy,
+    arrivedRemark,
+    receivedConfirmAt: constructionConfirmedAt,
+    receivedConfirmBy: constructionConfirmedBy,
+    receivedRemark: constructionRemark,
+    warehouseConfirmAt: warehouseConfirmedAt,
+    warehouseConfirmBy: warehouseConfirmedBy,
+    warehouseRemark,
+  }
   deliveryDetailModalVisible.value = true
 }
 

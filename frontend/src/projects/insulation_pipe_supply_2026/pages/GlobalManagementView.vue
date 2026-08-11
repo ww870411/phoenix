@@ -2488,6 +2488,10 @@ function translateActionType(type) {
     SUPER_UPDATE_DELIVERY: '🚨 超管强改',
     SUBMIT_FITTING_DELIVERY: '🔩 提交管件发货',
     DELETE_FITTING_DELIVERY: '🗑️ 撤销管件发货',
+    CONFIRM_FITTING_ARRIVAL: '👷 管件到货确认',
+    CONFIRM_FITTING_CONSTRUCTION: '🏗️ 管件施工接收',
+    CONFIRM_FITTING_WAREHOUSE: '🏢 管件库管确认',
+    CANCEL_FITTING_DELIVERY: '❌ 撤销管件发货',
   }
   return dict[type] || type
 }
@@ -2506,6 +2510,10 @@ function getActionTypeBadgeStyle(type) {
     SUPER_UPDATE_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
     SUBMIT_FITTING_DELIVERY: { bg: '#eef2ff', color: '#4f46e5' },
     DELETE_FITTING_DELIVERY: { bg: '#fff1f2', color: '#e11d48' },
+    CONFIRM_FITTING_ARRIVAL: { bg: '#fef3d6', color: '#f5b000' },
+    CONFIRM_FITTING_CONSTRUCTION: { bg: '#e8f7f0', color: '#2dca73' },
+    CONFIRM_FITTING_WAREHOUSE: { bg: '#f4eafc', color: '#8e44ad' },
+    CANCEL_FITTING_DELIVERY: { bg: '#fff1f2', color: '#e11d48' },
   }
   const match = colors[type] || { bg: '#f4f5f7', color: '#5a6b82' }
   return {

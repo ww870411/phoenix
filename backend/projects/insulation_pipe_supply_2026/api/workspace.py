@@ -73,6 +73,10 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
     super_update_delivery_record,
     query_history_records,
     submit_fitting_delivery,
+    confirm_fitting_delivery_arrival,
+    confirm_fitting_delivery_construction,
+    confirm_fitting_delivery_warehouse,
+    cancel_fitting_delivery,
     list_fitting_deliveries,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
@@ -2595,6 +2599,10 @@ def export_global_management_operation_logs(
         "UPDATE_CONFIG": "配置修改",
         "SUPER_UPDATE_DELIVERY": "超管强改",
         "SUBMIT_FITTING_DELIVERY": "提交管件发货",
+        "CONFIRM_FITTING_ARRIVAL": "管件现场确认到货",
+        "CONFIRM_FITTING_CONSTRUCTION": "管件施工确认接收",
+        "CONFIRM_FITTING_WAREHOUSE": "管件库管确认入库",
+        "CANCEL_FITTING_DELIVERY": "撤销管件发货",
         "DELETE_FITTING_DELIVERY": "撤销管件发货",
     }
     
@@ -3192,6 +3200,82 @@ def handle_submit_fitting_delivery(
     return submit_fitting_delivery(payload, operator=operator, operator_group=operator_group)
 
 
+@public_router.post("/workspace/fitting_deliveries/confirm_arrival", summary="确认管件现场到货")
+def handle_confirm_fitting_delivery_arrival(
+    payload: Dict[str, Any] = Body(...),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    if session and getattr(session, "group", None):
+        group_str = str(session.group).strip().lower()
+        if group_str in ("tube_global_viewer", "tube_viewer"):
+            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权确认到货")
+    operator = (
+        (session.username if (session and getattr(session, "username", None)) else None)
+        or str(payload.get("operator") or "").strip()
+        or str(payload.get("username") or "").strip()
+        or "GUEST"
+    )
+    operator_group = getattr(session, "group", None) if session else None
+    return confirm_fitting_delivery_arrival(payload, operator=operator, operator_group=operator_group)
+
+
+@public_router.post("/workspace/fitting_deliveries/confirm_construction", summary="施工单位确认接收管件")
+def handle_confirm_fitting_delivery_construction(
+    payload: Dict[str, Any] = Body(...),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    if session and getattr(session, "group", None):
+        group_str = str(session.group).strip().lower()
+        if group_str in ("tube_global_viewer", "tube_viewer"):
+            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权确认接收")
+    operator = (
+        (session.username if (session and getattr(session, "username", None)) else None)
+        or str(payload.get("operator") or "").strip()
+        or str(payload.get("username") or "").strip()
+        or "GUEST"
+    )
+    operator_group = getattr(session, "group", None) if session else None
+    return confirm_fitting_delivery_construction(payload, operator=operator, operator_group=operator_group)
+
+
+@public_router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件入库")
+def handle_confirm_fitting_delivery_warehouse(
+    payload: Dict[str, Any] = Body(...),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    if session and getattr(session, "group", None):
+        group_str = str(session.group).strip().lower()
+        if group_str in ("tube_global_viewer", "tube_viewer"):
+            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权操作库管入库")
+    operator = (
+        (session.username if (session and getattr(session, "username", None)) else None)
+        or str(payload.get("operator") or "").strip()
+        or str(payload.get("username") or "").strip()
+        or "GUEST"
+    )
+    operator_group = getattr(session, "group", None) if session else None
+    return confirm_fitting_delivery_warehouse(payload, operator=operator, operator_group=operator_group)
+
+
+@public_router.post("/workspace/fitting_deliveries/cancel", summary="撤销管件发货单")
+def handle_cancel_fitting_delivery(
+    payload: Dict[str, Any] = Body(...),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    if session and getattr(session, "group", None):
+        group_str = str(session.group).strip().lower()
+        if group_str in ("tube_global_viewer", "tube_viewer"):
+            raise HTTPException(status_code=403, detail="全局观察员角色仅具备只读权限，无权撤销发货")
+    operator = (
+        (session.username if (session and getattr(session, "username", None)) else None)
+        or str(payload.get("operator") or "").strip()
+        or str(payload.get("username") or "").strip()
+        or "GUEST"
+    )
+    operator_group = getattr(session, "group", None) if session else None
+    return cancel_fitting_delivery(payload, operator=operator, operator_group=operator_group)
+
+
 @public_router.get("/workspace/fitting_deliveries/list", summary="查询管件发货记录")
 def handle_list_fitting_deliveries(
     section_1_id: str = Query("", description="接收标段/工程ID"),
@@ -3202,14 +3286,21 @@ def handle_list_fitting_deliveries(
     limit: int = Query(200, description="限制返回数量"),
     session: AuthSession = Depends(get_current_session_optional),
 ):
+    clean_sec_id = section_1_id if isinstance(section_1_id, str) else ""
+    clean_sup_id = supply_entity_id if isinstance(supply_entity_id, str) else ""
+    clean_start = start_date if isinstance(start_date, str) else ""
+    clean_end = end_date if isinstance(end_date, str) else ""
+    clean_kw = search_keyword if isinstance(search_keyword, str) else ""
+    clean_limit = limit if isinstance(limit, int) else 200
+
     payload = load_tube_config()
     items = list_fitting_deliveries(
-        section_1_id="",
-        supply_entity_id="",
-        start_date=start_date,
-        end_date=end_date,
-        search_keyword=search_keyword,
-        limit=limit,
+        section_1_id=clean_sec_id,
+        supply_entity_id=clean_sup_id,
+        start_date=clean_start,
+        end_date=clean_end,
+        search_keyword=clean_kw,
+        limit=clean_limit,
     )
     _decorate_delivery_rows(payload, items)
 
@@ -3221,24 +3312,36 @@ def handle_list_fitting_deliveries(
             accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
         accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
 
-    selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
-    selected_supply_entities = {s.strip() for s in supply_entity_id.split(",") if s.strip()} if supply_entity_id else set()
+    ext_acc_sec: Set[str] = set()
+    for s in accessible_section_1_ids:
+        s_clean = s.strip().lower()
+        if s_clean: ext_acc_sec.add(s_clean)
+        for ent in get_config_list(payload, "demand_entities"):
+            e_sec = str(ent.get("section_1_id") or "").strip().lower()
+            e_code = str(ent.get("code") or "").strip().lower()
+            if s_clean in (e_sec, e_code):
+                if e_sec: ext_acc_sec.add(e_sec)
+                if e_code: ext_acc_sec.add(e_code)
+
+    ext_acc_sup: Set[str] = set()
+    for p in accessible_supply_entity_ids:
+        p_clean = p.strip().lower()
+        if p_clean: ext_acc_sup.add(p_clean)
+        for ent in get_config_list(payload, "supply_entities"):
+            e_id = str(ent.get("entity_id") or "").strip().lower()
+            e_code = str(ent.get("code") or "").strip().lower()
+            if p_clean in (e_id, e_code):
+                if e_id: ext_acc_sup.add(e_id)
+                if e_code: ext_acc_sup.add(e_code)
 
     filtered_items: List[Dict[str, Any]] = []
-    acc_sup_upper = {x.upper() for x in accessible_supply_entity_ids} if accessible_supply_entity_ids else set()
-    sel_sup_upper = {x.upper() for x in selected_supply_entities} if selected_supply_entities else set()
-
     for item in items:
-        sec_id = str(item.get("section_1_id") or "").strip()
-        sup_id = str(item.get("supply_entity_id") or "").strip()
+        sec_id = str(item.get("section_1_id") or "").strip().lower()
+        sup_id = str(item.get("supply_entity_id") or "").strip().lower()
 
-        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
+        if ext_acc_sec and sec_id not in ext_acc_sec:
             continue
-        if acc_sup_upper and sup_id.upper() not in acc_sup_upper:
-            continue
-        if selected_section_1s and sec_id not in selected_section_1s:
-            continue
-        if sel_sup_upper and sup_id.upper() not in sel_sup_upper:
+        if ext_acc_sup and sup_id not in ext_acc_sup:
             continue
         filtered_items.append(item)
 

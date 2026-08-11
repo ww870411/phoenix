@@ -639,6 +639,58 @@ export async function submitFittingDelivery(projectKey = 'insulation_pipe_supply
   return response.json()
 }
 
+export async function confirmFittingDeliveryArrival(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/confirm_arrival`, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '确认管件到货失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function confirmFittingDeliveryConstruction(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/confirm_construction`, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '施工确认管件接收失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function confirmFittingDeliveryWarehouse(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/confirm_warehouse`, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '库管确认管件入库失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function cancelFittingDelivery(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/cancel`, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '撤销管件发货失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
 export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulation_pipe_supply_2026', params = {}) {
   const search = new URLSearchParams()
   if (params?.show_date) search.set('show_date', String(params.show_date))
