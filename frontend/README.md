@@ -1,3 +1,13 @@
+## 2026-08-12 全面适配管件发货标准状态与字段重命名更新 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 更新了需求侧、发货侧、库管侧三大面板管件模块的状态 Badge 判定逻辑，无缝适配与支持直管标准状态（`pending_arrival` / `pending_receive` / `pending_warehouse` / `completed`）；
+  - 增强了凭证 Modal 与操作按钮判断条件，兼容易用性，确保在数据迁移前后前端展示均保持流畅稳定。
+
 ## 2026-08-11 彻底拔除 shipped_qty 冒充 arrived_qty 逻辑，实到数量 100% 纯粹绑定数据库物理字段 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
 
 - **关联前端页面**：

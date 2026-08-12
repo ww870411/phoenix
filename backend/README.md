@@ -1,3 +1,13 @@
+## 2026-08-12 管件表 (tube_fitting_delivery) 物理字段与状态枚举彻底统一为直管标准 (fitting_delivery_service.py)
+
+- **关联后端服务与 SQL 迁移**：
+  - `backend/sql/migrate_unify_fitting_delivery_schema.sql`
+  - `backend/sql/tube_schema_init.sql`
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 创建独立迁移 SQL `migrate_unify_fitting_delivery_schema.sql`，完成 10 个同含义物理字段的物理重命名（如 `arrived_by → arrived_confirm_by`）与 4 种 `status` 状态无损平滑映射（`shipped → pending_arrival`、`arrived → pending_receive`、`construction_confirmed → pending_warehouse`、`warehouse_confirmed → completed`）；
+  - 更新 `fitting_delivery_service.py` 的全套 SQL 读写与状态校验逻辑，新增全向兼容易用层，支持新旧状态及新旧字典字段防错转换。
+
 ## 2026-08-11 保温直管数据库物理表 tube_delivery 自增主键 DEFAULT 绑定 (supply_management_service.py)
 
 - **关联后端服务与数据库**：

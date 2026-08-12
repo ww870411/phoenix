@@ -746,16 +746,16 @@
                       <strong>{{ group.totalQty }} 个</strong>
                     </div>
                     <!-- 状态 Badge -->
-                    <span v-if="group.status === 'shipped' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
-                    <span v-else-if="group.status === 'arrived'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
-                    <span v-else-if="group.status === 'construction_confirmed' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管归档</span>
-                    <span v-else-if="group.status === 'warehouse_confirmed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已归档</span>
+                    <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
+                    <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
+                    <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管归档</span>
+                    <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已归档</span>
                     <span v-else-if="group.status === 'cancelled'" class="fitting-status-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">❌ 已撤销</span>
                     <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="fitting-status-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;">⚠️ 含已撤销明细</span>
 
                     <!-- 包含待归档项时显示“整车一键归档”按钮 -->
                     <button 
-                      v-if="group.status === 'construction_confirmed' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'received')"
+                      v-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received')"
                       type="button" 
                       class="btn primary btn-sm fitting-archive-button"
                       :disabled="fittingActionLoading"
@@ -824,16 +824,16 @@
 
                         <!-- 履约状态列 -->
                         <td style="text-align: center;">
-                          <span v-if="item.status === 'shipped' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
-                          <span v-else-if="item.status === 'arrived'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
-                          <span v-else-if="item.status === 'construction_confirmed' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
-                          <span v-else-if="item.status === 'warehouse_confirmed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
+                          <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
+                          <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
+                          <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
+                          <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
                           <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
                         </td>
 
                         <!-- 库管单项归档操作列 -->
                         <td style="text-align: center;">
-                          <div v-if="item.status === 'construction_confirmed' || item.status === 'received'" style="display: flex; justify-content: center; gap: 4px;">
+                          <div v-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" style="display: flex; justify-content: center; gap: 4px;">
                             <button
                               type="button"
                               class="btn primary btn-sm"
@@ -844,7 +844,7 @@
                               {{ item.submitting ? '提交中...' : '🏢 归档入库' }}
                             </button>
                           </div>
-                          <span v-else-if="item.status === 'warehouse_confirmed'" style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 已完成归档</span>
+                          <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 已完成归档</span>
                           <span v-else-if="item.status === 'cancelled'" style="font-size: 11px; color: #b91c1c; font-weight: 600;">已撤销</span>
                           <span v-else style="font-size: 11px; color: #94a3b8;">⏳ 待前置完成</span>
                         </td>
@@ -1278,16 +1278,16 @@ const fittingSummary = computed(() => {
 
 const filteredFittingRows = computed(() => {
   if (fittingSubTab.value === 'pending_arrival') {
-    return fittingRows.value.filter(r => (r.status || 'shipped') === 'shipped')
+    return fittingRows.value.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
   }
   if (fittingSubTab.value === 'pending_construction') {
-    return fittingRows.value.filter(r => r.status === 'arrived')
+    return fittingRows.value.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
   }
   if (fittingSubTab.value === 'pending_warehouse') {
-    return fittingRows.value.filter(r => r.status === 'construction_confirmed')
+    return fittingRows.value.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse')
   }
   if (fittingSubTab.value === 'completed') {
-    return fittingRows.value.filter(r => r.status === 'warehouse_confirmed')
+    return fittingRows.value.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
   }
   return fittingRows.value
 })

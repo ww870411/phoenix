@@ -1,3 +1,12 @@
+## 2026-08-12 [管件发货表 (tube_fitting_delivery) 字段名与状态枚举彻底统一为直管表标准]
+- **改动原因与契机**：响应对 `schema=tube` 下数据库约束与命名不规范的治理需求，将后期演进产生的 `tube_fitting_delivery` 离散状态与乱序字段名彻底收敛至直管表 (`tube_delivery`) 的统一语义标准体系。
+- **数据库升级 SQL 脚本**：创建独立且完全事务安全的物理迁移脚本 `backend/sql/migrate_unify_fitting_delivery_schema.sql`；
+  - 10 个物理字段重命名：`arrived_at → arrived_confirm_at`、`arrived_by → arrived_confirm_by`、`arrival_remark → arrived_remark`、`construction_confirmed_at → received_confirm_at`、`construction_confirmed_by → received_confirm_by`、`construction_remark → received_remark`、`warehouse_confirmed_at → warehouse_confirm_at`、`warehouse_confirmed_by → warehouse_confirm_by`、`cancelled_at → cancel_at`、`cancelled_by → cancel_by`；
+  - 4 种状态枚举平滑映射：`shipped → pending_arrival`、`arrived → pending_receive`、`construction_confirmed → pending_warehouse`、`warehouse_confirmed → completed`；
+  - 约束重建：更新 `chk_tube_fitting_status` 与状态凭证约束 `chk_tube_fitting_state_evidence`；同步更新归档建表语句 `tube_schema_init.sql`。
+- **后端 Service 双向防错兼容**：更新 `fitting_delivery_service.py` 中的 `SELECT` / `UPDATE` 字段名与 `status` 条件。采用向前兼容逻辑，读取与过滤时同时容忍新旧状态条件及双格式字典输出。
+- **前端 View 组件容错适配**：更新 `DemandManagementView.vue`、`SupplyManagementView.vue`、`WarehouseManagementView.vue` 中的 Badge 样式判定、操作按钮控制与详情提取，无缝支持新标准状态。
+
 ## 2026-08-11 [管件发货、显示、三级确认 P0/P1 完整性修复]
 - **前置与路线**：采用兼容路线 A，保留历史可见发货单号；新增不可变 `shipment_key` 区分同号批次。应用新字段先于数据库迁移曾导致列表查询 500、页面暂时看不到记录，现已补充迁移前后兼容读取并完成正式迁移。
 - **数据库完整性**：新增 `migrate_tube_fitting_delivery_integrity.sql`，修复重复 `id`、绑定主键与序列，增加正整数数量、到货上限、状态证据约束及查询索引；并发车次号改由计数表与登记表生成，不再使用 `COUNT + 1`。正式迁移前快照为 `tube.tube_fitting_delivery_backup_20260811_p0p1`。

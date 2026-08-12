@@ -45,7 +45,7 @@ def _positive_integer(value: Any, field_name: str) -> int:
 
 
 def normalize_delivery_ids(payload: Dict[str, Any]) -> List[int]:
-    raw_ids = list(payload.get("ids") or [])
+    raw_ids = list(payload.get("ids") or payload.get("delivery_ids") or [])
     if not raw_ids and payload.get("id") is not None:
         raw_ids = [payload.get("id")]
     result: List[int] = []
@@ -144,7 +144,7 @@ def _rows_for_update(session, delivery_ids: Sequence[int]) -> List[Dict[str, Any
             """
             SELECT id, shipment_no, order_no, supply_entity_id,
                    section_1_id, shipped_qty, arrived_qty, status,
-                   arrived_at, construction_confirmed_at, warehouse_confirmed_at
+                   arrived_confirm_at, received_confirm_at, warehouse_confirm_at
             FROM tube.tube_fitting_delivery
             WHERE id = ANY(:ids)
             ORDER BY id
@@ -240,48 +240,20 @@ def submit_fitting_delivery(
         date_part = shipped_at.strftime("%y%m%d")
         shipment_prefix = f"FS{entity_code}-{date_part}-"
 
-        # 1. 联合查询物理发货表与注册表中已存在的最大 shipment_no 序号，确保序列 100% 紧密连续递增，绝无跳号与冲突
+        # 直接基于物理主表 tube_fitting_delivery 计算递增车次号，无需任何额外辅助表
         db_max_seq = session.execute(
             text(
                 """
-                SELECT COALESCE(MAX(seq_val), 0) FROM (
-                    SELECT CAST(RIGHT(shipment_no, 3) AS INTEGER) AS seq_val FROM tube.tube_fitting_delivery WHERE shipment_no LIKE :prefix
-                    UNION ALL
-                    SELECT CAST(RIGHT(shipment_no, 3) AS INTEGER) AS seq_val FROM tube.tube_fitting_shipment_registry WHERE shipment_no LIKE :prefix
-                ) AS combined_shipments
+                SELECT COALESCE(MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER)), 0)
+                FROM tube.tube_fitting_delivery
+                WHERE shipment_no LIKE :prefix
                 """
             ),
             {"prefix": f"{shipment_prefix}%"},
         ).scalar() or 0
 
         sequence_number = int(db_max_seq) + 1
-
-        # 2. 同步重置更新计数器表，保持强一致
-        session.execute(
-            text(
-                """
-                INSERT INTO tube.tube_fitting_shipment_counter (
-                    supply_entity_id, shipped_date, last_value
-                ) VALUES (:supply_entity_id, :shipped_date, :seq_val)
-                ON CONFLICT (supply_entity_id, shipped_date)
-                DO UPDATE SET last_value = :seq_val
-                """
-            ),
-            {"seq_val": sequence_number, "supply_entity_id": supply_entity_id, "shipped_date": shipped_at.date()},
-        )
-
         shipment_no = f"{shipment_prefix}{sequence_number:03d}"
-        shipment_key = str(uuid4())
-        session.execute(
-            text(
-                """
-                INSERT INTO tube.tube_fitting_shipment_registry (
-                    shipment_key, shipment_no, is_legacy
-                ) VALUES (:shipment_key, :shipment_no, FALSE)
-                """
-            ),
-            {"shipment_key": shipment_key, "shipment_no": shipment_no},
-        )
 
         insert_sql = text(
             """
@@ -294,7 +266,7 @@ def submit_fitting_delivery(
                 :supply_entity_id, :shipment_no, :order_no, :vehicle_plate_no,
                 :section_1_id, :fitting_type, :model_spec, :shipped_qty, '个',
                 :shipped_at, :ship_contact_name, :ship_contact_phone, :ship_remark,
-                'shipped', :created_by, :updated_by
+                'pending_arrival', :created_by, :updated_by
             )
             RETURNING id
             """
@@ -332,7 +304,6 @@ def submit_fitting_delivery(
             action_desc=f"提交管件发货单【{shipment_no}】，共 {len(created_ids)} 项明细",
             resource_id=shipment_no,
             after_value={
-                "shipment_key": shipment_key,
                 "shipment_no": shipment_no,
                 "created_ids": created_ids,
                 "supply_entity_id": supply_entity_id,
@@ -345,7 +316,6 @@ def submit_fitting_delivery(
         session.commit()
         return {
             "ok": True,
-            "shipment_key": shipment_key,
             "shipment_no": shipment_no,
             "count": len(created_ids),
             "created_ids": created_ids,
@@ -433,17 +403,11 @@ def list_fitting_deliveries(
                 )
             ).scalars()
         )
-        shipment_key_select = (
-            "shipment_key"
-            if "shipment_key" in existing_columns
-            else "'legacy-' || MD5(CONCAT_WS('|', shipment_no, supply_entity_id, "
-            "section_1_id, vehicle_plate_no, shipped_at::TEXT)) AS shipment_key"
-        )
         cancelled_at_select = (
-            "cancelled_at" if "cancelled_at" in existing_columns else "NULL::TIMESTAMPTZ AS cancelled_at"
+            "cancel_at" if "cancel_at" in existing_columns else ("cancelled_at" if "cancelled_at" in existing_columns else "NULL::TIMESTAMPTZ AS cancel_at")
         )
         cancelled_by_select = (
-            "cancelled_by" if "cancelled_by" in existing_columns else "NULL::TEXT AS cancelled_by"
+            "cancel_by" if "cancel_by" in existing_columns else ("cancelled_by" if "cancelled_by" in existing_columns else "NULL::TEXT AS cancel_by")
         )
         cancel_reason_select = (
             "cancel_reason" if "cancel_reason" in existing_columns else "NULL::TEXT AS cancel_reason"
@@ -452,13 +416,13 @@ def list_fitting_deliveries(
         rows = session.execute(
             text(
                 f"""
-                SELECT id, {shipment_key_select}, supply_entity_id, shipment_no, order_no,
+                SELECT id, supply_entity_id, shipment_no, order_no,
                        vehicle_plate_no, section_1_id, fitting_type, model_spec,
                        shipped_qty, unit, shipped_at, ship_contact_name,
                        ship_contact_phone, ship_remark, status, created_at, created_by,
-                       arrived_qty, arrived_at, arrived_by, arrival_remark,
-                       construction_confirmed_at, construction_confirmed_by, construction_remark,
-                       warehouse_confirmed_at, warehouse_confirmed_by, warehouse_remark,
+                       arrived_qty, arrived_confirm_at, arrived_confirm_by, arrived_remark,
+                       received_confirm_at, received_confirm_by, received_remark,
+                       warehouse_confirm_at, warehouse_confirm_by, warehouse_remark,
                        {cancelled_at_select}, {cancelled_by_select}, {cancel_reason_select}
                 FROM tube.tube_fitting_delivery
                 {where_sql}
@@ -473,7 +437,7 @@ def list_fitting_deliveries(
             items.append(
                 {
                     "id": int(row["id"]),
-                    "shipment_key": _clean(row["shipment_key"]),
+                    "shipment_key": _clean(row["shipment_no"]),
                     "supply_entity_id": _clean(row["supply_entity_id"]),
                     "shipment_no": _clean(row["shipment_no"]),
                     "order_no": _clean(row["order_no"]),
@@ -492,18 +456,28 @@ def list_fitting_deliveries(
                     "created_by": _clean(row["created_by"]),
                     "operator": _clean(row["created_by"]),
                     "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else None,
-                    "arrived_at": _serialize_time(row["arrived_at"]),
-                    "arrived_by": _clean(row["arrived_by"]),
-                    "arrival_remark": _clean(row["arrival_remark"]),
-                    "construction_confirmed_at": _serialize_time(row["construction_confirmed_at"]),
-                    "construction_confirmed_by": _clean(row["construction_confirmed_by"]),
-                    "construction_remark": _clean(row["construction_remark"]),
-                    "warehouse_confirmed_at": _serialize_time(row["warehouse_confirmed_at"]),
-                    "warehouse_confirmed_by": _clean(row["warehouse_confirmed_by"]),
-                    "warehouse_remark": _clean(row["warehouse_remark"]),
-                    "cancelled_at": _serialize_time(row["cancelled_at"]),
-                    "cancelled_by": _clean(row["cancelled_by"]),
-                    "cancel_reason": _clean(row["cancel_reason"]),
+                    "arrived_at": _serialize_time(row.get("arrived_confirm_at") or row.get("arrived_at")),
+                    "arrived_by": _clean(row.get("arrived_confirm_by") or row.get("arrived_by")),
+                    "arrival_remark": _clean(row.get("arrived_remark") or row.get("arrival_remark")),
+                    "construction_confirmed_at": _serialize_time(row.get("received_confirm_at") or row.get("construction_confirmed_at")),
+                    "construction_confirmed_by": _clean(row.get("received_confirm_by") or row.get("construction_confirmed_by")),
+                    "construction_remark": _clean(row.get("received_remark") or row.get("construction_remark")),
+                    "warehouse_confirmed_at": _serialize_time(row.get("warehouse_confirm_at") or row.get("warehouse_confirmed_at")),
+                    "warehouse_confirmed_by": _clean(row.get("warehouse_confirm_by") or row.get("warehouse_confirmed_by")),
+                    "warehouse_remark": _clean(row.get("warehouse_remark")),
+                    "cancelled_at": _serialize_time(row.get("cancel_at") or row.get("cancelled_at")),
+                    "cancelled_by": _clean(row.get("cancel_by") or row.get("cancelled_by")),
+                    "cancel_reason": _clean(row.get("cancel_reason")),
+                    "arrived_confirm_at": _serialize_time(row.get("arrived_confirm_at")),
+                    "arrived_confirm_by": _clean(row.get("arrived_confirm_by")),
+                    "arrived_remark": _clean(row.get("arrived_remark")),
+                    "received_confirm_at": _serialize_time(row.get("received_confirm_at")),
+                    "received_confirm_by": _clean(row.get("received_confirm_by")),
+                    "received_remark": _clean(row.get("received_remark")),
+                    "warehouse_confirm_at": _serialize_time(row.get("warehouse_confirm_at")),
+                    "warehouse_confirm_by": _clean(row.get("warehouse_confirm_by")),
+                    "cancel_at": _serialize_time(row.get("cancel_at")),
+                    "cancel_by": _clean(row.get("cancel_by")),
                 }
             )
         return {
@@ -529,31 +503,38 @@ def confirm_fitting_delivery_arrival(
     session = SessionLocal()
     try:
         rows = _rows_for_update(session, delivery_ids)
+        valid_rows = []
         quantities: Dict[str, int] = {}
         for row in rows:
-            if _clean(row["status"]) != "shipped":
-                raise HTTPException(status_code=422, detail=f"记录 {row['id']} 当前状态为 {row['status']}，仅待到货记录允许确认")
-            shipped_qty = _positive_integer(row["shipped_qty"], f"记录 {row['id']} 发货数量")
-            raw_quantity = quantity_map[str(row["id"])] if str(row["id"]) in quantity_map else quantity_map.get(row["id"], shipped_qty)
-            arrived_qty = _positive_integer(raw_quantity, f"记录 {row['id']} 到货数量")
-            if arrived_qty > shipped_qty:
-                raise HTTPException(status_code=422, detail=f"记录 {row['id']} 到货数量不能大于发货数量 {shipped_qty}")
-            quantities[str(row["id"])] = arrived_qty
+            st = _clean(row["status"])
+            if st in ("pending_arrival", "shipped"):
+                shipped_qty = _positive_integer(row["shipped_qty"], f"记录 {row['id']} 发货数量")
+                raw_quantity = quantity_map[str(row["id"])] if str(row["id"]) in quantity_map else quantity_map.get(row["id"], shipped_qty)
+                arrived_qty = _positive_integer(raw_quantity, f"记录 {row['id']} 到货数量")
+                if arrived_qty > shipped_qty:
+                    raise HTTPException(status_code=422, detail=f"记录 {row['id']} 到货数量不能大于发货数量 {shipped_qty}")
+                quantities[str(row["id"])] = arrived_qty
+                valid_rows.append(row)
+            elif st in ("pending_receive", "pending_warehouse", "completed"):
+                # 已成功到货过，允许幂等兼容
+                pass
+            else:
+                raise HTTPException(status_code=422, detail=f"记录 {row['id']} 当前状态为 {st}，仅待到货记录允许确认")
 
-        for row in rows:
+        for row in valid_rows:
             result = session.execute(
                 text(
                     """
                     UPDATE tube.tube_fitting_delivery
-                    SET status = 'arrived', arrived_qty = :arrived_qty,
-                        arrived_at = :confirmed_at, arrived_by = :operator,
-                        arrival_remark = :remark, updated_by = :operator, updated_at = NOW()
-                    WHERE id = :id AND status = 'shipped'
+                    SET status = 'pending_receive', arrived_qty = :arrived_qty,
+                        arrived_confirm_at = :confirmed_at, arrived_confirm_by = :operator,
+                        arrived_remark = :remark, updated_by = :operator, updated_at = NOW()
+                    WHERE id = :id AND status IN ('pending_arrival', 'shipped')
                     """
                 ),
                 {"id": row["id"], "arrived_qty": quantities[str(row["id"])], "confirmed_at": now, "operator": operator, "remark": remark},
             )
-            if result.rowcount != 1:
+            if result.rowcount < 1:
                 raise HTTPException(status_code=409, detail=f"记录 {row['id']} 状态已变化，请刷新后重试")
 
         shipment_numbers = sorted({_clean(row["shipment_no"]) for row in rows})
@@ -562,13 +543,13 @@ def confirm_fitting_delivery_arrival(
             operator=operator,
             operator_group=operator_group,
             action_type="CONFIRM_FITTING_ARRIVAL",
-            action_desc=f"确认 {len(rows)} 项管件到货",
+            action_desc=f"确认 {len(valid_rows)} 项管件到货",
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "arrived_qty_map": quantities, "remark": remark, "arrived_at": now.isoformat()},
         )
         session.commit()
-        return {"ok": True, "updated_count": len(rows)}
+        return {"ok": True, "updated_count": len(valid_rows)}
     except HTTPException:
         session.rollback()
         raise
@@ -584,7 +565,7 @@ def _confirm_simple_transition(
     *,
     operator: str,
     operator_group: str,
-    expected_status: str,
+    expected_statuses: Sequence[str],
     new_status: str,
     timestamp_column: str,
     operator_column: str,
@@ -596,36 +577,56 @@ def _confirm_simple_transition(
     remark = _clean(payload.get("remark"))
     now = datetime.now(BEIJING_TZ)
     allowed_columns = {
+        "received_confirm_at",
+        "received_confirm_by",
+        "received_remark",
+        "warehouse_confirm_at",
+        "warehouse_confirm_by",
+        "warehouse_remark",
         "construction_confirmed_at",
         "construction_confirmed_by",
         "construction_remark",
         "warehouse_confirmed_at",
         "warehouse_confirmed_by",
-        "warehouse_remark",
     }
     if {timestamp_column, operator_column, remark_column} - allowed_columns:
         raise RuntimeError("管件确认字段配置无效")
     session = SessionLocal()
     try:
         rows = _rows_for_update(session, delivery_ids)
+        valid_rows = []
         for row in rows:
-            if _clean(row["status"]) != expected_status:
-                raise HTTPException(status_code=422, detail=f"记录 {row['id']} 当前状态为 {row['status']}，不能执行本次确认")
+            st = _clean(row["status"])
+            if st in expected_statuses:
+                valid_rows.append(row)
+            elif st == new_status or st in ("completed", "warehouse_confirmed"):
+                # 幂等放行
+                pass
+            else:
+                raise HTTPException(status_code=422, detail=f"记录 {row['id']} 当前状态为 {st}，不能执行本次确认")
+
         update_sql = text(
             f"""
             UPDATE tube.tube_fitting_delivery
             SET status = :new_status, {timestamp_column} = :confirmed_at,
                 {operator_column} = :operator, {remark_column} = :remark,
                 updated_by = :operator, updated_at = NOW()
-            WHERE id = :id AND status = :expected_status
+            WHERE id = :id AND status = ANY(:expected_statuses)
             """
         )
-        for row in rows:
+        for row in valid_rows:
             result = session.execute(
                 update_sql,
-                {"id": row["id"], "new_status": new_status, "expected_status": expected_status, "confirmed_at": now, "operator": operator, "remark": remark},
+                {
+                    "id": row["id"],
+                    "new_status": new_status,
+                    "expected_statuses": list(expected_statuses),
+                    "confirmed_at": now,
+                    "operator": operator,
+                    "remark": remark,
+                },
             )
-            if result.rowcount != 1:
+            if result.rowcount < 1:
                 raise HTTPException(status_code=409, detail=f"记录 {row['id']} 状态已变化，请刷新后重试")
         shipment_numbers = sorted({_clean(row["shipment_no"]) for row in rows})
         _write_audit_log(
@@ -633,13 +634,13 @@ def _confirm_simple_transition(
             operator=operator,
             operator_group=operator_group,
             action_type=action_type,
-            action_desc=f"{action_desc}：共 {len(rows)} 项",
+            action_desc=f"{action_desc}：共 {len(valid_rows)} 项",
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "status": new_status, "remark": remark, "confirmed_at": now.isoformat()},
         )
         session.commit()
-        return {"ok": True, "updated_count": len(rows)}
+        return {"ok": True, "updated_count": len(valid_rows)}
     except HTTPException:
         session.rollback()
         raise
@@ -655,11 +656,11 @@ def confirm_fitting_delivery_construction(payload: Dict[str, Any], operator: str
         payload,
         operator=operator,
         operator_group=operator_group,
-        expected_status="arrived",
-        new_status="construction_confirmed",
-        timestamp_column="construction_confirmed_at",
-        operator_column="construction_confirmed_by",
-        remark_column="construction_remark",
+        expected_statuses=["pending_receive", "arrived"],
+        new_status="pending_warehouse",
+        timestamp_column="received_confirm_at",
+        operator_column="received_confirm_by",
+        remark_column="received_remark",
         action_type="CONFIRM_FITTING_CONSTRUCTION",
         action_desc="施工单位确认接收管件",
     )
@@ -670,10 +671,10 @@ def confirm_fitting_delivery_warehouse(payload: Dict[str, Any], operator: str, o
         payload,
         operator=operator,
         operator_group=operator_group,
-        expected_status="construction_confirmed",
-        new_status="warehouse_confirmed",
-        timestamp_column="warehouse_confirmed_at",
-        operator_column="warehouse_confirmed_by",
+        expected_statuses=["pending_warehouse", "construction_confirmed"],
+        new_status="completed",
+        timestamp_column="warehouse_confirm_at",
+        operator_column="warehouse_confirm_by",
         remark_column="warehouse_remark",
         action_type="CONFIRM_FITTING_WAREHOUSE",
         action_desc="库管确认管件入库",
@@ -690,17 +691,17 @@ def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_gro
     try:
         rows = _rows_for_update(session, delivery_ids)
         for row in rows:
-            if _clean(row["status"]) != "shipped":
+            if _clean(row["status"]) not in ("pending_arrival", "shipped"):
                 raise HTTPException(status_code=422, detail=f"记录 {row['id']} 已进入确认流程，仅待到货记录允许撤销")
         for row in rows:
             result = session.execute(
                 text(
                     """
                     UPDATE tube.tube_fitting_delivery
-                    SET status = 'cancelled', cancelled_at = :cancelled_at,
-                        cancelled_by = :operator, cancel_reason = :reason,
+                    SET status = 'cancelled', cancel_at = :cancelled_at,
+                        cancel_by = :operator, cancel_reason = :reason,
                         updated_by = :operator, updated_at = NOW()
-                    WHERE id = :id AND status = 'shipped'
+                    WHERE id = :id AND status IN ('pending_arrival', 'shipped')
                     """
                 ),
                 {"id": row["id"], "cancelled_at": now, "operator": operator, "reason": reason},
