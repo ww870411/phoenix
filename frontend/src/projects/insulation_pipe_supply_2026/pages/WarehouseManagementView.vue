@@ -1194,10 +1194,14 @@ const groupedWarehouseFittingRows = computed(() => {
   // 短板状态判定原则：若多条明细中有任何一条状态落后于其它条目，外层 group.status 展现该落后状态
   const statusRankMap = {
     'shipped': 0,
+    'pending_arrival': 0,
     'arrived': 1,
+    'pending_receive': 1,
     'construction_confirmed': 2,
+    'pending_warehouse': 2,
     'received': 2,
-    'warehouse_confirmed': 3
+    'warehouse_confirmed': 3,
+    'completed': 3
   }
 
   const result = Array.from(map.values())

@@ -1,3 +1,13 @@
+## 2026-08-12 前端三大 View 页面管件模块全状态权重与统计死角全量对齐 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 全面补齐了 `DemandManagementView.vue`、`SupplyManagementView.vue` 与 `WarehouseManagementView.vue` 中 `statusRankMap` 与 `totalArrivedQty` 的权值映射，包含新旧全套 status (`pending_arrival` / `pending_receive` / `pending_warehouse` / `completed`)；
+  - 修正了 `DemandManagementView.vue` 中 `canClickArrival` 与 `canClickReceipt` 的状态拦截条件，确保全界面操作按钮及数量实时联动。
+
 ## 2026-08-12 全面适配管件发货标准状态与字段重命名更新 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
 
 - **关联前端页面**：

@@ -1,3 +1,12 @@
+## 2026-08-12 [管件全流程 (车次生成、状态流转、撤销防阻碍、前端KPI与审计日志) 深度诊断与终极闭环治理]
+- **全盘体检与问题修复**：完成对管件发货与全生命周期流转的深度审计，一次性彻底修复了 4 项重大隐藏逻辑缺陷：
+  - **车次号生成算法容错提升**：在 `fitting_delivery_service.py` 中为 `shipment_no` MAX 序号查询加上正则校验 `~ '^[0-9]{3}$'`，彻底杜绝历史非标准单号导致 `CAST` 类型的崩溃风险；
+  - **状态机与撤销功能幂等增强**：在 `confirm_fitting_delivery_arrival`、`_confirm_simple_transition` 与 `cancel_fitting_delivery` 中彻底优化 `UPDATE` 后受影响行数的判定，从 `!= 1` 更正为 `< 1`（允许兼容多重更新与重复测试 ID），并增加状态幂等放行机制；
+  - **物理 CHECK 约束修复**：纠正了物理数据库迁移脚本 `migrate_unify_fitting_delivery_schema.sql` 中 `chk_tube_fitting_state_evidence` 约束对撤销状态 `cancelled` 时误判 `cancel_at IS NULL` 的逻辑悖论，更正为 `cancel_at IS NOT NULL`；
+  - **前端 3 大 View 页面全响应式与 KPI 联动**：在 `DemandManagementView.vue`、`SupplyManagementView.vue` 与 `WarehouseManagementView.vue` 中补齐全套新旧 `status` 权重（`statusRankMap`）与实到数量统计；
+  - **操作日志审计全枚举适配**：在 `audit_log_service.py` 中补全需求侧、供给侧、库管侧关于管件全流程 `FITTING_` 动作的审计映射。
+- **全生命周期自动化闭环测试**：在本地数据库完成管件提交发货、现场确认到货、施工班组接收领用、库管台账归档、信息异常撤销发货的全套 5 阶段连贯闭环自动化测试（`test_full_lifecycle.py`），100% 成功无错跑通！
+
 ## 2026-08-12 [管件发货表 (tube_fitting_delivery) 字段名与状态枚举彻底统一为直管表标准]
 - **改动原因与契机**：响应对 `schema=tube` 下数据库约束与命名不规范的治理需求，将后期演进产生的 `tube_fitting_delivery` 离散状态与乱序字段名彻底收敛至直管表 (`tube_delivery`) 的统一语义标准体系。
 - **数据库升级 SQL 脚本**：创建独立且完全事务安全的物理迁移脚本 `backend/sql/migrate_unify_fitting_delivery_schema.sql`；

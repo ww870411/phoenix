@@ -240,13 +240,14 @@ def submit_fitting_delivery(
         date_part = shipped_at.strftime("%y%m%d")
         shipment_prefix = f"FS{entity_code}-{date_part}-"
 
-        # 直接基于物理主表 tube_fitting_delivery 计算递增车次号，无需任何额外辅助表
+        # 直接基于物理主表 tube_fitting_delivery 计算递增车次号（带正则类型校验防崩溃），无需任何额外辅助表
         db_max_seq = session.execute(
             text(
                 """
                 SELECT COALESCE(MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER)), 0)
                 FROM tube.tube_fitting_delivery
                 WHERE shipment_no LIKE :prefix
+                  AND RIGHT(shipment_no, 3) ~ '^[0-9]{3}$'
                 """
             ),
             {"prefix": f"{shipment_prefix}%"},
@@ -690,10 +691,17 @@ def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_gro
     session = SessionLocal()
     try:
         rows = _rows_for_update(session, delivery_ids)
+        valid_rows = []
         for row in rows:
-            if _clean(row["status"]) not in ("pending_arrival", "shipped"):
+            st = _clean(row["status"])
+            if st in ("pending_arrival", "shipped"):
+                valid_rows.append(row)
+            elif st == "cancelled":
+                # 已经撤销，幂等放行
+                pass
+            else:
                 raise HTTPException(status_code=422, detail=f"记录 {row['id']} 已进入确认流程，仅待到货记录允许撤销")
-        for row in rows:
+        for row in valid_rows:
             result = session.execute(
                 text(
                     """
@@ -706,7 +714,7 @@ def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_gro
                 ),
                 {"id": row["id"], "cancelled_at": now, "operator": operator, "reason": reason},
             )
-            if result.rowcount != 1:
+            if result.rowcount < 1:
                 raise HTTPException(status_code=409, detail=f"记录 {row['id']} 状态已变化，请刷新后重试")
         shipment_numbers = sorted({_clean(row["shipment_no"]) for row in rows})
         _write_audit_log(
@@ -714,13 +722,13 @@ def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_gro
             operator=operator,
             operator_group=operator_group,
             action_type="CANCEL_FITTING_DELIVERY",
-            action_desc=f"撤销 {len(rows)} 项管件发货记录",
+            action_desc=f"撤销 {len(valid_rows)} 项管件发货记录",
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "status": "cancelled", "cancel_reason": reason, "cancelled_at": now.isoformat()},
         )
         session.commit()
-        return {"ok": True, "updated_count": len(rows)}
+        return {"ok": True, "updated_count": len(valid_rows)}
     except HTTPException:
         session.rollback()
         raise

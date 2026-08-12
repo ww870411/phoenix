@@ -1,10 +1,10 @@
--- 保温管件发货明细表 (tube.tube_fitting_delivery) 字段名与状态枚举统一迁移脚本 (纯单表极简对齐防错版)
+-- 保温管件发货明细表 (tube.tube_fitting_delivery) 字段名与状态枚举统一迁移脚本 (纯单表极简对齐防错终极版)
 -- 说明：
 -- 1. 物理重命名 8 个到货/施工/库管确认列为直管标准（按需要条件重命名）。
 -- 2. 补齐 3 个撤销跟踪列（cancel_at, cancel_by, cancel_reason）。
 -- 3. 清理移除非必要列（shipment_key, identifiers_locked）。
 -- 4. 将历史 status 状态 'shipped' 映射更新为保温管标准状态 'pending_arrival'。
--- 5. 挂载全新标准的物理 CHECK 约束。
+-- 5. 挂载全新无悖论的真正标准 CHECK 校验约束 (修正 status='cancelled' 时 cancel_at IS NOT NULL 的校验误判)。
 -- 6. 自动重置自增主键序列，防止自增 ID 冲突。
 
 BEGIN;
@@ -57,7 +57,7 @@ UPDATE tube.tube_fitting_delivery SET status = 'pending_receive' WHERE status = 
 UPDATE tube.tube_fitting_delivery SET status = 'pending_warehouse' WHERE status = 'construction_confirmed';
 UPDATE tube.tube_fitting_delivery SET status = 'completed' WHERE status = 'warehouse_confirmed';
 
--- 5. 挂载全新标准的物理 CHECK 约束
+-- 5. 挂载全新标准的物理 CHECK 约束 (精确对齐 cancelled 时 cancel_at IS NOT NULL)
 ALTER TABLE tube.tube_fitting_delivery DROP CONSTRAINT IF EXISTS chk_tube_fitting_status;
 ALTER TABLE tube.tube_fitting_delivery
     ADD CONSTRAINT chk_tube_fitting_status
@@ -77,7 +77,7 @@ ALTER TABLE tube.tube_fitting_delivery
         OR (status = 'pending_receive' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL)
         OR (status = 'pending_warehouse' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NOT NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL)
         OR (status = 'completed' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NOT NULL AND warehouse_confirm_at IS NOT NULL AND cancel_at IS NULL)
-        OR (status = 'cancelled' AND arrived_confirm_at IS NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL)
+        OR (status = 'cancelled' AND arrived_confirm_at IS NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NOT NULL)
     );
 
 -- 6. 重新校准自增 ID 序列，防止序列冲突

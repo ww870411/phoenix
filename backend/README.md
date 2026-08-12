@@ -1,3 +1,15 @@
+## 2026-08-12 管件全流程后端服务容错性、幂等状态机与物理 CHECK 约束闭环治理 (fitting_delivery_service.py)
+
+- **关联后端服务与审计日志**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`
+  - `backend/sql/migrate_unify_fitting_delivery_schema.sql`
+- **更新说明**：
+  - **递增车次号生成健壮性**：`submit_fitting_delivery` MAX 序号正则校验 `~ '^[0-9]{3}$'`，防止非数字结尾历史数据抛出 `CAST` 异常；
+  - **状态机幂等与 rowcount 判定容错**：`confirm_fitting_delivery_arrival`、`_confirm_simple_transition` 与 `cancel_fitting_delivery` 受影响行数判定统一为 `< 1`，并对已完成到货或撤销的记录增加幂等兼容放行；
+  - **物理 CHECK 校验纠偏**：修正 `migrate_unify_fitting_delivery_schema.sql` 中 `chk_tube_fitting_state_evidence` 对撤销状态 `cancelled` 时 `cancel_at IS NOT NULL` 的物理校验；
+  - **审计日志动作集扩展**：在 `audit_log_service.py` 的分类动作映射中补齐需求侧、供给侧和库管侧管件流转全套 `FITTING_` 审计事件名。
+
 ## 2026-08-12 管件表 (tube_fitting_delivery) 物理字段与状态枚举彻底统一为直管标准 (fitting_delivery_service.py)
 
 - **关联后端服务与 SQL 迁移**：
