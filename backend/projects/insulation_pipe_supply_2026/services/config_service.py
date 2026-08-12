@@ -150,6 +150,13 @@ def load_tube_config() -> Dict[str, Any]:
         except Exception:
             pass
 
+    # 确保 fitting_config 节点存在并设置缺省保底
+    if "fitting_config" not in payload or not isinstance(payload.get("fitting_config"), dict):
+        payload["fitting_config"] = {
+            "allowed_units": ["个", "套"],
+            "standard_types": ["弯头", "三通", "大小头", "封头", "直缝弯管", "补偿器", "固定节"],
+        }
+
     return payload
 
 

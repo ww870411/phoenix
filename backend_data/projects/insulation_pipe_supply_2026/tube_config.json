@@ -5,6 +5,26 @@
   "weather_provider": "amap",
   "auto_update_plan_start_date": "all",
   "plan_editable_days": 3,
+  "fitting_config": {
+    "allowed_units": [
+      "个",
+      "套"
+    ],
+    "standard_types": [
+      "弯头",
+      "三通",
+      "大小头",
+      "封头",
+      "直缝弯管",
+      "补偿器",
+      "固定节",
+      "直埋焊接球阀",
+      "焊接球阀",
+      "直埋型套筒-波纹复合补偿器",
+      "直埋管道固定支架",
+      "穿墙防水密封节"
+    ]
+  },
   "supply_entities": [
     {
       "entity_id": "kaiyuan",

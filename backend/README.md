@@ -1,3 +1,32 @@
+## 2026-08-12 管件发货【单位】与常用【标准管件类型】全量解耦至 tube_config.json 配置文件并在 API & Service 动态适配 (config_service.py / workspace.py / fitting_delivery_service.py)
+
+- **关联后端服务与 API 路由**：
+  - `backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 彻底在 `tube_config.json` 中新增 `fitting_config` 专属节点（包含 `allowed_units` 和 `standard_types`）；
+  - **配置初始化 (`config_service.py`)**：在 `load_tube_config()` 中补全缺省校验与默认回退；
+  - **选项与保存 API (`workspace.py`)**：在 `/supply-management/options`、`/demand-management/options` 与 `/warehouse-management/options` 3 大选项接口响应中全量透传 `"fitting_config"` 节点；并在 `_save_config_section` 的 `allowed_sections` 白名单中注册 `"fitting_config"` 区块与落盘逻辑；
+  - **发货 Service (`fitting_delivery_service.py`)**：`submit_fitting_delivery` 函数从 `tube_config.json` 动态加载 `allowed_units` 白名单进行请求数据校验，替代了静态硬编码。
+
+## 2026-08-12 管件发货 API (submit_fitting_delivery) 取消单位硬编码、支持【个/套】双单位合法性强校验 (fitting_delivery_service.py)
+
+- **关联后端服务**：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 彻底移除了 `submit_fitting_delivery` 服务函数中原有的 `"unit": "个"` 硬编码写入；
+  - 增加对 API 请求中 `unit` 字段的白名单校验，限定值范围必须为 `{"个", "套"}`；
+  - 若接收到的 `unit` 既不是“个”也不是“套”，后端将抛出 422 HTTP 校验异常（`第 X 行【单位】必须为'个'或'套'`），确保前后端数据一致性。
+
+## 2026-08-12 agy / Gemini 环境 Serena MCP 配置参数与启动可执行程序纠偏
+
+- **配置位置**：`C:\Users\ww\.gemini\config\mcp_config.json`
+- **更新说明**：
+  - 排查解决用户 Serena 启动后控制台/界面 Log 无工作记录的问题；
+  - 将错误配置的可执行程序参数 `"serena-mcp-server"` 修正为标准的 `"serena", "start-mcp-server"`，并包含 `--project-from-cwd` 参数；
+  - 该调整为 AI 辅助协作 MCP 服务配置修补，不影响后端 API 及数据库逻辑。
+
 ## 2026-08-12 管件全流程后端服务容错性、幂等状态机与物理 CHECK 约束闭环治理 (fitting_delivery_service.py)
 
 - **关联后端服务与审计日志**：

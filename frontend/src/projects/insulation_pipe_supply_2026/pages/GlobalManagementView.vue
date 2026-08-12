@@ -357,6 +357,32 @@
 
             <section class="card elevated section-card">
               <div class="card-header-row">
+                <div class="card-header">🔩 管件基础参数与强校验配置</div>
+                <div class="section-actions">
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('fitting_config')" @click="saveSection('fitting_config')">
+                    {{ isSaving('fitting_config') ? '保存中…' : '💾 保存管件配置' }}
+                  </button>
+                </div>
+              </div>
+              <div class="field-grid core-field-grid">
+                <label class="field">
+                  <span>合规管件单位列表 (allowed_units)</span>
+                  <input v-model="fittingAllowedUnitsText" type="text" class="input" placeholder="例如: 个, 套" />
+                  <small class="field-help">填报或导入管件时强校验允许的文字单位（多个单位用逗号分隔）。</small>
+                </label>
+                <label class="field field-span-2">
+                  <span>常用标准管件类型 (standard_types)</span>
+                  <input v-model="fittingStandardTypesText" type="text" class="input" placeholder="例如: 弯头, 三通, 大小头, 封头, 直缝弯管, 补偿器, 固定节" />
+                  <small class="field-help">管件填报时识别常用规范类型的白名单（多个类型用逗号分隔）。</small>
+                </label>
+              </div>
+              <p v-if="sectionMessage('fitting_config')" :class="['section-tip', sectionMessage('fitting_config').type]">
+                {{ sectionMessage('fitting_config').text }}
+              </p>
+            </section>
+
+            <section class="card elevated section-card">
+              <div class="card-header-row">
                 <div>
                   <div class="card-header">需求主体昨日提交状态审计</div>
                   <p class="sub block-sub">审计昨日三日计划上报进度，判断昨日消耗数据及滚动计划是否全部锁盘入库。</p>
@@ -1440,6 +1466,10 @@ const amapApiKey = ref('')
 const amapSecurityCode = ref('')
 const showAmapKeys = ref(false)
 
+// 🔩 管件基础参数与校验配置 Ref 变量
+const fittingAllowedUnitsText = ref('个, 套')
+const fittingStandardTypesText = ref('弯头, 三通, 大小头, 封头, 直缝弯管, 补偿器, 固定节')
+
 async function loadWeatherConfig() {
   try {
     const res = await getTubeWeatherConfig(PROJECT_KEY)
@@ -1752,6 +1782,11 @@ function applyConfig(config) {
   weatherApiUrl.value = config.weather_api_url || ''
   weatherProvider.value = config.weather_provider || 'amap'
   amapRestKey.value = config.amap_config?.api_key || ''
+  
+  const fittingCfg = config.fitting_config || {}
+  fittingAllowedUnitsText.value = listToText(fittingCfg.allowed_units || ['个', '套'])
+  fittingStandardTypesText.value = listToText(fittingCfg.standard_types || ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
+  
   loadWeatherConfig()
 }
 
@@ -1925,6 +1960,12 @@ function buildSectionPayload(section) {
       security_code: amapSecurityCode.value || '',
     }
   }
+  if (section === 'fitting_config') {
+    return {
+      allowed_units: textToList(fittingAllowedUnitsText.value),
+      standard_types: textToList(fittingStandardTypesText.value),
+    }
+  }
   return null
 }
 
@@ -1937,6 +1978,7 @@ const configPreviewText = computed(() =>
       auto_update_plan_start_date: normalizeAutoUpdateSetting(autoUpdatePlanStartDate.value),
       plan_editable_days: Number(planEditableDays.value ?? 3),
       strict_planning_flow_control: Boolean(strictPlanningFlowControl.value),
+      fitting_config: buildSectionPayload('fitting_config'),
       supply_entities: buildSectionPayload('supply_entities'),
       demand_entities: buildSectionPayload('demand_entities'),
       pipe_models: buildSectionPayload('pipe_models'),

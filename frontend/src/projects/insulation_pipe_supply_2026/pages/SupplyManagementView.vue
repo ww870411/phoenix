@@ -510,7 +510,7 @@
                           {{ isReusingShipment(row) ? '取消继续车次' : '继续该车次' }}
                         </button>
                         <button
-                          v-if="row.status === 'pending_arrival'"
+                          v-if="row.status === 'pending_arrival' && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                           type="button"
                           class="btn danger-ghost"
                           :disabled="cancelLoadingIds[row.deliveryId]"
@@ -518,7 +518,8 @@
                         >
                           {{ cancelLoadingIds[row.deliveryId] ? '撤销中...' : '撤销发货' }}
                         </button>
-                        <span v-else-if="!['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" class="muted-text">不可撤销</span>
+                        <span v-else-if="row.status === 'cancelled'" class="muted-text" style="color: #ef4444;">已撤销</span>
+                        <span v-else-if="row.status !== 'pending_arrival'" class="muted-text" title="现场已签收/入库，不允许单方面撤销">不可撤销</span>
                       </div>
                     </td>
                   </tr>
@@ -629,13 +630,7 @@
 
             <!-- 可选标准管件下拉匹配提示词 -->
             <datalist id="fitting-type-list">
-              <option value="弯头" />
-              <option value="三通" />
-              <option value="大小头" />
-              <option value="封头" />
-              <option value="直缝弯管" />
-              <option value="补偿器" />
-              <option value="固定节" />
+              <option v-for="t in standardFittingTypes" :key="t" :value="t" />
             </datalist>
           </section>
 
@@ -727,7 +722,7 @@
                       <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
 
                       <button
-                        v-if="(group.status === 'shipped' || group.status === 'pending_arrival') && ['Global_admin', 'tube_supplier_admin', 'tube_supplier'].includes(currentGroup)"
+                        v-if="(group.status === 'shipped' || group.status === 'pending_arrival') && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                         type="button"
                         class="btn ghost btn-sm"
                         style="padding: 4px 10px; font-size: 12px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer;"
@@ -801,7 +796,7 @@
           
           <div style="padding: 20px; text-align: left;">
             <p style="font-size: 13px; color: #475569; margin-bottom: 12px; line-height: 1.5;">
-              系统标准管件包含：<strong style="color: #1e293b;">弯头、三通、大小头、封头、直缝弯管、补偿器、固定节</strong>。<br/>
+              系统标准管件包含：<strong style="color: #1e293b;">{{ (standardFittingTypes || []).join('、') }}</strong>。<br/>
               您填写的明细中包含 <span style="color: #ea580c; font-weight: bold;">{{ nonStandardItemsForConfirm.length }}</span> 行非常用管件类型：
             </p>
             <div style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: 8px; padding: 12px; max-height: 160px; overflow-y: auto; margin-bottom: 20px;">
@@ -1340,7 +1335,7 @@ const handleFittingGridAfterEdit = (e) => {
   }
 }
 
-const STANDARD_FITTING_TYPES = [
+const standardFittingTypes = ref([
   '弯头',
   '三通',
   '大小头',
@@ -1348,7 +1343,9 @@ const STANDARD_FITTING_TYPES = [
   '直缝弯管',
   '补偿器',
   '固定节'
-]
+])
+
+const allowedFittingUnits = ref(['个', '套'])
 
 const FITTING_ALIAS_MAP = {
   '异径管': '大小头',
@@ -1366,7 +1363,13 @@ function getNormalizedFittingType(typeStr) {
 
 function isStandardFittingType(typeStr) {
   const normalized = getNormalizedFittingType(typeStr)
-  return STANDARD_FITTING_TYPES.includes(normalized)
+  return (standardFittingTypes.value || []).includes(normalized)
+}
+
+function isValidFittingUnit(unitStr) {
+  if (!unitStr) return false
+  const trimmed = String(unitStr).trim()
+  return (allowedFittingUnits.value || []).includes(trimmed)
 }
 
 const isInvalidQtyCell = (val) => {
@@ -1462,14 +1465,16 @@ const fittingGridColumns = ref([
     cellClass: (row) => {
       const model = (row && row.model) ? row.model : (row || {})
       const val = model.unit
-      if (val && String(val).trim() !== '个') return 'rg-cell-info'
+      const hasContent = Boolean(model.fitting_type || model.model_spec || (model.shipped_qty !== '' && model.shipped_qty !== undefined && model.shipped_qty !== null))
+      if (hasContent && !isValidFittingUnit(val)) return 'rg-cell-error'
       return ''
     },
     cellProperties: (props) => {
       const model = (props && props.model) ? props.model : (props || {})
       const val = model.unit
-      if (val && String(val).trim() !== '个') {
-        return { style: { color: '#0284c7' } }
+      const hasContent = Boolean(model.fitting_type || model.model_spec || (model.shipped_qty !== '' && model.shipped_qty !== undefined && model.shipped_qty !== null))
+      if (hasContent && !isValidFittingUnit(val)) {
+        return { style: { backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' } }
       }
       return {}
     }
@@ -1559,12 +1564,16 @@ function showDeliveryDetail(input) {
 
 const downloadFittingTemplate = () => {
   // Sheet 1: 主填报清单 (包含 A1 到 E20 完整标准边框区)
+  const defaultUnit = (allowedFittingUnits.value || ['个'])[0] || '个'
+  const typesText = (standardFittingTypes.value || []).join('、')
+  const allowedUnitsText = (allowedFittingUnits.value || ['个', '套']).join('”、“')
+
   const templateRows = [
     ['管件类型 *', '型号/规格 *', '发货数量 *', '单位', '备注', '', '📌 填报规范与推荐类型说明'],
-    ['弯头', '90°DN1100 R=1.5DN', 10, '个', '样例数据', '', '1. 系统推荐标准管件类型：弯头、三通、大小头、封头、直缝弯管、补偿器、固定节'],
-    ['三通', 'DN1000/DN900', 5, '个', '样例数据', '', '2. 支持别名识别：填“异径管”系统将自动识别为“大小头”；填“弯管”自动识别为“直缝弯管”'],
-    ['大小头', 'DN1000/DN800', 5, '个', '样例数据', '', '3. 发货数量请填写纯数字（大于 0）'],
-    ['直缝弯管', 'DN1100 5°R=138.7 L=12m', 10, '个', '样例数据']
+    ['弯头', '90°DN1100 R=1.5DN', 10, defaultUnit, '样例数据', '', `1. 系统推荐标准管件类型：${typesText}`],
+    ['三通', 'DN1000/DN900', 5, defaultUnit, '样例数据', '', '2. 支持别名识别：填“异径管”系统将自动识别为“大小头”；填“弯管”自动识别为“直缝弯管”'],
+    ['大小头', 'DN1000/DN800', 5, defaultUnit, '样例数据', '', '3. 发货数量请填写纯数字（大于 0）'],
+    ['直缝弯管', 'DN1100 5°R=138.7 L=12m', 10, defaultUnit, '样例数据']
   ]
 
   // 补齐 20 行标准表数据格 (A1:E20)
@@ -1621,16 +1630,10 @@ const downloadFittingTemplate = () => {
     { wch: 65 }
   ]
 
-  // Sheet 2: 7 大标准管件类型参照表
+  // Sheet 2: 标准管件类型参照表
   const guideData = [
     ['标准管件类型', '说明与兼容别名'],
-    ['弯头', '包含无缝弯头、缝制弯头'],
-    ['三通', '包含等径三通、异径三通、放气/排水三通'],
-    ['大小头', '兼容别名：异径管'],
-    ['封头', '管道端帽管件'],
-    ['直缝弯管', '兼容别名：弯管'],
-    ['补偿器', '兼容别名：波纹补偿器、旋转补偿器'],
-    ['固定节', '固定支架受力管件']
+    ...(standardFittingTypes.value || []).map(t => [t, '系统全局配置标准管件类型'])
   ]
   const guideSheet = XLSX.utils.aoa_to_sheet(guideData)
   guideSheet['!cols'] = [
@@ -1642,9 +1645,9 @@ const downloadFittingTemplate = () => {
   const ruleData = [
     ['规则与提示分类', '具体逻辑与说明'],
     ['1. 数据校验规则', '“管件类型”、“型号/规格”、“发货数量”为核心必填项；“发货数量”必须为大于 0 的有效纯数字。相同“发货车次号”和“车牌号”的多行记录在解析后会自动聚合为整车卡片。'],
-    ['2. 单位修正逻辑', '管件发货数量单位必须统一为“个”。若留空或填写了其他单位，系统导入解析时也都会强制自动修正归一化为“个”。'],
+    ['2. 单位强校验逻辑', `管件发货数量单位必须填写合规文本（例如：“${allowedUnitsText}”）。若留空或填写了非法单位，系统将阻断提交并提示纠错。`],
     ['3. 空行与不完整行过滤', '系统解析记录时，会自动识别并彻底剔除全空行以及关键必填项缺失的不完整数据行，确保最终生成的均为有效合规台账。'],
-    ['4. 类型识别与提示逻辑', '系统自动校验匹配“弯头、三通、大小头、封头、直缝弯管、补偿器、固定节”7大标准管件。填报别名“异径管”自动修正识别为“大小头”，填“弯管”自动识别为“直缝弯管”。未匹配到的自定类型将提示标注为非常规件。']
+    ['4. 类型识别与提示逻辑', `系统自动校验匹配“${typesText}”标准管件。填报别名“异径管”自动修正识别为“大小头”，填“弯管”自动识别为“直缝弯管”。未匹配到的自定类型将提示标注为非常规件。`]
   ]
   const ruleSheet = XLSX.utils.aoa_to_sheet(ruleData)
   ruleSheet['!cols'] = [
@@ -1815,8 +1818,11 @@ const loadFittingDeliveries = async () => {
 }
 
 const handleCancelFittingGroup = async (group) => {
-  const cancellableItems = (group?.items || []).filter(item => (item.status || 'shipped') === 'shipped')
-  if (!cancellableItems.length) return
+  const cancellableItems = (group?.items || []).filter(item => ['shipped', 'pending_arrival'].includes(item.status || 'shipped'))
+  if (!cancellableItems.length) {
+    fittingActionMsg.value = { type: 'error', text: '该车次管件已全部进入后续确认/入库流程或已被撤销，不可重复撤销。' }
+    return
+  }
   const reason = window.prompt(`请输入撤销发货原因（车次 ${group.shipmentNo}）：`, '')
   if (reason === null) return
   if (String(reason).trim().length < 2) {
@@ -1858,9 +1864,8 @@ const submitFittingForm = async () => {
     return
   }
 
-  // 0. 第一时间自动清洗与更正审计：记录哪些行被自动更正了单位，哪些行因为信息缺失被擦除
+  // 0. 第一时间自动清洗：记录哪些行因为信息缺失被擦除（不再自动补充/更正单位，而是做强校验）
   let gridChanged = false
-  const unitCorrectedRowNums = []
   const deletedIncompleteRowNums = []
 
   ;(fittingGridSource.value || []).forEach((it, idx) => {
@@ -1870,16 +1875,10 @@ const submitFittingForm = async () => {
     const specStr = String(it.model_spec || '').trim()
     const hasQty = it.shipped_qty !== '' && it.shipped_qty !== undefined && it.shipped_qty !== null
 
-    const isAllEmpty = !typeStr && !specStr && !hasQty
+    const isAllEmpty = !typeStr && !specStr && !hasQty && !String(it.unit || '').trim()
     const isFullyFilled = Boolean(typeStr && specStr && hasQty)
 
-    if (isFullyFilled) {
-      if (it.unit !== '个') {
-        unitCorrectedRowNums.push(rowNum)
-        it.unit = '个'
-        gridChanged = true
-      }
-    } else if (!isAllEmpty) {
+    if (!isFullyFilled && !isAllEmpty) {
       // 存在至少一处空缺，直接删除清空整行内容
       deletedIncompleteRowNums.push(rowNum)
       it.fitting_type = ''
@@ -1906,7 +1905,7 @@ const submitFittingForm = async () => {
       fitting_type: String(it?.fitting_type || '').trim(),
       model_spec: String(it?.model_spec || '').trim(),
       shipped_qty_raw: it?.shipped_qty,
-      unit: '个',
+      unit: String(it?.unit || '').trim(),
       remark: String(it?.remark || '').trim(),
     }))
     .filter(r => r.fitting_type && r.model_spec && r.shipped_qty_raw !== '' && r.shipped_qty_raw !== undefined && r.shipped_qty_raw !== null)
@@ -1922,9 +1921,6 @@ const submitFittingForm = async () => {
       if (deletedIncompleteRowNums.length > 0) {
         notices.push(`第 ${deletedIncompleteRowNums.join('、')} 行因【类型/型号/数量】填写空缺，已自动清空整行记录；`)
       }
-      if (unitCorrectedRowNums.length > 0) {
-        notices.push(`第 ${unitCorrectedRowNums.join('、')} 行【单位】已自动归一更正为“个”。`)
-      }
       notices.push(`⚠️ ${errorMsg}`)
       fittingFormatNoticeList.value = notices
       showFittingFormatNoticeModal.value = true
@@ -1932,9 +1928,16 @@ const submitFittingForm = async () => {
     return
   }
 
-  // 2. 全盘并行强校验：检查发货数量是否为纯正整数
+  // 2. 全盘并行强校验：检查【单位】是否为“个”或“套”，以及发货数量是否为纯正整数
   let validationError = null
   for (const row of filledRows) {
+    if (!isValidFittingUnit(row.unit)) {
+      const allowedText = (allowedFittingUnits.value || ['个', '套']).join('”或“')
+      validationError = `表格第 ${row.rowNum} 行【单位】无效，填写内容必须为“${allowedText}”（当前填写: ${row.unit ? `“${row.unit}”` : '空'}）`
+      fittingActionMsg.value = { type: 'error', text: validationError }
+      break
+    }
+
     const parsedQty = Number(row.shipped_qty_raw)
     const isPosInt = Number.isInteger(parsedQty) && parsedQty > 0
     if (!isPosInt) {
@@ -1947,19 +1950,16 @@ const submitFittingForm = async () => {
       fitting_type: row.fitting_type,
       model_spec: row.model_spec,
       shipped_qty: parsedQty,
-      unit: '个',
+      unit: row.unit,
       remark: row.remark,
     })
   }
 
-  // 3. 汇总全盘审计情况：若包含删行、更正单位或业务校验报错，全盘一次性弹窗提示 + 阻断提交
+  // 3. 汇总全盘审计情况：若包含删行或业务校验报错，全盘一次性弹窗提示 + 阻断提交
   if (gridChanged || validationError) {
     const notices = []
     if (deletedIncompleteRowNums.length > 0) {
       notices.push(`第 ${deletedIncompleteRowNums.join('、')} 行因【类型/型号/数量】填写空缺，已自动清空整行记录；`)
-    }
-    if (unitCorrectedRowNums.length > 0) {
-      notices.push(`第 ${unitCorrectedRowNums.join('、')} 行【单位】已自动归一更正为“个”；`)
     }
     if (validationError) {
       notices.push(`⚠️ ${validationError}。`)
@@ -2550,6 +2550,14 @@ async function loadOptions() {
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
     showDate.value = normalized.showDate
     planStartDate.value = normalized.planStartDate
+    if (response && response.fitting_config) {
+      if (Array.isArray(response.fitting_config.allowed_units) && response.fitting_config.allowed_units.length) {
+        allowedFittingUnits.value = response.fitting_config.allowed_units
+      }
+      if (Array.isArray(response.fitting_config.standard_types) && response.fitting_config.standard_types.length) {
+        standardFittingTypes.value = response.fitting_config.standard_types
+      }
+    }
     const availableSupplyEntityIds = [
       ...normalized.currentSupplyEntityIds,
       ...customSupplyEntities.value.map((c) => c.entity_id),

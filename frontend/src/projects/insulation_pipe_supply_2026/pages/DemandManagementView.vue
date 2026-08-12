@@ -1776,10 +1776,10 @@ const groupedDemandFittingRows = computed(() => {
   return result
 })
 
-const STANDARD_FITTING_TYPES = ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节']
+const standardFittingTypes = ref(['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
 function isStandardFittingType(typeStr) {
   if (!typeStr) return true
-  return STANDARD_FITTING_TYPES.includes(String(typeStr).trim())
+  return (standardFittingTypes.value || []).includes(String(typeStr).trim())
 }
 
 const currentSection1Name = computed(() => {
@@ -2481,6 +2481,9 @@ async function loadOptions() {
     currentGroup.value = normalized.currentGroup
     showDate.value = normalized.showDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
+    if (response && response.fitting_config && Array.isArray(response.fitting_config.standard_types) && response.fitting_config.standard_types.length) {
+      standardFittingTypes.value = response.fitting_config.standard_types
+    }
     const section1IdSet = new Set(section1Options.value.map((item) => String(item.section_1_id || '')))
     if (!selectedSection1Id.value || !section1IdSet.has(selectedSection1Id.value)) {
       selectedSection1Id.value = section1Options.value[0]?.section_1_id || ''

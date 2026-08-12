@@ -219,18 +219,25 @@ def submit_fitting_delivery(
             entity_code = (compact_code + "X")[:2].upper()
             break
 
+    fitting_cfg = (config or {}).get("fitting_config") or {}
+    allowed_units = set(fitting_cfg.get("allowed_units") or ["个", "套"])
+
     validated_items: List[Dict[str, Any]] = []
     for index, item in enumerate(raw_items, 1):
         fitting_type = _clean(item.get("fitting_type"))
         model_spec = _clean(item.get("model_spec"))
         if not fitting_type or not model_spec:
             raise HTTPException(status_code=422, detail=f"第 {index} 行必须填写管件类型和型号规格")
+        unit = _clean(item.get("unit")) or "个"
+        if unit not in allowed_units:
+            allowed_str = " / ".join(sorted(list(allowed_units)))
+            raise HTTPException(status_code=422, detail=f"第 {index} 行【单位】必须为'{allowed_str}'")
         validated_items.append(
             {
                 "fitting_type": fitting_type,
                 "model_spec": model_spec,
                 "shipped_qty": _positive_integer(item.get("shipped_qty"), f"第 {index} 行发货数量"),
-                "unit": "个",
+                "unit": unit,
                 "remark": _clean(item.get("remark")),
             }
         )

@@ -496,11 +496,13 @@ function toggleDropdown(name) {
 const demandEntities = computed(() => configSummary.value?.demand_entities || [])
 const supplyEntitiesOptions = computed(() => configSummary.value?.supply_entities || [])
 
-const STANDARD_FITTING_TYPES = ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节']
+const standardFittingTypes = computed(() => {
+  return configSummary.value?.fitting_config?.standard_types || ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节']
+})
 
 function isStandardFittingType(typeStr) {
   if (!typeStr) return true
-  return STANDARD_FITTING_TYPES.includes(String(typeStr).trim())
+  return standardFittingTypes.value.includes(String(typeStr).trim())
 }
 
 const getPastDateStr = (days) => {

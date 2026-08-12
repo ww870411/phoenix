@@ -1228,10 +1228,10 @@ const groupedWarehouseFittingRows = computed(() => {
   return result
 })
 
-const STANDARD_FITTING_TYPES = ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节']
+const standardFittingTypes = ref(['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
 function isStandardFittingType(typeStr) {
   if (!typeStr) return true
-  return STANDARD_FITTING_TYPES.includes(String(typeStr).trim())
+  return (standardFittingTypes.value || []).includes(String(typeStr).trim())
 }
 
 const warehouseFittingTotalQty = computed(() => {
@@ -1886,6 +1886,9 @@ function toggleSelectAllPendingWarehouse(event) {
 async function loadOptions() {
   const payload = await getTubeWarehouseManagementOptions(projectKey)
   options.value = payload
+  if (payload && payload.fitting_config && Array.isArray(payload.fitting_config.standard_types) && payload.fitting_config.standard_types.length) {
+    standardFittingTypes.value = payload.fitting_config.standard_types
+  }
   const section1IdSet = new Set(section1Options.value.map((item) => String(item.section_1_id || '')))
   const supplyEntityIdSet = new Set(supplyEntityOptions.value.map((item) => String(item.entity_id || '')))
   const pipeModelIdSet = new Set(pipeModelOptions.value.map((item) => String(item.pipe_model_id || '')))

@@ -732,6 +732,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "auto_update_plan_start_date",
         "plan_editable_days",
         "strict_planning_flow_control",
+        "fitting_config",
         "supply_entities",
         "demand_entities",
         "pipe_models",
@@ -802,6 +803,17 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         payload[normalized_section] = {
             "api_key": simple_encrypt(api_key_plain),
             "security_code": simple_encrypt(security_code_plain),
+        }
+    elif normalized_section == "fitting_config":
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=422, detail="fitting_config 必须为对象")
+        allowed_units = [str(x).strip() for x in (data.get("allowed_units") or []) if str(x).strip()]
+        standard_types = [str(x).strip() for x in (data.get("standard_types") or []) if str(x).strip()]
+        if not allowed_units:
+            raise HTTPException(status_code=422, detail="管件允许单位列表 (allowed_units) 不能为空")
+        payload[normalized_section] = {
+            "allowed_units": allowed_units,
+            "standard_types": standard_types,
         }
     else:
         if not isinstance(data, list):
@@ -1261,6 +1273,7 @@ def get_demand_management_options(
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "supply_entities": supply_entities,
         "pipe_models": _serialize_pipe_options(payload),
+        "fitting_config": payload.get("fitting_config") or {},
         "show_date": show_date.isoformat(),
         "plan_start_date": plan_start_date.isoformat(),
         "plan_editable_days": plan_editable_days,
@@ -1286,6 +1299,7 @@ def get_supply_management_options(
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
+        "fitting_config": payload.get("fitting_config") or {},
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "current_supply_entity_ids": sorted(accessible_supply_entity_ids),
@@ -1846,6 +1860,7 @@ def get_warehouse_management_options(
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
         "supply_entities": _serialize_all_supply_entity_options(payload),
+        "fitting_config": payload.get("fitting_config") or {},
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "delivery_status_options": [

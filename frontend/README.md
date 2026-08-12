@@ -1,3 +1,34 @@
+## 2026-08-12 管件发货【单位】与常用【标准管件类型】全量解耦至 tube_config.json 配置文件并在前端全视图动态渲染 (Global/Supply/Demand/Warehouse/HistoryQuery)
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **更新说明**：
+  - 彻底将管件发货的允许单位（`allowed_units`）与常用标准管件类型白名单（`standard_types`）从静态硬编码代码及模板文本中解耦；
+  - **全局管理页面 (`GlobalManagementView.vue`)**：Tab 2 核心控制参数新增 **“🔩 管件基础参数与强校验配置”** 卡片，支持可视化编辑与 `saveSection('fitting_config')` 提交；
+  - **管件发货页面 (`SupplyManagementView.vue`)**：彻底清理了 HTML `<datalist>` 选项、常规模态确认弹窗文本、Excel 导入导出提示文本及 JavaScript 中的 `STANDARD_FITTING_TYPES` 死数据，全量绑定至响应式 `ref`；
+  - **需求侧/库管侧/历史查询视图 (`DemandManagementView` / `WarehouseManagementView` / `HistoryQueryView`)**：全量取消硬编码 `STANDARD_FITTING_TYPES` 常量，改为从 API (`loadOptions` / `configSummary`) 动态提取 `fitting_config.standard_types`，实现了全站 100% 动态配置驱动。
+
+## 2026-08-12 管件发货【单位】字段取消自动覆盖归一、调整为【个/套】强制校验与红色高亮提示 (SupplyManagementView.vue)
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 彻底取消以往在提交时将非“个”单位强制隐式覆盖更正为“个”的自动补充逻辑；
+  - 调整为显式白名单断言：允许且仅允许填入 **“个”** 或 **“套”** 两种单位；
+  - 在 RevoGrid 的 `unit` 列中增加单元格错误检测，若有数据填报但单位非“个/套”（或留空），直接高亮应用浅红底粉字错误样式（`#fee2e2`）；
+  - 提交时遇到单位非法自动强校验拦截并弹窗提示 `表格第 X 行【单位】无效，填写内容必须为“个”或“套”（当前填写: xx）`；合规单位按用户填写原样打包提交。
+
+## 2026-08-12 agy / Gemini 环境 Serena MCP 配置参数与启动可执行程序纠偏
+
+- **配置位置**：`C:\Users\ww\.gemini\config\mcp_config.json`
+- **更新说明**：
+  - 排查解决用户 Serena 启动后控制台/界面 Log 无工作记录的问题；
+  - 将错误配置的可执行程序参数 `"serena-mcp-server"` 修正为标准的 `"serena", "start-mcp-server"`，并包含 `--project-from-cwd` 参数；
+  - 该调整为 AI 辅助协作 MCP 服务配置修补，不影响前端代码构建逻辑。
+
 ## 2026-08-12 前端三大 View 页面管件模块全状态权重与统计死角全量对齐 (DemandManagementView / SupplyManagementView / WarehouseManagementView)
 
 - **关联前端页面**：
