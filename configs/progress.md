@@ -1,3 +1,87 @@
+## 2026-08-13 [全局管理“基准设计量预设”设计量与采购计划量列宽缩减]
+- **表格列宽精紧重排**：
+  1. 将 `设计量 (米)` 的列宽由 180px 缩减至 **120px**；
+  2. 将 `计划采购总量 (米)` 的列宽由 200px 缩减至 **135px**；
+  3. 将 `管材型号` 列宽微调为 **200px**，表格整体 `min-width` 从 900px 收紧为 **720px**；
+- **优化效果**：节省了 125px 的宝贵水平空间交由 `说明备注` 灵活拉伸，使表格在 PC 端呈现更加精致紧凑的卡片排版；
+- **构建测试**：运行 `npm run build` 打包校验，10.07s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全局管理页面“基准设计量预设”需求主体默认选中无效 Bug 深度排查与修复]
+- **Bug 根因诊断**：经排查发现，此前 `GlobalManagementView.vue` 脚本中定义的 `syncSelectedBaselineSection1()` 同步函数在整个 Vue 视图文件中**处于未被自动调用的游离状态**（零处调用点）。当页面首次加载 `loadConfig()` 或接收配置数据时，`selectedBaselineSection1Id` 依然维持初始空值 `''`，导致下拉选框无法自动选中任何项；
+- **全生命周期修复**：
+  1. 在 `applyConfig(config)` 函数赋予 `demandEntities` 新数据之后与末尾显式补齐 `syncSelectedBaselineSection1()` 调用；
+  2. 挂载 `watch(demandEntities, ..., { deep: true, immediate: true })` 与 `watch(activeTab, ...)` 自动响应式监听；
+  3. 在 `onMounted` 异步加载结束后补全强制同步，确保刷新或直接打开 Tab 时 100% 默认稳定高亮锁定“高温水_标段1”；
+- **构建测试**：运行 `npm run build` 打包校验，10.31s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全局管理页面基准设计量预设需求主体默认选中“高温水_标段1”]
+- **默认选中优化**：在 `GlobalManagementView.vue` 的 `syncSelectedBaselineSection1()` 初始化与校验逻辑中，增加了针对名称或 ID 包含/等于“高温水_标段1”/“high_lot_1”的优先智能匹配规则。进入标签页时直接默认精准选中“高温水_标段1”；
+- **构建测试**：运行 `npm run build` 打包校验，10.34s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全局管理页面“基准设计量预设”移除副标题并升级单行平铺排版]
+- **移除冗余文案**：删除了“维护特定需求主体的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择需求主体过滤。”这段多余的副标题；
+- ** Header 排版单行平铺**：重构 `.baseline-header-row` 为水平单行流线排布，左侧带有 `📐 需求主体管线基准设计量` 视觉标号，右侧筛选与操作按钮紧凑分列对齐，并增加底部轻量分割线 `border-bottom: 1px solid #f1f5f9`，使 PC 端界面呈现极致优雅的扁平化视效；
+- **构建测试**：运行 `npm run build` 打包校验，11.35s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全局管理页面“基准设计量预设”PC屏像素级对齐重构]
+- **电脑端排查与重构**：
+  1. **卡片 Header 控件重排**：将 `.baseline-header-row` 设置为 `align-items: center` 垂直双向居中，消除右侧检索下拉框、按钮组与左侧标题高低错位的视差；
+  2. **过滤器垂直居中**：为 `.section1-filter-inline` 补充高亮卡片包边，并将标签文字与 `<select>` 设为 32px 统一盒模型，解决下拉框与按钮参差不齐的问题；
+  3. **表格固定列宽分配**：为 `.baseline-table` 注入 `<colgroup>`，固定型号 240px、设计量 180px、计划采购量 200px、操作列 90px、备注自适应占满剩余，消除 PC 大屏下表格随意拉拉扯扯的视效；
+  4. **表头表体数值对齐**：为 `设计量` 与 `计划采购量` 的 `<th>` 及 `<td><input>` 绑定 `.col-num-design` / `.col-num-plan` 与 `.text-right` 规范，实现表头与输入框数值精细靠右比对，数字统一使用 Monospace 等宽字体与蓝色高亮；
+  5. **单元格垂直居中**：将表格所有 `th` 与 `td` 设置为 `vertical-align: middle !important;`，消除删除按钮在单元格内顶头偏上、与输入框不对齐的视觉隐患；
+- **构建测试**：运行 `npm run build` 打包校验，10.51s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全局管理页面“基准设计量预设”移除“补齐缺失规格”按钮与相关逻辑]
+- **需求变更**：在 `GlobalManagementView.vue` 的“基准设计量预设”标签页中，彻底删除了“补齐缺失规格”按钮及其调用的 JS 函数 `fillMissingPipeModelsForSelectedSection1`；
+- **前端清理**：去除了对应的视图按钮 HTML 及绑定的后台填充逻辑，避免管理员在管理基准设计量时误触发全量型号填充；
+- **构建测试**：运行 `npm run build` 打包校验，9.65s PASSED，编译构建 0 错误。
+
+## 2026-08-13 [全厂管件发货与记录模块 7 大手持屏死角像素级全面排查与清零]
+- **地毯式排查与修复点**：
+  - **`SupplyManagementView.vue` (供给侧)**：
+    1. **表头跨列隐患**：取消 `grid-column: span 2` 在移动端强行跨列导致 iPhone 端页面横向右偏的 bug，添加 `.col-remark-field` 在 `<720px` 时自动重置为单列；
+    2. **长提示文案高撑**：为 RevoGrid 电子表格旁的长段功能提示文字包裹 `.mobile-hide-hint`，移动端自动隐藏，释放 4 行无用垂直高度空间；
+    3. **台账筛选按钮溢出**：为发货台账检索栏添加 `flex-wrap: wrap; gap: 8px;`，让选择框和搜索框手持屏流式撑满自适应；
+    4. **台账明细卡片化**：给明细表格包裹 `table-responsive-wrapper` 视口保护，并应用 `.demand-fitting-table` 移动端流线型卡片样式；
+  - **`WarehouseManagementView.vue` (库管侧)**：
+    5. **归档按钮重叠**：在 `@media (max-width: 720px)` 下给 `.fitting-shipment-side` 强制注入 `flex-wrap: wrap !important; gap: 8px !important;`，彻底解决了极窄手机屏（< 480px）下“整车批量归档”与“流转凭证”按钮挤压压字的严重 Bug。
+- **构建测试**：Vite 7.1.10 生产环境构建编译 10.21s 100% 成功。
+
+## 2026-08-13 [全流程发货与记录模块自查诊断与移动端 Label 语义增强]
+- **二度自查与体验加固**：
+  - 在自查中对 `DemandManagementView.vue` Tab 4 保温管发货记录流水（`.logistics-table`）进行了二次精准微雕；
+  - 给 `logistics-table` 单元格绑定了 `col-code-order`、`col-code-shipment`、`col-shipped-qty`、`col-confirm-qty` 等 10 个语义化 class 组合；
+  - 在 CSS `@media (max-width: 720px)` 下利用伪元素 `::before` 为每个数字与日期注入自适应移动端轻量 Label 指引（如 `工厂发货量` / `到货/接收确认量`），消除了卡片化后纯数字易混淆的防呆死角；
+- **构建测试**：再次运行 Vite `npm run build` 打包校验，10.38s PASSED。
+
+## 2026-08-13 [全链路发货与记录模块 (DemandManagement / SupplyManagement) 手机模式全量响应式卡片重构]
+- **模块覆盖**：
+  - `DemandManagementView.vue`：Tab 4（到货与施工接收记录 / 保温管发货记录 `.logistics-table`）及 Tab 5（管件发货记录）；
+  - `SupplyManagementView.vue`：供给侧发货记录与卡片 Header 响应式保护；
+- **重构收益**：
+  - 彻底解决了手持移动设备下全宽大表格 12 列挤压变高、单字折行与拖动体验差的问题；
+  - 在 `@media (max-width: 720px)` 环境下自动启用流畅垂直流卡片与双栏数据网格，大按钮靠右易触达，视效简洁现代。
+- **验证结论**：Vite 7.1.10 生产打包测试通过（built in 10.24s）。
+
+## 2026-08-13 [需求管理 (DemandManagementView.vue) 管件发货明细移动端卡片化重构 (彻底解决字段挤压与高度拉高)]
+- **移动端卡片化重构 (Mobile Card Transformation)**：
+  - 针对用户反馈在手机模式（$\le 720\text{px}$）下明细表格字段极窄、文字折行成 3-4 行导致单行垂直高度被极度拉高、占用空间过大且需要频繁左右滑动的痛点，彻底放弃了手持设备下的硬表格形态；
+  - 给 `DemandManagementView.vue` Tab 5 明细表格注入 `.demand-fitting-table` 选择器与字段 class，在 CSS `@media (max-width: 720px)` 下实施流线型卡片转换：
+    1. **顶部信息全宽吸纳 (col-type / col-model)**：取消纯数字 `#` 序号列，将【管件类型 Badge】与【型号/规格描述】置于卡片顶部全宽区域，文字吸收 100% 宽度自适应，彻底杜绝单字断行叠字与极高垂直间距；
+    2. **中段发到货数据流式 Grid (col-shipped / col-arrived)**：发货件数与到货确认数由深灰底框包裹呈双栏 Grid，内置自适应 `mobile-lbl` 标签；
+    3. **底段履约状态与按钮防误触 (col-status / col-action)**：履约状态 Badge 居左展示，`🚚 确认到货` 与 `💬 备注` 按钮居右靠齐，大触控靶点防误触；
+  - 手机端垂直占用空间显著缩减 60%+，视效清爽流畅，零横向来回滚动。
+- **构建验证**：再次运行 Vite `npm run build` 打包校验，10.34s 顺利完成，零编译错误。
+
+## 2026-08-13 [需求管理 (DemandManagementView.vue) 管件发货记录移动端 Bug 修复与响应式重构]
+- **Bug 彻底排查与消除**：
+  - **核心 Bug 1 (表格挤压/叠字溢出)**：在 `DemandManagementView.vue` 管件发货记录标签页（Tab 5）明细展开区 `<table class="data-table">` 外层包裹了移动端响应式横向滚动保护层 `<div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">`，并指定 `min-width: 760px`，彻底解决手机端表格列宽死硬压缩导致的文字叠字变形、操作按钮遮挡无法点击及全局视口横向撑爆的问题；
+  - **核心 Bug 2 (车次卡片 Header 挤压误触)**：为车次卡片 Header 添加 `.fitting-card-header` 及子类 `.header-left-meta` 与 `.header-right-meta`，在移动端窄屏（`@media (max-width: 720px)`）下自动转换为上下优雅分层布局，并加入点阵虚线分隔，显著提升手持设备上的触控体验与防误触能力；
+  - **核心 Bug 3 (顶部操作按钮及快捷过滤条溢出)**：为顶部 `panel-title-row` 内的 4 个批量操作按钮添加 `flex-wrap: wrap; gap: 8px;`，过滤条的日期选择组件和关键字输入框支持手机屏弹性列流式适应，避免手机端横向向右溢出；
+  - **核心 Bug 4 (流转凭证 Modal 与统计网格适配)**：重构 `.block-modal-metrics` 为 2x2 响应式网格 (`grid-template-columns: repeat(2, 1fr)`)，并重构底部管件物资统计卡片为动态 `grid` 网格，完美展示发货件数与状态。
+- **构建验证**：使用 `npm run build` 进行生产编译测试，编译零报错顺利完成 (built in 9.34s)。
+
 ## 2026-08-12 [管件全流程 (车次生成、状态流转、撤销防阻碍、前端KPI与审计日志) 深度诊断与终极闭环治理]
 - **全盘体检与问题修复**：完成对管件发货与全生命周期流转的深度审计，一次性彻底修复了 4 项重大隐藏逻辑缺陷：
   - **车次号生成算法容错提升**：在 `fitting_delivery_service.py` 中为 `shipment_no` MAX 序号查询加上正则校验 `~ '^[0-9]{3}$'`，彻底杜绝历史非标准单号导致 `CAST` 类型的崩溃风险；

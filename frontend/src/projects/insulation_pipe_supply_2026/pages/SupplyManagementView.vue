@@ -591,17 +591,17 @@
                 <input v-model.trim="fittingForm.shipContactPhone" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
               </label>
 
-              <label class="field" style="grid-column: span 2;">
+              <label class="field col-remark-field">
                 <span style="font-size: 13px;">整车发货备注</span>
                 <input v-model.trim="fittingForm.shipRemark" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
               </label>
             </div>
 
             <!-- 明细填报 RevoGrid 电子表格 -->
-            <div class="panel-sub-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <h3 style="margin: 0; font-size: 14px; color: #334155; display: flex; align-items: center; gap: 6px;">
+            <div class="panel-sub-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+              <h3 style="margin: 0; font-size: 14px; color: #334155; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                 📊 本车管件发货电子表格
-                <span style="font-size: 12px; font-weight: normal; color: #64748b;">(双击单元格输入，直接按方向键切换，或在网格区域按下 Ctrl+V 快捷粘贴 Excel 矩阵)</span>
+                <span class="mobile-hide-hint" style="font-size: 12px; font-weight: normal; color: #64748b;">(双击单元格输入，直接按方向键切换，或在网格区域按下 Ctrl+V 快捷粘贴 Excel 矩阵)</span>
               </h3>
               <div style="display: flex; gap: 8px;">
                 <button type="button" class="btn ghost btn-sm" @click="addFittingGridRows(5)">+ 追加 5 行空行</button>
@@ -641,7 +641,7 @@
                 <h2>📋 已提交管件发货记录台账</h2>
                 <span class="panel-hint">显示已录入系统的管件发货明细，按发货时间倒序排列。</span>
               </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button
                   type="button"
                   class="btn ghost btn-sm"
@@ -658,13 +658,13 @@
                 >
                   📕 折叠全部车次
                 </button>
-                <select v-model="fittingTableSectionFilter" class="input" style="width: 150px; font-size: 13px;" @change.prevent.stop="loadFittingDeliveries">
+                <select v-model="fittingTableSectionFilter" class="input" style="min-width: 140px; font-size: 13px;" @change.prevent.stop="loadFittingDeliveries">
                   <option value="">全部接收标段</option>
                   <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
                     {{ st.section_1_name }}
                   </option>
                 </select>
-                <input v-model.trim="fittingSearchKw" type="text" placeholder="搜索车牌号/单号/管件类型..." class="input" style="width: 200px;" @keyup.enter="loadFittingDeliveries" />
+                <input v-model.trim="fittingSearchKw" type="text" placeholder="搜索车牌号/单号/管件类型..." class="input" style="min-width: 160px; flex: 1;" @keyup.enter="loadFittingDeliveries" />
                 <button type="button" class="btn ghost" :disabled="fittingLoading" @click="loadFittingDeliveries">刷新列表</button>
                 <button v-if="fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="downloadFittingHistoryExcel">📥 导出台账 (.xlsx)</button>
               </div>
@@ -689,18 +689,19 @@
                 >
                   <!-- 车次汇总卡片表头 (支持点击展开/折叠) -->
                   <div 
+                    class="fitting-card-header"
                     style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0;"
                     @click="toggleFittingGroup(group.groupKey)"
                   >
-                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div class="header-left-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                       <span style="font-size: 14px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold;" :style="{ transform: isFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
                         ▶
                       </span>
-                      <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
                         <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
                       </div>
-                      <span class="plate-badge" style="margin-left: 4px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
+                      <span class="plate-badge" style="margin-left: 2px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
                       <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`发往标段: ${group.section1Name}`">
                         <span style="color: #94a3b8; flex-shrink: 0;">➡️ 发往:</span>
                         <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ group.section1Name }}</strong>
@@ -708,10 +709,10 @@
                       <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="header-right-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                       <div style="text-align: right;">
                         <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                        <strong style="font-size: 14px; color: #059669;">发货总计: {{ group.totalQty }} 个</strong>
+                        <strong style="font-size: 13.5px; color: #059669;">发货总计: {{ group.totalQty }} 个</strong>
                       </div>
                       <!-- 状态 Badge -->
                       <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
@@ -725,7 +726,7 @@
                         v-if="(group.status === 'shipped' || group.status === 'pending_arrival') && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                         type="button"
                         class="btn ghost btn-sm"
-                        style="padding: 4px 10px; font-size: 12px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer;"
+                        style="padding: 4px 10px; font-size: 12px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; flex-shrink: 0;"
                         @click.stop="handleCancelFittingGroup(group)"
                       >
                         撤销发货
@@ -734,7 +735,7 @@
                       <button 
                         type="button" 
                         class="btn ghost btn-sm" 
-                        style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer;"
+                        style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer; flex-shrink: 0;"
                         @click.stop="showDeliveryDetail(group)"
                       >
                         📜 流转凭证
@@ -749,29 +750,34 @@
                       <span style="color: #0f172a;">{{ group.shipRemark }}</span>
                     </div>
 
-                    <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
-                      <thead style="background: #f8fafc;">
-                        <tr>
-                          <th style="width: 38px; text-align: center;">#</th>
-                          <th style="width: 110px;">管件类型</th>
-                          <th style="min-width: 220px;">型号 / 规格描述</th>
-                          <th style="width: 95px; text-align: right;">发货件数</th>
-                          <th style="width: 150px;">订单号</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(item, idx) in group.items" :key="item.id">
-                          <td style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                          <td>
-                            <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ getNormalizedFittingType(item.fitting_type) }}</span>
-                            <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
-                          </td>
-                          <td><strong style="color: #1e293b;">{{ item.model_spec }}</strong></td>
-                          <td style="text-align: right; font-weight: bold; color: #2563eb;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
-                          <td><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 4px;">
+                      <table class="data-table demand-fitting-table" style="margin: 0; min-width: 680px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                        <thead style="background: #f8fafc;">
+                          <tr>
+                            <th style="width: 38px; text-align: center;">#</th>
+                            <th style="width: 110px;">管件类型</th>
+                            <th style="min-width: 200px;">型号 / 规格描述</th>
+                            <th style="width: 95px; text-align: right;">发货件数</th>
+                            <th style="width: 150px;">订单号</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(item, idx) in group.items" :key="item.id">
+                            <td class="col-index" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                            <td class="col-type">
+                              <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ getNormalizedFittingType(item.fitting_type) }}</span>
+                              <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
+                            </td>
+                            <td class="col-model"><strong style="color: #1e293b;">{{ item.model_spec }}</strong></td>
+                            <td class="col-shipped" style="text-align: right; font-weight: bold; color: #2563eb;">
+                              <span class="mobile-lbl" style="display: none;">发货件数: </span>
+                              <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
+                            </td>
+                            <td class="col-action"><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3648,6 +3654,72 @@ async function saveSuperEdit() {
     width: 100%;
     margin-top: 6px;
     box-shadow: none;
+  }
+
+  .col-remark-field {
+    grid-column: span 1 !important;
+  }
+
+  .mobile-hide-hint {
+    display: none !important;
+  }
+
+  .fitting-card-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  .fitting-card-header .header-left-meta,
+  .fitting-card-header .header-right-meta {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .table-responsive-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin-left: -4px;
+    margin-right: -4px;
+  }
+
+  .demand-fitting-table {
+    min-width: 0 !important;
+    border: none !important;
+    table-layout: auto !important;
+    background: transparent !important;
+  }
+
+  .demand-fitting-table thead {
+    display: none !important;
+  }
+
+  .demand-fitting-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .demand-fitting-table tbody tr {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    gap: 6px !important;
+  }
+
+  .demand-fitting-table tbody td {
+    border: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+    width: 100% !important;
+  }
+
+  .demand-fitting-table tbody td.col-index {
+    display: none !important;
   }
 }
 

@@ -1,3 +1,100 @@
+## 2026-08-13 全局管理页面基准设计量预设表格列宽精减同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 前端完成基准量预设表格数值列宽精减，后端数据字段契约保持完整一致。
+
+## 2026-08-13 全局管理页面需求主体选框未默认选中 Bug 修复同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 修复了前端需求主体下拉框默认选项同步调用的隐匿 Bug，契约及后端数据交互无缝正常。
+
+## 2026-08-13 全局管理基准量预设需求主体默认选中“高温水_标段1”同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 前端更新了基准设计量预设需求主体选框默认选项定位为“高温水_标段1”，契约完整一致。
+
+## 2026-08-13 全局管理页面基准设计量预设 Header 排版精简与单行化同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 完成前端基准量预设 Header 单行化重构，API 交互逻辑完整保持不变。
+
+## 2026-08-13 全局管理页面基准设计量预设 PC 端对齐优化同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 前端基准设计量预设布局完成 PC 端像素级精准对齐重构，与后端配置 API 契约保持完整一致。
+
+## 2026-08-13 全局管理页面基准设计量预设简化同步记录
+
+- **关联前端页面与后端 API**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/global_config.py`
+- **更新说明**：
+  - 前端下架了“补齐缺失规格”纯前端填充辅助按钮，基准设计量 API 保持不变。
+
+## 2026-08-13 全厂管件模块 (Demand / Supply / Warehouse Management) 手持屏 7 大显示死角深度排查与修复同步记录
+
+- **关联前端与后端 API 路由**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/demand.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/supply.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/warehouse.py`
+- **更新说明**：
+  - 完成了全厂 3 大端管件页面手持移动端体验的像素级审计与修复，保持所有 RESTful API 契约与 WebSocket 状态广播兼容无影响。
+
+## 2026-08-13 全流程发货与到货记录模块移动端自查与 ::before Label 语义增强
+
+- **关联前端与后端 API 路由**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/demand.py`
+- **更新说明**：
+  - 前端二度自查补全了手机端卡片 Label 伪元素映射，保持后端与前端之间契约无缝对接。
+
+## 2026-08-13 全链路发货与到货记录页面手机模式响应式卡片重构同步记录
+
+- **关联前端与后端 API 路由**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/api/demand.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/supply.py`
+- **更新说明**：
+  - 前端需求侧与供给侧的发货到货流水全视图引入了统一的手机模式卡片化展示层，完全保持原后端 API 接口契约与数据模型定义。
+
+## 2026-08-13 需求侧 DemandManagementView.vue 移动端明细卡片化重构同步记录
+
+- **关联前端与后端数据契约**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 配合需求侧展开明细在移动端转化为卡片式渲染，保持底层 `/demand-management/fitting-deliveries/confirm-arrival` 接口与单项操作数据格式不变；
+  - 改善了手持终端设备上的视觉呈现与按钮操控体验。
+
+## 2026-08-13 需求侧 DemandManagementView.vue 管件发货记录移动端响应式 Bug 修复同步记录
+
+- **关联前端与后端数据契约**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+- **更新说明**：
+  - 配合后端 `/demand-management/fitting-deliveries` 接口，重构与加固前端需求侧 Tab 5 在移动端 (iOS/Android/微信内置浏览器) 下的响应式适配与数据列安全渲染；
+  - 明细列表通过 `.table-responsive-wrapper` 增加了移动端横向视口保护，确保移动设备下单项确认到货、补充备注弹窗及确认施工接收等按钮在狭窄视口下依然精准可触达；
+  - 车次 Header 增加上下分层重排样式，彻底消除移动手持设备下的重叠误触风险。
+
 ## 2026-08-12 管件发货【单位】与常用【标准管件类型】全量解耦至 tube_config.json 配置文件并在 API & Service 动态适配 (config_service.py / workspace.py / fitting_delivery_service.py)
 
 - **关联后端服务与 API 路由**：

@@ -429,7 +429,7 @@
                     title="点击整行可查看单据全生命周期凭证与发货备注"
                     @click="handleLogisticsRowClick($event, row)"
                   >
-                    <td class="cell-status">
+                    <td class="cell-status col-status">
                       <div class="status-pill-group">
                         <span 
                           class="status-pill clickable-pill" 
@@ -442,40 +442,44 @@
                         </span>
                       </div>
                     </td>
-                    <td class="cell-code">{{ row.deliveryCode || row.deliveryId }}</td>
-                    <td class="cell-code">{{ row.shipmentNo || '—' }}</td>
-                    <td class="cell-text" :title="row.vehiclePlateNo || '—'">{{ row.vehiclePlateNo || '—' }}</td>
-                    <td class="cell-text" :title="row.supplyEntityName">{{ row.supplyEntityName }}</td>
-                    <td class="cell-text" :title="row.pipeModelName">{{ row.pipeModelName }}</td>
-                    <td class="cell-number">{{ formatNumber(row.shippedQty) }}</td>
-                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</td>
-                    <td class="cell-datetime">{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</td>
-                    <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
-                    <td>
-                      <div v-if="row.status === 'pending_arrival'" class="stack-controls">
+                    <td class="cell-code col-code-order"><span class="val-text">{{ row.deliveryCode || row.deliveryId }}</span></td>
+                    <td class="cell-code col-code-shipment"><span class="val-text">{{ row.shipmentNo || '—' }}</span></td>
+                    <td class="cell-text col-text-plate" :title="row.vehiclePlateNo || '—'"><span class="plate-badge">{{ row.vehiclePlateNo || '—' }}</span></td>
+                    <td class="cell-text col-text-supply" :title="row.supplyEntityName"><span class="val-text">🏭 {{ row.supplyEntityName }}</span></td>
+                    <td class="cell-text col-text-model" :title="row.pipeModelName"><strong class="val-text" style="color: #1e293b; font-size: 13.5px;">{{ row.pipeModelName }}</strong></td>
+                    <td class="cell-number col-shipped-qty"><strong style="color: #2563eb;">{{ formatNumber(row.shippedQty) }} 米</strong></td>
+                    <td class="cell-datetime col-shipped-time"><span>{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</span></td>
+                    <td class="cell-datetime col-arrived-time"><span>{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</span></td>
+                    <td class="cell-elapsed col-elapsed"><span>⏱️ {{ formatDeliveryElapsedDisplay(row) }}</span></td>
+                    <td class="col-confirm-qty">
+                      <div v-if="row.status === 'pending_arrival'" class="stack-controls" style="display: inline-flex; align-items: center; gap: 4px;">
                         <input
                           v-model.number="row.arrivalConfirmQty"
                           type="number"
                           min="0"
                           :max="row.shippedQty"
                           step="1"
+                          style="width: 70px; padding: 2px 4px; border: 1px solid #059669; border-radius: 4px; text-align: right; font-weight: bold; color: #047857;"
                         />
+                        <span style="font-size: 11px; color: #64748b;">米</span>
                       </div>
-                      <div v-else-if="row.status === 'pending_receive'" class="stack-controls">
+                      <div v-else-if="row.status === 'pending_receive'" class="stack-controls" style="display: inline-flex; align-items: center; gap: 4px;">
                         <input
                           v-model.number="row.receiptConfirmQty"
                           type="number"
                           min="0"
                           :max="row.arrivedQty"
                           step="1"
+                          style="width: 70px; padding: 2px 4px; border: 1px solid #7c3aed; border-radius: 4px; text-align: right; font-weight: bold; color: #6b21a8;"
                         />
+                        <span style="font-size: 11px; color: #64748b;">米</span>
                       </div>
                       <span v-else-if="row.status === 'pending_diff_approve'" class="cell-number" style="color: #f97316; font-weight: bold;">
-                        {{ formatNumber(row.receivedQty) }} (待审批)
+                        {{ formatNumber(row.receivedQty) }} 米 (待审批)
                       </span>
-                      <span v-else class="cell-number">{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
+                      <span v-else class="cell-number" style="color: #059669; font-weight: bold;">{{ formatNumber(row.receivedQty || row.arrivedQty) }} 米</span>
                     </td>
-                    <td>
+                    <td class="col-action-btns">
                       <div v-if="row.status === 'pending_arrival' || row.status === 'pending_receive'" class="action-stack action-inline">
                         <button
                           type="button"
@@ -543,7 +547,7 @@
                 <h2>🔧 管件发货记录</h2>
                 <span class="panel-hint">本标段（需求主体）收到的全量管件（弯头、三通、大小头等）发货明细台账。由供给侧调度发货自动联动上报，需求方无需进行任何手工填报。</span>
               </div>
-              <div style="display: flex; gap: 8px;">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button
                   type="button"
                   class="btn ghost"
@@ -582,19 +586,19 @@
 
             <!-- 快捷搜索过滤条 -->
             <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 500;">发货日期：</span>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%;">
+                <span style="font-size: 12px; color: #64748b; font-weight: 500; flex-shrink: 0;">发货日期：</span>
                 <input v-model="fittingFilter.startDate" type="date" class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
                 <span style="color: #94a3b8;">至</span>
                 <input v-model="fittingFilter.endDate" type="date" class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
               </div>
 
-              <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 500;">关键字：</span>
+              <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px;">
+                <span style="font-size: 12px; color: #64748b; font-weight: 500; flex-shrink: 0;">关键字：</span>
                 <input v-model="fittingFilter.searchKeyword" type="text" placeholder="搜索车牌号/单号/类型/型号/备注..." class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font-size: 13px; width: 100%;" @keyup.enter="handleFittingQuery" />
               </div>
 
-              <button type="button" class="btn primary" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer;" @click="handleFittingQuery">
+              <button type="button" class="btn primary" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; flex-shrink: 0;" @click="handleFittingQuery">
                 🔍 检索
               </button>
             </div>
@@ -610,18 +614,19 @@
               >
                 <!-- 车次汇总卡片表头 (支持点击展开/折叠) -->
                 <div 
+                  class="fitting-card-header"
                   style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0;"
                   @click="toggleDemandFittingGroup(group.groupKey)"
                 >
-                  <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <div class="header-left-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span style="font-size: 14px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold;" :style="{ transform: isDemandFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
                       ▶
                     </span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
                       <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
                       <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
                     </div>
-                    <span class="plate-badge" style="margin-left: 4px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
+                    <span class="plate-badge" style="margin-left: 2px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
                     <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`供给主体: ${group.supplyEntityName}`">
                       <span style="color: #94a3b8; flex-shrink: 0;">🏭 供给方:</span>
                       <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ group.supplyEntityName }}</strong>
@@ -629,7 +634,7 @@
                     <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
                   </div>
 
-                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <div class="header-right-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <!-- 状态 Badge -->
                     <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
                     <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
@@ -640,14 +645,14 @@
 
                     <div style="text-align: right; margin-left: 4px;">
                       <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                      <strong style="font-size: 14px; color: #2563eb;">发货 {{ group.totalShippedQty }} 个 / 已确认到货 {{ group.totalArrivedQty }} 个</strong>
+                      <strong style="font-size: 13.5px; color: #2563eb;">发货 {{ group.totalShippedQty }} 个 / 已确认到货 {{ group.totalArrivedQty }} 个</strong>
                     </div>
 
                     <!-- 流转凭证按钮 -->
                     <button 
                       type="button" 
                       class="btn ghost btn-sm" 
-                      style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer;"
+                      style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer; flex-shrink: 0;"
                       @click.stop="showDeliveryDetail(group)"
                     >
                       📜 流转凭证
@@ -662,129 +667,151 @@
                     <span style="color: #0f172a;">{{ group.shipRemark }}</span>
                   </div>
 
-                  <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
-                    <thead style="background: #f8fafc;">
-                      <tr>
-                        <th style="width: 38px; text-align: center;">#</th>
-                        <th style="width: 110px;">管件类型</th>
-                        <th style="min-width: 200px;">型号 / 规格描述</th>
-                        <th style="width: 95px; text-align: right;">发货件数</th>
-                        <th style="width: 115px; text-align: right;">到货确认数</th>
-                        <th style="width: 125px; text-align: center;">履约状态</th>
-                        <th style="width: 135px; text-align: center;">单项确认操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(item, idx) in group.items" :key="item.id" style="vertical-align: middle;">
-                        <td style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                        <td>
-                          <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ item.fitting_type }}</span>
-                          <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
-                        </td>
-                        <td>
-                          <strong style="color: #1e293b;">{{ item.model_spec }}</strong>
-                          <div style="font-family: monospace; font-size: 11px; color: #94a3b8;">单号: {{ item.order_no }}</div>
-                        </td>
-                        <td style="text-align: right; font-weight: bold; color: #2563eb;">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
-                        
-                        <!-- 到货确认数量设定（默认等于发货数量，允许单条直接微调） -->
-                        <td style="text-align: right;">
-                          <div v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" style="display: inline-flex; align-items: center; gap: 4px;">
-                            <input 
-                              type="number" 
-                              v-model.number="item.tempArrivedQty"
-                              min="1"
-                              :max="item.shipped_qty"
-                              step="1"
-                              :disabled="!canConfirmArrival"
-                              style="width: 60px; padding: 2px 4px; border: 1px solid #059669; border-radius: 4px; text-align: right; font-weight: bold; color: #047857; font-size: 12px;"
-                            />
-                            <span style="font-size: 11px; color: #64748b;">{{ item.unit || '个' }}</span>
-                          </div>
-                          <span v-else style="font-weight: bold; color: #059669;">
-                            {{ item.arrived_qty !== undefined && item.arrived_qty !== null ? item.arrived_qty : item.shipped_qty }} {{ item.unit || '个' }}
-                          </span>
-                        </td>
+                  <!-- 视口横向滚动防护与手机卡片保护层 (Mobile Responsive Wrapper) -->
+                  <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 4px;">
+                    <table class="data-table demand-fitting-table" style="margin: 0; min-width: 760px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                      <thead style="background: #f8fafc;">
+                        <tr>
+                          <th style="width: 38px; text-align: center;">#</th>
+                          <th style="width: 110px;">管件类型</th>
+                          <th style="min-width: 200px;">型号 / 规格描述</th>
+                          <th style="width: 95px; text-align: right;">发货件数</th>
+                          <th style="width: 115px; text-align: right;">到货确认数</th>
+                          <th style="width: 125px; text-align: center;">履约状态</th>
+                          <th style="width: 135px; text-align: center;">单项确认操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(item, idx) in group.items" :key="item.id" style="vertical-align: middle;">
+                          <td class="col-index" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                          
+                          <td class="col-type">
+                            <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ item.fitting_type }}</span>
+                            <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
+                          </td>
+                          
+                          <td class="col-model">
+                            <strong style="color: #1e293b;">{{ item.model_spec }}</strong>
+                            <div style="font-family: monospace; font-size: 11px; color: #94a3b8;">单号: {{ item.order_no }}</div>
+                          </td>
+                          
+                          <td class="col-shipped" style="text-align: right; font-weight: bold; color: #2563eb;">
+                            <span class="mobile-lbl" style="display: none;">发货件数: </span>
+                            <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
+                          </td>
+                          
+                          <!-- 到货确认数量设定（默认等于发货数量，允许单条直接微调） -->
+                          <td class="col-arrived" style="text-align: right;">
+                            <span class="mobile-lbl" style="display: none;">到货确认: </span>
+                            <div v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" style="display: inline-flex; align-items: center; gap: 4px;">
+                              <input 
+                                type="number" 
+                                v-model.number="item.tempArrivedQty"
+                                min="1"
+                                :max="item.shipped_qty"
+                                step="1"
+                                :disabled="!canConfirmArrival"
+                                style="width: 60px; padding: 2px 4px; border: 1px solid #059669; border-radius: 4px; text-align: right; font-weight: bold; color: #047857; font-size: 12px;"
+                              />
+                              <span style="font-size: 11px; color: #64748b;">{{ item.unit || '个' }}</span>
+                            </div>
+                            <span v-else style="font-weight: bold; color: #059669;">
+                              {{ item.arrived_qty !== undefined && item.arrived_qty !== null ? item.arrived_qty : item.shipped_qty }} {{ item.unit || '个' }}
+                            </span>
+                          </td>
 
-                        <!-- 明细单项状态 Badge -->
-                        <td style="text-align: center;">
-                          <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
-                          <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
-                          <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
-                          <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
-                          <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
-                        </td>
+                          <!-- 明细单项状态 Badge -->
+                          <td class="col-status" style="text-align: center;">
+                            <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
+                            <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
+                            <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
+                            <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
+                            <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
+                          </td>
 
-                        <!-- 明细项独立确认操作列 -->
-                        <td style="text-align: center;">
-                          <!-- 1. 待到货状态下的确认到货按钮 -->
-                          <div v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" style="display: flex; justify-content: center; gap: 4px;">
-                            <button 
-                              type="button" 
-                              class="btn primary btn-sm" 
-                              style="padding: 2px 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer;"
-                              :disabled="item.submitting || !canConfirmArrival"
-                              :title="canConfirmArrival ? '确认现场到货' : '仅现场负责人可确认到货'"
-                              @click.stop="handleConfirmSingleItemArrival(item)"
-                            >
-                              {{ item.submitting ? '提交中...' : '🚚 确认到货' }}
-                            </button>
-                            <button 
-                              type="button" 
-                              class="btn ghost btn-sm" 
-                              style="padding: 2px 6px; font-size: 11.5px; color: #059669; border-color: #a7f3d0;"
-                              @click.stop="openFittingArrivalModalForSingle(item, group)"
-                              :disabled="!canConfirmArrival"
-                              title="补充到货备注"
-                            >
-                              💬 备注
-                            </button>
-                          </div>
+                          <!-- 明细项独立确认操作列 -->
+                          <td class="col-action" style="text-align: center;">
+                            <!-- 1. 待到货状态下的确认到货按钮 -->
+                            <div v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" style="display: flex; justify-content: center; gap: 4px;">
+                              <button 
+                                type="button" 
+                                class="btn primary btn-sm" 
+                                style="padding: 2px 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer;"
+                                :disabled="item.submitting || !canConfirmArrival"
+                                :title="canConfirmArrival ? '确认现场到货' : '仅现场负责人可确认到货'"
+                                @click.stop="handleConfirmSingleItemArrival(item)"
+                              >
+                                {{ item.submitting ? '提交中...' : '🚚 确认到货' }}
+                              </button>
+                              <button 
+                                type="button" 
+                                class="btn ghost btn-sm" 
+                                style="padding: 2px 6px; font-size: 11.5px; color: #059669; border-color: #a7f3d0;"
+                                @click.stop="openFittingArrivalModalForSingle(item, group)"
+                                :disabled="!canConfirmArrival"
+                                title="补充到货备注"
+                              >
+                                💬 备注
+                              </button>
+                            </div>
 
-                          <!-- 2. 到货状态下的施工接收按钮 -->
-                          <div v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" style="display: flex; justify-content: center; gap: 4px;">
-                            <button 
-                              type="button" 
-                              class="btn primary btn-sm" 
-                              style="padding: 2px 8px; font-size: 11.5px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer;"
-                              :disabled="item.submitting || !canConfirmReceipt"
-                              :title="canConfirmReceipt ? '确认施工接收' : '仅施工单位可确认接收'"
-                              @click.stop="handleConfirmSingleItemConstruction(item)"
-                            >
-                              {{ item.submitting ? '提交中...' : '👷 施工接收' }}
-                            </button>
-                            <button 
-                              type="button" 
-                              class="btn ghost btn-sm" 
-                              style="padding: 2px 6px; font-size: 11.5px; color: #7c3aed; border-color: #ddd6fe;"
-                              @click.stop="openFittingConstructionModalForSingle(item, group)"
-                              :disabled="!canConfirmReceipt"
-                              title="补充领用备注"
-                            >
-                              💬 备注
-                            </button>
-                          </div>
+                            <!-- 2. 到货状态下的施工接收按钮 -->
+                            <div v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" style="display: flex; justify-content: center; gap: 4px;">
+                              <button 
+                                type="button" 
+                                class="btn primary btn-sm" 
+                                style="padding: 2px 8px; font-size: 11.5px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer;"
+                                :disabled="item.submitting || !canConfirmReceipt"
+                                :title="canConfirmReceipt ? '确认施工接收' : '仅施工单位可确认接收'"
+                                @click.stop="handleConfirmSingleItemConstruction(item)"
+                              >
+                                {{ item.submitting ? '提交中...' : '👷 施工接收' }}
+                              </button>
+                              <button 
+                                type="button" 
+                                class="btn ghost btn-sm" 
+                                style="padding: 2px 6px; font-size: 11.5px; color: #7c3aed; border-color: #ddd6fe;"
+                                @click.stop="openFittingConstructionModalForSingle(item, group)"
+                                :disabled="!canConfirmReceipt"
+                                title="补充领用备注"
+                              >
+                                💬 备注
+                              </button>
+                            </div>
 
-                          <!-- 3. 已完全流转状态 -->
-                          <span v-else style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 节点流程完成</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                            <!-- 3. 已完全流转状态 -->
+                            <span v-else style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 节点流程完成</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
 
             <!-- 管件情况决策透视卡片 -->
             <div v-if="fittingRows.length > 0" style="margin-top: 15px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 8px; font-size: 13px; color: #334155; line-height: 1.8;">
-              <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
                 <span>💡 本标段管件物资统计：</span>
               </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 10px 30px;">
-                <span>🚚 累计发货车次：<strong style="color: #0f172a;">{{ demandFittingBatches }} 车/批</strong></span>
-                <span>📦 收到管件总量：<strong style="color: #2563eb;">{{ demandFittingTotalQty }} 个</strong></span>
-                <span>🟢 常用标准管件：<strong style="color: #16a34a;">{{ demandFittingStandardQty }} 个</strong></span>
-                <span>🟧 非常用/异形管件：<strong style="color: #ea580c;">{{ demandFittingNonStandardQty }} 个</strong></span>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px;">
+                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>🚚 累计发货车次</span>
+                  <strong style="color: #0f172a;">{{ demandFittingBatches }} 车/批</strong>
+                </div>
+                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>📦 收到管件总量</span>
+                  <strong style="color: #2563eb;">{{ demandFittingTotalQty }} 个</strong>
+                </div>
+                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>🟢 常用标准管件</span>
+                  <strong style="color: #16a34a;">{{ demandFittingStandardQty }} 个</strong>
+                </div>
+                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>🟧 非常用/异形管件</span>
+                  <strong style="color: #ea580c;">{{ demandFittingNonStandardQty }} 个</strong>
+                </div>
               </div>
             </div>
           </section>
@@ -3711,6 +3738,211 @@ function jumpToUsageTab() {
   .panel-title-row {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px !important;
+  }
+
+  .fitting-card-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  .fitting-card-header .header-left-meta {
+    width: 100% !important;
+  }
+
+  .fitting-card-header .header-right-meta {
+    width: 100% !important;
+    justify-content: space-between !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    padding-top: 8px !important;
+  }
+
+  .block-modal-metrics {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .table-responsive-wrapper {
+    margin-left: -4px;
+    margin-right: -4px;
+    overflow-x: visible !important;
+  }
+
+  /* 移动端 (<=720px) 明细表格自适应卡片化重构，彻底解决死硬表格列被严重挤压、文字叠字、高度拉高的问题 */
+  .demand-fitting-table {
+    min-width: 0 !important;
+    border: none !important;
+    table-layout: auto !important;
+    background: transparent !important;
+  }
+
+  .demand-fitting-table thead {
+    display: none !important;
+  }
+
+  .demand-fitting-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .demand-fitting-table tbody tr {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    gap: 6px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+  }
+
+  .demand-fitting-table tbody td {
+    border: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+    width: 100% !important;
+  }
+
+  /* 隐去无意义纯数字序号列 */
+  .demand-fitting-table tbody td.col-index {
+    display: none !important;
+  }
+
+  /* 卡片第 1 区域：类型 Badge 与型号规格吸纳整行全宽，绝不折叠压缩 */
+  .demand-fitting-table tbody td.col-type {
+    display: inline-block !important;
+    margin-bottom: 2px !important;
+  }
+
+  .demand-fitting-table tbody td.col-model {
+    width: 100% !important;
+  }
+
+  .demand-fitting-table tbody td.col-model strong {
+    font-size: 13.5px !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+  }
+
+  /* 卡片第 2 区域：发货件数与到货确认数 (浅色包围流式 Grid 双栏) */
+  .demand-fitting-table tbody td.col-shipped,
+  .demand-fitting-table tbody td.col-arrived {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .demand-fitting-table tbody td.col-shipped .mobile-lbl,
+  .demand-fitting-table tbody td.col-arrived .mobile-lbl {
+    display: inline-block !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+  }
+
+  /* 卡片第 3 区域：状态 Badge 与单项确认操作按钮 (底部并排布局) */
+  .demand-fitting-table tbody td.col-status {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-top: 4px !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+  }
+
+  .demand-fitting-table tbody td.col-action {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+  }
+
+  /* 移动端 (<=720px) 到货与施工接收记录表格 (logistics-table) 响应式卡片化精细重构 */
+  .logistics-table {
+    min-width: 0 !important;
+    border: none !important;
+    table-layout: auto !important;
+    background: transparent !important;
+  }
+
+  .logistics-table thead {
+    display: none !important;
+  }
+
+  .logistics-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .logistics-table tbody tr.logistics-table-row {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+    padding: 12px 14px !important;
+    gap: 6px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    box-sizing: border-box !important;
+  }
+
+  .logistics-table tbody td {
+    border: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 状态与车牌 */
+  .logistics-table tbody td.col-status {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 2px !important;
+  }
+
+  .logistics-table tbody td.col-code-order::before { content: "单号: "; color: #94a3b8; font-size: 11.5px; }
+  .logistics-table tbody td.col-code-shipment::before { content: "车次: "; color: #94a3b8; font-size: 11.5px; }
+  .logistics-table tbody td.col-shipped-time::before { content: "发货时间: "; color: #94a3b8; font-size: 11.5px; }
+  .logistics-table tbody td.col-arrived-time::before { content: "确认时间: "; color: #94a3b8; font-size: 11.5px; }
+  
+  .logistics-table tbody td.col-shipped-qty,
+  .logistics-table tbody td.col-confirm-qty {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .logistics-table tbody td.col-shipped-qty::before { content: "工厂发货量"; color: #64748b; font-weight: 500; }
+  .logistics-table tbody td.col-confirm-qty::before { content: "到货/接收确认量"; color: #047857; font-weight: 500; }
+
+  .logistics-table tbody td.col-text-model strong {
+    font-size: 14px !important;
+    color: #0f172a !important;
+  }
+
+  /* 确认量与操作按钮行 */
+  .logistics-table tbody td.col-action-btns {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    margin-top: 4px !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed #e2e8f0 !important;
   }
 }
 

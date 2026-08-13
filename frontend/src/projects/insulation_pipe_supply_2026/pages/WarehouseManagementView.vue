@@ -2912,7 +2912,7 @@ th.cell-number {
   .fitting-ledger-body { padding: 14px 16px 16px; }
   .fitting-shipment-toggle { grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 12px; }
   .fitting-route { grid-column: 2; width: 100%; box-sizing: border-box; }
-  .fitting-shipment-side { padding: 9px 12px; }
+  .fitting-shipment-side { padding: 9px 12px; flex-wrap: wrap !important; gap: 8px !important; }
   .fitting-shipment-quantity { align-items: flex-start; margin-right: auto; }
   .fitting-proof-button { margin-left: auto; }
   .fitting-shipment-remark { grid-template-columns: 1fr; gap: 4px; }

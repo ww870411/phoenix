@@ -708,6 +708,251 @@
       "design_qty": 745,
       "purchase_plan_qty": 745,
       "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ325×7.0/Φ417×7.0",
+      "design_qty": 1616,
+      "purchase_plan_qty": 1616,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ273×6.0/Φ363×5.6",
+      "design_qty": 1370,
+      "purchase_plan_qty": 1370,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ219×6.0/Φ309×4.9",
+      "design_qty": 5313,
+      "purchase_plan_qty": 5313,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ159×4.5/Φ245×3.9",
+      "design_qty": 4162,
+      "purchase_plan_qty": 4162,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ133×4.5/Φ219×3.5",
+      "design_qty": 4994,
+      "purchase_plan_qty": 4994,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ108×4.0/Φ194×3.2",
+      "design_qty": 5280,
+      "purchase_plan_qty": 5280,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ89×4.0/Φ175×3.0",
+      "design_qty": 8537,
+      "purchase_plan_qty": 8537,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ76×4.0/Φ160×3.0",
+      "design_qty": 8563,
+      "purchase_plan_qty": 8563,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ57×4.0/Φ140×3.0",
+      "design_qty": 9833,
+      "purchase_plan_qty": 9833,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ45×4.0/Φ131×3.0",
+      "design_qty": 792,
+      "purchase_plan_qty": 792,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ38×4.0/Φ124×3.0",
+      "design_qty": 193,
+      "purchase_plan_qty": 193,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_4",
+      "pipe_model_id": "Φ32×4.0/Φ118×3.0",
+      "design_qty": 620,
+      "purchase_plan_qty": 620,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ325×7.0/Φ417×7.0",
+      "design_qty": 827,
+      "purchase_plan_qty": 827,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ273×6.0/Φ363×5.6",
+      "design_qty": 1960,
+      "purchase_plan_qty": 1960,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ219×6.0/Φ309×4.9",
+      "design_qty": 5377,
+      "purchase_plan_qty": 5377,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ159×4.5/Φ245×3.9",
+      "design_qty": 3424,
+      "purchase_plan_qty": 3424,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ133×4.5/Φ219×3.5",
+      "design_qty": 3755,
+      "purchase_plan_qty": 3755,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ108×4.0/Φ194×3.2",
+      "design_qty": 7675,
+      "purchase_plan_qty": 7675,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ89×4.0/Φ175×3.0",
+      "design_qty": 6257,
+      "purchase_plan_qty": 6257,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ76×4.0/Φ160×3.0",
+      "design_qty": 5851,
+      "purchase_plan_qty": 5851,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ57×4.0/Φ140×3.0",
+      "design_qty": 9575,
+      "purchase_plan_qty": 9575,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ45×4.0/Φ131×3.0",
+      "design_qty": 1018,
+      "purchase_plan_qty": 1018,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ38×4.0/Φ124×3.0",
+      "design_qty": 1096,
+      "purchase_plan_qty": 1096,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_5",
+      "pipe_model_id": "Φ32×4.0/Φ118×3.0",
+      "design_qty": 591,
+      "purchase_plan_qty": 591,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ273×6.0/Φ363×5.6",
+      "design_qty": 978,
+      "purchase_plan_qty": 978,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ219×6.0/Φ309×4.9",
+      "design_qty": 5597,
+      "purchase_plan_qty": 5597,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ159×4.5/Φ245×3.9",
+      "design_qty": 3985,
+      "purchase_plan_qty": 3985,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ133×4.5/Φ219×3.5",
+      "design_qty": 4828,
+      "purchase_plan_qty": 4828,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ108×4.0/Φ194×3.2",
+      "design_qty": 5307,
+      "purchase_plan_qty": 5307,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ89×4.0/Φ175×3.0",
+      "design_qty": 7041,
+      "purchase_plan_qty": 7041,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ76×4.0/Φ160×3.0",
+      "design_qty": 8545,
+      "purchase_plan_qty": 8545,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ57×4.0/Φ140×3.0",
+      "design_qty": 5497,
+      "purchase_plan_qty": 5497,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ45×4.0/Φ131×3.0",
+      "design_qty": 662,
+      "purchase_plan_qty": 662,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ38×4.0/Φ124×3.0",
+      "design_qty": 234,
+      "purchase_plan_qty": 234,
+      "remark": ""
+    },
+    {
+      "section_1_id": "low_lot_6",
+      "pipe_model_id": "Φ32×4.0/Φ118×3.0",
+      "design_qty": 1203,
+      "purchase_plan_qty": 1203,
+      "remark": ""
     }
   ],
   "strict_planning_flow_control": false,

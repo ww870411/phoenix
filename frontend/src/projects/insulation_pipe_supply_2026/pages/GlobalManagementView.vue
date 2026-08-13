@@ -787,14 +787,11 @@
           <!-- Tab 5: 基准量预设 -->
           <div v-if="activeTab === 'baseline'" class="pane-content-wrapper">
             <section class="card elevated section-card">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">需求主体管线基准设计量</div>
-                  <p class="sub block-sub">维护特定需求主体的设计基准总量及计划采购总量，用以评估物流净缺口。请先选择需求主体过滤。</p>
-                </div>
+              <div class="card-header-row baseline-header-row">
+                <div class="card-header baseline-title-heading">📐 需求主体管线基准设计量</div>
                 <div class="section-actions baseline-actions-panel">
                   <div class="section1-filter-inline">
-                    <span>过滤需求主体：</span>
+                    <span class="filter-label">过滤需求主体：</span>
                     <select v-model="selectedBaselineSection1Id" class="input inline-select">
                       <option v-for="section1 in demandEntities" :key="section1.section_1_id" :value="section1.section_1_id">
                         {{ section1.section_1_name || section1.section_1_id }}
@@ -802,34 +799,43 @@
                     </select>
                   </div>
                   <button class="btn ghost" type="button" @click="addBaselinePreset">➕ 新增型号行</button>
-                  <button class="btn ghost btn-action-tool" type="button" @click="fillMissingPipeModelsForSelectedSection1">补齐缺失规格</button>
                   <button class="btn primary shadow-accent" type="button" :disabled="isSaving('baseline_presets')" @click="saveSection('baseline_presets')">
                     {{ isSaving('baseline_presets') ? '保存中…' : '💾 保存设计基准' }}
                   </button>
                 </div>
               </div>
+
               <p v-if="sectionMessage('baseline_presets')" :class="['section-tip', sectionMessage('baseline_presets').type]">
                 {{ sectionMessage('baseline_presets').text }}
               </p>
+
               <div class="summary-row baseline-summary">
-                <span class="summary-chip">当前站点：{{ selectedBaselineSection1Name }}</span>
-                <span class="summary-chip">当前显示：{{ filteredBaselinePresets.length }} 条</span>
-                <span class="summary-chip">全量预设：{{ baselinePresets.length }} 条</span>
+                <span class="summary-chip">📍 当前站点：<strong>{{ selectedBaselineSection1Name }}</strong></span>
+                <span class="summary-chip">📊 当前显示：<strong>{{ filteredBaselinePresets.length }}</strong> 条</span>
+                <span class="summary-chip">🗂️ 全量预设：<strong>{{ baselinePresets.length }}</strong> 条</span>
               </div>
+
               <div class="table-wrap">
                 <table class="table editor-table baseline-table">
+                  <colgroup>
+                    <col class="col-spec-width" style="width: 200px;" />
+                    <col class="col-num-width" style="width: 120px;" />
+                    <col class="col-num-width" style="width: 135px;" />
+                    <col class="col-remark-width" />
+                    <col class="col-act-width" style="width: 85px;" />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>管材型号</th>
-                      <th>设计量(米)</th>
-                      <th>计划采购总量(米)</th>
-                      <th>说明备注</th>
-                      <th>操作</th>
+                      <th class="col-model-spec">管材型号</th>
+                      <th class="col-num-design">设计量 (米)</th>
+                      <th class="col-num-plan">计划采购总量 (米)</th>
+                      <th class="col-text-remark">说明备注</th>
+                      <th class="col-action-btn">操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="item in filteredBaselinePresets" :key="item.__row_key">
-                      <td>
+                      <td class="col-model-spec">
                         <select v-model="item.pipe_model_id" class="input table-cell-input" @change="syncBaselinePipeModelName(item)">
                           <option 
                             v-for="model in selectableBaselinePipeModels" 
@@ -841,10 +847,18 @@
                           </option>
                         </select>
                       </td>
-                      <td><input v-model.number="item.design_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
-                      <td><input v-model.number="item.purchase_plan_qty" class="input table-cell-input" type="number" min="0" step="1" /></td>
-                      <td><input v-model.trim="item.remark" class="input table-cell-input" type="text" /></td>
-                      <td><button class="btn danger-ghost compact-btn" type="button" @click="removeBaselinePreset(item.__row_key)">删除</button></td>
+                      <td class="col-num-design">
+                        <input v-model.number="item.design_qty" class="input table-cell-input text-right" type="number" min="0" step="1" placeholder="0" />
+                      </td>
+                      <td class="col-num-plan">
+                        <input v-model.number="item.purchase_plan_qty" class="input table-cell-input text-right" type="number" min="0" step="1" placeholder="0" />
+                      </td>
+                      <td class="col-text-remark">
+                        <input v-model.trim="item.remark" class="input table-cell-input" type="text" placeholder="选填备注说明" />
+                      </td>
+                      <td class="col-action-btn">
+                        <button class="btn danger-ghost compact-btn" type="button" @click="removeBaselinePreset(item.__row_key)">删除</button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -1739,15 +1753,25 @@ function syncPipeModelIdentity(row, source = 'id') {
 }
 
 function syncSelectedBaselineSection1() {
-  const section1Ids = demandEntities.value
-    .map((item) => String(item.section_1_id || '').trim())
-    .filter(Boolean)
-  if (!section1Ids.length) {
+  const items = demandEntities.value.filter((item) => String(item.section_1_id || '').trim())
+  if (!items.length) {
     selectedBaselineSection1Id.value = ''
     return
   }
-  if (!section1Ids.includes(selectedBaselineSection1Id.value)) {
-    selectedBaselineSection1Id.value = section1Ids[0]
+  const validIds = items.map((item) => String(item.section_1_id || '').trim())
+
+  // 若当前未选中或选中的 ID 无效，优先匹配“高温水_标段1”
+  if (!selectedBaselineSection1Id.value || !validIds.includes(selectedBaselineSection1Id.value)) {
+    const targetMatch = items.find((item) => {
+      const name = String(item.section_1_name || '').trim()
+      const id = String(item.section_1_id || '').trim()
+      return name === '高温水_标段1' || name.includes('高温水_标段1') || id === 'high_lot_1' || id.includes('high_lot_1')
+    })
+    if (targetMatch && targetMatch.section_1_id) {
+      selectedBaselineSection1Id.value = targetMatch.section_1_id
+    } else {
+      selectedBaselineSection1Id.value = validIds[0]
+    }
   }
 }
 
@@ -1763,6 +1787,7 @@ function applyConfig(config) {
     section_1_ids_text: listToText(item.section_1_ids),
   }))
   demandEntities.value = cloneRows(config.demand_entities)
+  syncSelectedBaselineSection1()
   pipeModels.value = normalizePipeModelRows(config.pipe_models)
   productionCapacities.value = cloneRows(config.production_capacities).map((item) => ({
     ...item,
@@ -1788,6 +1813,7 @@ function applyConfig(config) {
   fittingStandardTypesText.value = listToText(fittingCfg.standard_types || ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
   
   loadWeatherConfig()
+  syncSelectedBaselineSection1()
 }
 
 function normalizeAutoUpdateSetting(value) {
@@ -2365,36 +2391,19 @@ function removeBaselinePreset(rowKey) {
   rebuildBaselineRowKeys()
 }
 
-function fillMissingPipeModelsForSelectedSection1() {
-  const currentSection1 = demandEntities.value.find((item) => item.section_1_id === selectedBaselineSection1Id.value)
-  if (!currentSection1) {
-    setGlobalMessage('error', '请先选择一个有效需求主体。')
-    return
+watch(demandEntities, () => {
+  syncSelectedBaselineSection1()
+}, { deep: true, immediate: true })
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'baseline') {
+    syncSelectedBaselineSection1()
   }
-  const existingModelIds = new Set(
-    baselinePresets.value
-      .filter((item) => item.section_1_id === selectedBaselineSection1Id.value)
-      .map((item) => item.pipe_model_id),
-  )
-  pipeModels.value.forEach((model) => {
-    if (!model.pipe_model_id || existingModelIds.has(model.pipe_model_id)) {
-      return
-    }
-    baselinePresets.value.push({
-      __row_key: `new::${currentSection1.section_1_id}::${model.pipe_model_id}::${Date.now()}`,
-      section_1_id: currentSection1.section_1_id,
-      pipe_model_id: model.pipe_model_id,
-      design_qty: defaultQtyByPipeModel(model.pipe_model_id),
-      purchase_plan_qty: defaultQtyByPipeModel(model.pipe_model_id),
-      remark: defaultRemarkByPipeModel(model.pipe_model_id),
-    })
-  })
-  rebuildBaselineRowKeys()
-  setSectionMessage('baseline_presets', 'success', '已为当前换热站补齐缺失型号。记得点击“保存本区块”。')
-}
+})
 
 onMounted(async () => {
   await loadConfig()
+  syncSelectedBaselineSection1()
   if (activeTab.value === 'submissions') {
     fetchSubmissionLogs(1)
   }
@@ -2894,16 +2903,88 @@ async function handleExportLogs() {
   word-break: break-all;
 }
 .summary-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
-.baseline-summary { margin-top: 0; margin-bottom: 12px; }
-.summary-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #eef2ff;
-  color: #334155;
-  font-size: 13px;
+
+/* PC端“基准设计量预设”头部与控件组 100% 单行平铺垂直居中与精准对齐 */
+.baseline-header-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin-bottom: 14px !important;
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
 }
+
+.baseline-title-heading {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+.baseline-actions-panel {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+.section1-filter-inline {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px 8px 3px 12px;
+}
+
+.section1-filter-inline .filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.section1-filter-inline select.inline-select {
+  height: 32px !important;
+  padding: 2px 8px !important;
+  font-size: 13px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  background-color: #ffffff !important;
+  box-sizing: border-box !important;
+}
+
+/* 统计卡片芯片居中对齐微调 */
+.baseline-summary {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin-top: 4px !important;
+  margin-bottom: 14px !important;
+}
+
+.baseline-summary .summary-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  font-size: 12.5px !important;
+}
+
+.baseline-summary .summary-chip strong {
+  color: #1e293b !important;
+}
+
 .block-sub { margin: 0 0 12px; }
 .section-tip {
   margin: 0 0 12px;
@@ -2915,8 +2996,65 @@ async function handleExportLogs() {
 .editor-table td {
   vertical-align: top;
 }
+
+/* 基准设计量表格 PC 端对齐重构 */
 .baseline-table {
-  min-width: 920px;
+  width: 100% !important;
+  min-width: 720px !important;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.baseline-table th {
+  vertical-align: middle !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+}
+
+.baseline-table td {
+  vertical-align: middle !important;
+  padding: 6px 8px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+/* 文本/数值列精准对齐规则 */
+.baseline-table th.col-model-spec { text-align: left !important; }
+.baseline-table th.col-num-design,
+.baseline-table th.col-num-plan { text-align: right !important; }
+.baseline-table th.col-text-remark { text-align: left !important; }
+.baseline-table th.col-action-btn,
+.baseline-table td.col-action-btn { text-align: center !important; }
+
+.baseline-table .table-cell-input {
+  height: 36px !important;
+  line-height: 1.4 !important;
+  box-sizing: border-box !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  background-color: #ffffff !important;
+}
+
+.baseline-table .table-cell-input.text-right {
+  text-align: right !important;
+  font-family: monospace, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: #1d4ed8 !important;
+}
+
+.baseline-table td.col-action-btn .compact-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 32px !important;
+  margin: 0 auto !important;
 }
 .submission-table {
   min-width: 760px;

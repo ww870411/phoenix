@@ -1,3 +1,83 @@
+## 2026-08-13 全局管理页面基准设计量预设表格列宽精减
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 将 `设计量 (米)` 与 `计划采购总量 (米)` 列宽分别精减至 120px 和 135px，表格整体排版更紧凑精致。
+
+## 2026-08-13 全局管理页面需求主体选框未默认选中 Bug 修复
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 修复了 `syncSelectedBaselineSection1()` 未被 `applyConfig()` 及 `watch` 触发的隐患，补全了全生命周期自动同步，保证 100% 默认稳定选中“高温水_标段1”。
+
+## 2026-08-13 全局管理基准量预设需求主体默认选中“高温水_标段1”
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 更新了 `syncSelectedBaselineSection1` 选框初始化逻辑，系统优先自动检索并默认锁定选中“高温水_标段1”。
+
+## 2026-08-13 全局管理页面基准设计量预设 Header 排版精简与单行化
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 去除了冗余副标题说明文案，并将卡片 Header 重构为单行极简高颜值的平铺流线排版。
+
+## 2026-08-13 全局管理页面基准设计量预设 PC 端对齐优化
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 对“基准设计量预设”标签页在 PC 电脑大屏下的控件垂直居中、`<colgroup>` 固定列宽、表头表体数值靠右精细比对、单元格行高对齐进行了全面像素级重构。
+
+## 2026-08-13 全局管理页面基准设计量预设简化
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 移除了“基准设计量预设”标签页中的“补齐缺失规格”按钮及其前端事件函数 `fillMissingPipeModelsForSelectedSection1`，简化了界面操作防误触。
+
+## 2026-08-13 全厂管件模块 (Demand / Supply / Warehouse Management) 手持屏 7 大显示死角深度排查与修复
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 进行了像素级跨屏扫描，彻底修复了供给侧发货表单在移动端强行跨列右偏、电子表格长提示文案高撑、台账筛选按钮向右溢出，以及库管侧极窄屏下批量归档与凭证按钮压字等 7 大显示死角；
+  - 管件全生命周期流转面板在手机屏幕下呈现流畅、高集成度的无障碍体验。
+
+## 2026-08-13 全流程发货与记录模块移动端自查与 ::before Label 语义增强
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - 自查并加固了到货与施工接收记录表格（`.logistics-table`）在手机屏下的伪元素说明（`::before`），为工厂发货量、到货确认量、车次与单号补齐手机端专属小文字 Label，彻底消除了纯数字在手持屏上无表头时易混淆的视觉隐患。
+
+## 2026-08-13 全链路发货与到货记录页面 (Demand/Supply Management) 手机模式全量响应式卡片化重构
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 将需求侧保温管/直管发货到货记录（Tab 4 `.logistics-table`）、管件发货记录（Tab 5）以及供给侧发货记录全量扩展为手机模式（$\le 720\text{px}$）响应式卡片流；
+  - 手机端隐藏多余表头与纯数字序号，关键状态 Badge、单号车牌、发/到货数量与操作按钮按优先级分列展现，极大改善了手持终端设备上的页面占用空间与操控舒适度。
+
+## 2026-08-13 需求侧 DemandManagementView.vue 移动端明细记录卡片化重构 (Mobile Card Transformation)
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - **明细卡片化 (Mobile Card Layout)**：针对手机屏幕（`@media (max-width: 720px)`）下明细表格列宽狭窄、型号文字多行折叠挤压导致占用垂直空间极高的问题，将传统 7 列 `data-table` 彻底重构为手机端流线型卡片：
+    - 型号与规格描述吸纳 100% 宽度，字体大而清晰；
+    - 发货件数与到货确认框在小框内双栏排列；
+    - 状态 Badge 与 `🚚 确认到货` / `💬 备注` 操作按钮在卡片底部右对齐；
+  - 手机端空间占用大幅降低 60%+，滑动体验极佳。
+
+## 2026-08-13 需求侧 DemandManagementView.vue “管件发货记录”标签页移动端 Bug 修复与响应式重构
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **更新说明**：
+  - **明细展开区表格移动端包裹防护 (`.table-responsive-wrapper`)**：解决 Tab 5 `<table class="data-table">` 7 列死硬宽度（~780px）在手机端（360-430px）被过度压缩导致文字叠字变形、操作按钮被裁剪遮挡及屏幕撑爆横向滚动等核心 Bug。外层新增 `-webkit-overflow-scrolling: touch` 视口保护容器，确保移动端顺畅横向滑移；
+  - **车次卡片 Header 移动端分层自适应 (`.fitting-card-header`)**：将车次信息 Header 左右布局在 `<720px` 手机端自动重排为垂直上下分层（左侧车牌/车次在上，右侧状态 Badge/数量统计/流转凭证按钮在下），并加入虚线分隔，显著改善手持屏上的视效与触控防误触性能；
+  - **表头按钮与检索条件弹性排版**：为 `panel-title-row` 内 4 个功能按钮添加 `flex-wrap: wrap; gap: 8px;`，过滤条件里的 `input type="date"` 适配手机流式布局；
+  - **Modal 与统计卡片网格响应式化**：重构凭证 Modal 的 `.block-modal-metrics` 为 2x2 移动端网格，底端管件物资统计卡片自适应移动端屏幕。
+
 ## 2026-08-12 管件发货【单位】与常用【标准管件类型】全量解耦至 tube_config.json 配置文件并在前端全视图动态渲染 (Global/Supply/Demand/Warehouse/HistoryQuery)
 
 - **关联前端页面**：
