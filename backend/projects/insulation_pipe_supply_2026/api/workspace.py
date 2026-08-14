@@ -1647,12 +1647,15 @@ def create_supply_management_delivery(
         requested_shipment_no=payload.shipment_no,
     )
     
+    section_1_map = _build_section_1_name_map(config_payload)
+    section_1_name = section_1_map.get(payload.section_1_id) or payload.section_1_id
+    
     # 记录操作审计日志
     save_operation_log(
         operator=session.username,
         operator_group=session.group,
         action_type="CREATE_DELIVERY",
-        action_desc=f"创建发货单: 订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {created['vehicle_plate_no']})，规格 {payload.pipe_model_id}，发货 {payload.shipped_qty} 米",
+        action_desc=f"创建发货单: 需求主体【{section_1_name}】，订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {created['vehicle_plate_no']})，规格 {payload.pipe_model_id}，发货 {payload.shipped_qty} 米",
         resource_id=str(created["delivery_id"]),
         before_value=None,
         after_value={
@@ -1695,6 +1698,7 @@ def create_supply_management_delivery_batch(
     shared_shipment_no = str(payload.shipment_no or "").strip().upper()
     created_rows: List[Dict[str, Any]] = []
     current_shipment_no = shared_shipment_no
+    section_1_map = _build_section_1_name_map(config_payload)
     for item in items:
         created = _create_supply_delivery_entry(
             config_payload=config_payload,
@@ -1714,12 +1718,13 @@ def create_supply_management_delivery_batch(
             current_shipment_no = created["shipment_no"]
         created_rows.append(created)
         
+        sec_name = section_1_map.get(item.section_1_id) or item.section_1_id
         # 批量发货记录明细日志
         save_operation_log(
             operator=session.username,
             operator_group=session.group,
             action_type="CREATE_DELIVERY",
-            action_desc=f"批量创建发货单: 订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {payload.vehicle_plate_no})，规格 {item.pipe_model_id}，发货 {item.shipped_qty} 米",
+            action_desc=f"批量创建发货单: 需求主体【{sec_name}】，订单号 {created['order_no']} (车次: {created['shipment_no']}, 车牌: {payload.vehicle_plate_no})，规格 {item.pipe_model_id}，发货 {item.shipped_qty} 米",
             resource_id=str(created["delivery_id"]),
             before_value=None,
             after_value={
@@ -2774,6 +2779,9 @@ def get_global_management_submission_logs(
 def get_global_management_operation_logs(
     action_type: Optional[str] = None,
     operator: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    is_sensitive: Optional[bool] = False,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     page: int = 1,
@@ -2788,6 +2796,9 @@ def get_global_management_operation_logs(
     result = query_operation_logs(
         action_type=action_type,
         operator=operator,
+        resource_id=resource_id,
+        keyword=keyword,
+        is_sensitive=is_sensitive,
         start_date=start_date,
         end_date=end_date,
         limit=limit,
@@ -2800,6 +2811,10 @@ def get_global_management_operation_logs(
         "total": result["total"],
         "page": page,
         "limit": limit,
+        "latest_operated_at": result.get("latest_operated_at"),
+        "today_count": result.get("today_count", 0),
+        "sensitive_count": result.get("sensitive_count", 0),
+        "operator_count": result.get("operator_count", 0),
         "rows": result["logs"]
     }
 
@@ -2812,6 +2827,9 @@ from fastapi.responses import StreamingResponse
 def export_global_management_operation_logs(
     action_type: Optional[str] = None,
     operator: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    is_sensitive: Optional[bool] = False,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     session: AuthSession = Depends(get_current_session),
@@ -2823,6 +2841,9 @@ def export_global_management_operation_logs(
     result = query_operation_logs(
         action_type=action_type,
         operator=operator,
+        resource_id=resource_id,
+        keyword=keyword,
+        is_sensitive=is_sensitive,
         start_date=start_date,
         end_date=end_date,
         limit=10000,
@@ -2836,19 +2857,21 @@ def export_global_management_operation_logs(
     output.write('\ufeff')
     writer = csv.writer(output)
     
-    writer.writerow(["时间", "操作人", "操作角色", "操作类型", "操作详情", "关联资源ID", "IP地址"])
+    writer.writerow(["时间", "操作人", "操作角色", "操作类型", "操作详情", "关联单号/资源ID", "IP地址"])
     
     action_type_map = {
         "CREATE_DELIVERY": "新增发货单",
+        "CREATE_DELIVERY_BATCH": "批量发货",
         "CANCEL_DELIVERY": "撤销发货",
-        "CONFIRM_ARRIVAL": "确认到货",
-        "CONFIRM_CONSTRUCTION": "施工接收",
-        "CONFIRM_WAREHOUSE": "库管确认",
+        "CONFIRM_ARRIVAL": "现场到货签收",
+        "CONFIRM_CONSTRUCTION": "施工接收确认",
+        "CONFIRM_WAREHOUSE": "库管确认入库",
         "SAVE_PLAN": "更新三日计划",
         "SUBMIT_USAGE": "上报消耗损耗",
         "SUBMIT_STATUS": "提交填报状态",
-        "UPDATE_CONFIG": "配置修改",
-        "SUPER_UPDATE_DELIVERY": "超管强改",
+        "UPDATE_CONFIG": "系统配置修改",
+        "SUPER_UPDATE_DELIVERY": "超管强行改单",
+        "CREATE_CUSTOM_ENTITY": "新增自定义主体",
         "SUBMIT_FITTING_DELIVERY": "提交管件发货",
         "CONFIRM_FITTING_ARRIVAL": "管件现场确认到货",
         "CONFIRM_FITTING_CONSTRUCTION": "管件施工确认接收",
@@ -3460,6 +3483,7 @@ def _ensure_fitting_supply_access(rows: List[Dict[str, Any]], session: AuthSessi
 @router.post("/workspace/fitting_deliveries/submit", summary="提交管件发货记录表")
 def handle_submit_fitting_delivery(
     payload: FittingDeliverySubmitPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货")
@@ -3470,12 +3494,18 @@ def handle_submit_fitting_delivery(
     allowed_section_ids = resolve_supply_entity_allowed_section_ids(config, payload.supply_entity_id)
     if allowed_section_ids and payload.section_1_id.strip().lower() not in _normalized_access_ids(allowed_section_ids):
         raise HTTPException(status_code=403, detail="当前供给主体无该标段的管件发货权限")
-    return submit_fitting_delivery(payload.model_dump(), operator=session.username, operator_group=session.group)
+    return submit_fitting_delivery(
+        payload.model_dump(),
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.post("/workspace/fitting_deliveries/confirm_arrival", summary="确认管件现场到货")
 def handle_confirm_fitting_delivery_arrival(
     payload: FittingArrivalConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_site_manager"}, "管件到货确认")
@@ -3484,12 +3514,18 @@ def handle_confirm_fitting_delivery_arrival(
     if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
-    return confirm_fitting_delivery_arrival(payload.model_dump(), operator=session.username, operator_group=session.group)
+    return confirm_fitting_delivery_arrival(
+        payload.model_dump(),
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.post("/workspace/fitting_deliveries/confirm_construction", summary="施工单位确认接收管件")
 def handle_confirm_fitting_delivery_construction(
     payload: FittingConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_construction_unit"}, "管件施工接收确认")
@@ -3498,12 +3534,18 @@ def handle_confirm_fitting_delivery_construction(
     if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
-    return confirm_fitting_delivery_construction(payload.model_dump(), operator=session.username, operator_group=session.group)
+    return confirm_fitting_delivery_construction(
+        payload.model_dump(),
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件入库")
 def handle_confirm_fitting_delivery_warehouse(
     payload: FittingConfirmPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}, "管件库管入库确认")
@@ -3512,12 +3554,18 @@ def handle_confirm_fitting_delivery_warehouse(
     if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_section_access(rows, session)
-    return confirm_fitting_delivery_warehouse(payload.model_dump(), operator=session.username, operator_group=session.group)
+    return confirm_fitting_delivery_warehouse(
+        payload.model_dump(),
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.post("/workspace/fitting_deliveries/cancel", summary="撤销管件发货单")
 def handle_cancel_fitting_delivery(
     payload: FittingCancelPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货撤销")
@@ -3526,7 +3574,12 @@ def handle_cancel_fitting_delivery(
     if not set(payload.ids).issubset(found_ids):
         raise HTTPException(status_code=404, detail="部分管件记录不存在")
     _ensure_fitting_supply_access(rows, session)
-    return cancel_fitting_delivery(payload.model_dump(), operator=session.username, operator_group=session.group)
+    return cancel_fitting_delivery(
+        payload.model_dump(),
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
 
 
 @router.get("/workspace/fitting_deliveries/list", summary="分页查询管件发货记录")
@@ -3568,6 +3621,21 @@ def handle_list_fitting_deliveries(
     )
     _decorate_delivery_rows(config, result["items"])
     return {"ok": True, **result}
+
+
+@router.get("/global-management/ip-location", summary="解析 IP 归属地与网络运营商")
+def get_global_management_ip_location(
+    ip: str = Query(..., description="待解析的 IP 地址"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services.ip_location_service import resolve_ip_location
+    loc_data = resolve_ip_location(ip)
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        **loc_data
+    }
+
 
 
 

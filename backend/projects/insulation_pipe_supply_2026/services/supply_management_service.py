@@ -1388,6 +1388,7 @@ def submit_fitting_delivery(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
     operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     raw_supply_entity_id = _normalize_text(payload.get("supply_entity_id") or "BH")
     supply_entity_id = raw_supply_entity_id.upper()
@@ -1540,7 +1541,7 @@ def submit_fitting_delivery(
                 operator=operator,
                 operator_group=operator_group or "tube_supplier",
                 action_type="SUBMIT_FITTING_DELIVERY",
-                action_desc=f"操作管件发货：发货单号【{shipment_no}】，共 {len(created_ids)} 项明细（车牌: {vehicle_plate_no}，接收标段: {section_1_id}）",
+                action_desc=f"操作管件发货：发货单号【{shipment_no}】，需求主体【{next((str(e.get('section_1_name') or e.get('name') or '').strip() for e in (load_tube_config().get('demand_entities') or []) if str(e.get('section_1_id') or e.get('id') or '').strip() == str(section_1_id).strip()), str(section_1_id))}】，共 {len(created_ids)} 项明细（车牌: {vehicle_plate_no}）",
                 resource_id=shipment_no,
                 after_value={
                     "shipment_no": shipment_no,
@@ -1550,7 +1551,8 @@ def submit_fitting_delivery(
                     "shipped_at": beijing_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "items_count": len(created_ids),
                     "items": items,
-                }
+                },
+                client_ip=client_ip
             )
         except Exception as log_ex:
             print(f"[Operation Log Warning] 记录管件发货日志失败: {log_ex}")
@@ -1720,6 +1722,7 @@ def confirm_fitting_delivery_arrival(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
     operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = payload.get("ids") or []
     if not delivery_ids and payload.get("id"):
@@ -1795,7 +1798,8 @@ def confirm_fitting_delivery_arrival(
                     "updated_count": updated_count,
                     "arrived_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "remark": remark,
-                }
+                },
+                client_ip=client_ip
             )
         except Exception as log_ex:
             print(f"[Operation Log Warning] 确认管件到货日志保存失败: {log_ex}")
@@ -1812,6 +1816,7 @@ def confirm_fitting_delivery_construction(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
     operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = payload.get("ids") or []
     if not delivery_ids and payload.get("id"):
@@ -1874,7 +1879,8 @@ def confirm_fitting_delivery_construction(
                     "updated_count": updated_count,
                     "construction_confirmed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "remark": remark,
-                }
+                },
+                client_ip=client_ip
             )
         except Exception as log_ex:
             print(f"[Operation Log Warning] 施工确认管件日志保存失败: {log_ex}")
@@ -1891,6 +1897,7 @@ def confirm_fitting_delivery_warehouse(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
     operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = payload.get("ids") or []
     if not delivery_ids and payload.get("id"):
@@ -1953,7 +1960,8 @@ def confirm_fitting_delivery_warehouse(
                     "updated_count": updated_count,
                     "warehouse_confirmed_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "remark": remark,
-                }
+                },
+                client_ip=client_ip
             )
         except Exception as log_ex:
             print(f"[Operation Log Warning] 库管确认管件日志保存失败: {log_ex}")
@@ -1970,6 +1978,7 @@ def cancel_fitting_delivery(
     payload: Dict[str, Any],
     operator: str = "SYSTEM",
     operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = payload.get("ids") or []
     if not delivery_ids and payload.get("id"):
@@ -2026,7 +2035,8 @@ def cancel_fitting_delivery(
                     "updated_count": updated_count,
                     "cancelled_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "remark": remark,
-                }
+                },
+                client_ip=client_ip
             )
         except Exception as log_ex:
             print(f"[Operation Log Warning] 撤销管件日志保存失败: {log_ex}")

@@ -1,3 +1,77 @@
+## 2026-08-14 [IP 定位全面接入高德开放平台 Web 服务 API 作为第一权威主力源]
+- **需求与优化背景**：为确保 IP 地理位置解析的权威性、合规性与长期稳定性，将系统现存的“高德开放平台（Amap）”API 密钥完整复用并接入 IP 解析引擎；
+- **后端定位引擎高精升级 (`ip_location_service.py`)**：
+  1. **高德官方 Web 服务主力源**：采用 `httpx.Client(trust_env=False)` 直连 `http://restapi.amap.com/v3/ip`，动态解密读取 `tube_config.json` 中的 `amap_config.api_key`，解析国标省市区名称与行政区划编码（Adcode，如 `210100` 沈阳市 / `110000` 北京市）；
+  2. **多源多层级容灾保底与运营商标准化 (`_normalize_isp`)**：高德为主力源，自动结合 IP-API 提取运营商并标准化为 `中国联通`、`中国电信`、`中国移动` 等标准中文；
+  3. **0 毫秒本地私网直判**：内网局域网（192.168.*, 10.*, 172.16-31.*）与本地回环（127.0.0.1）依然由 Python 内核毫秒直判；
+- **前端气泡浮窗卡片增强 (`GlobalManagementView.vue`)**：
+  1. **展示国标行政区划代码**：在气泡中新增 `🏷️ 行政代码 (Adcode)` 标签；
+  2. **展示权威数据来源**：底部标明 `⚡ 数据来源: 高德开放平台 (Amap)` 增强数据可信度；
+- **实测连线验证**：运行 Python 直连测试，真实公网 IP `218.60.145.2` 与 `114.247.50.2` 均 100% 成功返回高德省市、Adcode 与标准运营商中文；
+- **构建测试**：运行 `npm run build`，11.87s PASSED，编译 0 错误。
+
+## 2026-08-14 [全局管理提交记录与操作审计日志实现点击 IP 弹出气泡显示归属地与网络运营商]
+- **需求与优化背景**：针对公网部署环境，用户需要了解提交人和操作人 IP 的具体地理位置，要求支持在表格中点击 IP 实时弹出浮窗气泡展示归属地与运营商；
+- **后端公网 IP 解析服务与接口构建 (`ip_location_service.py` & `workspace.py`)**：
+  1. **新建 `ip_location_service.py`**：内置多源公网 IP 在线归属地解析（PCOnline / IP-API 中文容灾源）与私有局域网/回环地址（192.168.*, 10.*, 127.0.0.1）秒级智能识别；
+  2. **全局内存高速缓存 (`_IP_CACHE`)**：相同 IP 查询后永久缓存于后端内存字典，避免重复请求外部接口，实现 0 延迟响应；
+  3. **提供专用 API 路由**：`/global-management/ip-location?ip={ip}`；
+- **前端交互式 IP 气泡卡片与动效微雕 (`GlobalManagementView.vue` & `api.js`)**：
+  1. **API 封装 (`api.js`)**：新增 `getTubeIpLocation` 请求封装；
+  2. **交互式 IP 按钮**：Tab 7 提交记录与 Tab 8 操作审计日志中的 IP 胶囊升级为带点击微光动效的交互式按钮（`.clickable-ip`）；
+  3. **智能 Popover 浮窗**：点击 IP 自动计算屏幕视口坐标弹出悬浮气泡，包含：IP 源码展示与一键复制、📍 地理位置（省·市）、🏢 网络运营商/ISP、🛡️ 网络类型徽章（公网 IPv4 / 内网私有地址），并支持遮罩点击与 ESC 自动关闭；
+  4. **前端两级缓存机制**：前端组件内部建立 `ipLocationLocalCache`，二次点击瞬间呈现无需重新加载；
+- **构建测试**：运行 `npm run build`，9.56s PASSED，编译 0 错误。
+
+## 2026-08-14 [修复管件流转全链路（到货确认/施工接收/库管入库/发货/撤销）来源 IP 丢失 Bug]
+- **Bug 排查与根因分析**：
+  1. **服务层缺失**：`fitting_delivery_service.py` 内部的 `_write_audit_log` 审计函数未定义 `client_ip` 参数且 SQL 未写入 `client_ip` 字段；
+  2. **透传层缺失**：`supply_management_service.py` 中的管件发货、到货确认、施工确认、库管入库及撤销接口在调用 `save_operation_log` 时均未接收并传递 `client_ip`；
+  3. **路由层缺失**：`workspace.py` 中的 `/workspace/fitting_deliveries/*` 接口未注入 `request: Request`，导致无法提取客户端真实 IP 地址；
+- **全链路彻底修复与加固**：
+  1. **升级 `_write_audit_log` (`fitting_delivery_service.py`)**：参数与 SQL 均补齐 `client_ip`，并贯通到 `confirm_fitting_delivery_arrival`、`_confirm_simple_transition`、`submit_fitting_delivery` 与 `cancel_fitting_delivery`；
+  2. **补齐 service 层 IP 参数 (`supply_management_service.py`)**：在 `submit_fitting_delivery`、`confirm_fitting_delivery_arrival`、`confirm_fitting_delivery_construction`、`confirm_fitting_delivery_warehouse`、`cancel_fitting_delivery` 中全部增加 `client_ip` 参数并传给 `save_operation_log`；
+  3. **路由层注入并提取 IP (`workspace.py`)**：在所有管件流转 API 路由中注入 `request: Request`，通过 `_get_client_ip(request)` 统一提取并向下透传；
+- **构建测试**：运行 `npm run build`，9.84s PASSED，编译 0 错误。
+
+## 2026-08-14 [全局管理“提交记录”与“审计日志”详情说明字段展示对应需求主体/标段名称]
+- **需求与优化背景**：用户需要在“提交记录”（Tab 7）以及“操作审计日志”（Tab 8）的“数据提交内容与详情说明”字段中直观看到发货对应的需求主体（施工标段，如“高温水_标段1”），杜绝仅有订单号而无法一眼识别对应标段的痛点；
+- **后端发货与全流程操作日志增强 (`workspace.py` & `supply_management_service.py`)**：
+  1. 在 `CREATE_DELIVERY`（直管单笔发货）与 `CREATE_DELIVERY_BATCH`（批量发货）的日志写入时，通过 `_build_section_1_name_map` 将需求主体 ID 解析为中文名称，格式如：`创建发货单: 需求主体【高温水_标段1】，订单号 DEL2026...`；
+  2. 在 `SUBMIT_FITTING_DELIVERY`（管件发货）的日志写入中，自动将 `section_1_id` 转换为中文名称，写入 `需求主体【某某标段】`；
+- **前端多重智能解析与实体 Chip 徽章渲染 (`GlobalManagementView.vue`)**：
+  1. **全版本兼容智能提取 (`getSection1NameFromLog`)**：无论是新日志还是历史旧日志，优先从结构化快照 `after_value.section_1_id` / `before_value.section_1_id` 中通过配置字典 `demandEntities` 精准匹配中文标段名称，若无快照则从 `action_desc` 正则提取；
+  2. **高质感实体徽章展示**：在“数据提交内容与详情说明”单元格开头前置渲染大方美观的 `📍 [需求主体名称]` 蓝色微胶囊 Badge（`.submission-section-chip`）；
+  3. **文本清洗 (`getCleanActionDesc`)**：自动滤除重复出现的说明前缀，保证语句自然流畅且标段信息一目了然；
+- **构建测试**：运行 `npm run build` 验证，10.23s PASSED，编译 0 错误。
+
+## 2026-08-14 [全局管理“操作审计日志”页面排版与网格系统像素级精雕对齐]
+- **排版审计与对齐重构**：
+  1. **6 列严整过滤网格体系**：彻底摒弃此前参差不齐的分散布局，与“提交记录”标签页严格对齐，重构为工整的标准 6 列 Grid 布局（`repeat(6, minmax(0, 1fr))`）。所有输入框统一 38px 高度，带有统一的 `<span>` 标题 Label 与聚焦微光态；
+  2. **第三行操作与敏感开关对齐**：左侧 `span 3` 放置 `🚨 仅看高危敏感操作` 芯片式开关，右侧 `span 3` 右对齐放置【🔍 查询日志】+【🔄 重置】+【📥 导出 CSV】按钮组，彻底解决控件参差不齐与挤压断行问题；
+  3. **表格显式 `<colgroup>` 锁宽**：为 `audit-log-table` 注入精确 `<colgroup>`（时间 190px、单号 180px、操作人 140px、类型 165px、操作详情弹性拉伸、快照对比 130px），彻底杜绝内容动态变化导致的表格列宽抖动；
+  4. **态势概览看板像素微调**：左侧时间展示增加 `formatTimeAgo` 与动态色彩 Badge，右侧 3 个指标卡片在桌面端严谨等分，高危操作卡片支持悬浮提升与激活态微发光；
+  5. **智能 Diff 弹窗排版升华**：弹窗 Header 采用项目通用设计语言，模式切换 Tabs 重构为一体化微胶囊，差异表格引入 `<colgroup>` 锁宽（字段 220px、原值 38%、箭头 40px、新值 38%），并优化了遮罩点击关闭体验；
+- **构建测试**：运行 `npm run build` 打包校验，9.79s PASSED，编译构建 0 错误。
+
+## 2026-08-14 [全局管理“操作审计日志 (Audit Log)”全栈深度优化与智能 Diff 追溯重构]
+- **需求与优化背景**：为系统管理员、业务排障人员与数据审计人员提供企业级的物理操作全量追溯能力。针对原页面缺少多维联合检索、态势感知看板、单号快速复制/反查、易用分页器以及缺乏快照智能差异解析（原仅展示粗糙 JSON）等痛点进行全面重构升级；
+- **后端服务层重构与态势增强 (`audit_log_service.py` & `workspace.py`)**：
+  1. **定义高危敏感操作集合**：定义 `SENSITIVE_AUDIT_ACTIONS`（含 `SUPER_UPDATE_DELIVERY`, `UPDATE_CONFIG`, `CANCEL_DELIVERY`, `CANCEL_FITTING_DELIVERY`, `DELETE_FITTING_DELIVERY`）；
+  2. **多维条件组合检索**：增强 `query_operation_logs` 与导出函数，新增 `resource_id`（发货单号/换热站ID模糊检索）、`keyword`（详情描述关键词模糊搜索）、`is_sensitive`（一键仅筛选高危敏感操作）；
+  3. **宏观安全态势指标计算**：SQL 动态聚合并返回 `latest_operated_at`（最新操作物理时间）、`today_count`（今日操作笔数）、`sensitive_count`（高危敏感操作数）、`operator_count`（活跃操作账号数）；
+  4. **补齐全量 16+ 种操作类型映射与 CSV 增强**：导出 CSV 表头增加“关联单号/资源ID”列，并补齐管件流转全动作的中文友好翻译；
+- **前端 API 层与视图全量升级 (`api.js` & `GlobalManagementView.vue`)**：
+  1. **宏观安全态势看板 (Overview Metrics)**：新增顶部态势卡片，实时呈现最近操作时间、今日总操作笔数、高危敏感操作预警卡片（点击快捷反查高危操作）以及活跃账号总数；
+  2. **现代化双行多维筛选面板**：按高危、物流、管件、填报等分类呈现 16+ 种动作下拉，支持单号反查、关键词模糊匹配、高危快捷开关与起止日期范围筛选；
+  3. **数据表格与交互细节升级**：去除硬编码内联样式；增加等宽字体“关联单号”胶囊，支持一键点击复制（带轻量 Toast 反馈）与一键以此单号筛选；高危操作呈现专属 🚨 红色警示徽章与浅红警示底色；
+  4. **全功能分页器**：支持切换 15/20/50/100 条每页，支持直接输入页码快速跳转；
+  5. **智能 Diff 差异比对弹窗 (Smart Diff Viewer)**：
+     - 支持“⚡ 智能差异解析”与“📋 原始快照对照”一键 Tab 切换；
+     - 智能模式下自动提取变更前后字段差异，结合 30+ 种业务字段中文语义映射字典（`FIELD_LABEL_MAP`），以表格形式直观比对【原值 (删除线红底) ➔ 新值 (加粗绿底)】；
+     - 智能识别初始新增录入与撤销作废状态并展示专属引导 Banner；原始快照模式支持一键复制代码快照；
+- **构建测试**：运行 `npm run build` 验证，9.26s PASSED，前端生产环境编译 100% 成功，0 错误。
+
 ## 2026-08-13 [全局管理“基准设计量预设”设计量与采购计划量列宽缩减]
 - **表格列宽精紧重排**：
   1. 将 `设计量 (米)` 的列宽由 180px 缩减至 **120px**；

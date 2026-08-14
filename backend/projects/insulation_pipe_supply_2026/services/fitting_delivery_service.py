@@ -75,6 +75,7 @@ def _write_audit_log(
     resource_id: str,
     before_value: Optional[Dict[str, Any]] = None,
     after_value: Optional[Dict[str, Any]] = None,
+    client_ip: Optional[str] = None,
 ) -> None:
     """审计写入失败时回滚业务，避免出现有状态、无凭证。"""
     session.execute(
@@ -82,10 +83,10 @@ def _write_audit_log(
             """
             INSERT INTO logs.tube_operation_logs (
                 operator, operator_group, action_type, action_desc,
-                resource_id, before_value, after_value
+                resource_id, before_value, after_value, client_ip
             ) VALUES (
                 :operator, :operator_group, :action_type, :action_desc,
-                :resource_id, CAST(:before_value AS JSONB), CAST(:after_value AS JSONB)
+                :resource_id, CAST(:before_value AS JSONB), CAST(:after_value AS JSONB), :client_ip
             )
             """
         ),
@@ -97,6 +98,7 @@ def _write_audit_log(
             "resource_id": resource_id,
             "before_value": json.dumps(before_value or {}, ensure_ascii=False, default=str),
             "after_value": json.dumps(after_value or {}, ensure_ascii=False, default=str),
+            "client_ip": client_ip,
         },
     )
 
@@ -187,6 +189,7 @@ def submit_fitting_delivery(
     payload: Dict[str, Any],
     operator: str,
     operator_group: str,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     supply_entity_input = _clean(payload.get("supply_entity_id"))
     section_1_id = _clean(payload.get("section_1_id"))
@@ -320,6 +323,7 @@ def submit_fitting_delivery(
                 "shipped_at": shipped_at.isoformat(),
                 "items": validated_items,
             },
+            client_ip=client_ip,
         )
         session.commit()
         return {
@@ -503,6 +507,7 @@ def confirm_fitting_delivery_arrival(
     payload: Dict[str, Any],
     operator: str,
     operator_group: str,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = normalize_delivery_ids(payload)
     quantity_map = dict(payload.get("arrived_qty_map") or {})
@@ -551,10 +556,11 @@ def confirm_fitting_delivery_arrival(
             operator=operator,
             operator_group=operator_group,
             action_type="CONFIRM_FITTING_ARRIVAL",
-            action_desc=f"确认 {len(valid_rows)} 项管件到货",
+            action_desc=f"现场确认管件到货：共 {len(valid_rows)} 项（涉及单号: {', '.join(shipment_numbers[:3])}）",
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "arrived_qty_map": quantities, "remark": remark, "arrived_at": now.isoformat()},
+            client_ip=client_ip,
         )
         session.commit()
         return {"ok": True, "updated_count": len(valid_rows)}
@@ -580,6 +586,7 @@ def _confirm_simple_transition(
     remark_column: str,
     action_type: str,
     action_desc: str,
+    client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
     delivery_ids = normalize_delivery_ids(payload)
     remark = _clean(payload.get("remark"))
@@ -646,6 +653,7 @@ def _confirm_simple_transition(
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "status": new_status, "remark": remark, "confirmed_at": now.isoformat()},
+            client_ip=client_ip,
         )
         session.commit()
         return {"ok": True, "updated_count": len(valid_rows)}
@@ -659,7 +667,12 @@ def _confirm_simple_transition(
         session.close()
 
 
-def confirm_fitting_delivery_construction(payload: Dict[str, Any], operator: str, operator_group: str) -> Dict[str, Any]:
+def confirm_fitting_delivery_construction(
+    payload: Dict[str, Any],
+    operator: str,
+    operator_group: str,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
     return _confirm_simple_transition(
         payload,
         operator=operator,
@@ -671,10 +684,16 @@ def confirm_fitting_delivery_construction(payload: Dict[str, Any], operator: str
         remark_column="received_remark",
         action_type="CONFIRM_FITTING_CONSTRUCTION",
         action_desc="施工单位确认接收管件",
+        client_ip=client_ip,
     )
 
 
-def confirm_fitting_delivery_warehouse(payload: Dict[str, Any], operator: str, operator_group: str) -> Dict[str, Any]:
+def confirm_fitting_delivery_warehouse(
+    payload: Dict[str, Any],
+    operator: str,
+    operator_group: str,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
     return _confirm_simple_transition(
         payload,
         operator=operator,
@@ -686,10 +705,16 @@ def confirm_fitting_delivery_warehouse(payload: Dict[str, Any], operator: str, o
         remark_column="warehouse_remark",
         action_type="CONFIRM_FITTING_WAREHOUSE",
         action_desc="库管确认管件入库",
+        client_ip=client_ip,
     )
 
 
-def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_group: str) -> Dict[str, Any]:
+def cancel_fitting_delivery(
+    payload: Dict[str, Any],
+    operator: str,
+    operator_group: str,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
     delivery_ids = normalize_delivery_ids(payload)
     reason = _clean(payload.get("remark"))
     if len(reason) < 2:
@@ -733,6 +758,7 @@ def cancel_fitting_delivery(payload: Dict[str, Any], operator: str, operator_gro
             resource_id=", ".join(shipment_numbers),
             before_value={"items": rows},
             after_value={"ids": delivery_ids, "status": "cancelled", "cancel_reason": reason, "cancelled_at": now.isoformat()},
+            client_ip=client_ip,
         )
         session.commit()
         return {"ok": True, "updated_count": len(valid_rows)}

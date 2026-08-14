@@ -259,9 +259,15 @@
                             <span v-if="isRecent24h(log.created_at)" class="submission-recent-badge">
                               🔥 新提交
                             </span>
-                            <span v-if="log.client_ip" class="submission-ip">
-                              IP: {{ log.client_ip }}
-                            </span>
+                            <button 
+                              v-if="log.client_ip" 
+                              class="submission-ip clickable-ip" 
+                              type="button"
+                              title="点击查看 IP 归属地与网络运营商"
+                              @click.stop="triggerIpPopover($event, log.client_ip)"
+                            >
+                              📍 IP: {{ log.client_ip }}
+                            </button>
                           </div>
                         </td>
                         <td class="submission-operator-cell">
@@ -279,7 +285,10 @@
                         </td>
                         <td class="submission-detail-cell">
                           <div class="submission-detail-text">
-                            {{ log.action_desc }}
+                            <span v-if="getSection1NameFromLog(log)" class="submission-section-chip" :title="`发货对应需求主体: ${getSection1NameFromLog(log)}`">
+                              📍 {{ getSection1NameFromLog(log) }}
+                            </span>
+                            <span>{{ getCleanActionDesc(log) }}</span>
                           </div>
                         </td>
                       </tr>
@@ -1134,122 +1143,273 @@
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📜 物理操作与配置审计日志</div>
-                  <p class="sub block-sub">记录保温管系统的核心写操作（填报、物流、到货、施工、配置修改），支持快照 Diff 追溯。</p>
+                  <div class="card-header">📜 操作审计日志</div>
+                </div>
+                <div class="section-actions">
+                  <button class="btn ghost compact-btn" type="button" @click="fetchAuditLogs(1)">
+                    🔄 刷新审计日志
+                  </button>
+                </div>
+              </div>
+
+              <!-- 态势概览看板 -->
+              <div class="audit-overview">
+                <div class="audit-overview__lead">
+                  <div class="audit-overview__icon" aria-hidden="true">⏱️</div>
+                  <div class="audit-overview__copy">
+                    <div class="audit-overview__label">数据库最新操作物理时间</div>
+                    <div class="audit-overview__time">
+                      <span>{{ auditLatestTime ? formatDateTime(auditLatestTime) : '尚无操作记录' }}</span>
+                      <span
+                        v-if="auditLatestTime"
+                        class="audit-overview__age"
+                        :style="getTimeAgoBadgeStyle(auditLatestTime)"
+                      >
+                        {{ formatTimeAgo(auditLatestTime) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 核心态势指标看板 -->
+                <div class="audit-metrics">
+                  <div class="audit-metric audit-metric--total">
+                    <div class="audit-metric__label">今日操作总量</div>
+                    <div class="audit-metric__value">{{ auditTodayCount }} <span>笔</span></div>
+                  </div>
+                  <div
+                    class="audit-metric audit-metric--sensitive"
+                    :class="{ 'is-active': auditFilters.isSensitive, 'has-alert': auditSensitiveCount > 0 }"
+                    @click="toggleSensitiveFilter"
+                    title="点击快捷切换筛选高危敏感操作"
+                  >
+                    <div class="audit-metric__label">
+                      <span v-if="auditSensitiveCount > 0">🚨 </span>高危敏感操作
+                    </div>
+                    <div class="audit-metric__value">{{ auditSensitiveCount }} <span>笔</span></div>
+                  </div>
+                  <div class="audit-metric audit-metric--operator">
+                    <div class="audit-metric__label">活跃操作账号</div>
+                    <div class="audit-metric__value">{{ auditOperatorCount }} <span>人</span></div>
+                  </div>
                 </div>
               </div>
               
-              <!-- 过滤条件与导出栏 -->
-              <div class="filter-panel" style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; flex-wrap: wrap;">
-                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">操作类型</label>
-                  <select v-model="auditFilters.actionType" class="select" style="min-width: 150px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; height: 32px; padding: 0 8px; font-size: 13px;">
-                    <option value="">全部类型</option>
-                    <option value="CREATE_DELIVERY">🚚 新增发货单</option>
-                    <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
-                    <option value="CONFIRM_ARRIVAL">👷 确认到货</option>
-                    <option value="CONFIRM_CONSTRUCTION">👷 施工接收</option>
-                    <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
-                    <option value="SAVE_PLAN">📅 更新三日计划</option>
-                    <option value="SUBMIT_USAGE">🔋 上报消耗损耗</option>
-                    <option value="SUBMIT_STATUS">✅ 提交填报状态</option>
-                    <option value="UPDATE_CONFIG">⚙️ 配置修改</option>
-                    <option value="SUPER_UPDATE_DELIVERY">🚨 超管强改</option>
-                    <option value="SUBMIT_FITTING_DELIVERY">🔩 提交管件发货</option>
-                    <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
+              <!-- 6 列工整过滤控制面板 -->
+              <div class="audit-filter-panel">
+                <label class="audit-filter-item">
+                  <span>操作行为分类</span>
+                  <select v-model="auditFilters.actionType" class="select" @change="fetchAuditLogs(1)">
+                    <option value="">全部行为类型 (All Actions)</option>
+                    <optgroup label="🚨 高危与特殊管理">
+                      <option value="SUPER_UPDATE_DELIVERY">🚨 超管强改 (SUPER_UPDATE)</option>
+                      <option value="UPDATE_CONFIG">⚙️ 配置修改 (UPDATE_CONFIG)</option>
+                      <option value="CANCEL_DELIVERY">❌ 撤销发货 (CANCEL_DELIVERY)</option>
+                      <option value="CANCEL_FITTING_DELIVERY">❌ 撤销管件发货 (CANCEL_FITTING)</option>
+                      <option value="DELETE_FITTING_DELIVERY">🗑️ 废弃管件发货 (DELETE_FITTING)</option>
+                    </optgroup>
+                    <optgroup label="🚚 管道物流与履约">
+                      <option value="CREATE_DELIVERY">🚚 新增发货单 (CREATE_DELIVERY)</option>
+                      <option value="CONFIRM_ARRIVAL">👷 现场到货确认 (CONFIRM_ARRIVAL)</option>
+                      <option value="CONFIRM_CONSTRUCTION">🏗️ 施工接收确认 (CONFIRM_CONSTRUCTION)</option>
+                      <option value="CONFIRM_WAREHOUSE">🏢 库管入库确认 (CONFIRM_WAREHOUSE)</option>
+                    </optgroup>
+                    <optgroup label="🔩 管件物流与流转">
+                      <option value="SUBMIT_FITTING_DELIVERY">🔩 提交管件发货 (SUBMIT_FITTING)</option>
+                      <option value="CONFIRM_FITTING_ARRIVAL">👷 管件到货确认 (FITTING_ARRIVAL)</option>
+                      <option value="CONFIRM_FITTING_CONSTRUCTION">🏗️ 管件施工接收 (FITTING_CONSTRUCTION)</option>
+                      <option value="CONFIRM_FITTING_WAREHOUSE">🏢 管件库管确认 (FITTING_WAREHOUSE)</option>
+                    </optgroup>
+                    <optgroup label="📋 计划与消耗填报">
+                      <option value="SAVE_PLAN">📅 保存三日计划 (SAVE_PLAN)</option>
+                      <option value="SUBMIT_USAGE">🔋 上报消耗损耗 (SUBMIT_USAGE)</option>
+                      <option value="SUBMIT_STATUS">✅ 提交填报完成 (SUBMIT_STATUS)</option>
+                    </optgroup>
                   </select>
+                </label>
+
+                <label class="audit-filter-item">
+                  <span>关联单号 / 资源 ID</span>
+                  <input v-model.trim="auditFilters.resourceId" class="input" type="text" placeholder="发货单号/换热站ID" @keyup.enter="fetchAuditLogs(1)" />
+                </label>
+
+                <label class="audit-filter-item">
+                  <span>操作账号 / 姓名</span>
+                  <input v-model.trim="auditFilters.operator" class="input" type="text" placeholder="搜索账号或姓名" @keyup.enter="fetchAuditLogs(1)" />
+                </label>
+
+                <label class="audit-filter-item">
+                  <span>操作详情关键词</span>
+                  <input v-model.trim="auditFilters.keyword" class="input" type="text" placeholder="搜索详情说明/参数" @keyup.enter="fetchAuditLogs(1)" />
+                </label>
+
+                <label class="audit-filter-item">
+                  <span>开始日期</span>
+                  <input v-model="auditFilters.startDate" class="input" type="date" />
+                </label>
+
+                <label class="audit-filter-item">
+                  <span>结束日期</span>
+                  <input v-model="auditFilters.endDate" class="input" type="date" />
+                </label>
+
+                <!-- 第三行：左侧敏感过滤开关，右侧按钮组 -->
+                <div class="audit-filter-toggle-wrap">
+                  <label class="audit-toggle-chip" :class="{ active: auditFilters.isSensitive }">
+                    <input type="checkbox" v-model="auditFilters.isSensitive" @change="fetchAuditLogs(1)" />
+                    <span class="audit-toggle-text">🚨 仅看高危敏感操作 (强改/配置/撤销)</span>
+                  </label>
                 </div>
-                
-                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">操作人</label>
-                  <input v-model.trim="auditFilters.operator" class="input" type="text" placeholder="模糊搜索操作人" style="height: 32px; width: 140px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
-                </div>
-                
-                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">开始日期</label>
-                  <input v-model="auditFilters.startDate" class="input" type="date" style="height: 32px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
-                </div>
-                
-                <div class="filter-item" style="display: flex; flex-direction: column; gap: 5px;">
-                  <label style="font-size: 12px; color: #64748b; font-weight: 500;">结束日期</label>
-                  <input v-model="auditFilters.endDate" class="input" type="date" style="height: 32px; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
-                </div>
- 
-                <div class="filter-item" style="display: flex; gap: 8px; align-self: flex-end; margin-left: auto;">
-                  <button class="btn primary" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 5px; cursor: pointer;" @click="fetchAuditLogs(1)">
+
+                <div class="audit-filter-actions">
+                  <button class="btn primary audit-query-btn" type="button" @click="fetchAuditLogs(1)">
                     🔍 查询日志
                   </button>
-                  <button class="btn ghost" :disabled="exportLoading" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 5px; border-color: #cbd5e1; cursor: pointer; background: #fff;" @click="handleExportLogs">
-                    <span>{{ exportLoading ? '正在导出...' : '📥 导出 Excel (CSV)' }}</span>
+                  <button class="btn ghost audit-reset-btn" type="button" @click="resetAuditFilters">
+                    🔄 重置
+                  </button>
+                  <button class="btn ghost audit-export-btn" type="button" :disabled="exportLoading" @click="handleExportLogs">
+                    <span>{{ exportLoading ? '导出中…' : '📥 导出 CSV' }}</span>
                   </button>
                 </div>
               </div>
- 
+
               <!-- 日志明细列表 -->
-              <div v-if="auditLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">加载审计日志中...</div>
-              <div v-else-if="auditLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何匹配的操作日志。</div>
+              <div v-if="auditLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">
+                数据审计日志加载中...
+              </div>
+              <div v-else-if="auditLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">
+                未查询到任何匹配的操作审计日志。
+              </div>
               <div v-else>
-                <div class="table-wrap" style="max-height: 550px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
-                  <table class="table editor-table" style="margin: 0; width: 100%; border-collapse: collapse;">
+                <div class="audit-table-wrap">
+                  <table class="table editor-table audit-log-table">
+                    <colgroup>
+                      <col class="audit-col-time" />
+                      <col class="audit-col-resource" />
+                      <col class="audit-col-operator" />
+                      <col class="audit-col-action" />
+                      <col class="audit-col-desc" />
+                      <col class="audit-col-diff" />
+                    </colgroup>
                     <thead>
-                      <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                        <th style="width: 170px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">时间与IP</th>
-                        <th style="width: 130px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">操作人</th>
-                        <th style="width: 140px; text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">类型</th>
-                        <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">操作详情</th>
-                        <th style="width: 110px; text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; font-size: 13px;">快照对比</th>
+                      <tr>
+                        <th>操作时间与来源 IP</th>
+                        <th>关联单号 / 资源 ID</th>
+                        <th>操作账号 / 角色</th>
+                        <th>行为类型</th>
+                        <th>数据操作内容与详情说明</th>
+                        <th>快照对比</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="log in auditLogs" :key="log.id" style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
-                        <td style="color: #64748b; font-size: 12px; padding: 12px 16px; white-space: nowrap; line-height: 1.4; vertical-align: middle;">
-                          <div style="font-weight: 500; color: #475569;">{{ formatDateTime(log.created_at) }}</div>
-                          <div v-if="log.client_ip" style="font-family: monospace; color: #94a3b8; font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 3px;">
-                            <span style="display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #cbd5e1;"></span>
-                            IP: {{ log.client_ip }}
-                          </div>
-                          <div v-else style="font-family: monospace; color: #cbd5e1; font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 3px;">
-                            <span style="display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #e2e8f0;"></span>
-                            IP: —
+                      <tr v-for="log in auditLogs" :key="log.id" :class="{ 'audit-row--sensitive': isSensitiveAction(log.action_type) }">
+                        <!-- 操作时间与 IP -->
+                        <td class="audit-time-cell">
+                          <div class="audit-time-value">{{ formatDateTime(log.created_at) }}</div>
+                          <div class="audit-time-meta">
+                            <span v-if="isRecent24h(log.created_at)" class="audit-recent-badge">
+                              🔥 最新
+                            </span>
+                            <button 
+                              v-if="log.client_ip" 
+                              class="audit-ip clickable-ip" 
+                              type="button"
+                              title="点击查看 IP 归属地与网络运营商"
+                              @click.stop="triggerIpPopover($event, log.client_ip)"
+                            >
+                              📍 IP: {{ log.client_ip }}
+                            </button>
                           </div>
                         </td>
-                        <td style="padding: 12px 16px; vertical-align: middle;">
-                          <span style="font-weight: 600; color: #334155; display: block; font-size: 13px;">{{ log.operator }}</span>
-                          <span v-if="log.operator_group" style="display: block; font-size: 11px; color: #94a3b8; margin-top: 2px;">{{ log.operator_group }}</span>
+
+                        <!-- 关联单号 / 资源 ID -->
+                        <td class="audit-resource-cell">
+                          <div v-if="log.resource_id" class="audit-resource-box">
+                            <span class="audit-resource-code" :title="log.resource_id">{{ log.resource_id }}</span>
+                            <div class="audit-resource-actions">
+                              <button class="audit-micro-btn" title="复制单号" @click="copyResourceId(log.resource_id)">
+                                {{ auditCopiedId === log.resource_id ? '✓' : '📋' }}
+                              </button>
+                              <button class="audit-micro-btn" title="以此单号筛选" @click="filterByResourceId(log.resource_id)">
+                                🔍
+                              </button>
+                            </div>
+                          </div>
+                          <span v-else class="audit-empty-dash">—</span>
                         </td>
-                        <td style="padding: 12px 16px; vertical-align: middle;">
-                          <span class="badge" :style="getActionTypeBadgeStyle(log.action_type)" style="font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-block;">
+
+                        <!-- 操作人与角色 -->
+                        <td class="audit-operator-cell">
+                          <div class="audit-operator-name">{{ log.operator || '系统' }}</div>
+                          <div v-if="log.operator_group" class="audit-operator-meta">
+                            <span class="submission-group-chip">
+                              {{ log.operator_group }}
+                            </span>
+                          </div>
+                        </td>
+
+                        <!-- 行为类型 -->
+                        <td class="audit-action-cell">
+                          <span class="badge audit-action-badge" :style="getActionTypeBadgeStyle(log.action_type)">
+                            <span v-if="isSensitiveAction(log.action_type)" class="audit-sensitive-dot">🚨 </span>
                             {{ translateActionType(log.action_type) }}
                           </span>
                         </td>
-                        <td style="font-size: 13px; color: #334155; padding: 12px 16px; line-height: 1.5; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 0.2s; vertical-align: middle;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#334155'" @click="togglePopover($event, log)">
-                          <span style="border-bottom: 1px dashed #cbd5e1; padding-bottom: 2px;">{{ log.action_desc }}</span>
+
+                        <!-- 操作详情说明 -->
+                        <td class="audit-desc-cell">
+                          <div class="audit-desc-text" :title="log.action_desc">
+                            <span v-if="getSection1NameFromLog(log)" class="submission-section-chip" :title="`对应需求主体: ${getSection1NameFromLog(log)}`">
+                              📍 {{ getSection1NameFromLog(log) }}
+                            </span>
+                            <span>{{ getCleanActionDesc(log) }}</span>
+                          </div>
                         </td>
-                        <td style="text-align: center; padding: 12px 16px; vertical-align: middle;">
+
+                        <!-- 快照对比 -->
+                        <td class="audit-diff-cell">
                           <button 
                             v-if="log.before_value || log.after_value" 
-                            class="btn-text" 
-                            style="color: #2563eb; cursor: pointer; background: none; border: none; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                            onmouseover="this.style.background='rgba(37,99,235,0.06)'"
-                            onmouseout="this.style.background='none'"
+                            class="btn ghost compact-btn audit-diff-trigger-btn" 
                             @click="showDiffModal(log)"
                           >
-                            🔍 查看 Diff
+                            🔍 智能对比
                           </button>
-                          <span v-else style="color: #94a3b8; font-size: 12px;">无快照</span>
+                          <span v-else class="audit-empty-dash">无快照</span>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-                
-                <!-- 分页栏 -->
-                <div class="pagination-bar" style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; color: #475569; font-size: 13px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px;">
-                  <span>共计 <strong style="color: #0f172a;">{{ auditTotal }}</strong> 条记录</span>
-                  <div style="display: flex; gap: 10px; align-items: center;">
-                    <button class="btn ghost compact-btn" style="padding: 4px 12px; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer;" :disabled="auditPage <= 1" @click="fetchAuditLogs(auditPage - 1)">上一页</button>
-                    <span style="color: #64748b;">第 <strong style="color: #0f172a;">{{ auditPage }}</strong> 页 / 共 <strong style="color: #0f172a;">{{ Math.ceil(auditTotal / auditLimit) || 1 }}</strong> 页</span>
-                    <button class="btn ghost compact-btn" style="padding: 4px 12px; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer;" :disabled="auditPage >= Math.ceil(auditTotal / auditLimit)" @click="fetchAuditLogs(auditPage + 1)">下一页</button>
+
+                <!-- 分页控制栏 -->
+                <div class="pagination-bar audit-pagination-bar">
+                  <div class="audit-pagination-left">
+                    <span>共计 <strong>{{ auditTotal }}</strong> 条审计记录</span>
+                    <span class="audit-pagination-divider">|</span>
+                    <div class="audit-page-size-wrap">
+                      <span>每页</span>
+                      <select v-model="auditLimit" class="select audit-limit-select" @change="fetchAuditLogs(1)">
+                        <option :value="15">15 条</option>
+                        <option :value="20">20 条</option>
+                        <option :value="50">50 条</option>
+                        <option :value="100">100 条</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div class="audit-pagination-right">
+                    <button class="btn ghost compact-btn" :disabled="auditPage <= 1" @click="fetchAuditLogs(auditPage - 1)">上一页</button>
+                    <span class="audit-page-info">
+                      第 <strong>{{ auditPage }}</strong> 页 / 共 <strong>{{ Math.ceil(auditTotal / auditLimit) || 1 }}</strong> 页
+                    </span>
+                    <button class="btn ghost compact-btn" :disabled="auditPage >= Math.ceil(auditTotal / auditLimit)" @click="fetchAuditLogs(auditPage + 1)">下一页</button>
+                    
+                    <div class="audit-jump-box">
+                      <input v-model.number="auditJumpPage" type="number" min="1" :max="Math.ceil(auditTotal / auditLimit) || 1" placeholder="页码" class="input audit-jump-input" @keyup.enter="handleAuditJumpPage" />
+                      <button class="btn ghost compact-btn" @click="handleAuditJumpPage">跳转</button>
+                    </div>
                   </div>
                 </div>
               </div> <!-- 闭合 v-else -->
@@ -1261,34 +1421,221 @@
       </div>
     </main>
 
-    <!-- 快照 Diff 对比弹窗 -->
-    <div v-if="diffModalVisible" class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(8px);">
-      <div class="modal-card" style="width: 85%; max-width: 1000px; max-height: 85vh; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); animation: modalEnter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-        <div class="modal-header" style="padding: 18px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, #f8fafc, #ffffff);">
-          <div>
-            <h4 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px;">🔍 数据快照变更审计</h4>
-            <span style="font-size: 12px; color: #64748b; margin-top: 4px; display: block;">单号/资源: <strong style="color: #334155;">{{ selectedLog?.resource_id || '未知' }}</strong> | 操作人: <strong style="color: #334155;">{{ selectedLog?.operator }}</strong></span>
-          </div>
-          <button style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#94a3b8'" @click="diffModalVisible = false">×</button>
-        </div>
-        <div class="modal-body" style="padding: 24px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #ffffff;">
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="font-size: 13px; font-weight: 700; color: #dc2626; display: flex; align-items: center; gap: 6px;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: #dc2626;"></span>
-              变更前数据 (Before)
+    <!-- 快照 Diff 智能对比弹窗 -->
+    <div v-if="diffModalVisible" class="modal-overlay audit-modal-overlay" @click.self="diffModalVisible = false">
+      <div class="modal-card audit-diff-modal">
+        <header class="modal-header audit-modal-header">
+          <div class="audit-modal-header__main">
+            <h3 class="modal-title audit-modal-title">
+              🔍 实体变更快照智能对比与追溯
+              <span v-if="selectedLog && isSensitiveAction(selectedLog.action_type)" class="badge danger audit-modal-sensitive-tag">🚨 高危操作</span>
+            </h3>
+            <div class="audit-modal-subtitle">
+              <span>单号: <strong>{{ selectedLog?.resource_id || '—' }}</strong></span>
+              <span class="audit-sep">•</span>
+              <span>操作人: <strong>{{ selectedLog?.operator || '未知' }}</strong></span>
+              <span class="audit-sep">•</span>
+              <span>类型: <strong>{{ translateActionType(selectedLog?.action_type) }}</strong></span>
+              <span class="audit-sep">•</span>
+              <span>时间: {{ formatDateTime(selectedLog?.created_at) }}</span>
             </div>
-            <pre style="background: #fff5f5; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; margin: 0; font-family: Consolas, Monaco, monospace; font-size: 12px; color: #991b1b; overflow-x: auto; max-height: 450px; white-space: pre-wrap; text-align: left; line-height: 1.6; box-shadow: inset 0 1px 3px rgba(220, 38, 38, 0.02);">{{ selectedLog?.before_value ? JSON.stringify(selectedLog.before_value, null, 2) : '（无原始数据快照 - 属于新增操作）' }}</pre>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="font-size: 13px; font-weight: 700; color: #16a34a; display: flex; align-items: center; gap: 6px;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: #16a34a;"></span>
-              变更后数据 (After)
+          
+          <div class="audit-modal-header__actions">
+            <!-- 视图模式切换 -->
+            <div class="audit-view-tabs">
+              <button 
+                class="audit-view-tab" 
+                :class="{ 'is-active': diffViewMode === 'smart' }" 
+                @click="diffViewMode = 'smart'"
+              >
+                ⚡ 智能差异解析
+              </button>
+              <button 
+                class="audit-view-tab" 
+                :class="{ 'is-active': diffViewMode === 'raw' }" 
+                @click="diffViewMode = 'raw'"
+              >
+                📋 原始快照对比
+              </button>
             </div>
-            <pre style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 0; font-family: Consolas, Monaco, monospace; font-size: 12px; color: #166534; overflow-x: auto; max-height: 450px; white-space: pre-wrap; text-align: left; line-height: 1.6; box-shadow: inset 0 1px 3px rgba(22, 163, 74, 0.02);">{{ selectedLog?.after_value ? JSON.stringify(selectedLog.after_value, null, 2) : '（无新数据快照 - 属于删除或撤销操作）' }}</pre>
+            <button class="btn-close" type="button" @click="diffModalVisible = false">×</button>
+          </div>
+        </header>
+
+        <!-- 弹窗 Body -->
+        <div class="modal-body audit-modal-body">
+          <!-- 模式 1: 智能差异解析 (Smart Diff) -->
+          <div v-if="diffViewMode === 'smart'" class="audit-smart-diff-container">
+            <!-- 状态 1: 纯新增 -->
+            <div v-if="!selectedLog?.before_value && selectedLog?.after_value" class="audit-diff-banner audit-diff-banner--create">
+              <div class="audit-diff-banner__icon">🌟</div>
+              <div class="audit-diff-banner__content">
+                <strong>初始新增录入</strong>
+                <p>该条记录属于初始新增创建操作，无历史变更前数据。以下为本次提交录入的全部字段快照：</p>
+              </div>
+            </div>
+
+            <!-- 状态 2: 纯删除/撤销 -->
+            <div v-else-if="selectedLog?.before_value && !selectedLog?.after_value" class="audit-diff-banner audit-diff-banner--delete">
+              <div class="audit-diff-banner__icon">🗑️</div>
+              <div class="audit-diff-banner__content">
+                <strong>实体撤销或删除</strong>
+                <p>该条记录属于删除作废或撤销操作。以下为被清理实体的最终历史数据快照：</p>
+              </div>
+            </div>
+
+            <!-- 状态 3: 字段修改或两端皆有 -->
+            <div v-else-if="selectedLog?.before_value && selectedLog?.after_value" class="audit-diff-banner audit-diff-banner--modify">
+              <div class="audit-diff-banner__icon">🔄</div>
+              <div class="audit-diff-banner__content">
+                <strong>实体数据字段变更</strong>
+                <p>系统已比对提取出变更前后的差异字段，便于快速审计关键参数变动：</p>
+              </div>
+            </div>
+
+            <!-- 结构化差异比对表格 -->
+            <div class="audit-smart-table-wrap">
+              <table class="table editor-table audit-smart-diff-table">
+                <colgroup>
+                  <col style="width: 220px;" />
+                  <col style="width: 38%;" />
+                  <col style="width: 40px;" />
+                  <col style="width: 38%;" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>变更字段与属性</th>
+                    <th>变更前数据 (Before)</th>
+                    <th style="text-align: center;">➔</th>
+                    <th>变更后数据 (After)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="diff in computedSmartDiff" :key="diff.key" :class="`audit-diff-row--${diff.changeType}`">
+                    <td class="audit-diff-field-cell">
+                      <div class="audit-diff-field-name">{{ diff.label }}</div>
+                      <div class="audit-diff-field-key"><code>{{ diff.key }}</code></div>
+                      <span class="badge compact" :class="getDiffTypeBadgeClass(diff.changeType)">
+                        {{ getDiffTypeLabel(diff.changeType) }}
+                      </span>
+                    </td>
+                    <td class="audit-diff-val-cell audit-diff-val-cell--before">
+                      <div v-if="diff.changeType === 'added'" class="audit-val-placeholder">（无原值）</div>
+                      <div v-else class="audit-val-content audit-val-content--del">
+                        {{ formatDiffValue(diff.oldVal) }}
+                      </div>
+                    </td>
+                    <td class="audit-diff-arrow-cell">➔</td>
+                    <td class="audit-diff-val-cell audit-diff-val-cell--after">
+                      <div v-if="diff.changeType === 'deleted'" class="audit-val-placeholder">（已清除）</div>
+                      <div v-else class="audit-val-content audit-val-content--add">
+                        {{ formatDiffValue(diff.newVal) }}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="computedSmartDiff.length === 0">
+                    <td colspan="4" class="audit-diff-empty">
+                      前后快照字段值完全一致或无可解析差异项。
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 模式 2: 原始 JSON 对照 (Raw JSON) -->
+          <div v-else class="audit-raw-json-container">
+            <div class="audit-raw-column">
+              <div class="audit-raw-header audit-raw-header--before">
+                <span class="audit-raw-dot"></span>
+                <span>变更前原始快照 (Before Snapshot)</span>
+                <button class="btn ghost compact-btn audit-copy-json-btn" type="button" @click="copyJsonText(selectedLog?.before_value)">📋 复制 JSON</button>
+              </div>
+              <pre class="audit-json-pre audit-json-pre--before">{{ selectedLog?.before_value ? JSON.stringify(selectedLog.before_value, null, 2) : '（无原始数据快照 - 属于新增操作）' }}</pre>
+            </div>
+
+            <div class="audit-raw-column">
+              <div class="audit-raw-header audit-raw-header--after">
+                <span class="audit-raw-dot"></span>
+                <span>变更后最新快照 (After Snapshot)</span>
+                <button class="btn ghost compact-btn audit-copy-json-btn" type="button" @click="copyJsonText(selectedLog?.after_value)">📋 复制 JSON</button>
+              </div>
+              <pre class="audit-json-pre audit-json-pre--after">{{ selectedLog?.after_value ? JSON.stringify(selectedLog.after_value, null, 2) : '（无最新数据快照 - 属于删除或撤销操作）' }}</pre>
+            </div>
           </div>
         </div>
-        <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc;">
-          <button class="btn ghost compact-btn" style="padding: 6px 18px; border-radius: 6px; background: #ffffff; border: 1px solid #cbd5e1; color: #334155; cursor: pointer; font-size: 13px; font-weight: 600;" @click="diffModalVisible = false">关闭</button>
+
+        <footer class="modal-footer audit-modal-footer">
+          <div v-if="diffCopyToast" class="audit-copy-toast">✓ 已复制快照数据到剪贴板</div>
+          <button class="btn ghost compact-btn" type="button" @click="diffModalVisible = false">关闭窗口</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- 📍 IP 地理位置与运营商气泡弹窗 (Popover) -->
+    <div v-if="ipPopoverState.visible" class="ip-popover-mask" @click="closeIpPopover">
+      <div 
+        class="ip-popover-card" 
+        :style="{ left: `${ipPopoverState.x}px`, top: `${ipPopoverState.y}px` }"
+        @click.stop
+      >
+        <div class="ip-popover-header">
+          <div class="ip-popover-title">
+            <span>🌐 IP 来源与地理位置</span>
+          </div>
+          <button class="ip-popover-close" type="button" @click="closeIpPopover">×</button>
+        </div>
+
+        <div class="ip-popover-body">
+          <div class="ip-popover-address-row">
+            <span class="ip-code">{{ ipPopoverState.ip }}</span>
+            <button class="ip-copy-btn" type="button" :title="ipCopied ? '已复制' : '复制 IP'" @click="copyIpAddress(ipPopoverState.ip)">
+              {{ ipCopied ? '✓ 已复制' : '📋 复制' }}
+            </button>
+          </div>
+
+          <div v-if="ipPopoverState.loading" class="ip-popover-loading">
+            <div class="ip-loading-spinner"></div>
+            <span>正在查询 IP 归属地…</span>
+          </div>
+
+          <div v-else-if="ipPopoverState.error" class="ip-popover-error">
+            <span>⚠️ {{ ipPopoverState.error }}</span>
+          </div>
+
+          <div v-else-if="ipPopoverState.data" class="ip-popover-details">
+            <div class="ip-detail-item">
+              <span class="ip-detail-label">📍 地理位置</span>
+              <span class="ip-detail-value ip-detail-value--loc">
+                {{ ipPopoverState.data.location || '未知位置' }}
+              </span>
+            </div>
+            
+            <div v-if="ipPopoverState.data.isp" class="ip-detail-item">
+              <span class="ip-detail-label">🏢 网络运营</span>
+              <span class="ip-detail-value">{{ ipPopoverState.data.isp }}</span>
+            </div>
+
+            <div v-if="ipPopoverState.data.adcode" class="ip-detail-item">
+              <span class="ip-detail-label">🏷️ 行政代码</span>
+              <span class="ip-detail-value ip-adcode-tag">{{ ipPopoverState.data.adcode }}</span>
+            </div>
+
+            <div class="ip-detail-item">
+              <span class="ip-detail-label">🛡️ 网络类型</span>
+              <span class="ip-detail-value">
+                <span class="badge compact" :class="ipPopoverState.data.is_private ? 'badge-private-ip' : 'badge-public-ip'">
+                  {{ ipPopoverState.data.is_private ? '内网 / 私有地址' : '公网 IPv4' }}
+                </span>
+              </span>
+            </div>
+
+            <div v-if="ipPopoverState.data.provider" class="ip-detail-item ip-detail-item--footer">
+              <span class="ip-detail-label">⚡ 数据来源</span>
+              <span class="ip-provider-tag">{{ ipPopoverState.data.provider }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1408,6 +1755,7 @@ import {
   getTubeSubmissionLogs,
   getTubeAuditLogs,
   exportTubeAuditLogs,
+  getTubeIpLocation,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -1441,25 +1789,35 @@ const submissionFilters = ref({
   endDate: '',
 })
 
-// 操作审计日志相关 Ref 变量
+// 📜 操作审计日志相关 Ref 变量与响应式状态
 const auditLogs = ref([])
 const auditTotal = ref(0)
 const exportLoading = ref(false)
 const auditLoading = ref(false)
 const auditPage = ref(1)
-const auditLimit = ref(15)
+const auditLimit = ref(20)
+const auditLatestTime = ref(null)
+const auditTodayCount = ref(0)
+const auditSensitiveCount = ref(0)
+const auditOperatorCount = ref(0)
+const auditJumpPage = ref('')
+const auditCopiedId = ref(null)
+
 const auditFilters = ref({
   actionType: '',
   operator: '',
+  resourceId: '',
+  keyword: '',
+  isSensitive: false,
   startDate: '',
   endDate: '',
 })
+
+// Diff 弹窗相关状态
 const diffModalVisible = ref(false)
 const selectedLog = ref(null)
-
-// 操作详情悬浮气泡状态
-const activePopoverLog = ref(null)
-const popoverStyle = ref({ top: '0px', left: '0px' })
+const diffViewMode = ref('smart') // 'smart' 智能差异解析 vs 'raw' 原始 JSON 对照
+const diffCopyToast = ref(false)
 
 // 天气气温导入相关 Ref 变量
 const dailyCount = ref(0)
@@ -2460,7 +2818,204 @@ function getTimeAgoBadgeStyle(isoString) {
   return { background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }
 }
 
+/**
+ * 🏷️ 智能解析并提取日志中发货对应的需求主体/标段名称
+ */
+function getSection1NameFromLog(log) {
+  if (!log) return ''
+  
+  // 1. 优先从结构化快照中解析 section_1_id
+  const payload = log.after_value || log.before_value || {}
+  let rawSecId = payload.section_1_id || payload.section1_id || payload.section_id || ''
+  if (!rawSecId && Array.isArray(payload.items) && payload.items.length > 0) {
+    rawSecId = payload.items[0].section_1_id || ''
+  }
+  
+  if (rawSecId) {
+    const matched = demandEntities.value.find(
+      e => String(e.section_1_id || '').trim() === String(rawSecId).trim() ||
+           String(e.code || '').trim() === String(rawSecId).trim()
+    )
+    if (matched && matched.section_1_name) {
+      return matched.section_1_name
+    }
+    return rawSecId
+  }
+
+  // 2. 从 action_desc 中正则提取“需求主体【...】”或“接收标段: ...”
+  const desc = String(log.action_desc || '')
+  const matchBracket = desc.match(/需求主体【(.*?)】/)
+  if (matchBracket && matchBracket[1]) {
+    return matchBracket[1]
+  }
+  const matchColon = desc.match(/接收标段:\s*([^\)）]+)/)
+  if (matchColon && matchColon[1]) {
+    const matched = demandEntities.value.find(
+      e => String(e.section_1_id || '').trim() === String(matchColon[1]).trim()
+    )
+    return matched?.section_1_name || matchColon[1]
+  }
+
+  return ''
+}
+
+/**
+ * 🧼 提取清洗后的详情说明文字（避免与需求主体 Badge 重复）
+ */
+function getCleanActionDesc(log) {
+  if (!log || !log.action_desc) return '无详情说明'
+  let desc = String(log.action_desc)
+  // 如果提取出了主体徽章，可将文本内部重复的 "需求主体【...】，" 清洗掉
+  desc = desc.replace(/需求主体【.*?】[，,]?\s*/g, '')
+  return desc
+}
+
+// ==================== 📍 IP 归属地与网络运营商气泡弹窗逻辑 ====================
+
+const ipPopoverState = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  ip: '',
+  loading: false,
+  error: '',
+  data: null,
+})
+
+const ipLocationLocalCache = ref({})
+const ipCopied = ref(false)
+
+async function triggerIpPopover(event, ip) {
+  if (!ip) return
+  event.stopPropagation()
+
+  // 计算点击元素在屏幕上的位置
+  const rect = event.currentTarget.getBoundingClientRect()
+  
+  const popoverWidth = 280
+  let left = rect.left
+  if (left + popoverWidth > window.innerWidth - 20) {
+    left = window.innerWidth - popoverWidth - 20
+  }
+  if (left < 20) left = 20
+
+  let top = rect.bottom + 8
+  if (top + 180 > window.innerHeight) {
+    top = Math.max(10, rect.top - 180)
+  }
+
+  ipPopoverState.value = {
+    visible: true,
+    x: left,
+    y: top,
+    ip: ip,
+    loading: false,
+    error: '',
+    data: null,
+  }
+
+  // 命中本地缓存直接展示
+  if (ipLocationLocalCache.value[ip]) {
+    ipPopoverState.value.data = ipLocationLocalCache.value[ip]
+    return
+  }
+
+  ipPopoverState.value.loading = true
+  try {
+    const res = await getTubeIpLocation(PROJECT_KEY, ip)
+    ipPopoverState.value.data = res
+    ipLocationLocalCache.value[ip] = res
+  } catch (err) {
+    console.error('查询 IP 归属地失败:', err)
+    ipPopoverState.value.error = 'IP 归属地查询失败或网络超时'
+  } finally {
+    ipPopoverState.value.loading = false
+  }
+}
+
+function closeIpPopover() {
+  ipPopoverState.value.visible = false
+}
+
+async function copyIpAddress(ip) {
+  if (!ip) return
+  try {
+    await navigator.clipboard.writeText(ip)
+    ipCopied.value = true
+    setTimeout(() => {
+      ipCopied.value = false
+    }, 1800)
+  } catch (e) {
+    console.warn('复制 IP 失败:', e)
+  }
+}
+
 // ==================== 📜 操作审计日志 JS 业务逻辑 ====================
+
+const SENSITIVE_ACTION_SET = new Set([
+  'SUPER_UPDATE_DELIVERY',
+  'UPDATE_CONFIG',
+  'CANCEL_DELIVERY',
+  'CANCEL_FITTING_DELIVERY',
+  'DELETE_FITTING_DELIVERY',
+])
+
+function isSensitiveAction(actionType) {
+  return SENSITIVE_ACTION_SET.has(String(actionType || ''))
+}
+
+const FIELD_LABEL_MAP = {
+  show_date: '展示业务日期',
+  usage_collection_date: '消耗归集日期',
+  plan_start_date: '三日计划起始日',
+  auto_update_plan_start_date: '计划日自动顺延',
+  plan_editable_days: '计划可编辑天数',
+  strict_planning_flow_control: '严格计划流控',
+  supply_entities: '供给侧主体列表',
+  demand_entities: '需求侧主体列表',
+  pipe_models: '管型规格定义',
+  production_capacities: '厂家日产能预设',
+  manager_assignments: '人员管辖映射',
+  construction_units: '施工单位映射',
+  warehouse_keepers: '库管人员映射',
+  baseline_presets: '基准设计量预设',
+  weather_api_url: '气象接口 URL',
+  weather_provider: '气象数据源模式',
+  amap_config: '高德 API 密钥配置',
+  fitting_config: '管件流转规则配置',
+  delivery_id: '发货单号 (ID)',
+  order_no: '订单号',
+  shipment_no: '物流运单号',
+  pipe_model_id: '管型规格 ID',
+  pipe_model_name: '管型名称',
+  unit: '计量单位',
+  delivery_qty: '发货数量',
+  arrived_qty: '到货数量',
+  construction_received_qty: '施工接收数量',
+  warehouse_confirmed_qty: '库管确认数量',
+  license_plate: '运输车牌号',
+  driver_name: '司机姓名',
+  driver_phone: '司机联系电话',
+  operator: '操作人账号',
+  operator_group: '操作人角色组',
+  action_type: '操作动作类型',
+  action_desc: '操作描述说明',
+  max_daily_output_qty: '日最大产能',
+  design_qty: '设计基准量',
+  purchase_plan_qty: '采购计划量',
+  remark: '备注批注',
+  diff_note: '接收差异说明',
+  diff_status: '差异审批状态',
+  section_1_id: '需求侧换热站 ID',
+  section_1_name: '换热站名称',
+  section_2_id: '施工标段 ID',
+  factory_id: '生产厂商 ID',
+  delivery_date: '发货日期',
+  shipped_at: '实际发货时间',
+  arrived_at: '实际到货时间',
+  received_at: '施工接收时间',
+  warehouse_at: '库管确认时间',
+}
 
 async function fetchAuditLogs(page = 1) {
   auditLoading.value = true
@@ -2469,6 +3024,9 @@ async function fetchAuditLogs(page = 1) {
     const res = await getTubeAuditLogs(PROJECT_KEY, {
       actionType: auditFilters.value.actionType,
       operator: auditFilters.value.operator,
+      resourceId: auditFilters.value.resourceId,
+      keyword: auditFilters.value.keyword,
+      isSensitive: auditFilters.value.isSensitive,
       startDate: auditFilters.value.startDate,
       endDate: auditFilters.value.endDate,
       page: auditPage.value,
@@ -2476,6 +3034,10 @@ async function fetchAuditLogs(page = 1) {
     })
     auditLogs.value = res.rows || []
     auditTotal.value = res.total || 0
+    auditLatestTime.value = res.latest_operated_at || null
+    auditTodayCount.value = res.today_count || 0
+    auditSensitiveCount.value = res.sensitive_count || 0
+    auditOperatorCount.value = res.operator_count || 0
   } catch (error) {
     console.error('加载操作审计日志失败:', error)
   } finally {
@@ -2483,31 +3045,165 @@ async function fetchAuditLogs(page = 1) {
   }
 }
 
+function resetAuditFilters() {
+  auditFilters.value = {
+    actionType: '',
+    operator: '',
+    resourceId: '',
+    keyword: '',
+    isSensitive: false,
+    startDate: '',
+    endDate: '',
+  }
+  fetchAuditLogs(1)
+}
+
+function toggleSensitiveFilter() {
+  auditFilters.value.isSensitive = !auditFilters.value.isSensitive
+  fetchAuditLogs(1)
+}
+
+async function copyResourceId(id) {
+  if (!id) return
+  try {
+    await navigator.clipboard.writeText(String(id))
+    auditCopiedId.value = id
+    setTimeout(() => {
+      if (auditCopiedId.value === id) {
+        auditCopiedId.value = null
+      }
+    }, 1500)
+  } catch (e) {
+    console.error('复制单号失败:', e)
+  }
+}
+
+function filterByResourceId(id) {
+  if (!id) return
+  auditFilters.value.resourceId = id
+  fetchAuditLogs(1)
+}
+
+function handleAuditJumpPage() {
+  const maxPage = Math.ceil(auditTotal.value / auditLimit.value) || 1
+  let page = parseInt(auditJumpPage.value, 10)
+  if (isNaN(page) || page < 1) page = 1
+  if (page > maxPage) page = maxPage
+  auditJumpPage.value = ''
+  fetchAuditLogs(page)
+}
+
 function showDiffModal(log) {
   selectedLog.value = log
+  diffViewMode.value = 'smart'
   diffModalVisible.value = true
 }
 
-function togglePopover(event, log) {
-  if (activePopoverLog.value && activePopoverLog.value.id === log.id) {
-    activePopoverLog.value = null
-    return
-  }
-  activePopoverLog.value = log
-  
-  const rect = event.currentTarget.getBoundingClientRect()
-  
-  // 气泡定位在单元格上方居中，直接使用相对于视口的 rect.top 和 rect.left (对应 position: fixed 展现)
-  popoverStyle.value = {
-    top: `${rect.top - 8}px`,
-    left: `${rect.left + rect.width / 2}px`,
-    transform: 'translate(-50%, -100%)',
+async function copyJsonText(val) {
+  if (!val) return
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(val, null, 2))
+    diffCopyToast.value = true
+    setTimeout(() => {
+      diffCopyToast.value = false
+    }, 1500)
+  } catch (e) {
+    console.error('复制 JSON 失败:', e)
   }
 }
 
-watch(activeTab, () => {
-  activePopoverLog.value = null
+const computedSmartDiff = computed(() => {
+  if (!selectedLog.value) return []
+  const before = selectedLog.value.before_value
+  const after = selectedLog.value.after_value
+  
+  const diffList = []
+  
+  // 场景 1: 仅有新增 (After)
+  if (!before && after && typeof after === 'object') {
+    for (const [key, newVal] of Object.entries(after)) {
+      diffList.push({
+        key,
+        label: FIELD_LABEL_MAP[key] || key,
+        changeType: 'added',
+        oldVal: null,
+        newVal,
+      })
+    }
+    return diffList
+  }
+
+  // 场景 2: 仅有删除 (Before)
+  if (before && !after && typeof before === 'object') {
+    for (const [key, oldVal] of Object.entries(before)) {
+      diffList.push({
+        key,
+        label: FIELD_LABEL_MAP[key] || key,
+        changeType: 'deleted',
+        oldVal,
+        newVal: null,
+      })
+    }
+    return diffList
+  }
+
+  // 场景 3: 变更前后比对
+  if (before && after && typeof before === 'object' && typeof after === 'object') {
+    const allKeys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+    for (const key of allKeys) {
+      const oldVal = before[key]
+      const newVal = after[key]
+      
+      const oldStr = JSON.stringify(oldVal)
+      const newStr = JSON.stringify(newVal)
+      
+      if (oldStr !== newStr) {
+        let changeType = 'modified'
+        if (oldVal === undefined) changeType = 'added'
+        else if (newVal === undefined) changeType = 'deleted'
+
+        diffList.push({
+          key,
+          label: FIELD_LABEL_MAP[key] || key,
+          changeType,
+          oldVal,
+          newVal,
+        })
+      }
+    }
+  }
+
+  return diffList
 })
+
+function formatDiffValue(val) {
+  if (val === null || val === undefined) return '—'
+  if (typeof val === 'object') {
+    return JSON.stringify(val, null, 2)
+  }
+  if (typeof val === 'boolean') {
+    return val ? '是 (true)' : '否 (false)'
+  }
+  return String(val)
+}
+
+function getDiffTypeLabel(type) {
+  const map = {
+    modified: '修改',
+    added: '新增',
+    deleted: '删除',
+  }
+  return map[type] || type
+}
+
+function getDiffTypeBadgeClass(type) {
+  const map = {
+    modified: 'warning',
+    added: 'success',
+    deleted: 'danger',
+  }
+  return map[type] || 'muted'
+}
 
 function formatDateTime(isoString) {
   if (!isoString) return '—'
@@ -2529,47 +3225,48 @@ function translateActionType(type) {
   const dict = {
     CREATE_DELIVERY: '🚚 新增发货单',
     CANCEL_DELIVERY: '❌ 撤销发货',
-    CONFIRM_ARRIVAL: '👷 确认到货',
-    CONFIRM_CONSTRUCTION: '👷 施工接收',
-    CONFIRM_WAREHOUSE: '🏢 库管确认',
+    CONFIRM_ARRIVAL: '👷 现场到货确认',
+    CONFIRM_CONSTRUCTION: '🏗️ 施工接收确认',
+    CONFIRM_WAREHOUSE: '🏢 库管入库确认',
     SAVE_PLAN: '📅 更新三日计划',
     SUBMIT_USAGE: '🔋 上报消耗损耗',
     SUBMIT_STATUS: '✅ 提交填报状态',
     UPDATE_CONFIG: '⚙️ 配置修改',
     SUPER_UPDATE_DELIVERY: '🚨 超管强改',
     SUBMIT_FITTING_DELIVERY: '🔩 提交管件发货',
-    DELETE_FITTING_DELIVERY: '🗑️ 撤销管件发货',
+    DELETE_FITTING_DELIVERY: '🗑️ 废弃管件发货',
     CONFIRM_FITTING_ARRIVAL: '👷 管件到货确认',
     CONFIRM_FITTING_CONSTRUCTION: '🏗️ 管件施工接收',
     CONFIRM_FITTING_WAREHOUSE: '🏢 管件库管确认',
     CANCEL_FITTING_DELIVERY: '❌ 撤销管件发货',
   }
-  return dict[type] || type
+  return dict[type] || type || '—'
 }
 
 function getActionTypeBadgeStyle(type) {
   const colors = {
-    CREATE_DELIVERY: { bg: '#e8f4fd', color: '#1d88e5' },
-    CANCEL_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
-    CONFIRM_ARRIVAL: { bg: '#fef3d6', color: '#f5b000' },
-    CONFIRM_CONSTRUCTION: { bg: '#e8f7f0', color: '#2dca73' },
-    CONFIRM_WAREHOUSE: { bg: '#f4eafc', color: '#8e44ad' },
-    SAVE_PLAN: { bg: '#e8f4fd', color: '#1d88e5' },
-    SUBMIT_USAGE: { bg: '#fef3d6', color: '#f5b000' },
-    SUBMIT_STATUS: { bg: '#e8f7f0', color: '#2dca73' },
-    UPDATE_CONFIG: { bg: '#f4f5f7', color: '#5a6b82' },
-    SUPER_UPDATE_DELIVERY: { bg: '#fde8e8', color: '#e53935' },
-    SUBMIT_FITTING_DELIVERY: { bg: '#eef2ff', color: '#4f46e5' },
-    DELETE_FITTING_DELIVERY: { bg: '#fff1f2', color: '#e11d48' },
-    CONFIRM_FITTING_ARRIVAL: { bg: '#fef3d6', color: '#f5b000' },
-    CONFIRM_FITTING_CONSTRUCTION: { bg: '#e8f7f0', color: '#2dca73' },
-    CONFIRM_FITTING_WAREHOUSE: { bg: '#f4eafc', color: '#8e44ad' },
-    CANCEL_FITTING_DELIVERY: { bg: '#fff1f2', color: '#e11d48' },
+    CREATE_DELIVERY: { bg: '#e8f4fd', color: '#1d88e5', border: '1px solid #bae6fd' },
+    CANCEL_DELIVERY: { bg: '#fde8e8', color: '#e53935', border: '1px solid #fecaca' },
+    CONFIRM_ARRIVAL: { bg: '#fef3d6', color: '#d97706', border: '1px solid #fde68a' },
+    CONFIRM_CONSTRUCTION: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
+    CONFIRM_WAREHOUSE: { bg: '#f4eafc', color: '#7c3aed', border: '1px solid #ddd6fe' },
+    SAVE_PLAN: { bg: '#e8f4fd', color: '#0284c7', border: '1px solid #bae6fd' },
+    SUBMIT_USAGE: { bg: '#fef3d6', color: '#d97706', border: '1px solid #fde68a' },
+    SUBMIT_STATUS: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
+    UPDATE_CONFIG: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    SUPER_UPDATE_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    SUBMIT_FITTING_DELIVERY: { bg: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' },
+    DELETE_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    CONFIRM_FITTING_ARRIVAL: { bg: '#fef3d6', color: '#d97706', border: '1px solid #fde68a' },
+    CONFIRM_FITTING_CONSTRUCTION: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
+    CONFIRM_FITTING_WAREHOUSE: { bg: '#f4eafc', color: '#7c3aed', border: '1px solid #ddd6fe' },
+    CANCEL_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
   }
-  const match = colors[type] || { bg: '#f4f5f7', color: '#5a6b82' }
+  const match = colors[type] || { bg: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }
   return {
     backgroundColor: match.bg,
     color: match.color,
+    border: match.border,
   }
 }
 
@@ -2579,6 +3276,9 @@ async function handleExportLogs() {
     const blob = await exportTubeAuditLogs(PROJECT_KEY, {
       actionType: auditFilters.value.actionType,
       operator: auditFilters.value.operator,
+      resourceId: auditFilters.value.resourceId,
+      keyword: auditFilters.value.keyword,
+      isSensitive: auditFilters.value.isSensitive,
       startDate: auditFilters.value.startDate,
       endDate: auditFilters.value.endDate,
     })
@@ -2593,7 +3293,7 @@ async function handleExportLogs() {
     const mm = String(now.getMinutes()).padStart(2, '0')
     const ss = String(now.getSeconds()).padStart(2, '0')
     const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`
-    a.download = `operation_logs_${timestamp}.csv`
+    a.download = `tube_audit_logs_${timestamp}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -3878,5 +4578,1101 @@ async function handleExportLogs() {
     grid-template-columns: 1fr !important; /* 移动端折叠为单栏 */
     gap: 16px !important;
   }
+}
+
+/* ==========================================================================
+   📜 操作审计日志 (Audit Log) - 高质感看板、6列工整过滤、锁宽表格与智能 Diff 弹窗
+   ========================================================================== */
+
+/* 态势概览看板 */
+.audit-overview {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(360px, 1.1fr);
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f4f7fb 100%);
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.025);
+}
+
+.audit-overview__lead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.audit-overview__icon {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 20px;
+}
+
+.audit-overview__copy {
+  min-width: 0;
+}
+
+.audit-overview__label {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audit-overview__time {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.audit-overview__age {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.audit-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.audit-metric {
+  min-width: 0;
+  padding: 9px 12px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe4ef;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  transition: all 0.2s ease;
+}
+
+.audit-metric__label {
+  margin-bottom: 2px;
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.audit-metric__value {
+  color: #2563eb;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.audit-metric__value span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.audit-metric--sensitive {
+  cursor: pointer;
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.audit-metric--sensitive .audit-metric__value {
+  color: #dc2626;
+}
+
+.audit-metric--sensitive:hover {
+  border-color: #f87171;
+  background: #fef2f2;
+  transform: translateY(-1px);
+}
+
+.audit-metric--sensitive.is-active {
+  border-color: #dc2626;
+  background: #fee2e2;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+.audit-metric--operator .audit-metric__value {
+  color: #059669;
+}
+
+/* 6列严整过滤面板 (与提交记录完全对齐) */
+.audit-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+}
+
+.audit-filter-item {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.audit-filter-item > span {
+  color: #526276;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.audit-filter-item .input,
+.audit-filter-item .select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.audit-filter-item .input:focus,
+.audit-filter-item .select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* 过滤面板第3行：左侧敏感Toggle，右侧查询与导出按钮 */
+.audit-filter-toggle-wrap {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.audit-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.audit-toggle-chip:hover {
+  background: #fff5f5;
+  border-color: #f87171;
+}
+
+.audit-toggle-chip.active {
+  background: #fee2e2;
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+
+.audit-toggle-chip input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #dc2626;
+  cursor: pointer;
+  margin: 0;
+}
+
+.audit-toggle-text {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.audit-filter-actions {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.audit-query-btn,
+.audit-reset-btn,
+.audit-export-btn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.audit-reset-btn,
+.audit-export-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.audit-reset-btn:hover,
+.audit-export-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* 表格容器与锁宽 colgroup */
+.audit-table-wrap {
+  max-height: 600px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: #fff;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+}
+
+.audit-log-table {
+  width: 100%;
+  min-width: 1060px;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.audit-col-time { width: 190px; }
+.audit-col-resource { width: 180px; }
+.audit-col-operator { width: 140px; }
+.audit-col-action { width: 165px; }
+.audit-col-desc { width: auto; }
+.audit-col-diff { width: 130px; }
+
+.audit-log-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 16px;
+  text-align: left;
+  color: #475569;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.audit-log-table tbody td {
+  padding: 12px 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid #e8edf3;
+}
+
+.audit-log-table tbody tr {
+  background: #fff;
+  transition: background-color 0.18s;
+}
+
+.audit-log-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.audit-row--sensitive {
+  background: #fffafa !important;
+}
+
+.audit-row--sensitive:hover {
+  background: #fff1f2 !important;
+}
+
+/* 时间列 */
+.audit-time-cell {
+  min-width: 0;
+}
+
+.audit-time-value {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.audit-time-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.audit-recent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.audit-ip {
+  color: #64748b;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11px;
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* 单号列 */
+.audit-resource-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  max-width: 156px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.audit-resource-code {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-resource-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.audit-micro-btn {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.audit-micro-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* 操作人列 */
+.audit-operator-name {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.audit-operator-meta {
+  margin-top: 4px;
+}
+
+/* 行为类型列 */
+.audit-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.audit-sensitive-dot {
+  font-size: 12px;
+}
+
+/* 操作详情说明 */
+.audit-desc-text,
+.submission-detail-text {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.submission-section-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* 差异对比列 */
+.audit-diff-cell {
+  text-align: center;
+}
+
+.audit-diff-trigger-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.audit-diff-trigger-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.audit-empty-dash {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* 分页控制栏 (与提交记录 100% 对齐) */
+.audit-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.audit-pagination-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.audit-pagination-divider {
+  color: #cbd5e1;
+}
+
+.audit-page-size-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audit-limit-select {
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  border-radius: 5px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.audit-pagination-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audit-page-info strong {
+  color: #0f172a;
+}
+
+.audit-jump-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.audit-jump-input {
+  width: 54px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  text-align: center;
+  border-radius: 5px;
+}
+
+/* 智能 Diff 弹窗高质感样式 */
+.audit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(8px);
+}
+
+.audit-diff-modal {
+  width: 90%;
+  max-width: 1040px;
+  max-height: 86vh;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.audit-modal-header {
+  padding: 16px 22px;
+  background: linear-gradient(to bottom, #f8fafc, #ffffff);
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.audit-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-modal-sensitive-tag {
+  font-size: 11px;
+}
+
+.audit-modal-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.audit-modal-subtitle strong {
+  color: #1e293b;
+}
+
+.audit-sep {
+  color: #cbd5e1;
+}
+
+.audit-modal-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.audit-view-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.audit-view-tab {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.audit-view-tab.is-active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.audit-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  background: #ffffff;
+}
+
+/* 智能差异视图 */
+.audit-smart-diff-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.audit-diff-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+
+.audit-diff-banner__icon {
+  font-size: 22px;
+}
+
+.audit-diff-banner__content strong {
+  display: block;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.audit-diff-banner__content p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.audit-diff-banner--create {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.audit-diff-banner--delete {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.audit-diff-banner--modify {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.audit-smart-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.audit-smart-diff-table {
+  width: 100%;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.audit-smart-diff-table thead th {
+  background: #f8fafc;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.audit-smart-diff-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.audit-diff-field-name {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.audit-diff-field-key code {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.audit-diff-arrow-cell {
+  text-align: center;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.audit-val-content {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.audit-val-content--del {
+  background: #fff1f2;
+  color: #be123c;
+  text-decoration: line-through;
+  border: 1px solid #fecdd3;
+}
+
+.audit-val-content--add {
+  background: #f0fdf4;
+  color: #15803d;
+  font-weight: 600;
+  border: 1px solid #bbf7d0;
+}
+
+.audit-val-placeholder {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.audit-diff-empty {
+  text-align: center;
+  padding: 30px;
+  color: #64748b;
+}
+
+/* 原始快照对比双栏 */
+.audit-raw-json-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.audit-raw-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audit-raw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 0;
+}
+
+.audit-raw-header--before { color: #dc2626; }
+.audit-raw-header--after { color: #16a34a; }
+
+.audit-raw-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.audit-raw-header--before .audit-raw-dot { background: #dc2626; }
+.audit-raw-header--after .audit-raw-dot { background: #16a34a; }
+
+.audit-copy-json-btn {
+  font-size: 11px;
+}
+
+.audit-json-pre {
+  border-radius: 8px;
+  padding: 14px;
+  margin: 0;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 440px;
+  white-space: pre-wrap;
+  text-align: left;
+  line-height: 1.6;
+}
+
+.audit-json-pre--before {
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.audit-json-pre--after {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.audit-modal-footer {
+  padding: 12px 22px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+.audit-copy-toast {
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ==================== 📍 IP 归属地气泡浮窗 (Popover) 样式 ==================== */
+.clickable-ip {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+}
+
+.clickable-ip:hover {
+  background: #e2e8f0 !important;
+  color: #1d4ed8 !important;
+  border-color: #93c5fd !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.clickable-ip:active {
+  transform: translateY(0);
+}
+
+.ip-popover-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1200;
+  background: transparent;
+}
+
+.ip-popover-card {
+  position: absolute;
+  width: 290px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+  padding: 14px;
+  z-index: 1201;
+  animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.ip-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.ip-popover-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ip-popover-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.ip-popover-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.ip-popover-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.ip-code {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ip-copy-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ip-copy-btn:hover {
+  background: #f1f5f9;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.ip-popover-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.ip-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.ip-popover-error {
+  padding: 12px;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.ip-popover-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ip-detail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.ip-detail-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.ip-detail-value {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
+
+.ip-detail-value--loc {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.badge-private-ip {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.badge-public-ip {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.ip-adcode-tag {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11.5px;
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #475569;
+}
+
+.ip-detail-item--footer {
+  border-top: 1px dashed #f1f5f9;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.ip-provider-tag {
+  font-size: 11px;
+  color: #0284c7;
+  font-weight: 600;
 }
 </style>

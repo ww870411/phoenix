@@ -1,3 +1,53 @@
+## 2026-08-14 IP 定位引擎全面接入高德开放平台 Web 服务作为核心主力
+
+- **关联后端服务文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/ip_location_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/config_service.py`
+- **更新说明**：
+  - 动态解密并读取 `tube_config.json` 中配置的 `amap_config.api_key`；
+  - 核心接入高德 REST API `https://restapi.amap.com/v3/ip`，解析国标省市名称与 Adcode 编码；
+  - 结合太平洋网络（PCOnline）丰富网络运营商（ISP）信息，并保留 IP-API 作为海外中文兜底；
+  - 具备 0 毫秒本地局域网（RFC 1918）私网与本地回环直判能力。
+
+## 2026-08-14 新增公网 IP 地理位置解析服务与专用 API 路由
+
+- **关联后端文件与路由**：
+  - `backend/projects/insulation_pipe_supply_2026/services/ip_location_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 新增 `ip_location_service.py`，支持公网 IP 在线解析（国内 PCOnline 极速接口 + IP-API 中文兜底源）、私有局域网（192.168.*, 10.*, 172.16-31.*）与本地回环智能识别；
+  - 内置全局 `_IP_CACHE` 内存高速缓存，避免重复外呼请求；
+  - 在 `workspace.py` 新增公开路由 `GET /global-management/ip-location?ip={ip}` 供前端按需查询。
+
+## 2026-08-14 修复管件流转全生命周期操作日志 client_ip 丢失 Bug
+
+- **关联后端文件与路由**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - 修复 `fitting_delivery_service._write_audit_log` 缺少 `client_ip` 参数与 SQL 字段写入的问题；
+  - 在 `supply_management_service.py` 内部管件发货、到货确认、施工接收、库管入库及发货撤销等 5 个服务函数中完整接收并透传 `client_ip`；
+  - 在 `workspace.py` 中的管件相关路由处理函数注入 `request: Request` 并通过 `_get_client_ip(request)` 统一提取并透传。
+
+## 2026-08-14 保温管发货与管件流转全流程日志写入增加需求主体名称
+
+- **关联后端文件与路由**：
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+- **更新说明**：
+  - 在供给侧直管发货（`CREATE_DELIVERY`）、批量发货（`CREATE_DELIVERY_BATCH`）以及管件发货（`SUBMIT_FITTING_DELIVERY`）的操作审计日志落盘逻辑中，自动通过配置字典将 `section_1_id` 转换为需求主体/施工标段的中文名称（如 `需求主体【高温水_标段1】`），使提交记录与审计流水具备直观的业务标段可读性。
+
+## 2026-08-14 全局管理“操作审计日志”全量检索与安全态势服务层升级
+
+- **关联后端文件与路由**：
+  - `backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **更新说明**：
+  - **服务层增强**：`query_operation_logs` 升级支持 `resource_id` 模糊匹配、`keyword` 详情描述模糊检索、`is_sensitive` 高危敏感操作专用过滤；
+  - **宏观安全态势聚合**：在审计查询 SQL 聚合中返回 `latest_operated_at`（最近操作物理时间）、`today_count`（今日操作量）、`sensitive_count`（高危操作量）、`operator_count`（活跃操作人数）；
+  - **导出路由与字典补全**：`/global-management/operation-logs/export` 增加单号列支持，补齐全部 16+ 种操作类型的中文映射。
+
 ## 2026-08-13 全局管理页面基准设计量预设表格列宽精减同步记录
 
 - **关联前端页面与后端 API**：

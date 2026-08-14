@@ -70,27 +70,50 @@ def save_operation_log(
         session.close()
 
 
+SENSITIVE_AUDIT_ACTIONS = [
+    "SUPER_UPDATE_DELIVERY",
+    "UPDATE_CONFIG",
+    "CANCEL_DELIVERY",
+    "CANCEL_FITTING_DELIVERY",
+    "DELETE_FITTING_DELIVERY",
+]
+
+
 def query_operation_logs(
     action_type: Optional[str] = None,
     operator: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    is_sensitive: Optional[bool] = False,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 100,
     offset: int = 0
 ) -> Dict[str, Any]:
     """
-    查询并过滤操作审计日志，返回列表及总数。
+    查询并过滤操作审计日志，返回列表、总数以及宏观安全态势统计指标。
     """
     conditions = []
     params = {}
     
-    if action_type:
+    if is_sensitive:
+        conditions.append("action_type = ANY(:sensitive_actions)")
+        params["sensitive_actions"] = SENSITIVE_AUDIT_ACTIONS
+    elif action_type:
         conditions.append("action_type = :action_type")
         params["action_type"] = action_type
         
     if operator:
         conditions.append("operator ILIKE :operator")
         params["operator"] = f"%{operator}%"
+        
+    if resource_id:
+        conditions.append("resource_id ILIKE :resource_id")
+        params["resource_id"] = f"%{resource_id}%"
+
+    if keyword:
+        conditions.append("(action_desc ILIKE :keyword OR operator ILIKE :keyword OR resource_id ILIKE :keyword)")
+        params["keyword"] = f"%{keyword}%"
         
     if start_date:
         conditions.append("created_at >= :start_date")
@@ -116,6 +139,17 @@ def query_operation_logs(
         LIMIT :limit OFFSET :offset
         """
     )
+
+    stats_sql = text(
+        """
+        SELECT 
+            MAX(created_at) AS latest_operated_at,
+            COUNT(*) FILTER (WHERE created_at >= (NOW() AT TIME ZONE 'Asia/Shanghai')::date) AS today_count,
+            COUNT(*) FILTER (WHERE action_type = ANY(:all_sensitive_actions)) AS sensitive_count,
+            COUNT(DISTINCT operator) AS operator_count
+        FROM logs.tube_operation_logs
+        """
+    )
     
     params["limit"] = limit
     params["offset"] = offset
@@ -124,6 +158,10 @@ def query_operation_logs(
     try:
         total = session.execute(count_sql, params).scalar() or 0
         rows = session.execute(list_sql, params).mappings().all()
+
+        stats_row = session.execute(
+            stats_sql, {"all_sensitive_actions": SENSITIVE_AUDIT_ACTIONS}
+        ).mappings().first() or {}
         
         logs = []
         for row in rows:
@@ -140,7 +178,14 @@ def query_operation_logs(
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None
             })
             
-        return {"total": total, "logs": logs}
+        return {
+            "total": total,
+            "logs": logs,
+            "latest_operated_at": stats_row.get("latest_operated_at").isoformat() if stats_row.get("latest_operated_at") else None,
+            "today_count": stats_row.get("today_count", 0) or 0,
+            "sensitive_count": stats_row.get("sensitive_count", 0) or 0,
+            "operator_count": stats_row.get("operator_count", 0) or 0,
+        }
     finally:
         session.close()
 

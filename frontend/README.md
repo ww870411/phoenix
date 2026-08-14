@@ -1,3 +1,47 @@
+## 2026-08-14 IP 气泡弹窗支持行政区划代码 (Adcode) 与数据来源权威认证展示
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 增强 IP 浮窗卡片内容维度，不仅显示城市与运营商，还新增展示由高德官方返回的国标行政代码（`🏷️ 行政代码: 210200`）；
+  - 底部标注权威数据来源（`⚡ 数据来源: 高德开放平台 (Amap)`）。
+
+## 2026-08-14 全局管理提交记录与操作审计日志实现点击 IP 弹出归属地与运营商气泡
+
+- **关联前端页面与 API 服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **更新说明**：
+  - 将 Tab 7 提交记录与 Tab 8 操作审计日志中的 IP 胶囊升级为带点击微交互的交互式按钮（`.clickable-ip`）；
+  - 点击 IP 实时触发 Popover 气泡浮窗，通过 `getTubeIpLocation` 接口展示该 IP 的地理位置（省份、城市）、网络运营商（ISP）以及网络属性（公网 IPv4 / 内网局域网）；
+  - 引入前端本地内存缓存 `ipLocationLocalCache` 与遮罩点击自动关闭机制。
+
+## 2026-08-14 全局管理“提交记录”与“操作审计日志”详情说明字段智能展示需求主体名称
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 在“提交记录”与“操作审计日志”表格的“数据提交内容与详情说明”单元格中，引入 `getSection1NameFromLog` 智能解析引擎；
+  - 自动从快照 `section_1_id`、描述文本或配置字典中提取对应的需求主体（施工标段，如 `高温水_标段1`），并以高亮前置微胶囊 Badge（`.submission-section-chip`）清晰标示发货目标标段。
+
+## 2026-08-14 全局管理操作审计日志排版像素级精雕与 6 列网格体系重构
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **更新说明**：
+  - 将 Tab 8 操作审计日志的过滤控制栏重构为标准 6 列 Grid 体系，输入框高度 38px，与 Tab 7 提交记录完全对齐；
+  - 表格全面引入 `<colgroup>` 显式锁宽，根治列宽随数据动态抖动的隐患；
+  - 智能 Diff 弹窗 Header、Tab 切换与比对表格样式进行了统一优化，带来极致协调舒适的视觉体验。
+
+## 2026-08-14 全局管理页面“操作审计日志 (Audit Log)”全面深度升级与智能 Diff 弹窗
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **更新说明**：
+  - **态势概览看板**：Tab 8 顶部新增宏观安全态势卡片（最新操作时间与活跃标签、今日操作笔数、高危敏感操作数量与一键筛选、活跃账号统计）；
+  - **高级筛选工具栏**：支持 16+ 种细分操作类型（按高危、物流、管件、填报等分类分组）、关联单号/换热站 ID 检索、操作人与描述关键词搜索、高危操作一键开关、起止日期范围筛选与一键重置；
+  - **数据列表与交互体验**：新增等宽字体“关联单号”胶囊，支持一键点击复制单号（带轻量反馈 Toast）与一键以此单号进行条件反查；高危敏感操作呈现 🚨 红色警示徽章与浅红警示底色；
+  - **分页器增强**：支持切换 15/20/50/100 条每页展示，支持直接输入页码快速跳转；
+  - **智能 Diff 差异比对弹窗**：支持“智能差异解析 (Smart Diff)”与“原始快照对照 (Raw JSON)”切换；智能模式自动比对变更前后字段差异并映射 30+ 种中文业务名称，表格化呈现【原值 ➔ 新值】对比；原始快照模式支持一键复制代码快照。
+
 ## 2026-08-13 全局管理页面基准设计量预设表格列宽精减
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`

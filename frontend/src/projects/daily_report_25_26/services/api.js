@@ -442,7 +442,7 @@ export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pip
   return response.json()
 }
 
-export async function getTubeSubmissionLogs(projectKey, params) {
+export async function getTubeSubmissionLogs(projectKey, params = {}) {
   const query = new URLSearchParams()
   if (params.entityType) query.append('entity_type', params.entityType)
   if (params.actionType) query.append('action_type', params.actionType)
@@ -462,10 +462,26 @@ export async function getTubeSubmissionLogs(projectKey, params) {
   return response.json()
 }
 
-export async function getTubeAuditLogs(projectKey, params) {
+export async function getTubeIpLocation(projectKey, ip) {
+  const query = new URLSearchParams()
+  query.append('ip', ip)
+  const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/ip-location?${query.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '解析 IP 归属地失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+export async function getTubeAuditLogs(projectKey, params = {}) {
   const query = new URLSearchParams()
   if (params.actionType) query.append('action_type', params.actionType)
   if (params.operator) query.append('operator', params.operator)
+  if (params.resourceId) query.append('resource_id', params.resourceId)
+  if (params.keyword) query.append('keyword', params.keyword)
+  if (params.isSensitive) query.append('is_sensitive', 'true')
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
   query.append('page', params.page || 1)
@@ -481,10 +497,13 @@ export async function getTubeAuditLogs(projectKey, params) {
   return response.json()
 }
 
-export async function exportTubeAuditLogs(projectKey, params) {
+export async function exportTubeAuditLogs(projectKey, params = {}) {
   const query = new URLSearchParams()
   if (params.actionType) query.append('action_type', params.actionType)
   if (params.operator) query.append('operator', params.operator)
+  if (params.resourceId) query.append('resource_id', params.resourceId)
+  if (params.keyword) query.append('keyword', params.keyword)
+  if (params.isSensitive) query.append('is_sensitive', 'true')
   if (params.startDate) query.append('start_date', params.startDate)
   if (params.endDate) query.append('end_date', params.endDate)
   
