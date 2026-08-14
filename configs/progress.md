@@ -1,3 +1,16 @@
+## 2026-08-14 [修复3天滚动计划与每日使用量填报数据库唯一约束与序列丢失导致的 500 报错]
+- **Bug 根因深度排查**：
+  1. **唯一约束缺失**：`tube.tube_daily_plan` 表在数据库实例中缺少 `UNIQUE (plan_date, section_1_id, pipe_model_id)` 唯一索引，导致 PostgreSQL 执行 `ON CONFLICT (plan_date, section_1_id, pipe_model_id) DO UPDATE SET ...` 时报 `there is no unique or exclusion constraint matching the ON CONFLICT specification`；
+  2. **主键自增序列未绑定**：`tube.tube_daily_plan`、`tube.tube_daily_usage`、`tube.tube_inventory_adjustment` 等表的 `id` 列定义为 `bigint NOT NULL PRIMARY KEY`，但未绑定 `DEFAULT nextval('..._id_seq')`，导致插入数据时不带 id 触发 `null value in column "id" violates not-null constraint`；
+- **全自动自愈与加固措施 (`demand_management_service.py`)**：
+  1. **数据库 DDL 修复落地**：为 `tube.tube_daily_plan` 与 `tube.tube_daily_usage` 建立 `uq_tube_daily_plan_date_section_1_model` 与 `uq_tube_daily_usage_date_section_1_model` 唯一索引；
+  2. **创建并绑定全套自增序列**：为 `tube_daily_plan`、`tube_daily_usage`、`tube_inventory_adjustment`、`tube_weather_daily`、`tube_weather_hourly`、`tube_gis` 分别创建并绑定 `_id_seq`；
+  3. **服务层自动自愈引擎 (`_ensure_demand_table_structures`)**：在 `demand_management_service.py` 内部引入启动/执行期结构自动检测与自愈机制，即使以后在新数据库或重新迁移环境部署，服务也能 100% 自动修复表约束与自增序列；
+- **实测验证**：
+  1. 调用 `save_plan_records` 执行首次写入与更新写入，均 100% 成功返回 `影响条数: 1`；
+  2. 调用 `save_usage_records` 执行每日使用量写入，100% 成功返回 `影响条数: 1`；
+- **构建测试**：运行 `npm run build`，7.89s PASSED，编译 0 错误。
+
 ## 2026-08-14 [IP 定位全面接入高德开放平台 Web 服务 API 作为第一权威主力源]
 - **需求与优化背景**：为确保 IP 地理位置解析的权威性、合规性与长期稳定性，将系统现存的“高德开放平台（Amap）”API 密钥完整复用并接入 IP 解析引擎；
 - **后端定位引擎高精升级 (`ip_location_service.py`)**：

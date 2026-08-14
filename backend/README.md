@@ -1,3 +1,13 @@
+## 2026-08-14 需求侧 3 天滚动计划与使用量保存表结构自愈机制
+
+- **关联后端服务文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py`
+  - `backend/sql/tube_schema_init.sql`
+- **更新说明**：
+  - 修复 `tube.tube_daily_plan` 与 `tube.tube_daily_usage` 缺少唯一索引导致的 `ON CONFLICT` 报错；
+  - 修复 `tube` schema 下业务表 `id` 主键缺少自增序列（`_id_seq`）导致的非空约束违规；
+  - 在 `demand_management_service.py` 内部引入 `_ensure_demand_table_structures` 自动幂等自愈引擎，确保多环境部署自愈运行。
+
 ## 2026-08-14 IP 定位引擎全面接入高德开放平台 Web 服务作为核心主力
 
 - **关联后端服务文件**：

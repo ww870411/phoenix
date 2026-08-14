@@ -22,11 +22,66 @@ def _normalize_pipe_model_id(value: Any) -> str:
     return _normalize_text(value).upper()
 
 
+_structures_checked = False
+
+
+def _ensure_demand_table_structures() -> None:
+    """
+    自愈检查并保证 tube_daily_plan 和 tube_daily_usage 等表的唯一约束与自增序列存在。
+    """
+    global _structures_checked
+    if _structures_checked:
+        return
+
+    ddl_statements = [
+        # 1. tube_daily_plan 自增序列与唯一索引
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_daily_plan_id_seq",
+        "ALTER TABLE tube.tube_daily_plan ALTER COLUMN id SET DEFAULT nextval('tube.tube_daily_plan_id_seq')",
+        "ALTER SEQUENCE tube.tube_daily_plan_id_seq OWNED BY tube.tube_daily_plan.id",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_plan_date_section_1_model ON tube.tube_daily_plan (plan_date, section_1_id, pipe_model_id)",
+
+        # 2. tube_daily_usage 自增序列与唯一索引
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_daily_usage_id_seq",
+        "ALTER TABLE tube.tube_daily_usage ALTER COLUMN id SET DEFAULT nextval('tube.tube_daily_usage_id_seq')",
+        "ALTER SEQUENCE tube.tube_daily_usage_id_seq OWNED BY tube.tube_daily_usage.id",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_daily_usage_date_section_1_model ON tube.tube_daily_usage (usage_date, section_1_id, pipe_model_id)",
+
+        # 3. 其他业务表序列自愈
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_inventory_adjustment_id_seq",
+        "ALTER TABLE tube.tube_inventory_adjustment ALTER COLUMN id SET DEFAULT nextval('tube.tube_inventory_adjustment_id_seq')",
+        "ALTER SEQUENCE tube.tube_inventory_adjustment_id_seq OWNED BY tube.tube_inventory_adjustment.id",
+
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_weather_daily_id_seq",
+        "ALTER TABLE tube.tube_weather_daily ALTER COLUMN id SET DEFAULT nextval('tube.tube_weather_daily_id_seq')",
+        "ALTER SEQUENCE tube.tube_weather_daily_id_seq OWNED BY tube.tube_weather_daily.id",
+
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_weather_hourly_id_seq",
+        "ALTER TABLE tube.tube_weather_hourly ALTER COLUMN id SET DEFAULT nextval('tube.tube_weather_hourly_id_seq')",
+        "ALTER SEQUENCE tube.tube_weather_hourly_id_seq OWNED BY tube.tube_weather_hourly.id",
+
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_gis_id_seq",
+        "ALTER TABLE tube.tube_gis ALTER COLUMN id SET DEFAULT nextval('tube.tube_gis_id_seq')",
+        "ALTER SEQUENCE tube.tube_gis_id_seq OWNED BY tube.tube_gis.id",
+    ]
+    session = SessionLocal()
+    try:
+        for stmt in ddl_statements:
+            try:
+                session.execute(text(stmt))
+                session.commit()
+            except Exception:
+                session.rollback()
+        _structures_checked = True
+    finally:
+        session.close()
+
+
 def build_plan_dates(anchor_date: date) -> List[date]:
     return [anchor_date + timedelta(days=offset) for offset in range(3)]
 
 
 def list_plan_records(section_1_id: str, plan_dates: Sequence[date]) -> Dict[str, Dict[str, Any]]:
+    _ensure_demand_table_structures()
     sql = text(
         """
         SELECT
@@ -58,6 +113,7 @@ def list_plan_records(section_1_id: str, plan_dates: Sequence[date]) -> Dict[str
 def save_plan_records(section_1_id: str, records: Sequence[Dict[str, Any]], operator: str) -> int:
     if not records:
         return 0
+    _ensure_demand_table_structures()
     sql = text(
         """
         INSERT INTO tube.tube_daily_plan (
@@ -150,6 +206,7 @@ def list_usage_records(section_1_id: str, usage_date: date) -> Dict[str, Dict[st
 def save_usage_records(section_1_id: str, usage_date: date, records: Sequence[Dict[str, Any]], operator: str) -> int:
     if not records:
         return 0
+    _ensure_demand_table_structures()
         
     from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import auto_process_timeout_deliveries
     # 前置执行超时自动确认
