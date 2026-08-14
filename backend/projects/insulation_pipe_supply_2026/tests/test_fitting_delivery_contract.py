@@ -69,6 +69,27 @@ class FittingDeliveryContractTests(unittest.TestCase):
         self.assertEqual(payload.items[0].unit, "套")
         self.assertEqual(payload.items[1].unit, "个")
 
+    def test_submit_shipped_at_permission_rules(self):
+        from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_service import (
+            submit_fitting_delivery,
+            list_fitting_deliveries,
+        )
+        # 1. 普通供给主体 (tube_supplier) 提交时，即使传入了 2020 年的旧时间，后端也强制落库为当前真实时间
+        past_time = "2020-01-01T08:00:00+08:00"
+        payload = {
+            "supply_entity_id": "BH",
+            "vehicle_plate_no": "鲁B-11111",
+            "section_1_id": "high_lot_1",
+            "shipped_at": past_time,
+            "items": [{"fitting_type": "弯头", "model_spec": "DN300", "shipped_qty": 1, "unit": "个"}],
+        }
+        res = submit_fitting_delivery(payload, operator="supplier_user", operator_group="tube_supplier")
+        self.assertTrue(res["ok"])
+        items = list_fitting_deliveries(search_keyword="鲁B-11111", page_size=1).get("items", [])
+        self.assertTrue(len(items) > 0)
+        # 验证没有落库为 2020 年，而是当前的 2026 年
+        self.assertTrue(items[0]["shipped_at"].startswith("2026-"))
+
 
 if __name__ == "__main__":
     unittest.main()

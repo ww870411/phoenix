@@ -232,14 +232,20 @@ def submit_fitting_delivery(
     if not raw_items:
         raise HTTPException(status_code=422, detail="至少需要一条管件发货明细")
 
+    norm_group = str(operator_group or "").strip().lower()
+    is_admin = norm_group in {"global_admin", "dev_admin"}
     shipped_at_value = payload.get("shipped_at")
-    try:
-        shipped_at = shipped_at_value if isinstance(shipped_at_value, datetime) else datetime.fromisoformat(str(shipped_at_value).replace("Z", "+00:00"))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="发货时间格式不正确") from exc
-    if shipped_at.tzinfo is None:
-        shipped_at = shipped_at.replace(tzinfo=BEIJING_TZ)
-    shipped_at = shipped_at.astimezone(BEIJING_TZ)
+    if is_admin and shipped_at_value:
+        try:
+            shipped_at = shipped_at_value if isinstance(shipped_at_value, datetime) else datetime.fromisoformat(str(shipped_at_value).replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="发货时间格式不正确") from exc
+        if shipped_at.tzinfo is None:
+            shipped_at = shipped_at.replace(tzinfo=BEIJING_TZ)
+        shipped_at = shipped_at.astimezone(BEIJING_TZ)
+    else:
+        # 非 Global_admin 用户或未指定时间时，强制记录为当前实际的东八区时间
+        shipped_at = datetime.now(BEIJING_TZ)
 
     supply_entity_id = supply_entity_input.upper()
     entity_code = "SA"

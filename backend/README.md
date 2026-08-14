@@ -1,3 +1,12 @@
+## 2026-08-14 管件发货时间权限控制与东八区时间强制落库
+
+- **关联后端服务文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/tests/test_fitting_delivery_contract.py`
+- **更新说明**：
+  - 在 `submit_fitting_delivery` 中强化发货时间权限控制，仅 `global_admin` / `dev_admin` 允许传入自定义发货时间；
+  - 非管理员提交时，后端强制赋值为服务器真实的东八区时间（`datetime.now(BEIJING_TZ)`），彻底消除人为误选或客户端时区偏差问题。
+
 ## 2026-08-14 管件发货全流程与数据库物理层加固
 
 - **关联后端服务文件**：

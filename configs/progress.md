@@ -1,3 +1,31 @@
+## 2026-08-14 [管件发货表单彻底精简：移除发货时间选择框，发货时间全自动记录实时东八区时戳]
+- **交互优化与决策**：为彻底避免人工录单选择时间的人为失误与视觉干扰，管件发货表单移除“发货时间”输入框；
+- **全链路自动化记录机制**：
+  1. **前端**：表单精简为车牌、标段、经办人、电话与备注，提交时自动附带此时此刻本地时间（`getNowISOString()`）；
+  2. **后端**：`submit_fitting_delivery` 在无自定义输入或非管理员调用时，直接取服务器当前东八区真实时间（`datetime.now(BEIJING_TZ)`）落库；
+- **测试与构建**：后端 11 项单元测试 100% PASSED，前端 `npm run build` 9.42s 编译 0 错误。
+
+## 2026-08-14 [管件发货时间权限严格管控：仅全局管理员可选，其他用户强制锁定实时东八区时戳]
+- **需求与业务背景**：防止供给端普通操作员事后补录时未修改时间或随意调改时间导致单据与实际发货脱节，建立前后端双层强约束机制；
+- **前后端双层权限强约束实施**：
+  1. **【前端表单锁定与提示】**（`SupplyManagementView.vue`）：
+     - 仅 `Global_admin`（全局管理员）可自由点击日期时间选择器调整发货时间，并带有 `✏️ 管理员可调` 徽标；
+     - 其他角色（如 `tube_supplier` 供给端操作员）发货时间输入框直接设为只读锁定（`:disabled="true"`），带有 `🔒 锁定实际时间` 提示；
+     - 提交时非管理员自动刷新为此时此刻的实时东八区时间（`getNowISOString()`），提交成功后自动重置为最新实时时戳；
+  2. **【后端服务层防篡改硬校验】**（`fitting_delivery_service.py`）：
+     - 在 `submit_fitting_delivery` 内部进行角色严格判定，仅 `global_admin` / `dev_admin` 角色允许使用 payload 中的自定义时间；
+     - 其他所有操作角色一律在后端直接强制赋值为服务器真实的北京时间（`datetime.now(BEIJING_TZ)`），彻底封死通过抓包伪造时间戳的漏洞；
+- **自动化测试与构建**：
+  1. 在 `test_fitting_delivery_contract.py` 中新增发货时间权限防篡改测试用例，11 项后端测试 100% 全部 PASSED；
+  2. 运行前端 `npm run build`，10.38s 编译 0 错误。
+
+## 2026-08-14 [管件发货数据库时间体系剖析与前端流转时光轴字段错配彻底修复]
+- **时间体系梳理**：系统性剖析管件发货数据库表（`tube.tube_fitting_delivery`）维护的 7 大核心时戳（`shipped_at` 发货业务时间、`created_at` 物理入库时间、`updated_at` 最后更新时间、`arrived_confirm_at` 现场到货时间、`received_confirm_at` 施工接收时间、`warehouse_confirm_at` 库管归档时间、`cancel_at` 撤销时间）；
+- **发现并修复的前端时光轴字段错配**：
+  - 在 `SupplyManagementView.vue` 和 `WarehouseManagementView.vue` 的 `showDeliveryDetail` 函数中，原代码将履约时间分别映射为 `arrivedAt`、`constructionConfirmedAt`、`warehouseConfirmedAt`，而弹窗 Timeline 模板绑定的是 `arrivedConfirmAt`、`receivedConfirmAt`、`warehouseConfirmAt`，导致已确认的到货与接收在弹窗中可能出现节点显示变灰或时间空白；
+  - 已在两个页面中补齐全套 camelCase 与 snake_case 完整时间及经办人字段双向映射（`arrivedConfirmAt`、`receivedConfirmAt`、`warehouseConfirmAt`、`cancelledAt`），确保 4 个流转阶段的时间与经办人 100% 准确亮起并显示；
+- **构建测试**：运行 `npm run build`，9.28s 编译 0 错误。
+
 ## 2026-08-14 [管件发货与全生命周期“套/个”多单位展示与流转彻底地毯式排查与修复]
 - **排查与加固范围**：针对“套”与“个”多单位支持，开展了从“前端录入 -> 提交入库 -> 数据库物理存储 -> 查询列表 -> 卡片汇总 -> 详情弹窗凭证 -> 现场到货 -> 施工接收 -> 库管归档 -> 台账导出”全生命周期 10 大环节的全面地毯式代码审查；
 - **发现并修复的前端隐藏硬编码**：

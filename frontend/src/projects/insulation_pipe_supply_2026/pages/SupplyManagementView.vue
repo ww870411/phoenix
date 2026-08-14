@@ -572,11 +572,6 @@
               </label>
 
               <label class="field">
-                <span style="font-weight: bold; color: #1e293b; font-size: 13px;">发货时间</span>
-                <input v-model="fittingForm.shippedAt" type="datetime-local" class="input" style="padding: 6px 10px; font-size: 13px;" />
-              </label>
-
-              <label class="field">
                 <span style="font-size: 13px;">发货主体</span>
                 <input :value="currentSupplyEntityLabel" type="text" disabled class="input" style="background: #f1f5f9; color: #64748b; padding: 6px 10px; font-size: 13px;" />
               </label>
@@ -1263,6 +1258,10 @@ const allSupplyEntityOptions = computed(() => {
 const section1Options = ref([])
 const allPipeModelOptions = ref([])
 const currentGroup = ref('')
+const isGlobalAdmin = computed(() => {
+  const g = String(currentGroup.value || '').trim().toLowerCase()
+  return g === 'global_admin' || g === 'dev_admin'
+})
 const currentSupplyEntityIds = ref([])
 const showDate = ref('')
 const planStartDate = ref('')
@@ -1286,7 +1285,6 @@ const openTimelineModal = (input) => {
 const fittingForm = ref({
   vehiclePlateNo: '',
   section1Id: '',
-  shippedAt: getNowISOString(),
   shipContactName: '',
   shipContactPhone: '',
   shipRemark: '',
@@ -1571,15 +1569,26 @@ function showDeliveryDetail(input) {
     shipContactPhone,
     createdBy,
     shipRemark,
+    arrivedConfirmAt,
     arrivedAt: arrivedConfirmAt,
+    arrivedConfirmBy,
     arrivedBy: arrivedConfirmBy,
+    arrivedRemark,
     arrivalRemark: arrivedRemark,
+    receivedConfirmAt: constructionConfirmedAt,
     constructionConfirmedAt,
+    receivedConfirmBy: constructionConfirmedBy,
     constructionConfirmedBy,
+    receivedRemark: constructionRemark,
     constructionRemark,
+    warehouseConfirmAt: warehouseConfirmedAt,
     warehouseConfirmedAt,
+    warehouseConfirmBy: warehouseConfirmedBy,
     warehouseConfirmedBy,
-    warehouseRemark
+    warehouseRemark,
+    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || '',
+    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || '',
+    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
 }
@@ -1996,7 +2005,7 @@ const submitFittingForm = async () => {
     supply_entity_id: selectedSupplyEntityId.value || 'BH',
     vehicle_plate_no: fittingForm.value.vehiclePlateNo,
     section_1_id: fittingForm.value.section1Id,
-    shipped_at: fittingForm.value.shippedAt,
+    shipped_at: getNowISOString(),
     ship_contact_name: fittingForm.value.shipContactName,
     ship_contact_phone: fittingForm.value.shipContactPhone,
     ship_remark: fittingForm.value.shipRemark,
@@ -2032,6 +2041,7 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
       fittingGridSource.value = createEmptyFittingRows(8)
       fittingForm.value.vehiclePlateNo = ''
       fittingForm.value.shipRemark = ''
+      fittingForm.value.shippedAt = getNowISOString()
       pendingSubmitPayload.value = null
       loadFittingDeliveries()
     } else {

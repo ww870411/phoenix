@@ -1134,15 +1134,26 @@ function showDeliveryDetail(input) {
     shipContactPhone,
     createdBy,
     shipRemark,
+    arrivedConfirmAt,
     arrivedAt: arrivedConfirmAt,
+    arrivedConfirmBy,
     arrivedBy: arrivedConfirmBy,
+    arrivedRemark,
     arrivalRemark: arrivedRemark,
+    receivedConfirmAt: constructionConfirmedAt,
     constructionConfirmedAt,
+    receivedConfirmBy: constructionConfirmedBy,
     constructionConfirmedBy,
+    receivedRemark: constructionRemark,
     constructionRemark,
+    warehouseConfirmAt: warehouseConfirmedAt,
     warehouseConfirmedAt,
+    warehouseConfirmBy: warehouseConfirmedBy,
     warehouseConfirmedBy,
-    warehouseRemark
+    warehouseRemark,
+    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || '',
+    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || '',
+    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
 }

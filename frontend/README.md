@@ -1,3 +1,19 @@
+## 2026-08-14 管件发货表单移除发货时间选择框
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **更新说明**：
+  - 移除发货表单中的“发货时间”输入控件，表单布局进一步精简高效；
+  - 提交发货时自动由系统获取当前东八区实时时戳（`getNowISOString()`）并送交后端落盘。
+
+## 2026-08-14 管件流转凭证弹窗时光轴字段绑定全面对齐
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 彻底对齐 `showDeliveryDetail` 组装弹窗数据时的字段名绑定，补齐 `arrivedConfirmAt`、`receivedConfirmAt`、`warehouseConfirmAt`、`cancelledAt` 及对应的经办人与备注属性；
+  - 确保供给侧管理、需求侧管理与库管页面在打开流转凭证时光轴时，所有履约阶段的时间、经办人与备注均能 100% 准确点亮并渲染。
+
 ## 2026-08-14 管件发货全流程“套/个”单位动态化展示与凭证弹窗加固
 
 - **关联前端页面**：
