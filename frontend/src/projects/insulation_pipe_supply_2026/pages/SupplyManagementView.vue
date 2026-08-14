@@ -712,7 +712,7 @@
                     <div class="header-right-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                       <div style="text-align: right;">
                         <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                        <strong style="font-size: 13.5px; color: #059669;">发货总计: {{ group.totalQty }} 个</strong>
+                        <strong style="font-size: 13.5px; color: #059669;">发货总计: {{ group.totalQty }} {{ getGroupUnitLabel(group) }}</strong>
                       </div>
                       <!-- 状态 Badge -->
                       <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
@@ -875,7 +875,7 @@
             <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
               <span>{{ isFittingDeliveryModal ? '📦 本车次搭载管件清单及履约明细' : '📦 本车次保温管发货及履约明细' }}</span>
               <span style="font-size: 11px; color: #4f46e5; background: #eef2ff; padding: 3px 10px; border-radius: 99px; border: 1px solid #c7d2fe; font-weight: 600;">
-                {{ isFittingDeliveryModal ? `共 ${deliveryDetailModalData.totalTypesCount} 种规格 / 合计 ${formatNumber(deliveryDetailModalData.shippedQty)} 个` : `装载总长度 ${formatNumber(deliveryDetailModalData.shippedQty)} 米` }}
+                {{ isFittingDeliveryModal ? `共 ${deliveryDetailModalData.totalTypesCount} 种规格 / 合计 ${formatNumber(deliveryDetailModalData.shippedQty)} ${getModalUnitLabel(deliveryDetailModalData)}` : `装载总长度 ${formatNumber(deliveryDetailModalData.shippedQty)} 米` }}
               </span>
             </div>
             <table style="margin: 0; width: 100%; min-width: 480px; min-height: 70px; table-layout: fixed; border-collapse: collapse; border: 1px solid #edf2f7; border-radius: 6px; font-size: 11.5px; box-sizing: border-box;">
@@ -894,10 +894,10 @@
                   <td style="padding: 6px 4px; text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
                   <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}</td>
                   <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
-                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ isFittingDeliveryModal ? '个' : '米' }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
                     <span v-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
-                      {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ isFittingDeliveryModal ? '个' : '米' }}
+                      {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}
                     </span>
                     <span v-else style="color: #94a3b8; font-weight: normal;">—</span>
                   </td>
@@ -1376,6 +1376,22 @@ function isValidFittingUnit(unitStr) {
   if (!unitStr) return false
   const trimmed = String(unitStr).trim()
   return (allowedFittingUnits.value || []).includes(trimmed)
+}
+
+function getGroupUnitLabel(group) {
+  if (!group || !group.items || !group.items.length) return '个'
+  const units = Array.from(new Set(group.items.map(it => String(it.unit || '个').trim()).filter(Boolean)))
+  if (units.length === 1) return units[0]
+  return '件'
+}
+
+function getModalUnitLabel(modalData) {
+  if (!modalData) return '个'
+  const items = modalData.itemsList || []
+  if (!items.length) return modalData.unit || '个'
+  const units = Array.from(new Set(items.map(it => String(it.unit || '个').trim()).filter(Boolean)))
+  if (units.length === 1) return units[0]
+  return '件'
 }
 
 const isInvalidQtyCell = (val) => {

@@ -1,3 +1,14 @@
+## 2026-08-14 管件发货全流程“套/个”单位动态化展示与凭证弹窗加固
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **更新说明**：
+  - 彻底清理流转凭证弹窗中的硬编码，表格明细行优先展示记录自身的 `it.unit`，使“套”和“个”分别准确展示；
+  - 增加 `getGroupUnitLabel` 与 `getModalUnitLabel` 动态单位计算函数，支持单单位自动匹配与混合单位“件”的智能展示；
+  - 完善已发货卡片发货总计与已到货总计的单位动态化。
+
 ## 2026-08-14 IP 气泡弹窗支持行政区划代码 (Adcode) 与数据来源权威认证展示
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`

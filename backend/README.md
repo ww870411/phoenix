@@ -1,3 +1,15 @@
+## 2026-08-14 管件发货全流程与数据库物理层加固
+
+- **关联后端服务文件**：
+  - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - `backend/sql/tube_schema_init.sql`
+- **更新说明**：
+  - 修复 `submit_fitting_delivery` 插入语句中的 `unit` 参数绑定，保证“套”与“个”等合法单位真实落盘；
+  - 为 `tube.tube_fitting_delivery` 添加物理主键约束 `PRIMARY KEY (id)`、`uq_tube_fitting_delivery_order_no` 唯一索引及核心查询索引，并在服务启动与执行期集成 `_ensure_fitting_table_structures` 幂等自愈引擎；
+  - 优化发货车次号与单号生成算法，加入递增重试防并发竞争（Race Condition）机制；
+  - 将 `supply_management_service.py` 中历史冗余函数全部重构为对 `fitting_delivery_service.py` 的统一委托。
+
 ## 2026-08-14 需求侧 3 天滚动计划与使用量保存表结构自愈机制
 
 - **关联后端服务文件**：

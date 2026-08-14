@@ -1390,184 +1390,13 @@ def submit_fitting_delivery(
     operator_group: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> Dict[str, Any]:
-    raw_supply_entity_id = _normalize_text(payload.get("supply_entity_id") or "BH")
-    supply_entity_id = raw_supply_entity_id.upper()
-    vehicle_plate_no = _normalize_text(payload.get("vehicle_plate_no"))
-    section_1_id = _normalize_text(payload.get("section_1_id"))
-    shipped_at_str = payload.get("shipped_at")
-    ship_contact_name = _normalize_text(payload.get("ship_contact_name"))
-    ship_contact_phone = _normalize_text(payload.get("ship_contact_phone"))
-    ship_remark = _normalize_text(payload.get("ship_remark"))
-    items = payload.get("items") or []
-
-    if not vehicle_plate_no:
-        raise HTTPException(status_code=400, detail="发货车牌号不能为空")
-    if not section_1_id:
-        raise HTTPException(status_code=400, detail="接收标段/工程不能为空")
-    if not items:
-        raise HTTPException(status_code=400, detail="发货明细不能为空")
-
-    shipped_at_dt = None
-    if shipped_at_str:
-        try:
-            shipped_at_dt = datetime.fromisoformat(str(shipped_at_str).replace('Z', '+00:00'))
-        except Exception:
-            shipped_at_dt = datetime.now(BEIJING_TZ)
-    else:
-        shipped_at_dt = datetime.now(BEIJING_TZ)
-
-    beijing_dt = _to_beijing_time(shipped_at_dt)
-    date_part = beijing_dt.strftime("%y%m%d")
-
-    # 从配置中解析该供给主体的简写 code (例如 kaiyuan -> SA, supplier_b -> SB, BH -> BH)
-    config_payload = load_tube_config()
-    entity_code = supply_entity_id
-    for entity in get_config_list(config_payload, "supply_entities"):
-        e_id = str(entity.get("entity_id") or "").strip().lower()
-        if e_id == raw_supply_entity_id.lower():
-            code = str(entity.get("code") or "").strip().upper()
-            if code:
-                entity_code = code
-            break
-
-    session = SessionLocal()
-    try:
-        # 自动防错防护：确保 tube.tube_fitting_delivery 的 id 字段具备自增 Sequence 默认值，并追加流转留痕字段
-        try:
-            session.execute(text("""
-                CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq;
-                ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq');
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_qty NUMERIC;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMP WITH TIME ZONE;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_by TEXT;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrival_remark TEXT;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_at TIMESTAMP WITH TIME ZONE;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_by TEXT;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_remark TEXT;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_at TIMESTAMP WITH TIME ZONE;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_by TEXT;
-                ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_remark TEXT;
-            """))
-            session.commit()
-        except Exception:
-            session.rollback()
-        count_sql = text(
-            """
-            SELECT COUNT(DISTINCT shipment_no) AS batch_cnt
-            FROM tube.tube_fitting_delivery
-            WHERE LOWER(TRIM(supply_entity_id)) = LOWER(TRIM(:supply_entity_id))
-              AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date = :shipped_date
-            """
-        )
-        batch_cnt = session.execute(
-            count_sql,
-            {
-                "supply_entity_id": supply_entity_id,
-                "shipped_date": beijing_dt.date(),
-            }
-        ).scalar() or 0
-        
-        seq_num = batch_cnt + 1
-        shipment_no = f"FS{entity_code}-{date_part}-{seq_num:03d}"
-
-        insert_sql = text(
-            """
-            INSERT INTO tube.tube_fitting_delivery (
-                supply_entity_id, shipment_no, order_no, vehicle_plate_no,
-                section_1_id, fitting_type, model_spec, shipped_qty, unit,
-                shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
-                status, created_by, updated_by
-            ) VALUES (
-                :supply_entity_id, :shipment_no, :order_no, :vehicle_plate_no,
-                :section_1_id, :fitting_type, :model_spec, :shipped_qty, :unit,
-                :shipped_at, :ship_contact_name, :ship_contact_phone, :ship_remark,
-                'shipped', :created_by, :updated_by
-            )
-            RETURNING id
-            """
-        )
-
-        created_ids = []
-        for idx, item in enumerate(items, 1):
-            fitting_type = _normalize_text(item.get("fitting_type"))
-            model_spec = _normalize_text(item.get("model_spec"))
-            shipped_qty_raw = item.get("shipped_qty")
-            unit = "个"  # 单位强行归一化修正为“个”
-            item_remark = _normalize_text(item.get("remark"))
-
-            if not fitting_type or not model_spec:
-                continue
-
-            try:
-                shipped_qty_val = float(shipped_qty_raw)
-                if shipped_qty_val <= 0 or not shipped_qty_val.is_integer():
-                    raise HTTPException(status_code=400, detail=f"第 {idx} 行发货数量必须为大于0的纯正整数数字（当前输入: {shipped_qty_raw}）")
-                shipped_qty = float(int(shipped_qty_val))
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail=f"第 {idx} 行发货数量格式无效")
-
-            section_code = section_1_id[0].upper() if section_1_id else "X"
-            order_no = f"FO{entity_code}-{section_code}-{date_part}-{seq_num:03d}-{idx:02d}"
-
-            res = session.execute(
-                insert_sql,
-                {
-                    "supply_entity_id": supply_entity_id,
-                    "shipment_no": shipment_no,
-                    "order_no": order_no,
-                    "vehicle_plate_no": vehicle_plate_no,
-                    "section_1_id": section_1_id,
-                    "fitting_type": fitting_type,
-                    "model_spec": model_spec,
-                    "shipped_qty": shipped_qty,
-                    "unit": unit,
-                    "shipped_at": beijing_dt,
-                    "ship_contact_name": ship_contact_name,
-                    "ship_contact_phone": ship_contact_phone,
-                    "ship_remark": item_remark or ship_remark,
-                    "created_by": operator,
-                    "updated_by": operator,
-                }
-            )
-            row_id = res.scalar()
-            created_ids.append(row_id)
-
-        session.commit()
-
-        # 记录审计日志
-        try:
-            from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
-            save_operation_log(
-                operator=operator,
-                operator_group=operator_group or "tube_supplier",
-                action_type="SUBMIT_FITTING_DELIVERY",
-                action_desc=f"操作管件发货：发货单号【{shipment_no}】，需求主体【{next((str(e.get('section_1_name') or e.get('name') or '').strip() for e in (load_tube_config().get('demand_entities') or []) if str(e.get('section_1_id') or e.get('id') or '').strip() == str(section_1_id).strip()), str(section_1_id))}】，共 {len(created_ids)} 项明细（车牌: {vehicle_plate_no}）",
-                resource_id=shipment_no,
-                after_value={
-                    "shipment_no": shipment_no,
-                    "vehicle_plate_no": vehicle_plate_no,
-                    "section_1_id": section_1_id,
-                    "supply_entity_id": supply_entity_id,
-                    "shipped_at": beijing_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    "items_count": len(created_ids),
-                    "items": items,
-                },
-                client_ip=client_ip
-            )
-        except Exception as log_ex:
-            print(f"[Operation Log Warning] 记录管件发货日志失败: {log_ex}")
-
-        return {
-            "ok": True,
-            "shipment_no": shipment_no,
-            "count": len(created_ids),
-            "created_ids": created_ids,
-        }
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(status_code=500, detail=f"保存管件发货记录失败: {str(e)}")
-    finally:
-        session.close()
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    return fitting_delivery_service.submit_fitting_delivery(
+        payload,
+        operator=operator,
+        operator_group=operator_group or "tube_supplier",
+        client_ip=client_ip,
+    )
 
 
 def list_fitting_deliveries(
@@ -1578,144 +1407,76 @@ def list_fitting_deliveries(
     search_keyword: str = "",
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
-    # 自动防错防护：确保 tube.tube_fitting_delivery 拥有全量留痕字段
-    _init_session = SessionLocal()
-    try:
-        _init_session.execute(text("""
-            CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq;
-            ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq');
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_qty NUMERIC;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMP WITH TIME ZONE;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrived_by TEXT;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS arrival_remark TEXT;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_at TIMESTAMP WITH TIME ZONE;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_confirmed_by TEXT;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS construction_remark TEXT;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_at TIMESTAMP WITH TIME ZONE;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_confirmed_by TEXT;
-            ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS warehouse_remark TEXT;
-        """))
-        _init_session.commit()
-    except Exception:
-        _init_session.rollback()
-    finally:
-        _init_session.close()
-
-    clean_supply_id = _normalize_text(supply_entity_id)
-    clean_section_id = _normalize_text(section_1_id)
-    cfg = load_tube_config()
-
-    possible_supply_ids = []
-    if clean_supply_id:
-        p_set = {clean_supply_id.lower()}
-        for ent in get_config_list(cfg, "supply_entities"):
-            e_id = str(ent.get("entity_id") or "").strip().lower()
-            code = str(ent.get("code") or "").strip().lower()
-            if clean_supply_id.lower() in (e_id, code):
-                if e_id: p_set.add(e_id)
-                if code: p_set.add(code)
-        possible_supply_ids = list(p_set)
-
-    possible_section_ids = []
-    if clean_section_id:
-        p_set = {clean_section_id.lower()}
-        for ent in get_config_list(cfg, "demand_entities"):
-            s_id = str(ent.get("section_1_id") or "").strip().lower()
-            code = str(ent.get("code") or "").strip().lower()
-            if clean_section_id.lower() in (s_id, code):
-                if s_id: p_set.add(s_id)
-                if code: p_set.add(code)
-        possible_section_ids = list(p_set)
-
-    sql = text(
-        """
-        SELECT
-            id, supply_entity_id, shipment_no, order_no, vehicle_plate_no,
-            section_1_id, fitting_type, model_spec, shipped_qty, unit,
-            shipped_at, ship_contact_name, ship_contact_phone, ship_remark,
-            status, created_at, created_by, arrived_qty, arrived_at, arrived_by, arrival_remark,
-            construction_confirmed_at, construction_confirmed_by, construction_remark,
-            warehouse_confirmed_at, warehouse_confirmed_by, warehouse_remark
-        FROM tube.tube_fitting_delivery
-        WHERE (:has_section_filter = FALSE OR LOWER(TRIM(section_1_id)) = ANY(:section_ids))
-          AND (:has_supply_filter = FALSE OR LOWER(TRIM(supply_entity_id)) = ANY(:supply_ids))
-          AND (:start_date = '' OR shipped_at >= CAST(:start_date_ts AS TIMESTAMP))
-          AND (:end_date = '' OR shipped_at <= CAST(:end_date_ts AS TIMESTAMP))
-          AND (
-            :keyword = '' OR
-            shipment_no ILIKE :kw_like OR
-            order_no ILIKE :kw_like OR
-            vehicle_plate_no ILIKE :kw_like OR
-            fitting_type ILIKE :kw_like OR
-            model_spec ILIKE :kw_like OR
-            ship_remark ILIKE :kw_like
-          )
-        ORDER BY shipped_at DESC, id DESC
-        LIMIT :limit
-        """
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    res = fitting_delivery_service.list_fitting_deliveries(
+        section_1_id=section_1_id,
+        supply_entity_id=supply_entity_id,
+        start_date=start_date,
+        end_date=end_date,
+        search_keyword=search_keyword,
+        page_size=limit,
     )
-    session = SessionLocal()
-    try:
-        kw = _normalize_text(search_keyword)
-        clean_start = _normalize_text(start_date)
-        clean_end = _normalize_text(end_date)
-        start_ts = f"{clean_start} 00:00:00" if clean_start else "1970-01-01 00:00:00"
-        end_ts = f"{clean_end} 23:59:59" if clean_end else "2099-12-31 23:59:59"
+    return res.get("items", [])
 
-        rows = session.execute(
-            sql,
-            {
-                "has_section_filter": bool(possible_section_ids),
-                "section_ids": possible_section_ids if possible_section_ids else [""],
-                "has_supply_filter": bool(possible_supply_ids),
-                "supply_ids": possible_supply_ids if possible_supply_ids else [""],
-                "start_date": clean_start,
-                "start_date_ts": start_ts,
-                "end_date": clean_end,
-                "end_date_ts": end_ts,
-                "keyword": kw,
-                "kw_like": f"%{kw}%",
-                "limit": limit,
-            }
-        ).mappings().all()
 
-        items = [
-            {
-                "id": row["id"],
-                "supply_entity_id": _normalize_text(row["supply_entity_id"]),
-                "shipment_no": _normalize_text(row["shipment_no"]),
-                "order_no": _normalize_text(row["order_no"]),
-                "vehicle_plate_no": _normalize_text(row["vehicle_plate_no"]),
-                "section_1_id": _normalize_text(row["section_1_id"]),
-                "fitting_type": _normalize_text(row["fitting_type"]),
-                "model_spec": _normalize_text(row["model_spec"]),
-                "shipped_qty": float(row["shipped_qty"]),
-                "unit": _normalize_text(row["unit"]),
-                "shipped_at": _to_beijing_time(row["shipped_at"]).isoformat() if row["shipped_at"] else "",
-                "ship_contact_name": _normalize_text(row["ship_contact_name"]),
-                "ship_contact_phone": _normalize_text(row["ship_contact_phone"]),
-                "ship_remark": _normalize_text(row["ship_remark"]),
-                "status": _normalize_text(row["status"]),
-                "created_at": _to_beijing_time(row["created_at"]).isoformat() if row["created_at"] else "",
-                "created_by": _normalize_text(row["created_by"]),
-                "operator": _normalize_text(row["created_by"]),
-                "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else float(row["shipped_qty"]),
-                "arrived_at": _to_beijing_time(row["arrived_at"]).isoformat() if row["arrived_at"] else "",
-                "arrived_by": _normalize_text(row["arrived_by"]),
-                "arrival_remark": _normalize_text(row["arrival_remark"]),
-                "construction_confirmed_at": _to_beijing_time(row["construction_confirmed_at"]).isoformat() if row["construction_confirmed_at"] else "",
-                "construction_confirmed_by": _normalize_text(row["construction_confirmed_by"]),
-                "construction_remark": _normalize_text(row["construction_remark"]),
-                "warehouse_confirmed_at": _to_beijing_time(row["warehouse_confirmed_at"]).isoformat() if row["warehouse_confirmed_at"] else "",
-                "warehouse_confirmed_by": _normalize_text(row["warehouse_confirmed_by"]),
-                "warehouse_remark": _normalize_text(row["warehouse_remark"]),
-            }
-            for row in rows
-        ]
+def confirm_fitting_delivery_arrival(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    return fitting_delivery_service.confirm_fitting_delivery_arrival(
+        payload,
+        operator=operator,
+        operator_group=operator_group or "site_manager",
+        client_ip=client_ip,
+    )
 
-        return items
-    finally:
-        session.close()
+
+def confirm_fitting_delivery_construction(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    return fitting_delivery_service.confirm_fitting_delivery_construction(
+        payload,
+        operator=operator,
+        operator_group=operator_group or "construction_unit",
+        client_ip=client_ip,
+    )
+
+
+def confirm_fitting_delivery_warehouse(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    return fitting_delivery_service.confirm_fitting_delivery_warehouse(
+        payload,
+        operator=operator,
+        operator_group=operator_group or "warehouse_keeper",
+        client_ip=client_ip,
+    )
+
+
+def cancel_fitting_delivery(
+    payload: Dict[str, Any],
+    operator: str = "SYSTEM",
+    operator_group: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services import fitting_delivery_service
+    return fitting_delivery_service.cancel_fitting_delivery(
+        payload,
+        operator=operator,
+        operator_group=operator_group or "tube_supplier",
+        client_ip=client_ip,
+    )
 
 
 def confirm_fitting_delivery_arrival(

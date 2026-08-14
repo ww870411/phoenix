@@ -55,6 +55,20 @@ class FittingDeliveryContractTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             normalize_delivery_ids({"ids": ["invalid"]})
 
+    def test_submit_supports_multiple_units(self):
+        payload = FittingDeliverySubmitPayload(
+            supply_entity_id="BH",
+            vehicle_plate_no="鲁B-88888",
+            section_1_id="high_lot_1",
+            shipped_at=datetime.now(),
+            items=[
+                {"fitting_type": "补偿器", "model_spec": "DN1000", "shipped_qty": 2, "unit": "套"},
+                {"fitting_type": "弯头", "model_spec": "90°DN1100", "shipped_qty": 5, "unit": "个"},
+            ],
+        )
+        self.assertEqual(payload.items[0].unit, "套")
+        self.assertEqual(payload.items[1].unit, "个")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,38 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
 BEIJING_TZ = __import__("zoneinfo").ZoneInfo("Asia/Shanghai")
 
 
+_structures_checked = False
+
+
+def _ensure_fitting_table_structures() -> None:
+    """自愈检查并保证 tube_fitting_delivery 表的主键、序列与核心索引存在。"""
+    global _structures_checked
+    if _structures_checked:
+        return
+    ddls = [
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_delivery_id_seq",
+        "ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq')",
+        "ALTER SEQUENCE tube.tube_fitting_delivery_id_seq OWNED BY tube.tube_fitting_delivery.id",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'tube.tube_fitting_delivery'::regclass AND contype = 'p') THEN ALTER TABLE tube.tube_fitting_delivery ADD PRIMARY KEY (id); END IF; END $$;",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_fitting_delivery_order_no ON tube.tube_fitting_delivery (order_no)",
+        "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_no ON tube.tube_fitting_delivery (shipment_no)",
+        "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_section_1_status ON tube.tube_fitting_delivery (section_1_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_supply_entity ON tube.tube_fitting_delivery (supply_entity_id)",
+        "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipped_at ON tube.tube_fitting_delivery (shipped_at)",
+    ]
+    session = SessionLocal()
+    try:
+        for stmt in ddls:
+            try:
+                session.execute(text(stmt))
+                session.commit()
+            except Exception:
+                session.rollback()
+        _structures_checked = True
+    finally:
+        session.close()
+
+
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -245,26 +277,11 @@ def submit_fitting_delivery(
             }
         )
 
+    _ensure_fitting_table_structures()
     session = SessionLocal()
     try:
         date_part = shipped_at.strftime("%y%m%d")
         shipment_prefix = f"FS{entity_code}-{date_part}-"
-
-        # 直接基于物理主表 tube_fitting_delivery 计算递增车次号（带正则类型校验防崩溃），无需任何额外辅助表
-        db_max_seq = session.execute(
-            text(
-                """
-                SELECT COALESCE(MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER)), 0)
-                FROM tube.tube_fitting_delivery
-                WHERE shipment_no LIKE :prefix
-                  AND RIGHT(shipment_no, 3) ~ '^[0-9]{3}$'
-                """
-            ),
-            {"prefix": f"{shipment_prefix}%"},
-        ).scalar() or 0
-
-        sequence_number = int(db_max_seq) + 1
-        shipment_no = f"{shipment_prefix}{sequence_number:03d}"
 
         insert_sql = text(
             """
@@ -275,63 +292,90 @@ def submit_fitting_delivery(
                 status, created_by, updated_by
             ) VALUES (
                 :supply_entity_id, :shipment_no, :order_no, :vehicle_plate_no,
-                :section_1_id, :fitting_type, :model_spec, :shipped_qty, '个',
+                :section_1_id, :fitting_type, :model_spec, :shipped_qty, :unit,
                 :shipped_at, :ship_contact_name, :ship_contact_phone, :ship_remark,
                 'pending_arrival', :created_by, :updated_by
             )
             RETURNING id
             """
         )
-        created_ids: List[int] = []
-        section_code = section_1_id[:1].upper() or "X"
-        for index, item in enumerate(validated_items, 1):
-            order_no = f"FO{entity_code}-{section_code}-{date_part}-{sequence_number:03d}-{index:02d}"
-            row_id = session.execute(
-                insert_sql,
-                {
-                    "supply_entity_id": supply_entity_id,
-                    "shipment_no": shipment_no,
-                    "order_no": order_no,
-                    "vehicle_plate_no": vehicle_plate_no,
-                    "section_1_id": section_1_id,
-                    "fitting_type": item["fitting_type"],
-                    "model_spec": item["model_spec"],
-                    "shipped_qty": item["shipped_qty"],
-                    "shipped_at": shipped_at,
-                    "ship_contact_name": _clean(payload.get("ship_contact_name")),
-                    "ship_contact_phone": _clean(payload.get("ship_contact_phone")),
-                    "ship_remark": item["remark"] or _clean(payload.get("ship_remark")),
-                    "created_by": operator,
-                    "updated_by": operator,
-                },
-            ).scalar_one()
-            created_ids.append(int(row_id))
 
-        _write_audit_log(
-            session,
-            operator=operator,
-            operator_group=operator_group,
-            action_type="SUBMIT_FITTING_DELIVERY",
-            action_desc=f"提交管件发货单【{shipment_no}】，共 {len(created_ids)} 项明细",
-            resource_id=shipment_no,
-            after_value={
-                "shipment_no": shipment_no,
-                "created_ids": created_ids,
-                "supply_entity_id": supply_entity_id,
-                "section_1_id": section_1_id,
-                "vehicle_plate_no": vehicle_plate_no,
-                "shipped_at": shipped_at.isoformat(),
-                "items": validated_items,
-            },
-            client_ip=client_ip,
-        )
-        session.commit()
-        return {
-            "ok": True,
-            "shipment_no": shipment_no,
-            "count": len(created_ids),
-            "created_ids": created_ids,
-        }
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            try:
+                # 基于物理主表 tube_fitting_delivery 计算递增车次号（带正则类型校验防崩溃）
+                db_max_seq = session.execute(
+                    text(
+                        """
+                        SELECT COALESCE(MAX(CAST(RIGHT(shipment_no, 3) AS INTEGER)), 0)
+                        FROM tube.tube_fitting_delivery
+                        WHERE shipment_no LIKE :prefix
+                          AND RIGHT(shipment_no, 3) ~ '^[0-9]{3}$'
+                        """
+                    ),
+                    {"prefix": f"{shipment_prefix}%"},
+                ).scalar() or 0
+
+                sequence_number = int(db_max_seq) + 1 + attempt
+                shipment_no = f"{shipment_prefix}{sequence_number:03d}"
+
+                created_ids: List[int] = []
+                section_code = section_1_id[:1].upper() or "X"
+                for index, item in enumerate(validated_items, 1):
+                    order_no = f"FO{entity_code}-{section_code}-{date_part}-{sequence_number:03d}-{index:02d}"
+                    row_id = session.execute(
+                        insert_sql,
+                        {
+                            "supply_entity_id": supply_entity_id,
+                            "shipment_no": shipment_no,
+                            "order_no": order_no,
+                            "vehicle_plate_no": vehicle_plate_no,
+                            "section_1_id": section_1_id,
+                            "fitting_type": item["fitting_type"],
+                            "model_spec": item["model_spec"],
+                            "shipped_qty": item["shipped_qty"],
+                            "unit": item["unit"],
+                            "shipped_at": shipped_at,
+                            "ship_contact_name": _clean(payload.get("ship_contact_name")),
+                            "ship_contact_phone": _clean(payload.get("ship_contact_phone")),
+                            "ship_remark": item["remark"] or _clean(payload.get("ship_remark")),
+                            "created_by": operator,
+                            "updated_by": operator,
+                        },
+                    ).scalar_one()
+                    created_ids.append(int(row_id))
+
+                _write_audit_log(
+                    session,
+                    operator=operator,
+                    operator_group=operator_group,
+                    action_type="SUBMIT_FITTING_DELIVERY",
+                    action_desc=f"提交管件发货单【{shipment_no}】，共 {len(created_ids)} 项明细",
+                    resource_id=shipment_no,
+                    after_value={
+                        "shipment_no": shipment_no,
+                        "created_ids": created_ids,
+                        "supply_entity_id": supply_entity_id,
+                        "section_1_id": section_1_id,
+                        "vehicle_plate_no": vehicle_plate_no,
+                        "shipped_at": shipped_at.isoformat(),
+                        "items": validated_items,
+                    },
+                    client_ip=client_ip,
+                )
+                session.commit()
+                return {
+                    "ok": True,
+                    "shipment_no": shipment_no,
+                    "count": len(created_ids),
+                    "created_ids": created_ids,
+                }
+            except Exception as insert_err:
+                session.rollback()
+                err_str = str(insert_err).lower()
+                if attempt < max_attempts - 1 and ("unique" in err_str or "duplicate" in err_str or "uq_" in err_str):
+                    continue
+                raise
     except HTTPException:
         session.rollback()
         raise
@@ -354,6 +398,7 @@ def list_fitting_deliveries(
     allowed_section_ids: Optional[Sequence[str]] = None,
     allowed_supply_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
+    _ensure_fitting_table_structures()
     normalized_page = max(int(page), 1)
     normalized_page_size = min(max(int(page_size), 1), 500)
     section_filter = _resolve_filter(

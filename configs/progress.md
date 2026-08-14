@@ -1,3 +1,30 @@
+## 2026-08-14 [管件发货与全生命周期“套/个”多单位展示与流转彻底地毯式排查与修复]
+- **排查与加固范围**：针对“套”与“个”多单位支持，开展了从“前端录入 -> 提交入库 -> 数据库物理存储 -> 查询列表 -> 卡片汇总 -> 详情弹窗凭证 -> 现场到货 -> 施工接收 -> 库管归档 -> 台账导出”全生命周期 10 大环节的全面地毯式代码审查；
+- **发现并修复的前端隐藏硬编码**：
+  1. **【详情弹窗表格行单位硬编码】**：在 `SupplyManagementView.vue`、`DemandManagementView.vue`、`WarehouseManagementView.vue` 3 大页面的流转凭证弹窗明细表中，原发货/实到数量单位被三元表达式写死为 `isFittingDeliveryModal ? '个' : '米'`，已全部重构为优先取用明细行真实属性 `it.unit || (isFittingDeliveryModal ? '个' : '米')`，使“套”与“个”在弹窗中精准分别展示；
+  2. **【卡片与弹窗头部汇总单位动态化】**：实现 `getGroupUnitLabel` 与 `getModalUnitLabel` 动态计算引擎，若整车全为同一种单位（如全是“套”），则汇总显示为“X 套”；若包含多种单位（如既有“套”又有“个”），则汇总显示为“X 件”，彻底消除原本写死“X 个”的歧义；
+- **全生命周期核验结论**：
+  - 发货录入与校验：100% 允许“套”和“个”；
+  - 数据库落盘与存储：SQL 参数精准绑定 `:unit`，真实存储“套”和“个”；
+  - 流转确认与归档：UPDATE 语句仅更新状态与确认时间，绝不篡改已有 `unit`；
+  - 历史台账导出：Excel 导出的“单位”列 100% 对应真实 `row.unit`；
+- **构建测试**：后端 10 项测试用例全部通过，前端 `npm run build` 10.64s 编译 0 错误。
+
+## 2026-08-14 [管件发货与全生命周期流转 4 大底层隐患与代码缺陷彻底修复]
+- **需求与优化背景**：针对“管件发货与记录”页面点击发货及写入数据库过程，进行全面地毯式代码审查与加固，彻底消除数据篡改、并发竞争、物理约束遗漏与冗余双轨代码；
+- **4 项问题全面修复与加固措施**：
+  1. **【修复 SQL 字段硬编码绑定】**：在 `fitting_delivery_service.py` 中将 `INSERT INTO tube.tube_fitting_delivery` 写死的 `'个'` 修正为 `:unit` 动态参数绑定，使用户填报并校验通过的 `'套'` 与 `'个'` 能够 100% 真实落盘入库；
+  2. **【补齐数据库物理主键与全套索引】**：
+     - 在 PostgreSQL 数据库中为 `tube.tube_fitting_delivery` 成功添加 `PRIMARY KEY (id)` 主键约束；
+     - 创建 `uq_tube_fitting_delivery_order_no` 唯一索引，以及 `shipment_no`、`section_1_status`、`supply_entity`、`shipped_at` 4 大核心查询索引；
+     - 在 `fitting_delivery_service.py` 内部引入 `_ensure_fitting_table_structures()` 幂等自愈函数，保证任何新环境均能自动完成 DDL 补齐；
+  3. **【并发车次号与单号防重加固】**：在生成发货车次号与订单号时引入并发重试保护机制（5 次递增重试），彻底消除多人同秒点击或网络卡顿重发时的 Race Condition 重单冲突；
+  4. **【清理并统一服务层双轨实现】**：将 `supply_management_service.py` 中旧版残留的 6 个管件操作函数全面精简为对 `fitting_delivery_service.py` 的统一委托，确保全系统流转状态（`pending_arrival` ➔ `pending_receive` ➔ `pending_warehouse` ➔ `completed`）单一事实来源；
+- **全量实测与测试套件验证**：
+  1. 执行真实数据落盘测试：提交包含“补偿器（2 套）”与“弯头（5 个）”的发货记录，PostgreSQL 数据库真实查询显示 `unit` 分别精准落盘为 `'套'` 和 `'个'`，主键与单号正常；
+  2. 运行 `pytest` 测试套件：10 项契约与逻辑测试 100% 全部 PASSED；
+  3. 运行前端 `npm run build`：9.21s PASSED，编译 0 错误。
+
 ## 2026-08-14 [修复3天滚动计划与每日使用量填报数据库唯一约束与序列丢失导致的 500 报错]
 - **Bug 根因深度排查**：
   1. **唯一约束缺失**：`tube.tube_daily_plan` 表在数据库实例中缺少 `UNIQUE (plan_date, section_1_id, pipe_model_id)` 唯一索引，导致 PostgreSQL 执行 `ON CONFLICT (plan_date, section_1_id, pipe_model_id) DO UPDATE SET ...` 时报 `there is no unique or exclusion constraint matching the ON CONFLICT specification`；
