@@ -1,3 +1,27 @@
+## 2026-08-16 全局管理后台页面按钮排版系统性重构与触控体验升级
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）
+- **核心按钮排版与交互升级**：
+  1. **卡片头部操作按钮统一网格化**：将卡片头部的操作按钮统一重构为 `.header-actions-group`，移动端自适应为对称双列 `1fr 1fr` 弹性网格，统一 36px 易触控高度，消除右侧散落与错位；
+  2. **筛选工具栏双按钮控制**：在筛选栏新增专属 `.filter-actions-row` 操作条，集成 `🔍 立即查询` 与 `🔄 重置条件` 双按钮，支持一键重置与精准检索。
+
+## 2026-08-16 全局管理后台操作日志（Audit Log）内容排版专项双模重构
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心交互与排版改造**：
+  1. **桌面端与移动端双模智能渲染**：桌面端保持 7 列宽表格并为超长详情添加智能截断与展开控件；移动端（`<= 768px`）自动切换为高颜值 **时间线日志卡片流（Timeline Card Stream）**；
+  2. **日志卡片细节结构**：每条日志独立卡片呈现，包含时间胶囊、操作人徽章、分类/动作/IP 彩色 Pills、页面路由以及可折叠操作详情代码块（`展开全文 ▼ / 收起全文 ▲`），彻底杜绝超长 JSON/SQL 撑破手机屏幕；
+  3. **统计大盘与筛选器折叠优化**：移动端默认折叠长列表统计 TOP 榜，直奔最新日志内容。
+
+## 2026-08-16 全局管理后台（AdminConsoleView.vue）移动端与多尺寸响应式排版重构
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）
+- **核心响应式与移动端排版重构点**：
+  1. **顶层 Tab 导航滑轨**：在 `<= 768px` 移动端下自适应转为单行丝滑横向滑轨（iOS 胶囊设计，隐藏系统难看滚动条），彻底消除多行堆叠与横向撑爆；
+  2. **三栏权限配置中心自适应转换**：在 `<= 900px` 视口下将桌面写死的 3 栏固定网格重构为流式响应式布局，项目与角色组转为横向胶囊 Tab，第三栏权限开关卡片 100% 全宽适配；
+  3. **表格与操作按钮移动端原生保护**：操作日志表格、备份恢复表格全部配备专属 `-webkit-overflow-scrolling: touch` 横向滚动轨道与最小列宽保护，消除文字重叠与按钮挤压；
+  4. **全系统弹窗 Dialog / Modal 移动端防溢出**：统一限制 `width: calc(100vw - 16px); max-height: 90vh;` 并支持内滚动，适配虚拟键盘。
+
 ## 2026-08-16 全局管理后台权限入口全面收敛与三栏矩阵视觉升级
 
 - **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）

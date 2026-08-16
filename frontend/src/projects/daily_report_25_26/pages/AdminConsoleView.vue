@@ -796,43 +796,70 @@
         </section>
 
         <section v-else-if="activeTab === 'audit'" class="content-block">
-          <section class="inner-card">
+          <section class="inner-card audit-main-card">
             <header class="section-header">
-              <h3>操作日志与分类统计</h3>
-              <button class="btn ghost" type="button" :disabled="auditLoading" @click="reloadAuditData">
-                {{ auditLoading ? '加载中…' : '刷新日志' }}
-              </button>
+              <div class="header-title-box">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <span>📋 操作审计日志</span>
+                  <span class="audit-total-badge">{{ auditStats.total }} 条记录</span>
+                </h3>
+                <p class="subtext">记录全系统关键业务操作、页面访问、配置变更与接口调用流水</p>
+              </div>
+              <div class="header-actions-group">
+                <button class="btn ghost header-action-btn" type="button" @click="auditStatsCollapsed = !auditStatsCollapsed">
+                  <span>{{ auditStatsCollapsed ? '📊 展开统计 TOP' : '📊 收起统计' }}</span>
+                </button>
+                <button class="btn primary header-action-btn" type="button" :disabled="auditLoading" @click="reloadAuditData">
+                  <span>{{ auditLoading ? '加载中…' : '🔄 刷新日志' }}</span>
+                </button>
+              </div>
             </header>
-            <div class="toolbar">
-              <label class="field">
-                <span>时间范围</span>
-                <select v-model.number="auditFilters.days">
-                  <option :value="1">最近 1 天</option>
-                  <option :value="3">最近 3 天</option>
-                  <option :value="7">最近 7 天</option>
-                  <option :value="15">最近 15 天</option>
-                  <option :value="30">最近 30 天</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>用户</span>
-                <input v-model.trim="auditFilters.username" type="text" placeholder="用户名" />
-              </label>
-              <label class="field">
-                <span>分类</span>
-                <input v-model.trim="auditFilters.category" type="text" placeholder="如 navigation / click" />
-              </label>
-              <label class="field">
-                <span>动作</span>
-                <input v-model.trim="auditFilters.action" type="text" placeholder="如 page_open / click" />
-              </label>
-              <label class="field grow">
-                <span>关键字</span>
-                <input v-model.trim="auditFilters.keyword" type="text" placeholder="搜索 page/target/detail 等字段" />
-              </label>
+
+            <!-- 筛选工具栏 -->
+            <div class="toolbar audit-filter-toolbar">
+              <div class="filter-inputs-grid">
+                <label class="field">
+                  <span>时间范围</span>
+                  <select v-model.number="auditFilters.days">
+                    <option :value="1">最近 1 天</option>
+                    <option :value="3">最近 3 天</option>
+                    <option :value="7">最近 7 天</option>
+                    <option :value="15">最近 15 天</option>
+                    <option :value="30">最近 30 天</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>操作用户</span>
+                  <input v-model.trim="auditFilters.username" type="text" placeholder="用户名" />
+                </label>
+                <label class="field">
+                  <span>业务分类</span>
+                  <input v-model.trim="auditFilters.category" type="text" placeholder="如 navigation / click" />
+                </label>
+                <label class="field">
+                  <span>操作动作</span>
+                  <input v-model.trim="auditFilters.action" type="text" placeholder="如 page_open / click" />
+                </label>
+                <label class="field keyword-field">
+                  <span>关键字模糊检索</span>
+                  <input v-model.trim="auditFilters.keyword" type="text" placeholder="搜索 page/target/detail 等字段" />
+                </label>
+              </div>
+              
+              <div class="filter-actions-row">
+                <button class="btn ghost btn-sm" type="button" @click="resetAuditFilters">
+                  <span>🔄 重置条件</span>
+                </button>
+                <button class="btn primary btn-sm" type="button" :disabled="auditLoading" @click="reloadAuditData">
+                  <span>🔍 立即查询</span>
+                </button>
+              </div>
             </div>
+
             <div v-if="auditError" class="panel-state error">{{ auditError }}</div>
-            <div class="audit-grid">
+
+            <!-- 可折叠分类统计大盘 -->
+            <div v-if="!auditStatsCollapsed" class="audit-grid">
               <div class="overview-item">
                 <span class="label">日志总量</span>
                 <strong>{{ auditStats.total }}</strong>
@@ -859,7 +886,11 @@
                 </ul>
               </div>
             </div>
-            <div class="audit-table-wrap">
+
+            <div v-if="auditLoading" class="panel-state">正在检索日志数据…</div>
+
+            <!-- 1. 桌面端宽屏视图 (>= 769px) -->
+            <div v-else class="audit-table-wrap desktop-only-table">
               <table class="audit-table">
                 <thead>
                   <tr>
@@ -869,25 +900,101 @@
                     <th class="col-category">分类</th>
                     <th class="col-action">动作</th>
                     <th class="col-page">页面</th>
-                    <th class="col-target">目标</th>
+                    <th class="col-target">目标与操作详情</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(item, index) in auditEvents" :key="item.id || item.ts || index">
-                    <td>{{ item.ts_east8 || formatEast8Time(item.ts) }}</td>
-                    <td>{{ item.username || '-' }}</td>
-                    <td>{{ item.client_ip || item.ip || '-' }}</td>
-                    <td>{{ item.category || '-' }}</td>
-                    <td>{{ item.action || '-' }}</td>
-                    <td>{{ item.page || '-' }}</td>
-                    <td>{{ item.target || (item.detail ? JSON.stringify(item.detail) : '-') }}</td>
+                  <tr v-for="(item, index) in auditEvents" :key="getAuditItemKey(item, index)">
+                    <td class="col-time-cell">{{ item.ts_east8 || formatEast8Time(item.ts) }}</td>
+                    <td class="col-user-cell">
+                      <span class="audit-user-chip">{{ item.username || '-' }}</span>
+                    </td>
+                    <td class="col-ip-cell"><code>{{ item.client_ip || item.ip || '-' }}</code></td>
+                    <td>
+                      <span class="audit-cat-chip" :class="`cat-${item.category}`">{{ item.category || '-' }}</span>
+                    </td>
+                    <td>
+                      <span class="audit-act-chip">{{ item.action || '-' }}</span>
+                    </td>
+                    <td class="col-page-cell" :title="item.page">
+                      <span class="page-path-text">{{ item.page || '-' }}</span>
+                    </td>
+                    <td class="col-target-cell">
+                      <div class="target-detail-wrapper">
+                        <div class="target-text-preview" :class="{ 'is-expanded': isAuditDetailExpanded(getAuditItemKey(item, index)) }">
+                          <code>{{ formatAuditDetail(item) }}</code>
+                        </div>
+                        <button
+                          v-if="hasLongAuditDetail(item)"
+                          type="button"
+                          class="detail-expand-toggle-btn"
+                          @click="toggleExpandAuditDetail(getAuditItemKey(item, index))"
+                        >
+                          {{ isAuditDetailExpanded(getAuditItemKey(item, index)) ? '收起 ▲' : '查看完整详情 ▼' }}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                   <tr v-if="!auditEvents.length && !auditLoading">
-                    <td colspan="7" class="panel-state">暂无日志数据</td>
+                    <td colspan="7" class="table-empty">暂无符合条件的审计日志</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            <!-- 2. 移动端手机专属视图 (<= 768px)：现代时间线卡片流 -->
+            <div v-if="!auditLoading" class="audit-cards-container mobile-only-cards">
+              <div 
+                v-for="(item, index) in auditEvents" 
+                :key="`m-${getAuditItemKey(item, index)}`"
+                class="audit-mobile-card"
+              >
+                <!-- 卡片顶栏：时间与操作人 -->
+                <div class="card-top-row">
+                  <span class="time-badge">🕒 {{ item.ts_east8 || formatEast8Time(item.ts) }}</span>
+                  <span class="user-badge">👤 {{ item.username || '匿名/系统' }}</span>
+                </div>
+
+                <!-- 标签与状态行 -->
+                <div class="card-tags-row">
+                  <span class="cat-pill" :class="`cat-${item.category}`">{{ item.category || 'default' }}</span>
+                  <span class="act-pill">{{ item.action || 'action' }}</span>
+                  <span v-if="item.client_ip || item.ip" class="ip-pill">🌐 {{ item.client_ip || item.ip }}</span>
+                </div>
+
+                <!-- 页面路径 -->
+                <div v-if="item.page" class="card-page-row">
+                  <span class="field-title">页面:</span>
+                  <span class="page-link">{{ item.page }}</span>
+                </div>
+
+                <!-- 操作目标与详情详情框 -->
+                <div v-if="item.target || item.detail" class="card-detail-section">
+                  <div class="detail-sec-header">
+                    <span class="field-title">操作详情:</span>
+                    <button
+                      v-if="hasLongAuditDetail(item)"
+                      type="button"
+                      class="expand-btn"
+                      @click="toggleExpandAuditDetail(getAuditItemKey(item, index))"
+                    >
+                      {{ isAuditDetailExpanded(getAuditItemKey(item, index)) ? '收起全文 ▲' : '展开全文 ▼' }}
+                    </button>
+                  </div>
+                  <div 
+                    class="detail-code-box"
+                    :class="{ 'is-collapsed': !isAuditDetailExpanded(getAuditItemKey(item, index)) && hasLongAuditDetail(item) }"
+                  >
+                    <code>{{ formatAuditDetail(item) }}</code>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!auditEvents.length && !auditLoading" class="panel-state">
+                暂无符合条件的审计日志
+              </div>
+            </div>
+
           </section>
         </section>
 
@@ -1208,15 +1315,15 @@
 
             <div v-if="backupListLoading" class="panel-state">正在加载备份列表…</div>
             <div v-else-if="!backupList.length" class="panel-state">备份目录中暂无任何备份文件。点击右上角“⚡ 立即创建备份”即可生成！</div>
-            <div v-else class="table-wrap" style="max-height: 520px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;">
-              <table class="db-backup-table" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed;">
+            <div v-else class="table-wrap db-backup-table-wrap" style="max-height: 520px; overflow-y: auto; overflow-x: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;">
+              <table class="db-backup-table" style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px;">
                 <thead>
                   <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; position: sticky; top: 0; z-index: 5;">
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 38%;">备份文件名</th>
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 14%;">格式类型</th>
-                    <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; width: 14%;">文件大小</th>
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; width: 18%;">生成时间</th>
-                    <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; width: 16%;">操作选项</th>
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 200px;">备份文件名</th>
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 110px;">格式类型</th>
+                    <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 80px;">文件大小</th>
+                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 140px;">生成时间</th>
+                    <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 160px;">操作选项</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2049,6 +2156,52 @@ const auditFilters = reactive({
   keyword: '',
   limit: 300,
 })
+const auditStatsCollapsed = ref(true)
+const expandedAuditDetailKeys = ref(new Set())
+
+function getAuditItemKey(item, index) {
+  return item?.id || `${item?.ts || ''}-${index}`
+}
+
+function hasLongAuditDetail(item) {
+  const text = item.target || (item.detail ? JSON.stringify(item.detail) : '')
+  return text.length > 70
+}
+
+function isAuditDetailExpanded(key) {
+  return expandedAuditDetailKeys.value.has(key)
+}
+
+function toggleExpandAuditDetail(key) {
+  const nextSet = new Set(expandedAuditDetailKeys.value)
+  if (nextSet.has(key)) {
+    nextSet.delete(key)
+  } else {
+    nextSet.add(key)
+  }
+  expandedAuditDetailKeys.value = nextSet
+}
+
+function formatAuditDetail(item) {
+  if (item.target) return item.target
+  if (item.detail) {
+    try {
+      return typeof item.detail === 'string' ? item.detail : JSON.stringify(item.detail, null, 2)
+    } catch (e) {
+      return String(item.detail)
+    }
+  }
+  return '-'
+}
+
+function resetAuditFilters() {
+  auditFilters.days = 7
+  auditFilters.username = ''
+  auditFilters.category = ''
+  auditFilters.action = ''
+  auditFilters.keyword = ''
+  reloadAuditData()
+}
 const metricHistory = reactive({
   cpu: [],
   memory: [],
@@ -5660,46 +5813,380 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   gap: 4px;
 }
 
+/* ================= 操作审计日志双模样式系统 ================= */
+
+.audit-main-card {
+  overflow: visible;
+}
+
+.audit-total-badge {
+  font-size: 11px;
+  background: #0284c7;
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.header-actions-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.header-action-btn {
+  height: 34px !important;
+  padding: 0 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  border-radius: 6px !important;
+}
+
+.audit-filter-toolbar {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.filter-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.filter-inputs-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-inputs-grid .field span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.filter-inputs-grid select,
+.filter-inputs-grid input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.filter-inputs-grid select:focus,
+.filter-inputs-grid input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.filter-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #edf2f7;
+  padding-top: 8px;
+}
+
+.filter-actions-row .btn {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 1. 桌面端表格样式 (>= 769px) */
 .audit-table-wrap {
   margin-top: 14px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   overflow: auto;
+  background: #ffffff;
 }
 
 .audit-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  font-size: 12px;
 }
 
 .audit-table th,
 .audit-table td {
   border-bottom: 1px solid #e5e7eb;
-  padding: 8px 10px;
+  padding: 10px 12px;
   text-align: left;
-  font-size: 12px;
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
   vertical-align: top;
 }
 
 .audit-table th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: #f8fafc;
   color: #334155;
+  font-weight: 600;
+  border-bottom: 2px solid #cbd5e1;
 }
 
-.audit-table .col-time { width: 170px; }
-.audit-table .col-user { width: 96px; }
-.audit-table .col-ip { width: 130px; }
-.audit-table .col-category { width: 88px; }
-.audit-table .col-action { width: 90px; }
-.audit-table .col-page { width: 30%; }
-.audit-table .col-target { width: 24%; }
+.audit-table .col-time { width: 155px; }
+.audit-table .col-user { width: 110px; }
+.audit-table .col-ip { width: 120px; }
+.audit-table .col-category { width: 95px; }
+.audit-table .col-action { width: 100px; }
+.audit-table .col-page { width: 22%; }
+.audit-table .col-target { width: 28%; }
+
+.col-time-cell {
+  color: #64748b;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.audit-user-chip {
+  background: #f1f5f9;
+  color: #0f172a;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11.5px;
+  display: inline-block;
+}
+
+.audit-cat-chip,
+.cat-pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.cat-navigation { background: #eff6ff !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; }
+.cat-click, .cat-action { background: #ecfdf5 !important; color: #047857 !important; border-color: #a7f3d0 !important; }
+.cat-submit, .cat-api { background: #fdf4ff !important; color: #86198f !important; border-color: #f5d0fe !important; }
+.cat-error { background: #fef2f2 !important; color: #b91c1c !important; border-color: #fecaca !important; }
+
+.audit-act-chip,
+.act-pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-family: monospace;
+}
+
+.col-page-cell .page-path-text {
+  color: #0369a1;
+  font-family: monospace;
+  font-size: 11.5px;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-detail-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.target-text-preview {
+  max-height: 46px;
+  overflow: hidden;
+  font-size: 11px;
+  background: #f8fafc;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  word-break: break-all;
+  line-height: 1.4;
+  color: #334155;
+  transition: max-height 0.2s ease;
+}
+
+.target-text-preview.is-expanded {
+  max-height: 400px;
+  overflow-y: auto;
+  background: #ffffff;
+  border-color: #93c5fd;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.detail-expand-toggle-btn {
+  background: none;
+  border: none;
+  color: #0284c7;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  font-weight: 600;
+}
+
+.detail-expand-toggle-btn:hover {
+  text-decoration: underline;
+}
+
+/* 2. 移动端时间线卡片流专属样式 (<= 768px) */
+.mobile-only-cards {
+  display: none;
+}
+
+.audit-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.audit-mobile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-left: 4px solid #0284c7;
+  text-align: left;
+}
+
+.card-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.card-top-row .time-badge {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.card-top-row .user-badge {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.card-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ip-pill {
+  background: #faf5ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.card-page-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  background: #f8fafc;
+  padding: 6px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.card-page-row .field-title,
+.card-detail-section .field-title {
+  font-weight: 600;
+  color: #475569;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.card-page-row .page-link {
+  color: #0369a1;
+  font-family: monospace;
+  font-size: 11.5px;
+}
+
+.card-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-sec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.expand-btn {
+  background: none;
+  border: none;
+  color: #0284c7;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+
+.detail-code-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  word-break: break-all;
+  line-height: 1.45;
+  color: #334155;
+  font-family: monospace;
+}
+
+.detail-code-box.is-collapsed {
+  max-height: 48px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ================= 全面移动端与多尺寸响应式排版适配系统 ================= */
 
 @media (max-width: 1200px) {
   .top-header {
@@ -5749,25 +6236,414 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   }
 }
 
-@media (max-width: 720px) {
+/* 中等屏幕与平板适配 (<= 900px)：三栏权限矩阵自适应转换 */
+@media (max-width: 900px) {
+  .matrix-three-columns-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: auto !important;
+    max-height: none !important;
+  }
+
+  .project-nav-column,
+  .role-nav-column {
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    background: #f8fafc !important;
+  }
+
+  .project-nav-column .column-header,
+  .role-nav-column .column-header {
+    padding: 8px 12px !important;
+    background: #f1f5f9 !important;
+  }
+
+  .project-nav-column .column-header h4,
+  .role-nav-column .column-header h4 {
+    font-size: 13px !important;
+  }
+
+  .project-nav-column .column-list,
+  .role-nav-column .column-list {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    scrollbar-width: none !important;
+    max-height: none !important;
+  }
+
+  .project-nav-column .column-list::-webkit-scrollbar,
+  .role-nav-column .column-list::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .project-nav-column .nav-list-btn,
+  .role-nav-column .nav-list-btn {
+    flex-shrink: 0 !important;
+    width: auto !important;
+    white-space: nowrap !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    border-left: 1px solid #cbd5e1 !important;
+  }
+
+  .project-nav-column .nav-list-btn.active,
+  .role-nav-column .nav-list-btn.active {
+    background: #0284c7 !important;
+    color: #ffffff !important;
+    border-color: #0284c7 !important;
+  }
+
+  .project-nav-column .nav-list-btn.active .btn-icon,
+  .role-nav-column .nav-list-btn.active .btn-badge {
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: #ffffff !important;
+  }
+
+  .settings-panel-column {
+    width: 100% !important;
+  }
+
+  .permission-scroll-container {
+    padding: 12px !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+
+  .switches-grid-reborn {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* 手机移动端全面深度适配 (<= 768px) */
+@media (max-width: 768px) {
+  /* 1. 外层容器与内边距释放 */
+  .admin-console-main {
+    padding: 10px 10px !important;
+    gap: 10px !important;
+  }
+
+  .admin-top-nav-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .return-work-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 7px 12px !important;
+    font-size: 13px !important;
+    box-sizing: border-box !important;
+  }
+
+  .top-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .top-header h2 {
+    font-size: 18px !important;
+  }
+
+  /* 2. 顶层 Tab 导航条 -> 现代单行横向丝滑滑轨 */
+  .tab-group {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    padding: 4px !important;
+    gap: 4px !important;
+    scrollbar-width: none !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+  }
+
+  .tab-group::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .tab-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 6px 12px !important;
+    font-size: 12.5px !important;
+    border-radius: 6px !important;
+  }
+
+  /* 3. 数据库表编辑 Tab 移动端适配 */
+  .db-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .db-header-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .db-header-actions .btn.primary {
+    grid-column: span 2 !important;
+    height: 36px !important;
+  }
+
+  .db-selector-group {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .db-selector-group .db-field {
+    width: 100% !important;
+  }
+
+  .db-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .search-grow {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .db-status-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+  }
+
+  .db-data-grid {
+    height: 460px !important;
+    min-height: 340px !important;
+  }
+
   .db-cell-editor-drawer {
-    width: 100vw;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
   }
 
   .db-cell-editor-header,
   .db-cell-editor-body,
   .db-cell-editor-footer {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 
   .db-cell-editor-footer {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 8px !important;
   }
 
   .db-cell-editor-footer .inline-actions {
-    justify-content: flex-end;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  /* 全局卡片头部与按钮组移动端对称对齐 */
+  .section-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .header-actions-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .header-action-btn {
+    width: 100% !important;
+    height: 36px !important;
+    font-size: 13px !important;
+  }
+
+  /* 4. 操作日志 Tab 移动端专属卡片流与双模切换 */
+  .desktop-only-table {
+    display: none !important;
+  }
+
+  .mobile-only-cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .filter-inputs-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .filter-inputs-grid .keyword-field {
+    grid-column: span 2 !important;
+  }
+
+  .filter-actions-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .filter-actions-row .btn {
+    height: 36px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+  }
+
+  .audit-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* 5. 数据库备份与恢复 Tab 移动端自适应 */
+  .db-backup-stats-row {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .db-backup-table-wrap {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 8px !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  .db-backup-table {
+    min-width: 620px !important;
+  }
+
+  .db-backup-table th,
+  .db-backup-table td {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* 6. 项目后台设定与概览 */
+  .project-switch {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 4px !important;
+    scrollbar-width: none !important;
+  }
+
+  .project-switch::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .project-switch .list-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    font-size: 12.5px !important;
+    padding: 6px 12px !important;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .permission-central-card .section-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .permission-central-card .btn.primary {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .cache-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .cache-actions label {
+    width: 100% !important;
+  }
+
+  .cache-actions button {
+    width: 100% !important;
+  }
+
+  /* 7. 服务器管理与终端 */
+  .system-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .terminal-box {
+    height: 280px !important;
+  }
+
+  .terminal-input-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+
+  .terminal-input-row .btn {
+    width: 100% !important;
+  }
+
+  /* 8. 账号管理 Tab */
+  .accounts-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .accounts-table-wrap {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  .accounts-table {
+    min-width: 600px !important;
+  }
+
+  /* 9. 全局所有弹窗 Dialog / Modal 移动端防溢出保护 */
+  .dialog-card,
+  .editor-modal,
+  .account-form-dialog,
+  .super-modal-content,
+  .restore-modal-card {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: 90vh !important;
+    padding: 12px !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    overflow-y: auto !important;
+    border-radius: 10px !important;
   }
 }
 .cache-worker-grid {
