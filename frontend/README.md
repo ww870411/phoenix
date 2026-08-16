@@ -1,3 +1,39 @@
+## 2026-08-16 全局管理后台操作日志生产环境一键迁移（One-Click Migration）上线
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心功能点**：
+  1. **一键迁移历史日志按钮**：在操作日志卡片头部新增 `📥 迁移历史日志入库` 按钮；
+  2. **生产安全交互流程**：点击后弹出确认框，前端调用 `POST /api/v1/admin/audit/migrate-from-ndjson`；
+  3. **结果即时反馈与大盘刷新**：成功后弹出包含扫描文件数和成功导入行数的弹窗，并自动调用 `reloadAuditData()` 实时刷新大盘统计和日志列表。
+
+## 2026-08-16 全局管理后台操作日志（Audit Log）搜索区域用户视角全面重构
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心体验与交互重构**：
+  1. **一体化流式筛选卡片（Integrated Search Bar）**：取代原先笨重的灰底上下两层大框，采用轻盈浅灰底边框一体化卡片，所有筛选框与操作按钮自然对齐；
+  2. **中文直观下拉框取代手动输入**：
+     - **业务分类**：提供 `全部分类`、`页面访问`、`界面操作`、`数据填报`、`系统管理`、`系统服务` 等中文下拉选项；
+     - **所属项目**：新增 `预制直埋保温管`、`生产调度生产日报`、`春节供暖保障日报`、`月度生产数据中心` 等项目过滤；
+  3. **按钮统一收敛与防抖防闪烁**：消除“刷新 vs 查询”重复割裂按钮，头部仅保留统计大盘开关，搜索栏内敛集成 `🔍 立即查询` 与 `🔄 重置`，输入框支持 `Enter` 回车一键触发。
+
+## 2026-08-16 全局管理后台恢复 1280px 标准紧凑定宽与表格比例精准适配
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心体验与排版升级**：
+  1. **恢复 1280px 经典居中定宽**：恢复 `.admin-console-main` 为 `max-width: 1280px; margin: 0 auto; padding: 20px 24px;`，视觉紧凑工整，避免大屏拉扯过宽；
+  2. **1280px 完美列宽比例匹配**：设定时间（145px）、用户（95px）、IP（110px）、分类（85px）、动作（95px）、页面（28%）、详情（32%），在 1280px 视口下严丝合缝、完全撑满，无横向滚动条；
+  3. **表格视觉与可读性增强**：保留表头吸顶、浅蓝灰斑马纹与长 URL 平滑断行。
+
+## 2026-08-16 全局管理后台操作日志（Audit Log）PC 宽屏与多视口排版彻底修复
+
+## 2026-08-16 全局管理后台操作日志（Audit Log）PC 宽屏与多视口排版彻底修复
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心排版修复内容**：
+  1. **PC 端表格列宽精准分配与横向滚动保护**：为 `.audit-table` 显式设置 `min-width: 1080px;` 与各列物理定宽，彻底解决在 1024px~1440px 屏幕下时间/用户列被压缩换行、文字重叠等排版缺陷；
+  2. **筛选工具栏比例优化**：将 `.filter-inputs-grid` 设为 `140px 140px 140px 140px 1fr` 弹性网格，让关键字搜索框占据充足宽度，提升输入体验；
+  3. **卡片头部与全局自适应加固**：优化 `.header-title-box` 与操作按钮组空间，确保 PC 端无论是否带 `?from=...` 返回按钮均能完美对齐。
+
 ## 2026-08-16 全局管理后台页面按钮排版系统性重构与触控体验升级
 
 - **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）

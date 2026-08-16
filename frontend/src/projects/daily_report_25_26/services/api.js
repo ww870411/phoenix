@@ -248,6 +248,20 @@ export async function listPageShowcasePages(projectKey = 'page_showcase') {
   return response.json()
 }
 
+
+
+export async function triggerAdminAuditMigration() {
+  const response = await authAwareFetch(normalized('/admin/audit/migrate-from-ndjson'), {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `历史日志迁移失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getPageShowcaseHtml(projectKey, fileName) {
   const encodedFileName = encodeURIComponent(String(fileName || ''))
   const response = await authAwareFetch(`${projectPath(projectKey)}/page-showcase/html/${encodedFileName}`, {
@@ -2258,6 +2272,7 @@ export async function postAdminAuditEvents(events = []) {
 export async function getAdminAuditEvents(params = {}) {
   const search = new URLSearchParams()
   if (params.days != null) search.set('days', String(params.days))
+  if (params.project_key) search.set('project_key', String(params.project_key))
   if (params.username) search.set('username', String(params.username))
   if (params.category) search.set('category', String(params.category))
   if (params.action) search.set('action', String(params.action))

@@ -1,3 +1,84 @@
+## 2026-08-16 [操作审计日志生产环境一键迁移功能（One-Click Migration）前后端落地]
+- **任务目标与治理背景**：响应管理员“在生产环境中无法人工手动执行脚本，需在管理后台增加一键迁移按钮完成 ndjson 到 PostgreSQL 表入库”的指令；
+- **具体实施改动点与模块**：
+  1. **【后端一键迁移服务（`backend/services/audit_log.py`）】**：
+     - 实现 `migrate_ndjson_files_to_db()` 服务函数，利用 `DATA_DIRECTORY.rglob("audit-*.ndjson")` 自动递归遍历服务器磁盘全部历史日志；
+     - 自动补齐并解析 21 个工业级字段，分批（Batch Size 500）安全执行批量插入，带异常捕获与事务回滚；
+  2. **【后端管理接口（`backend/api/v1/admin_console.py`）】**：
+     - 新增 `POST /api/v1/admin/audit/migrate-from-ndjson` 接口，严格限制管理员权限访问，迁移完成后自动落库一条迁移操作审计日志；
+  3. **【前端一键迁移按钮与交互（`AdminConsoleView.vue` & `api.js`）】**：
+     - 在操作审计日志卡片头部新增 `📥 迁移历史日志入库` 按钮（配有触控交互和加载中防重放保护）；
+     - 点击后弹出二次确认提示，执行成功后弹出包含文件数和成功入库总行数的明细反馈，并自动重新加载大盘和列表；
+- **验证与测试**：
+  - 本地运行 `test_migration_service.py` 验证服务，成功扫描 65 个文件并导入 10,661 条记录（0 错误）；
+  - 前端运行 `npm run build`，10.10s 编译 0 错误。
+
+## 2026-08-16 [操作审计日志搜索筛选区域（Search Filter Bar）用户视角全面重构]
+- **任务目标与治理背景**：站在真实管理员操作视角，彻底解决搜索区域“双重重复按钮割裂、分类/动作需手动手打输入反人类、输入文本时频繁触发请求、筛选框排版笨重灰暗”等核心问题；
+- **具体实施改动点与模块**：
+  1. **【一体化流式筛选搜索条（`AdminConsoleView.vue`）】**：
+     - 去除原先笨拙的上下分层灰色大框，重构为现代一体化白底流式卡片（`.audit-search-filter-card`）；
+     - **业务分类改为中文下拉框**：提供 `全部分类`、`页面访问 (navigation)`、`界面操作 (ui / action)`、`数据填报 (submit)`、`系统管理 (admin)`、`系统服务 (system)`，杜绝手动键盘输入错误；
+     - **新增所属项目维度下拉**：支持按 `预制直埋保温管供应链`、`生产调度生产日报`、`春节供暖保障日报`、`月度生产数据中心` 精确筛选；
+     - **操作用户与关键字搜索**：提供清晰提示占位符，支持 `Enter` 快捷回车一键检索；
+  2. **【按钮操作统一收敛与交互优化】**：
+     - 消除卡片头部与筛选框内部“刷新 vs 查询”双重重复按钮，卡片头部只保留 `📊 统计大盘 (展开/收起)`，搜索栏内敛集成 `🔍 立即查询` 与 `🔄 重置`；
+     - 优化 watch 监听机制，仅在核心下拉维度切换时自动加载，文本输入改为回车或点击触发，彻底杜绝打字抖动闪烁；
+  3. **【后端接口联动（`admin_console.py` & `api.js`）】**：
+     - `/admin/audit/events` 接口与前端 `getAdminAuditEvents` 同步增加 `project_key` 过滤参数；
+- **验证与构建**：运行前端 `npm run build`，10.45s 编译 0 错误。
+
+## 2026-08-16 [全局管理后台恢复 1280px 标准紧凑定宽与表格比例精准适配]
+- **任务目标与治理背景**：响应管理员“恢复容器宽度，避免过分宽大”的指令，将外层容器恢复为经典、规整的 `1280px` 标准居中定宽，并精细校准表格各列比例；
+- **具体实施改动点与模块**（`AdminConsoleView.vue`）：
+  1. **【容器宽度恢复 1280px 定宽居中】**：
+     - `.admin-console-main` 恢复为 `max-width: 1280px; margin: 0 auto; padding: 20px 24px;`，视觉紧凑工整，符合中后台经典规范；
+  2. **【表格在 1280px 下的精准比例适配】**：
+     - 设定 `.audit-table` 基础列宽：时间（145px）、用户（95px）、IP（110px）、分类（85px）、动作（95px）、页面路由（28%）、目标与操作详情（32%）；
+     - 在 1280px 容器下严丝合缝、完全撑满，不需要出现横向滚动条，内容一览无余，紧凑美观；
+     - 单元格内边距调整为紧凑舒适的 `8px 10px`，保留表头吸顶、斑马纹与 URL 平滑换行；
+- **验证与构建**：运行前端 `npm run build`，9.80s 编译 0 错误。
+
+## 2026-08-16 [全局管理后台操作日志（Audit Log）PC 宽屏与多视口排版彻底修复]
+
+## 2026-08-16 [全局管理后台操作日志（Audit Log）PC 宽屏与多视口排版彻底修复]
+- **任务目标与治理背景**：针对管理员在 PC 宽屏（如 `?from=...&tab=audit`）下发现的“表格列宽被压缩、时间与用户列挤压换行、筛选栏关键字输入框过窄、容器没有横向安全滚动”等排版问题开展专项修复；
+- **具体实施改动点与模块**（`AdminConsoleView.vue`）：
+  1. **【PC 宽屏表格物理列宽分配与横向滚动保护】**：
+     - 将 `.audit-table` 显式设置 `min-width: 1080px; table-layout: fixed; width: 100%;`，为时间列（160px）、用户列（105px）、IP 列（115px）、分类列（90px）、动作列（100px）、页面路由列（230px）以及操作详情列（自适应最小 280px）分配严格列宽；
+     - `.audit-table-wrap` 增加 `-webkit-overflow-scrolling: touch; overflow-x: auto;`，彻底杜绝中屏与小宽屏下表格文字重叠与挤压变形；
+  2. **【筛选工具栏 PC 端网格智能分配】**：
+     - 重构 `.filter-inputs-grid` 为 `140px 140px 140px 140px 1fr` 精准比例，前 4 项紧凑字段固定宽度，让“关键字模糊检索”占据所有剩余空间（`1fr`），消除搜索框过窄缺陷；
+     - 底部操作条 `.filter-actions-row` 增加内边距并保持右对齐，整洁大气；
+  3. **【卡片头部与标题层级规范】**：
+     - 规范 `.header-title-box` 与 `.header-actions-group` 的内边距和对齐方式，优化桌面端与中屏下标题和操作按钮的排版空间；
+- **验证与构建**：运行前端 `npm run build`，8.73s 编译 0 错误。
+
+## 2026-08-16 [历史 10,661 条审计日志全量无损迁移入库 & 后端服务全面切换为 PostgreSQL 驱动]
+- **任务目标与治理背景**：响应管理员“将历史日志全量迁移入库并由数据库负责写入与查询”的指令；彻底告别磁盘文本文件扫描，进入数据库全索引毫秒级查询与统一运维阶段；
+- **具体实施改动点与模块**：
+  1. **【历史数据全量无损迁移】**：
+     - 编写并执行迁移脚本 `migrate_audit_ndjson_to_db.py`，成功扫描全量 65 个历史 `audit-*.ndjson` 文件；
+     - 规范化解析并补全 `project_key`、`status`、`user_group`、`detail (JSONB)` 等字段，共 **10,661 条历史操作流水 100% 成功导入 `logs.system_audit_logs` 表**；
+  2. **【后端服务全面切换（`backend/services/audit_log.py`）】**：
+     - **写入服务 `append_events`**：直连 PostgreSQL 执行批量 `INSERT INTO logs.system_audit_logs`，配备 `try...except` Fail-Safe 异常吞咽保护与事务回滚，确保写日志 0 阻塞主业务；
+     - **查询服务 `query_events`**：重构为原生 SQL 高性能多维过滤（利用 `ts`、`username`、`category`、`status` 等索引，支持 ILIKE 模糊检索与 JSON 字段深度匹配）；
+     - **分类统计 `build_stats`**：由逐行 Counter 统计重构为原生 SQL `GROUP BY` 聚合查询，统计耗时缩短 99%（毫秒级出大盘）；
+- **验证与结果**：
+  - 运行单元测试 `test_db_audit_log_service.py`，测试写入、多维过滤与统计聚合全链路 100% 通过（30 天内 3,860 条日志实时秒级聚合成功）。
+
+## 2026-08-16 [PostgreSQL 数据库全局系统操作审计日志表（logs.system_audit_logs）全量工业级字段与索引落地]
+- **任务目标与治理背景**：响应管理员关于“日志放在数据库里管理比文件更优”的需求，基于业务场景深化，在 PostgreSQL 数据库中正式设计并创建全局系统审计表与 8 大高性能索引；
+- **具体实施改动点与模块**：
+  1. **【SQL DDL 定义脚本】**：创建与完善 `backend/sql/create_system_audit_logs.sql`；
+  2. **【21 个全量工业级字段落地】**：在 `logs` 模式下成功建立 `system_audit_logs` 表，覆盖四大维度：
+     - **基础元数据**：`id`, `ts`, `ts_east8`, `created_at`
+     - **身份与设备**：`username`, `user_group`, `unit`, `client_ip`, `user_agent`
+     - **业务与链路（扩展）**：`project_key`（多项目分权）, `status`（执行成败）, `duration_ms`（耗时）, `error_msg`（异常摘要）, `resource_type` 与 `resource_id`（业务实体追踪）, `request_id`（全链路追踪）
+     - **动态快照载荷**：`detail`（JSONB 存储参数或 before/after 数据快照）
+  3. **【8 大高性能索引覆盖】**：包含时间倒序索引 `idx_sys_audit_ts`、项目索引 `idx_sys_audit_proj`、业务对象索引 `idx_sys_audit_res`、用户索引 `idx_sys_audit_user`、分类动作复合索引 `idx_sys_audit_cat_act`、状态索引 `idx_sys_audit_status`、页面索引 `idx_sys_audit_page`，以及 `detail` 字段的 **`GIN (detail)` 倒排索引**；
+- **验证与结果**：通过 SQLAlchemy 连接在 PostgreSQL 数据库中执行 DDL 与 ALTER 成功，21 个字段与 8 个索引全部就绪。
+
 ## 2026-08-16 [全局管理后台页面按钮排版系统性重构与触控体验升级]
 - **任务目标与治理背景**：针对管理员反馈“页面上的按钮排版不足（大小不一、不对称、右侧飘散、移动端换行错位、缺少明确检索触控操作）”问题开展系统性排版重构；
 - **具体实施改动点与模块**（`AdminConsoleView.vue`）：

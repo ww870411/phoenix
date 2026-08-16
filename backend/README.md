@@ -1,3 +1,62 @@
+## 2026-08-16 生产环境一键迁移历史 ndjson 日志到 PostgreSQL 数据库服务上线
+
+- **关联接口与服务**：
+  - 路由文件：`backend/api/v1/admin_console.py`（端点 `POST /api/v1/admin/audit/migrate-from-ndjson`）
+  - 核心服务：`backend/services/audit_log.py`（函数 `migrate_ndjson_files_to_db`）
+- **核心逻辑与安全保障**：
+  1. 自动利用 `DATA_DIRECTORY.rglob("audit-*.ndjson")` 递归扫描数据目录下的所有历史日志文件；
+  2. 补齐与映射 21 个工业级审计字段，分批（Batch Size 500）安全执行批量插入，带事务回滚与异常安全隔离；
+  3. 执行完成后自动向 `logs.system_audit_logs` 记录一条管理员触发迁移的审计日志。
+
+## 2026-08-16 全局系统审计日志 API 支持 project_key 多项目维度检索
+
+- **关联接口与服务**：
+  - 路由文件：`backend/api/v1/admin_console.py`（接口 `GET /api/v1/admin/audit/events`）
+  - 核心服务：`backend/services/audit_log.py`（函数 `query_events`）
+- **改动内容**：
+  - 在 `list_audit_events` 接口中增加 `project_key` 查询参数并透传给 `query_events`，支持前端管理后台按特定业务子项目精确筛选审计流水。
+
+## 2026-08-16 历史 10,661 条审计日志全量无损迁移入库 & 后端服务全面切换为 PostgreSQL 驱动
+
+- **关联数据表与服务**：
+  - 数据库表：`logs.system_audit_logs`
+  - 核心服务文件：`backend/services/audit_log.py`
+  - 迁移脚本：`scratch/migrate_audit_ndjson_to_db.py`
+- **核心改造内容**：
+  1. **历史数据全量入库**：65 个 `audit-*.ndjson` 文件共计 10,661 条历史日志已全部无损导入 `logs.system_audit_logs`；
+  2. **写入服务 `append_events`**：直写 PostgreSQL 批量插入，带 Fail-Safe 异常吞咽保护；
+  3. **查询服务 `query_events`**：基于索引原生 SQL 查询，支持多维精准与模糊检索；
+  4. **聚合统计 `build_stats`**：原生 SQL `GROUP BY` 高速聚合出分类、动作、用户 TOP 榜。
+
+## 2026-08-16 全局系统操作审计日志数据表（logs.system_audit_logs）建立与索引落地
+
+- **关联数据表与 SQL**：
+  - 物理 SQL 脚本：`backend/sql/create_system_audit_logs.sql`
+  - 模式与表名：`logs.system_audit_logs`
+- **21 个全量工业级字段规范与说明**：
+  - `id` (BIGSERIAL PK): 唯一自增主键
+  - `ts` (TIMESTAMPTZ): 事件发生的标准 UTC 时间戳（带索引）
+  - `ts_east8` (VARCHAR(64)): 东八区（北京时间）格式化时间文本
+  - `project_key` (VARCHAR(64)): 所属业务子项目代号（如 `daily_report_25_26`、`insulation_pipe_supply_2026`、`admin_console` 等，带索引）
+  - `category` (VARCHAR(64)): 操作分类（ui, navigation, submit, admin, auth, api 等）
+  - `action` (VARCHAR(64)): 具体动作（page_open, click, login, update_config 等）
+  - `status` (VARCHAR(32)): 操作执行结果（`success` / `failed` / `warning`，带索引）
+  - `duration_ms` (INTEGER): 执行或接口耗时（毫秒）
+  - `error_msg` (TEXT): 异常或失败错误摘要
+  - `resource_type` (VARCHAR(64)): 业务对象类型（如 `sheet_entry`、`fitting_delivery` 等，带复合索引）
+  - `resource_id` (VARCHAR(128)): 业务对象唯一主键/单据编号（带复合索引）
+  - `page` (VARCHAR(512)): 操作页面前端路由或 URL（带索引）
+  - `target` (TEXT): 操作目标描述或按钮文案
+  - `request_id` (VARCHAR(64)): 全链路追踪 ID
+  - `username` (VARCHAR(64)): 操作人账号（带索引）
+  - `user_group` (VARCHAR(64)): 用户角色组
+  - `unit` (VARCHAR(128)): 所属单位/部门
+  - `client_ip` (VARCHAR(64)): 客户端来源 IP
+  - `user_agent` (TEXT): 客户端浏览器/设备 UA
+  - `detail` (JSONB): 操作参数、快照(before/after)的 JSONB 结构（带 GIN 倒排索引）
+  - `created_at` (TIMESTAMPTZ): 记录入库时间
+- **8 大高性能索引覆盖**：`idx_sys_audit_ts`, `idx_sys_audit_proj`, `idx_sys_audit_res`, `idx_sys_audit_user`, `idx_sys_audit_cat_act`, `idx_sys_audit_status`, `idx_sys_audit_page`, `idx_sys_audit_detail_gin`。
+
 ## 2026-08-16 全局管理后台（admin-console）现存接口调用模型与优化方案诊断
 
 - **关联后端路由与服务**：

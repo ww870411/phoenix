@@ -1314,6 +1314,7 @@ def list_audit_events(
     category: str = Query(default=""),
     action: str = Query(default=""),
     keyword: str = Query(default=""),
+    project_key: str = Query(default=""),
     limit: int = Query(default=200, ge=1, le=1000),
 ):
     _ensure_admin_console_access(session)
@@ -1323,6 +1324,7 @@ def list_audit_events(
         category=category,
         action=action,
         keyword=keyword,
+        project_key=project_key,
         limit=limit,
     )
     return {"ok": True, "events": rows}
@@ -1336,6 +1338,37 @@ def get_audit_stats(
     _ensure_admin_console_access(session)
     stats = audit_log.build_stats(days=days)
     return {"ok": True, "stats": stats}
+
+
+@router.post("/admin/audit/migrate-from-ndjson", summary="一键将服务器历史 ndjson 日志文件迁移导入数据库")
+def migrate_audit_ndjson_to_db(
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    生产环境一键迁移：自动扫描数据目录下的所有历史 ndjson 日志文件并批量写入 PostgreSQL logs.system_audit_logs 表。
+    """
+    _ensure_admin_console_access(session)
+    result = audit_log.migrate_ndjson_files_to_db()
+
+    # 记录管理员触发迁移的审计日志
+    try:
+        audit_log.append_events([{
+            "category": "admin",
+            "action": "migrate_audit_ndjson",
+            "status": "success" if result.get("ok") else "error",
+            "page": "/admin-console?tab=audit",
+            "target": "logs.system_audit_logs",
+            "username": getattr(session, "username", "admin"),
+            "detail": {
+                "files_count": result.get("files_count"),
+                "total_lines": result.get("total_lines"),
+                "inserted_count": result.get("inserted_count"),
+            },
+        }])
+    except Exception as e:
+        logger.warning("Failed to log migration audit event: %s", e)
+
+    return result
 
 
 @router.post("/admin/super/login", summary="服务器管理员登录（兼容占位）")

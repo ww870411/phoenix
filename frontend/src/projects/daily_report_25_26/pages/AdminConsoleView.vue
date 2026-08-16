@@ -797,7 +797,7 @@
 
         <section v-else-if="activeTab === 'audit'" class="content-block">
           <section class="inner-card audit-main-card">
-            <header class="section-header">
+            <header class="section-header audit-section-header">
               <div class="header-title-box">
                 <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
                   <span>📋 操作审计日志</span>
@@ -806,53 +806,92 @@
                 <p class="subtext">记录全系统关键业务操作、页面访问、配置变更与接口调用流水</p>
               </div>
               <div class="header-actions-group">
-                <button class="btn ghost header-action-btn" type="button" @click="auditStatsCollapsed = !auditStatsCollapsed">
-                  <span>{{ auditStatsCollapsed ? '📊 展开统计 TOP' : '📊 收起统计' }}</span>
+                <button
+                  class="btn ghost header-action-btn migrate-btn"
+                  type="button"
+                  :disabled="auditMigrating || auditLoading"
+                  @click="handleAuditMigration"
+                  title="扫描生产服务器磁盘上的历史 ndjson 日志文件并批量导入 PostgreSQL 数据库表"
+                >
+                  <span>{{ auditMigrating ? '⏳ 正在迁移入库…' : '📥 迁移历史日志入库' }}</span>
                 </button>
-                <button class="btn primary header-action-btn" type="button" :disabled="auditLoading" @click="reloadAuditData">
-                  <span>{{ auditLoading ? '加载中…' : '🔄 刷新日志' }}</span>
+                <button class="btn ghost header-action-btn" type="button" @click="auditStatsCollapsed = !auditStatsCollapsed">
+                  <span>{{ auditStatsCollapsed ? '📊 展开统计大盘' : '📊 收起统计大盘' }}</span>
                 </button>
               </div>
             </header>
 
-            <!-- 筛选工具栏 -->
-            <div class="toolbar audit-filter-toolbar">
+            <!-- 现代一体化流式筛选搜索条 -->
+            <div class="audit-search-filter-card">
               <div class="filter-inputs-grid">
-                <label class="field">
+                <!-- 时间范围 -->
+                <label class="field filter-field-time">
                   <span>时间范围</span>
-                  <select v-model.number="auditFilters.days">
-                    <option :value="1">最近 1 天</option>
-                    <option :value="3">最近 3 天</option>
-                    <option :value="7">最近 7 天</option>
-                    <option :value="15">最近 15 天</option>
-                    <option :value="30">最近 30 天</option>
+                  <select v-model.number="auditFilters.days" @change="reloadAuditData">
+                    <option :value="1">🕒 最近 1 天</option>
+                    <option :value="3">🕒 最近 3 天</option>
+                    <option :value="7">🕒 最近 7 天</option>
+                    <option :value="15">🕒 最近 15 天</option>
+                    <option :value="30">🕒 最近 30 天</option>
                   </select>
                 </label>
-                <label class="field">
-                  <span>操作用户</span>
-                  <input v-model.trim="auditFilters.username" type="text" placeholder="用户名" />
+
+                <!-- 所属业务项目 -->
+                <label class="field filter-field-project">
+                  <span>所属项目</span>
+                  <select v-model="auditFilters.project_key" @change="reloadAuditData">
+                    <option value="">📁 全部业务项目</option>
+                    <option value="insulation_pipe_supply_2026">预制直埋保温管供应链</option>
+                    <option value="daily_report_25_26">生产调度生产日报 25-26</option>
+                    <option value="daily_report_spring_festval_2026">春节供暖保障日报</option>
+                    <option value="monthly_data_show">月度生产数据中心</option>
+                  </select>
                 </label>
-                <label class="field">
+
+                <!-- 业务分类下拉 -->
+                <label class="field filter-field-category">
                   <span>业务分类</span>
-                  <input v-model.trim="auditFilters.category" type="text" placeholder="如 navigation / click" />
+                  <select v-model="auditFilters.category" @change="reloadAuditData">
+                    <option value="">🏷️ 全部分类</option>
+                    <option value="navigation">页面访问 (navigation)</option>
+                    <option value="ui">界面操作 (ui / action)</option>
+                    <option value="submit">数据填报 (submit)</option>
+                    <option value="admin">系统管理 (admin)</option>
+                    <option value="system">系统服务 (system)</option>
+                  </select>
                 </label>
-                <label class="field">
-                  <span>操作动作</span>
-                  <input v-model.trim="auditFilters.action" type="text" placeholder="如 page_open / click" />
+
+                <!-- 操作用户 -->
+                <label class="field filter-field-user">
+                  <span>操作用户</span>
+                  <input
+                    v-model.trim="auditFilters.username"
+                    type="text"
+                    placeholder="如 admin / 姓名"
+                    @keydown.enter="reloadAuditData"
+                  />
                 </label>
-                <label class="field keyword-field">
+
+                <!-- 关键字综合模糊检索 -->
+                <label class="field filter-field-keyword">
                   <span>关键字模糊检索</span>
-                  <input v-model.trim="auditFilters.keyword" type="text" placeholder="搜索 page/target/detail 等字段" />
+                  <input
+                    v-model.trim="auditFilters.keyword"
+                    type="text"
+                    placeholder="🔍 检索页面路由 / 操作目标 / 详情 JSON 内容（回车直接查询）..."
+                    @keydown.enter="reloadAuditData"
+                  />
                 </label>
-              </div>
-              
-              <div class="filter-actions-row">
-                <button class="btn ghost btn-sm" type="button" @click="resetAuditFilters">
-                  <span>🔄 重置条件</span>
-                </button>
-                <button class="btn primary btn-sm" type="button" :disabled="auditLoading" @click="reloadAuditData">
-                  <span>🔍 立即查询</span>
-                </button>
+
+                <!-- 一体化操作按钮 -->
+                <div class="filter-actions-inline">
+                  <button class="btn primary search-btn" type="button" :disabled="auditLoading" @click="reloadAuditData">
+                    <span>{{ auditLoading ? '查询中…' : '🔍 查询' }}</span>
+                  </button>
+                  <button class="btn ghost reset-btn" type="button" :disabled="auditLoading" @click="resetAuditFilters">
+                    <span>🔄 重置</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1614,6 +1653,7 @@ import {
   testAdminAiSettings,
   getAdminAuditEvents,
   getAdminAuditStats,
+  triggerAdminAuditMigration,
   getAdminSystemMetrics,
   getAdminOverview,
   getAdminValidationMasterSwitch,
@@ -2150,6 +2190,7 @@ const auditStats = reactive({
 })
 const auditFilters = reactive({
   days: 7,
+  project_key: '',
   username: '',
   category: '',
   action: '',
@@ -2194,13 +2235,47 @@ function formatAuditDetail(item) {
   return '-'
 }
 
+const auditMigrating = ref(false)
+
 function resetAuditFilters() {
   auditFilters.days = 7
+  auditFilters.project_key = ''
   auditFilters.username = ''
   auditFilters.category = ''
   auditFilters.action = ''
   auditFilters.keyword = ''
   reloadAuditData()
+}
+
+async function handleAuditMigration() {
+  const confirmed = window.confirm(
+    '【生产环境历史日志一键迁移】\n\n' +
+    '系统将自动扫描服务器磁盘数据目录下的所有历史 audit-*.ndjson 文件，并批量导入 PostgreSQL 数据库表 logs.system_audit_logs。\n\n' +
+    '是否确认立即开始执行迁移入库？'
+  )
+  if (!confirmed) return
+  if (auditMigrating.value) return
+  auditMigrating.value = true
+  try {
+    const res = await triggerAdminAuditMigration()
+    if (res?.ok) {
+      window.alert(
+        `🎉 历史日志数据迁移成功！\n\n` +
+        `• 扫描历史文件数：${res.files_count ?? 0} 个\n` +
+        `• 成功导入数据行：${res.inserted_count ?? 0} 条\n` +
+        `• 扫描总数据行数：${res.total_lines ?? 0} 行\n\n` +
+        `${res.message || '历史数据已全部无损写入 PostgreSQL 数据库！'}`
+      )
+      await reloadAuditData()
+    } else {
+      window.alert(`❌ 迁移失败：${res?.error || '未知错误'}`)
+    }
+  } catch (err) {
+    console.error('Audit migration failed:', err)
+    window.alert(`❌ 迁移请求异常：${err.message || String(err)}`)
+  } finally {
+    auditMigrating.value = false
+  }
 }
 const metricHistory = reactive({
   cpu: [],
@@ -3987,6 +4062,7 @@ async function onUploadDrop(event) {
 async function loadAuditEvents() {
   const payload = await getAdminAuditEvents({
     days: auditFilters.days,
+    project_key: auditFilters.project_key,
     username: auditFilters.username,
     category: auditFilters.category,
     action: auditFilters.action,
@@ -4340,7 +4416,7 @@ watch(
 )
 
 watch(
-  () => [auditFilters.days, auditFilters.username, auditFilters.category, auditFilters.action, auditFilters.keyword].join('|'),
+  () => [auditFilters.days, auditFilters.project_key, auditFilters.category].join('|'),
   () => {
     if (activeTab.value === 'audit') {
       reloadAuditData().catch((err) => console.error(err))
@@ -4558,10 +4634,11 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   min-width: 0;
   max-width: 1280px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px 24px;
   box-sizing: border-box;
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .top-shell {
@@ -4569,38 +4646,51 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  padding-bottom: 8px;
+  padding: 16px 20px 12px 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .top-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .tab-group {
   display: inline-flex;
-  background: #f3f4f6;
-  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   padding: 4px;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .tab-btn {
   border: none;
   background: transparent;
-  color: #4b5563;
-  padding: 8px 14px;
-  border-radius: 8px;
+  color: #475569;
+  padding: 7px 14px;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: #0f172a;
 }
 
 .tab-btn.active {
   background: #ffffff;
-  color: #1d4ed8;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: #0284c7;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .content-block {
@@ -5817,21 +5907,31 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
 .audit-main-card {
   overflow: visible;
+  padding: 16px 20px;
 }
 
 .audit-total-badge {
-  font-size: 11px;
+  font-size: 11.5px;
   background: #0284c7;
   color: #ffffff;
   padding: 2px 8px;
   border-radius: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-title-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .header-actions-group {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .header-action-btn {
@@ -5846,34 +5946,69 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   border-radius: 6px !important;
 }
 
-.audit-filter-toolbar {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.migrate-btn {
+  border-color: #cbd5e1 !important;
+  color: #0369a1 !important;
+  background: #f0f9ff !important;
+}
+
+.migrate-btn:hover:not(:disabled) {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+}
+
+/* 现代一体化流式筛选搜索条 (PC 宽屏与通用) */
+.audit-search-filter-card {
+  margin-top: 14px;
   background: #f8fafc;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+  box-sizing: border-box;
 }
 
 .filter-inputs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
+  gap: 12px;
+  width: 100%;
 }
 
 .filter-inputs-grid .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-sizing: border-box;
 }
 
 .filter-inputs-grid .field span {
   font-size: 11.5px;
   font-weight: 600;
   color: #475569;
+  white-space: nowrap;
+}
+
+.filter-field-time {
+  width: 125px;
+}
+
+.filter-field-project {
+  width: 185px;
+}
+
+.filter-field-category {
+  width: 165px;
+}
+
+.filter-field-user {
+  width: 130px;
+}
+
+.filter-field-keyword {
+  flex: 1 1 200px;
+  min-width: 180px;
 }
 
 .filter-inputs-grid select,
@@ -5885,7 +6020,9 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   font-size: 12.5px;
   background: #ffffff;
   outline: none;
-  transition: border-color 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .filter-inputs-grid select:focus,
@@ -5894,35 +6031,43 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
 }
 
-.filter-actions-row {
-  display: flex;
-  justify-content: flex-end;
+.filter-actions-inline {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  border-top: 1px solid #edf2f7;
-  padding-top: 8px;
+  height: 34px;
+  flex-shrink: 0;
 }
 
-.filter-actions-row .btn {
-  height: 32px;
+.filter-actions-inline .btn {
+  height: 34px;
   padding: 0 14px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 /* 1. 桌面端表格样式 (>= 769px) */
 .audit-table-wrap {
   margin-top: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .audit-table {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 12px;
@@ -5930,34 +6075,45 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
 .audit-table th,
 .audit-table td {
-  border-bottom: 1px solid #e5e7eb;
-  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 10px;
   text-align: left;
   vertical-align: top;
+  box-sizing: border-box;
 }
 
 .audit-table th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 10;
   background: #f8fafc;
   color: #334155;
   font-weight: 600;
   border-bottom: 2px solid #cbd5e1;
+  font-size: 12px;
 }
 
-.audit-table .col-time { width: 155px; }
-.audit-table .col-user { width: 110px; }
-.audit-table .col-ip { width: 120px; }
-.audit-table .col-category { width: 95px; }
-.audit-table .col-action { width: 100px; }
-.audit-table .col-page { width: 22%; }
-.audit-table .col-target { width: 28%; }
+.audit-table tbody tr:nth-child(even) {
+  background-color: #fafbfc;
+}
+
+.audit-table tbody tr:hover {
+  background-color: #f0f9ff;
+}
+
+.audit-table .col-time { width: 145px; }
+.audit-table .col-user { width: 95px; }
+.audit-table .col-ip { width: 110px; }
+.audit-table .col-category { width: 85px; }
+.audit-table .col-action { width: 95px; }
+.audit-table .col-page { width: 28%; }
+.audit-table .col-target { width: 32%; }
 
 .col-time-cell {
   color: #64748b;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
+  font-family: monospace;
 }
 
 .audit-user-chip {
@@ -6006,33 +6162,36 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   font-size: 11.5px;
   display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .target-detail-wrapper {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
 }
 
 .target-text-preview {
-  max-height: 46px;
+  max-height: 48px;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 11.5px;
   background: #f8fafc;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 4px;
   border: 1px solid #e2e8f0;
   word-break: break-all;
-  line-height: 1.4;
+  overflow-wrap: break-word;
+  line-height: 1.45;
   color: #334155;
+  font-family: monospace;
   transition: max-height 0.2s ease;
 }
 
 .target-text-preview.is-expanded {
-  max-height: 400px;
+  max-height: 450px;
   overflow-y: auto;
   background: #ffffff;
   border-color: #93c5fd;
@@ -6043,11 +6202,12 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   background: none;
   border: none;
   color: #0284c7;
-  font-size: 11px;
+  font-size: 11.5px;
   cursor: pointer;
   text-align: left;
   padding: 0;
   font-weight: 600;
+  align-self: flex-start;
 }
 
 .detail-expand-toggle-btn:hover {
@@ -6489,24 +6649,37 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   }
 
   .filter-inputs-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  .filter-inputs-grid .keyword-field {
-    grid-column: span 2 !important;
-  }
-
-  .filter-actions-row {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
   }
 
-  .filter-actions-row .btn {
+  .filter-field-time,
+  .filter-field-project,
+  .filter-field-category,
+  .filter-field-user {
+    width: 100% !important;
+  }
+
+  .filter-field-keyword {
+    grid-column: span 2 !important;
+    width: 100% !important;
+  }
+
+  .filter-actions-inline {
+    grid-column: span 2 !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .filter-actions-inline .btn {
     height: 36px !important;
     justify-content: center !important;
     font-size: 13px !important;
+    width: 100% !important;
   }
 
   .audit-grid {
