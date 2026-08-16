@@ -142,17 +142,17 @@
       {
         "username": "王玮",
         "password": "wangwei_123",
-        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
       },
       {
         "username": "李绍",
         "password": "lishao_0801",
-        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
       },
       {
         "username": "张亮",
         "password": "zhangliang_0805",
-        "unit": "high_lot_1,high_lot_2,low_lot_1,low_lot_2,low_lot_3"
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
       },
       {
         "username": "陶远辉",
@@ -163,6 +163,56 @@
         "username": "卢君",
         "password": "lujun_0715",
         "unit": "high_lot_2"
+      },
+      {
+        "username": "王晓童",
+        "password": "wangxiaotong_0815",
+        "unit": "high_lot_3,high_lot_4"
+      },
+      {
+        "username": "宁吉兴",
+        "password": "ningjixing_0815",
+        "unit": "high_lot_3,high_lot_4"
+      },
+      {
+        "username": "肖贺升",
+        "password": "xiaohecheng_0815",
+        "unit": "high_lot_3"
+      },
+      {
+        "username": "王一粟",
+        "password": "wangyisu_0815",
+        "unit": "high_lot_4"
+      },
+      {
+        "username": "赵恩海",
+        "password": "zhaoenhai_0815",
+        "unit": "low_lot_1,low_lot_2"
+      },
+      {
+        "username": "李生辉",
+        "password": "lishenghui_0815",
+        "unit": "low_lot_1,low_lot_2"
+      },
+      {
+        "username": "鲍春来",
+        "password": "baochunlai_0815",
+        "unit": "low_lot_1"
+      },
+      {
+        "username": "葛书侨",
+        "password": "geshuqiao_0815",
+        "unit": "low_lot_1"
+      },
+      {
+        "username": "刘思洋",
+        "password": "liusiyang_0815",
+        "unit": "low_lot_2"
+      },
+      {
+        "username": "刘宇",
+        "password": "liuyu_0815",
+        "unit": "low_lot_2"
       }
     ],
     "tube_construction_unit": [

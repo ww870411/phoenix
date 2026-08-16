@@ -2,7 +2,17 @@
   <div class="admin-console-view">
     <AppHeader />
     <main class="admin-console-main">
-      <Breadcrumbs :items="breadcrumbItems" />
+      <div class="admin-top-nav-row">
+        <Breadcrumbs :items="breadcrumbItems" />
+        <button
+          v-if="returnTargetPath"
+          class="btn ghost btn-sm return-work-btn"
+          type="button"
+          @click="goBackToWork"
+        >
+          ⬅️ 返回刚才工作页面（{{ returnTargetLabel }}）
+        </button>
+      </div>
 
       <section class="card elevated top-shell">
         <header class="card-header top-header">
@@ -1590,7 +1600,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
@@ -1893,8 +1903,80 @@ const SUPER_COMMAND_PRESETS = [
   { label: 'docker compose up -d', command: 'docker compose -f lo1_new_server.yml up -d', cwd: '/home/ww870411/25-26' },
 ]
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
-const activeTab = ref('files')
+
+const VALID_TABS = ['files', 'database', 'project', 'system', 'audit', 'accounts', 'db_backup']
+const VALID_SUB_TABS = ['accounts_list', 'matrix_control']
+
+const initialTab = typeof route.query.tab === 'string' && VALID_TABS.includes(route.query.tab)
+  ? route.query.tab
+  : 'files'
+const activeTab = ref(initialTab)
+
+const initialSubTab = typeof route.query.sub === 'string' && VALID_SUB_TABS.includes(route.query.sub)
+  ? route.query.sub
+  : 'accounts_list'
+const activeSubTab = ref(initialSubTab)
+
+const returnTargetPath = computed(() => {
+  const from = route.query.from
+  if (typeof from === 'string' && from.startsWith('/') && !from.startsWith('/admin-console') && from !== '/login') {
+    return from
+  }
+  return ''
+})
+
+const returnTargetLabel = computed(() => {
+  const p = returnTargetPath.value
+  if (!p) return ''
+  if (p.includes('/spring-dashboard')) return '春节专刊大盘'
+  if (p.includes('/import-workspace')) return '月度数据导入'
+  if (p.includes('/query-tool')) return '月度数据查询'
+  if (p.includes('/data-analysis')) return '数据分析看板'
+  if (p.includes('/display')) return '动态展示看板'
+  if (p.includes('/approval')) return '数据审核页'
+  if (p.includes('/sheets/')) return '数据填报工作区'
+  if (p.includes('/dashboard')) return '数据看板'
+  if (p.includes('/global_management')) return '全局大盘配置'
+  if (p.includes('/supply_management')) return '供给管理'
+  if (p.includes('/demand_management')) return '需求管理'
+  if (p.includes('/warehouse_management')) return '仓库到货管理'
+  if (p.includes('/pages')) return '项目页面选择'
+  if (p.includes('/projects')) return '项目选择大厅'
+  return '业务页面'
+})
+
+function goBackToWork() {
+  if (returnTargetPath.value) {
+    router.push(returnTargetPath.value)
+  }
+}
+
+function syncUrlQuery() {
+  const currentQuery = { ...route.query }
+  const targetTab = activeTab.value
+  const targetSub = targetTab === 'accounts' ? activeSubTab.value : undefined
+
+  let changed = false
+  if (currentQuery.tab !== targetTab) {
+    currentQuery.tab = targetTab
+    changed = true
+  }
+  if (targetSub) {
+    if (currentQuery.sub !== targetSub) {
+      currentQuery.sub = targetSub
+      changed = true
+    }
+  } else if (currentQuery.sub) {
+    delete currentQuery.sub
+    changed = true
+  }
+
+  if (changed) {
+    router.replace({ query: currentQuery }).catch(() => {})
+  }
+}
 
 const chatBubbleOverride = ref(null)
 const showChatBubble = computed(() => {
@@ -4092,6 +4174,59 @@ function onMessage(event) {
   }
 }
 
+async function loadDataForTab(tab) {
+  if (tab === 'files') {
+    stopSystemTimer()
+    if (!directories.value.length) {
+      await loadDirectories()
+    }
+    return
+  }
+  if (tab === 'database') {
+    stopSystemTimer()
+    if (!dbTables.value.length) {
+      await loadDbTables()
+    }
+    if (dbSelectedTable.value && !dbRows.value.length) {
+      await loadDbRows()
+    }
+    return
+  }
+  if (tab === 'project') {
+    stopSystemTimer()
+    if (!projects.value.length) {
+      await loadProjects()
+    }
+    await selectProject(selectedProjectKey.value || TARGET_PROJECT_KEY)
+    return
+  }
+  if (tab === 'system') {
+    await loadSystemMetrics()
+    ensureSystemTimer()
+    if (!fileManagerItems.value.length) {
+      await refreshSuperTree(fileManagerPath.value)
+      await loadSuperFiles()
+    }
+    return
+  }
+  if (tab === 'audit') {
+    stopSystemTimer()
+    await reloadAuditData()
+    return
+  }
+  if (tab === 'accounts') {
+    stopSystemTimer()
+    await loadAccountsAndMatrix()
+    return
+  }
+  if (tab === 'db_backup') {
+    stopSystemTimer()
+    await loadBackupList()
+    return
+  }
+  stopSystemTimer()
+}
+
 onMounted(async () => {
   if (!auth.canAccessAdminConsole) {
     router.replace('/projects')
@@ -4101,53 +4236,41 @@ onMounted(async () => {
   // 同步 AI 气泡设置
   syncChatBubbleFromSettings()
   
-  await refreshSuperTree(fileManagerPath.value)
-  await loadSuperFiles()
-  await loadProjects()
-  await loadDirectories()
-  await loadDbTables()
-  await loadDbRows()
-  await selectProject(TARGET_PROJECT_KEY)
-  if (activeTab.value === 'accounts') {
-    await loadAccountsAndMatrix()
-  }
+  // 确保 URL 带有当前 tab
+  syncUrlQuery()
+
+  // 精准按需仅加载当前激活 Tab 的数据
+  await loadDataForTab(activeTab.value)
 })
 
 watch(
   () => activeTab.value,
   async (tab) => {
-    if (tab === 'files') {
-      stopSystemTimer()
-      return
+    syncUrlQuery()
+    await loadDataForTab(tab)
+  },
+)
+
+watch(
+  () => activeSubTab.value,
+  () => {
+    if (activeTab.value === 'accounts') {
+      syncUrlQuery()
     }
-    if (tab === 'database') {
-      stopSystemTimer()
-      await loadDbTables()
-      if (dbSelectedTable.value) {
-        await loadDbRows()
-      }
-      return
+  },
+)
+
+watch(
+  () => [route.query.tab, route.query.sub].join('|'),
+  () => {
+    const qTab = route.query.tab
+    const qSub = route.query.sub
+    if (typeof qTab === 'string' && VALID_TABS.includes(qTab) && qTab !== activeTab.value) {
+      activeTab.value = qTab
     }
-    if (tab === 'system') {
-      await loadSystemMetrics()
-      ensureSystemTimer()
-      if (!fileManagerItems.value.length) {
-        await refreshSuperTree(fileManagerPath.value)
-        await loadSuperFiles()
-      }
-      return
+    if (typeof qSub === 'string' && VALID_SUB_TABS.includes(qSub) && qSub !== activeSubTab.value) {
+      activeSubTab.value = qSub
     }
-    if (tab === 'audit') {
-      await reloadAuditData()
-      stopSystemTimer()
-      return
-    }
-    if (tab === 'accounts') {
-      stopSystemTimer()
-      await loadAccountsAndMatrix()
-      return
-    }
-    stopSystemTimer()
   },
 )
 
@@ -4189,7 +4312,6 @@ onBeforeUnmount(() => {
 })
 
 // --- 账户与权限管理大盘 (2026-07-02 重构优化版) ---
-const activeSubTab = ref('accounts_list') // 'accounts_list' or 'matrix_control'
 const selectedRoleForMatrix = ref('Global_admin')
 const accounts = ref([])
 const availableGroups = ref([])
@@ -6464,6 +6586,37 @@ input:checked + .switch-slider:before {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+.admin-top-nav-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 6px !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
+
+.return-work-btn {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0369a1 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.return-work-btn:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.12) !important;
 }
 
 </style>

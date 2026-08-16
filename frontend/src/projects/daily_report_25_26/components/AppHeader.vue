@@ -95,7 +95,12 @@ function goHome() {
 }
 
 function goAdminConsole() {
-  router.push('/admin-console')
+  const currentPath = route.fullPath || route.path
+  if (currentPath && !currentPath.startsWith('/admin-console') && currentPath !== '/login') {
+    router.push({ path: '/admin-console', query: { from: currentPath } })
+  } else {
+    router.push('/admin-console')
+  }
 }
 
 const userLabel = computed(() => {

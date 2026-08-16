@@ -158,9 +158,14 @@
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2",
+        "high_lot_3",
+        "high_lot_4",
         "low_lot_1",
         "low_lot_2",
-        "low_lot_3"
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ]
     },
     {
@@ -170,9 +175,14 @@
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2",
+        "high_lot_3",
+        "high_lot_4",
         "low_lot_1",
         "low_lot_2",
-        "low_lot_3"
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ]
     },
     {
@@ -182,9 +192,14 @@
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2",
+        "high_lot_3",
+        "high_lot_4",
         "low_lot_1",
         "low_lot_2",
-        "low_lot_3"
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ]
     },
     {
@@ -201,6 +216,86 @@
       "contact_phone": "13591176750",
       "section_1_ids": [
         "high_lot_2"
+      ]
+    },
+    {
+      "manager_id": "王晓童",
+      "manager_name": "王晓童",
+      "contact_phone": "15904956988",
+      "section_1_ids": [
+        "high_lot_3","high_lot_4"
+      ]
+    },
+    {
+      "manager_id": "宁吉兴",
+      "manager_name": "宁吉兴",
+      "contact_phone": "15840897281",
+      "section_1_ids": [
+        "high_lot_3","high_lot_4"
+      ]
+    },
+    {
+      "manager_id": "肖贺升",
+      "manager_name": "肖贺升",
+      "contact_phone": "18242308900",
+      "section_1_ids": [
+        "high_lot_3"
+      ]
+    },
+    {
+      "manager_id": "王一粟",
+      "manager_name": "王一粟",
+      "contact_phone": "15042408099",
+      "section_1_ids": [
+        "high_lot_4"
+      ]
+    },
+    {
+      "manager_id": "赵恩海",
+      "manager_name": "赵恩海",
+      "contact_phone": "13842698860",
+      "section_1_ids": [
+        "low_lot_1","low_lot_2"
+      ]
+    },
+    {
+      "manager_id": "李生辉",
+      "manager_name": "李生辉",
+      "contact_phone": "18641196080",
+      "section_1_ids": [
+        "low_lot_1","low_lot_2"
+      ]
+    },
+    {
+      "manager_id": "鲍春来",
+      "manager_name": "鲍春来",
+      "contact_phone": "15940845785",
+      "section_1_ids": [
+        "low_lot_1"
+      ]
+    },
+    {
+      "manager_id": "葛书侨",
+      "manager_name": "葛书侨",
+      "contact_phone": "13624119516",
+      "section_1_ids": [
+        "low_lot_1"
+      ]
+    },
+    {
+      "manager_id": "刘思洋",
+      "manager_name": "刘思洋",
+      "contact_phone": "15040578357",
+      "section_1_ids": [
+        "low_lot_2"
+      ]
+    },
+    {
+      "manager_id": "刘宇",
+      "manager_name": "刘宇",
+      "contact_phone": "13500789525",
+      "section_1_ids": [
+        "low_lot_2"
       ]
     }
   ],

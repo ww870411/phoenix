@@ -1,3 +1,36 @@
+## 2026-08-16 全局管理后台（AdminConsoleView.vue）阶段一体验与性能优化全面落地
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）
+  - `frontend/src/projects/daily_report_25_26/components/AppHeader.vue`
+- **具体实施变化**：
+  1. **Tab/SubTab 状态 URL 双向持久化**：
+     - 引入 `useRoute`，在 `syncUrlQuery` 中双向绑定 `route.query.tab` 与 `route.query.sub`；
+     - 刷新页面、浏览器前进/后退均能精准保留或还原在当前激活的 Tab，支持 URL 直达特定后台面板；
+  2. **按需懒加载机制（Lazy Load）**：
+     - 重构 `onMounted` 钩子，移除原先无脑执行的 7 个重型请求；
+     - 引入集中式 `loadDataForTab(tab)` 函数，进入哪个 Tab 才按需加载对应数据，未点击的 Tab 保持休眠，大幅降低管理后台首屏耗时与网络拥堵；
+  3. **数据库备份恢复自动触发**：
+     - 在 `loadDataForTab` 补充 `'db_backup'` 分支，切换至备份 Tab 时自动拉取 `loadBackupList()`，无需手动刷新；
+  4. **原业务页面返回通道**：
+     - `AppHeader.vue` 跳转后台自动携带来源全路径（`?from=...`）；
+     - `AdminConsoleView.vue` 面包屑右侧新增 `.return-work-btn` 智能返回按钮，支持一键返回原业务工作界面。
+
+## 2026-08-16 全局管理后台（AdminConsoleView.vue）体验痛点与架构深度诊断
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console`）
+- **现存架构现状与体量**：
+  - 页面聚合了 7 大业务板块：`files`（文件树编辑）、`database`（PostgreSQL 表在线编辑与单元格抽屉）、`project`（项目后台设定与看板缓存）、`system`（服务器指标与运维终端）、`audit`（审计日志与统计）、`accounts`（用户管理与三栏权限矩阵）、`db_backup`（数据库全量备份与高级按表恢复）；
+  - 单文件代码规模达 **6470 行（219 KB）**；
+- **排查诊断出的 6 项体验阻碍点**：
+  1. 标签状态未绑定 `route.query.tab`，刷新页面或后退时状态丢失强制重置回第一页；
+  2. `onMounted` 钩子全量无脑并发/串行预加载 7 个重型系统/数据库请求，无懒加载，首屏卡顿；
+  3. `watch(activeTab)` 漏写 `'db_backup'` 分支，切换备份页显示空白需手动点刷新；
+  4. “项目后台设定”与“权限配置中心”功能割裂重叠，且旧设定硬编码仅支持单一项目；
+  5. 顶部面包屑导航写死，从业务页进入后缺失一键返回通道；
+  6. 巨石组件耦合严重，缺乏子组件拆分；
+- **交付文档**：已在 `configs/` 目录下生成同名 `.md` 与 A4 纸张排版 `.docx` 说明文件。
+
 ## 2026-08-14 管件发货表单移除发货时间选择框
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
