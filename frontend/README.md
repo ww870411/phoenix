@@ -1,3 +1,12 @@
+## 2026-08-16 全局管理后台操作日志迁移工作台（Migration Modal）明细弹窗上线
+
+- **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）
+- **核心体验与功能升级**：
+  1. **直观工作台明细弹窗**：点击 `📥 迁移历史日志入库 (明细)` 按钮立即展开全景工作台弹窗，杜绝盲目等待；
+  2. **预检与状态大盘**：包含扫描文件数、待入库总行数、当前数据库存量 4 大统计卡片；
+  3. **逐文件明细表格**：列出每个 `.ndjson` 文件的大小、条数以及状态徽章（`⚪ 待迁移`、`⏳ 正在写入`、`🟢 已成功入库`）；
+  4. **全量一键执行与即时刷新**：点击 `🚀 立即开始全量入库迁移` 自动执行，完成后自动刷新大盘和表格。
+
 ## 2026-08-16 全局管理后台操作日志生产环境一键迁移（One-Click Migration）上线
 
 - **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）

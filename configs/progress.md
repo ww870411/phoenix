@@ -1,3 +1,28 @@
+## 2026-08-16 [审计日志数据库表自动自愈（Schema Self-Healing）与 project_key 列补齐]
+- **任务目标与问题排查**：排查并解决后端日志报错 `column "project_key" of relation "system_audit_logs" does not exist`；
+- **问题根源与解决思路**：数据库中的 `logs.system_audit_logs` 表由早期版本生成，缺少后来新增的 `project_key`、`status`、`duration_ms` 等字段。不仅立即执行了表结构补齐，更在后端加入了**自动自愈（Schema Self-Healing）与重试机制**，杜绝任何环境因表老旧而报错；
+- **具体实施改动点与模块**：
+  1. **【数据库表列与索引即时补齐】**：执行 `ALTER TABLE logs.system_audit_logs ADD COLUMN IF NOT EXISTS project_key ...` 补齐全部 21 列和索引；
+  2. **【后端服务自动自愈与容错重试（`backend/services/audit_log.py`）】**：
+     - 新增 `ensure_audit_log_table()` 幂等自愈函数；
+     - 在 `append_events`、`query_events`、`build_stats` 中引入 `_table_ensured` 检查及 `UndefinedColumn` 异常捕获自愈重试机制；
+- **验证与测试**：
+  - 运行 `test_full_audit_flow.py`，完整验证写入、带 project_key 过滤查询与统计大盘，全部通过。
+
+## 2026-08-16 [操作审计日志迁移工作台（Migration Modal）明细大盘与预检全流程上线]
+- **任务目标与治理背景**：响应管理员“点击迁移后需要直观明细、避免无感知长时间等待”的指令，上线生产环境一键迁移工作台弹窗；
+- **具体实施改动点与模块**：
+  1. **【毫秒级预检服务与接口（`backend/services/audit_log.py` & `admin_console.py`）】**：
+     - 新增 `inspect_ndjson_files()` 函数与 `GET /api/v1/admin/audit/migration/inspect` 接口，毫秒级扫描服务器全部待迁移文件、统计大小/行数及数据库现有量；
+     - 升级 `migrate_ndjson_files_to_db()` 返回每个文件的处理结果明细（文件名、路径、条数、状态）；
+  2. **【现代化迁移明细工作台弹窗（`AdminConsoleView.vue`）】**：
+     - 点击 `📥 迁移历史日志入库 (明细)` 立即打开工作台弹窗，展现扫描文件数、估算行数、数据库已存量 4 大统计卡片；
+     - 提供待迁移文件明细表格（文件名、路径、大小、行数、状态徽章）；
+     - 提供迁移中动态加载动画提示与防误触保护，迁移完成后各文件状态自动打标，实时刷新大盘数据；
+- **验证与测试**：
+  - 运行 `test_migration_service.py` 验证毫秒级预检与批量迁移；
+  - 前端运行 `npm run build`，13.05s 编译 0 错误。
+
 ## 2026-08-16 [操作审计日志生产环境一键迁移功能（One-Click Migration）前后端落地]
 - **任务目标与治理背景**：响应管理员“在生产环境中无法人工手动执行脚本，需在管理后台增加一键迁移按钮完成 ndjson 到 PostgreSQL 表入库”的指令；
 - **具体实施改动点与模块**：

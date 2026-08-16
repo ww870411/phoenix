@@ -810,10 +810,10 @@
                   class="btn ghost header-action-btn migrate-btn"
                   type="button"
                   :disabled="auditMigrating || auditLoading"
-                  @click="handleAuditMigration"
-                  title="扫描生产服务器磁盘上的历史 ndjson 日志文件并批量导入 PostgreSQL 数据库表"
+                  @click="openAuditMigrationModal"
+                  title="打开历史日志迁移工作台，查看扫描文件明细并一键导入 PostgreSQL 数据库表"
                 >
-                  <span>{{ auditMigrating ? '⏳ 正在迁移入库…' : '📥 迁移历史日志入库' }}</span>
+                  <span>{{ auditMigrating ? '⏳ 正在迁移入库…' : '📥 迁移历史日志入库 (明细)' }}</span>
                 </button>
                 <button class="btn ghost header-action-btn" type="button" @click="auditStatsCollapsed = !auditStatsCollapsed">
                   <span>{{ auditStatsCollapsed ? '📊 展开统计大盘' : '📊 收起统计大盘' }}</span>
@@ -1628,6 +1628,127 @@
         </footer>
       </aside>
     </div>
+
+    <!-- 生产环境历史日志迁移入库明细工作台弹窗 -->
+    <div v-if="auditMigrationDialogVisible" class="audit-migration-modal">
+      <div class="audit-migration-modal__mask" @click="!auditMigrating && (auditMigrationDialogVisible = false)"></div>
+      <div class="audit-migration-modal__card">
+        <header class="audit-migration-modal__header">
+          <div class="modal-title-group">
+            <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+              <span>📥 生产环境历史日志一键迁移入库工作台</span>
+            </h3>
+            <p class="modal-subtext">
+              自动扫描服务器磁盘上的所有历史 <code>audit-*.ndjson</code> 日志文件，并批量解析导入 PostgreSQL 数据库表 <code>logs.system_audit_logs</code>。
+            </p>
+          </div>
+          <button
+            class="audit-migration-modal__close"
+            type="button"
+            :disabled="auditMigrating"
+            @click="auditMigrationDialogVisible = false"
+          >×</button>
+        </header>
+
+        <!-- 顶部状态卡片概览 -->
+        <div class="migration-overview-grid">
+          <div class="mig-stat-card">
+            <span class="stat-label">扫描到历史文件</span>
+            <strong class="stat-val">{{ auditMigrationInspect.files_count ?? 0 }} <small>个</small></strong>
+          </div>
+          <div class="mig-stat-card">
+            <span class="stat-label">估算待入库总行数</span>
+            <strong class="stat-val text-primary">{{ auditMigrationInspect.total_estimated_lines ?? 0 }} <small>条</small></strong>
+          </div>
+          <div class="mig-stat-card">
+            <span class="stat-label">数据库当前已有数据</span>
+            <strong class="stat-val text-success">{{ auditMigrationInspect.db_current_count ?? 0 }} <small>条</small></strong>
+          </div>
+          <div class="mig-stat-card">
+            <span class="stat-label">本次迁移成功写入</span>
+            <strong class="stat-val text-accent">{{ auditMigrationResult.inserted_count ?? 0 }} <small>条</small></strong>
+          </div>
+        </div>
+
+        <!-- 迁移中动态动画提示 -->
+        <div v-if="auditMigrating" class="migration-running-box">
+          <div class="running-spinner-row">
+            <span class="running-spinner">⏳</span>
+            <span>正在批量解析 ndjson 并写入 PostgreSQL 数据库表，请稍候（请勿刷新或关闭窗口）…</span>
+          </div>
+        </div>
+
+        <!-- 历史文件明细列表 -->
+        <div class="migration-files-section">
+          <div class="section-title-row">
+            <h4 style="margin: 0;">📋 待迁移文件明细列表（共 {{ (auditMigrationFiles || []).length }} 个文件）</h4>
+            <button
+              class="btn ghost btn-sm"
+              type="button"
+              :disabled="auditMigrating || auditInspectLoading"
+              @click="runAuditMigrationInspect"
+            >
+              <span>{{ auditInspectLoading ? '正在扫描…' : '🔄 重新扫描文件' }}</span>
+            </button>
+          </div>
+          <div class="migration-table-wrap">
+            <table class="migration-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 220px;">文件名称</th>
+                  <th>相对路径</th>
+                  <th style="width: 95px;">文件大小</th>
+                  <th style="width: 100px;">估算行数</th>
+                  <th style="width: 130px; text-align: center;">入库状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(f, idx) in auditMigrationFiles" :key="f.rel_path || f.file_name">
+                  <td class="col-center" style="text-align: center; color: #64748b;">{{ idx + 1 }}</td>
+                  <td><code class="file-name-code">{{ f.file_name }}</code></td>
+                  <td class="col-path"><code>{{ f.rel_path }}</code></td>
+                  <td>{{ f.size_kb }} KB</td>
+                  <td><strong>{{ f.lines_count }}</strong> 条</td>
+                  <td style="text-align: center;">
+                    <span v-if="f.status === 'success'" class="status-badge success">🟢 已成功入库</span>
+                    <span v-else-if="f.status === 'writing'" class="status-badge writing">⏳ 正在写入…</span>
+                    <span v-else-if="f.status === 'error'" class="status-badge error" :title="f.error">🔴 写入失败</span>
+                    <span v-else class="status-badge pending">⚪ 待迁移入库</span>
+                  </td>
+                </tr>
+                <tr v-if="!auditMigrationFiles.length && !auditInspectLoading">
+                  <td colspan="6" class="table-empty">未扫描到任何历史 audit-*.ndjson 文件</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 底部操作按钮 -->
+        <footer class="audit-migration-modal__footer">
+          <div class="footer-tip">
+            <span>💡 提示：迁移入库采用分批安全事务提交，支持重复执行，不会影响系统正常运行。</span>
+          </div>
+          <div class="footer-actions">
+            <button
+              class="btn ghost"
+              type="button"
+              :disabled="auditMigrating"
+              @click="auditMigrationDialogVisible = false"
+            >关闭</button>
+            <button
+              class="btn primary start-mig-btn"
+              type="button"
+              :disabled="auditMigrating || auditInspectLoading || !auditMigrationFiles.length"
+              @click="startAuditMigrationExecution"
+            >
+              <span>{{ auditMigrating ? '⏳ 正在全量迁移数据中…' : '🚀 立即开始全量入库迁移' }}</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1653,6 +1774,7 @@ import {
   testAdminAiSettings,
   getAdminAuditEvents,
   getAdminAuditStats,
+  inspectAdminAuditMigration,
   triggerAdminAuditMigration,
   getAdminSystemMetrics,
   getAdminOverview,
@@ -2236,6 +2358,17 @@ function formatAuditDetail(item) {
 }
 
 const auditMigrating = ref(false)
+const auditMigrationDialogVisible = ref(false)
+const auditInspectLoading = ref(false)
+const auditMigrationInspect = reactive({
+  files_count: 0,
+  total_estimated_lines: 0,
+  db_current_count: 0,
+})
+const auditMigrationFiles = ref([])
+const auditMigrationResult = reactive({
+  inserted_count: 0,
+})
 
 function resetAuditFilters() {
   auditFilters.days = 7
@@ -2247,35 +2380,76 @@ function resetAuditFilters() {
   reloadAuditData()
 }
 
-async function handleAuditMigration() {
-  const confirmed = window.confirm(
-    '【生产环境历史日志一键迁移】\n\n' +
-    '系统将自动扫描服务器磁盘数据目录下的所有历史 audit-*.ndjson 文件，并批量导入 PostgreSQL 数据库表 logs.system_audit_logs。\n\n' +
-    '是否确认立即开始执行迁移入库？'
-  )
-  if (!confirmed) return
+async function openAuditMigrationModal() {
+  auditMigrationDialogVisible.value = true
+  await runAuditMigrationInspect()
+}
+
+async function runAuditMigrationInspect() {
+  if (auditInspectLoading.value) return
+  auditInspectLoading.value = true
+  try {
+    const res = await inspectAdminAuditMigration()
+    if (res?.ok) {
+      auditMigrationInspect.files_count = res.files_count ?? 0
+      auditMigrationInspect.total_estimated_lines = res.total_estimated_lines ?? 0
+      auditMigrationInspect.db_current_count = res.db_current_count ?? 0
+      auditMigrationFiles.value = Array.isArray(res.files) ? res.files : []
+    }
+  } catch (err) {
+    console.error('Audit inspect error:', err)
+    window.alert('预检历史日志文件失败: ' + (err.message || String(err)))
+  } finally {
+    auditInspectLoading.value = false
+  }
+}
+
+async function startAuditMigrationExecution() {
   if (auditMigrating.value) return
   auditMigrating.value = true
   try {
+    // 标记当前所有文件为写入中状态
+    auditMigrationFiles.value.forEach((f) => {
+      f.status = 'writing'
+    })
     const res = await triggerAdminAuditMigration()
     if (res?.ok) {
+      auditMigrationResult.inserted_count = res.inserted_count ?? 0
+      if (Array.isArray(res.files) && res.files.length) {
+        auditMigrationFiles.value = res.files
+      } else {
+        auditMigrationFiles.value.forEach((f) => {
+          f.status = 'success'
+        })
+      }
+      auditMigrationInspect.db_current_count = res.db_final_count ?? (auditMigrationInspect.db_current_count + (res.inserted_count ?? 0))
       window.alert(
-        `🎉 历史日志数据迁移成功！\n\n` +
+        `🎉 历史日志数据全量迁移入库成功！\n\n` +
         `• 扫描历史文件数：${res.files_count ?? 0} 个\n` +
         `• 成功导入数据行：${res.inserted_count ?? 0} 条\n` +
-        `• 扫描总数据行数：${res.total_lines ?? 0} 行\n\n` +
+        `• 数据库当前存量：${auditMigrationInspect.db_current_count} 条\n\n` +
         `${res.message || '历史数据已全部无损写入 PostgreSQL 数据库！'}`
       )
       await reloadAuditData()
     } else {
+      auditMigrationFiles.value.forEach((f) => {
+        f.status = 'error'
+      })
       window.alert(`❌ 迁移失败：${res?.error || '未知错误'}`)
     }
   } catch (err) {
-    console.error('Audit migration failed:', err)
-    window.alert(`❌ 迁移请求异常：${err.message || String(err)}`)
+    console.error('Audit migration execution error:', err)
+    auditMigrationFiles.value.forEach((f) => {
+      f.status = 'error'
+    })
+    window.alert(`❌ 迁移请求失败：${err.message || String(err)}`)
   } finally {
     auditMigrating.value = false
   }
+}
+
+async function handleAuditMigration() {
+  await openAuditMigrationModal()
 }
 const metricHistory = reactive({
   cpu: [],
@@ -6212,6 +6386,262 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
 .detail-expand-toggle-btn:hover {
   text-decoration: underline;
+}
+
+/* ================= 生产环境历史日志迁移工作台弹窗样式 ================= */
+
+.audit-migration-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.audit-migration-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.audit-migration-modal__card {
+  position: relative;
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.28);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  animation: migModalFadeIn 0.2s ease-out;
+}
+
+@keyframes migModalFadeIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.audit-migration-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+}
+
+.modal-title-group h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-subtext {
+  margin: 4px 0 0 0;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.modal-subtext code {
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #0369a1;
+  font-size: 11.5px;
+}
+
+.audit-migration-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.audit-migration-modal__close:hover:not(:disabled) {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+/* 4 格状态大盘 */
+.migration-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.mig-stat-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stat-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.stat-val small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.text-primary { color: #0284c7 !important; }
+.text-success { color: #059669 !important; }
+.text-accent { color: #7c3aed !important; }
+
+/* 运行动画框 */
+.migration-running-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.running-spinner-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.running-spinner {
+  font-size: 18px;
+  animation: spinSlow 1.5s infinite linear;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 文件明细列表 */
+.migration-files-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title-row h4 {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.migration-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.migration-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.migration-table th,
+.migration-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
+
+.migration-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.file-name-code {
+  color: #0369a1;
+  font-weight: 600;
+}
+
+.col-path code {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.pending { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+.status-badge.writing { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.status-badge.success { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.status-badge.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* 底部操作 */
+.audit-migration-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 14px;
+}
+
+.footer-tip {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.start-mig-btn {
+  font-weight: 600 !important;
+  padding: 0 18px !important;
 }
 
 /* 2. 移动端时间线卡片流专属样式 (<= 768px) */

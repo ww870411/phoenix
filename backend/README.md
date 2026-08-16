@@ -1,3 +1,19 @@
+## 2026-08-16 审计日志数据库表自动自愈（Schema Self-Healing）与 project_key 列补齐
+
+- **关联服务**：`backend/services/audit_log.py`（函数 `ensure_audit_log_table`）
+- **核心逻辑**：
+  1. **表列与索引自愈**：通过 `ADD COLUMN IF NOT EXISTS` 自动补齐老旧表中缺失的 `project_key`、`status`、`duration_ms`、`error_msg` 等列；
+  2. **写入容错自愈**：在 `append_events` 遇到 `UndefinedColumn` 时自动触发一次自愈并重试写入，保证主业务与日志记录的极高稳定性。
+
+## 2026-08-16 历史审计日志迁移预检接口（Inspect）与逐文件明细追踪服务上线
+
+- **关联接口与服务**：
+  - 路由文件：`backend/api/v1/admin_console.py`（端点 `GET /api/v1/admin/audit/migration/inspect`、`POST /api/v1/admin/audit/migrate-from-ndjson`）
+  - 核心服务：`backend/services/audit_log.py`（函数 `inspect_ndjson_files`、`migrate_ndjson_files_to_db`）
+- **核心逻辑与安全保障**：
+  1. **毫秒级预检（Inspect）**：极速扫描服务器磁盘上的所有 `audit-*.ndjson` 文件，返回文件清单、相对路径、大小、估算行数与当前数据库已有记录数；
+  2. **逐文件明细追踪（Detailed Results）**：迁移执行时记录并返回每一个文件的入库行数与状态，支持前端工作台精准呈现。
+
 ## 2026-08-16 生产环境一键迁移历史 ndjson 日志到 PostgreSQL 数据库服务上线
 
 - **关联接口与服务**：

@@ -250,6 +250,17 @@ export async function listPageShowcasePages(projectKey = 'page_showcase') {
 
 
 
+export async function inspectAdminAuditMigration() {
+  const response = await authAwareFetch(normalized('/admin/audit/migration/inspect'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `预检历史日志文件失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function triggerAdminAuditMigration() {
   const response = await authAwareFetch(normalized('/admin/audit/migrate-from-ndjson'), {
     method: 'POST',

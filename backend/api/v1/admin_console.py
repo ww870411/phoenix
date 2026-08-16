@@ -1340,6 +1340,17 @@ def get_audit_stats(
     return {"ok": True, "stats": stats}
 
 
+@router.get("/admin/audit/migration/inspect", summary="预检服务器待迁移的历史 ndjson 文件清单与条数")
+def inspect_audit_ndjson_files(
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    预检服务器待迁移的历史 ndjson 文件清单与条数，返回文件明细与当前数据库总量。
+    """
+    _ensure_admin_console_access(session)
+    return audit_log.inspect_ndjson_files()
+
+
 @router.post("/admin/audit/migrate-from-ndjson", summary="一键将服务器历史 ndjson 日志文件迁移导入数据库")
 def migrate_audit_ndjson_to_db(
     session: AuthSession = Depends(get_current_session),

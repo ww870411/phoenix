@@ -57,11 +57,86 @@ def infer_project_key(page: str, target: str, detail: Any) -> str:
     return "global"
 
 
+_table_ensured = False
+
+def ensure_audit_log_table() -> None:
+    """
+    自动自愈/创建 logs.system_audit_logs 数据表与全部列、索引。
+    防止生产环境中因表结构缺失某些字段而产生 UndefinedColumn 错误。
+    """
+    global _table_ensured
+    session = SessionLocal()
+    try:
+        session.execute(text("CREATE SCHEMA IF NOT EXISTS logs;"))
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS logs.system_audit_logs (
+                id BIGSERIAL PRIMARY KEY,
+                ts TIMESTAMPTZ NOT NULL,
+                ts_east8 VARCHAR(32),
+                project_key VARCHAR(64) DEFAULT 'global',
+                category VARCHAR(64) NOT NULL DEFAULT 'default',
+                action VARCHAR(64) NOT NULL DEFAULT 'action',
+                status VARCHAR(32) DEFAULT 'success',
+                duration_ms INTEGER,
+                error_msg TEXT,
+                resource_type VARCHAR(64),
+                resource_id VARCHAR(128),
+                page TEXT,
+                target TEXT,
+                request_id VARCHAR(64),
+                username VARCHAR(64),
+                user_group VARCHAR(64),
+                unit VARCHAR(128),
+                client_ip VARCHAR(64),
+                user_agent TEXT,
+                detail JSONB,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """))
+        columns_to_add = [
+            ("project_key", "VARCHAR(64) DEFAULT 'global'"),
+            ("ts_east8", "VARCHAR(32)"),
+            ("status", "VARCHAR(32) DEFAULT 'success'"),
+            ("duration_ms", "INTEGER"),
+            ("error_msg", "TEXT"),
+            ("resource_type", "VARCHAR(64)"),
+            ("resource_id", "VARCHAR(128)"),
+            ("page", "TEXT"),
+            ("target", "TEXT"),
+            ("request_id", "VARCHAR(64)"),
+            ("username", "VARCHAR(64)"),
+            ("user_group", "VARCHAR(64)"),
+            ("unit", "VARCHAR(128)"),
+            ("client_ip", "VARCHAR(64)"),
+            ("user_agent", "TEXT"),
+            ("detail", "JSONB"),
+            ("created_at", "TIMESTAMPTZ DEFAULT NOW()"),
+        ]
+        for col_name, col_type in columns_to_add:
+            try:
+                session.execute(text(f"ALTER TABLE logs.system_audit_logs ADD COLUMN IF NOT EXISTS {col_name} {col_type};"))
+            except Exception:
+                pass
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_audit_logs_ts ON logs.system_audit_logs (ts DESC);"))
+        session.execute(text("CREATE INDEX IF NOT EXISTS idx_audit_logs_project_key ON logs.system_audit_logs (project_key);"))
+        session.commit()
+        _table_ensured = True
+    except Exception as e:
+        session.rollback()
+        logger.warning("ensure_audit_log_table exception: %s", e)
+    finally:
+        session.close()
+
+
 def append_events(events: Iterable[Dict[str, Any]]) -> int:
     """
     将操作审计日志批量写入 PostgreSQL logs.system_audit_logs 数据表。
-    具备 Fail-Safe 安全保护：写日志异常绝不阻塞主业务流程。
+    具备 Fail-Safe 安全保护：写日志异常绝不阻塞主业务流程，并自动执行表自愈。
     """
+    global _table_ensured
+    if not _table_ensured:
+        ensure_audit_log_table()
+
     event_list = list(events)
     if not event_list:
         return 0
@@ -98,16 +173,16 @@ def append_events(events: Iterable[Dict[str, Any]]) -> int:
             "action": act_str,
             "status": status_val,
             "duration_ms": item.get("duration_ms"),
-            "error_msg": item.get("error_msg"),
-            "resource_type": item.get("resource_type"),
-            "resource_id": item.get("resource_id"),
+            "error_msg": _normalize_text(item.get("error_msg")) or None,
+            "resource_type": _normalize_text(item.get("resource_type")) or None,
+            "resource_id": _normalize_text(item.get("resource_id")) or None,
             "page": page_str or None,
             "target": target_str or None,
-            "request_id": item.get("request_id"),
+            "request_id": _normalize_text(item.get("request_id")) or None,
             "username": _normalize_text(item.get("username")) or None,
             "user_group": user_grp or None,
             "unit": _normalize_text(item.get("unit")) or None,
-            "client_ip": _normalize_text(item.get("client_ip")) or None,
+            "client_ip": _normalize_text(item.get("client_ip") or item.get("ip")) or None,
             "user_agent": _normalize_text(item.get("user_agent")) or None,
             "detail": detail_json,
             "created_at": now_utc,
@@ -129,18 +204,27 @@ def append_events(events: Iterable[Dict[str, Any]]) -> int:
     """)
 
     session = SessionLocal()
-    written = 0
     try:
         session.execute(insert_sql, batch_params)
         session.commit()
-        written = len(batch_params)
+        return len(batch_params)
     except Exception as e:
         session.rollback()
+        # 若因表结构缺失列，执行一次自愈重试
+        err_str = str(e).lower()
+        if "undefinedcolumn" in err_str or "does not exist" in err_str:
+            ensure_audit_log_table()
+            try:
+                session.execute(insert_sql, batch_params)
+                session.commit()
+                return len(batch_params)
+            except Exception as retry_err:
+                session.rollback()
+                logger.warning("Retry append_events failed: %s", retry_err)
         logger.warning("Failed to write audit logs to PostgreSQL logs.system_audit_logs: %s", e)
+        return 0
     finally:
         session.close()
-
-    return written
 
 
 def query_events(
@@ -157,6 +241,10 @@ def query_events(
     """
     基于 PostgreSQL 索引进行高性能多维审计日志检索。
     """
+    global _table_ensured
+    if not _table_ensured:
+        ensure_audit_log_table()
+
     safe_limit = max(1, min(int(limit), 1000))
     safe_days = max(1, min(int(days), 90))
 
@@ -236,6 +324,10 @@ def build_stats(*, days: int = 7, project_key: str = "") -> Dict[str, Any]:
     """
     基于 PostgreSQL 进行极速实时 SQL 聚合统计。
     """
+    global _table_ensured
+    if not _table_ensured:
+        ensure_audit_log_table()
+
     safe_days = max(1, min(int(days), 90))
     where_base = "ts >= NOW() - (:days || ' days')::INTERVAL"
     params: Dict[str, Any] = {"days": safe_days}
@@ -317,10 +409,83 @@ def build_stats(*, days: int = 7, project_key: str = "") -> Dict[str, Any]:
     }
 
 
+def inspect_ndjson_files(data_dir: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    预检服务器磁盘上的所有历史 audit-*.ndjson 文件清单与元数据。
+    毫秒级返回，不执行任何写库操作。
+    """
+    from pathlib import Path
+    from backend.config import DATA_DIRECTORY
+    root_dir = Path(data_dir) if data_dir else DATA_DIRECTORY
+
+    if not root_dir.exists():
+        return {
+            "ok": False,
+            "error": f"数据目录不存在: {root_dir}",
+            "files_count": 0,
+            "total_estimated_lines": 0,
+            "files": [],
+            "db_current_count": 0,
+        }
+
+    ndjson_files = sorted(list(root_dir.rglob("audit-*.ndjson")))
+    files_detail = []
+    total_lines_est = 0
+
+    for file_path in ndjson_files:
+        try:
+            size_kb = round(file_path.stat().st_size / 1024, 1)
+            rel_path = str(file_path.relative_to(root_dir)).replace("\\", "/")
+            # 快速计算行数
+            lines_cnt = 0
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if line.strip():
+                        lines_cnt += 1
+            total_lines_est += lines_cnt
+            files_detail.append({
+                "file_name": file_path.name,
+                "rel_path": rel_path,
+                "size_kb": size_kb,
+                "lines_count": lines_cnt,
+                "mtime": datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).astimezone(EAST_8).strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "pending",
+            })
+        except Exception as e:
+            files_detail.append({
+                "file_name": file_path.name,
+                "rel_path": str(file_path),
+                "size_kb": 0,
+                "lines_count": 0,
+                "mtime": "-",
+                "status": f"error: {e}",
+            })
+
+    # 查询当前数据库现有日志条数
+    db_count = 0
+    try:
+        session = SessionLocal()
+        try:
+            r = session.execute(text("SELECT COUNT(*) FROM logs.system_audit_logs")).scalar()
+            db_count = int(r or 0)
+        finally:
+            session.close()
+    except Exception as db_err:
+        logger.warning("Failed to query db current count: %s", db_err)
+
+    return {
+        "ok": True,
+        "files_count": len(files_detail),
+        "total_estimated_lines": total_lines_est,
+        "files": files_detail,
+        "db_current_count": db_count,
+    }
+
+
 def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]:
     """
     扫描服务器磁盘上的所有历史 audit-*.ndjson 文件，将其解析并全量导入 PostgreSQL logs.system_audit_logs 表。
-    支持生产环境一键迁移与分批入库。
+    支持生产环境一键迁移与分批入库，并返回每个文件的详细执行明细。
     """
     from pathlib import Path
     from backend.config import DATA_DIRECTORY
@@ -333,6 +498,7 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
             "files_count": 0,
             "total_lines": 0,
             "inserted_count": 0,
+            "files": [],
         }
 
     ndjson_files = sorted(list(root_dir.rglob("audit-*.ndjson")))
@@ -343,11 +509,13 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
             "files_count": 0,
             "total_lines": 0,
             "inserted_count": 0,
+            "files": [],
         }
 
     session = SessionLocal()
     total_lines = 0
     inserted_count = 0
+    file_results: List[Dict[str, Any]] = []
     errors: List[str] = []
 
     insert_sql = text("""
@@ -369,6 +537,10 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
 
     try:
         for file_path in ndjson_files:
+            file_inserted = 0
+            file_lines = 0
+            file_error = ""
+            rel_path = str(file_path.relative_to(root_dir)).replace("\\", "/")
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     for line_idx, line in enumerate(f, 1):
@@ -377,6 +549,7 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
                             continue
                         try:
                             item = json.loads(line_str)
+                            file_lines += 1
                             total_lines += 1
 
                             ts_dt = _parse_time(item.get("ts"))
@@ -423,17 +596,37 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
                                 session.execute(insert_sql, batch_records)
                                 session.commit()
                                 inserted_count += len(batch_records)
+                                file_inserted += len(batch_records)
                                 batch_records.clear()
                         except Exception as parse_err:
                             errors.append(f"{file_path.name}:{line_idx} 解析失败: {parse_err}")
-            except Exception as file_err:
-                errors.append(f"读取文件 {file_path.name} 失败: {file_err}")
+                
+                # 提交当前文件剩余未写记录
+                if batch_records:
+                    session.execute(insert_sql, batch_records)
+                    session.commit()
+                    inserted_count += len(batch_records)
+                    file_inserted += len(batch_records)
+                    batch_records.clear()
 
-        if batch_records:
-            session.execute(insert_sql, batch_records)
-            session.commit()
-            inserted_count += len(batch_records)
-            batch_records.clear()
+                file_results.append({
+                    "file_name": file_path.name,
+                    "rel_path": rel_path,
+                    "lines_count": file_lines,
+                    "inserted_count": file_inserted,
+                    "status": "success",
+                })
+            except Exception as file_err:
+                file_error = str(file_err)
+                errors.append(f"读取文件 {file_path.name} 失败: {file_err}")
+                file_results.append({
+                    "file_name": file_path.name,
+                    "rel_path": rel_path,
+                    "lines_count": file_lines,
+                    "inserted_count": file_inserted,
+                    "status": "error",
+                    "error": file_error,
+                })
 
     except Exception as e:
         session.rollback()
@@ -444,18 +637,34 @@ def migrate_ndjson_files_to_db(data_dir: Optional[Any] = None) -> Dict[str, Any]
             "files_count": len(ndjson_files),
             "total_lines": total_lines,
             "inserted_count": inserted_count,
+            "files": file_results,
             "errors": errors[:10],
         }
     finally:
         session.close()
+
+    # 查询迁移后数据库最新总量
+    db_final_count = inserted_count
+    try:
+        session_chk = SessionLocal()
+        try:
+            r = session_chk.execute(text("SELECT COUNT(*) FROM logs.system_audit_logs")).scalar()
+            db_final_count = int(r or 0)
+        finally:
+            session_chk.close()
+    except Exception:
+        pass
 
     return {
         "ok": True,
         "files_count": len(ndjson_files),
         "total_lines": total_lines,
         "inserted_count": inserted_count,
+        "db_final_count": db_final_count,
+        "files": file_results,
         "errors_count": len(errors),
         "message": f"成功扫描 {len(ndjson_files)} 个历史文件，共导入 {inserted_count} 条操作审计日志！",
     }
+
 
 
