@@ -1,3 +1,69 @@
+## 2026-08-16 [全局管理 GlobalManagementView 基准设计量接口对接数据库修复]
+- **问题排查与根因分析**：
+  1. 用户在前端页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/global_management` 的“基准设计量预设”标签页中看不到数据；
+  2. 经排查，全局管理视图调用的接口为 `GET /global-management/config`，该接口此前直接返回 `load_tube_config()` 的 JSON 数据。在从 `tube_config.json` 剔除冗余字段后，导致前端拿到的 `config.baseline_presets` 为空；
+- **具体修复实施（`backend/projects/insulation_pipe_supply_2026/api/workspace.py`）**：
+  1. `get_global_management_config`：增加动态从 `tube.tube_pipe_baseline` 表查询直管基准量并装填入 `config.baseline_presets`，前端无需刷新缓存即可直接展示全量 89 条基准数据；
+  2. `save_global_management_config` 与 `_save_config_section`：当管理员在界面编辑并保存基准量时，调用 `save_pipe_baselines()` 批量 UPSERT 入库，同时剔除 JSON 冗余，确保物理文件 `tube_config.json` 永久保持纯净；
+  3. `_save_config_section` 返回值中附带最新数据库基准量，确保局部保存后前端状态同步；
+- **验证与测试**：
+  - 编写并运行 `scratch/test_global_management_api.py`，测试覆盖 `GET /global-management/config`（89条数据完整注入）、物理 JSON 隔离检查、`POST /global-management/config-section` 存库验证，测试 100% 通过。
+
+## 2026-08-16 [配置文件 tube_config.json 冗余基准量字段彻底清理与安全退场]
+- **任务目标与清理背景**：在直管基准设计量与采购量全量入库且全链路业务切换为 PostgreSQL 驱动后，响应用户指令，从 `backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 中彻底移除 `baseline_presets` 键及 89 条冗余数据；
+- **具体实施与体积优化**：
+  1. 使用 native 工具安全剔除 `baseline_presets` 数组，`tube_config.json` 从 1153 行（28.8 KB）精简为 439 行（10.4 KB），体积缩减超 63%；
+  2. 验证 JSON 语法严密无误，基础配置（气象、管理模式、需求主体、供应主体、仓库管理员配置等）完整保留；
+- **验证与测试**：
+  - 再次执行 `scratch/test_db_baseline_integration.py` 全链路集成测试，在 JSON 文件完全不包含 `baseline_presets` 的状态下，系统 100% 顺畅从数据库表读取 89 条基准记录并完成全流程业务计算。
+
+## 2026-08-16 [保温直管设计量/采购量全链路业务过程全面切换为数据库驱动（向下兼容）]
+- **任务目标与重构背景**：响应用户指令，将系统原来所有从 JSON 文件读写设计使用量、计划采购量的 5 大业务过程全面平滑转移至 PostgreSQL `tube.tube_pipe_baseline` 数据库表，并做到对外接口与前端页面的向下兼容；
+- **具体实施改动点与模块（`backend/projects/insulation_pipe_supply_2026/api/workspace.py`）**：
+  1. **【全局配置读取（`get_workspace_config_summary`）】**：切换为直接调用 `baseline_service.list_pipe_baselines()` 实时查库，组装返回给前端【全局管理】界面；
+  2. **【全局配置保存（`_save_config_section`）】**：当保存 `section="baseline_presets"` 时，调用 `save_pipe_baselines()` 批量 UPSERT 幂等写入数据库表，同时保留 JSON 双轨备份；
+  3. **【需求侧台账与计划映射（`_build_baseline_preset_map`）】**：优先从 `tube.tube_pipe_baseline` 表按标段 `section_1_id` 精准查表，支持现场端（`GET /demand-management/baseline`）即时查看基准量；
+  4. **【全盘供需大盘与缺口计算（`get_supply_management_demand_summary`）】**：大盘遍历与缺口核算自动基于数据库真实基准量运行；
+  5. **【型号推导与降序排序（`_build_pipe_model_map` & `_resolve_section_1_sorted_pipe_model_ids`）】**：自动基于数据库已存型号进行外径解析与降序排序；
+- **验证与测试（`scratch/test_db_baseline_integration.py`）**：
+  - 运行全链路集成测试脚本，覆盖配置读取、标段映射、型号推导、保存与修改回填 4 大场景，测试通过率 100%。
+
+## 2026-08-16 [保温直管设计量/采购量基准历史数据全量无损迁移入库 (JSON -> DB)]
+- **任务目标与迁移背景**：响应用户指令，将 `tube_config.json` 中原有的 89 条直管基准设计量与计划采购量全量平滑迁移至新建的 `tube.tube_pipe_baseline` 数据库表中；
+- **具体实施与服务构建**：
+  1. **【迁移服务（`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`）】**：
+     - 实现 `migrate_pipe_baselines_from_json()` 函数，自动读取配置文件并进行结构校验与类型清洗；
+     - 采用 `ON CONFLICT (section_1_id, pipe_model_id) DO UPDATE` 幂等插入机制，支持重复执行与增量覆盖；
+  2. **【迁移执行与核验（`scratch/migrate_pipe_baseline_from_json.py`）】**：
+     - 成功读取 89 条 JSON 记录，全部成功写入 `tube.tube_pipe_baseline`（0 失败）；
+     - 数据库查询验证核对抽样前 5 条标段（`high_lot_1` 对应 DN1120、DN1020 等型号的设计与采购量）完全一致。
+- **结果产生**：直管基准数据已完成从 JSON 文件到 PostgreSQL 关系型数据库的平滑升级，为后续管件基准量扩展及大盘 SQL 联表分析奠定了坚实基础。
+
+## 2026-08-16 [保温直管与管件设计量/计划采购量基准数据表正式建表与服务落地]
+- **任务目标与业务背景**：将原来存储在 `tube_config.json` 中的基准设计量与采购量升级为数据库持久化表，并同时支持管件（直管 + 管件双轨相对分离）的设计量与计划采购量（支持管件主型号 + 子型号细分规格）；
+- **具体实施改动点与模块**：
+  1. **【数据库表与索引创建（`backend/sql/create_tube_baseline_tables.sql` & `tube_schema_init.sql`）】**：
+     - **直管基准表**：`tube.tube_pipe_baseline`，字段包含 `section_1_id`、`pipe_model_id`、`unit`、`design_qty`、`purchase_plan_qty`、`remark` 等，设置 `(section_1_id, pipe_model_id)` 唯一索引；
+     - **管件基准表**：`tube.tube_fitting_baseline`，字段包含 `section_1_id`、`fitting_type`、`model_spec`（主型号）、`sub_model_spec`（子型号/细分规格）、`unit`、`design_qty`、`purchase_plan_qty`、`remark` 等，设置 `(section_1_id, fitting_type, model_spec, sub_model_spec)` 唯一索引；
+  2. **【后端基础服务与自愈机制（`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`）】**：
+     - 实现 `ensure_baseline_tables()` 自愈建表与索引检查；
+     - 实现 `list_pipe_baselines()` / `save_pipe_baselines()` 批量 UPSERT 幂等操作；
+     - 实现 `list_fitting_baselines()` / `save_fitting_baselines()` 批量 UPSERT 幂等操作；
+  3. **【测试与验证（`test_baseline_service.py`）】**：
+     - 运行测试脚本，验证两张表成功在 PostgreSQL 中建立，并顺利完成直管与管件（含 90°/45° 弯头、封头等主子型号组合）的批量写入与查询，测试通过率 100%。
+- **结果产生**：数据库底座已正式就绪，直管与管件的设计量/采购量管理体系已在数据库层面完全解耦且支持主子型号细分。
+
+## 2026-08-16 [Docker 容器启动日志与告警信息全面诊断]
+- **诊断背景**：用户在通过 Docker Compose 启动 `phoenix_backend` 与 `phoenix_frontend` 时控制台输出了若干警告（Warning）与审计信息，需排查其含义与影响；
+- **排查结论与严重性划分**：
+  1. **核心结论**：系统**启动成功且正常运行**（无阻塞性 Error）。后端 Uvicorn 在 8000 端口启动并完成初始化，前端 Vite 在 5173 端口正常就绪；
+  2. **可忽略/温和告警（Non-blocking Warnings）**：
+     - `google.generativeai` 废弃警告（FutureWarning）：来自 `backend/services/ai_runtime.py` 与 `data_analysis_ai_report.py`，提示 Google SDK 后续建议迁移至 `google.genai`；
+     - Pydantic 命名空间冲突（UserWarning）：来自保温管项目的 `model_spec` 字段（与 Pydantic `model_` 命名空间冲突）；
+     - Pydantic V2 配置名变更（UserWarning）：`allow_population_by_field_name` 应建议更新为 `populate_by_name`；
+     - 前端 npm 审计提示：72 个开源包寻求赞助、13 个依赖项漏洞检测（开发环境常规提示）。
+- **建议措施**：当前不影响业务正常使用，后续可在框架维护时统一对 Pydantic V2 语法及 AI SDK 做平滑微调。
+
 ## 2026-08-16 [审计日志数据库表自动自愈（Schema Self-Healing）与 project_key 列补齐]
 - **任务目标与问题排查**：排查并解决后端日志报错 `column "project_key" of relation "system_audit_logs" does not exist`；
 - **问题根源与解决思路**：数据库中的 `logs.system_audit_logs` 表由早期版本生成，缺少后来新增的 `project_key`、`status`、`duration_ms` 等字段。不仅立即执行了表结构补齐，更在后端加入了**自动自愈（Schema Self-Healing）与重试机制**，杜绝任何环境因表老旧而报错；

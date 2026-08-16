@@ -1,3 +1,13 @@
+## 2026-08-16 保温管供货履约系统直管基准设计量/采购量全面升级为数据库持久化驱动（前端无感平滑适配）
+
+- **关联前端页面**：
+  - 全局管理：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`（基准量预设 Tab）
+  - 需求管理：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（基准设计量台账 Tab）
+  - 监控大盘：`frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`（供需缺口大盘与覆盖率统计）
+- **协同效果**：
+  1. **向下兼容保证**：前端数据结构、接口参数与字段命名完全无损复用；
+  2. **毫秒级持久化响应**：前端管理员在“📐 需求主体管线基准设计量”中添加、编辑并点击“💾 保存设计基准”时，后端直接直写 PostgreSQL `tube.tube_pipe_baseline` 数据库表，彻底摆脱单 JSON 文件并发冲突隐患。
+
 ## 2026-08-16 全局管理后台操作日志迁移工作台（Migration Modal）明细弹窗上线
 
 - **关联前端页面**：`frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`（路由 `/admin-console?tab=audit`）

@@ -89,6 +89,13 @@ from backend.projects.insulation_pipe_supply_2026.services.audit_log_service imp
     query_operation_logs,
     query_submission_logs,
 )
+from backend.projects.insulation_pipe_supply_2026.services.baseline_service import (
+    ensure_baseline_tables,
+    list_pipe_baselines,
+    save_pipe_baselines,
+    list_fitting_baselines,
+    save_fitting_baselines,
+)
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 
@@ -563,14 +570,25 @@ def _build_pipe_model_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             "pipe_model_id": pipe_model_id,
             "pipe_model_name": str(item.get("pipe_model_name") or pipe_model_id).strip() or pipe_model_id,
         }
-    for item in get_config_list(payload, "baseline_presets"):
-        pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
-        if pipe_model_id and pipe_model_id not in result:
-            result[pipe_model_id] = {
-                "pipe_model_id": pipe_model_id,
-                "pipe_model_name": pipe_model_id,
-                "unit": "米",
-            }
+    try:
+        db_baselines = list_pipe_baselines()
+        for item in db_baselines:
+            pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
+            if pipe_model_id and pipe_model_id not in result:
+                result[pipe_model_id] = {
+                    "pipe_model_id": pipe_model_id,
+                    "pipe_model_name": pipe_model_id,
+                    "unit": item.get("unit") or "米",
+                }
+    except Exception:
+        for item in get_config_list(payload, "baseline_presets"):
+            pipe_model_id = _normalize_pipe_model_id(item.get("pipe_model_id"))
+            if pipe_model_id and pipe_model_id not in result:
+                result[pipe_model_id] = {
+                    "pipe_model_id": pipe_model_id,
+                    "pipe_model_name": pipe_model_id,
+                    "unit": "米",
+                }
     return result
 
 
@@ -664,16 +682,33 @@ def _ensure_warehouse_access(session: AuthSession) -> None:
 
 def _build_baseline_preset_map(payload: Dict[str, Any], section_1_id: str) -> Dict[str, Dict[str, Any]]:
     result: Dict[str, Dict[str, Any]] = {}
-    for item in get_config_list(payload, "baseline_presets"):
-        normalized_section_1_id = str(item.get("section_1_id") or "").strip()
-        pipe_model_id = str(item.get("pipe_model_id") or "").strip()
-        if normalized_section_1_id != section_1_id or not pipe_model_id:
-            continue
-        result[pipe_model_id] = {
-            "design_qty": item.get("design_qty"),
-            "purchase_plan_qty": item.get("purchase_plan_qty"),
-            "remark": item.get("remark") or "",
-        }
+    try:
+        db_rows = list_pipe_baselines(section_1_id=section_1_id)
+        for item in db_rows:
+            pipe_model_id = str(item.get("pipe_model_id") or "").strip()
+            if not pipe_model_id:
+                continue
+            result[pipe_model_id] = {
+                "design_qty": item.get("design_qty"),
+                "purchase_plan_qty": item.get("purchase_plan_qty"),
+                "unit": item.get("unit") or "米",
+                "remark": item.get("remark") or "",
+            }
+    except Exception:
+        pass
+
+    if not result:
+        for item in get_config_list(payload, "baseline_presets"):
+            normalized_section_1_id = str(item.get("section_1_id") or "").strip()
+            pipe_model_id = str(item.get("pipe_model_id") or "").strip()
+            if normalized_section_1_id != section_1_id or not pipe_model_id:
+                continue
+            result[pipe_model_id] = {
+                "design_qty": item.get("design_qty"),
+                "purchase_plan_qty": item.get("purchase_plan_qty"),
+                "unit": item.get("unit") or "米",
+                "remark": item.get("remark") or "",
+            }
     return result
 
 
@@ -815,12 +850,58 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             "allowed_units": allowed_units,
             "standard_types": standard_types,
         }
+    elif normalized_section == "baseline_presets":
+        if not isinstance(data, list):
+            raise HTTPException(status_code=422, detail="baseline_presets 必须为数组")
+        try:
+            # 提取前端保存时涉及的需求标段列表，执行精准同步
+            sec_ids = list({str(item.get("section_1_id") or "").strip() for item in data if str(item.get("section_1_id") or "").strip()})
+            save_pipe_baselines(data, operator_name="admin", replace_all_for_sections=sec_ids if sec_ids else None)
+        except Exception as exc:
+            print(f"⚠️ 保存基准量至 tube.tube_pipe_baseline 发生异常: {exc}")
+        # 彻底从 JSON 结构中剔除 baseline_presets，确保配置纯净
+        payload.pop("baseline_presets", None)
+    elif normalized_section == "fitting_baselines":
+        if not isinstance(data, list):
+            raise HTTPException(status_code=422, detail="fitting_baselines 必须为数组")
+        try:
+            # 提取前端保存时涉及的需求标段列表，执行精准同步
+            sec_ids = list({str(item.get("section_1_id") or "").strip() for item in data if str(item.get("section_1_id") or "").strip()})
+            save_fitting_baselines(data, operator_name="admin", replace_all_for_sections=sec_ids if sec_ids else None)
+        except Exception as exc:
+            print(f"⚠️ 保存管件基准量至 tube.tube_fitting_baseline 发生异常: {exc}")
+        # 彻底从 JSON 结构中剔除 fitting_baselines，确保配置纯净
+        payload.pop("fitting_baselines", None)
     else:
         if not isinstance(data, list):
             raise HTTPException(status_code=422, detail=f"{normalized_section} 必须为数组")
         payload[normalized_section] = data
 
     save_tube_config(payload)
+
+    # 动态把数据库最新的 baseline_presets 附带在返回的 payload 中供前端更新状态
+    try:
+        db_baselines = list_pipe_baselines()
+        payload["baseline_presets"] = [
+            {
+                "section_1_id": item["section_1_id"],
+                "pipe_model_id": item["pipe_model_id"],
+                "unit": item.get("unit") or "米",
+                "design_qty": item.get("design_qty", 0),
+                "purchase_plan_qty": item.get("purchase_plan_qty", 0),
+                "remark": item.get("remark") or "",
+            }
+            for item in db_baselines
+        ]
+    except Exception:
+        payload["baseline_presets"] = []
+
+    # 动态把数据库最新的 fitting_baselines 附带在返回的 payload 中供前端更新状态
+    try:
+        payload["fitting_baselines"] = list_fitting_baselines()
+    except Exception:
+        payload["fitting_baselines"] = []
+
     return payload
 
 
@@ -1206,7 +1287,21 @@ def get_workspace_config_summary() -> Dict[str, Any]:
     manager_assignments = get_config_list(payload, "manager_assignments")
     construction_units = get_config_list(payload, "construction_units")
     warehouse_keepers = get_config_list(payload, "warehouse_keepers")
-    baseline_presets = get_config_list(payload, "baseline_presets")
+    try:
+        db_baselines = list_pipe_baselines()
+        baseline_presets = [
+            {
+                "section_1_id": item["section_1_id"],
+                "pipe_model_id": item["pipe_model_id"],
+                "unit": item.get("unit") or "米",
+                "design_qty": item.get("design_qty", 0),
+                "purchase_plan_qty": item.get("purchase_plan_qty", 0),
+                "remark": item.get("remark") or "",
+            }
+            for item in db_baselines
+        ]
+    except Exception:
+        baseline_presets = get_config_list(payload, "baseline_presets")
 
     return {
         "ok": True,
@@ -2608,6 +2703,32 @@ def get_global_management_config(
     payload = load_tube_config()
     submission_status = load_section_1_submission_status()
     amap_config_decrypted = get_configured_amap_config(payload)
+
+    # 动态从数据库表 tube.tube_pipe_baseline 注入直管基准量
+    try:
+        db_baselines = list_pipe_baselines()
+        payload["baseline_presets"] = [
+            {
+                "section_1_id": item["section_1_id"],
+                "pipe_model_id": item["pipe_model_id"],
+                "unit": item.get("unit") or "米",
+                "design_qty": item.get("design_qty", 0),
+                "purchase_plan_qty": item.get("purchase_plan_qty", 0),
+                "remark": item.get("remark") or "",
+            }
+            for item in db_baselines
+        ]
+    except Exception as exc:
+        print(f"⚠️ 从数据库读取直管基准量失败: {exc}")
+        payload["baseline_presets"] = []
+
+    # 动态从数据库表 tube.tube_fitting_baseline 注入管件基准量
+    try:
+        payload["fitting_baselines"] = list_fitting_baselines()
+    except Exception as exc:
+        print(f"⚠️ 从数据库读取管件基准量失败: {exc}")
+        payload["fitting_baselines"] = []
+
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -2630,7 +2751,27 @@ def save_global_management_config(
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
     before_config = load_tube_config()
-    save_tube_config(payload.config)
+    incoming_config = dict(payload.config or {})
+    
+    # 如果全量保存中含有 baseline_presets，同步写入数据库表，并从 JSON 中剔除
+    if "baseline_presets" in incoming_config:
+        baseline_presets_data = incoming_config.pop("baseline_presets")
+        if isinstance(baseline_presets_data, list):
+            try:
+                save_pipe_baselines(baseline_presets_data, operator_name=session.username)
+            except Exception as exc:
+                print(f"⚠️ 全量保存直管基准量至数据库异常: {exc}")
+
+    # 如果全量保存中含有 fitting_baselines，同步写入数据库表，并从 JSON 中剔除
+    if "fitting_baselines" in incoming_config:
+        fitting_baselines_data = incoming_config.pop("fitting_baselines")
+        if isinstance(fitting_baselines_data, list):
+            try:
+                save_fitting_baselines(fitting_baselines_data, operator_name=session.username)
+            except Exception as exc:
+                print(f"⚠️ 全量保存管件基准量至数据库异常: {exc}")
+
+    save_tube_config(incoming_config)
     save_operation_log(
         operator=session.username,
         operator_group=session.group,
@@ -2638,7 +2779,7 @@ def save_global_management_config(
         action_desc="保存全局管理配置（完整覆盖）",
         resource_id="global_config",
         before_value=before_config,
-        after_value=payload.config,
+        after_value=incoming_config,
         client_ip=_get_client_ip(request)
     )
     return {"ok": True, "project_key": PROJECT_KEY}

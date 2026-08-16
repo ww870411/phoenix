@@ -1,3 +1,29 @@
+## 2026-08-16 保温直管设计量/采购量全链路业务过程切换为 PostgreSQL 数据库驱动（向下兼容）
+
+- **关联配置文件与清理**：`backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 已彻底移除冗余的 `baseline_presets` 数组字段（文件从 1153 行精简为 439 行）；
+- **关联接口与路由**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点：`GET /workspace/config-summary`、`GET /global-management/config`、`POST /global-management/config`、`POST /global-management/config-section`、`POST /workspace/config/section`（section=`baseline_presets`）、`GET /demand-management/baseline`、`GET /supply-management/demand-summary`
+- **关联服务文件**：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`
+- **核心业务过程改造点**：
+  1. **全局管理配置读取**：`get_global_management_config` 动态从数据库表 `tube.tube_pipe_baseline` 注入 `baseline_presets`，前端全局管理“基准设计量预设”面板无感直接渲染全部 89 条数据；
+  2. **配置保存与物理隔离**：`save_global_management_config` 与 `_save_config_section` 保存基准量时写入数据库表，并彻底从 JSON 结构中剔除，保持物理 `tube_config.json` 纯净；
+  3. **标段基准量映射**：`_build_baseline_preset_map` 重构为优先从数据库表中按 `section_1_id` 精准查表；
+  4. **型号推导与排序**：`_build_pipe_model_map` 与 `_resolve_section_1_sorted_pipe_model_ids` 自动基于数据库已存型号进行外径解析与降序排序；
+  5. **向下兼容保证**：接口入参、返回字段名与前端组件数据结构完全一致，前端 0 改动即可平滑过渡。
+
+## 2026-08-16 保温直管与管件基准设计量/计划采购量数据表与服务上线
+
+- **关联数据表与 DDL 脚本**：
+  - DDL 脚本：`backend/sql/create_tube_baseline_tables.sql`、`backend/sql/tube_schema_init.sql`
+  - 直管基准表：`tube.tube_pipe_baseline` (按标段 `section_1_id` + 直管型号 `pipe_model_id` 唯一索引)
+  - 管件基准表：`tube.tube_fitting_baseline` (按标段 `section_1_id` + 管件类型 `fitting_type` + 主型号 `model_spec` + 子型号 `sub_model_spec` 唯一索引)
+- **关联服务文件**：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`
+- **核心功能与方法**：
+  1. `ensure_baseline_tables()`：自愈检查并创建表结构与索引；
+  2. `list_pipe_baselines()` / `save_pipe_baselines()`：直管基准量的全量/按标段读取与批量 UPSERT 幂等写入；
+  3. `migrate_pipe_baselines_from_json()`：从 `tube_config.json` 一键全量平滑迁移入库（首批已成功无损导入 89 条直管基准记录）；
+  4. `list_fitting_baselines()` / `save_fitting_baselines()`：管件基准量（含主型号+子型号）的全量/按标段读取与批量 UPSERT 幂等写入。
+
 ## 2026-08-16 审计日志数据库表自动自愈（Schema Self-Healing）与 project_key 列补齐
 
 - **关联服务**：`backend/services/audit_log.py`（函数 `ensure_audit_log_table`）
