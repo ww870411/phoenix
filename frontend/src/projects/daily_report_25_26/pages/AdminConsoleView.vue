@@ -302,8 +302,41 @@
             </button>
           </div>
 
-          <div v-if="selectedProjectKey !== TARGET_PROJECT_KEY" class="panel-state">
-            当前项目的后台设定暂未接入。请选择 {{ TARGET_PROJECT_KEY }} 查看现有配置模块。
+          <!-- 全局统一项目权限配置中枢卡片（支持全量子项目一键直达） -->
+          <section class="inner-card permission-central-card">
+            <header class="section-header">
+              <div>
+                <h3 style="margin: 0; font-size: 15px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                  <span>🎛️ 项目角色与权限配置中枢</span>
+                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">三维权限矩阵已打通</span>
+                </h3>
+                <p class="subtext" style="margin-top: 6px;">
+                  当前选中项目：<strong style="color: #0284c7;">[{{ getProjectDisplayName(selectedProjectKey) }}]</strong>。各子项目的页面路由访问控制（page_access）与业务操作动作（actions）已全面收敛至三栏权限配置中心统一管控。
+                </p>
+              </div>
+              <button
+                class="btn primary"
+                type="button"
+                style="display: flex; align-items: center; gap: 6px; white-space: nowrap; height: 34px;"
+                @click="jumpToMatrixForProject(selectedProjectKey)"
+              >
+                <span>⚙️ 前往配置该项目权限矩阵 ➔</span>
+              </button>
+            </header>
+            <div class="permission-central-tip-box">
+              <span class="tip-icon">💡</span>
+              <div class="tip-content">
+                <strong>统一权限配置提示：</strong>
+                <span>在权限配置中心中，您可以直观选择角色组（如供给端厂家、需求端施工、仓库管理、全局观察员等），并按项目一键勾选该角色组允许加载的页面路由与允许执行的业务动作（如提交/审批/撤销/发布等），修改即时生效。</span>
+              </div>
+            </div>
+          </section>
+
+          <div v-if="selectedProjectKey !== TARGET_PROJECT_KEY" class="panel-state" style="text-align: left; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <h4 style="margin: 0 0 6px; color: #334155;">📦 项目业务说明</h4>
+            <p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.6;">
+              当前项目【<strong>{{ getProjectDisplayName(selectedProjectKey) }}</strong>】由专属业务看板与工作流直接驱动，无独立的看板缓存或气温导入等后台批处理任务。如需调整该项目的页面访问或人员操作权限，请直接点击上方按钮前往权限配置中心。
+            </p>
           </div>
 
           <template v-else>
@@ -337,152 +370,6 @@
                 </button>
               </header>
               <p class="subtext">当前状态：{{ validationMasterEnabled ? '已开启' : '已关闭' }}</p>
-            </section>
-
-            <section class="inner-card">
-              <header class="section-header">
-                <h3>日报提交权限</h3>
-                <div class="submit-permission-actions">
-                  <span class="subtext">仅管理非 Global_admin 用户组在 {{ TARGET_PROJECT_KEY }} 中是否允许提交数据。</span>
-                  <button class="btn ghost" type="button" @click="submitPermissionCollapsed = !submitPermissionCollapsed">
-                    {{ submitPermissionCollapsed ? '展开列表' : '折叠列表' }}
-                  </button>
-                  <button
-                    class="btn ghost"
-                    type="button"
-                    :disabled="!canManageSubmitPermissions || submitPermissionBulkPending || !submitPermissionRows.length"
-                    @click="setAllSubmitPermissions(true)"
-                  >
-                    {{ submitPermissionBulkPending === 'enable' ? '开启中…' : '全部开启' }}
-                  </button>
-                  <button
-                    class="btn ghost"
-                    type="button"
-                    :disabled="!canManageSubmitPermissions || submitPermissionBulkPending || !submitPermissionRows.length"
-                    @click="setAllSubmitPermissions(false)"
-                  >
-                    {{ submitPermissionBulkPending === 'disable' ? '关闭中…' : '全部关闭' }}
-                  </button>
-                </div>
-              </header>
-              <p v-if="submitPermissionMessage" class="subtext">{{ submitPermissionMessage }}</p>
-              <div v-if="submitPermissionLoading" class="panel-state">加载中…</div>
-              <div v-else-if="submitPermissionCollapsed" class="panel-state">
-                已折叠，共 {{ submitPermissionRows.length }} 个可管理用户组。
-              </div>
-              <div v-else class="submit-permission-table-wrap">
-                <table class="submit-permission-table">
-                  <thead>
-                    <tr>
-                      <th>用户组</th>
-                      <th>层级</th>
-                      <th>账号数</th>
-                      <th>账号列表</th>
-                      <th>当前状态</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in submitPermissionRows" :key="row.group_name">
-                      <td>{{ row.group_name }}</td>
-                      <td>{{ row.hierarchy }}</td>
-                      <td>{{ row.user_count }}</td>
-                      <td>{{ Array.isArray(row.usernames) && row.usernames.length ? row.usernames.join('、') : '-' }}</td>
-                      <td>{{ row.can_submit ? '允许提交' : '禁止提交' }}</td>
-                      <td>
-                        <button
-                          class="btn ghost"
-                          type="button"
-                          :disabled="!canManageSubmitPermissions || submitPermissionSavingGroup === row.group_name"
-                          @click="toggleSubmitPermission(row)"
-                        >
-                          {{
-                            submitPermissionSavingGroup === row.group_name
-                              ? '保存中…'
-                              : (row.can_submit ? '关闭提交' : '开启提交')
-                          }}
-                        </button>
-                      </td>
-                    </tr>
-                    <tr v-if="!submitPermissionRows.length">
-                      <td colspan="6" class="table-empty">暂无可管理用户组</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="inner-card">
-              <header class="section-header">
-                <h3>月度查询页访问权限</h3>
-                <div class="submit-permission-actions">
-                  <span class="subtext">仅管理非 Global_admin 用户组在 monthly_data_show/query-tool 页面中的访问权限。</span>
-                  <button class="btn ghost" type="button" @click="pageAccessGroupCollapsed = !pageAccessGroupCollapsed">
-                    {{ pageAccessGroupCollapsed ? '展开列表' : '折叠列表' }}
-                  </button>
-                  <button
-                    class="btn ghost"
-                    type="button"
-                    :disabled="!canManageSubmitPermissions || pageAccessGroupBulkPending || !pageAccessGroupRows.length"
-                    @click="setAllPageAccessGroups(true)"
-                  >
-                    {{ pageAccessGroupBulkPending === 'enable' ? '开启中…' : '全部开启' }}
-                  </button>
-                  <button
-                    class="btn ghost"
-                    type="button"
-                    :disabled="!canManageSubmitPermissions || pageAccessGroupBulkPending || !pageAccessGroupRows.length"
-                    @click="setAllPageAccessGroups(false)"
-                  >
-                    {{ pageAccessGroupBulkPending === 'disable' ? '关闭中…' : '全部关闭' }}
-                  </button>
-                </div>
-              </header>
-              <p v-if="pageAccessGroupMessage" class="subtext">{{ pageAccessGroupMessage }}</p>
-              <div v-if="pageAccessGroupLoading" class="panel-state">加载中…</div>
-              <div v-else-if="pageAccessGroupCollapsed" class="panel-state">
-                已折叠，共 {{ pageAccessGroupRows.length }} 个可管理用户组。
-              </div>
-              <div v-else class="submit-permission-table-wrap">
-                <table class="submit-permission-table">
-                  <thead>
-                    <tr>
-                      <th>用户组</th>
-                      <th>层级</th>
-                      <th>账号数</th>
-                      <th>账号列表</th>
-                      <th>当前状态</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in pageAccessGroupRows" :key="row.group_name">
-                      <td>{{ row.group_name }}</td>
-                      <td>{{ row.hierarchy }}</td>
-                      <td>{{ row.user_count }}</td>
-                      <td>{{ Array.isArray(row.usernames) && row.usernames.length ? row.usernames.join('、') : '-' }}</td>
-                      <td>{{ row.has_access ? '允许访问' : '禁止访问' }}</td>
-                      <td>
-                        <button
-                          class="btn ghost"
-                          type="button"
-                          :disabled="!canManageSubmitPermissions || pageAccessGroupSavingName === row.group_name"
-                          @click="togglePageAccessGroup(row)"
-                        >
-                          {{
-                            pageAccessGroupSavingName === row.group_name
-                              ? '保存中…'
-                              : (row.has_access ? '关闭访问' : '开启访问')
-                          }}
-                        </button>
-                      </td>
-                    </tr>
-                    <tr v-if="!pageAccessGroupRows.length">
-                      <td colspan="6" class="table-empty">暂无可管理用户组</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
             </section>
 
             <section class="inner-card">
@@ -1103,7 +990,7 @@
                       @click="selectedProjectForMatrix = proj"
                     >
                       <span class="btn-icon">{{ proj === 'global' ? '🌐' : '📂' }}</span>
-                      <span class="btn-text">{{ proj }}</span>
+                      <span class="btn-text">{{ getProjectDisplayName(proj) }}</span>
                     </button>
                   </div>
                 </div>
@@ -1976,6 +1863,31 @@ function syncUrlQuery() {
   if (changed) {
     router.replace({ query: currentQuery }).catch(() => {})
   }
+}
+
+function getProjectDisplayName(projKey) {
+  if (!projKey) return ''
+  if (projKey === 'global') return '🌐 全局基础权限 (global)'
+  const found = projects.value?.find((p) => p.project_key === projKey)
+  if (found?.project_name) return `${found.project_name} (${projKey})`
+  const fallbackMap = {
+    daily_report_25_26: '2025-2026供暖期生产日报',
+    insulation_pipe_supply_2026: '2026年度保温管供需管理',
+    monthly_data_show: '月度生产运行数据查询与展示',
+    monthly_data_pull: '月度数据抓取与入库',
+    daily_report_spring_festval_2026: '2026春节专刊日报大盘',
+  }
+  return fallbackMap[projKey] ? `${fallbackMap[projKey]} (${projKey})` : projKey
+}
+
+function jumpToMatrixForProject(projKey) {
+  activeTab.value = 'accounts'
+  activeSubTab.value = 'matrix_control'
+  if (projKey) {
+    selectedProjectForMatrix.value = projKey
+  }
+  syncUrlQuery()
+  loadAccountsAndMatrix().catch((err) => console.error(err))
 }
 
 const chatBubbleOverride = ref(null)
@@ -6617,6 +6529,34 @@ input:checked + .switch-slider:before {
   border-color: #7dd3fc !important;
   color: #0284c7 !important;
   box-shadow: 0 2px 4px rgba(2, 132, 199, 0.12) !important;
+}
+
+/* 权限统一收敛引导卡片 */
+.permission-central-card {
+  border-left: 4px solid #0284c7 !important;
+  background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%) !important;
+  margin-bottom: 16px !important;
+}
+
+.permission-central-tip-box {
+  display: flex !important;
+  gap: 10px !important;
+  align-items: flex-start !important;
+  background: rgba(2, 132, 199, 0.06) !important;
+  border: 1px dashed #bae6fd !important;
+  border-radius: 6px !important;
+  padding: 10px 14px !important;
+  margin-top: 10px !important;
+  font-size: 13px !important;
+  color: #0369a1 !important;
+}
+
+.permission-central-tip-box .tip-icon {
+  font-size: 16px !important;
+}
+
+.permission-central-tip-box .tip-content {
+  line-height: 1.5 !important;
 }
 
 </style>
