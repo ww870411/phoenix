@@ -3,9 +3,9 @@
     <!-- 顶部科技流光控制栏 -->
     <header class="bigscreen-header">
       <div class="header-left">
-        <div class="header-badge">
-          <span class="pulse-dot"></span>
-          <span class="badge-text">数字孪生 · 实时调度中心</span>
+        <div class="header-badge" :class="{ 'live-mode': isLiveStreamMode }">
+          <span class="pulse-dot" :class="{ live: isLiveStreamMode }"></span>
+          <span class="badge-text">{{ isLiveStreamMode ? '生产实况 · 数据库实时直连 (只读感知)' : '数字孪生 · 实时调度中心' }}</span>
         </div>
         <div class="header-time">{{ currentTimeStr }}</div>
       </div>
@@ -24,38 +24,49 @@
       </div>
 
       <div class="header-right">
-        <!-- 演示模式、主题切换与实时交互快捷操作 -->
+        <!-- 真实数据流直连、演示模式、主题切换与全屏快捷操作 -->
         <div class="demo-actions">
+          <!-- 核心：接入真实数据流 / 生产实况按钮 -->
+          <button 
+            class="action-btn live-stream-btn" 
+            :class="{ active: isLiveStreamMode }" 
+            @click="toggleLiveStreamMode"
+            :title="isLiveStreamMode ? '已接入真实数据流（只读安全感知），点击断开' : '点击接入真实数据库实时数据流，展示真实数据状态与实时发运累计'"
+          >
+            <span class="btn-icon">{{ isLiveStreamMode ? '🟢' : '📡' }}</span>
+            <span>{{ isLiveStreamMode ? '实况数据流已接入' : '接入真实数据流' }}</span>
+          </button>
+
           <button 
             class="action-btn theme-toggle-btn" 
             @click="toggleTheme"
             :title="isDark ? '切换至明亮浅色模式' : '切换至科技深色模式'"
           >
             <span class="btn-icon">{{ isDark ? '☀️' : '🌙' }}</span>
-            <span>{{ isDark ? '浅色模式' : '深色模式' }}</span>
+            <span>{{ isDark ? '浅色' : '深色' }}</span>
           </button>
 
           <button 
             class="action-btn demo-btn" 
             :class="{ active: autoDemoRunning }" 
             @click="toggleAutoDemo"
-            title="开启/暂停自动演示流"
+            title="开启/暂停沙盒自动演示流"
           >
             <span class="btn-icon">{{ autoDemoRunning ? '⏸️' : '▶️' }}</span>
-            <span>{{ autoDemoRunning ? '演示播报中' : '自动演示' }}</span>
+            <span>{{ autoDemoRunning ? '演示中' : '自动演示' }}</span>
           </button>
           
           <button class="action-btn sim-btn" @click="triggerSimulateDelivery('pipe')">
             <span class="btn-icon">🏭</span>
-            <span>模拟管材直发</span>
+            <span>模拟管材</span>
           </button>
 
           <button class="action-btn sim-btn fitting" @click="triggerSimulateDelivery('fitting')">
             <span class="btn-icon">📦</span>
-            <span>模拟管件直运</span>
+            <span>模拟管件</span>
           </button>
 
-          <button class="action-btn icon-btn" @click="loadRealData" title="即时同步数据库最新数据">
+          <button class="action-btn icon-btn" @click="loadRealData(true)" title="即刻强制刷新数据库全量数据">
             <span>🔄</span>
           </button>
 
@@ -252,7 +263,7 @@
         </div>
       </section>
 
-      <!-- 中间栏：重构升级版 · 高工规整双系统拓扑中枢 (定向流光 + 交互高亮) -->
+      <!-- 中间栏：重构升级版 · 高工规整双系统拓扑中枢 (默认通透极简，发货在途/悬停显现) -->
       <section class="screen-col center-col">
         <div class="panel-box map-topology-master-panel">
           <!-- 拓扑头部导航与状态过滤 -->
@@ -286,15 +297,15 @@
 
             <!-- 图例说明 -->
             <div class="topology-legend">
-              <span class="legend-item"><span class="dot-line cyan"></span>直管专线</span>
-              <span class="legend-item"><span class="dot-line gold"></span>管件专线</span>
-              <span class="legend-item"><span class="dot-point active"></span>活跃路由</span>
+              <span class="legend-item"><span class="dot-line cyan"></span>直管在途</span>
+              <span class="legend-item"><span class="dot-line gold"></span>管件在途</span>
+              <span class="legend-item"><span class="dot-point active"></span>实况节点</span>
             </div>
           </div>
 
-          <!-- 拓扑主舞台：左管厂 (230px) + 中流向通道 (50px) + 右双系统矩阵 (1fr) -->
+          <!-- 拓扑主舞台：左管厂 (230px) + 中流向通道 (50px) + 右双系统立柱 (1fr) -->
           <div class="topology-container" ref="topologyContainerRef">
-            <!-- 动态贝塞尔飞线与激光粒子 SVG 视层 (置于最上层 z-index: 20，硬件加速) -->
+            <!-- 动态贝塞尔飞线与激光粒子 SVG 视层 (默认不显示任何线条，仅在发货在途或悬停时显现) -->
             <svg class="topology-svg" ref="svgRef">
               <defs>
                 <linearGradient id="grad-pipe-line" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -307,36 +318,30 @@
                 </linearGradient>
               </defs>
 
-              <!-- 1. 底层静止基准管道 (规整清晰，不刺眼) -->
-              <g class="flylines-base-layer">
-                <path 
+              <!-- 专供运输管道与流光组合 (默认无发货在途时完全隐藏，保持空间通透极简) -->
+              <g class="flylines-layer">
+                <g 
                   v-for="line in flylines" 
-                  :key="'base-' + line.id"
-                  :d="line.d" 
-                  class="flyline-base"
-                  :class="[
-                    line.type,
-                    { 
-                      dimmed: isAnyHovered && !isLineHighlighted(line),
-                      highlighted: isLineHighlighted(line)
-                    }
-                  ]"
-                />
+                  :key="line.id"
+                  class="flyline-group"
+                  v-show="isLineVisible(line)"
+                >
+                  <!-- 管道基础轨迹 -->
+                  <path 
+                    :d="line.d" 
+                    class="flyline-base"
+                    :class="line.type"
+                  />
+                  <!-- 在途动态光带 -->
+                  <path 
+                    :d="line.d" 
+                    class="flyline-stream"
+                    :class="line.type"
+                  />
+                </g>
               </g>
 
-              <!-- 2. 上层定向脉冲流光 (仅在发货、活跃路由或鼠标悬停对应管厂/标段时才启动动效，绝非全屏杂乱乱飞) -->
-              <g class="flylines-stream-layer">
-                <path 
-                  v-for="line in flylines" 
-                  v-show="isLineActive(line)"
-                  :key="'stream-' + line.id"
-                  :d="line.d" 
-                  class="flyline-stream"
-                  :class="line.type"
-                />
-              </g>
-
-              <!-- 3. 发货时触发的单点高亮激光能量包粒子 -->
+              <!-- 发货时触发的单点高亮激光能量包粒子 -->
               <g class="particles-layer">
                 <circle 
                   v-for="p in activeParticles" 
@@ -555,9 +560,9 @@
               <span class="title-icon">📢</span>
               <span>全网实时发运动态流水</span>
             </div>
-            <div class="live-status-pill">
-              <span class="live-dot"></span>
-              <span>真实单据 ({{ liveFeedList.length }})</span>
+            <div class="live-status-pill" :class="{ 'live-direct': isLiveStreamMode }">
+              <span class="live-dot" :class="{ 'live-pulse': isLiveStreamMode }"></span>
+              <span>{{ isLiveStreamMode ? '实况直连 (' + liveFeedList.length + ')' : '真实单据 (' + liveFeedList.length + ')' }}</span>
             </div>
           </div>
 
@@ -646,15 +651,20 @@
     <footer class="bigscreen-footer">
       <div class="footer-bar">
         <div class="sys-status">
-          <span class="status-indicator live"></span>
-          <span>100% 真实业务数据源</span>
+          <span class="status-indicator live" :class="{ 'stream-active': isLiveStreamMode }"></span>
+          <span>{{ isLiveStreamMode ? '⚡ 生产实况实时数据流已接入 · 数据库只读安全感知模式' : '100% 真实业务数据源 · 沙盒演示模式' }}</span>
           <span class="footer-sep">|</span>
           <span>开元/鑫瑞得/能源集团管厂直发</span>
           <span class="footer-sep">|</span>
           <span>10 大标段现场签收</span>
         </div>
         <div class="sys-tips">
-          💡 提示：所有数据与标段均读取自系统权威配置与 PostgreSQL 数据库，鼠标悬停管厂或标段可高亮专属专供路由。
+          <span v-if="isLiveStreamMode" class="live-mode-tip">
+            🟢 <strong>生产实况监听中</strong>：大屏只读取数据库与配置文件，不产生任何脏写入；现场或管厂提交新单据时将自动点亮专供流向与数据累计。
+          </span>
+          <span v-else>
+            💡 提示：所有数据均读取自系统权威数据库，点击【接入真实数据流】可实时感知生产实况，亦可点击【模拟管材/管件】体验沙盒动效。
+          </span>
         </div>
       </div>
     </footer>
@@ -694,12 +704,18 @@ const currentTimeStr = ref('')
 let timerClock = null
 let autoDemoTimer = null
 let autoSyncTimer = null
+let liveStreamTimer = null
 let resizeObserver = null
 let rAFId = null
 const autoDemoRunning = ref(false)
 const feedFilter = ref('all')
 const lastImpactedSectionId = ref(null)
 const activeSectionTab = ref('all') // 'all' | 'high' | 'low'
+
+// --- 生产实况 · 真实数据流直连模式 (Live Stream Mode) ---
+const isLiveStreamMode = ref(false)
+const knownFeedIds = ref(new Set())
+let initialDataLoaded = false
 
 // --- 交互悬停聚焦状态 (Hover Focus) ---
 const hoveredSupplierId = ref(null)
@@ -753,15 +769,15 @@ let rawSupplyEntities = []
 let rawDemandEntities = []
 let rawPipeModels = []
 
-// --- 核心指标状态 (由后端精准聚合统计) ---
+// --- 核心指标状态 (由后端数据库精准聚合统计) ---
 const kpiData = reactive({
-  pipeDesignKm: 120.0,
-  pipeShippedKm: 12.0,
-  pipeTransitKm: 12.0,
+  pipeDesignKm: 0.0,
+  pipeShippedKm: 0.0,
+  pipeTransitKm: 0.0,
   pipeDeliveredKm: 0.0,
-  fittingTotalPcs: 1138,
-  fittingShippedPcs: 280,
-  fittingTransitPcs: 280,
+  fittingTotalPcs: 0,
+  fittingShippedPcs: 0,
+  fittingTransitPcs: 0,
   fittingArrivedPcs: 0
 })
 
@@ -802,14 +818,7 @@ const fittingCoveragePercent = computed(() => {
 })
 
 // 热门管件类型汇总
-const fittingTypeSummary = ref([
-  { type: '90°/45°弯头', count: 480 },
-  { type: '同心/偏心变径管', count: 260 },
-  { type: '等径/异径三通', count: 190 },
-  { type: '直埋波纹补偿器', count: 95 },
-  { type: '直埋焊接球阀', count: 68 },
-  { type: '固定支架与节', count: 45 }
-])
+const fittingTypeSummary = ref([])
 
 // 拓扑节点定义 (3 大真实管厂)
 const supplyNodes = ref([...defaultSupplyNodes])
@@ -838,21 +847,11 @@ function isSupplierOfSection(supId, secId) {
   return isSuppliedBy(secId, supId)
 }
 
-function isLineHighlighted(line) {
-  if (hoveredSupplierId.value) {
-    return line.fromId === hoveredSupplierId.value
-  }
-  if (hoveredSectionId.value) {
-    return line.toId === 'sec_' + hoveredSectionId.value
-  }
-  return false
-}
-
-function isLineActive(line) {
-  // 1. 鼠标悬停时的流向
+function isLineVisible(line) {
+  // 1. 鼠标悬停管厂或标段时临时显现专供直达线路
   if (hoveredSupplierId.value && line.fromId === hoveredSupplierId.value) return true
   if (hoveredSectionId.value && line.toId === 'sec_' + hoveredSectionId.value) return true
-  // 2. 发货中的流向与默认活跃施工路由
+  // 2. 有发货在途运输时显现该条运输路线
   if (activeShipmentLineIds.value.has(line.id)) return true
   return false
 }
@@ -875,6 +874,108 @@ const milestones = ref([
     time: '实时'
   }
 ])
+
+// --- 切换真实数据实时流直连模式 ---
+function toggleLiveStreamMode() {
+  isLiveStreamMode.value = !isLiveStreamMode.value
+  if (isLiveStreamMode.value) {
+    // 1. 关闭沙盒自动演示
+    if (autoDemoRunning.value) toggleAutoDemo()
+    // 2. 立即拉取并完全对齐数据库最新全量真实数据
+    loadRealData(true)
+    // 3. 启动高频心跳轮询（每 3 秒检测数据库增量发货/签收动态）
+    if (liveStreamTimer) clearInterval(liveStreamTimer)
+    liveStreamTimer = setInterval(pollLiveRealData, 3000)
+  } else {
+    // 关闭实时流监听，恢复常规 20 秒静默轮询
+    if (liveStreamTimer) clearInterval(liveStreamTimer)
+    liveStreamTimer = null
+  }
+}
+
+// --- 高频轮询并感知数据库最新产生的真实发货与累计状态 (只读安全感知) ---
+async function pollLiveRealData() {
+  try {
+    const res = await getTubeBigScreenData(projectKey.value)
+    if (!res || !res.ok) return
+
+    // 1. 检查是否有新增真实发货单据
+    if (Array.isArray(res.live_feed_list)) {
+      const newArrivals = []
+      res.live_feed_list.forEach(feed => {
+        if (!knownFeedIds.value.has(feed.id)) {
+          knownFeedIds.value.add(feed.id)
+          if (initialDataLoaded) {
+            newArrivals.push(feed)
+          }
+        }
+      })
+
+      // 如果检测到现场或管厂提交了新的真实单据
+      if (newArrivals.length > 0) {
+        newArrivals.forEach(feed => {
+          feed.isNew = true
+          // 查找匹配管厂与标段
+          const sup = supplyNodes.value.find(s => s.name === feed.supplier || feed.supplier.includes(s.name) || s.raw_id === feed.supplier)
+          const sec = sectionProgressList.value.find(s => s.name === feed.target || feed.target.includes(s.name) || s.id === feed.target)
+          const fromId = sup ? sup.id : (supplyNodes.value[0]?.id || 'sup_kaiyuan')
+          const toId = sec ? ('sec_' + sec.id) : ('sec_' + (sectionProgressList.value[0]?.id || 'high_lot_1'))
+
+          shootLaserParticle(fromId, toId, feed.type)
+
+          if (feed.type === 'pipe') {
+            const meters = parseInt(feed.amount) || 120
+            bubbles.pipeShipped = meters
+            bubbles.pipeTransit = meters
+          } else {
+            const pcs = parseInt(feed.amount) || 2
+            bubbles.fittingShipped = pcs
+            bubbles.fittingTransit = pcs
+          }
+          setTimeout(() => {
+            bubbles.pipeShipped = null
+            bubbles.pipeTransit = null
+            bubbles.fittingShipped = null
+            bubbles.fittingTransit = null
+          }, 2400)
+        })
+
+        // 更新战报列表
+        liveFeedList.value = res.live_feed_list
+        setTimeout(() => {
+          liveFeedList.value.forEach(f => f.isNew = false)
+        }, 3500)
+      } else {
+        liveFeedList.value = res.live_feed_list
+      }
+    }
+
+    // 2. 实时同步全网真实大盘与累计指标
+    if (res.kpi) {
+      kpiData.pipeDesignKm = Number(res.kpi.pipeDesignKm || 0)
+      kpiData.pipeShippedKm = Number(res.kpi.pipeShippedKm || 0)
+      kpiData.pipeTransitKm = Number(res.kpi.pipeTransitKm || 0)
+      kpiData.pipeDeliveredKm = Number(res.kpi.pipeDeliveredKm || 0)
+      kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
+      kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
+      kpiData.fittingTransitPcs = Number(res.kpi.fittingTransitPcs || 0)
+      kpiData.fittingArrivedPcs = Number(res.kpi.fittingArrivedPcs || 0)
+    }
+
+    // 3. 实时同步 10 大标段真实进度
+    if (Array.isArray(res.section_progress_list) && res.section_progress_list.length > 0) {
+      sectionProgressList.value = res.section_progress_list
+    }
+
+    // 4. 实时同步管件类型汇总
+    if (Array.isArray(res.fitting_type_summary)) {
+      fittingTypeSummary.value = res.fitting_type_summary
+    }
+
+  } catch (err) {
+    console.warn('实时心跳拉取异常:', err)
+  }
+}
 
 // --- 高性能规整流向几何计算 (定向直达专线，绝不产生杂乱交叉) ---
 function recalculateFlylines() {
@@ -948,7 +1049,7 @@ function recalculateFlylines() {
   })
 }
 
-// 触发一道激光粒子飞行动画
+// 触发一道激光粒子飞行动画并在途显现线路
 function shootLaserParticle(fromId, toId, type = 'pipe') {
   let targetLine = flylines.value.find(l => l.fromId === fromId && l.toId === toId)
   if (!targetLine) {
@@ -957,7 +1058,12 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
   if (!targetLine) return
 
   const particleId = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
-  const duration = 1.2
+  const duration = 1.3
+
+  // 1. 点亮显现在途运输线路
+  activeShipmentLineIds.value.add(targetLine.id)
+  activeNodeIds.value.add(fromId)
+  activeNodeIds.value.add(toId)
 
   activeParticles.value.push({
     id: particleId,
@@ -966,21 +1072,17 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
     duration
   })
 
-  // 临时激活此通道脉冲流光与高亮
-  activeShipmentLineIds.value.add(targetLine.id)
-  activeNodeIds.value.add(fromId)
-  activeNodeIds.value.add(toId)
-
-  // 动画结束后清理
+  // 2. 激光粒子到达后移除粒子与高亮
   setTimeout(() => {
     activeParticles.value = activeParticles.value.filter(p => p.id !== particleId)
     activeNodeIds.value.delete(fromId)
     activeNodeIds.value.delete(toId)
-    // 3秒后完全恢复平静状态，移除流光特效
-    setTimeout(() => {
-      activeShipmentLineIds.value.delete(targetLine.id)
-    }, 3000)
   }, duration * 1000 + 100)
+
+  // 3. 在途运输持续 4.0 秒后线路平滑隐去，完全恢复通透极简状态
+  setTimeout(() => {
+    activeShipmentLineIds.value.delete(targetLine.id)
+  }, 4000)
 }
 
 // --- 核心业务：触发发货事件（支持真实数据或交互模拟）---
@@ -1147,8 +1249,8 @@ function updateClock() {
   currentTimeStr.value = `${year}-${mon}-${date} ${hour}:${min}:${sec} ${weekDay}`
 }
 
-// 加载 100% 真实项目与数据库数据
-async function loadRealData() {
+// 加载 100% 真实项目与数据库数据 (只读感知，不写数据库)
+async function loadRealData(isForce = false) {
   try {
     const res = await getTubeBigScreenData(projectKey.value)
     if (res && res.ok) {
@@ -1179,6 +1281,7 @@ async function loadRealData() {
       // 4. 真实发运动态流水
       if (Array.isArray(res.live_feed_list) && res.live_feed_list.length > 0) {
         liveFeedList.value = res.live_feed_list
+        res.live_feed_list.forEach(f => knownFeedIds.value.add(f.id))
       }
 
       // 5. 真实拓扑节点 (3 大管厂)
@@ -1191,7 +1294,7 @@ async function loadRealData() {
         milestones.value = res.milestones
       }
 
-      // 7. 保存底层字典供交互模拟使用
+      // 7. 保存底层字典供交互使用
       if (Array.isArray(res.supply_entities_raw)) {
         rawSupplyEntities = res.supply_entities_raw
       }
@@ -1202,6 +1305,7 @@ async function loadRealData() {
         rawPipeModels = res.pipe_models
       }
 
+      initialDataLoaded = true
       recalculateFlylines()
     }
   } catch (err) {
@@ -1213,6 +1317,7 @@ async function loadRealData() {
       rawDemandEntities = summary.demand_entities || []
       rawPipeModels = (summary.pipe_models || []).map(m => m.pipe_model_name || m.id || m)
     }
+    initialDataLoaded = true
     recalculateFlylines()
   }
 }
@@ -1243,6 +1348,7 @@ onBeforeUnmount(() => {
   if (timerClock) clearInterval(timerClock)
   if (autoDemoTimer) clearInterval(autoDemoTimer)
   if (autoSyncTimer) clearInterval(autoSyncTimer)
+  if (liveStreamTimer) clearInterval(liveStreamTimer)
   if (resizeObserver) resizeObserver.disconnect()
   if (rAFId) cancelAnimationFrame(rAFId)
   window.removeEventListener('resize', recalculateFlylines)
@@ -1251,7 +1357,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* ==========================================================================
-   2026 预制直埋保温管智慧供应链数字指挥大屏 (工业规整立柱布局 + 聚焦流向动效)
+   2026 预制直埋保温管智慧供应链数字指挥大屏 (工业规整立柱布局 + 生产实况实时直连)
    ========================================================================== */
 
 /* --- 默认深色科技主题 (Dark Theme) --- */
@@ -1288,8 +1394,8 @@ onBeforeUnmount(() => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 320px;
+  gap: 14px;
+  min-width: 330px;
 }
 
 .header-badge {
@@ -1300,22 +1406,34 @@ onBeforeUnmount(() => {
   background: rgba(0, 242, 254, 0.1);
   border: 1px solid rgba(0, 242, 254, 0.3);
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 12px;
   color: #00f2fe;
+  transition: all 0.3s ease;
+}
+
+.header-badge.live-mode {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
 }
 
 .pulse-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #00ff87;
-  box-shadow: 0 0 6px #00ff87;
+  background: #00f2fe;
+  box-shadow: 0 0 6px #00f2fe;
   animation: pulse-ring 2s infinite;
+}
+
+.pulse-dot.live {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
 }
 
 .header-time {
   font-family: 'Consolas', monospace;
-  font-size: 14px;
+  font-size: 13px;
   color: #94a3b8;
   letter-spacing: 0.5px;
 }
@@ -1327,7 +1445,7 @@ onBeforeUnmount(() => {
 
 .header-title {
   margin: 0;
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 1.5px;
   color: #ffffff;
@@ -1350,29 +1468,30 @@ onBeforeUnmount(() => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 320px;
+  gap: 10px;
+  min-width: 330px;
   justify-content: flex-end;
 }
 
 .demo-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 5px;
+  padding: 5px 12px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: #0f172a;
   color: #f1f5f9;
+  transition: all 0.2s ease;
 }
 
 .action-btn:hover {
@@ -1380,14 +1499,31 @@ onBeforeUnmount(() => {
   border-color: #00f2fe;
 }
 
+/* 核心：生产实况直连按钮 */
+.live-stream-btn {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  font-weight: 600;
+}
+
+.live-stream-btn:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+}
+
+.live-stream-btn.active {
+  background: #10b981;
+  border-color: #10b981;
+  color: #04130d;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
 .theme-toggle-btn {
   background: rgba(0, 242, 254, 0.1);
   border-color: rgba(0, 242, 254, 0.35);
   color: #00f2fe;
-}
-
-.theme-toggle-btn:hover {
-  background: rgba(0, 242, 254, 0.2);
 }
 
 .demo-btn {
@@ -1397,9 +1533,9 @@ onBeforeUnmount(() => {
 }
 
 .demo-btn.active {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: #10b981;
-  color: #10b981;
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  color: #93c5fd;
 }
 
 .sim-btn {
@@ -1408,25 +1544,15 @@ onBeforeUnmount(() => {
   color: #93c5fd;
 }
 
-.sim-btn:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: #60a5fa;
-}
-
 .sim-btn.fitting {
   background: rgba(251, 191, 36, 0.15);
   border-color: rgba(251, 191, 36, 0.4);
   color: #fde047;
 }
 
-.sim-btn.fitting:hover {
-  background: rgba(251, 191, 36, 0.25);
-  border-color: #f59e0b;
-}
-
 .icon-btn {
-  padding: 6px 10px;
-  font-size: 15px;
+  padding: 5px 9px;
+  font-size: 14px;
 }
 
 .back-btn {
@@ -1764,7 +1890,7 @@ onBeforeUnmount(() => {
 }
 
 /* ==========================================================================
-   中间栏：数字孪生全景拓扑中枢 (规整双立柱架构 + 交互流向聚焦)
+   中间栏：数字孪生全景拓扑中枢 (规整双立柱架构 + 在途/交互按需显现)
    ========================================================================== */
 
 .map-topology-master-panel {
@@ -1900,12 +2026,15 @@ onBeforeUnmount(() => {
   will-change: transform;
 }
 
-/* 1. 底层静止基准管道 (规整半透明) */
+/* 动态飞线组合层 (默认无发货在途时完全隐藏，出现时平滑渐显) */
+.flyline-group {
+  transition: opacity 0.35s ease;
+}
+
 .flyline-base {
   fill: none;
   stroke-width: 1.5;
-  opacity: 0.25;
-  transition: opacity 0.25s ease, stroke-width 0.25s ease;
+  opacity: 0.45;
 }
 
 .flyline-base.pipe {
@@ -1916,16 +2045,6 @@ onBeforeUnmount(() => {
   stroke: #fbbf24;
 }
 
-.flyline-base.dimmed {
-  opacity: 0.06;
-}
-
-.flyline-base.highlighted {
-  opacity: 0.95;
-  stroke-width: 2.2;
-}
-
-/* 2. 上层定向脉冲流光 (仅在发货或悬停时启动动画) */
 .flyline-stream {
   fill: none;
   stroke-width: 2.5;
@@ -2389,6 +2508,14 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(16, 185, 129, 0.3);
   border-radius: 10px;
   padding: 1px 6px;
+  transition: all 0.3s ease;
+}
+
+.live-status-pill.live-direct {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  color: #00ff87;
+  font-weight: 600;
 }
 
 .live-dot {
@@ -2397,6 +2524,11 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #10b981;
   animation: pulse-ring 2s infinite;
+}
+
+.live-dot.live-pulse {
+  background: #00ff87;
+  box-shadow: 0 0 6px #00ff87;
 }
 
 .feed-filter-bar {
@@ -2694,12 +2826,21 @@ onBeforeUnmount(() => {
   background: #10b981;
 }
 
+.status-indicator.stream-active {
+  box-shadow: 0 0 8px #00ff87;
+  animation: pulse-ring 1.5s infinite;
+}
+
 .footer-sep {
   opacity: 0.3;
 }
 
 .sys-tips {
   color: #94a3b8;
+}
+
+.live-mode-tip {
+  color: #10b981;
 }
 
 /* --- 精美深色科技细滚动条 Custom Scrollbars --- */
@@ -2748,6 +2889,12 @@ onBeforeUnmount(() => {
   color: #0284c7;
 }
 
+.bigscreen-container.light .header-badge.live-mode {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #059669;
+}
+
 .bigscreen-container.light .header-time {
   color: #475569;
 }
@@ -2770,6 +2917,18 @@ onBeforeUnmount(() => {
   background: #f8fafc;
   color: #0f172a;
   border-color: #94a3b8;
+}
+
+.bigscreen-container.light .live-stream-btn {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #059669;
+}
+
+.bigscreen-container.light .live-stream-btn.active {
+  background: #059669;
+  border-color: #059669;
+  color: #ffffff;
 }
 
 .bigscreen-container.light .theme-toggle-btn {

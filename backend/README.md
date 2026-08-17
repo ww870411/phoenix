@@ -1,3 +1,12 @@
+## 2026-08-17 修复预制直埋保温管大屏后端聚合接口（GET /big-screen/data）SQL物理列名映射
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点：`GET /big-screen/data`
+- **问题与修复**：
+  - **根本原因**：SQL 中直管发货表错误引用了不存在的 `length_m` 字段（物理表真实字段为 `shipped_qty`），管件发货表错误引用了 `total_count`（物理表真实字段为 `shipped_qty`），车牌号错误引用为 `license_plate`（物理表为 `vehicle_plate_no`），导致接口返回 500 错误并使前端回退至演示假数据。
+  - **修复措施**：全量纠正为物理表真实字段，并精确聚合 `total_shipped_m`、`total_arrived_m`、`total_received_m` 与管件 `shipped_qty`。
+- **验证**：Python 直接调用 `get_big_screen_dashboard_data()` 执行成功（返回全网规划 311.87 km、已发货 1.37 km、管件计划 63,173 件、已发货管件 56 件、真实单据 30 条）。
+
 ## 2026-08-17 预制直埋保温管大屏后端聚合接口（GET /big-screen/data）去伪存真与实体关联升级
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`

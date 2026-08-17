@@ -1366,7 +1366,9 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             SELECT 
                 section_1_id,
                 status,
-                SUM(COALESCE(length_m, 0)) AS total_length_m,
+                SUM(COALESCE(shipped_qty, 0)) AS total_shipped_m,
+                SUM(COALESCE(arrived_qty, shipped_qty, 0)) AS total_arrived_m,
+                SUM(COALESCE(received_qty, arrived_qty, shipped_qty, 0)) AS total_received_m,
                 COUNT(id) AS batch_count
             FROM tube.tube_delivery
             WHERE status != 'cancelled'
@@ -1374,14 +1376,14 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         """)
         pipe_deliv_rows = session.execute(pipe_deliv_sql).mappings().all()
 
-        pipe_shipped_total_m = sum(float(r["total_length_m"] or 0) for r in pipe_deliv_rows)
+        pipe_shipped_total_m = sum(float(r["total_shipped_m"] or 0) for r in pipe_deliv_rows)
         pipe_transit_total_m = sum(
-            float(r["total_length_m"] or 0) for r in pipe_deliv_rows 
-            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse", "shipped")
+            float(r["total_shipped_m"] or 0) for r in pipe_deliv_rows 
+            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse")
         )
         pipe_delivered_total_m = sum(
-            float(r["total_length_m"] or 0) for r in pipe_deliv_rows 
-            if r["status"] in ("completed", "arrived", "consumed", "warehoused")
+            float(r["total_received_m"] or r["total_arrived_m"] or 0) for r in pipe_deliv_rows 
+            if r["status"] in ("completed", "pending_warehouse")
         )
 
         # 2. 真实管件基准（1138项标准化明细）与发货汇总
@@ -1412,7 +1414,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             SELECT 
                 section_1_id,
                 status,
-                SUM(COALESCE(total_count, 0)) AS total_pcs,
+                SUM(COALESCE(shipped_qty, 0)) AS total_pcs,
                 COUNT(id) AS batch_count
             FROM tube.tube_fitting_delivery
             WHERE status != 'cancelled'
@@ -1426,7 +1428,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         fitting_shipped_total_pcs = sum(int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows)
         fitting_transit_total_pcs = sum(
             int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows 
-            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse", "shipped")
+            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse")
         )
         fitting_arrived_total_pcs = sum(
             int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows 
@@ -1473,7 +1475,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         pipe_shipped_by_sec: Dict[str, float] = {}
         for r in pipe_deliv_rows:
             sid = r["section_1_id"]
-            pipe_shipped_by_sec[sid] = pipe_shipped_by_sec.get(sid, 0.0) + float(r["total_length_m"] or 0)
+            pipe_shipped_by_sec[sid] = pipe_shipped_by_sec.get(sid, 0.0) + float(r["total_shipped_m"] or 0)
 
         fit_purchase_by_sec: Dict[str, int] = {}
         for b in fitting_baselines_raw:
@@ -1531,8 +1533,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         sup_name_map = {s["entity_id"]: s.get("entity_name") or s["entity_id"] for s in supply_entities}
 
         pipe_recent_sql = text("""
-            SELECT id, delivery_id, supply_entity_id, section_1_id, pipe_model_id, 
-                   COALESCE(length_m, 0) AS length_m, license_plate, shipped_at, status
+            SELECT id, order_no, shipment_no, supply_entity_id, section_1_id, pipe_model_id, 
+                   COALESCE(shipped_qty, 0) AS shipped_qty, vehicle_plate_no, shipped_at, status
             FROM tube.tube_delivery
             WHERE status != 'cancelled'
             ORDER BY shipped_at DESC NULLS LAST, id DESC
@@ -1548,8 +1550,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "supplier": sup_name_map.get(p["supply_entity_id"], p["supply_entity_id"] or "大连开元热力管道"),
                 "target": sec_name_map.get(p["section_1_id"], p["section_1_id"]),
                 "specification": f"{p['pipe_model_id'] or 'DN600'} 预制保温管",
-                "amount": f"{int(float(p['length_m']))} 米",
-                "shipmentCode": p["delivery_id"] or p["license_plate"] or f"DL-P-{p['id']}",
+                "amount": f"{int(float(p['shipped_qty']))} 米",
+                "shipmentCode": p["shipment_no"] or p["order_no"] or p["vehicle_plate_no"] or f"DL-P-{p['id']}",
                 "time": shipped_time_str,
                 "positiveTag": "直供施工标段现场",
                 "isNew": False,
@@ -1558,7 +1560,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
 
         fit_recent_sql = text("""
             SELECT id, order_no, shipment_no, supply_entity_id, section_1_id,
-                   items_summary, total_count, unit, license_plate, shipped_at, status
+                   fitting_type, model_spec, shipped_qty, unit, vehicle_plate_no, shipped_at, status
             FROM tube.tube_fitting_delivery
             WHERE status != 'cancelled'
             ORDER BY shipped_at DESC NULLS LAST, id DESC
@@ -1568,7 +1570,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             recent_fittings = session.execute(fit_recent_sql).mappings().all()
             for f in recent_fittings:
                 shipped_time_str = f["shipped_at"].strftime("%H:%M:%S") if f["shipped_at"] else "15:00:00"
-                spec_desc = f["items_summary"] or "标准关键管件"
+                spec_desc = f"{f['fitting_type'] or ''} {f['model_spec'] or ''}".strip() or "标准关键管件"
                 if len(spec_desc) > 22: spec_desc = spec_desc[:22] + "..."
                 live_feed_list.append({
                     "id": f"f_{f['id']}",
@@ -1576,8 +1578,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "supplier": sup_name_map.get(f["supply_entity_id"], f["supply_entity_id"] or "河北鑫瑞得管道"),
                     "target": sec_name_map.get(f["section_1_id"], f["section_1_id"]),
                     "specification": spec_desc,
-                    "amount": f"{int(float(f['total_count'] or 1))} {f.get('unit') or '件'}",
-                    "shipmentCode": f["order_no"] or f["shipment_no"] or f"FT-{f['id']}",
+                    "amount": f"{int(float(f['shipped_qty'] or 1))} {f.get('unit') or '件'}",
+                    "shipmentCode": f["shipment_no"] or f["order_no"] or f"FT-{f['id']}",
                     "time": shipped_time_str,
                     "positiveTag": "配件专车直达标段",
                     "isNew": False,

@@ -1,3 +1,21 @@
+## 2026-08-17 预制直埋保温管数字大屏生产实况直连模式（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **生产实况直连与只读安全准则**：
+  1. **只读安全监控**：严格执行只读模式，绝对不向业务数据库写入任何脏数据或伪造单据；
+  2. **【📡 接入真实数据流】控制按钮**：点击即刻与 PostgreSQL 数据库建立高频实况连接，感知现场最新发运与签收；
+  3. **真实单据增量流光联动**：一旦数据库有新的真实发运记录生成，自动识别并置顶流水，并在对应管厂与标段间发射激光能量流，动态累加全网 KPI 与标段达成率。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字大屏拓扑极简升级：默认隐藏线条与在途/悬停定向显现（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **拓扑极简通透与在途显现**：
+  1. **常态极简无线条**：SVG 飞线层默认完全隐藏，中枢通道开阔通透，零视觉干扰；
+  2. **在途运输动态显现**：发生发货时对应专供管道亮起并伴随激光粒子穿梭，在途持续 4 秒后平滑隐去；
+  3. **交互悬停探查**：鼠标滑过管厂或标段时瞬间显现专属供需路线，离开后自动隐退。
+- **构建验证**：`npm run build` 100% 成功。
+
 ## 2026-08-17 预制直埋保温管数字大屏管道流光彻底按需化修复（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
