@@ -84,9 +84,36 @@
         </div>
       </section>
 
-      <!-- 选项卡导航 (Responsive Tabs Header) -->
+      <!-- 一级大类胶囊分段切换栏 (Segmented Category Bar) -->
+      <div class="category-segment-wrapper" v-if="selectedSection1Id">
+        <div class="category-segment-bar">
+          <button 
+            type="button" 
+            class="category-segment-btn" 
+            :class="{ active: activeCategory === 'pipe' }" 
+            @click="handleCategoryClick('pipe')"
+          >
+            <span class="cat-icon">🔹</span>
+            <span class="cat-label">保温管业务</span>
+            <span class="cat-count">4 项功能</span>
+          </button>
+          <button 
+            type="button" 
+            class="category-segment-btn" 
+            :class="{ active: activeCategory === 'fitting' }" 
+            @click="handleCategoryClick('fitting')"
+          >
+            <span class="cat-icon">🔩</span>
+            <span class="cat-label">管件业务</span>
+            <span class="cat-count">2 项功能</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 二级选项卡导航 (Responsive Sub-Tabs Header) -->
       <div class="tube-tabs-header-wrap" v-if="selectedSection1Id">
-        <div class="tube-tabs-header">
+        <!-- 保温管子标签 -->
+        <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
           <button 
             type="button" 
             :class="{ active: activeTab === 'usage' }" 
@@ -113,14 +140,25 @@
             :class="{ active: activeTab === 'baseline' }" 
             @click="handleTabClick('baseline')"
           >
-            📋 基准设计量台账
+            📋 设计量与采购量
           </button>
+        </div>
+
+        <!-- 管件子标签 -->
+        <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting'">
           <button 
             type="button" 
             :class="{ active: activeTab === 'fitting' }" 
             @click="handleTabClick('fitting')"
           >
-            🔧 管件发货记录
+            🔧 管件发货与到货记录
+          </button>
+          <button 
+            type="button" 
+            :class="{ active: activeTab === 'fitting_baseline' }" 
+            @click="handleTabClick('fitting_baseline')"
+          >
+            📋 设计量与采购量
           </button>
         </div>
       </div>
@@ -817,6 +855,451 @@
           </section>
         </div>
 
+        <!-- Tab 6: 需求主体管件基准设计量与计划采购量台账 -->
+        <div v-if="activeTab === 'fitting_baseline'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row">
+              <div>
+                <h2>🔩 {{ currentSection1Name }}管件设计量与计划采购量</h2>
+                <span class="panel-hint">展示当前{{ modeLabels.section_1 }}在基准数据库（tube.tube_fitting_baseline）中的全量标准化管件与物料基准明细，供施工核对与物资计划追踪。</span>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button
+                  type="button"
+                  class="btn ghost"
+                  style="height: 34px; padding: 0 14px; font-size: 13px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                  @click="loadFittingBaseline"
+                >
+                  🔄 刷新数据
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="!fittingBaselineRows.length"
+                  style="height: 34px; padding: 0 14px; font-size: 13px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
+                  @click="exportDemandFittingBaseline"
+                >
+                  📥 导出 Excel
+                </button>
+              </div>
+            </div>
+
+            <!-- 数据统计微看板 -->
+            <div class="summary-row baseline-summary" style="margin-top: 12px; margin-bottom: 12px;">
+              <span class="summary-chip">📍 当前主体：<strong>{{ currentSection1Name }}</strong></span>
+              <span class="summary-chip">
+                🔍 命中种类：<strong>{{ filteredFittingBaselineRows.length }}</strong> / {{ fittingBaselineRows.length }} 种
+              </span>
+              <span class="summary-chip">
+                📐 命中设计量：<strong>{{ formatNumber(fittingBaselineStats.filteredDesignQty) }}</strong>
+                <small v-if="filteredFittingBaselineRows.length !== fittingBaselineRows.length" style="color: #64748b; font-weight: normal; margin-left: 4px;">(总: {{ formatNumber(fittingBaselineStats.totalDesignQty) }})</small>
+              </span>
+              <span class="summary-chip">
+                📦 命中采购量：<strong>{{ formatNumber(fittingBaselineStats.filteredPurchaseQty) }}</strong>
+                <small v-if="filteredFittingBaselineRows.length !== fittingBaselineRows.length" style="color: #64748b; font-weight: normal; margin-left: 4px;">(总: {{ formatNumber(fittingBaselineStats.totalPurchaseQty) }})</small>
+              </span>
+            </div>
+
+            <!-- 🔩 多维多选下拉筛选工具栏 (Clean Multi-Select Dropdown Toolbar) -->
+            <div class="fitting-filter-toolbar" @click.stop>
+              <!-- 1. 系统类型下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.systemTypes.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.systemTypes.length > 0, 'is-open': activeDropdown === 'systemTypes' }"
+                  @click="toggleFittingDropdown('systemTypes', $event)"
+                >
+                  <span class="ms-label-icon">💧</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('systemTypes', '系统类型') }}</span>
+                  <span v-if="fittingFilters.systemTypes.length > 1" class="ms-badge">{{ fittingFilters.systemTypes.length }}</span>
+                  <span v-if="fittingFilters.systemTypes.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('systemTypes')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'systemTypes'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择系统类型</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('systemTypes', availableFittingFacets.systemTypes)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('systemTypes')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.systemTypes"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('systemTypes', item.value) }"
+                      @click.stop="toggleFittingFilterItem('systemTypes', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('systemTypes', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('systemTypes', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. 物理类别下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.categories.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.categories.length > 0, 'is-open': activeDropdown === 'categories' }"
+                  @click="toggleFittingDropdown('categories', $event)"
+                >
+                  <span class="ms-label-icon">🔩</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('categories', '物理类别') }}</span>
+                  <span v-if="fittingFilters.categories.length > 1" class="ms-badge">{{ fittingFilters.categories.length }}</span>
+                  <span v-if="fittingFilters.categories.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('categories')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'categories'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择物理类别</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('categories', availableFittingFacets.categories)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('categories')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.categories"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('categories', item.value) }"
+                      @click.stop="toggleFittingFilterItem('categories', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('categories', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('categories', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 主径DN下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.mainDns.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.mainDns.length > 0, 'is-open': activeDropdown === 'mainDns' }"
+                  @click="toggleFittingDropdown('mainDns', $event)"
+                >
+                  <span class="ms-label-icon">📏</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('mainDns', '主径DN', 'DN') }}</span>
+                  <span v-if="fittingFilters.mainDns.length > 1" class="ms-badge">{{ fittingFilters.mainDns.length }}</span>
+                  <span v-if="fittingFilters.mainDns.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('mainDns')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'mainDns'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择主径口径</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('mainDns', availableFittingFacets.mainDns)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('mainDns')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.mainDns"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('mainDns', item.value) }"
+                      @click.stop="toggleFittingFilterItem('mainDns', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('mainDns', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('mainDns', item.value)"
+                      />
+                      <span class="ms-item-name">DN{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 角度下拉框 (弯头) -->
+              <div class="ms-dropdown-container" v-if="shouldShowAngleAndBending && availableFittingFacets.angles.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.angles.length > 0, 'is-open': activeDropdown === 'angles' }"
+                  @click="toggleFittingDropdown('angles', $event)"
+                >
+                  <span class="ms-label-icon">📐</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('angles', '角度', '', '°') }}</span>
+                  <span v-if="fittingFilters.angles.length > 1" class="ms-badge">{{ fittingFilters.angles.length }}</span>
+                  <span v-if="fittingFilters.angles.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('angles')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'angles'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择弯头角度</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('angles', availableFittingFacets.angles)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('angles')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.angles"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('angles', item.value) }"
+                      @click.stop="toggleFittingFilterItem('angles', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('angles', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('angles', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}°</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. 弯曲半径倍数下拉框 (弯头) -->
+              <div class="ms-dropdown-container" v-if="shouldShowAngleAndBending && availableFittingFacets.bendingRatios.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.bendingRatios.length > 0, 'is-open': activeDropdown === 'bendingRatios' }"
+                  @click="toggleFittingDropdown('bendingRatios', $event)"
+                >
+                  <span class="ms-label-icon">🔄</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('bendingRatios', '弯曲半径', '', 'DN') }}</span>
+                  <span v-if="fittingFilters.bendingRatios.length > 1" class="ms-badge">{{ fittingFilters.bendingRatios.length }}</span>
+                  <span v-if="fittingFilters.bendingRatios.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('bendingRatios')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'bendingRatios'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择弯曲半径倍数</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('bendingRatios', availableFittingFacets.bendingRatios)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('bendingRatios')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.bendingRatios"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('bendingRatios', item.value) }"
+                      @click.stop="toggleFittingFilterItem('bendingRatios', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('bendingRatios', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('bendingRatios', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}DN</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. 次径/支管DN下拉框 (三通/变径) -->
+              <div class="ms-dropdown-container" v-if="shouldShowSubDn && availableFittingFacets.subDns.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.subDns.length > 0, 'is-open': activeDropdown === 'subDns' }"
+                  @click="toggleFittingDropdown('subDns', $event)"
+                >
+                  <span class="ms-label-icon">🔀</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('subDns', '次径DN', 'DN') }}</span>
+                  <span v-if="fittingFilters.subDns.length > 1" class="ms-badge">{{ fittingFilters.subDns.length }}</span>
+                  <span v-if="fittingFilters.subDns.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('subDns')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'subDns'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择次径/支管口径</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('subDns', availableFittingFacets.subDns)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('subDns')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.subDns"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('subDns', item.value) }"
+                      @click.stop="toggleFittingFilterItem('subDns', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('subDns', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('subDns', item.value)"
+                      />
+                      <span class="ms-item-name">DN{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 7. 公称压力下拉框 (阀门/承压) -->
+              <div class="ms-dropdown-container" v-if="shouldShowPressure && availableFittingFacets.pressures.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.pressures.length > 0, 'is-open': activeDropdown === 'pressures' }"
+                  @click="toggleFittingDropdown('pressures', $event)"
+                >
+                  <span class="ms-label-icon">🛡️</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('pressures', '公称压力') }}</span>
+                  <span v-if="fittingFilters.pressures.length > 1" class="ms-badge">{{ fittingFilters.pressures.length }}</span>
+                  <span v-if="fittingFilters.pressures.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('pressures')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'pressures'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择公称压力</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('pressures', availableFittingFacets.pressures)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('pressures')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.pressures"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('pressures', item.value) }"
+                      @click.stop="toggleFittingFilterItem('pressures', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('pressures', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('pressures', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 8. 关键词搜索框 -->
+              <div class="ms-search-box">
+                <input
+                  v-model="fittingFilters.searchKeyword"
+                  type="text"
+                  class="input"
+                  placeholder="搜索标准名称 / 规格型号 / 备注..."
+                  style="height: 34px; padding: 0 10px; font-size: 13px; border-radius: 8px;"
+                />
+              </div>
+
+              <!-- 9. 重置按钮 -->
+              <button
+                v-if="activeFittingFilterTags.length > 0"
+                type="button"
+                class="btn ghost compact-btn reset-filter-btn"
+                title="重置全部筛选条件"
+                @click="clearAllFittingFilters"
+              >
+                🔄 重置
+              </button>
+            </div>
+
+            <div v-if="fittingBaselineLoading" class="loading-text">正在从数据库加载管件基准量...</div>
+            <div v-else-if="fittingBaselineError" class="error-box">{{ fittingBaselineError }}</div>
+            <div v-else-if="!filteredFittingBaselineRows.length" class="empty-box">
+              {{ fittingBaselineRows.length ? '未找到符合筛选条件的管件记录。' : `当前${modeLabels.section_1}暂无管件基准量记录。` }}
+            </div>
+            <div v-else class="table-wrap" style="overflow-x: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px; text-align: center;">序号</th>
+                    <th style="width: 80px; text-align: center;">系统类型</th>
+                    <th style="width: 90px;">物理类别</th>
+                    <th style="min-width: 150px;">标准名称</th>
+                    <th style="min-width: 160px;">型号规格</th>
+                    <th style="min-width: 120px;">细分规格/子型号</th>
+                    <th style="width: 75px; text-align: right;">主径DN</th>
+                    <th style="width: 75px; text-align: right;">次径DN</th>
+                    <th style="width: 75px; text-align: right;">角度(°)</th>
+                    <th style="width: 80px; text-align: right;">弯曲倍数</th>
+                    <th style="width: 110px;">阀门/公称压力</th>
+                    <th style="min-width: 130px;">原型号规格</th>
+                    <th style="min-width: 130px;">原名称</th>
+                    <th style="width: 60px; text-align: center;">单位</th>
+                    <th style="width: 105px; text-align: right; color: #1d4ed8;">设计使用量</th>
+                    <th style="width: 115px; text-align: right; color: #059669;">计划采购总量</th>
+                    <th style="min-width: 140px;">说明备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in filteredFittingBaselineRows" :key="row.id || idx">
+                    <td class="cell-text" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                    <td class="cell-text" style="text-align: center;">
+                      <span :style="{
+                        fontSize: '11.5px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        background: row.system_type === '高温水' ? '#eff6ff' : '#ecfdf5',
+                        color: row.system_type === '高温水' ? '#2563eb' : '#059669',
+                        fontWeight: '600'
+                      }">
+                        {{ row.system_type || '高温水' }}
+                      </span>
+                    </td>
+                    <td class="cell-text" style="font-weight: 600;">{{ row.category || row.fitting_type || '管件' }}</td>
+                    <td class="cell-text" :title="row.standard_name">{{ row.standard_name || '—' }}</td>
+                    <td class="cell-text font-mono" style="font-weight: 500;" :title="row.model_spec">{{ row.model_spec }}</td>
+                    <td class="cell-text font-mono" :title="row.sub_model_spec">{{ row.sub_model_spec || '—' }}</td>
+                    <td class="cell-number">{{ row.main_dn != null ? row.main_dn : '—' }}</td>
+                    <td class="cell-number">{{ row.sub_dn != null ? row.sub_dn : '—' }}</td>
+                    <td class="cell-number">{{ row.angle != null ? row.angle : '—' }}</td>
+                    <td class="cell-number">{{ row.bending_radius_ratio != null ? row.bending_radius_ratio : '—' }}</td>
+                    <td class="cell-text" style="font-size: 12px;" :title="`${row.valve_model || ''} ${row.pressure_rating || ''}`">
+                      {{ [row.valve_model, row.pressure_rating].filter(Boolean).join(' / ') || '—' }}
+                    </td>
+                    <td class="cell-text font-mono" :title="row.raw_model_spec">{{ row.raw_model_spec || '—' }}</td>
+                    <td class="cell-text" :title="row.raw_name">{{ row.raw_name || '—' }}</td>
+                    <td class="cell-text" style="text-align: center;">{{ row.unit || '个' }}</td>
+                    <td class="cell-number" style="font-weight: 700; color: #1d4ed8;">{{ formatNumber(row.design_qty) }}</td>
+                    <td class="cell-number" style="font-weight: 700; color: #059669;">{{ formatNumber(row.purchase_plan_qty) }}</td>
+                    <td class="cell-text" :title="row.remark">{{ row.remark || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
       </div>
 
       <!-- 初始未选择提示卡 -->
@@ -1397,6 +1880,7 @@ import {
   confirmTubeDemandManagementDeliveryReceipt,
   approveTubeDemandManagementDeliveryDifference,
   getTubeDemandManagementBaseline,
+  getTubeDemandManagementFittingBaseline,
   getTubeDemandManagementLogisticsRecords,
   getTubeDemandManagementOptions,
   getTubeDemandManagementPlanMatrix,
@@ -1428,6 +1912,9 @@ const pipeModelOptions = ref([])
 const currentGroup = ref('')
 
 const selectedSection1Id = ref('')
+const activeCategory = ref('pipe') // 'pipe' | 'fitting'
+const lastPipeTab = ref('usage') // 记忆直管最后选中的子标签
+const lastFittingTab = ref('fitting') // 记忆管件最后选中的子标签
 const activeTab = ref('usage')
 const showExportModal = ref(false)
 const blockModalVisible = ref(false)
@@ -2163,6 +2650,269 @@ const baselineLoading = ref(false)
 const baselineError = ref('')
 const baselineRows = ref([])
 
+const fittingBaselineLoading = ref(false)
+const fittingBaselineError = ref('')
+const fittingBaselineRows = ref([])
+
+// 多维多选分面筛选响应式状态
+const fittingFilters = reactive({
+  systemTypes: [],      // 系统类型多选
+  categories: [],       // 物理类别多选
+  mainDns: [],          // 主径DN多选
+  subDns: [],           // 次径DN多选
+  angles: [],           // 角度多选
+  bendingRatios: [],    // 弯曲倍数多选
+  pressures: [],        // 公称压力多选
+  searchKeyword: '',    // 全局关键词检索
+})
+
+// 动态提取当前标段各维度的可选值列表及对应记录数
+const availableFittingFacets = computed(() => {
+  const rows = fittingBaselineRows.value || []
+  
+  const systemTypeMap = new Map()
+  const categoryMap = new Map()
+  const mainDnMap = new Map()
+  const subDnMap = new Map()
+  const angleMap = new Map()
+  const bendingRatioMap = new Map()
+  const pressureMap = new Map()
+
+  rows.forEach((r) => {
+    // 1. 系统类型
+    const st = String(r.system_type || '').trim()
+    if (st) systemTypeMap.set(st, (systemTypeMap.get(st) || 0) + 1)
+
+    // 2. 物理类别
+    const cat = String(r.category || r.fitting_type || '').trim()
+    if (cat) categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1)
+
+    // 3. 主径DN
+    if (r.main_dn != null && !isNaN(Number(r.main_dn))) {
+      const dn = Number(r.main_dn)
+      mainDnMap.set(dn, (mainDnMap.get(dn) || 0) + 1)
+    }
+
+    // 4. 次径DN
+    if (r.sub_dn != null && !isNaN(Number(r.sub_dn))) {
+      const sdn = Number(r.sub_dn)
+      subDnMap.set(sdn, (subDnMap.get(sdn) || 0) + 1)
+    }
+
+    // 5. 角度
+    if (r.angle != null && !isNaN(Number(r.angle))) {
+      const ang = Number(r.angle)
+      angleMap.set(ang, (angleMap.get(ang) || 0) + 1)
+    }
+
+    // 6. 弯曲倍数
+    if (r.bending_radius_ratio != null && !isNaN(Number(r.bending_radius_ratio))) {
+      const br = Number(r.bending_radius_ratio)
+      bendingRatioMap.set(br, (bendingRatioMap.get(br) || 0) + 1)
+    }
+
+    // 7. 压力
+    const pr = String(r.pressure_rating || '').trim()
+    if (pr) pressureMap.set(pr, (pressureMap.get(pr) || 0) + 1)
+  })
+
+  return {
+    systemTypes: Array.from(systemTypeMap.entries()).map(([value, count]) => ({ value, count })),
+    categories: Array.from(categoryMap.entries()).map(([value, count]) => ({ value, count })),
+    mainDns: Array.from(mainDnMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    subDns: Array.from(subDnMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    angles: Array.from(angleMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    bendingRatios: Array.from(bendingRatioMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    pressures: Array.from(pressureMap.entries()).map(([value, count]) => ({ value, count })),
+  }
+})
+
+// 判断特定专属明细维度是否应该展示（级联感知）
+const shouldShowAngleAndBending = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('弯头') || c.includes('弯管'))
+  }
+  return (availableFittingFacets.value.angles.length > 0 || availableFittingFacets.value.bendingRatios.length > 0)
+})
+
+const shouldShowSubDn = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('三通') || c.includes('异径') || c.includes('变径') || c.includes('大小头'))
+  }
+  return availableFittingFacets.value.subDns.length > 0
+})
+
+const shouldShowPressure = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('阀') || c.includes('补偿') || c.includes('波纹'))
+  }
+  return availableFittingFacets.value.pressures.length > 0
+})
+
+// 下拉浮层展开状态控制
+const activeDropdown = ref('')
+
+function toggleFittingDropdown(name, event) {
+  if (event) event.stopPropagation()
+  if (activeDropdown.value === name) {
+    activeDropdown.value = ''
+  } else {
+    activeDropdown.value = name
+  }
+}
+
+function closeFittingDropdown() {
+  activeDropdown.value = ''
+}
+
+function getFittingFilterSummary(dimension, defaultLabel, prefix = '', suffix = '') {
+  const selected = fittingFilters[dimension] || []
+  if (selected.length === 0) {
+    return defaultLabel
+  }
+  if (selected.length === 1) {
+    return `${prefix}${selected[0]}${suffix}`
+  }
+  return `已选 ${selected.length} 项`
+}
+
+function selectAllFittingFilterDimension(dimension, options) {
+  if (!options || !options.length) return
+  fittingFilters[dimension] = options.map(opt => opt.value)
+}
+
+function toggleFittingFilterItem(dimension, value) {
+  const arr = fittingFilters[dimension]
+  if (!arr) return
+  const index = arr.indexOf(value)
+  if (index > -1) {
+    arr.splice(index, 1)
+  } else {
+    arr.push(value)
+  }
+}
+
+function isFittingFilterSelected(dimension, value) {
+  return fittingFilters[dimension]?.includes(value) ?? false
+}
+
+function clearFittingFilterDimension(dimension) {
+  if (fittingFilters[dimension]) {
+    fittingFilters[dimension] = []
+  }
+}
+
+function clearAllFittingFilters() {
+  fittingFilters.systemTypes = []
+  fittingFilters.categories = []
+  fittingFilters.mainDns = []
+  fittingFilters.subDns = []
+  fittingFilters.angles = []
+  fittingFilters.bendingRatios = []
+  fittingFilters.pressures = []
+  fittingFilters.searchKeyword = ''
+}
+
+// 活跃筛选条件标签列表 (用于可一键移除的小胶囊)
+const activeFittingFilterTags = computed(() => {
+  const tags = []
+  fittingFilters.systemTypes.forEach(v => tags.push({ dim: 'systemTypes', label: `系统: ${v}`, value: v }))
+  fittingFilters.categories.forEach(v => tags.push({ dim: 'categories', label: `类别: ${v}`, value: v }))
+  fittingFilters.mainDns.forEach(v => tags.push({ dim: 'mainDns', label: `主径: DN${v}`, value: v }))
+  fittingFilters.subDns.forEach(v => tags.push({ dim: 'subDns', label: `次径: DN${v}`, value: v }))
+  fittingFilters.angles.forEach(v => tags.push({ dim: 'angles', label: `角度: ${v}°`, value: v }))
+  fittingFilters.bendingRatios.forEach(v => tags.push({ dim: 'bendingRatios', label: `弯曲: ${v}DN`, value: v }))
+  fittingFilters.pressures.forEach(v => tags.push({ dim: 'pressures', label: `压力: ${v}`, value: v }))
+  if (fittingFilters.searchKeyword.trim()) {
+    tags.push({ dim: 'searchKeyword', label: `搜索: "${fittingFilters.searchKeyword.trim()}"`, value: fittingFilters.searchKeyword })
+  }
+  return tags
+})
+
+// 多维多选综合过滤
+const filteredFittingBaselineRows = computed(() => {
+  let list = fittingBaselineRows.value || []
+
+  // 1. 系统类型多选 (OR)
+  if (fittingFilters.systemTypes.length > 0) {
+    list = list.filter(r => fittingFilters.systemTypes.includes(String(r.system_type || '').trim()))
+  }
+
+  // 2. 物理类别多选 (OR)
+  if (fittingFilters.categories.length > 0) {
+    list = list.filter(r => fittingFilters.categories.includes(String(r.category || r.fitting_type || '').trim()))
+  }
+
+  // 3. 主径DN多选 (OR)
+  if (fittingFilters.mainDns.length > 0) {
+    list = list.filter(r => r.main_dn != null && fittingFilters.mainDns.includes(Number(r.main_dn)))
+  }
+
+  // 4. 次径DN多选 (OR)
+  if (fittingFilters.subDns.length > 0) {
+    list = list.filter(r => r.sub_dn != null && fittingFilters.subDns.includes(Number(r.sub_dn)))
+  }
+
+  // 5. 角度多选 (OR)
+  if (fittingFilters.angles.length > 0) {
+    list = list.filter(r => r.angle != null && fittingFilters.angles.includes(Number(r.angle)))
+  }
+
+  // 6. 弯曲倍数多选 (OR)
+  if (fittingFilters.bendingRatios.length > 0) {
+    list = list.filter(r => r.bending_radius_ratio != null && fittingFilters.bendingRatios.includes(Number(r.bending_radius_ratio)))
+  }
+
+  // 7. 公称压力多选 (OR)
+  if (fittingFilters.pressures.length > 0) {
+    list = list.filter(r => fittingFilters.pressures.includes(String(r.pressure_rating || '').trim()))
+  }
+
+  // 8. 关键词全局模糊搜索
+  if (fittingFilters.searchKeyword.trim()) {
+    const kw = fittingFilters.searchKeyword.trim().toLowerCase()
+    list = list.filter((r) => {
+      const matchName = String(r.standard_name || '').toLowerCase().includes(kw)
+      const matchSpec = String(r.model_spec || '').toLowerCase().includes(kw)
+      const matchSub = String(r.sub_model_spec || '').toLowerCase().includes(kw)
+      const matchRawSpec = String(r.raw_model_spec || '').toLowerCase().includes(kw)
+      const matchRawName = String(r.raw_name || '').toLowerCase().includes(kw)
+      const matchDn = String(r.main_dn || '').includes(kw) || String(r.sub_dn || '').includes(kw)
+      const matchValve = String(r.valve_model || '').toLowerCase().includes(kw)
+      const matchPressure = String(r.pressure_rating || '').toLowerCase().includes(kw)
+      const matchRemark = String(r.remark || '').toLowerCase().includes(kw)
+      return matchName || matchSpec || matchSub || matchRawSpec || matchRawName || matchDn || matchValve || matchPressure || matchRemark
+    })
+  }
+
+  return list
+})
+
+// 实时统计计算
+const fittingBaselineStats = computed(() => {
+  let totalDesignQty = 0
+  let totalPurchaseQty = 0
+  let filteredDesignQty = 0
+  let filteredPurchaseQty = 0
+
+  fittingBaselineRows.value.forEach((r) => {
+    totalDesignQty += Number(r.design_qty || 0)
+    totalPurchaseQty += Number(r.purchase_plan_qty || 0)
+  })
+
+  filteredFittingBaselineRows.value.forEach((r) => {
+    filteredDesignQty += Number(r.design_qty || 0)
+    filteredPurchaseQty += Number(r.purchase_plan_qty || 0)
+  })
+
+  return {
+    totalDesignQty,
+    totalPurchaseQty,
+    filteredDesignQty,
+    filteredPurchaseQty,
+  }
+})
+
 const planLoading = ref(false)
 const planError = ref('')
 const planDates = ref([])
@@ -2558,6 +3308,61 @@ async function loadBaseline() {
   }
 }
 
+async function loadFittingBaseline() {
+  if (!selectedSection1Id.value) {
+    fittingBaselineRows.value = []
+    return
+  }
+  fittingBaselineLoading.value = true
+  fittingBaselineError.value = ''
+  try {
+    const response = await getTubeDemandManagementFittingBaseline(PROJECT_KEY, selectedSection1Id.value)
+    fittingBaselineRows.value = response.rows || []
+  } catch (error) {
+    fittingBaselineError.value = error?.message || '加载管件基准量失败'
+    fittingBaselineRows.value = []
+  } finally {
+    fittingBaselineLoading.value = false
+  }
+}
+
+function exportDemandFittingBaseline() {
+  const rows = filteredFittingBaselineRows.value
+  if (!rows.length) return
+
+  const headers = [
+    '序号', '系统类型', '物理类别', '标准名称', '型号规格', '细分规格/子型号',
+    '主径DN', '次径DN', '角度(°)', '弯曲倍数', '阀门型号', '公称压力',
+    '单位', '设计使用量', '计划采购总量', '原型号规格', '原名称', '说明备注'
+  ]
+
+  const dataRows = rows.map((r, idx) => [
+    idx + 1,
+    r.system_type || '高温水',
+    r.category || r.fitting_type || '管件',
+    r.standard_name || '',
+    r.model_spec || '',
+    r.sub_model_spec || '',
+    r.main_dn,
+    r.sub_dn,
+    r.angle,
+    r.bending_radius_ratio,
+    r.valve_model || '',
+    r.pressure_rating || '',
+    r.unit || '个',
+    r.design_qty != null ? r.design_qty : 0,
+    r.purchase_plan_qty != null ? r.purchase_plan_qty : 0,
+    r.raw_model_spec || '',
+    r.raw_name || '',
+    r.remark || '',
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '管件设计与采购量')
+  XLSX.writeFile(wb, `${currentSection1Name.value}_管件设计量与计划采购量.xlsx`)
+}
+
 async function loadPlanMatrix() {
   if (!selectedSection1Id.value || !anchorDate.value) {
     planDates.value = []
@@ -2797,6 +3602,7 @@ async function reloadSection1Data() {
   clearActionMessage()
   await Promise.all([
     loadBaseline(),
+    loadFittingBaseline(),
     loadPlanMatrix(),
     loadUsageSheet(),
     loadLogisticsRecords(),
@@ -2938,10 +3744,47 @@ onMounted(async () => {
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 60000)
+  document.addEventListener('click', closeFittingDropdown)
   await refreshRealtimeConfig()
 })
 
+function handleCategoryClick(category) {
+  if (activeCategory.value === category) {
+    return
+  }
+
+  if (activeTab.value === 'plan' && isPlanDirty.value) {
+    const confirmDiscard = confirm('您在“三日滚动计划填报”中有未保存的修改，确定要离开并丢弃修改吗？')
+    if (!confirmDiscard) {
+      return
+    }
+  }
+
+  if (activeTab.value === 'usage' && isUsageDirty.value) {
+    const confirmDiscard = confirm('您在“每日使用消耗填报”中有未保存的修改，确定要离开并丢弃修改吗？')
+    if (!confirmDiscard) {
+      return
+    }
+  }
+
+  activeCategory.value = category
+  if (category === 'pipe') {
+    activeTab.value = lastPipeTab.value || 'usage'
+  } else if (category === 'fitting') {
+    activeTab.value = lastFittingTab.value || 'fitting'
+  }
+  refreshCurrentTabData(activeTab.value)
+}
+
 function handleTabClick(targetTab) {
+  if (['usage', 'plan', 'logistics', 'baseline'].includes(targetTab)) {
+    activeCategory.value = 'pipe'
+    lastPipeTab.value = targetTab
+  } else if (['fitting', 'fitting_baseline'].includes(targetTab)) {
+    activeCategory.value = 'fitting'
+    lastFittingTab.value = targetTab
+  }
+
   if (activeTab.value === targetTab) {
     refreshCurrentTabData(targetTab)
     return
@@ -2974,10 +3817,15 @@ function refreshCurrentTabData(tab) {
     loadBaseline()
   } else if (tab === 'logistics') {
     loadLogisticsRecords()
+  } else if (tab === 'fitting') {
+    handleFittingQuery()
+  } else if (tab === 'fitting_baseline') {
+    loadFittingBaseline()
   }
 }
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', closeFittingDropdown)
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
@@ -4105,12 +4953,84 @@ function jumpToUsageTab() {
   background: linear-gradient(90deg, rgba(37, 99, 235, 0.03) 0%, rgba(255, 255, 255, 0) 100%) !important;
 }
 
+/* 🔹 一级物料大类分段控制器 (Segmented Category Bar) */
+.category-segment-wrapper {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-radius: 14px !important;
+  padding: 4px !important;
+  margin-bottom: 6px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  box-sizing: border-box;
+}
+
+.category-segment-bar {
+  display: flex !important;
+  gap: 6px !important;
+  width: 100% !important;
+}
+
+.category-segment-btn {
+  flex: 1 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  padding: 8px 16px !important;
+  border-radius: 10px !important;
+  font-size: 14.5px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.category-segment-btn:hover {
+  color: #1e293b !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+}
+
+.category-segment-btn.active {
+  color: #1e40af !important;
+  background: #ffffff !important;
+  border-color: #dbeafe !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.category-segment-btn .cat-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.category-segment-btn .cat-label {
+  font-size: 14px;
+  letter-spacing: 0.2px;
+}
+
+.category-segment-btn .cat-count {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: #e2e8f0;
+  color: #64748b;
+  transition: all 0.25s ease;
+}
+
+.category-segment-btn.active .cat-count {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
 /* Vue Tabs 高端样式切换 */
 .tube-tabs-header-wrap {
   background: rgba(241, 245, 249, 0.8) !important;
-  border-radius: 14px !important;
-  padding: 6px !important;
-  margin-bottom: 16px !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+  margin-bottom: 14px !important;
   border: 1px solid #e2e8f0 !important;
   box-sizing: border-box;
 }
@@ -4461,5 +5381,222 @@ function jumpToUsageTab() {
 
 .animate-slide-down {
   animation: slide-down-fade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 🔩 多维多选下拉筛选工具栏 (Clean Multi-Select Dropdown Toolbar) */
+.fitting-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ms-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.ms-dropdown-trigger {
+  height: 34px;
+  padding: 0 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ms-dropdown-trigger:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.ms-dropdown-trigger.has-value {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.ms-dropdown-trigger.is-open {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.ms-label-icon {
+  font-size: 13px;
+}
+
+.ms-label-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-badge {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.ms-clear-btn {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 0 2px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.ms-clear-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ms-arrow {
+  font-size: 10px;
+  color: #64748b;
+  margin-left: 2px;
+}
+
+/* 下拉浮层菜单 */
+.ms-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  min-width: 180px;
+  max-width: 260px;
+  padding: 6px 0;
+  animation: slide-down-fade 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ms-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px 6px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.ms-menu-title {
+  font-weight: 600;
+  color: #475569;
+}
+
+.ms-menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-menu-actions a {
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.ms-menu-actions a:hover {
+  text-decoration: underline;
+}
+
+.ms-menu-actions .sep {
+  color: #cbd5e1;
+  font-size: 10px;
+}
+
+.ms-menu-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.ms-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.ms-menu-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.ms-menu-item.checked {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.ms-menu-item input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #2563eb;
+  width: 14px;
+  height: 14px;
+}
+
+.ms-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-item-count {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* 搜索框与重置按钮 */
+.ms-search-box {
+  flex: 1;
+  min-width: 180px;
+}
+
+.reset-filter-btn {
+  height: 34px !important;
+  font-size: 12px !important;
+  color: #ef4444 !important;
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+  padding: 0 10px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reset-filter-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
 }
 </style>

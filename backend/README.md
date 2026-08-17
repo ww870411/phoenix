@@ -1,3 +1,22 @@
+## 2026-08-17 工程部确认版管件基准数据全量无损同步与追溯字段扩展（1138行）
+
+- **数据源与文件**：`configs/8.17_管件设计使用量_标准化整理_确认后_导入.xlsx`
+- **核心数据演进与变更点**：
+  1. **物理类别与标准名称规范化（301 处）**：将原“异径管”统一修正规范为“**变径管**”（如“塑套钢预制保温同心变径管”）；
+  2. **计划采购量精准修正（65 处）**：工程部复核将未实际立项采购的物料计划量调整为 `0`；
+  3. **追溯字段扩展（Schema 幂等升级）**：
+     - `tube.tube_fitting_baseline` 增加 `raw_model_spec VARCHAR(255)`（原型号规格）与 `raw_name VARCHAR(128)`（原名称）；
+     - `baseline_service.py` 升级 `ensure_baseline_tables`、`list_fitting_baselines`、`save_fitting_baselines` 和 `import_fitting_baselines_from_excel`，实现 24 维度精准映射与全量 1138 行数据入库；
+- **验证与测试**：`pytest backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 100% 通过。
+
+## 2026-08-17 需求侧新增管件基准设计量与计划采购量查询接口
+
+- **关联接口与路由**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点：`GET /demand-management/fitting-baseline`（参数：`section_1_id: str`）
+  - 功能：支持现场管理人员精准按当前需求主体标段，从 `tube.tube_fitting_baseline` 读取全量标准化管件与物料基准记录（包含 22 个维度字段）；
+  - 权限控制：通过 `_ensure_section_1_access` 严格限制各标段负责人仅可读取经授权的标段数据；
+- **验证与测试**：`pytest backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 100% 通过。
+
 ## 2026-08-17 管件与标准化物料基准表重构升级（22个标准化维度+保留子类型+全量1138行数据入库）
 
 - **关联背景与需求目标**：根据物料基准工程标准化要求，将 `tube.tube_fitting_baseline` 由简易文本表全面升级为**工业级参数化多维宽表**，并保留子型号字段（`sub_model_spec`）；

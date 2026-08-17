@@ -8,7 +8,10 @@
   "fitting_config": {
     "allowed_units": [
       "个",
-      "套"
+      "套",
+      "件",
+      "米",
+      "根"
     ],
     "standard_types": [
       "弯头",

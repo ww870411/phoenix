@@ -2107,6 +2107,29 @@ def get_demand_management_baseline(
     }
 
 
+@router.get("/demand-management/fitting-baseline", summary="读取需求侧管件基准数据")
+def get_demand_management_fitting_baseline(
+    section_1_id: str,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
+
+    section_1_name_map = _build_section_1_name_map(payload)
+    rows = list_fitting_baselines(section_1_id=section_1_id)
+
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "section_1": {
+            "section_1_id": section_1_id,
+            "section_1_name": section_1_name_map.get(section_1_id, section_1_id),
+        },
+        "rows": rows,
+    }
+
+
 @router.get("/demand-management/plan-matrix", summary="读取需求侧三日计划矩阵")
 def get_demand_management_plan_matrix(
     section_1_id: str,

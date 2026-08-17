@@ -1,3 +1,40 @@
+## 2026-08-17 修复并点亮全局管理与现场工作台的“原型号规格”与“原名称”展示
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`（全局管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台）
+- **关联后端服务**：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`
+- **核心修复与升级点**：
+  1. **后端 SQL 查询字段补齐**：在 `list_fitting_baselines()` 的 `SELECT` 语句中补齐 `raw_model_spec` 与 `raw_name` 字段映射，彻底消除查询字段遗漏；
+  2. **全局管理表格（RevoGrid）正常呈现**：表格的【原型号规格】与【原名称】列成功获取数据库真实值并渲染显示；
+  3. **现场管理工作台表格同步呈现**：Tab 6【管件设计量与采购量】明细表及导出 Excel 均增加【原型号规格】与【原名称】列；
+  4. **构建验证**：前端执行 `npm run build` 100% 成功。
+
+## 2026-08-17 需求侧工作台子标签统一命名为“设计量与采购量”
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **优化点**：
+  - 将【保温管业务】下原“基准设计量台账”子标签正式更名为 **`📋 设计量与采购量`**；
+  - 与【管件业务】下的 **`📋 设计量与采购量`** 子标签实现完全对称、统一规范的命名；
+  - 打包构建 `npm run build` 100% 成功。
+
+## 2026-08-17 需求侧工作台管件设计量与采购量筛选重构为“紧凑整洁多选下拉选框工具栏”
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **核心交互与布局升级**：
+  1. **摒弃平铺 Tag，重构为高度统一的紧凑多选下拉选框工具栏（Clean Multi-Select Dropdown Toolbar）**：
+     - 各属性以统一定制的高度为 `34px` 的下拉触发器一字排开（`💧 系统类型`、`🔩 物理类别`、`📏 主径DN`、`📐 角度`、`🔄 弯曲半径`、`🔀 次径DN`、`🛡️ 公称压力`、`🔍 搜索框`、`🔄 重置`）；
+     - 彻底消除平铺标签过多带来的视觉杂乱感，页面布局紧凑、专业、清爽；
+  2. **自定义多选下拉浮层（Custom Dropdown Popovers）**：
+     - 点击触发器展开阴影浮层，支持直接勾选/取消勾选任意多项；
+     - 菜单顶部提供快捷【全选】与【清空】链接；
+     - 触发器状态智能响应：未选时显示维度默认名，选 1 项时显示具体选项名，多选时显示高亮计数徽章（如 `已选 3 项`），并支持直接点击 `✕` 快速清空该列；
+     - 点击页面外部区域自动收起下拉浮层（`click-outside` 监听）；
+  3. **微看板与精准导出联动**：
+     - 命中数量、设计量与采购量实时联动计算；
+     - 导出 Excel 严格导出当前多选下拉筛选过滤后的明细；
+  4. **打包构建验证**：执行 `npm run build` 100% 成功。
+
 ## 2026-08-17 全局管理 GlobalManagementView 管件基准支持“全部标段”全网视图与数据库级字段交互
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`

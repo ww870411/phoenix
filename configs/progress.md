@@ -1,3 +1,52 @@
+## 2026-08-17 [修复并点亮全局管理与现场工作台的“原型号规格”与“原名称”展示]
+- **根因定位与修复**：定位到后端 `baseline_service.py` 中 `list_fitting_baselines()` 的 SQL 查询语句在 `SELECT` 清单中遗漏了 `raw_model_spec` 与 `raw_name` 字段，导致从数据库查出后未映射给前端；
+- **具体实施与升级**：
+  1. 补齐 `SELECT ... raw_model_spec, raw_name` 字段查询，重新执行无损导入刷新 1138 行数据；
+  2. 全局管理（`GlobalManagementView`）数据网格成功渲染【原型号规格】与【原名称】列；
+  3. 现场管理工作台（`DemandManagementView`）Tab 6【管件设计量与采购量】明细表及导出 Excel 均同步增加【原型号规格】与【原名称】列；
+- **验证与测试**：
+  - `pytest backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 100% 通过；
+  - 前端执行 `npm run build` 生产打包编译 100% 成功。
+
+## 2026-08-17 [工程部确认版管件基准数据全量无损同步与追溯字段扩展（1138行）]
+- **数据源与变更点深度比对**：
+  - 数据文件：`configs/8.17_管件设计使用量_标准化整理_确认后_导入.xlsx`
+  - 核心变更：
+    1. 物理类别规范化（204 处）与标准名称规范化（97 处）：统一将“异径管”规范定名为“**变径管**”；
+    2. 计划采购量精准修正（65 处）：工程部复核将未实际立项采购的物料计划量调整为 `0`；
+    3. 新增追溯字段：`原型号规格` (`raw_model_spec`) 与 `原名称` (`raw_name`)；
+- **具体实施与架构升级**：
+  1. 数据库表 `tube.tube_fitting_baseline` 增加 `raw_model_spec VARCHAR(255)` 与 `raw_name VARCHAR(128)` 字段；
+  2. `backend/projects/insulation_pipe_supply_2026/services/baseline_service.py` 升级全套 DDL、UPSERT 与 Excel 自动解析逻辑；
+  3. 执行全量 1138 行数据无损覆盖刷新，前端全局管理与现场工作台筛选指标自动响应生效；
+- **验证与测试**：
+  - `pytest backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 100% 通过；
+  - 前端执行 `npm run build` 生产打包编译 100% 成功。
+
+## 2026-08-17 [需求侧工作台子标签统一命名为“设计量与采购量”]
+- **需求目标与界面规范**：根据用户指令，将【保温管业务】大类下的“基准设计量台账”子标签更名为 **`📋 设计量与采购量`**，与【管件业务】下的“设计量与采购量”实现完全对称、清晰统一的命名体系；
+- **具体改动文件**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`；
+- **验证与测试**：前端执行 `npm run build` 生产打包编译 100% 成功。
+
+## 2026-08-17 [需求侧工作台一级大类标签优化为“保温管业务”与“管件业务”]
+- **需求目标与界面调优**：根据用户规范要求，将现场管理工作台一级分段控制器标签规范精简为 **`🔹 保温管业务`** 与 **`🔩 管件业务`**，干练对齐；
+- **具体改动文件**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`；
+- **验证与测试**：前端执行 `npm run build` 生产打包编译 100% 成功。
+
+## 2026-08-17 [需求侧工作台管件设计量与采购量筛选重构为“紧凑整洁多选下拉选框工具栏”]
+- **需求目标与交互重构**：响应用户对于界面整洁度与排版美观性的要求，彻底摒弃平铺 Tag 占用高度大且杂乱的问题，将各属性多选全面重构为**高度统一、紧凑清爽的自定义多选下拉工具栏（Multi-Select Dropdown Toolbar）**；
+- **具体实施与改动文件（`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`）**：
+  1. **【高度统一的下拉触发器工具栏】**：
+     - 系统类型、物理类别、主径DN、弯头角度、弯曲半径、次径DN、公称压力全部封装为高度 `34px` 的整洁下拉选框；
+     - 状态智能回显：未选显示默认名，单选显示具体项，多选显示 `已选 N 项` 徽章，并提供快捷 `✕` 清空按钮；
+  2. **【带复选框的下拉浮层菜单（Dropdown Popovers）】**：
+     - 点击展开悬浮列表，内置 `[全选 | 清空]` 快捷操作栏与带数量统计的复选框列表；
+     - 全局 `click-outside` 监听，点击页面任意外部区域自动平滑收起；
+  3. **【数据看板与导出联动】**：
+     - 微数据看板与导出 Excel 完全与多选下拉过滤结果实时联动；
+- **验证与测试**：
+  - 前端执行 `npm run build` 生产打包编译 100% 成功（0 语法/类型错误）。
+
 ## 2026-08-17 [全局管理 GlobalManagementView 管件基准支持“全部标段”全网视图与数据库级字段交互]
 - **需求目标与交互重构**：响应用户指令，在“需求主体管件基准设计量与计划采购量”卡片中新增“全部标段”全网视图选项，并将 RevoGrid 表格升级为按数据库表结构形态交互（显式呈现 `section_1_id` / 标段ID），支持跨标段全网查询、编辑、导出与导入；
 - **具体实施与改动文件（`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`）**：

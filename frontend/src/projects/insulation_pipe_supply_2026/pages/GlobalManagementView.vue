@@ -2166,6 +2166,8 @@ function normalizeFittingBaselineRows(rows) {
     pressure_rating: String(item.pressure_rating || '').trim(),
     compensation_mm: item.compensation_mm != null ? Number(item.compensation_mm) : null,
     flow_direction: String(item.flow_direction || '').trim(),
+    raw_model_spec: String(item.raw_model_spec || '').trim(),
+    raw_name: String(item.raw_name || '').trim(),
     remark: String(item.remark || '').trim(),
     __row_key: `fitting::${item.section_1_id || 'sec'}::${item.system_type || 'sys'}::${item.standard_name || 'std'}::${item.model_spec || 'model'}::${index}`,
   }))
@@ -2503,6 +2505,18 @@ const fittingGridColumns = computed(() => [
     sortable: true,
   },
   {
+    name: '原型号规格',
+    prop: 'raw_model_spec',
+    size: 160,
+    sortable: true,
+  },
+  {
+    name: '原名称',
+    prop: 'raw_name',
+    size: 150,
+    sortable: true,
+  },
+  {
     name: '说明备注',
     prop: 'remark',
     size: 180,
@@ -2599,7 +2613,7 @@ function exportFittingBaselineTemplate() {
     '序号', '标段ID', '系统类型', '物理类别', '标准名称', '型号规格', '单位',
     '设计使用量', '计划采购量', '主径DN', '次径DN', '角度(°)', '弯曲半径倍数',
     '弯曲半径(m)', '阀门型号', '外径Φ(mm)', '壁厚(mm)', '长度(m)',
-    '公称压力/压力等级', '补偿量(mm)', '流向/方向', '备注'
+    '公称压力/压力等级', '补偿量(mm)', '流向/方向', '备注', '原型号规格', '原名称'
   ]
   
   let rows = []
@@ -2627,11 +2641,13 @@ function exportFittingBaselineTemplate() {
       item.compensation_mm,
       item.flow_direction || '',
       item.remark || '',
+      item.raw_model_spec || '',
+      item.raw_name || '',
     ])
   } else {
     rows = [
-      [1, currentSecId, '高温水', '弯头', '塑套钢预制保温弯头', '90° DN1000 R=1.5DN', '个', 24, 24, 1000, null, 90, 1.5, null, '', null, null, null, '', null, '', ''],
-      [2, currentSecId, '高温水', '三通', '塑套钢预制保温跨越三通', 'DN1000/DN600', '个', 8, 8, 1000, 600, null, null, null, '', null, null, null, '', null, '', ''],
+      [1, currentSecId, '高温水', '弯头', '塑套钢预制保温弯头', '90° DN1000 R=1.5DN', '个', 24, 24, 1000, null, 90, 1.5, null, '', null, null, null, '', null, '', '', '90° DN1000 R=1.5DN', '塑套钢预制保温弯头'],
+      [2, currentSecId, '高温水', '三通', '塑套钢预制保温跨越三通', 'DN1000/DN600', '个', 8, 8, 1000, 600, null, null, null, '', null, null, null, '', null, '', '', 'DN1000/DN600', '塑套钢预制保温跨越三通'],
     ]
   }
 
@@ -2728,6 +2744,8 @@ function handleFittingExcelFile(event) {
             pressure_rating: String(getVal('公称压力/压力等级') ?? getVal('公称压力') ?? '').trim(),
             compensation_mm: cleanNum(getVal('补偿量(mm)') ?? getVal('补偿量')),
             flow_direction: String(getVal('流向/方向') ?? getVal('流向') ?? '').trim(),
+            raw_model_spec: String(getVal('原型号规格') || getVal('原始型号规格') || '').trim(),
+            raw_name: String(getVal('原名称') || getVal('原始名称') || '').trim(),
             remark: String(getVal('备注') || '').trim(),
           }
         } else {
@@ -2914,6 +2932,8 @@ function buildSectionPayload(section) {
       pressure_rating: String(item.pressure_rating || '').trim(),
       compensation_mm: item.compensation_mm != null ? Number(item.compensation_mm) : null,
       flow_direction: String(item.flow_direction || '').trim(),
+      raw_model_spec: String(item.raw_model_spec || '').trim(),
+      raw_name: String(item.raw_name || '').trim(),
       remark: String(item.remark || '').trim(),
     }))
   }

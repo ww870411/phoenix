@@ -80,6 +80,8 @@ def ensure_baseline_tables() -> None:
                 pressure_rating VARCHAR(64),
                 compensation_mm NUMERIC(10, 2),
                 flow_direction VARCHAR(64),
+                raw_model_spec VARCHAR(255),
+                raw_name VARCHAR(128),
                 remark TEXT,
                 extra_params JSONB NOT NULL DEFAULT '{}'::jsonb,
                 created_by VARCHAR(128),
@@ -109,6 +111,8 @@ def ensure_baseline_tables() -> None:
             ("pressure_rating", "VARCHAR(64)"),
             ("compensation_mm", "NUMERIC(10, 2)"),
             ("flow_direction", "VARCHAR(64)"),
+            ("raw_model_spec", "VARCHAR(255)"),
+            ("raw_name", "VARCHAR(128)"),
             ("extra_params", "JSONB NOT NULL DEFAULT '{}'::jsonb"),
         ]
         for col_name, col_def in alter_cols:
@@ -140,15 +144,6 @@ def ensure_baseline_tables() -> None:
             session.execute(text("DROP INDEX IF EXISTS tube.uq_tube_fitting_baseline_sec_type_spec_sub;"))
         except Exception:
             pass
-
-        # 确保 sequence 正确绑定自增
-        session.execute(text("""
-            CREATE SEQUENCE IF NOT EXISTS tube.tube_pipe_baseline_id_seq;
-            ALTER TABLE tube.tube_pipe_baseline ALTER COLUMN id SET DEFAULT nextval('tube.tube_pipe_baseline_id_seq');
-            
-            CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_baseline_id_seq;
-            ALTER TABLE tube.tube_fitting_baseline ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_baseline_id_seq');
-        """))
 
         # 创建新联合唯一索引与高频查询索引
         session.execute(text("""
@@ -330,7 +325,8 @@ def list_fitting_baselines(
                    unit, design_qty, purchase_plan_qty,
                    main_dn, sub_dn, angle, bending_radius_ratio, bending_radius_m,
                    valve_model, outer_diameter, wall_thickness, length_m,
-                   pressure_rating, compensation_mm, flow_direction, remark, extra_params,
+                   pressure_rating, compensation_mm, flow_direction,
+                   raw_model_spec, raw_name, remark, extra_params,
                    created_by, created_at, updated_by, updated_at
             FROM tube.tube_fitting_baseline
             WHERE 1=1
@@ -374,6 +370,8 @@ def list_fitting_baselines(
                 "pressure_rating": row["pressure_rating"] or "",
                 "compensation_mm": float(row["compensation_mm"]) if row["compensation_mm"] is not None else None,
                 "flow_direction": row["flow_direction"] or "",
+                "raw_model_spec": row.get("raw_model_spec") or "",
+                "raw_name": row.get("raw_name") or "",
                 "remark": row["remark"] or "",
                 "extra_params": row["extra_params"] or {},
                 "created_by": row["created_by"] or "",
@@ -408,14 +406,14 @@ def save_fitting_baselines(
                 design_qty, purchase_plan_qty,
                 main_dn, sub_dn, angle, bending_radius_ratio, bending_radius_m,
                 valve_model, outer_diameter, wall_thickness, length_m,
-                pressure_rating, compensation_mm, flow_direction, remark, extra_params,
+                pressure_rating, compensation_mm, flow_direction, raw_model_spec, raw_name, remark, extra_params,
                 created_by, updated_by, updated_at
             ) VALUES (
                 :section_1_id, :system_type, :category, :standard_name, :model_spec, :sub_model_spec, :unit,
                 :design_qty, :purchase_plan_qty,
                 :main_dn, :sub_dn, :angle, :bending_radius_ratio, :bending_radius_m,
                 :valve_model, :outer_diameter, :wall_thickness, :length_m,
-                :pressure_rating, :compensation_mm, :flow_direction, :remark, '{}'::jsonb,
+                :pressure_rating, :compensation_mm, :flow_direction, :raw_model_spec, :raw_name, :remark, '{}'::jsonb,
                 :operator_name, :operator_name, NOW()
             )
             ON CONFLICT (section_1_id, system_type, standard_name, model_spec, sub_model_spec) DO UPDATE SET
@@ -435,6 +433,8 @@ def save_fitting_baselines(
                 pressure_rating = EXCLUDED.pressure_rating,
                 compensation_mm = EXCLUDED.compensation_mm,
                 flow_direction = EXCLUDED.flow_direction,
+                raw_model_spec = EXCLUDED.raw_model_spec,
+                raw_name = EXCLUDED.raw_name,
                 remark = EXCLUDED.remark,
                 updated_by = EXCLUDED.updated_by,
                 updated_at = NOW()
@@ -475,6 +475,8 @@ def save_fitting_baselines(
                     "pressure_rating": _clean_str(it.get("pressure_rating")),
                     "compensation_mm": _clean_num_nullable(it.get("compensation_mm")),
                     "flow_direction": _clean_str(it.get("flow_direction")),
+                    "raw_model_spec": _clean_str(it.get("raw_model_spec")),
+                    "raw_name": _clean_str(it.get("raw_name")),
                     "remark": _clean_str(it.get("remark")),
                     "operator_name": _clean_str(operator_name) or "system",
                 }
@@ -545,6 +547,8 @@ def import_fitting_baselines_from_excel(
             "pressure_rating": _clean_str(_get_val(r, "公称压力/压力等级") or _get_val(r, "公称压力")),
             "compensation_mm": _clean_num_nullable(_get_val(r, "补偿量(mm)") or _get_val(r, "补偿量")),
             "flow_direction": _clean_str(_get_val(r, "流向/方向") or _get_val(r, "流向")),
+            "raw_model_spec": _clean_str(_get_val(r, "原型号规格") or _get_val(r, "原始型号规格")),
+            "raw_name": _clean_str(_get_val(r, "原名称") or _get_val(r, "原始名称")),
             "remark": _clean_str(_get_val(r, "备注")),
         }
         items.append(item)

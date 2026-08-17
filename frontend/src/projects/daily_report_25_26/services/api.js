@@ -319,6 +319,18 @@ export async function getTubeDemandManagementBaseline(projectKey, section1Id) {
   return response.json()
 }
 
+export async function getTubeDemandManagementFittingBaseline(projectKey, section1Id) {
+  const params = new URLSearchParams({ section_1_id: String(section1Id || '') })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/fitting-baseline?${params.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取需求侧管件基准数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeDemandManagementPlanMatrix(projectKey, section1Id, anchorDate) {
   const params = new URLSearchParams({
     section_1_id: String(section1Id || ''),
