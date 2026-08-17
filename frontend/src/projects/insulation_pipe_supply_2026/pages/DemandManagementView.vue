@@ -1242,28 +1242,67 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th style="width: 50px; text-align: center;">序号</th>
-                    <th style="width: 80px; text-align: center;">系统类型</th>
-                    <th style="width: 90px;">物理类别</th>
-                    <th style="min-width: 150px;">标准名称</th>
-                    <th style="min-width: 160px;">型号规格</th>
-                    <th style="min-width: 120px;">细分规格/子型号</th>
-                    <th style="width: 75px; text-align: right;">主径DN</th>
-                    <th style="width: 75px; text-align: right;">次径DN</th>
-                    <th style="width: 75px; text-align: right;">角度(°)</th>
-                    <th style="width: 80px; text-align: right;">弯曲倍数</th>
-                    <th style="width: 110px;">阀门/公称压力</th>
-                    <th style="min-width: 130px;">原型号规格</th>
-                    <th style="min-width: 130px;">原名称</th>
-                    <th style="width: 60px; text-align: center;">单位</th>
-                    <th style="width: 105px; text-align: right; color: #1d4ed8;">设计使用量</th>
-                    <th style="width: 115px; text-align: right; color: #059669;">计划采购总量</th>
-                    <th style="min-width: 140px;">说明备注</th>
+                    <th style="width: 44px; min-width: 44px; max-width: 44px; padding: 8px 4px; text-align: center; white-space: nowrap;">序号</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'system_type' }" style="min-width: 95px; text-align: center; white-space: nowrap;" @click="handleFittingSort('system_type')">
+                      系统类型
+                      <span class="sort-icon">{{ fittingSortState.key === 'system_type' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'category' }" style="min-width: 105px; white-space: nowrap;" @click="handleFittingSort('category')">
+                      物理类别
+                      <span class="sort-icon">{{ fittingSortState.key === 'category' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'standard_name' }" style="min-width: 160px; white-space: nowrap;" @click="handleFittingSort('standard_name')">
+                      标准名称
+                      <span class="sort-icon">{{ fittingSortState.key === 'standard_name' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'model_spec' }" style="min-width: 170px; white-space: nowrap;" @click="handleFittingSort('model_spec')">
+                      型号规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'sub_model_spec' }" style="min-width: 110px; white-space: nowrap;" @click="handleFittingSort('sub_model_spec')">
+                      细分规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'sub_model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'main_dn' }" style="min-width: 90px; text-align: right; white-space: nowrap;" @click="handleFittingSort('main_dn')">
+                      主径DN
+                      <span class="sort-icon">{{ fittingSortState.key === 'main_dn' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'sub_dn' }" style="min-width: 90px; text-align: right; white-space: nowrap;" @click="handleFittingSort('sub_dn')">
+                      次径DN
+                      <span class="sort-icon">{{ fittingSortState.key === 'sub_dn' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'angle' }" style="min-width: 85px; text-align: right; white-space: nowrap;" @click="handleFittingSort('angle')">
+                      角度(°)
+                      <span class="sort-icon">{{ fittingSortState.key === 'angle' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'bending_radius_ratio' }" style="min-width: 95px; text-align: right; white-space: nowrap;" @click="handleFittingSort('bending_radius_ratio')">
+                      弯曲倍数
+                      <span class="sort-icon">{{ fittingSortState.key === 'bending_radius_ratio' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="min-width: 130px; white-space: nowrap;">阀门/公称压力</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'raw_model_spec' }" style="min-width: 140px; white-space: nowrap;" @click="handleFittingSort('raw_model_spec')">
+                      原型号规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'raw_model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'raw_name' }" style="min-width: 140px; white-space: nowrap;" @click="handleFittingSort('raw_name')">
+                      原名称
+                      <span class="sort-icon">{{ fittingSortState.key === 'raw_name' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="width: 50px; min-width: 50px; max-width: 50px; padding: 8px 4px; text-align: center; white-space: nowrap;">单位</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'design_qty' }" style="min-width: 125px; text-align: right; color: #1d4ed8; white-space: nowrap;" @click="handleFittingSort('design_qty')">
+                      设计使用量
+                      <span class="sort-icon">{{ fittingSortState.key === 'design_qty' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'purchase_plan_qty' }" style="min-width: 135px; text-align: right; color: #059669; white-space: nowrap;" @click="handleFittingSort('purchase_plan_qty')">
+                      计划采购总量
+                      <span class="sort-icon">{{ fittingSortState.key === 'purchase_plan_qty' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="min-width: 140px; white-space: nowrap;">说明备注</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, idx) in filteredFittingBaselineRows" :key="row.id || idx">
-                    <td class="cell-text" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                  <tr v-for="(row, idx) in sortedFittingBaselineRows" :key="row.id || idx">
+                    <td class="cell-text" style="width: 44px; min-width: 44px; max-width: 44px; padding: 6px 4px; text-align: center; color: #94a3b8; font-size: 12px;">{{ idx + 1 }}</td>
                     <td class="cell-text" style="text-align: center;">
                       <span :style="{
                         fontSize: '11.5px',
@@ -1289,7 +1328,7 @@
                     </td>
                     <td class="cell-text font-mono" :title="row.raw_model_spec">{{ row.raw_model_spec || '—' }}</td>
                     <td class="cell-text" :title="row.raw_name">{{ row.raw_name || '—' }}</td>
-                    <td class="cell-text" style="text-align: center;">{{ row.unit || '个' }}</td>
+                    <td class="cell-text" style="width: 50px; min-width: 50px; max-width: 50px; padding: 6px 4px; text-align: center;">{{ row.unit || '个' }}</td>
                     <td class="cell-number" style="font-weight: 700; color: #1d4ed8;">{{ formatNumber(row.design_qty) }}</td>
                     <td class="cell-number" style="font-weight: 700; color: #059669;">{{ formatNumber(row.purchase_plan_qty) }}</td>
                     <td class="cell-text" :title="row.remark">{{ row.remark || '—' }}</td>
@@ -2888,6 +2927,59 @@ const filteredFittingBaselineRows = computed(() => {
   return list
 })
 
+// 表头排序状态 (点击升序 -> 点击降序 -> 点击重置)
+const fittingSortState = reactive({
+  key: '',
+  order: 'asc', // 'asc' | 'desc'
+})
+
+function handleFittingSort(key) {
+  if (fittingSortState.key === key) {
+    if (fittingSortState.order === 'asc') {
+      fittingSortState.order = 'desc'
+    } else if (fittingSortState.order === 'desc') {
+      fittingSortState.key = ''
+      fittingSortState.order = 'asc'
+    }
+  } else {
+    fittingSortState.key = key
+    fittingSortState.order = 'asc'
+  }
+}
+
+const sortedFittingBaselineRows = computed(() => {
+  const list = [...filteredFittingBaselineRows.value]
+  if (!fittingSortState.key) {
+    return list
+  }
+  const { key, order } = fittingSortState
+  const multiplier = order === 'asc' ? 1 : -1
+
+  return list.sort((a, b) => {
+    let valA = a[key]
+    let valB = b[key]
+
+    const isNullA = valA === null || valA === undefined || valA === ''
+    const isNullB = valB === null || valB === undefined || valB === ''
+
+    if (isNullA && isNullB) return 0
+    if (isNullA) return 1
+    if (isNullB) return -1
+
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return (valA - valB) * multiplier
+    }
+
+    const numA = Number(valA)
+    const numB = Number(valB)
+    if (!isNaN(numA) && !isNaN(numB) && typeof valA !== 'boolean' && typeof valB !== 'boolean') {
+      return (numA - numB) * multiplier
+    }
+
+    return String(valA).localeCompare(String(valB), 'zh-CN', { numeric: true }) * multiplier
+  })
+})
+
 // 实时统计计算
 const fittingBaselineStats = computed(() => {
   let totalDesignQty = 0
@@ -3327,7 +3419,7 @@ async function loadFittingBaseline() {
 }
 
 function exportDemandFittingBaseline() {
-  const rows = filteredFittingBaselineRows.value
+  const rows = sortedFittingBaselineRows.value
   if (!rows.length) return
 
   const headers = [
@@ -5598,5 +5690,44 @@ function jumpToUsageTab() {
 .reset-filter-btn:hover {
   background: #fee2e2 !important;
   border-color: #fca5a5 !important;
+}
+
+/* 📊 表格可点击排序表头样式 (Click-to-Sort Headers) */
+.sortable-th {
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: all 0.18s ease !important;
+  position: relative;
+  white-space: nowrap !important;
+}
+
+.sortable-th:hover {
+  background: #f1f5f9 !important;
+  color: #1d4ed8 !important;
+}
+
+.sortable-th.sorted {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+  border-bottom: 2px solid #2563eb !important;
+}
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+  vertical-align: middle;
+  transition: color 0.15s ease;
+}
+
+.sortable-th.sorted .sort-icon {
+  color: #2563eb;
+  font-weight: bold;
+}
+
+.sortable-th:hover .sort-icon {
+  color: #3b82f6;
 }
 </style>
