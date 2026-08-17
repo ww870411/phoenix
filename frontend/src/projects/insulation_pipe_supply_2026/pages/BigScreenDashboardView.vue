@@ -11,7 +11,6 @@
       </div>
 
       <div class="header-title-box">
-        <div class="header-title-glow"></div>
         <h1 class="header-title">大连洁净能源集团 · 2026预制直埋保温管智慧供应链调度大屏</h1>
         <div class="header-sub">
           <span>三大保供制造管厂直供现场</span>
@@ -253,7 +252,7 @@
         </div>
       </section>
 
-      <!-- 中间栏：重构升级版 · 数字孪生全景供需流向中枢 -->
+      <!-- 中间栏：重构升级版 · 高工规整双系统拓扑中枢 (定向流光 + 交互高亮) -->
       <section class="screen-col center-col">
         <div class="panel-box map-topology-master-panel">
           <!-- 拓扑头部导航与状态过滤 -->
@@ -263,7 +262,7 @@
                 <span class="title-icon">🌐</span>
                 <span>数字孪生 · 供需全景智慧流向拓扑</span>
               </div>
-              <div class="topo-sub-tag">3大制造管厂直供 ──► 10大施工标段现场</div>
+              <div class="topo-sub-tag">3大制造管厂专线直供 ──► 10大施工标段</div>
             </div>
 
             <!-- 系统分类切换 Tabs -->
@@ -272,12 +271,12 @@
                 class="sys-tab-btn" 
                 :class="{ active: activeSectionTab === 'all' }"
                 @click="setSectionTab('all')"
-              >全网标段 (10)</button>
+              >全网总览 (10)</button>
               <button 
                 class="sys-tab-btn high" 
                 :class="{ active: activeSectionTab === 'high' }"
                 @click="setSectionTab('high')"
-              >🔥 高温水主线 (4)</button>
+              >🔥 高温水干线 (4)</button>
               <button 
                 class="sys-tab-btn low" 
                 :class="{ active: activeSectionTab === 'low' }"
@@ -287,31 +286,17 @@
 
             <!-- 图例说明 -->
             <div class="topology-legend">
-              <span class="legend-item"><span class="dot-line cyan"></span>直管直运</span>
-              <span class="legend-item"><span class="dot-line gold"></span>管件专运</span>
-              <span class="legend-item"><span class="dot-point active"></span>活跃节点</span>
+              <span class="legend-item"><span class="dot-line cyan"></span>直管专线</span>
+              <span class="legend-item"><span class="dot-line gold"></span>管件专线</span>
+              <span class="legend-item"><span class="dot-point active"></span>活跃路由</span>
             </div>
           </div>
 
-          <!-- 拓扑主舞台：左管厂 + 中流向通道 + 右标段矩阵 -->
+          <!-- 拓扑主舞台：左管厂 (230px) + 中流向通道 (50px) + 右双系统矩阵 (1fr) -->
           <div class="topology-container" ref="topologyContainerRef">
-            <!-- 动态贝塞尔飞线与激光粒子 SVG 视层 (置于最上层 z-index: 20，绝不被遮挡) -->
+            <!-- 动态贝塞尔飞线与激光粒子 SVG 视层 (置于最上层 z-index: 20，硬件加速) -->
             <svg class="topology-svg" ref="svgRef">
               <defs>
-                <filter id="glow-cyan-filter" x="-30%" y="-30%" width="160%" height="160%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-                <filter id="glow-gold-filter" x="-30%" y="-30%" width="160%" height="160%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
                 <linearGradient id="grad-pipe-line" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stop-color="#00f2fe" />
                   <stop offset="100%" stop-color="#38bdf8" />
@@ -322,21 +307,28 @@
                 </linearGradient>
               </defs>
 
-              <!-- 底层基础静态管线 -->
+              <!-- 1. 底层静止基准管道 (规整清晰，不刺眼) -->
               <g class="flylines-base-layer">
                 <path 
                   v-for="line in flylines" 
                   :key="'base-' + line.id"
                   :d="line.d" 
                   class="flyline-base"
-                  :class="line.type"
+                  :class="[
+                    line.type,
+                    { 
+                      dimmed: isAnyHovered && !isLineHighlighted(line),
+                      highlighted: isLineHighlighted(line)
+                    }
+                  ]"
                 />
               </g>
 
-              <!-- 上层脉冲流动的动态光流带 (持续流动) -->
+              <!-- 2. 上层定向脉冲流光 (仅在发货、活跃路由或鼠标悬停对应管厂/标段时才启动动效，绝非全屏杂乱乱飞) -->
               <g class="flylines-stream-layer">
                 <path 
                   v-for="line in flylines" 
+                  v-show="isLineActive(line)"
                   :key="'stream-' + line.id"
                   :d="line.d" 
                   class="flyline-stream"
@@ -344,14 +336,13 @@
                 />
               </g>
 
-              <!-- 发货时触发的高亮激光能量包粒子 -->
+              <!-- 3. 发货时触发的单点高亮激光能量包粒子 -->
               <g class="particles-layer">
                 <circle 
                   v-for="p in activeParticles" 
                   :key="p.id"
-                  r="6" 
+                  r="5" 
                   :fill="p.type === 'pipe' ? '#00f2fe' : '#fbbf24'"
-                  :filter="p.type === 'pipe' ? 'url(#glow-cyan-filter)' : 'url(#glow-gold-filter)'"
                   class="laser-particle"
                 >
                   <animateMotion 
@@ -365,7 +356,7 @@
               </g>
             </svg>
 
-            <!-- 拓扑节点三栏排版架构 -->
+            <!-- 拓扑节点排版架构：左管厂 (230px) + 中通道 (50px) + 右双系统立柱 (1fr) -->
             <div class="topology-layout-grid">
               <!-- 1. 左侧：供给制造基地 (Supply Hub) -->
               <div class="supply-hub-col">
@@ -377,16 +368,18 @@
                     v-for="sup in supplyNodes" 
                     :key="sup.id" 
                     class="supply-node-card"
-                    :class="{ active: activeNodeIds.has(sup.id) }"
+                    :class="{ 
+                      active: activeNodeIds.has(sup.id),
+                      hovered: hoveredSupplierId === sup.id,
+                      dimmed: (hoveredSupplierId && hoveredSupplierId !== sup.id) || (hoveredSectionId && !isSupplierOfSection(sup.id, hoveredSectionId))
+                    }"
                     :id="'node-' + sup.id"
+                    @mouseenter="hoveredSupplierId = sup.id"
+                    @mouseleave="hoveredSupplierId = null"
                   >
                     <div class="sup-card-top">
                       <span class="sup-code-badge">{{ sup.code }}</span>
                       <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
-                    </div>
-                    
-                    <div class="sup-person-row">
-                      <span class="sup-contact-pill">👤 {{ sup.contact }}</span>
                     </div>
 
                     <div class="sup-scope-row">
@@ -412,73 +405,138 @@
                 </div>
               </div>
 
-              <!-- 3. 右侧：10 大施工标段工程现场 (Demand Hub Grid) -->
+              <!-- 3. 右侧：10 大施工标段（按 高温水干线 与 低温水分支 两大规整立柱排布） -->
               <div class="demand-hub-col">
-                <div class="hub-header">
-                  <span class="hub-badge demand">🎯 施工标段现场 ({{ displayedSections.length }})</span>
-                </div>
-                
-                <div class="demand-cards-grid" @scroll="recalculateFlylines">
-                  <div 
-                    v-for="sec in displayedSections" 
-                    :key="sec.id" 
-                    class="demand-node-card"
-                    :class="{ 
-                      active: activeNodeIds.has('sec_' + sec.id),
-                      highlighted: lastImpactedSectionId === sec.id,
-                      completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
-                    }"
-                    :id="'node-sec_' + sec.id"
-                  >
-                    <!-- 物理对齐连接端口 (左锚点) -->
-                    <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
-                      <span class="port-dot"></span>
+                <div class="demand-systems-split" @scroll="recalculateFlylines">
+                  <!-- 高温水干线工程立柱 (H1 ~ H4) -->
+                  <div class="system-sub-col high-system" v-if="activeSectionTab !== 'low'">
+                    <div class="system-sub-header high">
+                      <span class="sub-badge high">🔥 高温水直供干线 ({{ highWaterSections.length }})</span>
+                      <span class="sub-route-tip">开元/集团管厂直发</span>
                     </div>
 
-                    <div class="sec-card-header">
-                      <div class="sec-badge-name">
-                        <span class="sec-code-tag" :class="sec.system_type">{{ sec.code }}</span>
-                        <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
+                    <div class="system-cards-list">
+                      <div 
+                        v-for="sec in highWaterSections" 
+                        :key="sec.id" 
+                        class="demand-node-card"
+                        :class="{ 
+                          active: activeNodeIds.has('sec_' + sec.id),
+                          highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
+                          dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                          completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                        }"
+                        :id="'node-sec_' + sec.id"
+                        @mouseenter="hoveredSectionId = sec.id"
+                        @mouseleave="hoveredSectionId = null"
+                      >
+                        <!-- 物理对齐连接端口 (左锚点) -->
+                        <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
+                          <span class="port-dot"></span>
+                        </div>
+
+                        <div class="sec-card-header">
+                          <div class="sec-badge-name">
+                            <span class="sec-code-tag high">{{ sec.code }}</span>
+                            <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
+                          </div>
+                          <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
+                            <span class="chip-dot"></span>
+                            <span>{{ sec.construction_status }}</span>
+                          </span>
+                        </div>
+
+                        <!-- 直管与管件双轨微进度 -->
+                        <div class="sec-metrics-body">
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label">📐 直管</span>
+                              <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
+                              <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
+                            </div>
+                            <div class="micro-bar-bg">
+                              <div class="micro-bar-fill cyan" :style="{ width: Math.min(sec.pipePercent, 100) + '%' }"></div>
+                            </div>
+                          </div>
+
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label">🔩 配件</span>
+                              <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
+                              <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
+                            </div>
+                            <div class="micro-bar-bg">
+                              <div class="micro-bar-fill gold" :style="{ width: Math.min(sec.fittingPercent, 100) + '%' }"></div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
-                        <span class="chip-dot"></span>
-                        <span>{{ sec.construction_status }}</span>
-                      </span>
+                    </div>
+                  </div>
+
+                  <!-- 低温水分支管网立柱 (L1 ~ L6) -->
+                  <div class="system-sub-col low-system" v-if="activeSectionTab !== 'high'">
+                    <div class="system-sub-header low">
+                      <span class="sub-badge low">❄️ 低温水分支管网 ({{ lowWaterSections.length }})</span>
+                      <span class="sub-route-tip">鑫瑞得/集团管厂直发</span>
                     </div>
 
-                    <!-- 直管与管件双轨进度 -->
-                    <div class="sec-metrics-body">
-                      <div class="sec-metric-line">
-                        <div class="line-info">
-                          <span class="line-label">📐 直管发运</span>
-                          <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
-                          <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
+                    <div class="system-cards-list">
+                      <div 
+                        v-for="sec in lowWaterSections" 
+                        :key="sec.id" 
+                        class="demand-node-card"
+                        :class="{ 
+                          active: activeNodeIds.has('sec_' + sec.id),
+                          highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
+                          dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                          completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                        }"
+                        :id="'node-sec_' + sec.id"
+                        @mouseenter="hoveredSectionId = sec.id"
+                        @mouseleave="hoveredSectionId = null"
+                      >
+                        <!-- 物理对齐连接端口 (左锚点) -->
+                        <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
+                          <span class="port-dot"></span>
                         </div>
-                        <div class="micro-bar-bg">
-                          <div class="micro-bar-fill cyan" :style="{ width: Math.min(sec.pipePercent, 100) + '%' }"></div>
+
+                        <div class="sec-card-header">
+                          <div class="sec-badge-name">
+                            <span class="sec-code-tag low">{{ sec.code }}</span>
+                            <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
+                          </div>
+                          <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
+                            <span class="chip-dot"></span>
+                            <span>{{ sec.construction_status }}</span>
+                          </span>
+                        </div>
+
+                        <!-- 直管与管件双轨微进度 -->
+                        <div class="sec-metrics-body">
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label">📐 直管</span>
+                              <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
+                              <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
+                            </div>
+                            <div class="micro-bar-bg">
+                              <div class="micro-bar-fill cyan" :style="{ width: Math.min(sec.pipePercent, 100) + '%' }"></div>
+                            </div>
+                          </div>
+
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label">🔩 配件</span>
+                              <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
+                              <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
+                            </div>
+                            <div class="micro-bar-bg">
+                              <div class="micro-bar-fill gold" :style="{ width: Math.min(sec.fittingPercent, 100) + '%' }"></div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-
-                      <div class="sec-metric-line">
-                        <div class="line-info">
-                          <span class="line-label">🔩 管件配套</span>
-                          <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
-                          <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
-                        </div>
-                        <div class="micro-bar-bg">
-                          <div class="micro-bar-fill gold" :style="{ width: Math.min(sec.fittingPercent, 100) + '%' }"></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 现场专责与驻点库管员明细 -->
-                    <div class="sec-card-duty-row">
-                      <span class="duty-pill keeper" :title="'驻点库管: ' + sec.warehouse_keepers">
-                        库管: {{ sec.warehouse_keepers }}
-                      </span>
-                      <span class="duty-pill mgr" :title="sec.construction_unit || sec.site_managers">
-                        {{ sec.construction_unit || ('经理: ' + sec.site_managers) }}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -596,7 +654,7 @@
           <span>10 大标段现场签收</span>
         </div>
         <div class="sys-tips">
-          💡 提示：所有数据、标段、厂家及驻点库管员均读取自系统权威配置与 PostgreSQL 数据库，点击【模拟管材直发】可体验全屏联动动效。
+          💡 提示：所有数据与标段均读取自系统权威配置与 PostgreSQL 数据库，鼠标悬停管厂或标段可高亮专属专供路由。
         </div>
       </div>
     </footer>
@@ -604,7 +662,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   getTubeWorkspaceConfigSummary,
@@ -622,7 +680,7 @@ const isDark = computed(() => currentTheme.value === 'dark')
 function toggleTheme() {
   currentTheme.value = currentTheme.value === 'dark' ? 'light' : 'dark'
   localStorage.setItem('phoenix_tube_bigscreen_theme', currentTheme.value)
-  setTimeout(recalculateFlylines, 60)
+  recalculateFlylines()
 }
 
 // --- 基础状态 ---
@@ -637,10 +695,17 @@ let timerClock = null
 let autoDemoTimer = null
 let autoSyncTimer = null
 let resizeObserver = null
+let rAFId = null
 const autoDemoRunning = ref(false)
 const feedFilter = ref('all')
 const lastImpactedSectionId = ref(null)
 const activeSectionTab = ref('all') // 'all' | 'high' | 'low'
+
+// --- 交互悬停聚焦状态 (Hover Focus) ---
+const hoveredSupplierId = ref(null)
+const hoveredSectionId = ref(null)
+const activeShipmentLineIds = ref(new Set()) // 默认全部静止基准线，仅在真实发货或鼠标悬停时按需激活
+const isAnyHovered = computed(() => !!hoveredSupplierId.value || !!hoveredSectionId.value)
 
 // --- 权威默认数据源 (保证第一帧即刻渲染完整节点与飞线) ---
 const defaultSupplyNodes = [
@@ -648,18 +713,16 @@ const defaultSupplyNodes = [
     id: 'sup_kaiyuan',
     raw_id: 'kaiyuan',
     code: 'SA',
-    name: '大连开元热力管道股份有限公司',
-    contact: '薛向新 13998603445',
-    assigned_sections: ['高温水_标段1', '高温水_标段2'],
+    name: '大连开元热力管道',
+    assigned_sections: ['高温水 1、2 标'],
     assigned_section_ids: ['high_lot_1', 'high_lot_2']
   },
   {
     id: 'sup_xinruide',
     raw_id: 'xinruide',
     code: 'SB',
-    name: '河北鑫瑞得管道设备有限公司',
-    contact: '刘宁 18230465777',
-    assigned_sections: ['低温水_标段1', '低温水_标段2', '低温水_标段3'],
+    name: '河北鑫瑞得管道',
+    assigned_sections: ['低温水 1、2、3 标'],
     assigned_section_ids: ['low_lot_1', 'low_lot_2', 'low_lot_3']
   },
   {
@@ -667,23 +730,22 @@ const defaultSupplyNodes = [
     raw_id: '吴近',
     code: 'SC',
     name: '能源集团保温管厂',
-    contact: '吴近 13998473933',
-    assigned_sections: ['全线直运与应急保供'],
-    assigned_section_ids: ['high_lot_1', 'high_lot_2', 'high_lot_3', 'high_lot_4', 'low_lot_1', 'low_lot_2', 'low_lot_3', 'low_lot_4', 'low_lot_5', 'low_lot_6']
+    assigned_sections: ['高水 3、4 标 / 低水 4、5、6 标'],
+    assigned_section_ids: ['high_lot_3', 'high_lot_4', 'low_lot_4', 'low_lot_5', 'low_lot_6']
   }
 ]
 
 const defaultSectionList = [
-  { id: 'high_lot_1', name: '高温水_标段1', code: 'H1', system_type: 'high', construction_status: '施工中', warehouse_keepers: '左巨、赫心彤', construction_unit: '鹤城建设 (翁永鑫)', site_managers: '陶远辉', designKm: 18.5, shippedKm: 12.0, pipePercent: 64.9, totalFittings: 400, shippedFittings: 280, fittingPercent: 70.0 },
-  { id: 'high_lot_2', name: '高温水_标段2', code: 'H2', system_type: 'high', construction_status: '未开工', warehouse_keepers: '左巨、赫心彤', construction_unit: '大连大通 (任强)', site_managers: '卢君', designKm: 15.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 350, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'high_lot_3', name: '高温水_标段3', code: 'H3', system_type: 'high', construction_status: '未开工', warehouse_keepers: '左巨、赫心彤', construction_unit: '', site_managers: '王晓童、宁吉兴', designKm: 14.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 320, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'high_lot_4', name: '高温水_标段4', code: 'H4', system_type: 'high', construction_status: '未开工', warehouse_keepers: '左巨、赫心彤', construction_unit: '', site_managers: '肖贺升、王一粟', designKm: 16.0, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 360, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_1', name: '低温水_标段1', code: 'L1', system_type: 'low', construction_status: '未开工', warehouse_keepers: '李春、李海', construction_unit: '', site_managers: '赵恩海、李生辉', designKm: 8.6, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 180, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_2', name: '低温水_标段2', code: 'L2', system_type: 'low', construction_status: '未开工', warehouse_keepers: '李春、李海', construction_unit: '', site_managers: '赵恩海、刘思洋', designKm: 9.1, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 195, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_3', name: '低温水_标段3', code: 'L3', system_type: 'low', construction_status: '未开工', warehouse_keepers: '王世博、辛宇满', construction_unit: '', site_managers: '许显旺、杜明熹', designKm: 11.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 240, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_4', name: '低温水_标段4', code: 'L4', system_type: 'low', construction_status: '未开工', warehouse_keepers: '王世博、辛宇满', construction_unit: '', site_managers: '许显旺、王楠', designKm: 10.5, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 220, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_5', name: '低温水_标段5', code: 'L5', system_type: 'low', construction_status: '未开工', warehouse_keepers: '杨毅、孟广胜', construction_unit: '', site_managers: '刘思源、韩宜林', designKm: 7.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 160, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_6', name: '低温水_标段6', code: 'L6', system_type: 'low', construction_status: '未开工', warehouse_keepers: '杨毅、孟广胜', construction_unit: '', site_managers: '侯志超、张奇钰', designKm: 8.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 175, shippedFittings: 0, fittingPercent: 0.0 }
+  { id: 'high_lot_1', name: '高温水_标段1', code: 'H1', system_type: 'high', construction_status: '施工中', designKm: 18.5, shippedKm: 12.0, pipePercent: 64.9, totalFittings: 400, shippedFittings: 280, fittingPercent: 70.0 },
+  { id: 'high_lot_2', name: '高温水_标段2', code: 'H2', system_type: 'high', construction_status: '未开工', designKm: 15.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 350, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'high_lot_3', name: '高温水_标段3', code: 'H3', system_type: 'high', construction_status: '未开工', designKm: 14.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 320, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'high_lot_4', name: '高温水_标段4', code: 'H4', system_type: 'high', construction_status: '未开工', designKm: 16.0, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 360, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_1', name: '低温水_标段1', code: 'L1', system_type: 'low', construction_status: '未开工', designKm: 8.6, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 180, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_2', name: '低温水_标段2', code: 'L2', system_type: 'low', construction_status: '未开工', designKm: 9.1, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 195, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_3', name: '低温水_标段3', code: 'L3', system_type: 'low', construction_status: '未开工', designKm: 11.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 240, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_4', name: '低温水_标段4', code: 'L4', system_type: 'low', construction_status: '未开工', designKm: 10.5, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 220, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_5', name: '低温水_标段5', code: 'L5', system_type: 'low', construction_status: '未开工', designKm: 7.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 160, shippedFittings: 0, fittingPercent: 0.0 },
+  { id: 'low_lot_6', name: '低温水_标段6', code: 'L6', system_type: 'low', construction_status: '未开工', designKm: 8.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 175, shippedFittings: 0, fittingPercent: 0.0 }
 ]
 
 // 真实实体库引用
@@ -752,23 +814,47 @@ const fittingTypeSummary = ref([
 // 拓扑节点定义 (3 大真实管厂)
 const supplyNodes = ref([...defaultSupplyNodes])
 
-// 真实 10 大标段充能矩阵数据
+// 真实 10 大标段健康矩阵数据
 const sectionProgressList = ref([...defaultSectionList])
 
-// 过滤展示的标段列表
-const displayedSections = computed(() => {
-  if (activeSectionTab.value === 'high') {
-    return sectionProgressList.value.filter(s => s.system_type === 'high')
-  }
-  if (activeSectionTab.value === 'low') {
-    return sectionProgressList.value.filter(s => s.system_type === 'low')
-  }
-  return sectionProgressList.value
-})
+// 高温水与低温水系统立柱分离
+const highWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'high'))
+const lowWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'low'))
 
 function setSectionTab(tab) {
   activeSectionTab.value = tab
-  setTimeout(recalculateFlylines, 40)
+  recalculateFlylines()
+}
+
+// 供需隶属判断辅助函数
+function isSuppliedBy(secId, supId) {
+  const sup = supplyNodes.value.find(s => s.id === supId)
+  if (!sup) return false
+  const assigned = sup.assigned_section_ids || []
+  return assigned.includes(secId)
+}
+
+function isSupplierOfSection(supId, secId) {
+  return isSuppliedBy(secId, supId)
+}
+
+function isLineHighlighted(line) {
+  if (hoveredSupplierId.value) {
+    return line.fromId === hoveredSupplierId.value
+  }
+  if (hoveredSectionId.value) {
+    return line.toId === 'sec_' + hoveredSectionId.value
+  }
+  return false
+}
+
+function isLineActive(line) {
+  // 1. 鼠标悬停时的流向
+  if (hoveredSupplierId.value && line.fromId === hoveredSupplierId.value) return true
+  if (hoveredSectionId.value && line.toId === 'sec_' + hoveredSectionId.value) return true
+  // 2. 发货中的流向与默认活跃施工路由
+  if (activeShipmentLineIds.value.has(line.id)) return true
+  return false
 }
 
 // 重大保供里程碑
@@ -785,45 +871,67 @@ const milestones = ref([
   },
   {
     title: '开元、鑫瑞得、能源集团管厂三大基地全线直运',
-    desc: '直通现场库管员（左巨、赫心彤、李春、李海、王世博等）闭环签收',
+    desc: '专线直发 10 大施工标段现场，保供直运闭环签收',
     time: '实时'
   }
 ])
 
-// --- 动态飞线生成与激光动画 (数学对齐锚点中心) ---
+// --- 高性能规整流向几何计算 (定向直达专线，绝不产生杂乱交叉) ---
 function recalculateFlylines() {
-  nextTick(() => {
+  if (rAFId) cancelAnimationFrame(rAFId)
+  rAFId = requestAnimationFrame(() => {
+    rAFId = null
     if (!topologyContainerRef.value) return
     const container = topologyContainerRef.value
     const containerRect = container.getBoundingClientRect()
     if (containerRect.width <= 0 || containerRect.height <= 0) return
 
+    // 1. 批量读取港口坐标，单次回流
+    const supRects = new Map()
+    supplyNodes.value.forEach(sup => {
+      const el = document.getElementById('port-out-' + sup.id)
+      if (el) {
+        const r = el.getBoundingClientRect()
+        supRects.set(sup.id, {
+          x: r.left + r.width / 2 - containerRect.left,
+          y: r.top + r.height / 2 - containerRect.top
+        })
+      }
+    })
+
+    const secRects = new Map()
+    sectionProgressList.value.forEach(sec => {
+      const el = document.getElementById('port-in-sec_' + sec.id)
+      if (el) {
+        const r = el.getBoundingClientRect()
+        secRects.set(sec.id, {
+          x: r.left + r.width / 2 - containerRect.left,
+          y: r.top + r.height / 2 - containerRect.top
+        })
+      }
+    })
+
+    // 2. 批量构建规整专属定向飞线 (精准直连负责标段，不再盲目全连)
     const newFlylines = []
-
     supplyNodes.value.forEach((sup, sIdx) => {
+      const p1 = supRects.get(sup.id)
+      if (!p1) return
       const assignedIds = sup.assigned_section_ids || []
-      const elFrom = document.getElementById('port-out-' + sup.id)
-      if (!elFrom) return
-      const rectFrom = elFrom.getBoundingClientRect()
-      const x1 = rectFrom.left + rectFrom.width / 2 - containerRect.left
-      const y1 = rectFrom.top + rectFrom.height / 2 - containerRect.top
 
-      displayedSections.value.forEach((sec) => {
-        const isMatched = assignedIds.length === 0 || assignedIds.includes(sec.id) || sup.raw_id === '吴近'
-        if (isMatched) {
-          const elTo = document.getElementById('port-in-sec_' + sec.id)
-          if (elTo) {
-            const rectTo = elTo.getBoundingClientRect()
-            const x2 = rectTo.left + rectTo.width / 2 - containerRect.left
-            const y2 = rectTo.top + rectTo.height / 2 - containerRect.top
+      sectionProgressList.value.forEach((sec) => {
+        // 仅在属于当前激活 Tab 且符合真实责任划分时绘制管道
+        const inActiveTab = activeSectionTab.value === 'all' || activeSectionTab.value === sec.system_type
+        const isMatched = assignedIds.includes(sec.id)
 
-            const dx = Math.max(Math.abs(x2 - x1), 40)
-            const cx1 = x1 + dx * 0.42
-            const cy1 = y1
-            const cx2 = x2 - dx * 0.42
-            const cy2 = y2
-
-            const d = `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`
+        if (inActiveTab && isMatched) {
+          const p2 = secRects.get(sec.id)
+          if (p2) {
+            const dx = Math.max(Math.abs(p2.x - p1.x), 40)
+            const cx1 = p1.x + dx * 0.45
+            const cy1 = p1.y
+            const cx2 = p2.x - dx * 0.45
+            const cy2 = p2.y
+            const d = `M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`
             newFlylines.push({
               id: `flyline-${sup.id}-${sec.id}`,
               fromId: sup.id,
@@ -848,7 +956,7 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
   }
   if (!targetLine) return
 
-  const particleId = 'particle-' + Date.now() + '-' + Math.floor(Math.random() * 1000)
+  const particleId = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
   const duration = 1.2
 
   activeParticles.value.push({
@@ -858,7 +966,8 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
     duration
   })
 
-  // 节点高亮呼吸
+  // 临时激活此通道脉冲流光与高亮
+  activeShipmentLineIds.value.add(targetLine.id)
   activeNodeIds.value.add(fromId)
   activeNodeIds.value.add(toId)
 
@@ -867,7 +976,11 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
     activeParticles.value = activeParticles.value.filter(p => p.id !== particleId)
     activeNodeIds.value.delete(fromId)
     activeNodeIds.value.delete(toId)
-  }, duration * 1000 + 200)
+    // 3秒后完全恢复平静状态，移除流光特效
+    setTimeout(() => {
+      activeShipmentLineIds.value.delete(targetLine.id)
+    }, 3000)
+  }, duration * 1000 + 100)
 }
 
 // --- 核心业务：触发发货事件（支持真实数据或交互模拟）---
@@ -1089,7 +1202,7 @@ async function loadRealData() {
         rawPipeModels = res.pipe_models
       }
 
-      setTimeout(recalculateFlylines, 80)
+      recalculateFlylines()
     }
   } catch (err) {
     console.warn('读取真实大屏聚合数据接口异常，使用配置与内置字典:', err)
@@ -1100,7 +1213,7 @@ async function loadRealData() {
       rawDemandEntities = summary.demand_entities || []
       rawPipeModels = (summary.pipe_models || []).map(m => m.pipe_model_name || m.id || m)
     }
-    setTimeout(recalculateFlylines, 80)
+    recalculateFlylines()
   }
 }
 
@@ -1109,7 +1222,7 @@ onMounted(() => {
   timerClock = setInterval(updateClock, 1000)
   loadRealData()
 
-  // 监听尺寸变化自适应重算飞线
+  // 监听尺寸变化自适应重算飞线 (rAF 节流)
   if (topologyContainerRef.value && window.ResizeObserver) {
     resizeObserver = new ResizeObserver(() => {
       recalculateFlylines()
@@ -1117,14 +1230,13 @@ onMounted(() => {
     resizeObserver.observe(topologyContainerRef.value)
   }
 
-  // 初始加载触发多次确保排版就绪
+  // 初始加载测量
   setTimeout(recalculateFlylines, 100)
   setTimeout(recalculateFlylines, 400)
-  setTimeout(recalculateFlylines, 1000)
 
   // 每 20 秒静默拉取数据库最新发货与核销状态
   autoSyncTimer = setInterval(loadRealData, 20000)
-  window.addEventListener('resize', recalculateFlylines)
+  window.addEventListener('resize', recalculateFlylines, { passive: true })
 })
 
 onBeforeUnmount(() => {
@@ -1132,13 +1244,14 @@ onBeforeUnmount(() => {
   if (autoDemoTimer) clearInterval(autoDemoTimer)
   if (autoSyncTimer) clearInterval(autoSyncTimer)
   if (resizeObserver) resizeObserver.disconnect()
+  if (rAFId) cancelAnimationFrame(rAFId)
   window.removeEventListener('resize', recalculateFlylines)
 })
 </script>
 
 <style scoped>
 /* ==========================================================================
-   2026 预制直埋保温管智慧供应链数字指挥大屏 (支持科技深色模式 + 明亮浅色模式)
+   2026 预制直埋保温管智慧供应链数字指挥大屏 (工业规整立柱布局 + 聚焦流向动效)
    ========================================================================== */
 
 /* --- 默认深色科技主题 (Dark Theme) --- */
@@ -1147,17 +1260,13 @@ onBeforeUnmount(() => {
   height: 100vh;
   max-height: 100vh;
   overflow: hidden;
-  background-color: #060913;
-  background-image: 
-    radial-gradient(ellipse at 50% 0%, rgba(0, 242, 254, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 80%, rgba(251, 191, 36, 0.06) 0%, transparent 50%),
-    linear-gradient(180deg, #090e1a 0%, #04070d 100%);
+  background: #060913;
   color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transform: translateZ(0);
 }
 
 /* --- 顶栏 Header --- */
@@ -1171,9 +1280,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 0 24px;
   position: relative;
-  background: linear-gradient(180deg, rgba(13, 22, 38, 0.85) 0%, rgba(6, 9, 19, 0.4) 100%);
+  background: #090e1a;
   border-bottom: 1px solid rgba(0, 242, 254, 0.2);
-  backdrop-filter: blur(12px);
   z-index: 20;
 }
 
@@ -1201,8 +1309,8 @@ onBeforeUnmount(() => {
   height: 8px;
   border-radius: 50%;
   background: #00ff87;
-  box-shadow: 0 0 10px #00ff87;
-  animation: pulse-ring 1.8s infinite;
+  box-shadow: 0 0 6px #00ff87;
+  animation: pulse-ring 2s infinite;
 }
 
 .header-time {
@@ -1217,27 +1325,12 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-.header-title-glow {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 400px;
-  height: 20px;
-  background: radial-gradient(circle, rgba(0, 242, 254, 0.4) 0%, transparent 70%);
-  filter: blur(8px);
-  pointer-events: none;
-}
-
 .header-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: 2px;
-  background: linear-gradient(180deg, #ffffff 20%, #90e0ef 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
+  letter-spacing: 1.5px;
+  color: #ffffff;
 }
 
 .header-sub {
@@ -1277,39 +1370,36 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.25s ease;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(15, 23, 42, 0.7);
+  background: #0f172a;
   color: #f1f5f9;
 }
 
 .action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  background: #1e293b;
+  border-color: #00f2fe;
 }
 
 .theme-toggle-btn {
-  background: rgba(0, 242, 254, 0.12);
+  background: rgba(0, 242, 254, 0.1);
   border-color: rgba(0, 242, 254, 0.35);
   color: #00f2fe;
 }
 
 .theme-toggle-btn:hover {
-  background: rgba(0, 242, 254, 0.25);
-  box-shadow: 0 0 12px rgba(0, 242, 254, 0.3);
+  background: rgba(0, 242, 254, 0.2);
 }
 
 .demo-btn {
-  background: rgba(0, 242, 254, 0.15);
+  background: rgba(0, 242, 254, 0.12);
   border-color: rgba(0, 242, 254, 0.4);
   color: #00f2fe;
 }
 
 .demo-btn.active {
-  background: rgba(16, 185, 129, 0.25);
-  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
   color: #10b981;
-  box-shadow: 0 0 14px rgba(16, 185, 129, 0.3);
 }
 
 .sim-btn {
@@ -1319,7 +1409,7 @@ onBeforeUnmount(() => {
 }
 
 .sim-btn:hover {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.25);
   border-color: #60a5fa;
 }
 
@@ -1330,7 +1420,7 @@ onBeforeUnmount(() => {
 }
 
 .sim-btn.fitting:hover {
-  background: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.25);
   border-color: #f59e0b;
 }
 
@@ -1373,15 +1463,13 @@ onBeforeUnmount(() => {
   padding-right: 4px;
 }
 
-/* --- 通用高科技卡片样式 Panel Box --- */
+/* --- 通用卡片样式 Panel Box --- */
 .panel-box {
-  background: linear-gradient(135deg, rgba(13, 22, 38, 0.7) 0%, rgba(6, 12, 24, 0.8) 100%);
-  border: 1px solid rgba(0, 242, 254, 0.15);
-  border-radius: 10px;
+  background: #0b1322;
+  border: 1px solid rgba(0, 242, 254, 0.18);
+  border-radius: 8px;
   padding: 14px 16px;
   position: relative;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
   box-sizing: border-box;
 }
 
@@ -1390,7 +1478,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   left: 0;
-  width: 16px;
+  width: 14px;
   height: 2px;
   background: #00f2fe;
 }
@@ -1401,7 +1489,7 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   width: 2px;
-  height: 16px;
+  height: 14px;
   background: #00f2fe;
 }
 
@@ -1460,8 +1548,8 @@ onBeforeUnmount(() => {
 }
 
 .metric-item {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #111c30;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   padding: 8px 10px;
   position: relative;
@@ -1495,12 +1583,10 @@ onBeforeUnmount(() => {
 
 .highlight-cyan .num {
   color: #00f2fe;
-  text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
 }
 
 .highlight-amber .num {
   color: #fbbf24;
-  text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
 }
 
 .highlight-green .num {
@@ -1523,46 +1609,44 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 700;
   color: #00ff87;
-  background: rgba(0, 255, 135, 0.15);
+  background: rgba(0, 255, 135, 0.2);
   padding: 1px 6px;
   border-radius: 10px;
-  border: 1px solid rgba(0, 255, 135, 0.4);
-  box-shadow: 0 0 8px rgba(0, 255, 135, 0.5);
+  border: 1px solid #00ff87;
   pointer-events: none;
 }
 
 .delta-bubble.amber {
   color: #fbbf24;
-  background: rgba(251, 191, 36, 0.15);
-  border-color: rgba(251, 191, 36, 0.4);
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.2);
+  border-color: #fbbf24;
 }
 
 .delta-bubble.gold {
   color: #fde047;
-  background: rgba(253, 224, 71, 0.15);
-  border-color: rgba(253, 224, 71, 0.4);
+  background: rgba(253, 224, 71, 0.2);
+  border-color: #fde047;
 }
 
 .delta-bubble.orange {
   color: #f97316;
-  background: rgba(249, 115, 22, 0.15);
-  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.2);
+  border-color: #f97316;
 }
 
 .bubble-fade-enter-active,
 .bubble-fade-leave-active {
-  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.5s ease-out;
 }
 
 .bubble-fade-enter-from {
   opacity: 0;
-  transform: translateY(8px) scale(0.8);
+  transform: translateY(6px);
 }
 
 .bubble-fade-leave-to {
   opacity: 0;
-  transform: translateY(-16px) scale(1.1);
+  transform: translateY(-12px);
 }
 
 /* --- 能量槽充能 Progress --- */
@@ -1589,7 +1673,7 @@ onBeforeUnmount(() => {
 .energy-bar-track {
   width: 100%;
   height: 8px;
-  background: rgba(15, 23, 42, 0.8);
+  background: #111c30;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -1599,28 +1683,24 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 4px;
   position: relative;
-  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.8s ease-out;
 }
 
 .energy-bar-fill.cyan-glow {
-  background: linear-gradient(90deg, #0052d4, #4364f7, #00f2fe);
-  box-shadow: 0 0 12px rgba(0, 242, 254, 0.6);
+  background: linear-gradient(90deg, #0052d4, #00f2fe);
 }
 
 .energy-bar-fill.gold-glow {
-  background: linear-gradient(90deg, #d97706, #f59e0b, #fbbf24);
-  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+  background: linear-gradient(90deg, #d97706, #fbbf24);
 }
 
 .energy-bar-light {
   position: absolute;
   top: 0;
   right: 0;
-  width: 14px;
+  width: 10px;
   height: 100%;
   background: #ffffff;
-  box-shadow: 0 0 8px #ffffff;
-  filter: blur(1px);
 }
 
 /* --- 管件类型 Pills --- */
@@ -1635,8 +1715,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(251, 191, 36, 0.2);
+  background: #111c30;
+  border: 1px solid rgba(251, 191, 36, 0.25);
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 10px;
@@ -1662,7 +1742,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(15, 23, 42, 0.5);
+  background: #111c30;
   border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 6px;
   padding: 6px 8px;
@@ -1684,7 +1764,7 @@ onBeforeUnmount(() => {
 }
 
 /* ==========================================================================
-   中间栏：重构升级版 · 数字孪生全景拓扑中枢 (Master Topology Deck)
+   中间栏：数字孪生全景拓扑中枢 (规整双立柱架构 + 交互流向聚焦)
    ========================================================================== */
 
 .map-topology-master-panel {
@@ -1727,7 +1807,7 @@ onBeforeUnmount(() => {
 }
 
 .sys-tab-btn {
-  background: rgba(15, 23, 42, 0.6);
+  background: #111c30;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   padding: 3px 10px;
@@ -1783,12 +1863,10 @@ onBeforeUnmount(() => {
 
 .dot-line.cyan {
   background: #00f2fe;
-  box-shadow: 0 0 6px #00f2fe;
 }
 
 .dot-line.gold {
   background: #fbbf24;
-  box-shadow: 0 0 6px #fbbf24;
 }
 
 .dot-point.active {
@@ -1796,7 +1874,6 @@ onBeforeUnmount(() => {
   height: 7px;
   border-radius: 50%;
   background: #00ff87;
-  box-shadow: 0 0 6px #00ff87;
 }
 
 /* 拓扑主体舞台容器 */
@@ -1806,9 +1883,10 @@ onBeforeUnmount(() => {
   position: relative;
   border: 1px solid rgba(0, 242, 254, 0.2);
   border-radius: 8px;
-  background: radial-gradient(circle at 50% 50%, rgba(13, 27, 42, 0.5) 0%, rgba(6, 11, 20, 0.9) 100%);
+  background: #070d19;
   overflow: hidden;
   box-sizing: border-box;
+  transform: translateZ(0);
 }
 
 .topology-svg {
@@ -1818,14 +1896,16 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 20; /* 提升至 20，确保飞线在最上层完全可见 */
+  z-index: 20;
+  will-change: transform;
 }
 
-/* 底层半透明实线管道 */
+/* 1. 底层静止基准管道 (规整半透明) */
 .flyline-base {
   fill: none;
   stroke-width: 1.5;
   opacity: 0.25;
+  transition: opacity 0.25s ease, stroke-width 0.25s ease;
 }
 
 .flyline-base.pipe {
@@ -1836,29 +1916,37 @@ onBeforeUnmount(() => {
   stroke: #fbbf24;
 }
 
-/* 上层脉冲流动虚线 (持续平滑流动) */
+.flyline-base.dimmed {
+  opacity: 0.06;
+}
+
+.flyline-base.highlighted {
+  opacity: 0.95;
+  stroke-width: 2.2;
+}
+
+/* 2. 上层定向脉冲流光 (仅在发货或悬停时启动动画) */
 .flyline-stream {
   fill: none;
   stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 8 12;
-  opacity: 0.85;
-  animation: flow-travel 1.2s linear infinite;
+  stroke-dasharray: 6 10;
+  opacity: 0.95;
+  animation: flow-travel 1.4s linear infinite;
+  will-change: stroke-dashoffset;
 }
 
 .flyline-stream.pipe {
   stroke: url(#grad-pipe-line);
-  filter: drop-shadow(0 0 4px rgba(0, 242, 254, 0.6));
 }
 
 .flyline-stream.fitting {
   stroke: url(#grad-fitting-line);
-  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
 }
 
 @keyframes flow-travel {
   from {
-    stroke-dashoffset: 40;
+    stroke-dashoffset: 32;
   }
   to {
     stroke-dashoffset: 0;
@@ -1869,7 +1957,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* 拓扑主排版三栏布局 (左: 230px, 中: 60px 通道, 右: 1fr) */
+/* 拓扑主排版三栏布局 (左: 230px, 中: 50px 通道, 右: 1fr) */
 .topology-layout-grid {
   position: absolute;
   top: 0;
@@ -1877,7 +1965,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 230px 60px 1fr;
+  grid-template-columns: 230px 50px 1fr;
   padding: 10px;
   box-sizing: border-box;
   z-index: 10;
@@ -1911,12 +1999,6 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.3);
 }
 
-.hub-badge.demand {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
 .supply-cards-stack {
   flex: 1;
   min-height: 0;
@@ -1927,17 +2009,17 @@ onBeforeUnmount(() => {
 }
 
 .supply-node-card {
-  background: rgba(15, 23, 42, 0.8);
+  background: #0f192b;
   border: 1px solid rgba(0, 242, 254, 0.25);
   border-left: 3px solid #00f2fe;
-  border-radius: 6px;
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 13px 15px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(6px);
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
 }
 
 .supply-node-card:nth-child(2) {
@@ -1948,10 +2030,14 @@ onBeforeUnmount(() => {
   border-left-color: #00ff87;
 }
 
-.supply-node-card.active {
+.supply-node-card.active,
+.supply-node-card.hovered {
   border-color: #00f2fe;
-  box-shadow: 0 0 16px rgba(0, 242, 254, 0.5);
   transform: scale(1.02);
+}
+
+.supply-node-card.dimmed {
+  opacity: 0.35;
 }
 
 .sup-card-top {
@@ -1963,40 +2049,27 @@ onBeforeUnmount(() => {
 .sup-code-badge {
   font-family: monospace;
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   color: #00f2fe;
   background: rgba(0, 242, 254, 0.15);
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .sup-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #f1f5f9;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sup-person-row {
-  display: flex;
-  align-items: center;
-}
-
-.sup-contact-pill {
-  font-size: 10px;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
 .sup-scope-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
+  gap: 6px;
+  font-size: 12px;
 }
 
 .scope-label {
@@ -2031,7 +2104,6 @@ onBeforeUnmount(() => {
   width: 2px;
   height: 60px;
   background: linear-gradient(180deg, transparent, #00f2fe, transparent);
-  animation: beam-pulse 2s infinite;
 }
 
 .channel-text {
@@ -2041,44 +2113,100 @@ onBeforeUnmount(() => {
   letter-spacing: 2px;
 }
 
-/* 3. 需求标段矩阵列 */
+/* 3. 需求标段矩阵列：规整的高温水/低温水双立柱体系 (加大高度与饱满间距) */
 .demand-hub-col {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding-left: 4px;
+  padding-left: 6px;
 }
 
-.demand-cards-grid {
+.demand-systems-split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.system-sub-col {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: rgba(15, 25, 45, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.system-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.sub-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.sub-badge.high {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.sub-badge.low {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.sub-route-tip {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.system-cards-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 3px;
 }
 
 .demand-node-card {
-  background: rgba(15, 23, 42, 0.75);
+  background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 11px 14px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(6px);
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
+  flex-shrink: 0;
 }
 
 .demand-node-card.highlighted {
   border-color: #00f2fe;
-  background: rgba(13, 37, 63, 0.85);
-  box-shadow: 0 0 16px rgba(0, 242, 254, 0.4);
+  background: #11263d;
   transform: translateY(-1px);
+}
+
+.demand-node-card.dimmed {
+  opacity: 0.35;
 }
 
 .demand-node-card.completed {
@@ -2094,16 +2222,16 @@ onBeforeUnmount(() => {
 .sec-badge-name {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
 }
 
 .sec-code-tag {
   font-family: monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
@@ -2118,8 +2246,8 @@ onBeforeUnmount(() => {
 }
 
 .sec-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #f1f5f9;
   white-space: nowrap;
   overflow: hidden;
@@ -2129,10 +2257,10 @@ onBeforeUnmount(() => {
 .sec-status-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 10px;
+  gap: 5px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #94a3b8;
   white-space: nowrap;
@@ -2144,34 +2272,35 @@ onBeforeUnmount(() => {
 }
 
 .chip-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #94a3b8;
 }
 
 .sec-status-chip.running .chip-dot {
   background: #10b981;
-  box-shadow: 0 0 4px #10b981;
 }
 
-/* 双轨微进度条 */
+/* 双轨微进度条 (加大高度与辨识度) */
 .sec-metrics-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
+  margin-top: 1px;
 }
 
 .sec-metric-line {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
 .line-info {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .line-label {
@@ -2188,15 +2317,15 @@ onBeforeUnmount(() => {
 
 .micro-bar-bg {
   width: 100%;
-  height: 3px;
+  height: 5px;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .micro-bar-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: width 0.8s ease;
 }
 
@@ -2206,36 +2335,6 @@ onBeforeUnmount(() => {
 
 .micro-bar-fill.gold {
   background: linear-gradient(90deg, #d97706, #fbbf24);
-}
-
-/* 职责信息行 */
-.sec-card-duty-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-  padding-top: 2px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.05);
-}
-
-.duty-pill {
-  font-size: 9px;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 1px 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-}
-
-.duty-pill.keeper {
-  color: #7dd3fc;
-}
-
-.duty-pill.mgr {
-  color: #cbd5e1;
 }
 
 /* 连接锚点 Node Ports (物理对齐) */
@@ -2256,14 +2355,12 @@ onBeforeUnmount(() => {
   right: -5px;
   background: #060913;
   border: 1.5px solid #00f2fe;
-  box-shadow: 0 0 6px #00f2fe;
 }
 
 .node-port.port-in {
   left: -5px;
   background: #060913;
   border: 1.5px solid #38bdf8;
-  box-shadow: 0 0 6px #38bdf8;
 }
 
 .port-dot {
@@ -2299,7 +2396,7 @@ onBeforeUnmount(() => {
   height: 5px;
   border-radius: 50%;
   background: #10b981;
-  animation: pulse-ring 1.5s infinite;
+  animation: pulse-ring 2s infinite;
 }
 
 .feed-filter-bar {
@@ -2310,7 +2407,7 @@ onBeforeUnmount(() => {
 }
 
 .filter-pill {
-  background: rgba(15, 23, 42, 0.6);
+  background: #111c30;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   padding: 3px 8px;
@@ -2341,7 +2438,7 @@ onBeforeUnmount(() => {
 }
 
 .feed-card {
-  background: rgba(15, 23, 42, 0.65);
+  background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   padding: 8px 10px;
@@ -2349,7 +2446,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
   position: relative;
-  transition: all 0.4s ease;
+  transition: transform 0.3s ease;
   flex-shrink: 0;
 }
 
@@ -2362,8 +2459,7 @@ onBeforeUnmount(() => {
 }
 
 .feed-card.just-arrived {
-  background: rgba(0, 242, 254, 0.18);
-  box-shadow: 0 0 16px rgba(0, 242, 254, 0.4);
+  background: #12223a;
   transform: scale(1.01);
 }
 
@@ -2483,17 +2579,17 @@ onBeforeUnmount(() => {
 /* 战报动画 TransitionGroup */
 .feed-item-enter-active,
 .feed-item-leave-active {
-  transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.35s ease-out;
 }
 
 .feed-item-enter-from {
   opacity: 0;
-  transform: translateY(-20px) scale(0.95);
+  transform: translateY(-12px);
 }
 
 .feed-item-leave-to {
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(12px);
 }
 
 /* --- 重大里程碑 Milestone --- */
@@ -2521,7 +2617,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 8px;
   padding: 5px 6px;
-  background: rgba(15, 23, 42, 0.45);
+  background: #111c30;
   border-radius: 5px;
   border-left: 2px solid #fbbf24;
   flex-shrink: 0;
@@ -2568,7 +2664,7 @@ onBeforeUnmount(() => {
   min-height: 32px;
   max-height: 32px;
   flex-shrink: 0;
-  background: rgba(6, 9, 19, 0.95);
+  background: #04070d;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
@@ -2609,7 +2705,7 @@ onBeforeUnmount(() => {
 /* --- 精美深色科技细滚动条 Custom Scrollbars --- */
 .left-col::-webkit-scrollbar,
 .feed-list-wrapper::-webkit-scrollbar,
-.demand-cards-grid::-webkit-scrollbar,
+.system-cards-list::-webkit-scrollbar,
 .milestone-list::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -2617,7 +2713,7 @@ onBeforeUnmount(() => {
 
 .left-col::-webkit-scrollbar-track,
 .feed-list-wrapper::-webkit-scrollbar-track,
-.demand-cards-grid::-webkit-scrollbar-track,
+.system-cards-list::-webkit-scrollbar-track,
 .milestone-list::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 2px;
@@ -2625,17 +2721,10 @@ onBeforeUnmount(() => {
 
 .left-col::-webkit-scrollbar-thumb,
 .feed-list-wrapper::-webkit-scrollbar-thumb,
-.demand-cards-grid::-webkit-scrollbar-thumb,
+.system-cards-list::-webkit-scrollbar-thumb,
 .milestone-list::-webkit-scrollbar-thumb {
   background: rgba(0, 242, 254, 0.25);
   border-radius: 2px;
-}
-
-.left-col::-webkit-scrollbar-thumb:hover,
-.feed-list-wrapper::-webkit-scrollbar-thumb:hover,
-.demand-cards-grid::-webkit-scrollbar-thumb:hover,
-.milestone-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 242, 254, 0.5);
 }
 
 /* ==========================================================================
@@ -2644,17 +2733,13 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light {
   background-color: #f1f5f9;
-  background-image: 
-    radial-gradient(ellipse at 50% 0%, rgba(2, 132, 199, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 80%, rgba(234, 88, 12, 0.05) 0%, transparent 50%),
-    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  background-image: none;
   color: #0f172a;
 }
 
 .bigscreen-container.light .bigscreen-header {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
+  background: #ffffff;
   border-bottom: 1px solid rgba(203, 213, 225, 0.8);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .bigscreen-container.light .header-badge {
@@ -2667,15 +2752,8 @@ onBeforeUnmount(() => {
   color: #475569;
 }
 
-.bigscreen-container.light .header-title-glow {
-  background: radial-gradient(circle, rgba(2, 132, 199, 0.2) 0%, transparent 70%);
-}
-
 .bigscreen-container.light .header-title {
-  background: linear-gradient(180deg, #0f172a 20%, #0369a1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
+  color: #0f172a;
 }
 
 .bigscreen-container.light .header-sub {
@@ -2683,27 +2761,25 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .action-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(203, 213, 225, 0.8);
+  background: #ffffff;
+  border-color: #cbd5e1;
   color: #334155;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .bigscreen-container.light .action-btn:hover {
-  background: #ffffff;
+  background: #f8fafc;
   color: #0f172a;
   border-color: #94a3b8;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .bigscreen-container.light .theme-toggle-btn {
-  background: rgba(2, 132, 199, 0.12);
+  background: rgba(2, 132, 199, 0.1);
   border-color: rgba(2, 132, 199, 0.35);
   color: #0284c7;
 }
 
 .bigscreen-container.light .demo-btn {
-  background: rgba(2, 132, 199, 0.12);
+  background: rgba(2, 132, 199, 0.1);
   border-color: rgba(2, 132, 199, 0.35);
   color: #0284c7;
 }
@@ -2733,9 +2809,8 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .panel-box {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
+  background: #ffffff;
   border: 1px solid rgba(203, 213, 225, 0.8);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
 }
 
 .bigscreen-container.light .panel-box::before,
@@ -2766,7 +2841,7 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .metric-item {
-  background: rgba(241, 245, 249, 0.85);
+  background: #f8fafc;
   border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
@@ -2780,12 +2855,10 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .highlight-cyan .num {
   color: #0284c7;
-  text-shadow: none;
 }
 
 .bigscreen-container.light .highlight-amber .num {
   color: #d97706;
-  text-shadow: none;
 }
 
 .bigscreen-container.light .highlight-green .num {
@@ -2819,18 +2892,15 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .energy-bar-fill.cyan-glow {
   background: linear-gradient(90deg, #0284c7, #38bdf8);
-  box-shadow: 0 0 8px rgba(2, 132, 199, 0.3);
 }
 
 .bigscreen-container.light .energy-bar-fill.gold-glow {
   background: linear-gradient(90deg, #d97706, #fbbf24);
-  box-shadow: 0 0 8px rgba(217, 119, 6, 0.3);
 }
 
 .bigscreen-container.light .fitting-pill {
   background: #ffffff;
   border-color: rgba(245, 158, 11, 0.3);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .bigscreen-container.light .pill-name {
@@ -2842,7 +2912,7 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .safety-card {
-  background: rgba(241, 245, 249, 0.85);
+  background: #f8fafc;
   border-color: rgba(16, 185, 129, 0.3);
 }
 
@@ -2860,57 +2930,52 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .dot-line.cyan {
   background: #0284c7;
-  box-shadow: 0 0 4px #0284c7;
 }
 
 .bigscreen-container.light .dot-line.gold {
   background: #ea580c;
-  box-shadow: 0 0 4px #ea580c;
 }
 
 .bigscreen-container.light .topology-container {
-  background: radial-gradient(circle at 50% 50%, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
+  background: #f8fafc;
   border-color: rgba(203, 213, 225, 0.8);
 }
 
 .bigscreen-container.light .flyline-base.pipe {
   stroke: #0284c7;
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
 .bigscreen-container.light .flyline-base.fitting {
   stroke: #ea580c;
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
 .bigscreen-container.light .flyline-stream.pipe {
   stroke: #0284c7;
-  filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.5));
 }
 
 .bigscreen-container.light .flyline-stream.fitting {
   stroke: #ea580c;
-  filter: drop-shadow(0 0 3px rgba(234, 88, 12, 0.5));
+}
+
+.bigscreen-container.light .system-sub-col {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(203, 213, 225, 0.8);
 }
 
 .bigscreen-container.light .supply-node-card {
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
   border-color: rgba(203, 213, 225, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
-.bigscreen-container.light .supply-node-card.active {
+.bigscreen-container.light .supply-node-card.active,
+.bigscreen-container.light .supply-node-card.hovered {
   border-color: #0284c7;
-  box-shadow: 0 0 12px rgba(2, 132, 199, 0.3);
 }
 
 .bigscreen-container.light .sup-title {
   color: #0f172a;
-}
-
-.bigscreen-container.light .sup-contact-pill {
-  color: #64748b;
-  background: #f1f5f9;
 }
 
 .bigscreen-container.light .scope-text {
@@ -2918,15 +2983,13 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .demand-node-card {
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
   border-color: rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
 }
 
 .bigscreen-container.light .demand-node-card.highlighted {
   border-color: #0284c7;
   background: #f0f9ff;
-  box-shadow: 0 0 16px rgba(2, 132, 199, 0.25);
 }
 
 .bigscreen-container.light .sec-title {
@@ -2945,28 +3008,14 @@ onBeforeUnmount(() => {
   background: linear-gradient(90deg, #d97706, #fbbf24);
 }
 
-.bigscreen-container.light .duty-pill {
-  background: #f1f5f9;
-}
-
-.bigscreen-container.light .duty-pill.keeper {
-  color: #0284c7;
-}
-
-.bigscreen-container.light .duty-pill.mgr {
-  color: #475569;
-}
-
 .bigscreen-container.light .node-port.port-out {
   background: #ffffff;
   border-color: #0284c7;
-  box-shadow: 0 0 4px #0284c7;
 }
 
 .bigscreen-container.light .node-port.port-in {
   background: #ffffff;
   border-color: #0284c7;
-  box-shadow: 0 0 4px #0284c7;
 }
 
 .bigscreen-container.light .filter-pill {
@@ -2983,14 +3032,12 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .feed-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border-color: rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
 }
 
 .bigscreen-container.light .feed-card.just-arrived {
   background: #f0f9ff;
-  box-shadow: 0 0 14px rgba(2, 132, 199, 0.25);
 }
 
 .bigscreen-container.light .source-name {
@@ -3018,9 +3065,8 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .milestone-item {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border-left-color: #d97706;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .bigscreen-container.light .milestone-badge {
@@ -3036,7 +3082,7 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .bigscreen-footer {
-  background: rgba(255, 255, 255, 0.95);
+  background: #f8fafc;
   border-top-color: rgba(226, 232, 240, 0.9);
   color: #64748b;
 }
@@ -3047,46 +3093,28 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .left-col::-webkit-scrollbar-track,
 .bigscreen-container.light .feed-list-wrapper::-webkit-scrollbar-track,
-.bigscreen-container.light .demand-cards-grid::-webkit-scrollbar-track,
+.bigscreen-container.light .system-cards-list::-webkit-scrollbar-track,
 .bigscreen-container.light .milestone-list::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.05);
 }
 
 .bigscreen-container.light .left-col::-webkit-scrollbar-thumb,
 .bigscreen-container.light .feed-list-wrapper::-webkit-scrollbar-thumb,
-.bigscreen-container.light .demand-cards-grid::-webkit-scrollbar-thumb,
+.bigscreen-container.light .system-cards-list::-webkit-scrollbar-thumb,
 .bigscreen-container.light .milestone-list::-webkit-scrollbar-thumb {
   background: rgba(2, 132, 199, 0.3);
-}
-
-.bigscreen-container.light .left-col::-webkit-scrollbar-thumb:hover,
-.bigscreen-container.light .feed-list-wrapper::-webkit-scrollbar-thumb:hover,
-.bigscreen-container.light .demand-cards-grid::-webkit-scrollbar-thumb:hover,
-.bigscreen-container.light .milestone-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(2, 132, 199, 0.6);
 }
 
 /* --- 关键帧动画 Keyframes --- */
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(0, 255, 135, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(0, 255, 135, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 255, 135, 0);
-  }
-}
-
-@keyframes beam-pulse {
-  0%, 100% {
-    opacity: 0.3;
-    transform: scaleY(0.8);
+    opacity: 0.8;
   }
   50% {
-    opacity: 0.9;
-    transform: scaleY(1.1);
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 0.8;
   }
 }
 

@@ -1,3 +1,49 @@
+## 2026-08-17 预制直埋保温管数字大屏管道流光彻底按需化修复（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **常态特效清理与按需化**：
+  1. **移除常态预置流光**：将 `activeShipmentLineIds` 响应式集合初始化为空，杜绝任何线路在静止状态下常驻动画；
+  2. **统一计时清理**：发货粒子结束后 3 秒无差别移除线路高亮流光，恢复为半透明静态管道；
+  3. **严格按需响应**：仅在真实/模拟发货事件与鼠标 Hover 交互时点亮流光。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字大屏标段卡片高度与垂直空间充实优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **尺寸与间距精细化充实**：
+  1. **扩大卡片高度与内边距**：标段卡片内边距扩充至 `11px 14px`，间距提至 `10px`，管厂卡片提至 `13px 15px`；
+  2. **加深双轨微进度条**：直管与配件进度条高度增厚至 `5px`，达成率百分比与数量文字提至 `11px`；
+  3. **强化标题与状态标签**：标段名称提至 `13px/700`，状态胶囊加宽至 `padding: 2px 8px`，大屏远景更具可视张力。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字大屏标段双立柱规整重构与定向交互流光（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版重构与动效克制治理**：
+  1. **规整双立柱体系**：将 10 大标段划分为【🔥 高温水直供干线（4 标段）】与【❄️ 低温水分支管网（6 标段）】两大纵向对齐立柱，彻底消除错位与散乱感；
+  2. **收敛定向供需连线**：按真实保供责任专供直连，从 30 条杂乱全连收敛为 10 条规整平行的专供管道；
+  3. **定向交互流光机制**：默认呈现静态优雅的工程基准线，仅在发货、重点施工或鼠标悬停（管厂/标段）时定向点亮专属流光与穿梭能量包，其余元素自动柔和暗化。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字大屏性能极致优化与 60FPS 满帧治理（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡顿排查与性能治理实施**：
+  1. **清除 GPU 实时滤镜重绘**：剔除 SVG 动态飞线上的 `filter: drop-shadow` 及高斯模糊，消除数十条曲线在动画过程中的逐帧模糊采样；
+  2. **消除毛玻璃卡顿**：移除所有面板与卡片的 `backdrop-filter: blur`，改用高性能纯净色彩渲染；
+  3. **开启 GPU 硬件加速**：对动态图层应用 `transform: translateZ(0)` 与 `will-change: stroke-dashoffset`；
+  4. **rAF 批量坐标缓存**：重构拓扑几何计算，批量缓存端口坐标并使用 `requestAnimationFrame` 节流，杜绝页面滚动与缩放时的 Layout Thrashing。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字大屏标段与管厂卡片精简优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片内容精简与视觉升级**：
+  1. **去除个人姓名冗余细节**：移除 10 大标段卡片底部的驻点库管姓名与经理姓名，移除三大管厂联系人电话；
+  2. **聚焦核心工程与物料双轨进度**：强化“标段编号/名称/施工状态”与“保温直管 / 关键配件”双轨进度条展示；
+  3. **视觉呼吸感与可读性提升**：卡片内部结构更为通透，标题与数值对比度更强，大屏远景展示更加大气整洁。
+- **构建验证**：`npm run build` 100% 成功。
+
 ## 2026-08-17 预制直埋保温管数字大屏拓扑动效与流光管道深度修复（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
