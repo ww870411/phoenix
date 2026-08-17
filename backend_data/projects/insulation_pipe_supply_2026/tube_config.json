@@ -304,6 +304,118 @@
       "section_1_ids": [
         "low_lot_2"
       ]
+    },
+    {
+      "manager_id": "许显旺",
+      "manager_name": "许显旺",
+      "contact_phone": "13591778203",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "manager_id": "杜明熹",
+      "manager_name": "杜明熹",
+      "contact_phone": "18504111103",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "manager_id": "于鹏飞",
+      "manager_name": "于鹏飞",
+      "contact_phone": "18504111197",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "manager_id": "贾宏乔",
+      "manager_name": "贾宏乔",
+      "contact_phone": "15140699547",
+      "section_1_ids": [
+        "low_lot_3",
+        "low_lot_4"
+      ]
+    },
+    {
+      "manager_id": "王楠",
+      "manager_name": "王楠",
+      "contact_phone": "15698891122",
+      "section_1_ids": [
+        "low_lot_4"
+      ]
+    },
+    {
+      "manager_id": "刘思源",
+      "manager_name": "刘思源",
+      "contact_phone": "15942455921",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "manager_id": "韩宜林",
+      "manager_name": "韩宜林",
+      "contact_phone": "15998410192",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "manager_id": "路宇鹏",
+      "manager_name": "路宇鹏",
+      "contact_phone": "13164543637",
+      "section_1_ids": [
+        "low_lot_5"
+      ]
+    },
+    {
+      "manager_id": "金明皓",
+      "manager_name": "金明皓",
+      "contact_phone": "18840834097",
+      "section_1_ids": [
+        "low_lot_5"
+      ]
+    },
+    {
+      "manager_id": "侯志超",
+      "manager_name": "侯志超",
+      "contact_phone": "15242629305",
+      "section_1_ids": [
+        "low_lot_6"
+      ]
+    },
+    {
+      "manager_id": "张奇钰",
+      "manager_name": "张奇钰",
+      "contact_phone": "18640801318",
+      "section_1_ids": [
+        "low_lot_6"
+      ]
+    },
+    {
+      "manager_id": "杨鑫",
+      "manager_name": "杨鑫",
+      "contact_phone": "15566956191",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
+    },
+    {
+      "manager_id": "闫冬",
+      "manager_name": "闫冬",
+      "contact_phone": "18525372727",
+      "section_1_ids": [
+        "low_lot_5",
+        "low_lot_6"
+      ]
     }
   ],
   "construction_units": [

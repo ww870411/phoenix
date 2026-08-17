@@ -213,6 +213,71 @@
         "username": "刘宇",
         "password": "liuyu_0815",
         "unit": "low_lot_2"
+      },
+      {
+        "username": "许显旺",
+        "password": "xuxianwang_0817",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "杜明熹",
+        "password": "dumingxi_0817",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "于鹏飞",
+        "password": "yupengfei_0817",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "贾宏乔",
+        "password": "jiahongqiao_0817",
+        "unit": "low_lot_3,low_lot_4"
+      },
+      {
+        "username": "王楠",
+        "password": "wangnan_0817",
+        "unit": "low_lot_4"
+      },
+      {
+        "username": "刘思源",
+        "password": "liusiyuan_0817",
+        "unit": "low_lot_5,low_lot_6"
+      },
+      {
+        "username": "韩宜林",
+        "password": "hanyilin_0817",
+        "unit": "low_lot_5,low_lot_6"
+      },
+      {
+        "username": "路宇鹏",
+        "password": "luyupeng_0817",
+        "unit": "low_lot_5"
+      },
+      {
+        "username": "金明皓",
+        "password": "jinminghao_0817",
+        "unit": "low_lot_5"
+      },
+      {
+        "username": "侯志超",
+        "password": "houzhichao_0817",
+        "unit": "low_lot_6"
+      },
+      {
+        "username": "张奇钰",
+        "password": "zhangqiyu_0817",
+        "unit": "low_lot_6"
+      },
+      {
+        "username": "杨鑫",
+        "password": "yangxin_0817",
+        "unit": "low_lot_5,low_lot_6"
+      },
+      {
+        "username": "闫冬",
+        "password": "yandong_0817",
+        "unit": "low_lot_5,low_lot_6"
       }
     ],
     "tube_construction_unit": [

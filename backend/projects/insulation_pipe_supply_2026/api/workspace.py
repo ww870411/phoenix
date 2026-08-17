@@ -3104,13 +3104,9 @@ def get_global_management_history(
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
-    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
-        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
-
     selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
 
-    # 获取原始合并历史数据
+    # 获取原始合并历史数据 (公共历史查询服务，所有具备项目权限的用户均可全量查看)
     rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=None)
     
     # 建立映射字典
@@ -3128,8 +3124,6 @@ def get_global_management_history(
     filtered_rows = []
     for row in rows:
         sec_id = str(row.get("section_1_id") or "").strip()
-        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
-            continue
         if selected_section_1s and sec_id not in selected_section_1s:
             continue
         row["section_1_name"] = section_1_map.get(sec_id) or sec_id
@@ -3171,10 +3165,6 @@ def export_global_management_history(
         raise HTTPException(status_code=400, detail="日期格式不正确，应为 YYYY-MM-DD") from exc
 
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
-    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
-        accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
-
     selected_section_1s = {s.strip() for s in section_1_id.split(",") if s.strip()} if section_1_id else set()
 
     rows = query_history_records(start_date=dt_start, end_date=dt_end, section_1_id=None)
@@ -3182,8 +3172,6 @@ def export_global_management_history(
     filtered_rows = []
     for row in rows:
         sec_id = str(row.get("section_1_id") or "").strip()
-        if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
-            continue
         if selected_section_1s and sec_id not in selected_section_1s:
             continue
         filtered_rows.append(row)
@@ -3756,6 +3744,7 @@ def handle_list_fitting_deliveries(
     search_keyword: str = Query("", description="搜索关键字"),
     page: int = Query(1, ge=1),
     limit: int = Query(200, ge=1, le=500),
+    public_view: bool = Query(False, description="是否为公共查询视角 (不按登录用户身份限制标段与厂家)"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config = load_tube_config()
@@ -3773,6 +3762,10 @@ def handle_list_fitting_deliveries(
     accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, session.group)
     section_scoped_groups = {"tube_supplier", "tube_site_manager", "tube_construction_unit", "tube_warehouse_keeper"}
     supply_scoped_groups = {"tube_supplier"}
+    
+    apply_section_scope = (group in section_scoped_groups) and (not public_view)
+    apply_supply_scope = (group in supply_scoped_groups) and (not public_view)
+
     result = list_fitting_deliveries(
         section_1_id=section_1_id,
         supply_entity_id=supply_entity_id,
@@ -3781,8 +3774,8 @@ def handle_list_fitting_deliveries(
         search_keyword=search_keyword,
         page=page,
         page_size=limit,
-        allowed_section_ids=sorted(accessible_section_ids) if group in section_scoped_groups else None,
-        allowed_supply_ids=sorted(accessible_supply_ids) if group in supply_scoped_groups else None,
+        allowed_section_ids=sorted(accessible_section_ids) if apply_section_scope else None,
+        allowed_supply_ids=sorted(accessible_supply_ids) if apply_supply_scope else None,
     )
     _decorate_delivery_rows(config, result["items"])
     return {"ok": True, **result}

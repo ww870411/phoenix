@@ -84,82 +84,85 @@
         </div>
       </section>
 
-      <!-- 一级大类胶囊分段切换栏 (Segmented Category Bar) -->
-      <div class="category-segment-wrapper" v-if="selectedSection1Id">
-        <div class="category-segment-bar">
-          <button 
-            type="button" 
-            class="category-segment-btn" 
-            :class="{ active: activeCategory === 'pipe' }" 
-            @click="handleCategoryClick('pipe')"
-          >
-            <span class="cat-icon">🔹</span>
-            <span class="cat-label">保温管业务</span>
-            <span class="cat-count">4 项功能</span>
-          </button>
-          <button 
-            type="button" 
-            class="category-segment-btn" 
-            :class="{ active: activeCategory === 'fitting' }" 
-            @click="handleCategoryClick('fitting')"
-          >
-            <span class="cat-icon">🔩</span>
-            <span class="cat-label">管件业务</span>
-            <span class="cat-count">2 项功能</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 二级选项卡导航 (Responsive Sub-Tabs Header) -->
-      <div class="tube-tabs-header-wrap" v-if="selectedSection1Id">
-        <!-- 保温管子标签 -->
-        <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'usage' }" 
-            @click="handleTabClick('usage')"
-          >
-            📊 每日使用消耗填报
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'plan' }" 
-            @click="handleTabClick('plan')"
-          >
-            🕒 三日滚动计划填报
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'logistics' }" 
-            @click="handleTabClick('logistics')"
-          >
-            🚚 现场到货与接收确认
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'baseline' }" 
-            @click="handleTabClick('baseline')"
-          >
-            📋 设计量与采购量
-          </button>
+      <!-- 一体化双层复合导航区 (Unified Compound Navigation Group) -->
+      <div class="nav-composite-group" v-if="selectedSection1Id">
+        <!-- 一级大类胶囊分段切换栏 (Segmented Category Bar) -->
+        <div class="category-segment-wrapper">
+          <div class="category-segment-bar">
+            <button 
+              type="button" 
+              class="category-segment-btn" 
+              :class="{ active: activeCategory === 'pipe' }" 
+              @click="handleCategoryClick('pipe')"
+            >
+              <span class="cat-icon">🔹</span>
+              <span class="cat-label">保温管业务</span>
+              <span class="cat-count">4 项功能</span>
+            </button>
+            <button 
+              type="button" 
+              class="category-segment-btn" 
+              :class="{ active: activeCategory === 'fitting' }" 
+              @click="handleCategoryClick('fitting')"
+            >
+              <span class="cat-icon">🔩</span>
+              <span class="cat-label">管件业务</span>
+              <span class="cat-count">2 项功能</span>
+            </button>
+          </div>
         </div>
 
-        <!-- 管件子标签 -->
-        <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting'">
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'fitting' }" 
-            @click="handleTabClick('fitting')"
-          >
-            🔧 管件发货与到货记录
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'fitting_baseline' }" 
-            @click="handleTabClick('fitting_baseline')"
-          >
-            📋 设计量与采购量
-          </button>
+        <!-- 二级选项卡导航 (Responsive Sub-Tabs Header) -->
+        <div class="tube-tabs-header-wrap">
+          <!-- 保温管子标签 -->
+          <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'usage' }" 
+              @click="handleTabClick('usage')"
+            >
+              📊 每日使用消耗填报
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'plan' }" 
+              @click="handleTabClick('plan')"
+            >
+              🕒 三日滚动计划填报
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'logistics' }" 
+              @click="handleTabClick('logistics')"
+            >
+              🚚 现场到货与接收确认
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'baseline' }" 
+              @click="handleTabClick('baseline')"
+            >
+              📋 设计量与采购量
+            </button>
+          </div>
+
+          <!-- 管件子标签 -->
+          <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'fitting' }" 
+              @click="handleTabClick('fitting')"
+            >
+              🔧 管件发货与到货记录
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'fitting_baseline' }" 
+              @click="handleTabClick('fitting_baseline')"
+            >
+              📋 设计量与采购量
+            </button>
+          </div>
         </div>
       </div>
 
@@ -5045,12 +5048,21 @@ function jumpToUsageTab() {
   background: linear-gradient(90deg, rgba(37, 99, 235, 0.03) 0%, rgba(255, 255, 255, 0) 100%) !important;
 }
 
+/* 🧭 一体化复合双层导航容器 (Unified Compound Navigation Group) */
+.nav-composite-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  width: 100% !important;
+  margin-bottom: 2px !important;
+}
+
 /* 🔹 一级物料大类分段控制器 (Segmented Category Bar) */
 .category-segment-wrapper {
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   padding: 4px !important;
-  margin-bottom: 6px !important;
+  margin: 0 !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
   box-sizing: border-box;
@@ -5067,12 +5079,12 @@ function jumpToUsageTab() {
   border: 1px solid transparent !important;
   background: transparent !important;
   padding: 8px 16px !important;
-  border-radius: 10px !important;
-  font-size: 14.5px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
   color: #64748b !important;
   cursor: pointer !important;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -5088,27 +5100,27 @@ function jumpToUsageTab() {
   color: #1e40af !important;
   background: #ffffff !important;
   border-color: #dbeafe !important;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
 .category-segment-btn .cat-icon {
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1;
 }
 
 .category-segment-btn .cat-label {
-  font-size: 14px;
+  font-size: 13.5px;
   letter-spacing: 0.2px;
 }
 
 .category-segment-btn .cat-count {
   font-size: 11px;
   font-weight: 500;
-  padding: 2px 7px;
+  padding: 1.5px 6px;
   border-radius: 20px;
   background: #e2e8f0;
   color: #64748b;
-  transition: all 0.25s ease;
+  transition: all 0.22s ease;
 }
 
 .category-segment-btn.active .cat-count {
@@ -5117,12 +5129,12 @@ function jumpToUsageTab() {
   font-weight: 600;
 }
 
-/* Vue Tabs 高端样式切换 */
+/* 🏷️ 二级选项卡导航 (Responsive Sub-Tabs Header) */
 .tube-tabs-header-wrap {
   background: rgba(241, 245, 249, 0.8) !important;
   border-radius: 12px !important;
   padding: 4px !important;
-  margin-bottom: 14px !important;
+  margin: 0 !important;
   border: 1px solid #e2e8f0 !important;
   box-sizing: border-box;
 }
@@ -5137,13 +5149,13 @@ function jumpToUsageTab() {
   flex: 1 !important;
   border: none !important;
   background: transparent !important;
-  padding: 12px 16px !important;
-  border-radius: 10px !important;
-  font-size: 14px !important;
+  padding: 11px 16px !important;
+  border-radius: 8px !important;
+  font-size: 13.5px !important;
   font-weight: 600 !important;
   color: #475569 !important;
   cursor: pointer !important;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -5158,7 +5170,7 @@ function jumpToUsageTab() {
 .tube-tabs-header button.active {
   color: #2563eb !important;
   background: #ffffff !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.06), 0 1px 3px -1px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* 🔮 首二日填报决策沙盘 Hover 悬浮气泡极致优化样式 */

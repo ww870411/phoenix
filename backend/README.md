@@ -1,3 +1,15 @@
+## 2026-08-17 历史数据查询接口全面放开为公共服务（支持全员无权限范围限制查询）
+
+- **关联后端接口与路由**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点 1：`GET /global-management/history`（保温管历史查询）
+  - 端点 2：`GET /global-management/history/export`（保温管历史导出）
+  - 端点 3：`GET /workspace/fitting_deliveries/list`（管件发货历史查询）
+- **核心放开逻辑**：
+  1. **定位调整**：将 `history_query` 正式定位于全项目全员共享的“公共数据服务与审计透视中心”；
+  2. **取消行级标段截断**：在保温管历史查询与导出接口中，移除了对 `accessible_section_1_ids` 的强制过滤，所有合法登录用户均可拉取并导出全集团所有需求主体的历史数据；
+  3. **支持公共视角穿透**：在管件发货查询接口中新增 `public_view: bool` 参数支持，在历史查询页面中跳过管厂与标段行级隔离，允许全员跨厂区、跨标段检索；
+- **验证与测试**：`pytest` 单元测试 100% 通过。
+
 ## 2026-08-17 工程部确认版管件基准数据全量无损同步与追溯字段扩展（1138行）
 
 - **数据源与文件**：`configs/8.17_管件设计使用量_标准化整理_确认后_导入.xlsx`

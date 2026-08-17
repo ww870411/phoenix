@@ -1,3 +1,21 @@
+## 2026-08-17 历史数据查询页面升级为全量公共服务（支持全员无权限限制查询）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+- **核心调整与交互升级**：
+  1. **公共服务透视**：管件发货查询调用 `getFittingDeliveriesList` 时附加 `public_view: true` 标记；
+  2. **全主体自由检索**：所有登录用户进入历史查询页面，均可在下拉框中自由勾选或一键全选所有需求主体标段与所有供货厂家，查看全集团的计划、消耗、到货与发货台账；
+  3. **数据导出一致性**：支持直接导出包含所有主体或指定主体的完整 Excel 历史台账；
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 现场管理工作台“物料大类”与“二级子标签”一体化复合导航重构
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+- **核心交互与视觉结构升级**：
+  1. **父子导航一体化归组（Compound Nav Group）**：将一级胶囊选择器与二级子功能标签包裹进统一的 `<div class="nav-composite-group">` 容器；
+  2. **消除多重间距叠加割裂感**：将原先主容器全局 `gap: 16px` + 一级外边距 `6px` 的 **`22px` 巨大空隙** 骤缩并规范至 **`6px`** 黄金微间距；
+  3. **视觉层次与空间利用优化**：一级胶囊与二级子标签形成浑然一体的父子递进层次，大幅节省首屏垂直操作空间，视觉感受更紧凑、精致与现代；
+- **构建验证**：`npm run build` 100% 成功。
+
 ## 2026-08-17 现场管理工作台管件设计量与采购量表格升级为“点击表头升降序排序”与列宽排版精细化优化
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`

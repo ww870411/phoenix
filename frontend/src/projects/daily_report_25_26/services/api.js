@@ -676,6 +676,7 @@ export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_sup
     if (query.startDate) params.append('start_date', query.startDate)
     if (query.endDate) params.append('end_date', query.endDate)
     if (query.searchKeyword) params.append('search_keyword', query.searchKeyword)
+    if (query.public_view || query.publicView) params.append('public_view', 'true')
     params.append('page', String(page))
     params.append('limit', String(pageSize))
 

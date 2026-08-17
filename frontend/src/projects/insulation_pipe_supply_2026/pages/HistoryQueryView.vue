@@ -732,6 +732,7 @@ async function handleFittingQuery() {
       startDate: fittingFilter.value.startDate,
       endDate: fittingFilter.value.endDate,
       searchKeyword: fittingFilter.value.searchKeyword,
+      public_view: true,
       limit: 300,
     })
     if (res && res.ok) {
