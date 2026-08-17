@@ -51,37 +51,51 @@ def test_baseline_tables():
         assert len(fetched_pipes) >= 1
         print(f" -> 直管基准读取成功，返回 {len(fetched_pipes)} 条记录 [OK]")
 
-        print("[4/4] 测试管件基准（含主型号+子型号）写入与读取...")
+        print("[4/4] 测试管件与物料基准（含多维工程参数+子型号）写入与读取...")
         fitting_items = [
             {
                 "section_1_id": "test_section_1",
-                "fitting_type": "弯头",
-                "model_spec": "DN1000",
+                "system_type": "高温水",
+                "category": "弯头",
+                "standard_name": "塑套钢预制保温弯头",
+                "model_spec": "90° DN1000 R=1.5DN",
                 "sub_model_spec": "90°",
                 "unit": "个",
                 "design_qty": 10,
                 "purchase_plan_qty": 10,
+                "main_dn": 1000,
+                "angle": 90,
+                "bending_radius_ratio": 1.5,
                 "remark": "测试90度弯头",
             },
             {
                 "section_1_id": "test_section_1",
-                "fitting_type": "弯头",
-                "model_spec": "DN1000",
+                "system_type": "高温水",
+                "category": "弯头",
+                "standard_name": "塑套钢预制保温弯头",
+                "model_spec": "45° DN1000 R=1.5DN",
                 "sub_model_spec": "45°",
                 "unit": "个",
                 "design_qty": 6,
                 "purchase_plan_qty": 6,
+                "main_dn": 1000,
+                "angle": 45,
+                "bending_radius_ratio": 1.5,
                 "remark": "测试45度弯头",
             },
             {
                 "section_1_id": "test_section_1",
-                "fitting_type": "封头",
-                "model_spec": "DN1000",
+                "system_type": "低温水",
+                "category": "三通",
+                "standard_name": "塑套钢预制保温跨越三通",
+                "model_spec": "DN1000/DN600",
                 "sub_model_spec": "",
                 "unit": "个",
                 "design_qty": 2,
                 "purchase_plan_qty": 2,
-                "remark": "测试封头",
+                "main_dn": 1000,
+                "sub_dn": 600,
+                "remark": "测试三通",
             },
         ]
         saved_fitting = save_fitting_baselines(fitting_items, operator_name="tester")
@@ -89,6 +103,8 @@ def test_baseline_tables():
         fetched_fittings = list_fitting_baselines("test_section_1")
         assert len(fetched_fittings) >= 3
         print(f" -> 管件基准读取成功，返回 {len(fetched_fittings)} 条记录 [OK]")
+        assert fetched_fittings[0]["system_type"] in ("高温水", "低温水")
+        assert fetched_fittings[0]["standard_name"] != ""
 
         # 清理测试数据
         session.execute(text("DELETE FROM tube.tube_pipe_baseline WHERE section_1_id = 'test_section_1'"))
@@ -104,3 +120,4 @@ def test_baseline_tables():
 
 if __name__ == "__main__":
     test_baseline_tables()
+

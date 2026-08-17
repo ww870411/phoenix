@@ -776,6 +776,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "construction_units",
         "warehouse_keepers",
         "baseline_presets",
+        "fitting_baselines",
         "weather_api_url",
         "weather_provider",
         "management_mode",

@@ -873,6 +873,70 @@
                 </table>
               </div>
             </section>
+
+            <!-- 卡片 2: 需求主体管件基准设计量与计划采购量 (RevoGrid 自由高性能表格) -->
+            <section class="card elevated section-card" style="margin-top: 24px;">
+              <div class="card-header-row baseline-header-row">
+                <div>
+                  <div class="card-header baseline-title-heading">🔩 需求主体管件基准设计量与计划采购量</div>
+                  <p class="sub" style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">
+                    支持自由录入任意管件类别与规格，支持从 Excel 直接批量复制粘贴或文件一键导入。
+                  </p>
+                </div>
+                <div class="section-actions baseline-actions-panel" style="flex-wrap: wrap; gap: 8px;">
+                  <div class="section1-filter-inline">
+                    <span class="filter-label">过滤需求主体：</span>
+                    <select v-model="selectedFittingSection1Id" class="input inline-select">
+                      <option value="ALL">🌐 全部标段 (全量查看与维护)</option>
+                      <option v-for="section1 in demandEntities" :key="section1.section_1_id" :value="section1.section_1_id">
+                        {{ section1.section_1_name || section1.section_1_id }} ({{ section1.section_1_id }})
+                      </option>
+                    </select>
+                  </div>
+                  <button class="btn ghost compact-btn" type="button" @click="addFittingBaselineRow">➕ 增行</button>
+                  <button class="btn ghost compact-btn" type="button" @click="addFittingBaselineRows(5)">➕ 增5行</button>
+                  <button class="btn ghost compact-btn" type="button" @click="exportFittingBaselineTemplate">📥 导出模板</button>
+                  <button class="btn ghost compact-btn" type="button" @click="triggerFittingExcelUpload">📤 导入Excel</button>
+                  <button class="btn danger-ghost compact-btn" type="button" @click="clearCurrentSectionFittingBaselines">
+                    🗑️ {{ selectedFittingSection1Id === 'ALL' ? '清空全部数据' : '清空本标段' }}
+                  </button>
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('fitting_baselines')" @click="saveSection('fitting_baselines')">
+                    {{ isSaving('fitting_baselines') ? '保存中…' : '💾 保存管件基准' }}
+                  </button>
+                  <input ref="fittingExcelFileInput" type="file" accept=".xlsx, .xls" style="display: none;" @change="handleFittingExcelFile" />
+                </div>
+              </div>
+
+              <p v-if="sectionMessage('fitting_baselines')" :class="['section-tip', sectionMessage('fitting_baselines').type]">
+                {{ sectionMessage('fitting_baselines').text }}
+              </p>
+
+              <div class="summary-row baseline-summary">
+                <span class="summary-chip">📍 当前站点：<strong>{{ selectedFittingSection1Name }}</strong></span>
+                <span class="summary-chip">📊 当前显示：<strong>{{ filteredFittingBaselines.length }}</strong> 条管件</span>
+                <span class="summary-chip">🗂️ 全量管件：<strong>{{ fittingBaselines.length }}</strong> 条</span>
+                <span class="summary-chip" style="color: #64748b;">💡 提示：双击单元格可自由编辑，支持从 Excel 复制后直接按 Ctrl+V 批量填入</span>
+              </div>
+
+              <div class="table-wrap card" style="min-height: 320px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff; margin-top: 10px;">
+                <RevoGrid
+                  ref="fittingGridRef"
+                  :row-headers="true"
+                  :hide-attribution="true"
+                  :stretch="true"
+                  :row-size="34"
+                  :resize="true"
+                  :range="true"
+                  :can-focus="true"
+                  :apply-on-close="true"
+                  :columns="fittingGridColumns"
+                  :source="fittingGridSource"
+                  style="height: 380px; width: 100%;"
+                  @afteredit="handleFittingGridAfterEdit"
+                  @afterEdit="handleFittingGridAfterEdit"
+                />
+              </div>
+            </section>
           </div>
 
           <!-- Tab 5.5: 气温数据管理 (恢复原始干净架构) -->
@@ -1744,6 +1808,8 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import RevoGrid from '@revolist/vue3-datagrid'
+import * as XLSX from 'xlsx-js-style'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
 import {
   getTubeGlobalManagementConfig,
@@ -1979,6 +2045,10 @@ const submissionStatusPath = ref('')
 const latestSubmissions = ref([])
 const historySubmissions = ref([])
 const selectedBaselineSection1Id = ref('')
+const fittingBaselines = ref([])
+const selectedFittingSection1Id = ref('ALL')
+const fittingGridRef = ref(null)
+const fittingExcelFileInput = ref(null)
 
 function setGlobalMessage(type, text) {
   globalMessage.value = { type, text }
@@ -2071,6 +2141,36 @@ function normalizeBaselineRows(rows) {
   }))
 }
 
+function normalizeFittingBaselineRows(rows) {
+  return cloneRows(rows).map((item, index) => ({
+    ...item,
+    section_1_id: String(item.section_1_id || '').trim(),
+    system_type: String(item.system_type || '高温水').trim(),
+    category: String(item.category || item.fitting_type || '管件').trim(),
+    fitting_type: String(item.category || item.fitting_type || '管件').trim(),
+    standard_name: String(item.standard_name || '').trim(),
+    model_spec: String(item.model_spec || '').trim(),
+    sub_model_spec: String(item.sub_model_spec || '').trim(),
+    unit: String(item.unit || '个').trim() || '个',
+    design_qty: Number(item.design_qty || 0),
+    purchase_plan_qty: Number(item.purchase_plan_qty || 0),
+    main_dn: item.main_dn != null ? Number(item.main_dn) : null,
+    sub_dn: item.sub_dn != null ? Number(item.sub_dn) : null,
+    angle: item.angle != null ? Number(item.angle) : null,
+    bending_radius_ratio: item.bending_radius_ratio != null ? Number(item.bending_radius_ratio) : null,
+    bending_radius_m: item.bending_radius_m != null ? Number(item.bending_radius_m) : null,
+    valve_model: String(item.valve_model || '').trim(),
+    outer_diameter: item.outer_diameter != null ? Number(item.outer_diameter) : null,
+    wall_thickness: item.wall_thickness != null ? Number(item.wall_thickness) : null,
+    length_m: item.length_m != null ? Number(item.length_m) : null,
+    pressure_rating: String(item.pressure_rating || '').trim(),
+    compensation_mm: item.compensation_mm != null ? Number(item.compensation_mm) : null,
+    flow_direction: String(item.flow_direction || '').trim(),
+    remark: String(item.remark || '').trim(),
+    __row_key: `fitting::${item.section_1_id || 'sec'}::${item.system_type || 'sys'}::${item.standard_name || 'std'}::${item.model_spec || 'model'}::${index}`,
+  }))
+}
+
 function normalizeSubmissionRows(rows) {
   return cloneRows(rows).map((item) => ({
     section_1_id: item.section_1_id || '',
@@ -2133,6 +2233,21 @@ function syncSelectedBaselineSection1() {
   }
 }
 
+function syncSelectedFittingSection1() {
+  if (selectedFittingSection1Id.value === 'ALL') {
+    return
+  }
+  const items = demandEntities.value.filter((item) => String(item.section_1_id || '').trim())
+  if (!items.length) {
+    selectedFittingSection1Id.value = 'ALL'
+    return
+  }
+  const validIds = items.map((item) => String(item.section_1_id || '').trim())
+  if (!selectedFittingSection1Id.value || !validIds.includes(selectedFittingSection1Id.value)) {
+    selectedFittingSection1Id.value = 'ALL'
+  }
+}
+
 function applyConfig(config) {
   showDate.value = config.show_date || config.biz_date || ''
   usageCollectionDate.value = config.usage_collection_date || ''
@@ -2146,6 +2261,7 @@ function applyConfig(config) {
   }))
   demandEntities.value = cloneRows(config.demand_entities)
   syncSelectedBaselineSection1()
+  syncSelectedFittingSection1()
   pipeModels.value = normalizePipeModelRows(config.pipe_models)
   productionCapacities.value = cloneRows(config.production_capacities).map((item) => ({
     ...item,
@@ -2162,6 +2278,7 @@ function applyConfig(config) {
     section_1_ids_text: listToText(item.section_1_ids),
   }))
   baselinePresets.value = normalizeBaselineRows(config.baseline_presets)
+  fittingBaselines.value = normalizeFittingBaselineRows(config.fitting_baselines)
   weatherApiUrl.value = config.weather_api_url || ''
   weatherProvider.value = config.weather_provider || 'amap'
   amapRestKey.value = config.amap_config?.api_key || ''
@@ -2172,6 +2289,7 @@ function applyConfig(config) {
   
   loadWeatherConfig()
   syncSelectedBaselineSection1()
+  syncSelectedFittingSection1()
 }
 
 function normalizeAutoUpdateSetting(value) {
@@ -2221,6 +2339,443 @@ const selectedBaselineSection1Name = computed(() => {
 const filteredBaselinePresets = computed(() =>
   baselinePresets.value.filter((item) => item.section_1_id === selectedBaselineSection1Id.value),
 )
+
+// 管件基准量 (Fitting Baseline) 响应式计算属性与操作方法
+const selectedFittingSection1Name = computed(() => {
+  if (selectedFittingSection1Id.value === 'ALL') {
+    return '🌐 全部标段 (全网物料)'
+  }
+  const matched = demandEntities.value.find((item) => item.section_1_id === selectedFittingSection1Id.value)
+  return matched?.section_1_name ? `${matched.section_1_name} (${matched.section_1_id})` : selectedFittingSection1Id.value || '未选择'
+})
+
+const filteredFittingBaselines = computed(() => {
+  if (!selectedFittingSection1Id.value || selectedFittingSection1Id.value === 'ALL') {
+    return fittingBaselines.value
+  }
+  return fittingBaselines.value.filter((item) => item.section_1_id === selectedFittingSection1Id.value)
+})
+
+const fittingGridSource = computed(() => {
+  return filteredFittingBaselines.value.map((item, idx) => ({
+    ...item,
+    __index: idx + 1,
+  }))
+})
+
+const fittingGridColumns = computed(() => [
+  {
+    name: '序号',
+    prop: '__index',
+    size: 55,
+    readonly: true,
+    cellClass: 'text-center text-muted',
+  },
+  {
+    name: '标段ID (section_1_id)',
+    prop: 'section_1_id',
+    size: 130,
+    sortable: true,
+    cellClass: 'font-mono text-indigo font-bold',
+  },
+  {
+    name: '系统类型',
+    prop: 'system_type',
+    size: 90,
+    cellClass: 'text-center',
+    sortable: true,
+  },
+  {
+    name: '物理类别',
+    prop: 'category',
+    size: 100,
+    sortable: true,
+  },
+  {
+    name: '标准名称',
+    prop: 'standard_name',
+    size: 170,
+    sortable: true,
+  },
+  {
+    name: '型号规格',
+    prop: 'model_spec',
+    size: 180,
+    sortable: true,
+  },
+  {
+    name: '细分规格/子型号',
+    prop: 'sub_model_spec',
+    size: 130,
+    sortable: true,
+  },
+  {
+    name: '主径DN',
+    prop: 'main_dn',
+    size: 80,
+    cellClass: 'text-right',
+    sortable: true,
+  },
+  {
+    name: '次径DN',
+    prop: 'sub_dn',
+    size: 80,
+    cellClass: 'text-right',
+    sortable: true,
+  },
+  {
+    name: '角度(°)',
+    prop: 'angle',
+    size: 75,
+    cellClass: 'text-right',
+    sortable: true,
+  },
+  {
+    name: '弯曲倍数',
+    prop: 'bending_radius_ratio',
+    size: 80,
+    cellClass: 'text-right',
+  },
+  {
+    name: '弯曲半径(m)',
+    prop: 'bending_radius_m',
+    size: 95,
+    cellClass: 'text-right',
+  },
+  {
+    name: '阀门型号',
+    prop: 'valve_model',
+    size: 110,
+  },
+  {
+    name: '外径Φ(mm)',
+    prop: 'outer_diameter',
+    size: 90,
+    cellClass: 'text-right',
+  },
+  {
+    name: '壁厚(mm)',
+    prop: 'wall_thickness',
+    size: 80,
+    cellClass: 'text-right',
+  },
+  {
+    name: '长度(m)',
+    prop: 'length_m',
+    size: 80,
+    cellClass: 'text-right',
+  },
+  {
+    name: '公称压力',
+    prop: 'pressure_rating',
+    size: 95,
+  },
+  {
+    name: '补偿量(mm)',
+    prop: 'compensation_mm',
+    size: 100,
+    cellClass: 'text-right',
+  },
+  {
+    name: '流向',
+    prop: 'flow_direction',
+    size: 75,
+    cellClass: 'text-center',
+  },
+  {
+    name: '单位',
+    prop: 'unit',
+    size: 65,
+    cellClass: 'text-center',
+  },
+  {
+    name: '设计使用量',
+    prop: 'design_qty',
+    size: 110,
+    cellClass: 'text-right',
+    sortable: true,
+  },
+  {
+    name: '计划采购总量',
+    prop: 'purchase_plan_qty',
+    size: 120,
+    cellClass: 'text-right',
+    sortable: true,
+  },
+  {
+    name: '说明备注',
+    prop: 'remark',
+    size: 180,
+  },
+])
+
+function handleFittingGridAfterEdit(event) {
+  const detail = event?.detail
+  if (!detail || detail.row === undefined || !detail.prop) return
+  const currentSectionRows = filteredFittingBaselines.value
+  const targetRow = currentSectionRows[detail.row]
+  if (targetRow) {
+    let val = detail.value
+    const numProps = [
+      'design_qty', 'purchase_plan_qty', 'main_dn', 'sub_dn', 'angle',
+      'bending_radius_ratio', 'bending_radius_m', 'outer_diameter', 'wall_thickness',
+      'length_m', 'compensation_mm'
+    ]
+    if (numProps.includes(detail.prop)) {
+      val = val === '' || val == null ? null : Number(val)
+    } else if (typeof val === 'string') {
+      val = val.trim()
+    }
+    targetRow[detail.prop] = val
+    if (detail.prop === 'category') {
+      targetRow.fitting_type = val
+    }
+  }
+}
+
+function addFittingBaselineRow() {
+  addFittingBaselineRows(1)
+}
+
+function addFittingBaselineRows(count = 1) {
+  const isAllMode = !selectedFittingSection1Id.value || selectedFittingSection1Id.value === 'ALL'
+  const fallbackSecId = demandEntities.value?.[0]?.section_1_id || 'high_lot_1'
+  const defaultSecId = isAllMode ? fallbackSecId : selectedFittingSection1Id.value
+
+  for (let i = 0; i < count; i++) {
+    fittingBaselines.value.push({
+      section_1_id: defaultSecId,
+      system_type: '高温水',
+      category: '管件',
+      fitting_type: '管件',
+      standard_name: '',
+      model_spec: '',
+      sub_model_spec: '',
+      unit: '个',
+      design_qty: 0,
+      purchase_plan_qty: 0,
+      main_dn: null,
+      sub_dn: null,
+      angle: null,
+      bending_radius_ratio: null,
+      bending_radius_m: null,
+      valve_model: '',
+      outer_diameter: null,
+      wall_thickness: null,
+      length_m: null,
+      pressure_rating: '',
+      compensation_mm: null,
+      flow_direction: '',
+      remark: '',
+      __row_key: `fitting::${defaultSecId}::${Date.now()}::${Math.random()}`,
+    })
+  }
+  setSectionMessage('fitting_baselines', 'info', `已在当前视图增加 ${count} 行数据，可直接在【标段ID】及各参数列中输入或按 Ctrl+V 批量粘贴数据。`)
+}
+
+function clearCurrentSectionFittingBaselines() {
+  const isAllMode = !selectedFittingSection1Id.value || selectedFittingSection1Id.value === 'ALL'
+  if (isAllMode) {
+    if (!confirm(`⚠️ 危险确认：确认清空【全部标段】的所有管件基准量数据吗？点击确定后本地将全量清空，点击【保存管件基准】后同步至数据库。`)) {
+      return
+    }
+    fittingBaselines.value = []
+    setSectionMessage('fitting_baselines', 'success', `已清空全部标段的管件数据。点击【保存管件基准】后将同步至数据库。`)
+  } else {
+    if (!confirm(`确认清空【${selectedFittingSection1Name.value}】的所有管件基准量数据吗？`)) {
+      return
+    }
+    fittingBaselines.value = fittingBaselines.value.filter(
+      (item) => item.section_1_id !== selectedFittingSection1Id.value
+    )
+    setSectionMessage('fitting_baselines', 'success', `已清空【${selectedFittingSection1Name.value}】的管件数据。点击【保存管件基准】后将同步至数据库。`)
+  }
+}
+
+function exportFittingBaselineTemplate() {
+  const isAllMode = !selectedFittingSection1Id.value || selectedFittingSection1Id.value === 'ALL'
+  const currentSecId = isAllMode ? 'high_lot_1' : selectedFittingSection1Id.value
+  const headers = [
+    '序号', '标段ID', '系统类型', '物理类别', '标准名称', '型号规格', '单位',
+    '设计使用量', '计划采购量', '主径DN', '次径DN', '角度(°)', '弯曲半径倍数',
+    '弯曲半径(m)', '阀门型号', '外径Φ(mm)', '壁厚(mm)', '长度(m)',
+    '公称压力/压力等级', '补偿量(mm)', '流向/方向', '备注'
+  ]
+  
+  let rows = []
+  if (filteredFittingBaselines.value.length > 0) {
+    rows = filteredFittingBaselines.value.map((item, idx) => [
+      idx + 1,
+      item.section_1_id || currentSecId,
+      item.system_type || '高温水',
+      item.category || item.fitting_type || '管件',
+      item.standard_name || '',
+      item.model_spec || '',
+      item.unit || '个',
+      item.design_qty != null ? item.design_qty : 0,
+      item.purchase_plan_qty != null ? item.purchase_plan_qty : 0,
+      item.main_dn,
+      item.sub_dn,
+      item.angle,
+      item.bending_radius_ratio,
+      item.bending_radius_m,
+      item.valve_model || '',
+      item.outer_diameter,
+      item.wall_thickness,
+      item.length_m,
+      item.pressure_rating || '',
+      item.compensation_mm,
+      item.flow_direction || '',
+      item.remark || '',
+    ])
+  } else {
+    rows = [
+      [1, currentSecId, '高温水', '弯头', '塑套钢预制保温弯头', '90° DN1000 R=1.5DN', '个', 24, 24, 1000, null, 90, 1.5, null, '', null, null, null, '', null, '', ''],
+      [2, currentSecId, '高温水', '三通', '塑套钢预制保温跨越三通', 'DN1000/DN600', '个', 8, 8, 1000, 600, null, null, null, '', null, null, null, '', null, '', ''],
+    ]
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '标准化数据')
+  const fileNameSuffix = isAllMode ? '全部标段' : selectedFittingSection1Id.value
+  XLSX.writeFile(wb, `管件与物料基准量_${fileNameSuffix}.xlsx`)
+}
+
+function triggerFittingExcelUpload() {
+  if (fittingExcelFileInput.value) {
+    fittingExcelFileInput.value.value = ''
+    fittingExcelFileInput.value.click()
+  }
+}
+
+function handleFittingExcelFile(event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[firstSheetName]
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+
+      if (!jsonData || jsonData.length < 2) {
+        throw new Error('Excel 文件内容为空或格式不正确')
+      }
+
+      const headers = (jsonData[0] || []).map((h) => String(h || '').trim())
+      const isFullStandardFormat = headers.includes('物理类别') || headers.includes('标准名称') || headers.includes('主径DN')
+      const colMap = {}
+      headers.forEach((h, idx) => {
+        if (h) colMap[h] = idx
+      })
+
+      const dataRows = jsonData.slice(1)
+      let importedCount = 0
+      const isAllMode = !selectedFittingSection1Id.value || selectedFittingSection1Id.value === 'ALL'
+      const fallbackSecId = demandEntities.value?.[0]?.section_1_id || 'high_lot_1'
+      const currentSecId = isAllMode ? fallbackSecId : selectedFittingSection1Id.value
+
+      const parsedItems = []
+      for (const row of dataRows) {
+        if (!row || !row.length) continue
+
+        let item = {}
+        if (isFullStandardFormat) {
+          const getVal = (colName) => {
+            const idx = colMap[colName]
+            return idx !== undefined ? row[idx] : undefined
+          }
+          const rawSecVal = String(getVal('标段ID') || getVal('需求主体ID') || getVal('标段') || '').trim()
+          let secVal = rawSecVal || currentSecId
+          if (rawSecVal) {
+            const matchedEntity = demandEntities.value.find(
+              (d) => d.section_1_id === rawSecVal || d.section_1_name === rawSecVal || d.code === rawSecVal
+            )
+            if (matchedEntity) {
+              secVal = matchedEntity.section_1_id
+            }
+          }
+
+          const mSpec = String(getVal('型号规格') || '').trim()
+          if (!mSpec) continue
+
+          const cleanNum = (v) => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v))
+
+          item = {
+            section_1_id: secVal,
+            system_type: String(getVal('系统类型') || '高温水').trim(),
+            category: String(getVal('物理类别') || '管件').trim(),
+            fitting_type: String(getVal('物理类别') || '管件').trim(),
+            standard_name: String(getVal('标准名称') || '').trim(),
+            model_spec: mSpec,
+            sub_model_spec: String(getVal('子型号') || getVal('子型号规格') || '').trim(),
+            unit: String(getVal('单位') || '个').trim() || '个',
+            design_qty: cleanNum(getVal('设计使用量')) || 0,
+            purchase_plan_qty: cleanNum(getVal('计划采购量')) || 0,
+            main_dn: cleanNum(getVal('主径DN')),
+            sub_dn: cleanNum(getVal('次径DN')),
+            angle: cleanNum(getVal('角度(°)') ?? getVal('角度')),
+            bending_radius_ratio: cleanNum(getVal('弯曲半径倍数')),
+            bending_radius_m: cleanNum(getVal('弯曲半径(m)') ?? getVal('弯曲半径')),
+            valve_model: String(getVal('阀门型号') || '').trim(),
+            outer_diameter: cleanNum(getVal('外径Φ(mm)') ?? getVal('外径')),
+            wall_thickness: cleanNum(getVal('壁厚(mm)') ?? getVal('壁厚')),
+            length_m: cleanNum(getVal('长度(m)') ?? getVal('长度')),
+            pressure_rating: String(getVal('公称压力/压力等级') ?? getVal('公称压力') ?? '').trim(),
+            compensation_mm: cleanNum(getVal('补偿量(mm)') ?? getVal('补偿量')),
+            flow_direction: String(getVal('流向/方向') ?? getVal('流向') ?? '').trim(),
+            remark: String(getVal('备注') || '').trim(),
+          }
+        } else {
+          // 兼容旧版简单 8 列格式
+          let secVal = String(row[0] || '').trim()
+          let fType = String(row[1] || '').trim()
+          let mSpec = String(row[2] || '').trim()
+          let subSpec = String(row[3] || '').trim()
+          let unit = String(row[4] || '个').trim() || '个'
+          let dQty = Number(row[5] || 0)
+          let pQty = Number(row[6] || 0)
+          let remark = String(row[7] || '').trim()
+
+          if (!fType && !mSpec) continue
+          item = {
+            section_1_id: secVal || currentSecId,
+            system_type: '高温水',
+            category: fType || '管件',
+            fitting_type: fType || '管件',
+            standard_name: '',
+            model_spec: mSpec,
+            sub_model_spec: subSpec,
+            unit: unit,
+            design_qty: isNaN(dQty) ? 0 : dQty,
+            purchase_plan_qty: isNaN(pQty) ? 0 : pQty,
+            remark: remark,
+          }
+        }
+
+        item.__row_key = `fitting::${item.section_1_id}::${item.system_type}::${item.standard_name}::${item.model_spec}::${Date.now()}::${importedCount}`
+        parsedItems.push(item)
+        importedCount++
+      }
+
+      if (!parsedItems.length) {
+        throw new Error('未从 Excel 中读取到有效的管件型号数据')
+      }
+
+      // 如果是全量导入或包含了多个标段，追加或更新到本地列表
+      fittingBaselines.value.push(...parsedItems)
+      setSectionMessage('fitting_baselines', 'success', `🎉 成功从 Excel 导入 ${importedCount} 条标准化物料基准量！请核对后点击【保存管件基准】。`)
+    } catch (err) {
+      setSectionMessage('fitting_baselines', 'error', `导入 Excel 失败: ${err?.message || err}`)
+    }
+  }
+
+  reader.readAsArrayBuffer(file)
+}
 
 const submissionStatusRows = computed(() => {
   const latestBySection1Id = new Map(
@@ -2333,6 +2888,33 @@ function buildSectionPayload(section) {
       design_qty: Number(item.design_qty || 0),
       purchase_plan_qty: Number(item.purchase_plan_qty || 0),
       remark: item.remark || '',
+    }))
+  }
+  if (section === 'fitting_baselines') {
+    return fittingBaselines.value.map((item) => ({
+      section_1_id: String(item.section_1_id || '').trim(),
+      system_type: String(item.system_type || '高温水').trim(),
+      category: String(item.category || item.fitting_type || '管件').trim(),
+      fitting_type: String(item.category || item.fitting_type || '管件').trim(),
+      standard_name: String(item.standard_name || '').trim(),
+      model_spec: String(item.model_spec || '').trim(),
+      sub_model_spec: String(item.sub_model_spec || '').trim(),
+      unit: String(item.unit || '个').trim() || '个',
+      design_qty: Number(item.design_qty || 0),
+      purchase_plan_qty: Number(item.purchase_plan_qty || 0),
+      main_dn: item.main_dn != null ? Number(item.main_dn) : null,
+      sub_dn: item.sub_dn != null ? Number(item.sub_dn) : null,
+      angle: item.angle != null ? Number(item.angle) : null,
+      bending_radius_ratio: item.bending_radius_ratio != null ? Number(item.bending_radius_ratio) : null,
+      bending_radius_m: item.bending_radius_m != null ? Number(item.bending_radius_m) : null,
+      valve_model: String(item.valve_model || '').trim(),
+      outer_diameter: item.outer_diameter != null ? Number(item.outer_diameter) : null,
+      wall_thickness: item.wall_thickness != null ? Number(item.wall_thickness) : null,
+      length_m: item.length_m != null ? Number(item.length_m) : null,
+      pressure_rating: String(item.pressure_rating || '').trim(),
+      compensation_mm: item.compensation_mm != null ? Number(item.compensation_mm) : null,
+      flow_direction: String(item.flow_direction || '').trim(),
+      remark: String(item.remark || '').trim(),
     }))
   }
   if (section === 'weather_api_url') {

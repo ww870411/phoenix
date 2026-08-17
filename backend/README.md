@@ -1,15 +1,34 @@
-## 2026-08-16 保温直管设计量/采购量全链路业务过程切换为 PostgreSQL 数据库驱动（向下兼容）
+## 2026-08-17 管件与标准化物料基准表重构升级（22个标准化维度+保留子类型+全量1138行数据入库）
 
-- **关联配置文件与清理**：`backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 已彻底移除冗余的 `baseline_presets` 数组字段（文件从 1153 行精简为 439 行）；
+- **关联背景与需求目标**：根据物料基准工程标准化要求，将 `tube.tube_fitting_baseline` 由简易文本表全面升级为**工业级参数化多维宽表**，并保留子型号字段（`sub_model_spec`）；
+- **关联数据表与 DDL 脚本**：
+  - DDL 脚本：`backend/sql/create_tube_baseline_tables.sql`、`backend/sql/tube_schema_init.sql`
+  - 核心数据表：`tube.tube_fitting_baseline`
+  - 联合唯一索引：`uq_tube_fitting_baseline_sec_sys_name_spec_sub`（`section_1_id, system_type, standard_name, model_spec, sub_model_spec`）
+  - 覆盖维度：`section_1_id`、`system_type`（高/低温水）、`category`（物理类别）、`standard_name`（标准名称）、`model_spec`（型号规格）、`sub_model_spec`（子型号）、`unit`、`design_qty`、`purchase_plan_qty`、`main_dn`（主径DN）、`sub_dn`（次径DN）、`angle`（角度）、`bending_radius_ratio`（弯曲倍数）、`bending_radius_m`（弯曲半径）、`valve_model`（阀门型号）、`outer_diameter`、`wall_thickness`、`length_m`、`pressure_rating`、`compensation_mm`、`flow_direction`、`remark`、`extra_params`；
+- **关联服务文件**：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`
+- **核心功能与方法**：
+  1. `ensure_baseline_tables()`：自愈升级表结构、序列序列号绑定与索引重建；
+  2. `list_fitting_baselines()` / `save_fitting_baselines()`：多维度物料基准读取与批量 UPSERT 幂等操作；
+  3. `import_fitting_baselines_from_excel()`：全自动解析 `configs/8.17 标准化数据.xlsx`，已完成 1138 行数据全量、无损、0 冲突入库；
+- **验证与测试**：`backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 测试通过率 100%。
+
+## 2026-08-16 直管与管件设计量/计划采购量全链路业务全面对接 PostgreSQL 数据库驱动（向下兼容）
+
+- **关联配置文件与清理**：`backend_data/projects/insulation_pipe_supply_2026/tube_config.json` 已彻底移除冗余基准数据，永久保持纯净；
+- **关联数据表**：
+  - 直管基准量表：`tube.tube_pipe_baseline`（唯一约束：`section_1_id, pipe_model_id`）
+  - 管件基准量表：`tube.tube_fitting_baseline`（唯一约束：`section_1_id, fitting_type, model_spec, sub_model_spec`）
 - **关联接口与路由**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
-  - 端点：`GET /workspace/config-summary`、`GET /global-management/config`、`POST /global-management/config`、`POST /global-management/config-section`、`POST /workspace/config/section`（section=`baseline_presets`）、`GET /demand-management/baseline`、`GET /supply-management/demand-summary`
+  - 端点：`GET /workspace/config-summary`、`GET /global-management/config`、`POST /global-management/config`、`POST /global-management/config-section`（section=`baseline_presets` / `fitting_baselines`）、`GET /demand-management/baseline`、`GET /supply-management/demand-summary`
 - **关联服务文件**：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`
 - **核心业务过程改造点**：
-  1. **全局管理配置读取**：`get_global_management_config` 动态从数据库表 `tube.tube_pipe_baseline` 注入 `baseline_presets`，前端全局管理“基准设计量预设”面板无感直接渲染全部 89 条数据；
-  2. **配置保存与物理隔离**：`save_global_management_config` 与 `_save_config_section` 保存基准量时写入数据库表，并彻底从 JSON 结构中剔除，保持物理 `tube_config.json` 纯净；
-  3. **标段基准量映射**：`_build_baseline_preset_map` 重构为优先从数据库表中按 `section_1_id` 精准查表；
-  4. **型号推导与排序**：`_build_pipe_model_map` 与 `_resolve_section_1_sorted_pipe_model_ids` 自动基于数据库已存型号进行外径解析与降序排序；
-  5. **向下兼容保证**：接口入参、返回字段名与前端组件数据结构完全一致，前端 0 改动即可平滑过渡。
+  1. **管件基准量全生命周期支持**：实现 `list_fitting_baselines` 和 `save_fitting_baselines`，支持自由类别名称、主型号与细分规格；
+  2. **全局管理配置读取**：`get_global_management_config` 动态从数据库注入直管（`baseline_presets`）和管件（`fitting_baselines`），前端无感直接渲染；
+  3. **配置保存与物理隔离**：保存基准量时写入数据库表，并彻底从 JSON 结构中剔除，保持物理 `tube_config.json` 纯净；
+  4. **标段基准量映射**：`_build_baseline_preset_map` 重构为优先从数据库表中按 `section_1_id` 精准查表；
+  5. **型号推导与排序**：`_build_pipe_model_map` 与 `_resolve_section_1_sorted_pipe_model_ids` 自动基于数据库已存型号进行外径解析与降序排序；
+  6. **向下兼容保证**：接口入参、返回字段名与前端组件数据结构完全一致，前端 0 改动即可平滑过渡。
 
 ## 2026-08-16 保温直管与管件基准设计量/计划采购量数据表与服务上线
 

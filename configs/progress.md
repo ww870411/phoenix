@@ -1,3 +1,52 @@
+## 2026-08-17 [全局管理 GlobalManagementView 管件基准支持“全部标段”全网视图与数据库级字段交互]
+- **需求目标与交互重构**：响应用户指令，在“需求主体管件基准设计量与计划采购量”卡片中新增“全部标段”全网视图选项，并将 RevoGrid 表格升级为按数据库表结构形态交互（显式呈现 `section_1_id` / 标段ID），支持跨标段全网查询、编辑、导出与导入；
+- **具体实施与改动文件（`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`）**：
+  1. **【标段下拉选择扩展】**：新增 `<option value="ALL">🌐 全部标段 (全量查看与维护)</option>`，默认直接进入全网视角；
+  2. **【数据库级字段显式呈现】**：RevoGrid 表格序号后首列新增 **`标段ID (section_1_id)`** 列，支持直接行内编辑标段ID、多标段数据复制与批量粘贴；
+  3. **【全网级别导出与智能导入】**：
+     - 在“全部标段”下点击【📥 导出模板】自动导出包含全网 1138 行真实 `section_1_id` 的全量 Excel（`管件与物料基准量_全部标段.xlsx`）；
+     - 导入 Excel 时自动读取每行中的 `标段ID`，精准分发至对应标段；
+  4. **【全量保存与状态同步】**：升级 `buildSectionPayload` 将 22 个维度字段全量序列化并同步至数据库 `tube.tube_fitting_baseline` 表；
+- **验证与测试**：
+  - 前端执行 `npm run build` 生产打包编译 100% 成功（0 语法/类型错误）；
+  - 本地验证全网模式切换、1138 条数据平滑加载、全字段编辑无卡顿。
+
+## 2026-08-17 [管件与标准化物料基准表重构升级（22个标准化维度+保留子类型+全量1138行数据入库）]
+- **任务背景与需求重构**：响应用户指令，基于《8.17 标准化数据.xlsx》将物料基准数据表 `tube.tube_fitting_baseline` 全面重构为工业级参数化多维宽表，完整保留子型号字段（`sub_model_spec`），并支撑同一标段（如 `high_lot_3`）高低温水并存的工程实际；
+- **具体实施与改动文件**：
+  1. **【数据库 DDL 脚本与索引（`backend/sql/create_tube_baseline_tables.sql` & `tube_schema_init.sql`）】**：
+     - 重构 `tube.tube_fitting_baseline` 表：包含标段ID、系统类型、物理类别、标准名称、型号规格、子型号、主径DN、次径DN、角度、弯曲倍数、弯曲半径、阀门型号、外径、壁厚、长度、公称压力、补偿量、流向、单位、设计量、采购量、备注、扩展参数 JSONB、审计字段等共 28 列；
+     - 创建联合唯一约束索引：`uq_tube_fitting_baseline_sec_sys_name_spec_sub`（`section_1_id, system_type, standard_name, model_spec, sub_model_spec`）；
+     - 创建高频查询索引：`idx_tube_fitting_baseline_sec_sys`、`idx_tube_fitting_baseline_category`、`idx_tube_fitting_baseline_standard_name`、`idx_tube_fitting_baseline_main_dn`；
+  2. **【后端服务与 Excel 全自动导入（`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`）】**：
+     - `ensure_baseline_tables()`：实现自愈升级、字段与序列号绑定；
+     - `list_fitting_baselines()` & `save_fitting_baselines()`：升级为 22 个维度字段的全量读写与批量 UPSERT；
+     - `import_fitting_baselines_from_excel()`：全自动解析 `configs/8.17 标准化数据.xlsx`，已将 1138 行数据 100% 成功导入数据库表（0 丢失、0 冲突）；
+  3. **【前端 RevoGrid 多维表格与导入导出升级（`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`）】**：
+     - RevoGrid 列定义全面扩展为 18 列精细化工程参数列，支持行内编辑与数字/文本类型校验；
+     - 升级 Excel 模板导出 `exportFittingBaselineTemplate()` 与上传解析 `handleFittingExcelFile()`，完美对接 22 列标准化 Excel 格式；
+- **验证与测试**：
+  - 执行 `backend/projects/insulation_pipe_supply_2026/tests/test_baseline_service.py` 自动化测试 100% 通过；
+  - 前端执行 `npm run build` 生产打包编译 100% 成功（0 语法/类型错误）；
+  - 数据库查询验证：全量 1138 条数据均已入库，`high_lot_3` 的 60 条高温水与 9 条低温水数据各自独立且完全正确。
+
+## 2026-08-16 [全局管理 GlobalManagementView 管件基准量 RevoGrid 高性能管理与 Excel 导入导出上线]
+- **需求目标与设计原则**：响应用户指导，在“基准设计量预设”标签页中“需求主体管线基准设计量”下方，新增独立的“需求主体管件基准设计量与计划采购量”卡片；针对管件量大型号多的特征，采用 RevoGrid 高性能虚拟表格，且管件类别、主型号、细分规格、单位全部采用完全自由文本录入，不做任何死板枚举限制；
+- **具体实施与改动文件**：
+  1. **前端页面（`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`）**：
+     - 引入 `@revolist/vue3-datagrid` 与 `xlsx-js-style`；
+     - 在 Tab 5 直管表格下方新增卡片 2，包含标段选择、自由编辑 RevoGrid 表格；
+     - 提供便捷操作：➕ 增 1 行、➕ 增 5 行、📥 导出 Excel 模板、📤 导入 Excel 文件、🗑️ 清空当前标段、💾 保存管件基准；
+     - 支持 Excel 多行多列无缝复制并在表格中直接按 `Ctrl+V` 批量粘贴；
+  2. **后端接口与数据处理（`backend/projects/insulation_pipe_supply_2026/api/workspace.py`）**：
+     - `get_global_management_config`：动态从 `tube.tube_fitting_baseline` 查出全量管件基准量注入 `config.fitting_baselines`；
+     - `_save_config_section` 与 `save_global_management_config`：支持 `fitting_baselines` 区块保存，批量 UPSERT 写入数据库表，物理 JSON 永久保持纯净；
+  3. **服务层（`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`）**：
+     - `list_fitting_baselines` 与 `save_fitting_baselines` 支持宽松自由字符串与小数用量；
+- **验证与测试**：
+  - 前端执行 `npm run build` 打包构建 100% 通过（0 语法错误）；
+  - 编写并执行 `scratch/test_fitting_baseline_integration.py` 与 `scratch/test_global_management_api.py`，全链路测试通过率 100%。
+
 ## 2026-08-16 [全局管理 GlobalManagementView 基准设计量接口对接数据库修复]
 - **问题排查与根因分析**：
   1. 用户在前端页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/global_management` 的“基准设计量预设”标签页中看不到数据；
