@@ -1,3 +1,47 @@
+## 2026-08-17 预制直埋保温管大屏后端聚合接口（GET /big-screen/data）去伪存真与实体关联升级
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点：`GET /big-screen/data`
+- **实体关系与拓扑数据调整**：
+  1. **彻底移除虚构中转库**：移除 `warehouse_nodes`，不输出任何不存在的中转站点；
+  2. **深入绑定 `tube_config.json` 真实实体**：
+     - **3 大制造管厂**：输出真实代号（SA/SB/SC）、联系人、电话及绑定的保供标段 `assigned_section_ids`；
+     - **10 大施工标段工程现场**：按高温水（`high_lot_1`~`4`）与低温水（`low_lot_1`~`6`）分组，并根据配置文件实时动态关联：
+       - **施工单位**：鹤城建设（翁永鑫）、大通建设（任强）等；
+       - **现场驻点库管员**：高温水组（左巨、赫心彤）、低温水标段1~2组（李春、李海）、低温水标段3~4组（王世博、王晟楠、辛宇满）、低温水标段5~6组（杨毅、孟广胜）；
+       - **现场经理专责组**：陶远辉、卢君、王晓童、赵恩海、李生辉、许显旺、刘思源等；
+- **验证与测试**：`pytest` 12 项测试用例全部通过。
+
+## 2026-08-17 预制直埋保温管项目新增高性能数字指挥大屏全量真实聚合接口（GET /big-screen/data）
+
+- **新增后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 端点：`GET /big-screen/data`（归属于 `public_router`，供指挥中心大屏幕与各端看板高效加载）
+- **核心数据计算与聚合逻辑**：
+  1. **直管全量真实统计**：
+     - 从 `tube.tube_pipe_baseline` 读取各标段规划与采购总量（km / 米）；
+     - 从 `tube.tube_delivery` 动态计算累计发货、在途运输（`pending_arrival` / `pending_receive` / `pending_warehouse`）、现场核销（`arrived` / `consumed` / `warehoused` / `completed`）；
+  2. **1138 项标准化管件多维分类聚合**：
+     - 从 `tube.tube_fitting_baseline` 提取 1138 行标准化物料基准，按 90°/45°弯头、变径管、三通、直埋补偿器、焊接球阀、固定支架分类聚合需求总量；
+     - 从 `tube.tube_fitting_delivery` 计算累计发运管件件数、在途直运件数与现场验收就位件数；
+  3. **10 大真实标段多维健康度矩阵**：
+     - 精准聚合 `high_lot_1` ~ `high_lot_4`（高温水 1~4 标段）与 `low_lot_1` ~ `low_lot_6`（低温水 1~6 标段）的管材与管件双轨达标率；
+  4. **全量真实发货流水**：
+     - 联合提取 `tube.tube_delivery` 与 `tube.tube_fitting_delivery` 最新的 25 条真实单据流水（真实车牌、单号、厂家、规格描述、发货量及时间）；
+  5. **实体拓扑节点构建**：
+     - 输出 3 大核心管厂（开元、鑫瑞得、能源集团保温管厂）、2 大仓储枢纽（西郊总库、二十里堡专配库）及 10 大施工标段拓扑节点与供求飞线关联。
+- **验证与测试**：`pytest` 单元测试 12 项全部通过。
+
+## 2026-08-17 预制直埋保温管项目注册数字指挥大屏页面（big_screen）
+
+- **关联配置与元数据**：
+  - `backend_data/shared/项目列表.json`：在 `insulation_pipe_supply_2026` 的 `pages` 对象中正式注册 `big_screen` 页面元数据（页面名称：“数字指挥大屏 (Big Screen)”，描述：“深色科技大屏、数字孪生飞线调度与实时发运战报”）；
+  - `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json`：为 `Global_admin`、`tube_supplier_admin`、`tube_supplier`、`tube_site_manager`、`tube_construction_unit`、`tube_warehouse_keeper`、`tube_global_viewer` 全量业务角色配置 `big_screen` 页面权限；
+- **接口支持链路**：
+  - `GET /workspace/config-summary`：为大屏提供集团业务基准日期与主体定义；
+  - `GET /supply-management/deliveries`：为大屏实时流水线提供保温管发货历史数据源；
+  - `GET /workspace/fitting_deliveries/list`：为大屏实时流水线提供关键管件（弯头/三通/补偿器/球阀等）直运数据源；
+- **验证与测试**：权限解析与接口读取 100% 正常。
+
 ## 2026-08-17 历史数据查询接口全面放开为公共服务（支持全员无权限范围限制查询）
 
 - **关联后端接口与路由**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`

@@ -8,6 +8,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 import DashboardView from './DashboardView.vue'
+import BigScreenDashboardView from './BigScreenDashboardView.vue'
 import DemandManagementView from './DemandManagementView.vue'
 import GlobalManagementView from './GlobalManagementView.vue'
 import SupplyManagementView from './SupplyManagementView.vue'
@@ -20,6 +21,7 @@ const pageKey = computed(() => String(route.params.pageKey || '').trim())
 
 const pageComponentMap = {
   dashboard: DashboardView,
+  big_screen: BigScreenDashboardView,
   history_query: HistoryQueryView,
   gis_map: GisMapView,
   global_management: GlobalManagementView,

@@ -1,3 +1,104 @@
+## 2026-08-17 预制直埋保温管数字大屏拓扑动效与流光管道深度修复（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **问题排查与修复**：
+  1. **SVG 层级提升至最顶层**：将 `.topology-svg` 从 `z-index: 5` 提升至 `z-index: 20` 并设置 `pointer-events: none`，消除卡片与通道容器对 SVG 飞线的视觉遮挡；
+  2. **双层动态流光管道**：
+     - 底层：1.5px 半透明管线（青色/金色）；
+     - 上层：2.5px 脉冲流动光带（带 `flow-travel` 动画与 `glow` 发光滤镜），实现全天候持续流动动效；
+  3. **初始数据兜底与几何重算保障**：预置 3 大管厂与 10 大标段权威初始数据，配合 `ResizeObserver`、`@scroll` 事件与多级延迟测量，确保任何网络状态下拓扑均可即时呈现且精准吸附；
+  4. **激光粒子发光与轨迹激活**：为 SMIL `<animateMotion>` 显式添加 `begin="0s"` 与径向高斯模糊光晕。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字指挥大屏中间流向拓扑全新一体化重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **中间流向拓扑中枢升级**：
+  1. **消除上下重复面板**：将原先割裂的拓扑图与标段矩阵合二为一，打造全景一体化大展厅（`.map-topology-master-panel`）；
+  2. **三栏工业流向体系**：
+     - **左侧供给端（230px）**：开元（SA）、鑫瑞得（SB）、能源集团管厂（SC）三大制造基地卡片；
+     - **中间专线通道（60px）**：纯净直达光带，飞线与激光流光平滑穿行；
+     - **右侧标段矩阵（1fr）**：10 大施工标段一体化高质感卡片，呈现标段编号（H1~H4, L1~L6）、施工中呼吸点、直管与管件双轨微进度条、真实驻点库管员与施工专责；
+  3. **端到端物理连接端口（Node Ports）**：在卡片左右边缘设置精准连接锚点，SVG 贝塞尔曲线与激光粒子完美衔接，彻底消除飞线乱飞、交叉遮挡文字的问题；
+  4. **系统分类切换**：支持“全网总览 / 高温水主线 / 低温水分支”一键切换聚焦。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字指挥大屏深色/浅色双主题无缝切换（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **主题双模架构**：
+  1. **快捷切换与持久化**：顶栏新增 `☀️ 浅色模式 / 🌙 深色模式` 一键切换按钮，状态持久化写入 `localStorage`（键名 `phoenix_tube_bigscreen_theme`）；
+  2. **浅色高科技主题（极简工业晨光蓝白）**：
+     - **主底色与毛玻璃**：`#f8fafc` 渐变底配合 `rgba(255, 255, 255, 0.95)` 纯白毛玻璃面板与细腻微阴影；
+     - **文字与指标色彩**：深黛色 `#0f172a` 主标题，深天蓝 `#0284c7` 直管发运指标，暖琥珀 `#d97706` 配件在途指标，翡翠绿 `#059669` 就位核销指标；
+     - **自适应拓扑与流光飞线**：在明亮画布下自适应天蓝与金橙色激光粒子飞行动画；
+  3. **深色高科技主题（赛博科技深蓝黑）**：保持原有的深色沉浸式数字孪生大屏效果；
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字指挥大屏视口高度锁定与局部平滑滚动（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **页面视口与滚动条优化**：
+  1. **大屏容器高度严格锁定**：`.bigscreen-container` 锁定为 `100vh / overflow: hidden`，主体内容区严格锁定为 `height: calc(100vh - 102px)`，无论单据流水如何高频推入，整个大屏页面绝对不会发生拉长或纵向晃动；
+  2. **局部独立弹性滚动**：
+     - 右侧实时流水面板（`.live-feed-panel`）与里程碑面板内部自适应弹性滚动；
+     - 中间标段矩阵（`.section-cards-grid`）与拓扑需求列表内部自适应弹性滚动；
+     - 左侧 KPI 指标栏自适应弹性滚动；
+  3. **定制深色科技极细滚动条**：为所有滚动容器配置 4px 荧光青半透明高质感滚动条。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字指挥大屏拓扑重构（彻底去除虚构节点，直通 3 大管厂与 10 大标段施工现场）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **拓扑结构与物理关系真实化**：
+  1. **彻底清除虚构中转库**：完全移除任何虚拟中转仓储站点；
+  2. **3 大核心制造管厂直供现场**：
+     - `大连开元热力管道股份有限公司`（薛向新 13998603445，负责高温水_标段1~2）
+     - `河北鑫瑞得管道设备有限公司`（刘宁 18230465777，负责低温水_标段1~3）
+     - `能源集团保温管厂`（吴近 13998473933，负责全网自研保供）
+  3. **10 大施工标段现场精准映射**：
+     - 🔥 **高温水系统（标段1~4）**：精准关联鹤城建设、大连大通及驻点库管员（左巨、赫心彤）；
+     - ❄️ **低温水系统（标段1~6）**：精准关联驻点库管员（李春、李海、王世博、王晟楠、辛宇满、杨毅、孟广胜）及现场专责经理；
+  4. **直连飞线调度**：SVG 激光粒子流线基于真实保供关系从三大基地直射现场。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管数字指挥大屏全面升级为 100% 真实项目数据库驱动
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **关联前端接口**：`frontend/src/projects/daily_report_25_26/services/api.js`（新增 `getTubeBigScreenData` 聚合接口）
+- **核心数据与真实业务深度绑定**：
+  1. **全网 10 大真实标段覆盖**：全量绑定高温水 4 个标段（`高温水_标段1` ~ `高温水_标段4`）与低温水 6 个标段（`低温水_标段1` ~ `低温水_标段6`），精准呈现各标段直管规划里程、发货量、管件计划数与到货配套率；
+  2. **3 大核心制造管厂拓扑**：精准映射 `大连开元热力管道股份有限公司`、`河北鑫瑞得管道设备有限公司`、`能源集团保温管厂` 及西郊/二十里堡周转储备库；
+  3. **1138 项管件基准多维聚合**：彻底告别占位符，直接挂接 1138 项标准化管件多维基准数据，实时分类汇总弯头、变径管、三通、补偿器、焊接球阀、固定支架；
+  4. **全量真实发货单据流水**：实时展示来自 `tube.tube_delivery` 和 `tube.tube_fitting_delivery` 的真实车牌号、运单号、发货米数及件数；
+  5. **真实库驱动的交互模拟器**：模拟发货与自动演示完全基于真实主体与 DN 型号库动态派发。
+- **构建验证**：`npm run build` 100% 成功。
+
+## 2026-08-17 预制直埋保温管深色科技数字指挥大屏上线（方案A：数字孪生与实时发货联动）
+
+- **新增前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **关联路由分发**：`frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`（增加 `big_screen` 页面映射）
+- **关联入口与导航**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`（顶栏配置 `🖥️ 调度大屏 (Big Screen)` 发光快捷跳转按钮）
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`（增加 `big_screen` 页面描述）
+- **核心模块与动态交互特性**：
+  1. **深色科技数字孪生视效体系**：基于 16:9 / 21:9 自适应大屏规范，采用深蓝黑背景、荧光青与流光蓝、高质感 Glassmorphism 磨砂光晕和工业排版；
+  2. **保温管 + 关键管件双轨发货实时流战报（Live Feed Ticker）**：
+     - 利用 Vue3 `<TransitionGroup>` 驱动发货消息从顶部平滑下沉推入；
+     - 动态卡片展示：厂家、目标标段、规格型号、发货量、发运单号及“✨ 正向保供增量”标签；
+     - 支持“全部 / 保温管 / 关键管件”实时快速分类切换；
+  3. **指标联动数字翻牌与增量气泡（Count-Up & Delta Bubbles）**：
+     - 实时联动全网规划量、累计发货量、在途量与现场就位量；
+     - 触发发货时，数字平滑滚动递增，并伴随绿色/金色 `+240m` / `+6件` 飘字气泡升空淡出；
+  4. **动态激光粒子流向飞线（Cyber Fly-line Matrix）**：
+     - 基于 SVG 动态贝塞尔曲线连接【供给制造管厂】──►【仓储枢纽】──►【需求标段现场】；
+     - 发货时发射高亮拖尾激光流光粒子，靶向节点产生水波纹扩散脉冲；
+  5. **标段保供能量矩阵（Fulfillment Energy Grid）**：
+     - 各施工标段同时展示管材与管件双进度充能条，受影响标段触发高亮涟漪与流光充能；
+  6. **演示控制台与全屏自适应（Demo & Simulator Controller）**：
+     - 支持“模拟管材发货”、“模拟管件发运”、“自动演示轮播”及 F11 全屏沉浸切换。
+- **构建验证**：`npm run build` 100% 成功。
+
 ## 2026-08-17 历史数据查询页面升级为全量公共服务（支持全员无权限限制查询）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`

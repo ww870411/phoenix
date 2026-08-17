@@ -27,6 +27,9 @@
               计划起点 (plan_start_date)：<strong>{{ configSummary?.plan_start_date || '—' }}</strong>
             </span>
           </div>
+          <button class="btn btn-bigscreen" type="button" @click="goBigScreen" title="进入全屏数字孪生调度大屏">
+            🖥️ 调度大屏 (Big Screen)
+          </button>
           <button class="btn ghost" type="button" @click="goProjectPages">返回功能页</button>
           <button class="btn primary" type="button" :disabled="loading || loadingSummary" @click="refreshAllData">
             {{ (loading || loadingSummary) ? '刷新中...' : '刷新看板数据' }}
@@ -554,7 +557,7 @@
 
 <script setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
   getTubeSupplyManagementDemandSummary,
@@ -565,7 +568,12 @@ import ExportSettingsModal from './ExportSettingsModal.vue'
 
 // 获取路由与当前项目 Key
 const route = useRoute()
+const router = useRouter()
 const projectKey = computed(() => String(route.params.projectKey || 'insulation_pipe_supply_2026'))
+
+function goBigScreen() {
+  router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages/big_screen`)
+}
 
 // 使用 tube 统一页面壳
 const {
@@ -1774,6 +1782,22 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.btn-bigscreen {
+  background: linear-gradient(135deg, #091e3a 0%, #0d3b66 100%) !important;
+  color: #00f2fe !important;
+  border: 1px solid #00f2fe !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.25) !important;
+  transition: all 0.25s ease !important;
+}
+
+.btn-bigscreen:hover {
+  background: linear-gradient(135deg, #0d3b66 0%, #00f2fe 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.6) !important;
+  transform: translateY(-1px) !important;
 }
 
 .date-context-badge {

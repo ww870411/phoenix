@@ -120,6 +120,7 @@ const projectKey = String(route.params.projectKey ?? '')
 
 const auth = useAuthStore()
 const PAGE_DESCRIPTION_MAP = Object.freeze({
+  big_screen: '深色科技大屏、数字孪生飞线调度与实时发运战报',
   dashboard: '查看整体数据仪表盘',
   data_show: '浏览固定数据展示表',
   data_approval: '处理审批流程进度',

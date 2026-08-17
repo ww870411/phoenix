@@ -296,6 +296,17 @@ export async function getTubeWorkspaceConfigSummary(projectKey = 'insulation_pip
   return response.json()
 }
 
+export async function getTubeBigScreenData(projectKey = 'insulation_pipe_supply_2026') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/big-screen/data`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取大屏真实数据失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeDemandManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/options`, {
     headers: attachAuthHeaders(),
