@@ -402,17 +402,7 @@
                     @mouseenter="hoveredSupplierId = sup.id"
                     @mouseleave="hoveredSupplierId = null"
                   >
-                    <div class="sup-card-top">
-                      <span class="sup-code-badge">{{ sup.code }}</span>
-                      <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
-                    </div>
-
-                    <div class="sup-scope-row">
-                      <span class="scope-label">🎯 专供:</span>
-                      <span class="scope-text" :title="(sup.assigned_sections || []).join('、')">
-                        {{ (sup.assigned_sections || []).join('、') || '全网保供统筹' }}
-                      </span>
-                    </div>
+                    <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
 
                     <!-- 物理对齐连接端口 (右锚点) -->
                     <div class="node-port port-out" :id="'port-out-' + sup.id" title="发运输出端口">
@@ -567,37 +557,78 @@
         </div>
       </section>
 
-      <!-- 右侧栏：实时发货战报流水与重大保供里程碑 (基于真实发货数据库) -->
+      <!-- 右侧栏：实时战报动态流水与重大保供里程碑 (基于真实工程全链路数据) -->
       <section class="screen-col right-col">
-        <!-- 实时发货战报流 -->
+        <!-- 实时工程战报流 -->
         <div class="panel-box live-feed-panel">
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">📢</span>
-              <span>全网实时发运动态流水</span>
+              <span>全网工程实时动态播报</span>
             </div>
-            <div class="live-status-pill" :class="{ 'live-direct': isLiveStreamMode }">
+            <div 
+              class="live-status-pill" 
+              :class="{ 'live-direct': isLiveStreamMode }"
+              @click="toggleLiveStreamMode"
+              style="cursor: pointer;"
+              :title="isLiveStreamMode ? '已接入真实生产数据库直播（点击断开）' : '点击接入真实生产数据库实时直播流'"
+            >
               <span class="live-dot" :class="{ 'live-pulse': isLiveStreamMode }"></span>
-              <span>{{ isLiveStreamMode ? '实况直连 (' + liveFeedList.length + ')' : '真实单据 (' + liveFeedList.length + ')' }}</span>
+              <span>{{ isLiveStreamMode ? '实况直播 (已接通)' : '接入实况' }}</span>
             </div>
           </div>
 
-          <div class="feed-filter-bar">
-            <button 
-              class="filter-pill" 
-              :class="{ active: feedFilter === 'all' }" 
-              @click="feedFilter = 'all'"
-            >全部 ({{ liveFeedList.length }})</button>
-            <button 
-              class="filter-pill" 
-              :class="{ active: feedFilter === 'pipe' }" 
-              @click="feedFilter = 'pipe'"
-            >保温管</button>
-            <button 
-              class="filter-pill" 
-              :class="{ active: feedFilter === 'fitting' }" 
-              @click="feedFilter = 'fitting'"
-            >关键管件</button>
+          <!-- 统一业务分类筛选按钮与展开式点选浮层 (纯净分类选择，无条数后缀) -->
+          <div class="feed-filter-unified-bar" ref="feedFilterMenuRef">
+            <div class="filter-dropdown-wrapper">
+              <button 
+                class="unified-filter-btn" 
+                :class="{ 'menu-open': isFeedFilterMenuOpen, 'is-filtered': feedFilter !== 'all' }"
+                @click.stop="isFeedFilterMenuOpen = !isFeedFilterMenuOpen"
+                title="点击展开/收起业务分类筛选菜单"
+              >
+                <div class="filter-btn-left">
+                  <span class="filter-btn-icon">{{ currentFilterOption.icon }}</span>
+                  <span class="filter-btn-label">业务分类:</span>
+                  <strong class="filter-btn-current">{{ currentFilterOption.label }}</strong>
+                </div>
+                <div class="filter-btn-right">
+                  <span class="filter-caret">{{ isFeedFilterMenuOpen ? '▲' : '▼' }}</span>
+                </div>
+              </button>
+
+              <!-- 展开式点选面板 -->
+              <transition name="filter-dropdown-anim">
+                <div v-if="isFeedFilterMenuOpen" class="feed-filter-popover" @click.stop>
+                  <div class="popover-tip-header">
+                    <span class="popover-title-text">⚡ 选择业务动态分类</span>
+                    <button 
+                      v-if="feedFilter !== 'all'" 
+                      class="reset-filter-link" 
+                      @click="selectFeedFilter('all')"
+                    >重置全部</button>
+                  </div>
+                  <div class="popover-options-grid">
+                    <div 
+                      v-for="opt in feedFilterOptions" 
+                      :key="opt.key"
+                      class="filter-option-row"
+                      :class="{ active: feedFilter === opt.key }"
+                      @click="selectFeedFilter(opt.key)"
+                    >
+                      <div class="option-tag-part">
+                        <span class="option-dot" :style="{ background: opt.color, boxShadow: '0 0 6px ' + opt.color }"></span>
+                        <span class="option-icon">{{ opt.icon }}</span>
+                        <span class="option-title">{{ opt.label }}</span>
+                      </div>
+                      <div class="option-meta-part">
+                        <span v-if="feedFilter === opt.key" class="option-check">✓</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
           </div>
 
           <!-- 战报消息动态上浮列表 -->
@@ -607,32 +638,57 @@
                 v-for="feed in filteredFeedList" 
                 :key="feed.id" 
                 class="feed-card"
-                :class="[feed.type, { 'just-arrived': feed.isNew }]"
+                :class="[feed.category_key || 'dispatch', { 'just-arrived': feed.isNew }]"
+                @click="handleFeedClick(feed)"
+                title="点击在中心拓扑图上聚焦并触发该业务动态直达路线"
+                style="cursor: pointer;"
               >
+                <!-- Row 1: 分类标签 + 经办人 + 发生时间 -->
                 <div class="feed-card-header">
-                  <span class="feed-type-tag" :class="feed.type">
-                    {{ feed.type === 'pipe' ? '🏭 保温管直发' : '📦 管件专送' }}
-                  </span>
+                  <div class="header-left-meta">
+                    <span class="feed-category-tag" :class="feed.category_key || 'dispatch'">
+                      {{ feed.category }}
+                    </span>
+                    <span v-if="feed.operator" class="feed-operator-tag" :title="'经办人: ' + feed.operator">
+                      👤 {{ feed.operator }}
+                    </span>
+                  </div>
                   <span class="feed-time">{{ feed.time }}</span>
                 </div>
 
-                <div class="feed-card-body">
-                  <div class="feed-headline">
-                    <strong class="source-name" :title="feed.supplier">{{ feed.supplier }}</strong>
-                    <span class="arrow-icon">──►</span>
-                    <strong class="target-name" :title="feed.target">{{ feed.target }}</strong>
-                  </div>
-                  <div class="feed-detail-box">
-                    <div class="detail-badge" :class="feed.type">
-                      <span class="spec-label" :title="feed.specification">{{ feed.specification }}</span>
-                      <strong class="spec-amount">{{ feed.amount }}</strong>
+                <!-- Row 2: 动态标题 / 厂家发运流向 -->
+                <div class="feed-card-headline">
+                  <template v-if="feed.category_key === 'dispatch'">
+                    <div class="route-line-box">
+                      <span class="route-source" :title="feed.supplier">{{ feed.supplier }}</span>
+                      <span class="route-arrow">──►</span>
+                      <span class="route-target" :title="feed.target">{{ feed.target }}</span>
                     </div>
-                    <span class="shipment-code">单号: {{ feed.shipmentCode }}</span>
+                  </template>
+                  <template v-else>
+                    <div class="action-headline-box" :title="feed.headline">
+                      <span class="action-headline-text">{{ feed.headline }}</span>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Row 3: 规格与数量明细栏 (左侧规格截断，右侧高亮数量，永不串行) -->
+                <div class="feed-spec-box">
+                  <div class="spec-text-col" :title="feed.specification">
+                    <span class="spec-name">{{ feed.specification }}</span>
+                  </div>
+                  <div class="spec-qty-col">
+                    <span class="spec-amount-badge" :class="feed.type">{{ feed.amount }}</span>
                   </div>
                 </div>
 
+                <!-- Row 4: 单号/车牌 + 正向动态评价 -->
                 <div class="feed-card-footer">
-                  <span class="pos-tag">✨ {{ feed.positiveTag }}</span>
+                  <span class="feed-code-tag" :title="feed.shipmentCode">
+                    <span class="code-icon">🔖</span>
+                    <span class="code-val">{{ feed.shipmentCode }}</span>
+                  </span>
+                  <span class="feed-pos-tag" :title="feed.positiveTag">✨ {{ feed.positiveTag }}</span>
                 </div>
               </div>
             </transition-group>
@@ -697,6 +753,8 @@ const realShowDate = ref('')
 const currentTimeStr = ref('')
 const isControlMenuOpen = ref(false)
 const controlMenuRef = ref(null)
+const isFeedFilterMenuOpen = ref(false)
+const feedFilterMenuRef = ref(null)
 
 function toggleControlMenu() {
   isControlMenuOpen.value = !isControlMenuOpen.value
@@ -705,6 +763,9 @@ function toggleControlMenu() {
 function handleGlobalClick(e) {
   if (isControlMenuOpen.value && controlMenuRef.value && !controlMenuRef.value.contains(e.target)) {
     isControlMenuOpen.value = false
+  }
+  if (isFeedFilterMenuOpen.value && feedFilterMenuRef.value && !feedFilterMenuRef.value.contains(e.target)) {
+    isFeedFilterMenuOpen.value = false
   }
 }
 let timerClock = null
@@ -715,6 +776,30 @@ let resizeObserver = null
 let rAFId = null
 const autoDemoRunning = ref(false)
 const feedFilter = ref('all')
+
+const feedFilterOptions = [
+  { key: 'all', label: '全部', icon: '🌐', color: '#00f2fe' },
+  { key: 'dispatch', label: '厂家发货', icon: '🚚', color: '#38bdf8' },
+  { key: 'arrival', label: '确认到货', icon: '📍', color: '#60a5fa' },
+  { key: 'receive', label: '施工单位收货', icon: '🏗️', color: '#f59e0b' },
+  { key: 'warehouse', label: '库管核销', icon: '🛡️', color: '#10b981' },
+  { key: 'usage', label: '施工量确认', icon: '📐', color: '#a855f7' },
+  { key: 'plan', label: '需求量申报', icon: '📋', color: '#f43f5e' },
+]
+
+function getFeedCountByCategory(categoryKey) {
+  if (categoryKey === 'all') return liveFeedList.value.length
+  return liveFeedList.value.filter(item => item.category_key === categoryKey || item.type === categoryKey).length
+}
+
+const currentFilterOption = computed(() => {
+  return feedFilterOptions.find(o => o.key === feedFilter.value) || feedFilterOptions[0]
+})
+
+function selectFeedFilter(key) {
+  feedFilter.value = key
+  isFeedFilterMenuOpen.value = false
+}
 const lastImpactedSectionId = ref(null)
 const activeSectionTab = ref('all') // 'all' | 'high' | 'low'
 
@@ -802,13 +887,13 @@ const activeNodeIds = ref(new Set())
 const flylines = ref([])
 const activeParticles = ref([])
 
-// 实时战报流列表
+// 实时战报流列表（100% 绑定底层真实业务数据库单据记录）
 const liveFeedList = ref([])
 
 // 过滤后的战报流
 const filteredFeedList = computed(() => {
   if (feedFilter.value === 'all') return liveFeedList.value
-  return liveFeedList.value.filter(item => item.type === feedFilter.value)
+  return liveFeedList.value.filter(item => item.category_key === feedFilter.value || item.type === feedFilter.value)
 })
 
 // 管材保供百分比
@@ -851,6 +936,36 @@ function isSuppliedBy(secId, supId) {
   return assigned.includes(secId)
 }
 
+function getSupplierStats(sup) {
+  const assigned = sup.assigned_section_ids || []
+  const matched = sectionProgressList.value.filter(s => assigned.includes(s.id))
+  if (matched.length === 0) {
+    return {
+      designKm: '0.00',
+      shippedKm: '0.00',
+      pipePercent: 0,
+      totalFittings: 0,
+      shippedFittings: 0,
+      fittingPercent: 0
+    }
+  }
+  const designKm = matched.reduce((acc, s) => acc + (Number(s.designKm) || 0), 0)
+  const shippedKm = matched.reduce((acc, s) => acc + (Number(s.shippedKm) || 0), 0)
+  const totalFittings = matched.reduce((acc, s) => acc + (Number(s.totalFittings) || 0), 0)
+  const shippedFittings = matched.reduce((acc, s) => acc + (Number(s.shippedFittings) || 0), 0)
+  const pipePercent = designKm > 0 ? Number(((shippedKm / designKm) * 100).toFixed(1)) : 0
+  const fittingPercent = totalFittings > 0 ? Number(((shippedFittings / totalFittings) * 100).toFixed(1)) : 0
+
+  return {
+    designKm: designKm.toFixed(2),
+    shippedKm: shippedKm.toFixed(2),
+    pipePercent: Math.min(pipePercent, 100),
+    totalFittings,
+    shippedFittings,
+    fittingPercent: Math.min(fittingPercent, 100)
+  }
+}
+
 function isSupplierOfSection(supId, secId) {
   return isSuppliedBy(secId, supId)
 }
@@ -883,6 +998,26 @@ const milestones = ref([
   }
 ])
 
+// --- 点击战报卡片即时在拓扑图上发射激光飞线并高亮相关节点 ---
+function handleFeedClick(feed) {
+  if (!feed) return
+  const sup = supplyNodes.value.find(s => s.name === feed.supplier || (feed.supplier && feed.supplier.includes(s.name)) || s.raw_id === feed.supplier)
+  const sec = sectionProgressList.value.find(s => s.name === feed.target || (feed.target && feed.target.includes(s.name)) || s.id === feed.target)
+  const fromId = sup ? sup.id : (supplyNodes.value[0]?.id || 'sup_kaiyuan')
+  const toId = sec ? ('sec_' + sec.id) : ('sec_' + (sectionProgressList.value[0]?.id || 'high_lot_1'))
+
+  // 1. 发射专属激光飞线
+  shootLaserParticle(fromId, toId, feed.type || 'pipe')
+
+  // 2. 临时高亮对应管厂与标段节点
+  if (sup) hoveredSupplierId.value = sup.id
+  if (sec) hoveredSectionId.value = sec.id
+  setTimeout(() => {
+    hoveredSupplierId.value = null
+    hoveredSectionId.value = null
+  }, 2500)
+}
+
 // --- 切换真实数据实时流直连模式 ---
 function toggleLiveStreamMode() {
   isLiveStreamMode.value = !isLiveStreamMode.value
@@ -894,6 +1029,16 @@ function toggleLiveStreamMode() {
     // 3. 启动高频心跳轮询（每 3 秒检测数据库增量发货/签收动态）
     if (liveStreamTimer) clearInterval(liveStreamTimer)
     liveStreamTimer = setInterval(pollLiveRealData, 3000)
+
+    // 4. 即刻触发实况接入动画（高亮首张卡片并向中心拓扑图发射一道连接激活飞线）
+    if (liveFeedList.value && liveFeedList.value.length > 0) {
+      const topFeed = liveFeedList.value[0]
+      topFeed.isNew = true
+      handleFeedClick(topFeed)
+      setTimeout(() => {
+        topFeed.isNew = false
+      }, 3500)
+    }
   } else {
     // 关闭实时流监听，恢复常规 20 秒静默轮询
     if (liveStreamTimer) clearInterval(liveStreamTimer)
@@ -1286,8 +1431,8 @@ async function loadRealData(isForce = false) {
         sectionProgressList.value = res.section_progress_list
       }
 
-      // 4. 真实发运动态流水
-      if (Array.isArray(res.live_feed_list) && res.live_feed_list.length > 0) {
+      // 4. 真实全网动态战报流水 (100% 呈现数据库最新真实单据)
+      if (Array.isArray(res.live_feed_list)) {
         liveFeedList.value = res.live_feed_list
         res.live_feed_list.forEach(f => knownFeedIds.value.add(f.id))
       }
@@ -1398,7 +1543,7 @@ onBeforeUnmount(() => {
   position: relative;
   background: #090e1a;
   border-bottom: 1px solid rgba(0, 242, 254, 0.2);
-  z-index: 20;
+  z-index: 1000;
 }
 
 .header-left {
@@ -1486,7 +1631,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  z-index: 25;
+  z-index: 1050;
 }
 
 .control-center-wrapper {
@@ -1551,7 +1696,7 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 254, 0.15);
-  z-index: 100;
+  z-index: 1100;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2243,7 +2388,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 230px 50px 1fr;
+  grid-template-columns: 260px 45px 1fr;
   padding: 10px;
   box-sizing: border-box;
   z-index: 10;
@@ -2283,83 +2428,71 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  gap: 10px;
+  gap: 16px;
 }
 
 .supply-node-card {
-  background: #0f192b;
-  border: 1px solid rgba(0, 242, 254, 0.25);
-  border-left: 3px solid #00f2fe;
+  background: linear-gradient(135deg, rgba(17, 34, 60, 0.85) 0%, rgba(11, 20, 36, 0.95) 100%);
+  border: 1px solid rgba(0, 242, 254, 0.22);
+  border-left: 4px solid #00f2fe;
   border-radius: 8px;
-  padding: 15px 16px;
+  padding: 18px 20px;
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 9px;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 76px;
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .supply-node-card:nth-child(2) {
   border-left-color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.22);
+  background: linear-gradient(135deg, rgba(38, 30, 18, 0.75) 0%, rgba(15, 25, 45, 0.95) 100%);
 }
 
 .supply-node-card:nth-child(3) {
   border-left-color: #00ff87;
+  border-color: rgba(0, 255, 135, 0.22);
+  background: linear-gradient(135deg, rgba(16, 38, 30, 0.75) 0%, rgba(15, 25, 45, 0.95) 100%);
 }
 
+.supply-node-card:hover,
 .supply-node-card.active,
 .supply-node-card.hovered {
   border-color: #00f2fe;
-  transform: scale(1.02);
+  transform: translateX(4px);
+  box-shadow: 0 6px 20px rgba(0, 242, 254, 0.18);
+}
+
+.supply-node-card:nth-child(2):hover,
+.supply-node-card:nth-child(2).hovered {
+  border-color: #fbbf24;
+  box-shadow: 0 6px 20px rgba(251, 191, 36, 0.18);
+}
+
+.supply-node-card:nth-child(3):hover,
+.supply-node-card:nth-child(3).hovered {
+  border-color: #00ff87;
+  box-shadow: 0 6px 20px rgba(0, 255, 135, 0.18);
 }
 
 .supply-node-card.dimmed {
-  opacity: 0.35;
-}
-
-.sup-card-top {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.sup-code-badge {
-  font-family: monospace;
-  font-weight: 700;
-  font-size: 11.5px;
-  color: #00f2fe;
-  background: rgba(0, 242, 254, 0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
+  opacity: 0.3;
 }
 
 .sup-title {
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
-  color: #f1f5f9;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sup-scope-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.scope-label {
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.scope-text {
-  color: #38bdf8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #ffffff;
+  white-space: normal;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+  word-break: break-word;
+  padding-right: 12px;
 }
 
 /* 2. 中间传输通道 */
@@ -2716,28 +2849,228 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 6px #00ff87;
 }
 
-.feed-filter-bar {
-  display: flex;
-  gap: 5px;
+/* ==================== 统一业务分类筛选器 (折叠式下拉面板) ==================== */
+.feed-filter-unified-bar {
   margin-bottom: 8px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 40;
+}
+
+.filter-dropdown-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.unified-filter-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(17, 28, 48, 0.95) 0%, rgba(13, 22, 38, 0.95) 100%);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: inset 0 0 8px rgba(0, 242, 254, 0.05);
+}
+
+.unified-filter-btn:hover {
+  background: linear-gradient(135deg, rgba(22, 36, 62, 0.95) 0%, rgba(15, 27, 48, 0.95) 100%);
+  border-color: #00f2fe;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.2), inset 0 0 10px rgba(0, 242, 254, 0.1);
+}
+
+.unified-filter-btn.menu-open {
+  border-color: #00f2fe;
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.25);
+}
+
+.unified-filter-btn.is-filtered {
+  border-color: #38bdf8;
+  background: linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%);
+}
+
+.filter-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.filter-btn-icon {
+  font-size: 13px;
+}
+
+.filter-btn-label {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.filter-btn-current {
+  color: #00f2fe;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.filter-btn-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-btn-badge {
+  font-size: 10.5px;
+  background: rgba(0, 242, 254, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.filter-caret {
+  font-size: 9px;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+/* 下拉浮层面板 */
+.feed-filter-popover {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  background: rgba(10, 18, 32, 0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 242, 254, 0.4);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75), 0 0 15px rgba(0, 242, 254, 0.15);
+  z-index: 100;
+}
+
+.popover-tip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
+}
+
+.popover-title-text {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.reset-filter-link {
+  font-size: 10.5px;
+  color: #38bdf8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.reset-filter-link:hover {
+  color: #00f2fe;
+}
+
+.popover-options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.filter-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-option-row:hover {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.2);
+}
+
+.filter-option-row.active {
+  background: rgba(0, 242, 254, 0.18);
+  border-color: #00f2fe;
+}
+
+.option-tag-part {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.option-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.filter-pill {
-  background: #111c30;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 11px;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.2s;
+.option-icon {
+  font-size: 12px;
 }
 
-.filter-pill.active {
-  background: rgba(0, 242, 254, 0.2);
-  border-color: #00f2fe;
+.option-title {
+  color: #e2e8f0;
+}
+
+.filter-option-row.active .option-title {
   color: #00f2fe;
+  font-weight: 600;
+}
+
+.option-meta-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.option-badge {
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.filter-option-row.active .option-badge {
+  background: rgba(0, 242, 254, 0.25);
+  color: #00f2fe;
+  font-weight: 600;
+}
+
+.option-check {
+  font-size: 11px;
+  color: #00f2fe;
+  font-weight: bold;
+}
+
+/* 展开动画 */
+.filter-dropdown-anim-enter-active,
+.filter-dropdown-anim-leave-active {
+  transition: all 0.2s ease;
+}
+
+.filter-dropdown-anim-enter-from,
+.filter-dropdown-anim-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .feed-list-wrapper {
@@ -2751,150 +3084,306 @@ onBeforeUnmount(() => {
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .feed-card {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 7px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 5px;
   position: relative;
-  transition: transform 0.3s ease;
+  transition: all 0.25s ease;
   flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
 }
 
-.feed-card.pipe {
-  border-left: 3px solid #00f2fe;
+.feed-card:hover {
+  background: #14223a;
+  border-color: rgba(0, 242, 254, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.feed-card.fitting {
-  border-left: 3px solid #fbbf24;
+/* 6 大核心业务分类卡片左侧标识色 */
+.feed-card.dispatch {
+  border-left: 3.5px solid #00f2fe;
+}
+
+.feed-card.arrival {
+  border-left: 3.5px solid #3b82f6;
+}
+
+.feed-card.receive {
+  border-left: 3.5px solid #f59e0b;
+}
+
+.feed-card.warehouse {
+  border-left: 3.5px solid #10b981;
+}
+
+.feed-card.usage {
+  border-left: 3.5px solid #a855f7;
+}
+
+.feed-card.plan {
+  border-left: 3.5px solid #f43f5e;
 }
 
 .feed-card.just-arrived {
   background: #12223a;
-  transform: scale(1.01);
+  animation: card-arrive-pulse 2s ease;
 }
 
+@keyframes card-arrive-pulse {
+  0% { box-shadow: 0 0 15px rgba(0, 242, 254, 0.6); }
+  100% { box-shadow: none; }
+}
+
+/* Row 1: 顶栏 (分类标签 + 经办人 + 时间) */
 .feed-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+  width: 100%;
 }
 
-.feed-type-tag {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.feed-type-tag.pipe {
-  background: rgba(0, 242, 254, 0.12);
-  border: 1px solid rgba(0, 242, 254, 0.25);
-  color: #38bdf8;
-  font-weight: 600;
-}
-
-.feed-type-tag.fitting {
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  color: #fbbf24;
-  font-weight: 600;
-}
-
-.feed-time {
-  font-family: monospace;
-  font-size: 10.5px;
-  color: #64748b;
-}
-
-.feed-headline {
+.header-left-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  min-width: 0;
+  flex: 1;
 }
 
-.source-name {
-  color: #f1f5f9;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
-}
-
-.arrow-icon {
-  color: #64748b;
-  font-size: 10px;
-}
-
-.target-name {
-  color: #38bdf8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
-}
-
-.feed-detail-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.detail-badge {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.spec-label {
+/* 6 大分类徽章微胶囊 */
+.feed-category-tag {
   font-size: 10.5px;
-  color: #94a3b8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.spec-amount {
-  font-size: 11.5px;
   font-weight: 700;
+  padding: 1.5px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.detail-badge.pipe .spec-amount {
-  color: #00f2fe;
+.feed-category-tag.dispatch {
+  background: rgba(0, 242, 254, 0.14);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  color: #38bdf8;
 }
 
-.detail-badge.fitting .spec-amount {
+.feed-category-tag.arrival {
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+.feed-category-tag.receive {
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.3);
   color: #fbbf24;
 }
 
-.shipment-code {
-  font-family: monospace;
-  font-size: 9.5px;
-  color: #64748b;
+.feed-category-tag.warehouse {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
 }
 
+.feed-category-tag.usage {
+  background: rgba(168, 85, 247, 0.14);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.feed-category-tag.plan {
+  background: rgba(244, 63, 94, 0.14);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+}
+
+.feed-operator-tag {
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+
+.feed-time {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10.5px;
+  color: #64748b;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Row 2: 标题 / 流向行 */
+.feed-card-headline {
+  width: 100%;
+  overflow: hidden;
+}
+
+.route-line-box {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.route-source {
+  color: #f1f5f9;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.route-arrow {
+  color: #00f2fe;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.route-target {
+  color: #38bdf8;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.action-headline-box {
+  width: 100%;
+  overflow: hidden;
+}
+
+.action-headline-text {
+  color: #f8fafc;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* Row 3: 规格与数量明细栏 */
+.feed-spec-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 3.5px 7px;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.spec-text-col {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.spec-name {
+  font-size: 10.5px;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.spec-qty-col {
+  flex-shrink: 0;
+}
+
+.spec-amount-badge {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.spec-amount-badge.pipe {
+  background: rgba(0, 242, 254, 0.15);
+  color: #00f2fe;
+}
+
+.spec-amount-badge.fitting {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+/* Row 4: 底栏 (单号/车牌 + 正向动态评价) */
 .feed-card-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
 }
 
-.pos-tag {
+.feed-code-tag {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 9.5px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.code-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.code-val {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-pos-tag {
   font-size: 9.5px;
   color: #10b981;
   background: rgba(16, 185, 129, 0.1);
-  padding: 1px 6px;
-  border-radius: 8px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  flex-shrink: 0;
 }
 
 /* 战报动画 TransitionGroup */
@@ -3315,19 +3804,31 @@ onBeforeUnmount(() => {
 .bigscreen-container.light .supply-node-card {
   background: #ffffff;
   border-color: rgba(203, 213, 225, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+.bigscreen-container.light .supply-node-card:nth-child(1) {
+  border-left-color: #0284c7;
+}
+
+.bigscreen-container.light .supply-node-card:nth-child(2) {
+  border-left-color: #d97706;
+}
+
+.bigscreen-container.light .supply-node-card:nth-child(3) {
+  border-left-color: #059669;
+}
+
+.bigscreen-container.light .supply-node-card:hover,
 .bigscreen-container.light .supply-node-card.active,
 .bigscreen-container.light .supply-node-card.hovered {
   border-color: #0284c7;
+  background: #f8fafc;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.12);
 }
 
 .bigscreen-container.light .sup-title {
   color: #0f172a;
-}
-
-.bigscreen-container.light .scope-text {
-  color: #0284c7;
 }
 
 .bigscreen-container.light .demand-node-card {
@@ -3414,17 +3915,57 @@ onBeforeUnmount(() => {
   border-color: #0284c7;
 }
 
-.bigscreen-container.light .filter-pill {
+.bigscreen-container.light .unified-filter-btn {
   background: #ffffff;
-  border-color: rgba(203, 213, 225, 0.8);
-  color: #64748b;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.bigscreen-container.light .filter-pill.active {
-  background: rgba(2, 132, 199, 0.12);
+.bigscreen-container.light .unified-filter-btn:hover {
   border-color: #0284c7;
+  background: #f8fafc;
+}
+
+.bigscreen-container.light .filter-btn-current {
   color: #0284c7;
-  font-weight: 600;
+}
+
+.bigscreen-container.light .filter-btn-badge {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #bae6fd;
+}
+
+.bigscreen-container.light .feed-filter-popover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+
+.bigscreen-container.light .filter-option-row {
+  background: transparent;
+}
+
+.bigscreen-container.light .filter-option-row:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.bigscreen-container.light .filter-option-row.active {
+  background: #e0f2fe;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .filter-option-row .option-title {
+  color: #1e293b;
+}
+
+.bigscreen-container.light .filter-option-row.active .option-title {
+  color: #0284c7;
+}
+
+.bigscreen-container.light .filter-option-row.active .option-check {
+  color: #0284c7;
 }
 
 .bigscreen-container.light .feed-card {
@@ -3432,44 +3973,119 @@ onBeforeUnmount(() => {
   border-color: rgba(226, 232, 240, 0.9);
 }
 
-.bigscreen-container.light .feed-type-tag.pipe {
+.bigscreen-container.light .feed-card.dispatch {
+  border-left: 3.5px solid #0284c7;
+}
+
+.bigscreen-container.light .feed-card.arrival {
+  border-left: 3.5px solid #2563eb;
+}
+
+.bigscreen-container.light .feed-card.receive {
+  border-left: 3.5px solid #d97706;
+}
+
+.bigscreen-container.light .feed-card.warehouse {
+  border-left: 3.5px solid #059669;
+}
+
+.bigscreen-container.light .feed-card.usage {
+  border-left: 3.5px solid #9333ea;
+}
+
+.bigscreen-container.light .feed-card.plan {
+  border-left: 3.5px solid #e11d48;
+}
+
+.bigscreen-container.light .feed-category-tag.dispatch {
   background: rgba(2, 132, 199, 0.12);
   border: 1px solid rgba(2, 132, 199, 0.25);
   color: #0284c7;
 }
 
-.bigscreen-container.light .feed-type-tag.fitting {
+.bigscreen-container.light .feed-category-tag.arrival {
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: #2563eb;
+}
+
+.bigscreen-container.light .feed-category-tag.receive {
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.25);
   color: #d97706;
+}
+
+.bigscreen-container.light .feed-category-tag.warehouse {
+  background: rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+  color: #059669;
+}
+
+.bigscreen-container.light .feed-category-tag.usage {
+  background: rgba(147, 51, 234, 0.12);
+  border: 1px solid rgba(147, 51, 234, 0.25);
+  color: #9333ea;
+}
+
+.bigscreen-container.light .feed-category-tag.plan {
+  background: rgba(225, 29, 72, 0.12);
+  border: 1px solid rgba(225, 29, 72, 0.25);
+  color: #e11d48;
 }
 
 .bigscreen-container.light .feed-card.just-arrived {
   background: #f0f9ff;
 }
 
-.bigscreen-container.light .source-name {
-  color: #0f172a;
-}
-
-.bigscreen-container.light .target-name {
-  color: #0284c7;
-}
-
-.bigscreen-container.light .feed-detail-box {
+.bigscreen-container.light .feed-operator-tag {
   background: #f1f5f9;
-}
-
-.bigscreen-container.light .spec-label {
+  border-color: #e2e8f0;
   color: #475569;
 }
 
-.bigscreen-container.light .detail-badge.pipe .spec-amount {
+.bigscreen-container.light .route-source {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .route-arrow {
   color: #0284c7;
 }
 
-.bigscreen-container.light .detail-badge.fitting .spec-amount {
+.bigscreen-container.light .route-target {
+  color: #0284c7;
+}
+
+.bigscreen-container.light .action-headline-text {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .feed-spec-box {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.bigscreen-container.light .spec-name {
+  color: #334155;
+}
+
+.bigscreen-container.light .spec-amount-badge.pipe {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+}
+
+.bigscreen-container.light .spec-amount-badge.fitting {
+  background: rgba(217, 119, 6, 0.12);
   color: #d97706;
+}
+
+.bigscreen-container.light .feed-code-tag {
+  color: #64748b;
+}
+
+.bigscreen-container.light .feed-pos-tag {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
 }
 
 .bigscreen-container.light .milestone-item {

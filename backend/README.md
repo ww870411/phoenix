@@ -1,3 +1,35 @@
+## 2026-08-18 数字指挥大屏事件流字符串深度清洗与换行符根除（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据清洗与排版规范**：
+  1. **换行符深度过滤**：实现 `_clean_str` 正则清洗函数，在读取数据库物理记录时，彻底清除 `model_spec`（管件规格）、`pipe_model_id`（直管型号）、`order_no`、经办人等字段中残留的 `\r\n\t` 换行符与多余连续空格；
+  2. **保证单行连续性**：输出给前端的所有物料规格与单据标题 100% 保持单行整洁，彻底根治前端因不可见换行符导致的意外串行和排版错位。
+
+## 2026-08-18 数字指挥大屏事件流时区转换与北京时间（UTC+8）格式化（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **时区与时间格式化**：
+  1. **北京时间 (UTC+8) 转换**：实现 `_format_bj_time` 辅助函数，将直管发货、到货确认、施工接收、库管核销、施工量填报与要料计划申报的 UTC 物理时间转换为北京时间；
+  2. **MM-DD HH:mm 输出格式**：大屏动态流水统一输出 `MM-DD HH:mm`（如 `08-18 10:31`、`08-18 09:32`、`08-17 12:57`），彻底修正了时区滞后 8 小时和无日期的缺陷。
+
+## 2026-08-18 数字指挥大屏物流与业务事件查询列名修正与多主体别名映射（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **列名与实体映射修复**：
+  1. **物理列名别名对齐**：将 `tube_delivery` 与 `tube_fitting_delivery` 查询中的 `arrived_by`、`received_by`、`warehouse_by` 修正为物理表对应列名 `arrived_confirm_by AS arrived_by`、`received_confirm_by AS received_by`、`warehouse_confirm_by AS warehouse_by`，管件到货量使用 `arrived_qty` 替代缺失的 `received_qty`；
+  2. **供货主体多格式兼容**：建立 `kaiyuan`/`KAIYUAN`（大连开元）、`BH`/`bh`/`beihai`/`吴近`（能源集团保温管厂）、`xinruide`/`XINRUIDE`（河北鑫瑞得）的大小写与别名映射字典，确保全网事件 100% 真实准确输出。
+
+## 2026-08-18 数字指挥大屏全网工程动态战报流升级（6大核心业务分类聚合）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **多表事件流聚合重构**：
+  1. **多轨业务流数据聚合**：
+     - `tube.tube_delivery`：聚合直管 `shipped_at`（`厂家发货`）、`arrived_confirm_at`（`确认到货`）、`received_confirm_at`（`施工单位收货`）、`warehouse_confirm_at`（`库管核销`）；
+     - `tube.tube_fitting_delivery`：聚合管件 `shipped_at`（`厂家发货`）、`arrived_confirm_at`（`确认到货`）、`received_confirm_at`（`施工单位收货`）、`warehouse_confirm_at`（`库管核销`）；
+     - `tube.tube_daily_usage`：聚合施工现场每日实际安装铺设与焊口完成记录（`施工量确认`）；
+     - `tube.tube_daily_plan`：聚合各标段未来 3 日滚动要料计划申报记录（`需求量申报`）。
+  2. **事件体标准输出**：统一输出 `id`、`category`、`category_key`、`type`、`headline`、`specification`、`amount`、`shipmentCode`、`operator`、`time`、`positiveTag` 等标准字段，并按时间戳全局倒序排序。
+
 ## 2026-08-18 权限体系与前后端访问控制边界规范
 
 - **权限架构设计准则**：

@@ -1,3 +1,95 @@
+## 2026-08-18 数字指挥大屏顶栏“调度控制中心”浮层层级修复（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **UI 层叠上下文修复**：
+  1. 将顶栏 `bigscreen-header` 的 `z-index` 提升为 `1000`；
+  2. 将 `control-menu-popover` 的 `z-index` 提升为 `1100`，彻底解决下方筛选按钮（`z-index: 40`）阻挡或遮盖控制中心下拉菜单的问题。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏战报栏目标题变更为“全网工程实时动态播报”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **文案变更**：将大屏右侧实时动态战报栏目主标题由“全网工程实时动态流水”修改为“全网工程实时动态播报”。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏右侧栏恢复“保供里程碑与正向成果”板块（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **布局状态恢复**：
+  1. **恢复里程碑成果面板**：恢复右下方的“保供里程碑与正向成果”板块（`milestone-panel`）；
+  2. **恢复纵向比例协调**：恢复上方实时动态战报（`flex: 1.4`）与下方里程碑榜单（`flex: 0.9`）的黄金分割比例，保持右侧栏业务流与里程碑成果双轮驱动展示。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏全网动态战报统一折叠式分类筛选面板（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **UI/UX 改造要点**：
+  1. **折叠整合统一按钮**：将原先横向排列的 7 个分散筛选药丸按钮精简为单一整合控制按钮（`unified-filter-btn`），展示当前选中的业务分类、分类图标与折叠指示标；
+  2. **浮层下拉纯净点选**：点击按钮展开弹出浮层面板（`feed-filter-popover`），内嵌 7 大业务流向纯净点选列表（`全部`、`厂家发货`、`确认到货`、`施工单位收货`、`库管核销`、`施工量确认`、`需求量申报`），去除了所有条数数字后缀，突出业务本质；
+  3. **交互细节优化**：支持单点选择后即刻过滤并自动收起，支持全局点击外部自动关闭，支持深色/浅色模式无缝适配。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏单据流去伪存真与 100% 真实数据库单据呈现（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **单据数据源透明化与时间精准化**：
+  1. **彻底移除 Mock 假数据与测试污染单据**：已删除所有预置静态占位数组，并清除了此前单元测试残留的假数据；
+  2. **时区转换与“月-日 时:分”完整呈现**：时间经由后端统一转换为北京时间 (UTC+8)，卡片右上角呈现 `MM-DD HH:mm`（如 `08-18 10:31`、`08-18 09:32`、`08-17 12:57`），彻底解决凌晨时间偏差与缺少日期的问题；
+  3. **精准展示真实单号与经办人**：动态战报流水 100% 对应“大连开元热力管道股份有限公司”真实发运的实单（如 `FOSA-H-260816-001-03`、`OSA-H1-260810-002`）、真实车牌（如 `辽ACU528`、`辽ACZ719`）、真实经办人（库管 `左巨`、施工单位 `翁永鑫`、申报人 `任强` 等）以及实际规格（`预制保温弯管（直缝管） DN1100`、`Φ1120×13/Φ1260×16 预制保温管`）。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏实况模式交互优化与战报卡片点击飞线联动（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **实况模式交互升级**：
+  1. **右侧面板直接触发**：右侧顶栏的 `live-status-pill` 徽章支持直接点击开启/断开实况模式；
+  2. **接入即刻反馈**：点击“接入实况”瞬间发射首道连接激光飞线并高亮置顶卡片，视觉反馈极强；
+  3. **战报卡片点击联动拓扑图**：点击任意一条战报卡片（`handleFeedClick`），系统会自动在中心拓扑图上高亮对应制造基地与标段节点，并向对应标段发射专属激光粒子飞线。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏实况模式历史战报预加载与推顶机制（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **动态流水加载优化**：
+  1. **首屏历史动态保底预载**：进入大屏或点击“接入实况”时，自动载入数据库最新历史战报（绝不留白）；
+  2. **新事件推顶（Prepend）与高亮**：新单据生成时自动推入最顶层并触发激光飞线与大盘增量气泡，历史记录继续保留并顺延下移。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏全网工程动态战报流升级（6大核心业务分类落地）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **动态战报流全景升级**：
+  1. **6 大业务分类微胶囊过滤**：支持 `全部`、`厂家发货`、`确认到货`、`施工单位收货`、`库管核销`、`施工量确认`、`需求量申报` 一键分类过滤；
+  2. **事件卡片智能适配**：不同事件类型展示对应的专属色彩标线、事件徽章、工区地点与现场操作人，形成全网工程作业直播流；
+  3. **双模高品质适配**：全面覆盖暗色与亮色主题下的 6 色分类标线与微胶囊光影。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏供给基地纯厂家名称高质感重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **纯厂家名称极简美感重构**：
+  1. 卡片内部仅保留企业完整全称，彻底去除所有多余图标、副标题与占位标签；
+  2. 采用微光渐变科技底框、4px 专属主题色标线与 15px 粗体清晰排版；
+  3. 支持鼠标悬停微位移与流光光晕，深度兼容深色与浅色双模。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏供给基地真实双轨微指标重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **供给基地数据化真实呈现**：
+  1. 移除冒烟工厂图标 `🏭` 及生硬空标签，直接呈现清晰的企业全称；
+  2. 引入真实累计发运双轨微指标（`📐 保温管` 发运/计划里程与进度条，`🔩 管件` 发运/计划件数与进度条）；
+  3. 供给端与需求端采用完全统一的工业数据语言与微胶囊视觉标准。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏供给制造基地全称展示与精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **供给方卡片优化**：
+  1. 移除 `🎯 专供: xxx` 描述行，卡片高度与纵向间距更舒展均衡；
+  2. 供给列拓扑宽度拓宽至 `260px`，取消标题省略号截断（`white-space: normal; line-height: 1.35`），支持厂家全称完整显示。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
 ## 2026-08-18 数字指挥大屏供热系统符号规范化（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

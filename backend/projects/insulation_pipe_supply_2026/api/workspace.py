@@ -6,7 +6,7 @@ insulation_pipe_supply_2026 工作台基础接口。
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
@@ -1528,68 +1528,383 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "latestMsg": latest_desc
             })
 
-        # 4. 真实发运动态流水 (直管 + 管件)
+        # 4. 真实全网全业务实时动态战报流（涵盖 6 大核心业务分类）
         live_feed_list = []
-        sup_name_map = {s["entity_id"]: s.get("entity_name") or s["entity_id"] for s in supply_entities}
+        sup_name_map = {
+            "kaiyuan": "大连开元热力管道股份有限公司",
+            "KAIYUAN": "大连开元热力管道股份有限公司",
+            "xinruide": "河北鑫瑞得管道设备有限公司",
+            "XINRUIDE": "河北鑫瑞得管道设备有限公司",
+            "吴近": "能源集团保温管厂",
+            "BH": "能源集团保温管厂",
+            "bh": "能源集团保温管厂",
+            "beihai": "能源集团保温管厂",
+        }
+        for s in supply_entities:
+            name = s.get("entity_name") or s["entity_id"]
+            sup_name_map[s["entity_id"]] = name
+            sup_name_map[str(s["entity_id"]).lower()] = name
+            sup_name_map[str(s["entity_id"]).upper()] = name
 
-        pipe_recent_sql = text("""
-            SELECT id, order_no, shipment_no, supply_entity_id, section_1_id, pipe_model_id, 
-                   COALESCE(shipped_qty, 0) AS shipped_qty, vehicle_plate_no, shipped_at, status
-            FROM tube.tube_delivery
-            WHERE status != 'cancelled'
-            ORDER BY shipped_at DESC NULLS LAST, id DESC
-            LIMIT 25
-        """)
-        recent_pipes = session.execute(pipe_recent_sql).mappings().all()
+        def _clean_str(text_val: Any) -> str:
+            """清洗字符串中的换行符、回车符、制表符及连续多余空格，确保单行排版整洁"""
+            if not text_val:
+                return ""
+            cleaned = re.sub(r'[\r\n\t]+', ' ', str(text_val))
+            cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+            return cleaned
 
-        for p in recent_pipes:
-            shipped_time_str = p["shipped_at"].strftime("%H:%M:%S") if p["shipped_at"] else "14:30:00"
-            live_feed_list.append({
-                "id": f"p_{p['id']}",
-                "type": "pipe",
-                "supplier": sup_name_map.get(p["supply_entity_id"], p["supply_entity_id"] or "大连开元热力管道"),
-                "target": sec_name_map.get(p["section_1_id"], p["section_1_id"]),
-                "specification": f"{p['pipe_model_id'] or 'DN600'} 预制保温管",
-                "amount": f"{int(float(p['shipped_qty']))} 米",
-                "shipmentCode": p["shipment_no"] or p["order_no"] or p["vehicle_plate_no"] or f"DL-P-{p['id']}",
-                "time": shipped_time_str,
-                "positiveTag": "直供施工标段现场",
-                "isNew": False,
-                "raw_time": p["shipped_at"].isoformat() if p["shipped_at"] else ""
-            })
+        def _format_bj_time(dt_val: Any) -> Tuple[str, str]:
+            """将 UTC 物理时间转换为北京时间 (UTC+8) 并输出易读的 'MM-DD HH:mm' 与标准 ISO 字符串"""
+            if not dt_val:
+                return "12:00", ""
+            if isinstance(dt_val, str):
+                try:
+                    dt_val = datetime.fromisoformat(dt_val.replace("Z", "+00:00"))
+                except Exception:
+                    return dt_val[:16], dt_val
+            if hasattr(dt_val, "tzinfo"):
+                if dt_val.tzinfo is None:
+                    dt_val = dt_val.replace(tzinfo=timezone.utc)
+                beijing_tz = timezone(timedelta(hours=8))
+                bj_dt = dt_val.astimezone(beijing_tz)
+                return bj_dt.strftime("%m-%d %H:%M"), bj_dt.isoformat()
+            if hasattr(dt_val, "strftime"):
+                return dt_val.strftime("%m-%d"), str(dt_val)
+            return str(dt_val), str(dt_val)
 
-        fit_recent_sql = text("""
-            SELECT id, order_no, shipment_no, supply_entity_id, section_1_id,
-                   fitting_type, model_spec, shipped_qty, unit, vehicle_plate_no, shipped_at, status
-            FROM tube.tube_fitting_delivery
-            WHERE status != 'cancelled'
-            ORDER BY shipped_at DESC NULLS LAST, id DESC
-            LIMIT 25
-        """)
+        # 4.1 管道物流链路事件（厂家发货、确认到货、施工单位收货、库管核销）
         try:
-            recent_fittings = session.execute(fit_recent_sql).mappings().all()
-            for f in recent_fittings:
-                shipped_time_str = f["shipped_at"].strftime("%H:%M:%S") if f["shipped_at"] else "15:00:00"
-                spec_desc = f"{f['fitting_type'] or ''} {f['model_spec'] or ''}".strip() or "标准关键管件"
-                if len(spec_desc) > 22: spec_desc = spec_desc[:22] + "..."
-                live_feed_list.append({
-                    "id": f"f_{f['id']}",
-                    "type": "fitting",
-                    "supplier": sup_name_map.get(f["supply_entity_id"], f["supply_entity_id"] or "河北鑫瑞得管道"),
-                    "target": sec_name_map.get(f["section_1_id"], f["section_1_id"]),
-                    "specification": spec_desc,
-                    "amount": f"{int(float(f['shipped_qty'] or 1))} {f.get('unit') or '件'}",
-                    "shipmentCode": f["shipment_no"] or f["order_no"] or f"FT-{f['id']}",
-                    "time": shipped_time_str,
-                    "positiveTag": "配件专车直达标段",
-                    "isNew": False,
-                    "raw_time": f["shipped_at"].isoformat() if f["shipped_at"] else ""
-                })
-        except Exception:
-            pass
+            pipe_events_sql = text("""
+                SELECT id, order_no, shipment_no, supply_entity_id, section_1_id, pipe_model_id, 
+                       COALESCE(shipped_qty, 0) AS shipped_qty, 
+                       COALESCE(received_qty, arrived_qty, shipped_qty, 0) AS received_qty,
+                       vehicle_plate_no, shipped_at, arrived_confirm_at, 
+                       arrived_confirm_by AS arrived_by,
+                       received_confirm_at, 
+                       received_confirm_by AS received_by, 
+                       warehouse_confirm_at, 
+                       warehouse_confirm_by AS warehouse_by,
+                       status
+                FROM tube.tube_delivery
+                WHERE status != 'cancelled'
+                  AND created_by != 'supplier_user'
+                  AND created_by != 'supplier_test_user'
+                ORDER BY id DESC
+                LIMIT 30
+            """)
+            pipe_events = session.execute(pipe_events_sql).mappings().all()
+            for p in pipe_events:
+                sup_name = _clean_str(sup_name_map.get(str(p["supply_entity_id"]).strip(), p["supply_entity_id"] or "大连开元热力管道股份有限公司"))
+                sec_name = _clean_str(sec_name_map.get(p["section_1_id"], p["section_1_id"] or "施工标段现场"))
+                model_str = _clean_str(f"{p['pipe_model_id'] or 'Φ1120×13/Φ1260×16'} 预制保温管")
+                qty_str = f"{int(float(p['shipped_qty']))} 米"
+                rec_qty_str = f"{int(float(p['received_qty']))} 米"
+                code_str = _clean_str(p["order_no"] or p["shipment_no"] or p["vehicle_plate_no"] or f"DL-P-{p['id']}")
+                plate_str = _clean_str(p["vehicle_plate_no"] or "专线保供车")
 
+                # 事件 1：厂家发货
+                if p["shipped_at"]:
+                    t_str, raw_t = _format_bj_time(p["shipped_at"])
+                    live_feed_list.append({
+                        "id": f"p_ship_{p['id']}",
+                        "category": "厂家发货",
+                        "category_key": "dispatch",
+                        "type": "pipe",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"{sup_name} ──► {sec_name}",
+                        "specification": model_str,
+                        "amount": qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": "管厂调度发运",
+                        "time": t_str,
+                        "positiveTag": "保温管专车直达标段",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                # 事件 2：确认到货
+                if p["arrived_confirm_at"]:
+                    t_str, raw_t = _format_bj_time(p["arrived_confirm_at"])
+                    arr_op = _clean_str(p["arrived_by"] or "现场负责人")
+                    live_feed_list.append({
+                        "id": f"p_arr_{p['id']}",
+                        "category": "确认到货",
+                        "category_key": "arrival",
+                        "type": "pipe",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}】运载车辆进场到货",
+                        "specification": model_str,
+                        "amount": qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": arr_op,
+                        "time": t_str,
+                        "positiveTag": "车辆已进场完成到货核验",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                # 事件 3：施工单位收货
+                if p["received_confirm_at"]:
+                    t_str, raw_t = _format_bj_time(p["received_confirm_at"])
+                    rec_op = _clean_str(p["received_by"] or "现场施工接收员")
+                    live_feed_list.append({
+                        "id": f"p_rec_{p['id']}",
+                        "category": "施工单位收货",
+                        "category_key": "receive",
+                        "type": "pipe",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}】施工单位现场实物收货",
+                        "specification": model_str,
+                        "amount": rec_qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": rec_op,
+                        "time": t_str,
+                        "positiveTag": f"施工队完成实物卸车接收",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                # 事件 4：库管核销
+                if p["warehouse_confirm_at"] or p["status"] == "completed":
+                    w_time = p["warehouse_confirm_at"] or p["received_confirm_at"] or p["shipped_at"]
+                    t_str, raw_t = _format_bj_time(w_time)
+                    w_op = _clean_str(p["warehouse_by"] or "专职库管员")
+                    live_feed_list.append({
+                        "id": f"p_wh_{p['id']}",
+                        "category": "库管核销",
+                        "category_key": "warehouse",
+                        "type": "pipe",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}材料库】专职库管实测核销",
+                        "specification": model_str,
+                        "amount": rec_qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": w_op,
+                        "time": t_str,
+                        "positiveTag": f"实测核验无误，入库手续闭环",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+        except Exception as e:
+            print("⚠️ 读取直管业务流水异常:", e)
+
+        # 4.2 管件物流链路事件
+        try:
+            fit_events_sql = text("""
+                SELECT id, order_no, shipment_no, supply_entity_id, section_1_id,
+                       fitting_type, model_spec, shipped_qty, 
+                       COALESCE(arrived_qty, shipped_qty, 0) AS received_qty,
+                       unit, vehicle_plate_no, shipped_at, arrived_confirm_at, 
+                       arrived_confirm_by AS arrived_by,
+                       received_confirm_at, 
+                       received_confirm_by AS received_by, 
+                       warehouse_confirm_at, 
+                       warehouse_confirm_by AS warehouse_by,
+                       status
+                FROM tube.tube_fitting_delivery
+                WHERE status != 'cancelled'
+                  AND created_by != 'supplier_user'
+                  AND created_by != 'supplier_test_user'
+                ORDER BY id DESC
+                LIMIT 30
+            """)
+            fit_events = session.execute(fit_events_sql).mappings().all()
+            for f in fit_events:
+                sup_name = _clean_str(sup_name_map.get(str(f["supply_entity_id"]).strip(), f["supply_entity_id"] or "河北鑫瑞得管道设备有限公司"))
+                sec_name = _clean_str(sec_name_map.get(f["section_1_id"], f["section_1_id"] or "施工标段现场"))
+                
+                ft = _clean_str(f.get("fitting_type"))
+                ms = _clean_str(f.get("model_spec"))
+                spec_desc = f"{ft} {ms}".strip() or "标准关键管件"
+                spec_desc = _clean_str(spec_desc)
+                
+                qty_str = f"{int(float(f['shipped_qty'] or 1))} {f.get('unit') or '件'}"
+                rec_qty_str = f"{int(float(f['received_qty'] or 1))} {f.get('unit') or '件'}"
+                code_str = _clean_str(f["order_no"] or f["shipment_no"] or f["vehicle_plate_no"] or f"FT-{f['id']}")
+                plate_str = _clean_str(f["vehicle_plate_no"] or "配件专送车")
+
+                if f["shipped_at"]:
+                    t_str, raw_t = _format_bj_time(f["shipped_at"])
+                    live_feed_list.append({
+                        "id": f"f_ship_{f['id']}",
+                        "category": "厂家发货",
+                        "category_key": "dispatch",
+                        "type": "fitting",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"{sup_name} ──► {sec_name}",
+                        "specification": spec_desc,
+                        "amount": qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": "管厂调度发运",
+                        "time": t_str,
+                        "positiveTag": "关键配件专车直达标段",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                if f["arrived_confirm_at"]:
+                    t_str, raw_t = _format_bj_time(f["arrived_confirm_at"])
+                    arr_op = _clean_str(f["arrived_by"] or "现场负责人")
+                    live_feed_list.append({
+                        "id": f"f_arr_{f['id']}",
+                        "category": "确认到货",
+                        "category_key": "arrival",
+                        "type": "fitting",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}现场】管件车辆进场到货",
+                        "specification": spec_desc,
+                        "amount": qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": arr_op,
+                        "time": t_str,
+                        "positiveTag": "管件已抵场等待卸车验收",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                if f["received_confirm_at"]:
+                    t_str, raw_t = _format_bj_time(f["received_confirm_at"])
+                    rec_op = _clean_str(f["received_by"] or "施工接收员")
+                    live_feed_list.append({
+                        "id": f"f_rec_{f['id']}",
+                        "category": "施工单位收货",
+                        "category_key": "receive",
+                        "type": "fitting",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}】施工单位接收管件",
+                        "specification": spec_desc,
+                        "amount": rec_qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": rec_op,
+                        "time": t_str,
+                        "positiveTag": "施工队确认管件规格并接收",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+
+                if f["warehouse_confirm_at"] or f["status"] == "completed":
+                    w_time = f["warehouse_confirm_at"] or f["received_confirm_at"] or f["shipped_at"]
+                    t_str, raw_t = _format_bj_time(w_time)
+                    w_op = _clean_str(f["warehouse_by"] or "专职库管员")
+                    live_feed_list.append({
+                        "id": f"f_wh_{f['id']}",
+                        "category": "库管核销",
+                        "category_key": "warehouse",
+                        "type": "fitting",
+                        "supplier": sup_name,
+                        "target": sec_name,
+                        "headline": f"【{sec_name}材料库】管件实物核销入库",
+                        "specification": spec_desc,
+                        "amount": rec_qty_str,
+                        "shipmentCode": code_str,
+                        "vehiclePlate": plate_str,
+                        "operator": w_op,
+                        "time": t_str,
+                        "positiveTag": "管件配套清点无误，手续闭环",
+                        "isNew": False,
+                        "raw_time": raw_t
+                    })
+        except Exception as e:
+            print("⚠️ 读取管件业务流水异常:", e)
+
+        # 4.3 施工现场消耗与安装量填报（施工量确认）
+        try:
+            usage_events_sql = text("""
+                SELECT id, usage_date, section_1_id, pipe_model_id, 
+                       COALESCE(usage_qty, 0) AS usage_qty, 
+                       COALESCE(loss_qty, 0) AS loss_qty,
+                       filled_by, filled_at, remark
+                FROM tube.tube_daily_usage
+                WHERE usage_qty > 0 OR loss_qty > 0
+                ORDER BY usage_date DESC, id DESC
+                LIMIT 20
+            """)
+            usage_events = session.execute(usage_events_sql).mappings().all()
+            for u in usage_events:
+                sec_name = _clean_str(sec_name_map.get(u["section_1_id"], u["section_1_id"] or "施工标段工区"))
+                u_time = u["filled_at"] or u["usage_date"]
+                t_str, raw_t = _format_bj_time(u_time)
+                model_name = _clean_str(f"{u['pipe_model_id'] or 'DN600'} 保温管")
+                fill_op = _clean_str(u["filled_by"] or "现场施工负责人")
+                live_feed_list.append({
+                    "id": f"u_{u['id']}",
+                    "category": "施工量确认",
+                    "category_key": "usage",
+                    "type": "pipe",
+                    "supplier": "施工现场班组",
+                    "target": sec_name,
+                    "headline": f"【{sec_name}】现场实际施工量确认",
+                    "specification": model_name,
+                    "amount": f"铺设安装 {int(float(u['usage_qty']))} 米",
+                    "shipmentCode": f"SG-{u['usage_date'].strftime('%m%d') if u['usage_date'] else u['id']}",
+                    "vehiclePlate": "工区现场铺设",
+                    "operator": fill_op,
+                    "time": t_str,
+                    "positiveTag": f"完成管网下沟敷设，记录已确认",
+                    "isNew": False,
+                    "raw_time": raw_t
+                })
+        except Exception as e:
+            print("⚠️ 读取施工用量业务流水异常:", e)
+
+        # 4.4 未来 3 日滚动要料计划（需求量申报）
+        try:
+            plan_events_sql = text("""
+                SELECT id, plan_date, section_1_id, pipe_model_id, 
+                       COALESCE(plan_qty, 0) AS plan_qty,
+                       filled_by, filled_at, remark
+                FROM tube.tube_daily_plan
+                WHERE plan_qty > 0
+                ORDER BY plan_date DESC, id DESC
+                LIMIT 20
+            """)
+            plan_events = session.execute(plan_events_sql).mappings().all()
+            for pl in plan_events:
+                sec_name = _clean_str(sec_name_map.get(pl["section_1_id"], pl["section_1_id"] or "需求标段项目部"))
+                pl_time = pl["filled_at"] or pl["plan_date"]
+                t_str, raw_t = _format_bj_time(pl_time)
+                model_name = _clean_str(f"{pl['pipe_model_id'] or 'DN600'} 保温管")
+                plan_date_str = pl["plan_date"].strftime("%m-%d") if pl["plan_date"] else "次日"
+                fill_op = _clean_str(pl["filled_by"] or "标段材料员")
+                live_feed_list.append({
+                    "id": f"pl_{pl['id']}",
+                    "category": "需求量申报",
+                    "category_key": "plan",
+                    "type": "pipe",
+                    "supplier": "标段材料计划组",
+                    "target": sec_name,
+                    "headline": f"【{sec_name}】提报 {plan_date_str} 滚动要料",
+                    "specification": model_name,
+                    "amount": f"申报调拨 {int(float(pl['plan_qty']))} 米",
+                    "shipmentCode": f"JH-{plan_date_str}",
+                    "vehiclePlate": "要料计划申报",
+                    "operator": fill_op,
+                    "time": t_str,
+                    "positiveTag": f"滚动调拨计划提报，待调度排产",
+                    "isNew": False,
+                    "raw_time": raw_t
+                })
+        except Exception as e:
+            print("⚠️ 读取要料计划业务流水异常:", e)
+
+        # 4.5 排序并截取最新 40 条全景战报流水
         live_feed_list.sort(key=lambda x: x.get("raw_time") or "", reverse=True)
-        live_feed_list = live_feed_list[:30]
+        live_feed_list = live_feed_list[:40]
 
         # 5. 真实拓扑节点 (3大保供管厂 + 10大需求标段施工现场，100% 对应配置文件真实实体)
         supply_nodes = [

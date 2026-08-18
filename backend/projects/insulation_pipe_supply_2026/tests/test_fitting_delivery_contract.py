@@ -74,21 +74,33 @@ class FittingDeliveryContractTests(unittest.TestCase):
             submit_fitting_delivery,
             list_fitting_deliveries,
         )
+        from sqlalchemy import text
+        from backend.db.database_daily_report_25_26 import SessionLocal
+
         # 1. 普通供给主体 (tube_supplier) 提交时，即使传入了 2020 年的旧时间，后端也强制落库为当前真实时间
         past_time = "2020-01-01T08:00:00+08:00"
         payload = {
-            "supply_entity_id": "BH",
-            "vehicle_plate_no": "鲁B-11111",
+            "supply_entity_id": "KAIYUAN",
+            "vehicle_plate_no": "鲁B-TEST-999",
             "section_1_id": "high_lot_1",
             "shipped_at": past_time,
             "items": [{"fitting_type": "弯头", "model_spec": "DN300", "shipped_qty": 1, "unit": "个"}],
         }
-        res = submit_fitting_delivery(payload, operator="supplier_user", operator_group="tube_supplier")
-        self.assertTrue(res["ok"])
-        items = list_fitting_deliveries(search_keyword="鲁B-11111", page_size=1).get("items", [])
-        self.assertTrue(len(items) > 0)
-        # 验证没有落库为 2020 年，而是当前的 2026 年
-        self.assertTrue(items[0]["shipped_at"].startswith("2026-"))
+        try:
+            res = submit_fitting_delivery(payload, operator="supplier_test_user", operator_group="tube_supplier")
+            self.assertTrue(res["ok"])
+            items = list_fitting_deliveries(search_keyword="鲁B-TEST-999", page_size=1).get("items", [])
+            self.assertTrue(len(items) > 0)
+            # 验证没有落库为 2020 年，而是当前的 2026 年
+            self.assertTrue(items[0]["shipped_at"].startswith("2026-"))
+        finally:
+            # 必须即时清理测试注入的数据，防止污染生产库大屏战报
+            clean_session = SessionLocal()
+            try:
+                clean_session.execute(text("DELETE FROM tube.tube_fitting_delivery WHERE vehicle_plate_no = '鲁B-TEST-999' OR created_by = 'supplier_test_user'"))
+                clean_session.commit()
+            finally:
+                clean_session.close()
 
 
 if __name__ == "__main__":
