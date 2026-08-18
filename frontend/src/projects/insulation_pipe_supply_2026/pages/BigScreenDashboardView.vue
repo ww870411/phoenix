@@ -5,78 +5,120 @@
       <div class="header-left">
         <div class="header-badge" :class="{ 'live-mode': isLiveStreamMode }">
           <span class="pulse-dot" :class="{ live: isLiveStreamMode }"></span>
-          <span class="badge-text">{{ isLiveStreamMode ? '生产实况 · 数据库实时直连 (只读感知)' : '数字孪生 · 实时调度中心' }}</span>
+          <span class="badge-text">全链追踪 · 实时调度中心</span>
         </div>
         <div class="header-time">{{ currentTimeStr }}</div>
       </div>
 
       <div class="header-title-box">
-        <h1 class="header-title">大连洁净能源集团 · 2026预制直埋保温管智慧供应链调度大屏</h1>
+        <h1 class="header-title">大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台</h1>
         <div class="header-sub">
           <span>三大保供制造管厂直供现场</span>
           <span class="sub-sep">|</span>
           <span>全网 10 大施工标段</span>
           <span class="sub-sep">|</span>
           <span>1138项物料基准</span>
-          <span class="sub-sep">|</span>
-          <span>业务日期：{{ realShowDate || configSummary?.show_date || '2026-08-10' }}</span>
         </div>
       </div>
 
-      <div class="header-right">
-        <!-- 真实数据流直连、演示模式、主题切换与全屏快捷操作 -->
-        <div class="demo-actions">
-          <!-- 核心：接入真实数据流 / 生产实况按钮 -->
+      <!-- 右侧：单一整合控制中心按钮 + 展开式控制面板 -->
+      <div class="header-right" ref="controlMenuRef">
+        <div class="control-center-wrapper">
+          <!-- 触发主按钮 -->
           <button 
-            class="action-btn live-stream-btn" 
-            :class="{ active: isLiveStreamMode }" 
-            @click="toggleLiveStreamMode"
-            :title="isLiveStreamMode ? '已接入真实数据流（只读安全感知），点击断开' : '点击接入真实数据库实时数据流，展示真实数据状态与实时发运累计'"
+            class="action-btn control-trigger-btn"
+            :class="{ active: isControlMenuOpen, 'live-active': isLiveStreamMode }"
+            @click.stop="toggleControlMenu"
+            title="点击打开/收起大屏控制中心"
           >
-            <span class="btn-icon">{{ isLiveStreamMode ? '🟢' : '📡' }}</span>
-            <span>{{ isLiveStreamMode ? '实况数据流已接入' : '接入真实数据流' }}</span>
+            <span class="btn-icon">⚙️</span>
+            <span class="btn-text">调度控制中心</span>
+            <span class="control-caret">{{ isControlMenuOpen ? '▲' : '▼' }}</span>
+            <span v-if="isLiveStreamMode" class="mini-live-tag">实况中</span>
           </button>
 
-          <button 
-            class="action-btn theme-toggle-btn" 
-            @click="toggleTheme"
-            :title="isDark ? '切换至明亮浅色模式' : '切换至科技深色模式'"
-          >
-            <span class="btn-icon">{{ isDark ? '☀️' : '🌙' }}</span>
-            <span>{{ isDark ? '浅色' : '深色' }}</span>
-          </button>
+          <!-- 浮层下拉控制面板 -->
+          <transition name="control-dropdown">
+            <div v-if="isControlMenuOpen" class="control-menu-popover" @click.stop>
+              <div class="popover-header">
+                <span class="popover-title">🎮 调度与大屏控制台</span>
+                <button class="popover-close-btn" @click="isControlMenuOpen = false" title="关闭">✕</button>
+              </div>
 
-          <button 
-            class="action-btn demo-btn" 
-            :class="{ active: autoDemoRunning }" 
-            @click="toggleAutoDemo"
-            title="开启/暂停沙盒自动演示流"
-          >
-            <span class="btn-icon">{{ autoDemoRunning ? '⏸️' : '▶️' }}</span>
-            <span>{{ autoDemoRunning ? '演示中' : '自动演示' }}</span>
-          </button>
-          
-          <button class="action-btn sim-btn" @click="triggerSimulateDelivery('pipe')">
-            <span class="btn-icon">🏭</span>
-            <span>模拟管材</span>
-          </button>
+              <div class="popover-group">
+                <div class="group-title">数据与视图模式</div>
+                <div class="group-buttons-grid">
+                  <!-- 接入真实数据流 -->
+                  <button 
+                    class="action-btn live-stream-btn" 
+                    :class="{ active: isLiveStreamMode }" 
+                    @click="toggleLiveStreamMode"
+                    :title="isLiveStreamMode ? '已接入真实数据流（只读安全感知），点击断开' : '点击接入真实数据库实时数据流，展示真实数据状态与实时发运累计'"
+                  >
+                    <span class="btn-icon">{{ isLiveStreamMode ? '🟢' : '📡' }}</span>
+                    <span>{{ isLiveStreamMode ? '断开实况' : '接入实况' }}</span>
+                  </button>
 
-          <button class="action-btn sim-btn fitting" @click="triggerSimulateDelivery('fitting')">
-            <span class="btn-icon">📦</span>
-            <span>模拟管件</span>
-          </button>
+                  <!-- 浅色/深色模式切换 -->
+                  <button 
+                    class="action-btn theme-toggle-btn" 
+                    @click="toggleTheme"
+                    :title="isDark ? '切换至明亮浅色模式' : '切换至科技深色模式'"
+                  >
+                    <span class="btn-icon">{{ isDark ? '☀️' : '🌙' }}</span>
+                    <span>{{ isDark ? '浅色' : '深色' }}</span>
+                  </button>
 
-          <button class="action-btn icon-btn" @click="loadRealData(true)" title="即刻强制刷新数据库全量数据">
-            <span>🔄</span>
-          </button>
+                  <!-- 强制刷新 -->
+                  <button class="action-btn icon-btn" @click="loadRealData(true)" title="即刻强制刷新数据库全量数据">
+                    <span class="btn-icon">🔄</span>
+                    <span>刷新数据</span>
+                  </button>
 
-          <button class="action-btn icon-btn" @click="toggleFullscreen" title="全屏展示">
-            <span>{{ isFullscreen ? '🗗' : '⛶' }}</span>
-          </button>
+                  <!-- 全屏展示 -->
+                  <button class="action-btn icon-btn" @click="toggleFullscreen" title="全屏展示">
+                    <span class="btn-icon">{{ isFullscreen ? '🗗' : '⛶' }}</span>
+                    <span>{{ isFullscreen ? '退出全屏' : '全屏展示' }}</span>
+                  </button>
+                </div>
+              </div>
 
-          <button class="action-btn icon-btn back-btn" @click="goBackToStandardDashboard" title="返回标准看板">
-            <span>↩</span>
-          </button>
+              <div class="popover-group">
+                <div class="group-title">沙盒演示与模拟</div>
+                <div class="group-buttons-grid">
+                  <!-- 自动演示 -->
+                  <button 
+                    class="action-btn demo-btn" 
+                    :class="{ active: autoDemoRunning }" 
+                    @click="toggleAutoDemo"
+                    title="开启/暂停沙盒自动演示流"
+                  >
+                    <span class="btn-icon">{{ autoDemoRunning ? '⏸️' : '▶️' }}</span>
+                    <span>{{ autoDemoRunning ? '演示中' : '自动演示' }}</span>
+                  </button>
+
+                  <!-- 模拟管材 -->
+                  <button class="action-btn sim-btn" @click="triggerSimulateDelivery('pipe')">
+                    <span class="btn-icon">🏭</span>
+                    <span>模拟管材</span>
+                  </button>
+
+                  <!-- 模拟管件 -->
+                  <button class="action-btn sim-btn fitting" @click="triggerSimulateDelivery('fitting')">
+                    <span class="btn-icon">📦</span>
+                    <span>模拟管件</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="popover-footer">
+                <button class="action-btn back-btn" @click="goBackToStandardDashboard" title="返回标准看板">
+                  <span class="btn-icon">↩</span>
+                  <span>返回标准看板</span>
+                </button>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </header>
@@ -268,31 +310,9 @@
         <div class="panel-box map-topology-master-panel">
           <!-- 拓扑头部导航与状态过滤 -->
           <div class="topology-header-bar">
-            <div class="topo-title-group">
-              <div class="panel-title">
-                <span class="title-icon">🌐</span>
-                <span>数字孪生 · 供需全景智慧流向拓扑</span>
-              </div>
-              <div class="topo-sub-tag">3大制造管厂专线直供 ──► 10大施工标段</div>
-            </div>
-
-            <!-- 系统分类切换 Tabs -->
-            <div class="system-tabs">
-              <button 
-                class="sys-tab-btn" 
-                :class="{ active: activeSectionTab === 'all' }"
-                @click="setSectionTab('all')"
-              >全网总览 (10)</button>
-              <button 
-                class="sys-tab-btn high" 
-                :class="{ active: activeSectionTab === 'high' }"
-                @click="setSectionTab('high')"
-              >🔥 高温水干线 (4)</button>
-              <button 
-                class="sys-tab-btn low" 
-                :class="{ active: activeSectionTab === 'low' }"
-                @click="setSectionTab('low')"
-              >❄️ 低温水分支 (6)</button>
+            <div class="panel-title">
+              <span class="title-icon">🌐</span>
+              <span>供需流向拓扑</span>
             </div>
 
             <!-- 图例说明 -->
@@ -646,28 +666,6 @@
         </div>
       </section>
     </main>
-
-    <!-- 底部状态光带 -->
-    <footer class="bigscreen-footer">
-      <div class="footer-bar">
-        <div class="sys-status">
-          <span class="status-indicator live" :class="{ 'stream-active': isLiveStreamMode }"></span>
-          <span>{{ isLiveStreamMode ? '⚡ 生产实况实时数据流已接入 · 数据库只读安全感知模式' : '100% 真实业务数据源 · 沙盒演示模式' }}</span>
-          <span class="footer-sep">|</span>
-          <span>开元/鑫瑞得/能源集团管厂直发</span>
-          <span class="footer-sep">|</span>
-          <span>10 大标段现场签收</span>
-        </div>
-        <div class="sys-tips">
-          <span v-if="isLiveStreamMode" class="live-mode-tip">
-            🟢 <strong>生产实况监听中</strong>：大屏只读取数据库与配置文件，不产生任何脏写入；现场或管厂提交新单据时将自动点亮专供流向与数据累计。
-          </span>
-          <span v-else>
-            💡 提示：所有数据均读取自系统权威数据库，点击【接入真实数据流】可实时感知生产实况，亦可点击【模拟管材/管件】体验沙盒动效。
-          </span>
-        </div>
-      </div>
-    </footer>
   </div>
 </template>
 
@@ -701,6 +699,18 @@ const isFullscreen = ref(false)
 const configSummary = ref(null)
 const realShowDate = ref('')
 const currentTimeStr = ref('')
+const isControlMenuOpen = ref(false)
+const controlMenuRef = ref(null)
+
+function toggleControlMenu() {
+  isControlMenuOpen.value = !isControlMenuOpen.value
+}
+
+function handleGlobalClick(e) {
+  if (isControlMenuOpen.value && controlMenuRef.value && !controlMenuRef.value.contains(e.target)) {
+    isControlMenuOpen.value = false
+  }
+}
 let timerClock = null
 let autoDemoTimer = null
 let autoSyncTimer = null
@@ -1342,6 +1352,7 @@ onMounted(() => {
   // 每 20 秒静默拉取数据库最新发货与核销状态
   autoSyncTimer = setInterval(loadRealData, 20000)
   window.addEventListener('resize', recalculateFlylines, { passive: true })
+  window.addEventListener('click', handleGlobalClick)
 })
 
 onBeforeUnmount(() => {
@@ -1352,6 +1363,7 @@ onBeforeUnmount(() => {
   if (resizeObserver) resizeObserver.disconnect()
   if (rAFId) cancelAnimationFrame(rAFId)
   window.removeEventListener('resize', recalculateFlylines)
+  window.removeEventListener('click', handleGlobalClick)
 })
 </script>
 
@@ -1439,16 +1451,23 @@ onBeforeUnmount(() => {
 }
 
 .header-title-box {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   text-align: center;
-  position: relative;
+  z-index: 5;
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
 .header-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: 1.5px;
   color: #ffffff;
+  text-shadow: 0 2px 12px rgba(0, 242, 254, 0.35);
 }
 
 .header-sub {
@@ -1468,15 +1487,155 @@ onBeforeUnmount(() => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 330px;
   justify-content: flex-end;
+  z-index: 25;
 }
 
-.demo-actions {
-  display: flex;
+.control-center-wrapper {
+  position: relative;
+}
+
+/* 调度控制中心触发主按钮 */
+.control-trigger-btn {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 16px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(0, 242, 254, 0.4);
+  border-radius: 20px;
+  color: #00f2fe;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 0 10px rgba(0, 242, 254, 0.1);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.control-trigger-btn:hover,
+.control-trigger-btn.active {
+  background: rgba(0, 242, 254, 0.15);
+  border-color: #00f2fe;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.4);
+  color: #ffffff;
+}
+
+.control-trigger-btn.live-active {
+  border-color: #10b981;
+  color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.control-caret {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.mini-live-tag {
+  font-size: 10px;
+  background: rgba(16, 185, 129, 0.25);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  color: #10b981;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+/* 下拉菜单浮层 Popover */
+.control-menu-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 320px;
+  background: rgba(9, 14, 26, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 254, 0.15);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.popover-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.popover-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.popover-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.group-buttons-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.group-buttons-grid .action-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.popover-footer {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-footer .back-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 7px 12px;
+}
+
+/* 下拉动画 */
+.control-dropdown-enter-active,
+.control-dropdown-leave-active {
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.control-dropdown-enter-from,
+.control-dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
 }
 
 .action-btn {
@@ -1565,11 +1724,11 @@ onBeforeUnmount(() => {
 .bigscreen-content {
   flex: 1;
   min-height: 0;
-  height: calc(100vh - 102px);
+  height: calc(100vh - 70px);
   display: grid;
   grid-template-columns: 330px 1fr 370px;
-  gap: 14px;
-  padding: 10px 20px;
+  gap: 16px;
+  padding: 14px 22px 18px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -1579,7 +1738,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow: hidden;
 }
 
@@ -1593,8 +1752,8 @@ onBeforeUnmount(() => {
 .panel-box {
   background: #0b1322;
   border: 1px solid rgba(0, 242, 254, 0.18);
-  border-radius: 8px;
-  padding: 14px 16px;
+  border-radius: 9px;
+  padding: 15px 16px;
   position: relative;
   box-sizing: border-box;
 }
@@ -1669,15 +1828,15 @@ onBeforeUnmount(() => {
 .kpi-metric-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .metric-item {
   background: #111c30;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   position: relative;
   overflow: hidden;
 }
@@ -1696,7 +1855,7 @@ onBeforeUnmount(() => {
 }
 
 .metric-val .num {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
   font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
   color: #f1f5f9;
@@ -1798,16 +1957,16 @@ onBeforeUnmount(() => {
 
 .energy-bar-track {
   width: 100%;
-  height: 8px;
+  height: 10px;
   background: #111c30;
-  border-radius: 4px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .energy-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 5px;
   position: relative;
   transition: width 0.8s ease-out;
 }
@@ -1833,19 +1992,19 @@ onBeforeUnmount(() => {
 .fitting-types-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .fitting-pill {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: #111c30;
   border: 1px solid rgba(251, 191, 36, 0.25);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 10px;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .pill-name {
@@ -1861,31 +2020,31 @@ onBeforeUnmount(() => {
 .safety-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 
 .safety-card {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   background: #111c30;
   border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 6px;
-  padding: 6px 8px;
+  padding: 8px 10px;
 }
 
 .safety-icon {
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .safety-val {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #10b981;
 }
 
 .safety-desc {
-  font-size: 10px;
+  font-size: 10.5px;
   color: #64748b;
 }
 
@@ -2124,7 +2283,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  gap: 8px;
+  gap: 10px;
 }
 
 .supply-node-card {
@@ -2132,11 +2291,11 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.25);
   border-left: 3px solid #00f2fe;
   border-radius: 8px;
-  padding: 13px 15px;
+  padding: 15px 16px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
 }
@@ -2162,13 +2321,13 @@ onBeforeUnmount(() => {
 .sup-card-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .sup-code-badge {
   font-family: monospace;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 11.5px;
   color: #00f2fe;
   background: rgba(0, 242, 254, 0.15);
   padding: 2px 6px;
@@ -2176,7 +2335,7 @@ onBeforeUnmount(() => {
 }
 
 .sup-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #f1f5f9;
   white-space: nowrap;
@@ -2221,13 +2380,13 @@ onBeforeUnmount(() => {
 
 .channel-glow-line {
   width: 2px;
-  height: 60px;
+  height: 80px;
   background: linear-gradient(180deg, transparent, #00f2fe, transparent);
 }
 
 .channel-text {
   writing-mode: vertical-rl;
-  font-size: 9px;
+  font-size: 9.5px;
   color: #64748b;
   letter-spacing: 2px;
 }
@@ -2246,7 +2405,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 14px;
   overflow: hidden;
 }
 
@@ -2258,7 +2417,7 @@ onBeforeUnmount(() => {
   background: rgba(15, 25, 45, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 
 .system-sub-header {
@@ -2300,7 +2459,7 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   padding-right: 3px;
 }
 
@@ -2308,7 +2467,7 @@ onBeforeUnmount(() => {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 11px 14px;
+  padding: 12px 14px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2542,8 +2701,8 @@ onBeforeUnmount(() => {
   background: #111c30;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 10px;
+  padding: 4px 10px;
+  font-size: 11px;
   color: #94a3b8;
   cursor: pointer;
   transition: all 0.2s;
@@ -2566,17 +2725,17 @@ onBeforeUnmount(() => {
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .feed-card {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 8px 10px;
+  border-radius: 7px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   position: relative;
   transition: transform 0.3s ease;
   flex-shrink: 0;
@@ -2602,9 +2761,9 @@ onBeforeUnmount(() => {
 }
 
 .feed-type-tag {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 3px;
 }
 
@@ -2620,15 +2779,15 @@ onBeforeUnmount(() => {
 
 .feed-time {
   font-family: monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   color: #64748b;
 }
 
 .feed-headline {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 11.5px;
 }
 
 .source-name {
@@ -2657,7 +2816,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   background: rgba(0, 0, 0, 0.25);
-  padding: 3px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
 }
 
@@ -2668,7 +2827,7 @@ onBeforeUnmount(() => {
 }
 
 .spec-label {
-  font-size: 10px;
+  font-size: 10.5px;
   color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
@@ -2677,7 +2836,7 @@ onBeforeUnmount(() => {
 }
 
 .spec-amount {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 
@@ -2691,7 +2850,7 @@ onBeforeUnmount(() => {
 
 .shipment-code {
   font-family: monospace;
-  font-size: 9px;
+  font-size: 9.5px;
   color: #64748b;
 }
 
@@ -2701,10 +2860,10 @@ onBeforeUnmount(() => {
 }
 
 .pos-tag {
-  font-size: 9px;
+  font-size: 9.5px;
   color: #10b981;
   background: rgba(16, 185, 129, 0.1);
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 8px;
 }
 
@@ -2741,14 +2900,14 @@ onBeforeUnmount(() => {
   padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .milestone-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 5px 6px;
+  gap: 9px;
+  padding: 7px 8px;
   background: #111c30;
   border-radius: 5px;
   border-left: 2px solid #fbbf24;
@@ -2768,7 +2927,7 @@ onBeforeUnmount(() => {
 }
 
 .m-title {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   color: #f1f5f9;
   white-space: nowrap;
@@ -2777,7 +2936,7 @@ onBeforeUnmount(() => {
 }
 
 .m-desc {
-  font-size: 10px;
+  font-size: 10.5px;
   color: #94a3b8;
   margin-top: 1px;
   line-height: 1.3;
@@ -2788,59 +2947,6 @@ onBeforeUnmount(() => {
   font-size: 10px;
   color: #64748b;
   flex-shrink: 0;
-}
-
-/* --- 底部状态栏 Footer --- */
-.bigscreen-footer {
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
-  flex-shrink: 0;
-  background: #04070d;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-  font-size: 11px;
-  color: #64748b;
-  z-index: 20;
-}
-
-.footer-bar {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sys-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-indicator.live {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-}
-
-.status-indicator.stream-active {
-  box-shadow: 0 0 8px #00ff87;
-  animation: pulse-ring 1.5s infinite;
-}
-
-.footer-sep {
-  opacity: 0.3;
-}
-
-.sys-tips {
-  color: #94a3b8;
-}
-
-.live-mode-tip {
-  color: #10b981;
 }
 
 /* --- 精美深色科技细滚动条 Custom Scrollbars --- */
@@ -2901,10 +3007,45 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .header-title {
   color: #0f172a;
+  text-shadow: none;
 }
 
 .bigscreen-container.light .header-sub {
   color: #64748b;
+}
+
+.bigscreen-container.light .control-trigger-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0284c7;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.bigscreen-container.light .control-trigger-btn:hover,
+.bigscreen-container.light .control-trigger-btn.active {
+  background: #f0f9ff;
+  border-color: #0284c7;
+  color: #0369a1;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+}
+
+.bigscreen-container.light .control-menu-popover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #cbd5e1;
+  box-shadow: 0 16px 36px -8px rgba(15, 23, 42, 0.15);
+}
+
+.bigscreen-container.light .popover-title {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .group-title {
+  color: #64748b;
+}
+
+.bigscreen-container.light .popover-header,
+.bigscreen-container.light .popover-footer {
+  border-color: #e2e8f0;
 }
 
 .bigscreen-container.light .action-btn {
@@ -3237,16 +3378,6 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .m-desc {
-  color: #64748b;
-}
-
-.bigscreen-container.light .bigscreen-footer {
-  background: #f8fafc;
-  border-top-color: rgba(226, 232, 240, 0.9);
-  color: #64748b;
-}
-
-.bigscreen-container.light .sys-tips {
   color: #64748b;
 }
 

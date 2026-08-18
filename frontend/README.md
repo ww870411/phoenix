@@ -1,3 +1,66 @@
+## 2026-08-18 数字指挥大屏垂直空间重配与元素饱满度提升（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **全屏空间再分配与卡片调高**：
+  1. **主网格与面板间距**：将 `bigscreen-content` 间距提至 `gap: 16px`、内边距增至 `padding: 14px 22px 18px`，面板内边距提至 `padding: 15px 16px`；
+  2. **左栏指标扩充**：KPI 网格间距放大至 `10px`，数值提升至 `19px`，能量进度条高度增至 `10px`，管件胶囊与安全雷达卡片全面加高；
+  3. **中栏拓扑饱满化**：3 大供应管厂卡片高度与内边距提至 `15px 16px`，传输通道光带增至 `80px`，10 大需求标段卡片增至 `12px 14px`，微进度条增至 `6px`；
+  4. **右栏战报与里程碑**：发运单据卡片（`feed-card`）与里程碑项目（`milestone-item`）内边距与字体同步放大。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏全屏沉浸感升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **底部状态栏移除**：彻底删除底部整行状态提示条（“100% 真实业务数据源 · 沙盒演示模式...”），将 `bigscreen-content` 高度调整为 `calc(100vh - 70px)`，使左右指标栏与中间流向拓扑获得充分的纵向呼吸空间，实现沉浸式大屏排版。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏拓扑头部去繁化简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **移除冗余分类 Tabs**：移除“全网总览 / 高温水干线 / 低温水分支”分类切换按钮，拓扑区始终保持全景双立柱架构（高温水干线 + 低温水分支）同屏展示，信息一览无余。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏拓扑区头部视觉极简化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **副标签清理**：彻底移除“3大制造管厂专线直供 ──► 10大施工标段”冗余副标签，让拓扑头部仅保留「🌐 供需流向拓扑」与系统 Tabs 分类按钮，排版更加纯粹高级。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏拓扑标题精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **拓扑标题精简**：将中间拓扑区主标题精简确立为 **「供需流向拓扑」**，配合副标签“3大制造管厂专线直供 ──► 10大施工标段”，使页面信息架构更具工业级规整感。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏副标题精简优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **副标题优化**：移除静态的“业务日期”展示，使大屏更加贴合全网实时动态感知与实时物流调度的业务定位。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏文案实战化更新（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **业务文案精准务实升级**：
+  1. **左侧状态徽标**：统一确立为 **「全链追踪 · 实时调度中心」**，消除虚浮概念词，突出物流全周期管控与实时调度属性；
+  2. **中间流向拓扑标题**：调整为 **「供需全景 · 3大管厂直供10大标段流向拓扑」**。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏 Header 结构重构与「调度控制中心」浮层集成（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **大屏 Header 专业化排版升级**：
+  1. **标题绝对居中**：通过 `position: absolute; left: 50%; transform: translate(-50%, -50%)`，使「大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台」及副标题无论在任何分辨率下均保持绝对物理几何居中；
+  2. **右侧操作整合为单一大按钮**：将原本散落排布的 8 个按钮（实况直连、深浅色、自动演示、模拟管材、模拟管件、强制刷新、全屏、返回）统一收纳进「⚙️ 调度控制中心」触发按钮；
+  3. **高质感毛玻璃 Popover 控制台**：点击主按钮展开半透明悬浮控制台，按“数据与视图模式”、“沙盒演示与模拟”及“返回看板”模块化排布，并支持点击外部空白自适应收起。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏主标题规范化更新（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标题更新**：将顶部主标题确立为 **「大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台」**，统一项目定位与大屏展示规范。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
 ## 2026-08-18 403 访问受限页面按钮排版精简与角标优化（ForbiddenView.vue）
 
 - **关联前端页面**：`frontend/src/pages/ForbiddenView.vue`
