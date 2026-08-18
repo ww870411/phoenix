@@ -132,9 +132,9 @@
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">📐</span>
-              <span>保温直管全网发运与在途</span>
+              <span>保温管全网发运与在途</span>
             </div>
-            <span class="panel-tag cyan">直管总线</span>
+            <span class="panel-tag cyan">保温管总线</span>
           </div>
 
           <div class="kpi-metric-grid">
@@ -177,7 +177,7 @@
           <!-- 管材保供进度充能条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
-              <span>全网直管保供覆盖率</span>
+              <span>全网保温管保供覆盖率</span>
               <strong class="cyan-text">{{ pipeCoveragePercent }}%</strong>
             </div>
             <div class="energy-bar-track">
@@ -317,7 +317,7 @@
 
             <!-- 图例说明 -->
             <div class="topology-legend">
-              <span class="legend-item"><span class="dot-line cyan"></span>直管在途</span>
+              <span class="legend-item"><span class="dot-line cyan"></span>保温管在途</span>
               <span class="legend-item"><span class="dot-line gold"></span>管件在途</span>
               <span class="legend-item"><span class="dot-point active"></span>实况节点</span>
             </div>
@@ -433,16 +433,16 @@
               <!-- 3. 右侧：10 大施工标段（按 高温水干线 与 低温水分支 两大规整立柱排布） -->
               <div class="demand-hub-col">
                 <div class="demand-systems-split" @scroll="recalculateFlylines">
-                  <!-- 高温水干线工程立柱 (H1 ~ H4) -->
-                  <div class="system-sub-col high-system" v-if="activeSectionTab !== 'low'">
+                  <!-- 第 1 标段立柱：高温干线及重点分支 (H1 ~ H4 + L1，共 5 标段) -->
+                  <div class="system-sub-col high-system">
                     <div class="system-sub-header high">
-                      <span class="sub-badge high">🔥 高温水直供干线 ({{ highWaterSections.length }})</span>
-                      <span class="sub-route-tip">开元/集团管厂直发</span>
+                      <span class="sub-badge high">🔥 高温干线及分支 ({{ col1Sections.length }})</span>
+                      <span class="sub-route-tip">开元/鑫瑞得/集团直供</span>
                     </div>
 
                     <div class="system-cards-list">
                       <div 
-                        v-for="sec in highWaterSections" 
+                        v-for="sec in col1Sections" 
                         :key="sec.id" 
                         class="demand-node-card"
                         :class="{ 
@@ -462,7 +462,7 @@
 
                         <div class="sec-card-header">
                           <div class="sec-badge-name">
-                            <span class="sec-code-tag high">{{ sec.code }}</span>
+                            <span class="sec-code-tag" :class="sec.system_type">{{ sec.code }}</span>
                             <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
                           </div>
                           <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
@@ -471,11 +471,11 @@
                           </span>
                         </div>
 
-                        <!-- 直管与管件双轨微进度 -->
+                        <!-- 保温管与管件双轨微进度 -->
                         <div class="sec-metrics-body">
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label">📐 直管</span>
+                              <span class="line-label pipe-tag">📐 保温管</span>
                               <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
                               <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
                             </div>
@@ -486,7 +486,7 @@
 
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label">🔩 配件</span>
+                              <span class="line-label fitting-tag">🔩 管件</span>
                               <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
                               <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
                             </div>
@@ -499,16 +499,16 @@
                     </div>
                   </div>
 
-                  <!-- 低温水分支管网立柱 (L1 ~ L6) -->
-                  <div class="system-sub-col low-system" v-if="activeSectionTab !== 'high'">
+                  <!-- 第 2 标段立柱：低温水分支管网 (L2 ~ L6，共 5 标段) -->
+                  <div class="system-sub-col low-system">
                     <div class="system-sub-header low">
-                      <span class="sub-badge low">❄️ 低温水分支管网 ({{ lowWaterSections.length }})</span>
+                      <span class="sub-badge low">❄️ 低温水分支管网 ({{ col2Sections.length }})</span>
                       <span class="sub-route-tip">鑫瑞得/集团管厂直发</span>
                     </div>
 
                     <div class="system-cards-list">
                       <div 
-                        v-for="sec in lowWaterSections" 
+                        v-for="sec in col2Sections" 
                         :key="sec.id" 
                         class="demand-node-card"
                         :class="{ 
@@ -528,7 +528,7 @@
 
                         <div class="sec-card-header">
                           <div class="sec-badge-name">
-                            <span class="sec-code-tag low">{{ sec.code }}</span>
+                            <span class="sec-code-tag" :class="sec.system_type">{{ sec.code }}</span>
                             <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
                           </div>
                           <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
@@ -537,11 +537,11 @@
                           </span>
                         </div>
 
-                        <!-- 直管与管件双轨微进度 -->
+                        <!-- 保温管与管件双轨微进度 -->
                         <div class="sec-metrics-body">
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label">📐 直管</span>
+                              <span class="line-label pipe-tag">📐 保温管</span>
                               <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
                               <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
                             </div>
@@ -552,7 +552,7 @@
 
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label">🔩 配件</span>
+                              <span class="line-label fitting-tag">🔩 管件</span>
                               <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
                               <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
                             </div>
@@ -596,7 +596,7 @@
               class="filter-pill" 
               :class="{ active: feedFilter === 'pipe' }" 
               @click="feedFilter = 'pipe'"
-            >保温直管</button>
+            >保温管</button>
             <button 
               class="filter-pill" 
               :class="{ active: feedFilter === 'fitting' }" 
@@ -615,7 +615,7 @@
               >
                 <div class="feed-card-header">
                   <span class="feed-type-tag" :class="feed.type">
-                    {{ feed.type === 'pipe' ? '🏭 直管直发' : '📦 配件专送' }}
+                    {{ feed.type === 'pipe' ? '🏭 保温管直发' : '📦 管件专送' }}
                   </span>
                   <span class="feed-time">{{ feed.time }}</span>
                 </div>
@@ -836,9 +836,11 @@ const supplyNodes = ref([...defaultSupplyNodes])
 // 真实 10 大标段健康矩阵数据
 const sectionProgressList = ref([...defaultSectionList])
 
-// 高温水与低温水系统立柱分离
+// 高温水与低温水系统立柱分离（均衡分配为两列各 5 个标段，避免底部留白）
 const highWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'high'))
 const lowWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'low'))
+const col1Sections = computed(() => sectionProgressList.value.slice(0, 5))
+const col2Sections = computed(() => sectionProgressList.value.slice(5, 10))
 
 function setSectionTab(tab) {
   activeSectionTab.value = tab
@@ -1171,7 +1173,7 @@ function triggerSimulateDelivery(type = 'pipe') {
       amount: `${pcs} 件套`,
       shipmentCode: 'FT-FAST-' + Math.floor(1000 + Math.random() * 9000),
       time: timeNow,
-      positiveTag: `关键配件专车直达 +${pcs}件 ✨`,
+      positiveTag: `关键管件专车直达 +${pcs}件 ✨`,
       isNew: true
     }
     liveFeedList.value.unshift(newFeed)
@@ -1807,15 +1809,15 @@ onBeforeUnmount(() => {
 }
 
 .panel-tag.cyan {
-  background: rgba(0, 242, 254, 0.15);
-  color: #00f2fe;
-  border: 1px solid rgba(0, 242, 254, 0.3);
+  background: #00f2fe;
+  color: #000000;
+  font-weight: 700;
 }
 
 .panel-tag.gold {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: #fbbf24;
+  color: #000000;
+  font-weight: 700;
 }
 
 .panel-tag.green {
@@ -2431,9 +2433,9 @@ onBeforeUnmount(() => {
 }
 
 .sub-badge {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 4px;
 }
 
@@ -2448,33 +2450,35 @@ onBeforeUnmount(() => {
 }
 
 .sub-route-tip {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .system-cards-list {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding-right: 3px;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .demand-node-card {
+  flex: 1;
+  min-height: 0;
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 13px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 6px;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
-  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .demand-node-card.highlighted {
@@ -2500,15 +2504,15 @@ onBeforeUnmount(() => {
 .sec-badge-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
 }
 
 .sec-code-tag {
   font-family: monospace;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 7px;
   border-radius: 4px;
   white-space: nowrap;
 }
@@ -2524,48 +2528,52 @@ onBeforeUnmount(() => {
 }
 
 .sec-title {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.2px;
 }
 
 .sec-status-chip {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: 11px;
+  padding: 2px 9px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .sec-status-chip.running {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: rgba(16, 185, 129, 0.2);
+  color: #00ff87;
+  font-weight: 600;
 }
 
 .chip-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #94a3b8;
 }
 
 .sec-status-chip.running .chip-dot {
-  background: #10b981;
+  background: #00ff87;
+  box-shadow: 0 0 6px #00ff87;
 }
 
 /* 双轨微进度条 (加大高度与辨识度) */
 .sec-metrics-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 1px;
+  gap: 7px;
+  margin-top: 2px;
 }
 
 .sec-metric-line {
@@ -2577,33 +2585,55 @@ onBeforeUnmount(() => {
 .line-info {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  font-weight: 500;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .line-label {
-  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1.5px 6px;
+  border-radius: 3px;
+  color: #000000;
+  line-height: 1.3;
+}
+
+.line-label.pipe-tag {
+  background: #00f2fe;
+  color: #000000;
+}
+
+.line-label.fitting-tag {
+  background: #fbbf24;
+  color: #000000;
 }
 
 .line-val {
-  font-family: monospace;
+  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, monospace;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .line-pct {
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 13px;
 }
 
 .micro-bar-bg {
   width: 100%;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .micro-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: width 0.8s ease;
 }
 
@@ -2768,13 +2798,15 @@ onBeforeUnmount(() => {
 }
 
 .feed-type-tag.pipe {
-  background: rgba(0, 242, 254, 0.15);
-  color: #00f2fe;
+  background: #00f2fe;
+  color: #000000;
+  font-weight: 700;
 }
 
 .feed-type-tag.fitting {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
+  background: #fbbf24;
+  color: #000000;
+  font-weight: 700;
 }
 
 .feed-time {

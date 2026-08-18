@@ -1,3 +1,56 @@
+## 2026-08-18 数字指挥大屏工业标识高对比度黑字升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **实心底色 + 纯黑醒目粗体字设计**：
+  1. **标段双轨指标**：`📐 保温管` 设定为实心亮青蓝徽标（`background: #00f2fe; color: #000000; font-weight: 800`），`🔩 管件` 设定为实心亮金黄徽标（`background: #fbbf24; color: #000000; font-weight: 800`）；
+  2. **全屏标签统一**：左侧面板总线标签与右侧发运流徽标同步采用实心高对比度纯黑字设计，彻底杜绝发光与光晕花哨感，极度契合工业指挥大屏的高清远视距阅读需求。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏视觉效果回退（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **视觉风格回退**：清除过度的霓虹高饱和发光与 drop-shadow 阴影，恢复原本清爽克制的高级灰白标签（`#cbd5e1`）、纯净数值与标准图例，保留规范术语「保温管」与「管件」。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏业务术语规范化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **全域术语规范化升级**：
+  1. **直管 ➔ 保温管**：全面替换左侧大盘指标（`保温管全网发运与在途`、`保温管总线`、`全网保温管保供覆盖率`）、拓扑图例（`保温管在途`）、标段卡片（`📐 保温管`）与发运流水（`保温管`、`🏭 保温管直发`）；
+  2. **配件 ➔ 管件**：全面替换标段卡片（`🔩 管件`）、发运流水（`📦 管件专送`）与推送提示（`关键管件专车直达`）。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段卡片文字清晰度与显著性升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **文字与进度条显著性强化**：
+  1. **标题与编号徽标**：标段主标题字号提升至 `14.5px`（加粗纯白高对比度），标段代号标签升至 `12px` 并加粗；
+  2. **指标数值加粗放大**：直管/配件指标文本提升至 `12.5px`，发货进度百分比与数值提升至 `13px`（字重 800）；
+  3. **微进度条轨道加粗**：双轨进度条高度从 `5px` 增至 `7px`，圆角增至 `4px`，运行状态呼吸灯加大并附带发光光晕。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏供给侧卡片布局复原（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **供给侧布局复原**：移除左侧 3 大供应管厂基地的 `flex: 1` 强制纵向拉伸，恢复原有的自然卡片内边距与 `justify-content: space-around` 优雅间距排布，保持供给侧与需求侧主次分明的视觉层次。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段卡片全高自适应均分排版（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **高度空间全自适应占满**：
+  1. **flex: 1 等比拉伸**：将标段列表与需求卡片设置为 `flex: 1; min-height: 0; justify-content: space-between`，左右两列各 5 张卡片均分占满整列垂直高度；
+  2. **消除滚动与底部留白**：彻底去除列表纵向滚动条与多余留白，内部进度条与头部两端自适应贴合，大屏视觉饱满度达到极致。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段立柱 5 + 5 视觉平衡重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标段立柱视觉平衡重排**：
+  1. **左右两列 5 + 5 对称排布**：将低温水标段 1（L1）挪至第一列，与高温水标段 H1~H4 共同组成第 1 列（5 个标段），第 2 列容纳 L2~L6（5 个标段），彻底消除第一列底部的空白留白；
+  2. **专属标识与连线保留**：卡片内部根据 `sec.system_type` 保持红/蓝标签区分，SVG 激光飞线锚点自动跟随新位置实时重绘。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
 ## 2026-08-18 数字指挥大屏垂直空间重配与元素饱满度提升（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
