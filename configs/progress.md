@@ -1,3 +1,118 @@
+## 2026-08-18 [403 页面按钮排版优化：精简文案与引入胶囊角标，消除长文本换行与拥挤]
+- **问题与反馈**：
+  - 用户指出合并按钮后，长项目名称导致按钮文案过长（如超过 35 个字符）发生折行，排版拥挤失衡。
+- **具体实施与优化**：
+  - [`frontend/src/pages/ForbiddenView.vue`](file:///D:/编程项目/phoenix/frontend/src/pages/ForbiddenView.vue)：
+    1. **文案精炼**：将主按钮文案精简为 `⬅️ 立即返回页面选择`（或 `⬅️ 立即返回项目选择大厅`）；
+    2. **胶囊角标设计**：倒计时采用半透明白色胶囊角标（`<span class="countdown-badge">5s</span>`）置于按钮右侧；
+    3. **布局约束**：对按钮操作区设置 `max-width: 320px` 并水平居中，设置 `white-space: nowrap`，杜绝任何换行与溢出变形。
+- **验证与测试**：
+  - 前端打包构建 `npm run build` 100% 成功（153 个模块编译通过，0 错误）。
+
+## 2026-08-18 [403 页面交互精简：移除暂停按钮，合并倒计时与立即返回为单一大按钮]
+- **需求与原则**：
+  - 响应用户反馈，精简 403 页面交互：
+    1. 移除无实际业务意义的“暂停倒计时”功能；
+    2. 将“立即返回”与“倒计时返回”合二为一，直接在主操作按钮上动态展示秒数（例如 `⬅️ 立即返回【...】（5 秒后自动返回）`）。
+- **具体实施与修改**：
+  - [`frontend/src/pages/ForbiddenView.vue`](file:///D:/编程项目/phoenix/frontend/src/pages/ForbiddenView.vue)：
+    - 移除独立的倒计时条、呼吸灯胶囊与暂停按钮；
+    - 将倒计时秒数直接绑定进主按钮文案，用户既可随时点击立即返回，亦可等待 5 秒自然归零自动跳转；
+    - 清理多余样式代码，页面视觉更克制聚焦。
+- **验证与测试**：
+  - 前端全量打包构建 `npm run build` 100% 成功（153 个模块编译通过，0 错误）。
+
+## 2026-08-18 [403 访问受限页面与 5 秒倒计时自动返回机制开发完成]
+- **需求与原则**：
+  - 响应用户体验需求：未授权直访受限页面时，不再做生硬的静默重定向，而是统一重定向至专属的 `/forbidden` (403 Forbidden) 页面；
+  - 页面清晰展示受限原因（当前登录角色、尝试访问的受限页面或项目名称）；
+  - 增加 **5 秒动态倒计时机制**，时间归零时自动安全重定向回对应项目的页面选择页（或项目大厅），并提供“立即返回”、“返回大厅”与“暂停/恢复倒计时”控制按钮。
+- **具体实施与修改**：
+  1. **新建 403 页面组件（`frontend/src/pages/ForbiddenView.vue`）**：
+     - 整合 `AppHeader` 与 `Breadcrumbs`，采用现代卡片设计与呼吸光晕倒计时胶囊；
+     - 依据路由 Query 参数（`projectKey`、`pageKey`、`from`）动态解析受限资源名称与返回目标；
+     - 使用 `setInterval` 管理 5 秒响应式倒计时，组件卸载时自动清理定时器防泄漏。
+  2. **全局路由守卫升级（`frontend/src/router/index.js`）**：
+     - 注册 `/forbidden` 路由；
+     - 将所有未授权拦截点（管理后台、月报导入/查询、春节看板、保温管大屏及各子页面）统一改为调用 `makeForbiddenRedirect` 携带上下文参数重定向到 `/forbidden`。
+- **验证与测试**：
+  - 前端全量打包构建 `npm run build` 100% 成功（153 个模块编译通过，0 错误）。
+
+## 2026-08-18 [白屏问题快速定位与修复：恢复 auth.js 中的 allowedUnits 响应式属性与根路由直达分发]
+- **问题现象**：
+  - 用户反馈访问主页 `http://localhost:5173/` 时页面变为空白。
+- **根本原因定位（Root Cause）**：
+  - 在上一轮给 `auth.js` 扩展 `hasProjectAccess` 时，意外遗漏了 `const allowedUnits = computed(...)` 变量声明；
+  - 导致 Pinia 初始化 `useAuthStore` 时抛出 `ReferenceError: allowedUnits is not defined` 运行时异常，阻止了 Vue 根应用的挂载，导致主页白屏；
+  - 另外，根路径 `/` 依赖旧的二级重定向链，存在跳转时延。
+- **具体实施与修复**：
+  1. **`auth.js`**：补齐 `const allowedUnits = computed(() => getAllowedUnitsSet(DEFAULT_PERMISSION_PROJECT))` 声明；
+  2. **`router/index.js`**：在守卫头部对根路径 `/` 进行显式分发（已登录直达 `/projects`，未登录直达 `/login`），杜绝中间态。
+- **验证与测试**：
+  - 前端打包构建 `npm run build` 100% 成功（0 错误），主页与项目大厅恢复正常渲染与路由跳转。
+
+## 2026-08-18 [全系统项目页面级路由鉴权守卫统一升级：在 router/index.js 统一封堵直链访问漏洞]
+- **需求与原则**：
+  - 贯彻用户核心设计原则：“看不看得到”由 `项目列表.json` 结合菜单权限展示，“能否进入（含 URL 直达）”统一严格由 `permissions/*.json` 对应各子项目的 `page_access` 白名单决定；
+  - 一步到位全面覆盖系统中全部子项目（包括 `daily_report_25_26`、`monthly_data_show`、`daily_report_spring_festval_2026`、`page_showcase`、`insulation_pipe_supply_2026` 以及 `/admin-console`）。
+- **具体实施与修改**：
+  1. **状态层（`auth.js`）**：
+     - 新增 `hasProjectAccess(projectKey)` 方法，精准判决当前用户是否拥有该项目空间的准入权限；
+     - 增强 `hasPageAccess(projectKey, pageKey)`，引入自适应 Slug 别名正则清洗与模糊比对，向下兼容 `/debug/...`、`projects_monthly_data_show_...` 等非标准 Key。
+  2. **全局路由守卫（`router/index.js`）**：
+     - 重构 `router.beforeEach`，根据目标 URL 自动匹配项目与页面标识；
+     - 封锁未授权访问：未授权角色直访受限子页面（如未授权人员访问审批页 `/data_approval`、月报导入页 `/import-workspace`、后台管理 `/admin-console`）时，守卫自动无缝拦截并重定向回安全页（项目主页或项目大厅）。
+- **验证与测试**：
+  - `npm run build` 打包构建 100% 成功，151 个模块全部编译通过，0 错误。
+
+## 2026-08-18 [子项目页面路由级权限校验增强：在 TubeProjectPageRouterView 中补齐 403 访问受限拦截]
+- **需求与原则**：
+  - 响应用户设计原则：“看不看得到”由 `项目列表.json` 结合菜单权限决定，“能否进入（包括输入 URL 直访）”严格由 `permissions/` 子配置文件（如 `insulation_pipe_supply_2026.json`）的 `page_access` 决定；
+  - 封堵已登录账号在未获授权情况下通过在浏览器地址栏手动输入 URL 直达受限页面的漏洞。
+- **具体实施与修改**：
+  - 在 `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue` 中引入 `useAuthStore` 与 `auth.hasPageAccess('insulation_pipe_supply_2026', pageKey)` 计算属性；
+  - 若当前登录角色无权访问该 `pageKey`，坚决不渲染实际页面组件，而是渲染专属设计的【访问受限 (403 Forbidden)】卡片，提示当前角色及受限页面名称，并提供“返回功能页面选择”与“返回项目选择大厅”按钮。
+- **验证与测试**：
+  - 前端执行 `npm run build` 打包构建，151 个模块全部编译通过，0 错误。
+
+## 2026-08-17 [权限回退完成：恢复保温管大屏页面仅限 Global_admin 管理员访问]
+- **指令与执行**：
+  - 响应用户指令，对刚才在 `permissions.json` 及子配置文件中为各业务角色添加的 `big_screen` 权限执行全量精确回退。
+- **回退范围与影响**：
+  - 在 `backend_data/shared/auth/permissions.json` 与 `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json` 中移除 `tube_supplier_admin`、`tube_supplier`、`tube_site_manager`、`tube_construction_unit`、`tube_warehouse_keeper`、`tube_global_viewer` 的 `big_screen` 访问项；
+  - 恢复至初始安全基线状态，各现场库管、施工单位、管厂等业务人员在页面选择列表中将不再看到大屏卡片。
+- **验证与测试**：
+  - Python 模拟库管员 `左巨`、施工单位 `翁永鑫`、全局浏览 `tube_viewer` 登录并检查页面权限，确认均已成功剔除 `big_screen`，仅管理员具备查看权限。
+
+## 2026-08-17 [全量业务角色开放数字指挥大屏权限：在 permissions.json 中为各角色补齐 big_screen 页面卡片]
+- **问题与需求**：
+  - 用户反馈在 `/projects/insulation_pipe_supply_2026/pages` 页面中，此前仅有 `Global_admin` 能看到【数字指挥大屏】（`big_screen`）卡片，其他角色登录后看不到该卡片。
+- **根本原因定位（Root Cause）**：
+  - 后端鉴权服务 `auth_manager.py` 加载的主权限文件为 `backend_data/shared/auth/permissions.json`；
+  - 该主配置文件中，`Global_admin`、`tube_supplier_admin`、`tube_supplier`、`tube_site_manager`、`tube_construction_unit`、`tube_warehouse_keeper`、`tube_global_viewer` 等角色的 `page_access` 数组中缺少 `"big_screen"` 项，导致 `list_project_pages` 接口按用户角色过滤时剔除了大屏卡片。
+- **具体实施与修复**：
+  - 更新 `backend_data/shared/auth/permissions.json`，在 `Global_admin` 以及全部 6 种 `tube_*` 业务角色的 `insulation_pipe_supply_2026.page_access` 中显式添加 `"big_screen"`；
+  - 保证库管员（如左巨、李春）、施工单位（如翁永鑫、任强）、管厂（如开元、鑫瑞得）、现场经理及全局浏览用户登录后，均能在项目页面列表中直接看到并点击进入【数字指挥大屏】。
+- **验证与测试**：
+  - Python 模拟库管员 `左巨`、施工单位 `翁永鑫`、全局浏览 `tube_viewer` 登录并提取页面权限，均 100% 包含 `big_screen` 页面权限。
+
+## 2026-08-17 [直管基准量录入完成：成功录入 high_lot_3 与 high_lot_4 全量设计与采购基准数据]
+- **需求与实施**：
+  - 用户提供 `high_lot_3`（高温三标段，11 种直管型号）与 `high_lot_4`（高温四标段，15 种直管型号）的设计使用量与计划采购量数据；
+  - 运用 `baseline_service.save_pipe_baselines` 对数据执行批量幂等入库写入 `tube.tube_pipe_baseline` 表。
+- **数据入库统计与核验**：
+  - **`high_lot_3`**：成功录入 11 条记录，设计使用总量 **8,866.00 米**，计划采购总量 **8,866.00 米**；
+  - **`high_lot_4`**：成功录入 15 条记录，设计使用总量 **10,700.00 米**，计划采购总量 **10,700.00 米**；
+  - **全网直管基准表最新分布**：10 大标段（`high_lot_1~4`、`low_lot_1~6`）直管基准数据全部齐备，记录总数达 104 条，设计与计划采购总长增至 **331,438.36 米**（约 331.44 km）。
+
+## 2026-08-17 [直管基准量录入准备：核验 tube.tube_pipe_baseline 状态与 high_lot_3/4 录入环境]
+- **需求背景**：用户需要向数据库表 `tube.tube_pipe_baseline` 录入 `high_lot_3`（高温三标段）与 `high_lot_4`（高温四标段）的保温管设计使用量与计划采购量基准数据。
+- **环境与数据核查**：
+  - 核验 PostgreSQL 数据库表 `tube.tube_pipe_baseline` 结构与约束（主键 `id`、唯一约束 `(section_1_id, pipe_model_id)`、数值非负检查约束等）；
+  - 查询当前各标段录入分布：现有 `high_lot_1` (9条)、`high_lot_2` (7条) 及低标段 `low_lot_1~6`，确认 `high_lot_3` 与 `high_lot_4` 目前确为空白；
+  - 确认底层已就绪 `baseline_service.save_pipe_baselines` 幂等写入方法，支持文本、表格、JSON 等多种形式的数据解析与快速入库。
+- **下一步**：接收用户提供的 `high_lot_3` 与 `high_lot_4` 具体规格数据并执行精确批量入库。
+
 ## 2026-08-17 [指挥大屏真实数据直连修复：解决后端 SQL 列名映射异常，成功读取全量真实数据库指标]
 - **问题排查（Root Cause）**：
   - 用户反馈点击【接入真实数据流】后界面数据未变为真实数据；

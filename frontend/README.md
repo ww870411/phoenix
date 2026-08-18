@@ -1,3 +1,60 @@
+## 2026-08-18 403 访问受限页面按钮排版精简与角标优化（ForbiddenView.vue）
+
+- **关联前端页面**：`frontend/src/pages/ForbiddenView.vue`
+- **排版重构与视觉体验升级**：
+  1. **文案精炼聚焦**：消除长项目名称造成的按钮折行，统一精炼为 `⬅️ 立即返回页面选择`（或 `⬅️ 立即返回项目选择大厅`）；
+  2. **内置倒计时胶囊角标**：在按钮内部右侧设置半透明胶囊角标（`<span class="countdown-badge">5s</span>`），秒数动态倒数，不挤占主文案空间；
+  3. **布局约束与居中**：操作区设置 `max-width: 320px` 水平居中，配合 `white-space: nowrap`，保证在大屏与移动端均呈现规整清爽的视觉层次。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 403 访问受限页面交互精简与单一大按钮合并（ForbiddenView.vue）
+
+- **关联前端页面**：`frontend/src/pages/ForbiddenView.vue`
+- **极简交互与单一大按钮融合**：
+  1. **移除暂停功能**：剔除冗余的“暂停倒计时”逻辑，保证交互纯粹直达；
+  2. **合二为一主操作按钮**：将“立即返回”与“5秒倒计时”合并为一个主按钮（例如 `⬅️ 立即返回【...】（5 秒后自动返回）`），既能随时点击瞬时返回，也能静待时间归零自动跳转；
+  3. **保留大厅跳出兜底**：保留“🏠 返回项目选择大厅”备选操作，提供灵活导航。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 403 访问受限页面与 5 秒倒计时自动返回机制（ForbiddenView.vue）
+
+- **关联前端页面**：`frontend/src/pages/ForbiddenView.vue`
+- **页面级受限友好反馈与倒计时中枢**：
+  1. **受限上下文自适应解析**：通过路由参数动态提取用户当前角色、受限页面或项目名称；
+  2. **5 秒动态响应式倒计时**：呈现呼吸脉冲胶囊与秒数倒计时，5 秒归零时自动安全重定向回对应项目的页面选择页（或项目选择大厅）；
+  3. **丰富控制与安全防护**：提供“立即返回”、“返回大厅”与“暂停/恢复倒计时”按钮，组件卸载时自动回收计时器防止内存泄漏；
+  4. **全系统无缝对接**：全局路由守卫拦截到的所有非授权直访，全部平滑导流至该页面。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 全系统全局路由守卫鉴权统一升级（router/index.js & store/auth.js）
+
+- **关联核心文件**：
+  - 全局路由守卫：`frontend/src/router/index.js`
+  - 权限状态存储：`frontend/src/projects/daily_report_25_26/store/auth.js`
+- **全项目统一访问控制防护**：
+  1. **全链路项目与页面级拦截**：在 `router.beforeEach` 中对所有路由规则引入强制白名单鉴权，全面覆盖 `daily_report_25_26`、`monthly_data_show`、`daily_report_spring_festval_2026`、`page_showcase`、`insulation_pipe_supply_2026` 及后台管理；
+  2. **跨项目防越权隔离**：
+     - 未授权直访项目页面时，自动拦截并安全重定向至项目主页；
+     - 未授权直访项目空间时，自动拦截并重定向至项目大厅；
+     - 非管理员直访 `/admin-console` 或 `/admin-file-editor` 立即拦截回退；
+  3. **增强匹配兼容性**：`auth.hasPageAccess` 支持多种 URL / Slug 格式自适应模糊匹配，向下兼容既有动态参数与固定路由。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 预制直埋保温管子项目页面级路由权限校验与 403 拦截（TubeProjectPageRouterView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`
+- **页面级路由鉴权防护**：
+  1. **响应式权限校验**：引入 `useAuthStore`，在组件加载与路由切换时，根据 `auth.hasPageAccess('insulation_pipe_supply_2026', pageKey)` 进行实时页面权限判决；
+  2. **封堵直链访问漏洞**：彻底阻止未授权角色通过在浏览器直接输入 URL（如 `/pages/big_screen`、`/pages/global_management`）强行打开未授权页面组件；
+  3. **友好 403 受限提示卡片**：未授权访问时渲染高质感 403 访问受限提示卡片，显示受限原因及当前角色，并提供返回页面选择或项目大厅的快捷跳转。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-17 预制直埋保温管直管基准量数据补齐（high_lot_3 与 high_lot_4 入库联动）
+
+- **业务数据联动**：
+  - 高温三标段（`high_lot_3`，8,866.00 米）与高温四标段（`high_lot_4`，10,700.00 米）直管基准量已全部持久化至数据库；
+  - 数字指挥大屏（`BigScreenDashboardView.vue`）及各管理工作台可无缝读取到全量 10 大标段完整的直管规划与达标率基准（全网直管规划总长达到 331.44 km）。
+
 ## 2026-08-17 预制直埋保温管数字大屏生产实况直连模式（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

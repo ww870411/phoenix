@@ -1,3 +1,35 @@
+## 2026-08-18 权限体系与前后端访问控制边界规范
+
+- **权限架构设计准则**：
+  1. **“看不看得到”（UI 可见性）**：由 `backend_data/shared/项目列表.json`（声明系统整体项目与页面拓扑）结合角色组的菜单过滤共同决定；
+  2. **“能否进入（访问控制）”**：严格由 `backend_data/shared/auth/permissions/<project_key>.json`（如 `insulation_pipe_supply_2026.json`）中的 `page_access` 与 `actions` 决定；
+  3. **前后端双重拦截**：
+     - **前端路由层**：`TubeProjectPageRouterView.vue` 拦截非法 URL 直访，无权限时渲染 403 阻断卡片；
+     - **后端 API 层**：各业务接口持续对 Session 角色与权限做二道严格守卫，确保数据绝对安全。
+
+## 2026-08-17 预制直埋保温管直管基准量（tube.tube_pipe_baseline）high_lot_3 与 high_lot_4 录入入库
+
+- **关联数据表与服务**：
+  - 物理表：`tube.tube_pipe_baseline`
+  - 写入服务：`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py` (`save_pipe_baselines`)
+- **数据入库明细**：
+  - **`high_lot_3`**：共 11 个型号规格（Φ630×10/Φ760×11.5 至 Φ108×5/Φ200×3.2），设计总量 8,866.00 米，计划采购量 8,866.00 米；
+  - **`high_lot_4`**：共 15 个型号规格（Φ820×11/Φ955×13 至 Φ57×5/Φ140×3.0），设计总量 10,700.00 米，计划采购量 10,700.00 米；
+- **校验与验证**：10 大施工标段直管基准数据全部齐备，累计记录 104 条，设计与计划采购总长增至 331,438.36 米（331.44 km）。
+
+## 2026-08-17 回退预制直埋保温管数字指挥大屏权限（big_screen）至初始基线
+
+- **关联权限文件**：`backend_data/shared/auth/permissions.json` 及 `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json`
+- **处理**：回退各业务角色（管厂、施工单位、库管员、现场经理）的 `big_screen` 页面权限，大屏卡片恢复为仅限管理员端展示。
+
+## 2026-08-17 全量业务角色开放预制直埋保温管数字指挥大屏权限（big_screen）
+
+- **关联权限文件**：`backend_data/shared/auth/permissions.json`
+- **问题与修复**：
+  - 此前仅 `Global_admin` 能在项目页面选择列表看到大屏卡片；
+  - 在 `backend_data/shared/auth/permissions.json` 的 `Global_admin`、`tube_supplier_admin`、`tube_supplier`、`tube_site_manager`、`tube_construction_unit`、`tube_warehouse_keeper`、`tube_global_viewer` 全量业务角色中，统一追加 `"big_screen"` 页面权限。
+- **验证**：库管员、施工单位、管厂、现场经理登录均可正常看到大屏卡片。
+
 ## 2026-08-17 修复预制直埋保温管大屏后端聚合接口（GET /big-screen/data）SQL物理列名映射
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`

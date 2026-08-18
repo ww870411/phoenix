@@ -32,7 +32,6 @@
     },
     "tube_supplier_admin": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "supply_management",
         "history_query"
@@ -57,7 +56,6 @@
     },
     "tube_supplier": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "supply_management",
         "history_query"
@@ -82,7 +80,6 @@
     },
     "tube_site_manager": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "demand_management",
         "history_query"
@@ -107,7 +104,6 @@
     },
     "tube_construction_unit": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "demand_management",
         "history_query"
@@ -132,7 +128,6 @@
     },
     "tube_warehouse_keeper": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "warehouse_management",
         "history_query"
@@ -157,7 +152,6 @@
     },
     "tube_global_viewer": {
       "page_access": [
-        "big_screen",
         "dashboard",
         "history_query",
         "supply_management",

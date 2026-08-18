@@ -250,11 +250,42 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
 
   const allowedUnits = computed(() => getAllowedUnitsSet(DEFAULT_PERMISSION_PROJECT))
 
+  function hasProjectAccess(projectKey) {
+    const normalizedKey = normalizeProjectKey(projectKey)
+    if (!normalizedKey) return false
+    const projectMap =
+      permissions.value && typeof permissions.value.projects === 'object'
+        ? permissions.value.projects
+        : {}
+    if (normalizedKey in projectMap) {
+      const proj = projectMap[normalizedKey]
+      return Array.isArray(proj?.page_access) && proj.page_access.length > 0
+    }
+    return Array.isArray(permissions.value?.page_access) && permissions.value.page_access.length > 0
+  }
+
   function hasPageAccess(projectKey, pageKey) {
     if (pageKey === undefined) {
-      return getPageAccessSet(DEFAULT_PERMISSION_PROJECT).has(projectKey)
+      return hasPageAccess(DEFAULT_PERMISSION_PROJECT, projectKey)
     }
-    return getPageAccessSet(projectKey).has(pageKey)
+    const pageSet = getPageAccessSet(projectKey)
+    const rawKey = String(pageKey || '').trim()
+    if (!rawKey) return false
+
+    if (pageSet.has(rawKey)) return true
+
+    // 格式自适应（消除斜杠、连字符转换为下划线）
+    const slugKey = rawKey.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase()
+    if (pageSet.has(slugKey)) return true
+
+    for (const item of pageSet) {
+      const itemRaw = String(item).trim()
+      const itemSlug = itemRaw.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase()
+      if (itemRaw.toLowerCase() === rawKey.toLowerCase() || itemSlug === slugKey) {
+        return true
+      }
+    }
+    return false
   }
 
   function filterPages(projectKey, pages) {
@@ -394,6 +425,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     logout,
     filterPages,
     filterSheetsByRule,
+    hasProjectAccess,
     hasPageAccess,
     canSubmitFor,
     canApproveFor,

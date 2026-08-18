@@ -82,6 +82,10 @@ const routes = [
     path: '/debug/runtime-eval',
     component: () => import('../projects/daily_report_25_26/pages/RuntimeEvalDebug.vue'),
   },
+  {
+    path: '/forbidden',
+    component: () => import('../pages/ForbiddenView.vue'),
+  },
 ]
 
 const router = createRouter({
@@ -89,15 +93,117 @@ const router = createRouter({
   routes,
 })
 
+function makeForbiddenRedirect(to, projectKey = '', pageKey = '') {
+  return {
+    path: '/forbidden',
+    query: {
+      projectKey: projectKey || '',
+      pageKey: pageKey || '',
+      from: to.fullPath || to.path,
+    },
+  }
+}
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.bootstrap()
+
+  // 1. 基础登录状态守卫
+  if (to.path === '/') {
+    return auth.isAuthenticated ? '/projects' : '/login'
+  }
   if (to.path !== '/login' && to.path !== '/dashboard' && !auth.isAuthenticated) {
     return '/login'
   }
   if (to.path === '/login' && auth.isAuthenticated) {
     return '/projects'
   }
+  if (to.path === '/projects' || to.path === '/login' || to.path === '/forbidden') {
+    return true
+  }
+
+  // 2. 全局管理后台权限校验
+  if (to.path === '/admin-console' || to.path === '/admin-file-editor') {
+    if (!auth.canAccessAdminConsole) {
+      return makeForbiddenRedirect(to, '', 'admin_console')
+    }
+    return true
+  }
+
+  // 3. 独立非参数化子项目页面权限校验
+  if (to.path.startsWith('/projects/monthly_data_show/')) {
+    const isImportWorkspace = to.path === '/projects/monthly_data_show/import-workspace'
+    const isQueryTool = to.path === '/projects/monthly_data_show/query-tool'
+
+    if (isImportWorkspace) {
+      if (!auth.hasPageAccess('monthly_data_show', 'projects_monthly_data_show_import_workspace')) {
+        return makeForbiddenRedirect(to, 'monthly_data_show', 'projects_monthly_data_show_import_workspace')
+      }
+      return true
+    }
+
+    if (isQueryTool) {
+      if (!auth.hasPageAccess('monthly_data_show', 'projects_monthly_data_show_query_tool')) {
+        return makeForbiddenRedirect(to, 'monthly_data_show', 'projects_monthly_data_show_query_tool')
+      }
+      return true
+    }
+  }
+
+  if (to.path.startsWith('/projects/page_showcase/')) {
+    if (!auth.hasPageAccess('page_showcase', 'workspace')) {
+      return makeForbiddenRedirect(to, 'page_showcase', 'workspace')
+    }
+    return true
+  }
+
+  if (to.path === '/debug/runtime-eval') {
+    if (!auth.hasPageAccess('daily_report_25_26', 'debug_runtime_eval')) {
+      return makeForbiddenRedirect(to, 'daily_report_25_26', 'debug_runtime_eval')
+    }
+    return true
+  }
+
+  // 4. 春节看板专属路由校验
+  if (to.path.endsWith('/spring-dashboard')) {
+    const projectKey = String(to.params.projectKey || 'daily_report_spring_festval_2026')
+    if (!auth.hasPageAccess(projectKey, 'mini_entry')) {
+      return makeForbiddenRedirect(to, projectKey, 'mini_entry')
+    }
+    return true
+  }
+
+  // 5. 保温管物流链专属子路由校验
+  if (to.path.startsWith('/projects/insulation_pipe_supply_2026/pages/')) {
+    const pageKey = String(to.params.pageKey || '').trim()
+    if (!auth.hasPageAccess('insulation_pipe_supply_2026', pageKey)) {
+      return makeForbiddenRedirect(to, 'insulation_pipe_supply_2026', pageKey)
+    }
+    return true
+  }
+
+  // 6. 通用项目子页面路由（含 sheets、dashboard、data-entry、approval、display、data-analysis 等）
+  const projectKey = String(to.params.projectKey || '').trim()
+  const pageKey = String(to.params.pageKey || '').trim()
+
+  if (projectKey && pageKey) {
+    if (!auth.hasProjectAccess(projectKey)) {
+      return makeForbiddenRedirect(to, projectKey, '')
+    }
+    if (!auth.hasPageAccess(projectKey, pageKey)) {
+      return makeForbiddenRedirect(to, projectKey, pageKey)
+    }
+    return true
+  }
+
+  // 7. 项目二级页面选择大厅与单入口校验
+  if (projectKey && (to.path === `/projects/${projectKey}/pages` || to.path === `/projects/${projectKey}`)) {
+    if (!auth.hasProjectAccess(projectKey)) {
+      return makeForbiddenRedirect(to, projectKey, '')
+    }
+    return true
+  }
+
   return true
 })
 
