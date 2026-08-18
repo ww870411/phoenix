@@ -1809,15 +1809,17 @@ onBeforeUnmount(() => {
 }
 
 .panel-tag.cyan {
-  background: #00f2fe;
-  color: #000000;
-  font-weight: 700;
+  background: rgba(0, 242, 254, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  font-weight: 600;
 }
 
 .panel-tag.gold {
-  background: #fbbf24;
-  color: #000000;
-  font-weight: 700;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  font-weight: 600;
 }
 
 .panel-tag.green {
@@ -2593,23 +2595,26 @@ onBeforeUnmount(() => {
 .line-label {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 1.5px 6px;
-  border-radius: 3px;
-  color: #000000;
-  line-height: 1.3;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
 }
 
 .line-label.pipe-tag {
-  background: #00f2fe;
-  color: #000000;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #ffffff;
 }
 
 .line-label.fitting-tag {
-  background: #fbbf24;
-  color: #000000;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #ffffff;
 }
 
 .line-val {
@@ -2798,15 +2803,17 @@ onBeforeUnmount(() => {
 }
 
 .feed-type-tag.pipe {
-  background: #00f2fe;
-  color: #000000;
-  font-weight: 700;
+  background: rgba(0, 242, 254, 0.12);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  color: #38bdf8;
+  font-weight: 600;
 }
 
 .feed-type-tag.fitting {
-  background: #fbbf24;
-  color: #000000;
-  font-weight: 700;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+  font-weight: 600;
 }
 
 .feed-time {
@@ -3154,6 +3161,24 @@ onBeforeUnmount(() => {
   color: #0f172a;
 }
 
+.bigscreen-container.light .panel-tag.cyan {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.35);
+}
+
+.bigscreen-container.light .panel-tag.gold {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.bigscreen-container.light .panel-tag.green {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
 .bigscreen-container.light .topo-sub-tag {
   background: #f1f5f9;
   border-color: #e2e8f0;
@@ -3328,6 +3353,22 @@ onBeforeUnmount(() => {
   color: #0f172a;
 }
 
+.bigscreen-container.light .line-label {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .line-label.pipe-tag {
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  color: #0369a1;
+}
+
+.bigscreen-container.light .line-label.fitting-tag {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #b45309;
+}
+
 .bigscreen-container.light .micro-bar-bg {
   background: #e2e8f0;
 }
@@ -3366,6 +3407,18 @@ onBeforeUnmount(() => {
 .bigscreen-container.light .feed-card {
   background: #ffffff;
   border-color: rgba(226, 232, 240, 0.9);
+}
+
+.bigscreen-container.light .feed-type-tag.pipe {
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  color: #0284c7;
+}
+
+.bigscreen-container.light .feed-type-tag.fitting {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #d97706;
 }
 
 .bigscreen-container.light .feed-card.just-arrived {
