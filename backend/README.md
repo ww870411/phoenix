@@ -1,3 +1,31 @@
+## 2026-08-18 数字指挥大屏动态战报标题格式规范化（仅发货带流向箭头）（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据输出规范升级**：
+  1. 厂家发货事件：保留 `大连开元热力管道 ──► 高温水 1 标段` 物理流向格式；
+  2. 非发货业务事件（到货确认、施工接收、库管核销、施工量填报、要料计划）：统一采用 `业务动作 · 标段名称` 格式（如 `车辆进场到货 · 高温水 1 标段`、`现场施工安装 · 低温水 1 标段`、`申报08-19要料 · 高温水 3 标段`），彻底移除多余的箭头符号。
+
+## 2026-08-18 数字指挥大屏事件流水实体 ID 显式注入与拓扑精准映射（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **字段规范与拓扑精确映射**：
+  1. 在直管物流（`tube_delivery`）、管件物流（`tube_fitting_delivery`）、施工量确认（`tube_daily_usage`）与要料计划（`tube_daily_plan`）四大类事件构造中，显式注入 `supplier_id` 与 `section_id` 字段；
+  2. 消除前端拓扑图对中文模糊名称匹配的依赖，实现从战报事件到底层 3 大管厂节点与 10 大施工标段节点的 100% 精确映射与即时流向激活。
+
+## 2026-08-18 数字指挥大屏标段直管与管件在途差值量及到货量细分计算（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **到货与在途精准拆解**：
+  1. **直管指标**：拆解计算 `arrivedKm`（到货量）、`transitKm`（在途差值量）、`shippedKm`（累计发货量）以及各自的百分比 `arrivedPercent`、`transitPercent`、`pipePercent`；
+  2. **管件指标**：拆解计算 `arrivedFittings`（到货件数）、`transitFittings`（在途差值件数）、`shippedFittings`（累计发货件数）以及对应的完成率。
+
+## 2026-08-18 数字指挥大屏标段施工量聚合与三轨监控支持（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **标段施工量聚合计算**：
+  1. **聚合 tube_daily_usage**：按 `section_1_id` 分组汇总施工下沟敷设米数（`usage_qty`）；
+  2. **输出字段升级**：在 `section_progress_list` 中增加 `installedM`（米数）、`installedKm`（公里数）、`installedPercent`（施工安装完成率），为前端标段三轨进度提供精准数据支撑。
+
 ## 2026-08-18 数字指挥大屏事件流字符串深度清洗与换行符根除（workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)

@@ -1,3 +1,178 @@
+## 2026-08-18 数字指挥大屏主标题 30px 视觉中枢强化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **顶部主标题微调升级**：
+  1. 将主标题 `.header-title` 字号从 26px 进一步放大至 **30px**；
+  2. 强化文字字间距（`2.2px`）与科技蓝弥散发光阴影（`text-shadow: 0 2px 16px rgba(0, 242, 254, 0.5)`）；
+  3. 标题在大屏顶栏居中区域更加饱满、庄重、醒目。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏主标题层级强化与精简化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **顶部标题视觉升级**：
+  1. 移除副标题说明文本（“三大保供制造管厂直供现场 | 全网 10 大施工标段 | 1138项物料基准”）；
+  2. 将主标题 `.header-title` 字号由 21px 放大至 **26px**，字重提升至 **800**，字间距拓展至 **2px**，并强化科技蓝文字发光阴影；
+  3. 大屏顶栏更加利落挺拔、庄重大气，视觉中心更加聚焦。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏动态战报卡片动效裁切修复（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片边框完整性修复**：
+  1. 移除卡片激活时 `.is-active-feed` 和 `:hover` 中的负向位移 `transform: translateX(-3px)` / `translateX(-2px)`；
+  2. 为 `.feed-list-wrapper` 与 `.feed-list` 补齐对称的安全内边距（`padding: 4px 6px`）；
+  3. 杜绝了卡片向左位移超出 `overflow-x: hidden` 容器左边界导致的 3px 边框竖条硬性裁切问题，使左侧彩色标识条与高光弥散阴影 100% 完整平滑呈现。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段卡片动效防截断与呼吸边距优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **光晕防裁切优化**：
+  1. 解除需求标段矩阵立柱容器 `.demand-systems-split` 与 `.system-cards-list` 的 `overflow: hidden` 限制，统一调整为 `overflow: visible`；
+  2. 为中心拓扑排版网格扩展安全内边距（`padding: 12px 14px`），并为立柱列表预留呼吸间隙；
+  3. 首行标段（如标段一、标段六）在触发发货、到货或安装时，向外扩散的高能脉冲流光与 24px `box-shadow` 弥散光晕 100% 完整舒展，彻底消除顶部被硬性切平的现象。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏中心拓扑供给端标签极简化优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版结构优化**：
+  1. 移除左侧三大管厂上方的 `🏭 保供制造基地 (3)` 胶囊徽章；
+  2. 释放纵向排版空间，使三大保供管厂卡片在左侧纵轴上更自然舒展地垂直居中分布，视觉更加极简干净、聚焦核心物流拓扑与飞线粒子。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏动态战报卡片行为色彩规范统一（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **动态战报卡片色彩规范对齐**：
+  1. **直埋保温直管发货（`dispatch` + `pipe`）**：卡片左侧边框、分类微胶囊徽章、流向箭头/标段与激活聚焦高亮统一为**科技青蓝**（`#00f2fe` / `#38bdf8`）；
+  2. **关键管件配件全业务（发货/到货/收货/核销，`fitting`）**：卡片左侧边框、分类徽章、流向标段与激活聚焦高亮 100% 统一为**尊贵琥珀金（金色）**（`#fbbf24` / `#d97706`）；
+  3. **直管现场业务（到货/收货/核销，`pipe`）**：统一为**澄澈蔚蓝**（`#38bdf8` / `#2563eb`）；
+  4. **现场施工安装（`usage`）**：统一为**生态翡翠绿**（`#10b981` / `#059669`）；
+  5. **滚动要料计划（`plan`）**：统一为**烈焰玫红/暖橙**（`#f43f5e` / `#e11d48`）；
+  6. 实现右侧战报卡片、中心拓扑飞线与两翼立柱标段卡片在材质与行为色彩上的**三位一体完全呼应**。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏管件全生命周期金色动效规范统一（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **管件视觉色彩规范对齐**：
+  1. **直管类事件（发货/到货/收货/核销）**：统一渲染为**科技青蓝/蔚蓝**边框与脉冲光晕（`#00f2fe` / `#38bdf8`）；
+  2. **管件配件事件（发货/到货/收货/核销）**：统一渲染为**尊贵琥珀金（金色）**边框、背景弥散光与端口脉冲动效（`#fbbf24` / `#f59e0b`）；
+  3. **沙盒模拟全链路对齐**：扩充模拟引擎对管件进场到货、施工接收管件与管件实物核销的支持，实现管件全生命周期的金色视觉闭环。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏飞线材质色彩精准映射修复（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **飞线材质色彩规范对齐**：
+  1. **直埋保温直管发货（`pipe`）**：飞线基础管道轨迹与在途光带 100% 渲染为**青蓝电光**（`#00f2fe` ➔ `#38bdf8`），能量飞行动画粒子渲染为青蓝色（`#00f2fe`）；
+  2. **关键管件配件发货（`fitting`）**：飞线与在途光带 100% 渲染为**琥珀金光**（`#fbbf24` ➔ `#f97316`），能量飞行动画粒子渲染为金黄色（`#fbbf24`）；
+  3. 彻底清除 `recalculateFlylines` 中曾将第二管厂写死为 `fitting` 的硬编码，飞线样式由当前焦点发运物料（`activeMaterialType`）纯动态控制。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏演示模式流水防冲刷与长效累积优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **演示模式长效沉淀优化**：
+  1. **拦截后台定时轮询覆盖**：在 `loadRealData` 中增加守卫拦截，处于演示模式时跳过每 20 秒的后台静默数据刷新，杜绝真实数据库空快照抹除演示中累加的战报流水与 KPI 指标；
+  2. **扩充流水队列容量**：将模拟流水缓冲池从 25 条扩充至 **100 条**，实现战报在演示过程中持续向下流动沉淀、长效累积。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏“实况直连 ⇋ 演示模式”双向互斥联动（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **运行模式互斥逻辑**：
+  1. **点击“自动演示”或“模拟管材/管件”**：系统自动检测并退出当前处于运行中的“实况直播”模式，断开高频数据库轮询，无缝接管为沙盒推流演示；
+  2. **点击“接入实况”**：系统自动检测并停止当前处于运行中的“自动演示”模式，立即对齐数据库全量真实数据并启动 3 秒增量心跳感知；
+  3. 两大模式严格互斥，杜绝多数据源交叉并发带来的状态机冲突。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏沙盒自动演示节拍优化（8 秒循环周期）（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **演示节拍调优**：
+  1. 将自动演示模式下的轮播间隔设置为 **8 秒**（`AUTO_DEMO_INTERVAL = 8000`）；
+  2. 完美契合“5 秒动态高亮展示 ➔ 3 秒大屏静息观察 ➔ 下一轮新动态启动”的呼吸节奏，使演示效果更具沉浸感与可读性。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏沙盒演示引擎与全链路拓扑动效重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **沙盒演示与拓扑动效对齐重构**：
+  1. **严格供需拓扑映射**：重构 `triggerSimulateDelivery`，选取供给管厂后，目标标段严格从该管厂的 `assigned_section_ids` 中选取，确保物理专线飞线必定存在，彻底消除此前飞线与标段错位的问题；
+  2. **模拟数据字段全量补齐**：补齐 `category_key`、`supplier_id`、`section_id`、`operator`、`vehiclePlate`、`shipmentCode`、`headline` 等全部数据字段，使模拟战报卡片信息饱满完整；
+  3. **多业务场景自动演示**：支持发货、到货、施工收货、库管核销、施工量确认等全套业务轮播，指标与能量槽实时精准联动；
+  4. **动效生命周期与粒子精准同步**：推入模拟单据时立即调用 `startAnimationLoop()` 重置 5 秒展示期，飞线激光粒子端点与高亮卡片 100% 严丝合缝；
+  5. **修复未定义函数**：补齐 `isSupplierOfSection(supId, secId)`。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏动态战报流向箭头精细化控制（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **流向符号展示规则**：
+  1. **跨主体厂家发货（`dispatch`）**：保留 `大连开元热力管道 ──► 高温水 1 标段` 的流向箭头（`.route-arrow`），清晰表达物理发运流向；
+  2. **其他标段本地业务（到货/收货/核销/施工/要料）**：移除 `──►` 符号，左侧清晰展示业务动作（如 `车辆进场到货`、`现场施工安装`），右侧固定展示标段名称（如 `高温水 1 标段`），两端对齐、整洁美观。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏动态战报卡片排版统一（左侧事件动作 ──► 右侧统一标段名称）（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版结构与视觉规范统一**：
+  1. **全类别流向统一**：消除此前“厂家发货标段在右、其他事件标段在左【】内”的排版割裂，全类别战报卡片 Row 2 统一为 `.route-line-box` 流向结构（左侧事件主体/动作摘要 ──► 右侧统一标段名称）；
+  2. **标段名称右侧固化**：右侧 `.route-target` 统一右对齐加粗展示，并根据业务分类动态渲染语义颜色（青蓝、蔚蓝、琥珀金、翡翠绿、紫光、玫红）；
+  3. **主题双向适配**：深色模式与浅色模式均完成高保真色彩映射。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏动效周期律动控制落地（5s 展示 + 5s 静息循环与新动态重置）（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **动效生命周期与间隔律动管理**：
+  1. **5 秒动效高亮展示期（Active Phase）**：最新动态触发时，即刻点亮供给方与标段专属流光边框，发射激光飞线并保持 5 秒流动；
+  2. **5 秒静息恢复期（Rest Phase）**：动效展示 5 秒后平滑静默，卡片外发光收敛，飞线隐去，大屏呈现纯净整洁的正常态 5 秒；
+  3. **循环往复**：5 秒静息结束后自动循环重启 5 秒展示期；
+  4. **新动态强打断重置**：检测到底层新数据推入时，即刻打断静息期，第一时间重启新一轮 5 秒展示期；
+  5. **悬停锁定**：鼠标悬停战报卡片时，锁定为常亮展示。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏全网供需拓扑事件驱动联动与卡片高亮边框动效落地（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **核心交互与视觉动效设计**：
+  1. **事件驱动焦点联动（Event-Driven Linkage）**：中心拓扑图响应右侧“全网工程实时动态播报”最新一条战报事件（或鼠标悬停选中的历史战报）；
+  2. **跨主体发货动态（`dispatch`）**：触发【发运供给方卡片高亮流光边框 + 接收标段卡片高亮流光边框 + 中间专属激光流向飞线】三位一体端到端贯通动效，直管青蓝激光，管件金黄光梭；
+  3. **到货入库确权动态（`arrival / receive / warehouse`）**：飞线隐去，接收标段卡片触发青蓝/金色实色到货流光边框与入库端口发光；
+  4. **施工量确认动态（`usage`）**：接收标段卡片触发翡翠生机绿光呼吸边框（`#10b981`）；
+  5. **滚动要料计划动态（`plan`）**：接收标段卡片触发琥珀橙黄预警呼吸边框（`#f59e0b`）；
+  6. **悬停历史回放机制（Hover Replay）**：战报卡片绑定 `@mouseenter/@mouseleave`，悬停时拓扑图即时回放该历史事件联动状态，移开后恢复最新战报。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏在途数值角标与流光进度条同频呼吸动效优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **动效同步升级**：
+  1. 将 `.transit-num-tag`（在途数值胶囊）与 `.micro-bar-transit`（在途流光线段）的 CSS 动画周期统一锁定为 **`1.4s infinite ease-in-out`**；
+  2. 同步两者的关键帧周期（0%/100% 柔和态，50% 爆发态），彻底消除此前因 1.8s 与 1.4s 周期差带来的视觉步调脱节。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏在途物资差值闪烁高亮双段进度条升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **复合动态微进度条设计**：
+  1. **到货与在途精准分离**：进度条左侧展示实体到场实色进度（`.micro-bar-fill`），右侧差值部分展示在途运送中车辆（`.micro-bar-transit`）；
+  2. **高亮呼吸与斜纹流光**：直管在途采用青蓝流光条纹（`.cyan-transit`），管件在途采用金黄流光条纹（`.gold-transit`），带有 `@keyframes transit-flash-glow` 呼吸式闪烁发光效果；
+  3. **数值动态拓展**：主数值显示到场量并在其后增加微型动态在途角标（如 `0.72(+0.22) km`）。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段看板三轨进度（保温管 / 施工量 / 管件）升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **UI/UX 维度扩展**：
+  1. **三轨并进全链路监控**：在中心拓扑图 10 大施工标段卡片内部，于“保温管”与“管件”进度行之间增设一条“施工量”显示行与微进度条；
+  2. **色彩辨识度划分**：保温管（青色 📐 `pipe-tag`）、施工量（绿色 🏗️ `construct-tag`）、管件（金色 🔩 `fitting-tag`），形成直观清晰的全流程物资与施工对照。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
 ## 2026-08-18 数字指挥大屏顶栏“调度控制中心”浮层层级修复（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

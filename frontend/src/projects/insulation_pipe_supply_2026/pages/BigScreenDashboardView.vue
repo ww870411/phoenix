@@ -12,13 +12,6 @@
 
       <div class="header-title-box">
         <h1 class="header-title">大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台</h1>
-        <div class="header-sub">
-          <span>三大保供制造管厂直供现场</span>
-          <span class="sub-sep">|</span>
-          <span>全网 10 大施工标段</span>
-          <span class="sub-sep">|</span>
-          <span>1138项物料基准</span>
-        </div>
       </div>
 
       <!-- 右侧：单一整合控制中心按钮 + 展开式控制面板 -->
@@ -338,7 +331,7 @@
                 </linearGradient>
               </defs>
 
-              <!-- 专供运输管道与流光组合 (默认无发货在途时完全隐藏，保持空间通透极简) -->
+              <!-- 专供运输管道与流光组合 (默认无发货在途时完全隐藏，出现时根据发货材质动态渲染青蓝或琥珀金) -->
               <g class="flylines-layer">
                 <g 
                   v-for="line in flylines" 
@@ -350,13 +343,13 @@
                   <path 
                     :d="line.d" 
                     class="flyline-base"
-                    :class="line.type"
+                    :class="activeMaterialType || 'pipe'"
                   />
                   <!-- 在途动态光带 -->
                   <path 
                     :d="line.d" 
                     class="flyline-stream"
-                    :class="line.type"
+                    :class="activeMaterialType || 'pipe'"
                   />
                 </g>
               </g>
@@ -385,9 +378,6 @@
             <div class="topology-layout-grid">
               <!-- 1. 左侧：供给制造基地 (Supply Hub) -->
               <div class="supply-hub-col">
-                <div class="hub-header">
-                  <span class="hub-badge supply">🏭 保供制造基地 (3)</span>
-                </div>
                 <div class="supply-cards-stack">
                   <div 
                     v-for="sup in supplyNodes" 
@@ -396,7 +386,11 @@
                     :class="{ 
                       active: activeNodeIds.has(sup.id),
                       hovered: hoveredSupplierId === sup.id,
-                      dimmed: (hoveredSupplierId && hoveredSupplierId !== sup.id) || (hoveredSectionId && !isSupplierOfSection(sup.id, hoveredSectionId))
+                      'is-shipping-source': isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
+                      [`mat-${activeMaterialType}`]: isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
+                      dimmed: (hoveredSupplierId && hoveredSupplierId !== sup.id) || 
+                              (hoveredSectionId && !isSupplierOfSection(sup.id, hoveredSectionId)) ||
+                              (isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId && activeSupplierId !== sup.id && !hoveredSupplierId && !hoveredSectionId)
                     }"
                     :id="'node-' + sup.id"
                     @mouseenter="hoveredSupplierId = sup.id"
@@ -435,7 +429,12 @@
                           { 
                             active: activeNodeIds.has('sec_' + sec.id),
                             highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
-                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                            'is-event-target': isAnimationRunning && activeSectionId === sec.id,
+                            [`event-cat-${activeEventCategory}`]: isAnimationRunning && activeSectionId === sec.id,
+                            [`event-mat-${activeMaterialType}`]: isAnimationRunning && activeSectionId === sec.id,
+                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || 
+                                    (hoveredSectionId && hoveredSectionId !== sec.id) ||
+                                    (isAnimationRunning && activeSectionId && activeSectionId !== sec.id && !hoveredSectionId && !hoveredSupplierId),
                             completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
                           }
                         ]"
@@ -459,27 +458,73 @@
                           </span>
                         </div>
 
-                        <!-- 保温管与管件双轨微进度 -->
+                        <!-- 保温管、施工量与管件三轨微进度 (支持在途差值高亮闪动) -->
                         <div class="sec-metrics-body">
+                          <!-- 1. 保温管 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
                               <span class="line-label pipe-tag">📐 保温管</span>
-                              <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
+                              <span class="line-val cyan-text">
+                                {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
+                              </span>
                               <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
                             </div>
-                            <div class="micro-bar-bg">
-                              <div class="micro-bar-fill cyan" :style="{ width: Math.min(sec.pipePercent, 100) + '%' }"></div>
+                            <div class="micro-bar-bg" :title="`到货: ${sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm}km | 在途: ${sec.transitKm || 0}km | 设计: ${sec.designKm}km`">
+                              <!-- 实体到货 (实色) -->
+                              <div 
+                                class="micro-bar-fill cyan" 
+                                :style="{ width: Math.min(sec.arrivedPercent !== undefined ? sec.arrivedPercent : sec.pipePercent, 100) + '%' }"
+                              ></div>
+                              <!-- 发货与到货差值 (在途闪烁高亮) -->
+                              <div 
+                                v-if="sec.transitPercent > 0"
+                                class="micro-bar-transit cyan-transit" 
+                                :style="{ 
+                                  left: Math.min(sec.arrivedPercent, 100) + '%', 
+                                  width: Math.min(sec.transitPercent, 100 - sec.arrivedPercent) + '%' 
+                                }"
+                                :title="`直管在途运送: ${sec.transitKm} km`"
+                              ></div>
                             </div>
                           </div>
 
+                          <!-- 2. 施工量 -->
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label construct-tag">🏗️ 施工量</span>
+                              <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
+                              <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
+                            </div>
+                            <div class="micro-bar-bg" :title="`已安装施工: ${sec.installedKm || '0.00'} km`">
+                              <div class="micro-bar-fill green" :style="{ width: Math.min(sec.installedPercent || 0, 100) + '%' }"></div>
+                            </div>
+                          </div>
+
+                          <!-- 3. 管件 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
                               <span class="line-label fitting-tag">🔩 管件</span>
-                              <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
+                              <span class="line-val gold-text">
+                                {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
+                              </span>
                               <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
                             </div>
-                            <div class="micro-bar-bg">
-                              <div class="micro-bar-fill gold" :style="{ width: Math.min(sec.fittingPercent, 100) + '%' }"></div>
+                            <div class="micro-bar-bg" :title="`到货: ${sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings}件 | 在途: ${sec.transitFittings || 0}件 | 计划: ${sec.totalFittings}件`">
+                              <!-- 实体到货 (实色) -->
+                              <div 
+                                class="micro-bar-fill gold" 
+                                :style="{ width: Math.min(sec.arrivedFittingPercent !== undefined ? sec.arrivedFittingPercent : sec.fittingPercent, 100) + '%' }"
+                              ></div>
+                              <!-- 发货与到货差值 (在途闪烁高亮) -->
+                              <div 
+                                v-if="sec.transitFittingPercent > 0"
+                                class="micro-bar-transit gold-transit" 
+                                :style="{ 
+                                  left: Math.min(sec.arrivedFittingPercent, 100) + '%', 
+                                  width: Math.min(sec.transitFittingPercent, 100 - sec.arrivedFittingPercent) + '%' 
+                                }"
+                                :title="`管件在途运送: ${sec.transitFittings} 件`"
+                              ></div>
                             </div>
                           </div>
                         </div>
@@ -499,7 +544,12 @@
                           { 
                             active: activeNodeIds.has('sec_' + sec.id),
                             highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
-                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                            'is-event-target': isAnimationRunning && activeSectionId === sec.id,
+                            [`event-cat-${activeEventCategory}`]: isAnimationRunning && activeSectionId === sec.id,
+                            [`event-mat-${activeMaterialType}`]: isAnimationRunning && activeSectionId === sec.id,
+                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || 
+                                    (hoveredSectionId && hoveredSectionId !== sec.id) ||
+                                    (isAnimationRunning && activeSectionId && activeSectionId !== sec.id && !hoveredSectionId && !hoveredSupplierId),
                             completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
                           }
                         ]"
@@ -523,27 +573,73 @@
                           </span>
                         </div>
 
-                        <!-- 保温管与管件双轨微进度 -->
+                        <!-- 保温管、施工量与管件三轨微进度 (支持在途差值高亮闪动) -->
                         <div class="sec-metrics-body">
+                          <!-- 1. 保温管 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
                               <span class="line-label pipe-tag">📐 保温管</span>
-                              <span class="line-val cyan-text">{{ sec.shippedKm }} / {{ sec.designKm }} km</span>
+                              <span class="line-val cyan-text">
+                                {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
+                              </span>
                               <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
                             </div>
-                            <div class="micro-bar-bg">
-                              <div class="micro-bar-fill cyan" :style="{ width: Math.min(sec.pipePercent, 100) + '%' }"></div>
+                            <div class="micro-bar-bg" :title="`到货: ${sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm}km | 在途: ${sec.transitKm || 0}km | 设计: ${sec.designKm}km`">
+                              <!-- 实体到货 (实色) -->
+                              <div 
+                                class="micro-bar-fill cyan" 
+                                :style="{ width: Math.min(sec.arrivedPercent !== undefined ? sec.arrivedPercent : sec.pipePercent, 100) + '%' }"
+                              ></div>
+                              <!-- 发货与到货差值 (在途闪烁高亮) -->
+                              <div 
+                                v-if="sec.transitPercent > 0"
+                                class="micro-bar-transit cyan-transit" 
+                                :style="{ 
+                                  left: Math.min(sec.arrivedPercent, 100) + '%', 
+                                  width: Math.min(sec.transitPercent, 100 - sec.arrivedPercent) + '%' 
+                                }"
+                                :title="`直管在途运送: ${sec.transitKm} km`"
+                              ></div>
                             </div>
                           </div>
 
+                          <!-- 2. 施工量 -->
+                          <div class="sec-metric-line">
+                            <div class="line-info">
+                              <span class="line-label construct-tag">🏗️ 施工量</span>
+                              <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
+                              <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
+                            </div>
+                            <div class="micro-bar-bg" :title="`已安装施工: ${sec.installedKm || '0.00'} km`">
+                              <div class="micro-bar-fill green" :style="{ width: Math.min(sec.installedPercent || 0, 100) + '%' }"></div>
+                            </div>
+                          </div>
+
+                          <!-- 3. 管件 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
                               <span class="line-label fitting-tag">🔩 管件</span>
-                              <span class="line-val gold-text">{{ sec.shippedFittings }} / {{ sec.totalFittings }} 件</span>
+                              <span class="line-val gold-text">
+                                {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
+                              </span>
                               <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
                             </div>
-                            <div class="micro-bar-bg">
-                              <div class="micro-bar-fill gold" :style="{ width: Math.min(sec.fittingPercent, 100) + '%' }"></div>
+                            <div class="micro-bar-bg" :title="`到货: ${sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings}件 | 在途: ${sec.transitFittings || 0}件 | 计划: ${sec.totalFittings}件`">
+                              <!-- 实体到货 (实色) -->
+                              <div 
+                                class="micro-bar-fill gold" 
+                                :style="{ width: Math.min(sec.arrivedFittingPercent !== undefined ? sec.arrivedFittingPercent : sec.fittingPercent, 100) + '%' }"
+                              ></div>
+                              <!-- 发货与到货差值 (在途闪烁高亮) -->
+                              <div 
+                                v-if="sec.transitFittingPercent > 0"
+                                class="micro-bar-transit gold-transit" 
+                                :style="{ 
+                                  left: Math.min(sec.arrivedFittingPercent, 100) + '%', 
+                                  width: Math.min(sec.transitFittingPercent, 100 - sec.arrivedFittingPercent) + '%' 
+                                }"
+                                :title="`管件在途运送: ${sec.transitFittings} 件`"
+                              ></div>
                             </div>
                           </div>
                         </div>
@@ -638,15 +734,31 @@
                 v-for="feed in filteredFeedList" 
                 :key="feed.id" 
                 class="feed-card"
-                :class="[feed.category_key || 'dispatch', { 'just-arrived': feed.isNew }]"
+                :class="[
+                  feed.category_key || 'dispatch',
+                  feed.type === 'fitting' ? 'mat-fitting' : 'mat-pipe',
+                  { 
+                    'just-arrived': feed.isNew,
+                    'is-active-feed': isAnimationRunning && activeEvent && activeEvent.id === feed.id,
+                    'is-fitting-event': feed.type === 'fitting'
+                  }
+                ]"
+                @mouseenter="hoveredFeedItem = feed"
+                @mouseleave="hoveredFeedItem = null"
                 @click="handleFeedClick(feed)"
-                title="点击在中心拓扑图上聚焦并触发该业务动态直达路线"
+                title="悬停/点击在中心拓扑图上即时聚焦并高亮该业务动态关联节点与路线"
                 style="cursor: pointer;"
               >
                 <!-- Row 1: 分类标签 + 经办人 + 发生时间 -->
                 <div class="feed-card-header">
                   <div class="header-left-meta">
-                    <span class="feed-category-tag" :class="feed.category_key || 'dispatch'">
+                    <span 
+                      class="feed-category-tag" 
+                      :class="[
+                        feed.category_key || 'dispatch',
+                        feed.type === 'fitting' ? 'mat-fitting' : 'mat-pipe'
+                      ]"
+                    >
                       {{ feed.category }}
                     </span>
                     <span v-if="feed.operator" class="feed-operator-tag" :title="'经办人: ' + feed.operator">
@@ -656,20 +768,18 @@
                   <span class="feed-time">{{ feed.time }}</span>
                 </div>
 
-                <!-- Row 2: 动态标题 / 厂家发运流向 -->
+                <!-- Row 2: 动态标题与流向行 (仅发货展示流向箭头，其他类型清晰两端对齐展示) -->
                 <div class="feed-card-headline">
-                  <template v-if="feed.category_key === 'dispatch'">
-                    <div class="route-line-box">
-                      <span class="route-source" :title="feed.supplier">{{ feed.supplier }}</span>
-                      <span class="route-arrow">──►</span>
-                      <span class="route-target" :title="feed.target">{{ feed.target }}</span>
-                    </div>
-                  </template>
-                  <template v-else>
-                    <div class="action-headline-box" :title="feed.headline">
-                      <span class="action-headline-text">{{ feed.headline }}</span>
-                    </div>
-                  </template>
+                  <div class="route-line-box" :class="{ 'is-dispatch': feed.category_key === 'dispatch' || feed.category === '厂家发货' }">
+                    <span class="route-source" :title="getFeedSourceOrAction(feed)">
+                      {{ getFeedSourceOrAction(feed) }}
+                    </span>
+                    <!-- 仅在厂家发货动态时展示流向箭头 -->
+                    <span v-if="feed.category_key === 'dispatch' || feed.category === '厂家发货'" class="route-arrow">──►</span>
+                    <span class="route-target" :title="feed.target">
+                      {{ feed.target }}
+                    </span>
+                  </div>
                 </div>
 
                 <!-- Row 3: 规格与数量明细栏 (左侧规格截断，右侧高亮数量，永不串行) -->
@@ -843,16 +953,16 @@ const defaultSupplyNodes = [
 ]
 
 const defaultSectionList = [
-  { id: 'high_lot_1', name: '高温水_标段1', code: 'H1', system_type: 'high', construction_status: '施工中', designKm: 18.5, shippedKm: 12.0, pipePercent: 64.9, totalFittings: 400, shippedFittings: 280, fittingPercent: 70.0 },
-  { id: 'high_lot_2', name: '高温水_标段2', code: 'H2', system_type: 'high', construction_status: '未开工', designKm: 15.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 350, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'high_lot_3', name: '高温水_标段3', code: 'H3', system_type: 'high', construction_status: '未开工', designKm: 14.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 320, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'high_lot_4', name: '高温水_标段4', code: 'H4', system_type: 'high', construction_status: '未开工', designKm: 16.0, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 360, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_1', name: '低温水_标段1', code: 'L1', system_type: 'low', construction_status: '未开工', designKm: 8.6, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 180, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_2', name: '低温水_标段2', code: 'L2', system_type: 'low', construction_status: '未开工', designKm: 9.1, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 195, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_3', name: '低温水_标段3', code: 'L3', system_type: 'low', construction_status: '未开工', designKm: 11.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 240, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_4', name: '低温水_标段4', code: 'L4', system_type: 'low', construction_status: '未开工', designKm: 10.5, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 220, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_5', name: '低温水_标段5', code: 'L5', system_type: 'low', construction_status: '未开工', designKm: 7.8, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 160, shippedFittings: 0, fittingPercent: 0.0 },
-  { id: 'low_lot_6', name: '低温水_标段6', code: 'L6', system_type: 'low', construction_status: '未开工', designKm: 8.2, shippedKm: 0.0, pipePercent: 0.0, totalFittings: 175, shippedFittings: 0, fittingPercent: 0.0 }
+  { id: 'high_lot_1', name: '高温水_标段1', code: 'H1', system_type: 'high', construction_status: '施工中', designKm: 18.5, shippedKm: 12.0, arrivedKm: 10.0, transitKm: 2.0, pipePercent: 64.9, arrivedPercent: 54.1, transitPercent: 10.8, installedKm: 0.23, installedPercent: 1.2, totalFittings: 400, shippedFittings: 280, arrivedFittings: 240, transitFittings: 40, fittingPercent: 70.0, arrivedFittingPercent: 60.0, transitFittingPercent: 10.0 },
+  { id: 'high_lot_2', name: '高温水_标段2', code: 'H2', system_type: 'high', construction_status: '未开工', designKm: 15.2, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 350, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'high_lot_3', name: '高温水_标段3', code: 'H3', system_type: 'high', construction_status: '未开工', designKm: 14.8, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 320, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'high_lot_4', name: '高温水_标段4', code: 'H4', system_type: 'high', construction_status: '未开工', designKm: 16.0, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 360, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_1', name: '低温水_标段1', code: 'L1', system_type: 'low', construction_status: '未开工', designKm: 8.6, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 180, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_2', name: '低温水_标段2', code: 'L2', system_type: 'low', construction_status: '未开工', designKm: 9.1, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 195, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_3', name: '低温水_标段3', code: 'L3', system_type: 'low', construction_status: '未开工', designKm: 11.2, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 240, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_4', name: '低温水_标段4', code: 'L4', system_type: 'low', construction_status: '未开工', designKm: 10.5, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 220, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_5', name: '低温水_标段5', code: 'L5', system_type: 'low', construction_status: '未开工', designKm: 7.8, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 160, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 },
+  { id: 'low_lot_6', name: '低温水_标段6', code: 'L6', system_type: 'low', construction_status: '未开工', designKm: 8.2, shippedKm: 0.0, arrivedKm: 0.0, transitKm: 0.0, pipePercent: 0.0, arrivedPercent: 0.0, transitPercent: 0.0, installedKm: 0.0, installedPercent: 0.0, totalFittings: 175, shippedFittings: 0, arrivedFittings: 0, transitFittings: 0, fittingPercent: 0.0, arrivedFittingPercent: 0.0, transitFittingPercent: 0.0 }
 ]
 
 // 真实实体库引用
@@ -936,6 +1046,10 @@ function isSuppliedBy(secId, supId) {
   return assigned.includes(secId)
 }
 
+function isSupplierOfSection(supId, secId) {
+  return isSuppliedBy(secId, supId)
+}
+
 function getSupplierStats(sup) {
   const assigned = sup.assigned_section_ids || []
   const matched = sectionProgressList.value.filter(s => assigned.includes(s.id))
@@ -966,15 +1080,138 @@ function getSupplierStats(sup) {
   }
 }
 
-function isSupplierOfSection(supId, secId) {
-  return isSuppliedBy(secId, supId)
+const hoveredFeedItem = ref(null)
+
+// 响应式解析当前驱动全屏拓扑的焦点事件（用户鼠标悬停战报卡片优先，默认锁定实时战报第一条最新情报）
+const activeEvent = computed(() => {
+  if (hoveredFeedItem.value) return hoveredFeedItem.value
+  if (filteredFeedList.value && filteredFeedList.value.length > 0) return filteredFeedList.value[0]
+  if (liveFeedList.value && liveFeedList.value.length > 0) return liveFeedList.value[0]
+  return null
+})
+
+// 解析当前焦点事件的供给方 ID（仅发货类事件关联具体发运供给方）
+const activeSupplierId = computed(() => {
+  if (!activeEvent.value) return null
+  const ev = activeEvent.value
+  const cat = ev.category_key || ev.category || ''
+  if (cat === 'dispatch' || cat === '厂家发货') {
+    if (ev.supplier_id) {
+      const sup = supplyNodes.value.find(s => s.id === ev.supplier_id || s.raw_id === ev.supplier_id || s.name === ev.supplier_id)
+      if (sup) return sup.id
+    }
+    const sup = supplyNodes.value.find(s => s.name === ev.supplier || (ev.supplier && ev.supplier.includes(s.name)) || s.raw_id === ev.supplier)
+    return sup ? sup.id : (supplyNodes.value[0]?.id || null)
+  }
+  return null
+})
+
+// 解析当前焦点事件的标段 ID
+const activeSectionId = computed(() => {
+  if (!activeEvent.value) return null
+  const ev = activeEvent.value
+  if (ev.section_id) {
+    const sec = sectionProgressList.value.find(s => s.id === ev.section_id || s.code === ev.section_id)
+    if (sec) return sec.id
+  }
+  const sec = sectionProgressList.value.find(s => s.name === ev.target || (ev.target && ev.target.includes(s.name)) || s.id === ev.target)
+  return sec ? sec.id : null
+})
+
+// 解析当前焦点事件的业务大类 (dispatch | arrival | usage | plan)
+const activeEventCategory = computed(() => {
+  if (!activeEvent.value) return null
+  const ev = activeEvent.value
+  const cat = ev.category_key || ev.category || ''
+  if (cat === 'dispatch' || cat === '厂家发货') return 'dispatch'
+  if (['arrival', 'receive', 'warehouse', '确认到货', '施工单位收货', '库管核销'].includes(cat)) return 'arrival'
+  if (cat === 'usage' || cat === '施工量确认') return 'usage'
+  if (cat === 'plan' || cat === '需求量申报') return 'plan'
+  return 'other'
+})
+
+// 解析当前焦点事件的物料类型 (pipe | fitting)
+const activeMaterialType = computed(() => {
+  return activeEvent.value?.type || 'pipe'
+})
+
+// 解析战报事件卡片左侧动作/来源摘要（右侧统一固定对齐标段名称）
+function getFeedSourceOrAction(feed) {
+  if (!feed) return ''
+  if (feed.category_key === 'dispatch' || feed.category === '厂家发货') {
+    return feed.supplier || '管厂调度发运'
+  }
+  if (feed.category_key === 'arrival' || feed.category === '确认到货') {
+    return feed.type === 'fitting' ? '管件进场到货' : '车辆进场到货'
+  }
+  if (feed.category_key === 'receive' || feed.category === '施工单位收货') {
+    return feed.type === 'fitting' ? '施工接收管件' : '施工实物收货'
+  }
+  if (feed.category_key === 'warehouse' || feed.category === '库管核销') {
+    return feed.type === 'fitting' ? '管件实物核销' : '库管实测核销'
+  }
+  if (feed.category_key === 'usage' || feed.category === '施工量确认') {
+    return '现场施工安装'
+  }
+  if (feed.category_key === 'plan' || feed.category === '需求量申报') {
+    if (feed.headline && feed.headline.includes('申报') && feed.headline.includes('要料')) {
+      const parts = feed.headline.split(/[──►·|]/)
+      return parts[0].trim()
+    }
+    return '申报滚动要料'
+  }
+  if (feed.headline) {
+    const parts = feed.headline.split(/[──►·|]/)
+    return parts[0].replace(/【.*?】/g, '').trim()
+  }
+  return feed.supplier || '业务办理'
+}
+
+// --- 动效生命周期与间隔律动管理（5 秒高亮展示 -> 5 秒静息恢复 -> 循环执行，新动态产生即刻重置）---
+const ANIMATION_ACTIVE_DURATION = 5000 // 5 秒动效高亮展示期
+const ANIMATION_REST_DURATION = 5000   // 5 秒静息恢复期
+const isAnimationCycleActive = ref(true)
+let animationCycleTimeout = null
+
+// 计算当前是否处于有效动效激活状态（若用户鼠标正在悬停某战报项，则保持常亮；否则跟随 5s/5s 周期律动）
+const isAnimationRunning = computed(() => {
+  if (hoveredFeedItem.value) return true
+  return isAnimationCycleActive.value
+})
+
+function startAnimationLoop() {
+  if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
+  isAnimationCycleActive.value = true
+
+  // 每次进入 5 秒激活周期时，如果当前焦点是发货事件，自动发射一次激光粒子飞向标段
+  if (activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
+    shootLaserParticle(activeSupplierId.value, 'sec_' + activeSectionId.value, activeMaterialType.value)
+  }
+
+  // 5 秒展示期结束，进入 5 秒静息期
+  animationCycleTimeout = setTimeout(() => {
+    isAnimationCycleActive.value = false
+
+    // 5 秒静息期结束，再次循环进入展示期
+    animationCycleTimeout = setTimeout(() => {
+      startAnimationLoop()
+    }, ANIMATION_REST_DURATION)
+  }, ANIMATION_ACTIVE_DURATION)
 }
 
 function isLineVisible(line) {
-  // 1. 鼠标悬停管厂或标段时临时显现专供直达线路
+  // 1. 鼠标手动悬停管厂或标段时临时显现专供直达线路
   if (hoveredSupplierId.value && line.fromId === hoveredSupplierId.value) return true
   if (hoveredSectionId.value && line.toId === 'sec_' + hoveredSectionId.value) return true
-  // 2. 有发货在途运输时显现该条运输路线
+
+  // 2. 当前焦点事件是“厂家发货”且处于 5 秒高亮动效周期内时，点亮对应供给方至标段的专属连线
+  if (isAnimationRunning.value && activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
+    if (line.fromId === activeSupplierId.value && line.toId === 'sec_' + activeSectionId.value) {
+      return true
+    }
+  }
+
+  // 3. 有临时触发的激光粒子运输时显现
   if (activeShipmentLineIds.value.has(line.id)) return true
   return false
 }
@@ -1001,16 +1238,34 @@ const milestones = ref([
 // --- 点击战报卡片即时在拓扑图上发射激光飞线并高亮相关节点 ---
 function handleFeedClick(feed) {
   if (!feed) return
-  const sup = supplyNodes.value.find(s => s.name === feed.supplier || (feed.supplier && feed.supplier.includes(s.name)) || s.raw_id === feed.supplier)
-  const sec = sectionProgressList.value.find(s => s.name === feed.target || (feed.target && feed.target.includes(s.name)) || s.id === feed.target)
+  const isDispatch = feed.category_key === 'dispatch' || feed.category === '厂家发货'
+  
+  let sup = null
+  if (feed.supplier_id) {
+    sup = supplyNodes.value.find(s => s.id === feed.supplier_id || s.raw_id === feed.supplier_id)
+  }
+  if (!sup) {
+    sup = supplyNodes.value.find(s => s.name === feed.supplier || (feed.supplier && feed.supplier.includes(s.name)) || s.raw_id === feed.supplier)
+  }
+
+  let sec = null
+  if (feed.section_id) {
+    sec = sectionProgressList.value.find(s => s.id === feed.section_id || s.code === feed.section_id)
+  }
+  if (!sec) {
+    sec = sectionProgressList.value.find(s => s.name === feed.target || (feed.target && feed.target.includes(s.name)) || s.id === feed.target)
+  }
+
   const fromId = sup ? sup.id : (supplyNodes.value[0]?.id || 'sup_kaiyuan')
   const toId = sec ? ('sec_' + sec.id) : ('sec_' + (sectionProgressList.value[0]?.id || 'high_lot_1'))
 
-  // 1. 发射专属激光飞线
-  shootLaserParticle(fromId, toId, feed.type || 'pipe')
+  if (isDispatch) {
+    // 1. 发货事件发射专属激光飞线并高亮供给方
+    shootLaserParticle(fromId, toId, feed.type || 'pipe')
+    if (sup) hoveredSupplierId.value = sup.id
+  }
 
-  // 2. 临时高亮对应管厂与标段节点
-  if (sup) hoveredSupplierId.value = sup.id
+  // 2. 临时高亮对应标段节点
   if (sec) hoveredSectionId.value = sec.id
   setTimeout(() => {
     hoveredSupplierId.value = null
@@ -1093,8 +1348,9 @@ async function pollLiveRealData() {
           }, 2400)
         })
 
-        // 更新战报列表
+        // 更新战报列表并即刻重置启动 5 秒动效展示期
         liveFeedList.value = res.live_feed_list
+        startAnimationLoop()
         setTimeout(() => {
           liveFeedList.value.forEach(f => f.isNew = false)
         }, 3500)
@@ -1190,7 +1446,7 @@ function recalculateFlylines() {
               id: `flyline-${sup.id}-${sec.id}`,
               fromId: sup.id,
               toId: 'sec_' + sec.id,
-              type: sIdx === 1 ? 'fitting' : 'pipe',
+              type: 'pipe',
               d
             })
           }
@@ -1206,17 +1462,23 @@ function recalculateFlylines() {
 function shootLaserParticle(fromId, toId, type = 'pipe') {
   let targetLine = flylines.value.find(l => l.fromId === fromId && l.toId === toId)
   if (!targetLine) {
-    targetLine = flylines.value.find(l => l.toId === toId) || flylines.value[0]
+    targetLine = flylines.value.find(l => l.toId === toId)
+  }
+  if (!targetLine) {
+    targetLine = flylines.value.find(l => l.fromId === fromId)
+  }
+  if (!targetLine) {
+    targetLine = flylines.value[0]
   }
   if (!targetLine) return
 
   const particleId = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
   const duration = 1.3
 
-  // 1. 点亮显现在途运输线路
+  // 1. 点亮显现在途运输线路（使用确切 targetLine 的端点，确保线路与发光节点100%对齐）
   activeShipmentLineIds.value.add(targetLine.id)
-  activeNodeIds.value.add(fromId)
-  activeNodeIds.value.add(toId)
+  activeNodeIds.value.add(targetLine.fromId)
+  activeNodeIds.value.add(targetLine.toId)
 
   activeParticles.value.push({
     id: particleId,
@@ -1228,135 +1490,301 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
   // 2. 激光粒子到达后移除粒子与高亮
   setTimeout(() => {
     activeParticles.value = activeParticles.value.filter(p => p.id !== particleId)
-    activeNodeIds.value.delete(fromId)
-    activeNodeIds.value.delete(toId)
+    activeNodeIds.value.delete(targetLine.fromId)
+    activeNodeIds.value.delete(targetLine.toId)
   }, duration * 1000 + 100)
 
-  // 3. 在途运输持续 4.0 秒后线路平滑隐去，完全恢复通透极简状态
+  // 3. 在途运输持续 4.0 秒后线路平滑隐去
   setTimeout(() => {
     activeShipmentLineIds.value.delete(targetLine.id)
   }, 4000)
 }
 
-// --- 核心业务：触发发货事件（支持真实数据或交互模拟）---
-function triggerSimulateDelivery(type = 'pipe') {
-  const timeNow = new Date().toTimeString().split(' ')[0]
-  
-  // 1. 真实供给主体
-  const chosenSup = rawSupplyEntities.length > 0 
-    ? rawSupplyEntities[Math.floor(Math.random() * rawSupplyEntities.length)]
-    : { entity_id: 'kaiyuan', entity_name: '大连开元热力管道股份有限公司' }
-  const supName = chosenSup.entity_name || '大连开元热力管道股份有限公司'
-  const supNodeId = `sup_${chosenSup.entity_id}`
-
-  // 2. 真实需求标段 (10 大标段)
-  const secTarget = sectionProgressList.value.length > 0 
-    ? sectionProgressList.value[Math.floor(Math.random() * sectionProgressList.value.length)]
-    : { id: 'high_lot_1', name: '高温水_标段1', designKm: 18.5, shippedKm: 12.0, totalFittings: 400, shippedFittings: 280 }
-  const secNodeId = `sec_${secTarget.id}`
-
-  if (type === 'pipe') {
-    const models = rawPipeModels.length > 0 ? rawPipeModels : ['DN600', 'DN800', 'DN1000', 'DN1200', 'DN500']
-    const model = models[Math.floor(Math.random() * models.length)]
-    const meters = [120, 240, 360, 480][Math.floor(Math.random() * 4)]
-
-    // 1. 战报卡片加入队列
-    const newFeed = {
-      id: 'sim_p_' + Date.now(),
-      type: 'pipe',
-      supplier: supName,
-      target: secTarget.name,
-      specification: `${model} 预制直埋保温管`,
-      amount: `${meters} 米`,
-      shipmentCode: 'DL-P-' + Math.floor(1000 + Math.random() * 9000),
-      time: timeNow,
-      positiveTag: `直达现场 +${meters}米 🚀`,
-      isNew: true
-    }
-    liveFeedList.value.unshift(newFeed)
-    if (liveFeedList.value.length > 25) liveFeedList.value = liveFeedList.value.slice(0, 25)
-
-    // 2. 指标联动递增 (CountUp)
-    const kmDelta = meters / 1000
-    kpiData.pipeShippedKm = Math.round((kpiData.pipeShippedKm + kmDelta) * 100) / 100
-    kpiData.pipeTransitKm = Math.round((kpiData.pipeTransitKm + kmDelta) * 100) / 100
-
-    // 3. 气泡飘字
-    bubbles.pipeShipped = meters
-    bubbles.pipeTransit = meters
-    setTimeout(() => {
-      bubbles.pipeShipped = null
-      bubbles.pipeTransit = null
-    }, 2400)
-
-    // 4. 标段能量槽充能
-    lastImpactedSectionId.value = secTarget.id
-    secTarget.shippedKm = Math.min(Math.round((secTarget.shippedKm + kmDelta) * 100) / 100, secTarget.designKm || 999)
-    if (secTarget.designKm > 0) {
-      secTarget.pipePercent = Math.min(Math.round((secTarget.shippedKm / secTarget.designKm) * 1000) / 10, 100)
-    }
-
-    // 5. 发射激光飞线粒子
-    shootLaserParticle(supNodeId, secNodeId, 'pipe')
-
-  } else {
-    // 管件发运
-    const fittings = ['90°大口径弯头', '同心变径管', '异径三通', '直埋波纹补偿器', '直埋焊接球阀', '固定支架节']
-    const fittingName = fittings[Math.floor(Math.random() * fittings.length)]
-    const pcs = [2, 4, 6, 8, 12][Math.floor(Math.random() * 5)]
-
-    const newFeed = {
-      id: 'sim_f_' + Date.now(),
-      type: 'fitting',
-      supplier: supName,
-      target: secTarget.name,
-      specification: fittingName,
-      amount: `${pcs} 件套`,
-      shipmentCode: 'FT-FAST-' + Math.floor(1000 + Math.random() * 9000),
-      time: timeNow,
-      positiveTag: `关键管件专车直达 +${pcs}件 ✨`,
-      isNew: true
-    }
-    liveFeedList.value.unshift(newFeed)
-    if (liveFeedList.value.length > 25) liveFeedList.value = liveFeedList.value.slice(0, 25)
-
-    // 指标联动
-    kpiData.fittingShippedPcs += pcs
-    kpiData.fittingTransitPcs += pcs
-
-    // 气泡飘字
-    bubbles.fittingShipped = pcs
-    bubbles.fittingTransit = pcs
-    setTimeout(() => {
-      bubbles.fittingShipped = null
-      bubbles.fittingTransit = null
-    }, 2400)
-
-    // 标段管件充能
-    lastImpactedSectionId.value = secTarget.id
-    secTarget.shippedFittings += pcs
-    if (secTarget.totalFittings > 0) {
-      secTarget.fittingPercent = Math.min(Math.round((secTarget.shippedFittings / secTarget.totalFittings) * 1000) / 10, 100)
-    }
-
-    // 激光飞线
-    shootLaserParticle(supNodeId, secNodeId, 'fitting')
+// --- 核心业务：触发发货与现场业务事件（支持真实数据或沙盒演示模拟）---
+function triggerSimulateDelivery(mode = 'pipe') {
+  // 手动模拟或演示时自动退出实况模式
+  if (isLiveStreamMode.value) {
+    toggleLiveStreamMode()
   }
 
-  // 3秒后移除新到标记
-  setTimeout(() => {
-    liveFeedList.value.forEach(f => f.isNew = false)
-  }, 3000)
+  const timeNow = new Date().toTimeString().split(' ')[0].slice(0, 5)
+  const validSuppliers = supplyNodes.value.length > 0 ? supplyNodes.value : defaultSupplyNodes
+
+  // 1. 严格从当前供给方中选取管厂与可供标段
+  const chosenSup = validSuppliers[Math.floor(Math.random() * validSuppliers.length)]
+  const supNodeId = chosenSup.id
+  const supName = chosenSup.name
+  const assignedSectionIds = (chosenSup.assigned_section_ids && chosenSup.assigned_section_ids.length > 0)
+    ? chosenSup.assigned_section_ids
+    : ['high_lot_1', 'high_lot_2']
+
+  // 严格选取管厂负责的标段，确保物理拓扑飞线 100% 存在且与标段卡片完全一致
+  const chosenSecId = assignedSectionIds[Math.floor(Math.random() * assignedSectionIds.length)]
+  const secTarget = sectionProgressList.value.find(s => s.id === chosenSecId) || sectionProgressList.value[0]
+  const secNodeId = 'sec_' + secTarget.id
+  const secName = secTarget.name
+
+  const eventId = 'sim_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
+
+  // 2. 决定事件类别与物料类型
+  let categoryKey = 'dispatch'
+  let categoryName = '厂家发货'
+  let matType = (mode === 'fitting') ? 'fitting' : 'pipe'
+
+  if (mode === 'auto') {
+    const roll = Math.random()
+    if (roll < 0.50) {
+      categoryKey = 'dispatch'
+      categoryName = '厂家发货'
+      matType = Math.random() > 0.45 ? 'pipe' : 'fitting'
+    } else if (roll < 0.70) {
+      categoryKey = 'arrival'
+      categoryName = '确认到货'
+      matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
+    } else if (roll < 0.82) {
+      categoryKey = 'receive'
+      categoryName = '施工单位收货'
+      matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
+    } else if (roll < 0.92) {
+      categoryKey = 'warehouse'
+      categoryName = '库管核销'
+      matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
+    } else {
+      categoryKey = 'usage'
+      categoryName = '施工量确认'
+      matType = 'pipe'
+    }
+  }
+
+  // 3. 构造完整规范的战报实体并联动指标
+  let newFeed = null
+
+  if (categoryKey === 'dispatch') {
+    if (matType === 'pipe') {
+      const models = rawPipeModels.length > 0 ? rawPipeModels : ['DN600', 'DN800', 'DN1000', 'DN1200', 'DN500']
+      const model = models[Math.floor(Math.random() * models.length)]
+      const meters = [120, 240, 360, 480][Math.floor(Math.random() * 4)]
+      const kmDelta = Math.round((meters / 1000) * 100) / 100
+
+      newFeed = {
+        id: eventId,
+        category: '厂家发货',
+        category_key: 'dispatch',
+        type: 'pipe',
+        supplier_id: chosenSup.id,
+        section_id: secTarget.id,
+        supplier: supName,
+        target: secName,
+        headline: `${supName} ──► ${secName}`,
+        specification: `${model} 预制直埋保温管`,
+        amount: `${meters} 米`,
+        shipmentCode: 'DL-P-' + Math.floor(1000 + Math.random() * 9000),
+        vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
+        operator: '管厂调度发运',
+        time: timeNow,
+        positiveTag: `保温管专车直达标段 +${meters}米 🚀`,
+        isNew: true
+      }
+
+      kpiData.pipeShippedKm = Math.round((kpiData.pipeShippedKm + kmDelta) * 100) / 100
+      kpiData.pipeTransitKm = Math.round((kpiData.pipeTransitKm + kmDelta) * 100) / 100
+      secTarget.shippedKm = Math.round(((Number(secTarget.shippedKm) || 0) + kmDelta) * 100) / 100
+      secTarget.transitKm = Math.round(((Number(secTarget.transitKm) || 0) + kmDelta) * 100) / 100
+      if (secTarget.designKm > 0) {
+        secTarget.pipePercent = Math.min(Math.round((secTarget.shippedKm / secTarget.designKm) * 1000) / 10, 100)
+        secTarget.transitPercent = Math.min(Math.round((secTarget.transitKm / secTarget.designKm) * 1000) / 10, 100)
+      }
+
+      bubbles.pipeShipped = meters
+      bubbles.pipeTransit = meters
+      setTimeout(() => { bubbles.pipeShipped = null; bubbles.pipeTransit = null }, 2400)
+
+    } else {
+      // 管件发货
+      const fittings = ['90°大口径弯头', '同心变径管', '异径三通', '直埋波纹补偿器', '直埋焊接球阀']
+      const fittingName = fittings[Math.floor(Math.random() * fittings.length)]
+      const pcs = [2, 4, 6, 8, 12][Math.floor(Math.random() * 5)]
+
+      newFeed = {
+        id: eventId,
+        category: '厂家发货',
+        category_key: 'dispatch',
+        type: 'fitting',
+        supplier_id: chosenSup.id,
+        section_id: secTarget.id,
+        supplier: supName,
+        target: secName,
+        headline: `${supName} ──► ${secName}`,
+        specification: fittingName,
+        amount: `${pcs} 件套`,
+        shipmentCode: 'FT-SH-' + Math.floor(1000 + Math.random() * 9000),
+        vehiclePlate: '冀B·' + Math.floor(1000 + Math.random() * 9000),
+        operator: '管厂调度发运',
+        time: timeNow,
+        positiveTag: `关键配件专车直达 +${pcs}件 ✨`,
+        isNew: true
+      }
+
+      kpiData.fittingShippedPcs += pcs
+      kpiData.fittingTransitPcs += pcs
+      secTarget.shippedFittings = (Number(secTarget.shippedFittings) || 0) + pcs
+      secTarget.transitFittings = (Number(secTarget.transitFittings) || 0) + pcs
+      if (secTarget.totalFittings > 0) {
+        secTarget.fittingPercent = Math.min(Math.round((secTarget.shippedFittings / secTarget.totalFittings) * 1000) / 10, 100)
+        secTarget.transitFittingPercent = Math.min(Math.round((secTarget.transitFittings / secTarget.totalFittings) * 1000) / 10, 100)
+      }
+
+      bubbles.fittingShipped = pcs
+      bubbles.fittingTransit = pcs
+      setTimeout(() => { bubbles.fittingShipped = null; bubbles.fittingTransit = null }, 2400)
+    }
+
+  } else if (categoryKey === 'arrival') {
+    const meters = [120, 240, 360][Math.floor(Math.random() * 3)]
+    const kmDelta = Math.round((meters / 1000) * 100) / 100
+
+    newFeed = {
+      id: eventId,
+      category: '确认到货',
+      category_key: 'arrival',
+      type: matType,
+      supplier_id: chosenSup.id,
+      section_id: secTarget.id,
+      supplier: supName,
+      target: secName,
+      headline: matType === 'fitting' ? `管件进场到货 · ${secName}` : `车辆进场到货 · ${secName}`,
+      specification: matType === 'pipe' ? 'DN800 预制直埋保温管' : '90°大口径弯头 DN800',
+      amount: matType === 'pipe' ? `${meters} 米` : `4 件套`,
+      shipmentCode: 'ARR-' + Math.floor(1000 + Math.random() * 9000),
+      vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
+      operator: '现场负责人',
+      time: timeNow,
+      positiveTag: matType === 'fitting' ? '关键管件专车已进场完成核验' : '车辆已进场完成到货核验',
+      isNew: true
+    }
+
+    if (matType === 'pipe') {
+      kpiData.pipeDeliveredKm = Math.round((kpiData.pipeDeliveredKm + kmDelta) * 100) / 100
+      kpiData.pipeTransitKm = Math.max(0, Math.round((kpiData.pipeTransitKm - kmDelta) * 100) / 100)
+      secTarget.arrivedKm = Math.round(((Number(secTarget.arrivedKm) || 0) + kmDelta) * 100) / 100
+      secTarget.transitKm = Math.max(0, Math.round(((Number(secTarget.transitKm) || 0) - kmDelta) * 100) / 100)
+      if (secTarget.designKm > 0) {
+        secTarget.arrivedPercent = Math.min(Math.round((secTarget.arrivedKm / secTarget.designKm) * 1000) / 10, 100)
+        secTarget.transitPercent = Math.min(Math.round((secTarget.transitKm / secTarget.designKm) * 1000) / 10, 100)
+      }
+    } else {
+      kpiData.fittingArrivedPcs += 4
+      kpiData.fittingTransitPcs = Math.max(0, kpiData.fittingTransitPcs - 4)
+      secTarget.arrivedFittings = (Number(secTarget.arrivedFittings) || 0) + 4
+      secTarget.transitFittings = Math.max(0, (Number(secTarget.transitFittings) || 0) - 4)
+      if (secTarget.totalFittings > 0) {
+        secTarget.arrivedFittingPercent = Math.min(Math.round((secTarget.arrivedFittings / secTarget.totalFittings) * 1000) / 10, 100)
+        secTarget.transitFittingPercent = Math.min(Math.round((secTarget.transitFittings / secTarget.totalFittings) * 1000) / 10, 100)
+      }
+    }
+
+  } else if (categoryKey === 'receive') {
+    newFeed = {
+      id: eventId,
+      category: '施工单位收货',
+      category_key: 'receive',
+      type: matType,
+      supplier_id: chosenSup.id,
+      section_id: secTarget.id,
+      supplier: supName,
+      target: secName,
+      headline: matType === 'fitting' ? `施工接收管件 · ${secName}` : `施工实物收货 · ${secName}`,
+      specification: matType === 'fitting' ? '90°大口径弯头 DN800' : 'DN800 预制直埋保温管',
+      amount: matType === 'fitting' ? '4 件套' : '240 米',
+      shipmentCode: 'REC-' + Math.floor(1000 + Math.random() * 9000),
+      vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
+      operator: '现场施工接收员',
+      time: timeNow,
+      positiveTag: matType === 'fitting' ? '施工队完成特种管件核验签收' : '施工队完成实物卸车接收',
+      isNew: true
+    }
+
+  } else if (categoryKey === 'warehouse') {
+    newFeed = {
+      id: eventId,
+      category: '库管核销',
+      category_key: 'warehouse',
+      type: matType,
+      supplier_id: chosenSup.id,
+      section_id: secTarget.id,
+      supplier: supName,
+      target: secName,
+      headline: matType === 'fitting' ? `管件实物核销 · ${secName}` : `库管实测核销 · ${secName}`,
+      specification: matType === 'fitting' ? '90°大口径弯头 DN800' : 'DN800 预制直埋保温管',
+      amount: matType === 'fitting' ? '4 件套' : '240 米',
+      shipmentCode: 'WH-' + Math.floor(1000 + Math.random() * 9000),
+      vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
+      operator: '专职库管员',
+      time: timeNow,
+      positiveTag: matType === 'fitting' ? '管件实物核验无误，入库手续闭环' : '实测核验无误，入库手续闭环',
+      isNew: true
+    }
+
+  } else if (categoryKey === 'usage') {
+    const meters = [60, 120, 180][Math.floor(Math.random() * 3)]
+    const kmDelta = Math.round((meters / 1000) * 100) / 100
+
+    newFeed = {
+      id: eventId,
+      category: '施工量确认',
+      category_key: 'usage',
+      type: 'pipe',
+      supplier_id: null,
+      section_id: secTarget.id,
+      supplier: '施工现场班组',
+      target: secName,
+      headline: `现场施工安装 · ${secName}`,
+      specification: 'DN800 预制直埋保温管',
+      amount: `铺设安装 ${meters} 米`,
+      shipmentCode: 'SG-' + Math.floor(1000 + Math.random() * 9000),
+      vehiclePlate: '工区现场铺设',
+      operator: '现场施工负责人',
+      time: timeNow,
+      positiveTag: '完成管网下沟敷设，记录已确认',
+      isNew: true
+    }
+
+    secTarget.installedKm = Math.round(((parseFloat(secTarget.installedKm) || 0) + kmDelta) * 100) / 100
+    if (secTarget.designKm > 0) {
+      secTarget.installedPercent = Math.min(Math.round((secTarget.installedKm / secTarget.designKm) * 1000) / 10, 100)
+    }
+  }
+
+  // 4. 将新战报排在最前，并允许持续累积记录（最高保留 100 条流水）
+  if (newFeed) {
+    liveFeedList.value.unshift(newFeed)
+    if (liveFeedList.value.length > 100) liveFeedList.value = liveFeedList.value.slice(0, 100)
+    lastImpactedSectionId.value = secTarget.id
+
+    // 立即启动 5 秒周期动效联动
+    startAnimationLoop()
+
+    setTimeout(() => {
+      newFeed.isNew = false
+    }, 3500)
+  }
 }
 
-// 开启/关闭自动轮播演示
+// --- 沙盒演示自动轮播控制（每 8 秒触发一次新动态）---
+const AUTO_DEMO_INTERVAL = 8000
+
 function toggleAutoDemo() {
   autoDemoRunning.value = !autoDemoRunning.value
   if (autoDemoRunning.value) {
+    // 1. 开启演示模式时，自动退出并断开实况模式
+    if (isLiveStreamMode.value) {
+      toggleLiveStreamMode()
+    }
+    triggerSimulateDelivery('auto')
+    if (autoDemoTimer) clearInterval(autoDemoTimer)
     autoDemoTimer = setInterval(() => {
-      const type = Math.random() > 0.45 ? 'pipe' : 'fitting'
-      triggerSimulateDelivery(type)
-    }, 4500)
+      triggerSimulateDelivery('auto')
+    }, AUTO_DEMO_INTERVAL)
   } else {
     if (autoDemoTimer) clearInterval(autoDemoTimer)
     autoDemoTimer = null
@@ -1404,6 +1832,11 @@ function updateClock() {
 
 // 加载 100% 真实项目与数据库数据 (只读感知，不写数据库)
 async function loadRealData(isForce = false) {
+  // 若当前正处于沙盒演示模式且非手动强制刷新，则跳过后台静默覆盖，确保演示流水持续累积沉淀
+  if (autoDemoRunning.value && !isForce) {
+    return
+  }
+
   try {
     const res = await getTubeBigScreenData(projectKey.value)
     if (res && res.ok) {
@@ -1460,6 +1893,7 @@ async function loadRealData(isForce = false) {
 
       initialDataLoaded = true
       recalculateFlylines()
+      startAnimationLoop()
     }
   } catch (err) {
     console.warn('读取真实大屏聚合数据接口异常，使用配置与内置字典:', err)
@@ -1472,6 +1906,7 @@ async function loadRealData(isForce = false) {
     }
     initialDataLoaded = true
     recalculateFlylines()
+    startAnimationLoop()
   }
 }
 
@@ -1479,6 +1914,7 @@ onMounted(() => {
   updateClock()
   timerClock = setInterval(updateClock, 1000)
   loadRealData()
+  startAnimationLoop()
 
   // 监听尺寸变化自适应重算飞线 (rAF 节流)
   if (topologyContainerRef.value && window.ResizeObserver) {
@@ -1503,6 +1939,7 @@ onBeforeUnmount(() => {
   if (autoDemoTimer) clearInterval(autoDemoTimer)
   if (autoSyncTimer) clearInterval(autoSyncTimer)
   if (liveStreamTimer) clearInterval(liveStreamTimer)
+  if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
   if (resizeObserver) resizeObserver.disconnect()
   if (rAFId) cancelAnimationFrame(rAFId)
   window.removeEventListener('resize', recalculateFlylines)
@@ -1606,25 +2043,11 @@ onBeforeUnmount(() => {
 
 .header-title {
   margin: 0;
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 2.2px;
   color: #ffffff;
-  text-shadow: 0 2px 12px rgba(0, 242, 254, 0.35);
-}
-
-.header-sub {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.sub-sep {
-  opacity: 0.4;
+  text-shadow: 0 2px 16px rgba(0, 242, 254, 0.5);
 }
 
 .header-right {
@@ -2389,7 +2812,7 @@ onBeforeUnmount(() => {
   height: 100%;
   display: grid;
   grid-template-columns: 260px 45px 1fr;
-  padding: 10px;
+  padding: 12px 14px;
   box-sizing: border-box;
   z-index: 10;
   gap: 0;
@@ -2401,25 +2824,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-
-.hub-header {
-  margin-bottom: 8px;
-  flex-shrink: 0;
-}
-
-.hub-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.hub-badge.supply {
-  background: rgba(0, 242, 254, 0.15);
-  color: #00f2fe;
-  border: 1px solid rgba(0, 242, 254, 0.3);
+  overflow: visible;
 }
 
 .supply-cards-stack {
@@ -2429,6 +2834,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   justify-content: space-around;
   gap: 16px;
+  overflow: visible;
+  padding: 4px 2px;
+  box-sizing: border-box;
 }
 
 .supply-node-card {
@@ -2478,6 +2886,41 @@ onBeforeUnmount(() => {
 .supply-node-card:nth-child(3).hovered {
   border-color: #00ff87;
   box-shadow: 0 6px 20px rgba(0, 255, 135, 0.18);
+}
+
+.supply-node-card.is-shipping-source {
+  border-color: #00f2fe;
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.22) 0%, #11263d 80%);
+  box-shadow: 0 0 22px rgba(0, 242, 254, 0.5), inset 0 0 12px rgba(0, 242, 254, 0.18);
+  animation: supplier-shipping-pulse 1.6s infinite ease-in-out;
+  transform: translateX(4px);
+  z-index: 5;
+}
+
+.supply-node-card.is-shipping-source.mat-fitting {
+  border-color: #fbbf24;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, #11263d 80%);
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.5), inset 0 0 12px rgba(251, 191, 36, 0.18);
+}
+
+.supply-node-card.is-shipping-source .node-port.port-out {
+  box-shadow: 0 0 12px #00f2fe;
+  background: #00f2fe;
+}
+
+.supply-node-card.is-shipping-source.mat-fitting .node-port.port-out {
+  box-shadow: 0 0 12px #fbbf24;
+  background: #fbbf24;
+  border-color: #fbbf24;
+}
+
+@keyframes supplier-shipping-pulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 26px rgba(0, 242, 254, 0.8), inset 0 0 14px rgba(0, 242, 254, 0.3);
+  }
 }
 
 .supply-node-card.dimmed {
@@ -2531,6 +2974,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   padding-left: 6px;
+  overflow: visible;
 }
 
 .demand-systems-split {
@@ -2539,7 +2983,9 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
-  overflow: hidden;
+  overflow: visible;
+  padding: 4px 2px;
+  box-sizing: border-box;
 }
 
 .system-sub-col {
@@ -2547,6 +2993,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: visible;
 }
 
 .system-cards-list {
@@ -2556,7 +3003,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
-  overflow: hidden;
+  overflow: visible;
+  padding: 4px 2px;
+  box-sizing: border-box;
 }
 
 .demand-node-card {
@@ -2572,7 +3021,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 5px;
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
+  transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   box-sizing: border-box;
 }
 
@@ -2590,6 +3039,93 @@ onBeforeUnmount(() => {
   border-color: #00f2fe;
   background: #11263d;
   transform: translateY(-1px);
+}
+
+/* 标段事件驱动高亮状态 */
+.demand-node-card.is-event-target {
+  transform: translateY(-2px);
+  z-index: 5;
+}
+
+/* 1. 厂家发货接收端 */
+.demand-node-card.is-event-target.event-cat-dispatch {
+  border-color: #00f2fe;
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.18) 0%, #11263d 70%);
+  box-shadow: 0 0 24px rgba(0, 242, 254, 0.6), inset 0 0 12px rgba(0, 242, 254, 0.18);
+  animation: target-dispatch-pulse 1.6s infinite ease-in-out;
+}
+
+.demand-node-card.is-event-target.event-cat-dispatch.event-mat-fitting {
+  border-color: #fbbf24;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, #11263d 70%);
+  box-shadow: 0 0 24px rgba(251, 191, 36, 0.6), inset 0 0 12px rgba(251, 191, 36, 0.18);
+}
+
+.demand-node-card.is-event-target.event-cat-dispatch .node-port.port-in {
+  box-shadow: 0 0 12px #00f2fe;
+  background: #00f2fe;
+}
+
+/* 2. 确认到货/确权/核销端 */
+.demand-node-card.is-event-target.event-cat-arrival {
+  border-color: #38bdf8;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, #11263d 70%);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.6), inset 0 0 12px rgba(56, 189, 248, 0.2);
+  animation: target-arrival-pulse 1.6s infinite ease-in-out;
+}
+
+/* 管件到货/施工接收管件/库管核销管件 - 专属琥珀金光晕 */
+.demand-node-card.is-event-target.event-cat-arrival.event-mat-fitting {
+  border-color: #fbbf24;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, #11263d 70%);
+  box-shadow: 0 0 24px rgba(251, 191, 36, 0.6), inset 0 0 12px rgba(251, 191, 36, 0.18);
+  animation: target-fitting-pulse 1.6s infinite ease-in-out;
+}
+
+.demand-node-card.is-event-target.event-cat-arrival.event-mat-fitting .node-port.port-in {
+  box-shadow: 0 0 12px #fbbf24;
+  background: #fbbf24;
+}
+
+/* 3. 施工量确认/下沟安装端 */
+.demand-node-card.is-event-target.event-cat-usage {
+  border-color: #10b981;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, #0f192b 70%);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.65), inset 0 0 12px rgba(16, 185, 129, 0.25);
+  animation: target-usage-pulse 1.6s infinite ease-in-out;
+}
+
+/* 4. 需求量申报/三日计划端 */
+.demand-node-card.is-event-target.event-cat-plan {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, #0f192b 70%);
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.65), inset 0 0 12px rgba(245, 158, 11, 0.25);
+  animation: target-plan-pulse 1.6s infinite ease-in-out;
+}
+
+@keyframes target-dispatch-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 242, 254, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(0, 242, 254, 0.85), inset 0 0 14px rgba(0, 242, 254, 0.35); }
+}
+
+@keyframes target-fitting-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(251, 191, 36, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(251, 191, 36, 0.85), inset 0 0 14px rgba(251, 191, 36, 0.35); }
+}
+
+@keyframes target-arrival-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(56, 189, 248, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(56, 189, 248, 0.85), inset 0 0 14px rgba(56, 189, 248, 0.35); }
+}
+
+@keyframes target-usage-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(16, 185, 129, 0.9), inset 0 0 14px rgba(16, 185, 129, 0.4); }
+}
+
+@keyframes target-plan-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+  50% { box-shadow: 0 0 28px rgba(245, 158, 11, 0.9), inset 0 0 14px rgba(245, 158, 11, 0.4); }
 }
 
 .demand-node-card.dimmed {
@@ -2735,6 +3271,12 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
+.line-label.construct-tag {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #ffffff;
+}
+
 .line-label.fitting-tag {
   background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.35);
@@ -2747,12 +3289,50 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.line-val.cyan-text,
+.line-pct.cyan-text {
+  color: #00f2fe;
+}
+
+.line-val.green-text,
+.line-pct.green-text {
+  color: #10b981;
+}
+
+.line-val.gold-text,
+.line-pct.gold-text {
+  color: #fbbf24;
+}
+
 .line-pct {
   font-weight: 800;
   font-size: 13px;
 }
 
+.transit-num-tag {
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  display: inline-block;
+  animation: transit-text-sync-glow 1.4s infinite ease-in-out;
+}
+
+.transit-num-tag.cyan-transit {
+  color: #00f2fe;
+  background: rgba(0, 242, 254, 0.15);
+  border: 1px solid rgba(0, 242, 254, 0.35);
+}
+
+.transit-num-tag.gold-transit {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
 .micro-bar-bg {
+  position: relative;
   width: 100%;
   height: 7px;
   background: rgba(255, 255, 255, 0.1);
@@ -2761,17 +3341,82 @@ onBeforeUnmount(() => {
 }
 
 .micro-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   border-radius: 4px;
   transition: width 0.8s ease;
+  z-index: 1;
 }
 
 .micro-bar-fill.cyan {
   background: linear-gradient(90deg, #0052d4, #00f2fe);
 }
 
+.micro-bar-fill.green {
+  background: linear-gradient(90deg, #059669, #10b981);
+}
+
 .micro-bar-fill.gold {
   background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+
+/* 在途差值段：动态流光闪烁高亮 (与上方在途角标严格同频 1.4s 呼吸) */
+.micro-bar-transit {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+  transition: all 0.8s ease;
+  animation: transit-bar-sync-glow 1.4s infinite ease-in-out;
+  z-index: 2;
+}
+
+.micro-bar-transit.cyan-transit {
+  background: repeating-linear-gradient(
+    -45deg,
+    #00f2fe,
+    #00f2fe 3px,
+    #0284c7 3px,
+    #0284c7 6px
+  );
+  box-shadow: 0 0 10px #00f2fe, inset 0 0 4px #ffffff;
+}
+
+.micro-bar-transit.gold-transit {
+  background: repeating-linear-gradient(
+    -45deg,
+    #fbbf24,
+    #fbbf24 3px,
+    #d97706 3px,
+    #d97706 6px
+  );
+  box-shadow: 0 0 10px #fbbf24, inset 0 0 4px #ffffff;
+}
+
+/* 同频呼吸动画：0% 与 100% 处于柔和基态，50% 处于高亮爆发态 */
+@keyframes transit-bar-sync-glow {
+  0%, 100% {
+    opacity: 0.45;
+    filter: brightness(1.05);
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.9) drop-shadow(0 0 6px #ffffff);
+  }
+}
+
+@keyframes transit-text-sync-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+    text-shadow: 0 0 8px currentColor;
+  }
 }
 
 /* 连接锚点 Node Ports (物理对齐) */
@@ -3078,13 +3723,16 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding: 4px 6px 4px 6px;
+  box-sizing: border-box;
 }
 
 .feed-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 2px 2px;
+  box-sizing: border-box;
 }
 
 .feed-card {
@@ -3096,39 +3744,84 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 5px;
   position: relative;
-  transition: all 0.25s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   box-sizing: border-box;
   width: 100%;
-  overflow: hidden;
 }
 
 .feed-card:hover {
   background: #14223a;
-  border-color: rgba(0, 242, 254, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border-color: rgba(0, 242, 254, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.feed-card.is-active-feed {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.12) 0%, #13243d 100%);
+  border-color: #00f2fe;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.45);
+}
+
+.feed-card.is-active-feed.mat-fitting,
+.feed-card.is-active-feed.is-fitting-event {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.14) 0%, #1a2233 100%);
+  border-color: #fbbf24;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
+}
+
+.feed-card.is-active-feed.arrival:not(.mat-fitting) {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, #13243d 100%);
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+}
+
+.feed-card.is-active-feed.usage {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, #112620 100%);
+  border-color: #10b981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+}
+
+.feed-card.is-active-feed.plan {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.14) 0%, #201322 100%);
+  border-color: #f43f5e;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.4);
 }
 
 /* 6 大核心业务分类卡片左侧标识色 */
 .feed-card.dispatch {
   border-left: 3.5px solid #00f2fe;
 }
+.feed-card.dispatch.mat-fitting,
+.feed-card.dispatch.is-fitting-event {
+  border-left: 3.5px solid #fbbf24;
+}
 
 .feed-card.arrival {
-  border-left: 3.5px solid #3b82f6;
+  border-left: 3.5px solid #38bdf8;
+}
+.feed-card.arrival.mat-fitting,
+.feed-card.arrival.is-fitting-event {
+  border-left: 3.5px solid #fbbf24;
 }
 
 .feed-card.receive {
-  border-left: 3.5px solid #f59e0b;
+  border-left: 3.5px solid #38bdf8;
+}
+.feed-card.receive.mat-fitting,
+.feed-card.receive.is-fitting-event {
+  border-left: 3.5px solid #fbbf24;
 }
 
 .feed-card.warehouse {
-  border-left: 3.5px solid #10b981;
+  border-left: 3.5px solid #38bdf8;
+}
+.feed-card.warehouse.mat-fitting,
+.feed-card.warehouse.is-fitting-event {
+  border-left: 3.5px solid #fbbf24;
 }
 
 .feed-card.usage {
-  border-left: 3.5px solid #a855f7;
+  border-left: 3.5px solid #10b981;
 }
 
 .feed-card.plan {
@@ -3177,29 +3870,49 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.3);
   color: #38bdf8;
 }
+.feed-category-tag.dispatch.mat-fitting {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
 
 .feed-category-tag.arrival {
-  background: rgba(59, 130, 246, 0.14);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #60a5fa;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+.feed-category-tag.arrival.mat-fitting {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
 }
 
 .feed-category-tag.receive {
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+.feed-category-tag.receive.mat-fitting {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.3);
   color: #fbbf24;
 }
 
 .feed-category-tag.warehouse {
-  background: rgba(16, 185, 129, 0.14);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+.feed-category-tag.warehouse.mat-fitting {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
 }
 
 .feed-category-tag.usage {
-  background: rgba(168, 85, 247, 0.14);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #c084fc;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
 }
 
 .feed-category-tag.plan {
@@ -3230,7 +3943,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-/* Row 2: 标题 / 流向行 */
+/* Row 2: 标题 / 流向行 (左侧主体或动作 ──► 右侧统一固定标段名称) */
 .feed-card-headline {
   width: 100%;
   overflow: hidden;
@@ -3239,7 +3952,8 @@ onBeforeUnmount(() => {
 .route-line-box {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 6px;
   width: 100%;
 }
 
@@ -3252,40 +3966,52 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+  text-align: left;
 }
 
 .route-arrow {
   color: #00f2fe;
-  font-size: 10px;
+  font-size: 10.5px;
   flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .route-target {
   color: #38bdf8;
   font-size: 11.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-}
-
-.action-headline-box {
-  width: 100%;
-  overflow: hidden;
-}
-
-.action-headline-text {
-  color: #f8fafc;
-  font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: block;
+  flex-shrink: 0;
+  max-width: 55%;
+  text-align: right;
+  letter-spacing: 0.2px;
 }
+
+.feed-card.dispatch .route-arrow { color: #00f2fe; }
+.feed-card.dispatch .route-target { color: #38bdf8; }
+
+.feed-card.dispatch.mat-fitting .route-arrow,
+.feed-card.dispatch.is-fitting-event .route-arrow { color: #fbbf24; }
+.feed-card.dispatch.mat-fitting .route-target,
+.feed-card.dispatch.is-fitting-event .route-target { color: #fbbf24; }
+
+.feed-card.arrival .route-target { color: #38bdf8; }
+.feed-card.arrival.mat-fitting .route-target,
+.feed-card.arrival.is-fitting-event .route-target { color: #fbbf24; }
+
+.feed-card.receive .route-target { color: #38bdf8; }
+.feed-card.receive.mat-fitting .route-target,
+.feed-card.receive.is-fitting-event .route-target { color: #fbbf24; }
+
+.feed-card.warehouse .route-target { color: #38bdf8; }
+.feed-card.warehouse.mat-fitting .route-target,
+.feed-card.warehouse.is-fitting-event .route-target { color: #fbbf24; }
+
+.feed-card.usage .route-target { color: #10b981; }
+
+.feed-card.plan .route-target { color: #f43f5e; }
 
 /* Row 3: 规格与数量明细栏 */
 .feed-spec-box {
@@ -3527,10 +4253,6 @@ onBeforeUnmount(() => {
 .bigscreen-container.light .header-title {
   color: #0f172a;
   text-shadow: none;
-}
-
-.bigscreen-container.light .header-sub {
-  color: #64748b;
 }
 
 .bigscreen-container.light .control-trigger-btn {
@@ -3887,6 +4609,27 @@ onBeforeUnmount(() => {
   color: #0369a1;
 }
 
+.bigscreen-container.light .line-label.construct-tag {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #059669;
+}
+
+.bigscreen-container.light .line-val.cyan-text,
+.bigscreen-container.light .line-pct.cyan-text {
+  color: #0284c7;
+}
+
+.bigscreen-container.light .line-val.green-text,
+.bigscreen-container.light .line-pct.green-text {
+  color: #059669;
+}
+
+.bigscreen-container.light .line-val.gold-text,
+.bigscreen-container.light .line-pct.gold-text {
+  color: #d97706;
+}
+
 .bigscreen-container.light .line-label.fitting-tag {
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.4);
@@ -3901,8 +4644,46 @@ onBeforeUnmount(() => {
   background: linear-gradient(90deg, #0284c7, #38bdf8);
 }
 
+.bigscreen-container.light .micro-bar-fill.green {
+  background: linear-gradient(90deg, #059669, #10b981);
+}
+
 .bigscreen-container.light .micro-bar-fill.gold {
   background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+
+.bigscreen-container.light .transit-num-tag.cyan-transit {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.12);
+  border-color: rgba(2, 132, 199, 0.35);
+}
+
+.bigscreen-container.light .transit-num-tag.gold-transit {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.bigscreen-container.light .micro-bar-transit.cyan-transit {
+  background: repeating-linear-gradient(
+    -45deg,
+    #0284c7,
+    #0284c7 3px,
+    #38bdf8 3px,
+    #38bdf8 6px
+  );
+  box-shadow: 0 0 8px rgba(2, 132, 199, 0.6);
+}
+
+.bigscreen-container.light .micro-bar-transit.gold-transit {
+  background: repeating-linear-gradient(
+    -45deg,
+    #d97706,
+    #d97706 3px,
+    #fbbf24 3px,
+    #fbbf24 6px
+  );
+  box-shadow: 0 0 8px rgba(217, 119, 6, 0.6);
 }
 
 .bigscreen-container.light .node-port.port-out {
@@ -3976,21 +4757,37 @@ onBeforeUnmount(() => {
 .bigscreen-container.light .feed-card.dispatch {
   border-left: 3.5px solid #0284c7;
 }
+.bigscreen-container.light .feed-card.dispatch.mat-fitting,
+.bigscreen-container.light .feed-card.dispatch.is-fitting-event {
+  border-left: 3.5px solid #d97706;
+}
 
 .bigscreen-container.light .feed-card.arrival {
   border-left: 3.5px solid #2563eb;
 }
+.bigscreen-container.light .feed-card.arrival.mat-fitting,
+.bigscreen-container.light .feed-card.arrival.is-fitting-event {
+  border-left: 3.5px solid #d97706;
+}
 
 .bigscreen-container.light .feed-card.receive {
+  border-left: 3.5px solid #2563eb;
+}
+.bigscreen-container.light .feed-card.receive.mat-fitting,
+.bigscreen-container.light .feed-card.receive.is-fitting-event {
   border-left: 3.5px solid #d97706;
 }
 
 .bigscreen-container.light .feed-card.warehouse {
-  border-left: 3.5px solid #059669;
+  border-left: 3.5px solid #2563eb;
+}
+.bigscreen-container.light .feed-card.warehouse.mat-fitting,
+.bigscreen-container.light .feed-card.warehouse.is-fitting-event {
+  border-left: 3.5px solid #d97706;
 }
 
 .bigscreen-container.light .feed-card.usage {
-  border-left: 3.5px solid #9333ea;
+  border-left: 3.5px solid #059669;
 }
 
 .bigscreen-container.light .feed-card.plan {
@@ -4002,29 +4799,49 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(2, 132, 199, 0.25);
   color: #0284c7;
 }
+.bigscreen-container.light .feed-category-tag.dispatch.mat-fitting {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #d97706;
+}
 
 .bigscreen-container.light .feed-category-tag.arrival {
   background: rgba(37, 99, 235, 0.12);
   border: 1px solid rgba(37, 99, 235, 0.25);
   color: #2563eb;
 }
+.bigscreen-container.light .feed-category-tag.arrival.mat-fitting {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #d97706;
+}
 
 .bigscreen-container.light .feed-category-tag.receive {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: #2563eb;
+}
+.bigscreen-container.light .feed-category-tag.receive.mat-fitting {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.25);
   color: #d97706;
 }
 
 .bigscreen-container.light .feed-category-tag.warehouse {
-  background: rgba(5, 150, 105, 0.12);
-  border: 1px solid rgba(5, 150, 105, 0.25);
-  color: #059669;
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: #2563eb;
+}
+.bigscreen-container.light .feed-category-tag.warehouse.mat-fitting {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #d97706;
 }
 
 .bigscreen-container.light .feed-category-tag.usage {
-  background: rgba(147, 51, 234, 0.12);
-  border: 1px solid rgba(147, 51, 234, 0.25);
-  color: #9333ea;
+  background: rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+  color: #059669;
 }
 
 .bigscreen-container.light .feed-category-tag.plan {
@@ -4055,9 +4872,29 @@ onBeforeUnmount(() => {
   color: #0284c7;
 }
 
-.bigscreen-container.light .action-headline-text {
-  color: #0f172a;
-}
+.bigscreen-container.light .feed-card.dispatch .route-arrow,
+.bigscreen-container.light .feed-card.dispatch .route-target { color: #0284c7; }
+
+.bigscreen-container.light .feed-card.dispatch.mat-fitting .route-arrow,
+.bigscreen-container.light .feed-card.dispatch.mat-fitting .route-target,
+.bigscreen-container.light .feed-card.dispatch.is-fitting-event .route-arrow,
+.bigscreen-container.light .feed-card.dispatch.is-fitting-event .route-target { color: #d97706; }
+
+.bigscreen-container.light .feed-card.arrival .route-target { color: #2563eb; }
+.bigscreen-container.light .feed-card.arrival.mat-fitting .route-target,
+.bigscreen-container.light .feed-card.arrival.is-fitting-event .route-target { color: #d97706; }
+
+.bigscreen-container.light .feed-card.receive .route-target { color: #2563eb; }
+.bigscreen-container.light .feed-card.receive.mat-fitting .route-target,
+.bigscreen-container.light .feed-card.receive.is-fitting-event .route-target { color: #d97706; }
+
+.bigscreen-container.light .feed-card.warehouse .route-target { color: #2563eb; }
+.bigscreen-container.light .feed-card.warehouse.mat-fitting .route-target,
+.bigscreen-container.light .feed-card.warehouse.is-fitting-event .route-target { color: #d97706; }
+
+.bigscreen-container.light .feed-card.usage .route-target { color: #059669; }
+
+.bigscreen-container.light .feed-card.plan .route-target { color: #e11d48; }
 
 .bigscreen-container.light .feed-spec-box {
   background: #f8fafc;
@@ -4105,18 +4942,77 @@ onBeforeUnmount(() => {
   color: #64748b;
 }
 
-.bigscreen-container.light .left-col::-webkit-scrollbar-track,
-.bigscreen-container.light .feed-list-wrapper::-webkit-scrollbar-track,
-.bigscreen-container.light .system-cards-list::-webkit-scrollbar-track,
-.bigscreen-container.light .milestone-list::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
+.bigscreen-container.light .supply-node-card.is-shipping-source {
+  border-color: #0284c7;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, #ffffff 80%);
+  box-shadow: 0 0 18px rgba(2, 132, 199, 0.45);
 }
 
-.bigscreen-container.light .left-col::-webkit-scrollbar-thumb,
-.bigscreen-container.light .feed-list-wrapper::-webkit-scrollbar-thumb,
-.bigscreen-container.light .system-cards-list::-webkit-scrollbar-thumb,
-.bigscreen-container.light .milestone-list::-webkit-scrollbar-thumb {
-  background: rgba(2, 132, 199, 0.3);
+.bigscreen-container.light .supply-node-card.is-shipping-source.mat-fitting {
+  border-color: #d97706;
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, #ffffff 80%);
+  box-shadow: 0 0 18px rgba(217, 119, 6, 0.45);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-dispatch {
+  border-color: #0284c7;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(2, 132, 199, 0.5);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-dispatch.event-mat-fitting {
+  border-color: #d97706;
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.5);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-arrival {
+  border-color: #2563eb;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-arrival.event-mat-fitting {
+  border-color: #d97706;
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.5);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-usage {
+  border-color: #059669;
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(5, 150, 105, 0.55);
+}
+
+.bigscreen-container.light .demand-node-card.is-event-target.event-cat-plan {
+  border-color: #d97706;
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, #ffffff 70%);
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.55);
+}
+
+.bigscreen-container.light .feed-card.is-active-feed {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, #ffffff 100%);
+  border-color: #0284c7;
+  box-shadow: 0 0 14px rgba(2, 132, 199, 0.3);
+}
+
+.bigscreen-container.light .feed-card.is-active-feed.mat-fitting,
+.bigscreen-container.light .feed-card.is-active-feed.is-fitting-event {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.1) 0%, #ffffff 100%);
+  border-color: #d97706;
+  box-shadow: 0 0 14px rgba(217, 119, 6, 0.35);
+}
+
+.bigscreen-container.light .feed-card.is-active-feed.usage {
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.1) 0%, #ffffff 100%);
+  border-color: #059669;
+  box-shadow: 0 0 14px rgba(5, 150, 105, 0.35);
+}
+
+.bigscreen-container.light .feed-card.is-active-feed.plan {
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.1) 0%, #ffffff 100%);
+  border-color: #e11d48;
+  box-shadow: 0 0 14px rgba(225, 29, 72, 0.35);
 }
 
 /* --- 关键帧动画 Keyframes --- */
@@ -4140,7 +5036,7 @@ onBeforeUnmount(() => {
     padding: 8px 12px;
   }
   .header-title {
-    font-size: 18px;
+    font-size: 22px;
   }
   .topology-layout-grid {
     grid-template-columns: 200px 40px 1fr;

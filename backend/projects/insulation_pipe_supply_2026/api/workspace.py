@@ -1473,9 +1473,12 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             pipe_design_by_sec[sid] = pipe_design_by_sec.get(sid, 0.0) + float(b.get("design_qty") or 0)
 
         pipe_shipped_by_sec: Dict[str, float] = {}
+        pipe_arrived_by_sec: Dict[str, float] = {}
         for r in pipe_deliv_rows:
             sid = r["section_1_id"]
             pipe_shipped_by_sec[sid] = pipe_shipped_by_sec.get(sid, 0.0) + float(r["total_shipped_m"] or 0)
+            if r["status"] in ("completed", "pending_warehouse", "pending_receive", "arrived"):
+                pipe_arrived_by_sec[sid] = pipe_arrived_by_sec.get(sid, 0.0) + float(r["total_arrived_m"] or r["total_shipped_m"] or 0)
 
         fit_purchase_by_sec: Dict[str, int] = {}
         for b in fitting_baselines_raw:
@@ -1483,9 +1486,22 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             fit_purchase_by_sec[sid] = fit_purchase_by_sec.get(sid, 0) + int(float(b.get("purchase_plan_qty") or b.get("design_qty") or 0))
 
         fit_shipped_by_sec: Dict[str, int] = {}
+        fit_arrived_by_sec: Dict[str, int] = {}
         for r in fit_deliv_rows:
             sid = r["section_1_id"]
             fit_shipped_by_sec[sid] = fit_shipped_by_sec.get(sid, 0) + int(float(r["total_pcs"] or 0))
+            if r["status"] in ("completed", "pending_warehouse", "pending_receive", "arrived"):
+                fit_arrived_by_sec[sid] = fit_arrived_by_sec.get(sid, 0) + int(float(r["total_pcs"] or 0))
+
+        # 标段施工安装量统计（从 tube_daily_usage 聚合真实下沟敷设米数）
+        sec_usage_sql = text("""
+            SELECT section_1_id, 
+                   COALESCE(SUM(usage_qty), 0) AS total_usage_m
+            FROM tube.tube_daily_usage
+            GROUP BY section_1_id
+        """)
+        sec_usage_rows = session.execute(sec_usage_sql).mappings().all()
+        sec_usage_map: Dict[str, float] = {r["section_1_id"]: float(r["total_usage_m"] or 0) for r in sec_usage_rows}
 
         section_progress_list = []
         for d in demand_entities:
@@ -1493,11 +1509,23 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             sname = d.get("section_1_name") or sid
             p_design_km = round(pipe_design_by_sec.get(sid, 0.0) / 1000, 2)
             p_shipped_km = round(pipe_shipped_by_sec.get(sid, 0.0) / 1000, 2)
+            p_arrived_km = round(pipe_arrived_by_sec.get(sid, 0.0) / 1000, 2)
+            p_transit_km = round(max(p_shipped_km - p_arrived_km, 0.0), 2)
             p_percent = round((p_shipped_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_shipped_km > 0 else 0.0)
+            p_arrived_pct = round((p_arrived_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_arrived_km > 0 else 0.0)
+            p_transit_pct = round(max(p_percent - p_arrived_pct, 0.0), 1)
+
+            u_m = float(sec_usage_map.get(sid, 0.0))
+            u_km = round(u_m / 1000, 2)
+            u_percent = round((u_m / (pipe_design_by_sec.get(sid, 0.0) or 1)) * 100, 1) if pipe_design_by_sec.get(sid, 0.0) > 0 else 0.0
 
             f_total = fit_purchase_by_sec.get(sid, 0)
             f_shipped = fit_shipped_by_sec.get(sid, 0)
+            f_arrived = fit_arrived_by_sec.get(sid, 0)
+            f_transit = max(f_shipped - f_arrived, 0)
             f_percent = round((f_shipped / f_total * 100), 1) if f_total > 0 else (100.0 if f_shipped > 0 else 0.0)
+            f_arrived_pct = round((f_arrived / f_total * 100), 1) if f_total > 0 else (100.0 if f_arrived > 0 else 0.0)
+            f_transit_pct = round(max(f_percent - f_arrived_pct, 0.0), 1)
 
             tag = "高温水系统" if "high" in sid else "低温水系统"
             status_text = d.get("construction_status") or "施工中"
@@ -1521,10 +1549,21 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "site_managers": mgr_str,
                 "designKm": p_design_km,
                 "shippedKm": p_shipped_km,
+                "arrivedKm": p_arrived_km,
+                "transitKm": p_transit_km,
                 "pipePercent": min(p_percent, 100.0),
+                "arrivedPercent": min(p_arrived_pct, 100.0),
+                "transitPercent": min(p_transit_pct, 100.0),
+                "installedM": int(u_m),
+                "installedKm": u_km,
+                "installedPercent": min(u_percent, 100.0),
                 "totalFittings": f_total,
                 "shippedFittings": f_shipped,
+                "arrivedFittings": f_arrived,
+                "transitFittings": f_transit,
                 "fittingPercent": min(f_percent, 100.0),
+                "arrivedFittingPercent": min(f_arrived_pct, 100.0),
+                "transitFittingPercent": min(f_transit_pct, 100.0),
                 "latestMsg": latest_desc
             })
 
@@ -1611,6 +1650,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "厂家发货",
                         "category_key": "dispatch",
                         "type": "pipe",
+                        "supplier_id": p.get("supply_entity_id"),
+                        "section_id": p.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
                         "headline": f"{sup_name} ──► {sec_name}",
@@ -1634,9 +1675,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "确认到货",
                         "category_key": "arrival",
                         "type": "pipe",
+                        "supplier_id": p.get("supply_entity_id"),
+                        "section_id": p.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}】运载车辆进场到货",
+                        "headline": f"车辆进场到货 · {sec_name}",
                         "specification": model_str,
                         "amount": qty_str,
                         "shipmentCode": code_str,
@@ -1657,9 +1700,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "施工单位收货",
                         "category_key": "receive",
                         "type": "pipe",
+                        "supplier_id": p.get("supply_entity_id"),
+                        "section_id": p.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}】施工单位现场实物收货",
+                        "headline": f"施工实物收货 · {sec_name}",
                         "specification": model_str,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
@@ -1681,9 +1726,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "库管核销",
                         "category_key": "warehouse",
                         "type": "pipe",
+                        "supplier_id": p.get("supply_entity_id"),
+                        "section_id": p.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}材料库】专职库管实测核销",
+                        "headline": f"库管实测核销 · {sec_name}",
                         "specification": model_str,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
@@ -1739,6 +1786,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "厂家发货",
                         "category_key": "dispatch",
                         "type": "fitting",
+                        "supplier_id": f.get("supply_entity_id"),
+                        "section_id": f.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
                         "headline": f"{sup_name} ──► {sec_name}",
@@ -1761,9 +1810,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "确认到货",
                         "category_key": "arrival",
                         "type": "fitting",
+                        "supplier_id": f.get("supply_entity_id"),
+                        "section_id": f.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}现场】管件车辆进场到货",
+                        "headline": f"管件进场到货 · {sec_name}",
                         "specification": spec_desc,
                         "amount": qty_str,
                         "shipmentCode": code_str,
@@ -1783,9 +1834,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "施工单位收货",
                         "category_key": "receive",
                         "type": "fitting",
+                        "supplier_id": f.get("supply_entity_id"),
+                        "section_id": f.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}】施工单位接收管件",
+                        "headline": f"施工接收管件 · {sec_name}",
                         "specification": spec_desc,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
@@ -1806,9 +1859,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "category": "库管核销",
                         "category_key": "warehouse",
                         "type": "fitting",
+                        "supplier_id": f.get("supply_entity_id"),
+                        "section_id": f.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"【{sec_name}材料库】管件实物核销入库",
+                        "headline": f"管件实物核销 · {sec_name}",
                         "specification": spec_desc,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
@@ -1846,9 +1901,10 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "category": "施工量确认",
                     "category_key": "usage",
                     "type": "pipe",
+                    "section_id": u.get("section_1_id"),
                     "supplier": "施工现场班组",
                     "target": sec_name,
-                    "headline": f"【{sec_name}】现场实际施工量确认",
+                    "headline": f"现场施工安装 · {sec_name}",
                     "specification": model_name,
                     "amount": f"铺设安装 {int(float(u['usage_qty']))} 米",
                     "shipmentCode": f"SG-{u['usage_date'].strftime('%m%d') if u['usage_date'] else u['id']}",
@@ -1886,9 +1942,10 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "category": "需求量申报",
                     "category_key": "plan",
                     "type": "pipe",
+                    "section_id": pl.get("section_1_id"),
                     "supplier": "标段材料计划组",
                     "target": sec_name,
-                    "headline": f"【{sec_name}】提报 {plan_date_str} 滚动要料",
+                    "headline": f"申报{plan_date_str}要料 · {sec_name}",
                     "specification": model_name,
                     "amount": f"申报调拨 {int(float(pl['plan_qty']))} 米",
                     "shipmentCode": f"JH-{plan_date_str}",
