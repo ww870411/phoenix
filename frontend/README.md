@@ -1,3 +1,54 @@
+## 2026-08-18 数字指挥大屏供热系统符号规范化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **低温水系统符号更正**：
+  1. 将标段卡片头部的低温水雪花图标 `❄️ 低温` 更正为符合 40℃~60℃ 二级水循环实际的水滴图标 **`💧 低温`**；
+  2. 与高温水 **`🔥 高温`** 形成鲜明、严谨的供热流体系统标识。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段标头代码标签精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标段卡片标头精简优化**：
+  1. 移除 `H1~H4` 与 `L1~L6` 冗余代码小标签；
+  2. 由 `🔥 高温` / `❄️ 低温` 专属微胶囊徽标直接搭配标段全称，标段名称水平展示空间更充足、视觉更纯粹。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段高温/低温系统强区分升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **系统专属强视觉标识体系**：
+  1. **专属卡片色带与微渐变底**：高温水卡片采用朱红主色标线（`border-left: 3.5px solid #ef4444`）与暖朱红渐变底，低温水卡片采用天蓝主色标线（`border-left: 3.5px solid #0ea5e9`）与天蓝渐变底；
+  2. **标头系统级徽标与编码**：增加 `🔥 高温` / `❄️ 低温` 专属微胶囊徽标，配合 `H1~H4` / `L1~L6` 与标段全称，形成一眼可辨的多维视觉锚点；
+  3. **双主题无缝适配**：深色与浅色模式下均呈现出极佳的对比度与高级工业质感。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段卡片空间排版优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **立柱与卡片空间优化**：
+  1. 移除立柱外部 `system-sub-col` 嵌套底色与内外边距，横向与纵向可用面积全面释放；
+  2. 微调 `demand-node-card` 内边距（`10px 14px`）与内部组件间距，卡片整体在大屏上均匀舒展、层次分明。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏标段立柱头部精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标段立柱结构平整化**：
+  1. 移除第 1 列上方的 `🔥 高温干线及分支 (5)` 徽标与 `开元/鑫瑞得/集团直供` 提示；
+  2. 移除第 2 列上方的 `❄️ 低温水分支管网 (5)` 徽标与 `鑫瑞得/集团管厂直发` 提示；
+  3. 10 张标段需求卡片直接顶格平整排布，立柱纵向可用空间更大、视觉更干净纯粹。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
+## 2026-08-18 数字指挥大屏深浅双主题高可读性适配（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **深浅主题双模智能适配**：
+  1. **深色模式（Dark）**：`📐 保温管` 与 `🔩 管件` 保持半透明青蓝/金黄微胶囊底色 + **纯白高对比度文字（`#ffffff`）**，在深底卡片上极具科技质感；
+  2. **浅色模式（Light）**：`📐 保温管` 自动切换为清爽天蓝浅底 + **深海蓝高对比度文字（`#0369a1`）**；`🔩 管件` 自动切换为温暖琥珀浅底 + **深琥珀褐文字（`#b45309`）**；
+  3. **大盘标签与发运流**：同步完成浅色模式适配，彻底消除浅色底下的文字隐形问题。
+- **构建验证**：`npm run build` 打包构建 100% 成功。
+
 ## 2026-08-18 数字指挥大屏半透明微胶囊标签重构（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

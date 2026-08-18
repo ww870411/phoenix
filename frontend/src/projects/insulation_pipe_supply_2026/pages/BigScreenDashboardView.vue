@@ -433,24 +433,22 @@
               <!-- 3. 右侧：10 大施工标段（按 高温水干线 与 低温水分支 两大规整立柱排布） -->
               <div class="demand-hub-col">
                 <div class="demand-systems-split" @scroll="recalculateFlylines">
-                  <!-- 第 1 标段立柱：高温干线及重点分支 (H1 ~ H4 + L1，共 5 标段) -->
+                  <!-- 第 1 标段立柱：5 标段 (H1 ~ H4 + L1) -->
                   <div class="system-sub-col high-system">
-                    <div class="system-sub-header high">
-                      <span class="sub-badge high">🔥 高温干线及分支 ({{ col1Sections.length }})</span>
-                      <span class="sub-route-tip">开元/鑫瑞得/集团直供</span>
-                    </div>
-
                     <div class="system-cards-list">
                       <div 
                         v-for="sec in col1Sections" 
                         :key="sec.id" 
                         class="demand-node-card"
-                        :class="{ 
-                          active: activeNodeIds.has('sec_' + sec.id),
-                          highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
-                          dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
-                          completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
-                        }"
+                        :class="[
+                          sec.system_type === 'high' ? 'high-system' : 'low-system',
+                          { 
+                            active: activeNodeIds.has('sec_' + sec.id),
+                            highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
+                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                            completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                          }
+                        ]"
                         :id="'node-sec_' + sec.id"
                         @mouseenter="hoveredSectionId = sec.id"
                         @mouseleave="hoveredSectionId = null"
@@ -462,7 +460,7 @@
 
                         <div class="sec-card-header">
                           <div class="sec-badge-name">
-                            <span class="sec-code-tag" :class="sec.system_type">{{ sec.code }}</span>
+                            <span class="sec-sys-badge" :class="sec.system_type">{{ sec.system_type === 'high' ? '🔥 高温' : '💧 低温' }}</span>
                             <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
                           </div>
                           <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
@@ -499,24 +497,22 @@
                     </div>
                   </div>
 
-                  <!-- 第 2 标段立柱：低温水分支管网 (L2 ~ L6，共 5 标段) -->
+                  <!-- 第 2 标段立柱：5 标段 (L2 ~ L6) -->
                   <div class="system-sub-col low-system">
-                    <div class="system-sub-header low">
-                      <span class="sub-badge low">❄️ 低温水分支管网 ({{ col2Sections.length }})</span>
-                      <span class="sub-route-tip">鑫瑞得/集团管厂直发</span>
-                    </div>
-
                     <div class="system-cards-list">
                       <div 
                         v-for="sec in col2Sections" 
                         :key="sec.id" 
                         class="demand-node-card"
-                        :class="{ 
-                          active: activeNodeIds.has('sec_' + sec.id),
-                          highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
-                          dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
-                          completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
-                        }"
+                        :class="[
+                          sec.system_type === 'high' ? 'high-system' : 'low-system',
+                          { 
+                            active: activeNodeIds.has('sec_' + sec.id),
+                            highlighted: lastImpactedSectionId === sec.id || (hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)),
+                            dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || (hoveredSectionId && hoveredSectionId !== sec.id),
+                            completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                          }
+                        ]"
                         :id="'node-sec_' + sec.id"
                         @mouseenter="hoveredSectionId = sec.id"
                         @mouseleave="hoveredSectionId = null"
@@ -528,7 +524,7 @@
 
                         <div class="sec-card-header">
                           <div class="sec-badge-name">
-                            <span class="sec-code-tag" :class="sec.system_type">{{ sec.code }}</span>
+                            <span class="sec-sys-badge" :class="sec.system_type">{{ sec.system_type === 'high' ? '🔥 高温' : '💧 低温' }}</span>
                             <strong class="sec-title" :title="sec.name">{{ sec.name }}</strong>
                           </div>
                           <span class="sec-status-chip" :class="{ running: sec.construction_status === '施工中' }">
@@ -2418,42 +2414,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: rgba(15, 25, 45, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.system-sub-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
-.sub-badge {
-  font-size: 13px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 4px;
-}
-
-.sub-badge.high {
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.2);
-}
-
-.sub-badge.low {
-  color: #7dd3fc;
-  background: rgba(56, 189, 248, 0.2);
-}
-
-.sub-route-tip {
-  font-size: 12px;
-  color: #94a3b8;
 }
 
 .system-cards-list {
@@ -2462,7 +2422,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -2472,15 +2432,25 @@ onBeforeUnmount(() => {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 10px 13px;
+  padding: 10px 14px;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease;
   box-sizing: border-box;
+}
+
+.demand-node-card.high-system {
+  border-left: 3.5px solid #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, #0f192b 40%);
+}
+
+.demand-node-card.low-system {
+  border-left: 3.5px solid #0ea5e9;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, #0f192b 40%);
 }
 
 .demand-node-card.highlighted {
@@ -2506,31 +2476,52 @@ onBeforeUnmount(() => {
 .sec-badge-name {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
+}
+
+.sec-sys-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.sec-sys-badge.high {
+  background: rgba(239, 68, 68, 0.22);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.sec-sys-badge.low {
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
 }
 
 .sec-code-tag {
   font-family: monospace;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 800;
-  padding: 2px 7px;
+  padding: 1.5px 6px;
   border-radius: 4px;
   white-space: nowrap;
 }
 
 .sec-code-tag.high {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.15);
   color: #fca5a5;
 }
 
 .sec-code-tag.low {
-  background: rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.15);
   color: #7dd3fc;
 }
 
 .sec-title {
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
@@ -2574,8 +2565,8 @@ onBeforeUnmount(() => {
 .sec-metrics-body {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-top: 2px;
+  gap: 5px;
+  margin-top: 0;
 }
 
 .sec-metric-line {
@@ -3317,8 +3308,8 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .system-sub-col {
-  background: rgba(241, 245, 249, 0.8);
-  border-color: rgba(203, 213, 225, 0.8);
+  background: transparent;
+  border: none;
 }
 
 .bigscreen-container.light .supply-node-card {
@@ -3344,9 +3335,41 @@ onBeforeUnmount(() => {
   border-color: rgba(226, 232, 240, 0.9);
 }
 
+.bigscreen-container.light .demand-node-card.high-system {
+  border-left: 3.5px solid #dc2626;
+  background: linear-gradient(135deg, rgba(254, 226, 226, 0.5) 0%, #ffffff 40%);
+}
+
+.bigscreen-container.light .demand-node-card.low-system {
+  border-left: 3.5px solid #0284c7;
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.5) 0%, #ffffff 40%);
+}
+
 .bigscreen-container.light .demand-node-card.highlighted {
   border-color: #0284c7;
   background: #f0f9ff;
+}
+
+.bigscreen-container.light .sec-sys-badge.high {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #dc2626;
+}
+
+.bigscreen-container.light .sec-sys-badge.low {
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  color: #0284c7;
+}
+
+.bigscreen-container.light .sec-code-tag.high {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.bigscreen-container.light .sec-code-tag.low {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0369a1;
 }
 
 .bigscreen-container.light .sec-title {
