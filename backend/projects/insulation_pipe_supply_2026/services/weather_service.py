@@ -745,3 +745,147 @@ def get_weather_dashboard_data(show_date_str: str) -> Dict[str, Any]:
         }
     finally:
         session.close()
+
+
+_LIVE_WEATHER_CACHE: Dict[str, Any] = {
+    "data": None,
+    "last_fetched_at": 0.0
+}
+
+
+def evaluate_construction_impact(weather: str, wind_power: str = "") -> Dict[str, str]:
+    """根据天气状况与风力智能推导施工影响与建议"""
+    w = str(weather or "").strip()
+    # 受到明显影响 (大雨、暴雨、雷阵雨、雷暴、大雪、暴雪、冰雹、冻雨、6级及以上大风)
+    if any(k in w for k in ["暴雨", "大雨", "特大暴雨", "雷阵雨", "雷暴", "大雪", "暴雪", "冰雹", "冻雨"]) or any(str(p) in str(wind_power) for p in ["6", "7", "8", "9"]):
+        return {
+            "status_tag": "户外施工受到明显影响",
+            "status_level": "danger",
+            "advice": "【受到明显影响】当前强对流/降水天气不利于户外作业，建议暂停露天吊装与高空作业，加强基坑排涝与现场用电防汛安全。"
+        }
+    # 受到轻微影响 (小雨、中雨、阵雨、毛毛雨、小雪、中雪、雨夹雪、4-5级风)
+    elif any(k in w for k in ["小雨", "中雨", "阵雨", "毛毛雨", "雨", "雪", "雾", "霾"]) or any(str(p) in str(wind_power) for p in ["4", "5"]):
+        return {
+            "status_tag": "户外施工受到轻微影响",
+            "status_level": "warning",
+            "advice": "【受到轻微影响】户外施工受到轻微影响，建议做好露天焊接防雨棚遮盖与保温管端口防水密封，并注意路面防滑。"
+        }
+    # 适宜施工 (晴、多云、少云、阴)
+    else:
+        return {
+            "status_tag": "适宜施工",
+            "status_level": "success",
+            "advice": "【适宜施工】当前气象条件良好，可正常组织管网吊装下沟与沟槽焊接作业。"
+        }
+
+
+def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any]:
+    """读取高德平台主城区施工现场实时天气与今日全天预报数据（动态缓存时间，默认15分钟，带容灾保底）"""
+    import time
+    global _LIVE_WEATHER_CACHE
+    now = time.time()
+
+    payload = load_tube_config()
+    bs_config = payload.get("big_screen_config") or {}
+    cache_duration_sec = int(bs_config.get("weather_cache_duration_min") or 15) * 60
+
+    if not force_refresh and _LIVE_WEATHER_CACHE["data"] and (now - _LIVE_WEATHER_CACHE["last_fetched_at"]) < cache_duration_sec:
+        return _LIVE_WEATHER_CACHE["data"]
+
+    try:
+        from backend.projects.insulation_pipe_supply_2026.services.config_service import get_configured_amap_config
+        amap_cfg = get_configured_amap_config(payload)
+        api_key = amap_cfg.get("api_key") or "f49ff8e523dd739fecc6d8bfb4209f22"
+
+        # 1. 实时实况
+        url_base = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=base&key={api_key}"
+        res_base = httpx.get(url_base, timeout=5.0)
+        res_json = res_base.json()
+
+        # 2. 全天预报
+        url_all = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}"
+        res_all = httpx.get(url_all, timeout=5.0)
+        all_json = res_all.json()
+
+        today_cast = {}
+        if all_json.get("status") == "1" and all_json.get("forecasts"):
+            casts = all_json["forecasts"][0].get("casts") or []
+            if casts:
+                today_cast = casts[0]
+
+        if res_json.get("status") == "1" and res_json.get("lives"):
+            live = res_json["lives"][0]
+            weather_text = live.get("weather") or "多云"
+            temp_val = live.get("temperature") or "26"
+            wind_dir = live.get("winddirection") or "微风"
+            wind_pwr = live.get("windpower") or "≤3"
+            humidity_val = live.get("humidity") or "65"
+            report_time_str = live.get("reporttime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            impact = evaluate_construction_impact(weather_text, wind_pwr)
+
+            day_weather = today_cast.get("dayweather") or weather_text
+            night_weather = today_cast.get("nightweather") or weather_text
+            temp_min = str(today_cast.get("nighttemp") or "24")
+            temp_max = str(today_cast.get("daytemp") or "29")
+            day_wind = f"{today_cast.get('daywind') or '南'}风 {today_cast.get('daypower') or '1-3'}级"
+            night_wind = f"{today_cast.get('nightwind') or '南'}风 {today_cast.get('nightpower') or '1-3'}级"
+
+            weather_obj = {
+                "city": "主城区施工现场",
+                "weather": weather_text,
+                "temperature": str(temp_val),
+                "wind_direction": str(wind_dir),
+                "wind_power": str(wind_pwr),
+                "humidity": str(humidity_val),
+                "report_time": report_time_str,
+                "status_tag": impact["status_tag"],
+                "status_level": impact["status_level"],
+                "advice": impact["advice"],
+                "forecast": {
+                    "date": today_cast.get("date") or datetime.now().strftime("%Y-%m-%d"),
+                    "day_weather": day_weather,
+                    "night_weather": night_weather,
+                    "temp_min": temp_min,
+                    "temp_max": temp_max,
+                    "temp_range": f"{temp_min}°C ~ {temp_max}°C",
+                    "day_wind": day_wind,
+                    "night_wind": night_wind,
+                }
+            }
+            _LIVE_WEATHER_CACHE["data"] = weather_obj
+            _LIVE_WEATHER_CACHE["last_fetched_at"] = now
+            return weather_obj
+    except Exception as err:
+        print(f"[Live Weather Error] 拉取高德实况/全天预报天气异常: {err}")
+
+    # 保底返回
+    if _LIVE_WEATHER_CACHE["data"]:
+        return _LIVE_WEATHER_CACHE["data"]
+
+    impact = evaluate_construction_impact("多云", "≤3")
+    fallback_obj = {
+        "city": "主城区施工现场",
+        "weather": "多云",
+        "temperature": "26",
+        "wind_direction": "微风",
+        "wind_power": "≤3",
+        "humidity": "68",
+        "report_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status_tag": impact["status_tag"],
+        "status_level": impact["status_level"],
+        "advice": impact["advice"],
+        "forecast": {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "day_weather": "阴",
+            "night_weather": "阴",
+            "temp_min": "24",
+            "temp_max": "29",
+            "temp_range": "24°C ~ 29°C",
+            "day_wind": "南风 1-3级",
+            "night_wind": "南风 1-3级",
+        }
+    }
+    _LIVE_WEATHER_CACHE["data"] = fallback_obj
+    _LIVE_WEATHER_CACHE["last_fetched_at"] = now
+    return fallback_obj

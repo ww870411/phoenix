@@ -1,3 +1,81 @@
+## 2026-08-19 数字指挥大屏天气缓存周期参数化接口升级（weather_service.py & workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`save_big_screen_config`) & `weather_service.py` (`get_live_weather_for_dashboard`)
+- **动态配置支持**：
+  - `big_screen_config` 新增 `weather_cache_duration_min`（默认 15 分钟）；
+  - `weather_service.py` 动态依据该配置控制高德气象 API 内存缓存的过期时长。
+
+## 2026-08-19 数字指挥大屏高德实时天气与全天预报双轨服务上线（weather_service.py & workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`) & `weather_service.py` (`get_live_weather_for_dashboard`)
+- **服务升级**：
+  - 同步拉取高德实况（`extensions=base`）与权威全天预报（`extensions=all`）；
+  - 输出实时天气、即时温度、湿度、风力，以及 `forecast` 全天极值温差（`temp_range: 24°C ~ 29°C`）、昼夜天气（`day_weather` / `night_weather`）与昼夜风力。
+
+## 2026-08-19 数字指挥大屏高德实时天气与施工评估服务上线（weather_service.py & workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`) & `weather_service.py` (`get_live_weather_for_dashboard`)
+- **服务设计**：
+  - 对接高德 Web 服务官方实况气象 API（`city=210200`，大连主城区），内置 5 分钟内存热缓存与保底机制；
+  - 提供 `evaluate_construction_impact` 智能评估器，输出天气、气温、湿度、风力、评级徽章及定制调度建议至 `live_weather` 结构体。
+
+## 2026-08-19 数字指挥大屏运输全流程在途时长算法精修（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **算法设计精修**：
+  - 范围限定：仅查询保温管（`tube.tube_delivery`）；
+  - 剔除异常：剔除备注中包含“补录”的发货单（`ship_remark / arrived_remark / warehouse_remark`）；
+  - 时长区间过滤：仅保留 $1.0\text{h} \le \text{duration} < 36.0\text{h}$ 的真实发运单；
+  - 动态计算结果为 **16.4 小时**，精准反映管厂至各工区的干线直达时效。
+
+## 2026-08-19 数字指挥大屏运输全流程平均在途时长算法设计与输出（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **算法设计**：
+  - 提取 `tube.tube_delivery` 和 `tube.tube_fitting_delivery` 中所有已到货单据：
+  - 计算发货至确认到货时长 `duration_hours = EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at)) / 3600.0`；
+  - 过滤异常噪点（仅保留 `1.0 <= duration_hours <= 48.0` 的发货单），计算 `AVG(duration_hours)`；
+  - 在 `kpi` 字典中以 `avgTransitHours`（小时）输出。
+
+## 2026-08-19 数字指挥大屏库管确认率算法设计与输出（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **算法设计**：
+  - 统计 `tube.tube_delivery`：
+    - 分母 `pipe_confirmed_arrived_total_m`：全部已确认到货的保温管累计米数；
+    - 分子 `pipe_confirmed_warehouse_total_m`：驻点库管员已完成入库/验收核销的保温管累计米数；
+  - 确认率 `warehouseConfirmRate = round((warehouse / arrived) * 100, 1)`，在 `kpi` 字典中实时输出。
+
+## 2026-08-19 数字指挥大屏直管全网计划采购量口径严谨锁定（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据源口径**：
+  - 保温管计划总量 `pipeDesignKm`（与 `pipePurchasePlanKm`）严格绑定 `SUM(tube_pipe_baseline.purchase_plan_qty)`（计划采购量合计米数 / 1000），与管件统一口径。
+
+## 2026-08-19 数字指挥大屏管件全网计划采购量口径严谨锁定（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据源口径**：
+  - 管件计划总量 `fittingTotalPcs` 严格绑定 `SUM(tube_fitting_baseline.purchase_plan_qty)`（计划采购量合计值），不再混用 `design_qty`（设计使用量），确保供应链采购与直运跟踪的严谨闭环。
+
+## 2026-08-19 数字指挥大屏管件现场库存量计算与输出（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **算法设计**：
+  - 计算 `fitting_stock_total_pcs = max(0, fitting_arrived_total_pcs - fitting_installed_total_pcs)`，在 `kpi` 字典中以 `fittingStockPcs` 输出，实现管件到货与安装消耗的实时动态差值库存统计。
+
+## 2026-08-19 数字指挥大屏管件累计安装量契约预置（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据输出契约**：
+  - 在 `kpi` 字典中新增 `"fittingInstalledPcs": 0` 字段，为后续管件实际下沟安装与消耗量统计打通无缝数据流契约。
+
+## 2026-08-19 数字指挥大屏管件大类数量动态聚合（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据输出增强**：
+  - 在 `kpi` 字典中新增 `fittingCategoryCount` 字段，实时提取 `cat_counts` 中真实存在的管件大类数量并输出给前端，支持大屏标签完全动态化展示。
+
 ## 2026-08-19 数字指挥大屏累计施工量、库存与三日净缺口聚合升级（workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)

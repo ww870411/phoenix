@@ -1,3 +1,219 @@
+## 2026-08-19 数字指挥大屏标段矩阵宽度缩减5%与“施工中”标签转红（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **视觉优化升级**：
+  - 需求标段矩阵 `.demand-systems-split` 设置 `width: 95%` 居中，各标段卡片整体宽度精准缩减 5%；
+  - 标段卡片右上角“施工中”状态芯片徽章（`.sec-status-chip.running`）转为醒目红色高亮（深色模式：`#ff4d4f` 边框与发光点；浅色模式：`#dc2626` 纯正红字与红底）。
+
+## 2026-08-19 数字指挥大屏供需拓扑供给方卡片高度微调增高（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **尺寸微调**：
+  - 供给方卡片最小高度增至 `64px`，内边距增至 `14px 16px`，标题字阶调整为 `13.5px`，饱满挺拔；
+  - 需求侧 10 大施工标段卡片严格保持原版尺寸与双立柱规整排布不变。
+
+## 2026-08-19 数字指挥大屏供需拓扑供给方卡片紧凑微缩优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **拓扑比例优化**：
+  - 供给方列宽由 `260px` 适度收窄至 `210px`，中间通道优化为 `40px`；
+  - 供给方卡片内边距微缩至 `10px 14px`，高度降至 `52px`，标题字号精修至 `13px`，整体更显精巧，拓扑流动感更加充裕。
+
+## 2026-08-19 数字指挥大屏控制中心双列排版与全天预报条居中对齐（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版重构与体验升级**：
+  - 「调度控制中心」面板宽度拓宽至 `530px`，7 大参数设定采用 2 列网格（`grid-template-columns: repeat(2, 1fr)`）紧凑布局，彻底解决面板高度过长需频繁滚动的痛点；
+  - 气象卡片内部底部的「全天 24°C ~ 29°C · 白天 阴 / 夜间 阴」单行预报条增加 `justify-content: center`，完美居中对齐展示。
+
+## 2026-08-19 数字指挥大屏调度控制中心新增“天气缓存周期”配置滑块（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **控制台参数扩展**：
+  - 在「调度控制中心 ➔ ⚙️ 大屏运行节律与参数配置」新增 `🌤️ 天气缓存周期` 调节滑块（1~60分钟，默认 15 分钟）；
+  - 支持即时调节生效、持久化保存与一键重置。
+
+## 2026-08-19 数字指挥大屏气象卡片字号微调放大（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **字阶精进优化**：
+  - 实时温度提升至 `24px`，天气 Emoji 提升至 `28px`，天气名称提升至 `13px`；
+  - 湿度与风力参数提升至 `12px`，全天预报条文字与温差提升至 `11.5px/12.5px`，全屏远视距下清晰醒目。
+
+## 2026-08-19 数字指挥大屏实况样式无损复原与同框全天预报条（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **样式精益还原**：
+  - 实况天气数据完整复原至经典大字阶与左右分立排版（`22px` 粗体温度、`26px` Emoji 图标与右侧双行紧凑参数）；
+  - 全天预报作为同框体底部一行（`width: 100%`），精简呈现 `📅 全天 24°C ~ 29°C · 白天 阴 / 夜间 阴`。
+
+## 2026-08-19 数字指挥大屏气象同框集成与“全天xxx”表述精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **框体一体化集成**：
+  - 全天天气直接嵌入在实况数据同一框体（`.weather-metrics-row`）下方，避免多重嵌套卡片；
+  - 表述精炼为 `📅 全天 24°C ~ 29°C · 白天 阴 / 夜间 阴`。
+
+## 2026-08-19 数字指挥大屏横向实况天气与单行全天预报排版优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版架构精进**：
+  - 恢复经典横向实况卡片（左侧天气 Emoji/名称/即时温度，右侧湿度与风力）；
+  - 在实况数据下方新增单行全天预报信息栏（`📅 今日全天 24°C ~ 29°C · 白天 阴 / 夜间 阴`），高度紧凑自然。
+
+## 2026-08-19 数字指挥大屏“实时数据”与“全天预报”双轨分立呈现（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片子模块分立**：
+  - 模块 1【实时数据】：直观展示当前天气、即时温度、湿度与风力；
+  - 模块 2【全天预报】：展示今日全天气温区间（如 `24°C ~ 29°C`）及白天/夜间天气；
+  - 适配深浅双色主题，信息结构清晰分明。
+
+## 2026-08-19 数字指挥大屏气象位置栏时间精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **文案精简**：
+  - 位置栏文案去除具体小时分钟数字，统一定义为“主城区施工现场 · 实况”。
+
+## 2026-08-19 数字指挥大屏“今日天气与施工条件”更名与浅色模式高对比度重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **样式升级与体验优化**：
+  - 更名为“今日天气与施工条件”；
+  - 针对浅色模式（Light Mode）全面重构对比度，天气文字锁定为 `#0f172a`（深黑墨色）、温度为 `#0284c7`（明亮湛蓝），彻底解决阴天时背景与文字粘连看不清的问题；
+  - 深色模式同步强化纯白与荧光青高对比度。
+
+## 2026-08-19 数字指挥大屏左侧栏 Flex 弹性满屏排版优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **布局重构**：
+  - 左侧栏改用 Flex 弹性伸缩架构（`flex: 1` + `justify-content: space-between`），4 大卡片自适应均匀平铺并撑满整列纵向空间；
+  - 彻底消除底部留白与垂直滚动条，视觉饱满匀称。
+
+## 2026-08-19 数字指挥大屏左侧栏全局紧凑排版优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **布局重构**：
+  - 针对左侧栏 4 大板块（今日天气、保温管情报、管件情报、保供效能）实施全局紧凑化排版：
+  - 间隙降至 8px，内边距降至 9px 12px，气象卡片收缩至 ~68px，消除默认垂直滚动条，在各类分辨率与屏幕缩放下满屏平铺。
+
+## 2026-08-19 数字指挥大屏今日天气卡片精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片精炼**：
+  - 移除底部的“影响与建议”横幅，卡片整体聚焦于“主城区施工现场位置、实况时间、天气状态 Emoji、温度、湿度、风力”与状态徽章，视觉高度紧凑。
+
+## 2026-08-19 数字指挥大屏左侧栏置顶上线“今日天气”与施工评估卡片（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片新增与布局**：
+  - 置顶在左侧栏第 1 顺位，直连高德官方气象接口（主城区施工现场）；
+  - 动态呈现实况天气（Emoji/气温/湿度/风力）、影响评级徽章（适宜施工/轻微影响/受到影响）与“💡 影响与建议”调度横幅。
+
+## 2026-08-19 数字指挥大屏保供效能卡片 4 更名为“平均在途时长”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将保供效能与履约保障板块第 4 张卡片正式更名为“平均在途时长”，示数展示为 `{{ kpiData.avgTransitHours }} 小时`。
+
+## 2026-08-19 数字指挥大屏运输全流程保障示数修正为 16.4 小时（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **口径精修**：
+  - 前端响应式绑定保温管在途时长（排除“补录”及 $\ge 36$ 小时单据），示数精准更新为 `16.4 小时`。
+
+## 2026-08-19 数字指挥大屏保供效能卡片 4 更名为“运输全流程保障”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将保供效能与履约保障板块第 4 张卡片更名为“运输全流程保障”，示数由 `kpiData.avgTransitHours`（平均在途时长 小时）动态驱动。
+
+## 2026-08-19 数字指挥大屏保供效能卡片 3 更名为“库管确认率”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将保供效能与履约保障板块第 3 张卡片更名为“库管确认率”，图标更新为 `📦`，示数由 `kpiData.warehouseConfirmRate` 响应式驱动。
+
+## 2026-08-19 数字指挥大屏管件大类明细胶囊移除（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **布局优化**：
+  - 移除管件大盘底部的 `.fitting-types-pills` 分类列表，使管件面板与上方保温管面板保持 100% 高度与结构对称，界面清爽聚焦。
+
+## 2026-08-19 数字指挥大屏管件进度条更名为“全网管件供应进度”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **进度条与百分比优化**：
+  - 将管件进度条文字由“关键管件配套就绪率”更名为“全网管件供应进度”；
+  - 严格核实直管（保温管）与管件的供应进度算法：均为 `(累计发货总量 / 全网计划采购量) * 100%`。
+
+## 2026-08-19 数字指挥大屏保温管卡片 1 更名为“全网计划采购量”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将保温管第 1 张卡片正式更名为“全网计划采购量”，示数 100% 绑定来自数据库基准表中 `purchase_plan_qty`（计划采购量）的聚合公里数。
+
+## 2026-08-19 数字指挥大屏管件卡片 1 更名为“全网计划采购量”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将管件第 1 张卡片正式更名为“全网计划采购量”，示数 100% 绑定来自数据库基准表中 `purchase_plan_qty`（计划采购量）的聚合合计值。
+
+## 2026-08-19 数字指挥大屏管件卡片 1 更名为“全网计划总量”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将管件第 1 张卡片由“管件计划总量”正式更名为“全网计划总量”，与直管大盘的“全网规划总量”保持对齐。
+
+## 2026-08-19 数字指挥大屏管件卡片 4 更名为“现场库存量”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将管件第 4 张卡片更名为“现场库存量”，示数由 `kpiData.fittingStockPcs` 响应式驱动，数字采用翡翠绿大字号高亮（`green-text`），构建与保温管大盘 100% 对齐的指标体系。
+
+## 2026-08-19 数字指挥大屏管件卡片 3 更名为“累计安装量”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片优化**：
+  - 将管件第 3 张卡片由“在途直运中”修改为“累计安装量”，卡片外框应用 `.highlight-purple` 紫罗兰高光，示数绑定 `kpiData.fittingInstalledPcs`。
+
+## 2026-08-19 数字指挥大屏管件大盘卡片重构与在途件数胶囊（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片排版优化**：
+  - 管件第 2 张卡片更名为“累计发货总量”，并在右上角悬挂 `.amber-capsule`（在途金黄胶囊 `在途 X 件`）；
+  - 全面应用 `.hero-num` 大字号排版（`22px 800`），与上方保温管大盘保持 100% 统一的视觉质感。
+
+## 2026-08-19 数字指挥大屏管件板块副标签设为“10个大类”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **副标签展示**：
+  - 左侧管件板块顶部副标签正式设定为“10个大类”，清晰突出管件多品类、全规格的覆盖格局。
+
+## 2026-08-19 数字指挥大屏管件板块更名与实际大类数动态绑定（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标题与副标签优化**：
+  - 左侧管件板块标题正式更名为“管件全网发运情报”，与上方的“保温管全网发运情报”形成工整对齐的统一情报视觉体系；
+  - 右侧副标签由固定文本升级为动态绑定的 `{{ fittingCategoryCount }}个大类`，实时反映系统中管件种类的实际覆盖广度。
+
+## 2026-08-19 数字指挥大屏供应进度文字字号加大（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **排版与字号优化**：
+  - 将 `.energy-progress-info` 标题文字字号由 `11px` 提升至 `13px`，字重设为 `600`，使“全网保温管供应进度”更具层次感与可读性；百分比数值强化为 `14px 700`。
+
+## 2026-08-19 数字指挥大屏保温管大盘 KPI 视觉突破：22px特大主数与状态胶囊排版（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **视觉排版与字号跃升**：
+  1. **标题不折行 + 伴随状态胶囊**：
+     - 主标题纯粹单行展示（全网规划总量、累计发货总量、累计施工量、现场库存总量）；
+     - 发货卡片右上角悬挂 `.amber-capsule`（在途金黄胶囊 `在途 X.XX`）；
+     - 库存卡片右上角悬挂 `.red-capsule` / `.gray-capsule`（三日缺口预警胶囊 `缺口 X.XX`）；
+  2. **特大主数值（`hero-num`）**：
+     - 主数值字号放大至 **`22px ~ 23px`**，粗度加粗至 800，远看近看均气势磅礴、清晰醒目。
+
 ## 2026-08-19 数字指挥大屏保温管保供进度文案更名为“全网保温管供应进度”（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

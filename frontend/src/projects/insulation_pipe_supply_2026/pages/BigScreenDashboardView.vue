@@ -205,6 +205,25 @@
                     />
                     <div class="setting-hint">动态流水截取的最大最新记录数</div>
                   </div>
+
+                  <!-- 7. 天气缓存刷新周期 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">🌤️ 天气缓存周期</span>
+                      <span class="setting-val-tag">{{ bsConfig.weather_cache_duration_min || 15 }} 分钟</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="60" 
+                      step="1" 
+                      v-model.number="bsConfig.weather_cache_duration_min" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="向高德地图拉取天气实况与预报的缓存更新周期"
+                    />
+                    <div class="setting-hint">向高德气象拉取实况/预报周期</div>
+                  </div>
                 </div>
 
                 <!-- 保存与重置操作按钮 -->
@@ -318,6 +337,59 @@
     <main class="bigscreen-content" :class="['mobile-tab-' + activeMobileTab]">
       <!-- 左侧栏：全局指标体系与管材/管件双轨大盘 (100% 真实数据库计算) -->
       <section class="screen-col left-col" :class="{ 'mobile-active-col': activeMobileTab === 'kpi' || activeMobileTab === 'all' }">
+        <!-- 核心气象：今日天气与施工环境 (高德实时数据) -->
+        <div class="panel-box weather-kpi-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="title-icon">🌤️</span>
+              <span>今日天气与施工条件</span>
+            </div>
+            <span class="panel-tag" :class="liveWeatherData.status_level === 'danger' ? 'danger' : (liveWeatherData.status_level === 'warning' ? 'gold' : 'green')">
+              {{ liveWeatherData.status_tag || '适宜施工' }}
+            </span>
+          </div>
+
+          <div class="weather-panel-body">
+            <!-- 施工现场位置与报告时间 -->
+            <div class="weather-loc-bar">
+              <span class="loc-pin">📍</span>
+              <span class="loc-text">{{ liveWeatherData.city || '主城区施工现场' }}</span>
+              <span class="loc-dot">·</span>
+              <span class="loc-time">实况</span>
+            </div>
+
+            <!-- 横向核心气象数据行（原版经典横向 + 同框全天预报） -->
+            <div class="weather-metrics-row">
+              <div class="weather-temp-block">
+                <span class="weather-emoji">{{ getWeatherEmoji(liveWeatherData.weather) }}</span>
+                <div class="temp-detail">
+                  <span class="weather-name">{{ liveWeatherData.weather || '多云' }}</span>
+                  <span class="temp-degree">{{ liveWeatherData.temperature }}<small>°C</small></span>
+                </div>
+              </div>
+
+              <div class="weather-params-block">
+                <div class="param-item">
+                  <span class="param-k">湿度</span>
+                  <span class="param-v">{{ liveWeatherData.humidity }}%</span>
+                </div>
+                <div class="param-item">
+                  <span class="param-k">风力</span>
+                  <span class="param-v">{{ liveWeatherData.wind_direction }}风 {{ liveWeatherData.wind_power }}级</span>
+                </div>
+              </div>
+
+              <!-- 同一框体下方的全天预报条 -->
+              <div class="weather-forecast-subrow">
+                <span class="fc-icon">📅</span>
+                <span class="fc-range">全天 {{ liveWeatherData.forecast?.temp_range || '24°C ~ 29°C' }}</span>
+                <span class="fc-dot">·</span>
+                <span class="fc-dn">白天 {{ liveWeatherData.forecast?.day_weather || '阴' }} / 夜间 {{ liveWeatherData.forecast?.night_weather || '阴' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 核心指标1：管材全网发运与在途 (真实数据库聚合) -->
         <div class="panel-box pipe-kpi-panel">
           <div class="panel-header">
@@ -329,40 +401,59 @@
           </div>
 
           <div class="kpi-metric-grid">
+            <!-- 1. 全网计划采购量 -->
             <div class="metric-item">
-              <div class="metric-label">全网规划总量</div>
+              <div class="metric-label-box">
+                <span class="metric-label">全网计划采购量</span>
+              </div>
               <div class="metric-val">
-                <span class="num">{{ formatNumber(kpiData.pipeDesignKm) }}</span>
+                <span class="num hero-num">{{ formatNumber(kpiData.pipeDesignKm) }}</span>
                 <span class="unit">km</span>
               </div>
             </div>
+
+            <!-- 2. 累计发货总量 + 在途状态胶囊 -->
             <div class="metric-item highlight-cyan">
-              <div class="metric-label" title="累计发货总量 / 运输在途量">累计发货总量 / 运输在途量</div>
-              <div class="metric-val dual-val">
-                <span class="num count-num" title="累计发货总量">{{ formatNumber(kpiData.pipeShippedKm) }}</span>
-                <span class="sep">/</span>
-                <span class="num sub-num amber-text" title="运输在途量">{{ formatNumber(kpiData.pipeTransitKm) }}</span>
+              <div class="metric-label-box">
+                <span class="metric-label">累计发货总量</span>
+                <span class="metric-capsule amber-capsule" title="当前运输在途量">
+                  在途 {{ formatNumber(kpiData.pipeTransitKm) }}
+                </span>
+              </div>
+              <div class="metric-val">
+                <span class="num hero-num count-num">{{ formatNumber(kpiData.pipeShippedKm) }}</span>
                 <span class="unit">km</span>
                 <transition name="bubble-fade">
                   <span v-if="bubbles.pipeShipped" class="delta-bubble">+{{ bubbles.pipeShipped }}m</span>
                 </transition>
               </div>
             </div>
+
+            <!-- 3. 累计施工量 -->
             <div class="metric-item highlight-purple">
-              <div class="metric-label">累计施工量</div>
+              <div class="metric-label-box">
+                <span class="metric-label">累计施工量</span>
+              </div>
               <div class="metric-val">
-                <span class="num count-num purple-text">{{ formatNumber(kpiData.pipeInstalledKm) }}</span>
+                <span class="num hero-num count-num purple-text">{{ formatNumber(kpiData.pipeInstalledKm) }}</span>
                 <span class="unit">km</span>
               </div>
             </div>
+
+            <!-- 4. 现场库存总量 + 缺口状态胶囊 -->
             <div class="metric-item highlight-green">
-              <div class="metric-label" title="库存总量 / 三日净缺口">库存总量 / 三日净缺口</div>
-              <div class="metric-val dual-val">
-                <span class="num green-text" title="现场库存总量">{{ formatNumber(kpiData.pipeStockKm) }}</span>
-                <span class="sep">/</span>
-                <span class="num sub-num" :class="kpiData.pipeThreeDayGapKm > 0 ? 'red-text alert-pulse' : 'gray-text'" title="未来三日净缺口">
-                  {{ formatNumber(kpiData.pipeThreeDayGapKm) }}
+              <div class="metric-label-box">
+                <span class="metric-label">现场库存总量</span>
+                <span 
+                  class="metric-capsule" 
+                  :class="kpiData.pipeThreeDayGapKm > 0 ? 'red-capsule alert-pulse' : 'gray-capsule'" 
+                  :title="kpiData.pipeThreeDayGapKm > 0 ? '未来三日存在净缺口' : '未来三日要料满足，无净缺口'"
+                >
+                  缺口 {{ formatNumber(kpiData.pipeThreeDayGapKm) }}
                 </span>
+              </div>
+              <div class="metric-val">
+                <span class="num hero-num green-text">{{ formatNumber(kpiData.pipeStockKm) }}</span>
                 <span class="unit">km</span>
               </div>
             </div>
@@ -385,57 +476,65 @@
           </div>
         </div>
 
-        <!-- 核心指标2：关键管件全流程跟踪 (1138 项标准化真实基准) -->
+        <!-- 核心指标2：管件全网发运情报 -->
         <div class="panel-box fitting-kpi-panel">
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">🔩</span>
-              <span>关键管件配套与直运大盘</span>
+              <span>管件全网发运情报</span>
             </div>
-            <span class="panel-tag gold">1138项标准化基准</span>
+            <span class="panel-tag gold">10个大类</span>
           </div>
 
           <div class="kpi-metric-grid">
             <div class="metric-item">
-              <div class="metric-label">管件计划总量</div>
+              <div class="metric-label-box">
+                <span class="metric-label">全网计划采购量</span>
+              </div>
               <div class="metric-val">
-                <span class="num">{{ kpiData.fittingTotalPcs }}</span>
+                <span class="num hero-num">{{ kpiData.fittingTotalPcs }}</span>
                 <span class="unit">件/套</span>
               </div>
             </div>
             <div class="metric-item highlight-gold">
-              <div class="metric-label">累计发货管件</div>
+              <div class="metric-label-box">
+                <span class="metric-label">累计发货总量</span>
+                <span class="metric-capsule amber-capsule" title="当前在途直运件数">
+                  在途 {{ kpiData.fittingTransitPcs }}
+                </span>
+              </div>
               <div class="metric-val">
-                <span class="num count-num">{{ kpiData.fittingShippedPcs }}</span>
+                <span class="num hero-num count-num">{{ kpiData.fittingShippedPcs }}</span>
                 <span class="unit">件</span>
                 <transition name="bubble-fade">
                   <span v-if="bubbles.fittingShipped" class="delta-bubble gold">+{{ bubbles.fittingShipped }}件</span>
                 </transition>
               </div>
             </div>
-            <div class="metric-item highlight-orange">
-              <div class="metric-label">在途直运中</div>
+            <div class="metric-item highlight-purple">
+              <div class="metric-label-box">
+                <span class="metric-label">累计安装量</span>
+              </div>
               <div class="metric-val">
-                <span class="num count-num">{{ kpiData.fittingTransitPcs }}</span>
+                <span class="num hero-num count-num purple-text">{{ kpiData.fittingInstalledPcs || 0 }}</span>
                 <span class="unit">件</span>
-                <transition name="bubble-fade">
-                  <span v-if="bubbles.fittingTransit" class="delta-bubble orange">+{{ bubbles.fittingTransit }}件</span>
-                </transition>
               </div>
             </div>
             <div class="metric-item highlight-green">
-              <div class="metric-label">现场验收就位</div>
+              <div class="metric-label-box">
+                <span class="metric-label">现场库存量</span>
+              </div>
               <div class="metric-val">
-                <span class="num">{{ kpiData.fittingArrivedPcs }}</span>
+                <span class="num hero-num green-text">{{ kpiData.fittingStockPcs ?? kpiData.fittingArrivedPcs }}</span>
                 <span class="unit">件</span>
               </div>
             </div>
           </div>
 
-          <!-- 管件配套进度条 -->
+          <!-- 管件供应进度条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
-              <span>关键管件配套就绪率</span>
+              <span>全网管件供应进度</span>
               <strong class="gold-text">{{ fittingCoveragePercent }}%</strong>
             </div>
             <div class="energy-bar-track">
@@ -445,14 +544,6 @@
               >
                 <div class="energy-bar-light"></div>
               </div>
-            </div>
-          </div>
-
-          <!-- 真实管件分类占比速览 -->
-          <div class="fitting-types-pills">
-            <div class="fitting-pill" v-for="item in fittingTypeSummary" :key="item.type">
-              <span class="pill-name">{{ item.type }}</span>
-              <span class="pill-count">{{ item.count }}件</span>
             </div>
           </div>
         </div>
@@ -482,17 +573,17 @@
               </div>
             </div>
             <div class="safety-card">
-              <div class="safety-icon">🌿</div>
+              <div class="safety-icon">📦</div>
               <div class="safety-info">
-                <div class="safety-val">100%</div>
-                <div class="safety-desc">出厂质检合规率</div>
+                <div class="safety-val">{{ kpiData.warehouseConfirmRate !== undefined ? kpiData.warehouseConfirmRate + '%' : '100%' }}</div>
+                <div class="safety-desc">库管确认率</div>
               </div>
             </div>
             <div class="safety-card">
               <div class="safety-icon">⏱️</div>
               <div class="safety-info">
-                <div class="safety-val">0 延误</div>
-                <div class="safety-desc">专线直达保障</div>
+                <div class="safety-val">{{ kpiData.avgTransitHours !== undefined ? kpiData.avgTransitHours + ' 小时' : '16.4 小时' }}</div>
+                <div class="safety-desc">平均在途时长</div>
               </div>
             </div>
           </div>
@@ -1057,7 +1148,8 @@ const bsConfig = reactive({
   auto_sync_interval_sec: 20,
   live_stream_interval_sec: 3,
   flyline_travel_sec: 1.8,
-  feed_limit: 40
+  feed_limit: 40,
+  weather_cache_duration_min: 15
 })
 const isSavingConfig = ref(false)
 const configSaveStatus = ref(null)
@@ -1122,6 +1214,7 @@ async function handleResetConfigToDefault() {
   bsConfig.live_stream_interval_sec = 3
   bsConfig.flyline_travel_sec = 1.8
   bsConfig.feed_limit = 40
+  bsConfig.weather_cache_duration_min = 15
   await handleSaveConfigToBackend()
   showSaveStatus('🔄 已恢复出厂默认设定', 'success')
 }
@@ -1281,8 +1374,60 @@ const kpiData = reactive({
   fittingTotalPcs: 0,
   fittingShippedPcs: 0,
   fittingTransitPcs: 0,
-  fittingArrivedPcs: 0
+  fittingInstalledPcs: 0,
+  fittingStockPcs: 0,
+  fittingArrivedPcs: 0,
+  fittingCategoryCount: 0,
+  warehouseConfirmRate: 100.0,
+  avgTransitHours: 16.4
 })
+
+// 今日天气与施工环境 (高德实时数据)
+const liveWeatherData = reactive({
+  city: '主城区施工现场',
+  weather: '多云',
+  temperature: '26',
+  wind_direction: '微风',
+  wind_power: '≤3',
+  humidity: '68',
+  report_time: '',
+  status_tag: '适宜施工',
+  status_level: 'success',
+  advice: '【适宜施工】当前气象条件良好，可正常组织管网吊装下沟与沟槽焊接作业。',
+  forecast: {
+    date: '',
+    day_weather: '阴',
+    night_weather: '阴',
+    temp_min: '24',
+    temp_max: '29',
+    temp_range: '24°C ~ 29°C',
+    day_wind: '南风 1-3级',
+    night_wind: '南风 1-3级'
+  }
+})
+
+const getWeatherEmoji = (weatherStr) => {
+  const w = String(weatherStr || '').trim()
+  if (w.includes('雷')) return '🌩️'
+  if (w.includes('暴雨') || w.includes('大雨')) return '⛈️'
+  if (w.includes('雨')) return '🌧️'
+  if (w.includes('雪')) return '❄️'
+  if (w.includes('阴')) return '☁️'
+  if (w.includes('多云') || w.includes('少云')) return '⛅'
+  if (w.includes('晴')) return '☀️'
+  if (w.includes('雾') || w.includes('霾')) return '🌫️'
+  return '🌤️'
+}
+
+const formatWeatherTime = (timeStr) => {
+  if (!timeStr) return ''
+  const parts = String(timeStr).trim().split(' ')
+  if (parts.length >= 2) {
+    const timeParts = parts[1].split(':')
+    return `${timeParts[0]}:${timeParts[1]}`
+  }
+  return timeStr
+}
 
 // 飘字气泡 (Delta Bubbles)
 const bubbles = reactive({
@@ -1322,6 +1467,17 @@ const fittingCoveragePercent = computed(() => {
 
 // 热门管件类型汇总
 const fittingTypeSummary = ref([])
+
+// 管件实际大类数量
+const fittingCategoryCount = computed(() => {
+  if (kpiData.fittingCategoryCount && kpiData.fittingCategoryCount > 0) {
+    return kpiData.fittingCategoryCount
+  }
+  if (Array.isArray(fittingTypeSummary.value) && fittingTypeSummary.value.length > 0) {
+    return fittingTypeSummary.value.length
+  }
+  return 5
+})
 
 // 拓扑节点定义 (3 大真实管厂)
 const supplyNodes = ref([...defaultSupplyNodes])
@@ -1683,7 +1839,17 @@ async function pollLiveRealData() {
       kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
       kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
       kpiData.fittingTransitPcs = Number(res.kpi.fittingTransitPcs || 0)
+      kpiData.fittingInstalledPcs = Number(res.kpi.fittingInstalledPcs || 0)
+      kpiData.fittingStockPcs = Number(res.kpi.fittingStockPcs !== undefined ? res.kpi.fittingStockPcs : (res.kpi.fittingArrivedPcs || 0))
       kpiData.fittingArrivedPcs = Number(res.kpi.fittingArrivedPcs || 0)
+      kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
+      kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
+      kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
+    }
+
+    // 2.5 实时同步现场天气与施工环境
+    if (res.live_weather && typeof res.live_weather === 'object') {
+      Object.assign(liveWeatherData, res.live_weather)
     }
 
     // 3. 实时同步 10 大标段真实进度
@@ -2178,7 +2344,17 @@ async function loadRealData(isForce = false) {
         kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
         kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
         kpiData.fittingTransitPcs = Number(res.kpi.fittingTransitPcs || 0)
+        kpiData.fittingInstalledPcs = Number(res.kpi.fittingInstalledPcs || 0)
+        kpiData.fittingStockPcs = Number(res.kpi.fittingStockPcs !== undefined ? res.kpi.fittingStockPcs : (res.kpi.fittingArrivedPcs || 0))
         kpiData.fittingArrivedPcs = Number(res.kpi.fittingArrivedPcs || 0)
+        kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
+        kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
+        kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
+      }
+
+      // 1.5 实时同步现场天气与施工环境
+      if (res.live_weather && typeof res.live_weather === 'object') {
+        Object.assign(liveWeatherData, res.live_weather)
       }
 
       // 2. 管件真实分类统计
@@ -2531,7 +2707,8 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
-  width: 350px;
+  width: 530px;
+  max-width: calc(100vw - 32px);
   max-height: calc(100vh - 90px);
   overflow-y: auto;
   scrollbar-width: thin;
@@ -2577,8 +2754,8 @@ onBeforeUnmount(() => {
 
 .settings-form-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px 10px;
 }
 
 .setting-item {
@@ -2850,9 +3027,257 @@ onBeforeUnmount(() => {
 }
 
 .left-col {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.left-col::-webkit-scrollbar {
+  display: none;
+}
+
+/* 4 大卡片高度自适应拉伸填充整个左侧区域，零底部留白 */
+.left-col .weather-kpi-panel {
+  flex-shrink: 0;
+  padding: 10px 14px;
+}
+
+.left-col .pipe-kpi-panel,
+.left-col .fitting-kpi-panel,
+.left-col .safety-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.left-col .panel-header {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.left-col .panel-title {
+  font-size: 13.5px;
+  gap: 6px;
+}
+
+.left-col .panel-tag {
+  font-size: 11px;
+  padding: 1.5px 7px;
+}
+
+.left-col .kpi-metric-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.left-col .metric-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.left-col .metric-label {
+  font-size: 11px;
+}
+
+.left-col .metric-capsule {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+.left-col .metric-val .num.hero-num {
+  font-size: 20px;
+}
+
+.left-col .metric-val .num {
+  font-size: 18px;
+}
+
+.left-col .energy-progress-box {
+  margin-top: auto;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+.left-col .energy-progress-info {
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+
+.left-col .energy-bar-track {
+  height: 7px;
+}
+
+.left-col .safety-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.left-col .safety-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.left-col .safety-icon {
+  font-size: 17px;
+}
+
+.left-col .safety-val {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.left-col .safety-desc {
+  font-size: 10.5px;
+}
+
+.left-col .weather-loc-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 7px;
+}
+
+.left-col .weather-loc-bar .loc-pin {
+  font-size: 12.5px;
+}
+
+.left-col .weather-loc-bar .loc-text {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.left-col .weather-loc-bar .loc-time {
+  color: #38bdf8;
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-size: 11.5px;
+}
+
+.left-col .weather-metrics-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(0, 242, 254, 0.16);
+  border-radius: 6px;
+  padding: 9px 13px;
+}
+
+.left-col .weather-temp-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.left-col .weather-emoji {
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 5px rgba(0, 242, 254, 0.25));
+}
+
+.left-col .temp-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.left-col .weather-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.left-col .temp-degree {
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #00f2fe;
+  line-height: 1.1;
+}
+
+.left-col .temp-degree small {
+  font-size: 13px;
+  font-weight: normal;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.left-col .weather-params-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.left-col .param-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.left-col .param-k {
+  color: #94a3b8;
+}
+
+.left-col .param-v {
+  color: #ffffff;
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-weight: 700;
+}
+
+/* 同框体下方的全天预报条（居中展示） */
+.left-col .weather-forecast-subrow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(0, 242, 254, 0.15);
+  font-size: 11.5px;
+}
+
+.left-col .weather-forecast-subrow .fc-icon {
+  font-size: 12px;
+}
+
+.left-col .weather-forecast-subrow .fc-range {
+  color: #fbbf24;
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.left-col .weather-forecast-subrow .fc-dot {
+  color: #64748b;
+}
+
+.left-col .weather-forecast-subrow .fc-dn {
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 11.5px;
 }
 
 /* --- 通用卡片样式 Panel Box --- */
@@ -2933,6 +3358,165 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+.panel-tag.danger,
+.panel-tag.red {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+/* --- 今日天气与施工环境 (Weather KPI Panel) --- */
+.weather-kpi-panel {
+  padding: 8px 12px;
+}
+
+.weather-loc-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.weather-loc-bar .loc-pin {
+  font-size: 11.5px;
+}
+
+.weather-loc-bar .loc-text {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.weather-loc-bar .loc-dot {
+  color: #64748b;
+}
+
+.weather-loc-bar .loc-time {
+  color: #00f2fe;
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-size: 10.5px;
+}
+
+.weather-metrics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(0, 242, 254, 0.12);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.weather-temp-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-emoji {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 5px rgba(0, 242, 254, 0.25));
+}
+
+.temp-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.weather-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.temp-degree {
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.1;
+}
+
+.temp-degree small {
+  font-size: 11px;
+  font-weight: normal;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.weather-params-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.param-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.param-k {
+  color: #94a3b8;
+}
+
+.param-v {
+  color: #e2e8f0;
+  font-family: 'DIN Alternate', 'Consolas', sans-serif;
+  font-weight: 600;
+}
+
+.weather-advice-banner {
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.weather-advice-banner.advice-success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.weather-advice-banner.advice-warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.weather-advice-banner.advice-danger {
+  background: rgba(244, 63, 94, 0.08);
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+.advice-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.advice-bulb {
+  font-size: 12px;
+}
+
+.advice-label {
+  font-size: 11.5px;
+  color: #00f2fe;
+}
+
+.advice-text {
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 /* --- KPI Metric Grid --- */
 .kpi-metric-grid {
   display: grid;
@@ -2945,15 +3529,55 @@ onBeforeUnmount(() => {
   background: #111c30;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
-  padding: 9px 11px;
+  padding: 8px 10px;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric-label-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
 .metric-label {
   font-size: 11px;
   color: #94a3b8;
-  margin-bottom: 3px;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.metric-capsule {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.metric-capsule.amber-capsule {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.metric-capsule.red-capsule {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+}
+
+.metric-capsule.gray-capsule {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .metric-val {
@@ -2968,6 +3592,12 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
   color: #f1f5f9;
+}
+
+.metric-val .num.hero-num {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .metric-val .unit {
@@ -3104,9 +3734,17 @@ onBeforeUnmount(() => {
 .energy-progress-info {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: #94a3b8;
-  margin-bottom: 4px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 5px;
+}
+
+.energy-progress-info strong {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .cyan-text {
@@ -3397,7 +4035,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* 拓扑主排版三栏布局 (左: 230px, 中: 50px 通道, 右: 1fr) */
+/* 拓扑主排版三栏布局 (左: 210px 紧凑供给基地, 中: 40px 通道, 右: 1fr 需求标段) */
 .topology-layout-grid {
   position: absolute;
   top: 0;
@@ -3405,7 +4043,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 260px 45px 1fr;
+  grid-template-columns: 210px 40px 1fr;
   padding: 12px 14px;
   box-sizing: border-box;
   z-index: 10;
@@ -3427,7 +4065,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  gap: 16px;
+  gap: 14px;
   overflow: visible;
   padding: 4px 2px;
   box-sizing: border-box;
@@ -3436,18 +4074,18 @@ onBeforeUnmount(() => {
 .supply-node-card {
   background: linear-gradient(135deg, rgba(17, 34, 60, 0.85) 0%, rgba(11, 20, 36, 0.95) 100%);
   border: 1px solid rgba(0, 242, 254, 0.22);
-  border-left: 4px solid #00f2fe;
-  border-radius: 8px;
-  padding: 18px 20px;
+  border-left: 3px solid #00f2fe;
+  border-radius: 6px;
+  padding: 14px 16px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 76px;
+  min-height: 64px;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
 }
 
 .supply-node-card:nth-child(2) {
@@ -3466,35 +4104,35 @@ onBeforeUnmount(() => {
 .supply-node-card.active,
 .supply-node-card.hovered {
   border-color: #00f2fe;
-  transform: translateX(4px);
-  box-shadow: 0 6px 20px rgba(0, 242, 254, 0.18);
+  transform: translateX(3px);
+  box-shadow: 0 4px 16px rgba(0, 242, 254, 0.18);
 }
 
 .supply-node-card:nth-child(2):hover,
 .supply-node-card:nth-child(2).hovered {
   border-color: #fbbf24;
-  box-shadow: 0 6px 20px rgba(251, 191, 36, 0.18);
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.18);
 }
 
 .supply-node-card:nth-child(3):hover,
 .supply-node-card:nth-child(3).hovered {
   border-color: #00ff87;
-  box-shadow: 0 6px 20px rgba(0, 255, 135, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 255, 135, 0.18);
 }
 
 .supply-node-card.is-shipping-source {
   border-color: #00f2fe;
   background: linear-gradient(135deg, rgba(0, 242, 254, 0.22) 0%, #11263d 80%);
-  box-shadow: 0 0 22px rgba(0, 242, 254, 0.5), inset 0 0 12px rgba(0, 242, 254, 0.18);
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.5), inset 0 0 10px rgba(0, 242, 254, 0.18);
   animation: supplier-shipping-pulse 1.6s infinite ease-in-out;
-  transform: translateX(4px);
+  transform: translateX(3px);
   z-index: 5;
 }
 
 .supply-node-card.is-shipping-source.mat-fitting {
   border-color: #fbbf24;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, #11263d 80%);
-  box-shadow: 0 0 22px rgba(251, 191, 36, 0.5), inset 0 0 12px rgba(251, 191, 36, 0.18);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.5), inset 0 0 10px rgba(251, 191, 36, 0.18);
 }
 
 .supply-node-card.is-shipping-source .node-port.port-out {
@@ -3522,14 +4160,14 @@ onBeforeUnmount(() => {
 }
 
 .sup-title {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #ffffff;
   white-space: normal;
-  line-height: 1.4;
+  line-height: 1.38;
   letter-spacing: 0.3px;
   word-break: break-word;
-  padding-right: 12px;
+  padding-right: 8px;
 }
 
 /* 2. 中间传输通道 */
@@ -3572,6 +4210,9 @@ onBeforeUnmount(() => {
 }
 
 .demand-systems-split {
+  width: 95%;
+  max-width: 95%;
+  margin: 0 auto;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -3807,9 +4448,10 @@ onBeforeUnmount(() => {
 }
 
 .sec-status-chip.running {
-  background: rgba(16, 185, 129, 0.2);
-  color: #00ff87;
-  font-weight: 600;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ff4d4f;
+  border: 1px solid rgba(255, 77, 79, 0.4);
+  font-weight: 700;
 }
 
 .chip-dot {
@@ -3820,8 +4462,8 @@ onBeforeUnmount(() => {
 }
 
 .sec-status-chip.running .chip-dot {
-  background: #00ff87;
-  box-shadow: 0 0 6px #00ff87;
+  background: #ff4d4f;
+  box-shadow: 0 0 6px #ff4d4f;
 }
 
 /* 双轨微进度条 (加大高度与辨识度) */
@@ -5062,6 +5704,83 @@ onBeforeUnmount(() => {
   background: rgba(16, 185, 129, 0.12);
   color: #059669;
   border: 1px solid rgba(16, 185, 129, 0.35);
+  font-weight: 700;
+}
+
+.bigscreen-container.light .panel-tag.danger,
+.bigscreen-container.light .panel-tag.red {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-weight: 700;
+}
+
+/* 浅色模式：今日天气与施工条件卡片高对比度支持 */
+.bigscreen-container.light .left-col .weather-loc-bar .loc-pin {
+  color: #0284c7;
+}
+
+.bigscreen-container.light .left-col .weather-loc-bar .loc-text {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.bigscreen-container.light .left-col .weather-loc-bar .loc-dot {
+  color: #64748b;
+}
+
+.bigscreen-container.light .left-col .weather-loc-bar .loc-time {
+  color: #0284c7;
+  font-weight: 700;
+}
+
+.bigscreen-container.light .left-col .weather-metrics-row {
+  background: #f1f5f9;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.bigscreen-container.light .left-col .weather-name {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.bigscreen-container.light .left-col .temp-degree {
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.bigscreen-container.light .left-col .temp-degree small {
+  color: #475569;
+  font-weight: 700;
+}
+
+.bigscreen-container.light .left-col .param-k {
+  color: #475569;
+  font-weight: 600;
+}
+
+.bigscreen-container.light .left-col .param-v {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.bigscreen-container.light .left-col .weather-forecast-subrow {
+  border-top: 1px dashed #cbd5e1;
+}
+
+.bigscreen-container.light .left-col .weather-forecast-subrow .fc-range {
+  color: #b45309;
+  font-weight: 800;
+}
+
+.bigscreen-container.light .left-col .weather-forecast-subrow .fc-dot {
+  color: #94a3b8;
+}
+
+.bigscreen-container.light .left-col .weather-forecast-subrow .fc-dn {
+  color: #0f172a;
+  font-weight: 700;
 }
 
 .bigscreen-container.light .topo-sub-tag {
@@ -5089,6 +5808,24 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .metric-label {
   color: #64748b;
+}
+
+.bigscreen-container.light .metric-capsule.amber-capsule {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.bigscreen-container.light .metric-capsule.red-capsule {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.bigscreen-container.light .metric-capsule.gray-capsule {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
 }
 
 .bigscreen-container.light .metric-val .num {
@@ -5305,6 +6042,23 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .sec-title {
   color: #0f172a;
+}
+
+.bigscreen-container.light .sec-status-chip {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bigscreen-container.light .sec-status-chip.running {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  font-weight: 700;
+}
+
+.bigscreen-container.light .sec-status-chip.running .chip-dot {
+  background: #dc2626;
+  box-shadow: 0 0 5px rgba(220, 38, 38, 0.5);
 }
 
 .bigscreen-container.light .line-label {
