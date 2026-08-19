@@ -1101,12 +1101,9 @@
             </div>
             <div class="header-right-meta">
               <span class="panel-tag gold" :title="'统计周期: ' + (weeklyReport.date_range_str || '近7日')">
-                连续7日
+                {{ weeklyReport.date_range_str || '近7日' }}
               </span>
             </div>
-          </div>
-          <div class="weekly-period">
-            统计周期：{{ weeklyReport.date_range_str || '近7日' }} · 数据实时更新
           </div>
 
           <!-- 1. 顶部固定双 KPI：无数据时保留相同尺寸，仅切换辅助文案 -->
@@ -1117,7 +1114,7 @@
                 <span class="kpi-title">7日累计发货量</span>
               </div>
               <div class="kpi-main-val cyan-text">
-                {{ weeklyReport.total_shipped_km }} <span class="unit">km</span>
+                {{ formatWeeklyKm(weeklyReport.total_shipped_km) }} <span class="unit">km</span>
               </div>
               <div class="weekly-kpi-note">{{ weeklyShipNote }}</div>
             </div>
@@ -1128,7 +1125,7 @@
                 <span class="kpi-title">7日累计施工量</span>
               </div>
               <div class="kpi-main-val gold-text">
-                {{ weeklyReport.total_usage_km }} <span class="unit">km</span>
+                {{ formatWeeklyKm(weeklyReport.total_usage_km) }} <span class="unit">km</span>
               </div>
               <div class="weekly-kpi-note">{{ weeklyUsageNote }}</div>
             </div>
@@ -1136,8 +1133,7 @@
 
           <!-- 2. 固定趋势区：始终保留坐标与日期，无数据时叠加明确状态 -->
           <div class="weekly-chart-heading">
-            <span>每日趋势</span>
-            <span>发货量 / 施工量</span>
+            <span>每日趋势 (km)</span>
           </div>
           <div class="weekly-chart-box">
             <div ref="weeklyChartRef" class="weekly-echarts-dom"></div>
@@ -1294,6 +1290,13 @@ function setMobileTab(tabKey) {
     }, 60)
     setTimeout(() => {
       recalculateFlylines()
+    }, 250)
+  } else if (tabKey === 'feed') {
+    setTimeout(() => {
+      handleResizeWeeklyChart()
+    }, 60)
+    setTimeout(() => {
+      handleResizeWeeklyChart()
     }, 250)
   }
 }
@@ -1875,8 +1878,8 @@ function renderWeeklyChart() {
         }
       },
       legend: {
-        top: 0,
-        right: 6,
+        top: 2,
+        right: 8,
         itemWidth: 12,
         itemHeight: 3,
         itemGap: 10,
@@ -1889,9 +1892,9 @@ function renderWeeklyChart() {
       },
       grid: {
         top: 22,
-        left: 6,
-        right: 10,
-        bottom: 4,
+        left: 4,
+        right: 16,
+        bottom: 6,
         containLabel: true
       },
       xAxis: {
@@ -1904,21 +1907,15 @@ function renderWeeklyChart() {
         axisTick: { show: false },
         axisLabel: {
           color: isLight ? '#475569' : '#94a3b8',
-          fontSize: 10.5,
+          fontSize: 10,
           interval: 0,
-          lineHeight: 13,
+          lineHeight: 12,
           fontWeight: 500,
           fontFamily: 'JetBrains Mono, Consolas, sans-serif'
         }
       },
       yAxis: {
         type: 'value',
-        name: 'km',
-        nameTextStyle: {
-          color: isLight ? '#64748b' : '#94a3b8',
-          fontSize: 10,
-          padding: [0, 0, 0, -18]
-        },
         splitLine: {
           lineStyle: {
             color: splitLineColor,
@@ -2013,6 +2010,10 @@ function renderWeeklyChart() {
 
 function handleResizeWeeklyChart() {
   try {
+    if (!weeklyChartInstance && weeklyChartRef.value && weeklyChartRef.value.clientWidth > 0) {
+      renderWeeklyChart()
+      return
+    }
     if (weeklyChartInstance && weeklyChartRef.value) {
       weeklyChartInstance.resize({
         width: weeklyChartRef.value.clientWidth || 'auto',
@@ -5067,11 +5068,12 @@ onBeforeUnmount(() => {
 
 /* --- 右侧栏：实时战报流 Live Feed --- */
 .live-feed-panel {
-  flex: 1.3;
+  flex: 1.45;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 10px 14px 8px;
 }
 
 .live-status-pill {
@@ -5140,7 +5142,7 @@ onBeforeUnmount(() => {
 
 /* ==================== 统一业务分类筛选器 (折叠式下拉面板) ==================== */
 .feed-filter-unified-bar {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   flex-shrink: 0;
   position: relative;
   z-index: 40;
@@ -5159,7 +5161,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, rgba(17, 28, 48, 0.95) 0%, rgba(13, 22, 38, 0.95) 100%);
   border: 1px solid rgba(0, 242, 254, 0.25);
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   cursor: pointer;
   transition: all 0.25s ease;
   box-shadow: inset 0 0 8px rgba(0, 242, 254, 0.05);
@@ -5367,26 +5369,26 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 6px 4px 6px;
+  padding: 2px 4px 4px 4px;
   box-sizing: border-box;
 }
 
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 2px 2px;
+  gap: 6px;
+  padding: 1px 2px;
   box-sizing: border-box;
 }
 
 .feed-card {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  padding: 8px 10px;
+  border-radius: 6px;
+  padding: 6.5px 9px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3.5px;
   position: relative;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
@@ -5665,7 +5667,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 3.5px 7px;
+  padding: 2.5px 6px;
   border-radius: 4px;
   width: 100%;
   box-sizing: border-box;
@@ -5785,15 +5787,7 @@ onBeforeUnmount(() => {
 }
 
 .weekly-report-panel .panel-header {
-  margin-bottom: 2px;
-  flex-shrink: 0;
-}
-
-.weekly-period {
-  margin: 0 0 7px 24px;
-  color: #64748b;
-  font-size: 10px;
-  line-height: 1.2;
+  margin-bottom: 9px;
   flex-shrink: 0;
 }
 
@@ -7643,7 +7637,11 @@ onBeforeUnmount(() => {
 
   .weekly-report-panel {
     flex: none;
-    min-height: 250px;
+    min-height: 330px;
+  }
+
+  .weekly-chart-box {
+    min-height: 150px;
   }
 
   .weekly-kpi-grid {
@@ -7661,6 +7659,13 @@ onBeforeUnmount(() => {
 
 /* 📱 超窄小屏手机深度优化 (<= 480px) */
 @media (max-width: 480px) {
+  .weekly-insight-grid span {
+    font-size: 8.5px;
+  }
+  .weekly-insight-grid strong {
+    font-size: 9.5px;
+  }
+
   .bigscreen-header {
     padding: 0 8px;
   }

@@ -1,3 +1,100 @@
+## 2026-08-19 [数字指挥大屏：本周战报趋势标题精炼与冗余图例字样移除]
+- **改动背景与需求**：
+  - 用户明确要求移除本周战报图表标题栏右侧的“发货量 / 施工量”字样，避免与 ECharts 内部右上角已有的青/金彩色双轨图例（`legend`）重复；
+- **技术改动细节**：
+  - 前端（`BigScreenDashboardView.vue`）：
+    - 在 `.weekly-chart-heading` 中移除 `<span>发货量 / 施工量</span>`，仅保留核心主题 `<span>每日趋势 (km)</span>`，交由内部自带颜色与图例项的 ECharts Legend 统一承载图例认知，界面更加清爽干练；
+- **验证结果**：
+  - 前端 `npm run build` 构建编译 100% 成功（`built in 14.51s`，0 错误）；
+  - 趋势图表区顶部视觉层次分明，标题与图例各司其职，无任何重复堆叠。
+
+## 2026-08-19 [数字指挥大屏：全网工程动态播报面板高度与卡片尺寸精调（完整呈现纵向 3 张卡片）]
+- **改动背景与视觉微调**：
+  - 用户反馈：“‘全网工程实时动态播报’板块，我想微调一下高度，能让三个播报卡片完整显示出来，现在纵向第三个卡片的底部稍微有点不全”；
+  - 经排查，在 1080p 标准屏或 125% DPI 缩放环境下，原卡片高度（~100px）与内边距在原 `flex: 1.3` 的容器高度下，第三张卡片底部有约 15~20px 的内容被遮挡；
+- **全栈精细化调优方案**：
+  1. **面板弹性权重与外边距调整（`BigScreenDashboardView.vue`）**：
+     - 将 `.live-feed-panel` 的弹性系数提升至 `flex: 1.45;`，赋予播报列表更充裕的纵向有效渲染高度；
+     - 面板内边距微调为 `padding: 10px 14px 8px;`，业务分类筛选栏下边距微调为 `margin-bottom: 6px;`，筛选按钮内边距精简为 `padding: 5px 9px;`；
+  2. **卡片结构紧凑化与留白精修（`BigScreenDashboardView.vue`）**：
+     - `.feed-list-wrapper` 内边距设为 `padding: 2px 4px 4px;`；
+     - `.feed-list` 卡片纵向间距由 `8px` 优化为 `6px`；
+     - `.feed-card` 内边距由 `8px 10px` 优化为 `6.5px 9px`，内部行间距由 `5px` 优化为 `3.5px`，圆角设为 `6px`；
+     - `.feed-spec-box`（规格与数量明细栏）内边距微调为 `padding: 2.5px 6px;`；
+     - 优化后单张卡片平均高度收敛至 ~88px，3 张卡片总高度（含间隙）仅需 ~276px，在各类屏幕分辨率下均可 100% 完整露底显示；
+- **验证结果**：
+  - 前端 `npm run build` 构建编译 100% 成功（`built in 15.10s`，0 错误）；
+  - 右侧栏“实时动态播报”区域前 3 张卡片自上而下 100% 完整无遮挡展示，底部平齐饱满。
+
+## 2026-08-19 [数字指挥大屏：本周战报图表移除 Y轴冗余单位并扩展垂直绘图高度]
+- **改动背景与需求**：
+  - 用户指出由于折线图上方副标题已显式标明“每日趋势 (km)”，折线图内部左上角的 `km` 文本显得冗余且影响视觉纯净度，要求直接去除图表内部的 `km` 字样；
+- **全栈技术改动**：
+  1. **ECharts 坐标轴配置精简（`BigScreenDashboardView.vue`）**：
+     - 在 `renderWeeklyChart()` 的 `yAxis` 中彻底移除 `name: 'km'` 及其关联的 `nameLocation`、`nameGap` 与 `nameTextStyle` 配置；
+     - 去除 Y 轴内部文本后，将折线图绘图网格 `grid.top` 适度上移优化至 `22px`，图例 `legend.top` 调至 `2px`，使数据折线与面积阴影在垂直方向获得更大的渲染高度与表现力；
+- **验证结果**：
+  - 前端 `npm run build` 构建编译 100% 成功（`built in 17.24s`，0 错误）；
+  - 图表区域视觉更加开阔纯净，由外部标题统一统领计量单位，PC 与手机移动端均展现出高水准工业级质感。
+
+## 2026-08-19 [管件数据库发货状态标志口径审查与确认]
+- **咨询与确认内容**：
+  - 审查确认了管件发货明细主表 `tube.tube_fitting_delivery` 的物理字段与状态枚举定义；
+  - 明确了当前生效的 5 大标准状态标志（`pending_arrival`、`pending_receive`、`pending_warehouse`、`completed`、`cancelled`）、物理证据链约束 `chk_tube_fitting_state_evidence` 以及历史状态映射演进关系。
+
+## 2026-08-19 [数字指挥大屏：本周战报右上角标签精简升级为动态日期区间与冗余副标清理]
+- **改动背景与需求**：
+  - 用户明确要求优化“本周战报”面板头部信息结构：去除“统计周期：08/12 ~ 08/18 · 数据实时更新”冗余副标题行，并将右上角固定标签“连续7日”直接替换为动态统计日期区间（如 `08/12 ~ 08/18`），使信息呈现更加紧凑干练；
+- **全栈技术改动**：
+  1. **模板结构重塑（`BigScreenDashboardView.vue`）**：
+     - 移除面板内部的 `<div class="weekly-period">` 副标题结构；
+     - 将面板右上角标签文案由固定的“连续7日”改为动态数据驱动绑定：`{{ weeklyReport.date_range_str || '近7日' }}`；
+  2. **样式间距调优（`BigScreenDashboardView.vue`）**：
+     - 调整 `.weekly-report-panel .panel-header` 的下外边距为 `margin-bottom: 9px;`，弥补移除副标题行后的垂直间隙，确保与下方双 KPI 卡片保持黄金比例视觉节奏；
+     - 清理废弃的 `.weekly-period` 样式规则。
+- **验证结果**：
+  - 前端 `npm run build` 构建编译 100% 成功（`built in 21.92s`，0 错误）；
+  - 右上角金色胶囊标签精准呈现当前真实统计日期区间（如 `08/12 ~ 08/18`），面板顶部布局清爽通透。
+
+## 2026-08-19 [数字指挥大屏：彻底根治本周战报 Y轴量程单位 km 上部被遮挡与裁剪问题（nameGap 与 grid.top 精细化校准）]
+- **改动背景与问题深挖**：
+  - 用户反馈：“km字样还是没显示全，上半部被遮住了，这个问题在电脑访问时也存在”；
+  - 经深入排查 ECharts Y 轴名称布局与 Canvas 裁剪原理：
+    1. **Canvas 顶部越界裁剪**：ECharts 在 `nameLocation: 'end'` 模式下，默认 `nameGap` 为 15px，名称绘制在 Y 轴顶点（即 `grid.top`）上方。当 `grid.top` 较小（如 24px）且 `nameGap` 偏大时，文本的基线和字形上边缘会被推至 `y <= 0` 之外；而外层 `.weekly-chart-box` 具有 `overflow: hidden; border-radius: 6px;`，导致超出 Canvas 顶部的文字上半部分被硬生生裁切；
+    2. **图例与标题协调**：图例位于 `top: 4`，若 Y 轴名称距离顶部过近，容易出现视觉压迫。
+- **高精细修复方案**：
+  1. **ECharts 坐标系与名称定位精细校准（`BigScreenDashboardView.vue`）**：
+     - 将 `grid.top` 提升至 `30px`，`bottom` 设为 `6px`，为顶部文本区域留足纯净安全带；
+     - 显式设置 `yAxis.nameLocation = 'end'`，并将 `yAxis.nameGap = 6`，使 `km` 文本基线与字形绝对坐标精确落在 `y = 30 - 6 = 24px`，文字上边缘距离 Canvas 顶部有至少 14px 充足内缩空间，彻底杜绝任何顶部遮挡与裁剪；
+     - `legend.top` 设为 `4px`，与左侧 `km` 保持优雅水平均衡；
+  2. **趋势区标题增强（`BigScreenDashboardView.vue`）**：
+     - 在 `.weekly-chart-heading` 中增加 `(km)` 标识（`每日趋势 (km)`），双重保障量程单位在任何视口下一目了然。
+- **验证结果**：
+  - 前端 `npm run build` 成功构建（`built in 19.12s`，0 错误）；
+  - PC 端大屏与移动端实机预览下，Y 轴左上角 `km` 字样上下左右 100% 完整露出，文字圆润饱满，0 裁切、0 遮挡。
+
+## 2026-08-19 [数字指挥大屏：本周战报移动端图表裁剪修复、Tab切换自适应与KPI千分位格式化优化]
+- **改动背景与问题排查**：
+  - 用户在手机端实机测试大屏“动态战报”板块（`BigScreenDashboardView.vue`），指出：“图的右侧‘8.18周二’显示出一半，上面的km也没显示全”；
+  - 经全面审查与诊断发现 3 项关键细节问题：
+    1. **ECharts 坐标轴与量程名称边距偏移**：`yAxis.nameTextStyle` 此前设置了 `padding: [0, 0, 0, -18]`，导致左侧负向偏移将 "km" 文本推至 Canvas 视口之外产生截断；同时 X 轴右侧边距（`grid.right`）仅为 10px，无空间承载末端日期标签右半部文字，导致最右侧日期标签（如 `8.18 周二`）被裁剪一半；
+    2. **移动端 Tab 切换自适应缺失**：手机端（`<= 1024px`）采用 Tab 导航分屏，默认展示 `kpi`，右侧 `feed` 栏为 `display: none`。当用户切换至“动态战报”Tab 时，`setMobileTab` 未触发图表尺寸重算，且当图表容器从不可见变为可见时缺乏延迟重绘兜底；
+    3. **移动端面板高度与 KPI 格式化统一**：移动端媒体查询中 `.weekly-report-panel` 仅设定 `min-height: 250px`，扣除标题、双 KPI 卡片及底部复盘栏后图表仅剩约 70px，空间极度局促；此外，顶部双 KPI 卡片未统一经过 `formatWeeklyKm` 进行千分位和小数规范化。
+- **全栈精细化修复与优化方案**：
+  1. **ECharts 边距与排版精调（`BigScreenDashboardView.vue`）**：
+     - `yAxis.nameTextStyle` 改为 `align: 'left', padding: [0, 0, 4, 0]`，彻底消除负边距，使量程单位 `km` 稳居 Y 轴刻度上方并完整清晰呈现；
+     - `grid` 调整为 `top: 24, left: 4, right: 16, bottom: 4, containLabel: true`，右侧预留 16px 充裕缓冲空间，杜绝最右侧日期文字被裁切；
+     - `xAxis.axisLabel` 字号与行高微调为 `fontSize: 10, lineHeight: 12`，兼顾 7 日两行标签的紧凑与可读性；
+     - `handleResizeWeeklyChart` 新增首次渲染判定：若此前因容器隐藏未初始化实例，在容器可见（`clientWidth > 0`）时自动调用 `renderWeeklyChart()` 完成初始化。
+  2. **移动端 Tab 联动触发（`BigScreenDashboardView.vue`）**：
+     - 在 `setMobileTab` 中针对 `tabKey === 'feed'` 增加 60ms 与 250ms 双阶 `handleResizeWeeklyChart()` 触发，确保从隐藏到展开时尺寸 100% 刷新对齐。
+  3. **移动端最小高度与 KPI 格式化（`BigScreenDashboardView.vue`）**：
+     - 将 `@media (max-width: 1024px)` 下 `.weekly-report-panel` 最小高度提升至 `330px`，并赋予 `.weekly-chart-box` 专属 `min-height: 150px`，释放图表绘制空间；
+     - 模板第 1120、1131 行统一升级为 `{{ formatWeeklyKm(weeklyReport.total_shipped_km) }}` 与 `{{ formatWeeklyKm(weeklyReport.total_usage_km) }}`。
+- **验证结果**：
+  - 前端 `npm run build` 打包编译通过（`built in 14.84s`，0 错误）；
+  - 手机端切换至战报页 0 延迟自适应渲染，折线图 Y 轴 "km" 与最右侧 "8.18周二" 100% 完整显示，0 裁剪、0 溢出。
+
 ## 2026-08-19 [数字指挥大屏：彻底解决 ECharts 图表尺寸超出容器显示不全问题（专属 ResizeObserver + 绝对定位填满）]
 - **改动背景与排查**：
   - 用户审查指出：“审查一下 echarts 图表的区域，现在这个区域都没有显示全，肯定是比外边的容器要大太多了”；

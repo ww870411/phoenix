@@ -1,3 +1,45 @@
+## 2026-08-19 数字指挥大屏本周战报标题栏图例文字精炼（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标题栏视觉优化**：
+  - 移除 `.weekly-chart-heading` 中冗余的 `发货量 / 施工量` 文本，保留 `每日趋势 (km)`，统一交由 ECharts 内置的青/金双轨交互图例承接，界面更显精简专业。
+
+## 2026-08-19 数字指挥大屏工程动态播报面板高度与卡片紧凑度精调（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **播报区域尺寸精修**：
+  - 将 `.live-feed-panel` 的弹性比例提升至 `flex: 1.45`，并优化顶部内边距与筛选栏下边距（`margin-bottom: 6px`）；
+  - 精修 `.feed-card` 内边距（`6.5px 9px`）、行间距（`3.5px`）与列表间隙（`6px`），将卡片高度收敛至 ~88px，实现纵向 3 张战报卡片 100% 完整露底显示、0 遮挡。
+
+## 2026-08-19 数字指挥大屏本周战报图表内部单位精简与绘图区扩充（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **图表纯净化重构**：
+  - 由外部标题 `每日趋势 (km)` 统领单位展示，彻底移除 ECharts `yAxis` 内部的 `name: 'km'` 属性及定位配置；
+  - 折线图 `grid.top` 调整为 `22px`，释放纵向绘制空间，使折线波峰波谷与渐变光晕更加饱满流畅。
+
+## 2026-08-19 数字指挥大屏本周战报头部日期标签动态化与结构精简（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **面板头部信息精炼**：
+  - 移除原“统计周期：08/12 ~ 08/18 · 数据实时更新”中间副标题行，释放纵向排版空间；
+  - 将右上角状态徽章由静态文本“连续7日”升级为动态日期范围标签（如 `08/12 ~ 08/18`），并同步将 `.panel-header` 的下边距调整为 `9px`，保持整体排版紧凑工整。
+
+## 2026-08-19 数字指挥大屏本周战报 Y轴单位 km 顶部裁切彻底根治（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **量程单位渲染精修**：
+  - **坐标与间隙精调**：显式设定 `yAxis.nameGap = 6` 与 `grid.top = 30`，使 `km` 文本精确渲染在 Canvas 安全可视区域内（距画布顶部留有 14px 充足缓冲），彻底杜绝由于 `nameGap` 默认过大导致字形上边缘越界被父级 `overflow: hidden` 裁剪的问题；
+  - **标题栏同步标识**：在 `.weekly-chart-heading` 中增加 `(km)` 标示（`每日趋势 (km)`），提升全端视觉辨识度。
+
+## 2026-08-19 数字指挥大屏本周战报移动端图表裁剪修复与格式化升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **移动端与图表适配优化**：
+  - **坐标与名称防裁切**：调整 `yAxis.nameTextStyle` 为 `align: 'left', padding: [0, 0, 4, 0]`，彻底消除负边距裁剪导致 "km" 丢失的问题；调整 ECharts `grid.right` 为 `16px`，确保最右端末日日期标签（如 `8.18 周二`）完整显示；
+  - **移动端 Tab 联动刷新**：在 `setMobileTab` 中当切换至“动态战报（`feed`）”时，触发双阶延迟 `handleResizeWeeklyChart()`，并对隐藏状态下未初始化的 ECharts 实例自动补全渲染；
+  - **面板高度与千分位格式化**：提升移动端 `.weekly-report-panel` 最小高度至 `330px` 并为 `.weekly-chart-box` 设定 `min-height: 150px`；7日累计发货/施工量全面绑定 `formatWeeklyKm(...)`。
+
 ## 2026-08-19 数字指挥大屏 ECharts 图表尺寸绝对自适应与专属 ResizeObserver 升级（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

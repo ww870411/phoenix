@@ -1,3 +1,10 @@
+## 2026-08-19 数字指挥大屏本周战报全端与移动端展示契约对齐（workspace.py & BigScreenDashboardView.vue）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **契约与展示对齐**：
+  - 前端全面适配 `weekly_report` 中的 `total_shipped_km`、`total_usage_km` 与 `days` 连续 7 日数组；
+  - 修复前端移动端图表量程单位 `km` 与日期标签渲染边距，实现真实业务数据在 PC 与手机端 100% 无裁切精细化呈现。
+
 ## 2026-08-19 数字指挥大屏“本周战报（连续7日）”纯真实数据聚合服务（workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
