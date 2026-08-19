@@ -136,6 +136,11 @@
         "username": "xinruide",
         "password": "xinruide_123",
         "unit": "河北鑫瑞得管道设备有限公司"
+      },
+      {
+        "username": "wosheng",
+        "password": "wosheng_123",
+        "unit": "江苏沃圣阀业有限公司"
       }
     ],
     "tube_site_manager": [
@@ -176,7 +181,7 @@
       },
       {
         "username": "肖贺升",
-        "password": "xiaohecheng_0815",
+        "password": "xiaohesheng_0815",
         "unit": "high_lot_3"
       },
       {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Set
 from uuid import uuid4
 
@@ -821,3 +821,373 @@ def cancel_fitting_delivery(
         raise HTTPException(status_code=500, detail=f"撤销管件发货失败: {exc}") from exc
     finally:
         session.close()
+
+
+def super_update_fitting_delivery_record(
+    *,
+    delivery_id: int,
+    section_1_id: str,
+    fitting_type: str,
+    model_spec: str,
+    shipped_qty: float,
+    unit: str = "个",
+    shipped_at: datetime,
+    supply_entity_id: str = "",
+    vehicle_plate_no: str = "",
+    ship_contact_name: str = "",
+    ship_contact_phone: str = "",
+    ship_remark: str = "",
+    status: str,
+    order_no: str = "",
+    shipment_no: str = "",
+    arrived_qty: Optional[float] = None,
+    arrived_confirm_at: Optional[datetime] = None,
+    arrived_confirm_by: Optional[str] = None,
+    arrived_remark: Optional[str] = None,
+    received_confirm_at: Optional[datetime] = None,
+    received_confirm_by: Optional[str] = None,
+    received_remark: Optional[str] = None,
+    warehouse_confirm_at: Optional[datetime] = None,
+    warehouse_confirm_by: Optional[str] = None,
+    warehouse_remark: Optional[str] = None,
+    cancel_at: Optional[datetime] = None,
+    cancel_by: Optional[str] = None,
+    cancel_reason: Optional[str] = None,
+    operator: str,
+    operator_group: str,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    """超级管理员与供给方管理员强力覆写更新管件发货记录（全维度数据修正通道）。"""
+    _ensure_fitting_table_structures()
+    now_bj = datetime.now(BEIJING_TZ)
+    session = SessionLocal()
+    try:
+        check_sql = text(
+            """
+            SELECT id, supply_entity_id, shipment_no, order_no, vehicle_plate_no, section_1_id,
+                   fitting_type, model_spec, shipped_qty, unit, shipped_at,
+                   ship_contact_name, ship_contact_phone, ship_remark, status,
+                   created_by, created_at, updated_by, updated_at,
+                   arrived_qty, arrived_confirm_at, arrived_confirm_by, arrived_remark,
+                   received_confirm_at, received_confirm_by, received_remark,
+                   warehouse_confirm_at, warehouse_confirm_by, warehouse_remark,
+                   cancel_at, cancel_by, cancel_reason
+            FROM tube.tube_fitting_delivery
+            WHERE id = :id
+            FOR UPDATE
+            """
+        )
+        orig_row = session.execute(check_sql, {"id": delivery_id}).mappings().first()
+        if not orig_row:
+            raise HTTPException(status_code=404, detail="管件发货记录不存在，无法更新")
+
+        orig_record = dict(orig_row)
+
+        # 基础字段清洗与校验
+        val_sec = _clean(section_1_id)
+        if not val_sec:
+            raise HTTPException(status_code=422, detail="装车接收需求主体不能为空")
+
+        val_ftype = _clean(fitting_type)
+        if not val_ftype:
+            raise HTTPException(status_code=422, detail="管件类型不能为空")
+
+        val_spec = _clean(model_spec)
+        if not val_spec:
+            raise HTTPException(status_code=422, detail="型号规格描述不能为空")
+
+        val_unit = _clean(unit) or "个"
+        val_supply_entity = _clean(supply_entity_id) or _clean(orig_record.get("supply_entity_id")) or "default_supplier"
+        val_order_no = _clean(order_no) or _clean(orig_record.get("order_no"))
+        val_shipment_no = _clean(shipment_no) or _clean(orig_record.get("shipment_no"))
+        val_plate = _clean(vehicle_plate_no) or _clean(orig_record.get("vehicle_plate_no"))
+        val_cname = _clean(ship_contact_name)
+        val_cphone = _clean(ship_contact_phone)
+        val_ship_remark = _clean(ship_remark)
+
+        # 发货数量校验（严格正整数）
+        try:
+            val_shipped_qty = float(shipped_qty)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="发货件数必须为正整数") from exc
+        if val_shipped_qty <= 0 or not val_shipped_qty.is_integer():
+            raise HTTPException(status_code=422, detail="发货件数必须为正整数")
+        val_shipped_qty = int(val_shipped_qty)
+
+        # 发货时间校验与时区归一化
+        dt_shipped_at = shipped_at
+        if dt_shipped_at is None:
+            dt_shipped_at = now_bj
+        elif dt_shipped_at.tzinfo is None:
+            dt_shipped_at = dt_shipped_at.replace(tzinfo=BEIJING_TZ)
+        else:
+            dt_shipped_at = dt_shipped_at.astimezone(BEIJING_TZ)
+
+        # 规整状态枚举
+        normalized_st = _clean(status).lower()
+        if normalized_st in ("shipped", "pending_arrival"):
+            normalized_st = "pending_arrival"
+        elif normalized_st in ("arrived", "pending_receive"):
+            normalized_st = "pending_receive"
+        elif normalized_st in ("construction_confirmed", "received", "pending_warehouse"):
+            normalized_st = "pending_warehouse"
+        elif normalized_st in ("warehouse_confirmed", "completed"):
+            normalized_st = "completed"
+        elif normalized_st == "cancelled":
+            normalized_st = "cancelled"
+        else:
+            raise HTTPException(status_code=422, detail=f"无效的管件流转状态: {status}")
+
+        def _ensure_tz(dt_val: Optional[datetime]) -> Optional[datetime]:
+            if dt_val is None:
+                return None
+            if dt_val.tzinfo is None:
+                return dt_val.replace(tzinfo=BEIJING_TZ)
+            return dt_val.astimezone(BEIJING_TZ)
+
+        dt_arrived_confirm_at = _ensure_tz(arrived_confirm_at)
+        dt_received_confirm_at = _ensure_tz(received_confirm_at)
+        dt_warehouse_confirm_at = _ensure_tz(warehouse_confirm_at)
+        dt_cancel_at = _ensure_tz(cancel_at)
+
+        # 提取原记录历史各节点真实时间快照（用于回退或已有状态保持）
+        orig_arrived_at = _ensure_tz(orig_record.get("arrived_confirm_at"))
+        orig_received_at = _ensure_tz(orig_record.get("received_confirm_at"))
+        orig_warehouse_at = _ensure_tz(orig_record.get("warehouse_confirm_at"))
+        orig_cancel_at = _ensure_tz(orig_record.get("cancel_at"))
+
+        # 状态机与物理证据链严格不变量校准 (chk_tube_fitting_state_evidence)
+        if normalized_st == "pending_arrival":
+            # 1. 待到货状态：清空所有后续节点凭证
+            out_arrived_qty = None
+            out_arrived_confirm_at = None
+            out_arrived_confirm_by = None
+            out_arrived_remark = None
+
+            out_received_confirm_at = None
+            out_received_confirm_by = None
+            out_received_remark = None
+
+            out_warehouse_confirm_at = None
+            out_warehouse_confirm_by = None
+            out_warehouse_remark = None
+
+            out_cancel_at = None
+            out_cancel_by = None
+            out_cancel_reason = None
+
+        elif normalized_st == "pending_receive":
+            # 2. 待施工接收状态：必须有到货凭证
+            if arrived_qty is not None and float(arrived_qty) > 0:
+                out_arrived_qty = min(int(float(arrived_qty)), val_shipped_qty)
+            else:
+                out_arrived_qty = val_shipped_qty
+
+            # 时间戳规则：传入指定时间 > 历史已有时间 > 点击保存当前时间(now_bj)
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
+            if dt_arrived_confirm_at < dt_shipped_at:
+                dt_arrived_confirm_at = dt_shipped_at
+            out_arrived_confirm_at = dt_arrived_confirm_at
+            out_arrived_confirm_by = _clean(arrived_confirm_by) or _clean(orig_record.get("arrived_confirm_by")) or operator
+            out_arrived_remark = _clean(arrived_remark) or _clean(orig_record.get("arrived_remark")) or None
+
+            out_received_confirm_at = None
+            out_received_confirm_by = None
+            out_received_remark = None
+
+            out_warehouse_confirm_at = None
+            out_warehouse_confirm_by = None
+            out_warehouse_remark = None
+
+            out_cancel_at = None
+            out_cancel_by = None
+            out_cancel_reason = None
+
+        elif normalized_st == "pending_warehouse":
+            # 3. 待库管确认状态：必须有到货与施工接收凭证
+            if arrived_qty is not None and float(arrived_qty) > 0:
+                out_arrived_qty = min(int(float(arrived_qty)), val_shipped_qty)
+            else:
+                out_arrived_qty = val_shipped_qty
+
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
+            if dt_arrived_confirm_at < dt_shipped_at:
+                dt_arrived_confirm_at = dt_shipped_at
+            out_arrived_confirm_at = dt_arrived_confirm_at
+            out_arrived_confirm_by = _clean(arrived_confirm_by) or _clean(orig_record.get("arrived_confirm_by")) or operator
+            out_arrived_remark = _clean(arrived_remark) or _clean(orig_record.get("arrived_remark")) or None
+
+            if dt_received_confirm_at is None:
+                dt_received_confirm_at = orig_received_at or now_bj
+            if dt_received_confirm_at < out_arrived_confirm_at:
+                dt_received_confirm_at = out_arrived_confirm_at
+            out_received_confirm_at = dt_received_confirm_at
+            out_received_confirm_by = _clean(received_confirm_by) or _clean(orig_record.get("received_confirm_by")) or operator
+            out_received_remark = _clean(received_remark) or _clean(orig_record.get("received_remark")) or None
+
+            out_warehouse_confirm_at = None
+            out_warehouse_confirm_by = None
+            out_warehouse_remark = None
+
+            out_cancel_at = None
+            out_cancel_by = None
+            out_cancel_reason = None
+
+        elif normalized_st == "completed":
+            # 4. 已结清状态：必须有到货、施工接收与库管入库凭证
+            if arrived_qty is not None and float(arrived_qty) > 0:
+                out_arrived_qty = min(int(float(arrived_qty)), val_shipped_qty)
+            else:
+                out_arrived_qty = val_shipped_qty
+
+            if dt_arrived_confirm_at is None:
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
+            if dt_arrived_confirm_at < dt_shipped_at:
+                dt_arrived_confirm_at = dt_shipped_at
+            out_arrived_confirm_at = dt_arrived_confirm_at
+            out_arrived_confirm_by = _clean(arrived_confirm_by) or _clean(orig_record.get("arrived_confirm_by")) or operator
+            out_arrived_remark = _clean(arrived_remark) or _clean(orig_record.get("arrived_remark")) or None
+
+            if dt_received_confirm_at is None:
+                dt_received_confirm_at = orig_received_at or now_bj
+            if dt_received_confirm_at < out_arrived_confirm_at:
+                dt_received_confirm_at = out_arrived_confirm_at
+            out_received_confirm_at = dt_received_confirm_at
+            out_received_confirm_by = _clean(received_confirm_by) or _clean(orig_record.get("received_confirm_by")) or operator
+            out_received_remark = _clean(received_remark) or _clean(orig_record.get("received_remark")) or None
+
+            if dt_warehouse_confirm_at is None:
+                dt_warehouse_confirm_at = orig_warehouse_at or now_bj
+            if dt_warehouse_confirm_at < out_received_confirm_at:
+                dt_warehouse_confirm_at = out_received_confirm_at
+            out_warehouse_confirm_at = dt_warehouse_confirm_at
+            out_warehouse_confirm_by = _clean(warehouse_confirm_by) or _clean(orig_record.get("warehouse_confirm_by")) or operator
+            out_warehouse_remark = _clean(warehouse_remark) or _clean(orig_record.get("warehouse_remark")) or None
+
+            out_cancel_at = None
+            out_cancel_by = None
+            out_cancel_reason = None
+
+        elif normalized_st == "cancelled":
+            # 5. 已撤销状态：清空所有确认流转，必须有撤销时间与原因
+            out_arrived_qty = None
+            out_arrived_confirm_at = None
+            out_arrived_confirm_by = None
+            out_arrived_remark = None
+
+            out_received_confirm_at = None
+            out_received_confirm_by = None
+            out_received_remark = None
+
+            out_warehouse_confirm_at = None
+            out_warehouse_confirm_by = None
+            out_warehouse_remark = None
+
+            out_cancel_at = dt_cancel_at or orig_cancel_at or now_bj
+            out_cancel_by = _clean(cancel_by) or _clean(orig_record.get("cancel_by")) or operator
+            out_cancel_reason = _clean(cancel_reason) or _clean(orig_record.get("cancel_reason")) or "超级管理员编辑覆盖撤销"
+
+        # 执行数据库物理层强力 UPDATE
+        update_sql = text(
+            """
+            UPDATE tube.tube_fitting_delivery
+            SET supply_entity_id = :supply_entity_id,
+                shipment_no = :shipment_no,
+                order_no = :order_no,
+                vehicle_plate_no = :vehicle_plate_no,
+                section_1_id = :section_1_id,
+                fitting_type = :fitting_type,
+                model_spec = :model_spec,
+                shipped_qty = :shipped_qty,
+                unit = :unit,
+                shipped_at = :shipped_at,
+                ship_contact_name = :ship_contact_name,
+                ship_contact_phone = :ship_contact_phone,
+                ship_remark = :ship_remark,
+                status = :status,
+                updated_by = :operator,
+                updated_at = NOW(),
+                arrived_qty = :arrived_qty,
+                arrived_confirm_at = :arrived_confirm_at,
+                arrived_confirm_by = :arrived_confirm_by,
+                arrived_remark = :arrived_remark,
+                received_confirm_at = :received_confirm_at,
+                received_confirm_by = :received_confirm_by,
+                received_remark = :received_remark,
+                warehouse_confirm_at = :warehouse_confirm_at,
+                warehouse_confirm_by = :warehouse_confirm_by,
+                warehouse_remark = :warehouse_remark,
+                cancel_at = :cancel_at,
+                cancel_by = :cancel_by,
+                cancel_reason = :cancel_reason
+            WHERE id = :id
+            """
+        )
+        update_params = {
+            "id": delivery_id,
+            "supply_entity_id": val_supply_entity,
+            "shipment_no": val_shipment_no,
+            "order_no": val_order_no,
+            "vehicle_plate_no": val_plate,
+            "section_1_id": val_sec,
+            "fitting_type": val_ftype,
+            "model_spec": val_spec,
+            "shipped_qty": val_shipped_qty,
+            "unit": val_unit,
+            "shipped_at": dt_shipped_at,
+            "ship_contact_name": val_cname,
+            "ship_contact_phone": val_cphone,
+            "ship_remark": val_ship_remark,
+            "status": normalized_st,
+            "operator": operator,
+            "arrived_qty": out_arrived_qty,
+            "arrived_confirm_at": out_arrived_confirm_at,
+            "arrived_confirm_by": out_arrived_confirm_by,
+            "arrived_remark": out_arrived_remark,
+            "received_confirm_at": out_received_confirm_at,
+            "received_confirm_by": out_received_confirm_by,
+            "received_remark": out_received_remark,
+            "warehouse_confirm_at": out_warehouse_confirm_at,
+            "warehouse_confirm_by": out_warehouse_confirm_by,
+            "warehouse_remark": out_warehouse_remark,
+            "cancel_at": out_cancel_at,
+            "cancel_by": out_cancel_by,
+            "cancel_reason": out_cancel_reason,
+        }
+        session.execute(update_sql, update_params)
+
+        # 读取更新后完整快照用于审计记录
+        after_row = session.execute(check_sql, {"id": delivery_id}).mappings().first()
+        after_record = dict(after_row) if after_row else update_params
+
+        # 写入高精细审计日志
+        _write_audit_log(
+            session,
+            operator=operator,
+            operator_group=operator_group,
+            action_type="SUPER_UPDATE_FITTING_DELIVERY",
+            action_desc=f"超级管理员强力覆写管件发货单: 订单号 {val_order_no} ({val_ftype} {val_spec} {val_shipped_qty}{val_unit})",
+            resource_id=val_shipment_no or str(delivery_id),
+            before_value=orig_record,
+            after_value=after_record,
+            client_ip=client_ip,
+        )
+
+        session.commit()
+        return {
+            "ok": True,
+            "detail": "管件发货记录已成功编辑覆盖保存",
+            "delivery_id": delivery_id,
+            "record": after_record,
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"管件编辑覆盖保存失败: {exc}") from exc
+    finally:
+        session.close()
+

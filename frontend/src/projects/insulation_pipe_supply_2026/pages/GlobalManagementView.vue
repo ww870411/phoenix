@@ -1267,6 +1267,7 @@
                     <option value="">全部行为类型 (All Actions)</option>
                     <optgroup label="🚨 高危与特殊管理">
                       <option value="SUPER_UPDATE_DELIVERY">🚨 超管强改 (SUPER_UPDATE)</option>
+                      <option value="SUPER_UPDATE_FITTING_DELIVERY">🚨 超管强改管件 (SUPER_UPDATE_FITTING)</option>
                       <option value="UPDATE_CONFIG">⚙️ 配置修改 (UPDATE_CONFIG)</option>
                       <option value="CANCEL_DELIVERY">❌ 撤销发货 (CANCEL_DELIVERY)</option>
                       <option value="CANCEL_FITTING_DELIVERY">❌ 撤销管件发货 (CANCEL_FITTING)</option>
@@ -3556,6 +3557,7 @@ async function copyIpAddress(ip) {
 
 const SENSITIVE_ACTION_SET = new Set([
   'SUPER_UPDATE_DELIVERY',
+  'SUPER_UPDATE_FITTING_DELIVERY',
   'UPDATE_CONFIG',
   'CANCEL_DELIVERY',
   'CANCEL_FITTING_DELIVERY',
@@ -3835,6 +3837,7 @@ function translateActionType(type) {
     SUBMIT_STATUS: '✅ 提交填报状态',
     UPDATE_CONFIG: '⚙️ 配置修改',
     SUPER_UPDATE_DELIVERY: '🚨 超管强改',
+    SUPER_UPDATE_FITTING_DELIVERY: '🚨 超管强改管件',
     SUBMIT_FITTING_DELIVERY: '🔩 提交管件发货',
     DELETE_FITTING_DELIVERY: '🗑️ 废弃管件发货',
     CONFIRM_FITTING_ARRIVAL: '👷 管件到货确认',
@@ -3857,6 +3860,7 @@ function getActionTypeBadgeStyle(type) {
     SUBMIT_STATUS: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
     UPDATE_CONFIG: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
     SUPER_UPDATE_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    SUPER_UPDATE_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
     SUBMIT_FITTING_DELIVERY: { bg: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' },
     DELETE_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
     CONFIRM_FITTING_ARRIVAL: { bg: '#fef3d6', color: '#d97706', border: '1px solid #fde68a' },

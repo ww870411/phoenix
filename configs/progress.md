@@ -1,3 +1,50 @@
+## 2026-08-19 [发货管理编辑覆盖：弹窗冗余级联卡片移除与推进状态入库时间极简轻量提示升级]
+- **需求与视觉精修**：
+  - 用户要求去掉弹窗中冗长的大黄色“级联时序凭证提示”说明与大块卡片，仅保留推进状态时的当前时间入库说明；
+- **技术改动细节（`SupplyManagementView.vue`）**：
+  - 在直管编辑覆盖弹窗（`showSuperEditModal`）与管件编辑覆盖弹窗（`showSuperEditFittingModal`）中彻底移除原本的大黄色提示卡片与冗余文本；
+  - 替换为极简、轻量的单行提示：`💡 提示：推进至后续状态时，未填写的节点将自动按点击保存时的当前时间入库。`（仅在状态为待接收/待入库/已完成时展示）；
+  - 界面高度大幅释放，输入焦点清晰明了，交互体验更为干净干练。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 17.65s`，0 错误）；
+  - 后端 pytest 13 项单元与契约流转测试全部 100% 绿色通过（`13 passed in 3.14s`）。
+
+## 2026-08-19 [发货管理编辑覆盖：状态回退时间戳自动保持与后续推进按当前时间入库机制升级]
+- **需求与业务背景**：
+  - 用户明确要求优化编辑覆盖功能的时间处理逻辑：
+    1. **回退状态（即切回上一个或更早状态）**：对应状态的时间输入框默认保持历史记录中的真实时间，用户亦可按需手动微调；
+    2. **改为后续状态（即推进到原本未达到的状态）**：弹窗中后续各状态时间输入框默认留空（不强制预设伪数据），若直接点击覆盖保存，后端与系统自动按点击按钮时的当前时间（`NOW`）入库；
+- **全栈技术实现**：
+  1. **前端交互与响应（`SupplyManagementView.vue`）**：
+     - 在直管（`openSuperEdit`）与管件（`openSuperEditFitting`）打开时记录原始状态与各节点时间戳快照（`origSuperEditSnap` / `origSuperEditFittingSnap`）；
+     - 注入 `@change="handleSuperEditStatusChange"` 与 `@change="handleSuperEditFittingStatusChange"` 监听函数，状态回退时自动恢复历史时间，推进后续状态时保持留空并提供 `placeholder="留空保存时自动按当前点击时间入库"`；
+  2. **后端服务层时间自愈策略（`supply_management_service.py` & `fitting_delivery_service.py`）**：
+     - 在 `super_update_delivery_record` 与 `super_update_fitting_delivery_record` 中，对目标流转节点的时间戳应用“`用户传入值 > 历史已有真实时间 > 当前点击时间 (now_bj)`”的优先级判定规则；
+     - 确保无论是回退还是跨节点跃进，写入数据库的时间戳绝对满足物理约束 `chk_tube_state_evidence` / `chk_tube_fitting_state_evidence` 且时序自洽。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 18.93s`，0 错误）；
+  - 后端 pytest 13 项单元与契约流转测试全部 100% 绿色通过（`13 passed in 2.25s`）。
+
+## 2026-08-19 [管件数据编辑覆盖功能全栈上线与物理证据链严格自洽支持]
+- **需求与设计背景**：
+  - 用户提出对管件发货记录开放同等管理员用户组（`Global_admin` / `tube_supplier_admin`）的“数据编辑覆盖”功能，避免现场错录时需要手工直改数据库；
+  - 核心设计严守管件物理表 `tube.tube_fitting_delivery` 的 CHECK 约束（`chk_tube_fitting_state_evidence` 与 `chk_tube_fitting_arrived_qty_range`），实现状态机逆向/正向切换时到货、施工、库管、撤销凭证的级联自愈与完整审计留痕。
+- **全栈技术改动**：
+  1. **后端数据模型与服务层（`fitting_delivery_service.py` & `workspace.py`）**：
+     - 在 `workspace.py` 中定义 `SuperUpdateFittingDeliveryPayload` 契约模型（校验 `shipped_qty >= 1` 等）；
+     - 在 `fitting_delivery_service.py` 中实现 `super_update_fitting_delivery_record` 严谨事务函数，涵盖全维度参数强力覆盖、正整数发货量校验、东八区时区归一化与 5 大状态证据链不变量自动校准；
+     - 挂载专有 API 路由 `POST /supply-management/fitting-deliveries/{delivery_id}/super-update`，严格执行 `Global_admin` / `tube_supplier_admin` / `dev_admin` 角色鉴权拦截；
+     - 注册 `SUPER_UPDATE_FITTING_DELIVERY`（超管强改管件）敏感审计操作并在日志落盘记录 Diff 快照。
+  2. **前端 API 与视图交互（`api.js`、`SupplyManagementView.vue` & `GlobalManagementView.vue`）**：
+     - 在 `api.js` 中新增并导出 `superUpdateTubeFittingDelivery` 请求封装；
+     - 在 `SupplyManagementView.vue` 管件发货历史列表中，为车次卡片头部与展开明细表格每行分别注入 `⚙️ 编辑覆盖` 按钮（仅对管理员开放）；
+     - 开发管件专属超级编辑覆盖弹窗 `showSuperEditFittingModal`，支持发货订单号、车次号、需求标段、车牌号、管件大类（支持标准大类选择）、规格描述、发货件数、计量单位、发货时间、流转状态、物理到货确认件数、撤销原因及备注的全维度修正；
+     - 注入“🪄 智能时间与数量一键对齐”魔术棒，支持时序凭证等距自动分布对齐；
+     - 在 `GlobalManagementView.vue` 审计日志中补全 `SUPER_UPDATE_FITTING_DELIVERY` 筛选与高亮样式。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（0 错误，`built in 44.75s`）；
+  - 后端 pytest 自动化回归测试（包含新增的 `test_super_update_fitting_delivery_contract_and_flow` 等 13 项契约与流转测试）全部 100% 通过（`13 passed in 4.23s`）。
+
 ## 2026-08-19 [数字指挥大屏：本周战报趋势标题精炼与冗余图例字样移除]
 - **改动背景与需求**：
   - 用户明确要求移除本周战报图表标题栏右侧的“发货量 / 施工量”字样，避免与 ECharts 内部右上角已有的青/金彩色双轨图例（`legend`）重复；

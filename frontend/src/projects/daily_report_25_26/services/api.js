@@ -482,6 +482,19 @@ export async function confirmTubeDemandManagementDeliveryReceipt(projectKey, del
   return response.json()
 }
 
+export async function superUpdateTubeFittingDelivery(projectKey, deliveryId, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/fitting-deliveries/${encodeURIComponent(String(deliveryId || ''))}/super-update`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `超级管理员强力订正管件发货记录失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function approveTubeDemandManagementDeliveryDifference(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/diff-approve`, {
     method: 'POST',

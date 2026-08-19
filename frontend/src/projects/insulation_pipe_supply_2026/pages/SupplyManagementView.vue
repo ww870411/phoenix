@@ -718,6 +718,17 @@
                       <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
 
                       <button
+                        v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup) && group.items && group.items.length > 0"
+                        type="button"
+                        class="btn primary btn-sm"
+                        style="padding: 4px 10px; font-size: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; flex-shrink: 0;"
+                        @click.stop="openSuperEditFitting(group.items[0], group)"
+                        :title="group.items.length > 1 ? '编辑覆盖本车次首条明细（多明细可展开逐行编辑）' : '编辑覆盖此条发货记录'"
+                      >
+                        ⚙️ 编辑覆盖
+                      </button>
+
+                      <button
                         v-if="(group.status === 'shipped' || group.status === 'pending_arrival') && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                         type="button"
                         class="btn ghost btn-sm"
@@ -754,6 +765,7 @@
                             <th style="min-width: 200px;">型号 / 规格描述</th>
                             <th style="width: 95px; text-align: right;">发货件数</th>
                             <th style="width: 150px;">订单号</th>
+                            <th v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" style="width: 100px; text-align: center;">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -769,6 +781,16 @@
                               <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
                             </td>
                             <td class="col-action"><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
+                            <td v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" style="text-align: center;">
+                              <button
+                                type="button"
+                                class="btn primary btn-sm"
+                                style="padding: 3px 8px; font-size: 11.5px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px;"
+                                @click.stop="openSuperEditFitting(item, group)"
+                              >
+                                ⚙️ 编辑覆盖
+                              </button>
+                            </td>
                           </tr>
                         </tbody>
                       </table>
@@ -1114,7 +1136,7 @@
             </label>
             <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">发货单流转状态</span>
-              <select v-model="superEditForm.status" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+              <select v-model="superEditForm.status" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" @change="handleSuperEditStatusChange">
                 <option value="pending_arrival">🚚 在途待现场到货</option>
                 <option value="pending_receive">📦 已到货待施工接收</option>
                 <option value="pending_warehouse">🧱 施工已接收待入库</option>
@@ -1131,31 +1153,23 @@
               <input v-model.number="superEditForm.receivedQty" type="number" min="0" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空为无" />
             </label>
             
-            <!-- 智能对齐前置提示区 & 魔术棒 -->
-            <div v-if="['arrived', 'received', 'pending_receive', 'pending_warehouse', 'completed'].includes(superEditForm.status)" style="grid-column: span 2; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
-              <span style="font-size: 13.5px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
-                💡 级联时序凭证对齐提示 (SLA 防爆锁)
-              </span>
-              <p style="margin: 0; font-size: 12.5px; color: #78350f; line-height: 1.5;">
-                您正将订单强改至该状态。为防范大盘时效分析（OTD/在途时长）因凭证缺失爆零崩溃，请核对并补全下方暴露的时间戳凭证。您也可以点击下方魔术棒一键等距自动分布对齐。
-              </p>
-              <button type="button" @click="smartAlignSuperTimestamps" style="align-self: flex-start; padding: 6px 12px; font-size: 12.5px; border: 1px dashed #d97706; background: #fffbeb; color: #d97706; border-radius: 6px; cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
-                🪄 智能时间与数量一键对齐（推荐）
-              </button>
+            <!-- 仅提示推进状态时的入库时间 -->
+            <div v-if="['arrived', 'received', 'pending_receive', 'pending_warehouse', 'completed'].includes(superEditForm.status)" style="grid-column: span 2; font-size: 12.5px; color: #64748b; background: #f8fafc; padding: 6px 12px; border-radius: 6px; border: 1px dashed #cbd5e1; display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+              <span>💡 提示：推进至后续状态时，未填写的节点将自动按点击保存时的当前时间入库。</span>
             </div>
 
             <!-- 动态级联时间戳输入框 -->
             <label v-if="['arrived', 'received', 'pending_receive', 'pending_warehouse', 'completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">1. 到货确认时间 (arrived_confirm_at)</span>
-              <input v-model="superEditForm.arrivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+              <input v-model="superEditForm.arrivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
             </label>
             <label v-if="['received', 'pending_warehouse', 'completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">2. 施工接收时间 (received_confirm_at)</span>
-              <input v-model="superEditForm.receivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+              <input v-model="superEditForm.receivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
             </label>
             <label v-if="['completed'].includes(superEditForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
               <span style="font-size: 13px; font-weight: 600; color: #475569;">3. 库管入库确认时间 (warehouse_confirm_at)</span>
-              <input v-model="superEditForm.warehouseConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+              <input v-model="superEditForm.warehouseConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
             </label>
 
             <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
@@ -1169,6 +1183,112 @@
           <button type="button" class="btn ghost" @click="showSuperEditModal = false" style="padding: 10px 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;">取消覆盖</button>
           <button type="button" class="btn primary" :disabled="superEditSaving" @click="saveSuperEdit" style="padding: 10px 20px; border: none; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
             {{ superEditSaving ? '正在保存覆盖...' : '💾 确认编辑覆盖' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 管件专用超级编辑覆盖弹窗 -->
+    <div v-if="showSuperEditFittingModal" class="modal-overlay">
+      <div class="modal-card elevated" style="max-width: 680px; width: 90%; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+        <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #1e293b;">⚙️ 管件数据编辑覆盖 (供给方管理员/全局管理员)</h3>
+          <button type="button" class="close-btn" @click="showSuperEditFittingModal = false" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">×</button>
+        </div>
+        <div class="modal-body" style="padding: 20px; max-height: 60vh; overflow-y: auto;">
+          <p class="section-desc" style="color: #4f46e5; font-weight: bold; margin-bottom: 20px; font-size: 14px;">
+            ⚠️ 注意：此通道为您行使最高管理员权力编辑覆盖管件发货与履约数据，保存后将直接覆盖底层数据库，请务必核实数据后再保存！
+          </p>
+          <div class="field-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货订单号 (order_no)</span>
+              <input v-model.trim="superEditFittingForm.orderNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">运输车次号 (shipment_no)</span>
+              <input v-model.trim="superEditFittingForm.shipmentNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收需求主体</span>
+              <select v-model="superEditFittingForm.section1Id" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
+                  {{ st.section_1_name }}
+                </option>
+              </select>
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">运输车牌号</span>
+              <input v-model.trim="superEditFittingForm.vehiclePlateNo" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">管件大类 (fitting_type)</span>
+              <input v-model.trim="superEditFittingForm.fittingType" list="fitting-type-list" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="例如: 90°弯头 / 变径管 / 三通" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">管件型号 / 规格描述 (model_spec)</span>
+              <input v-model.trim="superEditFittingForm.modelSpec" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="例如: DN300*8 / DN200*6" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货件数</span>
+              <input v-model.number="superEditFittingForm.shippedQty" type="number" min="1" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">计量单位</span>
+              <input v-model.trim="superEditFittingForm.unit" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="例如: 个 / 件 / 套" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货日期与时间</span>
+              <input v-model="superEditFittingForm.shippedAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" />
+            </label>
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货单流转状态</span>
+              <select v-model="superEditFittingForm.status" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" @change="handleSuperEditFittingStatusChange">
+                <option value="pending_arrival">🚚 在途待现场到货</option>
+                <option value="pending_receive">📦 已到货待施工接收</option>
+                <option value="pending_warehouse">🧱 施工已接收待入库</option>
+                <option value="completed">✅ 已完成入库结清</option>
+                <option value="cancelled">❌ 已撤销发货废弃</option>
+              </select>
+            </label>
+            <label v-if="['pending_receive', 'pending_warehouse', 'completed'].includes(superEditFittingForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">物理到货确认件数</span>
+              <input v-model.number="superEditFittingForm.arrivedQty" type="number" min="1" step="1" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空默认等于发货件数" />
+            </label>
+            <label v-if="superEditFittingForm.status === 'cancelled'" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">撤销原因 (cancel_reason)</span>
+              <input v-model.trim="superEditFittingForm.cancelReason" type="text" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="例如: 现场计划变更撤销" />
+            </label>
+            
+            <!-- 仅提示推进状态时的入库时间 -->
+            <div v-if="['pending_receive', 'pending_warehouse', 'completed'].includes(superEditFittingForm.status)" style="grid-column: span 2; font-size: 12.5px; color: #64748b; background: #f8fafc; padding: 6px 12px; border-radius: 6px; border: 1px dashed #cbd5e1; display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+              <span>💡 提示：推进至后续状态时，未填写的节点将自动按点击保存时的当前时间入库。</span>
+            </div>
+
+            <!-- 动态级联时间戳输入框 -->
+            <label v-if="['pending_receive', 'pending_warehouse', 'completed'].includes(superEditFittingForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">1. 到货确认时间 (arrived_confirm_at)</span>
+              <input v-model="superEditFittingForm.arrivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
+            </label>
+            <label v-if="['pending_warehouse', 'completed'].includes(superEditFittingForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">2. 施工接收时间 (received_confirm_at)</span>
+              <input v-model="superEditFittingForm.receivedConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
+            </label>
+            <label v-if="['completed'].includes(superEditFittingForm.status)" class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">3. 库管入库确认时间 (warehouse_confirm_at)</span>
+              <input v-model="superEditFittingForm.warehouseConfirmAt" type="datetime-local" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="留空保存时自动按当前点击时间入库" />
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货备注信息</span>
+              <textarea v-model.trim="superEditFittingForm.shipRemark" class="input" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; height: 60px; resize: vertical;"></textarea>
+            </label>
+          </div>
+          <p v-if="superEditFittingError" style="margin-top: 16px; color: #ef4444; font-size: 13px; font-weight: 600;">⚠️ 错误提示：{{ superEditFittingError }}</p>
+        </div>
+        <div class="modal-footer" style="padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+          <button type="button" class="btn ghost" @click="showSuperEditFittingModal = false" style="padding: 10px 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;">取消覆盖</button>
+          <button type="button" class="btn primary" :disabled="superEditFittingSaving" @click="saveSuperEditFitting" style="padding: 10px 20px; border: none; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
+            {{ superEditFittingSaving ? '正在保存覆盖...' : '💾 确认编辑覆盖' }}
           </button>
         </div>
       </div>
@@ -1201,6 +1321,7 @@ import {
   getTubeSupplyManagementOptions,
   createCustomSupplyEntity,
   superUpdateTubeSupplyManagementDelivery,
+  superUpdateTubeFittingDelivery,
   getFittingDeliveriesList,
   submitFittingDelivery,
   cancelFittingDelivery,
@@ -2921,6 +3042,40 @@ const superEditForm = ref({
   warehouseConfirmAt: '',
 })
 
+const showSuperEditFittingModal = ref(false)
+const superEditFittingSaving = ref(false)
+const superEditFittingError = ref('')
+const superEditFittingForm = ref({
+  deliveryId: 0,
+  section1Id: '',
+  supplyEntityId: '',
+  fittingType: '',
+  modelSpec: '',
+  shippedQty: 1,
+  unit: '个',
+  shippedAt: '',
+  vehiclePlateNo: '',
+  shipContactName: '',
+  shipContactPhone: '',
+  shipRemark: '',
+  status: 'pending_arrival',
+  orderNo: '',
+  shipmentNo: '',
+  arrivedQty: null,
+  arrivedConfirmAt: '',
+  arrivedConfirmBy: '',
+  arrivedRemark: '',
+  receivedConfirmAt: '',
+  receivedConfirmBy: '',
+  receivedRemark: '',
+  warehouseConfirmAt: '',
+  warehouseConfirmBy: '',
+  warehouseRemark: '',
+  cancelAt: '',
+  cancelBy: '',
+  cancelReason: '',
+})
+
 function formatToDatetimeLocal(isoString) {
   if (!isoString) return ''
   try {
@@ -2974,9 +3129,42 @@ function smartAlignSuperTimestamps() {
   }
 }
 
+const STATUS_RANK = {
+  'pending_arrival': 0,
+  'shipped': 0,
+  'pending_receive': 1,
+  'arrived': 1,
+  'pending_diff_approve': 1.5,
+  'pending_warehouse': 2,
+  'received': 2,
+  'completed': 3,
+  'cancelled': -1,
+}
+
+let origSuperEditSnap = {
+  status: '',
+  rank: 0,
+  arrivedConfirmAt: '',
+  receivedConfirmAt: '',
+  warehouseConfirmAt: '',
+}
+
 function openSuperEdit(row) {
   superEditError.value = ''
   
+  const arrivedAt = formatToDatetimeLocal(row.arrivedConfirmAt)
+  const receivedAt = formatToDatetimeLocal(row.receivedConfirmAt)
+  const warehouseAt = formatToDatetimeLocal(row.warehouseConfirmAt)
+  const st = row.status || 'pending_arrival'
+
+  origSuperEditSnap = {
+    status: st,
+    rank: STATUS_RANK[st] ?? 0,
+    arrivedConfirmAt: arrivedAt,
+    receivedConfirmAt: receivedAt,
+    warehouseConfirmAt: warehouseAt,
+  }
+
   superEditForm.value = {
     deliveryId: row.deliveryId,
     section1Id: row.section1Id || '',
@@ -2985,16 +3173,54 @@ function openSuperEdit(row) {
     shippedAt: formatToDatetimeLocal(row.shippedAt),
     vehiclePlateNo: row.vehiclePlateNo || '',
     shipRemark: row.shipRemark || '',
-    status: row.status || '',
+    status: st,
     orderNo: row.deliveryCode || '',
     shipmentNo: row.shipmentNo || '',
     arrivedQty: row.arrivedQty ?? null,
     receivedQty: row.receivedQty ?? null,
-    arrivedConfirmAt: formatToDatetimeLocal(row.arrivedConfirmAt),
-    receivedConfirmAt: formatToDatetimeLocal(row.receivedConfirmAt),
-    warehouseConfirmAt: formatToDatetimeLocal(row.warehouseConfirmAt),
+    arrivedConfirmAt: arrivedAt,
+    receivedConfirmAt: receivedAt,
+    warehouseConfirmAt: warehouseAt,
   }
   showSuperEditModal.value = true
+}
+
+function handleSuperEditStatusChange() {
+  const newSt = superEditForm.value.status
+  const newRank = STATUS_RANK[newSt] ?? 0
+
+  // 1. 到货时间：若目标状态到达或超过待接收，若原记录曾经历过该状态则恢复历史时间，否则后续状态默认留空
+  if (newRank >= 1) {
+    if (origSuperEditSnap.rank >= 1 && origSuperEditSnap.arrivedConfirmAt) {
+      superEditForm.value.arrivedConfirmAt = origSuperEditSnap.arrivedConfirmAt
+    } else {
+      superEditForm.value.arrivedConfirmAt = ''
+    }
+  } else {
+    superEditForm.value.arrivedConfirmAt = ''
+  }
+
+  // 2. 施工接收时间
+  if (newRank >= 2 || newSt === 'pending_diff_approve') {
+    if (origSuperEditSnap.rank >= 2 && origSuperEditSnap.receivedConfirmAt) {
+      superEditForm.value.receivedConfirmAt = origSuperEditSnap.receivedConfirmAt
+    } else {
+      superEditForm.value.receivedConfirmAt = ''
+    }
+  } else {
+    superEditForm.value.receivedConfirmAt = ''
+  }
+
+  // 3. 库管入库时间
+  if (newRank >= 3) {
+    if (origSuperEditSnap.rank >= 3 && origSuperEditSnap.warehouseConfirmAt) {
+      superEditForm.value.warehouseConfirmAt = origSuperEditSnap.warehouseConfirmAt
+    } else {
+      superEditForm.value.warehouseConfirmAt = ''
+    }
+  } else {
+    superEditForm.value.warehouseConfirmAt = ''
+  }
 }
 
 async function saveSuperEdit() {
@@ -3029,6 +3255,212 @@ async function saveSuperEdit() {
     superEditError.value = error?.message || '数据编辑覆盖保存失败'
   } finally {
     superEditSaving.value = false
+  }
+}
+
+const FITTING_STATUS_RANK = {
+  'pending_arrival': 0,
+  'shipped': 0,
+  'pending_receive': 1,
+  'arrived': 1,
+  'pending_warehouse': 2,
+  'construction_confirmed': 2,
+  'received': 2,
+  'completed': 3,
+  'warehouse_confirmed': 3,
+  'cancelled': -1,
+}
+
+let origSuperEditFittingSnap = {
+  status: '',
+  rank: 0,
+  arrivedConfirmAt: '',
+  receivedConfirmAt: '',
+  warehouseConfirmAt: '',
+  cancelAt: '',
+}
+
+function openSuperEditFitting(item, group = null) {
+  superEditFittingError.value = ''
+  
+  const arrivedAt = formatToDatetimeLocal(item.arrived_confirm_at || item.arrived_at)
+  const receivedAt = formatToDatetimeLocal(item.received_confirm_at || item.construction_confirmed_at)
+  const warehouseAt = formatToDatetimeLocal(item.warehouse_confirm_at || item.warehouse_confirmed_at)
+  const cancelAt = formatToDatetimeLocal(item.cancel_at || item.cancelled_at)
+  const st = item.status || group?.status || 'pending_arrival'
+
+  origSuperEditFittingSnap = {
+    status: st,
+    rank: FITTING_STATUS_RANK[st] ?? 0,
+    arrivedConfirmAt: arrivedAt,
+    receivedConfirmAt: receivedAt,
+    warehouseConfirmAt: warehouseAt,
+    cancelAt: cancelAt,
+  }
+
+  superEditFittingForm.value = {
+    deliveryId: item.id,
+    section1Id: item.section_1_id || group?.section_1_id || '',
+    supplyEntityId: item.supply_entity_id || group?.supply_entity_id || '',
+    fittingType: item.fitting_type || '',
+    modelSpec: item.model_spec || '',
+    shippedQty: Number(item.shipped_qty || 1),
+    unit: item.unit || '个',
+    shippedAt: formatToDatetimeLocal(item.shipped_at || group?.shipped_at),
+    vehiclePlateNo: item.vehicle_plate_no || group?.vehicle_plate_no || '',
+    shipContactName: item.ship_contact_name || group?.ship_contact_name || '',
+    shipContactPhone: item.ship_contact_phone || group?.ship_contact_phone || '',
+    shipRemark: item.ship_remark || group?.ship_remark || '',
+    status: st,
+    orderNo: item.order_no || '',
+    shipmentNo: item.shipment_no || group?.shipment_no || '',
+    arrivedQty: item.arrived_qty ?? null,
+    arrivedConfirmAt: arrivedAt,
+    arrivedConfirmBy: item.arrived_confirm_by || item.arrived_by || '',
+    arrivedRemark: item.arrived_remark || item.arrival_remark || '',
+    receivedConfirmAt: receivedAt,
+    receivedConfirmBy: item.received_confirm_by || item.construction_confirmed_by || '',
+    receivedRemark: item.received_remark || item.construction_remark || '',
+    warehouseConfirmAt: warehouseAt,
+    warehouseConfirmBy: item.warehouse_confirm_by || item.warehouse_confirmed_by || '',
+    warehouseRemark: item.warehouse_remark || '',
+    cancelAt: cancelAt,
+    cancelBy: item.cancel_by || item.cancelled_by || '',
+    cancelReason: item.cancel_reason || '',
+  }
+  showSuperEditFittingModal.value = true
+}
+
+function handleSuperEditFittingStatusChange() {
+  const newSt = superEditFittingForm.value.status
+  const newRank = FITTING_STATUS_RANK[newSt] ?? 0
+
+  // 1. 到货时间：若目标状态到达或超过待接收，若原记录曾经历过该状态则恢复历史时间，否则后续状态默认留空
+  if (newRank >= 1) {
+    if (origSuperEditFittingSnap.rank >= 1 && origSuperEditFittingSnap.arrivedConfirmAt) {
+      superEditFittingForm.value.arrivedConfirmAt = origSuperEditFittingSnap.arrivedConfirmAt
+    } else {
+      superEditFittingForm.value.arrivedConfirmAt = ''
+    }
+  } else {
+    superEditFittingForm.value.arrivedConfirmAt = ''
+  }
+
+  // 2. 施工接收时间
+  if (newRank >= 2) {
+    if (origSuperEditFittingSnap.rank >= 2 && origSuperEditFittingSnap.receivedConfirmAt) {
+      superEditFittingForm.value.receivedConfirmAt = origSuperEditFittingSnap.receivedConfirmAt
+    } else {
+      superEditFittingForm.value.receivedConfirmAt = ''
+    }
+  } else {
+    superEditFittingForm.value.receivedConfirmAt = ''
+  }
+
+  // 3. 库管入库时间
+  if (newRank >= 3) {
+    if (origSuperEditFittingSnap.rank >= 3 && origSuperEditFittingSnap.warehouseConfirmAt) {
+      superEditFittingForm.value.warehouseConfirmAt = origSuperEditFittingSnap.warehouseConfirmAt
+    } else {
+      superEditFittingForm.value.warehouseConfirmAt = ''
+    }
+  } else {
+    superEditFittingForm.value.warehouseConfirmAt = ''
+  }
+
+  // 4. 撤销时间
+  if (newSt === 'cancelled') {
+    if (origSuperEditFittingSnap.status === 'cancelled' && origSuperEditFittingSnap.cancelAt) {
+      superEditFittingForm.value.cancelAt = origSuperEditFittingSnap.cancelAt
+    } else {
+      superEditFittingForm.value.cancelAt = ''
+    }
+  } else {
+    superEditFittingForm.value.cancelAt = ''
+  }
+}
+
+function smartAlignSuperFittingTimestamps() {
+  if (!superEditFittingForm.value.shippedAt) return
+  try {
+    const shippedTime = new Date(superEditFittingForm.value.shippedAt).getTime()
+    if (isNaN(shippedTime)) return
+    
+    // 等距分布智能对齐
+    const arrivedTime = new Date(shippedTime + 12 * 60 * 60 * 1000)
+    const receivedTime = new Date(arrivedTime.getTime() + 6 * 60 * 60 * 1000)
+    const warehouseTime = new Date(receivedTime.getTime() + 2 * 60 * 60 * 1000)
+    
+    const formatTimeObj = (d) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const date = String(d.getDate()).padStart(2, '0')
+      const hours = String(d.getHours()).padStart(2, '0')
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      return `${year}-${month}-${date}T${hours}:${minutes}`
+    }
+    
+    superEditFittingForm.value.arrivedConfirmAt = formatTimeObj(arrivedTime)
+    superEditFittingForm.value.receivedConfirmAt = formatTimeObj(receivedTime)
+    superEditFittingForm.value.warehouseConfirmAt = formatTimeObj(warehouseTime)
+    
+    // 数量自动对齐
+    const shipQty = Math.max(1, Math.round(Number(superEditFittingForm.value.shippedQty || 1)))
+    if (!superEditFittingForm.value.arrivedQty || superEditFittingForm.value.arrivedQty === '') {
+      superEditFittingForm.value.arrivedQty = shipQty
+    }
+  } catch (e) {
+    console.error('管件智能时间自动对齐失败:', e)
+  }
+}
+
+async function saveSuperEditFitting() {
+  superEditFittingError.value = ''
+  superEditFittingSaving.value = true
+  try {
+    const form = superEditFittingForm.value
+    const shippedAtIso = form.shippedAt ? new Date(form.shippedAt).toISOString() : new Date().toISOString()
+    const arrivedConfirmAtIso = form.arrivedConfirmAt ? new Date(form.arrivedConfirmAt).toISOString() : null
+    const receivedConfirmAtIso = form.receivedConfirmAt ? new Date(form.receivedConfirmAt).toISOString() : null
+    const warehouseConfirmAtIso = form.warehouseConfirmAt ? new Date(form.warehouseConfirmAt).toISOString() : null
+    const cancelAtIso = form.cancelAt ? new Date(form.cancelAt).toISOString() : null
+
+    await superUpdateTubeFittingDelivery(PROJECT_KEY, form.deliveryId, {
+      section_1_id: form.section1Id,
+      fitting_type: form.fittingType,
+      model_spec: form.modelSpec,
+      shipped_qty: Math.max(1, Math.round(Number(form.shippedQty || 1))),
+      unit: form.unit || '个',
+      shipped_at: shippedAtIso,
+      supply_entity_id: form.supplyEntityId,
+      vehicle_plate_no: form.vehiclePlateNo,
+      ship_contact_name: form.shipContactName,
+      ship_contact_phone: form.shipContactPhone,
+      ship_remark: form.shipRemark,
+      status: form.status,
+      order_no: form.orderNo,
+      shipment_no: form.shipmentNo,
+      arrived_qty: form.arrivedQty !== null && form.arrivedQty !== '' ? Math.max(1, Math.round(Number(form.arrivedQty))) : null,
+      arrived_confirm_at: arrivedConfirmAtIso,
+      arrived_confirm_by: form.arrivedConfirmBy || null,
+      arrived_remark: form.arrivedRemark || null,
+      received_confirm_at: receivedConfirmAtIso,
+      received_confirm_by: form.receivedConfirmBy || null,
+      received_remark: form.receivedRemark || null,
+      warehouse_confirm_at: warehouseConfirmAtIso,
+      warehouse_confirm_by: form.warehouseConfirmBy || null,
+      warehouse_remark: form.warehouseRemark || null,
+      cancel_at: cancelAtIso,
+      cancel_by: form.cancelBy || null,
+      cancel_reason: form.cancelReason || null,
+    })
+    showSuperEditFittingModal.value = false
+    fittingActionMsg.value = { type: 'success', text: '🎉 管件超级数据已成功编辑覆盖保存！' }
+    await loadFittingDeliveries()
+  } catch (error) {
+    superEditFittingError.value = error?.message || '管件数据编辑覆盖保存失败'
+  } finally {
+    superEditFittingSaving.value = false
   }
 }
 </script>

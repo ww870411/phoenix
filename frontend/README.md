@@ -1,3 +1,31 @@
+## 2026-08-19 编辑覆盖弹窗提示卡片轻量化与文案极简化（SupplyManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **弹窗 UI 精炼**：
+  - 彻底移除直管与管件编辑覆盖弹窗中冗长的大黄色“级联时序凭证提示”卡片；
+  - 替换为紧凑的单行灰底提示：`💡 提示：推进至后续状态时，未填写的节点将自动按点击保存时的当前时间入库。`；
+  - 释放纵向弹窗空间，大幅提升表单填写与审核操作的聚焦度。
+
+## 2026-08-19 编辑覆盖弹窗时间戳状态联动与入库策略升级（SupplyManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **交互逻辑重构**：
+  1. **状态回退**：直管与管件在打开编辑覆盖时记录当前历史快照。切换到回退状态（如待入库 $\rightarrow$ 待接收）时，自动恢复原记录的历史时间戳（用户可手动微调）；
+  2. **状态推进**：切换到后续新状态（如在途 $\rightarrow$ 待入库）时，后续未达状态的时间戳输入框**默认留空**（显示 `placeholder="留空保存时自动按当前点击时间入库"`），点击确认覆盖时由后端与系统自动以管理员操作时的当前时间入库；
+  3. **提示文案升级**：弹窗内动态提示文案同步更新，明确回退保持与推进当前时间落库机制。
+
+## 2026-08-19 管件发货记录数据编辑覆盖功能上线（SupplyManagementView.vue & api.js）
+
+- **关联前端页面与服务**：
+  - 页面：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 接口：`frontend/src/projects/daily_report_25_26/services/api.js` (`superUpdateTubeFittingDelivery`)
+  - 审计页面：`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`
+- **核心功能与交互体验**：
+  1. **双重入口支持**：在管件发货历史列表中，为车次卡片头部与展开明细表格每行分别注入 `⚙️ 编辑覆盖` 按钮，对 `Global_admin` 和 `tube_supplier_admin` 角色开放；
+  2. **专属模态弹窗（`showSuperEditFittingModal`）**：支持强行覆盖订正订单号、车次号、装车需求主体、车牌号、管件大类（支持标准大类选择）、型号规格、发货件数（步长为 1）、计量单位、发货时间、流转状态（5 大标准状态）、实到件数、撤销原因及发货备注；
+  3. **时序智能对齐魔术棒**：提供“🪄 智能时间与数量一键对齐”按钮，根据发货时间自动按等距分布对齐到货、施工接收与库管入库凭证时间戳，自动防呆防错；
+  4. **审计与操作反馈**：保存成功后即时刷新管件列表并呈现成功提示消息；在全局审计日志中无缝支持 `SUPER_UPDATE_FITTING_DELIVERY` 筛选与高亮展示。
+
 ## 2026-08-19 数字指挥大屏本周战报标题栏图例文字精炼（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

@@ -102,6 +102,89 @@ class FittingDeliveryContractTests(unittest.TestCase):
             finally:
                 clean_session.close()
 
+    def test_super_update_fitting_delivery_contract_and_flow(self):
+        from backend.projects.insulation_pipe_supply_2026.api.workspace import SuperUpdateFittingDeliveryPayload
+        from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_service import (
+            submit_fitting_delivery,
+            super_update_fitting_delivery_record,
+            list_fitting_deliveries,
+        )
+        from sqlalchemy import text
+        from backend.db.database_daily_report_25_26 import SessionLocal
+
+        # 1. 契约校验：发货件数必须 >= 1
+        with self.assertRaises(ValidationError):
+            SuperUpdateFittingDeliveryPayload(
+                section_1_id="high_lot_1",
+                fitting_type="弯头",
+                model_spec="DN300",
+                shipped_qty=0,
+                shipped_at=datetime.now(),
+                status="pending_arrival",
+            )
+
+        # 2. 真实数据库流转与不变量自洽测试
+        submit_payload = {
+            "supply_entity_id": "KAIYUAN",
+            "vehicle_plate_no": "鲁B-TEST-SUPER",
+            "section_1_id": "high_lot_1",
+            "shipped_at": datetime.now().isoformat(),
+            "items": [{"fitting_type": "90°弯头", "model_spec": "DN300*8", "shipped_qty": 5, "unit": "个"}],
+        }
+        test_delivery_id = None
+        try:
+            sub_res = submit_fitting_delivery(submit_payload, operator="super_test_user", operator_group="Global_admin")
+            self.assertTrue(sub_res["ok"])
+            items = list_fitting_deliveries(search_keyword="鲁B-TEST-SUPER", page_size=5).get("items", [])
+            self.assertTrue(len(items) > 0)
+            test_delivery_id = items[0]["id"]
+
+            # 执行编辑覆盖：直接强改状态为 pending_receive (实到 4 个)
+            up_res = super_update_fitting_delivery_record(
+                delivery_id=test_delivery_id,
+                section_1_id="high_lot_2",
+                fitting_type="变径管",
+                model_spec="DN300/200",
+                shipped_qty=6,
+                unit="件",
+                shipped_at=datetime.now(),
+                status="pending_receive",
+                arrived_qty=4,
+                operator="admin_tester",
+                operator_group="Global_admin",
+            )
+            self.assertTrue(up_res["ok"])
+            self.assertEqual(up_res["record"]["status"], "pending_receive")
+            self.assertEqual(up_res["record"]["arrived_qty"], 4)
+            self.assertEqual(up_res["record"]["section_1_id"], "high_lot_2")
+            self.assertIsNotNone(up_res["record"]["arrived_confirm_at"])
+
+            # 再次编辑覆盖：回滚状态为 pending_arrival (验证自动清空到货时间戳和到货数量)
+            rollback_res = super_update_fitting_delivery_record(
+                delivery_id=test_delivery_id,
+                section_1_id="high_lot_2",
+                fitting_type="变径管",
+                model_spec="DN300/200",
+                shipped_qty=6,
+                unit="件",
+                shipped_at=datetime.now(),
+                status="pending_arrival",
+                operator="admin_tester",
+                operator_group="Global_admin",
+            )
+            self.assertTrue(rollback_res["ok"])
+            self.assertEqual(rollback_res["record"]["status"], "pending_arrival")
+            self.assertIsNone(rollback_res["record"]["arrived_qty"])
+            self.assertIsNone(rollback_res["record"]["arrived_confirm_at"])
+
+        finally:
+            clean_session = SessionLocal()
+            try:
+                clean_session.execute(text("DELETE FROM tube.tube_fitting_delivery WHERE vehicle_plate_no = '鲁B-TEST-SUPER' OR created_by = 'super_test_user'"))
+                clean_session.commit()
+            finally:
+                clean_session.close()
+
 
 if __name__ == "__main__":
     unittest.main()

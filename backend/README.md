@@ -1,3 +1,25 @@
+## 2026-08-19 编辑覆盖服务时间戳自愈与当前时间入库策略升级（fitting_delivery_service.py & supply_management_service.py）
+
+- **关联服务函数**：
+  - 管件：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py` (`super_update_fitting_delivery_record`)
+  - 直管：`backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py` (`super_update_delivery_record`)
+- **核心逻辑升级**：
+  1. **状态回退**：对目标状态已发生过的历史节点，时间戳优先保留原单据中的历史真实记录时间；
+  2. **状态推进**：当未显式传入后续状态时间戳（留空）时，后端服务自动将未达节点按管理员点击覆盖保存时的当前时间（`now_bj`）写入数据库，杜绝空指针或伪造未来时间；
+  3. **用户自定义优先**：若管理员在输入框中明确填入了自定义时间，则以管理员填写的指定时间为准。
+
+## 2026-08-19 管件数据编辑覆盖服务与全维度流转纠偏通道上线（fitting_delivery_service.py & workspace.py）
+
+- **关联后端服务与路由**：
+  - 服务实现：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py` (`super_update_fitting_delivery_record`)
+  - 专有 API：`POST /supply-management/fitting-deliveries/{delivery_id}/super-update`
+  - 审计操作：`SUPER_UPDATE_FITTING_DELIVERY`（超管强改管件）
+- **核心业务逻辑与技术特性**：
+  1. **特权角色鉴权**：接口强制限定 `Global_admin`（全局管理员）与 `tube_supplier_admin`（供给方管理员）可访问；
+  2. **全维度参数强力覆盖**：支持订正 `order_no`、`shipment_no`、`section_1_id`、`vehicle_plate_no`、`fitting_type`、`model_spec`、`shipped_qty`（正整数约束）、`unit`、`shipped_at`、`ship_contact_name`、`ship_contact_phone` 与 `ship_remark`；
+  3. **证据链不变量自愈**：严格遵循物理约束 `chk_tube_fitting_state_evidence` 和 `chk_tube_fitting_arrived_qty_range`，在状态流转切换（`pending_arrival` $\leftrightarrow$ `pending_receive` $\leftrightarrow$ `pending_warehouse` $\leftrightarrow$ `completed` $\leftrightarrow$ `cancelled`）时自动完成到货量、到货时间戳、施工接收、库管入库及撤销凭证的级联重置与智能等距分布对齐；
+  4. **完备审计留痕**：在 `logs.tube_operation_logs` 中记录 `SUPER_UPDATE_FITTING_DELIVERY` 动作及修改前后的完整 JSON Diff 快照。
+
 ## 2026-08-19 数字指挥大屏本周战报全端与移动端展示契约对齐（workspace.py & BigScreenDashboardView.vue）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)

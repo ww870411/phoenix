@@ -83,6 +83,7 @@ from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_serv
     list_fitting_deliveries,
     normalize_delivery_ids,
     submit_fitting_delivery,
+    super_update_fitting_delivery_record,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
@@ -453,6 +454,36 @@ class SuperUpdateDeliveryPayload(BaseModel):
     arrived_confirm_at: Optional[datetime] = None
     received_confirm_at: Optional[datetime] = None
     warehouse_confirm_at: Optional[datetime] = None
+
+
+class SuperUpdateFittingDeliveryPayload(BaseModel):
+    section_1_id: str
+    fitting_type: str
+    model_spec: str
+    shipped_qty: float = Field(ge=1)
+    unit: str = "个"
+    shipped_at: datetime
+    supply_entity_id: str = ""
+    vehicle_plate_no: str = ""
+    ship_contact_name: str = ""
+    ship_contact_phone: str = ""
+    ship_remark: str = ""
+    status: str
+    order_no: str = ""
+    shipment_no: str = ""
+    arrived_qty: Optional[float] = None
+    arrived_confirm_at: Optional[datetime] = None
+    arrived_confirm_by: Optional[str] = None
+    arrived_remark: Optional[str] = None
+    received_confirm_at: Optional[datetime] = None
+    received_confirm_by: Optional[str] = None
+    received_remark: Optional[str] = None
+    warehouse_confirm_at: Optional[datetime] = None
+    warehouse_confirm_by: Optional[str] = None
+    warehouse_remark: Optional[str] = None
+    cancel_at: Optional[datetime] = None
+    cancel_by: Optional[str] = None
+    cancel_reason: Optional[str] = None
 
 
 
@@ -2813,8 +2844,8 @@ def super_update_supply_management_delivery(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     group_lower = str(session.group or "").strip().lower()
-    if group_lower != "global_admin":
-        raise HTTPException(status_code=403, detail="此接口为 Global_admin 超级管理员专属数据订正通道,普通角色无权访问")
+    if group_lower not in ("global_admin", "tube_supplier_admin", "dev_admin"):
+        raise HTTPException(status_code=403, detail="此接口为管理员专属数据订正通道,普通角色无权访问")
     
     before_val = get_delivery_record_basic(delivery_id)
     
@@ -2854,6 +2885,54 @@ def super_update_supply_management_delivery(
         "ok": True,
         "detail": "发货记录已由超级管理员强力重写保存",
     }
+
+
+@router.post("/supply-management/fitting-deliveries/{delivery_id}/super-update", summary="[超级管理员] 强力覆写更新管件发货单任意信息")
+def super_update_supply_management_fitting_delivery(
+    delivery_id: int,
+    payload: SuperUpdateFittingDeliveryPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in ("global_admin", "tube_supplier_admin", "dev_admin"):
+        raise HTTPException(status_code=403, detail="此接口为管理员专属数据订正通道,普通角色无权访问")
+
+    result = super_update_fitting_delivery_record(
+        delivery_id=delivery_id,
+        section_1_id=payload.section_1_id,
+        fitting_type=payload.fitting_type,
+        model_spec=payload.model_spec,
+        shipped_qty=payload.shipped_qty,
+        unit=payload.unit,
+        shipped_at=payload.shipped_at,
+        supply_entity_id=payload.supply_entity_id,
+        vehicle_plate_no=payload.vehicle_plate_no,
+        ship_contact_name=payload.ship_contact_name,
+        ship_contact_phone=payload.ship_contact_phone,
+        ship_remark=payload.ship_remark,
+        status=payload.status,
+        order_no=payload.order_no,
+        shipment_no=payload.shipment_no,
+        arrived_qty=payload.arrived_qty,
+        arrived_confirm_at=payload.arrived_confirm_at,
+        arrived_confirm_by=payload.arrived_confirm_by,
+        arrived_remark=payload.arrived_remark,
+        received_confirm_at=payload.received_confirm_at,
+        received_confirm_by=payload.received_confirm_by,
+        received_remark=payload.received_remark,
+        warehouse_confirm_at=payload.warehouse_confirm_at,
+        warehouse_confirm_by=payload.warehouse_confirm_by,
+        warehouse_remark=payload.warehouse_remark,
+        cancel_at=payload.cancel_at,
+        cancel_by=payload.cancel_by,
+        cancel_reason=payload.cancel_reason,
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
+
+    return result
 
 
 
@@ -3953,6 +4032,7 @@ def export_global_management_operation_logs(
         "SUBMIT_STATUS": "提交填报状态",
         "UPDATE_CONFIG": "系统配置修改",
         "SUPER_UPDATE_DELIVERY": "超管强行改单",
+        "SUPER_UPDATE_FITTING_DELIVERY": "超管强改管件",
         "CREATE_CUSTOM_ENTITY": "新增自定义主体",
         "SUBMIT_FITTING_DELIVERY": "提交管件发货",
         "CONFIRM_FITTING_ARRIVAL": "管件现场确认到货",

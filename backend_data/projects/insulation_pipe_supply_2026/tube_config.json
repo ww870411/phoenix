@@ -63,6 +63,19 @@
       "is_custom": false
     },
     {
+      "entity_id": "wosheng",
+      "code": "SD",
+      "entity_name": "江苏沃圣阀业有限公司",
+      "contact_name": "秦杰",
+      "contact_phone": "13520598794",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3"
+      ],
+      "is_custom": false
+    },
+    {
       "entity_id": "吴近",
       "code": "SC",
       "entity_name": "能源集团保温管厂",
@@ -73,7 +86,10 @@
         "high_lot_2",
         "low_lot_1",
         "low_lot_2",
-        "low_lot_3"
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ],
       "is_custom": false
     }

@@ -993,7 +993,13 @@ def super_update_delivery_record(
         dt_received_confirm_at = received_confirm_at
         dt_warehouse_confirm_at = warehouse_confirm_at
 
-        # 从数据库中拉取历史操作人，如果为空则默认为当前管理员
+        # 从数据库中拉取历史操作人与时间快照，用于回退或已有状态保持
+        orig_arrived_at = orig_record["arrived_confirm_at"]
+        orig_received_at = orig_record["received_confirm_at"]
+        orig_warehouse_at = orig_record["warehouse_confirm_at"]
+        orig_cancel_at = orig_record["cancel_at"]
+        now_bj = datetime.now(BEIJING_TZ)
+
         op_arrived_by = orig_record["arrived_confirm_by"] or operator
         op_received_by = orig_record["received_confirm_by"] or operator
         op_warehouse_by = orig_record["warehouse_confirm_by"] or operator
@@ -1029,9 +1035,9 @@ def super_update_delivery_record(
             val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
 
             if dt_arrived_confirm_at is None:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
             if dt_arrived_confirm_at < shipped_at:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+                dt_arrived_confirm_at = shipped_at
 
             val_received_qty = None
             dt_received_confirm_at = None
@@ -1057,14 +1063,14 @@ def super_update_delivery_record(
                 val_received_qty = min(val_received_qty, max(val_arrived_qty - 0.01, 0.0))
 
             if dt_arrived_confirm_at is None:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
             if dt_arrived_confirm_at < shipped_at:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+                dt_arrived_confirm_at = shipped_at
 
             if dt_received_confirm_at is None:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=6)
+                dt_received_confirm_at = orig_received_at or now_bj
             if dt_received_confirm_at < dt_arrived_confirm_at:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=1)
+                dt_received_confirm_at = dt_arrived_confirm_at
 
             dt_warehouse_confirm_at = None
             op_warehouse_by = None
@@ -1085,14 +1091,14 @@ def super_update_delivery_record(
             val_received_qty = min(val_received_qty, val_arrived_qty)
 
             if dt_arrived_confirm_at is None:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
             if dt_arrived_confirm_at < shipped_at:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+                dt_arrived_confirm_at = shipped_at
 
             if dt_received_confirm_at is None:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=6)
+                dt_received_confirm_at = orig_received_at or now_bj
             if dt_received_confirm_at < dt_arrived_confirm_at:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=1)
+                dt_received_confirm_at = dt_arrived_confirm_at
 
             dt_warehouse_confirm_at = None
             op_warehouse_by = None
@@ -1121,19 +1127,19 @@ def super_update_delivery_record(
             val_received_qty = min(val_received_qty, val_arrived_qty)
 
             if dt_arrived_confirm_at is None:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=12)
+                dt_arrived_confirm_at = orig_arrived_at or now_bj
             if dt_arrived_confirm_at < shipped_at:
-                dt_arrived_confirm_at = shipped_at + timedelta(hours=1)
+                dt_arrived_confirm_at = shipped_at
 
             if dt_received_confirm_at is None:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=6)
+                dt_received_confirm_at = orig_received_at or now_bj
             if dt_received_confirm_at < dt_arrived_confirm_at:
-                dt_received_confirm_at = dt_arrived_confirm_at + timedelta(hours=1)
+                dt_received_confirm_at = dt_arrived_confirm_at
 
             if dt_warehouse_confirm_at is None:
-                dt_warehouse_confirm_at = dt_received_confirm_at + timedelta(hours=2)
+                dt_warehouse_confirm_at = orig_warehouse_at or now_bj
             if dt_warehouse_confirm_at < dt_received_confirm_at:
-                dt_warehouse_confirm_at = dt_received_confirm_at + timedelta(hours=1)
+                dt_warehouse_confirm_at = dt_received_confirm_at
 
             # 校验少接收确认是否具有审批凭证
             if val_received_qty == val_arrived_qty:
