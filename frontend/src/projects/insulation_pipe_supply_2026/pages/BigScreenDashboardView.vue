@@ -321,22 +321,12 @@
         <span class="tab-label">动态战报</span>
         <span v-if="liveFeedList.length" class="tab-badge">{{ Math.min(liveFeedList.length, 99) }}</span>
       </button>
-      <button 
-        class="mobile-tab-btn" 
-        :class="{ active: activeMobileTab === 'all' }"
-        @click="setMobileTab('all')"
-        type="button"
-        role="tab"
-      >
-        <span class="tab-icon">📜</span>
-        <span class="tab-label">全览</span>
-      </button>
     </nav>
 
     <!-- 主展示区：三栏网格体系 -->
     <main class="bigscreen-content" :class="['mobile-tab-' + activeMobileTab]">
       <!-- 左侧栏：全局指标体系与管材/管件双轨大盘 (100% 真实数据库计算) -->
-      <section class="screen-col left-col" :class="{ 'mobile-active-col': activeMobileTab === 'kpi' || activeMobileTab === 'all' }">
+      <section class="screen-col left-col" :class="{ 'mobile-active-col': activeMobileTab === 'kpi' }">
         <!-- 核心气象：今日天气与施工环境 (高德实时数据) -->
         <div class="panel-box weather-kpi-panel">
           <div class="panel-header">
@@ -591,7 +581,7 @@
       </section>
 
       <!-- 中间栏：重构升级版 · 高工规整双系统拓扑中枢 (默认通透极简，发货在途/悬停显现) -->
-      <section class="screen-col center-col" :class="{ 'mobile-active-col': activeMobileTab === 'topology' || activeMobileTab === 'all' }">
+      <section class="screen-col center-col" :class="{ 'mobile-active-col': activeMobileTab === 'topology' }">
         <div class="panel-box map-topology-master-panel">
           <!-- 拓扑头部导航与状态过滤 -->
           <div class="topology-header-bar">
@@ -609,7 +599,7 @@
           </div>
 
           <!-- 移动端专属手势滑动提示 (<= 900px 自动显现) -->
-          <div class="mobile-topo-scroll-hint" v-if="activeMobileTab === 'topology' || activeMobileTab === 'all'">
+          <div class="mobile-topo-scroll-hint" v-if="activeMobileTab === 'topology'">
             <span>👆 支持 2D 自由手势滑动 · 查看全网 3 家管厂与 10 大施工标段流向拓扑 ➔</span>
           </div>
 
@@ -690,8 +680,8 @@
                               (isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId && activeSupplierId !== sup.id && !hoveredSupplierId && !hoveredSectionId)
                     }"
                     :id="'node-' + sup.id"
-                    @mouseenter="hoveredSupplierId = sup.id"
-                    @mouseleave="hoveredSupplierId = null"
+                    @mouseenter="handleNodeMouseEnter('sup', sup.id)"
+                    @mouseleave="handleNodeMouseLeave('sup')"
                   >
                     <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
 
@@ -736,8 +726,8 @@
                           }
                         ]"
                         :id="'node-sec_' + sec.id"
-                        @mouseenter="hoveredSectionId = sec.id"
-                        @mouseleave="hoveredSectionId = null"
+                        @mouseenter="handleNodeMouseEnter('sec', sec.id)"
+                        @mouseleave="handleNodeMouseLeave('sec')"
                       >
                         <!-- 物理对齐连接端口 (左锚点) -->
                         <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
@@ -851,8 +841,8 @@
                           }
                         ]"
                         :id="'node-sec_' + sec.id"
-                        @mouseenter="hoveredSectionId = sec.id"
-                        @mouseleave="hoveredSectionId = null"
+                        @mouseenter="handleNodeMouseEnter('sec', sec.id)"
+                        @mouseleave="handleNodeMouseLeave('sec')"
                       >
                         <!-- 物理对齐连接端口 (左锚点) -->
                         <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
@@ -951,7 +941,7 @@
       </section>
 
       <!-- 右侧栏：实时战报动态流水与重大保供里程碑 (基于真实工程全链路数据) -->
-      <section class="screen-col right-col" :class="{ 'mobile-active-col': activeMobileTab === 'feed' || activeMobileTab === 'all' }">
+      <section class="screen-col right-col" :class="{ 'mobile-active-col': activeMobileTab === 'feed' }">
         <!-- 实时工程战报流 -->
         <div class="panel-box live-feed-panel">
           <div class="panel-header">
@@ -1243,11 +1233,11 @@ const isFeedFilterMenuOpen = ref(false)
 const feedFilterMenuRef = ref(null)
 
 // --- 移动端专属响应式状态 ---
-const activeMobileTab = ref('kpi') // 'kpi' | 'topology' | 'feed' | 'all'
+const activeMobileTab = ref('kpi') // 'kpi' | 'topology' | 'feed'
 
 function setMobileTab(tabKey) {
   activeMobileTab.value = tabKey
-  if (tabKey === 'topology' || tabKey === 'all') {
+  if (tabKey === 'topology') {
     setTimeout(() => {
       recalculateFlylines()
     }, 60)
@@ -1309,11 +1299,36 @@ const isLiveStreamMode = ref(false)
 const knownFeedIds = ref(new Set())
 let initialDataLoaded = false
 
-// --- 交互悬停聚焦状态 (Hover Focus) ---
+// --- 交互悬停聚焦状态 (Hover Focus: 仅在 PC 桌面鼠标设备生效，触屏/移动端彻底禁用) ---
 const hoveredSupplierId = ref(null)
 const hoveredSectionId = ref(null)
-const activeShipmentLineIds = ref(new Set()) // 默认全部静止基准线，仅在真实发货或鼠标悬停时按需激活
+const activeShipmentLineIds = ref(new Set()) // 默认全部静止基准线，仅在真实发货或 PC 鼠标悬停时按需激活
 const isAnyHovered = computed(() => !!hoveredSupplierId.value || !!hoveredSectionId.value)
+
+function isMobileOrTouchEvent() {
+  if (typeof window === 'undefined') return false
+  if (window.innerWidth <= 900) return true
+  if (window.matchMedia && window.matchMedia('(hover: none)').matches) return true
+  return false
+}
+
+function handleNodeMouseEnter(type, id) {
+  if (isMobileOrTouchEvent()) return
+  if (type === 'sup') {
+    hoveredSupplierId.value = id
+  } else if (type === 'sec') {
+    hoveredSectionId.value = id
+  }
+}
+
+function handleNodeMouseLeave(type) {
+  if (isMobileOrTouchEvent()) return
+  if (type === 'sup') {
+    hoveredSupplierId.value = null
+  } else if (type === 'sec') {
+    hoveredSectionId.value = null
+  }
+}
 
 // --- 权威默认数据源 (保证第一帧即刻渲染完整节点与飞线) ---
 const defaultSupplyNodes = [
@@ -6676,80 +6691,7 @@ onBeforeUnmount(() => {
     display: flex;
   }
 
-  /* 🌟 全览模式专属瀑布流排版 (各板块物理隔离，上下留白，绝不遮挡) */
-  .bigscreen-content.mobile-tab-all,
-  .mobile-tab-all .bigscreen-content {
-    display: flex !important;
-    flex-direction: column !important;
-    height: auto !important;
-    gap: 16px !important;
-    overflow-y: visible !important;
-    padding: 12px 10px 36px !important;
-  }
 
-  .bigscreen-content.mobile-tab-all .screen-col,
-  .mobile-tab-all .screen-col {
-    display: flex !important;
-    flex-direction: column !important;
-    width: 100% !important;
-    height: auto !important;
-    flex: none !important;
-    overflow: visible !important;
-    position: relative !important;
-    gap: 12px !important;
-  }
-
-  .bigscreen-content.mobile-tab-all .left-col,
-  .mobile-tab-all .left-col {
-    height: auto !important;
-    flex: none !important;
-    overflow: visible !important;
-    position: relative !important;
-    z-index: 1 !important;
-    margin-bottom: 2px !important;
-  }
-
-  .bigscreen-content.mobile-tab-all .center-col,
-  .mobile-tab-all .center-col {
-    height: 740px !important;
-    min-height: 740px !important;
-    flex: none !important;
-    overflow: visible !important;
-    position: relative !important;
-    z-index: 2 !important;
-    margin-top: 4px !important;
-    margin-bottom: 4px !important;
-  }
-
-  .bigscreen-content.mobile-tab-all .map-topology-master-panel,
-  .mobile-tab-all .map-topology-master-panel {
-    height: 740px !important;
-    min-height: 740px !important;
-    flex: none !important;
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
-  }
-
-  .bigscreen-content.mobile-tab-all .topology-container,
-  .mobile-tab-all .topology-container {
-    height: 650px !important;
-    min-height: 650px !important;
-    flex: none !important;
-    position: relative !important;
-    overflow: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-  }
-
-  .bigscreen-content.mobile-tab-all .right-col,
-  .mobile-tab-all .right-col {
-    height: auto !important;
-    flex: none !important;
-    overflow: visible !important;
-    position: relative !important;
-    z-index: 1 !important;
-    margin-top: 4px !important;
-  }
 
   /* 1. 左侧指标大盘移动端调优 */
   .left-col {
@@ -6876,6 +6818,19 @@ onBeforeUnmount(() => {
     flex: 1 0 88px;
     padding: 12px 14px;
     box-sizing: border-box;
+  }
+
+  /* 📱 移动端与触屏模式：彻底消除触碰导致的卡片压暗变黑与粘滞位移 */
+  .supply-node-card.dimmed,
+  .demand-node-card.dimmed {
+    opacity: 1 !important;
+  }
+
+  .supply-node-card:hover,
+  .supply-node-card.hovered,
+  .demand-node-card:hover,
+  .demand-node-card.highlighted {
+    transform: none !important;
   }
 
   .sup-title {
@@ -7091,6 +7046,21 @@ onBeforeUnmount(() => {
   .fitting-pill {
     padding: 3px 6px;
     font-size: 10.5px;
+  }
+}
+
+/* 📱 触屏设备（无鼠标精确指针设备）：彻底消除悬停导致的卡片压暗与伪类位移 */
+@media (hover: none) {
+  .supply-node-card.dimmed,
+  .demand-node-card.dimmed {
+    opacity: 1 !important;
+  }
+
+  .supply-node-card:hover,
+  .supply-node-card.hovered,
+  .demand-node-card:hover,
+  .demand-node-card.highlighted {
+    transform: none !important;
   }
 }
 </style>

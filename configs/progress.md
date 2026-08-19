@@ -1,3 +1,43 @@
+## 2026-08-19 [数字指挥大屏移动端：彻底消除触屏滑动时的主体误暗淡与粘滞高亮]
+- **改动背景与需求**：
+  - 用户反馈在手机模式浏览供需拓扑时，由于手指滑动触摸屏幕，浏览器将 touch 模拟为 hover 导致卡片被误触发，造成其他主体被压暗变黑、卡片粘滞高亮；用户明确要求在手机/触屏模式下取消该聚焦暗淡效果，保持所有卡片常态清晰；
+- **技术实现细节**：
+  - 前端（`BigScreenDashboardView.vue`）：
+    1. **JS 逻辑防护**：新增 `isMobileOrTouchEvent()` 环境判定（判断视口宽度 `<= 900px` 或满足媒体查询 `(hover: none)`）；
+    2. **安全事件封装**：引入 `handleNodeMouseEnter` 与 `handleNodeMouseLeave`，在移动/触屏模式下直接短路忽略 hover 赋值，不改变 `hoveredSupplierId` 与 `hoveredSectionId`；
+    3. **模板事件升级**：供给方（3 家管厂）与需求侧（10 大标段）全面绑定封装后的安全事件；
+    4. **CSS 媒体查询强力兜底**：
+       - 在 `@media (max-width: 900px)` 与 `@media (hover: none)` 下，强制覆盖 `.supply-node-card.dimmed, .demand-node-card.dimmed` 为 `opacity: 1 !important`；
+       - 强制重置移动端 `:hover` / `.hovered` / `.highlighted` 的位移（`transform: none !important`）；
+- **验证结果**：
+  - 前端 `npm run build` 构建打包 100% 成功，0 错误；PC 端继续享有精致的鼠标聚焦暗淡体验，手机端触屏滑动平滑通透，彻底告别误暗淡。
+
+## 2026-08-19 [大屏交互回退：根据用户指令回退卡片点选高亮与控制中心相关参数]
+- **改动背景与需求**：
+  - 用户要求回退卡片点选高亮功能与相关控制中心参数，恢复至移动端三选项卡优化后的纯净基准版本；
+- **回退细节**：
+  - 前端（`BigScreenDashboardView.vue`）：
+    - 移除控制中心第 8 项滑块配置 `🖱️ 卡片点选高亮`，恢复 7 大参数标准矩阵；
+    - 恢复 `bsConfig`、`handleResetConfigToDefault` 默认配置；
+    - 移除管厂/标段卡片点击事件、选中状态及定时器，恢复纯净 hover 悬停高亮；
+    - 移除 `.is-selected` 深浅双色样式，保持原有视觉规范；
+  - 后端（`workspace.py`）：
+    - 移除 `card_click_highlight_sec` 字段解析及相关模型属性，保持接口整洁；
+- **验证结果**：
+  - 前端 `npm run build` 构建编译 100% 成功，0 错误；无缝安全回退。
+
+## 2026-08-19 [数字指挥大屏移动端：移除“全览”标签页并精简三选项卡布局]
+- **改动背景与需求**：
+  - 用户反馈手机端浏览时，前三个标签页（指标大盘、供需拓扑、动态战报）已完整覆盖所有工程业务信息，第四个“全览”标签页冗余，要求将其去除；
+- **技术实现细节**：
+  - 前端（`BigScreenDashboardView.vue`）：
+    - 移除 `.mobile-nav-tabs` 中的 `全览` 选项卡按钮，标签栏收敛为清晰明了的 3 个核心 Tab（📊 指标大盘、🌐 供需拓扑、📢 动态战报），每个 Tab 均分 `33.3%` 宽度，手指触控热区更宽裕；
+    - 精简模板中左栏（`.left-col`）、中栏（`.center-col`）、拓扑手势提示（`.mobile-topo-scroll-hint`）与右栏（`.right-col`）的激活条件（移除 `activeMobileTab === 'all'` 逻辑）；
+    - 精简 Vue 响应式状态 `activeMobileTab` 注释及 `setMobileTab` 拓扑重算触发逻辑；
+    - 清理 CSS 中废弃的 `.bigscreen-content.mobile-tab-all` 瀑布流样式，精简样式体积；
+- **验证结果**：
+  - 前端 `npm run build` 构建打包 100% 成功，0 错误；移动端切换清爽顺畅。
+
 ## 2026-08-19 [供需流向拓扑：标段矩阵宽度缩减5% & “施工中”标签转为醒目红色]
 - **改动背景与需求**：
   - 用户要求将右侧各标段卡片整体宽度减少 5%，为拓扑图留出更宽绰的居中通道；

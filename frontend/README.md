@@ -1,3 +1,24 @@
+## 2026-08-19 数字指挥大屏移动端触屏防误触与压暗取消优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **移动端与触屏体验优化**：
+  - 针对手机端触摸滑动时可能误触发 hover 导致其他卡片被压暗变黑的问题，全面新增 `isMobileOrTouchEvent()` 环境判定；
+  - 在移动端（`width <= 900px`）及触屏环境（`@media (hover: none)`）下彻底禁用鼠标悬停事件触发，解除卡片变暗（`.dimmed` 强制为 `opacity: 1 !important`），确保手机端滑动拓扑图时所有卡片常态清晰、通透清爽。
+
+## 2026-08-19 数字指挥大屏交互回退（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **交互回退**：
+  - 响应用户指令，回退卡片点选高亮功能与控制中心第 8 项参数滑块，保持纯净悬停 Hover 联动；
+  - 完整保留移动端 3 选项卡（指标大盘、供需拓扑、动态战报）优化成果。
+
+## 2026-08-19 数字指挥大屏移动端移除“全览”标签页（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **移动端交互优化**：
+  - 移除手机端导航栏中的“全览”选项卡，保留“📊 指标大盘”、“🌐 供需拓扑”、“📢 动态战报” 3 大专属 Tab，每个按钮均分占宽 33.3%，热区更大、点击更准；
+  - 精简各栏位激活判断与相关逻辑，彻底清理已废弃的 `.mobile-tab-all` 样式。
+
 ## 2026-08-19 数字指挥大屏标段矩阵宽度缩减5%与“施工中”标签转红（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
