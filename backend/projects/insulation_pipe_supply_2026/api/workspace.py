@@ -99,6 +99,14 @@ from backend.projects.insulation_pipe_supply_2026.services.baseline_service impo
     list_fitting_baselines,
     save_fitting_baselines,
 )
+from backend.projects.insulation_pipe_supply_2026.services.fitting_usage_service import (
+    cancel_fitting_usage_record,
+    get_fitting_inventory_summary,
+    list_fitting_usage_history,
+    submit_fitting_usage_batch,
+    update_fitting_usage_item,
+    update_fitting_usage_batch,
+)
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 
@@ -1449,6 +1457,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 section_1_id,
                 status,
                 SUM(COALESCE(shipped_qty, 0)) AS total_pcs,
+                SUM(CASE 
+                    WHEN arrived_confirm_at IS NOT NULL OR status IN ('completed', 'arrived', 'consumed', 'warehoused', 'pending_receive', 'pending_warehouse')
+                    THEN COALESCE(arrived_qty, shipped_qty, 0)
+                    ELSE 0
+                END) AS arrived_pcs,
                 COUNT(id) AS batch_count
             FROM tube.tube_fitting_delivery
             WHERE status != 'cancelled'
@@ -1465,10 +1478,23 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse")
         )
         fitting_arrived_total_pcs = sum(
-            int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows 
-            if r["status"] in ("completed", "arrived", "consumed", "warehoused")
+            int(float(r["arrived_pcs"] or 0)) for r in fit_deliv_rows 
         )
-        fitting_installed_total_pcs = 0
+
+        # 真实从数据库统计管件累计安装使用量 (仅统计 active 生效记录)
+        try:
+            fit_usage_sql = text("""
+                SELECT 
+                    COALESCE(SUM(usage_qty), 0) AS total_installed_pcs
+                FROM tube.tube_fitting_daily_usage
+                WHERE status = 'active'
+            """)
+            fitting_installed_total_pcs = int(session.execute(fit_usage_sql).scalar() or 0)
+        except Exception as e:
+            print("⚠️ 查询管件累计安装量异常:", e)
+            fitting_installed_total_pcs = 0
+
+        # 现场真实可用库存 = 累计确认到货 - 累计有效安装
         fitting_stock_total_pcs = max(0, fitting_arrived_total_pcs - fitting_installed_total_pcs)
 
         # 3. 针对全量 10 个真实标段进行精准聚合，并关联真实库管员与施工单位
@@ -1539,6 +1565,20 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         sec_usage_rows = session.execute(sec_usage_sql).mappings().all()
         sec_usage_map: Dict[str, float] = {r["section_1_id"]: float(r["total_usage_m"] or 0) for r in sec_usage_rows}
 
+        # 标段管件施工安装量统计（从 tube_fitting_daily_usage 聚合真实安装件数）
+        sec_fit_usage_sql = text("""
+            SELECT section_1_id, 
+                   COALESCE(SUM(usage_qty), 0) AS total_usage_pcs
+            FROM tube.tube_fitting_daily_usage
+            WHERE status = 'active'
+            GROUP BY section_1_id
+        """)
+        try:
+            sec_fit_usage_rows = session.execute(sec_fit_usage_sql).mappings().all()
+            sec_fit_usage_map: Dict[str, int] = {r["section_1_id"]: int(r["total_usage_pcs"] or 0) for r in sec_fit_usage_rows}
+        except Exception:
+            sec_fit_usage_map = {}
+
         section_progress_list = []
         for d in demand_entities:
             sid = d["section_1_id"]
@@ -1559,9 +1599,12 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             f_shipped = fit_shipped_by_sec.get(sid, 0)
             f_arrived = fit_arrived_by_sec.get(sid, 0)
             f_transit = max(f_shipped - f_arrived, 0)
+            f_installed = sec_fit_usage_map.get(sid, 0)
+            f_stock = max(0, f_arrived - f_installed)
             f_percent = round((f_shipped / f_total * 100), 1) if f_total > 0 else (100.0 if f_shipped > 0 else 0.0)
             f_arrived_pct = round((f_arrived / f_total * 100), 1) if f_total > 0 else (100.0 if f_arrived > 0 else 0.0)
             f_transit_pct = round(max(f_percent - f_arrived_pct, 0.0), 1)
+            f_installed_pct = round((f_installed / f_total * 100), 1) if f_total > 0 else 0.0
 
             tag = "高温水系统" if "high" in sid else "低温水系统"
             status_text = d.get("construction_status") or "施工中"
@@ -1597,9 +1640,12 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "shippedFittings": f_shipped,
                 "arrivedFittings": f_arrived,
                 "transitFittings": f_transit,
+                "installedFittings": f_installed,
+                "stockFittings": f_stock,
                 "fittingPercent": min(f_percent, 100.0),
                 "arrivedFittingPercent": min(f_arrived_pct, 100.0),
                 "transitFittingPercent": min(f_transit_pct, 100.0),
+                "installedFittingPercent": min(f_installed_pct, 100.0),
                 "latestMsg": latest_desc
             })
 
@@ -1954,7 +2000,44 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         except Exception as e:
             print("⚠️ 读取施工用量业务流水异常:", e)
 
-        # 4.4 未来 3 日滚动要料计划（需求量申报）
+        # 4.4 管件现场安装与使用量填报（管件施工量确认）
+        try:
+            fitting_usage_events_sql = text("""
+                SELECT id, usage_date, section_1_id, fitting_type, model_spec, unit,
+                       COALESCE(usage_qty, 0) AS usage_qty, filled_by, filled_at, remark
+                FROM tube.tube_fitting_daily_usage
+                WHERE status = 'active' AND usage_qty > 0
+                ORDER BY usage_date DESC, id DESC
+                LIMIT 20
+            """)
+            fit_usage_events = session.execute(fitting_usage_events_sql).mappings().all()
+            for u in fit_usage_events:
+                sec_name = _clean_str(sec_name_map.get(u["section_1_id"], u["section_1_id"] or "施工标段工区"))
+                u_time = u["filled_at"] or u["usage_date"]
+                t_str, raw_t = _format_bj_time(u_time)
+                f_name = f"{u['fitting_type']} {u['model_spec']}"
+                fill_op = _clean_str(u["filled_by"] or "施工填报员")
+                live_feed_list.append({
+                    "id": f"fu_{u['id']}",
+                    "category": "管件安装施工",
+                    "category_key": "usage",
+                    "type": "fitting",
+                    "section_id": u.get("section_1_id"),
+                    "supplier": "施工现场班组",
+                    "target": sec_name,
+                    "headline": f"管件现场安装 · {sec_name}",
+                    "specification": f_name,
+                    "amount": f"{u['usage_qty']} {u['unit'] or '件'}",
+                    "operator": fill_op,
+                    "time": t_str,
+                    "positiveTag": "现场完成焊接安装并记账",
+                    "isNew": False,
+                    "raw_time": raw_t
+                })
+        except Exception as e:
+            print("⚠️ 读取管件安装业务流水异常:", e)
+
+        # 4.5 未来 3 日滚动要料计划（需求量申报）
         try:
             plan_events_sql = text("""
                 SELECT id, plan_date, section_1_id, pipe_model_id, 
@@ -4807,6 +4890,205 @@ def get_global_management_ip_location(
         "project_key": PROJECT_KEY,
         **loc_data
     }
+
+
+# ----------------------------------------------------------------------
+# 管件安装使用量与现场动态库存接口 (Fitting Daily Usage & Live Inventory)
+# ----------------------------------------------------------------------
+
+class FittingUsageItemPayload(BaseModel):
+    fitting_type: str = Field(..., description="管件物理类别")
+    model_spec: str = Field(..., description="型号规格")
+    unit: str = Field(default="个", description="计量单位")
+    usage_qty: int = Field(..., gt=0, description="安装使用数量（正整数）")
+    remark: Optional[str] = Field(default="", description="施工备注")
+
+
+class FittingUsageSubmitPayload(BaseModel):
+    section_1_id: str = Field(..., description="标段/需求主体ID")
+    usage_date: str = Field(..., description="使用业务日期，YYYY-MM-DD")
+    items: List[FittingUsageItemPayload] = Field(..., min_length=1, description="使用量明细列表")
+
+
+class FittingUsageCancelPayload(BaseModel):
+    usage_id: int = Field(..., gt=0, description="管件使用记录ID")
+    cancel_reason: str = Field(..., min_length=1, description="撤回/作废原因说明")
+
+
+class FittingUsageItemUpdatePayload(BaseModel):
+    usage_id: int = Field(..., gt=0, description="管件使用记录ID")
+    usage_qty: Optional[int] = Field(default=None, description="修改后的安装数量")
+    remark: Optional[str] = Field(default=None, description="施工备注")
+    status: Optional[str] = Field(default=None, description="记录状态：active 或 cancelled")
+    cancel_reason: Optional[str] = Field(default=None, description="作废/修改原因")
+    filled_by: Optional[str] = Field(default=None, description="填报人")
+    usage_date: Optional[str] = Field(default=None, description="消耗采集日期，YYYY-MM-DD")
+
+
+class FittingUsageBatchUpdateItem(BaseModel):
+    id: int = Field(..., gt=0, description="子项记录ID")
+    usage_qty: Optional[int] = Field(default=None, description="安装数量")
+    remark: Optional[str] = Field(default=None, description="备注")
+    status: Optional[str] = Field(default=None, description="状态")
+    cancel_reason: Optional[str] = Field(default=None, description="作废原因")
+
+
+class FittingUsageBatchUpdatePayload(BaseModel):
+    section_1_id: str = Field(..., description="标段ID")
+    usage_date: str = Field(..., description="原消耗采集日期，YYYY-MM-DD")
+    new_usage_date: Optional[str] = Field(default=None, description="新消耗采集日期，YYYY-MM-DD")
+    filled_by: Optional[str] = Field(default=None, description="批量修改填报人")
+    items: Optional[List[FittingUsageBatchUpdateItem]] = Field(default=None, description="各子项修改列表")
+    cancel_reason: Optional[str] = Field(default=None, description="批量修改原因说明")
+
+
+@router.get("/demand-management/fitting-usage/inventory-summary", summary="查询指定标段现场管件实时可用库存与消耗统计")
+@router.get("/fitting-usage/inventory-summary", summary="查询指定标段现场管件实时可用库存与消耗统计")
+def handle_get_fitting_inventory_summary(
+    section_1_id: str = Query(..., description="标段ID"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {
+            "global_admin", "dev_admin", "tube_site_manager",
+            "tube_construction_unit", "tube_warehouse_admin",
+            "tube_warehouse_keeper", "tube_global_viewer",
+            "tube_supplier_admin", "tube_supplier"
+        },
+        "管件现场库存查询",
+    )
+    return get_fitting_inventory_summary(section_1_id)
+
+
+@router.post("/demand-management/fitting-usage/submit", summary="批量提交管件安装使用量记录")
+@router.post("/fitting-usage/submit", summary="批量提交管件安装使用量记录")
+def handle_submit_fitting_usage(
+    payload: FittingUsageSubmitPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {"global_admin", "dev_admin", "tube_site_manager", "tube_construction_unit"},
+        "管件安装使用量填报",
+    )
+    config = load_tube_config()
+    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, session.group)
+    if session.group not in ("global_admin", "dev_admin"):
+        if payload.section_1_id.strip().lower() not in _normalized_access_ids(accessible_section_ids):
+            raise HTTPException(status_code=403, detail="当前账号无该标段的管件使用量填报权限")
+
+    return submit_fitting_usage_batch(
+        section_1_id=payload.section_1_id,
+        usage_date=payload.usage_date,
+        items=[it.model_dump() for it in payload.items],
+        operator=session.username,
+        user_group=session.group,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.get("/demand-management/fitting-usage/history", summary="查询管件安装使用流水台账")
+@router.get("/fitting-usage/history", summary="查询管件安装使用流水台账")
+def handle_list_fitting_usage_history(
+    section_1_id: str = Query(..., description="标段ID"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    keyword: Optional[str] = Query(None, description="搜索关键字"),
+    status: Optional[str] = Query("all", description="状态过滤: all / active / cancelled"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {
+            "global_admin", "dev_admin", "tube_site_manager",
+            "tube_construction_unit", "tube_warehouse_admin",
+            "tube_warehouse_keeper", "tube_global_viewer",
+            "tube_supplier_admin", "tube_supplier"
+        },
+        "管件安装台账查询",
+    )
+    rows = list_fitting_usage_history(
+        section_1_id=section_1_id,
+        start_date=start_date,
+        end_date=end_date,
+        keyword=keyword,
+        status=status,
+    )
+    return {"ok": True, "rows": rows, "count": len(rows)}
+
+
+@router.post("/demand-management/fitting-usage/cancel", summary="撤回/作废管件使用记录 (仅限Global_admin)")
+@router.post("/fitting-usage/cancel", summary="撤回/作废管件使用记录 (仅限Global_admin)")
+def handle_cancel_fitting_usage(
+    payload: FittingUsageCancelPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {"global_admin", "dev_admin"},
+        "管件安装使用量撤回",
+    )
+    return cancel_fitting_usage_record(
+        usage_id=payload.usage_id,
+        operator=session.username,
+        user_group=session.group,
+        cancel_reason=payload.cancel_reason,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post("/demand-management/fitting-usage/update-item", summary="编辑单项管件安装记录 (仅限Global_admin)")
+@router.post("/fitting-usage/update-item", summary="编辑单项管件安装记录 (仅限Global_admin)")
+def handle_update_fitting_usage_item(
+    payload: FittingUsageItemUpdatePayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {"global_admin", "dev_admin"},
+        "单项管件安装记录编辑",
+    )
+    return update_fitting_usage_item(
+        usage_id=payload.usage_id,
+        operator=session.username,
+        user_group=session.group,
+        usage_qty=payload.usage_qty,
+        remark=payload.remark,
+        status=payload.status,
+        cancel_reason=payload.cancel_reason,
+        filled_by=payload.filled_by,
+        usage_date=payload.usage_date,
+        ip_address=_get_client_ip(request),
+    )
+
+
+@router.post("/demand-management/fitting-usage/update-batch", summary="批量编辑整体管件安装记录 (仅限Global_admin)")
+@router.post("/fitting-usage/update-batch", summary="批量编辑整体管件安装记录 (仅限Global_admin)")
+def handle_update_fitting_usage_batch(
+    payload: FittingUsageBatchUpdatePayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(
+        session,
+        {"global_admin", "dev_admin"},
+        "整体管件安装批次编辑",
+    )
+    return update_fitting_usage_batch(
+        section_1_id=payload.section_1_id,
+        usage_date=payload.usage_date,
+        operator=session.username,
+        user_group=session.group,
+        new_usage_date=payload.new_usage_date,
+        filled_by=payload.filled_by,
+        items=[it.model_dump() for it in payload.items] if payload.items else None,
+        cancel_reason=payload.cancel_reason,
+        ip_address=_get_client_ip(request),
+    )
 
 
 

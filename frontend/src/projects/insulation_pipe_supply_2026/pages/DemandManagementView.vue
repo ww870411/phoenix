@@ -107,7 +107,7 @@
             >
               <span class="cat-icon">🔩</span>
               <span class="cat-label">管件业务</span>
-              <span class="cat-count">2 项功能</span>
+              <span class="cat-count">3 项功能</span>
             </button>
           </div>
         </div>
@@ -153,7 +153,14 @@
               :class="{ active: activeTab === 'fitting' }" 
               @click="handleTabClick('fitting')"
             >
-              🔧 管件发货与到货记录
+              🚚 到货确认与明细记录
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'fitting_usage' }" 
+              @click="handleTabClick('fitting_usage')"
+            >
+              🔨 库存与管件使用量填报
             </button>
             <button 
               type="button" 
@@ -651,129 +658,137 @@
               <div 
                 v-for="group in groupedDemandFittingRows" 
                 :key="group.groupKey"
-                style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: all 0.2s ease;"
+                style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.03); transition: all 0.2s ease;"
               >
-                <!-- 车次汇总卡片表头 (支持点击展开/折叠) -->
+                <!-- 车次汇总卡片表头 (超紧凑清爽流式，0滚动条) -->
                 <div 
                   class="fitting-card-header"
-                  style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0;"
                   @click="toggleDemandFittingGroup(group.groupKey)"
                 >
-                  <div class="header-left-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span style="font-size: 14px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold;" :style="{ transform: isDemandFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
-                      ▶
+                  <!-- 左侧：箭头 + 车次 + 车牌 + 供给主体 + 发货时间 -->
+                  <div class="card-left-stream">
+                    <span 
+                      class="expand-caret-icon" 
+                      :style="{ transform: isDemandFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                    >▶</span>
+                    <span class="shipment-code-badge">{{ group.shipmentNo }}</span>
+                    <span class="plate-badge">{{ group.vehiclePlateNo }}</span>
+                    <span class="entity-pill-badge" :title="`供给主体: ${group.supplyEntityName}`">
+                      <span style="opacity: 0.8; font-size: 11px;">🏭</span>
+                      <span class="entity-name-text">{{ group.supplyEntityName }}</span>
                     </span>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                      <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
-                      <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
-                    </div>
-                    <span class="plate-badge" style="margin-left: 2px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
-                    <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`供给主体: ${group.supplyEntityName}`">
-                      <span style="color: #94a3b8; flex-shrink: 0;">🏭 供给方:</span>
-                      <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ group.supplyEntityName }}</strong>
-                    </div>
-                    <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
+                    <span class="shipped-time-text">{{ formatShortDateTime(group.shippedAt) }}</span>
                   </div>
 
-                  <div class="header-right-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <!-- 状态 Badge -->
-                    <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
-                    <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
-                    <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管归档</span>
-                    <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已归档</span>
-                    <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11.5px;">❌ 已撤销</span>
-                    <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
-
-                    <div style="text-align: right; margin-left: 4px;">
-                      <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                      <strong style="font-size: 13.5px; color: #2563eb;">发货 {{ group.totalShippedQty }} {{ getGroupUnitLabel(group) }} / 已确认到货 {{ group.totalArrivedQty }} {{ getGroupUnitLabel(group) }}</strong>
+                  <!-- 右侧：发到数量微芯片 + 状态 Badge + 操作按钮组 -->
+                  <div class="card-right-stream">
+                    <!-- 发到数量微芯片 -->
+                    <div class="qty-summary-chip">
+                      <span class="qty-types-lbl">{{ group.items.length }} 种</span>
+                      <span class="qty-divider">·</span>
+                      <span class="qty-stat-item text-blue">发 <strong>{{ group.totalShippedQty }}</strong></span>
+                      <span class="qty-divider">/</span>
+                      <span class="qty-stat-item text-emerald">到 <strong>{{ group.totalArrivedQty }}</strong></span>
+                      <span class="qty-unit-lbl">{{ getGroupUnitLabel(group) }}</span>
                     </div>
 
-                    <!-- 车次级整车操作主按钮 -->
-                    <button 
-                      v-if="(group.status === 'shipped' || group.status === 'pending_arrival' || !group.status || group.items.some(i => i.status === 'shipped' || i.status === 'pending_arrival' || !i.status)) && canConfirmArrival"
-                      type="button" 
-                      class="btn primary btn-sm" 
-                      style="padding: 4px 12px; font-size: 12px; background: #059669; border-color: #059669; color: #fff; cursor: pointer; flex-shrink: 0; font-weight: 600;"
-                      @click.stop="openFittingArrivalModal(group)"
-                    >
-                      🚚 整车到货确认
-                    </button>
+                    <!-- 履约状态 Badge -->
+                    <div class="status-badge-container">
+                      <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
+                      <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">✅ 待施工接收</span>
+                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管归档</span>
+                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已归档</span>
+                      <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px; white-space: nowrap;">❌ 已撤销</span>
+                      <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10.5px; padding: 1px 5px; margin-left: 2px; white-space: nowrap;">⚠️ 撤销</span>
+                    </div>
 
-                    <button 
-                      v-else-if="(group.status === 'arrived' || group.status === 'pending_receive' || group.items.some(i => i.status === 'arrived' || i.status === 'pending_receive')) && canConfirmReceipt"
-                      type="button" 
-                      class="btn primary btn-sm" 
-                      style="padding: 4px 12px; font-size: 12px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer; flex-shrink: 0; font-weight: 600;"
-                      @click.stop="openFittingConstructionModal(group)"
-                    >
-                      👷 整车施工接收
-                    </button>
+                    <!-- 操作按钮组 -->
+                    <div class="action-btn-container" @click.stop>
+                      <button 
+                        v-if="(group.status === 'shipped' || group.status === 'pending_arrival' || !group.status || group.items.some(i => i.status === 'shipped' || i.status === 'pending_arrival' || !i.status)) && canConfirmArrival"
+                        type="button" 
+                        class="btn primary btn-sm" 
+                        style="height: 26px; padding: 0 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer; font-weight: 600; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                        @click.stop="openFittingArrivalModal(group)"
+                      >
+                        🚚 到货确认
+                      </button>
 
-                    <!-- 流转凭证按钮 -->
-                    <button 
-                      type="button" 
-                      class="btn ghost btn-sm" 
-                      style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer; flex-shrink: 0;"
-                      @click.stop="showDeliveryDetail(group)"
-                    >
-                      📜 流转凭证
-                    </button>
+                      <button 
+                        v-else-if="(group.status === 'arrived' || group.status === 'pending_receive' || group.items.some(i => i.status === 'arrived' || i.status === 'pending_receive')) && canConfirmReceipt"
+                        type="button" 
+                        class="btn primary btn-sm" 
+                        style="height: 26px; padding: 0 8px; font-size: 11.5px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer; font-weight: 600; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                        @click.stop="openFittingConstructionModal(group)"
+                      >
+                        👷 施工接收
+                      </button>
+
+                      <button 
+                        type="button" 
+                        class="btn ghost btn-sm" 
+                        style="height: 26px; padding: 0 9px; font-size: 11.5px; color: #4f46e5; border: 1px solid #c7d2fe; background: #eef2ff; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 3px;"
+                        @click.stop="showDeliveryDetail(group)"
+                      >
+                        📜 流转凭证
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <!-- 明细展开区 (纯净货物清单展示) -->
-                <div v-show="isDemandFittingGroupExpanded(group.groupKey)" style="padding: 12px 16px; background: #ffffff;">
-                  <div v-if="group.shipRemark" style="font-size: 12px; color: #475569; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                    <span>📝 整车发货备注：</span>
-                    <span style="color: #0f172a;">{{ group.shipRemark }}</span>
+                <!-- 明细展开区 (纯净货物清单展示，100% 自适应，无滚动条) -->
+                <div v-show="isDemandFittingGroupExpanded(group.groupKey)" style="padding: 10px 14px 14px 14px; background: #ffffff;">
+                  <div v-if="group.shipRemark" style="font-size: 11.5px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    <span style="font-weight: 600;">📝 发货备注：</span>
+                    <span style="color: #1e293b;">{{ group.shipRemark }}</span>
                   </div>
 
-                  <!-- 视口横向滚动防护与手机卡片保护层 (Mobile Responsive Wrapper) -->
-                  <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 4px;">
-                    <table class="data-table demand-fitting-table" style="margin: 0; min-width: 680px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
-                      <thead style="background: #f8fafc;">
-                        <tr>
-                          <th style="width: 40px; text-align: center;">#</th>
-                          <th style="width: 120px;">管件类型</th>
-                          <th style="min-width: 220px;">型号 / 规格描述</th>
-                          <th style="width: 100px; text-align: right;">发货件数</th>
-                          <th style="width: 110px; text-align: right;">到货确认数</th>
-                          <th style="width: 130px; text-align: center;">履约状态</th>
+                  <div style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                    <table class="data-table demand-fitting-table" style="margin: 0; width: 100%; font-size: 12px; border-collapse: collapse;">
+                      <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                          <th style="width: 42px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                          <th style="width: 90px; text-align: center; white-space: nowrap;">名称</th>
+                          <th style="text-align: left; white-space: nowrap;">型号规格</th>
+                          <th style="width: 140px; text-align: center; white-space: nowrap;">订单编号</th>
+                          <th style="width: 75px; text-align: right; white-space: nowrap; color: #2563eb;">发货数量</th>
+                          <th style="width: 75px; text-align: right; white-space: nowrap; color: #059669;">到货确认数</th>
+                          <th style="width: 115px; text-align: center; white-space: nowrap;">履约状态</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="(item, idx) in group.items" :key="item.id" style="vertical-align: middle;">
-                          <td class="col-index" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                          
-                          <td class="col-type">
-                            <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ item.fitting_type }}</span>
-                            <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
+                        <tr 
+                          v-for="(item, idx) in group.items" 
+                          :key="item.id" 
+                          style="border-bottom: 1px solid #f1f5f9; height: 36px; vertical-align: middle;"
+                        >
+                          <td style="width: 32px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11px;">
+                            {{ idx + 1 }}
                           </td>
-                          
-                          <td class="col-model">
-                            <strong style="color: #1e293b;">{{ item.model_spec }}</strong>
-                            <div style="font-family: monospace; font-size: 11px; color: #94a3b8;">单号: {{ item.order_no }}</div>
+                          <td style="text-align: center; white-space: nowrap;">
+                            <span class="fitting-type-badge" style="font-size: 11px; padding: 1px 6px;">{{ item.fitting_type }}</span>
                           </td>
-                          
-                          <td class="col-shipped" style="text-align: right; font-weight: bold; color: #2563eb;">
-                            <span class="mobile-lbl" style="display: none;">发货件数: </span>
-                            <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
+                          <td class="font-mono" style="font-weight: 600; color: #1e293b;">
+                            {{ item.model_spec }}
                           </td>
-                          
-                          <!-- 到货确认数量展示 -->
-                          <td class="col-arrived" style="text-align: right; font-weight: bold; color: #059669;">
-                            <span class="mobile-lbl" style="display: none;">到货确认: </span>
-                            <span>{{ item.arrived_qty !== undefined && item.arrived_qty !== null ? item.arrived_qty : item.shipped_qty }} {{ item.unit || '个' }}</span>
+                          <td class="font-mono" style="text-align: center; color: #64748b; font-size: 11px;">
+                            {{ item.order_no || '-' }}
                           </td>
-
-                          <!-- 明细单项状态 Badge -->
-                          <td class="col-status" style="text-align: center;">
-                            <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
-                            <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
-                            <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
-                            <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
-                            <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
+                          <td class="font-mono" style="text-align: right; font-weight: 700; color: #2563eb; white-space: nowrap;">
+                            <span v-if="item.status === 'cancelled'" style="color: #94a3b8; text-decoration: line-through;">{{ item.shipped_qty }}</span>
+                            <span v-else>{{ item.shipped_qty }} {{ item.unit || '件' }}</span>
+                          </td>
+                          <td class="font-mono" style="text-align: right; font-weight: 700; color: #059669; white-space: nowrap;">
+                            <span v-if="isItemArrived(item)">{{ getItemArrivedQty(item) }} {{ item.unit || '件' }}</span>
+                            <span v-else-if="item.status === 'cancelled'" style="color: #94a3b8; font-size: 11px; font-weight: normal;">-</span>
+                            <span v-else style="color: #94a3b8; font-size: 11px; font-weight: normal;">待到货 (0)</span>
+                          </td>
+                          <td style="text-align: center; white-space: nowrap;">
+                            <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10.5px; padding: 1px 6px;">🚚 待到货确认</span>
+                            <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px; padding: 1px 6px;">✅ 待施工接收</span>
+                            <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 10.5px; padding: 1px 6px;">👷 待库管归档</span>
+                            <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 10.5px; padding: 1px 6px;">🏢 库管已归档</span>
+                            <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 10.5px; padding: 1px 6px;">❌ 已撤销</span>
                           </td>
                         </tr>
                       </tbody>
@@ -795,16 +810,481 @@
                 </div>
                 <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
                   <span>📦 收到管件总量</span>
-                  <strong style="color: #2563eb;">{{ demandFittingTotalQty }} 个</strong>
+                  <strong style="color: #2563eb;">{{ demandFittingTotalQty }} 件</strong>
                 </div>
                 <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
                   <span>🟢 常用标准管件</span>
-                  <strong style="color: #16a34a;">{{ demandFittingStandardQty }} 个</strong>
+                  <strong style="color: #16a34a;">{{ demandFittingStandardQty }} 件</strong>
                 </div>
                 <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
                   <span>🟧 非常用/异形管件</span>
-                  <strong style="color: #ea580c;">{{ demandFittingNonStandardQty }} 个</strong>
+                  <strong style="color: #ea580c;">{{ demandFittingNonStandardQty }} 件</strong>
                 </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Tab 7: 标段库存与管件使用量填报 -->
+        <div v-if="activeTab === 'fitting_usage'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <!-- 标题与操作栏 -->
+            <div class="panel-title-row">
+              <div>
+                <h2>📦 {{ currentSection1Name }}库存与管件使用量填报</h2>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <div class="section-select-group" style="background: #f8fafc; padding: 4px 12px; border-radius: 8px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 6px;">
+                  <span class="section-select-label" style="font-size: 13px; color: #475569; font-weight: 500;">📅 消耗采集日期:</span>
+                  <strong style="font-size: 13.5px; color: #1e293b; font-family: monospace;">{{ usageDate || '未设置' }}</strong>
+                </div>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  style="height: 34px; padding: 0 14px; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer; border-radius: 8px;"
+                  @click="refreshFittingUsageData"
+                >
+                  🔄 刷新库存
+                </button>
+              </div>
+            </div>
+
+            <!-- 库存与消耗微看板 (Premium Metrics Grid) -->
+            <div class="fitting-usage-summary-grid">
+              <div class="summary-metric-card card-blue">
+                <div class="metric-header-row">
+                  <span class="metric-icon">📦</span>
+                  <span class="metric-label">到货物料种类</span>
+                </div>
+                <div class="metric-body-row">
+                  <strong class="metric-val text-blue">{{ fittingInventorySummary.total_types || 0 }}</strong>
+                  <span class="metric-unit">种</span>
+                </div>
+              </div>
+
+              <div class="summary-metric-card card-indigo">
+                <div class="metric-header-row">
+                  <span class="metric-icon">🚚</span>
+                  <span class="metric-label">累计到货总数</span>
+                </div>
+                <div class="metric-body-row">
+                  <strong class="metric-val text-indigo">{{ fittingInventorySummary.arrived_sum || 0 }}</strong>
+                  <span class="metric-unit">件</span>
+                </div>
+              </div>
+
+              <div class="summary-metric-card card-emerald">
+                <div class="metric-header-row">
+                  <span class="metric-icon">🔨</span>
+                  <span class="metric-label">累计安装总数</span>
+                </div>
+                <div class="metric-body-row">
+                  <strong class="metric-val text-emerald">{{ fittingInventorySummary.used_sum || 0 }}</strong>
+                  <span class="metric-unit">件</span>
+                </div>
+              </div>
+
+              <div class="summary-metric-card card-amber">
+                <div class="metric-header-row">
+                  <span class="metric-icon">🏷️</span>
+                  <span class="metric-label">现场实时可用库存</span>
+                </div>
+                <div class="metric-body-row">
+                  <strong class="metric-val text-amber">{{ fittingInventorySummary.stock_sum || 0 }}</strong>
+                  <span class="metric-unit">件</span>
+                </div>
+              </div>
+
+              <div class="summary-metric-card card-purple">
+                <div class="metric-header-row">
+                  <span class="metric-icon">📈</span>
+                  <span class="metric-label">整体安装消耗率</span>
+                </div>
+                <div class="metric-body-row">
+                  <strong class="metric-val text-purple">{{ fittingInventorySummary.overall_rate_pct || 0 }}%</strong>
+                </div>
+                <div class="micro-progress-bar">
+                  <div class="micro-progress-fill" :style="{ width: `${Math.min(fittingInventorySummary.overall_rate_pct || 0, 100)}%` }"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 加载与空数据提示 -->
+            <div v-if="fittingInventoryLoading" class="loading-text" style="padding: 24px; text-align: center; color: #64748b;">
+              ⏳ 正在计算当前标段现场实时库存...
+            </div>
+            <div v-else-if="fittingInventoryError" class="error-box">{{ fittingInventoryError }}</div>
+            <div v-else-if="!filteredFittingInventoryItems.length" class="empty-box" style="padding: 30px; text-align: center; color: #94a3b8;">
+              当前{{ modeLabels.section_1 }}暂无可用的到货管件记录。
+            </div>
+
+            <!-- 单日已提交锁定提示条 -->
+            <div v-if="hasSubmittedFittingUsageToday" class="submitted-warning-banner" style="margin-top: 14px; padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; color: #92400e; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span>⚠️ <strong>单日填报已锁定</strong>：当前标段在【{{ usageDate }}】已完成管件安装使用量填报（已记账）。单日仅允许提交一次，如需重新填报，请在下方【管件现场安装使用历史台账】中点击【撤回】后重新填报。</span>
+            </div>
+
+            <!-- 动态库存与可视化填报表 -->
+            <div v-else class="table-wrap fitting-baseline-table-wrap" style="margin-top: 14px; max-height: 580px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                    <th style="min-width: 100px; text-align: center; white-space: nowrap;">名称</th>
+                    <th style="min-width: 180px; white-space: nowrap;">到货型号规格</th>
+                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">单位</th>
+                    <th style="min-width: 140px; white-space: nowrap;">库存量</th>
+                    <th style="min-width: 180px; white-space: nowrap;">本日使用量</th>
+                    <th style="min-width: 140px; white-space: nowrap;">备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr 
+                    v-for="(item, idx) in filteredFittingInventoryItems" 
+                    :key="getItemKey(item)"
+                    :class="{ 'row-has-input': (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0 }"
+                  >
+                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11.5px;">
+                      {{ idx + 1 }}
+                    </td>
+                    <td class="cell-text" style="text-align: center;">
+                      <span class="fitting-type-badge">{{ item.fitting_type }}</span>
+                    </td>
+                    <td class="cell-text font-mono" style="font-weight: 600; color: #1e293b;">
+                      {{ item.model_spec }}
+                    </td>
+                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #64748b; font-size: 12px;">
+                      {{ item.unit }}
+                    </td>
+                    <td class="cell-text">
+                      <div class="stock-progress-cell">
+                        <div class="stock-stat-text">
+                          <span>已用: <strong style="color: #059669;">{{ item.used_qty }}</strong></span>
+                          <span>库存剩余: <strong :style="{ color: item.stock_qty > 0 ? '#2563eb' : '#dc2626' }">{{ item.stock_qty }}</strong> {{ item.unit }}</span>
+                        </div>
+                        <div class="stock-progress-bar-bg">
+                          <div class="stock-progress-bar-used" :style="{ width: `${item.usage_rate_pct}%` }"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="cell-text">
+                      <div v-if="item.stock_qty > 0" class="usage-input-control-group">
+                        <div class="stepper-wrap">
+                          <button 
+                            type="button" 
+                            class="step-btn" 
+                            :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) <= 0"
+                            @click="adjustFittingUsageQty(item, -1)"
+                          >-</button>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            :max="item.stock_qty" 
+                            v-model.number="getFormItem(item).qty" 
+                            class="qty-input"
+                            :disabled="hasSubmittedFittingUsageToday"
+                            @blur="validateFittingUsageQty(item)"
+                          />
+                          <button 
+                            type="button" 
+                            class="step-btn" 
+                            :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) >= item.stock_qty"
+                            @click="adjustFittingUsageQty(item, 1)"
+                          >+</button>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0" 
+                          :max="item.stock_qty" 
+                          v-model.number="getFormItem(item).qty" 
+                          class="usage-slider"
+                          :disabled="hasSubmittedFittingUsageToday"
+                        />
+                        <button 
+                          v-if="!hasSubmittedFittingUsageToday && (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0"
+                          type="button" 
+                          class="quick-clear-btn"
+                          @click="clearFittingUsageItem(item)"
+                          title="清零"
+                        >✕</button>
+                      </div>
+                      <div v-else style="color: #ef4444; font-size: 12px; font-weight: 500;">
+                        ⚠️ 现场已无结存库存
+                      </div>
+                    </td>
+                    <td class="cell-text">
+                      <input 
+                        type="text" 
+                        v-model="getFormItem(item).remark"
+                        placeholder="备注" 
+                        class="text-input-compact"
+                        :disabled="hasSubmittedFittingUsageToday || item.stock_qty <= 0"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 底部提交条 -->
+            <div class="usage-submit-action-bar" style="margin-top: 14px; padding: 12px 18px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="font-size: 13.5px; color: #1e3a8a;">
+                <span v-if="hasSubmittedFittingUsageToday" style="color: #92400e; font-weight: 600;">
+                  🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。如需重新填报请在历史台账中撤回。
+                </span>
+                <template v-else>
+                  <span>已选填报 <strong>{{ totalFilledItemsCount }}</strong> 种管件规格，</span>
+                  <span>本次拟安装消耗合计：<strong style="color: #2563eb; font-size: 16px;">{{ totalFilledQtySum }}</strong> 件</span>
+                  <span v-if="totalFilledQtySum > 0" style="margin-left: 8px; color: #059669; font-size: 12px;">(消耗采集日期: {{ usageDate }})</span>
+                </template>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button
+                  type="button"
+                  class="btn ghost"
+                  style="height: 36px; padding: 0 14px; font-size: 13px;"
+                  :disabled="hasSubmittedFittingUsageToday || totalFilledQtySum <= 0"
+                  @click="resetFittingUsageForm"
+                >
+                  清空填写
+                </button>
+                <button
+                  type="button"
+                  class="btn primary"
+                  :style="{ opacity: hasSubmittedFittingUsageToday ? 0.6 : 1, cursor: hasSubmittedFittingUsageToday ? 'not-allowed' : 'pointer' }"
+                  style="height: 36px; padding: 0 22px; font-size: 14px; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;"
+                  :disabled="hasSubmittedFittingUsageToday || totalFilledQtySum <= 0 || fittingUsageSubmitting"
+                  @click="handleFittingUsageSubmit"
+                >
+                  <span v-if="hasSubmittedFittingUsageToday">🔒 本日已提交 (单日仅限提交一次)</span>
+                  <span v-else-if="fittingUsageSubmitting">正在提交入库...</span>
+                  <span v-else>🚀 提交管件安装记录</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 下半区：管件安装使用历史台账 -->
+            <div style="margin-top: 28px; border-top: 2px dashed #e2e8f0; padding-top: 20px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 16px; color: #1e293b; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                    <span>📋 管件现场安装使用历史台账</span>
+                  </h3>
+                  <span style="font-size: 12px; color: #64748b;">支持查看与追溯所有历史安装流水；填报人 24 小时内或超级管理员可撤回误填记录并自动恢复现场库存。</span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button
+                    v-if="groupedFittingUsageHistory.length"
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="expandAllUsageDates"
+                  >
+                    全部展开
+                  </button>
+                  <button
+                    v-if="groupedFittingUsageHistory.length"
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="collapseAllUsageDates"
+                  >
+                    全部折叠
+                  </button>
+                  <button
+                    type="button"
+                    class="btn secondary"
+                    style="height: 30px; font-size: 12px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px;"
+                    @click="exportFittingUsageHistory"
+                  >
+                    📊 导出使用台账
+                  </button>
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="loadFittingUsageHistory"
+                  >
+                    🔄 刷新台账
+                  </button>
+                </div>
+              </div>
+
+              <!-- 历史台账表格 -->
+              <div v-if="fittingUsageHistoryLoading" class="loading-text" style="padding: 16px; text-align: center; color: #64748b;">
+                正在加载安装流水台账...
+              </div>
+              <div v-else-if="!groupedFittingUsageHistory.length" class="empty-box" style="padding: 20px; text-align: center; color: #94a3b8;">
+                当前标段尚无管件安装使用流水记录。
+              </div>
+              <div v-else class="table-wrap fitting-baseline-table-wrap" style="max-height: 520px;">
+                <table class="data-table grouped-history-table" style="width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed;">
+                  <thead>
+                    <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                      <th style="width: 38px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                      <th style="width: 110px; text-align: left; padding: 6px 8px; white-space: nowrap;">消耗采集日期</th>
+                      <th style="width: 90px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报规模</th>
+                      <th style="width: 85px; text-align: right; padding: 6px 8px; color: #2563eb; white-space: nowrap;">有效安装总量</th>
+                      <th style="width: 75px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报人</th>
+                      <th style="width: 95px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报时间</th>
+                      <th style="width: 60px; text-align: center; padding: 6px 2px; white-space: nowrap;">状态</th>
+                      <th style="width: 120px; text-align: center; padding: 6px 2px; white-space: nowrap;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(group, gIdx) in groupedFittingUsageHistory" :key="group.usage_date">
+                      <!-- 📅 日期聚合主行 -->
+                      <tr 
+                        class="history-group-header-row"
+                        :class="{ 'is-expanded': isUsageDateExpanded(group.usage_date) }"
+                        @click="toggleUsageDateExpand(group.usage_date)"
+                      >
+                        <td class="cell-text" style="width: 38px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11px;">
+                          {{ gIdx + 1 }}
+                        </td>
+                        <td class="cell-text font-mono" style="padding: 6px 8px; font-weight: 700; color: #1e293b; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="`消耗采集日期: ${group.usage_date}`">
+                          <span class="group-expand-caret">{{ isUsageDateExpanded(group.usage_date) ? '▼' : '▶' }}</span>
+                          <span>{{ group.usage_date }}</span>
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 4px; white-space: nowrap;">
+                          <span class="pill-badge-subtle" style="font-size: 11px; padding: 1px 6px;">共 {{ group.total_types }} 种</span>
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: right; padding: 6px 8px; font-weight: 700; color: #2563eb; white-space: nowrap;">
+                          {{ group.total_active_qty }} 件
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 4px; font-size: 11.5px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="group.filled_by_str">
+                          {{ group.filled_by_str }}
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: center; padding: 6px 4px; font-size: 11px; color: #64748b; white-space: nowrap;">
+                          {{ formatUsageTime(group.latest_filled_at) }}
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 2px; white-space: nowrap;">
+                          <span v-if="!group.has_cancelled" style="font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: #ecfdf5; color: #059669; font-weight: 600;">已记账</span>
+                          <span v-else-if="group.has_active && group.has_cancelled" style="font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: #fff7ed; color: #ea580c; font-weight: 600;">含作废</span>
+                          <span v-else style="font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: #fef2f2; color: #ef4444; font-weight: 600;">全作废</span>
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 2px; white-space: nowrap;">
+                          <div style="display: inline-flex; align-items: center; justify-content: center; gap: 3px;">
+                            <button
+                              v-if="isGlobalAdmin"
+                              type="button"
+                              class="btn-toggle-expand"
+                              style="padding: 1px 5px; font-size: 10.5px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff;"
+                              @click.stop="openEditUsageBatchModal(group)"
+                              title="管理员批量编辑整日安装批次 (支持修改日期、填报人与各项物料)"
+                            >
+                              ✏️ 编辑
+                            </button>
+                            <button
+                              v-if="isGlobalAdmin && group.has_active"
+                              type="button"
+                              class="btn-cancel-usage"
+                              style="padding: 1px 5px; font-size: 10.5px; color: #b91c1c; border-color: #fecaca; background: #fef2f2;"
+                              @click.stop="openCancelUsageGroupModal(group)"
+                              title="管理员作废当日整批记录 (退回库存并解锁填报)"
+                            >
+                              ↩️ 作废
+                            </button>
+                            <button 
+                              type="button" 
+                              class="btn-toggle-expand"
+                              style="padding: 1px 5px; font-size: 10.5px;"
+                              @click.stop="toggleUsageDateExpand(group.usage_date)"
+                            >
+                              {{ isUsageDateExpanded(group.usage_date) ? '收起▴' : '明细▾' }}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      <!-- 🔍 日期明细展开子表格 -->
+                      <tr v-if="isUsageDateExpanded(group.usage_date)" class="history-detail-container-row">
+                        <td colspan="8" style="padding: 0; background: #f8fafc; border-bottom: 2px solid #cbd5e1;">
+                          <div style="padding: 8px 12px 12px 16px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                              <span>📋 【消耗采集日期: {{ group.usage_date }}】安装物料明细 (共 {{ group.items.length }} 笔)</span>
+                              <span v-if="isGlobalAdmin" style="font-size: 11px; color: #2563eb; font-weight: 500;">⚡ 管理员可对单项或整批进行编辑微调与作废</span>
+                              <span v-else style="font-size: 11px; color: #64748b;">台账已归档记账，如需修正请联系系统管理员</span>
+                            </div>
+                            <table class="detail-nested-table" style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; font-size: 12px; table-layout: fixed;">
+                              <thead>
+                                <tr style="background: #f1f5f9; color: #475569;">
+                                  <th style="width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                                  <th style="width: 70px; text-align: center; padding: 6px 4px; white-space: nowrap;">名称</th>
+                                  <th style="text-align: left; padding: 6px 8px; white-space: nowrap;">型号规格</th>
+                                  <th style="width: 70px; text-align: right; padding: 6px 8px; color: #2563eb; white-space: nowrap;">安装量</th>
+                                  <th style="width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">单位</th>
+                                  <th style="width: 120px; text-align: left; padding: 6px 8px; white-space: nowrap;">备注</th>
+                                  <th style="width: 60px; text-align: center; padding: 6px 2px; white-space: nowrap;">状态</th>
+                                  <th style="width: 95px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报人/时间</th>
+                                  <th style="width: 80px; text-align: center; padding: 6px 2px; white-space: nowrap;">操作</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr 
+                                  v-for="(row, rIdx) in group.items" 
+                                  :key="row.id || rIdx"
+                                  :style="{ opacity: row.status === 'cancelled' ? 0.55 : 1, background: row.status === 'cancelled' ? '#fff5f5' : '#ffffff' }"
+                                  style="border-bottom: 1px solid #f1f5f9;"
+                                >
+                                  <td style="width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11px;">
+                                    {{ rIdx + 1 }}
+                                  </td>
+                                  <td style="text-align: center; padding: 6px 4px; white-space: nowrap;">
+                                    <span class="fitting-type-badge" style="font-size: 10.5px; padding: 1px 5px;">{{ row.fitting_type }}</span>
+                                  </td>
+                                  <td class="font-mono" style="font-weight: 600; color: #1e293b; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.model_spec">
+                                    {{ row.model_spec }}
+                                  </td>
+                                  <td class="font-mono" style="text-align: right; font-weight: 700; color: #2563eb; padding: 6px 8px; white-space: nowrap;">
+                                    {{ row.usage_qty }}
+                                  </td>
+                                  <td style="width: 36px; padding: 6px 2px; text-align: center; color: #64748b; white-space: nowrap;">
+                                    {{ row.unit || '件' }}
+                                  </td>
+                                  <td style="padding: 6px 8px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.remark || ''">
+                                    {{ row.remark || '-' }}
+                                  </td>
+                                  <td style="text-align: center; padding: 6px 2px; white-space: nowrap;">
+                                    <span v-if="row.status === 'active'" style="font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #ecfdf5; color: #059669; font-weight: 600;">已记账</span>
+                                    <span v-else style="font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #fef2f2; color: #ef4444; font-weight: 600;" :title="`作废原因: ${row.cancel_reason}`">已作废</span>
+                                  </td>
+                                  <td style="text-align: center; font-size: 11px; color: #64748b; padding: 6px 4px; white-space: nowrap;">
+                                    <div>{{ row.filled_by }}</div>
+                                    <div style="font-size: 10px; color: #94a3b8; font-family: monospace;">{{ formatUsageTime(row.filled_at) }}</div>
+                                  </td>
+                                  <td style="text-align: center; padding: 6px 2px; white-space: nowrap;">
+                                    <div v-if="isGlobalAdmin" style="display: inline-flex; align-items: center; justify-content: center; gap: 3px;">
+                                      <button
+                                        type="button"
+                                        class="btn-toggle-expand"
+                                        style="padding: 1px 4px; font-size: 10px; color: #2563eb; border-color: #bfdbfe; background: #eff6ff;"
+                                        @click="openEditUsageItemModal(row)"
+                                        title="管理员编辑此笔安装记录"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        v-if="row.status === 'active'"
+                                        type="button"
+                                        class="btn-cancel-usage"
+                                        style="padding: 1px 4px; font-size: 10px;"
+                                        @click="openCancelUsageModal(row)"
+                                        title="管理员作废当笔记录"
+                                      >
+                                        ↩️
+                                      </button>
+                                    </div>
+                                    <span v-else style="font-size: 11px; color: #94a3b8;">-</span>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>
@@ -1193,11 +1673,12 @@
             <div v-else-if="!filteredFittingBaselineRows.length" class="empty-box">
               {{ fittingBaselineRows.length ? '未找到符合筛选条件的管件记录。' : `当前${modeLabels.section_1}暂无管件基准量记录。` }}
             </div>
-            <div v-else class="table-wrap" style="overflow-x: auto;">
+            <!-- 限制20行数据高度并带固定表头与垂直滚动条 -->
+            <div v-else class="table-wrap fitting-baseline-table-wrap">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th style="width: 44px; min-width: 44px; max-width: 44px; padding: 8px 4px; text-align: center; white-space: nowrap;">序号</th>
+                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
                     <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'system_type' }" style="min-width: 95px; text-align: center; white-space: nowrap;" @click="handleFittingSort('system_type')">
                       系统类型
                       <span class="sort-icon">{{ fittingSortState.key === 'system_type' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
@@ -1257,7 +1738,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="(row, idx) in sortedFittingBaselineRows" :key="row.id || idx">
-                    <td class="cell-text" style="width: 44px; min-width: 44px; max-width: 44px; padding: 6px 4px; text-align: center; color: #94a3b8; font-size: 12px;">{{ idx + 1 }}</td>
+                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11.5px;">{{ idx + 1 }}</td>
                     <td class="cell-text" style="text-align: center;">
                       <span :style="{
                         fontSize: '11.5px',
@@ -1860,6 +2341,198 @@
         </div>
       </div>
     </div>
+
+    <!-- ↩️ 管件使用量记录撤回作废 Modal -->
+    <Transition name="fade">
+      <div v-if="showFittingUsageCancelModal" class="block-modal-overlay" @click.self="showFittingUsageCancelModal = false">
+        <div class="block-modal-container" style="max-width: 500px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;">
+            <span class="block-warning-icon">↩️</span>
+            <h3 style="margin-top: 5px; color: #fff;">{{ selectedCancelUsageGroup ? '撤回整日管件安装使用记录' : '撤回管件安装使用记录' }}</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">
+              <span v-if="selectedCancelUsageGroup">
+                消耗采集日期：<strong>{{ selectedCancelUsageGroup.usage_date }}</strong> (共 {{ selectedCancelUsageGroup.items.filter(i => i.status === 'active').length }} 笔有效物料，合计 {{ selectedCancelUsageGroup.total_active_qty }} 件)
+              </span>
+              <span v-else>
+                管件：{{ selectedCancelUsageRow?.fitting_type }} {{ selectedCancelUsageRow?.model_spec }} ({{ selectedCancelUsageRow?.usage_qty }} {{ selectedCancelUsageRow?.unit || '件' }})
+              </span>
+            </p>
+          </div>
+
+          <div style="padding: 16px 20px; font-size: 13px; color: #334155;">
+            <div style="margin-bottom: 12px; background: #fff5f5; border: 1px solid #fed7d7; padding: 10px 12px; border-radius: 6px; color: #c53030; font-size: 12px;">
+              <span v-if="selectedCancelUsageGroup">
+                ⚠️ 撤回作废后，该日所有有效安装物料（共 <strong>{{ selectedCancelUsageGroup.total_active_qty }} 件</strong>）将立即全额退回当前标段的现场可用库存，<strong>单日填报通道将自动重新解锁</strong>！
+              </span>
+              <span v-else>
+                ⚠️ 撤回作废后，该笔安装使用的 <strong>{{ selectedCancelUsageRow?.usage_qty }} {{ selectedCancelUsageRow?.unit || '件' }}</strong> 将立即退回至当前标段的现场可用库存！
+              </span>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 6px; color: #1e293b;">
+                请填写撤回/作废原因 <span style="color: #ef4444;">*</span>:
+              </label>
+              <textarea
+                v-model="cancelUsageReason"
+                rows="3"
+                placeholder="例如：现场桩号或数量录入有误，需重新核实填报..."
+                style="width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; outline: none;"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="block-modal-actions" style="margin-top: 5px; display: flex; gap: 10px;">
+            <button
+              type="button"
+              class="btn ghost"
+              style="flex: 1;"
+              @click="showFittingUsageCancelModal = false"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="btn primary"
+              style="flex: 1; background: #ef4444 !important; border-color: #ef4444 !important; color: #fff !important; font-weight: 600;"
+              :disabled="!cancelUsageReason.trim() || cancelUsageSubmitting"
+              @click="handleConfirmCancelUsage"
+            >
+              {{ cancelUsageSubmitting ? '正在撤回...' : '确认撤回并恢复库存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ✏️ 管理员编辑单项安装记录 Modal -->
+    <Transition name="fade">
+      <div v-if="showFittingUsageItemEditModal" class="block-modal-overlay" @click.self="showFittingUsageItemEditModal = false">
+        <div class="block-modal-container" style="max-width: 520px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;">
+            <span class="block-warning-icon">✏️</span>
+            <h3 style="margin-top: 5px; color: #fff;">管理员编辑安装记录</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">
+              物料：{{ selectedEditUsageItem?.fitting_type }} {{ selectedEditUsageItem?.model_spec }} ({{ selectedEditUsageItem?.unit || '件' }})
+            </p>
+          </div>
+
+          <div style="padding: 16px 20px; font-size: 13px; color: #334155;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">消耗采集日期 <span style="color: #ef4444;">*</span></label>
+                <input v-model="editItemForm.usage_date" type="date" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">填报人</label>
+                <input v-model="editItemForm.filled_by" type="text" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">安装数量 ({{ selectedEditUsageItem?.unit || '件' }}) <span style="color: #ef4444;">*</span></label>
+                <input v-model.number="editItemForm.usage_qty" type="number" min="1" style="width: 100%; padding: 6px 8px; font-size: 13px; font-weight: 700; color: #2563eb; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">记录状态</label>
+                <select v-model="editItemForm.status" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;">
+                  <option value="active">🟢 已记账 (生效并占用库存)</option>
+                  <option value="cancelled">🔴 已作废 (退回可用库存)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">施工备注</label>
+              <input v-model="editItemForm.remark" type="text" placeholder="填写施工部位、核验说明等备注信息" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+            </div>
+
+            <div v-if="editItemForm.status === 'cancelled'" style="margin-bottom: 12px; background: #fff5f5; border: 1px solid #fed7d7; padding: 10px; border-radius: 6px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #c53030;">作废原因说明 <span style="color: #ef4444;">*</span></label>
+              <input v-model="editItemForm.cancel_reason" type="text" placeholder="必填：请输入作废原因说明" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #feb2b2; border-radius: 6px; box-sizing: border-box;" />
+            </div>
+          </div>
+
+          <div class="block-modal-actions" style="margin-top: 5px; display: flex; gap: 10px;">
+            <button type="button" class="btn ghost" style="flex: 1;" @click="showFittingUsageItemEditModal = false">取消</button>
+            <button type="button" class="btn primary" style="flex: 1; background: #2563eb !important; border-color: #2563eb !important; color: #fff !important; font-weight: 600;" :disabled="editItemSubmitting || (editItemForm.status === 'active' && editItemForm.usage_qty <= 0) || (editItemForm.status === 'cancelled' && !editItemForm.cancel_reason.trim())" @click="handleConfirmUpdateUsageItem">
+              {{ editItemSubmitting ? '保存中...' : '💾 保存修改' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 📋 管理员批量编辑整日安装批次 Modal -->
+    <Transition name="fade">
+      <div v-if="showFittingUsageBatchEditModal" class="block-modal-overlay" @click.self="showFittingUsageBatchEditModal = false">
+        <div class="block-modal-container" style="max-width: 650px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;">
+            <span class="block-warning-icon">📋</span>
+            <h3 style="margin-top: 5px; color: #fff;">管理员批量编辑整日安装批次</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">
+              当前标段在【{{ selectedEditUsageGroup?.usage_date }}】的管件安装批次 (共 {{ editBatchForm.items.length }} 笔物料)
+            </p>
+          </div>
+
+          <div style="padding: 16px 20px; font-size: 13px; color: #334155; max-height: 60vh; overflow-y: auto;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">整批迁移至新消耗采集日期</label>
+                <input v-model="editBatchForm.new_usage_date" type="date" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #1e293b;">批量更新填报人</label>
+                <input v-model="editBatchForm.filled_by" type="text" placeholder="留空则保持各项原填报人" style="width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <div style="font-weight: 600; margin-bottom: 8px; color: #0f172a;">📦 当日各物料使用量微调：</div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+              <thead>
+                <tr style="background: #f1f5f9; color: #475569;">
+                  <th style="padding: 6px 4px; text-align: center; width: 65px;">类型</th>
+                  <th style="padding: 6px 6px; text-align: left;">型号规格</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 85px;">安装数量</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 150px;">施工备注</th>
+                  <th style="padding: 6px 4px; text-align: center; width: 75px;">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="it in editBatchForm.items" :key="it.id" style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 6px 4px; text-align: center;">
+                    <span class="fitting-type-badge" style="font-size: 10.5px;">{{ it.fitting_type }}</span>
+                  </td>
+                  <td class="font-mono" style="padding: 6px 6px; font-weight: 600; font-size: 11.5px;">
+                    {{ it.model_spec }}
+                  </td>
+                  <td style="padding: 6px 6px; text-align: right;">
+                    <input v-model.number="it.usage_qty" type="number" min="0" style="width: 65px; padding: 3px 4px; font-size: 12px; font-weight: 700; color: #2563eb; text-align: right; border: 1px solid #cbd5e1; border-radius: 4px;" />
+                  </td>
+                  <td style="padding: 6px 6px;">
+                    <input v-model="it.remark" type="text" placeholder="施工部位/说明等备注" style="width: 100%; padding: 4px 6px; font-size: 11.5px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;" />
+                  </td>
+                  <td style="padding: 6px 4px; text-align: center;">
+                    <select v-model="it.status" style="padding: 2px 4px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                      <option value="active">🟢 生效</option>
+                      <option value="cancelled">🔴 作废</option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block-modal-actions" style="margin-top: 5px; display: flex; gap: 10px;">
+            <button type="button" class="btn ghost" style="flex: 1;" @click="showFittingUsageBatchEditModal = false">取消</button>
+            <button type="button" class="btn primary" style="flex: 1; background: #4f46e5 !important; border-color: #4f46e5 !important; color: #fff !important; font-weight: 600;" :disabled="editBatchSubmitting" @click="handleConfirmUpdateUsageBatch">
+              {{ editBatchSubmitting ? '正在批量保存...' : '💾 批量保存并重算库存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1885,7 +2558,13 @@ import {
   submitTubeDemandManagementSection1Status,
   getFittingDeliveriesList,
   confirmFittingDeliveryArrival,
-  confirmFittingDeliveryConstruction
+  confirmFittingDeliveryConstruction,
+  getTubeFittingInventorySummary,
+  submitTubeFittingUsage,
+  listTubeFittingUsageHistory,
+  cancelTubeFittingUsage,
+  updateTubeFittingUsageItem,
+  updateTubeFittingUsageBatch
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -1925,18 +2604,12 @@ const receiptRemarkModalData = ref({
 })
 
 function getGroupUnitLabel(group) {
-  if (!group || !group.items || !group.items.length) return '个'
-  const units = Array.from(new Set(group.items.map(it => String(it.unit || '个').trim()).filter(Boolean)))
-  if (units.length === 1) return units[0]
+  if (!group || !group.items || !group.items.length) return '件'
   return '件'
 }
 
 function getModalUnitLabel(modalData) {
-  if (!modalData) return '个'
-  const items = modalData.itemsList || []
-  if (!items.length) return modalData.unit || '个'
-  const units = Array.from(new Set(items.map(it => String(it.unit || '个').trim()).filter(Boolean)))
-  if (units.length === 1) return units[0]
+  if (!modalData) return '件'
   return '件'
 }
 
@@ -2237,6 +2910,25 @@ const toggleAllDemandFittingGroups = (expandAll = true) => {
   }
 }
 
+function isItemArrived(item) {
+  if (!item || item.status === 'cancelled') return false
+  if (['arrived', 'pending_receive', 'construction_confirmed', 'received', 'pending_warehouse', 'warehouse_confirmed', 'completed'].includes(item.status)) {
+    return true
+  }
+  if (item.arrived_confirm_at || item.arrived_at) {
+    return true
+  }
+  return false
+}
+
+function getItemArrivedQty(item) {
+  if (!isItemArrived(item)) return 0
+  if (item.arrived_qty !== null && item.arrived_qty !== undefined && !isNaN(Number(item.arrived_qty))) {
+    return Number(item.arrived_qty)
+  }
+  return Number(item.shipped_qty) || 0
+}
+
 const groupedDemandFittingRows = computed(() => {
   const map = new Map()
   for (const item of fittingRows.value) {
@@ -2261,19 +2953,27 @@ const groupedDemandFittingRows = computed(() => {
     }
     const group = map.get(groupKey)
     group.items.push(item)
-    group.totalShippedQty += (Number(item.shipped_qty) || 0)
-    if (['arrived', 'construction_confirmed', 'received', 'warehouse_confirmed'].includes(item.status) && item.arrived_qty !== null && item.arrived_qty !== undefined) {
-      group.totalArrivedQty += (Number(item.arrived_qty) || 0)
+
+    // 仅累加未作废的有效发运与到货数据
+    if (item.status !== 'cancelled') {
+      group.totalShippedQty += (Number(item.shipped_qty) || 0)
+      if (isItemArrived(item)) {
+        group.totalArrivedQty += getItemArrivedQty(item)
+      }
     }
   }
 
   // 短板状态判定原则：若多条明细中有任何一条状态落后于其它条目，外层 group.status 展现该落后状态
   const statusRankMap = {
     'shipped': 0,
+    'pending_arrival': 0,
     'arrived': 1,
+    'pending_receive': 1,
     'construction_confirmed': 2,
     'received': 2,
-    'warehouse_confirmed': 3
+    'pending_warehouse': 2,
+    'warehouse_confirmed': 3,
+    'completed': 3
   }
 
   const result = Array.from(map.values())
@@ -2374,17 +3074,23 @@ function handleDemandFittingExport() {
 }
 
 const demandFittingTotalQty = computed(() => {
-  return fittingRows.value.reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
+  return fittingRows.value
+    .filter(r => (r.status || 'shipped') !== 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
 })
 
 const demandFittingBatches = computed(() => {
-  const set = new Set(fittingRows.value.map(r => r.shipment_no || r.id))
+  const set = new Set(
+    fittingRows.value
+      .filter(r => (r.status || 'shipped') !== 'cancelled')
+      .map(r => r.shipment_no || r.id)
+  )
   return set.size
 })
 
 const demandFittingStandardQty = computed(() => {
   return fittingRows.value
-    .filter(r => isStandardFittingType(r.fitting_type))
+    .filter(r => (r.status || 'shipped') !== 'cancelled' && isStandardFittingType(r.fitting_type))
     .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
 })
 
@@ -3203,6 +3909,16 @@ function formatDateTimeDisplay(value) {
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
 }
 
+function formatShortDateTime(value) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value).replace('T', ' ').slice(5, 16)
+  }
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+}
+
 function getDeliveryStatusLabel(status, isTimeout = false) {
   return getDeliveryStatus(status, isTimeout).label
 }
@@ -3319,6 +4035,520 @@ function exportDemandFittingBaseline() {
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '管件设计与采购量')
   XLSX.writeFile(wb, `${currentSection1Name.value}_管件设计量与计划采购量.xlsx`)
+}
+
+// ----------------------------------------------------------------------
+// 📦 管件现场动态库存与安装使用量填报响应式状态与业务逻辑
+// ----------------------------------------------------------------------
+const fittingUsageDate = ref(getTodayString())
+const fittingInventorySummary = ref({
+  total_types: 0,
+  arrived_sum: 0,
+  used_sum: 0,
+  stock_sum: 0,
+  overall_rate_pct: 0
+})
+const fittingInventoryItems = ref([])
+const fittingInventoryLoading = ref(false)
+const fittingInventoryError = ref('')
+
+const fittingUsageCategoryFilter = ref('')
+const fittingUsageKeyword = ref('')
+const fittingUsageOnlyInStock = ref(true)
+
+const fittingUsageForm = reactive({}) // { [key]: { qty: 0, remark: '' } }
+const fittingUsageSubmitting = ref(false)
+
+// 历史台账
+const fittingUsageHistoryRows = ref([])
+const fittingUsageHistoryLoading = ref(false)
+const expandedUsageDates = ref(new Set())
+
+function toggleUsageDateExpand(dateStr) {
+  const nextSet = new Set(expandedUsageDates.value)
+  if (nextSet.has(dateStr)) {
+    nextSet.delete(dateStr)
+  } else {
+    nextSet.add(dateStr)
+  }
+  expandedUsageDates.value = nextSet
+}
+
+function isUsageDateExpanded(dateStr) {
+  return expandedUsageDates.value.has(dateStr)
+}
+
+function expandAllUsageDates() {
+  const nextSet = new Set()
+  groupedFittingUsageHistory.value.forEach(g => nextSet.add(g.usage_date))
+  expandedUsageDates.value = nextSet
+}
+
+function collapseAllUsageDates() {
+  expandedUsageDates.value = new Set()
+}
+
+const groupedFittingUsageHistory = computed(() => {
+  const groupsMap = {}
+  const dateOrder = []
+  
+  fittingUsageHistoryRows.value.forEach(row => {
+    const d = row.usage_date || '未知日期'
+    if (!groupsMap[d]) {
+      groupsMap[d] = {
+        usage_date: d,
+        items: [],
+        total_types: 0,
+        total_active_qty: 0,
+        total_cancelled_qty: 0,
+        filled_by_list: new Set(),
+        latest_filled_at: '',
+        has_cancelled: false,
+        has_active: false
+      }
+      dateOrder.push(d)
+    }
+    const g = groupsMap[d]
+    g.items.push(row)
+    if (row.status === 'active') {
+      g.total_active_qty += Number(row.usage_qty || 0)
+      g.has_active = true
+    } else {
+      g.total_cancelled_qty += Number(row.usage_qty || 0)
+      g.has_cancelled = true
+    }
+    if (row.filled_by) g.filled_by_list.add(row.filled_by)
+    if (!g.latest_filled_at || (row.filled_at && row.filled_at > g.latest_filled_at)) {
+      g.latest_filled_at = row.filled_at
+    }
+  })
+  
+  return dateOrder.map(d => {
+    const g = groupsMap[d]
+    g.total_types = g.items.length
+    g.filled_by_str = Array.from(g.filled_by_list).join(', ') || '-'
+    return g
+  })
+})
+
+const hasSubmittedFittingUsageToday = computed(() => {
+  if (!usageDate.value || !fittingUsageHistoryRows.value.length) return false
+  return fittingUsageHistoryRows.value.some(
+    row => row.usage_date === usageDate.value && row.status === 'active'
+  )
+})
+
+// 撤回 Modal (仅限 Global_admin)
+const showFittingUsageCancelModal = ref(false)
+const selectedCancelUsageRow = ref(null)
+const selectedCancelUsageGroup = ref(null)
+const cancelUsageReason = ref('')
+const cancelUsageSubmitting = ref(false)
+
+// ✏️ 管理员单项编辑 Modal
+const showFittingUsageItemEditModal = ref(false)
+const selectedEditUsageItem = ref(null)
+const editItemForm = reactive({
+  usage_qty: 0,
+  remark: '',
+  status: 'active',
+  cancel_reason: '',
+  filled_by: '',
+  usage_date: ''
+})
+const editItemSubmitting = ref(false)
+
+// 📋 管理员整批编辑 Modal
+const showFittingUsageBatchEditModal = ref(false)
+const selectedEditUsageGroup = ref(null)
+const editBatchForm = reactive({
+  new_usage_date: '',
+  filled_by: '',
+  cancel_reason: '',
+  items: []
+})
+const editBatchSubmitting = ref(false)
+
+function getItemKey(item) {
+  return `${item.fitting_type}__${item.model_spec}__${item.unit}`
+}
+
+function getFormItem(item) {
+  const key = getItemKey(item)
+  if (!fittingUsageForm[key]) {
+    fittingUsageForm[key] = {
+      qty: 0,
+      remark: ''
+    }
+  }
+  return fittingUsageForm[key]
+}
+
+const fittingInventoryCategories = computed(() => {
+  const map = {}
+  fittingInventoryItems.value.forEach(it => {
+    const cat = it.fitting_type || '其他'
+    map[cat] = (map[cat] || 0) + 1
+  })
+  return Object.keys(map).map(name => ({ name, count: map[name] }))
+})
+
+const filteredFittingInventoryItems = computed(() => {
+  return fittingInventoryItems.value
+})
+
+const totalFilledItemsCount = computed(() => {
+  return Object.values(fittingUsageForm).filter(v => Number(v?.qty || 0) > 0).length
+})
+
+const totalFilledQtySum = computed(() => {
+  return Object.values(fittingUsageForm).reduce((sum, v) => sum + (Number(v?.qty || 0) > 0 ? Number(v.qty) : 0), 0)
+})
+
+function adjustFittingUsageQty(item, delta) {
+  const formItem = getFormItem(item)
+  let val = (formItem.qty || 0) + delta
+  if (val < 0) val = 0
+  if (val > item.stock_qty) val = item.stock_qty
+  formItem.qty = val
+}
+
+function setFittingUsageMax(item) {
+  const formItem = getFormItem(item)
+  formItem.qty = item.stock_qty
+}
+
+function clearFittingUsageItem(item) {
+  const formItem = getFormItem(item)
+  formItem.qty = 0
+}
+
+function validateFittingUsageQty(item) {
+  const formItem = getFormItem(item)
+  if (formItem.qty < 0 || isNaN(formItem.qty)) {
+    formItem.qty = 0
+  } else if (formItem.qty > item.stock_qty) {
+    formItem.qty = item.stock_qty
+  } else {
+    formItem.qty = Math.floor(formItem.qty)
+  }
+}
+
+function resetFittingUsageForm() {
+  Object.keys(fittingUsageForm).forEach(k => delete fittingUsageForm[k])
+}
+
+async function loadFittingInventorySummary() {
+  if (!selectedSection1Id.value) return
+  fittingInventoryLoading.value = true
+  fittingInventoryError.value = ''
+  try {
+    const res = await getTubeFittingInventorySummary(PROJECT_KEY, selectedSection1Id.value)
+    if (res.ok) {
+      fittingInventorySummary.value = res.summary || {}
+      fittingInventoryItems.value = res.items || []
+    }
+  } catch (err) {
+    fittingInventoryError.value = err?.message || '加载管件现场库存失败'
+  } finally {
+    fittingInventoryLoading.value = false
+  }
+}
+
+async function loadFittingUsageHistory() {
+  if (!selectedSection1Id.value) return
+  fittingUsageHistoryLoading.value = true
+  try {
+    const res = await listTubeFittingUsageHistory(PROJECT_KEY, { section_1_id: selectedSection1Id.value })
+    if (res.ok) {
+      fittingUsageHistoryRows.value = res.rows || []
+      // 默认全部折叠，不自动加入任何展开项
+    }
+  } catch (err) {
+    console.error('加载管件使用台账失败', err)
+  } finally {
+    fittingUsageHistoryLoading.value = false
+  }
+}
+
+function refreshFittingUsageData() {
+  loadFittingInventorySummary()
+  loadFittingUsageHistory()
+}
+
+async function handleFittingUsageSubmit() {
+  const itemsToSubmit = []
+  for (const item of fittingInventoryItems.value) {
+    const key = getItemKey(item)
+    const formVal = fittingUsageForm[key]
+    const qty = Number(formVal?.qty || 0)
+    if (qty > 0) {
+      itemsToSubmit.push({
+        fitting_type: item.fitting_type,
+        model_spec: item.model_spec,
+        unit: item.unit || '个',
+        usage_qty: qty,
+        remark: formVal?.remark || ''
+      })
+    }
+  }
+
+  if (!itemsToSubmit.length) {
+    alert('未填报任何大于 0 的管件安装数量')
+    return
+  }
+
+  const confirmMsg = `确定在【${usageDate.value}】为标段【${currentSection1Name.value}】提交 ${itemsToSubmit.length} 种管件共计 ${totalFilledQtySum.value} 件安装使用记录吗？`
+  if (!confirm(confirmMsg)) return
+
+  fittingUsageSubmitting.value = true
+  try {
+    const payload = {
+      section_1_id: selectedSection1Id.value,
+      usage_date: usageDate.value,
+      items: itemsToSubmit
+    }
+    const res = await submitTubeFittingUsage(PROJECT_KEY, payload)
+    if (res.ok) {
+      setActionMessage('success', res.message || '提交管件安装记录成功')
+      resetFittingUsageForm()
+      refreshFittingUsageData()
+    }
+  } catch (err) {
+    alert(err?.message || '提交失败')
+  } finally {
+    fittingUsageSubmitting.value = false
+  }
+}
+
+function canCancelUsage(row) {
+  if (!row) return false
+  // 严格仅保留 Global_admin 的记录编辑/作废权限，普通填报用户不可撤回
+  return isGlobalAdmin.value
+}
+
+function canCancelUsageGroup(group) {
+  if (!group || !group.has_active) return false
+  return isGlobalAdmin.value
+}
+
+function openCancelUsageModal(row) {
+  selectedCancelUsageRow.value = row
+  selectedCancelUsageGroup.value = null
+  cancelUsageReason.value = ''
+  showFittingUsageCancelModal.value = true
+}
+
+function openCancelUsageGroupModal(group) {
+  selectedCancelUsageGroup.value = group
+  selectedCancelUsageRow.value = null
+  cancelUsageReason.value = ''
+  showFittingUsageCancelModal.value = true
+}
+
+async function handleConfirmCancelUsage() {
+  if (!cancelUsageReason.value.trim()) return
+  cancelUsageSubmitting.value = true
+  try {
+    if (selectedCancelUsageRow.value) {
+      const res = await cancelTubeFittingUsage(PROJECT_KEY, {
+        usage_id: selectedCancelUsageRow.value.id,
+        cancel_reason: cancelUsageReason.value.trim()
+      })
+      if (res.ok) {
+        setActionMessage('success', res.message || '管理员作废成功，库存已恢复')
+      }
+    } else if (selectedCancelUsageGroup.value) {
+      const activeItems = (selectedCancelUsageGroup.value.items || []).filter(it => it.status === 'active')
+      let successCount = 0
+      for (const item of activeItems) {
+        await cancelTubeFittingUsage(PROJECT_KEY, {
+          usage_id: item.id,
+          cancel_reason: cancelUsageReason.value.trim()
+        })
+        successCount++
+      }
+      setActionMessage('success', `管理员已成功作废【${selectedCancelUsageGroup.value.usage_date}】共 ${successCount} 笔安装记录，库存已全部退回，填报通道已重新解锁！`)
+    }
+    showFittingUsageCancelModal.value = false
+    selectedCancelUsageRow.value = null
+    selectedCancelUsageGroup.value = null
+    refreshFittingUsageData()
+  } catch (err) {
+    alert(err?.message || '作废操作失败')
+  } finally {
+    cancelUsageSubmitting.value = false
+  }
+}
+
+// ✏️ 管理员单项编辑处理
+function openEditUsageItemModal(row) {
+  if (!row) return
+  selectedEditUsageItem.value = row
+  editItemForm.usage_qty = Number(row.usage_qty || 0)
+  editItemForm.remark = String(row.remark || '')
+  editItemForm.status = String(row.status || 'active')
+  editItemForm.cancel_reason = String(row.cancel_reason || '')
+  editItemForm.filled_by = String(row.filled_by || '')
+  editItemForm.usage_date = String(row.usage_date || usageDate.value || '')
+  showFittingUsageItemEditModal.value = true
+}
+
+async function handleConfirmUpdateUsageItem() {
+  if (!selectedEditUsageItem.value) return
+  if (editItemForm.status === 'active' && editItemForm.usage_qty <= 0) {
+    alert('有效记录的安装数量必须大于 0')
+    return
+  }
+  if (editItemForm.status === 'cancelled' && !editItemForm.cancel_reason.trim()) {
+    alert('作废记录必须填写作废原因说明')
+    return
+  }
+
+  editItemSubmitting.value = true
+  try {
+    const res = await updateTubeFittingUsageItem(PROJECT_KEY, {
+      usage_id: selectedEditUsageItem.value.id,
+      usage_qty: editItemForm.usage_qty,
+      remark: editItemForm.remark,
+      status: editItemForm.status,
+      cancel_reason: editItemForm.cancel_reason,
+      filled_by: editItemForm.filled_by,
+      usage_date: editItemForm.usage_date
+    })
+    if (res.ok) {
+      setActionMessage('success', res.message || '管理员成功更新安装记录')
+      showFittingUsageItemEditModal.value = false
+      selectedEditUsageItem.value = null
+      refreshFittingUsageData()
+    }
+  } catch (err) {
+    alert(err?.message || '更新记录失败')
+  } finally {
+    editItemSubmitting.value = false
+  }
+}
+
+// 📋 管理员批量整日编辑处理
+function openEditUsageBatchModal(group) {
+  if (!group) return
+  selectedEditUsageGroup.value = group
+  editBatchForm.new_usage_date = group.usage_date || ''
+  editBatchForm.filled_by = ''
+  editBatchForm.cancel_reason = ''
+  editBatchForm.items = (group.items || []).map(it => ({
+    id: it.id,
+    fitting_type: it.fitting_type,
+    model_spec: it.model_spec,
+    unit: it.unit || '件',
+    usage_qty: Number(it.usage_qty || 0),
+    remark: String(it.remark || ''),
+    status: String(it.status || 'active'),
+    cancel_reason: String(it.cancel_reason || '')
+  }))
+  showFittingUsageBatchEditModal.value = true
+}
+
+async function handleConfirmUpdateUsageBatch() {
+  if (!selectedEditUsageGroup.value || !selectedSection1Id.value) return
+  editBatchSubmitting.value = true
+  try {
+    const res = await updateTubeFittingUsageBatch(PROJECT_KEY, {
+      section_1_id: selectedSection1Id.value,
+      usage_date: selectedEditUsageGroup.value.usage_date,
+      new_usage_date: editBatchForm.new_usage_date || selectedEditUsageGroup.value.usage_date,
+      filled_by: editBatchForm.filled_by || undefined,
+      items: editBatchForm.items.map(it => ({
+        id: it.id,
+        usage_qty: Number(it.usage_qty || 0),
+        remark: it.remark,
+        status: it.status,
+        cancel_reason: it.cancel_reason
+      })),
+      cancel_reason: editBatchForm.cancel_reason
+    })
+    if (res.ok) {
+      setActionMessage('success', res.message || '管理员成功批量更新整日安装批次')
+      showFittingUsageBatchEditModal.value = false
+      selectedEditUsageGroup.value = null
+      refreshFittingUsageData()
+    }
+  } catch (err) {
+    alert(err?.message || '批量更新失败')
+  } finally {
+    editBatchSubmitting.value = false
+  }
+}
+
+function formatUsageTime(isoStr) {
+  if (!isoStr) return '-'
+  try {
+    const d = new Date(isoStr)
+    if (Number.isNaN(d.getTime())) {
+      const s = String(isoStr).replace('T', ' ')
+      return s.slice(5, 16) || s
+    }
+    // 使用东八区（Asia/Shanghai）标准时区格式化
+    const formatter = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+    const parts = formatter.formatToParts(d)
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '00'
+    return `${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
+  } catch {
+    return String(isoStr).replace('T', ' ').slice(5, 16)
+  }
+}
+
+function exportFittingUsageHistory() {
+  const rows = fittingUsageHistoryRows.value
+  const groups = groupedFittingUsageHistory.value
+  if (!rows.length) {
+    alert('暂无管件使用台账数据可导出')
+    return
+  }
+
+  const wb = XLSX.utils.book_new()
+
+  // Sheet 1: 每日安装汇总
+  const summaryHeaders = ['序号', '施工日期', '填报物料种数', '有效安装总量(件)', '填报人', '最新填报时间', '状态']
+  const summaryData = groups.map((g, idx) => [
+    idx + 1,
+    g.usage_date,
+    g.total_types,
+    g.total_active_qty,
+    g.filled_by_str,
+    g.latest_filled_at,
+    !g.has_cancelled ? '已记账' : (g.has_active ? '含作废' : '全作废')
+  ])
+  const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryData])
+  XLSX.utils.book_append_sheet(wb, wsSummary, '每日安装汇总')
+
+  // Sheet 2: 全量安装流水明细
+  const detailHeaders = ['序号', '施工日期', '名称', '型号规格', '安装数量', '计量单位', '备注', '记录状态', '填报人', '填报时间', '撤回人', '撤回原因']
+  const detailData = rows.map((r, idx) => [
+    idx + 1,
+    r.usage_date,
+    r.fitting_type,
+    r.model_spec,
+    r.usage_qty,
+    r.unit,
+    r.remark || '',
+    r.status === 'active' ? '已记账' : '已作废',
+    r.filled_by,
+    r.filled_at,
+    r.cancelled_by || '',
+    r.cancel_reason || ''
+  ])
+  const wsDetail = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailData])
+  XLSX.utils.book_append_sheet(wb, wsDetail, '安装流水明细')
+
+  XLSX.writeFile(wb, `${currentSection1Name.value}_管件安装使用台账_${getTodayString()}.xlsx`)
 }
 
 async function loadPlanMatrix() {
@@ -3558,6 +4788,7 @@ async function reloadSection1Data() {
     return
   }
   clearActionMessage()
+  resetFittingUsageForm()
   await Promise.all([
     loadBaseline(),
     loadFittingBaseline(),
@@ -3565,7 +4796,8 @@ async function reloadSection1Data() {
     loadUsageSheet(),
     loadLogisticsRecords(),
     loadAllPendingLogistics(),
-    handleFittingQuery()
+    handleFittingQuery(),
+    refreshFittingUsageData()
   ])
 }
 
@@ -3738,7 +4970,7 @@ function handleTabClick(targetTab) {
   if (['usage', 'plan', 'logistics', 'baseline'].includes(targetTab)) {
     activeCategory.value = 'pipe'
     lastPipeTab.value = targetTab
-  } else if (['fitting', 'fitting_baseline'].includes(targetTab)) {
+  } else if (['fitting', 'fitting_usage', 'fitting_baseline'].includes(targetTab)) {
     activeCategory.value = 'fitting'
     lastFittingTab.value = targetTab
   }
@@ -3777,6 +5009,8 @@ function refreshCurrentTabData(tab) {
     loadLogisticsRecords()
   } else if (tab === 'fitting') {
     handleFittingQuery()
+  } else if (tab === 'fitting_usage') {
+    refreshFittingUsageData()
   } else if (tab === 'fitting_baseline') {
     loadFittingBaseline()
   }
@@ -5604,5 +6838,566 @@ function jumpToUsageTab() {
 
 .sortable-th:hover .sort-icon {
   color: #3b82f6;
+}
+
+/* 📜 限制约20行高度并带粘性吸顶表头与独立滚动条的表格容器 */
+.fitting-baseline-table-wrap {
+  max-height: 680px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  position: relative !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+.fitting-baseline-table-wrap table {
+  margin: 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100% !important;
+}
+
+.fitting-baseline-table-wrap thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 12 !important;
+  background: #f8fafc !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 📦 管件现场库存微看板与滑块填报控件样式 */
+.fitting-usage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1180px) {
+  .fitting-usage-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .fitting-usage-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.summary-metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+.summary-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.summary-metric-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3.5px;
+}
+
+.summary-metric-card.card-blue {
+  background: linear-gradient(145deg, #f0f9ff 0%, #ffffff 100%);
+  border-color: #e0f2fe;
+}
+.summary-metric-card.card-blue::before {
+  background: #0284c7;
+}
+
+.summary-metric-card.card-indigo {
+  background: linear-gradient(145deg, #eef2ff 0%, #ffffff 100%);
+  border-color: #e0e7ff;
+}
+.summary-metric-card.card-indigo::before {
+  background: #4f46e5;
+}
+
+.summary-metric-card.card-emerald {
+  background: linear-gradient(145deg, #ecfdf5 0%, #ffffff 100%);
+  border-color: #d1fae5;
+}
+.summary-metric-card.card-emerald::before {
+  background: #059669;
+}
+
+.summary-metric-card.card-amber {
+  background: linear-gradient(145deg, #fffbeb 0%, #ffffff 100%);
+  border-color: #fef3c7;
+}
+.summary-metric-card.card-amber::before {
+  background: #d97706;
+}
+
+.summary-metric-card.card-purple {
+  background: linear-gradient(145deg, #faf5ff 0%, #ffffff 100%);
+  border-color: #f3e8ff;
+}
+.summary-metric-card.card-purple::before {
+  background: #7c3aed;
+}
+
+.metric-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metric-icon {
+  font-size: 14px;
+}
+
+.summary-metric-card .metric-label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.metric-body-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.summary-metric-card .metric-val {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.metric-unit {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.text-blue { color: #0284c7; }
+.text-indigo { color: #4f46e5; }
+.text-emerald { color: #059669; }
+.text-amber { color: #d97706; }
+.text-purple { color: #7c3aed; }
+
+.micro-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: #f1f5f9;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.micro-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed 0%, #a855f7 100%);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.pill-filter-btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pill-filter-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.pill-filter-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+  font-weight: 600;
+}
+
+.fitting-type-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.stock-progress-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stock-stat-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.stock-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 99px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.stock-progress-bar-used {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 99px;
+  transition: width 0.2s ease;
+}
+
+.usage-input-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper-wrap {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.step-btn {
+  width: 26px;
+  height: 28px;
+  border: none;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.step-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qty-input {
+  width: 44px;
+  height: 28px;
+  border: none;
+  text-align: center;
+  font-weight: 700;
+  color: #2563eb;
+  font-size: 13px;
+  outline: none;
+}
+
+.usage-slider {
+  width: 80px;
+  height: 5px;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.quick-max-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.quick-max-btn:hover {
+  background: #dbeafe;
+}
+
+.quick-clear-btn {
+  font-size: 11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fee2e2;
+  border: none;
+  color: #dc2626;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-input-compact {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.row-has-input {
+  background: #f0fdf4 !important;
+}
+
+.btn-cancel-usage {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+  background: #fff5f5;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cancel-usage:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+/* 📅 历史台账按日期折叠展开样式 */
+.history-group-header-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  user-select: none;
+}
+
+.history-group-header-row:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.history-group-header-row.is-expanded {
+  background-color: #eff6ff !important;
+  border-bottom: 1px solid #bfdbfe !important;
+}
+
+.group-expand-caret {
+  display: inline-block;
+  width: 16px;
+  font-size: 10px;
+  color: #64748b;
+  margin-right: 4px;
+  transition: transform 0.15s ease;
+}
+
+.pill-badge-subtle {
+  display: inline-block;
+  font-size: 11.5px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-weight: 500;
+}
+
+.btn-toggle-expand {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-toggle-expand:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.detail-nested-table {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.detail-nested-table th {
+  font-weight: 600;
+  font-size: 11.5px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.detail-nested-table td {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* 🔧 管件发货记录卡片与表头超紧凑清爽流式排版（0滚动条，自适应） */
+.fitting-card-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 12px !important;
+  background: #f8fafc !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  flex-wrap: nowrap !important;
+  gap: 10px !important;
+  transition: background-color 0.15s ease !important;
+  overflow: hidden !important;
+}
+
+.fitting-card-header:hover {
+  background: #f1f5f9 !important;
+}
+
+.card-left-stream {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+.expand-caret-icon {
+  display: inline-block;
+  width: 14px;
+  font-size: 11px;
+  color: #6366f1;
+  font-weight: bold;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.shipment-code-badge {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4338ca;
+  background: #e0e7ff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #c7d2fe;
+  flex-shrink: 0;
+}
+
+.plate-badge {
+  flex-shrink: 0;
+  padding: 1px 6px !important;
+  font-size: 11.5px !important;
+}
+
+.entity-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: #334155;
+  max-width: 140px;
+  flex-shrink: 1;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.entity-pill-badge .entity-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.shipped-time-text {
+  font-size: 11px;
+  color: #64748b;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.card-right-stream {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.qty-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 11.5px;
+}
+
+.qty-types-lbl {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.qty-divider {
+  color: #cbd5e1;
+  font-size: 10px;
+  margin: 0 1px;
+}
+
+.qty-stat-item {
+  font-size: 11.5px;
+}
+
+.qty-stat-item strong {
+  font-size: 12px;
+}
+
+.qty-unit-lbl {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.status-badge-container {
+  display: flex;
+  align-items: center;
+}
+
+.action-btn-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

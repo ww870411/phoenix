@@ -2641,4 +2641,106 @@ export async function getAdminDatabaseRestoreJob(jobId) {
   return response.json()
 }
 
+// ----------------------------------------------------------------------
+// 管件现场动态库存与安装使用量填报 API (Fitting Inventory & Daily Usage)
+// ----------------------------------------------------------------------
+
+export async function getTubeFittingInventorySummary(projectKey, section1Id) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(
+    `/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/inventory-summary?section_1_id=${encodeURIComponent(section1Id)}`
+  )
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取管件现场库存失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function submitTubeFittingUsage(projectKey, payload) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/submit`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '提交管件安装使用量失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function listTubeFittingUsageHistory(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const query = new URLSearchParams()
+  if (params.section_1_id) query.set('section_1_id', params.section_1_id)
+  if (params.start_date) query.set('start_date', params.start_date)
+  if (params.end_date) query.set('end_date', params.end_date)
+  if (params.keyword) query.set('keyword', params.keyword)
+  if (params.status) query.set('status', params.status)
+
+  const url = normalized(
+    `/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/history?${query.toString()}`
+  )
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取管件安装台账失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function cancelTubeFittingUsage(projectKey, payload) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/cancel`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '撤回管件使用记录失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function updateTubeFittingUsageItem(projectKey, payload) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/update-item`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '更新管件使用记录失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function updateTubeFittingUsageBatch(projectKey, payload) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/demand-management/fitting-usage/update-batch`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '批量更新管件使用记录失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
 

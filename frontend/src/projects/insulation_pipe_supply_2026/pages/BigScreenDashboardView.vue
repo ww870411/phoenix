@@ -1097,7 +1097,7 @@
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">📅</span>
-              <span>本周战报</span>
+              <span>本周保温管施工战报</span>
             </div>
             <div class="header-right-meta">
               <span class="panel-tag gold" :title="'统计周期: ' + (weeklyReport.date_range_str || '近7日')">
@@ -1528,7 +1528,7 @@ const pipeCoveragePercent = computed(() => {
   return Math.min(Math.round((kpiData.pipeShippedKm / kpiData.pipeDesignKm) * 1000) / 10, 100)
 })
 
-// 管件保供百分比
+// 管件保供发运百分比
 const fittingCoveragePercent = computed(() => {
   if (!kpiData.fittingTotalPcs || kpiData.fittingTotalPcs <= 0) return 0
   return Math.min(Math.round((kpiData.fittingShippedPcs / kpiData.fittingTotalPcs) * 1000) / 10, 100)
@@ -2853,23 +2853,29 @@ onBeforeUnmount(() => {
 }
 
 .header-left {
+  position: absolute;
+  left: 24px;
+  bottom: 18px;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 330px;
+  align-items: flex-end;
+  gap: 12px;
+  z-index: 10;
+  line-height: 1;
 }
 
 .header-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
+  padding: 3px 10px;
   background: rgba(0, 242, 254, 0.1);
   border: 1px solid rgba(0, 242, 254, 0.3);
   border-radius: 20px;
   font-size: 12px;
   color: #00f2fe;
   transition: all 0.3s ease;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .header-badge.live-mode {
@@ -2893,30 +2899,39 @@ onBeforeUnmount(() => {
 }
 
 .header-time {
-  font-family: 'Consolas', monospace;
+  font-family: 'Consolas', 'Segoe UI', monospace;
   font-size: 13px;
   color: #94a3b8;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
+  padding-bottom: 2px;
 }
 
 .header-title-box {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  left: calc(50% + 55px);
+  bottom: 18px;
+  transform: translateX(-50%);
   text-align: center;
   z-index: 5;
   white-space: nowrap;
-  pointer-events: auto;
+  pointer-events: none;
+  line-height: 1;
 }
 
 .header-title {
   margin: 0;
-  font-size: 30px;
+  font-size: clamp(20px, 1.7vw, 27px);
   font-weight: 800;
-  letter-spacing: 2.2px;
+  letter-spacing: clamp(0.6px, 0.1vw, 1.8px);
   color: #ffffff;
-  text-shadow: 0 2px 16px rgba(0, 242, 254, 0.5);
+  text-shadow: 0 2px 18px rgba(0, 242, 254, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
 }
 
 .title-desktop {
@@ -3007,8 +3022,11 @@ onBeforeUnmount(() => {
 }
 
 .header-right {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-end;
   z-index: 1050;
 }
@@ -3926,6 +3944,12 @@ onBeforeUnmount(() => {
   background: rgba(245, 158, 11, 0.15);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.metric-capsule.purple-capsule {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.45);
 }
 
 .metric-capsule.red-capsule {
@@ -6364,6 +6388,12 @@ onBeforeUnmount(() => {
   border-color: #fde68a;
 }
 
+.bigscreen-container.light .metric-capsule.purple-capsule {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border-color: #d8b4fe;
+}
+
 .bigscreen-container.light .metric-capsule.red-capsule {
   background: #fee2e2;
   color: #b91c1c;
@@ -7150,14 +7180,17 @@ onBeforeUnmount(() => {
 }
 
 /* --- 响应式适配 Responsive Layout --- */
+@media (max-width: 1600px) {
+  .badge-desktop-prefix {
+    display: none;
+  }
+}
+
 @media (max-width: 1400px) {
   .bigscreen-content {
     grid-template-columns: 300px 1fr 330px;
     gap: 10px;
     padding: 8px 12px;
-  }
-  .header-title {
-    font-size: 22px;
   }
   .topology-layout-grid {
     grid-template-columns: 200px 40px 1fr;

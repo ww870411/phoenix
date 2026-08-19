@@ -114,7 +114,7 @@
             >
               <span class="cat-icon">🔩</span>
               <span class="cat-label">管件业务</span>
-              <span class="cat-count">1 项功能</span>
+              <span class="cat-count">2 项功能</span>
             </button>
           </div>
         </div>
@@ -154,6 +154,13 @@
               @click="handleTabClick('fitting')"
             >
               🔧 管件发货与明细记录
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'fitting_baseline' }" 
+              @click="handleTabClick('fitting_baseline')"
+            >
+              📋 设计量与计划采购量
             </button>
           </div>
         </div>
@@ -836,6 +843,526 @@
           </section>
         </div>
 
+        <!-- Tab 5: 管件基准设计量与计划采购量台账 -->
+        <div v-if="activeTab === 'fitting_baseline'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row baseline-header-row">
+              <div class="header-title-col">
+                <h2>🔩 管件设计量与计划采购量台账</h2>
+                <span class="panel-hint">展示各标段在基准数据库（tube.tube_fitting_baseline）中的全量标准化管件与物料基准明细。</span>
+              </div>
+              <div class="header-actions-col">
+                <!-- 标段选择组件 (无全局 field 类干扰，纯净 Flex 对齐) -->
+                <div class="section-select-group">
+                  <span class="select-label">📍 查看标段:</span>
+                  <select
+                    v-model="selectedFittingBaselineSection1Id"
+                    class="baseline-section-select"
+                    @change="loadFittingBaseline"
+                  >
+                    <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
+                      {{ st.section_1_name }}
+                    </option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  class="baseline-action-btn"
+                  @click="loadFittingBaseline"
+                >
+                  🔄 刷新数据
+                </button>
+                <button
+                  type="button"
+                  class="baseline-action-btn"
+                  :disabled="!fittingBaselineRows.length"
+                  @click="exportFittingBaseline"
+                >
+                  📥 导出 Excel
+                </button>
+              </div>
+            </div>
+
+            <!-- 数据统计微看板 -->
+            <div class="summary-row baseline-summary" style="margin-top: 12px; margin-bottom: 12px;">
+              <span class="summary-chip">📍 选定标段：<strong>{{ getSection1Name(selectedFittingBaselineSection1Id) }}</strong></span>
+              <span class="summary-chip">
+                🔍 命中种类：<strong>{{ filteredFittingBaselineRows.length }}</strong> / {{ fittingBaselineRows.length }} 种
+              </span>
+              <span class="summary-chip">
+                📐 命中设计量：<strong>{{ formatNumber(fittingBaselineStats.filteredDesignQty) }}</strong>
+                <small v-if="filteredFittingBaselineRows.length !== fittingBaselineRows.length" style="color: #64748b; font-weight: normal; margin-left: 4px;">(总: {{ formatNumber(fittingBaselineStats.totalDesignQty) }})</small>
+              </span>
+              <span class="summary-chip">
+                📦 命中采购量：<strong>{{ formatNumber(fittingBaselineStats.filteredPurchaseQty) }}</strong>
+                <small v-if="filteredFittingBaselineRows.length !== fittingBaselineRows.length" style="color: #64748b; font-weight: normal; margin-left: 4px;">(总: {{ formatNumber(fittingBaselineStats.totalPurchaseQty) }})</small>
+              </span>
+            </div>
+
+            <!-- 🔩 多维多选下拉筛选工具栏 (Clean Multi-Select Dropdown Toolbar) -->
+            <div class="fitting-filter-toolbar" @click.stop>
+              <!-- 1. 系统类型下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.systemTypes.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.systemTypes.length > 0, 'is-open': activeDropdown === 'systemTypes' }"
+                  @click="toggleFittingDropdown('systemTypes', $event)"
+                >
+                  <span class="ms-label-icon">💧</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('systemTypes', '系统类型') }}</span>
+                  <span v-if="fittingFilters.systemTypes.length > 1" class="ms-badge">{{ fittingFilters.systemTypes.length }}</span>
+                  <span v-if="fittingFilters.systemTypes.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('systemTypes')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'systemTypes'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择系统类型</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('systemTypes', availableFittingFacets.systemTypes)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('systemTypes')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.systemTypes"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('systemTypes', item.value) }"
+                      @click.stop="toggleFittingFilterItem('systemTypes', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('systemTypes', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('systemTypes', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. 物理类别下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.categories.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.categories.length > 0, 'is-open': activeDropdown === 'categories' }"
+                  @click="toggleFittingDropdown('categories', $event)"
+                >
+                  <span class="ms-label-icon">🔩</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('categories', '物理类别') }}</span>
+                  <span v-if="fittingFilters.categories.length > 1" class="ms-badge">{{ fittingFilters.categories.length }}</span>
+                  <span v-if="fittingFilters.categories.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('categories')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'categories'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择物理类别</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('categories', availableFittingFacets.categories)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('categories')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.categories"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('categories', item.value) }"
+                      @click.stop="toggleFittingFilterItem('categories', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('categories', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('categories', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 主径DN下拉框 -->
+              <div class="ms-dropdown-container" v-if="availableFittingFacets.mainDns.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.mainDns.length > 0, 'is-open': activeDropdown === 'mainDns' }"
+                  @click="toggleFittingDropdown('mainDns', $event)"
+                >
+                  <span class="ms-label-icon">📏</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('mainDns', '主径DN', 'DN') }}</span>
+                  <span v-if="fittingFilters.mainDns.length > 1" class="ms-badge">{{ fittingFilters.mainDns.length }}</span>
+                  <span v-if="fittingFilters.mainDns.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('mainDns')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'mainDns'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择主径口径</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('mainDns', availableFittingFacets.mainDns)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('mainDns')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.mainDns"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('mainDns', item.value) }"
+                      @click.stop="toggleFittingFilterItem('mainDns', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('mainDns', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('mainDns', item.value)"
+                      />
+                      <span class="ms-item-name">DN{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 角度下拉框 (弯头) -->
+              <div class="ms-dropdown-container" v-if="shouldShowAngleAndBending && availableFittingFacets.angles.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.angles.length > 0, 'is-open': activeDropdown === 'angles' }"
+                  @click="toggleFittingDropdown('angles', $event)"
+                >
+                  <span class="ms-label-icon">📐</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('angles', '角度', '', '°') }}</span>
+                  <span v-if="fittingFilters.angles.length > 1" class="ms-badge">{{ fittingFilters.angles.length }}</span>
+                  <span v-if="fittingFilters.angles.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('angles')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'angles'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择弯头角度</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('angles', availableFittingFacets.angles)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('angles')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.angles"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('angles', item.value) }"
+                      @click.stop="toggleFittingFilterItem('angles', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('angles', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('angles', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}°</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. 弯曲半径倍数下拉框 (弯头) -->
+              <div class="ms-dropdown-container" v-if="shouldShowAngleAndBending && availableFittingFacets.bendingRatios.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.bendingRatios.length > 0, 'is-open': activeDropdown === 'bendingRatios' }"
+                  @click="toggleFittingDropdown('bendingRatios', $event)"
+                >
+                  <span class="ms-label-icon">🔄</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('bendingRatios', '弯曲半径', '', 'DN') }}</span>
+                  <span v-if="fittingFilters.bendingRatios.length > 1" class="ms-badge">{{ fittingFilters.bendingRatios.length }}</span>
+                  <span v-if="fittingFilters.bendingRatios.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('bendingRatios')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'bendingRatios'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择弯曲半径倍数</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('bendingRatios', availableFittingFacets.bendingRatios)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('bendingRatios')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.bendingRatios"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('bendingRatios', item.value) }"
+                      @click.stop="toggleFittingFilterItem('bendingRatios', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('bendingRatios', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('bendingRatios', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}DN</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. 次径/支管DN下拉框 (三通/变径) -->
+              <div class="ms-dropdown-container" v-if="shouldShowSubDn && availableFittingFacets.subDns.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.subDns.length > 0, 'is-open': activeDropdown === 'subDns' }"
+                  @click="toggleFittingDropdown('subDns', $event)"
+                >
+                  <span class="ms-label-icon">🔀</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('subDns', '次径DN', 'DN') }}</span>
+                  <span v-if="fittingFilters.subDns.length > 1" class="ms-badge">{{ fittingFilters.subDns.length }}</span>
+                  <span v-if="fittingFilters.subDns.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('subDns')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'subDns'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择次径/支管口径</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('subDns', availableFittingFacets.subDns)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('subDns')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.subDns"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('subDns', item.value) }"
+                      @click.stop="toggleFittingFilterItem('subDns', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('subDns', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('subDns', item.value)"
+                      />
+                      <span class="ms-item-name">DN{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 7. 公称压力下拉框 (阀门/承压) -->
+              <div class="ms-dropdown-container" v-if="shouldShowPressure && availableFittingFacets.pressures.length > 0">
+                <button
+                  type="button"
+                  class="ms-dropdown-trigger"
+                  :class="{ 'has-value': fittingFilters.pressures.length > 0, 'is-open': activeDropdown === 'pressures' }"
+                  @click="toggleFittingDropdown('pressures', $event)"
+                >
+                  <span class="ms-label-icon">🛡️</span>
+                  <span class="ms-label-text">{{ getFittingFilterSummary('pressures', '公称压力') }}</span>
+                  <span v-if="fittingFilters.pressures.length > 1" class="ms-badge">{{ fittingFilters.pressures.length }}</span>
+                  <span v-if="fittingFilters.pressures.length > 0" class="ms-clear-btn" title="清空" @click.stop="clearFittingFilterDimension('pressures')">✕</span>
+                  <span class="ms-arrow">▾</span>
+                </button>
+                <div v-if="activeDropdown === 'pressures'" class="ms-dropdown-menu">
+                  <div class="ms-menu-header">
+                    <span class="ms-menu-title">选择公称压力</span>
+                    <div class="ms-menu-actions">
+                      <a href="javascript:void(0)" @click.stop="selectAllFittingFilterDimension('pressures', availableFittingFacets.pressures)">全选</a>
+                      <span class="sep">|</span>
+                      <a href="javascript:void(0)" @click.stop="clearFittingFilterDimension('pressures')">清空</a>
+                    </div>
+                  </div>
+                  <div class="ms-menu-list">
+                    <label
+                      v-for="item in availableFittingFacets.pressures"
+                      :key="item.value"
+                      class="ms-menu-item"
+                      :class="{ checked: isFittingFilterSelected('pressures', item.value) }"
+                      @click.stop="toggleFittingFilterItem('pressures', item.value)"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="isFittingFilterSelected('pressures', item.value)"
+                        @click.stop
+                        @change="toggleFittingFilterItem('pressures', item.value)"
+                      />
+                      <span class="ms-item-name">{{ item.value }}</span>
+                      <span class="ms-item-count">({{ item.count }})</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 8. 关键词搜索框 -->
+              <div class="ms-search-box">
+                <input
+                  v-model="fittingFilters.searchKeyword"
+                  type="text"
+                  class="input"
+                  placeholder="搜索标准名称 / 规格型号 / 备注..."
+                  style="height: 34px; padding: 0 10px; font-size: 13px; border-radius: 8px;"
+                />
+              </div>
+
+              <!-- 9. 重置按钮 -->
+              <button
+                v-if="activeFittingFilterTags.length > 0"
+                type="button"
+                class="btn ghost compact-btn reset-filter-btn"
+                title="重置全部筛选条件"
+                @click="clearAllFittingFilters"
+              >
+                🔄 重置
+              </button>
+            </div>
+
+            <!-- 🏷️ 已选筛选条件胶囊标签行 (Active Filter Tags) -->
+            <div v-if="activeFittingFilterTags.length > 0" class="active-filter-tags-row">
+              <span class="active-tags-label">已筛选:</span>
+              <span
+                v-for="tag in activeFittingFilterTags"
+                :key="tag.dim + '_' + tag.value"
+                class="filter-tag-chip"
+                title="点击移除此项筛选"
+                @click="removeSingleFittingFilter(tag.dim, tag.value)"
+              >
+                {{ tag.label }}
+                <span class="tag-close-icon">✕</span>
+              </span>
+              <button
+                type="button"
+                class="clear-all-link"
+                @click="clearAllFittingFilters"
+              >
+                清空全部
+              </button>
+            </div>
+
+            <div v-if="fittingBaselineLoading" class="loading-text">正在从数据库加载管件基准量...</div>
+            <div v-else-if="fittingBaselineError" class="error-box">{{ fittingBaselineError }}</div>
+            <div v-else-if="!filteredFittingBaselineRows.length" class="empty-box">
+              {{ fittingBaselineRows.length ? '未找到符合筛选条件的管件记录。' : '当前选定标段暂无管件基准量记录。' }}
+            </div>
+            <!-- 限制20行数据高度并带固定表头与垂直滚动条 -->
+            <div v-else class="table-wrap fitting-baseline-table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'system_type' }" style="min-width: 95px; text-align: center; white-space: nowrap;" @click="handleFittingSort('system_type')">
+                      系统类型
+                      <span class="sort-icon">{{ fittingSortState.key === 'system_type' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'category' }" style="min-width: 105px; white-space: nowrap;" @click="handleFittingSort('category')">
+                      物理类别
+                      <span class="sort-icon">{{ fittingSortState.key === 'category' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'standard_name' }" style="min-width: 160px; white-space: nowrap;" @click="handleFittingSort('standard_name')">
+                      标准名称
+                      <span class="sort-icon">{{ fittingSortState.key === 'standard_name' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'model_spec' }" style="min-width: 170px; white-space: nowrap;" @click="handleFittingSort('model_spec')">
+                      型号规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'sub_model_spec' }" style="min-width: 110px; white-space: nowrap;" @click="handleFittingSort('sub_model_spec')">
+                      细分规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'sub_model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'main_dn' }" style="min-width: 90px; text-align: right; white-space: nowrap;" @click="handleFittingSort('main_dn')">
+                      主径DN
+                      <span class="sort-icon">{{ fittingSortState.key === 'main_dn' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'sub_dn' }" style="min-width: 90px; text-align: right; white-space: nowrap;" @click="handleFittingSort('sub_dn')">
+                      次径DN
+                      <span class="sort-icon">{{ fittingSortState.key === 'sub_dn' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'angle' }" style="min-width: 85px; text-align: right; white-space: nowrap;" @click="handleFittingSort('angle')">
+                      角度(°)
+                      <span class="sort-icon">{{ fittingSortState.key === 'angle' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'bending_radius_ratio' }" style="min-width: 95px; text-align: right; white-space: nowrap;" @click="handleFittingSort('bending_radius_ratio')">
+                      弯曲倍数
+                      <span class="sort-icon">{{ fittingSortState.key === 'bending_radius_ratio' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="min-width: 130px; white-space: nowrap;">阀门/公称压力</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'raw_model_spec' }" style="min-width: 140px; white-space: nowrap;" @click="handleFittingSort('raw_model_spec')">
+                      原型号规格
+                      <span class="sort-icon">{{ fittingSortState.key === 'raw_model_spec' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'raw_name' }" style="min-width: 140px; white-space: nowrap;" @click="handleFittingSort('raw_name')">
+                      原名称
+                      <span class="sort-icon">{{ fittingSortState.key === 'raw_name' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">单位</th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'design_qty' }" style="min-width: 125px; text-align: right; color: #1d4ed8; white-space: nowrap;" @click="handleFittingSort('design_qty')">
+                      设计使用量
+                      <span class="sort-icon">{{ fittingSortState.key === 'design_qty' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th class="sortable-th" :class="{ sorted: fittingSortState.key === 'purchase_plan_qty' }" style="min-width: 135px; text-align: right; color: #059669; white-space: nowrap;" @click="handleFittingSort('purchase_plan_qty')">
+                      计划采购总量
+                      <span class="sort-icon">{{ fittingSortState.key === 'purchase_plan_qty' ? (fittingSortState.order === 'asc' ? '▲' : '▼') : '⇅' }}</span>
+                    </th>
+                    <th style="min-width: 140px; white-space: nowrap;">说明备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in sortedFittingBaselineRows" :key="row.id || idx">
+                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11.5px;">{{ idx + 1 }}</td>
+                    <td class="cell-text" style="text-align: center;">
+                      <span :style="{
+                        fontSize: '11.5px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        background: row.system_type === '高温水' ? '#eff6ff' : '#ecfdf5',
+                        color: row.system_type === '高温水' ? '#2563eb' : '#059669',
+                        fontWeight: '600'
+                      }">
+                        {{ row.system_type || '高温水' }}
+                      </span>
+                    </td>
+                    <td class="cell-text" style="font-weight: 600;">{{ row.category || row.fitting_type || '管件' }}</td>
+                    <td class="cell-text" :title="row.standard_name">{{ row.standard_name || '—' }}</td>
+                    <td class="cell-text font-mono" style="font-weight: 500;" :title="row.model_spec">{{ row.model_spec }}</td>
+                    <td class="cell-text font-mono" :title="row.sub_model_spec">{{ row.sub_model_spec || '—' }}</td>
+                    <td class="cell-number">{{ row.main_dn != null ? row.main_dn : '—' }}</td>
+                    <td class="cell-number">{{ row.sub_dn != null ? row.sub_dn : '—' }}</td>
+                    <td class="cell-number">{{ row.angle != null ? row.angle : '—' }}</td>
+                    <td class="cell-number">{{ row.bending_radius_ratio != null ? row.bending_radius_ratio : '—' }}</td>
+                    <td class="cell-text">{{ [row.valve_model, row.pressure_rating].filter(Boolean).join(' / ') || '—' }}</td>
+                    <td class="cell-text font-mono" :title="row.raw_model_spec">{{ row.raw_model_spec || '—' }}</td>
+                    <td class="cell-text" :title="row.raw_name">{{ row.raw_name || '—' }}</td>
+                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center;">{{ row.unit || '个' }}</td>
+                    <td class="cell-number" style="font-weight: 700; color: #1d4ed8;">{{ formatNumber(row.design_qty) }}</td>
+                    <td class="cell-number" style="font-weight: 700; color: #059669;">{{ formatNumber(row.purchase_plan_qty) }}</td>
+                    <td class="cell-text" :title="row.remark">{{ row.remark || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="filteredFittingBaselineRows.length > 0" class="baseline-table-footer">
+              <span class="footer-left">共 <strong>{{ filteredFittingBaselineRows.length }}</strong> 行管件基准数据</span>
+            </div>
+          </section>
+        </div>
+
       </div>
     </main>
 
@@ -1402,7 +1929,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
@@ -1421,6 +1948,7 @@ import {
   checkRecentFittingShipment,
   submitFittingDelivery,
   cancelFittingDelivery,
+  getTubeDemandManagementFittingBaseline,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -1487,6 +2015,7 @@ const selectedSupplyEntityId = ref('')
 const activeCategory = ref('pipe') // 'pipe' | 'fitting'
 const activeTab = ref('demand')
 const lastPipeTab = ref('demand')
+const lastFittingTab = ref('fitting')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
 
@@ -1496,13 +2025,15 @@ const handleCategoryClick = (category) => {
   if (category === 'pipe') {
     activeTab.value = lastPipeTab.value || 'demand'
   } else if (category === 'fitting') {
-    activeTab.value = 'fitting'
+    activeTab.value = lastFittingTab.value || 'fitting'
   }
 }
 
 const handleTabClick = (tab) => {
   activeTab.value = tab
-  if (tab !== 'fitting') {
+  if (['fitting', 'fitting_baseline'].includes(tab)) {
+    lastFittingTab.value = tab
+  } else {
     lastPipeTab.value = tab
   }
 }
@@ -2342,9 +2873,17 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'fitting') {
+  if (['fitting', 'fitting_baseline'].includes(tab)) {
     activeCategory.value = 'fitting'
-    loadFittingDeliveries()
+    lastFittingTab.value = tab
+    if (tab === 'fitting') {
+      loadFittingDeliveries()
+    } else if (tab === 'fitting_baseline') {
+      if (!selectedFittingBaselineSection1Id.value && currentAssignedSection1Options.value?.length > 0) {
+        selectedFittingBaselineSection1Id.value = currentAssignedSection1Options.value[0].section_1_id
+      }
+      loadFittingBaseline()
+    }
   } else {
     activeCategory.value = 'pipe'
     lastPipeTab.value = tab
@@ -2355,6 +2894,361 @@ watch(activeTab, (tab) => {
     }
   }
 })
+
+// --- 管件设计量与计划采购量 Tab 专用响应式状态与逻辑 ---
+const selectedFittingBaselineSection1Id = ref('')
+const fittingBaselineLoading = ref(false)
+const fittingBaselineError = ref('')
+const fittingBaselineRows = ref([])
+
+// 多维多选分面筛选响应式状态
+const fittingFilters = reactive({
+  systemTypes: [],
+  categories: [],
+  mainDns: [],
+  subDns: [],
+  angles: [],
+  bendingRatios: [],
+  pressures: [],
+  searchKeyword: '',
+})
+
+// 动态提取当前标段各维度的可选值列表及对应记录数
+const availableFittingFacets = computed(() => {
+  const rows = fittingBaselineRows.value || []
+  
+  const systemTypeMap = new Map()
+  const categoryMap = new Map()
+  const mainDnMap = new Map()
+  const subDnMap = new Map()
+  const angleMap = new Map()
+  const bendingRatioMap = new Map()
+  const pressureMap = new Map()
+
+  rows.forEach((r) => {
+    const st = String(r.system_type || '').trim()
+    if (st) systemTypeMap.set(st, (systemTypeMap.get(st) || 0) + 1)
+
+    const cat = String(r.category || r.fitting_type || '').trim()
+    if (cat) categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1)
+
+    if (r.main_dn != null && !isNaN(Number(r.main_dn))) {
+      const dn = Number(r.main_dn)
+      mainDnMap.set(dn, (mainDnMap.get(dn) || 0) + 1)
+    }
+
+    if (r.sub_dn != null && !isNaN(Number(r.sub_dn))) {
+      const sdn = Number(r.sub_dn)
+      subDnMap.set(sdn, (subDnMap.get(sdn) || 0) + 1)
+    }
+
+    if (r.angle != null && !isNaN(Number(r.angle))) {
+      const ang = Number(r.angle)
+      angleMap.set(ang, (angleMap.get(ang) || 0) + 1)
+    }
+
+    if (r.bending_radius_ratio != null && !isNaN(Number(r.bending_radius_ratio))) {
+      const br = Number(r.bending_radius_ratio)
+      bendingRatioMap.set(br, (bendingRatioMap.get(br) || 0) + 1)
+    }
+
+    const pr = String(r.pressure_rating || '').trim()
+    if (pr) pressureMap.set(pr, (pressureMap.get(pr) || 0) + 1)
+  })
+
+  return {
+    systemTypes: Array.from(systemTypeMap.entries()).map(([value, count]) => ({ value, count })),
+    categories: Array.from(categoryMap.entries()).map(([value, count]) => ({ value, count })),
+    mainDns: Array.from(mainDnMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    subDns: Array.from(subDnMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    angles: Array.from(angleMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    bendingRatios: Array.from(bendingRatioMap.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.value - a.value),
+    pressures: Array.from(pressureMap.entries()).map(([value, count]) => ({ value, count })),
+  }
+})
+
+const shouldShowAngleAndBending = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('弯头') || c.includes('弯管'))
+  }
+  return (availableFittingFacets.value.angles.length > 0 || availableFittingFacets.value.bendingRatios.length > 0)
+})
+
+const shouldShowSubDn = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('三通') || c.includes('异径') || c.includes('变径') || c.includes('大小头'))
+  }
+  return availableFittingFacets.value.subDns.length > 0
+})
+
+const shouldShowPressure = computed(() => {
+  if (fittingFilters.categories.length > 0) {
+    return fittingFilters.categories.some(c => c.includes('阀') || c.includes('补偿') || c.includes('波纹'))
+  }
+  return availableFittingFacets.value.pressures.length > 0
+})
+
+const activeDropdown = ref('')
+
+function toggleFittingDropdown(name, event) {
+  if (event) event.stopPropagation()
+  if (activeDropdown.value === name) {
+    activeDropdown.value = ''
+  } else {
+    activeDropdown.value = name
+  }
+}
+
+function closeFittingDropdown() {
+  activeDropdown.value = ''
+}
+
+function getFittingFilterSummary(dimension, defaultLabel, prefix = '', suffix = '') {
+  const selected = fittingFilters[dimension] || []
+  if (selected.length === 0) {
+    return defaultLabel
+  }
+  if (selected.length === 1) {
+    return `${prefix}${selected[0]}${suffix}`
+  }
+  return `已选 ${selected.length} 项`
+}
+
+function selectAllFittingFilterDimension(dimension, options) {
+  if (!options || !options.length) return
+  fittingFilters[dimension] = options.map(opt => opt.value)
+}
+
+function toggleFittingFilterItem(dimension, value) {
+  const arr = fittingFilters[dimension]
+  if (!arr) return
+  const index = arr.indexOf(value)
+  if (index > -1) {
+    arr.splice(index, 1)
+  } else {
+    arr.push(value)
+  }
+}
+
+function isFittingFilterSelected(dimension, value) {
+  return fittingFilters[dimension]?.includes(value) ?? false
+}
+
+function clearFittingFilterDimension(dimension) {
+  if (fittingFilters[dimension]) {
+    fittingFilters[dimension] = []
+  }
+}
+
+function clearAllFittingFilters() {
+  fittingFilters.systemTypes = []
+  fittingFilters.categories = []
+  fittingFilters.mainDns = []
+  fittingFilters.subDns = []
+  fittingFilters.angles = []
+  fittingFilters.bendingRatios = []
+  fittingFilters.pressures = []
+  fittingFilters.searchKeyword = ''
+}
+
+function removeSingleFittingFilter(dim, val) {
+  if (dim === 'searchKeyword') {
+    fittingFilters.searchKeyword = ''
+  } else if (Array.isArray(fittingFilters[dim])) {
+    const idx = fittingFilters[dim].indexOf(val)
+    if (idx > -1) {
+      fittingFilters[dim].splice(idx, 1)
+    }
+  }
+}
+
+const activeFittingFilterTags = computed(() => {
+  const tags = []
+  fittingFilters.systemTypes.forEach(v => tags.push({ dim: 'systemTypes', label: `系统: ${v}`, value: v }))
+  fittingFilters.categories.forEach(v => tags.push({ dim: 'categories', label: `类别: ${v}`, value: v }))
+  fittingFilters.mainDns.forEach(v => tags.push({ dim: 'mainDns', label: `主径: DN${v}`, value: v }))
+  fittingFilters.subDns.forEach(v => tags.push({ dim: 'subDns', label: `次径: DN${v}`, value: v }))
+  fittingFilters.angles.forEach(v => tags.push({ dim: 'angles', label: `角度: ${v}°`, value: v }))
+  fittingFilters.bendingRatios.forEach(v => tags.push({ dim: 'bendingRatios', label: `弯曲: ${v}DN`, value: v }))
+  fittingFilters.pressures.forEach(v => tags.push({ dim: 'pressures', label: `压力: ${v}`, value: v }))
+  if (fittingFilters.searchKeyword.trim()) {
+    tags.push({ dim: 'searchKeyword', label: `搜索: "${fittingFilters.searchKeyword.trim()}"`, value: fittingFilters.searchKeyword })
+  }
+  return tags
+})
+
+const filteredFittingBaselineRows = computed(() => {
+  let list = fittingBaselineRows.value || []
+
+  if (fittingFilters.systemTypes.length > 0) {
+    list = list.filter(r => fittingFilters.systemTypes.includes(String(r.system_type || '').trim()))
+  }
+  if (fittingFilters.categories.length > 0) {
+    list = list.filter(r => fittingFilters.categories.includes(String(r.category || r.fitting_type || '').trim()))
+  }
+  if (fittingFilters.mainDns.length > 0) {
+    list = list.filter(r => r.main_dn != null && fittingFilters.mainDns.includes(Number(r.main_dn)))
+  }
+  if (fittingFilters.subDns.length > 0) {
+    list = list.filter(r => r.sub_dn != null && fittingFilters.subDns.includes(Number(r.sub_dn)))
+  }
+  if (fittingFilters.angles.length > 0) {
+    list = list.filter(r => r.angle != null && fittingFilters.angles.includes(Number(r.angle)))
+  }
+  if (fittingFilters.bendingRatios.length > 0) {
+    list = list.filter(r => r.bending_radius_ratio != null && fittingFilters.bendingRatios.includes(Number(r.bending_radius_ratio)))
+  }
+  if (fittingFilters.pressures.length > 0) {
+    list = list.filter(r => fittingFilters.pressures.includes(String(r.pressure_rating || '').trim()))
+  }
+  if (fittingFilters.searchKeyword.trim()) {
+    const kw = fittingFilters.searchKeyword.trim().toLowerCase()
+    list = list.filter((r) => {
+      const matchName = String(r.standard_name || '').toLowerCase().includes(kw)
+      const matchSpec = String(r.model_spec || '').toLowerCase().includes(kw)
+      const matchSub = String(r.sub_model_spec || '').toLowerCase().includes(kw)
+      const matchRawSpec = String(r.raw_model_spec || '').toLowerCase().includes(kw)
+      const matchRawName = String(r.raw_name || '').toLowerCase().includes(kw)
+      const matchDn = String(r.main_dn || '').includes(kw) || String(r.sub_dn || '').includes(kw)
+      const matchValve = String(r.valve_model || '').toLowerCase().includes(kw)
+      const matchPressure = String(r.pressure_rating || '').toLowerCase().includes(kw)
+      const matchRemark = String(r.remark || '').toLowerCase().includes(kw)
+      return matchName || matchSpec || matchSub || matchRawSpec || matchRawName || matchDn || matchValve || matchPressure || matchRemark
+    })
+  }
+  return list
+})
+
+const fittingSortState = reactive({
+  key: '',
+  order: 'asc',
+})
+
+function handleFittingSort(key) {
+  if (fittingSortState.key === key) {
+    if (fittingSortState.order === 'asc') {
+      fittingSortState.order = 'desc'
+    } else if (fittingSortState.order === 'desc') {
+      fittingSortState.key = ''
+      fittingSortState.order = 'asc'
+    }
+  } else {
+    fittingSortState.key = key
+    fittingSortState.order = 'asc'
+  }
+}
+
+const sortedFittingBaselineRows = computed(() => {
+  const list = [...filteredFittingBaselineRows.value]
+  if (!fittingSortState.key) return list
+  const { key, order } = fittingSortState
+  const multiplier = order === 'asc' ? 1 : -1
+
+  return list.sort((a, b) => {
+    let valA = a[key]
+    let valB = b[key]
+    const isNullA = valA === null || valA === undefined || valA === ''
+    const isNullB = valB === null || valB === undefined || valB === ''
+    if (isNullA && isNullB) return 0
+    if (isNullA) return 1
+    if (isNullB) return -1
+
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return (valA - valB) * multiplier
+    }
+    const numA = Number(valA)
+    const numB = Number(valB)
+    if (!isNaN(numA) && !isNaN(numB) && typeof valA !== 'boolean' && typeof valB !== 'boolean') {
+      return (numA - numB) * multiplier
+    }
+    return String(valA).localeCompare(String(valB), 'zh-CN', { numeric: true }) * multiplier
+  })
+})
+
+const fittingBaselineStats = computed(() => {
+  let totalDesignQty = 0
+  let totalPurchaseQty = 0
+  let filteredDesignQty = 0
+  let filteredPurchaseQty = 0
+
+  fittingBaselineRows.value.forEach((r) => {
+    totalDesignQty += Number(r.design_qty || 0)
+    totalPurchaseQty += Number(r.purchase_plan_qty || 0)
+  })
+
+  filteredFittingBaselineRows.value.forEach((r) => {
+    filteredDesignQty += Number(r.design_qty || 0)
+    filteredPurchaseQty += Number(r.purchase_plan_qty || 0)
+  })
+
+  return {
+    totalDesignQty,
+    totalPurchaseQty,
+    filteredDesignQty,
+    filteredPurchaseQty,
+  }
+})
+
+async function loadFittingBaseline() {
+  const validIds = currentAssignedSection1Ids.value
+  if (!selectedFittingBaselineSection1Id.value || (validIds && validIds.size > 0 && !validIds.has(selectedFittingBaselineSection1Id.value))) {
+    if (currentAssignedSection1Options.value && currentAssignedSection1Options.value.length > 0) {
+      selectedFittingBaselineSection1Id.value = currentAssignedSection1Options.value[0].section_1_id
+    } else {
+      selectedFittingBaselineSection1Id.value = ''
+      fittingBaselineRows.value = []
+      return
+    }
+  }
+  fittingBaselineLoading.value = true
+  fittingBaselineError.value = ''
+  try {
+    const response = await getTubeDemandManagementFittingBaseline(PROJECT_KEY, selectedFittingBaselineSection1Id.value)
+    fittingBaselineRows.value = response.rows || []
+  } catch (error) {
+    fittingBaselineError.value = error?.message || '加载管件基准量失败'
+    fittingBaselineRows.value = []
+  } finally {
+    fittingBaselineLoading.value = false
+  }
+}
+
+function exportFittingBaseline() {
+  const rows = sortedFittingBaselineRows.value
+  if (!rows.length) return
+
+  const headers = [
+    '序号', '系统类型', '物理类别', '标准名称', '型号规格', '细分规格/子型号',
+    '主径DN', '次径DN', '角度(°)', '弯曲倍数', '阀门/公称压力', '原型号规格',
+    '原名称', '单位', '设计使用量', '计划采购总量', '说明备注'
+  ]
+
+  const dataRows = rows.map((r, idx) => [
+    idx + 1,
+    r.system_type || '高温水',
+    r.category || r.fitting_type || '管件',
+    r.standard_name || '',
+    r.model_spec || '',
+    r.sub_model_spec || '',
+    r.main_dn,
+    r.sub_dn,
+    r.angle,
+    r.bending_radius_ratio,
+    [r.valve_model, r.pressure_rating].filter(Boolean).join(' / ') || '',
+    r.raw_model_spec || '',
+    r.raw_name || '',
+    r.unit || '个',
+    r.design_qty != null ? r.design_qty : 0,
+    r.purchase_plan_qty != null ? r.purchase_plan_qty : 0,
+    r.remark || '',
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+  const wb = XLSX.utils.book_new()
+  const secName = getSection1Name(selectedFittingBaselineSection1Id.value) || '标段'
+  XLSX.utils.book_append_sheet(wb, ws, `${secName}管件基准量`)
+  XLSX.writeFile(wb, `${secName}_管件设计与采购量台账.xlsx`)
+}
 
 const summaryLoading = ref(false)
 const summaryError = ref('')
@@ -3123,15 +4017,39 @@ watch(selectedSupplyEntityId, (value) => {
     if (!validSectionIds.has(fittingForm.value.section1Id)) {
       fittingForm.value.section1Id = currentAssignedSection1Options.value[0]?.section_1_id || ''
     }
+    if (!validSectionIds.has(selectedFittingBaselineSection1Id.value)) {
+      selectedFittingBaselineSection1Id.value = currentAssignedSection1Options.value[0]?.section_1_id || ''
+    }
     if (fittingTableSectionFilter.value && !validSectionIds.has(fittingTableSectionFilter.value)) {
       fittingTableSectionFilter.value = ''
     }
     loadDeliveries()
     loadFittingDeliveries()
+    if (activeTab.value === 'fitting_baseline') {
+      loadFittingBaseline()
+    }
   } else {
     fittingDeliveries.value = []
   }
 })
+
+watch(
+  currentAssignedSection1Options,
+  (options) => {
+    if (!options || !options.length) {
+      selectedFittingBaselineSection1Id.value = ''
+      return
+    }
+    const validIds = new Set(options.map((s) => s.section_1_id))
+    if (!selectedFittingBaselineSection1Id.value || !validIds.has(selectedFittingBaselineSection1Id.value)) {
+      selectedFittingBaselineSection1Id.value = options[0]?.section_1_id || ''
+      if (activeTab.value === 'fitting_baseline') {
+        loadFittingBaseline()
+      }
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   deliveryFormPipeModelOptions,
@@ -3188,16 +4106,16 @@ onMounted(async () => {
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 60000)
+  document.addEventListener('click', closeFittingDropdown)
   await refreshRealtimeConfig()
 })
-
-
 
 onBeforeUnmount(() => {
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
   }
+  document.removeEventListener('click', closeFittingDropdown)
 })
 
 const showSuperEditModal = ref(false)
@@ -4808,6 +5726,519 @@ async function saveSuperEditFitting() {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25) !important;
   overflow: hidden !important;
   border: 1px solid #e2e8f0 !important;
+}
+
+/* 🔩 多维多选下拉筛选工具栏 (Clean Multi-Select Dropdown Toolbar) */
+.fitting-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ms-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.ms-dropdown-trigger {
+  height: 34px;
+  padding: 0 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ms-dropdown-trigger:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.ms-dropdown-trigger.has-value {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.ms-dropdown-trigger.is-open {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.ms-label-icon {
+  font-size: 13px;
+}
+
+.ms-label-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-badge {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.ms-clear-btn {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 0 2px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.ms-clear-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ms-arrow {
+  font-size: 10px;
+  color: #64748b;
+  margin-left: 2px;
+}
+
+.ms-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100 !important;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  min-width: 180px;
+  max-width: 260px;
+  padding: 6px 0;
+  animation: slide-down-fade 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-down-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ms-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px 6px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.ms-menu-title {
+  font-weight: 600;
+  color: #475569;
+}
+
+.ms-menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-menu-actions a {
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.ms-menu-actions a:hover {
+  text-decoration: underline;
+}
+
+.ms-menu-actions .sep {
+  color: #cbd5e1;
+  font-size: 10px;
+}
+
+.ms-menu-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.ms-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.ms-menu-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.ms-menu-item.checked {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.ms-menu-item input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #2563eb;
+  width: 14px;
+  height: 14px;
+}
+
+.ms-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-item-count {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ms-search-box {
+  flex: 1;
+  min-width: 180px;
+}
+
+.reset-filter-btn {
+  height: 34px !important;
+  font-size: 12px !important;
+  color: #ef4444 !important;
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+  padding: 0 10px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reset-filter-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+}
+
+/* 📊 表格可点击排序表头样式 */
+.sortable-th {
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: all 0.18s ease !important;
+  position: relative;
+  white-space: nowrap !important;
+}
+
+.sortable-th:hover {
+  background: #f1f5f9 !important;
+  color: #1d4ed8 !important;
+}
+
+.sortable-th.sorted {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+  border-bottom: 2px solid #2563eb !important;
+}
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+  vertical-align: middle;
+  transition: color 0.15s ease;
+}
+
+.sortable-th.sorted .sort-icon {
+  color: #2563eb;
+  font-weight: bold;
+}
+
+/* 🔩 管件基准量标题与顶部操作栏规范排版 */
+.baseline-header-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 12px !important;
+}
+
+.header-title-col {
+  flex: 1 1 auto;
+  min-width: 260px;
+}
+
+.header-title-col h2 {
+  margin: 0 0 4px 0 !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+.header-title-col .panel-hint {
+  font-size: 12.5px !important;
+  color: #64748b !important;
+  margin: 0 !important;
+}
+
+.header-actions-col {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.section-select-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 34px !important;
+  padding: 0 8px 0 10px !important;
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+}
+
+.section-select-group:focus-within {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+  background: #ffffff !important;
+}
+
+.section-select-group .select-label {
+  font-size: 12.5px !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  user-select: none !important;
+}
+
+.baseline-section-select {
+  height: 28px !important;
+  line-height: 28px !important;
+  border: none !important;
+  background: transparent !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  outline: none !important;
+  cursor: pointer !important;
+  padding: 0 4px !important;
+  min-width: 130px !important;
+}
+
+.baseline-action-btn {
+  height: 34px !important;
+  line-height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  cursor: pointer !important;
+  transition: all 0.18s ease !important;
+  color: #334155 !important;
+  box-sizing: border-box !important;
+}
+
+.baseline-action-btn:hover:not(:disabled) {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.baseline-action-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* 🏷️ 数据统计微看板 (Baseline Summary Micro-Dashboard) */
+.baseline-summary {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin-top: 6px !important;
+  margin-bottom: 12px !important;
+}
+
+.baseline-summary .summary-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  font-size: 12.5px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+.baseline-summary .summary-chip strong {
+  color: #1e293b !important;
+  font-weight: 700 !important;
+}
+
+/* 🏷️ 已选筛选条件胶囊标签行 (Active Filter Tags Row) */
+.active-filter-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+.active-tags-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.filter-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.filter-tag-chip:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.tag-close-icon {
+  font-size: 10px;
+  color: #3b82f6;
+  font-weight: bold;
+}
+
+.filter-tag-chip:hover .tag-close-icon {
+  color: #ef4444;
+}
+
+.clear-all-link {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  font-size: 11.5px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 2px 6px;
+}
+
+.clear-all-link:hover {
+  color: #b91c1c;
+}
+
+/* 📜 限制约20行高度并带粘性吸顶表头与独立滚动条的表格容器 */
+.fitting-baseline-table-wrap {
+  max-height: 680px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  position: relative !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+.fitting-baseline-table-wrap table {
+  margin: 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100% !important;
+}
+
+.fitting-baseline-table-wrap thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 12 !important;
+  background: #f8fafc !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 底部状态指示栏 */
+.baseline-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.baseline-table-footer .footer-left strong {
+  color: #0284c7;
+  font-weight: 700;
+}
+
+.baseline-table-footer .footer-right {
+  color: #94a3b8;
+  font-size: 11.5px;
 }
 </style>
 

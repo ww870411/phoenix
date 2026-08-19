@@ -1,3 +1,66 @@
+## 2026-08-19 数字指挥大屏接口全面接入真实管件安装与库存聚合（workspace.py）
+
+- **关联后端路由**：`GET /projects/{project_key}/big_screen` ➔ `handle_get_big_screen_dashboard`
+- **核心数据聚合**：
+  1. **管件累计安装量（`fittingInstalledPcs`）**：从 `tube.tube_fitting_daily_usage` 中按 `status = 'active'` 聚合计算真实全网有效安装件数；
+  2. **管件现场库存量（`fittingStockPcs`）**：$$\text{现场库存} = \text{累计到货} - \text{累计安装}$$；
+  3. **标段管件进度（`section_progress_list`）**：聚合各标段的管件安装量与库存量；
+  4. **全网战报流（`live_feed_list`）**：接入管件现场安装施工流水播报。
+
+## 2026-08-19 后端彻底移除 install_location 字段与 SQL 引用（fitting_usage_service.py & workspace.py）
+
+- **关联后端服务与路由**：
+  - `fitting_usage_service.py`：建表 DDL、提交写入（INSERT）、台账查询（SELECT）以及单项/整批更新中彻底清除 `install_location` 字段；
+  - `workspace.py`：请求 Payloads 统一移除 `install_location`，业务口径全面归拢为纯粹的 `remark`（施工备注）；
+  - `test_fitting_usage_contract.py`：契约测试用例同步更新。
+
+## 2026-08-19 权限收归Global_admin与单项/整批高级编辑接口上线（fitting_usage_service.py & workspace.py）
+
+- **关联后端服务与路由**：
+  - 路由：
+    - `POST /demand-management/fitting-usage/cancel`（作废记录，仅限 `global_admin` / `dev_admin`）
+    - `POST /demand-management/fitting-usage/update-item`（单项编辑，仅限 `global_admin` / `dev_admin`）
+    - `POST /demand-management/fitting-usage/update-batch`（整批编辑，仅限 `global_admin` / `dev_admin`）
+  - 核心服务：`backend/projects/insulation_pipe_supply_2026/services/fitting_usage_service.py`
+- **业务与权限升级**：
+  1. **废除普通填报人员撤回规则**：普通填报用户无权撤销或篡改历史流水，仅 `Global_admin` 拥有作废与修改权限；
+  2. **支持整批迁移与单项精细微调**：
+     - `update_fitting_usage_item`：支持修改安装数量（后端自动根据累计到货量及其他记录占用量核算剩余可用库存上限）、施工桩号位置、备注、填报人、采集日期及状态；
+     - `update_fitting_usage_batch`：支持整批迁移消耗采集日期、更新填报人并批量微调各项物料使用量，全过程记录操作审计日志。
+
+## 2026-08-19 管件安装使用记录撤回时限调整为 1 小时内（fitting_usage_service.py）
+
+- **关联后端服务**：`fitting_usage_service.py` ➔ `cancel_fitting_usage_record`
+- **时效规则收紧**：
+  - 填报人本人（`operator == filled_by`）撤回时限由 24 小时缩短为 **1 小时内**（`timedelta(hours=1)`）；
+  - 超过 1 小时后，普通填报人员禁止自行撤销（返回 `HTTP 403`），必须由超级管理员（`global_admin` / `dev_admin` 等）介入处理，保障施工台账数据的严肃性与不可随意篡改性。
+
+## 2026-08-19 管件安装使用量提交单日仅限提交一次强校验（fitting_usage_service.py）
+
+- **关联后端服务**：`fitting_usage_service.py` ➔ `submit_fitting_usage_batch`
+- **业务校验升级**：
+  - 在写入事务前增加防重复提交前置校验：查询 `tube.tube_fitting_daily_usage` 中当前标段在指定 `usage_date` 是否已存在 `status = 'active'` 的记录；
+  - 若已存在，直接抛出 `HTTP 400` 异常并明确提示：“当前标段在【YYYY-MM-DD】已提交过管件安装记录，单日仅允许提交一次。如需重新填报，请先在历史台账中撤回当日记录。”，杜绝重复记账。
+
+## 2026-08-19 管件现场安装使用量与动态实时库存服务上线（fitting_usage_service.py & workspace.py）
+
+- **关联后端服务与路由**：
+  - 数据表：`tube.tube_fitting_daily_usage`（含 `idx_fitting_usage_stock_calc`、`idx_fitting_usage_date_query` 索引）
+  - 核心服务：`backend/projects/insulation_pipe_supply_2026/services/fitting_usage_service.py`
+  - 接口路由：
+    - `GET /demand-management/fitting-usage/inventory-summary`（实时现场库存汇总）
+    - `POST /demand-management/fitting-usage/submit`（批量安装使用量提交）
+    - `GET /demand-management/fitting-usage/history`（历史使用流水台账）
+    - `POST /demand-management/fitting-usage/cancel`（记录撤回与库存恢复）
+- **核心逻辑与技术特性**：
+  1. **动态现场库存聚合（`get_fitting_inventory_summary`）**：
+     - 通过实时 SQL 聚合发货表已到货数据（`status IN ('pending_receive', 'pending_warehouse', 'completed', 'arrived')`）与使用量表有效流水（`status = 'active'`），实时算出每种到货管件的 $\text{到货量}$、$\text{已使用量}$ 与 $\text{可用结存}$；
+  2. **原子并发安全扣减（`submit_fitting_usage_batch`）**：
+     - 校验数量为正整数，逐项排他校验使用量 $\le$ 现场可用库存，严防负库存与超发；
+  3. **分级权限撤回机制（`cancel_fitting_usage_record`）**：
+     - 填报人本人在 24 小时内可自行撤回误填记录并填写原因；超级管理员全时段全局可撤回，作废后库存自动释放恢复；
+  4. **全套自动化测试覆盖**：新增 `test_fitting_usage_contract.py`，全套 18 项后端测试 100% 绿色通过。
+
 ## 2026-08-19 管件同车牌1小时发货预检与合并追加服务上线（fitting_delivery_service.py & workspace.py）
 
 - **关联后端服务与路由**：
