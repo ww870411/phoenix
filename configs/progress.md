@@ -1,3 +1,22 @@
+## 2026-08-19 [权限全量开放：为保温管物流链项目全量业务角色开放数字指挥大屏（big_screen）访问权限]
+- **权限配置调整**：
+  - 更新 [`backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json`](file:///D:/%E7%BC%96%E7%A8%8B%E9%A1%B9%E7%9B%AE/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)；
+  - 为 `tube_supplier_admin`（供给方管理员）、`tube_supplier`（供给方业务员）、`tube_site_manager`（现场经理）、`tube_construction_unit`（施工单位）、`tube_warehouse_keeper`（库管员）、`tube_global_viewer`（全局只读观察员）全量用户组统一在 `page_access` 中追加 `"big_screen"` 页面权限；
+  - 结合已有 `Global_admin`，本项目下的**所有用户组**均已获权在页面大厅查看并进入数字指挥大屏。
+- **验证结果**：
+  - 后端 18 个测试用例全部通过，前端路由鉴权守卫放行正常。
+
+## 2026-08-19 [上线前质量大体检：全链路契约测试、发货防重、到货接收、使用量填报及数字大屏全面核验全部通过]
+- **全链路代码静态审计与回归测试**：
+  1. **全套自动化测试回归**：运行 `pytest projects/insulation_pipe_supply_2026/tests -v`，全部 18 个测试用例（涵盖发货合并、超额校验、多单位适配、到货流转、使用量计算、权限拦截、超管作废及库存回补）**100% 全部通过（18 passed）**；
+  2. **同车牌短时间发货合并机制**：`checkRecentFittingShipment` 接口与前端弹窗联动顺畅，支持检测 1 小时内同车牌发货并自动合并为同车次；
+  3. **确认到货与施工接收流转闭环**：卸车确认、施工领用、库管归档三阶段状态机与事务回滚机制坚固；
+  4. **管件使用量填报与库存联动**：严格实行“超库存填报拒绝”、“作废记录释放库存”与“管理员专享高级编辑”，`install_location` 字段彻底清除，统一收拢为 `remark`；
+  5. **数字指挥大屏真实数据聚合**：发货、在途、到货、安装、库存指标已全量连接真实数据库，顶栏单行排版与基线对齐无任何重叠或报错。
+- **验证结果**：
+  - 后端：18 个契约/单元测试 100% 通过（0 失败）；
+  - 前端：`npm run build` 生产构建 100% 成功（`✓ built in 21.83s`，0 错误）。
+
 ## 2026-08-19 [UI/UX 底端基线对齐：左侧日期时间、调度标签底部与主标题文字底部精准水平齐平]
 - **底端基线（Bottom Baseline）精细对齐**：
   1. **底端基线统一锚定**：左侧 `.header-left`（包含“全链追踪 · 实时调度中心”徽章与“实时日期时间”）与中间主标题 `.header-title-box`、右侧控制按钮全部统一定位至 `bottom: 18px`；

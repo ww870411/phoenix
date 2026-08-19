@@ -1,3 +1,12 @@
+## 2026-08-19 上线前全套契约自动化测试与全链路回归（tests/）
+
+- **测试套件**：`pytest projects/insulation_pipe_supply_2026/tests -v`
+- **验证结果**：**18 个契约/单元测试 100% 全部通过（18 passed in 2.97s）**；
+- **覆盖范围**：
+  1. 基础数据与日期自动切换规则（`test_baseline_service.py`、`test_config_service_dates.py`）；
+  2. 管件发货、短时间同车牌合并、多单位适配、超管高级维护、整车确认（`test_fitting_delivery_contract.py`）；
+  3. 管件使用量填报、超库存拦截、超管作废权限收归、库存回补恢复（`test_fitting_usage_contract.py`）。
+
 ## 2026-08-19 数字指挥大屏接口全面接入真实管件安装与库存聚合（workspace.py）
 
 - **关联后端路由**：`GET /projects/{project_key}/big_screen` ➔ `handle_get_big_screen_dashboard`

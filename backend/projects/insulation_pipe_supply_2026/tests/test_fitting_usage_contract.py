@@ -153,12 +153,12 @@ class FittingUsageContractTests(unittest.TestCase):
         self.assertEqual(len(history), 2)
         self.assertEqual(history[0]["status"], "active")
 
-        # 6. 填报人本人撤回弯头的使用记录 (4个)
+        # 6. 超级管理员撤回弯头的使用记录 (4个)
         cancel_res = cancel_fitting_usage_record(
             usage_id=elbow_usage_id,
-            operator="worker_zhang",
-            user_group="tube_construction_unit",
-            cancel_reason="桩号录入有误需要重填",
+            operator="admin_user",
+            user_group="global_admin",
+            cancel_reason="施工备注录入有误需要重填",
         )
         self.assertTrue(cancel_res["ok"])
 
@@ -198,7 +198,7 @@ class FittingUsageContractTests(unittest.TestCase):
         self.assertIn("现场当前可用库存仅剩 5 个", ctx.exception.detail)
 
     def test_cancel_permission_rules(self) -> None:
-        """测试非本人且非管理员撤回被 403 拦截，超管可无条件撤回。"""
+        """测试普通施工单位撤回被 403 拦截，仅超管可撤回。"""
         self._create_and_arrive_delivery("直缝弯管", "DN1100 5°R=138.7", 8)
         today_str = date.today().isoformat()
         submit_res = submit_fitting_usage_batch(
@@ -217,16 +217,16 @@ class FittingUsageContractTests(unittest.TestCase):
         )
         usage_id = submit_res["inserted_ids"][0]
 
-        # 他人 (worker_b) 尝试撤回 -> 403
+        # 普通施工人员尝试撤回 -> 403
         with self.assertRaises(HTTPException) as ctx:
             cancel_fitting_usage_record(
                 usage_id=usage_id,
-                operator="worker_b",
+                operator="worker_a",
                 user_group="tube_construction_unit",
                 cancel_reason="我想撤回",
             )
         self.assertEqual(ctx.exception.status_code, 403)
-        self.assertIn("您无权撤回他人填报", ctx.exception.detail)
+        self.assertIn("仅超级管理员（Global_admin）拥有管件安装记录的作废与撤回权限", ctx.exception.detail)
 
         # 超级管理员 (admin) 撤回 -> 成功
         admin_cancel_res = cancel_fitting_usage_record(
