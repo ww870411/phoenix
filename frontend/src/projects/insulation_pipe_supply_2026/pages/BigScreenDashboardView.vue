@@ -1,17 +1,23 @@
 <template>
-  <div class="bigscreen-container" :class="[currentTheme]" ref="containerRef">
+  <div class="bigscreen-container" :class="[currentTheme, `mobile-tab-${activeMobileTab}`]" ref="containerRef">
     <!-- 顶部科技流光控制栏 -->
     <header class="bigscreen-header">
       <div class="header-left">
         <div class="header-badge" :class="{ 'live-mode': isLiveStreamMode }">
           <span class="pulse-dot" :class="{ live: isLiveStreamMode }"></span>
-          <span class="badge-text">全链追踪 · 实时调度中心</span>
+          <span class="badge-text"><span class="badge-desktop-prefix">全链追踪 · </span>实时调度中心</span>
         </div>
         <div class="header-time">{{ currentTimeStr }}</div>
       </div>
 
       <div class="header-title-box">
-        <h1 class="header-title">大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台</h1>
+        <h1 class="header-title">
+          <span class="title-desktop">大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台</span>
+          <span class="title-mobile">
+            <span class="title-mobile-line1">大连洁净能源集团 · 2026年度</span>
+            <span class="title-mobile-line2">老旧管网改造项目物流链智慧管理平台</span>
+          </span>
+        </h1>
       </div>
 
       <!-- 右侧：单一整合控制中心按钮 + 展开式控制面板 -->
@@ -76,6 +82,153 @@
                 </div>
               </div>
 
+              <!-- ⚙️ 核心：大屏运行参数与节律配置 (实时生效并持久化保存在 tube_config.json) -->
+              <div class="popover-group settings-group">
+                <div class="group-title-with-action">
+                  <span class="group-title">⚙️ 大屏运行节律与参数配置</span>
+                  <span v-if="configSaveStatus" class="save-status-badge" :class="configSaveStatus.type">
+                    {{ configSaveStatus.msg }}
+                  </span>
+                </div>
+
+                <div class="settings-form-grid">
+                  <!-- 1. 动效高亮展示时长 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">⏱️ 动效高亮展示</span>
+                      <span class="setting-val-tag">{{ bsConfig.animation_active_duration_sec }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="30" 
+                      step="1" 
+                      v-model.number="bsConfig.animation_active_duration_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="发货飞线与标段光晕高亮展示时长"
+                    />
+                    <div class="setting-hint">发货飞线与标段光晕点亮时长</div>
+                  </div>
+
+                  <!-- 2. 动效静息间隔时长 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">⏸️ 动效静息间隔</span>
+                      <span class="setting-val-tag">{{ bsConfig.animation_rest_duration_sec }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="30" 
+                      step="1" 
+                      v-model.number="bsConfig.animation_rest_duration_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="飞线消退后全景静止沉淀时长"
+                    />
+                    <div class="setting-hint">飞线消退后全景静止沉淀时长</div>
+                  </div>
+
+                  <!-- 3. 常规后台刷新周期 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">🔄 常规刷新周期</span>
+                      <span class="setting-val-tag">{{ bsConfig.auto_sync_interval_sec }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="5" 
+                      max="120" 
+                      step="5" 
+                      v-model.number="bsConfig.auto_sync_interval_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="后台静默同步数据库指标的轮询周期"
+                    />
+                    <div class="setting-hint">后台静默同步全量数据库周期</div>
+                  </div>
+
+                  <!-- 4. 实况心跳频率 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">⚡ 实况心跳频率</span>
+                      <span class="setting-val-tag">{{ bsConfig.live_stream_interval_sec }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="15" 
+                      step="1" 
+                      v-model.number="bsConfig.live_stream_interval_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="接入实况模式下感知新增单据频率"
+                    />
+                    <div class="setting-hint">实况直连模式增量监听频率</div>
+                  </div>
+
+                  <!-- 5. 飞线粒子流速 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">🚀 飞线粒子流速</span>
+                      <span class="setting-val-tag">{{ bsConfig.flyline_travel_sec }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0.5" 
+                      max="5.0" 
+                      step="0.1" 
+                      v-model.number="bsConfig.flyline_travel_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="激光粒子由管厂跨越飞向标段耗时"
+                    />
+                    <div class="setting-hint">激光粒子跨越飞向标段耗时</div>
+                  </div>
+
+                  <!-- 6. 战报显示条数 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">📜 战报显示条数</span>
+                      <span class="setting-val-tag">{{ bsConfig.feed_limit }} 条</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="10" 
+                      max="80" 
+                      step="5" 
+                      v-model.number="bsConfig.feed_limit" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="动态流水截取的最大最新单据记录数"
+                    />
+                    <div class="setting-hint">动态流水截取的最大最新记录数</div>
+                  </div>
+                </div>
+
+                <!-- 保存与重置操作按钮 -->
+                <div class="settings-actions-bar">
+                  <button 
+                    class="action-btn save-config-btn" 
+                    :disabled="isSavingConfig" 
+                    @click="handleSaveConfigToBackend"
+                    title="将当前调节后的设定持久化写入后端 tube_config.json"
+                  >
+                    <span class="btn-icon">💾</span>
+                    <span>{{ isSavingConfig ? '正在保存...' : '保存设定' }}</span>
+                  </button>
+                  <button 
+                    class="action-btn reset-config-btn" 
+                    @click="handleResetConfigToDefault"
+                    title="恢复出厂默认参数设置"
+                  >
+                    <span class="btn-icon">🔄</span>
+                    <span>重置默认</span>
+                  </button>
+                </div>
+              </div>
+
               <div class="popover-group">
                 <div class="group-title">沙盒演示与模拟</div>
                 <div class="group-buttons-grid">
@@ -116,10 +269,55 @@
       </div>
     </header>
 
+    <!-- 移动端专属导航选项卡 (<= 900px 自动显现，一触即切) -->
+    <nav class="mobile-nav-tabs" role="tablist">
+      <button 
+        class="mobile-tab-btn" 
+        :class="{ active: activeMobileTab === 'kpi' }"
+        @click="setMobileTab('kpi')"
+        type="button"
+        role="tab"
+      >
+        <span class="tab-icon">📊</span>
+        <span class="tab-label">指标大盘</span>
+      </button>
+      <button 
+        class="mobile-tab-btn" 
+        :class="{ active: activeMobileTab === 'topology' }"
+        @click="setMobileTab('topology')"
+        type="button"
+        role="tab"
+      >
+        <span class="tab-icon">🌐</span>
+        <span class="tab-label">供需拓扑</span>
+      </button>
+      <button 
+        class="mobile-tab-btn" 
+        :class="{ active: activeMobileTab === 'feed' }"
+        @click="setMobileTab('feed')"
+        type="button"
+        role="tab"
+      >
+        <span class="tab-icon">📢</span>
+        <span class="tab-label">动态战报</span>
+        <span v-if="liveFeedList.length" class="tab-badge">{{ Math.min(liveFeedList.length, 99) }}</span>
+      </button>
+      <button 
+        class="mobile-tab-btn" 
+        :class="{ active: activeMobileTab === 'all' }"
+        @click="setMobileTab('all')"
+        type="button"
+        role="tab"
+      >
+        <span class="tab-icon">📜</span>
+        <span class="tab-label">全览</span>
+      </button>
+    </nav>
+
     <!-- 主展示区：三栏网格体系 -->
-    <main class="bigscreen-content">
+    <main class="bigscreen-content" :class="['mobile-tab-' + activeMobileTab]">
       <!-- 左侧栏：全局指标体系与管材/管件双轨大盘 (100% 真实数据库计算) -->
-      <section class="screen-col left-col">
+      <section class="screen-col left-col" :class="{ 'mobile-active-col': activeMobileTab === 'kpi' || activeMobileTab === 'all' }">
         <!-- 核心指标1：管材全网发运与在途 (真实数据库聚合) -->
         <div class="panel-box pipe-kpi-panel">
           <div class="panel-header">
@@ -299,7 +497,7 @@
       </section>
 
       <!-- 中间栏：重构升级版 · 高工规整双系统拓扑中枢 (默认通透极简，发货在途/悬停显现) -->
-      <section class="screen-col center-col">
+      <section class="screen-col center-col" :class="{ 'mobile-active-col': activeMobileTab === 'topology' || activeMobileTab === 'all' }">
         <div class="panel-box map-topology-master-panel">
           <!-- 拓扑头部导航与状态过滤 -->
           <div class="topology-header-bar">
@@ -316,8 +514,13 @@
             </div>
           </div>
 
+          <!-- 移动端专属手势滑动提示 (<= 900px 自动显现) -->
+          <div class="mobile-topo-scroll-hint" v-if="activeMobileTab === 'topology' || activeMobileTab === 'all'">
+            <span>👆 支持 2D 自由手势滑动 · 查看全网 3 家管厂与 10 大施工标段流向拓扑 ➔</span>
+          </div>
+
           <!-- 拓扑主舞台：左管厂 (230px) + 中流向通道 (50px) + 右双系统立柱 (1fr) -->
-          <div class="topology-container" ref="topologyContainerRef">
+          <div class="topology-container" ref="topologyContainerRef" @scroll="recalculateFlylines">
             <!-- 动态贝塞尔飞线与激光粒子 SVG 视层 (默认不显示任何线条，仅在发货在途或悬停时显现) -->
             <svg class="topology-svg" ref="svgRef">
               <defs>
@@ -654,7 +857,7 @@
       </section>
 
       <!-- 右侧栏：实时战报动态流水与重大保供里程碑 (基于真实工程全链路数据) -->
-      <section class="screen-col right-col">
+      <section class="screen-col right-col" :class="{ 'mobile-active-col': activeMobileTab === 'feed' || activeMobileTab === 'all' }">
         <!-- 实时工程战报流 -->
         <div class="panel-box live-feed-panel">
           <div class="panel-header">
@@ -836,12 +1039,89 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   getTubeWorkspaceConfigSummary,
-  getTubeBigScreenData
+  getTubeBigScreenData,
+  updateTubeBigScreenConfig
 } from '../../daily_report_25_26/services/api'
 
 const router = useRouter()
 const route = useRoute()
 const projectKey = computed(() => String(route.params.projectKey || 'insulation_pipe_supply_2026'))
+
+// --- ⚙️ 大屏运行参数与节律配置状态 (持久化存储于 tube_config.json) ---
+const bsConfig = reactive({
+  animation_active_duration_sec: 5,
+  animation_rest_duration_sec: 5,
+  auto_sync_interval_sec: 20,
+  live_stream_interval_sec: 3,
+  flyline_travel_sec: 1.8,
+  feed_limit: 40
+})
+const isSavingConfig = ref(false)
+const configSaveStatus = ref(null)
+let configSaveStatusTimer = null
+
+function showSaveStatus(msg, type = 'success') {
+  configSaveStatus.value = { msg, type }
+  if (configSaveStatusTimer) clearTimeout(configSaveStatusTimer)
+  configSaveStatusTimer = setTimeout(() => {
+    configSaveStatus.value = null
+  }, 3000)
+}
+
+// 调节滑块时本地即刻动态生效
+function applyConfigLocally() {
+  startAnimationLoop()
+  
+  if (!isLiveStreamMode.value && !autoDemoRunning.value) {
+    if (autoSyncTimer) clearInterval(autoSyncTimer)
+    const intervalMs = Math.max(5, Number(bsConfig.auto_sync_interval_sec) || 20) * 1000
+    autoSyncTimer = setInterval(loadRealData, intervalMs)
+  }
+  
+  if (isLiveStreamMode.value) {
+    if (liveStreamTimer) clearInterval(liveStreamTimer)
+    const liveMs = Math.max(1, Number(bsConfig.live_stream_interval_sec) || 3) * 1000
+    liveStreamTimer = setInterval(pollLiveRealData, liveMs)
+  }
+  
+  if (liveFeedList.value && liveFeedList.value.length > bsConfig.feed_limit) {
+    liveFeedList.value = liveFeedList.value.slice(0, bsConfig.feed_limit)
+  }
+}
+
+// 持久化保存至后端 tube_config.json
+async function handleSaveConfigToBackend() {
+  isSavingConfig.value = true
+  try {
+    applyConfigLocally()
+    const res = await updateTubeBigScreenConfig(projectKey.value, bsConfig)
+    if (res && res.ok) {
+      if (res.big_screen_config) {
+        Object.assign(bsConfig, res.big_screen_config)
+      }
+      showSaveStatus('✅ 已持久化保存至配置文件', 'success')
+    } else {
+      showSaveStatus('⚠️ 保存异常', 'error')
+    }
+  } catch (err) {
+    console.error('保存大屏配置失败:', err)
+    showSaveStatus('❌ 保存失败: ' + (err.message || '网络异常'), 'error')
+  } finally {
+    isSavingConfig.value = false
+  }
+}
+
+// 恢复出厂默认参数设置
+async function handleResetConfigToDefault() {
+  bsConfig.animation_active_duration_sec = 5
+  bsConfig.animation_rest_duration_sec = 5
+  bsConfig.auto_sync_interval_sec = 20
+  bsConfig.live_stream_interval_sec = 3
+  bsConfig.flyline_travel_sec = 1.8
+  bsConfig.feed_limit = 40
+  await handleSaveConfigToBackend()
+  showSaveStatus('🔄 已恢复出厂默认设定', 'success')
+}
 
 // --- 主题切换状态 ---
 const currentTheme = ref(localStorage.getItem('phoenix_tube_bigscreen_theme') || 'dark')
@@ -865,6 +1145,21 @@ const isControlMenuOpen = ref(false)
 const controlMenuRef = ref(null)
 const isFeedFilterMenuOpen = ref(false)
 const feedFilterMenuRef = ref(null)
+
+// --- 移动端专属响应式状态 ---
+const activeMobileTab = ref('kpi') // 'kpi' | 'topology' | 'feed' | 'all'
+
+function setMobileTab(tabKey) {
+  activeMobileTab.value = tabKey
+  if (tabKey === 'topology' || tabKey === 'all') {
+    setTimeout(() => {
+      recalculateFlylines()
+    }, 60)
+    setTimeout(() => {
+      recalculateFlylines()
+    }, 250)
+  }
+}
 
 function toggleControlMenu() {
   isControlMenuOpen.value = !isControlMenuOpen.value
@@ -1030,8 +1325,14 @@ const sectionProgressList = ref([...defaultSectionList])
 // 高温水与低温水系统立柱分离（均衡分配为两列各 5 个标段，避免底部留白）
 const highWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'high'))
 const lowWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'low'))
-const col1Sections = computed(() => sectionProgressList.value.slice(0, 5))
-const col2Sections = computed(() => sectionProgressList.value.slice(5, 10))
+const col1Sections = computed(() => {
+  const half = Math.ceil(sectionProgressList.value.length / 2)
+  return sectionProgressList.value.slice(0, half)
+})
+const col2Sections = computed(() => {
+  const half = Math.ceil(sectionProgressList.value.length / 2)
+  return sectionProgressList.value.slice(half)
+})
 
 function setSectionTab(tab) {
   activeSectionTab.value = tab
@@ -1183,20 +1484,23 @@ function startAnimationLoop() {
   if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
   isAnimationCycleActive.value = true
 
-  // 每次进入 5 秒激活周期时，如果当前焦点是发货事件，自动发射一次激光粒子飞向标段
+  // 每次进入激活周期时，如果当前焦点是发货事件，自动发射一次激光粒子飞向标段
   if (activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
     shootLaserParticle(activeSupplierId.value, 'sec_' + activeSectionId.value, activeMaterialType.value)
   }
 
-  // 5 秒展示期结束，进入 5 秒静息期
+  const activeDurationMs = Math.max(1, Number(bsConfig.animation_active_duration_sec) || 5) * 1000
+  const restDurationMs = Math.max(0, bsConfig.animation_rest_duration_sec !== undefined ? Number(bsConfig.animation_rest_duration_sec) : 5) * 1000
+
+  // 动效展示期结束，进入静息期
   animationCycleTimeout = setTimeout(() => {
     isAnimationCycleActive.value = false
 
-    // 5 秒静息期结束，再次循环进入展示期
+    // 静息期结束，再次循环进入展示期
     animationCycleTimeout = setTimeout(() => {
       startAnimationLoop()
-    }, ANIMATION_REST_DURATION)
-  }, ANIMATION_ACTIVE_DURATION)
+    }, restDurationMs)
+  }, activeDurationMs)
 }
 
 function isLineVisible(line) {
@@ -1396,15 +1700,18 @@ function recalculateFlylines() {
     const containerRect = container.getBoundingClientRect()
     if (containerRect.width <= 0 || containerRect.height <= 0) return
 
-    // 1. 批量读取港口坐标，单次回流
+    const scrollLeft = container.scrollLeft || 0
+    const scrollTop = container.scrollTop || 0
+
+    // 1. 批量读取港口坐标，单次回流 (含移动端滚动偏移容错)
     const supRects = new Map()
     supplyNodes.value.forEach(sup => {
       const el = document.getElementById('port-out-' + sup.id)
       if (el) {
         const r = el.getBoundingClientRect()
         supRects.set(sup.id, {
-          x: r.left + r.width / 2 - containerRect.left,
-          y: r.top + r.height / 2 - containerRect.top
+          x: r.left + r.width / 2 - containerRect.left + scrollLeft,
+          y: r.top + r.height / 2 - containerRect.top + scrollTop
         })
       }
     })
@@ -1415,8 +1722,8 @@ function recalculateFlylines() {
       if (el) {
         const r = el.getBoundingClientRect()
         secRects.set(sec.id, {
-          x: r.left + r.width / 2 - containerRect.left,
-          y: r.top + r.height / 2 - containerRect.top
+          x: r.left + r.width / 2 - containerRect.left + scrollLeft,
+          y: r.top + r.height / 2 - containerRect.top + scrollTop
         })
       }
     })
@@ -1473,7 +1780,7 @@ function shootLaserParticle(fromId, toId, type = 'pipe') {
   if (!targetLine) return
 
   const particleId = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000)
-  const duration = 1.3
+  const duration = Math.max(0.5, Number(bsConfig.flyline_travel_sec) || 1.8)
 
   // 1. 点亮显现在途运输线路（使用确切 targetLine 的端点，确保线路与发光节点100%对齐）
   activeShipmentLineIds.value.add(targetLine.id)
@@ -1875,6 +2182,11 @@ async function loadRealData(isForce = false) {
         supplyNodes.value = res.supply_nodes
       }
 
+      // 5.5. 大屏持久化运行参数绑定
+      if (res.big_screen_config) {
+        Object.assign(bsConfig, res.big_screen_config)
+      }
+
       // 6. 真实里程碑
       if (Array.isArray(res.milestones)) {
         milestones.value = res.milestones
@@ -1928,8 +2240,9 @@ onMounted(() => {
   setTimeout(recalculateFlylines, 100)
   setTimeout(recalculateFlylines, 400)
 
-  // 每 20 秒静默拉取数据库最新发货与核销状态
-  autoSyncTimer = setInterval(loadRealData, 20000)
+  // 静默拉取数据库最新状态，使用配置中设定的同步周期
+  const defaultIntervalMs = Math.max(5, Number(bsConfig.auto_sync_interval_sec) || 20) * 1000
+  autoSyncTimer = setInterval(loadRealData, defaultIntervalMs)
   window.addEventListener('resize', recalculateFlylines, { passive: true })
   window.addEventListener('click', handleGlobalClick)
 })
@@ -2050,6 +2363,93 @@ onBeforeUnmount(() => {
   text-shadow: 0 2px 16px rgba(0, 242, 254, 0.5);
 }
 
+.title-desktop {
+  display: inline;
+}
+
+.title-mobile {
+  display: none;
+}
+
+.badge-desktop-prefix {
+  display: inline;
+}
+
+/* 移动端专属导航选项卡 (默认在 PC 桌面端完全隐藏) */
+.mobile-nav-tabs {
+  display: none;
+  height: 44px;
+  background: #090e1a;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+  align-items: stretch;
+  justify-content: space-around;
+  padding: 0 4px;
+  flex-shrink: 0;
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+.mobile-tab-btn {
+  flex: 1;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0 4px;
+  position: relative;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab-btn .tab-icon {
+  font-size: 14px;
+}
+
+.mobile-tab-btn .tab-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(0, 242, 254, 0.2);
+  color: #00f2fe;
+  border: 1px solid rgba(0, 242, 254, 0.4);
+  padding: 0 5px;
+  border-radius: 10px;
+  line-height: 1.4;
+}
+
+.mobile-tab-btn.active {
+  color: #00f2fe;
+  font-weight: 700;
+  border-bottom-color: #00f2fe;
+  background: rgba(0, 242, 254, 0.08);
+}
+
+.mobile-topo-scroll-hint {
+  display: none;
+  font-size: 11px;
+  color: #38bdf8;
+  background: rgba(0, 242, 254, 0.08);
+  border: 1px dashed rgba(0, 242, 254, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  text-align: center;
+  margin-bottom: 6px;
+  animation: hint-shimmer 2.5s infinite ease-in-out;
+}
+
+@keyframes hint-shimmer {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -2111,7 +2511,11 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
-  width: 320px;
+  width: 350px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 242, 254, 0.4) transparent;
   background: rgba(9, 14, 26, 0.96);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -2123,6 +2527,123 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.group-title-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.save-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  animation: fadeIn 0.2s ease;
+}
+
+.save-status-badge.success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.save-status-badge.error {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.setting-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.2s ease;
+}
+
+.setting-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 242, 254, 0.25);
+}
+
+.setting-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.setting-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.setting-val-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #00f2fe;
+  background: rgba(0, 242, 254, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.setting-slider {
+  width: 100%;
+  height: 4px;
+  accent-color: #00f2fe;
+  cursor: pointer;
+  margin: 3px 0;
+}
+
+.setting-hint {
+  font-size: 9.5px;
+  color: #64748b;
+}
+
+.settings-actions-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.save-config-btn {
+  flex: 1.5;
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.35));
+  border: 1px solid #00f2fe;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 7px 12px;
+  justify-content: center;
+}
+
+.save-config-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.4), rgba(79, 172, 254, 0.55));
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+}
+
+.reset-config-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  padding: 7px 10px;
+  justify-content: center;
+}
+
+.reset-config-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
 }
 
 .popover-header {
@@ -3009,8 +3530,8 @@ onBeforeUnmount(() => {
 }
 
 .demand-node-card {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 110px;
+  min-height: 110px;
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -3236,33 +3757,42 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 5px;
   margin-top: 0;
+  flex: 1;
+  justify-content: space-around;
+  min-height: 0;
 }
 
 .sec-metric-line {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .line-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12.5px;
+  gap: 4px;
+  font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .line-label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 4px;
+  padding: 1.5px 5px;
+  border-radius: 3px;
   color: #ffffff;
   letter-spacing: 0.2px;
   line-height: 1.2;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .line-label.pipe-tag {
@@ -3284,9 +3814,15 @@ onBeforeUnmount(() => {
 }
 
 .line-val {
-  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, monospace;
-  font-size: 13px;
+  font-family: 'DIN Alternate', 'JetBrains Mono', 'Helvetica Neue', Arial, monospace;
+  font-size: 11.5px;
   font-weight: 600;
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .line-val.cyan-text,
@@ -3306,15 +3842,18 @@ onBeforeUnmount(() => {
 
 .line-pct {
   font-weight: 800;
-  font-size: 13px;
+  font-size: 11.5px;
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: right;
 }
 
 .transit-num-tag {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  margin-left: 2px;
-  padding: 0 3px;
-  border-radius: 3px;
+  margin-left: 1px;
+  padding: 0 2px;
+  border-radius: 2px;
   display: inline-block;
   animation: transit-text-sync-glow 1.4s infinite ease-in-out;
 }
@@ -4255,6 +4794,42 @@ onBeforeUnmount(() => {
   text-shadow: none;
 }
 
+.bigscreen-container.light .title-mobile-line1 {
+  color: #64748b;
+}
+
+.bigscreen-container.light .title-mobile-line2 {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+.bigscreen-container.light .mobile-nav-tabs {
+  background: #ffffff;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.8);
+}
+
+.bigscreen-container.light .mobile-tab-btn {
+  color: #64748b;
+}
+
+.bigscreen-container.light .mobile-tab-btn.active {
+  color: #0284c7;
+  border-bottom-color: #0284c7;
+  background: rgba(2, 132, 199, 0.08);
+}
+
+.bigscreen-container.light .mobile-tab-btn .tab-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+
+.bigscreen-container.light .mobile-topo-scroll-hint {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.3);
+}
+
 .bigscreen-container.light .control-trigger-btn {
   background: #ffffff;
   border-color: #cbd5e1;
@@ -4311,6 +4886,41 @@ onBeforeUnmount(() => {
   background: #059669;
   border-color: #059669;
   color: #ffffff;
+}
+
+.bigscreen-container.light .setting-item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.bigscreen-container.light .setting-item:hover {
+  background: #f1f5f9;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .setting-name {
+  color: #334155;
+}
+
+.bigscreen-container.light .setting-val-tag {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+}
+
+.bigscreen-container.light .setting-slider {
+  accent-color: #0284c7;
+}
+
+.bigscreen-container.light .save-config-btn {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+.bigscreen-container.light .reset-config-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #64748b;
 }
 
 .bigscreen-container.light .theme-toggle-btn {
@@ -5028,7 +5638,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* --- 响应式适配 --- */
+/* --- 响应式适配 Responsive Layout --- */
 @media (max-width: 1400px) {
   .bigscreen-content {
     grid-template-columns: 300px 1fr 330px;
@@ -5040,6 +5650,595 @@ onBeforeUnmount(() => {
   }
   .topology-layout-grid {
     grid-template-columns: 200px 40px 1fr;
+  }
+}
+
+/* 📱 移动端与平板竖屏全量适配 (<= 900px) */
+@media (max-width: 900px) {
+  .bigscreen-container {
+    height: 100%;
+    min-height: 100dvh;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 顶栏紧凑高质感化 */
+  .bigscreen-header {
+    height: 64px;
+    min-height: 64px;
+    max-height: 64px;
+    padding: 0 12px;
+    gap: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left {
+    min-width: auto;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .header-badge {
+    padding: 3px 8px;
+    font-size: 11px;
+    gap: 5px;
+  }
+
+  .badge-desktop-prefix {
+    display: none;
+  }
+
+  .header-time {
+    display: none;
+  }
+
+  .header-title-box {
+    position: static;
+    transform: none;
+    flex: 1;
+    text-align: center;
+    padding: 0 4px;
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .title-desktop {
+    display: none;
+  }
+
+  .title-mobile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+  }
+
+  .title-mobile-line1 {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.8px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .title-mobile-line2 {
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-shadow: 0 0 14px rgba(0, 242, 254, 0.6);
+  }
+
+  .header-title {
+    font-size: 14.5px;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+    margin: 0;
+    width: 100%;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
+
+  .control-trigger-btn {
+    padding: 5px 9px;
+    font-size: 11.5px;
+    gap: 4px;
+    border-radius: 16px;
+  }
+
+  .control-trigger-btn .btn-text {
+    display: none;
+  }
+
+  .control-trigger-btn .mini-live-tag {
+    display: inline-block;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+
+  /* 控制中心浮层在移动端自适应全屏弹窗 */
+  .control-menu-popover {
+    position: fixed !important;
+    top: 60px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 480px !important;
+    max-height: calc(100dvh - 80px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin: 0 auto !important;
+    border-radius: 14px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 242, 254, 0.25) !important;
+    z-index: 2000 !important;
+  }
+
+  /* 显现移动端导航选项卡 */
+  .mobile-nav-tabs {
+    display: flex;
+  }
+
+  /* 主内容区改为单列流式结构 */
+  .bigscreen-content {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100dvh - 100px);
+    padding: 10px 10px 24px;
+    gap: 12px;
+    overflow: visible;
+  }
+
+  /* 默认隐藏未激活的列，仅显示当前 Tab 对应的列 (或全览模式全部显示) */
+  .screen-col {
+    display: none;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    gap: 12px;
+    flex: none;
+  }
+
+  .screen-col.mobile-active-col {
+    display: flex;
+  }
+
+  /* 🌟 全览模式专属瀑布流排版 (各板块物理隔离，上下留白，绝不遮挡) */
+  .bigscreen-content.mobile-tab-all,
+  .mobile-tab-all .bigscreen-content {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    gap: 16px !important;
+    overflow-y: visible !important;
+    padding: 12px 10px 36px !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .screen-col,
+  .mobile-tab-all .screen-col {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: auto !important;
+    flex: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    gap: 12px !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .left-col,
+  .mobile-tab-all .left-col {
+    height: auto !important;
+    flex: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1 !important;
+    margin-bottom: 2px !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .center-col,
+  .mobile-tab-all .center-col {
+    height: 740px !important;
+    min-height: 740px !important;
+    flex: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 2 !important;
+    margin-top: 4px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .map-topology-master-panel,
+  .mobile-tab-all .map-topology-master-panel {
+    height: 740px !important;
+    min-height: 740px !important;
+    flex: none !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .topology-container,
+  .mobile-tab-all .topology-container {
+    height: 650px !important;
+    min-height: 650px !important;
+    flex: none !important;
+    position: relative !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .bigscreen-content.mobile-tab-all .right-col,
+  .mobile-tab-all .right-col {
+    height: auto !important;
+    flex: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1 !important;
+    margin-top: 4px !important;
+  }
+
+  /* 1. 左侧指标大盘移动端调优 */
+  .left-col {
+    padding-right: 0;
+    overflow: visible;
+  }
+
+  .panel-box {
+    padding: 12px 14px;
+    border-radius: 8px;
+  }
+
+  .panel-header {
+    margin-bottom: 10px;
+  }
+
+  .panel-title {
+    font-size: 13.5px;
+  }
+
+  .kpi-metric-grid {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .metric-item {
+    padding: 8px 10px;
+  }
+
+  .metric-val .num {
+    font-size: 17px;
+  }
+
+  .safety-grid {
+    gap: 8px;
+  }
+
+  .safety-card {
+    padding: 8px 10px;
+  }
+
+  /* 2. 中间供需拓扑移动端调优 (根治卡片压扁与重叠，支持 2D 平滑手势滑动) */
+  .center-col {
+    height: calc(100dvh - 110px);
+    min-height: 540px;
+    overflow: hidden;
+  }
+
+  .bigscreen-content.mobile-tab-topology .center-col,
+  .mobile-tab-topology .center-col {
+    height: calc(100dvh - 110px) !important;
+    min-height: 540px !important;
+    overflow: hidden !important;
+    flex: 1 !important;
+  }
+
+  .bigscreen-content.mobile-tab-topology .map-topology-master-panel,
+  .mobile-tab-topology .map-topology-master-panel {
+    height: 100% !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .bigscreen-content.mobile-tab-topology .topology-container,
+  .mobile-tab-topology .topology-container {
+    flex: 1 !important;
+    height: 100% !important;
+    min-height: 460px !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    position: relative !important;
+  }
+
+  .map-topology-master-panel {
+    height: 100%;
+    flex: 1;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .mobile-topo-scroll-hint {
+    display: block;
+  }
+
+  .topology-container {
+    flex: 1;
+    min-height: 0;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+    border-radius: 6px;
+  }
+
+  .topology-layout-grid {
+    min-width: 860px;
+    min-height: 640px;
+    width: 100%;
+    height: 100%;
+    grid-template-columns: 220px 38px 1fr;
+    padding: 12px 14px;
+    box-sizing: border-box;
+  }
+
+  .topology-svg {
+    min-width: 860px;
+    min-height: 640px;
+    width: 100%;
+    height: 100%;
+  }
+
+  .supply-cards-stack {
+    gap: 16px;
+    padding: 2px 0;
+    height: 100%;
+    min-height: 600px;
+    justify-content: space-around;
+    box-sizing: border-box;
+  }
+
+  .supply-node-card {
+    min-height: 88px;
+    flex: 1 0 88px;
+    padding: 12px 14px;
+    box-sizing: border-box;
+  }
+
+  .sup-title {
+    font-size: 13px;
+  }
+
+  .demand-systems-split {
+    gap: 14px;
+    height: 100%;
+    min-height: 600px;
+    box-sizing: border-box;
+  }
+
+  .system-sub-col {
+    height: 100%;
+    min-height: 600px;
+  }
+
+  .system-cards-list {
+    gap: 10px;
+    padding: 2px 0;
+    height: 100%;
+    min-height: 600px;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+
+  .demand-node-card {
+    min-height: 122px;
+    flex: 1 0 122px;
+    padding: 8px 12px;
+    gap: 5px;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .sec-card-header {
+    height: 22px;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sec-badge-name {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .sec-sys-badge {
+    font-size: 10.5px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+  }
+
+  .sec-title {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sec-status-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+  }
+
+  .sec-metrics-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    justify-content: space-around;
+    min-height: 0;
+  }
+
+  .sec-metric-line {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .sec-metric-line .line-info {
+    font-size: 11px;
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  .sec-metric-line .line-label {
+    font-size: 10.5px;
+    padding: 1px 4px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .sec-metric-line .line-val {
+    font-size: 11.5px;
+    font-weight: 600;
+    flex: 1;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .sec-metric-line .line-pct {
+    font-size: 11.5px;
+    font-weight: 800;
+    flex-shrink: 0;
+    min-width: 34px;
+    text-align: right;
+  }
+
+  .micro-bar-bg {
+    height: 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .transit-channel-col .channel-text {
+    font-size: 9px;
+  }
+
+  /* 3. 右侧实时动态与成果榜移动端调优 */
+  .right-col {
+    display: none;
+    overflow: visible;
+  }
+
+  .right-col.mobile-active-col {
+    display: flex;
+  }
+
+  .live-feed-panel {
+    flex: none;
+    min-height: 380px;
+  }
+
+  .feed-list-wrapper {
+    max-height: 480px;
+    padding: 2px 4px;
+  }
+
+  .milestone-panel {
+    flex: none;
+    min-height: 220px;
+  }
+
+  .milestone-list {
+    max-height: 280px;
+  }
+}
+
+/* 📱 超窄小屏手机深度优化 (<= 480px) */
+@media (max-width: 480px) {
+  .bigscreen-header {
+    padding: 0 8px;
+  }
+
+  .header-badge {
+    padding: 2px 5px;
+    font-size: 10.5px;
+  }
+
+  .title-mobile-line1 {
+    font-size: 10.5px;
+    letter-spacing: 0.4px;
+  }
+
+  .title-mobile-line2 {
+    font-size: 13px;
+    letter-spacing: 0.3px;
+  }
+
+  .mobile-tab-btn {
+    font-size: 12px;
+    gap: 3px;
+  }
+
+  .mobile-tab-btn .tab-icon {
+    font-size: 13px;
+  }
+
+  .kpi-metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .metric-val .num {
+    font-size: 15.5px;
+  }
+
+  .fitting-types-pills {
+    gap: 4px;
+  }
+
+  .fitting-pill {
+    padding: 3px 6px;
+    font-size: 10.5px;
   }
 }
 </style>

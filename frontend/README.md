@@ -1,3 +1,67 @@
+## 2026-08-19 数字指挥大屏调度控制中心运行参数实时调谐与持久化配置（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **关联后端服务**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+- **功能特性与实现机制**：
+  1. **调度控制中心新增运行参数设定组**：
+     - 提供 6 大核心运行节律滑块：动效展示时长（1~30s）、动效静息间隔（0~30s）、常规刷新周期（5~120s）、实况心跳频率（1~15s）、飞线粒子流速（0.5~5.0s）、战报截取条数（10~80条）；
+  2. **双层热重载机制**：
+     - **即时预览**：拖动滑块时前端本地立即重新启动动效循环、重设后台计时器，0 延迟生效；
+     - **持久化落库**：点击【保存设定】调用 `POST /big-screen/config`，将配置安全写入后端 `tube_config.json`；页面刷新后自动继承最新保存参数；
+     - **一键重置**：提供【重置默认】按钮可快速还原出厂参数。
+
+## 2026-08-19 数字指挥大屏全链路动态数据驱动与标段双立柱动态等分升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **数据源动态架构**：
+  1. **实体与业务数据 100% 动态驱动**：
+     - 供给主体（`supplyNodes`）通过 `v-for` 循环从接口动态获取，系统若新增供给主体，大屏**全自动渲染新卡片、生成物理锚点并自动接入拓扑飞线航网**；
+     - 标段切片升级为 `Math.ceil(length / 2)` 动态等分算法，支持任意标段数量自适应平衡排布；
+  2. **双模实时感知**：
+     - 默认 20 秒静默全量轮询；实况直连模式下 3 秒高频心跳，自动触发激光飞线粒子与增量浮动气泡。
+
+## 2026-08-19 数字指挥大屏移动端标题与桌面版完整全称统一（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标题全称统一与双行高质感排版**：
+  1. **字字统一**：移动端呈现与电脑端 100% 一致的权威全称 `大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台`；
+  2. **双行大字号梯级流光**：
+     - Line 1 (`.title-mobile-line1`)：`大连洁净能源集团 · 2026年度`（11.5px / 700 粗度）；
+     - Line 2 (`.title-mobile-line2`)：`老旧管网改造项目物流链智慧管理平台`（14.5px / 800 极粗，发光霓虹流光）；
+  3. **顶栏扩展至 64px**：保障两行大标题居中舒展，自适应深浅双色主题。
+
+## 2026-08-19 数字指挥大屏全览模式板块物理隔离与容器高度锁定（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **全览瀑布流排版重构**：
+  1. **拓扑容器显式物理高度锁定**：针对拓扑内部绝对定位导致的高度塌陷问题，在全览模式下为 `.center-col` 与 `.map-topology-master-panel` 锁定 `740px` 高度，为 `.topology-container` 锁定 `650px` 独立画布高度，彻底杜绝外框坍塌导致的漂浮重叠；
+  2. **三大板块物理隔离机制**：全览模式下 `.left-col`、`.center-col`、`.right-col` 统一采用 `flex: none !important; position: relative !important;` 纵向瀑布流有序排列，各板块上下留白均匀，0 遮挡。
+
+## 2026-08-19 数字指挥大屏标段三轨指标排版溢出与折行压扁根治（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片内部排版像素级重构**：
+  1. **单行不换行锁定**：`.line-info` 与 `.line-val` 强制 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`，杜绝长数值（如 `12.45(+1.20) / 15.00 km`）因容器收缩而产生换行膨胀；
+  2. **卡片高度提升至 122px**：`.demand-node-card` 锁定 `min-height: 122px; flex: 1 0 122px; overflow: hidden;`，确保头部和 3 条微进度条纵向呼吸舒展；
+  3. **拓扑画布拓宽至 860px**：`.topology-layout-grid` 与 `.topology-svg` 拓展至 `min-width: 860px; min-height: 640px;`，单列标段宽度增加至 290px+，完美容纳全量三轨文字与状态标签。
+
+## 2026-08-19 数字指挥大屏标段卡片防压扁防重叠与 2D 手势拓扑优化（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片与拓扑画布深度调优**：
+  1. **标段卡片物理防坍缩**：将 `.demand-node-card` 的高度硬性锁定为 `min-height: 108px; flex: 1 0 108px;`，规避了 flex 自动缩减到 60px 导致三轨进度条溢出重叠的问题；
+  2. **管厂卡片高度匹配**：`.supply-node-card` 设定为 `min-height: 84px; flex: 1 0 84px;`；
+  3. **2D 自由手势拓扑画布**：拓扑容器 `.topology-container` 开启双向手势滚动（`overflow: auto !important; -webkit-overflow-scrolling: touch;`），内部网格 `.topology-layout-grid` 与 `.topology-svg` 确立 `760px * 620px` 充裕物理空间，在全览模式与拓扑模式下均饱满清晰，手势体验流畅。
+
+## 2026-08-19 数字指挥大屏手机端全量响应式适配与交互架构重构（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **移动端多维体验重构**：
+  1. **移动端分栏导航栏（Mobile Nav Tabs）**：在屏幕宽度 `<= 900px` 时自动激活顶部分栏导航（`📊 指标大盘` / `🌐 供需拓扑` / `📢 动态战报` / `📜 全览`），配合 `activeMobileTab` 状态实现清晰干练的多视图单列切换；
+  2. **双模自适应顶栏**：PC 端维持 30px 超大霓虹标题；移动端自动切换为 14.5px 紧凑标题与 `实时调度` 微徽章，控制中心平滑降级为全屏悬浮卡片；
+  3. **手势友好供需拓扑**：中间拓扑画布支持横向丝滑手势拖拽（`-webkit-overflow-scrolling: touch`），`recalculateFlylines` 引入 `scrollLeft` 坐标补偿，飞线粒子与物理连接端口 100% 精准对齐；
+  4. **深浅双色全量媒体查询**：覆盖 `<=900px`（常规平板/手机）与 `<=480px`（超窄屏手机），全套 CSS 样式 0 语法冲突，`npm run build` 构建成功。
+
 ## 2026-08-18 数字指挥大屏主标题 30px 视觉中枢强化（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

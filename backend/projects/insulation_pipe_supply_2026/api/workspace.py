@@ -1959,9 +1959,19 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         except Exception as e:
             print("⚠️ 读取要料计划业务流水异常:", e)
 
-        # 4.5 排序并截取最新 40 条全景战报流水
+        # 4.5 排序并截取最新战报流水 (受 big_screen_config.feed_limit 动态控制)
+        bs_config_raw = payload.get("big_screen_config") or {}
+        big_screen_config = {
+            "animation_active_duration_sec": int(bs_config_raw.get("animation_active_duration_sec") or 5),
+            "animation_rest_duration_sec": int(bs_config_raw.get("animation_rest_duration_sec") or 5) if bs_config_raw.get("animation_rest_duration_sec") is not None else 5,
+            "auto_sync_interval_sec": int(bs_config_raw.get("auto_sync_interval_sec") or 20),
+            "live_stream_interval_sec": int(bs_config_raw.get("live_stream_interval_sec") or 3),
+            "flyline_travel_sec": float(bs_config_raw.get("flyline_travel_sec") or 1.8),
+            "feed_limit": int(bs_config_raw.get("feed_limit") or 40),
+        }
+
         live_feed_list.sort(key=lambda x: x.get("raw_time") or "", reverse=True)
-        live_feed_list = live_feed_list[:40]
+        live_feed_list = live_feed_list[:big_screen_config["feed_limit"]]
 
         # 5. 真实拓扑节点 (3大保供管厂 + 10大需求标段施工现场，100% 对应配置文件真实实体)
         supply_nodes = [
@@ -2033,12 +2043,38 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "supply_nodes": supply_nodes,
             "demand_nodes": demand_nodes,
             "milestones": milestones,
+            "big_screen_config": big_screen_config,
             "pipe_models": [pm.get("pipe_model_name") or pm.get("id") or str(pm) for pm in pipe_models if pm],
             "supply_entities_raw": supply_entities,
             "demand_entities_raw": demand_entities
         }
     finally:
         session.close()
+
+
+class BigScreenConfigUpdatePayload(BaseModel):
+    animation_active_duration_sec: Optional[int] = 5
+    animation_rest_duration_sec: Optional[int] = 5
+    auto_sync_interval_sec: Optional[int] = 20
+    live_stream_interval_sec: Optional[int] = 3
+    flyline_travel_sec: Optional[float] = 1.8
+    feed_limit: Optional[int] = 40
+
+
+@public_router.post("/big-screen/config", summary="更新并持久化保存大屏运行参数与动效设定")
+def save_big_screen_config(payload_in: BigScreenConfigUpdatePayload) -> Dict[str, Any]:
+    payload = load_tube_config()
+    new_bs = {
+        "animation_active_duration_sec": max(1, min(60, int(payload_in.animation_active_duration_sec or 5))),
+        "animation_rest_duration_sec": max(0, min(60, int(payload_in.animation_rest_duration_sec if payload_in.animation_rest_duration_sec is not None else 5))),
+        "auto_sync_interval_sec": max(5, min(300, int(payload_in.auto_sync_interval_sec or 20))),
+        "live_stream_interval_sec": max(1, min(30, int(payload_in.live_stream_interval_sec or 3))),
+        "flyline_travel_sec": max(0.5, min(10.0, float(payload_in.flyline_travel_sec or 1.8))),
+        "feed_limit": max(10, min(100, int(payload_in.feed_limit or 40))),
+    }
+    payload["big_screen_config"] = new_bs
+    save_tube_config(payload)
+    return {"ok": True, "big_screen_config": new_bs}
 
 
 @router.get("/demand-management/options", summary="读取需求侧页面选项")

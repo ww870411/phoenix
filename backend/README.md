@@ -1,3 +1,24 @@
+## 2026-08-19 数字指挥大屏运行参数与节律调谐接口及持久化存储（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - `GET /api/v1/projects/insulation_pipe_supply_2026/workspace/big-screen/data`
+  - `POST /api/v1/projects/insulation_pipe_supply_2026/workspace/big-screen/config`
+- **关联配置文件**：`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`
+- **接口设计与实现**：
+  1. **配置读取与战报动态切片**：
+     - `get_big_screen_dashboard_data` 动态读取 `tube_config.json` 中的 `big_screen_config` 节点，并在响应中返回 6 大运行参数；
+     - 使用 `big_screen_config.feed_limit` 动态截取最新实时战报流水；
+  2. **持久化保存接口（`save_big_screen_config`）**：
+     - 新增 `POST /big-screen/config` 接口，支持前端调整动效展示时长、动效静息时长、常规刷新周期、实况心跳频率、飞线流速与战报条数；
+     - 自动进行边界值校验，并调用 `save_tube_config` 幂等安全写入 `tube_config.json`。
+
+## 2026-08-19 数字指挥大屏多端适配与数据契约稳定性确认（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **多端契约稳定性保障**：
+  1. 后端 `GET /big-screen/data` 接口保持单一权威数据源（Single Source of Truth），输出结构完整涵盖直管指标、管件基准、施工量敷设、标段履约状态与 6 大业务动态战报；
+  2. 前端无论在 PC 桌面端三栏全景还是在移动端四分栏单列视图下，均无缝共享同一套高性能数据流，无需额外增设专有移动端接口。
+
 ## 2026-08-18 数字指挥大屏动态战报标题格式规范化（仅发货带流向箭头）（workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)

@@ -5,6 +5,14 @@
   "weather_provider": "amap",
   "auto_update_plan_start_date": "all",
   "plan_editable_days": 3,
+  "big_screen_config": {
+    "animation_active_duration_sec": 5,
+    "animation_rest_duration_sec": 5,
+    "auto_sync_interval_sec": 20,
+    "live_stream_interval_sec": 3,
+    "flyline_travel_sec": 1.8,
+    "feed_limit": 40
+  },
   "fitting_config": {
     "allowed_units": [
       "个",
