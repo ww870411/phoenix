@@ -1,3 +1,21 @@
+## 2026-08-19 [数字指挥大屏：彻底解决 ECharts 图表尺寸超出容器显示不全问题（专属 ResizeObserver + 绝对定位填满）]
+- **改动背景与排查**：
+  - 用户审查指出：“审查一下 echarts 图表的区域，现在这个区域都没有显示全，肯定是比外边的容器要大太多了”；
+  - 经深入排查 ECharts 底层渲染机理：
+    1. **DOM 初始化尺寸暂态**：ECharts 在 `init()` 时若未能实时获取到 Flex 容器的最终物理像素，会以默认尺寸（如 300x200）生成过大的 `<canvas>` 节点；
+    2. **缺乏专属尺寸监听**：此前 `ResizeObserver` 仅监听了中间拓扑图容器，未直接监听图表 DOM，导致容器尺寸变化时图表未能即时触发 `resize()`，被父级 `overflow: hidden` 硬生生裁剪了右侧与底部内容；
+- **全栈根治性技术重构**：
+  1. **绝对定位精确锁死（`BigScreenDashboardView.vue`）**：
+     - 将 `.weekly-echarts-dom` 设置为 `position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100% !important; height: 100% !important;`，使其物理像素 100% 绝对精确等于外部 `.weekly-chart-box` 容器；
+  2. **专属 `chartResizeObserver` 实时监听（`BigScreenDashboardView.vue`）**：
+     - 为 `weeklyChartRef.value` 专门挂载 `ResizeObserver`，任何窗口或布局变动时 0 延迟调用 `handleResizeWeeklyChart()`；
+     - 在 `setOption()` 后主动通过 `nextTick` 与 `requestAnimationFrame` 执行双重尺寸重算；
+  3. **ECharts 坐标轴边距精细校准**：
+     - `grid: { top: 22, left: 6, right: 10, bottom: 4, containLabel: true }`，确保 X/Y 轴、图例、曲线 100% 完整落在可是视口内；
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（23.35s，0 错误）；
+  - ECharts 图表尺寸与外部容器 100% 严丝合缝，所有数据点、日期标签、量程单位完全展示，0 裁剪、0 溢出。
+
 ## 2026-08-19 [数字指挥大屏移动端：彻底消除触屏滑动时的主体误暗淡与粘滞高亮]
 - **改动背景与需求**：
   - 用户反馈在手机模式浏览供需拓扑时，由于手指滑动触摸屏幕，浏览器将 touch 模拟为 hover 导致卡片被误触发，造成其他主体被压暗变黑、卡片粘滞高亮；用户明确要求在手机/触屏模式下取消该聚焦暗淡效果，保持所有卡片常态清晰；

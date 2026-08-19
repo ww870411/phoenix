@@ -950,14 +950,14 @@
               <span>全网工程实时动态播报</span>
             </div>
             <div 
-              class="live-status-pill" 
-              :class="{ 'live-direct': isLiveStreamMode }"
-              @click="toggleLiveStreamMode"
-              style="cursor: pointer;"
-              :title="isLiveStreamMode ? '已接入真实生产数据库直播（点击断开）' : '点击接入真实生产数据库实时直播流'"
+              class="live-status-pill live-connected" 
+              :class="{ 'is-refreshing': isManualRefreshing }"
+              @click="handleManualRefresh"
+              title="系统已实时直连数据库 (点击立即强制同步最新数据)"
             >
-              <span class="live-dot" :class="{ 'live-pulse': isLiveStreamMode }"></span>
-              <span>{{ isLiveStreamMode ? '实况直播 (已接通)' : '接入实况' }}</span>
+              <span class="live-dot live-pulse"></span>
+              <span class="status-label">{{ isManualRefreshing ? '正在同步...' : '实时直连中' }}</span>
+              <span class="refresh-sym" :class="{ 'spin-anim': isManualRefreshing }">🔄</span>
             </div>
           </div>
 
@@ -1092,25 +1092,46 @@
           </div>
         </div>
 
-        <!-- 关键保供里程碑与正向成果榜 -->
-        <div class="panel-box milestone-panel">
+        <!-- 🏆 本周战报（连续 7 日保温管发货 vs 施工使用态势） -->
+        <div class="panel-box weekly-report-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">🏆</span>
-              <span>保供里程碑与正向成果</span>
+              <span class="title-icon">📅</span>
+              <span>本周战报（连续7日）</span>
             </div>
-            <span class="panel-tag gold">今日战报</span>
+            <div class="header-right-meta">
+              <span class="panel-tag gold" :title="'统计周期: ' + (weeklyReport.date_range_str || '近7日')">
+                {{ weeklyReport.date_range_str || '近7日' }}
+              </span>
+            </div>
           </div>
 
-          <div class="milestone-list">
-            <div class="milestone-item" v-for="(m, idx) in milestones" :key="idx">
-              <div class="milestone-badge">0{{ idx + 1 }}</div>
-              <div class="milestone-content">
-                <div class="m-title">{{ m.title }}</div>
-                <div class="m-desc">{{ m.desc }}</div>
+          <!-- 1. 顶部 2 联排大号 KPI 核心概况（纯粹展示 km 数） -->
+          <div class="weekly-kpi-grid">
+            <div class="weekly-kpi-card ship-card" title="近7日累计发运保温管总量">
+              <div class="kpi-card-header">
+                <span class="kpi-dot cyan"></span>
+                <span class="kpi-title">📦 7日累计发货</span>
               </div>
-              <div class="m-time">{{ m.time }}</div>
+              <div class="kpi-main-val cyan-text">
+                {{ weeklyReport.total_shipped_km }} <span class="unit">km</span>
+              </div>
             </div>
+
+            <div class="weekly-kpi-card usage-card" title="近7日现场累计施工使用 (敷设) 总量">
+              <div class="kpi-card-header">
+                <span class="kpi-dot gold"></span>
+                <span class="kpi-title">🏗️ 7日累计施工</span>
+              </div>
+              <div class="kpi-main-val gold-text">
+                {{ weeklyReport.total_usage_km }} <span class="unit">km</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. ECharts 专业双轨发货 vs 施工走势大屏图表 -->
+          <div class="weekly-chart-box">
+            <div ref="weeklyChartRef" class="weekly-echarts-dom"></div>
           </div>
         </div>
       </section>
@@ -1119,7 +1140,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import * as echarts from 'echarts'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   getTubeWorkspaceConfigSummary,
@@ -1698,24 +1720,235 @@ function isLineVisible(line) {
   return false
 }
 
-// 重大保供里程碑
-const milestones = ref([
-  {
-    title: '全网管材规划总量达 120.00 km',
-    desc: '统筹覆盖 10 个高温水及低温水标段，三大制造基地全面开工供货',
-    time: '2026-08-10'
-  },
-  {
-    title: '1138 项标准化管件采购计划全面受控',
-    desc: '涵盖弯头、变径管、三通、补偿器及球阀，累计计划配套 1138 件/套',
-    time: '2026-08-10'
-  },
-  {
-    title: '开元、鑫瑞得、能源集团管厂三大基地全线直运',
-    desc: '专线直发 10 大施工标段现场，保供直运闭环签收',
-    time: '实时'
+// --- 🏆 本周战报（连续 7 日保温管发货 vs 施工使用态势） ---
+const weeklyReport = ref({
+  date_range_str: '近7日',
+  total_shipped_km: 0.0,
+  total_shipped_m: 0,
+  total_usage_km: 0.0,
+  total_usage_m: 0,
+  days: []
+})
+// --- 🏆 本周战报 ECharts 专业工业大屏双轨图表 ---
+const weeklyChartRef = ref(null)
+let weeklyChartInstance = null
+let chartResizeObserver = null
+
+function renderWeeklyChart() {
+  try {
+    if (!weeklyChartRef.value) return
+    if (!weeklyChartInstance) {
+      weeklyChartInstance = echarts.init(weeklyChartRef.value)
+      if (window.ResizeObserver) {
+        chartResizeObserver = new ResizeObserver(() => {
+          handleResizeWeeklyChart()
+        })
+        chartResizeObserver.observe(weeklyChartRef.value)
+      }
+    }
+
+    const isLight = currentTheme.value === 'light'
+    const days = weeklyReport.value?.days || []
+    const xLabels = days.map(d => `${d.date}\n${d.day_name}`)
+    const shipData = days.map(d => Number(d.shipped_km) || 0)
+    const usageData = days.map(d => Number(d.usage_km) || 0)
+
+    const textColor = isLight ? '#64748b' : '#94a3b8'
+    const splitLineColor = isLight ? 'rgba(203, 213, 225, 0.6)' : 'rgba(255, 255, 255, 0.08)'
+
+    const option = {
+      animation: true,
+      animationDuration: 800,
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(10, 20, 38, 0.96)',
+        borderColor: isLight ? '#cbd5e1' : 'rgba(0, 242, 254, 0.4)',
+        borderWidth: 1,
+        padding: [8, 12],
+        textStyle: {
+          color: isLight ? '#0f172a' : '#f1f5f9',
+          fontSize: 11
+        },
+        axisPointer: {
+          type: 'line',
+          lineStyle: {
+            color: isLight ? 'rgba(2, 132, 199, 0.4)' : 'rgba(0, 242, 254, 0.6)',
+            type: 'dashed',
+            width: 1.2
+          }
+        },
+        formatter: function(params) {
+          if (!params || params.length === 0) return ''
+          const dayObj = days[params[0].dataIndex] || {}
+          let html = `<div style="font-weight: 700; border-bottom: 1px solid ${isLight ? '#e2e8f0' : 'rgba(255,255,255,0.12)'}; padding-bottom: 4px; margin-bottom: 6px;">📅 ${dayObj.full_date || ''} (${dayObj.day_name || ''})</div>`
+          params.forEach(p => {
+            const isShip = p.seriesName.includes('发货')
+            const color = isShip ? (isLight ? '#0284c7' : '#00f2fe') : (isLight ? '#d97706' : '#fbbf24')
+            html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 11px; line-height: 1.6;">
+              <span style="color: ${textColor}; display: flex; align-items: center; gap: 4px;">${p.marker} ${p.seriesName}:</span>
+              <strong style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${p.value} km</strong>
+            </div>`
+          })
+          return html
+        }
+      },
+      legend: {
+        top: 0,
+        right: 6,
+        itemWidth: 12,
+        itemHeight: 3,
+        itemGap: 10,
+        textStyle: {
+          color: isLight ? '#475569' : '#cbd5e1',
+          fontSize: 10.5,
+          fontWeight: 500
+        },
+        data: ['发货量', '施工量']
+      },
+      grid: {
+        top: 22,
+        left: 6,
+        right: 10,
+        bottom: 4,
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: xLabels,
+        boundaryGap: false,
+        axisLine: {
+          lineStyle: { color: isLight ? '#cbd5e1' : 'rgba(255, 255, 255, 0.18)' }
+        },
+        axisTick: { show: false },
+        axisLabel: {
+          color: isLight ? '#475569' : '#94a3b8',
+          fontSize: 10.5,
+          interval: 0,
+          lineHeight: 13,
+          fontWeight: 500,
+          fontFamily: 'JetBrains Mono, Consolas, sans-serif'
+        }
+      },
+      yAxis: {
+        type: 'value',
+        name: 'km',
+        nameTextStyle: {
+          color: isLight ? '#64748b' : '#94a3b8',
+          fontSize: 10,
+          padding: [0, 0, 0, -18]
+        },
+        splitLine: {
+          lineStyle: {
+            color: splitLineColor,
+            type: 'dashed'
+          }
+        },
+        axisLabel: {
+          color: isLight ? '#64748b' : '#94a3b8',
+          fontSize: 10,
+          fontFamily: 'JetBrains Mono, Consolas, monospace'
+        }
+      },
+      series: [
+        {
+          name: '发货量',
+          type: 'line',
+          smooth: 0.35,
+          symbol: 'circle',
+          symbolSize: 5,
+          itemStyle: {
+            color: isLight ? '#0284c7' : '#00f2fe',
+            borderColor: isLight ? '#ffffff' : '#090e1a',
+            borderWidth: 1.5
+          },
+          lineStyle: {
+            width: 2,
+            color: isLight ? '#0284c7' : '#00f2fe',
+            shadowColor: isLight ? 'rgba(2, 132, 199, 0.25)' : 'rgba(0, 242, 254, 0.4)',
+            shadowBlur: 6
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: isLight ? 'rgba(2, 132, 199, 0.28)' : 'rgba(0, 242, 254, 0.38)' },
+                { offset: 1, color: isLight ? 'rgba(2, 132, 199, 0.0)' : 'rgba(0, 242, 254, 0.0)' }
+              ]
+            }
+          },
+          data: shipData
+        },
+        {
+          name: '施工量',
+          type: 'line',
+          smooth: 0.35,
+          symbol: 'circle',
+          symbolSize: 6,
+          itemStyle: {
+            color: isLight ? '#d97706' : '#fbbf24',
+            borderColor: isLight ? '#ffffff' : '#090e1a',
+            borderWidth: 2
+          },
+          lineStyle: {
+            width: 2.2,
+            color: isLight ? '#d97706' : '#fbbf24',
+            shadowColor: isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)',
+            shadowBlur: 8
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(251, 191, 36, 0.28)' },
+                { offset: 1, color: isLight ? 'rgba(217, 119, 6, 0.0)' : 'rgba(251, 191, 36, 0.0)' }
+              ]
+            }
+          },
+          data: usageData
+        }
+      ]
+    }
+
+    weeklyChartInstance.setOption(option, true)
+    nextTick(() => {
+      handleResizeWeeklyChart()
+    })
+    requestAnimationFrame(() => {
+      handleResizeWeeklyChart()
+    })
+  } catch (e) {
+    console.warn('渲染本周战报 ECharts 异常 (已安全降级):', e)
   }
-])
+}
+
+function handleResizeWeeklyChart() {
+  try {
+    if (weeklyChartInstance && weeklyChartRef.value) {
+      weeklyChartInstance.resize({
+        width: weeklyChartRef.value.clientWidth || 'auto',
+        height: weeklyChartRef.value.clientHeight || 'auto'
+      })
+    }
+  } catch (e) {
+    // 忽略自适应异常
+  }
+}
+
+watch(weeklyReport, () => {
+  nextTick(renderWeeklyChart)
+}, { deep: true })
+
+watch(currentTheme, () => {
+  nextTick(renderWeeklyChart)
+})
 
 // --- 点击战报卡片即时在拓扑图上发射激光飞线并高亮相关节点 ---
 function handleFeedClick(feed) {
@@ -1753,6 +1986,22 @@ function handleFeedClick(feed) {
     hoveredSupplierId.value = null
     hoveredSectionId.value = null
   }, 2500)
+}
+
+// --- 🔄 点击“实时直连”徽章立即强制同步数据库最新数据 ---
+const isManualRefreshing = ref(false)
+async function handleManualRefresh() {
+  if (isManualRefreshing.value) return
+  isManualRefreshing.value = true
+  try {
+    await loadRealData(true)
+  } catch (err) {
+    console.warn('手动同步真实数据异常:', err)
+  } finally {
+    setTimeout(() => {
+      isManualRefreshing.value = false
+    }, 700)
+  }
 }
 
 // --- 切换真实数据实时流直连模式 ---
@@ -2398,9 +2647,9 @@ async function loadRealData(isForce = false) {
         Object.assign(bsConfig, res.big_screen_config)
       }
 
-      // 6. 真实里程碑
-      if (Array.isArray(res.milestones)) {
-        milestones.value = res.milestones
+      // 6. 真实 7 日战报大盘
+      if (res.weekly_report && typeof res.weekly_report === 'object') {
+        weeklyReport.value = res.weekly_report
       }
 
       // 7. 保存底层字典供交互使用
@@ -2439,10 +2688,16 @@ onMounted(() => {
   loadRealData()
   startAnimationLoop()
 
+  // 初始化 ECharts 本周战报图表
+  nextTick(() => {
+    renderWeeklyChart()
+  })
+
   // 监听尺寸变化自适应重算飞线 (rAF 节流)
   if (topologyContainerRef.value && window.ResizeObserver) {
     resizeObserver = new ResizeObserver(() => {
       recalculateFlylines()
+      handleResizeWeeklyChart()
     })
     resizeObserver.observe(topologyContainerRef.value)
   }
@@ -2455,6 +2710,7 @@ onMounted(() => {
   const defaultIntervalMs = Math.max(5, Number(bsConfig.auto_sync_interval_sec) || 20) * 1000
   autoSyncTimer = setInterval(loadRealData, defaultIntervalMs)
   window.addEventListener('resize', recalculateFlylines, { passive: true })
+  window.addEventListener('resize', handleResizeWeeklyChart, { passive: true })
   window.addEventListener('click', handleGlobalClick)
 })
 
@@ -2465,8 +2721,14 @@ onBeforeUnmount(() => {
   if (liveStreamTimer) clearInterval(liveStreamTimer)
   if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
   if (resizeObserver) resizeObserver.disconnect()
+  if (chartResizeObserver) chartResizeObserver.disconnect()
   if (rAFId) cancelAnimationFrame(rAFId)
+  if (weeklyChartInstance) {
+    weeklyChartInstance.dispose()
+    weeklyChartInstance = null
+  }
   window.removeEventListener('resize', recalculateFlylines)
+  window.removeEventListener('resize', handleResizeWeeklyChart)
   window.removeEventListener('click', handleGlobalClick)
 })
 </script>
@@ -4723,7 +4985,7 @@ onBeforeUnmount(() => {
 
 /* --- 右侧栏：实时战报流 Live Feed --- */
 .live-feed-panel {
-  flex: 1.4;
+  flex: 1.3;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -4735,32 +4997,63 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   font-size: 10px;
-  color: #10b981;
+  color: #00ff87;
   background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 10px;
-  padding: 1px 6px;
-  transition: all 0.3s ease;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 12px;
+  padding: 1.5px 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 8px rgba(0, 255, 135, 0.1);
 }
 
-.live-status-pill.live-direct {
+.live-status-pill:hover {
   background: rgba(16, 185, 129, 0.25);
-  border-color: #10b981;
-  color: #00ff87;
-  font-weight: 600;
+  border-color: #00ff87;
+  box-shadow: 0 0 12px rgba(0, 255, 135, 0.3);
+  transform: translateY(-0.5px);
+}
+
+.live-status-pill:active {
+  transform: scale(0.96);
+}
+
+.live-status-pill.is-refreshing {
+  border-color: #00f2fe;
+  color: #00f2fe;
+  background: rgba(0, 242, 254, 0.18);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.3);
 }
 
 .live-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #10b981;
+  background: #00ff87;
+  box-shadow: 0 0 6px #00ff87;
+  flex-shrink: 0;
   animation: pulse-ring 2s infinite;
 }
 
-.live-dot.live-pulse {
-  background: #00ff87;
-  box-shadow: 0 0 6px #00ff87;
+.refresh-sym {
+  font-size: 9.5px;
+  opacity: 0.75;
+  transition: transform 0.3s ease, opacity 0.2s ease;
+}
+
+.live-status-pill:hover .refresh-sym {
+  opacity: 1;
+}
+
+.refresh-sym.spin-anim {
+  animation: rotate-refresh 0.65s linear infinite;
+  opacity: 1;
+}
+
+@keyframes rotate-refresh {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* ==================== 统一业务分类筛选器 (折叠式下拉面板) ==================== */
@@ -5397,71 +5690,128 @@ onBeforeUnmount(() => {
   transform: translateY(12px);
 }
 
-/* --- 重大里程碑 Milestone --- */
-.milestone-panel {
-  flex: 0.9;
+/* --- 🏆 本周战报（连续 7 日发货 vs 施工态势）Weekly Report Panel --- */
+.weekly-report-panel {
+  flex: 1;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  padding: 12px 14px 10px;
 }
 
-.milestone-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.milestone-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 7px 8px;
-  background: #111c30;
-  border-radius: 5px;
-  border-left: 2px solid #fbbf24;
+.weekly-report-panel .panel-header {
+  margin-bottom: 8px;
   flex-shrink: 0;
 }
 
-.milestone-badge {
-  font-family: monospace;
-  font-weight: 700;
-  font-size: 11px;
-  color: #fbbf24;
+/* 1. 顶部 2 联排大号对称 KPI 卡片 (大气饱满) */
+.weekly-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
-.milestone-content {
-  flex: 1;
+.weekly-kpi-card {
+  border-radius: 6px;
+  padding: 5px 10px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
 
-.m-title {
-  font-size: 11.5px;
+.weekly-kpi-card.ship-card {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  border-left: 3px solid #00f2fe;
+}
+
+.weekly-kpi-card.usage-card {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-left: 3px solid #fbbf24;
+}
+
+.kpi-card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.kpi-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.kpi-dot.cyan { background: #00f2fe; box-shadow: 0 0 5px #00f2fe; }
+.kpi-dot.gold { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
+
+.kpi-title {
+  font-size: 11px;
+  color: #94a3b8;
   font-weight: 600;
-  color: #f1f5f9;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.m-desc {
-  font-size: 10.5px;
-  color: #94a3b8;
-  margin-top: 1px;
-  line-height: 1.3;
-}
-
-.m-time {
-  font-family: monospace;
-  font-size: 10px;
-  color: #64748b;
+.kpi-main-val {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
   flex-shrink: 0;
 }
+
+.kpi-main-val.cyan-text { color: #00f2fe; text-shadow: 0 0 6px rgba(0, 242, 254, 0.3); }
+.kpi-main-val.gold-text { color: #fbbf24; text-shadow: 0 0 6px rgba(251, 191, 36, 0.3); }
+
+.kpi-main-val .unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  margin-left: 1px;
+}
+
+/* 2. ECharts 专业双轨发货 vs 施工走势图容器 (精致内收，四周充裕留白) */
+.weekly-chart-box {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  background: rgba(11, 19, 35, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.weekly-echarts-dom {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+}
+
+
 
 /* --- 精美深色科技细滚动条 Custom Scrollbars --- */
 .left-col::-webkit-scrollbar,
@@ -6271,6 +6621,33 @@ onBeforeUnmount(() => {
   border-left: 3.5px solid #e11d48;
 }
 
+/* 浅色模式下的实时直连徽章 (高对比度墨绿+高清晰字阶，杜绝发虚) */
+.bigscreen-container.light .live-status-pill {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(5, 150, 105, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+.bigscreen-container.light .live-status-pill:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #059669;
+  box-shadow: 0 0 10px rgba(5, 150, 105, 0.2);
+}
+
+.bigscreen-container.light .live-status-pill.is-refreshing {
+  border-color: #0284c7;
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.15);
+  box-shadow: 0 0 8px rgba(2, 132, 199, 0.2);
+}
+
+.bigscreen-container.light .live-dot {
+  background: #059669;
+  box-shadow: 0 0 4px #059669;
+}
+
 .bigscreen-container.light .feed-category-tag.dispatch {
   background: rgba(2, 132, 199, 0.12);
   border: 1px solid rgba(2, 132, 199, 0.25);
@@ -6402,21 +6779,83 @@ onBeforeUnmount(() => {
   color: #059669;
 }
 
-.bigscreen-container.light .milestone-item {
+.bigscreen-container.light .weekly-kpi-card.ship-card {
   background: #ffffff;
-  border-left-color: #d97706;
+  border-color: rgba(2, 132, 199, 0.3);
+  border-left: 3px solid #0284c7;
 }
 
-.bigscreen-container.light .milestone-badge {
-  color: #d97706;
+.bigscreen-container.light .weekly-kpi-card.usage-card {
+  background: #ffffff;
+  border-color: rgba(217, 119, 6, 0.3);
+  border-left: 3px solid #d97706;
 }
 
-.bigscreen-container.light .m-title {
+.bigscreen-container.light .weekly-chart-box {
+  background: #ffffff;
+  border-color: rgba(226, 232, 240, 0.9);
+}
+
+.bigscreen-container.light .kpi-title {
+  color: #64748b;
+}
+
+.bigscreen-container.light .kpi-sub-desc {
+  color: #64748b;
+}
+
+.bigscreen-container.light .kpi-sub-desc .num {
   color: #0f172a;
 }
 
-.bigscreen-container.light .m-desc {
-  color: #64748b;
+.bigscreen-container.light .kpi-main-val.cyan-text { color: #0284c7; text-shadow: none; }
+.bigscreen-container.light .kpi-main-val.gold-text { color: #d97706; text-shadow: none; }
+
+.bigscreen-container.light .legend-indicator.ship { background: #0284c7; }
+.bigscreen-container.light .legend-indicator.usage { background: #d97706; }
+
+.bigscreen-container.light .chart-grid-lines .grid-line {
+  stroke: rgba(203, 213, 225, 0.6);
+}
+
+.bigscreen-container.light .chart-grid-lines .grid-line.base {
+  stroke: rgba(148, 163, 184, 0.8);
+}
+
+.bigscreen-container.light .chart-dot.ship {
+  fill: #0284c7;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 2px rgba(2, 132, 199, 0.4));
+}
+
+.bigscreen-container.light .chart-dot.usage {
+  fill: #d97706;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 2px rgba(217, 119, 6, 0.4));
+}
+
+.bigscreen-container.light .chart-x-axis .chart-x-label {
+  fill: #475569;
+}
+
+.bigscreen-container.light .chart-x-axis .chart-x-sublabel {
+  fill: #94a3b8;
+}
+
+.bigscreen-container.light .chart-x-axis .chart-x-label.active,
+.bigscreen-container.light .chart-x-axis .chart-x-sublabel.active {
+  fill: #0284c7;
+}
+
+.bigscreen-container.light .chart-tooltip-bubble {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+}
+
+.bigscreen-container.light .tooltip-date {
+  color: #0f172a;
+  border-bottom-color: #e2e8f0;
 }
 
 .bigscreen-container.light .supply-node-card.is-shipping-source {
@@ -6991,13 +7430,21 @@ onBeforeUnmount(() => {
     padding: 2px 4px;
   }
 
-  .milestone-panel {
+  .weekly-report-panel {
     flex: none;
-    min-height: 220px;
+    min-height: 250px;
   }
 
-  .milestone-list {
-    max-height: 280px;
+  .weekly-kpi-grid {
+    gap: 6px;
+  }
+
+  .weekly-kpi-card {
+    padding: 5px 8px;
+  }
+
+  .kpi-main-val {
+    font-size: 15px;
   }
 }
 

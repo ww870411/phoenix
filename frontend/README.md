@@ -1,3 +1,10 @@
+## 2026-08-19 数字指挥大屏 ECharts 图表尺寸绝对自适应与专属 ResizeObserver 升级（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **自适应与防裁剪重构**：
+  - **根治 Canvas 过大裁剪**：给 `.weekly-echarts-dom` 设置绝对定位填满（`position: absolute; inset: 0; width: 100% !important; height: 100% !important;`），使其像素尺寸 100% 绝对等同于父级容器；
+  - **挂载专属 `chartResizeObserver`**：对图表 DOM 建立专属尺寸监听，配合 `setOption` 后的 `nextTick` 与 `requestAnimationFrame` 双重重算，确保坐标轴、日期标签与曲线 100% 完整可见，彻底杜绝超出裁剪。
+
 ## 2026-08-19 数字指挥大屏移动端触屏防误触与压暗取消优化（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

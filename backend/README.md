@@ -1,3 +1,11 @@
+## 2026-08-19 数字指挥大屏“本周战报（连续7日）”纯真实数据聚合服务（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据真实性重构**：
+  - 彻底移除任何基于累计量的模拟兜底平滑权重（`base_usage_weights`）；
+  - 严格仅从 `tube.tube_delivery` 聚合真实发货（`shipped_qty`），从 `tube.tube_daily_usage` 聚合真实施工敷设（`usage_qty`）；
+  - 无施工单据时严格返回 `0.00 km`，确保大屏数据绝对真实可审计。
+
 ## 2026-08-19 数字指挥大屏天气缓存周期参数化接口升级（weather_service.py & workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`save_big_screen_config`) & `weather_service.py` (`get_live_weather_for_dashboard`)

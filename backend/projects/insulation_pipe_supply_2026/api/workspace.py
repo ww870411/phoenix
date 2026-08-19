@@ -6,6 +6,7 @@ insulation_pipe_supply_2026 工作台基础接口。
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -2104,6 +2105,94 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         except Exception:
             avg_transit_hours = 16.4
 
+        # 10. 本周战报（连续 7 日保温管发货量 vs 施工使用量态势聚合）
+        weekly_report = {
+            "date_range_str": "",
+            "total_shipped_km": 0.0,
+            "total_shipped_m": 0,
+            "total_usage_km": 0.0,
+            "total_usage_m": 0,
+            "days": []
+        }
+        try:
+            try:
+                base_dt = datetime.strptime(str(show_date).strip(), "%Y-%m-%d").date()
+            except Exception:
+                base_dt = datetime.now().date()
+            
+            day_names_zh = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+            seven_days = [base_dt - timedelta(days=i) for i in range(6, -1, -1)]
+            start_date_str = seven_days[0].strftime("%m/%d")
+            end_date_str = seven_days[-1].strftime("%m/%d")
+            weekly_report["date_range_str"] = f"{start_date_str} ~ {end_date_str}"
+
+            # 1. 从 tube_delivery 查询近7日保温管每日发货量
+            daily_pipe_ship_sql = text("""
+                SELECT 
+                    DATE(shipped_at) AS s_date,
+                    SUM(COALESCE(shipped_qty, 0)) AS ship_m
+                FROM tube.tube_delivery
+                WHERE status != 'cancelled'
+                GROUP BY DATE(shipped_at)
+            """)
+            pipe_ship_rows = session.execute(daily_pipe_ship_sql).mappings().all()
+            ship_by_date = defaultdict(float)
+            for r in pipe_ship_rows:
+                if r["s_date"]:
+                    d_str = r["s_date"].strftime("%Y-%m-%d")
+                    ship_by_date[d_str] += float(r["ship_m"] or 0)
+
+            # 2. 从 tube_daily_usage 查询近7日保温管每日施工量 (使用量)
+            daily_usage_sql = text("""
+                SELECT 
+                    usage_date,
+                    SUM(COALESCE(usage_qty, 0)) AS usage_m
+                FROM tube.tube_daily_usage
+                GROUP BY usage_date
+            """)
+            usage_rows = session.execute(daily_usage_sql).mappings().all()
+            usage_by_date = defaultdict(float)
+            for r in usage_rows:
+                if r["usage_date"]:
+                    d_str = r["usage_date"].strftime("%Y-%m-%d")
+                    usage_by_date[d_str] += float(r["usage_m"] or 0)
+
+            total_ship_m = 0.0
+            total_usage_m = 0.0
+            days_list = []
+
+            for cur_d in seven_days:
+                cur_d_str = cur_d.strftime("%Y-%m-%d")
+                s_m = float(ship_by_date.get(cur_d_str, 0.0))
+                u_m = float(usage_by_date.get(cur_d_str, 0.0))
+
+                s_km = round(s_m / 1000.0, 2)
+                u_km = round(u_m / 1000.0, 2)
+
+                total_ship_m += s_m
+                total_usage_m += u_m
+
+                days_list.append({
+                    "date": cur_d.strftime("%m/%d"),
+                    "full_date": cur_d_str,
+                    "day_name": day_names_zh[cur_d.weekday()],
+                    "shipped_km": s_km,
+                    "shipped_m": int(s_m),
+                    "usage_km": u_km,
+                    "usage_m": int(u_m)
+                })
+
+            tot_ship_km = round(total_ship_m / 1000.0, 2)
+            tot_usage_km = round(total_usage_m / 1000.0, 2)
+
+            weekly_report["total_shipped_km"] = tot_ship_km
+            weekly_report["total_shipped_m"] = int(total_ship_m)
+            weekly_report["total_usage_km"] = tot_usage_km
+            weekly_report["total_usage_m"] = int(total_usage_m)
+            weekly_report["days"] = days_list
+        except Exception as e:
+            print("⚠️ 构建本周战报异常:", e)
+
         return {
             "ok": True,
             "project_key": PROJECT_KEY,
@@ -2136,6 +2225,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "supply_nodes": supply_nodes,
             "demand_nodes": demand_nodes,
             "milestones": milestones,
+            "weekly_report": weekly_report,
             "big_screen_config": big_screen_config,
             "pipe_models": [pm.get("pipe_model_name") or pm.get("id") or str(pm) for pm in pipe_models if pm],
             "supply_entities_raw": supply_entities,
