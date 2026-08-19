@@ -91,37 +91,71 @@
       </section>
     </div>
 
-      <!-- 选项卡导航 (Responsive Tabs Header) -->
-      <div class="tube-tabs-header-wrap" v-if="selectedSupplyEntityId">
-        <div class="tube-tabs-header">
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'demand' }" 
-            @click="activeTab = 'demand'"
-          >
-            🎯 需求与缺口看板
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'register' }" 
-            @click="activeTab = 'register'"
-          >
-            🚚 批量发货与车次装配
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'history' }" 
-            @click="activeTab = 'history'"
-          >
-            📋 物流发货记录
-          </button>
-          <button 
-            type="button" 
-            :class="{ active: activeTab === 'fitting' }" 
-            @click="activeTab = 'fitting'"
-          >
-            🔧 管件发货与记录
-          </button>
+      <!-- 一体化双层复合导航区 (Unified Compound Navigation Group) -->
+      <div class="nav-composite-group" v-if="selectedSupplyEntityId">
+        <!-- 一级物料大类分段切换栏 (Segmented Category Bar) -->
+        <div class="category-segment-wrapper">
+          <div class="category-segment-bar">
+            <button 
+              type="button" 
+              class="category-segment-btn" 
+              :class="{ active: activeCategory === 'pipe' }" 
+              @click="handleCategoryClick('pipe')"
+            >
+              <span class="cat-icon">🔹</span>
+              <span class="cat-label">保温管业务</span>
+              <span class="cat-count">3 项功能</span>
+            </button>
+            <button 
+              type="button" 
+              class="category-segment-btn" 
+              :class="{ active: activeCategory === 'fitting' }" 
+              @click="handleCategoryClick('fitting')"
+            >
+              <span class="cat-icon">🔩</span>
+              <span class="cat-label">管件业务</span>
+              <span class="cat-count">1 项功能</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 二级选项卡导航 (Responsive Sub-Tabs Header) -->
+        <div class="tube-tabs-header-wrap">
+          <!-- 保温管二级子标签 -->
+          <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'demand' }" 
+              @click="handleTabClick('demand')"
+            >
+              🎯 需求与缺口看板
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'register' }" 
+              @click="handleTabClick('register')"
+            >
+              🚚 批量发货与车次装配
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'history' }" 
+              @click="handleTabClick('history')"
+            >
+              📋 物流发货记录
+            </button>
+          </div>
+
+          <!-- 管件二级子标签 -->
+          <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'fitting' }" 
+              @click="handleTabClick('fitting')"
+            >
+              🔧 管件发货与明细记录
+            </button>
+          </div>
         </div>
       </div>
 
@@ -830,7 +864,68 @@
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
               <button type="button" class="btn ghost" @click="showFittingTypeConfirmModal = false">取消，返回修改</button>
-              <button type="button" class="btn primary" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; border: none !important; font-weight: 600;" @click="doRealSubmitFittingForm()">确认继续提交 🚀</button>
+              <button type="button" class="btn primary" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; border: none !important; font-weight: 600;" @click="handleConfirmNonStandardFitting">确认继续提交 🚀</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 同车牌1小时内发货智能合并提示 Modal 弹窗 -->
+    <Transition name="fade">
+      <div v-if="showFittingMergeConfirmModal && recentFittingShipmentData" class="block-modal-overlay" @click.self="showFittingMergeConfirmModal = false">
+        <div class="block-modal-container" style="max-width: 560px;">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;">
+            <span class="block-warning-icon">🚚</span>
+            <h3 style="margin-top: 5px; color: #fff;">检测到 1 小时内同车牌发货单（即将合并）</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9);">
+              车牌【{{ recentFittingShipmentData.vehicle_plate_no }}】在 {{ recentFittingShipmentData.minutes_ago }} 分钟前已有发货记录
+            </p>
+          </div>
+          
+          <div style="padding: 20px; text-align: left;">
+            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px;">
+              <div style="font-weight: bold; color: #0369a1; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <span>📦 前序车次：{{ recentFittingShipmentData.shipment_no }}</span>
+                <span style="font-size: 11px; background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 99px;">在途待到货</span>
+              </div>
+              <div style="color: #475569; font-size: 12px; line-height: 1.6;">
+                <div>发往标段：<strong style="color: #1e293b;">{{ getSection1Name(recentFittingShipmentData.section_1_id) }}</strong></div>
+                <div>已装管件：<span style="color: #0369a1;">{{ recentFittingShipmentData.items_summary?.join('、') || (recentFittingShipmentData.items_count ? ('共 ' + recentFittingShipmentData.items_count + ' 项') : '') }}</span></div>
+              </div>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px;">
+              <div style="font-weight: bold; color: #334155; margin-bottom: 6px;">
+                ➕ 本次追加管件（即将合并入该车次）：
+              </div>
+              <div style="color: #64748b; font-size: 12px; line-height: 1.6;">
+                <div>拟发数量：<strong style="color: #0284c7;">共 {{ pendingSubmitPayload?.items?.length || 0 }} 种规格，合计 {{ pendingSubmitPayload?.items?.reduce((s, it) => s + Number(it.shipped_qty || 0), 0) }} 件</strong></div>
+              </div>
+            </div>
+
+            <p style="font-size: 13px; color: #334155; margin-bottom: 18px; line-height: 1.5; font-weight: 500;">
+              💡 <span style="color: #0284c7;">业务提示：</span>系统检测到同一车牌在 1 小时内再次录入发货，将<strong>自动合并</strong>入前序车次【{{ recentFittingShipmentData.shipment_no }}】，统一车次号与实体单据。若车牌录入有误，请点击【返回修改车牌】。
+            </p>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button
+                type="button"
+                class="btn ghost"
+                style="color: #64748b; font-weight: 500;"
+                @click="showFittingMergeConfirmModal = false"
+              >
+                ↩️ 返回修改车牌
+              </button>
+              <button
+                type="button"
+                class="btn primary"
+                style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; border: none !important; font-weight: 600;"
+                :disabled="submitFittingLoading"
+                @click="confirmMergeToRecentShipment"
+              >
+                🚚 确认合并发货 🚀
+              </button>
             </div>
           </div>
         </div>
@@ -1323,6 +1418,7 @@ import {
   superUpdateTubeSupplyManagementDelivery,
   superUpdateTubeFittingDelivery,
   getFittingDeliveriesList,
+  checkRecentFittingShipment,
   submitFittingDelivery,
   cancelFittingDelivery,
 } from '../../daily_report_25_26/services/api'
@@ -1388,9 +1484,28 @@ const showDate = ref('')
 const planStartDate = ref('')
 
 const selectedSupplyEntityId = ref('')
+const activeCategory = ref('pipe') // 'pipe' | 'fitting'
 const activeTab = ref('demand')
+const lastPipeTab = ref('demand')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
+
+const handleCategoryClick = (category) => {
+  if (activeCategory.value === category) return
+  activeCategory.value = category
+  if (category === 'pipe') {
+    activeTab.value = lastPipeTab.value || 'demand'
+  } else if (category === 'fitting') {
+    activeTab.value = 'fitting'
+  }
+}
+
+const handleTabClick = (tab) => {
+  activeTab.value = tab
+  if (tab !== 'fitting') {
+    lastPipeTab.value = tab
+  }
+}
 
 // --- 管件发货记录 Tab 专用变量与逻辑 ---
 const getNowISOString = () => {
@@ -1429,6 +1544,8 @@ const fittingGridSource = ref(createEmptyFittingRows(8))
 const fittingGridRef = ref(null)
 
 const showFittingTypeConfirmModal = ref(false)
+const showFittingMergeConfirmModal = ref(false)
+const recentFittingShipmentData = ref(null)
 const showFittingFormatNoticeModal = ref(false)
 const fittingFormatNoticeList = ref([])
 const nonStandardItemsForConfirm = ref([])
@@ -2142,6 +2259,47 @@ const submitFittingForm = async () => {
     return
   }
 
+  // 4. 预检 20 分钟内同车牌在途发货单
+  await checkRecentAndProceed(payload)
+}
+
+const handleConfirmNonStandardFitting = async () => {
+  showFittingTypeConfirmModal.value = false
+  if (!pendingSubmitPayload.value) return
+  await checkRecentAndProceed(pendingSubmitPayload.value)
+}
+
+const checkRecentAndProceed = async (payload) => {
+  if (!payload) return
+  try {
+    submitFittingLoading.value = true
+    const checkRes = await checkRecentFittingShipment(PROJECT_KEY, {
+      vehicle_plate_no: payload.vehicle_plate_no,
+      section_1_id: payload.section_1_id,
+      supply_entity_id: payload.supply_entity_id,
+    })
+    if (checkRes && checkRes.has_recent) {
+      recentFittingShipmentData.value = checkRes
+      pendingSubmitPayload.value = payload
+      showFittingMergeConfirmModal.value = true
+      return
+    }
+  } catch (checkErr) {
+    console.warn('预检近期发货记录异常，继续走正常发货提交:', checkErr)
+  } finally {
+    submitFittingLoading.value = false
+  }
+
+  await doRealSubmitFittingForm(payload)
+}
+
+const confirmMergeToRecentShipment = async () => {
+  if (!pendingSubmitPayload.value || !recentFittingShipmentData.value) return
+  const payload = {
+    ...pendingSubmitPayload.value,
+    merge_to_shipment_no: recentFittingShipmentData.value.shipment_no,
+  }
+  showFittingMergeConfirmModal.value = false
   await doRealSubmitFittingForm(payload)
 }
 
@@ -2154,16 +2312,24 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
   submitFittingLoading.value = true
   fittingActionMsg.value = null
   showFittingTypeConfirmModal.value = false
+  showFittingMergeConfirmModal.value = false
 
   try {
     const data = await submitFittingDelivery(PROJECT_KEY, payload)
     if (data && data.ok) {
-      fittingActionMsg.value = { type: 'success', text: `🎉 提交成功！已成功录入管件发货单 [${data.shipment_no}]，包含 ${data.count} 项明细` }
+      const isMerged = Boolean(data.merged)
+      fittingActionMsg.value = {
+        type: 'success',
+        text: isMerged
+          ? `🎉 追加合并成功！已成功向车次 [${data.shipment_no}] 合并追加 ${data.count} 项管件明细`
+          : `🎉 提交成功！已成功录入管件发货单 [${data.shipment_no}]，包含 ${data.count} 项明细`,
+      }
       fittingGridSource.value = createEmptyFittingRows(8)
       fittingForm.value.vehiclePlateNo = ''
       fittingForm.value.shipRemark = ''
       fittingForm.value.shippedAt = getNowISOString()
       pendingSubmitPayload.value = null
+      recentFittingShipmentData.value = null
       loadFittingDeliveries()
     } else {
       fittingActionMsg.value = { type: 'error', text: data?.detail || '提交失败' }
@@ -2177,7 +2343,16 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
 
 watch(activeTab, (tab) => {
   if (tab === 'fitting') {
+    activeCategory.value = 'fitting'
     loadFittingDeliveries()
+  } else {
+    activeCategory.value = 'pipe'
+    lastPipeTab.value = tab
+    if (tab === 'demand') {
+      loadDemandSummary()
+    } else if (tab === 'history') {
+      loadDeliveries()
+    }
   }
 })
 
@@ -2521,6 +2696,10 @@ function createDefaultDeliveryForm() {
 function getSection1Name(section1Id) {
   const matched = section1Options.value.find((item) => item.section_1_id === section1Id)
   return matched?.section_1_name || section1Id || '—'
+}
+
+function getSectionLabel(section1Id) {
+  return getSection1Name(section1Id)
 }
 
 function getPipeModelName(pipeModelId) {
@@ -4253,13 +4432,94 @@ async function saveSuperEditFitting() {
   color: #2563eb !important;
 }
 
-/* Vue Tabs 高端样式切换 */
+/* 🧭 一体化复合双层导航容器 (Unified Compound Navigation Group) */
+.nav-composite-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  width: 100% !important;
+  margin-top: 6px !important;
+  margin-bottom: 16px !important;
+}
+
+/* 🔹 一级物料大类分段控制器 (Segmented Category Bar) */
+.category-segment-wrapper {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+  margin: 0 !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  box-sizing: border-box;
+}
+
+.category-segment-bar {
+  display: flex !important;
+  gap: 6px !important;
+  width: 100% !important;
+}
+
+.category-segment-btn {
+  flex: 1 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.category-segment-btn:hover {
+  color: #1e293b !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+}
+
+.category-segment-btn.active {
+  color: #1e40af !important;
+  background: #ffffff !important;
+  border-color: #dbeafe !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.category-segment-btn .cat-icon {
+  font-size: 14.5px;
+  line-height: 1;
+}
+
+.category-segment-btn .cat-label {
+  font-size: 13.5px;
+  letter-spacing: 0.2px;
+}
+
+.category-segment-btn .cat-count {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1.5px 6px;
+  border-radius: 20px;
+  background: #e2e8f0;
+  color: #64748b;
+  transition: all 0.22s ease;
+}
+
+.category-segment-btn.active .cat-count {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* 🏷️ 二级选项卡导航 (Responsive Sub-Tabs Header) */
 .tube-tabs-header-wrap {
   background: rgba(241, 245, 249, 0.8) !important;
-  border-radius: 14px !important;
-  padding: 6px !important;
-  margin-top: 8px !important;
-  margin-bottom: 16px !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+  margin: 0 !important;
   border: 1px solid #e2e8f0 !important;
   box-sizing: border-box;
 }

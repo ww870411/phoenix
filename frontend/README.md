@@ -1,3 +1,61 @@
+## 2026-08-19 供给管理台账复合双层导航重构（SupplyManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **页面架构升级**：
+  1. **分层导航对齐需求端**：将原有的单层 4 选项卡重构为与需求端（`DemandManagementView.vue`）一致的“一级物料大类分段条 + 二级业务子Tab”复合双层导航架构；
+  2. **清晰归类**：
+     - **🔹 保温管业务（一级大类）**：归纳前 3 个子功能（`🎯 需求与缺口看板`、`🚚 批量发货与车次装配`、`📋 物流发货记录`）；
+     - **🔩 管件业务（一级大类）**：归纳管件功能（`🔧 管件发货与明细记录`）；
+  3. **记忆与平滑切换**：切换大类时智能记忆直管子 Tab，并自动响应数据刷新。
+
+## 2026-08-19 管件供给发货1小时同车牌自动合并提示与返回修改车牌体验升级（SupplyManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **交互规范升级**：
+  1. **时间窗口扩展**：同车牌预检时间窗口扩展至 **1 小时（60分钟）**；
+  2. **强制合并通知与防错纠偏**：
+     - 检测到 1 小时内同车牌在途记录时，不再提供“作为全新独立车次”的分歧选项，弹窗直接明确通知用户本次录入将**自动合并入前序车次**；
+     - 底部提供两个明确操作：
+       - `【↩️ 返回修改车牌】`：若非同一辆车（如操作员误输车牌），点击后关闭弹窗返回表格修改车牌；
+       - `【🚚 确认合并发货 🚀】`：若确认无误，一键完成原子追加合并与订单号自增顺延。
+
+## 2026-08-19 管件同车牌发货合并确认弹窗渲染函数修复（SupplyManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+- **问题排查与修复**：
+  - **标段函数名契约对齐**：将弹窗模板中引用的 `getSectionLabel` 调整为 `getSection1Name`，并在 `<script setup>` 中同时导出 `getSectionLabel` 别名；
+  - **防崩溃渲染保护**：增强管件清单摘要数组的空值保护，确保同车牌第二单录入时秒级弹出【检测到近期同车牌发货单】双选对话框。
+
+## 2026-08-19 管件供给发货同车牌20分钟智能检测与合并追加功能上线（SupplyManagementView.vue & api.js）
+
+- **关联前端页面与服务**：
+  - 页面：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`
+  - 接口：`frontend/src/projects/daily_report_25_26/services/api.js` (`checkRecentFittingShipment`, `submitFittingDelivery`)
+- **交互与用户体验升级**：
+  1. **智能无感预检**：供给方点击发货时，系统在后台对车牌号、接收标段与供给主体进行 20 分钟内在途车次轻量预检；
+  2. **同车牌合并确认弹窗（`showFittingMergeConfirmModal`）**：
+     - 若检测到前序车次，弹窗直观对比前序车次信息（车次号、已装管件摘要）与本次拟发管件，并提供业务友好指引；
+     - 双选一键操作：【➕ 合并追加至原车次（推荐）】与【🚚 作为全新独立车次】；
+  3. **实时反馈**：合并追加成功后给出明确提示（如“🎉 追加合并成功！已成功向车次 [FSSA-xxx] 合并追加 2 项管件明细”），并重置发货网格与表单。
+
+## 2026-08-19 库管台账管件全生命周期流转凭证弹窗渲染修复（WarehouseManagementView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **问题排查与修复**：
+  1. **缺失格式化函数补齐**：在 `<script setup>` 中补全 `formatNumber` 安全数值格式化函数，解决模板渲染时因未定义函数导致的 JS 运行时中断问题；
+  2. **管件与直管弹窗分支精准判定**：优化 `isFittingDeliveryModal` 计算属性与 `showDeliveryDetail` 字段组装，确保管件多规格车次清单及各阶段验收时间线 100% 完整流畅弹出展示。
+
+## 2026-08-19 管件流转交互全面升级为车次整体确认模式（DemandManagementView.vue & WarehouseManagementView.vue）
+
+- **关联前端页面**：
+  - 标段需求与施工：`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`
+  - 库管归档与台账：`frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`
+- **重构交互与体验升级**：
+  1. **车次头部整体确认入口**：在车次卡片头部根据流转状态智能呈现【🚚 整车到货确认】或【👷 整车施工接收】主操作按钮，现场负责人或施工员可一键调起弹窗；
+  2. **整车清单弹窗批量核对**：弹窗内列出整车全部管件规格与发货件数，支持到货件数微调（针对少送/破损）及整车验收备注统一录入，一键完成全车原子流转；
+  3. **展开明细表格纯净化**：明细表格由 7 列精简为 6 列纯净数据展示（#、管件类型、型号/规格、发货件数、到货确认数、履约状态），彻底移除杂乱的行内输入框与单点按钮；
+  4. **库管整车一键归档协同**：在库管台账中强化【🏢 整车批量归档】并同步精简明细表格。
+
 ## 2026-08-19 编辑覆盖弹窗提示卡片轻量化与文案极简化（SupplyManagementView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`

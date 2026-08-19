@@ -790,7 +790,6 @@
                         <col class="fitting-col-qty">
                         <col class="fitting-col-qty">
                         <col class="fitting-col-status">
-                        <col class="fitting-col-action">
                       </colgroup>
                       <thead>
                         <tr>
@@ -800,7 +799,6 @@
                           <th class="fitting-col-qty">发货件数</th>
                           <th class="fitting-col-qty">实到件数</th>
                           <th class="fitting-col-status">履约状态</th>
-                          <th class="fitting-col-action">归档操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -816,7 +814,7 @@
                         </td>
                         <td class="fitting-qty-cell is-shipped">{{ item.shipped_qty }} {{ item.unit || '个' }}</td>
                         <td class="fitting-qty-cell">
-                          <span v-if="item.status && item.status !== 'shipped'" style="color: #2563eb;">
+                          <span v-if="item.status && item.status !== 'shipped'" style="color: #2563eb; font-weight: bold;">
                             {{ item.arrived_qty !== undefined && item.arrived_qty !== null ? item.arrived_qty : item.shipped_qty }} {{ item.unit || '个' }}
                           </span>
                           <span v-else style="color: #94a3b8; font-weight: normal; font-size: 11.5px;">—</span>
@@ -829,24 +827,6 @@
                           <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管归档</span>
                           <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已归档</span>
                           <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
-                        </td>
-
-                        <!-- 库管单项归档操作列 -->
-                        <td style="text-align: center;">
-                          <div v-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" style="display: flex; justify-content: center; gap: 4px;">
-                            <button
-                              type="button"
-                              class="btn primary btn-sm"
-                              style="padding: 2px 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer;"
-                              :disabled="item.submitting"
-                              @click.stop="handleConfirmSingleFittingWarehouse(item)"
-                            >
-                              {{ item.submitting ? '提交中...' : '🏢 归档入库' }}
-                            </button>
-                          </div>
-                          <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" style="font-size: 11px; color: #16a34a; font-weight: 600;">✓ 已完成归档</span>
-                          <span v-else-if="item.status === 'cancelled'" style="font-size: 11px; color: #b91c1c; font-weight: 600;">已撤销</span>
-                          <span v-else style="font-size: 11px; color: #94a3b8;">⏳ 待前置完成</span>
                         </td>
                       </tr>
                       </tbody>
@@ -1061,6 +1041,14 @@ const fittingActionMsg = ref(null)
 // 凭证 Modal 对话框
 const deliveryDetailModalVisible = ref(false)
 const deliveryDetailModalData = ref(null)
+
+function formatNumber(val, digits = 2) {
+  if (val === undefined || val === null || val === '') return '—'
+  const num = Number(val)
+  if (isNaN(num)) return '—'
+  return Number.isInteger(num) ? String(num) : num.toFixed(digits)
+}
+
 function getModalUnitLabel(modalData) {
   if (!modalData) return '个'
   const items = modalData.itemsList || []
@@ -1073,9 +1061,9 @@ function getModalUnitLabel(modalData) {
 const isFittingDeliveryModal = computed(() => {
   if (!deliveryDetailModalData.value) return false
   const data = deliveryDetailModalData.value
-  if (data.fitting_type || data.fittingType || data.isFittingDelivery) return true
-  if (data.pipe_model_id || data.pipe_model_name || data.pipeModelId || data.pipeModelName || data.isStraightPipe) return false
+  if (data.isFittingDelivery || data.fitting_type || data.fittingType) return true
   if (data.itemsList && data.itemsList.length && (data.itemsList[0].fitting_type || data.itemsList[0].fittingType)) return true
+  if (data.pipe_model_id || data.pipe_model_name || data.pipeModelId) return false
   return false
 })
 
@@ -1085,6 +1073,7 @@ function showDeliveryDetail(input) {
   const itemsList = isGroup ? input.items : [input]
   const mainRow = itemsList[0] || input
 
+  const isFitting = isGroup || Boolean(mainRow.fitting_type || mainRow.fittingType || input.fitting_type || input.fittingType)
   const shipmentNo = input.shipmentNo || input.shipment_no || mainRow.shipment_no || mainRow.shipmentNo || mainRow.order_no || mainRow.orderNo || String(mainRow.id || '')
   const vehiclePlateNo = input.vehiclePlateNo || input.vehicle_plate_no || mainRow.vehicle_plate_no || mainRow.vehiclePlateNo || '—'
   const shippedAt = input.shippedAt || input.shipped_at || mainRow.shipped_at || mainRow.shippedAt || ''
@@ -1120,14 +1109,15 @@ function showDeliveryDetail(input) {
     ...mainRow,
     ...input,
     itemsList,
+    isFittingDelivery: isFitting,
     totalTypesCount: itemsList.length,
     deliveryCode: shipmentNo,
     vehiclePlateNo,
     shippedAt,
     shippedQty: totalShippedQty,
     arrivedQty: totalArrivedQty,
-    unit: mainRow.unit || '个',
-    pipeModelName: itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`,
+    unit: mainRow.unit || (isFitting ? '个' : '米'),
+    pipeModelName: isFitting ? (itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`) : (mainRow.pipe_model_name || mainRow.pipeModelName || '保温管'),
     supplyEntityName,
     section1Name,
     shipContactName,
@@ -1361,25 +1351,7 @@ async function handleConfirmFittingWarehouse(items) {
   }
 }
 
-async function handleConfirmSingleFittingWarehouse(item) {
-  if (!item || !item.id) return
-  item.submitting = true
-  try {
-    const res = await confirmFittingDeliveryWarehouse(projectKey, {
-      ids: [item.id],
-      remark: '库管核对明细入库归档'
-    })
-    if (res && res.ok) {
-      alert(`✅ 单项管件【${item.fitting_type || '管件'} (${item.model_spec || ''})】库管归档成功！`)
-      await loadWarehouseFittingDeliveries()
-    }
-  } catch (err) {
-    console.error('单项库管归档失败:', err)
-    alert(`归档失败: ${err.message || '系统开小差了'}`)
-  } finally {
-    item.submitting = false
-  }
-}
+
 
 const handleSwitchToFittingTab = () => {
   activeTab.value = 'fitting'

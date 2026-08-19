@@ -76,6 +76,7 @@ from backend.projects.insulation_pipe_supply_2026.services.supply_management_ser
 )
 from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_service import (
     cancel_fitting_delivery,
+    check_recent_fitting_shipment,
     confirm_fitting_delivery_arrival,
     confirm_fitting_delivery_construction,
     confirm_fitting_delivery_warehouse,
@@ -530,6 +531,7 @@ class FittingDeliverySubmitPayload(BaseModel):
     ship_contact_name: Optional[str] = ""
     ship_contact_phone: Optional[str] = ""
     ship_remark: Optional[str] = ""
+    merge_to_shipment_no: Optional[str] = None
     items: List[FittingDeliveryItemInput] = Field(min_length=1)
     model_config = ConfigDict(extra="ignore")
 
@@ -4628,6 +4630,21 @@ def _ensure_fitting_supply_access(rows: List[Dict[str, Any]], session: AuthSessi
     denied = sorted({str(row.get("supply_entity_id") or "").strip() for row in rows if str(row.get("supply_entity_id") or "").strip().lower() not in allowed_ids})
     if denied:
         raise HTTPException(status_code=403, detail=f"当前账号无以下供给主体的管件操作权限：{', '.join(denied)}")
+
+
+@router.get("/workspace/fitting_deliveries/check_recent", summary="预检同车牌20分钟内在途管件发货单")
+def handle_check_recent_fitting_shipment(
+    vehicle_plate_no: str = Query(..., min_length=1),
+    section_1_id: str = Query(..., min_length=1),
+    supply_entity_id: str = Query(..., min_length=1),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货预检")
+    return check_recent_fitting_shipment(
+        vehicle_plate_no=vehicle_plate_no,
+        section_1_id=section_1_id,
+        supply_entity_id=supply_entity_id,
+    )
 
 
 @router.post("/workspace/fitting_deliveries/submit", summary="提交管件发货记录表")

@@ -740,6 +740,19 @@ export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_sup
   }
 }
 
+export async function checkRecentFittingShipment(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const query = new URLSearchParams(params).toString()
+  const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/check_recent?${query}`, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, '预检近期管件发货失败')
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
 export async function submitFittingDelivery(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/workspace/fitting_deliveries/submit`, {
     method: 'POST',

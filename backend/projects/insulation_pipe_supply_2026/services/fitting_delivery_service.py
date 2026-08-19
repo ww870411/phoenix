@@ -217,6 +217,84 @@ def get_fitting_deliveries_by_ids(delivery_ids: Sequence[int]) -> List[Dict[str,
         session.close()
 
 
+def check_recent_fitting_shipment(
+    *,
+    vehicle_plate_no: str,
+    section_1_id: str,
+    supply_entity_id: str,
+    time_window_minutes: int = 60,
+) -> Dict[str, Any]:
+    """预检指定车牌在过去指定分钟数（默认1小时/60分钟）内是否存在相同供给主体、相同标段且处于在途待到货状态的车次。"""
+    plate = _clean(vehicle_plate_no)
+    sec_id = _clean(section_1_id)
+    entity_id = _clean(supply_entity_id).upper()
+    if not plate or not sec_id or not entity_id:
+        return {"has_recent": False}
+
+    _ensure_fitting_table_structures()
+    session = SessionLocal()
+    try:
+        rows = session.execute(
+            text(
+                """
+                SELECT id, shipment_no, order_no, vehicle_plate_no, section_1_id,
+                       supply_entity_id, fitting_type, model_spec, shipped_qty, unit,
+                       shipped_at, created_at, status, ship_remark
+                FROM tube.tube_fitting_delivery
+                WHERE UPPER(vehicle_plate_no) = UPPER(:plate)
+                  AND UPPER(supply_entity_id) = UPPER(:entity_id)
+                  AND section_1_id = :sec_id
+                  AND status IN ('pending_arrival', 'shipped')
+                  AND (created_at >= NOW() - (:minutes || ' minutes')::INTERVAL OR shipped_at >= NOW() - (:minutes || ' minutes')::INTERVAL)
+                ORDER BY created_at DESC, id DESC
+                """
+            ),
+            {"plate": plate, "entity_id": entity_id, "sec_id": sec_id, "minutes": str(time_window_minutes)},
+        ).mappings().all()
+
+        if not rows:
+            return {"has_recent": False}
+
+        recent_shipment_no = _clean(rows[0]["shipment_no"])
+        shipment_rows = [r for r in rows if _clean(r["shipment_no"]) == recent_shipment_no]
+        if not shipment_rows:
+            return {"has_recent": False}
+
+        first_row = shipment_rows[0]
+        created_at_dt = first_row["created_at"]
+        shipped_at_dt = first_row["shipped_at"]
+
+        now_utc = datetime.now(BEIJING_TZ)
+        dt_ref = created_at_dt or shipped_at_dt
+        if dt_ref:
+            if dt_ref.tzinfo is None:
+                dt_ref = dt_ref.replace(tzinfo=BEIJING_TZ)
+            minutes_ago = max(0, int((now_utc - dt_ref.astimezone(BEIJING_TZ)).total_seconds() / 60))
+        else:
+            minutes_ago = 0
+
+        items_summary = [
+            f"{r['fitting_type']} ({r['model_spec']}) × {int(r['shipped_qty']) if float(r['shipped_qty']).is_integer() else r['shipped_qty']}{r['unit'] or '个'}"
+            for r in shipment_rows
+        ]
+
+        return {
+            "has_recent": True,
+            "shipment_no": recent_shipment_no,
+            "minutes_ago": minutes_ago,
+            "vehicle_plate_no": first_row["vehicle_plate_no"],
+            "section_1_id": first_row["section_1_id"],
+            "supply_entity_id": first_row["supply_entity_id"],
+            "shipped_at": _serialize_time(shipped_at_dt),
+            "created_at": _serialize_time(created_at_dt),
+            "items_count": len(shipment_rows),
+            "total_qty": sum(float(r["shipped_qty"]) for r in shipment_rows),
+            "items_summary": items_summary,
+        }
+    finally:
+        session.close()
+
+
 def submit_fitting_delivery(
     payload: Dict[str, Any],
     operator: str,
@@ -306,6 +384,111 @@ def submit_fitting_delivery(
             """
         )
 
+        merge_to_shipment_no = _clean(payload.get("merge_to_shipment_no"))
+        if merge_to_shipment_no:
+            # 模式 A：合并追加至既有在途车次
+            existing_rows = session.execute(
+                text(
+                    """
+                    SELECT id, shipment_no, order_no, vehicle_plate_no, section_1_id,
+                           supply_entity_id, status, shipped_at, ship_contact_name, ship_contact_phone
+                    FROM tube.tube_fitting_delivery
+                    WHERE shipment_no = :shipment_no
+                    ORDER BY id ASC
+                    FOR UPDATE
+                    """
+                ),
+                {"shipment_no": merge_to_shipment_no},
+            ).mappings().all()
+
+            if not existing_rows:
+                raise HTTPException(status_code=404, detail=f"指定合并的车次【{merge_to_shipment_no}】不存在")
+
+            first_existing = existing_rows[0]
+            for r in existing_rows:
+                if _clean(r["status"]) not in ("pending_arrival", "shipped"):
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"车次【{merge_to_shipment_no}】当前状态为【{r['status']}】，现场已处理或已签收，不能再合并追加，请作为独立车次发货",
+                    )
+
+            if _clean(first_existing["section_1_id"]) != section_1_id:
+                raise HTTPException(status_code=422, detail="合并车次的接收标段不一致，无法合并")
+            if _clean(first_existing["supply_entity_id"]).upper() != supply_entity_id.upper():
+                raise HTTPException(status_code=422, detail="合并车次的供给主体不一致，无法合并")
+
+            max_sub_seq = 0
+            base_order_prefix = None
+            for r in existing_rows:
+                ord_no = _clean(r["order_no"])
+                if ord_no and "-" in ord_no:
+                    parts = ord_no.split("-")
+                    base_order_prefix = "-".join(parts[:-1])
+                    try:
+                        seq_val = int(parts[-1])
+                        if seq_val > max_sub_seq:
+                            max_sub_seq = seq_val
+                    except ValueError:
+                        pass
+
+            if not base_order_prefix:
+                section_code = section_1_id[:1].upper() or "X"
+                base_order_prefix = f"FO{entity_code}-{section_code}-{date_part}-001"
+
+            target_shipped_at = first_existing["shipped_at"] or shipped_at
+            ship_contact_name = _clean(payload.get("ship_contact_name")) or _clean(first_existing["ship_contact_name"])
+            ship_contact_phone = _clean(payload.get("ship_contact_phone")) or _clean(first_existing["ship_contact_phone"])
+
+            created_ids: List[int] = []
+            for offset, item in enumerate(validated_items, 1):
+                cur_sub_seq = max_sub_seq + offset
+                order_no = f"{base_order_prefix}-{cur_sub_seq:02d}"
+                row_id = session.execute(
+                    insert_sql,
+                    {
+                        "supply_entity_id": supply_entity_id,
+                        "shipment_no": merge_to_shipment_no,
+                        "order_no": order_no,
+                        "vehicle_plate_no": vehicle_plate_no,
+                        "section_1_id": section_1_id,
+                        "fitting_type": item["fitting_type"],
+                        "model_spec": item["model_spec"],
+                        "shipped_qty": item["shipped_qty"],
+                        "unit": item["unit"],
+                        "shipped_at": target_shipped_at,
+                        "ship_contact_name": ship_contact_name,
+                        "ship_contact_phone": ship_contact_phone,
+                        "ship_remark": item["remark"] or _clean(payload.get("ship_remark")),
+                        "created_by": operator,
+                        "updated_by": operator,
+                    },
+                ).scalar_one()
+                created_ids.append(int(row_id))
+
+            _write_audit_log(
+                session,
+                operator=operator,
+                operator_group=operator_group,
+                action_type="MERGE_APPEND_FITTING_DELIVERY",
+                action_desc=f"向既有车次【{merge_to_shipment_no}】合并追加 {len(created_ids)} 项管件明细",
+                resource_id=merge_to_shipment_no,
+                after_value={
+                    "shipment_no": merge_to_shipment_no,
+                    "created_ids": created_ids,
+                    "items": validated_items,
+                },
+                client_ip=client_ip,
+            )
+            session.commit()
+            return {
+                "ok": True,
+                "merged": True,
+                "shipment_no": merge_to_shipment_no,
+                "count": len(created_ids),
+                "created_ids": created_ids,
+            }
+
+        # 模式 B：生成全新独立车次
         max_attempts = 5
         for attempt in range(max_attempts):
             try:
@@ -372,12 +555,15 @@ def submit_fitting_delivery(
                 session.commit()
                 return {
                     "ok": True,
+                    "merged": False,
                     "shipment_no": shipment_no,
                     "count": len(created_ids),
                     "created_ids": created_ids,
                 }
             except Exception as insert_err:
                 session.rollback()
+                if attempt == max_attempts - 1:
+                    raise HTTPException(status_code=500, detail=f"保存管件发货记录失败: {insert_err}") from insert_err
                 err_str = str(insert_err).lower()
                 if attempt < max_attempts - 1 and ("unique" in err_str or "duplicate" in err_str or "uq_" in err_str):
                     continue
@@ -665,35 +851,114 @@ def _confirm_simple_transition(
             st = _clean(row["status"])
             if st in expected_statuses:
                 valid_rows.append(row)
+            elif new_status == "pending_warehouse" and st in ("pending_arrival", "shipped"):
+                # 整车施工接收时，若存在落后的待到货明细，纳入自愈队列
+                valid_rows.append(row)
+            elif new_status == "completed" and st in ("pending_arrival", "shipped", "pending_receive", "arrived"):
+                # 整车库管归档时，若存在落后的在途/待接收明细，纳入自愈队列
+                valid_rows.append(row)
             elif st == new_status or st in ("completed", "warehouse_confirmed"):
                 # 幂等放行
                 pass
             else:
                 raise HTTPException(status_code=422, detail=f"记录 {row['id']} 当前状态为 {st}，不能执行本次确认")
 
-        update_sql = text(
-            f"""
-            UPDATE tube.tube_fitting_delivery
-            SET status = :new_status, {timestamp_column} = :confirmed_at,
-                {operator_column} = :operator, {remark_column} = :remark,
-                updated_by = :operator, updated_at = NOW()
-            WHERE id = :id AND status = ANY(:expected_statuses)
-            """
-        )
         for row in valid_rows:
-            result = session.execute(
-                update_sql,
-                {
-                    "id": row["id"],
-                    "new_status": new_status,
-                    "expected_statuses": list(expected_statuses),
-                    "confirmed_at": now,
-                    "operator": operator,
-                    "remark": remark,
-                },
-            )
-            if result.rowcount < 1:
-                raise HTTPException(status_code=409, detail=f"记录 {row['id']} 状态已变化，请刷新后重试")
+            st = _clean(row["status"])
+            shipped_qty = _positive_integer(row["shipped_qty"], f"记录 {row['id']} 发货数量")
+            
+            if new_status == "pending_warehouse":
+                # 推进到待库管入库：确保必须具有到货凭证
+                cur_arrived_qty = row.get("arrived_qty") or shipped_qty
+                cur_arrived_at = row.get("arrived_confirm_at") or now
+                cur_arrived_by = _clean(row.get("arrived_confirm_by")) or operator
+                
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE tube.tube_fitting_delivery
+                        SET status = 'pending_warehouse',
+                            arrived_qty = COALESCE(arrived_qty, :arrived_qty),
+                            arrived_confirm_at = COALESCE(arrived_confirm_at, :arrived_confirm_at),
+                            arrived_confirm_by = COALESCE(arrived_confirm_by, :arrived_confirm_by),
+                            {timestamp_column} = :confirmed_at,
+                            {operator_column} = :operator,
+                            {remark_column} = :remark,
+                            updated_by = :operator,
+                            updated_at = NOW()
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "id": row["id"],
+                        "arrived_qty": cur_arrived_qty,
+                        "arrived_confirm_at": cur_arrived_at,
+                        "arrived_confirm_by": cur_arrived_by,
+                        "confirmed_at": now,
+                        "operator": operator,
+                        "remark": remark,
+                    },
+                )
+            elif new_status == "completed":
+                # 推进到已结清归档：确保到货凭证和施工接收凭证全齐
+                cur_arrived_qty = row.get("arrived_qty") or shipped_qty
+                cur_arrived_at = row.get("arrived_confirm_at") or now
+                cur_arrived_by = _clean(row.get("arrived_confirm_by")) or operator
+                cur_received_at = row.get("received_confirm_at") or now
+                cur_received_by = _clean(row.get("received_confirm_by")) or operator
+
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE tube.tube_fitting_delivery
+                        SET status = 'completed',
+                            arrived_qty = COALESCE(arrived_qty, :arrived_qty),
+                            arrived_confirm_at = COALESCE(arrived_confirm_at, :arrived_confirm_at),
+                            arrived_confirm_by = COALESCE(arrived_confirm_by, :arrived_confirm_by),
+                            received_confirm_at = COALESCE(received_confirm_at, :received_confirm_at),
+                            received_confirm_by = COALESCE(received_confirm_by, :received_confirm_by),
+                            {timestamp_column} = :confirmed_at,
+                            {operator_column} = :operator,
+                            {remark_column} = :remark,
+                            updated_by = :operator,
+                            updated_at = NOW()
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "id": row["id"],
+                        "arrived_qty": cur_arrived_qty,
+                        "arrived_confirm_at": cur_arrived_at,
+                        "arrived_confirm_by": cur_arrived_by,
+                        "received_confirm_at": cur_received_at,
+                        "received_confirm_by": cur_received_by,
+                        "confirmed_at": now,
+                        "operator": operator,
+                        "remark": remark,
+                    },
+                )
+            else:
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE tube.tube_fitting_delivery
+                        SET status = :new_status,
+                            {timestamp_column} = :confirmed_at,
+                            {operator_column} = :operator,
+                            {remark_column} = :remark,
+                            updated_by = :operator,
+                            updated_at = NOW()
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "id": row["id"],
+                        "new_status": new_status,
+                        "confirmed_at": now,
+                        "operator": operator,
+                        "remark": remark,
+                    },
+                )
         shipment_numbers = sorted({_clean(row["shipment_no"]) for row in rows})
         _write_audit_log(
             session,

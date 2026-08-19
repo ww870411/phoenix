@@ -1,3 +1,28 @@
+## 2026-08-19 管件同车牌1小时发货预检与合并追加服务上线（fitting_delivery_service.py & workspace.py）
+
+- **关联后端服务与路由**：
+  - 预检接口：`GET /workspace/fitting_deliveries/check_recent`
+  - 预检函数：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py` (`check_recent_fitting_shipment`)
+  - 发货接口：`POST /workspace/fitting_deliveries/submit` (支持可选参数 `merge_to_shipment_no`)
+- **核心逻辑与技术特性**：
+  1. **智能预检（`check_recent_fitting_shipment`）**：在 **1 小时（60分钟）**时间窗口内，快速排查相同车牌、相同供给主体、相同标段且处于在途待到货（`pending_arrival` / `shipped`）状态的发货单，返回前序车次与已装管件清单；
+  2. **原子合并追加与序号顺延（`submit_fitting_delivery`）**：
+     - 在数据库行锁机制下验证原车次状态合规性（若现场已签收则安全阻断）；
+     - 读取该车次当前最大子订单号（`-01`），新追加管件无缝顺延递增为 `-02`、`-03`...；
+     - 继承原车次号（`shipment_no`）与发货时间等主单属性，并记录 `MERGE_APPEND_FITTING_DELIVERY` 审计日志；
+  3. **单元与契约测试覆盖**：在 `test_fitting_delivery_contract.py` 中新增 `test_recent_shipment_check_and_merge_flow`，测试套件 15 项测试全部通过。
+
+## 2026-08-19 管件整车批量流转与前序证据链向下自愈机制升级（fitting_delivery_service.py）
+
+- **关联服务模块**：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - 到货确认：`confirm_fitting_delivery_arrival`
+  - 施工接收：`confirm_fitting_delivery_construction`
+  - 库管归档：`confirm_fitting_delivery_warehouse`
+- **核心逻辑升级**：
+  1. **车次级整车批量流转**：接口天然支持传入整车所有管件明细 `ids: [...]` 数组，执行单事务原子批量状态流转；
+  2. **前序落后项向前自愈**：在施工接收（推进至 `pending_warehouse`）或库管归档（推进至 `completed`）时，若车次中存在历史遗留或漏点的在途/待接收明细，系统自动为其补齐前置到货（`arrived_qty = shipped_qty` / `arrived_confirm_at`）及施工接收凭证，100% 确保满足数据库 `chk_tube_fitting_state_evidence` 严格约束；
+  3. **单元与契约测试覆盖**：在 `test_fitting_delivery_contract.py` 中新增 `test_whole_shipment_batch_confirm_and_healing_flow`，覆盖从发货到最终归档的全闭环批量流转测试。
+
 ## 2026-08-19 编辑覆盖服务时间戳自愈与当前时间入库策略升级（fitting_delivery_service.py & supply_management_service.py）
 
 - **关联服务函数**：

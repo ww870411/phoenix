@@ -1,3 +1,97 @@
+## 2026-08-19 [供给管理台账：复合双层导航结构改造（一级大类：保温管/管件）]
+- **业务需求与交互升级**：
+  - 遵循需求端（`DemandManagementView.vue`）优秀的分层架构模式，将供给端（`SupplyManagementView.vue`）的单层 4 选项卡重构为**“一级物料大类 + 二级业务子Tab”**的复合双层导航结构；
+- **全栈技术调整（`SupplyManagementView.vue`）**：
+  1. **一级物料大类分段控制器（`activeCategory: 'pipe' | 'fitting'`）**：
+     - 【🔹 保温管业务】（包含 3 项子功能）
+     - 【🔩 管件业务】（包含 1 项子功能）
+  2. **二级业务子Tab 响应式联动**：
+     - 保温管大类下呈现：`🎯 需求与缺口看板`、`🚚 批量发货与车次装配`、`📋 物流发货记录`；
+     - 管件大类下呈现：`🔧 管件发货与明细记录`；
+  3. **状态记忆与无缝平滑切换**：
+     - 引入 `lastPipeTab` 记忆保温管选中的子 Tab，大类切换时自动恢复上次选中的子界面并按需自动触发数据刷新；
+  4. **视觉与样式体系对齐**：
+     - 注入 `.nav-composite-group`、`.category-segment-wrapper`、`.category-segment-bar`、`.category-segment-btn` 样式类，全站 UI 体验完美统一。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 16.72s`，0 错误）；
+  - 后端 pytest 15 项全栈自动化测试 100% 绿色通过（`15 passed in 2.52s`）。
+
+## 2026-08-19 [管件发货合并机制升级：1小时时间窗口与自动合并通知/返回修改体验]
+- **业务需求与逻辑演进**：
+  - 用户明确要求调整合并策略：
+    1. **时间窗口放宽**：发货时间间隔由 20 分钟扩展为 **$\le$ 1 小时（60分钟）**；
+    2. **交互改为强制自动合并通知**：不再提供“作为全新独立车次”的分歧选项，而是明确告知即将自动合并入前序车次；
+    3. **错误车牌纠偏保护**：如果操作员并非同一辆车（例如填错了车牌号），提供明确的【↩️ 返回修改车牌】按钮，便于返回表格修正；若确认则一键【🚚 确认合并发货 🚀】入库。
+- **全栈技术调整**：
+  1. **后端服务（`fitting_delivery_service.py`）**：
+     - `check_recent_fitting_shipment` 默认时间窗口（`time_window_minutes`）由 20 分钟提升为 60 分钟；
+  2. **前端页面（`SupplyManagementView.vue`）**：
+     - 弹窗重构为告知确认型：明确提示即将合并，提供【↩️ 返回修改车牌】和【🚚 确认合并发货 🚀】；
+     - 移除旧版独立发货分支，防止操作员犹豫或误选拆单。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 19.50s`，0 错误）；
+  - 后端 pytest 15 项全栈自动化测试 100% 绿色通过（`15 passed in 4.26s`）。
+
+## 2026-08-19 [管件发货合并确认：弹窗标段渲染函数修复与交互顺畅弹出]
+- **故障排查与根因分析**：
+  - 用户反馈发同一车牌第二单时没有任何反应、数据留在表格中。排查发现同车牌合并弹窗模板中引用了 `getSectionLabel`，但组件内函数名为 `getSection1Name`，导致检测命中时 Vue 渲染弹窗触发未定义错误中断；
+- **前端修复细节（`SupplyManagementView.vue`）**：
+  1. 将弹窗模板中的标段名称取值调整为 `getSection1Name(recentFittingShipmentData.section_1_id)`；
+  2. 在 `<script setup>` 中同时定义 `getSectionLabel` 别名函数，并补齐 `items_count` 安全渲染表达式；
+  3. 经过全流程构建与验证，同车牌第二单录入时已能秒级、流畅弹出【检测到近期同车牌发货单】双选对话框。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 18.97s`，0 错误）；
+  - 后端 pytest 15 项自动化测试 100% 绿色通过（`15 passed in 2.32s`）。
+
+## 2026-08-19 [管件供给发货：20分钟内同车牌发货智能检测与合并追加全链路功能上线]
+- **业务痛点与需求背景**：
+  - 供给方装车现场高频存在“第一批刚发货，车尾又补装/漏录了管件”的情况。若直接发新单会导致同一辆物理车辆拆成 2 个独立车次号，与随车实体单据和库管验收产生脱节；
+  - 打造**“20分钟内同车牌在途发货智能检测、双选交互与原子合并追加”**全链路方案。
+- **全栈技术实现细节**：
+  1. **后端服务层（`fitting_delivery_service.py` & `workspace.py`）**：
+     - 新增预检函数 `check_recent_fitting_shipment` 与对应接口 `GET /workspace/fitting_deliveries/check_recent`，精准判定 20 分钟内同车牌、同供给主体、同接收标段且处于在途待到货状态的车次；
+     - 升级 `submit_fitting_delivery` 提交逻辑，支持 `merge_to_shipment_no` 参数。在行锁保护下校验原车次状态与合法性，自动计算当前最大子订单序号（`-01`），新追加管件自动续编为 `-02`、`-03`...，继承原车次号与主单属性；
+     - 写入 `MERGE_APPEND_FITTING_DELIVERY` 完备审计日志；
+  2. **前端交互与弹窗（`SupplyManagementView.vue` & `api.js`）**：
+     - 提交前自动发起轻量预检，若命中则弹出友好的双选确认弹窗（`showFittingMergeConfirmModal`）；
+     - 清晰展示原车次已装管件与本次拟发管件概览，支持操作员一键选择【➕ 合并追加至原车次（推荐）】或【🚚 作为全新独立车次】；
+  3. **单元与契约测试（`test_fitting_delivery_contract.py`）**：
+     - 新增 `test_recent_shipment_check_and_merge_flow` 测试用例，完整覆盖预检命中/不命中、合并追加、子订单自增与车次号继承。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 15.47s`，0 错误）；
+  - 后端 pytest 15 项全栈自动化测试 100% 绿色通过（`15 passed in 2.46s`）。
+
+## 2026-08-19 [库管管理台账：管件流转凭证弹窗渲染与数据类型判定修复]
+- **故障排查与根因分析**：
+  - 库管页面（`WarehouseManagementView.vue`）管件卡片点击“📜 流转凭证”无响应，排查发现模板中引用了 `formatNumber` 工具函数但未在 `<script setup>` 中定义，导致 Vue 渲染弹窗时触发运行时中断；
+  - 另外，`isFittingDeliveryModal` 计算属性之前受直管 `pipeModelName` 兼容字段干扰产生误判；
+- **前端修复细节（`WarehouseManagementView.vue`）**：
+  1. 在组件内补齐并导出 `formatNumber` 安全数值格式化函数；
+  2. 修复 `isFittingDeliveryModal` 计算逻辑，通过 `isFittingDelivery` 显式标识确保管件弹窗 100% 准确走入管件清单分支；
+  3. 在 `showDeliveryDetail` 中为多规格管件清单注入规整的单位与规格标签。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 14.98s`，0 错误）；
+  - 后端 pytest 14 项全栈测试 100% 绿色通过（`14 passed in 2.28s`）。
+
+## 2026-08-19 [管件业务流转全链路升级：按车次整体确认模式与明细纯净化改造]
+- **业务痛点与重构目标**：
+  - 原管件流转在明细表格中逐项单点确认，导致现场极易漏点某项而产生“状态撕裂”（如同一车次部分归档、部分仍停留在途/待接收），下游施工与库管待办阻滞；
+  - 全面升级为**“以车次（Shipment）为原子单元的整车整体流转模式”**，涵盖【现场卸车到货】、【施工领用接收】与【库管入库归档】三大流转环节，同时纯净化明细展开表。
+- **全栈技术实现细节**：
+  1. **前端交互重构（`DemandManagementView.vue` & `WarehouseManagementView.vue`）**：
+     - 在标段需求台账（`DemandManagementView.vue`）的车次卡片头部注入【🚚 整车到货确认】与【👷 整车施工接收】主操作大按钮；
+     - 弹窗（`fittingArrivalModal` & `fittingConstructionModal`）全量展示整车清单，支持到货件数快捷核对微调与整车验收备注统一录入，一键批量提交；
+     - 纯净化明细表格：彻底移除逐行操作列与嵌入式输入框，表头精简为 6 列纯净展示（类型、规格、发货件数、到货确认数、履约状态）；
+     - 在库管台账（`WarehouseManagementView.vue`）中强化【🏢 整车批量归档】并同步精简明细表格。
+  2. **后端服务层批量流转与向下自愈强化（`fitting_delivery_service.py`）**：
+     - 在 `_confirm_simple_transition` 中注入前序落后项向前自愈补偿机制（当整车施工接收或库管归档推进时，若存在落后的在途/待接收明细，自动补齐前置到货/施工凭证不变量），100% 遵守物理约束 `chk_tube_fitting_state_evidence`；
+     - 保持存量历史数据绝对安全、不自动破坏改写，支持新整车流转或“编辑覆盖”自然追平。
+  3. **单元与契约测试（`test_fitting_delivery_contract.py`）**：
+     - 新增 `test_whole_shipment_batch_confirm_and_healing_flow` 自动化测试用例，全链路覆盖发货 $\rightarrow$ 整车到货 $\rightarrow$ 整车施工接收 $\rightarrow$ 整车库管归档与自愈校验。
+- **验证结果**：
+  - 前端 `npm run build` 编译 100% 成功（`✓ built in 17.02s`，0 错误）；
+  - 后端 pytest 14 项全栈单元与契约流转测试全部 100% 绿色通过（`14 passed in 2.21s`）。
+
 ## 2026-08-19 [发货管理编辑覆盖：弹窗冗余级联卡片移除与推进状态入库时间极简轻量提示升级]
 - **需求与视觉精修**：
   - 用户要求去掉弹窗中冗长的大黄色“级联时序凭证提示”说明与大块卡片，仅保留推进状态时的当前时间入库说明；
