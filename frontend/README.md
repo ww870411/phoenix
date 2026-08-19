@@ -10358,3 +10358,10 @@ docker compose up -d --build
 - 配置加载、普通分区保存和核心参数保存后，三个日期均使用后端顶层动态返回值回显，消除自动模式下消耗日期显示旧配置值的问题。
 - 原始JSON预览已补充 `usage_collection_date`，并原样保留 `auto_update_plan_start_date="all"`，不会再把第三态布尔化。
 - 验证：`npm --prefix D:\\编程项目\\phoenix\\frontend run build` 通过，149个模块完成转换；构建产物已检索到“全部是 (三个日期均自动后移)”。本地浏览器因缺少登录会话停留在登录页，尚未完成登录态视觉验收。
+
+
+## 2026-08-19 保温管大屏本周战报固定内容结构
+
+- 页面：src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue。
+- “本周战报”固定为统计周期、7日累计发货/施工、每日趋势和发货峰值日/施工峰值日/今日发货施工三项复盘栏，右栏尺寸不因有无业务数据改变。
+- 页面继续消费既有 weekly_report；当七日明细均为零时，以覆盖层明确说明暂无业务数据，仍显示相同 KPI、趋势区和复盘栏结构，避免空白图表被误判为加载失败。

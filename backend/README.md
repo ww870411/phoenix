@@ -7517,3 +7517,9 @@
 - 全局配置分区保存接口仅接受 `false`、`true` 或 `all`，其他值返回422；完整JSON配置仍可保存第三态并由配置服务规范解析。
 - 仍采用请求时动态计算，不新增定时任务、不每日回写配置文件、不修改数据库结构。
 - 新增 `tests/test_config_service_dates.py`，4项测试覆盖06:30临界点及三种模式；`python -m unittest backend.projects.insulation_pipe_supply_2026.tests.test_config_service_dates` 全部通过，相关文件 `py_compile` 通过。
+
+
+## 2026-08-19 保温管大屏本周战报前端呈现同步
+
+- 本轮未修改后端代码、接口、数据库或统计口径。
+- 大屏既有 weekly_report 响应持续提供连续 7 日日期、发货量与施工使用量；前端新增的峰值日、今日量与空数据提示均由该既有明细字段计算。

@@ -1092,46 +1092,75 @@
           </div>
         </div>
 
-        <!-- 🏆 本周战报（连续 7 日保温管发货 vs 施工使用态势） -->
+        <!-- 🏆 本周战报：固定信息结构，数据状态仅切换内容 -->
         <div class="panel-box weekly-report-panel">
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">📅</span>
-              <span>本周战报（连续7日）</span>
+              <span>本周战报</span>
             </div>
             <div class="header-right-meta">
               <span class="panel-tag gold" :title="'统计周期: ' + (weeklyReport.date_range_str || '近7日')">
-                {{ weeklyReport.date_range_str || '近7日' }}
+                连续7日
               </span>
             </div>
           </div>
+          <div class="weekly-period">
+            统计周期：{{ weeklyReport.date_range_str || '近7日' }} · 数据实时更新
+          </div>
 
-          <!-- 1. 顶部 2 联排大号 KPI 核心概况（纯粹展示 km 数） -->
+          <!-- 1. 顶部固定双 KPI：无数据时保留相同尺寸，仅切换辅助文案 -->
           <div class="weekly-kpi-grid">
             <div class="weekly-kpi-card ship-card" title="近7日累计发运保温管总量">
               <div class="kpi-card-header">
                 <span class="kpi-dot cyan"></span>
-                <span class="kpi-title">📦 7日累计发货</span>
+                <span class="kpi-title">7日累计发货量</span>
               </div>
               <div class="kpi-main-val cyan-text">
                 {{ weeklyReport.total_shipped_km }} <span class="unit">km</span>
               </div>
+              <div class="weekly-kpi-note">{{ weeklyShipNote }}</div>
             </div>
 
-            <div class="weekly-kpi-card usage-card" title="近7日现场累计施工使用 (敷设) 总量">
+            <div class="weekly-kpi-card usage-card" title="近7日现场累计施工使用（敷设）总量">
               <div class="kpi-card-header">
                 <span class="kpi-dot gold"></span>
-                <span class="kpi-title">🏗️ 7日累计施工</span>
+                <span class="kpi-title">7日累计施工量</span>
               </div>
               <div class="kpi-main-val gold-text">
                 {{ weeklyReport.total_usage_km }} <span class="unit">km</span>
               </div>
+              <div class="weekly-kpi-note">{{ weeklyUsageNote }}</div>
             </div>
           </div>
 
-          <!-- 2. ECharts 专业双轨发货 vs 施工走势大屏图表 -->
+          <!-- 2. 固定趋势区：始终保留坐标与日期，无数据时叠加明确状态 -->
+          <div class="weekly-chart-heading">
+            <span>每日趋势</span>
+            <span>发货量 / 施工量</span>
+          </div>
           <div class="weekly-chart-box">
             <div ref="weeklyChartRef" class="weekly-echarts-dom"></div>
+            <div v-if="!weeklyHasBusinessData" class="weekly-empty-state">
+              <strong>本周暂无业务数据</strong>
+              <span>累计指标与趋势将在数据同步后自动更新</span>
+            </div>
+          </div>
+
+          <!-- 3. 固定复盘栏：用真实 7 日数据补足“战报”语义 -->
+          <div class="weekly-insight-grid">
+            <div>
+              <span>发货峰值日</span>
+              <strong>{{ weeklyShipPeakText }}</strong>
+            </div>
+            <div>
+              <span>施工峰值日</span>
+              <strong>{{ weeklyUsagePeakText }}</strong>
+            </div>
+            <div>
+              <span>今日发货 / 施工</span>
+              <strong>{{ weeklyTodayText }}</strong>
+            </div>
           </div>
         </div>
       </section>
@@ -1729,6 +1758,59 @@ const weeklyReport = ref({
   total_usage_m: 0,
   days: []
 })
+
+function formatWeeklyKm(value) {
+  const amount = Number(value) || 0
+  return amount.toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+}
+
+const weeklyDays = computed(() => (
+  Array.isArray(weeklyReport.value?.days) ? weeklyReport.value.days : []
+))
+const weeklyHasBusinessData = computed(() => weeklyDays.value.some(day => (
+  (Number(day?.shipped_km) || 0) > 0 || (Number(day?.usage_km) || 0) > 0
+)))
+const weeklyToday = computed(() => weeklyDays.value.at(-1) || {
+  shipped_km: 0,
+  usage_km: 0
+})
+
+function getWeeklyPeak(metricKey) {
+  if (!weeklyHasBusinessData.value || weeklyDays.value.length === 0) return null
+  return weeklyDays.value.reduce((peak, day) => (
+    (Number(day?.[metricKey]) || 0) > (Number(peak?.[metricKey]) || 0) ? day : peak
+  ), weeklyDays.value[0])
+}
+
+const weeklyShipPeakText = computed(() => {
+  const peak = getWeeklyPeak('shipped_km')
+  return peak && Number(peak.shipped_km) > 0
+    ? `${peak.date} · ${formatWeeklyKm(peak.shipped_km)} km`
+    : '—'
+})
+const weeklyUsagePeakText = computed(() => {
+  const peak = getWeeklyPeak('usage_km')
+  return peak && Number(peak.usage_km) > 0
+    ? `${peak.date} · ${formatWeeklyKm(peak.usage_km)} km`
+    : '—'
+})
+const weeklyTodayText = computed(() => (
+  `${formatWeeklyKm(weeklyToday.value.shipped_km)} / ${formatWeeklyKm(weeklyToday.value.usage_km)} km`
+))
+const weeklyShipNote = computed(() => (
+  weeklyHasBusinessData.value
+    ? `今日 ${formatWeeklyKm(weeklyToday.value.shipped_km)} km`
+    : '本周暂无发货记录'
+))
+const weeklyUsageNote = computed(() => (
+  weeklyHasBusinessData.value
+    ? `今日 ${formatWeeklyKm(weeklyToday.value.usage_km)} km`
+    : '本周暂无施工记录'
+))
+
 // --- 🏆 本周战报 ECharts 专业工业大屏双轨图表 ---
 const weeklyChartRef = ref(null)
 let weeklyChartInstance = null
@@ -5703,11 +5785,19 @@ onBeforeUnmount(() => {
 }
 
 .weekly-report-panel .panel-header {
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   flex-shrink: 0;
 }
 
-/* 1. 顶部 2 联排大号对称 KPI 卡片 (大气饱满) */
+.weekly-period {
+  margin: 0 0 7px 24px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+/* 1. 顶部固定双 KPI：无数据时仅替换辅助文案 */
 .weekly-kpi-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5717,13 +5807,15 @@ onBeforeUnmount(() => {
 }
 
 .weekly-kpi-card {
+  min-height: 70px;
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 7px 10px 6px;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -5769,7 +5861,7 @@ onBeforeUnmount(() => {
 
 .kpi-main-val {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
@@ -5786,7 +5878,34 @@ onBeforeUnmount(() => {
   margin-left: 1px;
 }
 
-/* 2. ECharts 专业双轨发货 vs 施工走势图容器 (精致内收，四周充裕留白) */
+.weekly-kpi-note {
+  width: 100%;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weekly-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.weekly-chart-heading span:last-child {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+/* 2. 固定趋势区：保留图表骨架，空数据时展示清晰状态 */
 .weekly-chart-box {
   flex: 1;
   min-height: 0;
@@ -5811,7 +5930,77 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+.weekly-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+  background: rgba(11, 19, 35, 0.52);
+  text-align: center;
+}
 
+.weekly-empty-state strong {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-empty-state span {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.weekly-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.weekly-insight-grid > div {
+  min-width: 0;
+  padding: 0 5px;
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.weekly-insight-grid > div:first-child {
+  padding-left: 0;
+}
+
+.weekly-insight-grid > div:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.weekly-insight-grid span,
+.weekly-insight-grid strong {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weekly-insight-grid span {
+  color: #64748b;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.weekly-insight-grid strong {
+  margin-top: 3px;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 700;
+}
 
 /* --- 精美深色科技细滚动条 Custom Scrollbars --- */
 .left-col::-webkit-scrollbar,
@@ -6794,6 +6983,28 @@ onBeforeUnmount(() => {
 .bigscreen-container.light .weekly-chart-box {
   background: #ffffff;
   border-color: rgba(226, 232, 240, 0.9);
+}
+
+.bigscreen-container.light .weekly-chart-heading {
+  color: #334155;
+}
+
+.bigscreen-container.light .weekly-empty-state {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.bigscreen-container.light .weekly-empty-state strong,
+.bigscreen-container.light .weekly-insight-grid strong {
+  color: #334155;
+}
+
+.bigscreen-container.light .weekly-empty-state span {
+  color: #64748b;
+}
+
+.bigscreen-container.light .weekly-insight-grid,
+.bigscreen-container.light .weekly-insight-grid > div {
+  border-color: rgba(203, 213, 225, 0.8);
 }
 
 .bigscreen-container.light .kpi-title {
