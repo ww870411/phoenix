@@ -2023,6 +2023,32 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             }
         ]
 
+        # 7. 全网累计施工量、库存总量与未来三日净缺口精准计算
+        pipe_installed_total_m = sum(sec_usage_map.values())
+        pipe_arrived_total_m = sum(
+            float(r["total_arrived_m"] or r["total_shipped_m"] or 0) 
+            for r in pipe_deliv_rows 
+            if r["status"] in ("completed", "pending_warehouse", "pending_receive", "arrived")
+        )
+        pipe_stock_total_m = max(0.0, pipe_arrived_total_m - pipe_installed_total_m)
+
+        plan_start_date = get_configured_plan_start_date(payload)
+        plan_end_date = plan_start_date + timedelta(days=3)
+        try:
+            three_day_plan_sql = text("""
+                SELECT COALESCE(SUM(plan_qty), 0) AS total_plan_m
+                FROM tube.tube_daily_plan
+                WHERE plan_date >= :p_start AND plan_date < :p_end
+            """)
+            three_day_plan_m = float(session.execute(three_day_plan_sql, {"p_start": plan_start_date, "p_end": plan_end_date}).scalar() or 0)
+            if three_day_plan_m <= 0:
+                all_plan_sql = text("SELECT COALESCE(SUM(plan_qty), 0) AS total_plan_m FROM tube.tube_daily_plan WHERE plan_qty > 0")
+                three_day_plan_m = float(session.execute(all_plan_sql).scalar() or 0)
+        except Exception:
+            three_day_plan_m = 0.0
+
+        pipe_three_day_gap_m = max(0.0, three_day_plan_m - pipe_stock_total_m)
+
         return {
             "ok": True,
             "project_key": PROJECT_KEY,
@@ -2031,6 +2057,10 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "pipeDesignKm": round(pipe_design_total_m / 1000, 2),
                 "pipeShippedKm": round(pipe_shipped_total_m / 1000, 2),
                 "pipeTransitKm": round(pipe_transit_total_m / 1000, 2),
+                "pipeInstalledKm": round(pipe_installed_total_m / 1000, 2),
+                "pipeStockKm": round(pipe_stock_total_m / 1000, 2),
+                "pipeThreeDayPlanKm": round(three_day_plan_m / 1000, 2),
+                "pipeThreeDayGapKm": round(pipe_three_day_gap_m / 1000, 2),
                 "pipeDeliveredKm": round(pipe_delivered_total_m / 1000, 2),
                 "fittingTotalPcs": total_fitting_target,
                 "fittingShippedPcs": fitting_shipped_total_pcs,

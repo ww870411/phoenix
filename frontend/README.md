@@ -1,3 +1,24 @@
+## 2026-08-19 数字指挥大屏保温管保供进度文案更名为“全网保温管供应进度”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **进度条标题优化**：
+  - 左侧 `.pipe-kpi-panel` 内的充能进度条标题由“全网保温管保供覆盖率”优化为“全网保温管供应进度”，表达更为清晰准确。
+
+## 2026-08-19 数字指挥大屏保温管发运大盘 KPI 卡片重构与组合示数展示（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **卡片指标与视觉重构**：
+  1. **全网规划总量**：展示全网管网规划总公里数（km）；
+  2. **累计发货总量 / 运输在途量**：单行双值组合（发货青蓝 `count-num` / 在途金黄 `amber-text`），并在发运时附带浮动气泡；
+  3. **累计施工量**：紫罗兰高亮展示全网各标段下沟敷设总公里数（km）；
+  4. **库存总量 / 三日净缺口**：单行双值组合（现场库存翡翠绿 / 三日缺口预警红），当存在断料净缺口时触发红光呼吸警示。
+
+## 2026-08-19 数字指挥大屏左侧核心大盘板块更名为“保温管全网发运情报”（BigScreenDashboardView.vue）
+
+- **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`
+- **标题规范优化**：
+  - 左侧 `.pipe-kpi-panel` 大盘标题正式由“保温管全网发运与在途”升级为“保温管全网发运情报”，强化作战指挥与数字化情报大盘的权威语境。
+
 ## 2026-08-19 数字指挥大屏调度控制中心运行参数实时调谐与持久化配置（BigScreenDashboardView.vue）
 
 - **关联前端页面**：`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`

@@ -1,3 +1,11 @@
+## 2026-08-19 数字指挥大屏累计施工量、库存与三日净缺口聚合升级（workspace.py）
+
+- **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py` (`get_big_screen_dashboard_data`)
+- **数据指标聚合与算法设计**：
+  1. **全网累计施工量（`pipeInstalledKm`）**：从 `tube.tube_daily_usage` 动态统计全网所有标段实际下沟安装敷设的总公里数；
+  2. **现场库存总量（`pipeStockKm`）**：基于 `到货总量 - 累计施工量` 实时得出工区现场当前有效库存；
+  3. **三日滚动净缺口（`pipeThreeDayGapKm`）**：统计未来 3 日滚动要料计划总量（`pipeThreeDayPlanKm`），计算 `max(0, 三日计划量 - 现场库存)`，实现断料风险实时预警。
+
 ## 2026-08-19 数字指挥大屏运行参数与节律调谐接口及持久化存储（workspace.py）
 
 - **关联后端接口**：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`

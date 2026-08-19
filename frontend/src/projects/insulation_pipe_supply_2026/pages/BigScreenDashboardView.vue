@@ -323,7 +323,7 @@
           <div class="panel-header">
             <div class="panel-title">
               <span class="title-icon">📐</span>
-              <span>保温管全网发运与在途</span>
+              <span>保温管全网发运情报</span>
             </div>
             <span class="panel-tag cyan">保温管总线</span>
           </div>
@@ -337,29 +337,32 @@
               </div>
             </div>
             <div class="metric-item highlight-cyan">
-              <div class="metric-label">累计发货总量</div>
-              <div class="metric-val">
-                <span class="num count-num">{{ formatNumber(kpiData.pipeShippedKm) }}</span>
+              <div class="metric-label" title="累计发货总量 / 运输在途量">累计发货总量 / 运输在途量</div>
+              <div class="metric-val dual-val">
+                <span class="num count-num" title="累计发货总量">{{ formatNumber(kpiData.pipeShippedKm) }}</span>
+                <span class="sep">/</span>
+                <span class="num sub-num amber-text" title="运输在途量">{{ formatNumber(kpiData.pipeTransitKm) }}</span>
                 <span class="unit">km</span>
                 <transition name="bubble-fade">
                   <span v-if="bubbles.pipeShipped" class="delta-bubble">+{{ bubbles.pipeShipped }}m</span>
                 </transition>
               </div>
             </div>
-            <div class="metric-item highlight-amber">
-              <div class="metric-label">在途运输中</div>
+            <div class="metric-item highlight-purple">
+              <div class="metric-label">累计施工量</div>
               <div class="metric-val">
-                <span class="num count-num">{{ formatNumber(kpiData.pipeTransitKm) }}</span>
+                <span class="num count-num purple-text">{{ formatNumber(kpiData.pipeInstalledKm) }}</span>
                 <span class="unit">km</span>
-                <transition name="bubble-fade">
-                  <span v-if="bubbles.pipeTransit" class="delta-bubble amber">+{{ bubbles.pipeTransit }}m</span>
-                </transition>
               </div>
             </div>
             <div class="metric-item highlight-green">
-              <div class="metric-label">现场核销/就位</div>
-              <div class="metric-val">
-                <span class="num">{{ formatNumber(kpiData.pipeDeliveredKm) }}</span>
+              <div class="metric-label" title="库存总量 / 三日净缺口">库存总量 / 三日净缺口</div>
+              <div class="metric-val dual-val">
+                <span class="num green-text" title="现场库存总量">{{ formatNumber(kpiData.pipeStockKm) }}</span>
+                <span class="sep">/</span>
+                <span class="num sub-num" :class="kpiData.pipeThreeDayGapKm > 0 ? 'red-text alert-pulse' : 'gray-text'" title="未来三日净缺口">
+                  {{ formatNumber(kpiData.pipeThreeDayGapKm) }}
+                </span>
                 <span class="unit">km</span>
               </div>
             </div>
@@ -368,7 +371,7 @@
           <!-- 管材保供进度充能条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
-              <span>全网保温管保供覆盖率</span>
+              <span>全网保温管供应进度</span>
               <strong class="cyan-text">{{ pipeCoveragePercent }}%</strong>
             </div>
             <div class="energy-bar-track">
@@ -1270,6 +1273,10 @@ const kpiData = reactive({
   pipeDesignKm: 0.0,
   pipeShippedKm: 0.0,
   pipeTransitKm: 0.0,
+  pipeInstalledKm: 0.0,
+  pipeStockKm: 0.0,
+  pipeThreeDayPlanKm: 0.0,
+  pipeThreeDayGapKm: 0.0,
   pipeDeliveredKm: 0.0,
   fittingTotalPcs: 0,
   fittingShippedPcs: 0,
@@ -1668,6 +1675,10 @@ async function pollLiveRealData() {
       kpiData.pipeDesignKm = Number(res.kpi.pipeDesignKm || 0)
       kpiData.pipeShippedKm = Number(res.kpi.pipeShippedKm || 0)
       kpiData.pipeTransitKm = Number(res.kpi.pipeTransitKm || 0)
+      kpiData.pipeInstalledKm = Number(res.kpi.pipeInstalledKm || 0)
+      kpiData.pipeStockKm = Number(res.kpi.pipeStockKm || 0)
+      kpiData.pipeThreeDayPlanKm = Number(res.kpi.pipeThreeDayPlanKm || 0)
+      kpiData.pipeThreeDayGapKm = Number(res.kpi.pipeThreeDayGapKm || 0)
       kpiData.pipeDeliveredKm = Number(res.kpi.pipeDeliveredKm || 0)
       kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
       kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
@@ -1973,6 +1984,8 @@ function triggerSimulateDelivery(mode = 'pipe') {
     if (matType === 'pipe') {
       kpiData.pipeDeliveredKm = Math.round((kpiData.pipeDeliveredKm + kmDelta) * 100) / 100
       kpiData.pipeTransitKm = Math.max(0, Math.round((kpiData.pipeTransitKm - kmDelta) * 100) / 100)
+      kpiData.pipeStockKm = Math.round((kpiData.pipeStockKm + kmDelta) * 100) / 100
+      kpiData.pipeThreeDayGapKm = Math.max(0, Math.round(((kpiData.pipeThreeDayPlanKm || 0) - kpiData.pipeStockKm) * 100) / 100)
       secTarget.arrivedKm = Math.round(((Number(secTarget.arrivedKm) || 0) + kmDelta) * 100) / 100
       secTarget.transitKm = Math.max(0, Math.round(((Number(secTarget.transitKm) || 0) - kmDelta) * 100) / 100)
       if (secTarget.designKm > 0) {
@@ -2056,6 +2069,9 @@ function triggerSimulateDelivery(mode = 'pipe') {
       isNew: true
     }
 
+    kpiData.pipeInstalledKm = Math.round((kpiData.pipeInstalledKm + kmDelta) * 100) / 100
+    kpiData.pipeStockKm = Math.max(0, Math.round((kpiData.pipeStockKm - kmDelta) * 100) / 100)
+    kpiData.pipeThreeDayGapKm = Math.max(0, Math.round(((kpiData.pipeThreeDayPlanKm || 0) - kpiData.pipeStockKm) * 100) / 100)
     secTarget.installedKm = Math.round(((parseFloat(secTarget.installedKm) || 0) + kmDelta) * 100) / 100
     if (secTarget.designKm > 0) {
       secTarget.installedPercent = Math.min(Math.round((secTarget.installedKm / secTarget.designKm) * 1000) / 10, 100)
@@ -2154,6 +2170,10 @@ async function loadRealData(isForce = false) {
         kpiData.pipeDesignKm = Number(res.kpi.pipeDesignKm || 0)
         kpiData.pipeShippedKm = Number(res.kpi.pipeShippedKm || 0)
         kpiData.pipeTransitKm = Number(res.kpi.pipeTransitKm || 0)
+        kpiData.pipeInstalledKm = Number(res.kpi.pipeInstalledKm || 0)
+        kpiData.pipeStockKm = Number(res.kpi.pipeStockKm || 0)
+        kpiData.pipeThreeDayPlanKm = Number(res.kpi.pipeThreeDayPlanKm || 0)
+        kpiData.pipeThreeDayGapKm = Number(res.kpi.pipeThreeDayGapKm || 0)
         kpiData.pipeDeliveredKm = Number(res.kpi.pipeDeliveredKm || 0)
         kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
         kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
@@ -2967,12 +2987,65 @@ onBeforeUnmount(() => {
   color: #10b981;
 }
 
+.highlight-purple .num,
+.purple-text {
+  color: #c084fc !important;
+}
+
 .highlight-gold .num {
   color: #fbbf24;
 }
 
 .highlight-orange .num {
   color: #f97316;
+}
+
+.metric-val.dual-val {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+.metric-val.dual-val .num {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+
+.metric-val.dual-val .sub-num {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.metric-val.dual-val .sep {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 1px;
+}
+
+.amber-text {
+  color: #fbbf24 !important;
+}
+
+.green-text {
+  color: #10b981 !important;
+}
+
+.red-text {
+  color: #f43f5e !important;
+}
+
+.gray-text {
+  color: #94a3b8 !important;
+}
+
+.alert-pulse {
+  animation: alertTextPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes alertTextPulse {
+  0%, 100% { opacity: 1; transform: scale(1); text-shadow: 0 0 6px rgba(244, 63, 94, 0.6); }
+  50% { opacity: 0.7; transform: scale(0.96); text-shadow: none; }
 }
 
 /* 飘字气泡 (Delta Bubble) */
@@ -5032,6 +5105,31 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .highlight-green .num {
   color: #059669;
+}
+
+.bigscreen-container.light .highlight-purple .num,
+.bigscreen-container.light .purple-text {
+  color: #9333ea !important;
+}
+
+.bigscreen-container.light .metric-val.dual-val .sep {
+  color: #94a3b8;
+}
+
+.bigscreen-container.light .amber-text {
+  color: #d97706 !important;
+}
+
+.bigscreen-container.light .green-text {
+  color: #059669 !important;
+}
+
+.bigscreen-container.light .red-text {
+  color: #e11d48 !important;
+}
+
+.bigscreen-container.light .gray-text {
+  color: #64748b !important;
 }
 
 .bigscreen-container.light .highlight-gold .num {
