@@ -5091,6 +5091,61 @@ def handle_update_fitting_usage_batch(
     )
 
 
+# -----------------------------------------------------------------------------
+# 📊 综合历史数据查询中心 API 接口
+# -----------------------------------------------------------------------------
+
+from backend.projects.insulation_pipe_supply_2026.services.comprehensive_history_service import (
+    query_daily_flow_history,
+    query_baseline_progress_history,
+    query_entity_directory,
+)
+
+
+@router.get("/comprehensive-history/daily-flow", summary="综合历史数据：每日全流程流转台账")
+def handle_comprehensive_daily_flow(
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    section_1_ids: Optional[str] = Query(None, description="标段ID（逗号分隔）"),
+    pipe_model_ids: Optional[str] = Query(None, description="保温管型号ID（逗号分隔）"),
+    material_type: str = Query("pipe", description="物料类型: pipe | fitting"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    sec_list = [s.strip() for s in section_1_ids.split(",") if s.strip()] if section_1_ids else None
+    model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    return query_daily_flow_history(
+        start_date=start_date,
+        end_date=end_date,
+        section_1_ids=sec_list,
+        pipe_model_ids=model_list,
+        material_type=material_type,
+    )
+
+
+@router.get("/comprehensive-history/baseline-progress", summary="综合历史数据：设计采购与基准量进度对照")
+def handle_comprehensive_baseline_progress(
+    section_1_ids: Optional[str] = Query(None, description="标段ID（逗号分隔）"),
+    pipe_model_ids: Optional[str] = Query(None, description="保温管型号ID（逗号分隔）"),
+    material_type: str = Query("pipe", description="物料类型: pipe | fitting"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    sec_list = [s.strip() for s in section_1_ids.split(",") if s.strip()] if section_1_ids else None
+    model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    return query_baseline_progress_history(
+        section_1_ids=sec_list,
+        pipe_model_ids=model_list,
+        material_type=material_type,
+    )
+
+
+@router.get("/comprehensive-history/entity-directory", summary="综合历史数据：责任主体与人员管辖速查矩阵")
+def handle_comprehensive_entity_directory(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    return query_entity_directory(PROJECT_KEY)
+
+
+
 
 
 

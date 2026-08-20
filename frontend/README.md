@@ -1,3 +1,226 @@
+## 2026-08-20 管件全周期流转与现场库存表表头精简化（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 将《管件全周期累计流转与现场库存表》表头中的“累计发货量 (件)”、“累计到货量 (件)”、“现场安装量 (件)”、“现场库存余量 (件)”统一精简为 **`累计发货量`**、**`累计到货量`**、**`现场安装量`**、**`现场库存余量`**；
+  - 汇总行与 Excel 导出表头同步对齐。
+
+## 2026-08-20 管件设计采购基准表单位数据库对齐与表头精简（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - “单位”字段严格使用数据库中原始单位（如“个”、“套”、“台”、“根”），不再强制转为“件”；
+  - 表头中的“设计使用量 (件)”、“计划采购量 (件)”统一去掉“(件)”，精简为 **`设计使用量`** 与 **`计划采购量`**，汇总行与 Excel 导出同步对齐。
+
+## 2026-08-20 数据表格列宽黄金比例与排版体系深度优化（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 结合实际文本内容长度与扫描视觉习惯，重构列宽黄金比例：
+    - `业务日期`：110px 居中等宽显示；
+    - `需求标段`：160px 左对齐加粗；
+    - `规格型号`：保温管 165px / 管件 220px 胶囊徽章呈现；
+    - `供货厂家`：140px 左对齐；
+    - `数值指标列`：统一 105~110px 右对齐，等宽数字字体 `tabular-nums` 纵向对齐；
+    - `进度条列`：160~170px 左对齐，图形与百分比饱满呼应。
+
+## 2026-08-20 数据表格列宽硬性保障与防串行优化（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 为 `业务日期`（min-width: 120px）、`需求标段`（min-width: 200px）、`规格型号`（min-width: 170px）、`供货厂家`（min-width: 160px）等核心维度列设置专属最小列宽和 `white-space: nowrap`；
+  - 表格容器开启平滑自适应双向滚动（`overflow-x: auto; overflow-y: auto;`），彻底杜绝多列与窄屏下的内容换行与行错位。
+
+## 2026-08-20 综合数据查询中心排版规范化与视觉体系重构（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 规范化三大主 Tab 与各子标签页的递进排版逻辑（主 Tab ➔ 物料子类 ➔ 报表子视图 ➔ KPI 指标看板 ➔ 透视明细数据表）；
+  - KPI 看板统一为规范的 6 列等高自适应网格，数值统一等宽数字字体并增强悬浮动效；
+  - 响应式多端断点优化，表格工具栏与聚合维度选择器在各子标签下表现高度一致。
+
+## 2026-08-20 子品类切换标签文案精简化（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - Tab 1 与 Tab 2 的子品类切换按钮文字中的括号说明全面移除，统一精简为 **`🔥 保温管`** 与 **`🔧 管件`**。
+
+## 2026-08-20 管件“设计基准表”与“累计流转表”双表独立查询架构（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 在 Tab 2（设计采购与基准量进度）选择管件时，彻底解耦为两个独立的子查询表：
+    1. **【📐 管件设计与计划采购基准表】**：展示标段、管件标准名、主规格、子规格、单位（件）、设计使用量与计划采购量；
+    2. **【🚚 管件全周期累计流转与现场库存表】**：展示标段、供货厂家、物料名称、现场填报规格、单位（件）、累计发货量、累计到货量、现场安装量与现场库存余量；
+  - 提供现代化的快捷子视图切换胶囊 `[ 📐 基准表 ]` vs `[ 🚚 流转表 ]`，多维聚合透视、行计数、合计行与 Excel 导出均独立自适应联动。
+
+## 2026-08-20 管件统计单位全局统一为“件”（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 顶部管件 KPI 看板中，“总设计管件数”、“计划采购总数”、“累计已发货”、“累计已到货”、“累计已安装”、“现场可用库存”等指标的单位全部统一为 **`件`**；
+  - 表格列头（设计量、计划采购量、发货量、到货量、安装量、入库量、现场结余等）统一更新为 `(件)`；
+  - Excel 导出表头同步对齐为 `(件)`。
+
+## 2026-08-20 页面名称与路由Key全面升级（comprehensive_query）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+- **变更详情**：
+  - 页面注册 key 正式变更为 `comprehensive_query`；
+  - 页面名称在页面选择卡片、头部导航与路由标题中统一为 **`综合数据查询中心`**；
+  - 路由访问路径全面升级为 `/projects/insulation_pipe_supply_2026/pages/comprehensive_query`，并对历史路径保留自动兼容。
+
+## 2026-08-20 面包屑导航与工作台返回路由修复（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **路由与导航修复**：
+  1. **面包屑标准三级对齐**：原有的 2 级跳转路径 `/projects/insulation_pipe_supply_2026` 无法正常打开工作台；现统一重构为标准三级导航：
+     - `项目选择 (/projects)` ➔ `2026年度保温管物流链管理系统 (/projects/insulation_pipe_supply_2026/pages)` ➔ `综合数据查询中心`；
+  2. **返回按钮修复**：右上角返回按钮路由同步指向 `/projects/insulation_pipe_supply_2026/pages`。
+
+## 2026-08-20 全局 KPI 看板极简重构（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **视觉与排版精简**：
+  - 彻底移除了 Tab 1 与 Tab 2 全部 KPI 卡片内的辅助副标题（如“设计基准”、“采购批复”、“施工安装基准”、“在途与妥投”等）；
+  - 卡片高度与版面全面紧凑化，聚焦核心指标数据与单位呈现。
+
+## 2026-08-20 KPI 卡片文案精简与统一（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **文案优化**：
+  - 将 Tab 2（基准进度）顶部的 `📥 累计已到货 (保障率)` 统一精简为 **`📥 累计已到货`**；
+  - 同步精简保温管与管件看板中相关的标签描述，使卡片视觉整洁清爽。
+
+## 2026-08-20 极简聚合维度下拉选择器升级与显示层级修复（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **核心模块与体验优化**：
+  1. **修复下拉面板裁剪与点击响应（`pivot-dropdown-wrap`）**：
+     - 将 `.table-card` 裁剪属性调整为 `overflow: visible`，解除父容器对绝对定位下拉浮层的切除阻断；
+     - 增加全屏点击关闭遮罩 `.pivot-backdrop` 并拦截冒泡，确保点击胶囊按钮 100% 顺畅唤出浮层；
+  2. **表格内置极简聚合下拉列表（`pivot-dropdown-wrap`）**：
+     - 将原先占用垂直空间的大块卡片完全替换为表格工具栏右侧的紧凑胶囊按钮 `🎛️ 聚合维度: [ 1.型号 ➔ 2.日期 ▾ ]`；
+     - 展开后展示清晰的有序勾选列表（点击按先后次序自动赋予分组层级序号 `1`、`2`...），并配有微调升降级按钮 `↑` `↓` 与常用快捷方案；
+     - 手机端自动以底部半屏抽屉形式展开，支持单手点击与即时聚合；
+  3. **Tab 2 管件发货列全量对齐**：
+     - 表格补充 `累计发货 (个)` 列与顶部发货 KPI 卡片，Excel 导出同步输出。
+
+## 2026-08-20 多维透视聚合计算引擎与动态层级控制器全面上线（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **核心模块与功能升级**：
+  1. **多维透视聚合控制器（`pivot-control-card`）**：
+     - **Tab 1（每日历史流转台账）**：自由组合 【📅 业务日期】、【🏗️ 需求标段】、【📐 规格型号】、【🏭 供货厂家】，支持自由调序与勾选；
+     - **Tab 2（基准量进度对照）**：自由组合 【🏗️ 需求标段】、【📐 规格型号】、【🏭 供货厂家】；
+     - **快捷透视预设**：一键直达 `🌟 型号➔日期 (标段全合并)`、`🌟 全网型号总览 (标段合计)` 等典型分析模式；
+  2. **高精度前端动态聚合引擎**：
+     - `aggregatedDailyRows` 与 `aggregatedBaselineRows` 响应式计算属性，根据选定维度实时聚合求和；
+     - 未激活维度自动 SUM 合并，比率指标（采购完成率、安装完成率）按聚合总量重算；
+  3. **表格与 Excel 导出自适应**：
+     - 表格列头、单元格与 Excel 导出均严格跟随当前透视维度结构。
+
+## 2026-08-20 标签页栏与子分类栏手机端零溢出 3 等分网格重构（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **溢出痛点解决**：
+  1. **主 Tab 栏响应式文案与 3 等分网格**：
+     - 手机端文字自适应精简为：`📅 每日流转`、`📐 基准进度`、`🏢 责任主体`；
+     - 容器采用 `grid-template-columns: repeat(3, 1fr)` 3 等分网格，100% 紧密贴合手机屏幕边界，零溢出、零超出右侧；
+  2. **Tab 3 子分类胶囊栏 3 列网格排布**：6 大分类在手机端转为 2 行 3 列紧凑网格，居中对齐；
+  3. **页面级防溢出**：外层容器设置 `overflow-x: hidden; width: 100%; max-width: 100vw;`，杜绝任何水平横滑晃动。
+
+## 2026-08-20 标段穿透视图移动端脱胎换骨重构（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **移动端痛点重构**：
+  1. **标段折叠手风琴**：卡片支持点击头部随时展开/收起，顶部提供一键展开/折叠全部标段功能；
+  2. **扁平化名片行**：彻底移除厚重沉闷的多层灰盒子，手机端转为白色极简名片行（左侧角色/企业/人名，右侧高亮蓝色拨号复制胶囊）；
+  3. **CSS 媒体查询架构修正**：将所有移动端覆盖规则规范置于样式表最底端，确保移动端呈现 100% 精准清爽。
+  6. **弹窗流转链 2 列排布**：每日流转 6 节点链条在手机端转为 2 列网格卡片，排版清爽自然。
+
+## 2026-08-20 全网统筹与指挥观察人员板块增加“供给侧全局管理”（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **功能升级**：
+  1. **4 大全网全局角色支柱**：在“按标段综合穿透”视图底部，将全局角色卡片扩展为 4 列独立区域：集团现场总调度（王玮/李绍/张亮）、**供给侧全局管理（吴近 · 能源集团保温管厂）**、物资总库管理（左巨）、系统管理与指挥观察（admin/观察员）；
+  2. **一键拨号与穿透**：吴近个人卡片配备带徽章的真实手机号（13998473933）并支持一键复制到剪贴板。
+
+## 2026-08-20 责任主体矩阵供货厂家标段归属严密性修正（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **业务逻辑修正**：
+  1. **未分配标段严格判定**：未在 `tube_config.json` 中指定具体标段的供给侧主体（如吴近 · 能源集团保温管厂），展示为 `暂未分配供应标段`，不再作为任何标段的供货商；
+  2. **按标段穿透卡片纯净化**：各标段卡片只展示真正配置了该标段的供货厂家（如开元、鑫瑞得、沃圣），未分配标段的主体绝不出现；
+  3. **配置驱动即时响应**：未来只要在配置文件中添加具体标段，系统将实时动态归入对应标段。
+
+## 2026-08-20 综合数据查询中心责任主体矩阵升级：上线“按标段综合穿透”与“按主体类别分组”双视图切换（HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **双视图交互与功能说明**：
+  1. **顶栏 Segmented Switcher 模式切换**：
+     - **🏢 按主体类别分组**：按 供货厂家 ➔ 现场负责人 ➔ 施工单位 ➔ 物资库管 ➔ 系统管理 5 大业务面板折叠展示；
+     - **🏗️ 按标段综合穿透**：按项目 10 个标段卡片化展示，每个标段卡片内部以 4 列标准网格直接穿透列示该标段的供货厂家、现场负责人、施工单位、物资库管，一站式查清标段全套班组；
+  2. **🌐 全局统筹与指挥观察人员**：在标段视图底部专门展示集团现场总调度（王玮、李绍、张亮）、物资总库（左巨）以及系统超管与观察员；
+  3. **一键穿透与电话复制**：所有人名与联系人均配备带徽章的真实手机号并支持一键复制到剪贴板；
+  4. **Excel 导出智能排版**：按标段视图下导出的 Excel 表格自动切换为按标段穿透 4 大角色的专业台账结构。
+
+## 2026-08-20 高温水1-4标段球阀基准数据同步呈现（GlobalManagementView.vue & HistoryQueryView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`（全局管理与基准量预设）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **数据联动与交互说明**：
+  1. **全局管理视图（Tab 5 管件基准量）**：动态从 `tube.tube_fitting_baseline` 载入最新 1-4 标段高温水直埋/焊接球阀（49条）及全量 1173 条物料基准，支持 RevoGrid 行内直接查看阀柄高度、压力等级、设计量与计划采购量；
+  2. **综合查询中心（Tab 2 基准与进度对照）**：高温水 1、2、3、4 标段球阀基准量自动实时对齐最新数据库设计量与采购量，保障率与进度对比精准无误。
+
+## 2026-08-20 综合数据查询中心升级：落地每日流转6节点台账、设计采购基准进度对比与责任主体管辖速查（HistoryQueryView.vue）
+
+- **关联前端组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+- **核心功能与架构升级**：
+  1. **全局智能多选筛选栏（标准 4 列等高网格排版，杜绝串行）**：
+     - **标段多选**：支持一键全选、清空与多标段自由勾选组合；
+     - **物料型号多选**：保温管管径多选、管件类型/规格关键字检索；
+     - **快捷日期胶囊**：`全部周期` · `近7天` · `近30天` 及自定义起止日期；
+     - **全局模糊速搜**：车牌、单号、人名、电话、备注一键搜索；
+     - **已选 Chips 标签栏**：即时呈现已勾选的条件标签，支持一键单项移除；
+  2. **📅 Tab 1: 每日历史综合流转台账（`Daily Flow Ledger`）**：
+     - **🔥 保温管**：穿透 `计划量 ➔ 供给发货 ➔ 现场到货 ➔ 施工接收 ➔ 现场使用 ➔ 库管入库` 6 大闭环节点与在途时长，支持点击行弹窗穿透分型号明细；
+     - **🔧 管件**：5 大节点台账（发货、到货、接收、安装、入库）与现场动态结余库存（`到货 - 安装`）；
+     - **开会秒读看板**：顶部大字展示时段内总计划、总发货、总到货、总接收、总使用、总入库、履约率与转化率；
+  3. **📐 Tab 2: 设计采购与基准量进度对照（`Baseline & Progress Ledger`）**：
+     - **🔥 保温管**：标段 ➔ 型号 ➔ 设计使用量 vs 计划采购量 vs 累计已发 vs 累计到货 vs 累计安装 vs 现场库存，配备**双色可视化进度条**（采购完成率 + 施工进度率）；
+     - **🔧 管件**：7 大标准类型与规格的设计采购基准对比与保障率分析；
+  4. **🏢 Tab 3: 责任主体与人员管辖速查矩阵（`Entities & Accounts Directory`）**：
+     - 全量补齐 55 个条目：4 家供货厂家、10 个需求标段单位、29 位现场主管经理、10 位物资库管员（含真实电话）与系统管理员；
+     - 彻底精炼卡片结构（去重），提供 6 大分类 Pills 快速切换与标段联动过滤；
+  5. **📥 商业级 Excel 高规格导出（`xlsx-js-style`）**：
+     - 各 Tab 均支持一键导出带深蓝灰商务表头（`#334155`）、斑马底色、全表格细边框、数值居右加粗的正式报表。
+  5. **📥 商业级 Excel 高规格导出（`xlsx-js-style`）**：
+     - 各 Tab 均支持一键导出带深蓝灰商务表头（`#334155`）、斑马底色、全表格细边框、数值居右加粗的正式报表。
+
 ## 2026-08-20 库管台账保温管发货记录支持按车次合并展示与高规格Excel单元格合并/美化导出（WarehouseManagementView.vue）
 
 - **关联前端页面**：

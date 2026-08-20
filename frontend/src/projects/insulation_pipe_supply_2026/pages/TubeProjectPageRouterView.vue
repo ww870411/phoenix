@@ -38,7 +38,8 @@ const pageKey = computed(() => String(route.params.pageKey || '').trim())
 const pageComponentMap = {
   dashboard: DashboardView,
   big_screen: BigScreenDashboardView,
-  history_query: HistoryQueryView,
+  comprehensive_query: HistoryQueryView,
+  history_query: HistoryQueryView, // 兼容历史路由
   gis_map: GisMapView,
   global_management: GlobalManagementView,
   demand_management: DemandManagementView,
@@ -49,7 +50,8 @@ const pageComponentMap = {
 const pageTitleMap = {
   dashboard: '全局数据看板',
   big_screen: '数字指挥大屏',
-  history_query: '历史数据查询',
+  comprehensive_query: '综合数据查询中心',
+  history_query: '综合数据查询中心',
   gis_map: '焊口与表计 GIS 地图标注',
   global_management: '全局管理入口',
   demand_management: '需求侧管理入口',

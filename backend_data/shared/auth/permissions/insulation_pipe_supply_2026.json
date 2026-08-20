@@ -5,6 +5,7 @@
       "page_access": [
         "big_screen",
         "dashboard",
+        "comprehensive_query",
         "history_query",
         "gis_map",
         "global_management",
@@ -35,6 +36,7 @@
         "big_screen",
         "dashboard",
         "supply_management",
+        "comprehensive_query",
         "history_query"
       ],
       "sheet_rules": {},
@@ -60,6 +62,7 @@
         "big_screen",
         "dashboard",
         "supply_management",
+        "comprehensive_query",
         "history_query"
       ],
       "sheet_rules": {},
@@ -85,6 +88,7 @@
         "big_screen",
         "dashboard",
         "demand_management",
+        "comprehensive_query",
         "history_query"
       ],
       "sheet_rules": {},
@@ -110,6 +114,7 @@
         "big_screen",
         "dashboard",
         "demand_management",
+        "comprehensive_query",
         "history_query"
       ],
       "sheet_rules": {},
@@ -135,6 +140,7 @@
         "big_screen",
         "dashboard",
         "warehouse_management",
+        "comprehensive_query",
         "history_query"
       ],
       "sheet_rules": {},
@@ -159,6 +165,7 @@
       "page_access": [
         "big_screen",
         "dashboard",
+        "comprehensive_query",
         "history_query",
         "supply_management",
         "demand_management",

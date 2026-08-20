@@ -158,7 +158,8 @@ function getCurrentPageName() {
       warehouse_management: '仓库到货管理',
       global_management: '全局大盘配置',
       gis_map: 'GIS地图看板',
-      history_query: '历史综合查询',
+      comprehensive_query: '综合数据查询中心',
+      history_query: '综合数据查询中心',
       analysis: '数据分析看板',
       approval: '数据审核',
     }

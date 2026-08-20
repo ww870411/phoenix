@@ -334,6 +334,8 @@ export async function getTubeDemandManagementOptions(projectKey = 'insulation_pi
   return response.json()
 }
 
+export const fetchTubeConfig = getTubeDemandManagementOptions
+
 export async function getTubeDemandManagementBaseline(projectKey, section1Id) {
   const params = new URLSearchParams({ section_1_id: String(section1Id || '') })
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/baseline?${params.toString()}`, {
@@ -2741,6 +2743,64 @@ export async function updateTubeFittingUsageBatch(projectKey, payload) {
   }
   return response.json()
 }
+
+// -----------------------------------------------------------------------------
+// 📊 综合历史数据查询中心 API
+// -----------------------------------------------------------------------------
+
+export async function getComprehensiveDailyFlow(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const searchParams = new URLSearchParams()
+  if (params.startDate) searchParams.set('start_date', params.startDate)
+  if (params.endDate) searchParams.set('end_date', params.endDate)
+  if (params.section1Ids && params.section1Ids.length) {
+    searchParams.set('section_1_ids', Array.isArray(params.section1Ids) ? params.section1Ids.join(',') : params.section1Ids)
+  }
+  if (params.pipeModelIds && params.pipeModelIds.length) {
+    searchParams.set('pipe_model_ids', Array.isArray(params.pipeModelIds) ? params.pipeModelIds.join(',') : params.pipeModelIds)
+  }
+  if (params.materialType) searchParams.set('material_type', params.materialType)
+
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/comprehensive-history/daily-flow?${searchParams.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取每日综合流转数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getComprehensiveBaselineProgress(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const searchParams = new URLSearchParams()
+  if (params.section1Ids && params.section1Ids.length) {
+    searchParams.set('section_1_ids', Array.isArray(params.section1Ids) ? params.section1Ids.join(',') : params.section1Ids)
+  }
+  if (params.pipeModelIds && params.pipeModelIds.length) {
+    searchParams.set('pipe_model_ids', Array.isArray(params.pipeModelIds) ? params.pipeModelIds.join(',') : params.pipeModelIds)
+  }
+  if (params.materialType) searchParams.set('material_type', params.materialType)
+
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/comprehensive-history/baseline-progress?${searchParams.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取设计采购基准量与进度失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getComprehensiveEntityDirectory(projectKey) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/comprehensive-history/entity-directory`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取责任主体与人员管辖速查矩阵失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 
 
 

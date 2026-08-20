@@ -1,3 +1,74 @@
+## 2026-08-20 保温管基准进度台账返回值与统计修复（comprehensive_history_service.py）
+
+- **业务规则与服务调整**：
+  - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - 数据表：`tube.tube_pipe_baseline`、`tube.tube_delivery`、`tube.tube_daily_usage`
+- **核心改动**：
+  - 修复 `_query_pipe_baseline_progress` 函数中的汇总统计计算与结果返回语句；
+  - 确保返回 114 项保温管设计使用量、采购量、发货量、到货量、使用量与库存量数据，并带 `pipe_model_name`。
+
+## 2026-08-20 管件基准与流转双表独立统计架构（comprehensive_history_service.py）
+
+- **业务规则与服务调整**：
+  - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - 数据表：`tube.tube_fitting_baseline`、`tube.tube_fitting_delivery`、`tube.tube_fitting_daily_usage`
+- **核心改动**：
+  - 将管件基准查询与流转查询彻底解耦：
+    1. `baseline_items`：严格从基准库查询设计使用量与计划采购量（排除 unit='米' 后共 1,169 行，设计量 69,650 件，采购量 63,415 件）；
+    2. `flow_items`：严格从现场流转记录统计累计发货、累计到货、现场安装与库存余量（共 15 行真实流转数据）；
+  - 杜绝因现场填报品名规格与图纸基准微小偏差造成的错位与空缺。
+
+## 2026-08-20 管件统计中按计量单位 unit='米' 排除设计量与计划采购量（comprehensive_history_service.py）
+
+- **业务规则与服务调整**：
+  - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - 数据表：`tube.tube_fitting_baseline`
+- **核心改动**：
+  - 在管件基准量查询 `_query_fitting_baseline_progress` 中，将判断条件优化为 `TRIM(unit) = '米' OR LOWER(TRIM(unit)) = 'm'`，精准排除长度类物料的设计量与采购量；
+  - 真正管件物料（个、台、套、根）的设计总量保持为 **`69,650 个`**，计划采购量为 **`63,415 个`**。
+
+## 2026-08-20 管件流转台账与基准进度发货量统计修复（comprehensive_history_service.py）
+
+- **服务模块与数据修复**：
+  - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - 数据表：`tube.tube_fitting_delivery`、`tube.tube_fitting_baseline`
+- **核心修复项**：
+  1. **移除不存在的 `received_qty` 字段**：修复 `_query_fitting_daily_flow` 中因不存在该列导致的 SQL 500 报错；
+  2. **Tab 2 补齐管件累计发货量统计**：`_query_fitting_baseline_progress` 引入 `s` CTE 计算 `total_shipped_qty`，并在 summary 与 items 中输出；
+  3. **数据格式清洗归一化**：清除 `model_spec` 历史数据中的换行符与多余空格，确保与基准表 100% 关联匹配。
+
+## 2026-08-20 高温水1-4标段球阀基准数据全量精准更新（tube.tube_fitting_baseline）
+
+- **数据表与服务定位**：
+  - 核心数据表：`tube.tube_fitting_baseline`（PostgreSQL）
+  - 执行脚本：`scratch/import_ball_valves_20260820.py`
+  - 安全备份：`backend_data/projects/insulation_pipe_supply_2026/backup_ball_valves_high_lot_1_2_20260820.json`
+- **更新内容与数据流转**：
+  1. **旧数据安全归档与清理**：在数据库事务中，先将原 `high_lot_1`（8条）和 `high_lot_2`（6条）共 14 条旧高温水球阀数据备份并清理；
+  2. **标准化 22 维参数提取**：解析《8.20 高温水1.2.3.4标球阀数量（额外）.xlsx》，提取标段、高温水系统、标准名称（直埋焊接球阀/焊接球阀）、型号规格（DN1100~DN25）、阀柄高度（如 2.2米、1.5米等子型号）、主径DN、阀门型号（Q361F-25/Q61F-25）、公称压力（PN2.5）、设计使用量与计划采购量；
+  3. **批量 UPSERT 入库**：
+     - `high_lot_1`：8 条（31.00 套）
+     - `high_lot_2`：7 条（30.00 套）
+     - `high_lot_3`：18 条（122.00 套）
+     - `high_lot_4`：16 条（120.00 套）
+     - 全表总行数升至 1173 行，联合唯一约束 100% 满足无冲突。
+
+## 2026-08-20 综合数据查询中心多维数据聚合服务与路由（comprehensive_history_service.py）
+
+- **新增服务与路由**：
+  - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - `GET /projects/{project_key}/comprehensive-history/daily-flow`
+  - `GET /projects/{project_key}/comprehensive-history/baseline-progress`
+  - `GET /projects/{project_key}/comprehensive-history/entity-directory`
+- **核心聚合算法与能力**：
+  1. **每日流转全节点闭环（`query_daily_flow_history`）**：
+     - 保温管：通过 `WITH` 语法统一关联 `tube.tube_daily_plan`、`tube.tube_delivery`、`tube.tube_daily_usage`，汇聚出 `计划量`、`发货量`、`确认到货量`、`施工接收量`、`现场使用量`、`损耗量`、`库管确认量` 6 大闭环节点与在途时长；
+     - 管件：多源聚合管件发货、到货、接收、安装及现场结余库存；
+  2. **设计采购基准与进度对照（`query_baseline_progress_history`）**：
+     - 对比 `tube.tube_pipe_baseline` / `tube.tube_fitting_baseline` 的设计量、计划采购量与全周期累计发货、到货、使用量，实时计算采购到货完成率与施工安装率；
+  3. **责任主体与人员管辖速查（`query_entity_directory`）**：
+     - 融合 `supply_entities`、`demand_entities`、`construction_units`、`manager_assignments` 及 `账户信息.json`，结构化输出各主体联系人、电话与管辖范围。
+
 ## 2026-08-20 权限体系审计与全局角色层级补齐（backend_data/shared/auth/permissions/）
 
 - **关联配置文件**：
