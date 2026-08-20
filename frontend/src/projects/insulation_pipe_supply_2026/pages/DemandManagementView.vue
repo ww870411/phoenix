@@ -923,106 +923,242 @@
               <span>⚠️ <strong>单日填报已锁定</strong>：当前标段在【{{ usageDate }}】已完成管件安装使用量填报（已记账）。单日仅允许提交一次，如需重新填报，请在下方【管件现场安装使用历史台账】中点击【撤回】后重新填报。</span>
             </div>
 
-            <!-- 动态库存与可视化填报表 -->
-            <div v-else class="table-wrap fitting-baseline-table-wrap" style="margin-top: 14px; max-height: 580px;">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
-                    <th style="min-width: 100px; text-align: center; white-space: nowrap;">名称</th>
-                    <th style="min-width: 180px; white-space: nowrap;">到货型号规格</th>
-                    <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">单位</th>
-                    <th style="min-width: 140px; white-space: nowrap;">库存量</th>
-                    <th style="min-width: 180px; white-space: nowrap;">本日使用量</th>
-                    <th style="min-width: 140px; white-space: nowrap;">备注</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr 
-                    v-for="(item, idx) in filteredFittingInventoryItems" 
-                    :key="getItemKey(item)"
-                    :class="{ 'row-has-input': (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0 }"
-                  >
-                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11.5px;">
-                      {{ idx + 1 }}
-                    </td>
-                    <td class="cell-text" style="text-align: center;">
-                      <span class="fitting-type-badge">{{ item.fitting_type }}</span>
-                    </td>
-                    <td class="cell-text font-mono" style="font-weight: 600; color: #1e293b;">
-                      {{ item.model_spec }}
-                    </td>
-                    <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #64748b; font-size: 12px;">
-                      {{ item.unit }}
-                    </td>
-                    <td class="cell-text">
-                      <div class="stock-progress-cell">
-                        <div class="stock-stat-text">
-                          <span>已用: <strong style="color: #059669;">{{ item.used_qty }}</strong></span>
-                          <span>库存剩余: <strong :style="{ color: item.stock_qty > 0 ? '#2563eb' : '#dc2626' }">{{ item.stock_qty }}</strong> {{ item.unit }}</span>
+            <!-- 动态库存与可视化填报表 (电脑端表格 + 移动端卡片自适应) -->
+            <div v-else class="fitting-usage-content-body" style="margin-top: 14px;">
+              <!-- 🖥️ 电脑端高密度表格视图 (大屏幕显示，手机端隐藏) -->
+              <div class="table-wrap fitting-baseline-table-wrap desktop-fitting-table-view" style="max-height: 580px;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                      <th style="min-width: 100px; text-align: center; white-space: nowrap;">名称</th>
+                      <th style="min-width: 180px; white-space: nowrap;">到货型号规格</th>
+                      <th style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; white-space: nowrap;">单位</th>
+                      <th style="min-width: 140px; white-space: nowrap;">库存量</th>
+                      <th style="min-width: 180px; white-space: nowrap;">本日使用量</th>
+                      <th style="min-width: 140px; white-space: nowrap;">备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr 
+                      v-for="(item, idx) in filteredFittingInventoryItems" 
+                      :key="getItemKey(item)"
+                      :class="{ 'row-has-input': (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0 }"
+                    >
+                      <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11.5px;">
+                        {{ idx + 1 }}
+                      </td>
+                      <td class="cell-text" style="text-align: center;">
+                        <span class="fitting-type-badge">{{ item.fitting_type }}</span>
+                      </td>
+                      <td class="cell-text font-mono" style="font-weight: 600; color: #1e293b;">
+                        {{ item.model_spec }}
+                      </td>
+                      <td class="cell-text" style="width: 36px; min-width: 36px; max-width: 36px; padding: 6px 2px; text-align: center; color: #64748b; font-size: 12px;">
+                        {{ item.unit }}
+                      </td>
+                      <td class="cell-text">
+                        <div class="stock-progress-cell">
+                          <div class="stock-stat-text">
+                            <span>已用: <strong style="color: #059669;">{{ item.used_qty }}</strong></span>
+                            <span>库存剩余: <strong :style="{ color: item.stock_qty > 0 ? '#2563eb' : '#dc2626' }">{{ item.stock_qty }}</strong> {{ item.unit }}</span>
+                          </div>
+                          <div class="stock-progress-bar-bg">
+                            <div class="stock-progress-bar-used" :style="{ width: `${item.usage_rate_pct}%` }"></div>
+                          </div>
                         </div>
-                        <div class="stock-progress-bar-bg">
-                          <div class="stock-progress-bar-used" :style="{ width: `${item.usage_rate_pct}%` }"></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="cell-text">
-                      <div v-if="item.stock_qty > 0" class="usage-input-control-group">
-                        <div class="stepper-wrap">
-                          <button 
-                            type="button" 
-                            class="step-btn" 
-                            :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) <= 0"
-                            @click="adjustFittingUsageQty(item, -1)"
-                          >-</button>
+                      </td>
+                      <td class="cell-text">
+                        <div v-if="item.stock_qty > 0" class="usage-input-control-group">
+                          <div class="stepper-wrap">
+                            <button 
+                              type="button" 
+                              class="step-btn" 
+                              :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) <= 0"
+                              @click="adjustFittingUsageQty(item, -1)"
+                            >-</button>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              :max="item.stock_qty" 
+                              v-model.number="getFormItem(item).qty" 
+                              class="qty-input"
+                              :disabled="hasSubmittedFittingUsageToday"
+                              @blur="validateFittingUsageQty(item)"
+                            />
+                            <button 
+                              type="button" 
+                              class="step-btn" 
+                              :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) >= item.stock_qty"
+                              @click="adjustFittingUsageQty(item, 1)"
+                            >+</button>
+                          </div>
                           <input 
-                            type="number" 
+                            type="range" 
                             min="0" 
                             :max="item.stock_qty" 
                             v-model.number="getFormItem(item).qty" 
-                            class="qty-input"
+                            class="usage-slider"
+                            :disabled="hasSubmittedFittingUsageToday"
+                          />
+                          <button 
+                            v-if="!hasSubmittedFittingUsageToday && (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0"
+                            type="button" 
+                            class="quick-clear-btn"
+                            @click="clearFittingUsageItem(item)"
+                            title="清零"
+                          >✕</button>
+                        </div>
+                        <div v-else style="color: #ef4444; font-size: 12px; font-weight: 500;">
+                          ⚠️ 现场已无结存库存
+                        </div>
+                      </td>
+                      <td class="cell-text">
+                        <input 
+                          type="text" 
+                          v-model="getFormItem(item).remark"
+                          placeholder="备注" 
+                          class="text-input-compact"
+                          :disabled="hasSubmittedFittingUsageToday || item.stock_qty <= 0"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- 📱 手机端触控卡片流视图 (手机屏幕展示，电脑端隐藏) -->
+              <div class="mobile-fitting-cards-view">
+                <div 
+                  v-for="(item, idx) in filteredFittingInventoryItems" 
+                  :key="getItemKey(item)"
+                  class="fitting-mobile-card"
+                  :class="{ 
+                    'card-has-input': (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0,
+                    'card-out-of-stock': item.stock_qty <= 0 
+                  }"
+                >
+                  <!-- 顶部信息行：序号、类型、规格、单位与已填徽章 -->
+                  <div class="fmc-header">
+                    <div class="fmc-title-left">
+                      <span class="fmc-idx">#{{ idx + 1 }}</span>
+                      <span class="fitting-type-badge">{{ item.fitting_type }}</span>
+                      <span class="fmc-spec font-mono">{{ item.model_spec }}</span>
+                    </div>
+                    <div class="fmc-header-right">
+                      <span v-if="(fittingUsageForm[getItemKey(item)]?.qty || 0) > 0" class="fmc-filled-badge">
+                        已填 {{ fittingUsageForm[getItemKey(item)]?.qty }} {{ item.unit }}
+                      </span>
+                      <span class="fmc-unit-chip">{{ item.unit }}</span>
+                    </div>
+                  </div>
+
+                  <!-- 中部：现场库存与进度指示 -->
+                  <div class="fmc-stock-panel">
+                    <div class="fmc-stock-grid">
+                      <div class="fmc-stock-box">
+                        <span class="fmc-stock-lbl">累计已安装</span>
+                        <div class="fmc-stock-val text-emerald">
+                          <strong>{{ item.used_qty }}</strong> <span class="unit">{{ item.unit }}</span>
+                        </div>
+                      </div>
+                      <div class="fmc-stock-box highlight-box" :class="item.stock_qty > 0 ? 'box-blue' : 'box-danger'">
+                        <span class="fmc-stock-lbl">现场可用库存</span>
+                        <div class="fmc-stock-val" :class="item.stock_qty > 0 ? 'text-blue' : 'text-danger'">
+                          <strong>{{ item.stock_qty }}</strong> <span class="unit">{{ item.unit }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="stock-progress-bar-bg" style="margin-top: 6px;">
+                      <div class="stock-progress-bar-used" :style="{ width: `${item.usage_rate_pct}%` }"></div>
+                    </div>
+                  </div>
+
+                  <!-- 下部：触控填报控件区 -->
+                  <div class="fmc-action-panel">
+                    <div v-if="item.stock_qty > 0" class="fmc-control-wrapper">
+                      <!-- 填报量头部与一键填满/清零操作 -->
+                      <div class="fmc-action-top-row">
+                        <span class="fmc-action-heading">
+                          本日使用量: 
+                          <strong style="color: #2563eb; font-size: 15px;">{{ getFormItem(item).qty || 0 }}</strong> {{ item.unit }}
+                        </span>
+                        <div class="fmc-quick-btn-group">
+                          <button 
+                            type="button" 
+                            class="fmc-btn-quick max"
+                            :disabled="hasSubmittedFittingUsageToday"
+                            @click="setFittingUsageMax(item)"
+                          >
+                            全部用完 ({{ item.stock_qty }})
+                          </button>
+                          <button 
+                            v-if="!hasSubmittedFittingUsageToday && (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0"
+                            type="button" 
+                            class="fmc-btn-quick clear"
+                            @click="clearFittingUsageItem(item)"
+                          >
+                            清零
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- 大触控步进器 + 手指滑块 -->
+                      <div class="fmc-stepper-control-row">
+                        <div class="fmc-touch-stepper">
+                          <button 
+                            type="button" 
+                            class="fmc-touch-btn minus" 
+                            :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) <= 0"
+                            @click="adjustFittingUsageQty(item, -1)"
+                          >−</button>
+                          <input 
+                            type="number" 
+                            inputmode="numeric"
+                            min="0" 
+                            :max="item.stock_qty" 
+                            v-model.number="getFormItem(item).qty" 
+                            class="fmc-touch-input"
                             :disabled="hasSubmittedFittingUsageToday"
                             @blur="validateFittingUsageQty(item)"
                           />
                           <button 
                             type="button" 
-                            class="step-btn" 
+                            class="fmc-touch-btn plus" 
                             :disabled="hasSubmittedFittingUsageToday || (fittingUsageForm[getItemKey(item)]?.qty || 0) >= item.stock_qty"
                             @click="adjustFittingUsageQty(item, 1)"
                           >+</button>
                         </div>
+                        <div class="fmc-touch-slider-wrap">
+                          <input 
+                            type="range" 
+                            min="0" 
+                            :max="item.stock_qty" 
+                            v-model.number="getFormItem(item).qty" 
+                            class="fmc-touch-slider"
+                            :disabled="hasSubmittedFittingUsageToday"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- 选填备注 -->
+                      <div class="fmc-remark-row">
                         <input 
-                          type="range" 
-                          min="0" 
-                          :max="item.stock_qty" 
-                          v-model.number="getFormItem(item).qty" 
-                          class="usage-slider"
+                          type="text" 
+                          v-model="getFormItem(item).remark"
+                          placeholder="选填备注（如安装部位、班组等）" 
+                          class="fmc-touch-remark"
                           :disabled="hasSubmittedFittingUsageToday"
                         />
-                        <button 
-                          v-if="!hasSubmittedFittingUsageToday && (fittingUsageForm[getItemKey(item)]?.qty || 0) > 0"
-                          type="button" 
-                          class="quick-clear-btn"
-                          @click="clearFittingUsageItem(item)"
-                          title="清零"
-                        >✕</button>
                       </div>
-                      <div v-else style="color: #ef4444; font-size: 12px; font-weight: 500;">
-                        ⚠️ 现场已无结存库存
-                      </div>
-                    </td>
-                    <td class="cell-text">
-                      <input 
-                        type="text" 
-                        v-model="getFormItem(item).remark"
-                        placeholder="备注" 
-                        class="text-input-compact"
-                        :disabled="hasSubmittedFittingUsageToday || item.stock_qty <= 0"
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+
+                    <div v-else class="fmc-no-stock-tip">
+                      <span>⚠️ 现场已无结存库存，无法登记安装量</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- 底部提交条 -->
@@ -6885,6 +7021,10 @@ function jumpToUsageTab() {
 @media (max-width: 768px) {
   .fitting-usage-summary-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .fitting-usage-summary-grid .summary-metric-card:nth-child(5) {
+    grid-column: span 2;
   }
 }
 
@@ -7399,5 +7539,393 @@ function jumpToUsageTab() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* ==========================================================================
+   📱 移动端管件库存与使用量专属卡片流样式 (Mobile Touch Cards View)
+   ========================================================================== */
+.desktop-fitting-table-view {
+  display: block !important;
+}
+
+.mobile-fitting-cards-view {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .desktop-fitting-table-view {
+    display: none !important;
+  }
+
+  .mobile-fitting-cards-view {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    margin-top: 10px !important;
+  }
+
+  /* 📦 移动端型号填报单卡片 */
+  .fitting-mobile-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+  }
+
+  .fitting-mobile-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #cbd5e1;
+    transition: background 0.2s ease;
+  }
+
+  /* 🟢 已填写数量的高亮活跃卡片 */
+  .fitting-mobile-card.card-has-input {
+    background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    border-color: #86efac;
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.12);
+  }
+
+  .fitting-mobile-card.card-has-input::before {
+    background: #16a34a;
+  }
+
+  /* 🔴 缺货/无库存卡片 */
+  .fitting-mobile-card.card-out-of-stock {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    opacity: 0.88;
+  }
+
+  .fitting-mobile-card.card-out-of-stock::before {
+    background: #ef4444;
+  }
+
+  /* 卡片头部 */
+  .fmc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .fmc-title-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .fmc-idx {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    background: #f1f5f9;
+    padding: 1px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .fmc-spec {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #0f172a;
+    word-break: break-all;
+    line-height: 1.35;
+  }
+
+  .fmc-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .fmc-filled-badge {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    padding: 2px 7px;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(22, 163, 74, 0.08);
+  }
+
+  .fmc-unit-chip {
+    font-size: 11px;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  /* 库存指示区 */
+  .fmc-stock-panel {
+    background: #f8fafc;
+    border: 1px solid #edf2f7;
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+
+  .fmc-stock-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .fmc-stock-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .fmc-stock-box.highlight-box {
+    border-left: 2px solid #e2e8f0;
+    padding-left: 10px;
+  }
+
+  .fmc-stock-box.highlight-box.box-blue {
+    border-left-color: #3b82f6;
+  }
+
+  .fmc-stock-box.highlight-box.box-danger {
+    border-left-color: #ef4444;
+  }
+
+  .fmc-stock-lbl {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .fmc-stock-val {
+    font-size: 15px;
+    font-family: monospace;
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  .fmc-stock-val .unit {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: normal;
+  }
+
+  .fmc-stock-val.text-danger {
+    color: #dc2626;
+  }
+
+  /* 填报控制区 */
+  .fmc-action-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .fmc-control-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .fmc-action-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .fmc-action-heading {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .fmc-quick-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fmc-btn-quick {
+    font-size: 11.5px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .fmc-btn-quick.max {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .fmc-btn-quick.max:active {
+    background: #dbeafe;
+  }
+
+  .fmc-btn-quick.clear {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+  }
+
+  .fmc-btn-quick:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* 大触控步进器与滑块行 */
+  .fmc-stepper-control-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fmc-touch-stepper {
+    display: inline-flex;
+    align-items: center;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #ffffff;
+    flex-shrink: 0;
+  }
+
+  .fmc-touch-btn {
+    width: 42px;
+    height: 40px;
+    border: none;
+    background: #f8fafc;
+    color: #1e293b;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+
+  .fmc-touch-btn:hover:not(:disabled) {
+    background: #e2e8f0;
+  }
+
+  .fmc-touch-btn:active:not(:disabled) {
+    background: #cbd5e1;
+  }
+
+  .fmc-touch-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .fmc-touch-input {
+    width: 56px;
+    height: 40px;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #2563eb;
+    outline: none;
+    background: #ffffff;
+    box-sizing: border-box;
+  }
+
+  .fmc-touch-slider-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .fmc-touch-slider {
+    width: 100%;
+    height: 8px;
+    cursor: pointer;
+    accent-color: #2563eb;
+    border-radius: 99px;
+  }
+
+  /* 备注输入框 */
+  .fmc-remark-row {
+    width: 100%;
+  }
+
+  .fmc-touch-remark {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    outline: none;
+    box-sizing: border-box;
+    background: #ffffff;
+    transition: border-color 0.15s ease;
+  }
+
+  .fmc-touch-remark:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+  }
+
+  .fmc-no-stock-tip {
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  /* 移动端底部提交栏优化 */
+  .usage-submit-action-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px !important;
+  }
+
+  .usage-submit-action-bar > div:last-child {
+    display: grid !important;
+    grid-template-columns: 1fr 2fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .usage-submit-action-bar .btn {
+    height: 42px !important;
+    font-size: 14px !important;
+    justify-content: center !important;
+  }
 }
 </style>

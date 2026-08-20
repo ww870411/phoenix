@@ -1,3 +1,13 @@
+## 2026-08-20 权限体系审计与全局角色层级补齐（backend_data/shared/auth/permissions/）
+
+- **关联配置文件**：
+  - `backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json`
+  - `backend_data/shared/auth/permissions/global.json`
+- **审计与修复内容**：
+  1. **文件合法性核验**：经底层字节与 UTF-8 校验，`insulation_pipe_supply_2026.json` 语法完全合规（无 BOM、无尾随逗号、标准 JSON 0 错误）；
+  2. **全局用户组层级补齐**：在 `global.json` 中为 `tube_global_viewer`（项目全局观察员）补齐 `"hierarchy": 55` 全局层级定义；
+  3. **装载测试**：`auth_manager` 成功加载全量 68 个系统账户与 13 个用户组权限矩阵（`Users: 68 Groups: 13`）。
+
 ## 2026-08-19 上线前全套契约自动化测试与全链路回归（tests/）
 
 - **测试套件**：`pytest projects/insulation_pipe_supply_2026/tests -v`

@@ -276,9 +276,205 @@
       </section>
 
       <section class="card elevated">
-        <div class="card-header">库管发货台账</div>
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-weight: 700; font-size: 15px;">库管发货台账</span>
+            <span class="muted" style="font-size: 12px;">
+              共 {{ groupedPipeDeliveries.length }} 个车次 · {{ deliveries.length }} 项订单明细
+            </span>
+          </div>
+          
+          <!-- 🔀 视图切换与批量展开折叠按钮区 -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <!-- 展开 / 折叠全部（仅在合并视图下显示） -->
+            <template v-if="pipeViewMode === 'grouped' && groupedPipeDeliveries.length > 0">
+              <button
+                type="button"
+                class="btn ghost btn-sm"
+                style="height: 30px; font-size: 12px; padding: 0 10px;"
+                @click="toggleAllPipeShipments(true)"
+              >
+                📖 展开全车次
+              </button>
+              <button
+                type="button"
+                class="btn ghost btn-sm"
+                style="height: 30px; font-size: 12px; padding: 0 10px;"
+                @click="toggleAllPipeShipments(false)"
+              >
+                📕 折叠全车次
+              </button>
+            </template>
+
+            <!-- 模式切换开关按钮组 (默认扁平明细置前) -->
+            <div class="view-mode-segmented-control" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px; display: inline-flex; gap: 2px;">
+              <button
+                type="button"
+                style="border: none; padding: 4px 12px; font-size: 12.5px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.15s ease;"
+                :style="pipeViewMode === 'flat' ? { background: '#ffffff', color: '#4f46e5', fontWeight: '700', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' } : { background: 'transparent', color: '#64748b' }"
+                @click="pipeViewMode = 'flat'"
+              >
+                <span>📋 扁平明细视图</span>
+              </button>
+              <button
+                type="button"
+                style="border: none; padding: 4px 12px; font-size: 12.5px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.15s ease;"
+                :style="pipeViewMode === 'grouped' ? { background: '#ffffff', color: '#4f46e5', fontWeight: '700', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' } : { background: 'transparent', color: '#64748b' }"
+                @click="pipeViewMode = 'grouped'"
+              >
+                <span>🚚 按车次合并视图</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div v-if="loading" class="page-state">正在读取库管台账...</div>
         <div v-else-if="deliveries.length === 0" class="page-state">当前筛选条件下没有记录。</div>
+
+        <!-- 模式 1：按车次合并折叠卡片列表 -->
+        <div v-else-if="pipeViewMode === 'grouped'" class="pipe-shipment-group-list" style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;">
+          <div
+            v-for="group in groupedPipeDeliveries"
+            :key="group.groupKey"
+            class="pipe-shipment-card"
+            :class="{ 'has-selected': group.checkedItemsCount > 0 }"
+            style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.03); transition: all 0.2s ease;"
+          >
+            <!-- 车次卡片头部汇总行 -->
+            <div 
+              class="pipe-shipment-header"
+              style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; cursor: pointer; user-select: none; gap: 12px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap;"
+              @click="togglePipeShipmentExpand(group.groupKey)"
+            >
+              <!-- 左侧：展开箭头、整车勾选框、车次号、车牌、供需流向、发货时间 -->
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="expand-arrow" style="font-size: 11px; color: #6366f1; transition: transform 0.2s ease; display: inline-block; width: 14px; text-align: center;" :style="{ transform: isPipeShipmentExpanded(group.groupKey) ? 'rotate(90deg)' : 'none' }">
+                  ▶
+                </span>
+                
+                <!-- 整车勾选框（仅在该车次包含“待库管”状态项时可勾选） -->
+                <input
+                  v-if="group.hasPendingWarehouse"
+                  type="checkbox"
+                  :checked="group.allPendingWarehouseChecked"
+                  :indeterminate.prop="group.hasPartialPendingWarehouseSelection"
+                  title="勾选/取消整车待库管记录"
+                  @click.stop
+                  @change="togglePipeShipmentSelectAll(group, $event)"
+                />
+
+                <span class="shipment-code-badge" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #4338ca; background: #e0e7ff; padding: 2px 8px; border-radius: 6px; border: 1px solid #c7d2fe;">
+                  {{ group.shipmentNo }}
+                </span>
+
+                <span class="plate-badge" style="font-size: 12px;">
+                  {{ group.vehiclePlateNo }}
+                </span>
+
+                <!-- 供需路由流向 -->
+                <span style="font-size: 12.5px; color: #475569; display: inline-flex; align-items: center; gap: 4px;">
+                  <strong>{{ group.supplyEntityName }}</strong>
+                  <span style="color: #94a3b8;">→</span>
+                  <strong style="color: #1e293b;">{{ group.section1Name }}</strong>
+                </span>
+
+                <span style="font-size: 11.5px; color: #64748b; font-family: monospace;">
+                  🕒 {{ formatDateTime(group.shippedAt) }}
+                </span>
+              </div>
+
+              <!-- 右侧：包含物料汇总与综合状态 Badge -->
+              <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                <div style="font-size: 12px; color: #475569; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;">
+                  <span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #475569; font-weight: 500;">
+                    共 {{ group.items.length }} 种型号
+                  </span>
+                  <span>发货: <strong style="color: #0f172a;">{{ formatAmount(group.totalShippedQty) }}</strong> 米</span>
+                  <span v-if="group.totalArrivedQty > 0">到货: <strong style="color: #059669;">{{ formatAmount(group.totalArrivedQty) }}</strong> 米</span>
+                  <span v-if="group.totalReceivedQty > 0">接收: <strong style="color: #7c3aed;">{{ formatAmount(group.totalReceivedQty) }}</strong> 米</span>
+                </div>
+
+                <span :class="['status-pill', statusClass(group.overallStatus)]" style="font-size: 11.5px; padding: 2px 8px;">
+                  {{ deliveryStatusLabelMap[group.overallStatus] || group.overallStatus }}
+                </span>
+
+                <span v-if="group.hasAbnormal" class="status-pill status-abnormal" style="font-size: 11px;">
+                  含异常
+                </span>
+              </div>
+            </div>
+
+            <!-- 展开后的明细表格 -->
+            <div v-show="isPipeShipmentExpanded(group.groupKey)" style="padding: 8px 12px; background: #ffffff;">
+              <table class="table" style="font-size: 12px; margin: 0; background: #ffffff;">
+                <thead>
+                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="width: 38px; text-align: center;">勾选</th>
+                    <th style="width: 140px;">订单号</th>
+                    <th>保温管型号规格</th>
+                    <th class="cell-number" style="width: 110px;">发货量 (米)</th>
+                    <th class="cell-number" style="width: 110px;">到货量 (米)</th>
+                    <th class="cell-number" style="width: 110px;">接收量 (米)</th>
+                    <th class="cell-status" style="width: 110px;">状态</th>
+                    <th style="width: 120px;">在途时长</th>
+                    <th style="width: 80px; text-align: center;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in group.items"
+                    :key="row.id"
+                    :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
+                    style="cursor: pointer;"
+                    @click="toggleDeliverySelection(row)"
+                  >
+                    <td class="cell-checkbox" style="text-align: center;">
+                      <input
+                        v-if="row.status === 'pending_warehouse'"
+                        type="checkbox"
+                        :checked="isDeliverySelected(row.id)"
+                        @click.stop
+                        @change="toggleDeliverySelection(row)"
+                      />
+                    </td>
+                    <td class="cell-code-wrapper font-mono" style="font-weight: 600; color: #1e293b;">
+                      {{ row.order_no || row.delivery_code || row.id }}
+                    </td>
+                    <td class="cell-model font-mono" :title="row.pipe_model_name" style="font-weight: 600; color: #334155;">
+                      {{ row.pipe_model_name }}
+                    </td>
+                    <td class="cell-number">{{ formatAmount(row.shipped_qty) }}</td>
+                    <td class="cell-number">{{ formatOptionalAmount(row.arrived_qty) }}</td>
+                    <td class="cell-number">{{ formatOptionalAmount(row.received_qty) }}</td>
+                    <td class="cell-status">
+                      <div class="status-pill-group">
+                        <span class="status-pill" :class="statusClass(row.status)" style="font-size: 11px; padding: 1px 6px;">
+                          {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
+                        </span>
+                        <span v-if="row.abnormal_flag" class="status-pill status-abnormal" style="font-size: 10px; padding: 1px 4px;">
+                          {{ getAbnormalLabel(row) }}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="cell-elapsed" style="font-size: 11px;">{{ formatDeliveryElapsedDisplay(row) }}</td>
+                    <td style="text-align: center;">
+                      <button
+                        type="button"
+                        class="btn ghost btn-sm"
+                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5;"
+                        @click.stop="selectDelivery(row)"
+                      >
+                        查看轨迹
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 模式 2：扁平明细表格（原有表格） -->
         <div v-else class="table-wrap">
           <table class="table">
             <colgroup>
@@ -995,13 +1191,16 @@
         </div>
       </div>
     </Transition>
-    <!-- 导出配置与 XLSX 导出组件 -->
+    <!-- 导出配置与 XLSX 导出组件 (支持车次模式单元格合并) -->
     <ExportSettingsModal
       :show="showExportModal"
       :columns="exportColumns"
       :data="exportAllWarehouseRows"
       :filtered-data="exportWarehouseRows"
-      default-filename="保温管库管待入库明细台账"
+      :default-filename="exportDefaultFilename"
+      :is-grouped-export="pipeViewMode === 'grouped'"
+      group-key-field="shipment_no"
+      :merge-columns="exportMergeColumns"
       @close="showExportModal = false"
     />
   </div>
@@ -1401,31 +1600,77 @@ const options = ref(null)
 const deliveries = ref([])
 const allDeliveries = ref([])
 const showExportModal = ref(false)
-const exportColumns = computed(() => [
-  { key: 'order_no', label: '订单号' },
-  { key: 'shipment_no', label: '运输车次号' },
-  { key: 'vehicle_plate_no', label: '车牌号' },
-  { key: 'supply_entity_name', label: '供给主体' },
-  { key: 'section_1_name', label: '装车接收需求主体' },
-  { key: 'pipe_model_name', label: '保温管规格型号' },
-  { key: 'shipped_qty', label: '发货量（米）' },
-  { key: 'arrived_qty', label: '到货量（米）' },
-  { key: 'received_qty', label: '接收量（米）' },
-  { key: 'shippedAtDisplay', label: '发货时间' },
-  { key: 'statusLabel', label: '状态' },
-  { key: 'ship_contact_name', label: '发货联系人' },
-  { key: 'ship_contact_phone', label: '发货电话' },
-  { key: 'ship_remark', label: '发货备注' },
-  { key: 'arrived_confirm_by', label: '到货确认人' },
-  { key: 'arrivedConfirmAtDisplay', label: '确认到货时间' },
-  { key: 'arrived_remark', label: '到货备注' },
-  { key: 'received_confirm_by', label: '施工接收人' },
-  { key: 'receivedConfirmAtDisplay', label: '接收确认时间' },
-  { key: 'received_remark', label: '接收备注' },
-  { key: 'warehouse_confirm_by', label: '库管确认人' },
-  { key: 'warehouseConfirmAtDisplay', label: '入库确认时间' },
-  { key: 'warehouse_remark', label: '入库备注' }
-])
+
+const exportDefaultFilename = computed(() => {
+  return pipeViewMode.value === 'grouped' ? '保温管库管台账(按车次合并)' : '保温管库管待入库明细台账'
+})
+
+const exportMergeColumns = [
+  'shipment_no',
+  'vehicle_plate_no',
+  'supply_entity_name',
+  'section_1_name',
+  'shippedAtDisplay',
+  'delivery_elapsed_label'
+]
+
+const exportColumns = computed(() => {
+  if (pipeViewMode.value === 'grouped') {
+    return [
+      { key: 'shipment_no', label: '运输车次号' },
+      { key: 'vehicle_plate_no', label: '车牌号' },
+      { key: 'supply_entity_name', label: '供给主体' },
+      { key: 'section_1_name', label: '装车接收需求主体' },
+      { key: 'shippedAtDisplay', label: '发货时间' },
+      { key: 'delivery_elapsed_label', label: '在途时长' },
+      { key: 'order_no', label: '订单号' },
+      { key: 'pipe_model_name', label: '保温管规格型号' },
+      { key: 'shipped_qty', label: '发货量（米）' },
+      { key: 'arrived_qty', label: '到货量（米）' },
+      { key: 'received_qty', label: '接收量（米）' },
+      { key: 'statusLabel', label: '状态' },
+      { key: 'ship_contact_name', label: '发货联系人' },
+      { key: 'ship_contact_phone', label: '发货电话' },
+      { key: 'ship_remark', label: '发货备注' },
+      { key: 'arrived_confirm_by', label: '到货确认人' },
+      { key: 'arrivedConfirmAtDisplay', label: '确认到货时间' },
+      { key: 'arrived_remark', label: '到货备注' },
+      { key: 'received_confirm_by', label: '施工接收人' },
+      { key: 'receivedConfirmAtDisplay', label: '接收确认时间' },
+      { key: 'received_remark', label: '接收备注' },
+      { key: 'warehouse_confirm_by', label: '库管确认人' },
+      { key: 'warehouseConfirmAtDisplay', label: '入库确认时间' },
+      { key: 'warehouse_remark', label: '入库备注' }
+    ]
+  }
+  return [
+    { key: 'order_no', label: '订单号' },
+    { key: 'shipment_no', label: '运输车次号' },
+    { key: 'vehicle_plate_no', label: '车牌号' },
+    { key: 'supply_entity_name', label: '供给主体' },
+    { key: 'section_1_name', label: '装车接收需求主体' },
+    { key: 'pipe_model_name', label: '保温管规格型号' },
+    { key: 'shipped_qty', label: '发货量（米）' },
+    { key: 'arrived_qty', label: '到货量（米）' },
+    { key: 'received_qty', label: '接收量（米）' },
+    { key: 'shippedAtDisplay', label: '发货时间' },
+    { key: 'statusLabel', label: '状态' },
+    { key: 'delivery_elapsed_label', label: '在途时长' },
+    { key: 'ship_contact_name', label: '发货联系人' },
+    { key: 'ship_contact_phone', label: '发货电话' },
+    { key: 'ship_remark', label: '发货备注' },
+    { key: 'arrived_confirm_by', label: '到货确认人' },
+    { key: 'arrivedConfirmAtDisplay', label: '确认到货时间' },
+    { key: 'arrived_remark', label: '到货备注' },
+    { key: 'received_confirm_by', label: '施工接收人' },
+    { key: 'receivedConfirmAtDisplay', label: '接收确认时间' },
+    { key: 'received_remark', label: '接收备注' },
+    { key: 'warehouse_confirm_by', label: '库管确认人' },
+    { key: 'warehouseConfirmAtDisplay', label: '入库确认时间' },
+    { key: 'warehouse_remark', label: '入库备注' }
+  ]
+})
+
 const exportWarehouseRows = computed(() => {
   return deliveries.value.map(row => ({
     ...row,
@@ -1433,10 +1678,12 @@ const exportWarehouseRows = computed(() => {
     arrivedConfirmAtDisplay: formatDateTime(row.arrived_confirm_at),
     receivedConfirmAtDisplay: formatDateTime(row.received_confirm_at),
     warehouseConfirmAtDisplay: formatDateTime(row.warehouse_confirm_at),
-    statusLabel: deliveryStatusLabelMap[row.status] || row.status || '',
+    delivery_elapsed_label: formatDeliveryElapsedDisplay(row),
+    statusLabel: deliveryStatusLabelMap.value?.[row.status] || row.status || '',
     ship_remark: row.ship_remark || row.cancel_reason || ''
   }))
 })
+
 const exportAllWarehouseRows = computed(() => {
   return allDeliveries.value.map(row => ({
     ...row,
@@ -1444,7 +1691,8 @@ const exportAllWarehouseRows = computed(() => {
     arrivedConfirmAtDisplay: formatDateTime(row.arrived_confirm_at),
     receivedConfirmAtDisplay: formatDateTime(row.received_confirm_at),
     warehouseConfirmAtDisplay: formatDateTime(row.warehouse_confirm_at),
-    statusLabel: deliveryStatusLabelMap[row.status] || row.status || '',
+    delivery_elapsed_label: formatDeliveryElapsedDisplay(row),
+    statusLabel: deliveryStatusLabelMap.value?.[row.status] || row.status || '',
     ship_remark: row.ship_remark || row.cancel_reason || ''
   }))
 })
@@ -1694,9 +1942,117 @@ const selectedDeliveryAggregate = computed(() => {
     statusSummaryLabel,
     pipeModelLabel: summarizeCollection(Array.from(pipeModelSet)),
     shipmentLabel: summarizeCollection(Array.from(shipmentSet)),
-    vehiclePlateLabel: summarizeCollection(Array.from(vehiclePlateSet)),
   }
 })
+
+// 保温管发货记录展示模式：'flat' (默认扁平明细) 或 'grouped' (按车次合并)
+const pipeViewMode = ref('flat')
+const expandedPipeShipmentKeys = ref(new Set())
+
+// 计算属性：按车次号合并的保温管数据
+const groupedPipeDeliveries = computed(() => {
+  const groupsMap = new Map()
+  
+  for (const row of deliveries.value) {
+    // 分组键：优先使用 shipment_no，若无则使用 vehicle_plate_no 或 order_no 或独立 id
+    const shipmentKey = row.shipment_no ? `shipment_${row.shipment_no}` : (row.vehicle_plate_no ? `plate_${row.vehicle_plate_no}` : `order_${row.order_no || row.id}`)
+    
+    if (!groupsMap.has(shipmentKey)) {
+      groupsMap.set(shipmentKey, {
+        groupKey: shipmentKey,
+        shipmentNo: row.shipment_no || '无车次号',
+        vehiclePlateNo: row.vehicle_plate_no || '—',
+        supplyEntityName: row.supply_entity_name || '—',
+        section1Name: row.section_1_name || '—',
+        shippedAt: row.shipped_at,
+        items: [],
+        totalShippedQty: 0,
+        totalArrivedQty: 0,
+        totalReceivedQty: 0,
+        statuses: new Set(),
+        hasPendingWarehouse: false,
+        hasAbnormal: false,
+      })
+    }
+    
+    const group = groupsMap.get(shipmentKey)
+    group.items.push(row)
+    group.totalShippedQty += Number(row.shipped_qty || 0)
+    group.totalArrivedQty += Number(row.arrived_qty || 0)
+    group.totalReceivedQty += Number(row.received_qty || 0)
+    if (row.status) group.statuses.add(row.status)
+    if (row.abnormal_flag) group.hasAbnormal = true
+    if (row.status === 'pending_warehouse') group.hasPendingWarehouse = true
+  }
+  
+  const selectedIdSet = new Set(selectedDeliveryIds.value)
+  const result = Array.from(groupsMap.values())
+  
+  for (const group of result) {
+    const pendingWarehouseItems = group.items.filter(item => item.status === 'pending_warehouse')
+    group.pendingWarehouseCount = pendingWarehouseItems.length
+    group.checkedItemsCount = group.items.filter(item => selectedIdSet.has(String(item.id))).length
+    group.allPendingWarehouseChecked = pendingWarehouseItems.length > 0 && pendingWarehouseItems.every(item => selectedIdSet.has(String(item.id)))
+    group.hasPartialPendingWarehouseSelection = pendingWarehouseItems.length > 0 && !group.allPendingWarehouseChecked && pendingWarehouseItems.some(item => selectedIdSet.has(String(item.id)))
+    
+    // 计算车次综合状态
+    if (group.statuses.has('pending_arrival')) {
+      group.overallStatus = 'pending_arrival'
+    } else if (group.statuses.has('pending_receive') || group.statuses.has('pending_diff_approve')) {
+      group.overallStatus = 'pending_receive'
+    } else if (group.statuses.has('pending_warehouse')) {
+      group.overallStatus = 'pending_warehouse'
+    } else if (group.statuses.has('completed') && group.statuses.size === 1) {
+      group.overallStatus = 'completed'
+    } else if (group.statuses.has('cancelled') && group.statuses.size === 1) {
+      group.overallStatus = 'cancelled'
+    } else {
+      group.overallStatus = Array.from(group.statuses)[0] || 'unknown'
+    }
+  }
+  
+  return result
+})
+
+function isPipeShipmentExpanded(groupKey) {
+  return expandedPipeShipmentKeys.value.has(groupKey)
+}
+
+function togglePipeShipmentExpand(groupKey) {
+  const next = new Set(expandedPipeShipmentKeys.value)
+  if (next.has(groupKey)) {
+    next.delete(groupKey)
+  } else {
+    next.add(groupKey)
+  }
+  expandedPipeShipmentKeys.value = next
+}
+
+function toggleAllPipeShipments(expand) {
+  if (expand) {
+    expandedPipeShipmentKeys.value = new Set(groupedPipeDeliveries.value.map(g => g.groupKey))
+  } else {
+    expandedPipeShipmentKeys.value = new Set()
+  }
+}
+
+function togglePipeShipmentSelectAll(group, event) {
+  const checked = Boolean(event?.target?.checked)
+  const pendingIds = group.items.filter(it => it.status === 'pending_warehouse').map(it => String(it.id))
+  if (!pendingIds.length) return
+  
+  const currentSet = new Set(selectedDeliveryIds.value)
+  if (checked) {
+    pendingIds.forEach(id => currentSet.add(id))
+  } else {
+    pendingIds.forEach(id => currentSet.delete(id))
+  }
+  selectedDeliveryIds.value = Array.from(currentSet)
+  
+  if (!selectedDeliveryId.value && pendingWarehouseSelectedDeliveries.value.length) {
+    selectDelivery(pendingWarehouseSelectedDeliveries.value[0])
+  }
+}
 
 const deliverySummary = computed(() => {
   const summary = {

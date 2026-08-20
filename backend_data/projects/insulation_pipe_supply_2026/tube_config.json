@@ -428,8 +428,8 @@
       "manager_name": "杨鑫",
       "contact_phone": "15566956191",
       "section_1_ids": [
-        "low_lot_5",
-        "low_lot_6"
+        "low_lot_1",
+        "low_lot_2"
       ]
     },
     {
@@ -437,8 +437,8 @@
       "manager_name": "闫冬",
       "contact_phone": "18525372727",
       "section_1_ids": [
-        "low_lot_5",
-        "low_lot_6"
+        "low_lot_3",
+        "low_lot_4"
       ]
     },
     {
@@ -543,8 +543,6 @@
       "keeper_name": "王世博",
       "contact_phone": "13704941850",
       "section_1_ids": [
-        "low_lot_3",
-        "low_lot_4",
         "low_lot_5",
         "low_lot_6"
       ]
@@ -572,8 +570,8 @@
       "keeper_name": "杨毅",
       "contact_phone": "13909845001",
       "section_1_ids": [
-        "low_lot_5",
-        "low_lot_6"
+        "low_lot_3",
+        "low_lot_4"
       ]
     },
     {
@@ -592,4 +590,6 @@
     "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="
   },
   "usage_collection_date": "2026-08-19"
+
+
 }

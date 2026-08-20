@@ -70,6 +70,18 @@
             💡 提示：您可以根据具体报表诉求自由勾选导出列，未被勾选的列将不会呈现在生成的 Excel 文件中。
           </p>
         </div>
+
+        <!-- 4. 🔀 车次单元格合并选项 (仅在提供 mergeColumns 时呈现) -->
+        <div v-if="mergeColumns && mergeColumns.length" class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; font-weight: 600; color: #475569;">🔀 聚合排版设置</span>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 13.5px; font-weight: 600; color: #1e293b;">合并同车次前置公共列单元格</span>
+              <span style="font-size: 12px; color: #64748b;">勾选后，同一车次内的车次号、车牌、供需主体等前置公共信息将在 Excel 中自动跨行合并居中展示</span>
+            </div>
+            <input type="checkbox" v-model="enableGroupMerge" style="width: 18px; height: 18px; cursor: pointer; accent-color: #4f46e5; flex-shrink: 0;" />
+          </div>
+        </div>
       </div>
 
       <!-- 弹窗 Footer -->
@@ -91,7 +103,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 
 const props = defineProps({
   show: {
@@ -113,6 +125,18 @@ const props = defineProps({
   defaultFilename: {
     type: String,
     default: '报表导出'
+  },
+  isGroupedExport: {
+    type: Boolean,
+    default: false
+  },
+  groupKeyField: {
+    type: String,
+    default: ''
+  },
+  mergeColumns: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -123,6 +147,7 @@ const exportRange = ref('filtered') // 'filtered' or 'all'
 const availableColumns = ref([])
 const selectedColumnKeys = ref([])
 const isExporting = ref(false)
+const enableGroupMerge = ref(false)
 
 // 获取当前日期字符串 YYYYMMDD
 function getTodayDateString() {
@@ -138,6 +163,7 @@ watch(() => props.show, (newVal) => {
   if (newVal) {
     exportFilename.value = `${props.defaultFilename}_${getTodayDateString()}`
     exportRange.value = props.filteredData.length > 0 ? 'filtered' : 'all'
+    enableGroupMerge.value = Boolean(props.isGroupedExport)
     
     // 过滤出有有效 label 的列定义
     availableColumns.value = props.columns.filter(col => col.key && col.label && col.label !== '操作' && col.label !== '序号' && col.label !== '')
@@ -158,14 +184,14 @@ function selectAllCols(selectAll) {
   }
 }
 
-// 执行高规格 XLSX 导出，深度美化自适应列宽
+// 执行高规格 XLSX 导出，支持单元格纵向合并、高级样式美化与自适应列宽
 async function executeExcelExport() {
   if (selectedColumnKeys.value.length === 0) return
   isExporting.value = true
   
   try {
     // 1. 确定导出范围的数据源
-    const rawRows = exportRange.value === 'filtered' ? props.filteredData : props.data
+    let rawRows = exportRange.value === 'filtered' ? [...props.filteredData] : [...props.data]
     if (rawRows.length === 0) {
       alert('当前选定的导出数据范围没有可导出的行数据！')
       isExporting.value = false
@@ -175,14 +201,21 @@ async function executeExcelExport() {
     // 2. 映射当前勾选的列和表头
     const activeCols = availableColumns.value.filter(col => selectedColumnKeys.value.includes(col.key))
     
-    // 3. 构建待导出的 JSON 记录（按中文表头 Key 进行重塑，确保 Excel 首行显示中文名称）
+    // 3. 若启用了按车次合并单元格，先对数据按照分组键进行稳定排序归集
+    const groupKeyField = props.groupKeyField || 'shipment_no'
+    if (enableGroupMerge.value && groupKeyField) {
+      rawRows.sort((a, b) => {
+        const keyA = String(a[groupKeyField] || a.shipment_no || a.order_no || a.id || '')
+        const keyB = String(b[groupKeyField] || b.shipment_no || b.order_no || b.id || '')
+        return keyA.localeCompare(keyB, 'zh-CN')
+      })
+    }
+
+    // 4. 构建待导出的 JSON 记录（按中文表头 Key 进行重塑）
     const exportRows = rawRows.map(row => {
       const entry = {}
       activeCols.forEach(col => {
-        // 取出属性，兼容驼峰及下划线字段
         let val = row[col.key]
-        
-        // 兼容处理特殊的显示文本字段
         if (col.key === 'statusLabel' && row.statusLabel) {
           val = row.statusLabel
         } else if (col.key === 'shippedAtDisplay' && row.shippedAtDisplay) {
@@ -190,32 +223,183 @@ async function executeExcelExport() {
         } else if (val === null || val === undefined) {
           val = ''
         }
-        
         entry[col.label] = val
       })
       return entry
     })
 
-    // 4. 调用 xlsx 库创建 Worksheet
+    // 5. 调用 xlsx-js-style 库创建 Worksheet
     const ws = XLSX.utils.json_to_sheet(exportRows)
 
-    // 🌟 5. 高级自适应列宽计算，确保 Excel 表格极其整齐美观 🌟
+    // 🌟 6. 高级合并单元格计算 (Merge Cells) 🌟
+    const merges = []
+    const groups = []
+    let currentGroup = null
+
+    // 计算每个连续车次组的起止索引
+    rawRows.forEach((row, idx) => {
+      const gKey = String(row[groupKeyField] || row.shipment_no || row.order_no || row.id || `row_${idx}`)
+      if (!currentGroup || currentGroup.key !== gKey) {
+        currentGroup = { key: gKey, startIndex: idx, count: 1, groupIndex: groups.length }
+        groups.push(currentGroup)
+      } else {
+        currentGroup.count += 1
+      }
+    })
+
+    if (enableGroupMerge.value && props.mergeColumns && props.mergeColumns.length) {
+      const mergeColSet = new Set(props.mergeColumns)
+      for (const grp of groups) {
+        if (grp.count > 1) {
+          const rStart = 1 + grp.startIndex
+          const rEnd = 1 + grp.startIndex + grp.count - 1
+
+          activeCols.forEach((col, colIdx) => {
+            if (mergeColSet.has(col.key)) {
+              merges.push({
+                s: { r: rStart, c: colIdx },
+                e: { r: rEnd, c: colIdx }
+              })
+            }
+          })
+        }
+      }
+
+      if (merges.length > 0) {
+        ws['!merges'] = merges
+      }
+    }
+
+    // 🌟 7. 专业排版与单元格美化样式 (Cell Styling) 🌟
+    const thinBorder = {
+      top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+    }
+
+    const headerStyle = {
+      font: { name: 'Microsoft YaHei', sz: 10.5, bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '334155' } }, // 商务深蓝灰色 #334155
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        top: { style: 'thin', color: { rgb: '1E293B' } },
+        bottom: { style: 'medium', color: { rgb: '0F172A' } },
+        left: { style: 'thin', color: { rgb: '475569' } },
+        right: { style: 'thin', color: { rgb: '475569' } }
+      }
+    }
+
+    // 构建每行数据对应的车次组索引，以便渲染交替斑马底色
+    const rowGroupIndexMap = new Map()
+    groups.forEach(grp => {
+      for (let i = 0; i < grp.count; i++) {
+        rowGroupIndexMap.set(grp.startIndex + i, grp.groupIndex)
+      }
+    })
+
+    const mergeColSet = new Set(props.mergeColumns || [])
+    const totalDataRows = exportRows.length
+    const totalCols = activeCols.length
+
+    // 设置行高：表头 30pt，数据行 24pt
+    const rowHeights = [{ hpt: 30 }]
+
+    // 格式化所有单元格
+    for (let r = 0; r <= totalDataRows; r++) {
+      if (r > 0) {
+        rowHeights.push({ hpt: 24 })
+      }
+
+      for (let c = 0; c < totalCols; c++) {
+        const cellAddress = XLSX.utils.encode_cell({ r, c })
+        if (!ws[cellAddress]) {
+          ws[cellAddress] = { v: '', t: 's' }
+        }
+
+        if (r === 0) {
+          // 表头样式
+          ws[cellAddress].s = headerStyle
+        } else {
+          // 数据行
+          const dataRowIndex = r - 1
+          const colDef = activeCols[c]
+          const isMergeCol = mergeColSet.has(colDef.key)
+          const grpIdx = rowGroupIndexMap.get(dataRowIndex) || 0
+          
+          // 车次交替微底色：偶数组纯白，奇数组极淡蓝灰
+          const isOddGroup = grpIdx % 2 === 1
+          const bgRgb = isOddGroup ? 'F8FAFC' : 'FFFFFF'
+
+          // 判断对齐方式
+          let hAlign = 'left'
+          let fontColor = '1E293B'
+          let isBold = false
+
+          if (isMergeCol) {
+            hAlign = 'center'
+            if (colDef.key === 'shipment_no') {
+              fontColor = '3730A3' // 沉稳靛蓝
+              isBold = true
+            } else if (colDef.key === 'vehicle_plate_no') {
+              fontColor = '0F766E' // 青翠深绿
+              isBold = true
+            }
+          } else if (
+            colDef.key.includes('qty') || 
+            colDef.key.includes('amount') || 
+            colDef.label.includes('量') || 
+            colDef.label.includes('米') || 
+            colDef.label.includes('件')
+          ) {
+            hAlign = 'right'
+            isBold = true
+            fontColor = '0F172A'
+          } else if (
+            colDef.key.includes('status') || 
+            colDef.key.includes('code') || 
+            colDef.key.includes('no') || 
+            colDef.key.includes('time') || 
+            colDef.key.includes('At') || 
+            colDef.key.includes('elapsed')
+          ) {
+            hAlign = 'center'
+          }
+
+          ws[cellAddress].s = {
+            font: { 
+              name: 'Microsoft YaHei', 
+              sz: 9.5, 
+              color: { rgb: fontColor },
+              bold: isBold
+            },
+            fill: { fgColor: { rgb: bgRgb } },
+            alignment: { 
+              horizontal: hAlign, 
+              vertical: 'center', 
+              wrapText: true 
+            },
+            border: thinBorder
+          }
+        }
+      }
+    }
+
+    ws['!rows'] = rowHeights
+
+    // 🌟 8. 高级自适应列宽计算，确保 Excel 表格极其整齐美观 🌟
     const colWidths = activeCols.map(col => {
-      // (1) 表头中文 Label 长度（将双字节中文的每个字折算成 2 个英文字符，以防止字数排错）
       const headerLen = col.label ? col.label.replace(/[^\x00-\xff]/g, '00').length : 10
-      // (2) 遍历所有数据行，找出此字段值中最长的一项
       const maxValLen = exportRows.reduce((max, row) => {
         const val = row[col.label] ?? ''
         const len = String(val).replace(/[^\x00-\xff]/g, '00').length
         return Math.max(max, len)
       }, 0)
-      
-      // (3) 取两者最大值，并额外提供 4 个字符宽度的呼吸间距，彻底消除拥挤感与折行
       return { wch: Math.max(headerLen, maxValLen) + 4 }
     })
     ws['!cols'] = colWidths
 
-    // 6. 生成 Workbook 并写入下载
+    // 9. 生成 Workbook 并写入下载
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '数据台账')
     
@@ -225,7 +409,7 @@ async function executeExcelExport() {
       
     XLSX.writeFile(wb, finalFilename)
     
-    // 7. 成功后利落退出
+    // 10. 成功后关闭弹窗
     handleClose()
   } catch (error) {
     console.error('Excel export error:', error)
