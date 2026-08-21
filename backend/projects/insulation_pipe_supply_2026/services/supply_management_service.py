@@ -741,12 +741,15 @@ def cancel_delivery_record(
             raise HTTPException(status_code=403, detail="当前账号无权撤销该发货记录")
         if _normalize_text(row["status"]) != "pending_arrival":
             raise HTTPException(status_code=422, detail="仅“已发货待到货”状态允许撤销")
+        clean_reason = _normalize_text(cancel_reason)
+        if len(clean_reason) < 2:
+            raise HTTPException(status_code=422, detail="撤销发货必须填写原因（至少2个字符）")
         session.execute(
             sql_update,
             {
                 "delivery_id": int(delivery_id),
                 "cancel_by": operator,
-                "cancel_reason": _normalize_text(cancel_reason) or "供给侧撤销发货",
+                "cancel_reason": clean_reason,
                 "updated_by": operator,
             },
         )

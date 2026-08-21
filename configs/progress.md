@@ -1,3 +1,41 @@
+## 2026-08-21 [保温管发货单撤销必须填写备注、流转凭证时光轴显示撤销信息、需求方/库管方彻底排除已撤销发货单]
+- **需求与优化目标**：
+  1. 保温管发货单在撤销时必须同管件发货单一样强制填写撤销原因（字数 ≥ 2）；
+  2. 在全生命周期流转凭证中，完整展示单据撤销状态（🚫 供给侧撤销发货）、撤销操作人、撤销时间及撤销原因；
+  3. 已撤销的发货单，不再显示在需求方（`DemandManagementView.vue`）和库管方（`WarehouseManagementView.vue`）的台账列表、车次分组与统计中。
+- **改动详情**：
+  1. **后端服务与接口强化**：
+     - `workspace.py`：`SupplyDeliveryCancelPayload` 约束 `cancel_reason: str = Field(..., min_length=2, description="撤销发货原因说明")`；
+     - `supply_management_service.py`：`cancel_delivery_record` 增加校验 `if len(_normalize_text(cancel_reason)) < 2: raise HTTPException(422, "撤销发货必须填写原因（至少2个字符）")`；
+     - `fitting_delivery_service.py` & `workspace.py`：`list_fitting_deliveries` 和 `handle_list_fitting_deliveries` 支持 `exclude_cancelled: bool` 与 `status: str` 参数，当 `exclude_cancelled=True` 时在 SQL 中追加 `AND status != 'cancelled'`；
+     - `workspace.py`：`get_warehouse_management_options` 移除 `cancelled` 选项；`get_warehouse_management_deliveries` 在后端遍历时直接跳过 `status == 'cancelled'` 的记录。
+  2. **前端交互与流转凭证时光轴增强**：
+     - `SupplyManagementView.vue`：
+       - 直管 `cancelDelivery` 点击后弹出输入框 `window.prompt`，校验原因长度 ≥ 2 个字符后提交；
+       - `showDeliveryDetail` 全面提取 `cancelledAt`、`cancelBy`、`cancelReason`；
+       - 流转凭证时光轴（`Timeline Modal`）挂载撤销节点：展示红色的 `🚫 供给侧撤销发货`、撤销时间、撤销操作人与撤销原因警示卡片；
+     - `DemandManagementView.vue`：
+       - `handleFittingQuery` 请求传 `exclude_cancelled: true` 并过滤 `filter(it => it.status !== 'cancelled')`；
+       - `groupedDemandFittingRows` 彻底过滤排除已撤销管件明细与整车撤销组；
+       - 流转凭证时光轴同步挂载撤销节点渲染；
+     - `WarehouseManagementView.vue`：
+       - 移除顶部统计卡片中的“已撤销”卡片与 `deliverySummary.cancelled` 计数；
+       - `deliveries`、`allDeliveries`、`groupedPipeDeliveries` 彻底排除 `status === 'cancelled'` 直管记录；
+       - 管件发货台账与 `groupedFittingRows` 彻底排除已撤销管件明细与整车撤销组；
+       - 流转凭证时光轴同步挂载撤销节点渲染；
+     - `api.js`：`getFittingDeliveriesList` 支持绑定透传 `status` 与 `exclude_cancelled` 参数。
+
+## 2026-08-21 [业务逻辑审查：保温管/管件发货单撤销权限、备注规则与流转凭证展示]
+- **审查与核验结论**：
+  1. **发货单撤销权限**：
+     - **保温管发货单（直管）**与**管件发货单**在供给方刚完成发货、尚未进入后续到货/接收阶段时（状态为 `pending_arrival` 或 `shipped`），发货人（所属供给主体账号及管理员角色）**均有权限撤销发货单**。
+  2. **备注说明填写规则**：
+     - **保温管发货单**：**非强制填写**。前端点击“撤销发货”直接提交，自动填充默认值 `cancel_reason: '供给侧主动撤销发货'`，后端亦有容错回退；
+     - **管件发货单**：**必须填写备注说明**。前端通过 `window.prompt` 弹出必填校验（至少 2 个字符），后端 Pydantic 模型（`FittingCancelPayload`）及服务层（`cancel_fitting_delivery`）均严格强制校验 `min_length=2`。
+  3. **流转凭证中撤销备注展示**：
+     - **全生命周期流转凭证弹窗（Timeline Modal）**：目前时光轴仅渲染发货、到货、接收、审批、库管确认节点，**尚未挂载撤销节点及撤销备注**；
+     - **库管详情侧边栏**：仅在 `WarehouseManagementView.vue` 直管侧边详情中展示了 `🚫 供给侧撤销/强制退单` 及 `cancel_reason`。
+
 ## 2026-08-21 [精简管件填报已锁定提示文本]
 - **改动详情**：
   - 在需求管理页面（`DemandManagementView.vue`）底部提交条中，将本日已提交时的提示文案从“🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。如需重新填报请在历史台账中撤回。”进一步精简为 **`🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。`**，降低视觉冗余并增强移动端紧凑度。

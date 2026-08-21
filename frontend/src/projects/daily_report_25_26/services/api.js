@@ -715,6 +715,8 @@ export async function getFittingDeliveriesList(projectKey = 'insulation_pipe_sup
     const params = new URLSearchParams()
     if (query.section1Id) params.append('section_1_id', query.section1Id)
     if (query.supplyEntityId) params.append('supply_entity_id', query.supplyEntityId)
+    if (query.status) params.append('status', query.status)
+    if (query.exclude_cancelled || query.excludeCancelled) params.append('exclude_cancelled', 'true')
     if (query.startDate) params.append('start_date', query.startDate)
     if (query.endDate) params.append('end_date', query.endDate)
     if (query.searchKeyword) params.append('search_keyword', query.searchKeyword)

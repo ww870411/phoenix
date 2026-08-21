@@ -268,10 +268,6 @@
             <span>库管已确认</span>
             <strong>{{ deliverySummary.completed }}</strong>
           </div>
-          <div class="stat-box">
-            <span>已撤销</span>
-            <strong>{{ deliverySummary.cancelled }}</strong>
-          </div>
         </div>
       </section>
 
@@ -1178,6 +1174,24 @@
                 </div>
               </div>
             </div>
+
+            <!-- 5. 撤销/异常废弃阶段 (当单据状态为 cancelled 或存在撤销记录时展示) -->
+            <div v-if="deliveryDetailModalData.status === 'cancelled' || deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason" style="position: relative; margin-top: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #ef4444; border: 2px solid #fff; box-shadow: 0 0 0 2px #ef4444; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #b91c1c;">🚫 供给侧撤销发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fef2f2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fecaca; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>撤销操作人：<strong style="color: #b91c1c;">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
+                  <div>撤销时间：<span>{{ formatDateTime(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span></div>
+                  <div style="grid-column: span 2; word-break: break-all;">撤销原因：
+                    <strong style="color: #b91c1c; font-weight: 600;">{{ deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason || '供给侧主动撤销发货' }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <button
@@ -1339,10 +1353,9 @@ function showDeliveryDetail(input) {
     warehouseConfirmedAt,
     warehouseConfirmBy: warehouseConfirmedBy,
     warehouseConfirmedBy,
-    warehouseRemark,
-    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || '',
-    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || '',
-    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || '',
+    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || input.cancel_at || input.cancelled_at || input.cancelAt || '',
+    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || input.cancel_reason || input.cancelReason || '',
+    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || input.cancel_by || input.cancelled_by || input.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
 }
@@ -1413,13 +1426,14 @@ const groupedWarehouseFittingRows = computed(() => {
   }
 
   const result = Array.from(map.values())
+  const validGroups = []
   for (const group of result) {
     const activeItems = group.items.filter(item => (item.status || 'shipped') !== 'cancelled')
-    group.hasCancelled = activeItems.length !== group.items.length
     if (!activeItems.length) {
-      group.status = 'cancelled'
       continue
     }
+    group.items = activeItems
+    group.hasCancelled = false
     let minRank = 999
     let minStatus = 'shipped'
     for (const item of activeItems) {
@@ -1431,9 +1445,10 @@ const groupedWarehouseFittingRows = computed(() => {
       }
     }
     group.status = minStatus
+    validGroups.push(group)
   }
 
-  return result
+  return validGroups
 })
 
 const standardFittingTypes = ref(['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
@@ -1467,7 +1482,6 @@ const fittingSummary = computed(() => {
   let pendingConstruction = 0
   let pendingWarehouse = 0
   let completed = 0
-  let cancelled = 0
 
   for (const r of fittingRows.value) {
     const st = r.status || 'shipped'
@@ -1475,7 +1489,6 @@ const fittingSummary = computed(() => {
     else if (st === 'arrived') pendingConstruction++
     else if (st === 'construction_confirmed') pendingWarehouse++
     else if (st === 'warehouse_confirmed') completed++
-    else if (st === 'cancelled') cancelled++
   }
 
   return {
@@ -1484,24 +1497,24 @@ const fittingSummary = computed(() => {
     pendingConstruction,
     pendingWarehouse,
     completed,
-    cancelled,
   }
 })
 
 const filteredFittingRows = computed(() => {
+  const validRows = fittingRows.value.filter(r => r.status !== 'cancelled')
   if (fittingSubTab.value === 'pending_arrival') {
-    return fittingRows.value.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
+    return validRows.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
   }
   if (fittingSubTab.value === 'pending_construction') {
-    return fittingRows.value.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
+    return validRows.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
   }
   if (fittingSubTab.value === 'pending_warehouse') {
-    return fittingRows.value.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse')
+    return validRows.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse')
   }
   if (fittingSubTab.value === 'completed') {
-    return fittingRows.value.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
+    return validRows.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
   }
-  return fittingRows.value
+  return validRows
 })
 
 const loadWarehouseFittingDeliveries = async () => {
@@ -1513,14 +1526,17 @@ const loadWarehouseFittingDeliveries = async () => {
       startDate: filters.startDate,
       endDate: filters.endDate,
       searchKeyword: filters.searchKeyword,
+      exclude_cancelled: true,
       limit: 300,
     })
     if (res && res.ok) {
-      fittingRows.value = (res.items || []).map(it => ({
-        ...it,
-        tempArrivedQty: Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty || 0),
-        submitting: false
-      }))
+      fittingRows.value = (res.items || [])
+        .filter(it => it.status !== 'cancelled')
+        .map(it => ({
+          ...it,
+          tempArrivedQty: Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty || 0),
+          submitting: false
+        }))
     }
   } catch (err) {
     console.error('库管侧加载管件发货记录失败:', err)
@@ -1954,6 +1970,7 @@ const groupedPipeDeliveries = computed(() => {
   const groupsMap = new Map()
   
   for (const row of deliveries.value) {
+    if (row.status === 'cancelled') continue
     // 分组键：优先使用 shipment_no，若无则使用 vehicle_plate_no 或 order_no 或独立 id
     const shipmentKey = row.shipment_no ? `shipment_${row.shipment_no}` : (row.vehicle_plate_no ? `plate_${row.vehicle_plate_no}` : `order_${row.order_no || row.id}`)
     
@@ -2004,8 +2021,6 @@ const groupedPipeDeliveries = computed(() => {
       group.overallStatus = 'pending_warehouse'
     } else if (group.statuses.has('completed') && group.statuses.size === 1) {
       group.overallStatus = 'completed'
-    } else if (group.statuses.has('cancelled') && group.statuses.size === 1) {
-      group.overallStatus = 'cancelled'
     } else {
       group.overallStatus = Array.from(group.statuses)[0] || 'unknown'
     }
@@ -2056,19 +2071,17 @@ function togglePipeShipmentSelectAll(group, event) {
 
 const deliverySummary = computed(() => {
   const summary = {
-    total: deliveries.value.length,
+    total: deliveries.value.filter(r => r.status !== 'cancelled').length,
     pendingArrival: 0,
     pendingReceive: 0,
     pendingWarehouse: 0,
     completed: 0,
-    cancelled: 0,
   }
   for (const row of deliveries.value) {
     if (row.status === 'pending_arrival') summary.pendingArrival += 1
     else if (row.status === 'pending_receive') summary.pendingReceive += 1
     else if (row.status === 'pending_warehouse') summary.pendingWarehouse += 1
     else if (row.status === 'completed') summary.completed += 1
-    else if (row.status === 'cancelled') summary.cancelled += 1
   }
   return summary
 })
@@ -2254,7 +2267,7 @@ async function loadOptions() {
 async function loadAllDeliveries() {
   try {
     const payload = await getTubeWarehouseManagementDeliveries(projectKey, {})
-    allDeliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
+    allDeliveries.value = Array.isArray(payload?.rows) ? payload.rows.filter(row => row.status !== 'cancelled') : []
   } catch (error) {
     console.error('Failed to load all deliveries for export:', error)
   }
@@ -2276,7 +2289,7 @@ async function loadDeliveries() {
       orderNo: filters.orderNo,
       vehiclePlateNo: filters.vehiclePlateNo,
     })
-    deliveries.value = Array.isArray(payload?.rows) ? payload.rows : []
+    deliveries.value = Array.isArray(payload?.rows) ? payload.rows.filter(row => row.status !== 'cancelled') : []
     
     const availableIdSet = new Set(deliveries.value.map((row) => String(row.id)))
     selectedDeliveryIds.value = selectedDeliveryIds.value.filter((id) => availableIdSet.has(id))

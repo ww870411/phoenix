@@ -1692,6 +1692,24 @@
                 </div>
               </div>
             </div>
+
+            <!-- 7. 撤销/异常废弃阶段 (当单据状态为 cancelled 或存在撤销记录时展示) -->
+            <div v-if="deliveryDetailModalData.status === 'cancelled' || deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason" style="position: relative; margin-top: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #ef4444; border: 2px solid #fff; box-shadow: 0 0 0 2px #ef4444; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #b91c1c;">🚫 供给侧撤销发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fef2f2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fecaca; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>撤销操作人：<strong style="color: #b91c1c;">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
+                  <div>撤销时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span></div>
+                  <div style="grid-column: span 2; word-break: break-all;">撤销原因：
+                    <strong style="color: #b91c1c; font-weight: 600;">{{ deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason || '供给侧主动撤销发货' }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 底部按钮区 -->
@@ -2354,10 +2372,9 @@ function showDeliveryDetail(input) {
     warehouseConfirmedAt,
     warehouseConfirmBy: warehouseConfirmedBy,
     warehouseConfirmedBy,
-    warehouseRemark,
-    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || '',
-    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || '',
-    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || '',
+    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || input.cancel_at || input.cancelled_at || input.cancelAt || '',
+    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || input.cancel_reason || input.cancelReason || '',
+    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || input.cancel_by || input.cancelled_by || input.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
 }
@@ -3964,6 +3981,14 @@ function toggleShipmentReuse(row) {
 
 async function cancelDelivery(row) {
   if (!row?.deliveryId) return
+  const identifier = row.orderNo || row.deliveryCode || row.shipmentNo || row.deliveryId
+  const reason = window.prompt(`请输入撤销发货原因（单号/车次 ${identifier}）：`, '')
+  if (reason === null) return
+  const cleanReason = String(reason).trim()
+  if (cleanReason.length < 2) {
+    setActionMessage('error', '撤销原因至少填写 2 个字符')
+    return
+  }
   cancelLoadingIds.value = {
     ...cancelLoadingIds.value,
     [row.deliveryId]: true,
@@ -3971,9 +3996,9 @@ async function cancelDelivery(row) {
   clearActionMessage()
   try {
     await cancelTubeSupplyManagementDelivery(PROJECT_KEY, row.deliveryId, {
-      cancel_reason: '供给侧主动撤销发货',
+      cancel_reason: cleanReason,
     })
-    setActionMessage('success', `发货记录 ${row.deliveryCode} 已撤销。`)
+    setActionMessage('success', `发货记录 ${row.deliveryCode || identifier} 已撤销。`)
     await Promise.all([loadDemandSummary(), loadDeliveries()])
   } catch (error) {
     setActionMessage('error', error?.message || '撤销发货记录失败')

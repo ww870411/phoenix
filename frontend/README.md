@@ -1,3 +1,33 @@
+## 2026-08-21 保温管撤销原因必填、流转凭证时光轴撤销节点与需求/库管页面过滤已撤销发货单
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管中心）
+  - `frontend/src/projects/daily_report_25_26/services/api.js`（前端公共接口层）
+- **变更详情**：
+  1. **保温管发货单撤销交互升级**（`SupplyManagementView.vue`）：
+     - 点击“撤销发货”时弹出 `window.prompt` 输入框，强制要求输入撤销原因且长度 ≥ 2 个字符，与管件撤销体验完全一致。
+  2. **全生命周期流转凭证时光轴挂载撤销节点**（`SupplyManagementView.vue`、`DemandManagementView.vue`、`WarehouseManagementView.vue`）：
+     - 在时光轴模态弹窗末尾增加撤销阶段节点渲染（`🚫 供给侧撤销发货`），完整呈现撤销时间、撤销操作人（`cancelBy`）及撤销原因（`cancelReason`）红色醒目警示卡片。
+  3. **需求方与库管方页面彻底排除已撤销发货单**：
+     - **需求端**（`DemandManagementView.vue`）：管件发货单查询传参 `exclude_cancelled: true`，`groupedDemandFittingRows` 排除已撤销明细与整车撤销组；
+     - **库管端**（`WarehouseManagementView.vue`）：移除顶部“已撤销”卡片与统计计数；直管发货台账、车次分组及管件发货台账全量过滤排除 `status === 'cancelled'` 单据。
+
+## 2026-08-21 保温管与管件发货单撤销交互及流转凭证展示审查（SupplyManagementView.vue / WarehouseManagementView.vue）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管中心）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理）
+- **核验与分析详情**：
+  - **撤销权限与交互**：
+    - 直管发货单在 `pending_arrival` 状态下展示“撤销发货”按钮，点击后直接发起请求（未弹窗输入备注，默认携带“供给侧主动撤销发货”）；
+    - 管件发货单在 `shipped` / `pending_arrival` 状态下展示“撤销发货”按钮，点击后弹出 `window.prompt` 强制要求输入至少 2 个字符的撤销原因；
+  - **流转凭证时光轴展示**：
+    - 各视图通用的“订单全生命周期流转凭证”弹窗（`deliveryDetailModalData`）中目前仅展示发货、到货、接收、审批、库管确认节点，尚未加入撤销状态节点；
+    - 仅在 `WarehouseManagementView.vue` 直管单选侧边抽屉中展示了撤销节点与撤销备注。
+
 ## 2026-08-21 需求管理管件已提交锁定提示文本精简（DemandManagementView.vue）
 
 - **关联前端页面**：

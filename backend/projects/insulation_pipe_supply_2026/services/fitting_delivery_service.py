@@ -582,6 +582,8 @@ def list_fitting_deliveries(
     *,
     section_1_id: str = "",
     supply_entity_id: str = "",
+    status: str = "",
+    exclude_cancelled: bool = False,
     start_date: str = "",
     end_date: str = "",
     search_keyword: str = "",
@@ -611,6 +613,7 @@ def list_fitting_deliveries(
     clean_start = _clean(start_date)
     clean_end = _clean(end_date)
     clean_keyword = _clean(search_keyword)
+    clean_status = _clean(status)
     start_timestamp = f"{clean_start} 00:00:00+08:00" if clean_start else "1970-01-01 00:00:00+08:00"
     end_timestamp = f"{clean_end} 23:59:59.999999+08:00" if clean_end else "2099-12-31 23:59:59.999999+08:00"
     params = {
@@ -622,14 +625,21 @@ def list_fitting_deliveries(
         "end_timestamp": end_timestamp,
         "keyword": clean_keyword,
         "keyword_like": f"%{clean_keyword}%",
+        "status": clean_status,
         "limit": normalized_page_size,
         "offset": (normalized_page - 1) * normalized_page_size,
     }
-    where_sql = """
+    status_clause = ""
+    if exclude_cancelled:
+        status_clause = " AND status != 'cancelled'"
+    elif clean_status:
+        status_clause = " AND status = :status"
+    where_sql = f"""
         WHERE (:has_section_filter = FALSE OR LOWER(TRIM(section_1_id)) = ANY(:section_ids))
           AND (:has_supply_filter = FALSE OR LOWER(TRIM(supply_entity_id)) = ANY(:supply_ids))
           AND shipped_at >= CAST(:start_timestamp AS TIMESTAMPTZ)
           AND shipped_at <= CAST(:end_timestamp AS TIMESTAMPTZ)
+          {status_clause}
           AND (
             :keyword = '' OR shipment_no ILIKE :keyword_like OR order_no ILIKE :keyword_like OR
             vehicle_plate_no ILIKE :keyword_like OR fitting_type ILIKE :keyword_like OR

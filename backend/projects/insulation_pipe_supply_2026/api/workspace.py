@@ -253,7 +253,7 @@ class SupplyDeliveryBatchCreatePayload(BaseModel):
 
 
 class SupplyDeliveryCancelPayload(BaseModel):
-    cancel_reason: str = ""
+    cancel_reason: str = Field(..., min_length=2, description="撤销发货原因说明")
 
 
 class CustomSupplyEntityPayload(BaseModel):
@@ -438,7 +438,7 @@ class SupplyDeliveryBatchCreatePayload(BaseModel):
 
 
 class SupplyDeliveryCancelPayload(BaseModel):
-    cancel_reason: str = ""
+    cancel_reason: str = Field(..., min_length=2, description="撤销发货原因说明")
 
 
 class CustomSupplyEntityPayload(BaseModel):
@@ -3050,7 +3050,6 @@ def get_warehouse_management_options(
             {"value": "pending_receive", "label": "已到货待接收"},
             {"value": "pending_warehouse", "label": "待库管确认"},
             {"value": "completed", "label": "库管已确认"},
-            {"value": "cancelled", "label": "已撤销"},
         ],
     }
 
@@ -3094,6 +3093,10 @@ def get_warehouse_management_deliveries(
     
     filtered_rows: List[Dict[str, Any]] = []
     for row in rows:
+        # 库管端彻底排除已撤销的发货单记录
+        if row.get("status") == "cancelled":
+            continue
+
         sec_id = str(row.get("section_1_id") or "").strip()
 
         # 核心拦截：账号分管标段范围边界过滤
@@ -4836,6 +4839,8 @@ def handle_cancel_fitting_delivery(
 def handle_list_fitting_deliveries(
     section_1_id: str = Query("", description="接收标段/工程ID，多个值以逗号分隔"),
     supply_entity_id: str = Query("", description="供给主体ID"),
+    status: str = Query("", description="状态过滤"),
+    exclude_cancelled: bool = Query(False, description="是否排除已撤销记录"),
     start_date: str = Query("", description="开始时间/日期"),
     end_date: str = Query("", description="结束时间/日期"),
     search_keyword: str = Query("", description="搜索关键字"),
@@ -4866,6 +4871,8 @@ def handle_list_fitting_deliveries(
     result = list_fitting_deliveries(
         section_1_id=section_1_id,
         supply_entity_id=supply_entity_id,
+        status=status,
+        exclude_cancelled=exclude_cancelled,
         start_date=start_date,
         end_date=end_date,
         search_keyword=search_keyword,

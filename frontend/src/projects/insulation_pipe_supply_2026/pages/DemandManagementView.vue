@@ -2290,6 +2290,24 @@
                 </div>
               </div>
             </div>
+
+            <!-- 7. 撤销/异常废弃阶段 (当单据状态为 cancelled 或存在撤销记录时展示) -->
+            <div v-if="deliveryDetailModalData.status === 'cancelled' || deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason" style="position: relative; margin-top: 20px;">
+              <span style="position: absolute; left: -24px; top: 2px; width: 12px; height: 12px; border-radius: 99px; background: #ef4444; border: 2px solid #fff; box-shadow: 0 0 0 2px #ef4444; display: inline-block;"></span>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; font-weight: bold; color: #b91c1c;">🚫 供给侧撤销发货</span>
+                  <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span>
+                </div>
+                <div style="font-size: 11px; color: #475569; background: #fef2f2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fecaca; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                  <div>撤销操作人：<strong style="color: #b91c1c;">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
+                  <div>撤销时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span></div>
+                  <div style="grid-column: span 2; word-break: break-all;">撤销原因：
+                    <strong style="color: #b91c1c; font-weight: 600;">{{ deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason || '供给侧主动撤销发货' }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 底部按钮区 -->
@@ -2833,6 +2851,9 @@ function showDeliveryDetail(input) {
     warehouseConfirmAt: warehouseConfirmedAt,
     warehouseConfirmBy: warehouseConfirmedBy,
     warehouseRemark,
+    cancelledAt: mainRow.cancelled_at || mainRow.cancel_at || mainRow.cancelledAt || input.cancel_at || input.cancelled_at || input.cancelAt || '',
+    cancelReason: mainRow.cancel_reason || mainRow.cancelReason || input.cancel_reason || input.cancelReason || '',
+    cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || input.cancel_by || input.cancelled_by || input.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
 }
@@ -3114,13 +3135,14 @@ const groupedDemandFittingRows = computed(() => {
   }
 
   const result = Array.from(map.values())
+  const validGroups = []
   for (const group of result) {
     const activeItems = group.items.filter(item => (item.status || 'shipped') !== 'cancelled')
-    group.hasCancelled = activeItems.length !== group.items.length
     if (!activeItems.length) {
-      group.status = 'cancelled'
       continue
     }
+    group.items = activeItems
+    group.hasCancelled = false
     let minRank = 999
     let minStatus = 'shipped'
     for (const item of activeItems) {
@@ -3132,9 +3154,10 @@ const groupedDemandFittingRows = computed(() => {
       }
     }
     group.status = minStatus
+    validGroups.push(group)
   }
 
-  return result
+  return validGroups
 })
 
 const standardFittingTypes = ref(['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
@@ -3158,14 +3181,17 @@ const handleFittingQuery = async () => {
       startDate: fittingFilter.value.startDate,
       endDate: fittingFilter.value.endDate,
       searchKeyword: fittingFilter.value.searchKeyword,
+      exclude_cancelled: true,
       limit: 300,
     })
     if (res && res.ok) {
-      fittingRows.value = (res.items || []).map(it => ({
-        ...it,
-        tempArrivedQty: Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty || 0),
-        submitting: false
-      }))
+      fittingRows.value = (res.items || [])
+        .filter(it => it.status !== 'cancelled')
+        .map(it => ({
+          ...it,
+          tempArrivedQty: Number(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : it.shipped_qty || 0),
+          submitting: false
+        }))
     }
   } catch (err) {
     console.error('读取本标段管件到货记录失败:', err)

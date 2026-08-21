@@ -1,3 +1,28 @@
+## 2026-08-21 保温管发货撤销必填校验与库管/需求端过滤已撤销发货单（workspace.py / supply_management_service.py / fitting_delivery_service.py）
+
+- **服务模块与业务规则调整**：
+  1. **保温管撤销接口原因必填约束**（`workspace.py` / `supply_management_service.py`）：
+     - `SupplyDeliveryCancelPayload.cancel_reason` 改为 `Field(..., min_length=2, description="撤销发货原因说明")`；
+     - `cancel_delivery_record` 强制校验 `len(_normalize_text(cancel_reason)) >= 2`，否则返回 422 错误。
+  2. **管件列表支持排除撤销记录**（`workspace.py` / `fitting_delivery_service.py`）：
+     - `list_fitting_deliveries` 与 `handle_list_fitting_deliveries` 引入 `exclude_cancelled: bool = False` 与 `status: str = ""` 参数；
+     - 当 `exclude_cancelled=True` 时自动追加 `AND status != 'cancelled'`，供需求端和库管端无撤销污染查询。
+  3. **库管端彻底排除已撤销直管单据**（`workspace.py`）：
+     - `get_warehouse_management_options` 移除 `cancelled` 状态选项；
+     - `get_warehouse_management_deliveries` 在内存过滤阶段直接跳过 `status == 'cancelled'` 的单据。
+
+## 2026-08-21 保温管与管件发货单撤销服务与接口逻辑审查（workspace.py / supply_management_service.py / fitting_delivery_service.py）
+
+- **服务模块与业务逻辑核验**：
+  - **保温管撤销接口**：`POST /api/v1/projects/insulation_pipe_supply_2026/supply-management/deliveries/{delivery_id}/cancel`
+    - 状态限制：必须处于 `pending_arrival`（已发货待到货）；
+    - 权限控制：校验 `allowed_supply_entity_ids`；
+    - 备注字段：`SupplyDeliveryCancelPayload.cancel_reason` 为可选（空时默认 `供给侧撤销发货`）；
+  - **管件发货撤销接口**：`POST /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/cancel`
+    - 状态限制：必须处于 `pending_arrival` 或 `shipped`；
+    - 权限控制：`_ensure_fitting_role` + `_ensure_fitting_supply_access`；
+    - 备注字段：`FittingCancelPayload.remark` 强制必填（`min_length=2`），服务层严格校验。
+
 ## 2026-08-21 需求端移动端管件填报交互与防溢出优化同步说明
 
 - **服务模块与业务同步**：
