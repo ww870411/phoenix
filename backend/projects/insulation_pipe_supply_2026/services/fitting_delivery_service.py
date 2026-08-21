@@ -1020,7 +1020,7 @@ def confirm_fitting_delivery_warehouse(
         operator_column="warehouse_confirm_by",
         remark_column="warehouse_remark",
         action_type="CONFIRM_FITTING_WAREHOUSE",
-        action_desc="库管确认管件入库",
+        action_desc="管件库管确认",
         client_ip=client_ip,
     )
 

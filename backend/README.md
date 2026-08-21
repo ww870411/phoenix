@@ -1,3 +1,18 @@
+## 2026-08-21 库管确认环节流转状态与展示名称规范化（workspace.py / supply_management_service.py）
+
+- **业务规则与服务调整**：
+  - 核心模块：
+    - `backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+    - `backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+    - `backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+    - `backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+- **核心改动**：
+  - **状态与事件名称标准化**：
+    - 战报分类事件名称统一规范为 `库管确认`，战报标题统一规范为 `库管已确认 · 标段名称` 与 `管件库管已确认 · 标段名称`；
+    - 审计日志动作描述由 `库管确认入库` / `管件确认入库` 更新为 `库管确认` / `管件库管确认`；
+    - 接口选项 `delivery_status_options` 中，`pending_warehouse` 统一标为 `待库管确认`，`completed` 统一标为 `库管已确认`；
+    - 接口路由 summary 与权限提示文案同步更新，移除“核销”与“入库”等误导性概念。
+
 ## 2026-08-20 保温管基准进度台账返回值与统计修复（comprehensive_history_service.py）
 
 - **业务规则与服务调整**：

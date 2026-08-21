@@ -1694,7 +1694,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 return dt_val.strftime("%m-%d"), str(dt_val)
             return str(dt_val), str(dt_val)
 
-        # 4.1 管道物流链路事件（厂家发货、确认到货、施工单位收货、库管核销）
+        # 4.1 管道物流链路事件（厂家发货、确认到货、施工单位收货、库管确认）
         try:
             pipe_events_sql = text("""
                 SELECT id, order_no, shipment_no, supply_entity_id, section_1_id, pipe_model_id, 
@@ -1798,28 +1798,28 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "raw_time": raw_t
                     })
 
-                # 事件 4：库管核销
+                # 事件 4：库管确认
                 if p["warehouse_confirm_at"] or p["status"] == "completed":
                     w_time = p["warehouse_confirm_at"] or p["received_confirm_at"] or p["shipped_at"]
                     t_str, raw_t = _format_bj_time(w_time)
                     w_op = _clean_str(p["warehouse_by"] or "专职库管员")
                     live_feed_list.append({
                         "id": f"p_wh_{p['id']}",
-                        "category": "库管核销",
+                        "category": "库管确认",
                         "category_key": "warehouse",
                         "type": "pipe",
                         "supplier_id": p.get("supply_entity_id"),
                         "section_id": p.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"库管实测核销 · {sec_name}",
+                        "headline": f"库管已确认 · {sec_name}",
                         "specification": model_str,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
                         "vehiclePlate": plate_str,
                         "operator": w_op,
                         "time": t_str,
-                        "positiveTag": f"实测核验无误，入库手续闭环",
+                        "positiveTag": f"实测核验无误，库管确认完成",
                         "isNew": False,
                         "raw_time": raw_t
                     })
@@ -1938,21 +1938,21 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     w_op = _clean_str(f["warehouse_by"] or "专职库管员")
                     live_feed_list.append({
                         "id": f"f_wh_{f['id']}",
-                        "category": "库管核销",
+                        "category": "库管确认",
                         "category_key": "warehouse",
                         "type": "fitting",
                         "supplier_id": f.get("supply_entity_id"),
                         "section_id": f.get("section_1_id"),
                         "supplier": sup_name,
                         "target": sec_name,
-                        "headline": f"管件实物核销 · {sec_name}",
+                        "headline": f"管件库管已确认 · {sec_name}",
                         "specification": spec_desc,
                         "amount": rec_qty_str,
                         "shipmentCode": code_str,
                         "vehiclePlate": plate_str,
                         "operator": w_op,
                         "time": t_str,
-                        "positiveTag": "管件配套清点无误，手续闭环",
+                        "positiveTag": "管件配套清点无误，库管确认完成",
                         "isNew": False,
                         "raw_time": raw_t
                     })
@@ -2138,7 +2138,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             },
             {
                 "title": "大连开元、河北鑫瑞得、能源集团保温管厂三大基地全线直运",
-                "desc": "直通现场库管员（左巨、赫心彤、李春、李海、王世博等）闭环签收核销",
+                "desc": "直通现场库管员（左巨、赫心彤、李春、李海、王世博等）闭环签收确认",
                 "time": "实时"
             }
         ]
@@ -3048,8 +3048,8 @@ def get_warehouse_management_options(
         "delivery_status_options": [
             {"value": "pending_arrival", "label": "已发货待到货"},
             {"value": "pending_receive", "label": "已到货待接收"},
-            {"value": "pending_warehouse", "label": "已接收待库管"},
-            {"value": "completed", "label": "已完成"},
+            {"value": "pending_warehouse", "label": "待库管确认"},
+            {"value": "completed", "label": "库管已确认"},
             {"value": "cancelled", "label": "已撤销"},
         ],
     }
@@ -4111,7 +4111,7 @@ def export_global_management_operation_logs(
         "CANCEL_DELIVERY": "撤销发货",
         "CONFIRM_ARRIVAL": "现场到货签收",
         "CONFIRM_CONSTRUCTION": "施工接收确认",
-        "CONFIRM_WAREHOUSE": "库管确认入库",
+        "CONFIRM_WAREHOUSE": "库管确认",
         "SAVE_PLAN": "更新三日计划",
         "SUBMIT_USAGE": "上报消耗损耗",
         "SUBMIT_STATUS": "提交填报状态",
@@ -4122,7 +4122,7 @@ def export_global_management_operation_logs(
         "SUBMIT_FITTING_DELIVERY": "提交管件发货",
         "CONFIRM_FITTING_ARRIVAL": "管件现场确认到货",
         "CONFIRM_FITTING_CONSTRUCTION": "管件施工确认接收",
-        "CONFIRM_FITTING_WAREHOUSE": "管件库管确认入库",
+        "CONFIRM_FITTING_WAREHOUSE": "管件库管确认",
         "CANCEL_FITTING_DELIVERY": "撤销管件发货",
         "DELETE_FITTING_DELIVERY": "撤销管件发货",
     }
@@ -4792,13 +4792,13 @@ def handle_confirm_fitting_delivery_construction(
     )
 
 
-@router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件入库")
+@router.post("/workspace/fitting_deliveries/confirm_warehouse", summary="库管确认管件")
 def handle_confirm_fitting_delivery_warehouse(
     payload: FittingConfirmPayload,
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
-    _ensure_fitting_role(session, {"global_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}, "管件库管入库确认")
+    _ensure_fitting_role(session, {"global_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}, "管件库管确认")
     rows = get_fitting_deliveries_by_ids(payload.ids)
     found_ids = {int(row["id"]) for row in rows}
     if not set(payload.ids).issubset(found_ids):

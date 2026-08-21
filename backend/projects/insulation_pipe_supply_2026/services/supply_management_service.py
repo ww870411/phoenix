@@ -928,7 +928,7 @@ def update_delivery_warehouse_record(
         if not row:
             raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
         if _normalize_text(row["status"]) != "pending_warehouse":
-            raise HTTPException(status_code=422, detail="仅“已接收待库管确认”状态允许库管确认")
+            raise HTTPException(status_code=422, detail="仅“待库管确认”状态允许库管确认")
         session.execute(
             sql_update,
             {
@@ -1081,7 +1081,7 @@ def super_update_delivery_record(
             val_diff_approve_remark = None
 
         elif normalized_status == "pending_warehouse":
-            # 已接收待库管确认，必有到货与施工接收凭证
+            # 待库管确认，必有到货与施工接收凭证
             if val_arrived_qty is None or val_arrived_qty <= 0:
                 val_arrived_qty = val_shipped_qty
             val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
@@ -1117,7 +1117,7 @@ def super_update_delivery_record(
                     val_diff_approve_remark = "[管理员强改修正，自动补全差异确认手续]"
 
         elif normalized_status == "completed":
-            # 已入库结清，必有完整的时空与数量时序链
+            # 库管已确认，必有完整的时空与数量时序链
             if val_arrived_qty is None or val_arrived_qty <= 0:
                 val_arrived_qty = val_shipped_qty
             val_arrived_qty = min(val_arrived_qty, val_shipped_qty)
@@ -1670,7 +1670,7 @@ def confirm_fitting_delivery_warehouse(
     if not delivery_ids and payload.get("id"):
         delivery_ids = [payload.get("id")]
     if not delivery_ids:
-        raise HTTPException(status_code=400, detail="缺失待库管确认入库的管件记录 ID 列表")
+        raise HTTPException(status_code=400, detail="缺失待库管确认的管件记录 ID 列表")
 
     remark = _normalize_text(payload.get("remark"))
     now_dt = datetime.now(BEIJING_TZ)
@@ -1721,7 +1721,7 @@ def confirm_fitting_delivery_warehouse(
                 operator=operator,
                 operator_group=operator_group or "warehouse_keeper",
                 action_type="CONFIRM_FITTING_WAREHOUSE",
-                action_desc=f"库管确认管件入库完结：共确认 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
+                action_desc=f"库管确认管件完结：共确认 {updated_count} 条记录（涉及运单: {', '.join(list(shipment_nos)[:3])}）",
                 resource_id=", ".join(list(shipment_nos)[:3]),
                 after_value={
                     "updated_count": updated_count,
@@ -1736,7 +1736,7 @@ def confirm_fitting_delivery_warehouse(
         return {"ok": True, "updated_count": updated_count}
     except Exception as e:
         session.rollback()
-        raise HTTPException(status_code=500, detail=f"库管确认管件入库失败: {e}")
+        raise HTTPException(status_code=500, detail=f"库管确认管件失败: {e}")
     finally:
         session.close()
 

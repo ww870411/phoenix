@@ -1,3 +1,18 @@
+## 2026-08-21 库管确认环节流转状态与展示名称全系统规范化
+
+- **关联前端页面与模块**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js`（全局状态字典）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管台账工作台）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`（数字指挥大屏）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue`（综合驾驶舱）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **变更详情**：
+  - 库管确认前状态统一定名为 **“待库管确认”**（彻底清除“已接收待库管”、“待库管归档”、“施工已接收待入库”等历史表述）；
+  - 库管确认后状态统一定名为 **“库管已确认”**（彻底清除“库管核销”、“已入库结清”、“库管已归档”、“库管入库”、“已确认入库”等混淆概念）；
+  - 同步更新流转时光轴节点文案、状态徽章、批量操作按钮、战报微胶囊与 XLSX 导出表头，确保全项目多视图口径与规范绝对一致。
+
 ## 2026-08-20 管件全周期流转与现场库存表表头精简化（HistoryQueryView.vue）
 
 - **关联前端页面**：

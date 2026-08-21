@@ -1327,7 +1327,7 @@ const feedFilterOptions = [
   { key: 'dispatch', label: '厂家发货', icon: '🚚', color: '#38bdf8' },
   { key: 'arrival', label: '确认到货', icon: '📍', color: '#60a5fa' },
   { key: 'receive', label: '施工单位收货', icon: '🏗️', color: '#f59e0b' },
-  { key: 'warehouse', label: '库管核销', icon: '🛡️', color: '#10b981' },
+  { key: 'warehouse', label: '库管确认', icon: '🛡️', color: '#10b981' },
   { key: 'usage', label: '施工量确认', icon: '📐', color: '#a855f7' },
   { key: 'plan', label: '需求量申报', icon: '📋', color: '#f43f5e' },
 ]
@@ -1657,7 +1657,7 @@ const activeEventCategory = computed(() => {
   const ev = activeEvent.value
   const cat = ev.category_key || ev.category || ''
   if (cat === 'dispatch' || cat === '厂家发货') return 'dispatch'
-  if (['arrival', 'receive', 'warehouse', '确认到货', '施工单位收货', '库管核销'].includes(cat)) return 'arrival'
+  if (['arrival', 'receive', 'warehouse', '确认到货', '施工单位收货', '库管核销', '库管确认', '库管已确认'].includes(cat)) return 'arrival'
   if (cat === 'usage' || cat === '施工量确认') return 'usage'
   if (cat === 'plan' || cat === '需求量申报') return 'plan'
   return 'other'
@@ -1680,8 +1680,8 @@ function getFeedSourceOrAction(feed) {
   if (feed.category_key === 'receive' || feed.category === '施工单位收货') {
     return feed.type === 'fitting' ? '施工接收管件' : '施工实物收货'
   }
-  if (feed.category_key === 'warehouse' || feed.category === '库管核销') {
-    return feed.type === 'fitting' ? '管件实物核销' : '库管实测核销'
+  if (feed.category_key === 'warehouse' || feed.category === '库管核销' || feed.category === '库管确认' || feed.category === '库管已确认') {
+    return feed.type === 'fitting' ? '管件库管已确认' : '库管已确认'
   }
   if (feed.category_key === 'usage' || feed.category === '施工量确认') {
     return '现场施工安装'
@@ -2378,7 +2378,7 @@ function triggerSimulateDelivery(mode = 'pipe') {
       matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
     } else if (roll < 0.92) {
       categoryKey = 'warehouse'
-      categoryName = '库管核销'
+      categoryName = '库管确认'
       matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
     } else {
       categoryKey = 'usage'
@@ -2540,21 +2540,21 @@ function triggerSimulateDelivery(mode = 'pipe') {
   } else if (categoryKey === 'warehouse') {
     newFeed = {
       id: eventId,
-      category: '库管核销',
+      category: '库管确认',
       category_key: 'warehouse',
       type: matType,
       supplier_id: chosenSup.id,
       section_id: secTarget.id,
       supplier: supName,
       target: secName,
-      headline: matType === 'fitting' ? `管件实物核销 · ${secName}` : `库管实测核销 · ${secName}`,
+      headline: matType === 'fitting' ? `管件库管已确认 · ${secName}` : `库管已确认 · ${secName}`,
       specification: matType === 'fitting' ? '90°大口径弯头 DN800' : 'DN800 预制直埋保温管',
       amount: matType === 'fitting' ? '4 件套' : '240 米',
       shipmentCode: 'WH-' + Math.floor(1000 + Math.random() * 9000),
       vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
       operator: '专职库管员',
       time: timeNow,
-      positiveTag: matType === 'fitting' ? '管件实物核验无误，入库手续闭环' : '实测核验无误，入库手续闭环',
+      positiveTag: matType === 'fitting' ? '管件实物核验无误，库管确认完成' : '实测核验无误，库管确认完成',
       isNew: true
     }
 
@@ -4685,7 +4685,7 @@ onBeforeUnmount(() => {
   background: #00f2fe;
 }
 
-/* 2. 确认到货/确权/核销端 */
+/* 2. 确认到货/确权/库管确认端 */
 .demand-node-card.is-event-target.event-cat-arrival {
   border-color: #38bdf8;
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, #11263d 70%);
@@ -4693,7 +4693,7 @@ onBeforeUnmount(() => {
   animation: target-arrival-pulse 1.6s infinite ease-in-out;
 }
 
-/* 管件到货/施工接收管件/库管核销管件 - 专属琥珀金光晕 */
+/* 管件到货/施工接收管件/管件库管确认 - 专属琥珀金光晕 */
 .demand-node-card.is-event-target.event-cat-arrival.event-mat-fitting {
   border-color: #fbbf24;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, #11263d 70%);

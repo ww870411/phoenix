@@ -313,7 +313,7 @@
               <span class="kpi-val text-emerald">{{ formatQty(dailyPipeSummary.total_usage_qty) }} <small>米</small></span>
             </div>
             <div class="kpi-card">
-              <span class="kpi-label">💼 库管入库总量</span>
+              <span class="kpi-label">💼 库管已确认总量</span>
               <span class="kpi-val text-amber">{{ formatQty(dailyPipeSummary.total_warehouse_qty) }} <small>米</small></span>
             </div>
           </div>
@@ -340,7 +340,7 @@
               <span class="kpi-val text-amber">{{ dailyFittingSummary.site_stock_pcs || 0 }} <small>件</small></span>
             </div>
             <div class="kpi-card">
-              <span class="kpi-label">💼 库管确认入库</span>
+              <span class="kpi-label">💼 库管已确认</span>
               <span class="kpi-val text-slate">{{ dailyFittingSummary.total_warehouse_qty || 0 }} <small>件</small></span>
             </div>
           </div>
@@ -469,7 +469,7 @@
                     <th class="text-right">施工接收 (米)</th>
                     <th class="text-right">实际使用 (米)</th>
                     <th class="text-right">损耗量 (米)</th>
-                    <th class="text-right">库管入库 (米)</th>
+                    <th class="text-right">库管已确认 (米)</th>
                     <th v-if="dailyDimensions.includes('date')" class="text-center">在途时长</th>
                   </tr>
                   <tr v-else>
@@ -484,7 +484,7 @@
                     <th class="text-right">到货数量 (件)</th>
                     <th class="text-right">施工接收 (件)</th>
                     <th class="text-right">现场安装 (件)</th>
-                    <th class="text-right">库管入库 (件)</th>
+                    <th class="text-right">库管已确认 (件)</th>
                     <th class="text-right">现场结余 (件)</th>
                   </tr>
                 </thead>
@@ -1339,7 +1339,7 @@
                   <span class="group-icon">📦</span>
                   <span class="group-title">物资仓储与库管核验人员</span>
                   <span class="badge badge-keeper">{{ filteredWarehouseKeepers.length }} 人</span>
-                  <span class="group-desc">负责现场物资到货二次核验、整车入库台账确认与物资管理</span>
+                  <span class="group-desc">负责现场物资到货二次核验、整车台账确认与物资管理</span>
                 </div>
                 <div class="accordion-toggle-arrow">
                   <span>{{ groupCollapseState.warehouse_keepers ? '▼ 展开' : '▲ 收起' }}</span>
@@ -1753,7 +1753,7 @@
               </div>
               <div class="chain-arrow">➔</div>
               <div class="chain-step">
-                <span class="step-lbl">6. 库管入库</span>
+                <span class="step-lbl">6. 库管已确认</span>
                 <span class="step-val text-amber">{{ formatQty(pipeDetailModalData.warehouse_qty) }} 米</span>
               </div>
             </div>
@@ -3044,7 +3044,7 @@ async function exportCurrentTabExcel() {
       const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
 
       if (subMaterialType.value === 'pipe') {
-        headers = [...dimHeaders, '计划量(米)', '发货量(米)', '到货量(米)', '施工接收(米)', '现场使用(米)', '损耗量(米)', '库管入库(米)']
+        headers = [...dimHeaders, '计划量(米)', '发货量(米)', '到货量(米)', '施工接收(米)', '现场使用(米)', '损耗量(米)', '库管已确认(米)']
         if (activeDims.includes('date')) headers.push('在途时长')
 
         dataRows = aggregatedDailyRows.value.map(r => {
@@ -3061,7 +3061,7 @@ async function exportCurrentTabExcel() {
         })
         filename = `保温管每日流转透视台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
       } else {
-        headers = [...dimHeaders, '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管入库(件)', '现场结余(件)']
+        headers = [...dimHeaders, '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管已确认(件)', '现场结余(件)']
         dataRows = aggregatedDailyRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'date') return r.biz_date || '—'

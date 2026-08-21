@@ -145,7 +145,7 @@ export const DELIVERY_STATUS_DICT = {
     color: '#a855f7',
   },
   completed: {
-    label: '✅ 已入库结清',
+    label: '✅ 库管已确认',
     class: 'status-completed',
     icon: '✅',
     color: '#10b981',

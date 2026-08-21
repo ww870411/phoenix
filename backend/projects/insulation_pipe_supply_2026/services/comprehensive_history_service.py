@@ -1014,7 +1014,7 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
             "contact_phone": phone,
             "managed_sections": managed_sec_names,
             "managed_section_ids": managed_sec_ids,
-            "scope_desc": f"负责 {scope_str} 到货核验与入库确认",
+            "scope_desc": f"负责 {scope_str} 到货核验与库管确认",
             "is_global": is_global,
         })
 

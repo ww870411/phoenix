@@ -696,8 +696,8 @@
                     <div class="status-badge-container">
                       <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
                       <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">✅ 待施工接收</span>
-                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管归档</span>
-                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已归档</span>
+                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管确认</span>
+                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已确认</span>
                       <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px; white-space: nowrap;">❌ 已撤销</span>
                       <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10.5px; padding: 1px 5px; margin-left: 2px; white-space: nowrap;">⚠️ 撤销</span>
                     </div>
@@ -786,8 +786,8 @@
                           <td style="text-align: center; white-space: nowrap;">
                             <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10.5px; padding: 1px 6px;">🚚 待到货确认</span>
                             <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px; padding: 1px 6px;">✅ 待施工接收</span>
-                            <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 10.5px; padding: 1px 6px;">👷 待库管归档</span>
-                            <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 10.5px; padding: 1px 6px;">🏢 库管已归档</span>
+                            <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 10.5px; padding: 1px 6px;">👷 待库管确认</span>
+                            <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 10.5px; padding: 1px 6px;">🏢 库管已确认</span>
                             <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 10.5px; padding: 1px 6px;">❌ 已撤销</span>
                           </td>
                         </tr>
@@ -2242,7 +2242,7 @@
               </div>
             </div>
 
-            <!-- 5. 库管入库阶段 -->
+            <!-- 5. 库管确认阶段 -->
             <div style="position: relative;">
               <span :style="{
                 position: 'absolute', left: '-24px', top: '2px', width: '12px', height: '12px', borderRadius: '99px',
@@ -2252,16 +2252,16 @@
               }"></span>
               <div style="display: flex; flex-direction: column; gap: 4px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.warehouseConfirmAt ? '#1e293b' : '#94a3b8' }">🏢 库管员确认物资归档入库</span>
+                  <span :style="{ fontSize: '13px', fontWeight: 'bold', color: deliveryDetailModalData.warehouseConfirmAt ? '#1e293b' : '#94a3b8' }">🏢 库管已确认</span>
                   <span v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span>
                   <span v-else style="font-size: 11px; color: #94a3b8; font-style: italic;">等待库管确认...</span>
                 </div>
                 <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>入库日期：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
+                  <div>确认时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
                   <div>操作账号：<strong>{{ deliveryDetailModalData.warehouseConfirmBy || '—' }}</strong></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.warehouseConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.warehouseConfirmPhone }}</span></div>
-                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">入库备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">确认备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
                 </div>
               </div>
             </div>
@@ -2385,7 +2385,7 @@
 
           <div style="padding: 15px 20px; font-size: 13px; color: #334155;">
             <div style="margin-bottom: 12px; background: #f3e8ff; border: 1px solid #d8b4fe; padding: 10px 12px; border-radius: 6px; color: #581c87; font-size: 12px;">
-              💡 提示：由施工现场接收人员确认管件到场领用入库。确认后将进入“库管待归档”流转阶段。
+              💡 提示：由施工现场接收人员确认管件到场领用接收。确认后将进入“待库管确认”流转阶段。
             </div>
 
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px; border: 1px solid #e2e8f0; table-layout: fixed;">
