@@ -919,7 +919,7 @@
             </div>
 
             <!-- 单日已提交锁定提示条 -->
-            <div v-if="hasSubmittedFittingUsageToday" class="submitted-warning-banner" style="margin-top: 14px; padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; color: #92400e; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <div v-if="hasSubmittedFittingUsageToday" class="submitted-warning-banner" style="margin-top: 14px; padding: 12px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; color: #92400e; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box; word-break: break-word; line-height: 1.5;">
               <span>⚠️ <strong>单日填报已锁定</strong>：当前标段在【{{ usageDate }}】已完成管件安装使用量填报（已记账）。单日仅允许提交一次，如需重新填报，请在下方【管件现场安装使用历史台账】中点击【撤回】后重新填报。</span>
             </div>
 
@@ -1163,9 +1163,9 @@
 
             <!-- 底部提交条 -->
             <div class="usage-submit-action-bar" style="margin-top: 14px; padding: 12px 18px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-              <div style="font-size: 13.5px; color: #1e3a8a;">
+              <div class="usage-submit-info" style="font-size: 13.5px; color: #1e3a8a;">
                 <span v-if="hasSubmittedFittingUsageToday" style="color: #92400e; font-weight: 600;">
-                  🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。如需重新填报请在历史台账中撤回。
+                  🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。
                 </span>
                 <template v-else>
                   <span>已选填报 <strong>{{ totalFilledItemsCount }}</strong> 种管件规格，</span>
@@ -1173,8 +1173,9 @@
                   <span v-if="totalFilledQtySum > 0" style="margin-left: 8px; color: #059669; font-size: 12px;">(消耗采集日期: {{ usageDate }})</span>
                 </template>
               </div>
-              <div style="display: flex; gap: 10px; align-items: center;">
+              <div class="usage-submit-btns" :class="{ 'is-submitted-single': hasSubmittedFittingUsageToday }" style="display: flex; gap: 10px; align-items: center;">
                 <button
+                  v-if="!hasSubmittedFittingUsageToday"
                   type="button"
                   class="btn ghost"
                   style="height: 36px; padding: 0 14px; font-size: 13px;"
@@ -1187,11 +1188,11 @@
                   type="button"
                   class="btn primary"
                   :style="{ opacity: hasSubmittedFittingUsageToday ? 0.6 : 1, cursor: hasSubmittedFittingUsageToday ? 'not-allowed' : 'pointer' }"
-                  style="height: 36px; padding: 0 22px; font-size: 14px; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;"
+                  style="height: 36px; padding: 0 18px; font-size: 14px; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;"
                   :disabled="hasSubmittedFittingUsageToday || totalFilledQtySum <= 0 || fittingUsageSubmitting"
                   @click="handleFittingUsageSubmit"
                 >
-                  <span v-if="hasSubmittedFittingUsageToday">🔒 本日已提交 (单日仅限提交一次)</span>
+                  <span v-if="hasSubmittedFittingUsageToday">🔒 本日已提交</span>
                   <span v-else-if="fittingUsageSubmitting">正在提交入库...</span>
                   <span v-else>🚀 提交管件安装记录</span>
                 </button>
@@ -7911,21 +7912,41 @@ function jumpToUsageTab() {
   .usage-submit-action-bar {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 12px !important;
-    padding: 14px !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
   }
 
-  .usage-submit-action-bar > div:last-child {
+  .usage-submit-action-bar .usage-submit-info {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    word-break: break-word !important;
+  }
+
+  .usage-submit-action-bar .usage-submit-btns {
     display: grid !important;
-    grid-template-columns: 1fr 2fr !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) !important;
     gap: 8px !important;
     width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .usage-submit-action-bar .usage-submit-btns.is-submitted-single {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
   .usage-submit-action-bar .btn {
-    height: 42px !important;
-    font-size: 14px !important;
+    height: 40px !important;
+    font-size: 13.5px !important;
+    padding: 0 10px !important;
     justify-content: center !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 }
 </style>

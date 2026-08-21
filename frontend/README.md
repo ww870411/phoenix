@@ -1,3 +1,22 @@
+## 2026-08-21 需求管理管件已提交锁定提示文本精简（DemandManagementView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理）
+- **变更详情**：
+  - 底部提交条中的已提交状态文字提示优化为：`🔒 当前标段在【{{ usageDate }}】已记账提交，单日仅限提交一次。`。
+
+## 2026-08-21 移动端管件填报提交按钮防溢出与自适应优化（DemandManagementView.vue）
+
+- **关联前端页面**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理）
+- **变更详情**：
+  - **文案精简化与单列自适应**：
+    - 已提交锁定状态下，将底部提交按钮上的文案精简为 `🔒 本日已提交`，移除多余的长括号说明；
+    - 当 `hasSubmittedFittingUsageToday` 为真时，隐藏已禁用的“清空填写”按钮，提交按钮自适应为整行全宽（`is-submitted-single` 单列模式），界面清晰整洁；
+  - **移动端网格防溢出与弹性自适应**：
+    - 移动端媒体查询下，网格列宽采用 `minmax(0, 1fr)` 和 `minmax(0, 2fr)`，配合 `min-width: 0; box-sizing: border-box; text-overflow: ellipsis;`，彻底消除在窄屏手机上长文本撑爆网格导致超出屏幕右侧的 UI 缺陷；
+    - 顶部锁定警告条与操作条容器强化 `word-break: break-word; overflow: hidden;`，保障极端小屏下的多端一致体验。
+
 ## 2026-08-21 库管确认环节流转状态与展示名称全系统规范化
 
 - **关联前端页面与模块**：
