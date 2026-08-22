@@ -117,6 +117,24 @@ def ensure_audit_log_table() -> None:
                 session.execute(text(f"ALTER TABLE logs.system_audit_logs ADD COLUMN IF NOT EXISTS {col_name} {col_type};"))
             except Exception:
                 pass
+
+        # 自愈修复：确保主键 id 关联自增序列 (解决从历史备份恢复可能丢失 sequence DEFAULT 的问题)
+        try:
+            session.execute(text("""
+                DO $$
+                BEGIN
+                    CREATE SEQUENCE IF NOT EXISTS logs.system_audit_logs_id_seq;
+                    ALTER TABLE logs.system_audit_logs ALTER COLUMN id SET DEFAULT nextval('logs.system_audit_logs_id_seq');
+                    ALTER SEQUENCE logs.system_audit_logs_id_seq OWNED BY logs.system_audit_logs.id;
+                    PERFORM setval('logs.system_audit_logs_id_seq', COALESCE((SELECT MAX(id) FROM logs.system_audit_logs), 0) + 1, false);
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        NULL;
+                END $$;
+            """))
+        except Exception as seq_err:
+            logger.warning("ensure sequence for audit logs failed: %s", seq_err)
+
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_audit_logs_ts ON logs.system_audit_logs (ts DESC);"))
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_audit_logs_project_key ON logs.system_audit_logs (project_key);"))
         session.commit()
@@ -210,17 +228,20 @@ def append_events(events: Iterable[Dict[str, Any]]) -> int:
         return len(batch_params)
     except Exception as e:
         session.rollback()
-        # 若因表结构缺失列，执行一次自愈重试
+        # 若因表结构缺失列或序列丢失，执行一次自愈重试
         err_str = str(e).lower()
-        if "undefinedcolumn" in err_str or "does not exist" in err_str:
+        if any(keyword in err_str for keyword in ["undefinedcolumn", "does not exist", "notnullviolation", "null value in column"]):
             ensure_audit_log_table()
+            retry_session = SessionLocal()
             try:
-                session.execute(insert_sql, batch_params)
-                session.commit()
+                retry_session.execute(insert_sql, batch_params)
+                retry_session.commit()
                 return len(batch_params)
             except Exception as retry_err:
-                session.rollback()
+                retry_session.rollback()
                 logger.warning("Retry append_events failed: %s", retry_err)
+            finally:
+                retry_session.close()
         logger.warning("Failed to write audit logs to PostgreSQL logs.system_audit_logs: %s", e)
         return 0
     finally:

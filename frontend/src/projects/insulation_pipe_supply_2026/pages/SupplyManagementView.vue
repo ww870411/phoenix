@@ -798,39 +798,88 @@
                     </div>
 
                     <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 4px;">
-                      <table class="data-table demand-fitting-table" style="margin: 0; min-width: 680px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                      <table class="data-table demand-fitting-table" style="margin: 0; min-width: 720px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
                         <thead style="background: #f8fafc;">
                           <tr>
                             <th style="width: 38px; text-align: center;">#</th>
-                            <th style="width: 110px;">管件类型</th>
-                            <th style="min-width: 200px;">型号 / 规格描述</th>
-                            <th style="width: 95px; text-align: right;">发货件数</th>
-                            <th style="width: 150px;">订单号</th>
-                            <th v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" style="width: 100px; text-align: center;">操作</th>
+                            <th style="width: 105px;">管件类型</th>
+                            <th style="min-width: 170px;">型号 / 规格描述</th>
+                            <th style="width: 90px; text-align: right;">发货件数</th>
+                            <th style="width: 135px;">订单号</th>
+                            <th style="width: 120px; text-align: center;">状态 / 备注</th>
+                            <th v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="width: 140px; text-align: center;">操作</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="(item, idx) in group.items" :key="item.id">
+                          <tr 
+                            v-for="(item, idx) in group.items" 
+                            :key="item.id"
+                            :class="['mobile-fitting-item-row', { 'is-cancelled-row': item.status === 'cancelled' }]"
+                            :style="item.status === 'cancelled' ? { background: '#fef2f2', opacity: '0.85' } : {}"
+                          >
                             <td class="col-index" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
                             <td class="col-type">
                               <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ getNormalizedFittingType(item.fitting_type) }}</span>
                               <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
                             </td>
-                            <td class="col-model"><strong style="color: #1e293b;">{{ item.model_spec }}</strong></td>
-                            <td class="col-shipped" style="text-align: right; font-weight: bold; color: #2563eb;">
-                              <span class="mobile-lbl" style="display: none;">发货件数: </span>
+                            <td class="col-model">
+                              <strong :style="{ color: item.status === 'cancelled' ? '#94a3b8' : '#1e293b', textDecoration: item.status === 'cancelled' ? 'line-through' : 'none' }">
+                                {{ item.model_spec }}
+                              </strong>
+                            </td>
+                            <td class="col-shipped" style="text-align: right; font-weight: bold;" :style="{ color: item.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: item.status === 'cancelled' ? 'line-through' : 'none' }">
+                              <span class="mobile-lbl" style="display: none;">发货: </span>
                               <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
                             </td>
-                            <td class="col-action"><span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span></td>
-                            <td v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)" style="text-align: center;">
-                              <button
-                                type="button"
-                                class="btn primary btn-sm"
-                                style="padding: 3px 8px; font-size: 11.5px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px;"
-                                @click.stop="openSuperEditFitting(item, group)"
-                              >
-                                ⚙️ 编辑覆盖
-                              </button>
+                            <td class="col-action">
+                              <span class="mobile-order-lbl" style="display: none; font-size: 11px; color: #94a3b8; margin-right: 4px;">单号:</span>
+                              <span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span>
+                            </td>
+                            <td class="col-status" style="text-align: center;">
+                              <span v-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px;" :title="item.cancel_reason ? `撤销原因: ${item.cancel_reason}` : '已撤销'">
+                                ❌ 已撤销
+                              </span>
+                              <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px;">
+                                🏢 库管已确认
+                              </span>
+                              <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px;">
+                                👷 待库管确认
+                              </span>
+                              <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px;">
+                                ✅ 待施工接收
+                              </span>
+                              <span v-else class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px;">
+                                🚚 待到货
+                              </span>
+                              <div v-if="item.cancel_reason" class="mobile-cancel-reason" style="font-size: 10.5px; color: #b91c1c; margin-top: 2px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'撤销原因: ' + item.cancel_reason">
+                                理由: {{ item.cancel_reason }}
+                              </div>
+                            </td>
+                            <td class="col-operate" v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="text-align: center;">
+                              <div class="mobile-action-buttons" style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <button
+                                  v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)"
+                                  type="button"
+                                  class="btn primary btn-sm"
+                                  style="padding: 2px 6px; font-size: 11px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px;"
+                                  @click.stop="openSuperEditFitting(item, group)"
+                                  title="编辑覆盖此项发货数据"
+                                >
+                                  ⚙️ 编辑
+                                </button>
+                                <button
+                                  v-if="(item.status === 'shipped' || item.status === 'pending_arrival' || !item.status) && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
+                                  type="button"
+                                  class="btn ghost btn-sm"
+                                  style="padding: 2px 6px; font-size: 11px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; border-radius: 4px;"
+                                  @click.stop="handleCancelFittingItem(item, group)"
+                                  title="局部撤销此项管件明细"
+                                >
+                                  撤销此项
+                                </button>
+                                <span v-else-if="item.status === 'cancelled'" style="font-size: 11px; color: #94a3b8;">—</span>
+                                <span v-else style="font-size: 11px; color: #94a3b8;" title="现场已签收/入库，不可单方面撤销">不可撤销</span>
+                              </div>
                             </td>
                           </tr>
                         </tbody>
@@ -1529,18 +1578,24 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(it, idx) in deliveryDetailModalData.itemsList" :key="it.id || idx" style="border-bottom: 1px solid #f1f5f9;">
+                <tr v-for="(it, idx) in deliveryDetailModalData.itemsList" :key="it.id || idx" style="border-bottom: 1px solid #f1f5f9;" :style="it.status === 'cancelled' ? { background: '#fef2f2', opacity: '0.8' } : {}">
                   <td style="padding: 6px 4px; text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">{{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}</td>
+                  <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">
+                    {{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}
+                    <span v-if="it.status === 'cancelled'" class="tag-badge" style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 10px; margin-left: 4px;">已撤销</span>
+                  </td>
                   <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
-                  <td style="padding: 6px 6px; text-align: right; font-weight: bold; color: #2563eb; white-space: nowrap;">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}</td>
+                  <td style="padding: 6px 6px; text-align: right; font-weight: bold;" :style="{ color: it.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: it.status === 'cancelled' ? 'line-through' : 'none', whiteSpace: 'nowrap' }">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
-                    <span v-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
+                    <span v-if="it.status === 'cancelled'" style="color: #ef4444; font-size: 11px;">已撤销</span>
+                    <span v-else-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
                       {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}
                     </span>
                     <span v-else style="color: #94a3b8; font-weight: normal;">—</span>
                   </td>
-                  <td style="padding: 6px 6px; color: #64748b; font-style: italic; word-break: break-word;">{{ it.ship_remark || it.shipRemark || it.arrival_remark || '—' }}</td>
+                  <td style="padding: 6px 6px; color: #64748b; font-style: italic; word-break: break-word;">
+                    {{ it.cancel_reason ? `[撤销原因: ${it.cancel_reason}]` : (it.ship_remark || it.shipRemark || it.arrival_remark || '—') }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -2640,7 +2695,7 @@ const handleCancelFittingGroup = async (group) => {
     fittingActionMsg.value = { type: 'error', text: '该车次管件已全部进入后续确认/入库流程或已被撤销，不可重复撤销。' }
     return
   }
-  const reason = window.prompt(`请输入撤销发货原因（车次 ${group.shipmentNo}）：`, '')
+  const reason = window.prompt(`请输入整车撤销发货原因（车次 ${group.shipmentNo}）：`, '')
   if (reason === null) return
   if (String(reason).trim().length < 2) {
     fittingActionMsg.value = { type: 'error', text: '撤销原因至少填写 2 个字符' }
@@ -2653,6 +2708,32 @@ const handleCancelFittingGroup = async (group) => {
       remark: String(reason).trim(),
     })
     fittingActionMsg.value = { type: 'success', text: `已撤销 ${result.updated_count} 项管件发货记录` }
+    await loadFittingDeliveries()
+  } catch (error) {
+    fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
+  }
+}
+
+const handleCancelFittingItem = async (item, group) => {
+  const st = item.status || 'shipped'
+  if (!['shipped', 'pending_arrival'].includes(st)) {
+    fittingActionMsg.value = { type: 'error', text: `该管件明细（${item.fitting_type} ${item.model_spec}）已进入后续确认流程或已撤销，不可撤销。` }
+    return
+  }
+  const specDesc = `${item.fitting_type} ${item.model_spec}`
+  const reason = window.prompt(`请输入撤销管件明细【${specDesc}】的原因说明（至少2个字符）：`, '')
+  if (reason === null) return
+  if (String(reason).trim().length < 2) {
+    fittingActionMsg.value = { type: 'error', text: '撤销原因至少填写 2 个字符' }
+    return
+  }
+  fittingActionMsg.value = null
+  try {
+    const result = await cancelFittingDelivery(PROJECT_KEY, {
+      ids: [item.id],
+      remark: String(reason).trim(),
+    })
+    fittingActionMsg.value = { type: 'success', text: `已成功撤销管件明细【${specDesc}】` }
     await loadFittingDeliveries()
   } catch (error) {
     fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
@@ -5206,10 +5287,33 @@ async function saveSuperEditFitting() {
     padding-bottom: 16px;
   }
 
+  /* 🏷️ 二级 Tab 选项卡横向滑动 (防止多 Tab 挤压换行) */
+  .tube-tabs-header-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 3px !important;
+    border-radius: 10px !important;
+  }
+
+  .tube-tabs-header {
+    width: max-content !important;
+    min-width: 100% !important;
+    gap: 3px !important;
+  }
+
+  .tube-tabs-header button {
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+    white-space: nowrap !important;
+    flex: none !important;
+    border-radius: 8px !important;
+  }
+
   .topbar,
   .panel-title-row {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
 
   .topbar-actions {
@@ -5219,6 +5323,8 @@ async function saveSuperEditFitting() {
   .toolbar-actions {
     width: 100%;
     justify-content: stretch;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .topbar-actions .btn,
@@ -5244,24 +5350,44 @@ async function saveSuperEditFitting() {
     display: none !important;
   }
 
+  /* 🚚 管件车次汇总卡片头部响应式 */
   .fitting-card-header {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 10px !important;
+    gap: 8px !important;
     padding: 10px 12px !important;
   }
 
-  .fitting-card-header .header-left-meta,
-  .fitting-card-header .header-right-meta {
+  .fitting-card-header .header-left-meta {
     width: 100% !important;
-    justify-content: space-between !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
   }
 
+  .fitting-card-header .header-right-meta {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    padding-top: 8px !important;
+    margin-top: 2px !important;
+  }
+
+  .fitting-card-header .header-right-meta .btn {
+    flex-shrink: 0 !important;
+  }
+
+  /* 📱 展开后的管件明细在手机端卡片化优雅排版 */
   .table-responsive-wrapper {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    margin-left: -4px;
-    margin-right: -4px;
+    overflow-x: visible !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   .demand-fitting-table {
@@ -5269,6 +5395,7 @@ async function saveSuperEditFitting() {
     border: none !important;
     table-layout: auto !important;
     background: transparent !important;
+    width: 100% !important;
   }
 
   .demand-fitting-table thead {
@@ -5278,28 +5405,120 @@ async function saveSuperEditFitting() {
   .demand-fitting-table tbody {
     display: flex !important;
     flex-direction: column !important;
-    gap: 8px !important;
+    gap: 10px !important;
   }
 
-  .demand-fitting-table tbody tr {
-    display: flex !important;
-    flex-direction: column !important;
+  .demand-fitting-table tbody tr.mobile-fitting-item-row {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-areas:
+      "type status"
+      "model model"
+      "shipped action"
+      "operate operate";
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
+    border: 1px solid #e2e8f0 !important;
     border-radius: 8px !important;
     padding: 10px 12px !important;
-    gap: 6px !important;
+    gap: 6px 10px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+    box-sizing: border-box !important;
+  }
+
+  .demand-fitting-table tbody tr.mobile-fitting-item-row.is-cancelled-row {
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
   }
 
   .demand-fitting-table tbody td {
     border: none !important;
     padding: 0 !important;
-    text-align: left !important;
-    width: 100% !important;
+    width: auto !important;
   }
 
   .demand-fitting-table tbody td.col-index {
     display: none !important;
+  }
+
+  .demand-fitting-table tbody td.col-type {
+    grid-area: type !important;
+    text-align: left !important;
+  }
+
+  .demand-fitting-table tbody td.col-status {
+    grid-area: status !important;
+    text-align: right !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+  }
+
+  .demand-fitting-table tbody td.col-model {
+    grid-area: model !important;
+    font-size: 13.5px !important;
+    color: #1e293b !important;
+    padding: 2px 0 !important;
+    word-break: break-all !important;
+    text-align: left !important;
+  }
+
+  .demand-fitting-table tbody td.col-shipped {
+    grid-area: shipped !important;
+    text-align: left !important;
+    font-size: 13px !important;
+  }
+
+  .demand-fitting-table tbody td.col-shipped .mobile-lbl {
+    display: inline !important;
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    font-weight: normal !important;
+  }
+
+  .demand-fitting-table tbody td.col-action {
+    grid-area: action !important;
+    text-align: right !important;
+    font-size: 11.5px !important;
+  }
+
+  .demand-fitting-table tbody td.col-action .mobile-order-lbl {
+    display: inline !important;
+  }
+
+  .demand-fitting-table tbody td.col-operate {
+    grid-area: operate !important;
+    text-align: right !important;
+    border-top: 1px dashed #f1f5f9 !important;
+    padding-top: 6px !important;
+    margin-top: 2px !important;
+  }
+
+  .demand-fitting-table tbody td.col-operate .mobile-action-buttons {
+    justify-content: flex-end !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .demand-fitting-table tbody td.col-operate .btn {
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* 📜 直管发货台账横向滚动容器优化 */
+  .delivery-record-table {
+    min-width: 860px !important;
+  }
+
+  /* 🛡️ 时光轴弹窗在移动端的紧凑排版 */
+  .block-modal-overlay {
+    padding: 8px !important;
+  }
+
+  .block-modal-card {
+    max-height: 92vh !important;
+    width: 100% !important;
+    border-radius: 12px !important;
   }
 }
 

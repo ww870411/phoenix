@@ -1,3 +1,25 @@
+## 2026-08-22 供给管理工作台前端移动端显示与交互深度优化同步说明
+
+- **服务模块与业务同步**：
+  - 本轮改动为供给管理工作台前端（`SupplyManagementView.vue`）在手机端移动设备上的响应式排版重构（Tab 栏横滑、车次头部自适应、管件明细卡片化网格）；
+  - 后端接口契约与数据模型保持完全兼容，无破坏性变更。
+
+## 2026-08-22 管件发货单明细项局部撤销服务支持（fitting_delivery_service.py）
+
+- **服务模块与业务规则调整**：
+  - 核心模块：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`
+  - 接口路由：`POST /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/cancel`
+  - 逻辑说明：服务层原生支持接收单个或多个明细 `ids: [id]` 与 `remark`，校验状态处于 `pending_arrival` 或 `shipped` 后精准将指定明细状态置为 `cancelled` 并写入审计日志；配合前端实现整车多规格管件中的单项局部精准撤销。
+
+## 2026-08-22 审计日志表主键序列自愈及生产库全表修复 SQL 工具（audit_log.py / fix_all_missing_id_sequences.sql）
+
+- **服务模块与数据库自愈工具**：
+  - 关联模块：`backend/services/audit_log.py`、`backend/sql/fix_system_audit_logs_id_seq.sql`、`backend/sql/fix_all_missing_id_sequences.sql`
+  - 核心改动：
+    1. 在 `ensure_audit_log_table` 中增加 PostgreSQL 自增序列检测与绑定语句（`logs.system_audit_logs_id_seq`，`DEFAULT nextval(...)`，`setval` 对齐当前最大值）；
+    2. 在 `append_events` 中捕获 `NotNullViolation` 时自动触发自愈并重试插入；
+    3. 新增 `backend/sql/fix_system_audit_logs_id_seq.sql`（单表修复）与 `backend/sql/fix_all_missing_id_sequences.sql`（全库批量扫描并自动自愈缺失序列的表）。
+
 ## 2026-08-21 保温管发货撤销必填校验与库管/需求端过滤已撤销发货单（workspace.py / supply_management_service.py / fitting_delivery_service.py）
 
 - **服务模块与业务规则调整**：

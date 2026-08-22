@@ -62,3 +62,10 @@ COMMENT ON COLUMN logs.system_audit_logs.client_ip IS '操作人客户端 IP 地
 COMMENT ON COLUMN logs.system_audit_logs.user_agent IS '客户端浏览器或设备 User-Agent 信息';
 COMMENT ON COLUMN logs.system_audit_logs.detail IS '操作参数详情、数据前后快照(before/after)或补充数据的 JSONB 结构体';
 COMMENT ON COLUMN logs.system_audit_logs.created_at IS '记录写入数据库的时间';
+
+-- 存量历史库自愈修复：若历史表丢失自增序列或 DEFAULT nextval
+CREATE SEQUENCE IF NOT EXISTS logs.system_audit_logs_id_seq;
+ALTER TABLE logs.system_audit_logs ALTER COLUMN id SET DEFAULT nextval('logs.system_audit_logs_id_seq');
+ALTER SEQUENCE logs.system_audit_logs_id_seq OWNED BY logs.system_audit_logs.id;
+SELECT setval('logs.system_audit_logs_id_seq', COALESCE((SELECT MAX(id) FROM logs.system_audit_logs), 0) + 1, false);
+

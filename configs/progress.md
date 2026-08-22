@@ -1,3 +1,40 @@
+## 2026-08-22 [供给管理工作台手机端移动端显示深度优化]
+- **优化背景与目标**：
+  - 针对在手机/窄屏设备访问供给管理页面（`SupplyManagementView.vue`）时，二级选项卡容易挤压换行、管件整车车次头部各元数据拥挤、展开明细表格因宽列产生错位及操作按钮排版混乱等问题进行深度响应式重构。
+- **改动详情**（`SupplyManagementView.vue`）：
+  1. **选项卡导航横向滑选**：对 `.tube-tabs-header-wrap` 引入移动端横向丝滑滑动（`-webkit-overflow-scrolling: touch`），Tab 按钮设置紧凑内边距与无换行，彻底消除多 Tab 时的挤压换行；
+  2. **管件车次汇总头部自适应**：车次号、车牌号、接收标段与发货时间在顶部自然流式排列；发货总计与操作按钮（流转凭证、撤销发货、编辑覆盖）在底部整齐右对齐分行排列；
+  3. **展开明细卡片化网格排版**：手机端将每行管件明细重塑为独立的 Grid 卡片结构（类型与状态左右分列置顶、型号规格大字呈现、发货件数与订单号清晰对照、底部专属操作按钮区），带圆角与细微阴影，兼顾视觉美观与触控体验；
+  4. **直管台账与时光轴弹窗适配**：直管 14 列台账配备防溢出横向平滑滚动；流转凭证弹窗在移动端自动适配视口高度并缩减边缘留白。
+
+## 2026-08-22 [管件发货单增加明细项局部撤销功能与强制备注说明]
+- **需求与优化目标**：
+  1. 为管件整车发货单提供明细级局部撤销能力（当整车装运多种管件规格时，允许发货方仅撤销作废其中装不下的某种规格，保留其余明细正常发运）；
+  2. 单项局部撤销与整单撤销体验完全一致，必须强制填写撤销原因（字数 ≥ 2 个字符）；
+  3. 全生命周期流转凭证时光轴模态弹窗与各端台账同步支持展示局部已撤销管件明细项的红色醒目标签与撤销原因。
+- **改动详情**：
+  1. **前端交互与单项撤销实现**（`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`）：
+     - 在展开的管件明细表格中增加“状态 / 备注”列与“操作”列；
+     - 每一行处于待到货状态（`shipped` 或 `pending_arrival`）的管件明细均展示【撤销此项】按钮；已撤销明细以中划线和浅红底色展示 `❌ 已撤销` 与撤销原因；
+     - 新增 `handleCancelFittingItem` 函数：点击后弹出 `window.prompt` 强制要求输入撤销原因（校验字数 ≥ 2），调用 `cancelFittingDelivery(PROJECT_KEY, { ids: [item.id], remark: reason })` 实现单项精准局部撤销；
+     - 时光轴弹窗（`Timeline Modal`）明细列表同步渲染局部已撤销状态与撤销原因。
+  2. **多端流转凭证时光轴同步增强**：
+     - `DemandManagementView.vue` 与 `WarehouseManagementView.vue` 的流转凭证时光轴明细列表同步挂载局部撤销状态与原因展示。
+
+## 2026-08-22 [修复审计日志表主键自增序列缺失及提供生产库全表一键自愈 SQL]
+- **问题现象与原因分析**：
+  - 启动 Docker 并登录应用后，后端输出警告日志：`WARNING:backend.services.audit_log:Failed to write audit logs to PostgreSQL logs.system_audit_logs: (psycopg2.errors.NotNullViolation) null value in column "id" of relation "system_audit_logs" violates not-null constraint`；
+  - 根因：PostgreSQL 中的 `logs.system_audit_logs` 表的自增主键 `id` 字段丢失了默认自增序列（`DEFAULT nextval('logs.system_audit_logs_id_seq'::regclass)`，常见于从历史 dump 备份还原）。插入操作日志未显式指定 `id` 时，数据库赋予 `NULL` 触发非空约束。系统因具备 Fail-Safe 机制未阻塞登录主业务，但导致审计日志写库丢失。
+- **改动详情**：
+  1. **服务层自动自愈强化**（`backend/services/audit_log.py`）：
+     - `ensure_audit_log_table` 增加 PostgreSQL 自愈修复 block：自动创建 `logs.system_audit_logs_id_seq` 序列、绑定 `id` 列的 `DEFAULT nextval(...)` 并通过 `setval` 对齐当前表中最大已分配 `id`，防止主键冲突；
+     - `append_events` 的异常捕获中扩充自愈条件（涵盖 `notnullviolation` 与 `null value in column`），当发生此类异常时立即触发自动自愈并重新执行批量插入。
+  2. **生产环境改造与修复 SQL 脚本集**（`backend/sql/`）：
+     - `fix_system_audit_logs_id_seq.sql`：针对 `logs.system_audit_logs` 表的单表自愈与对齐脚本；
+     - `fix_all_missing_id_sequences.sql`：支持生产环境全库扫描的自动化 PL/pgSQL 脚本，自动识别 `logs`, `tube`, `public` 等全部业务模式下缺失 `DEFAULT` 序列的 `id` 字段并批量完成自愈绑定与最大值对齐。
+  3. **SQL 迁移脚本补充**（`backend/sql/create_system_audit_logs.sql`）：
+     - 补充针对存量历史数据库的自增序列自愈与对齐 SQL 语句。
+
 ## 2026-08-21 [保温管发货单撤销必须填写备注、流转凭证时光轴显示撤销信息、需求方/库管方彻底排除已撤销发货单]
 - **需求与优化目标**：
   1. 保温管发货单在撤销时必须同管件发货单一样强制填写撤销原因（字数 ≥ 2）；

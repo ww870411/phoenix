@@ -1,3 +1,35 @@
+## 2026-08-22 供给管理页面（SupplyManagementView.vue）手机端显示与触控体验深度优化
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理工作台）
+- **移动端响应式变更详情**：
+  1. **Tab 导航横向滑选**：对二级 Tab 容器开启横向平滑滚动（`-webkit-overflow-scrolling: touch`），避免在窄屏手机上发生换行破形；
+  2. **管件车次头部与明细卡片化**：管件发货卡片头部拆分为上下两段自适应排版；展开的管件明细表格自动转为 Grid 移动端卡片，左右清晰分列展示类型、状态、规格型号、发货件数与单项撤销操作按钮；
+  3. **表格与时光轴弹窗移动端适配**：直管 14 列台账设置标准最小宽度与防溢出滚动；流转凭证弹窗适配手机屏幕高度与边距。
+
+## 2026-08-22 管件发货单明细项局部撤销功能与流转凭证增强（SupplyManagementView.vue）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理工作台）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理流转凭证）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管中心流转凭证）
+- **变更详情**：
+  1. **管件展开明细表格增加单项撤销与状态栏**：
+     - 在展开的管件明细表格中新增“状态 / 备注”列及“操作”列；
+     - 每一行处于待到货（`shipped` 或 `pending_arrival`）状态的管件明细提供【撤销此项】按钮；
+     - 点击后弹出 `window.prompt` 强制要求输入撤销原因（字数 ≥ 2 个字符）；
+     - 提交后仅撤销该特定规格明细行，其余明细行正常在途发运；
+  2. **局部撤销状态与流转凭证时光轴渲染**：
+     - 被撤销的明细行以中划线及浅红底色呈现 `❌ 已撤销` 与撤销原因；
+     - 若一车中仅部分明细撤销，外层车次卡片标记 `⚠️ 含已撤销明细`；若全部明细撤销则标记 `❌ 已撤销`；
+     - 时光轴弹窗明细列表同步渲染局部已撤销状态与原因标签。
+
+## 2026-08-22 全局操作审计日志上报后端自愈对接说明
+
+- **前端架构与状态同步**：
+  - 前端路由守卫与全局交互事件（`POST /api/v1/audit/events`）保持原有协议不变；
+  - 后端对操作审计日志库表 `logs.system_audit_logs` 的自增序列自愈机制已强化，前端产生的点击、页面跳转、登录事件均可被稳定且静默地记录入库，无跨端异常。
+
 ## 2026-08-21 保温管撤销原因必填、流转凭证时光轴撤销节点与需求/库管页面过滤已撤销发货单
 
 - **关联前端页面与组件**：
