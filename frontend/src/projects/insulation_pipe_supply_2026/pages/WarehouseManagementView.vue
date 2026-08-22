@@ -1228,6 +1228,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus } from './shared'
@@ -1241,10 +1242,42 @@ import {
 } from '../../daily_report_25_26/services/api'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const projectKey = 'insulation_pipe_supply_2026'
+
+const VALID_TABS = ['pipe', 'fitting']
+
+// 清理历史残留的 localStorage 缓存，避免跨入口污染
+try {
+  localStorage.removeItem('phoenix_warehouse_management_active_tab')
+} catch (e) {}
+
+const getInitialTab = () => {
+  // 纯粹依据当前 URL Query 参数（刷新页面时 URL 自带参数，从主菜单进入时 URL 干净则展示默认页）
+  const queryTab = String(route?.query?.tab || '').trim()
+  if (VALID_TABS.includes(queryTab)) {
+    return queryTab
+  }
+
+  // 无 Query 时严格返回默认首页
+  return 'pipe'
+}
+
+const syncTabStateToUrl = (tab) => {
+  if (route?.query?.tab !== tab) {
+    router.replace({
+      query: {
+        ...(route?.query || {}),
+        tab,
+      },
+    }).catch(() => {})
+  }
+}
+
 const { breadcrumbItems, goProjectPages, errorMessage: shellError, managementMode, modeLabels } = useTubePageShell('库管员管理入口')
 
-const activeTab = ref('pipe')
+const activeTab = ref(getInitialTab())
 
 // 管件发货台账状态
 const fittingRows = ref([])
@@ -1576,8 +1609,18 @@ async function handleConfirmFittingWarehouse(items) {
 
 const handleSwitchToFittingTab = () => {
   activeTab.value = 'fitting'
+  syncTabStateToUrl('fitting')
   loadWarehouseFittingDeliveries()
 }
+
+watch(activeTab, (tab) => {
+  syncTabStateToUrl(tab)
+  if (tab === 'fitting') {
+    loadWarehouseFittingDeliveries()
+  } else {
+    loadDeliveries()
+  }
+})
 
 function exportWarehouseFittingExcel() {
   if (!fittingRows.value.length) {
@@ -2331,7 +2374,8 @@ async function reloadAll() {
   }
   await Promise.all([
     loadDeliveries(),
-    loadAllDeliveries()
+    loadAllDeliveries(),
+    loadWarehouseFittingDeliveries()
   ])
 }
 

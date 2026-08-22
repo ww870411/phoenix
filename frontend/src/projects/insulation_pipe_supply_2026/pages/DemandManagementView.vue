@@ -2699,6 +2699,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus } from './shared'
@@ -2731,6 +2732,48 @@ import {
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+
+const VALID_TABS = ['usage', 'plan', 'logistics', 'baseline', 'fitting', 'fitting_usage', 'fitting_baseline']
+const VALID_CATEGORIES = ['pipe', 'fitting']
+
+// 清理历史残留的 localStorage 缓存，避免跨入口污染
+try {
+  localStorage.removeItem('phoenix_demand_management_active_category')
+  localStorage.removeItem('phoenix_demand_management_active_tab')
+  localStorage.removeItem('phoenix_demand_management_section1_id')
+} catch (e) {}
+
+const getInitialCategoryAndTab = () => {
+  // 纯粹依据当前 URL Query 参数（刷新页面时 URL 自带参数，从主菜单进入时 URL 干净则展示默认页）
+  const queryTab = String(route?.query?.tab || '').trim()
+  const queryCategory = String(route?.query?.category || '').trim()
+
+  if (VALID_TABS.includes(queryTab)) {
+    const inferredCategory = ['fitting', 'fitting_usage', 'fitting_baseline'].includes(queryTab) ? 'fitting' : 'pipe'
+    return {
+      category: VALID_CATEGORIES.includes(queryCategory) ? queryCategory : inferredCategory,
+      tab: queryTab,
+    }
+  }
+
+  // 无 Query 时严格返回默认首页
+  return { category: 'pipe', tab: 'usage' }
+}
+
+const syncTabStateToUrl = (category, tab) => {
+  if (route?.query?.tab !== tab || route?.query?.category !== category) {
+    router.replace({
+      query: {
+        ...(route?.query || {}),
+        category,
+        tab,
+      },
+    }).catch(() => {})
+  }
+}
+
 const {
   errorMessage,
   breadcrumbItems,
@@ -2745,11 +2788,12 @@ const section1Options = ref([])
 const pipeModelOptions = ref([])
 const currentGroup = ref('')
 
+const initialSelection = getInitialCategoryAndTab()
 const selectedSection1Id = ref('')
-const activeCategory = ref('pipe') // 'pipe' | 'fitting'
-const lastPipeTab = ref('usage') // 记忆直管最后选中的子标签
-const lastFittingTab = ref('fitting') // 记忆管件最后选中的子标签
-const activeTab = ref('usage')
+const activeCategory = ref(initialSelection.category) // 'pipe' | 'fitting'
+const lastPipeTab = ref(initialSelection.category === 'pipe' ? initialSelection.tab : 'usage') // 记忆直管最后选中的子标签
+const lastFittingTab = ref(initialSelection.category === 'fitting' ? initialSelection.tab : 'fitting') // 记忆管件最后选中的子标签
+const activeTab = ref(initialSelection.tab)
 const showExportModal = ref(false)
 const blockModalVisible = ref(false)
 const blockModalData = ref(null)
@@ -5132,6 +5176,7 @@ function handleCategoryClick(category) {
   } else if (category === 'fitting') {
     activeTab.value = lastFittingTab.value || 'fitting'
   }
+  syncTabStateToUrl(activeCategory.value, activeTab.value)
   refreshCurrentTabData(activeTab.value)
 }
 
@@ -5145,6 +5190,7 @@ function handleTabClick(targetTab) {
   }
 
   if (activeTab.value === targetTab) {
+    syncTabStateToUrl(activeCategory.value, targetTab)
     refreshCurrentTabData(targetTab)
     return
   }
@@ -5164,6 +5210,7 @@ function handleTabClick(targetTab) {
   }
 
   activeTab.value = targetTab
+  syncTabStateToUrl(activeCategory.value, targetTab)
   refreshCurrentTabData(targetTab)
 }
 

@@ -1,3 +1,73 @@
+## 2026-08-22 全面升级为纯 URL Query 驱动模式（移除 localStorage 避免跨入口状态污染）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理工作台）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理工作台）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管员管理工作台）
+- **改造详情**：
+  1. **彻底解耦 LocalStorage**：
+     - 移除了对 `localStorage` 的读写依赖，防止从 `/pages` 导航大厅或菜单首次进入工作台时被旧缓存绑架到特定二级子标签；
+  2. **优雅的纯 URL-driven 状态管理**：
+     - **全新进入（无 Query 参数）**：严格显示系统默认首页（如直管、需求看板、每日消耗、直管发货等）；
+     - **页面内切换**：通过 `router.replace` 动态静默在地址栏追加 `?category=...&tab=...`，不产生历史栈冗余；
+     - **按 F5 刷新页面**：浏览器由于自带地址栏 Query 参数，刷新后自然保留在当前标签页；
+     - **链接分享直达**：复制带参数网址发送他人，打开即可直达对应 Tab。
+
+## 2026-08-22 库管员管理页面（WarehouseManagementView.vue）标签页状态持久化（刷新保留）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`（库管员管理工作台）
+- **改造详情**：
+  1. **URL Query 与 LocalStorage 双重持久化存储**：
+     - 引入 `useRoute` 与 `useRouter` 路由钩子；
+     - 页面载入时智能解析当前 URL Query 参数（`?tab=...`）及 LocalStorage 缓存记录（`phoenix_warehouse_management_active_tab`）；
+     - 当用户在“🔥 保温管发货记录”与“🔧 管件发货记录”之间切换时，自动同步更新浏览器地址栏与本地缓存；
+  2. **刷新与直接访问精准还原**：
+     - 无论用户按 F5 刷新、从其他路由返回还是直接分享带参数链接，页面均可 100% 精准还原用户所在的标签页与业务视图；
+  3. **数据刷新聚合强化**：
+     - `reloadAll` 中将 `loadWarehouseFittingDeliveries()` 纳入 `Promise.all` 统一全量刷新，保证多 Tab 数据即时同步。
+
+## 2026-08-22 需求管理页面（DemandManagementView.vue）标签页与标段状态持久化（刷新保留）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（需求管理工作台）
+- **改造详情**：
+  1. **URL Query 与 LocalStorage 双重持久化存储**：
+     - 引入 `useRoute` 与 `useRouter` 路由钩子；
+     - 页面载入时智能解析当前 URL Query 参数（`?category=...&tab=...`）及 LocalStorage 缓存记录（`phoenix_demand_management_active_category` 与 `phoenix_demand_management_active_tab`）；
+     - 当用户切换直管/管件大类或二级子标签（如“📅 三日用管计划”、“📋 现场发货接收”、“🔩 设计量基准”、“🚚 物流明细”、“🔧 管件发货到货接收”、“🔨 管件领用消耗”、“🔩 管件设计量与计划采购量”）时，自动同步更新浏览器地址栏与本地缓存；
+  2. **刷新与直接访问精准还原**：
+     - 无论用户按 F5 刷新、从其他路由返回还是直接分享带参数链接，页面均可 100% 精准还原用户所在的标签页与业务视图；
+  3. **需求标段选择记忆**：
+     - 用户在下拉菜单中切换需求标段时，自动缓存至 `phoenix_demand_management_section1_id`，刷新后自动保持当前选中的标段。
+
+## 2026-08-22 供给管理页面（SupplyManagementView.vue）标签页与供给主体状态持久化（刷新保留）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理工作台）
+- **改造详情**：
+  1. **URL Query 与 LocalStorage 双重持久化存储**：
+     - 引入 `useRoute` 与 `useRouter` 路由钩子；
+     - 页面载入时智能解析当前 URL Query 参数（`?category=...&tab=...`）及 LocalStorage 缓存记录（`phoenix_supply_management_active_category` 与 `phoenix_supply_management_active_tab`）；
+     - 当用户切换直管/管件大类或二级子标签（如“管件发货与明细记录”、“设计量与计划采购量”、“物流发货记录”等）时，自动同步更新浏览器地址栏与本地缓存；
+  2. **解决刷新回退默认页问题**：
+     - 无论用户按 F5 刷新、从其他路由返回还是直接分享带参数链接，页面均可 100% 精准还原用户所在的标签页与视图模式；
+  3. **供给主体持久化记忆**：
+     - 用户在下拉菜单中切换供给主体时，自动缓存至 `phoenix_supply_management_supply_entity`，刷新后自动保持当前选中的供给主体。
+
+## 2026-08-22 供给管理发货撤销全面升级为 Vue 专属模态弹窗（彻底解决浏览器原生弹窗拦截）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（供给管理工作台）
+- **改造详情**：
+  1. **废弃 window.prompt 原生调用**：针对国产双核/定制浏览器（如迅雷浏览器、360、QQ等）及开启强力弹窗拦截导致点击撤销无响应的问题，彻底移除浏览器原生 `window.prompt`；
+  2. **内置专属响应式 Modal 弹窗（`cancelModalState`）**：
+     - 包含红白醒目的危险操作卡片头部（`🚫 撤销发货确认`）；
+     - 显示待撤销对象的关键元数据（车次号/车牌号/单号/管件规格型号及件数）；
+     - 多行自适应文本域（`<textarea>`），提供字数实时统计、至少 2 字必填校验以及 Ctrl + Enter 快捷提交；
+     - 统一接管管件整车撤销（`handleCancelFittingGroup`）、管件单项局部撤销（`handleCancelFittingItem`）与直管发货撤销（`cancelDelivery`）；
+  3. **兼容性保障**：纯 Vue 状态与 DOM 控制，100% 免疫任何浏览器的拦截策略，多端跨浏览器表现高度一致。
+
 ## 2026-08-22 供给管理页面（SupplyManagementView.vue）手机端显示与触控体验深度优化
 
 - **关联前端页面与组件**：

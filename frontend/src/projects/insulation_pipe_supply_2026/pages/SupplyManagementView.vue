@@ -1536,6 +1536,58 @@
       </div>
     </Transition>
 
+    <!-- 全局统一发货撤销专属确认 Modal 弹窗（100% 免疫浏览器原生弹窗拦截，适配迅雷/360/手机端等所有浏览器） -->
+    <Transition name="fade">
+      <div v-if="cancelModalState.visible" class="block-modal-overlay" style="position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(15, 23, 42, 0.6) !important; z-index: 99999 !important; display: flex !important; align-items: center !important; justify-content: center !important; backdrop-filter: blur(4px) !important;" @click.self="cancelModalState.loading ? null : (cancelModalState.visible = false)">
+        <div class="block-modal-container" style="max-width: 520px; border-radius: 16px; background: #ffffff; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important; padding: 18px 20px;">
+            <span class="block-warning-icon">🚫</span>
+            <h3 style="margin-top: 5px; color: #fff; font-size: 17px; font-weight: 700;">{{ cancelModalState.title }}</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.9); margin-top: 4px; font-size: 13px;">撤销后该发货记录将作废并同步更新台账，且不可逆转恢复</p>
+          </div>
+          
+          <div style="padding: 20px; text-align: left;">
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+              <div style="font-size: 12px; color: #991b1b; font-weight: 600; margin-bottom: 4px;">待撤销目标对象：</div>
+              <div style="font-size: 13.5px; color: #1e293b; font-weight: bold; word-break: break-all; line-height: 1.4;">{{ cancelModalState.targetDesc }}</div>
+            </div>
+
+            <label class="field" style="margin-bottom: 6px; display: block;">
+              <span style="font-size: 13px; font-weight: bold; color: #1e293b; margin-bottom: 6px; display: block;">撤销原因说明 <span style="color: #ef4444;">* (必填，至少 2 个字符)</span></span>
+              <textarea
+                v-model.trim="cancelModalState.reason"
+                class="input"
+                rows="3"
+                placeholder="请详细输入撤销该发货记录的具体原因（例如：车辆故障改派、单号录入有误、现场装载空间不足等）..."
+                style="width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; font-size: 13px; min-height: 70px; border-radius: 6px; border: 1px solid #cbd5e1; outline: none; font-family: inherit;"
+                :disabled="cancelModalState.loading"
+                @keyup.enter.ctrl="confirmCancelAction"
+                autofocus
+              ></textarea>
+            </label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <span v-if="cancelModalState.errorMsg" style="font-size: 12px; color: #dc2626; font-weight: 600;">⚠️ {{ cancelModalState.errorMsg }}</span>
+              <span v-else style="font-size: 11.5px; color: #94a3b8;">💡 提示：支持按 Ctrl + Enter 快捷提交</span>
+              <span style="font-size: 12px; color: #64748b;">字数：{{ (cancelModalState.reason || '').length }} / 至少 2 字</span>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn ghost" :disabled="cancelModalState.loading" @click="cancelModalState.visible = false">放弃撤销</button>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="cancelModalState.loading || (cancelModalState.reason || '').trim().length < 2"
+                style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important; border: none !important; font-weight: 600; padding: 8px 20px;"
+                @click="confirmCancelAction"
+              >
+                {{ cancelModalState.loading ? '正在提交撤销...' : '🚫 确认撤销作废' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 运输单全生命周期流转轨迹时光轴 modal -->
     <Transition name="fade">
       <div v-if="deliveryDetailModalVisible && deliveryDetailModalData" class="block-modal-overlay" style="position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(15, 23, 42, 0.6) !important; z-index: 99999 !important; display: flex !important; align-items: center !important; justify-content: center !important; backdrop-filter: blur(4px) !important;" @click.self="deliveryDetailModalVisible = false">
@@ -2003,6 +2055,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
@@ -2026,6 +2079,47 @@ import {
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+
+const VALID_TABS = ['demand', 'register', 'history', 'fitting', 'fitting_baseline']
+const VALID_CATEGORIES = ['pipe', 'fitting']
+
+// 清理历史残留的 localStorage 缓存，避免跨入口污染
+try {
+  localStorage.removeItem('phoenix_supply_management_active_category')
+  localStorage.removeItem('phoenix_supply_management_active_tab')
+  localStorage.removeItem('phoenix_supply_management_supply_entity')
+} catch (e) {}
+
+const getInitialCategoryAndTab = () => {
+  // 纯粹依据当前 URL Query 参数（刷新页面时 URL 自带参数，从主菜单进入时 URL 干净则展示默认页）
+  const queryTab = String(route?.query?.tab || '').trim()
+  const queryCategory = String(route?.query?.category || '').trim()
+
+  if (VALID_TABS.includes(queryTab)) {
+    const inferredCategory = ['fitting', 'fitting_baseline'].includes(queryTab) ? 'fitting' : 'pipe'
+    return {
+      category: VALID_CATEGORIES.includes(queryCategory) ? queryCategory : inferredCategory,
+      tab: queryTab,
+    }
+  }
+
+  // 无 Query 时严格返回默认首页
+  return { category: 'pipe', tab: 'demand' }
+}
+
+const syncTabStateToUrl = (category, tab) => {
+  if (route?.query?.tab !== tab || route?.query?.category !== category) {
+    router.replace({
+      query: {
+        ...(route?.query || {}),
+        category,
+        tab,
+      },
+    }).catch(() => {})
+  }
+}
 
 const {
   loading,
@@ -2084,11 +2178,12 @@ const currentSupplyEntityIds = ref([])
 const showDate = ref('')
 const planStartDate = ref('')
 
+const initialSelection = getInitialCategoryAndTab()
 const selectedSupplyEntityId = ref('')
-const activeCategory = ref('pipe') // 'pipe' | 'fitting'
-const activeTab = ref('demand')
-const lastPipeTab = ref('demand')
-const lastFittingTab = ref('fitting')
+const activeCategory = ref(initialSelection.category) // 'pipe' | 'fitting'
+const activeTab = ref(initialSelection.tab)
+const lastPipeTab = ref(initialSelection.category === 'pipe' ? initialSelection.tab : 'demand')
+const lastFittingTab = ref(initialSelection.category === 'fitting' ? initialSelection.tab : 'fitting')
 const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
 
@@ -2100,6 +2195,7 @@ const handleCategoryClick = (category) => {
   } else if (category === 'fitting') {
     activeTab.value = lastFittingTab.value || 'fitting'
   }
+  syncTabStateToUrl(activeCategory.value, activeTab.value)
 }
 
 const handleTabClick = (tab) => {
@@ -2109,6 +2205,7 @@ const handleTabClick = (tab) => {
   } else {
     lastPipeTab.value = tab
   }
+  syncTabStateToUrl(activeCategory.value, tab)
 }
 
 // --- 管件发货记录 Tab 专用变量与逻辑 ---
@@ -2689,54 +2786,115 @@ const loadFittingDeliveries = async () => {
   }
 }
 
-const handleCancelFittingGroup = async (group) => {
+// 全局统一撤销模态弹窗状态（彻底规避任何浏览器对 window.prompt 的拦截）
+const cancelModalState = ref({
+  visible: false,
+  type: '', // 'fitting_group' | 'fitting_item' | 'pipe_delivery'
+  title: '',
+  targetDesc: '',
+  reason: '',
+  loading: false,
+  errorMsg: '',
+  payload: null,
+})
+
+const handleCancelFittingGroup = (group) => {
   const cancellableItems = (group?.items || []).filter(item => ['shipped', 'pending_arrival'].includes(item.status || 'shipped'))
   if (!cancellableItems.length) {
     fittingActionMsg.value = { type: 'error', text: '该车次管件已全部进入后续确认/入库流程或已被撤销，不可重复撤销。' }
     return
   }
-  const reason = window.prompt(`请输入整车撤销发货原因（车次 ${group.shipmentNo}）：`, '')
-  if (reason === null) return
-  if (String(reason).trim().length < 2) {
-    fittingActionMsg.value = { type: 'error', text: '撤销原因至少填写 2 个字符' }
-    return
-  }
   fittingActionMsg.value = null
-  try {
-    const result = await cancelFittingDelivery(PROJECT_KEY, {
-      ids: cancellableItems.map(item => item.id),
-      remark: String(reason).trim(),
-    })
-    fittingActionMsg.value = { type: 'success', text: `已撤销 ${result.updated_count} 项管件发货记录` }
-    await loadFittingDeliveries()
-  } catch (error) {
-    fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
+  cancelModalState.value = {
+    visible: true,
+    type: 'fitting_group',
+    title: '整车管件发货撤销确认',
+    targetDesc: `车次号：${group.shipmentNo}（车牌：${group.vehiclePlateNo || '未填'}，发往：${group.section1Name || '未填'}，共 ${cancellableItems.length} 项在途管件）`,
+    reason: '',
+    loading: false,
+    errorMsg: '',
+    payload: { group, items: cancellableItems },
   }
 }
 
-const handleCancelFittingItem = async (item, group) => {
+const handleCancelFittingItem = (item, group) => {
   const st = item.status || 'shipped'
   if (!['shipped', 'pending_arrival'].includes(st)) {
     fittingActionMsg.value = { type: 'error', text: `该管件明细（${item.fitting_type} ${item.model_spec}）已进入后续确认流程或已撤销，不可撤销。` }
     return
   }
+  fittingActionMsg.value = null
   const specDesc = `${item.fitting_type} ${item.model_spec}`
-  const reason = window.prompt(`请输入撤销管件明细【${specDesc}】的原因说明（至少2个字符）：`, '')
-  if (reason === null) return
-  if (String(reason).trim().length < 2) {
-    fittingActionMsg.value = { type: 'error', text: '撤销原因至少填写 2 个字符' }
+  cancelModalState.value = {
+    visible: true,
+    type: 'fitting_item',
+    title: '局部管件明细撤销确认',
+    targetDesc: `管件规格：${specDesc}（数量：${item.shipped_qty} ${item.unit || '个'}，订单号：${item.order_no || '—'}，所属车次：${group?.shipmentNo || '—'}）`,
+    reason: '',
+    loading: false,
+    errorMsg: '',
+    payload: { item, group },
+  }
+}
+
+const confirmCancelAction = async () => {
+  const cleanReason = String(cancelModalState.value.reason || '').trim()
+  if (cleanReason.length < 2) {
+    cancelModalState.value.errorMsg = '撤销原因至少填写 2 个字符'
     return
   }
-  fittingActionMsg.value = null
+  cancelModalState.value.errorMsg = ''
+  cancelModalState.value.loading = true
+
   try {
-    const result = await cancelFittingDelivery(PROJECT_KEY, {
-      ids: [item.id],
-      remark: String(reason).trim(),
-    })
-    fittingActionMsg.value = { type: 'success', text: `已成功撤销管件明细【${specDesc}】` }
-    await loadFittingDeliveries()
+    if (cancelModalState.value.type === 'fitting_group') {
+      const { items } = cancelModalState.value.payload || {}
+      const result = await cancelFittingDelivery(PROJECT_KEY, {
+        ids: (items || []).map(item => item.id),
+        remark: cleanReason,
+      })
+      cancelModalState.value.visible = false
+      fittingActionMsg.value = { type: 'success', text: `已成功整车撤销 ${result?.updated_count || items?.length || 0} 项管件发货记录` }
+      await loadFittingDeliveries()
+    } else if (cancelModalState.value.type === 'fitting_item') {
+      const { item } = cancelModalState.value.payload || {}
+      const specDesc = `${item?.fitting_type || ''} ${item?.model_spec || ''}`
+      await cancelFittingDelivery(PROJECT_KEY, {
+        ids: [item.id],
+        remark: cleanReason,
+      })
+      cancelModalState.value.visible = false
+      fittingActionMsg.value = { type: 'success', text: `已成功撤销管件明细【${specDesc}】` }
+      await loadFittingDeliveries()
+    } else if (cancelModalState.value.type === 'pipe_delivery') {
+      const { row, identifier } = cancelModalState.value.payload || {}
+      cancelLoadingIds.value = {
+        ...cancelLoadingIds.value,
+        [row.deliveryId]: true,
+      }
+      try {
+        await cancelTubeSupplyManagementDelivery(PROJECT_KEY, row.deliveryId, {
+          cancel_reason: cleanReason,
+        })
+        cancelModalState.value.visible = false
+        setActionMessage('success', `发货记录 ${row.deliveryCode || identifier} 已成功撤销。`)
+        await Promise.all([loadDemandSummary(), loadDeliveries()])
+      } finally {
+        cancelLoadingIds.value = {
+          ...cancelLoadingIds.value,
+          [row.deliveryId]: false,
+        }
+      }
+    }
   } catch (error) {
-    fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
+    cancelModalState.value.errorMsg = error.message || '撤销失败，请稍后重试'
+    if (cancelModalState.value.type === 'pipe_delivery') {
+      setActionMessage('error', error?.message || '撤销发货记录失败')
+    } else {
+      fittingActionMsg.value = { type: 'error', text: `撤销失败：${error.message || '系统异常'}` }
+    }
+  } finally {
+    cancelModalState.value.loading = false
   }
 }
 
@@ -2991,6 +3149,7 @@ watch(activeTab, (tab) => {
       loadDeliveries()
     }
   }
+  syncTabStateToUrl(activeCategory.value, tab)
 })
 
 // --- 管件设计量与计划采购量 Tab 专用响应式状态与逻辑 ---
@@ -4063,31 +4222,16 @@ function toggleShipmentReuse(row) {
 async function cancelDelivery(row) {
   if (!row?.deliveryId) return
   const identifier = row.orderNo || row.deliveryCode || row.shipmentNo || row.deliveryId
-  const reason = window.prompt(`请输入撤销发货原因（单号/车次 ${identifier}）：`, '')
-  if (reason === null) return
-  const cleanReason = String(reason).trim()
-  if (cleanReason.length < 2) {
-    setActionMessage('error', '撤销原因至少填写 2 个字符')
-    return
-  }
-  cancelLoadingIds.value = {
-    ...cancelLoadingIds.value,
-    [row.deliveryId]: true,
-  }
   clearActionMessage()
-  try {
-    await cancelTubeSupplyManagementDelivery(PROJECT_KEY, row.deliveryId, {
-      cancel_reason: cleanReason,
-    })
-    setActionMessage('success', `发货记录 ${row.deliveryCode || identifier} 已撤销。`)
-    await Promise.all([loadDemandSummary(), loadDeliveries()])
-  } catch (error) {
-    setActionMessage('error', error?.message || '撤销发货记录失败')
-  } finally {
-    cancelLoadingIds.value = {
-      ...cancelLoadingIds.value,
-      [row.deliveryId]: false,
-    }
+  cancelModalState.value = {
+    visible: true,
+    type: 'pipe_delivery',
+    title: '直管发货记录撤销确认',
+    targetDesc: `发货单号：${identifier}（车牌：${row.vehiclePlateNo || '—'}，型号：${row.pipeModelName || '—'}，发货量：${formatNumber(row.shippedQty)} ${row.unit || '米'}）`,
+    reason: '',
+    loading: false,
+    errorMsg: '',
+    payload: { row, identifier },
   }
 }
 
