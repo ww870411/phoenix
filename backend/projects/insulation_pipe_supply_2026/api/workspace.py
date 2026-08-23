@@ -1268,20 +1268,7 @@ def _create_supply_delivery_entry(
     section_1_code_map = _build_section_1_code_map(config_payload)
     supply_code = supply_entity_code_map.get(supply_entity_id, "")
     section_1_code = section_1_code_map.get(section_1_id, "")
-    delivery_id = create_delivery_record(
-        supply_entity_id=supply_entity_id,
-        order_no="",
-        shipment_no="",
-        vehicle_plate_no="",
-        section_1_id=section_1_id,
-        pipe_model_id=pipe_model_id,
-        shipped_qty=shipped_qty,
-        shipped_at=shipped_at,
-        ship_contact_name=ship_contact_name,
-        ship_contact_phone=ship_contact_phone,
-        ship_remark=ship_remark,
-        operator=session.username,
-    )
+
     next_order_sequence = get_next_order_sequence(
         supply_code=supply_code,
         shipped_at=shipped_at,
@@ -1299,10 +1286,18 @@ def _create_supply_delivery_entry(
         shipped_at=shipped_at,
         requested_vehicle_plate_no=vehicle_plate_no,
     )
-    update_delivery_identifiers(
-        delivery_id,
+    delivery_id = create_delivery_record(
+        supply_entity_id=supply_entity_id,
         order_no=order_no,
         shipment_no=shipment_no,
+        vehicle_plate_no=resolved_vehicle_plate_no,
+        section_1_id=section_1_id,
+        pipe_model_id=pipe_model_id,
+        shipped_qty=shipped_qty,
+        shipped_at=shipped_at,
+        ship_contact_name=ship_contact_name,
+        ship_contact_phone=ship_contact_phone,
+        ship_remark=ship_remark,
         operator=session.username,
     )
     sync_shipment_vehicle_plate(

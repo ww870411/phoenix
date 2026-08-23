@@ -1,3 +1,24 @@
+## 2026-08-23 [供给管理直管发货单底层撤销机制彻底修复、原子化创建重构与 tube_schema_init.sql 初始化定义全量同步]
+- **目标与核心诉求**：
+  - 修复底层阻止撤销的机制，不直接硬性替用户作废，而是将单据恢复至 `pending_arrival`（已发货待到货）正常状态，让用户在前端界面中能够自主点击“撤销发货”、输入撤销原因并成功撤销；
+  - 彻底重构后端发货单创建链路，杜绝任何两阶段更新产生空单号悬挂记录的隐患；
+  - 对全库 `tube` 及 `logs` schema 下的所有业务表主键约束与自增序列进行深度审计与校准对齐；
+  - 将当前 `schema=tube` 下全部 11 张业务表与 `schema=logs` 下审计日志表的物理定义、主键、校验约束、索引及中文注释全量同步更新至 `backend/sql/tube_schema_init.sql`。
+- **改动与底层机制修复详情**：
+  1. **底层机制彻底修复**：
+     - **物理主键与自增序列固化**：为 `tube.tube_delivery` 挂载 `PRIMARY KEY (id)` 主键约束并同步自增序列（`57`），彻底根除 ID 碰撞；
+     - **历史冲突单据 ID 独立重排**：将 8 月 22 日的新记录重排为独立 ID（48~57），恢复 7 月底开元历史记录原始单号与车牌号；
+     - **单据状态恢复待到货**：将 `OSB-L2-260822-031`（ID 49）及同批次两笔单据状态重置为 `pending_arrival`，单号与车牌规范回填，满足前端撤销条件；
+  2. **发货创建链路单阶段原子化重构**（`backend/projects/insulation_pipe_supply_2026/api/workspace.py`）：
+     - 重构 `_create_supply_delivery_entry`：由原本的“先插入空白单号记录、再执行 UPDATE”的两阶段写操作，全面优化为“先推导解析 `order_no`、`shipment_no` 与 `vehicle_plate_no`，再执行一次性完整 INSERT”的单阶段原子写入，从源头杜绝空单号/空车牌记录产生的可能性；
+  3. **全库自增序列深度对齐校准**：
+     - `tube.tube_delivery_id_seq` 对齐至 57；
+     - `tube.tube_fitting_delivery_id_seq` 对齐至 55；
+     - `logs.tube_operation_logs_id_seq` 对齐至 321；
+     - `logs.system_audit_logs_id_seq` 对齐至 22805。保证全库未来所有发货与操作日志的自增 ID 绝不发生二次碰撞；
+  4. **DDL 初始化脚本全量同步固化**（`backend/sql/tube_schema_init.sql`）：
+     - 包含 `tube_daily_plan`、`tube_delivery`（主键固化）、`tube_daily_usage`、`tube_fitting_delivery`（主键固化）、`tube_fitting_daily_usage`、`tube_pipe_baseline`、`tube_fitting_baseline`、`tube_inventory_adjustment`、`tube_weather_daily`、`tube_weather_hourly`、`tube_gis` 以及 `logs.tube_operation_logs` 的完整 DDL、约束、索引与注释。
+
 ## 2026-08-22 [标签页持久化架构全面优化：纯 URL Query 驱动，移除 localStorage 避免入口污染]
 - **问题反馈与优化目标**：
   - 用户反馈通过主菜单入口 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages` 正常导航进入工作台时，由于之前 `localStorage` 强行缓存了历史 Tab，导致页面没有展示默认的初始首页，而是直接跳到了此前操作过的特定子标签；

@@ -1,3 +1,11 @@
+## 2026-08-23 供给管理直管发货单底层撤销机制修复完成与前端自主撤销验证（SupplyManagementView.vue）
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`（已发货物流跟踪记录 Tab: `tab=history`）
+- **交互与渲染链路分析**：
+  1. **单据状态与按钮恢复**：底层 ID 冲突与主键修复后，单据 `OSB-L2-260822-031` 恢复为正常的 `pending_arrival`（已发货待到货）状态，前端发货记录列表准确渲染其单号、车牌及红色的 **【撤销发货】** 按钮；
+  2. **撤销交互闭环**：用户点击“撤销发货”触发 `cancelDelivery` 模态弹窗（`cancelModalState`），输入原因后向 `POST /supply-management/deliveries/49/cancel` 提交，后端精准命中该独立待到货单据并 200 成功撤销，页面无缝转换为“已撤销”标签。
+
 ## 2026-08-22 全面升级为纯 URL Query 驱动模式（移除 localStorage 避免跨入口状态污染）
 
 - **关联前端页面与组件**：

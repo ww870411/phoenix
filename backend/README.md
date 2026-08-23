@@ -1,3 +1,14 @@
+## 2026-08-23 供给管理直管发货单底层撤销机制彻底修复、原子化创建重构与 tube_schema_init.sql 同步（workspace.py / tube_schema_init.sql）
+
+- **模块与服务分析**：
+  - 核心模块：`backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`、`backend/projects/insulation_pipe_supply_2026/api/workspace.py`、`backend/sql/fix_tube_delivery_duplicate_ids.sql`、`backend/sql/tube_schema_init.sql`
+  - 涉及接口：`POST /supply-management/deliveries`、`POST /supply-management/deliveries/batch`、`POST /supply-management/deliveries/{delivery_id}/cancel`
+- **底层机制修复与逻辑优化**：
+  1. **底层撤销机制修复**：物理表 `tube.tube_delivery` 添加 `PRIMARY KEY (id)` 唯一主键约束并同步自增序列，重排冲突 ID（48~57），恢复单据处于正常 `pending_arrival`（已发货待到货）状态，解除对用户前端撤销的阻断；
+  2. **发货单原子化创建链路**：在 `_create_supply_delivery_entry` 中移除“先插空白行再 UPDATE”的两阶段写入，改为先计算单号、车牌后一次性 INSERT，杜绝空字段悬挂单据产生；
+  3. **全库自增序列健康巡检与对齐**：同步校准了 `tube.tube_fitting_delivery_id_seq`（55）、`logs.tube_operation_logs_id_seq`（321）及 `logs.system_audit_logs_id_seq`（22805），杜绝其他发货与日志模块未来发生潜在重号；
+  4. **初始化 DDL 脚本全面固化**：全面更新 `backend/sql/tube_schema_init.sql`，收录 `tube` schema 下 11 张核心业务表及 `logs` schema 审计表的完整物理主键、CHECK 约束、UNIQUE 索引与字段级中文注释。
+
 ## 2026-08-22 供给管理工作台前端移动端显示与交互深度优化同步说明
 
 - **服务模块与业务同步**：
