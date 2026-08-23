@@ -1,3 +1,37 @@
+## 2026-08-23 [全库 21 张物理表健康深度审计、隐患排障与全自动自愈迁移脚本 fix_all_database_health_audit.sql 交付]
+- **全库深度体检背景与审计结果**：
+  - 对整个 PostgreSQL 数据库（涵盖 `public`、`tube`、`logs` 三大 schema）全部 21 张物理业务表开展了全量深度健康体检（包括：主键约束、自增序列对齐、ID重号、索引覆盖度、NULL违规等 5 维审计）；
+  - **审计发现的隐患**：
+    1. **自增序列滞后（Sequence Lagging）**：`tube_fitting_baseline`（MAX ID=4564 但序列仅为 55）、`tube_pipe_baseline`（MAX ID=802 但序列为 29）、`tube_weather_hourly`、`tube_weather_daily`、`tube_gis`、`tube_daily_usage` 等表序列滞后，若执行新插入会发生主键碰撞；
+    2. **主键约束缺失（Missing PK）**：`auth_sessions`、`paln_and_real_month_data`、`tube_daily_plan`、`tube_daily_usage`、`tube_gis`、`tube_weather_daily`、`tube_weather_hourly` 等表缺失物理主键约束；
+    3. **历史局部表 ID 重号**：`logs.tube_operation_logs`（527 行中存在 319 独立 ID）、`tube.tube_daily_plan`（204 行中存在 177 独立 ID）因历史无主键时序列滞后产生少许重复 ID 编号。
+- **全自动自愈脚本与修复详情**（[fix_all_database_health_audit.sql](file:///D:/编程项目/phoenix/backend/sql/fix_all_database_health_audit.sql)）：
+  1. **安全重排历史冲突 ID**：使用窗口函数 `ROW_NUMBER()` 为重号行重新分配单调递增独立 ID，彻底消除重号且不丢失任何业务数据；
+  2. **全库序列精准对齐**：通过 `setval` 将全库全部 21 张表的序列推进至各自表的真实 `MAX(id) + 1`，彻底根除后续并发插入与自动写入时的主键碰撞风险；
+  3. **补齐物理主键与复合唯一索引**：为全库缺失主键的表全部补齐 `PRIMARY KEY` 约束，并为天气表补齐日期唯一索引（`uq_tube_weather_daily_date`、`uq_tube_weather_hourly_datetime`）；
+  4. **体检与执行反馈分析**：
+     - 用户在数据库客户端执行脚本时，PostgreSQL 输出的 `relation "xxx" already exists, skipping` 为标准的幂等防护提示（`NOTICE`），表明 `IF NOT EXISTS` 机制正常生效，跳过重复创建并成功完成了核心的 `setval` 序列数值推进、ID 重排、主键挂载与唯一索引建立；
+  5. **体检复测结果与文档归档**：
+     - 本地与生产数据库经执行修复后，全库 **21 张物理表 100% 达到“结构健康（✅）”** 状态；
+     - 完整体检清单、隐患成因深度剖析及全套自愈脚本已整理归档至 [configs/26.8.23 数据库表隐患修复.md](file:///D:/编程项目/phoenix/configs/26.8.23%20%E6%95%B0%E6%8D%AE%E5%BA%93%E8%A1%A8%E9%9A%90%E6%82%A3%E4%BF%AE%E5%A4%8D.md)。
+
+## 2026-08-23 [monthly_data_show 导入更新报错：ON CONFLICT specification 缺少唯一约束排障、物理修复与生产迁移脚本]
+- **问题现象与原因分析**：
+  - 用户在 `/projects/monthly_data_show/import-workspace`（月报提取与导入工作台）导入已有数据进行覆盖更新时，接口抛出异常：`there is no unique or exclusion constraint matching the ON CONFLICT specification`；
+  - **根本原因**：后端入库接口 `POST /monthly-data-show/import-csv`（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/monthly_data_show/api/workspace.py#L2415)）采用 PostgreSQL 原生 `ON CONFLICT (company, item, date, period, type) DO UPDATE SET ...` 实现幂等覆盖更新，但底层数据库表 `monthly_data_show` 物理上缺少与这 5 个字段匹配的唯一约束或唯一索引（`UNIQUE INDEX`），导致 Postgres 无法建立冲突判断依据而报错阻断。同时该表也缺少主键约束与自增序列绑定。
+- **排障与物理修复详情**：
+  1. **数据健康巡检**：通过脚本审计当前 36,814 条存量月报记录，确认在 `(company, item, date, period, type)` 5 维组合下当前重复组为 0，具备直接安全建索引的物理条件；
+  2. **物理索引与主键固化**：
+     - 为 `monthly_data_show` 表创建自增序列 `monthly_data_show_id_seq` 并挂载 `DEFAULT nextval(...)`，同步对齐最大 ID（98430）；
+     - 挂载主键约束 `pk_monthly_data_show PRIMARY KEY (id)`；
+     - 创建业务唯一复合索引 `CREATE UNIQUE INDEX idx_monthly_data_show_unique ON monthly_data_show (company, item, date, period, type);`，彻底满足 `ON CONFLICT` 语法要求；
+     - 创建查询加速索引 `CREATE INDEX idx_monthly_data_show_date_company ON monthly_data_show (date, company);`；
+  3. **生产迁移专属脚本沉淀与 Schema 安全强化**：
+     - 新增 [fix_monthly_data_show_unique_index.sql](file:///D:/编程项目/phoenix/backend/sql/fix_monthly_data_show_unique_index.sql)，采用 PL/pgSQL 动态探测 `monthly_data_show` 所在的物理 schema（避免因客户端默认 search_path 与 public 不一致导致 `sequence must be in same schema as table it is linked to` 错误），实现自增序列对齐、主键自愈、重复清理与 5 维复合唯一索引一键安全创建；
+  4. **UPSERT 链路验证**：对单条/批量 UPSERT 执行模拟验证，更新与插入均 100% 成功。
+- **影响范围与结果**：
+  - 本地环境已自动完成修复；生产环境可通过执行 [fix_monthly_data_show_unique_index.sql](file:///D:/编程项目/phoenix/backend/sql/fix_monthly_data_show_unique_index.sql) 一键完成索引与主键对齐。页面 `/projects/monthly_data_show/import-workspace` 的 CSV 入库覆盖更新功能完全恢复正常。
+
 ## 2026-08-23 [供给管理直管发货单底层撤销机制彻底修复、原子化创建重构与 tube_schema_init.sql 初始化定义全量同步]
 - **目标与核心诉求**：
   - 修复底层阻止撤销的机制，不直接硬性替用户作废，而是将单据恢复至 `pending_arrival`（已发货待到货）正常状态，让用户在前端界面中能够自主点击“撤销发货”、输入撤销原因并成功撤销；

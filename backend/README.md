@@ -1,3 +1,28 @@
+## 2026-08-23 全库 21 张物理表健康深度审计与自愈脚本沉淀（fix_all_database_health_audit.sql）
+
+- **全库深度体检与审计报告**：
+  - 全库共扫描 21 张物理业务表（跨 `public`, `tube`, `logs` 三大 schema）；
+  - 核心资产表（`daily_basic_data`、`monthly_data_show`、`system_audit_logs`、`tube_delivery`、`coal_inventory_data` 等）结构健全；
+  - 排查出 12 张表存在序列滞后（如 `tube_fitting_baseline` 滞后 4500+、`tube_pipe_baseline` 滞后 770+ 等）、缺失主键约束或局部重号问题；
+- **自愈脚本发布与修复**：
+  - 新增 `backend/sql/fix_all_database_health_audit.sql`，以原子事务安全完成全库重号消除、全量自增序列与物理 MAX(id) 对齐、主键约束与唯一索引自动补齐；
+  - 执行时输出的 `relation "xxx" already exists, skipping` 提示为标准幂等保护（`IF NOT EXISTS` 正常跳过重复创建并完成核心的序列推进与主键绑定），全库 21 张物理表 100% 达到“✅ 结构健康”标准；
+  - 完整审计报告与自愈脚本已归档至 `configs/26.8.23 数据库表隐患修复.md`。
+
+## 2026-08-23 月报模块 monthly_data_show 唯一约束缺失与 ON CONFLICT 入库报错修复（workspace.py / month_data_show.sql / fix_monthly_data_show_unique_index.sql）
+
+- **模块与服务分析**：
+  - 关联模块：`backend/projects/monthly_data_show/api/workspace.py`、`backend/sql/month_data_show.sql`、`backend/sql/fix_monthly_data_show_unique_index.sql`
+  - 涉及接口：`POST /api/v1/projects/monthly_data_show/monthly-data-show/import-csv`
+- **问题原因与修复详情**：
+  1. **问题本质**：接口采用 PostgreSQL 原生 `ON CONFLICT (company, item, date, period, type) DO UPDATE SET ...` 实现数据幂等写入与覆盖更新。PostgreSQL 要求冲突列必须具备对应的物理唯一约束或唯一索引，而数据库中的 `monthly_data_show` 物理表此前缺失此复合唯一索引；
+  2. **物理表主键与索引修复**：
+     - 为 `monthly_data_show.id` 补齐自增序列 `monthly_data_show_id_seq`（对齐当前最大 ID 98430）与主键约束 `pk_monthly_data_show`；
+     - 创建唯一索引 `idx_monthly_data_show_unique ON monthly_data_show (company, item, date, period, type)`；
+     - 创建组合查询索引 `idx_monthly_data_show_date_company ON monthly_data_show (date, company)`；
+  3. **生产迁移专属脚本**：提供 `backend/sql/fix_monthly_data_show_unique_index.sql`，采用 PL/pgSQL 动态探测目标表物理 schema，彻底规避因客户端 search_path 与 table schema 不一致导致的 sequence 绑定错误，一键事务性执行主键补齐、自增对齐与唯一索引创建；
+  4. **验证结果**：经实测验证，36,814 条存量记录健康无重复，UPSERT 语句针对已存在记录更新及新增记录写入均已恢复正常运行。
+
 ## 2026-08-23 供给管理直管发货单底层撤销机制彻底修复、原子化创建重构与 tube_schema_init.sql 同步（workspace.py / tube_schema_init.sql）
 
 - **模块与服务分析**：
