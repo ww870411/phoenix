@@ -13,6 +13,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // 允许外部通过宿主机访问
     port: 5173,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     proxy: {
       '/api': {
         // 在 Docker 容器中运行时，应该指向后端服务的容器名 'backend'
@@ -21,6 +25,18 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  optimizeDeps: {
+    include: [
+      'vue',
+      'vue-router',
+      'pinia',
+      '@revolist/vue3-datagrid',
+      '@revolist/revogrid',
+      'echarts',
+      'xlsx',
+      'xlsx-js-style',
+    ],
   },
   resolve: {
     alias: {

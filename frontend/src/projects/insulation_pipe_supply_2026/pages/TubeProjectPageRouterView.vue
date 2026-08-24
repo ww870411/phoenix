@@ -17,18 +17,18 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 
-import DashboardView from './DashboardView.vue'
-import BigScreenDashboardView from './BigScreenDashboardView.vue'
-import DemandManagementView from './DemandManagementView.vue'
-import GlobalManagementView from './GlobalManagementView.vue'
-import SupplyManagementView from './SupplyManagementView.vue'
-import WarehouseManagementView from './WarehouseManagementView.vue'
-import HistoryQueryView from './HistoryQueryView.vue'
-import GisMapView from './GisMapView.vue'
+const DashboardView = defineAsyncComponent(() => import('./DashboardView.vue'))
+const BigScreenDashboardView = defineAsyncComponent(() => import('./BigScreenDashboardView.vue'))
+const DemandManagementView = defineAsyncComponent(() => import('./DemandManagementView.vue'))
+const GlobalManagementView = defineAsyncComponent(() => import('./GlobalManagementView.vue'))
+const SupplyManagementView = defineAsyncComponent(() => import('./SupplyManagementView.vue'))
+const WarehouseManagementView = defineAsyncComponent(() => import('./WarehouseManagementView.vue'))
+const HistoryQueryView = defineAsyncComponent(() => import('./HistoryQueryView.vue'))
+const GisMapView = defineAsyncComponent(() => import('./GisMapView.vue'))
 
 const auth = useAuthStore()
 const route = useRoute()

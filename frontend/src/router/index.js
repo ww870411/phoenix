@@ -207,4 +207,23 @@ router.beforeEach(async (to) => {
   return true
 })
 
+router.onError((error, to) => {
+  const message = String(error?.message || error || '')
+  const isDynamicImportError =
+    message.includes('Failed to fetch dynamically imported module') ||
+    (error?.name === 'TypeError' && message.includes('fetch'))
+
+  if (isDynamicImportError && typeof window !== 'undefined') {
+    console.warn('[Router] 检测到动态模块加载中断或过期，正在自动重试并同步最新模块...', error)
+    const storageKey = 'phoenix_last_dynamic_import_retry'
+    const lastRetry = sessionStorage.getItem(storageKey)
+    const now = Date.now()
+    if (!lastRetry || now - Number(lastRetry) > 6000) {
+      sessionStorage.setItem(storageKey, String(now))
+      const targetUrl = to?.fullPath || window.location.href
+      window.location.href = targetUrl
+    }
+  }
+})
+
 export default router

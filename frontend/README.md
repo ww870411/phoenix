@@ -1,3 +1,19 @@
+## 2026-08-24 Docker 环境 Vite 依赖预构建配置与保温管子页面异步按需加载优化（解决 Failed to fetch dynamically imported module）
+
+- **关联前端文件与模块**：
+  - `frontend/vite.config.js`（Vite 构建与服务器配置）
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue`（保温管项目主路由分发容器）
+  - `frontend/src/router/index.js`（全局 Vue Router 路由守卫与异常自愈处理器）
+- **问题成因与结构优化说明**：
+  1. **Vite 依赖预构建锁定（`optimizeDeps.include`）**：
+     - 在 `vite.config.js` 中显式包含 `vue`、`vue-router`、`pinia`、`@revolist/vue3-datagrid`、`@revolist/revogrid`、`echarts`、`xlsx`、`xlsx-js-style` 等核心库；
+     - 解决 Docker 初次启动时在后台动态发现深层依赖触发 re-bundling 并向浏览器发送 reload 信号打断正在进行的 `import()` 导致的报错问题；
+  2. **8 个超大子页面按需异步加载（`defineAsyncComponent`）**：
+     - 将原本在 `TubeProjectPageRouterView.vue` 静态 import 的 8 个业务子页面（大屏、看板、需求管理、供给管理、库管管理、综合查询、GIS地图、全局管理）改为 `defineAsyncComponent(() => import(...))` 按需加载；
+     - 路由 chunk 产物由 2.85MB 大幅缩减为主路由 3.85KB，各个子页面独立切片，大幅降低单次加载与网络传输开销；
+  3. **全局动态模块加载失败自愈（`router.onError`）**：
+     - 在 `router/index.js` 中添加 `router.onError` 捕获动态 import 失败，带 6 秒防抖安全刷新机制，彻底消除偶发性模块失效导致的页面停滞。
+
 ## 2026-08-23 全库业务表主键与序列自愈同步（前端全模块数据操作稳定性保障）
 
 - **关联前端页面与组件**：

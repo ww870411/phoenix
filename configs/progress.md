@@ -1,3 +1,34 @@
+## 2026-08-24 [供给管理直管发货单管理员编辑覆写报错：Could not locate column 'arrived_confirm_at' 排障与修复]
+- **问题现象与原因分析**：
+  - **报错现象**：用户在供给管理页面（`/projects/insulation_pipe_supply_2026/pages/supply_management?category=pipe&tab=history`）尝试通过“编辑覆盖”修改发货单（如 `OSA-H2-260821-002`）时，后端报错抛出：`超级管理员强力更新数据失败: Could not locate column in row for column 'arrived_confirm_at'`；
+  - **根本原因**：
+    - 后端服务 `supply_management_service.py` 中的管理员强力更新函数 `super_update_delivery_record` 在执行预查询 `check_sql` 时，`SELECT` 字段清单中遗漏了 `arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at`、`cancel_at` 等时间字段；
+    - 后续代码通过字典键访问 `orig_record["arrived_confirm_at"]` 时，SQLAlchemy MappingRow 发现该列名未在查询结果中而抛出 `KeyError: Could not locate column in row for column 'arrived_confirm_at'` 异常。
+- **修复与优化详情**（[supply_management_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py#L972-L1030)）：
+  1. **补齐查询全量字段与行锁**：在 `check_sql` 中将 `tube.tube_delivery` 的全部状态、操作人、各阶段时间戳（`arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at`、`cancel_at`）及审批字段完整补全，并加上 `FOR UPDATE` 行级悲观锁；
+  2. **安全字典读取模式**：将 `orig_row` 转换为 Python 字典（`orig_record = dict(orig_row)`），使用 `.get()` 进行安全访问，避免缺失键时抛出致命异常；
+  3. **去除冗余二次查询**：移除后续多余的 `cancel_info_sql` 二次查询，直接复用原记录字典数据，提升执行效率与代码健壮性。
+- **验证结果**：
+  - 后端服务自动热重载完成，无语法或运行时错误；
+  - 超级管理员在历史发货记录中进行“编辑覆盖”更新时，所有状态与时间字段能够正确继承/覆写并入库。
+
+## 2026-08-24 [Docker 环境 Vite 动态导入模块报错排障分析、依赖预构建配置与子页面按需加载性能优化]
+- **问题现象与原因分析**：
+  - **报错现象**：本地在 Docker 中启动容器后访问网站，浏览器控制台抛出多条 `TypeError: Failed to fetch dynamically imported module: http://localhost:5173/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue` 和 `http://localhost:5173/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`，随后过一会儿自动恢复正常。
+  - **根本原因**：
+    1. **Vite 首次加载未预构建依赖触发 Re-bundling 打断请求**：Docker 容器初次启动时，Vite 的依赖缓存处于初始状态。当浏览器首次访问巨型页面时，Vite 在后台实时扫描到了深层未预构建依赖（如 `xlsx-js-style`、`@revolist/vue3-datagrid`、`echarts` 等），自动触发了 `optimizeDeps` 重新打包并向前端推送重载信号，导致浏览器正在进行的动态 `import()` 请求被 Aborted/失效中断，抛出 `Failed to fetch dynamically imported module`；一旦 Vite 后台完成全量预打包并生成缓存后，再次访问便恢复正常；
+    2. **超大单文件子页面全量静态同步引入**：`TubeProjectPageRouterView.vue` 原本通过同步 `import` 一次性导入了 8 个超大子页面（各 100KB~320KB，累计数万行代码，未打包时单路由请求量巨大），在 Docker 跨平台文件挂载 I/O 下极易引发网络等待和并发阻塞；
+    3. **前端路由层缺失动态模块加载失败自愈机制**：当开发模式或发布更新导致 chunk 发生瞬时加载失败时，缺少自动捕获并安全刷新的重试机制。
+- **优化与修复落地**：
+  1. **Vite 依赖预构建与 Watch 轮询强化**（[vite.config.js](file:///D:/编程项目/phoenix/frontend/vite.config.js)）：
+     - 在 `optimizeDeps.include` 中显式固化核心第三方依赖（`vue`、`vue-router`、`pinia`、`@revolist/vue3-datagrid`、`@revolist/revogrid`、`echarts`、`xlsx`、`xlsx-js-style`），杜绝运行时动态触发 re-bundling；
+     - 配置 `server.watch.usePolling` 提升 Docker 挂载开发时的文件变更监听稳定性；
+  2. **保温管路由子页面按需懒加载重构**（[TubeProjectPageRouterView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)）：
+     - 将 8 个子页面（大屏、看板、需求管理、供给管理、库管管理、综合查询、GIS地图、全局管理）全部重构为 `defineAsyncComponent(() => import(...))` 异步按需加载；
+     - 路由打包产物由原本的单一超大 chunk（2.85MB）精细化拆分为按需 chunk（主路由仅 3.85KB，各子页面独立按需拉取），大幅降低单次网络负载与编译开销；
+  3. **Vue Router 全局错误捕获与自愈**（[frontend/src/router/index.js](file:///D:/编程项目/phoenix/frontend/src/router/index.js)）：
+     - 添加 `router.onError` 处理器，针对 `Failed to fetch dynamically imported module` 自动触发防死循环的智能页面安全刷新，防止用户遇到突发白屏停滞。
+
 ## 2026-08-23 [全库 21 张物理表健康深度审计、隐患排障与全自动自愈迁移脚本 fix_all_database_health_audit.sql 交付]
 - **全库深度体检背景与审计结果**：
   - 对整个 PostgreSQL 数据库（涵盖 `public`、`tube`、`logs` 三大 schema）全部 21 张物理业务表开展了全量深度健康体检（包括：主键约束、自增序列对齐、ID重号、索引覆盖度、NULL违规等 5 维审计）；

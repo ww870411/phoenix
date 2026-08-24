@@ -539,7 +539,6 @@
       "keeper_name": "李春",
       "contact_phone": "15940835639",
       "section_1_ids": [
-        "low_lot_1",
         "low_lot_2"
       ]
     },
@@ -548,8 +547,7 @@
       "keeper_name": "李海",
       "contact_phone": "13500781011",
       "section_1_ids": [
-        "low_lot_1",
-        "low_lot_2"
+        "low_lot_1"
       ]
     },
     {

@@ -1,3 +1,21 @@
+## 2026-08-24 供给管理直管发货单管理员编辑覆写报错修复（supply_management_service.py）
+
+- **服务模块与业务分析**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py`
+  - 核心接口：`PUT /api/v1/projects/insulation_pipe_supply_2026/workspace/supply-management/deliveries/{delivery_id}/super-update`
+- **问题成因与修复详情**：
+  1. **问题成因**：管理员强力覆写直管发货单接口中，`check_sql` 预查询字段缺失 `arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at`、`cancel_at` 等时间字段，导致后续按 key 读取时抛出 `KeyError / column not found`；
+  2. **修复落地**：
+     - 在 `check_sql` 中将 `tube.tube_delivery` 的全部业务字段与时空凭证列完整补齐，并添加 `FOR UPDATE` 悲观锁保证并发安全；
+     - 转为字典并采用 `orig_record.get(...)` 安全读取模式，避免缺失字段时抛出异常；
+     - 移除冗余的 `cancel_info_sql` 二次查询，提升接口响应效率。
+
+## 2026-08-24 前端容器化构建与按需路由加载优化同步（后端契约无缝保持）
+
+- **服务模块与业务同步**：
+  - 本轮改动为前端工程化配置与路由性能优化（`vite.config.js` 依赖预构建加固、`TubeProjectPageRouterView.vue` 异步懒加载拆分、`router.onError` 异常自愈）；
+  - 后端所有 API 接口契约、数据库模型与业务服务层保持 100% 一致与兼容，无破坏性变更。
+
 ## 2026-08-23 全库 21 张物理表健康深度审计与自愈脚本沉淀（fix_all_database_health_audit.sql）
 
 - **全库深度体检与审计报告**：

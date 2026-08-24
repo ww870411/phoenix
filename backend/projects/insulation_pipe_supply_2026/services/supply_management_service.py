@@ -972,15 +972,25 @@ def super_update_delivery_record(
     try:
         check_sql = text(
             """
-            SELECT id, status, arrived_confirm_by, received_confirm_by, warehouse_confirm_by, ship_remark,
+            SELECT id, supply_entity_id, order_no, shipment_no, vehicle_plate_no, section_1_id,
+                   pipe_model_id, shipped_qty, arrived_qty, received_qty, shipped_at,
+                   ship_contact_name, ship_contact_phone, ship_remark,
+                   arrived_confirm_by, arrived_confirm_at, arrived_remark,
+                   received_confirm_by, received_confirm_at, received_remark,
+                   warehouse_confirm_by, warehouse_confirm_at, warehouse_remark,
+                   status, abnormal_flag, cancel_by, cancel_at, cancel_reason,
                    diff_approve_by, diff_approve_at, diff_approve_remark, is_timeout_receive
-            FROM tube.tube_delivery WHERE id = :id
+            FROM tube.tube_delivery
+            WHERE id = :id
+            FOR UPDATE
             """
         )
-        orig_record = session.execute(check_sql, {"id": delivery_id}).mappings().first()
-        if not orig_record:
+        orig_row = session.execute(check_sql, {"id": delivery_id}).mappings().first()
+        if not orig_row:
             raise HTTPException(status_code=404, detail="发货记录不存在，无法更新")
         
+        orig_record = dict(orig_row)
+
         # 规整状态名称映射
         normalized_status = _normalize_text(status).lower()
         if normalized_status == "arrived":
@@ -997,21 +1007,21 @@ def super_update_delivery_record(
         dt_warehouse_confirm_at = warehouse_confirm_at
 
         # 从数据库中拉取历史操作人与时间快照，用于回退或已有状态保持
-        orig_arrived_at = orig_record["arrived_confirm_at"]
-        orig_received_at = orig_record["received_confirm_at"]
-        orig_warehouse_at = orig_record["warehouse_confirm_at"]
-        orig_cancel_at = orig_record["cancel_at"]
+        orig_arrived_at = orig_record.get("arrived_confirm_at")
+        orig_received_at = orig_record.get("received_confirm_at")
+        orig_warehouse_at = orig_record.get("warehouse_confirm_at")
+        orig_cancel_at = orig_record.get("cancel_at")
         now_bj = datetime.now(BEIJING_TZ)
 
-        op_arrived_by = orig_record["arrived_confirm_by"] or operator
-        op_received_by = orig_record["received_confirm_by"] or operator
-        op_warehouse_by = orig_record["warehouse_confirm_by"] or operator
+        op_arrived_by = orig_record.get("arrived_confirm_by") or operator
+        op_received_by = orig_record.get("received_confirm_by") or operator
+        op_warehouse_by = orig_record.get("warehouse_confirm_by") or operator
 
         # 继承或重置差异审批/超时接收元数据状态
-        val_diff_approve_by = orig_record["diff_approve_by"]
-        val_diff_approve_at = orig_record["diff_approve_at"]
-        val_diff_approve_remark = orig_record["diff_approve_remark"]
-        val_is_timeout_receive = bool(orig_record["is_timeout_receive"])
+        val_diff_approve_by = orig_record.get("diff_approve_by")
+        val_diff_approve_at = orig_record.get("diff_approve_at")
+        val_diff_approve_remark = orig_record.get("diff_approve_remark")
+        val_is_timeout_receive = bool(orig_record.get("is_timeout_receive"))
 
         # 根据目标状态执行逆向级联不变量校准
         if normalized_status in {"pending_arrival", "cancelled"}:
@@ -1168,14 +1178,11 @@ def super_update_delivery_record(
         new_cancel_by = None
         new_cancel_at = None
         new_cancel_reason = None
-        
-        cancel_info_sql = text("SELECT cancel_by, cancel_at, cancel_reason FROM tube.tube_delivery WHERE id = :id")
-        orig_cancel = session.execute(cancel_info_sql, {"id": delivery_id}).mappings().first()
 
         if normalized_status == "cancelled":
-            new_cancel_by = orig_cancel["cancel_by"] if orig_cancel and orig_cancel["cancel_by"] else operator
-            new_cancel_at = orig_cancel["cancel_at"] if orig_cancel and orig_cancel["cancel_at"] else datetime.now()
-            new_cancel_reason = orig_cancel["cancel_reason"] if orig_cancel and orig_cancel["cancel_reason"] else (_normalize_text(ship_remark) or "超级管理员编辑覆盖撤销")
+            new_cancel_by = orig_record.get("cancel_by") or operator
+            new_cancel_at = orig_record.get("cancel_at") or datetime.now()
+            new_cancel_reason = orig_record.get("cancel_reason") or (_normalize_text(ship_remark) or "超级管理员编辑覆盖撤销")
 
         # 格式化自动审计备注打标
         audit_tag = f" | 状态强改至 {normalized_status}, 操作人: {operator}"
