@@ -459,39 +459,119 @@
                     <th 
                       v-for="dim in dailyDimensions" 
                       :key="`th-daily-${dim}`"
-                      :class="['text-left', 'th-dimension', `th-dim-${dim}`]"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('daily_pipe', dim) }]"
+                      @click="handleTableSort('daily_pipe', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
                     >
-                      {{ getDimensionDef(dim).colHeader }}
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', dim) }">{{ getSortIcon('daily_pipe', dim) }}</span>
+                      </div>
                     </th>
-                    <th class="text-right">计划量 (米)</th>
-                    <th class="text-right">发货量 (米)</th>
-                    <th class="text-right">到货量 (米)</th>
-                    <th class="text-right">施工接收 (米)</th>
-                    <th class="text-right">实际使用 (米)</th>
-                    <th class="text-right">损耗量 (米)</th>
-                    <th class="text-right">库管已确认 (米)</th>
-                    <th v-if="dailyDimensions.includes('date')" class="text-center">在途时长</th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'plan_qty') }" @click="handleTableSort('daily_pipe', 'plan_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>计划量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'plan_qty') }">{{ getSortIcon('daily_pipe', 'plan_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'shipped_qty') }" @click="handleTableSort('daily_pipe', 'shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>发货量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'shipped_qty') }">{{ getSortIcon('daily_pipe', 'shipped_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'arrived_qty') }" @click="handleTableSort('daily_pipe', 'arrived_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>到货量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'arrived_qty') }">{{ getSortIcon('daily_pipe', 'arrived_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'received_qty') }" @click="handleTableSort('daily_pipe', 'received_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>施工接收 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'received_qty') }">{{ getSortIcon('daily_pipe', 'received_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'usage_qty') }" @click="handleTableSort('daily_pipe', 'usage_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>实际使用 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'usage_qty') }">{{ getSortIcon('daily_pipe', 'usage_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'loss_qty') }" @click="handleTableSort('daily_pipe', 'loss_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>损耗量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'loss_qty') }">{{ getSortIcon('daily_pipe', 'loss_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'warehouse_qty') }" @click="handleTableSort('daily_pipe', 'warehouse_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>库管已确认 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'warehouse_qty') }">{{ getSortIcon('daily_pipe', 'warehouse_qty') }}</span>
+                      </div>
+                    </th>
+                    <th v-if="dailyDimensions.includes('date')" class="text-center sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_pipe', 'avg_transit') }" @click="handleTableSort('daily_pipe', 'avg_transit')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-center">
+                        <span>在途时长</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_pipe', 'avg_transit') }">{{ getSortIcon('daily_pipe', 'avg_transit') }}</span>
+                      </div>
+                    </th>
                   </tr>
                   <tr v-else>
                     <th 
                       v-for="dim in dailyDimensions" 
                       :key="`th-daily-fit-${dim}`"
-                      :class="['text-left', 'th-dimension', `th-dim-${dim}`]"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('daily_fitting', dim) }]"
+                      @click="handleTableSort('daily_fitting', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
                     >
-                      {{ getDimensionDef(dim).colHeader }}
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', dim) }">{{ getSortIcon('daily_fitting', dim) }}</span>
+                      </div>
                     </th>
-                    <th class="text-right">发货数量 (件)</th>
-                    <th class="text-right">到货数量 (件)</th>
-                    <th class="text-right">施工接收 (件)</th>
-                    <th class="text-right">现场安装 (件)</th>
-                    <th class="text-right">库管已确认 (件)</th>
-                    <th class="text-right">现场结余 (件)</th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'shipped_qty') }" @click="handleTableSort('daily_fitting', 'shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>发货数量 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'shipped_qty') }">{{ getSortIcon('daily_fitting', 'shipped_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'arrived_qty') }" @click="handleTableSort('daily_fitting', 'arrived_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>到货数量 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'arrived_qty') }">{{ getSortIcon('daily_fitting', 'arrived_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'received_qty') }" @click="handleTableSort('daily_fitting', 'received_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>施工接收 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'received_qty') }">{{ getSortIcon('daily_fitting', 'received_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'usage_qty') }" @click="handleTableSort('daily_fitting', 'usage_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>现场安装 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'usage_qty') }">{{ getSortIcon('daily_fitting', 'usage_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'warehouse_qty') }" @click="handleTableSort('daily_fitting', 'warehouse_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>库管已确认 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'warehouse_qty') }">{{ getSortIcon('daily_fitting', 'warehouse_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('daily_fitting', 'site_stock_pcs') }" @click="handleTableSort('daily_fitting', 'site_stock_pcs')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>现场结余 (件)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('daily_fitting', 'site_stock_pcs') }">{{ getSortIcon('daily_fitting', 'site_stock_pcs') }}</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <template v-if="subMaterialType === 'pipe'">
                     <tr 
-                      v-for="(row, idx) in aggregatedDailyRows" 
+                      v-for="(row, idx) in sortedDailyPipeRows" 
                       :key="idx"
                       :class="{ 'clickable-row': isDefaultFullDaily }"
                       @click="isDefaultFullDaily && openDailyPipeDetail(row)"
@@ -529,7 +609,7 @@
 
                   <template v-else>
                     <tr 
-                      v-for="(row, idx) in aggregatedDailyRows" 
+                      v-for="(row, idx) in sortedDailyFittingRows" 
                       :key="idx"
                     >
                       <!-- 动态渲染管件维度列 -->
@@ -811,25 +891,70 @@
                     <th 
                       v-for="dim in baselineDimensions" 
                       :key="`th-base-${dim}`"
-                      :class="['text-left', 'th-dimension', `th-dim-${dim}`]"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('baseline_pipe', dim) }]"
+                      @click="handleTableSort('baseline_pipe', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
                     >
-                      {{ getDimensionDef(dim).colHeader }}
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', dim) }">{{ getSortIcon('baseline_pipe', dim) }}</span>
+                      </div>
                     </th>
-                    <th class="text-right">设计量 (米)</th>
-                    <th class="text-right">计划采购量 (米)</th>
-                    <th class="text-right">累计发货 (米)</th>
-                    <th class="text-right">累计到货 (米)</th>
-                    <th class="text-right">累计使用 (米)</th>
-                    <th class="text-right">现场库存 (米)</th>
-                    <th class="text-left" style="min-width: 140px;">采购到货进度</th>
-                    <th class="text-left" style="min-width: 140px;">施工安装进度</th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'design_qty') }" @click="handleTableSort('baseline_pipe', 'design_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>设计量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'design_qty') }">{{ getSortIcon('baseline_pipe', 'design_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'purchase_plan_qty') }" @click="handleTableSort('baseline_pipe', 'purchase_plan_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>计划采购量 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'purchase_plan_qty') }">{{ getSortIcon('baseline_pipe', 'purchase_plan_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'total_shipped_qty') }" @click="handleTableSort('baseline_pipe', 'total_shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>累计发货 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'total_shipped_qty') }">{{ getSortIcon('baseline_pipe', 'total_shipped_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'total_arrived_qty') }" @click="handleTableSort('baseline_pipe', 'total_arrived_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>累计到货 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'total_arrived_qty') }">{{ getSortIcon('baseline_pipe', 'total_arrived_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'total_usage_qty') }" @click="handleTableSort('baseline_pipe', 'total_usage_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>累计使用 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'total_usage_qty') }">{{ getSortIcon('baseline_pipe', 'total_usage_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'stock_qty') }" @click="handleTableSort('baseline_pipe', 'stock_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>现场库存 (米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'stock_qty') }">{{ getSortIcon('baseline_pipe', 'stock_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-left sortable-th" style="min-width: 140px;" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'purchase_rate') }" @click="handleTableSort('baseline_pipe', 'purchase_rate')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell">
+                        <span>采购到货进度</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'purchase_rate') }">{{ getSortIcon('baseline_pipe', 'purchase_rate') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-left sortable-th" style="min-width: 140px;" :class="{ 'sorted-col': isColumnSorted('baseline_pipe', 'install_rate') }" @click="handleTableSort('baseline_pipe', 'install_rate')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell">
+                        <span>施工安装进度</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('baseline_pipe', 'install_rate') }">{{ getSortIcon('baseline_pipe', 'install_rate') }}</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="aggregatedBaselineRows.length === 0">
                     <td :colspan="baselineDimensions.length + 8" class="empty-cell">未查询到保温管基准对照数据</td>
                   </tr>
-                  <tr v-for="(row, idx) in aggregatedBaselineRows" :key="idx">
+                  <tr v-for="(row, idx) in sortedBaselinePipeRows" :key="idx">
                     <td 
                       v-for="dim in baselineDimensions" 
                       :key="`td-base-${dim}`"
@@ -894,20 +1019,40 @@
                     <th 
                       v-for="dim in baselineDimensions" 
                       :key="`th-base-fit-d-${dim}`"
-                      :class="['text-left', 'th-dimension', `th-dim-${dim}`]"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('fitting_baseline', dim) }]"
+                      @click="handleTableSort('fitting_baseline', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
                     >
-                      {{ getDimensionDef(dim).colHeader }}
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_baseline', dim) }">{{ getSortIcon('fitting_baseline', dim) }}</span>
+                      </div>
                     </th>
-                    <th class="text-center" style="width: 80px;">单位</th>
-                    <th class="text-right">设计使用量</th>
-                    <th class="text-right">计划采购量</th>
+                    <th class="text-center sortable-th" style="width: 80px;" :class="{ 'sorted-col': isColumnSorted('fitting_baseline', 'unit') }" @click="handleTableSort('fitting_baseline', 'unit')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-center">
+                        <span>单位</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_baseline', 'unit') }">{{ getSortIcon('fitting_baseline', 'unit') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_baseline', 'design_qty') }" @click="handleTableSort('fitting_baseline', 'design_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>设计使用量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_baseline', 'design_qty') }">{{ getSortIcon('fitting_baseline', 'design_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_baseline', 'purchase_plan_qty') }" @click="handleTableSort('fitting_baseline', 'purchase_plan_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>计划采购量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_baseline', 'purchase_plan_qty') }">{{ getSortIcon('fitting_baseline', 'purchase_plan_qty') }}</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="aggregatedFittingBaselineRows.length === 0">
                     <td :colspan="baselineDimensions.length + 3" class="empty-cell">未查询到管件基准数据</td>
                   </tr>
-                  <tr v-for="(row, idx) in aggregatedFittingBaselineRows" :key="`fit-base-${idx}`">
+                  <tr v-for="(row, idx) in sortedFittingBaselineRows" :key="`fit-base-${idx}`">
                     <td 
                       v-for="dim in baselineDimensions" 
                       :key="`td-fit-base-${dim}`"
@@ -950,22 +1095,52 @@
                     <th 
                       v-for="dim in baselineDimensions" 
                       :key="`th-flow-fit-d-${dim}`"
-                      :class="['text-left', 'th-dimension', `th-dim-${dim}`]"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('fitting_flow', dim) }]"
+                      @click="handleTableSort('fitting_flow', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
                     >
-                      {{ getDimensionDef(dim).colHeader }}
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', dim) }">{{ getSortIcon('fitting_flow', dim) }}</span>
+                      </div>
                     </th>
-                    <th class="text-center" style="width: 80px;">单位</th>
-                    <th class="text-right">累计发货量</th>
-                    <th class="text-right">累计到货量</th>
-                    <th class="text-right">现场安装量</th>
-                    <th class="text-right">现场库存余量</th>
+                    <th class="text-center sortable-th" style="width: 80px;" :class="{ 'sorted-col': isColumnSorted('fitting_flow', 'unit') }" @click="handleTableSort('fitting_flow', 'unit')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-center">
+                        <span>单位</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', 'unit') }">{{ getSortIcon('fitting_flow', 'unit') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_flow', 'total_shipped_qty') }" @click="handleTableSort('fitting_flow', 'total_shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>累计发货量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', 'total_shipped_qty') }">{{ getSortIcon('fitting_flow', 'total_shipped_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_flow', 'total_arrived_qty') }" @click="handleTableSort('fitting_flow', 'total_arrived_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>累计到货量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', 'total_arrived_qty') }">{{ getSortIcon('fitting_flow', 'total_arrived_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_flow', 'total_usage_qty') }" @click="handleTableSort('fitting_flow', 'total_usage_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>现场安装量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', 'total_usage_qty') }">{{ getSortIcon('fitting_flow', 'total_usage_qty') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('fitting_flow', 'stock_qty') }" @click="handleTableSort('fitting_flow', 'stock_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>现场库存余量</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('fitting_flow', 'stock_qty') }">{{ getSortIcon('fitting_flow', 'stock_qty') }}</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="aggregatedFittingFlowRows.length === 0">
                     <td :colspan="baselineDimensions.length + 5" class="empty-cell">未查询到管件发运或流转记录</td>
                   </tr>
-                  <tr v-for="(row, idx) in aggregatedFittingFlowRows" :key="`fit-flow-${idx}`">
+                  <tr v-for="(row, idx) in sortedFittingFlowRows" :key="`fit-flow-${idx}`">
                     <td 
                       v-for="dim in baselineDimensions" 
                       :key="`td-fit-flow-${dim}`"
@@ -2663,6 +2838,136 @@ const baselineFittingSummary = computed(() => {
 })
 
 // -----------------------------------------------------------------------------
+// 🔀 表格字段动态排序状态与方法 (支持 升序 -> 降序 -> 清除排序 循环切换)
+// -----------------------------------------------------------------------------
+
+const tableSortStates = ref({
+  daily_pipe: { key: '', order: '' }, // order: '' | 'asc' | 'desc'
+  daily_fitting: { key: '', order: '' },
+  baseline_pipe: { key: '', order: '' },
+  fitting_baseline: { key: '', order: '' },
+  fitting_flow: { key: '', order: '' }
+})
+
+function handleTableSort(tableKey, columnKey) {
+  if (!tableSortStates.value[tableKey]) {
+    tableSortStates.value[tableKey] = { key: '', order: '' }
+  }
+  const current = tableSortStates.value[tableKey]
+  if (current.key === columnKey) {
+    if (current.order === 'asc') {
+      current.order = 'desc'
+    } else if (current.order === 'desc') {
+      current.key = ''
+      current.order = ''
+    } else {
+      current.order = 'asc'
+    }
+  } else {
+    current.key = columnKey
+    current.order = 'asc'
+  }
+}
+
+function isColumnSorted(tableKey, columnKey) {
+  const current = tableSortStates.value[tableKey]
+  return !!(current && current.key === columnKey && current.order)
+}
+
+function getSortIcon(tableKey, columnKey) {
+  const current = tableSortStates.value[tableKey]
+  if (!current || current.key !== columnKey || !current.order) {
+    return '↕'
+  }
+  return current.order === 'asc' ? '▲' : '▼'
+}
+
+function sortRows(list, tableKey, customGetters = {}) {
+  const current = tableSortStates.value[tableKey]
+  if (!current || !current.key || !current.order) {
+    return list
+  }
+  const { key, order } = current
+  const isAsc = order === 'asc'
+  const getter = customGetters[key] || (r => r[key])
+
+  const copy = [...list]
+  copy.sort((a, b) => {
+    let valA = getter(a)
+    let valB = getter(b)
+
+    if (valA === undefined || valA === null) valA = ''
+    if (valB === undefined || valB === null) valB = ''
+
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return isAsc ? valA - valB : valB - valA
+    }
+
+    const numA = Number(valA)
+    const numB = Number(valB)
+    if (!isNaN(numA) && !isNaN(numB) && typeof valA !== 'boolean' && typeof valB !== 'boolean' && valA !== '' && valB !== '') {
+      return isAsc ? numA - numB : numB - numA
+    }
+
+    const strA = String(valA)
+    const strB = String(valB)
+    const comp = strA.localeCompare(strB, 'zh-CN', { numeric: true, sensitivity: 'base' })
+    return isAsc ? comp : -comp
+  })
+
+  return copy
+}
+
+// Tab 1 保温管排序后行数据
+const sortedDailyPipeRows = computed(() => {
+  return sortRows(aggregatedDailyRows.value, 'daily_pipe', {
+    date: r => r.biz_date || '',
+    section: r => r.section_1_name || '',
+    model: r => r.pipe_model_name || '',
+    supplier: r => r.supplier_name || '',
+    avg_transit: r => parseFloat(r.avg_transit_display) || (Number(r.avg_transit_days) || 0)
+  })
+})
+
+// Tab 1 管件排序后行数据
+const sortedDailyFittingRows = computed(() => {
+  return sortRows(aggregatedDailyRows.value, 'daily_fitting', {
+    date: r => r.biz_date || '',
+    section: r => r.section_1_name || '',
+    model: r => `${r.fitting_type || ''} ${r.model_spec || ''}`.trim(),
+    supplier: r => r.supplier_name || '',
+    site_stock_pcs: r => Math.max(0, (Number(r.arrived_qty) || 0) - (Number(r.usage_qty) || 0))
+  })
+})
+
+// Tab 2 保温管基准与进度对照排序后行数据
+const sortedBaselinePipeRows = computed(() => {
+  return sortRows(aggregatedBaselineRows.value, 'baseline_pipe', {
+    section: r => r.section_1_name || '',
+    model: r => r.pipe_model_name || '',
+    supplier: r => r.supplier_name || ''
+  })
+})
+
+// Tab 2 管件设计与计划采购基准排序后行数据
+const sortedFittingBaselineRows = computed(() => {
+  return sortRows(aggregatedFittingBaselineRows.value, 'fitting_baseline', {
+    section: r => r.section_1_name || '',
+    model: r => `${r.fitting_type || r.standard_name || r.category || ''} ${r.model_spec || ''} ${r.sub_model_spec || ''}`.trim(),
+    supplier: r => r.supplier_name || ''
+  })
+})
+
+// Tab 2 管件全周期累计流转与现场库存排序后行数据
+const sortedFittingFlowRows = computed(() => {
+  return sortRows(aggregatedFittingFlowRows.value, 'fitting_flow', {
+    section: r => r.section_1_name || '',
+    model: r => `${r.fitting_type || ''} ${r.model_spec || ''}`.trim(),
+    supplier: r => r.supplier_name || ''
+  })
+})
+
+// -----------------------------------------------------------------------------
 // 🏢 责任主体与人员管辖 (Tab 3 模式 A 过滤与分组)
 // -----------------------------------------------------------------------------
 
@@ -2969,6 +3274,13 @@ function resetAllFilters() {
   fittingKeyword.value = ''
   globalSearchKeyword.value = ''
   setDateRangeByCapsule('30days')
+  tableSortStates.value = {
+    daily_pipe: { key: '', order: '' },
+    daily_fitting: { key: '', order: '' },
+    baseline_pipe: { key: '', order: '' },
+    fitting_baseline: { key: '', order: '' },
+    fitting_flow: { key: '', order: '' }
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -3047,7 +3359,7 @@ async function exportCurrentTabExcel() {
         headers = [...dimHeaders, '计划量(米)', '发货量(米)', '到货量(米)', '施工接收(米)', '现场使用(米)', '损耗量(米)', '库管已确认(米)']
         if (activeDims.includes('date')) headers.push('在途时长')
 
-        dataRows = aggregatedDailyRows.value.map(r => {
+        dataRows = sortedDailyPipeRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'date') return r.biz_date || '—'
             if (d === 'section') return r.section_1_name || '—'
@@ -3062,7 +3374,7 @@ async function exportCurrentTabExcel() {
         filename = `保温管每日流转透视台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
       } else {
         headers = [...dimHeaders, '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管已确认(件)', '现场结余(件)']
-        dataRows = aggregatedDailyRows.value.map(r => {
+        dataRows = sortedDailyFittingRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'date') return r.biz_date || '—'
             if (d === 'section') return r.section_1_name || '—'
@@ -3080,7 +3392,7 @@ async function exportCurrentTabExcel() {
 
       if (subMaterialType.value === 'pipe') {
         headers = [...dimHeaders, '设计量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
-        dataRows = aggregatedBaselineRows.value.map(r => {
+        dataRows = sortedBaselinePipeRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return r.pipe_model_name || '—'
@@ -3092,7 +3404,7 @@ async function exportCurrentTabExcel() {
         filename = '保温管设计采购基准进度透视表.xlsx'
       } else if (fittingTab2SubView.value === 'baseline') {
         headers = [...dimHeaders, '单位', '设计使用量', '计划采购量']
-        dataRows = aggregatedFittingBaselineRows.value.map(r => {
+        dataRows = sortedFittingBaselineRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return `${r.fitting_type || r.standard_name || r.category || ''} ${r.model_spec || ''}`.trim() || '—'
@@ -3104,7 +3416,7 @@ async function exportCurrentTabExcel() {
         filename = '管件设计与计划采购基准表.xlsx'
       } else {
         headers = [...dimHeaders, '单位', '累计发货量', '累计到货量', '现场安装量', '现场库存余量']
-        dataRows = aggregatedFittingFlowRows.value.map(r => {
+        dataRows = sortedFittingFlowRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return `${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—'
@@ -4173,6 +4485,59 @@ async function exportCurrentTabExcel() {
   color: #334155;
   background: #f8fafc;
   white-space: nowrap;
+}
+
+/* 🔀 表头排序样式 */
+.data-table th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.data-table th.sortable-th:hover {
+  background: #f1f5f9;
+  color: #0284c7;
+}
+
+.data-table th.sortable-th.sorted-col {
+  background: #f0f9ff;
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.th-inner-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.th-inner-cell.text-right {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.th-inner-cell.text-center {
+  justify-content: center;
+  width: 100%;
+}
+
+.sort-arrow {
+  font-size: 11px;
+  line-height: 1;
+  color: #94a3b8;
+  opacity: 0.5;
+  transition: all 0.15s ease;
+}
+
+.sortable-th:hover .sort-arrow {
+  opacity: 1;
+  color: #0284c7;
+}
+
+.sort-arrow.active {
+  opacity: 1;
+  color: #0284c7;
+  font-weight: 900;
 }
 
 .data-table td {

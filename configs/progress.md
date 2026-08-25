@@ -1,3 +1,32 @@
+## 2026-08-25 [综合数据查询中心（comprehensive_query）每日历史流转与基准进度表格全字段三态动态排序功能交付]
+- **需求与背景**：
+  - 用户在综合数据查询中心页面（`/projects/insulation_pipe_supply_2026/pages/comprehensive_query`）浏览“📅 每日历史综合流转台账”与“📐 设计采购与基准量进度”两大标签页下的表格时，需要支持对每个字段进行灵活排序；
+  - 核心要求：点击相应字段名即可在“升序 (▲) -> 降序 (▼) -> 清除排序 (恢复默认)”之间三态循环切换，且各表格与品类（保温管/管件）状态独立清晰，互不干扰。
+- **改动与实现详情**（[HistoryQueryView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+  1. **全表格覆盖（涵盖 5 个表格视图）**：
+     - **Tab 1 每日历史流转**：
+       - 🔥 保温直管表格：动态维度列（业务日期、需求标段、型号、厂家）+ 7 项固定指标列（计划量、发货量、到货量、施工接收、实际使用、损耗量、库管确认）+ 在途时长列；
+       - 🔧 管件表格：动态维度列 + 6 项固定指标列（发货数量、到货数量、施工接收、现场安装、库管确认、现场结余）；
+     - **Tab 2 设计采购与基准量进度**：
+       - 🔥 保温管基准与进度对照表：动态维度列 + 6 项数量列（设计量、计划采购量、累计发货、累计到货、累计使用、现场库存）+ 2 项比率列（采购到货进度、施工安装进度）；
+       - 🔧 管件设计与计划采购基准表：动态维度列 + 单位 + 设计使用量 + 计划采购量；
+       - 🔧 管件全周期累计流转与现场库存表：动态维度列 + 单位 + 累计发货量 + 累计到货量 + 现场安装量 + 现场库存余量；
+  2. **三态循环排序算法与独立响应式状态**：
+     - 引入 `tableSortStates`（为 `daily_pipe`、`daily_fitting`、`baseline_pipe`、`fitting_baseline`、`fitting_flow` 分配独立状态机）；
+     - 实现 `handleTableSort`（升序 -> 降序 -> 清除恢复）、`isColumnSorted` 与 `getSortIcon`（`▲` / `▼` / `↕`）；
+     - 通用排序函数 `sortRows` 支持数值量化比较、中文拼音自然排序（`localeCompare('zh-CN', { numeric: true })`）以及自定义字段 Getter；
+     - 5 个表格分别派生出独立的计算属性（`sortedDailyPipeRows`、`sortedDailyFittingRows`、`sortedBaselinePipeRows`、`sortedFittingBaselineRows`、`sortedFittingFlowRows`）；
+  3. **表格交互视觉增强**：
+     - 在表头中增加 `.sortable-th`、`.sorted-col`、`.th-inner-cell` 与 `.sort-arrow` 样式；
+     - 支持鼠标悬浮高亮、激活列背景淡蓝底色（`#f0f9ff`）、字重强化（`font-weight: 800`）及高亮排序指示器；
+     - 针对数值靠右（`text-right`）与居中（`text-center`）列优化 flex 对齐，确保表头文字与排序列箭头整齐排布；
+  4. **全功能联动与重置自愈**：
+     - `resetAllFilters` 一键清空时同步重置所有表格排序；
+     - `exportCurrentTabExcel` Excel 导出功能无缝对接排序后数据集，确保“所见即所得”导出当前排序顺序的报表。
+- **验证结果**：
+  - 前端生产环境构建（`npm run build`）一次性通过，736 个模块编译无误，无控制台告警或语法错误；
+  - 表格数据渲染、汇总底栏、开会看板 KPI 以及 Excel 导出逻辑均保持正常。
+
 ## 2026-08-24 [供给管理直管发货单管理员编辑覆写报错：Could not locate column 'arrived_confirm_at' 排障与修复]
 - **问题现象与原因分析**：
   - **报错现象**：用户在供给管理页面（`/projects/insulation_pipe_supply_2026/pages/supply_management?category=pipe&tab=history`）尝试通过“编辑覆盖”修改发货单（如 `OSA-H2-260821-002`）时，后端报错抛出：`超级管理员强力更新数据失败: Could not locate column in row for column 'arrived_confirm_at'`；

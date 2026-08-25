@@ -1,3 +1,20 @@
+## 2026-08-25 综合数据查询中心（HistoryQueryView.vue）表格全字段三态动态排序功能交付
+
+- **关联前端页面与组件**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`（综合数据查询中心）
+- **功能特性与实现机制**：
+  1. **全字段可排与三态切换（Three-State Sorting）**：
+     - 为 Tab 1（每日历史流转台账 - 保温管/管件）与 Tab 2（设计采购与基准量进度 - 保温管基准对照/管件基准/管件流转库存）全部 5 个表格的每一个字段（动态透视维度列、数量列、比率列、在途时长、库存结余等）支持表头点击排序；
+     - 循环切换逻辑：点击 1 次升序（`▲`） -> 点击 2 次降序（`▼`） -> 点击 3 次清除排序（恢复默认聚合排序，显示 `↕`）；
+  2. **独立状态管理与响应式计算属性**：
+     - `tableSortStates` 为各个表格维护独立状态机，各品类与子视图切换时互不干扰；
+     - `sortedDailyPipeRows`、`sortedDailyFittingRows`、`sortedBaselinePipeRows`、`sortedFittingBaselineRows`、`sortedFittingFlowRows` 实时响应排序状态；
+     - 排序算法支持纯数值绝对差值排序、中文拼音首字母自然排序（`localeCompare('zh-CN', { numeric: true })`）；
+  3. **表头交互体验优化**：
+     - 增加 `.sortable-th`（指针悬浮变色）、`.sorted-col`（激活列淡蓝背景 `#f0f9ff` 与粗体显示）、`.th-inner-cell`（flex 对齐保持数值列与居中列箭头位置整洁）；
+  4. **导出与重置闭环**：
+     - 顶部“重置全部”自动清空排序；“导出 Excel”自动使用当前排序结果生成报表。
+
 ## 2026-08-24 Docker 环境 Vite 依赖预构建配置与保温管子页面异步按需加载优化（解决 Failed to fetch dynamically imported module）
 
 - **关联前端文件与模块**：

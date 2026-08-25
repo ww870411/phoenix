@@ -1,3 +1,9 @@
+## 2026-08-25 综合数据查询中心表格全字段动态排序功能交付同步说明
+
+- **服务模块与业务同步**：
+  - 本轮改动为综合数据查询中心（`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`）中每日流转与基准进度表格的全字段三态（升序/降序/恢复默认）前端交互与排序计算属性升级；
+  - 后端接口契约（`getComprehensiveDailyFlow`、`getComprehensiveBaselineProgress`）与数据模型完全保持兼容，无需后端接口变更。
+
 ## 2026-08-24 供给管理直管发货单管理员编辑覆写报错修复（supply_management_service.py）
 
 - **服务模块与业务分析**：
