@@ -1,3 +1,30 @@
+## 2026-08-27 现场需求管理全标段在途与待办发货单汇总聚合接口交付（workspace.py）
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 核心端点：`GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/pending-deliveries-summary`
+- **实现机制与业务逻辑**：
+  1. **多标段权限自适应**：
+     - 调用 `resolve_accessible_section_1_ids(payload, session.username, session.group)` 解析当前登录用户的有效管辖标段；
+     - 超级管理员（`Global_admin`）可查询全厂全部标段，普通标段账号仅能查询自身负责的标段，确保多租户数据安全；
+  2. **双品类（直管/管件）全量在途聚合**：
+     - 自动触发 `auto_process_timeout_deliveries()` 执行超时单据的自动状态流转；
+     - 直管表（`tube.tube_delivery`）：拉取 `pending_arrival`（待确认到货）、`pending_receive`（待施工接收）、`pending_diff_approve`（少收差异待审批）的全部有效单据；
+     - 管件表（`tube.tube_fitting_delivery`）：拉取 `pending_arrival`、`pending_receive` 等未结案发货单据；
+  3. **“在途时长”与“操作等待时长”双维度预警计算与多级排序**：
+     - 在途时长（`elapsed_seconds` / `elapsed_display`）：系统当前时刻与单据发货时间 `shipped_at` 之差；
+     - 操作等待时长（`unconfirmed_elapsed_seconds` / `unconfirmed_elapsed_display`）：
+       - 未到货单据（`pending_arrival`）：等于在途时长（`now - shipped_at`）；
+       - 未施工接收单据（`pending_receive`）：等于自到站确认以来的时间（`now - arrived_confirm_at`）；
+     - 双维度延误预警计算：
+       - `is_severe_delay` / `is_unconfirmed_severe`：时长 >= 48 小时（标红超期）；
+       - `is_warning_delay` / `is_unconfirmed_warning`：时长 >= 24 小时（标黄关注）；
+     - 排序规则：默认按在途时长降序，次级按操作等待时长降序（`ORDER BY elapsed_seconds DESC, unconfirmed_elapsed_seconds DESC`）；
+  4. **汇总 KPI 统计指标**：
+     - 实时汇总返回 `total_count`、`pending_arrival_count`、`pending_receive_count`、`severe_delay_count`、`pipe_count`、`fitting_count` 以及用户管辖的有效标段列表。
+  5. **底层表结构自愈优化**（`fitting_delivery_service.py`、`fitting_usage_service.py`、`baseline_service.py`）：
+     - 增加数据库 Sequence 与 DEFAULT 列自愈对齐机制，确保主键唯一与自增安全。
+
 ## 2026-08-25 综合数据查询中心表格全字段动态排序功能交付同步说明
 
 - **服务模块与业务同步**：

@@ -55,6 +55,16 @@ def ensure_baseline_tables() -> None:
                 ON tube.tube_pipe_baseline (section_1_id);
         """))
 
+        # 确保直管序列与默认值
+        try:
+            session.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS tube.tube_pipe_baseline_id_seq;
+                ALTER TABLE tube.tube_pipe_baseline ALTER COLUMN id SET DEFAULT nextval('tube.tube_pipe_baseline_id_seq');
+            """))
+            session.commit()
+        except Exception:
+            session.rollback()
+
         # 3. 管件与标准化物料基准表 (自愈升级)
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS tube.tube_fitting_baseline (
@@ -166,6 +176,19 @@ def ensure_baseline_tables() -> None:
             CREATE INDEX IF NOT EXISTS idx_tube_fitting_baseline_main_dn 
                 ON tube.tube_fitting_baseline (main_dn);
         """))
+
+        # 序列自愈校准
+        try:
+            session.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS tube.tube_pipe_baseline_id_seq;
+                ALTER TABLE tube.tube_pipe_baseline ALTER COLUMN id SET DEFAULT nextval('tube.tube_pipe_baseline_id_seq');
+                SELECT setval('tube.tube_pipe_baseline_id_seq', COALESCE((SELECT MAX(id) FROM tube.tube_pipe_baseline), 0) + 1, false);
+                CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_baseline_id_seq;
+                ALTER TABLE tube.tube_fitting_baseline ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_baseline_id_seq');
+                SELECT setval('tube.tube_fitting_baseline_id_seq', COALESCE((SELECT MAX(id) FROM tube.tube_fitting_baseline), 0) + 1, false);
+            """))
+        except Exception:
+            pass
 
         session.commit()
         _baseline_tables_checked = True

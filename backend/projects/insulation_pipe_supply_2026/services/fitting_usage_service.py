@@ -55,6 +55,9 @@ def _ensure_fitting_usage_table_structures() -> None:
         CREATE INDEX IF NOT EXISTS idx_fitting_usage_date_query 
         ON tube.tube_fitting_daily_usage (section_1_id, usage_date DESC, id DESC)
         """,
+        "CREATE SEQUENCE IF NOT EXISTS tube.tube_fitting_daily_usage_id_seq",
+        "ALTER TABLE tube.tube_fitting_daily_usage ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_daily_usage_id_seq')",
+        "SELECT setval('tube.tube_fitting_daily_usage_id_seq', COALESCE((SELECT MAX(id) FROM tube.tube_fitting_daily_usage), 0) + 1, false)",
     ]
     session = SessionLocal()
     try:

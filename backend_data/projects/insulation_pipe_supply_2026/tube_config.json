@@ -81,7 +81,10 @@
       "section_1_ids": [
         "low_lot_1",
         "low_lot_2",
-        "low_lot_3"
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ],
       "is_custom": false
     },
@@ -95,6 +98,49 @@
         "low_lot_1",
         "low_lot_2",
         "low_lot_3"
+      ],
+      "is_custom": false
+    },
+    {
+      "entity_id": "kaersi",
+      "code": "SE",
+      "entity_name": "天津卡尔斯阀门股份有限公司",
+      "contact_name": "贾祥娟",
+      "contact_phone": "18311089570",
+      "section_1_ids": [
+        "high_lot_1",
+        "high_lot_2",
+        "high_lot_3",
+        "high_lot_4"
+      ],
+      "is_custom": false
+    },
+    {
+      "entity_id": "zeyue",
+      "code": "SF",
+      "entity_name": "河北泽悦节能设备科技有限公司",
+      "contact_name": "刘波",
+      "contact_phone": "13910551929",
+      "section_1_ids": [
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
+      ],
+      "is_custom": false
+    },
+    {
+      "entity_id": "tiandilong",
+      "code": "SG",
+      "entity_name": "天津天地龙管业股份有限公司",
+      "contact_name": "丁彧",
+      "contact_phone": "13516258086",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ],
       "is_custom": false
     },

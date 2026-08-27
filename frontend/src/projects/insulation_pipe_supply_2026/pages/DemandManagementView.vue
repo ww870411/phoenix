@@ -8,11 +8,18 @@
       <header class="topbar premium-topbar">
         <div>
           <h2>现场管理工作台 (需求侧)</h2>
-          <p class="sub">
-            面向项目现场负责人与管理人员。提供 Tabs 标签化分类，支持未来三日滚动计划的高效填报、昨日实际用量核对、物理到货确认与施工接收登记。
-          </p>
         </div>
         <div class="topbar-actions">
+          <button
+            type="button"
+            class="btn pending-summary-topbar-btn"
+            @click="openPendingSummaryModal"
+            title="根据当前账号管辖的标段范围，弹出全标段发货督办清单"
+          >
+            <span class="btn-icon">🚚</span>
+            <span>全标段发货督办清单</span>
+            <span v-if="pendingSummaryTotalCount > 0" class="badge-count-pill">{{ pendingSummaryTotalCount }}</span>
+          </button>
           <button type="button" class="btn ghost btn-back" @click="goProjectPages">
             返回功能页
           </button>
@@ -411,6 +418,15 @@
                 <span class="panel-hint">确认运输车次的安全到站，并录入施工单位的真实物理接收量。计量单位：米。</span>
               </div>
               <div class="toolbar-actions" style="display: flex; gap: 8px;">
+                <button 
+                  type="button" 
+                  class="btn ghost" 
+                  style="color: #ea580c; border-color: #fdba74; font-weight: 600;" 
+                  @click="openPendingSummaryModal"
+                  title="查看管辖的所有标段中待到货与待接收的发货单汇总"
+                >
+                  🚚 全标段在途汇总 ({{ pendingSummaryTotalCount }})
+                </button>
                 <button type="button" class="btn ghost" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
                 <button type="button" class="primary-button" :disabled="pendingLoading || !selectedSection1Id" @click="applyPendingFilters">
                   {{ pendingLoading ? '查询中...' : '筛选记录' }}
@@ -596,6 +612,15 @@
                 <span class="panel-hint">本标段（需求主体）收到的全量管件（弯头、三通、大小头等）发货明细台账。由供给侧调度发货自动联动上报，需求方无需进行任何手工填报。</span>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button 
+                  type="button" 
+                  class="btn ghost" 
+                  style="height: 34px; padding: 0 12px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #fdba74; color: #ea580c; background: #fff; font-weight: 600; cursor: pointer;" 
+                  @click="openPendingSummaryModal"
+                  title="查看管辖的所有标段中待到货与待接收的发货单汇总"
+                >
+                  🚚 全标段在途汇总 ({{ pendingSummaryTotalCount }})
+                </button>
                 <button
                   type="button"
                   class="btn ghost"
@@ -2694,6 +2719,411 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 🚚 全标段在途发货单汇总督办 Modal (清爽宽敞横表 + 手机端响应式小卡片) -->
+    <Transition name="fade">
+      <div v-if="pendingSummaryModalVisible" class="block-modal-overlay pending-super-overlay" @click.self="pendingSummaryModalVisible = false">
+        <div class="block-modal-container pending-clean-modal-container">
+          <!-- 1. 清爽单行 Header -->
+          <div class="pending-clean-header">
+            <div class="header-left-info">
+              <span class="header-icon">🚚</span>
+              <h3 class="header-title">全标段发货督办清单</h3>
+              <span class="header-count-pill">{{ pendingSummaryTotalCount }} 笔待办</span>
+            </div>
+            
+            <div class="header-right-tools">
+              <button
+                type="button"
+                class="btn-clean-ghost"
+                :disabled="pendingSummaryLoading"
+                @click="loadPendingDeliveriesSummary(true)"
+                title="重新拉取最新在途发货数据"
+              >
+                <span class="btn-ic" :class="{ 'spin-anim': pendingSummaryLoading }">🔄</span>
+                <span>刷新</span>
+              </button>
+              <button
+                type="button"
+                class="btn-clean-export"
+                :disabled="pendingSummaryLoading || !sortedPendingSummaryRows.length"
+                @click="exportPendingSummaryExcel"
+                title="导出当前筛选的发货单 Excel 督办清单"
+              >
+                <span class="btn-ic">📥</span>
+                <span>导出 EXCEL 表</span>
+              </button>
+              <button type="button" class="btn-clean-close" @click="pendingSummaryModalVisible = false" title="关闭弹窗 (Esc)">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. 清爽通透的筛选栏 (单行流，按钮文字绝对不串行) -->
+          <div class="pending-clean-toolbar">
+            <!-- 品类胶囊切换 -->
+            <div class="capsule-group">
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.category === 'all' }"
+                @click="setPendingSummaryCategory('all')"
+              >
+                全部品类
+              </button>
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.category === 'pipe' }"
+                @click="setPendingSummaryCategory('pipe')"
+              >
+                🔥 直管 ({{ pendingSummaryStats.pipe_count || 0 }})
+              </button>
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.category === 'fitting' }"
+                @click="setPendingSummaryCategory('fitting')"
+              >
+                🔩 管件 ({{ pendingSummaryStats.fitting_count || 0 }})
+              </button>
+            </div>
+
+            <!-- 待办状态切换 -->
+            <div class="capsule-group status-capsules">
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.status === '' }"
+                @click="setPendingSummaryStatusFilter('')"
+              >
+                全部状态
+              </button>
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.status === 'pending_arrival' }"
+                @click="setPendingSummaryStatusFilter('pending_arrival')"
+              >
+                🚚 待到货确认 ({{ pendingSummaryStats.pending_arrival_count || 0 }})
+              </button>
+              <button
+                type="button"
+                class="capsule-item"
+                :class="{ active: pendingSummaryFilter.status === 'pending_receive' }"
+                @click="setPendingSummaryStatusFilter('pending_receive')"
+              >
+                🏗️ 待施工接收 ({{ pendingSummaryStats.pending_receive_count || 0 }})
+              </button>
+            </div>
+
+            <!-- 标段筛选下拉 -->
+            <select v-model="pendingSummaryFilter.section1Id" class="clean-select" @change="loadPendingDeliveriesSummary(true)">
+              <option value="">全部管辖标段 ({{ pendingSummaryAccessibleSections.length }}个)</option>
+              <option v-for="sec in pendingSummaryAccessibleSections" :key="sec.section_1_id" :value="sec.section_1_id">
+                📍 {{ sec.section_1_name }}
+              </option>
+            </select>
+
+            <!-- 🚛 按车次合并开关 (默认合并，可手动切换) -->
+            <button
+              type="button"
+              class="btn-group-toggle"
+              :class="{ 'is-active': groupByShipment }"
+              @click="groupByShipment = !groupByShipment"
+              :title="groupByShipment ? '当前：按车次号合并记录（点击切换为按单据逐笔明细）' : '当前：按单据逐笔明细展示（点击切换为按车次号合并）'"
+            >
+              <span class="toggle-ic">{{ groupByShipment ? '🚛' : '📄' }}</span>
+              <span class="toggle-txt">{{ groupByShipment ? '按车次合并' : '单据明细' }}</span>
+              <span class="toggle-indicator" :class="{ active: groupByShipment }"></span>
+            </button>
+
+            <!-- 搜索框 -->
+            <div class="clean-search-wrap">
+              <span class="search-ic">🔍</span>
+              <input
+                v-model.trim="pendingSummaryFilter.searchKeyword"
+                type="text"
+                placeholder="搜索单号/车牌/厂家/规格..."
+                class="clean-search-input"
+                @input="loadPendingDeliveriesSummary(false)"
+              />
+              <button
+                v-if="pendingSummaryFilter.searchKeyword"
+                type="button"
+                class="clean-search-clear"
+                @click="clearPendingSummarySearch"
+                title="清空搜索"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. 主体内容区：PC 端大横表 + 手机端小卡片 -->
+          <div class="pending-clean-body">
+            <!-- 加载状态 -->
+            <div v-if="pendingSummaryLoading" class="clean-empty-state">
+              <div class="clean-spinner"></div>
+              <p>正在读取全标段在途单据与在途时长...</p>
+            </div>
+
+            <!-- 错误提示 -->
+            <div v-else-if="pendingSummaryError" class="clean-error-state">
+              <span>⚠️ {{ pendingSummaryError }}</span>
+              <button type="button" class="btn-clean-ghost small" @click="loadPendingDeliveriesSummary(true)">重试</button>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-else-if="!sortedPendingSummaryRows.length" class="clean-empty-state">
+              <span class="empty-emoji">🎉</span>
+              <h4>太好了！当前没有未确认或在途滞留的发货单</h4>
+              <p>管辖标段内所有物资均已正常完成到站与接收。</p>
+            </div>
+
+            <!-- 数据呈现区 -->
+            <div v-else class="pending-content-wrapper">
+              <!-- A. 桌面端：通透大气的大横表 (PC Table) -->
+              <div class="clean-table-scroll-wrap pc-only-table">
+                <table class="clean-wide-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 48px; text-align: center;">#</th>
+                      <th style="width: 88px; text-align: center;">物料品类</th>
+                      <th style="width: 110px; text-align: center;">当前状态</th>
+                      <th style="width: 130px;">需求标段</th>
+                      <th style="width: 160px;">订单号 / 运输车次</th>
+                      <th style="width: 100px;">车牌号</th>
+                      <th style="width: 140px;">供给厂家</th>
+                      <th style="min-width: 180px;">规格型号 / 物料名称</th>
+                      <th style="width: 110px; text-align: right;">发货数量</th>
+                      <th style="width: 120px;">发货时间</th>
+                      <th
+                        style="width: 125px; cursor: pointer; user-select: none;"
+                        class="clean-sort-th"
+                        @click="togglePendingSummarySort"
+                        title="点击按在途时长升降序排列（次级按操作等待时长排序）"
+                      >
+                        <span>在途时长</span>
+                        <span class="sort-icon-tag">{{ pendingSummaryFilter.sortOrder === 'desc' ? '▼ 降序' : '▲ 升序' }}</span>
+                      </th>
+                      <th style="width: 125px;" title="待到货确认单据为在途时长；待施工接收单据为自确认到货以来的时长">
+                        <span>操作等待时长</span>
+                      </th>
+                      <th style="width: 170px; text-align: center;">现场督办操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(row, idx) in sortedPendingSummaryRows"
+                      :key="`${row.category}_${row.id}`"
+                      class="clean-table-tr"
+                      :class="{ 'tr-severe': row.is_severe_delay, 'tr-warning': row.is_warning_delay && !row.is_severe_delay }"
+                    >
+                      <td style="text-align: center; color: #94a3b8; font-size: 12px;">{{ idx + 1 }}</td>
+                      <td style="text-align: center;">
+                        <span class="clean-cat-badge" :class="row.category">
+                          {{ row.category === 'pipe' ? '🔥 直管' : '🔩 管件' }}
+                        </span>
+                      </td>
+                      <td style="text-align: center;">
+                        <span
+                          class="clean-status-badge"
+                          :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
+                        >
+                          {{ row.status_label }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
+                      </td>
+                      <td>
+                        <div class="order-code-main font-mono">
+                          {{ row.order_no }}
+                          <span v-if="row.is_grouped && row.sub_count > 1" class="sub-count-tag" :title="`该车次合并了 ${row.sub_count} 笔发货单`">
+                            共{{ row.sub_count }}单
+                          </span>
+                        </div>
+                        <div v-if="row.shipment_no && row.shipment_no !== '—'" class="shipment-code-sub font-mono">
+                          车次: {{ row.shipment_no }}
+                        </div>
+                      </td>
+                      <td>
+                        <span class="clean-plate-pill">{{ row.vehicle_plate_no || '未填' }}</span>
+                      </td>
+                      <td>
+                        <div class="supply-entity-cell text-ellipsis" :title="row.supply_entity_name">
+                          🏭 {{ row.supply_entity_name }}
+                        </div>
+                      </td>
+                      <td>
+                        <div class="material-name-cell">
+                          <strong>{{ row.material_name }}</strong>
+                        </div>
+                      </td>
+                      <td style="text-align: right;">
+                        <span class="qty-highlight">{{ row.quantity_display }}</span>
+                      </td>
+                      <td>
+                        <span class="time-cell-text">{{ formatShortDateTime(row.shipped_at) }}</span>
+                      </td>
+                      <td>
+                        <div
+                          class="clean-elapsed-pill"
+                          :class="{ 'is-severe': row.is_severe_delay, 'is-warning': row.is_warning_delay && !row.is_severe_delay }"
+                        >
+                          ⏱️ {{ row.elapsed_display }}
+                        </div>
+                      </td>
+                      <td>
+                        <div
+                          class="clean-elapsed-pill unconfirmed"
+                          :class="{
+                            'is-severe': row.is_unconfirmed_severe,
+                            'is-warning': row.is_unconfirmed_warning && !row.is_unconfirmed_severe
+                          }"
+                        >
+                          ⏳ {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
+                        </div>
+                      </td>
+                      <td style="text-align: center;">
+                        <div class="clean-op-btn-group">
+                          <button
+                            type="button"
+                            class="op-btn-jump"
+                            @click="handleJumpToSectionDelivery(row)"
+                            title="切换至该标段并前往现场到货/施工接收确认"
+                          >
+                            📍 定位处理
+                          </button>
+                          <button
+                            type="button"
+                            class="op-btn-detail"
+                            @click="showDeliveryDetail(row)"
+                            title="查看单据完整时光轴与凭证"
+                          >
+                            👁️ 详情
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- B. 手机端 / 窄屏：自动展示精致小卡片 (Mobile Cards) -->
+              <div class="mobile-only-cards-grid">
+                <div
+                  v-for="row in sortedPendingSummaryRows"
+                  :key="`m_${row.category}_${row.id}`"
+                  class="mobile-ticket-card"
+                  :class="{ 'card-severe': row.is_severe_delay, 'card-warning': row.is_warning_delay && !row.is_severe_delay }"
+                >
+                  <!-- 手机卡片顶栏 -->
+                  <div class="m-card-header">
+                    <div class="m-tags-row">
+                      <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
+                      <span class="clean-cat-badge" :class="row.category">
+                        {{ row.category === 'pipe' ? '🔥 直管' : '🔩 管件' }}
+                      </span>
+                      <span
+                        class="clean-status-badge"
+                        :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
+                      >
+                        {{ row.status_label }}
+                      </span>
+                    </div>
+                    <div class="m-elapsed-box">
+                      <div
+                        class="clean-elapsed-pill mini"
+                        :class="{ 'is-severe': row.is_severe_delay, 'is-warning': row.is_warning_delay && !row.is_severe_delay }"
+                        title="在途时长"
+                      >
+                        ⏱️ 在途: {{ row.elapsed_display }}
+                      </div>
+                      <div
+                        class="clean-elapsed-pill mini unconfirmed"
+                        :class="{
+                          'is-severe': row.is_unconfirmed_severe,
+                          'is-warning': row.is_unconfirmed_warning && !row.is_unconfirmed_severe
+                        }"
+                        title="操作等待时长"
+                      >
+                        ⏳ 等待: {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 手机卡片主体 -->
+                  <div class="m-card-body">
+                    <div class="m-mat-row">
+                      <strong class="m-mat-name">{{ row.material_name }}</strong>
+                      <span class="m-qty-val">{{ row.quantity_display }}</span>
+                    </div>
+                    <div class="m-info-line">
+                      <span class="m-info-k">单号车次:</span>
+                      <span class="m-info-v font-mono">{{ row.order_no }} ({{ row.shipment_no || '独立' }})</span>
+                      <span v-if="row.is_grouped && row.sub_count > 1" class="sub-count-tag">共{{ row.sub_count }}单</span>
+                    </div>
+                    <div class="m-info-line">
+                      <span class="m-info-k">车牌车辆:</span>
+                      <span class="clean-plate-pill mini">{{ row.vehicle_plate_no || '未填车牌' }}</span>
+                      <span class="m-supplier">🏭 {{ row.supply_entity_name }}</span>
+                    </div>
+                    <div v-if="row.ship_contact_name || row.ship_contact_phone" class="m-contact-line" @click="copyContactPhone(row.ship_contact_phone, row.ship_contact_name)">
+                      <span>👤 {{ row.ship_contact_name || '司机' }}</span>
+                      <span v-if="row.ship_contact_phone" class="m-phone-txt">📞 {{ row.ship_contact_phone }}</span>
+                      <span class="m-copy-tag">复制</span>
+                    </div>
+                  </div>
+
+                  <!-- 手机卡片底栏操作 -->
+                  <div class="m-card-footer">
+                    <button
+                      type="button"
+                      class="m-btn-ghost"
+                      @click="showDeliveryDetail(row)"
+                    >
+                      👁️ 流转详情
+                    </button>
+                    <button
+                      type="button"
+                      class="m-btn-primary"
+                      @click="handleJumpToSectionDelivery(row)"
+                    >
+                      📍 现场确认 ➔
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. 弹窗底栏 Footer -->
+          <div class="pending-clean-footer">
+            <div class="footer-stats-left">
+              <span class="f-stat-item">
+                待办单据：<strong>{{ sortedPendingSummaryRows.length }}</strong> 笔
+              </span>
+              <span class="f-divider">/</span>
+              <span class="f-stat-item">
+                在途直管：<strong class="text-blue">{{ summaryAggregates.totalPipeMeters }} 米</strong>
+              </span>
+              <span class="f-divider">/</span>
+              <span class="f-stat-item">
+                在途管件：<strong class="text-purple">{{ summaryAggregates.totalFittingCount }} 件</strong>
+              </span>
+            </div>
+
+            <div class="footer-btn-right">
+              <button type="button" class="btn-clean-close-foot" @click="pendingSummaryModalVisible = false">
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -2711,6 +3141,7 @@ import {
   getTubeDemandManagementBaseline,
   getTubeDemandManagementFittingBaseline,
   getTubeDemandManagementLogisticsRecords,
+  getTubeDemandManagementPendingDeliveriesSummary,
   getTubeDemandManagementOptions,
   getTubeDemandManagementPlanMatrix,
   getTubeDemandManagementUsageSheet,
@@ -2798,6 +3229,439 @@ const showExportModal = ref(false)
 const blockModalVisible = ref(false)
 const blockModalData = ref(null)
 const allPendingRows = ref([])
+
+// 🚚 全标段在途与待接收发货单汇总督办状态
+const pendingSummaryModalVisible = ref(false)
+const pendingSummaryLoading = ref(false)
+const pendingSummaryError = ref('')
+const pendingSummaryViewMode = ref('card') // 'card' | 'table'
+const pendingSummaryRows = ref([])
+const pendingSummaryStats = ref({
+  total_count: 0,
+  pending_arrival_count: 0,
+  pending_receive_count: 0,
+  severe_delay_count: 0,
+  pipe_count: 0,
+  fitting_count: 0
+})
+const pendingSummaryTotalCount = ref(0)
+const pendingSummaryAccessibleSections = ref([])
+const groupByShipment = ref(true) // 默认开启按车次合并，可手动切换
+
+const pendingSummaryFilter = reactive({
+  category: 'all',
+  status: '',
+  section1Id: '',
+  searchKeyword: '',
+  sortOrder: 'desc'
+})
+
+function setPendingSummaryCategory(cat) {
+  pendingSummaryFilter.category = cat
+  loadPendingDeliveriesSummary(true)
+}
+
+function setPendingSummaryStatusFilter(status) {
+  if (pendingSummaryFilter.status === status) {
+    pendingSummaryFilter.status = ''
+  } else {
+    pendingSummaryFilter.status = status
+  }
+  loadPendingDeliveriesSummary(true)
+}
+
+function clearPendingSummarySearch() {
+  pendingSummaryFilter.searchKeyword = ''
+  loadPendingDeliveriesSummary(true)
+}
+
+function togglePendingSummarySort() {
+  pendingSummaryFilter.sortOrder = pendingSummaryFilter.sortOrder === 'desc' ? 'asc' : 'desc'
+}
+
+const processedPendingSummaryRows = computed(() => {
+  const rawRows = pendingSummaryRows.value || []
+  if (!groupByShipment.value) {
+    return rawRows.map(r => ({
+      ...r,
+      is_grouped: false,
+      sub_count: 1,
+      sub_rows: [r],
+      is_unconfirmed_severe: Boolean(r.is_unconfirmed_severe) || Number(r.unconfirmed_elapsed_seconds || 0) >= 172800,
+      is_unconfirmed_warning: Boolean(r.is_unconfirmed_warning) || Number(r.unconfirmed_elapsed_seconds || 0) >= 86400,
+    }))
+  }
+
+  const groupMap = new Map()
+
+  rawRows.forEach((r) => {
+    // 分组 Key：相同标段、相同品类、相同有效车次号
+    const hasShipment = r.shipment_no && r.shipment_no !== '—' && String(r.shipment_no).trim() !== ''
+    const groupKey = hasShipment
+      ? `${r.section_1_id}_${r.category}_${r.shipment_no.trim()}_${r.vehicle_plate_no || ''}`
+      : `${r.section_1_id}_${r.category}_INDIVIDUAL_${r.id}`
+
+    if (!groupMap.has(groupKey)) {
+      groupMap.set(groupKey, {
+        ...r,
+        group_key: groupKey,
+        is_grouped: false,
+        sub_count: 1,
+        sub_rows: [r],
+        shipped_qty: Number(r.shipped_qty || 0),
+        elapsed_seconds: Number(r.elapsed_seconds || 0),
+        unconfirmed_elapsed_seconds: Number(r.unconfirmed_elapsed_seconds || 0),
+        is_severe_delay: Boolean(r.is_severe_delay) || Number(r.elapsed_seconds || 0) >= 172800,
+        is_warning_delay: Boolean(r.is_warning_delay) || Number(r.elapsed_seconds || 0) >= 86400,
+        is_unconfirmed_severe: Boolean(r.is_unconfirmed_severe) || Number(r.unconfirmed_elapsed_seconds || 0) >= 172800,
+        is_unconfirmed_warning: Boolean(r.is_unconfirmed_warning) || Number(r.unconfirmed_elapsed_seconds || 0) >= 86400,
+      })
+    } else {
+      const g = groupMap.get(groupKey)
+      g.is_grouped = true
+      g.sub_count += 1
+      g.sub_rows.push(r)
+      g.shipped_qty += Number(r.shipped_qty || 0)
+
+      // 物料聚合
+      const uniqueMats = [...new Set(g.sub_rows.map(item => item.material_name || item.pipe_model_name || ''))].filter(Boolean)
+      if (uniqueMats.length === 1) {
+        g.material_name = uniqueMats[0]
+      } else {
+        g.material_name = `${uniqueMats[0]} 等共 ${uniqueMats.length} 种物料`
+      }
+
+      // 单号聚合
+      const allOrders = g.sub_rows.map(item => item.order_no || item.delivery_code).filter(Boolean)
+      g.order_no = `${allOrders[0]} 等(共${g.sub_count}单)`
+
+      // 时长取最大延误
+      if (Number(r.elapsed_seconds || 0) > g.elapsed_seconds) {
+        g.elapsed_seconds = Number(r.elapsed_seconds || 0)
+        g.elapsed_display = r.elapsed_display
+        g.shipped_at = r.shipped_at
+      }
+      if (Number(r.unconfirmed_elapsed_seconds || 0) > g.unconfirmed_elapsed_seconds) {
+        g.unconfirmed_elapsed_seconds = Number(r.unconfirmed_elapsed_seconds || 0)
+        g.unconfirmed_elapsed_display = r.unconfirmed_elapsed_display
+      }
+
+      // 预警合并
+      if (r.is_severe_delay || Number(r.elapsed_seconds || 0) >= 172800) g.is_severe_delay = true
+      if (r.is_warning_delay || Number(r.elapsed_seconds || 0) >= 86400) g.is_warning_delay = true
+      if (r.is_unconfirmed_severe || Number(r.unconfirmed_elapsed_seconds || 0) >= 172800) g.is_unconfirmed_severe = true
+      if (r.is_unconfirmed_warning || Number(r.unconfirmed_elapsed_seconds || 0) >= 86400) g.is_unconfirmed_warning = true
+
+      // 联系方式补齐
+      if (!g.ship_contact_phone && r.ship_contact_phone) {
+        g.ship_contact_phone = r.ship_contact_phone
+        g.ship_contact_name = r.ship_contact_name
+      }
+    }
+  })
+
+  // 格式化合并后的数量显示
+  return Array.from(groupMap.values()).map(g => {
+    if (g.category === 'pipe') {
+      g.quantity_display = `${g.shipped_qty.toFixed(1)} 米`
+    } else {
+      g.quantity_display = `${Math.round(g.shipped_qty)} ${g.unit || '个'}`
+    }
+    return g
+  })
+})
+
+const sortedPendingSummaryRows = computed(() => {
+  const rows = [...processedPendingSummaryRows.value]
+  const isDesc = pendingSummaryFilter.sortOrder === 'desc'
+  return rows.sort((a, b) => {
+    const timeA = Number(a.elapsed_seconds || 0)
+    const timeB = Number(b.elapsed_seconds || 0)
+    if (timeA !== timeB) {
+      return isDesc ? timeB - timeA : timeA - timeB
+    }
+    const unconfA = Number(a.unconfirmed_elapsed_seconds || 0)
+    const unconfB = Number(b.unconfirmed_elapsed_seconds || 0)
+    return isDesc ? unconfB - unconfA : unconfA - unconfB
+  })
+})
+
+const summaryAggregates = computed(() => {
+  let totalPipeMeters = 0
+  let totalFittingCount = 0
+  ;(pendingSummaryRows.value || []).forEach((r) => {
+    if (r.category === 'pipe') {
+      totalPipeMeters += Number(r.shipped_qty || 0)
+    } else {
+      totalFittingCount += Number(r.shipped_qty || 0)
+    }
+  })
+  return {
+    totalPipeMeters: totalPipeMeters.toFixed(2),
+    totalFittingCount: Math.round(totalFittingCount),
+  }
+})
+
+async function copyContactPhone(phone, name) {
+  if (!phone) return
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(phone)
+      setActionMessage('success', `已复制【${name || '联系人'}】电话：${phone}`)
+    } else {
+      prompt('联系人电话（请按 Ctrl+C 复制）：', phone)
+    }
+  } catch (e) {
+    prompt('联系人电话（请按 Ctrl+C 复制）：', phone)
+  }
+}
+
+async function loadPendingDeliveriesSummary(showLoading = true) {
+  if (showLoading) {
+    pendingSummaryLoading.value = true
+    pendingSummaryError.value = ''
+  }
+  try {
+    const res = await getTubeDemandManagementPendingDeliveriesSummary(PROJECT_KEY, {
+      section_1_id: pendingSummaryFilter.section1Id || '',
+      category: pendingSummaryFilter.category || 'all',
+      status: pendingSummaryFilter.status || '',
+      search: pendingSummaryFilter.searchKeyword || ''
+    })
+    if (res && res.ok) {
+      pendingSummaryRows.value = res.rows || []
+      pendingSummaryStats.value = res.summary || {}
+      pendingSummaryTotalCount.value = res.summary?.total_count || 0
+      pendingSummaryAccessibleSections.value = res.accessible_sections || []
+    }
+  } catch (err) {
+    if (showLoading) {
+      pendingSummaryError.value = err?.message || '加载全标段在途与待接收单据失败'
+    }
+  } finally {
+    if (showLoading) {
+      pendingSummaryLoading.value = false
+    }
+  }
+}
+
+function openPendingSummaryModal() {
+  pendingSummaryModalVisible.value = true
+  loadPendingDeliveriesSummary(true)
+}
+
+function handleJumpToSectionDelivery(row) {
+  if (!row || !row.section_1_id) return
+  selectedSection1Id.value = row.section_1_id
+  if (row.category === 'fitting') {
+    activeCategory.value = 'fitting'
+    activeTab.value = 'fitting'
+  } else {
+    activeCategory.value = 'pipe'
+    activeTab.value = 'logistics'
+  }
+  syncTabStateToUrl(activeCategory.value, activeTab.value)
+  pendingSummaryModalVisible.value = false
+  setActionMessage('success', `已为您切换至标段【${row.section_1_name}】并定位至到货与施工接收记录。`)
+}
+
+function exportPendingSummaryExcel() {
+  const rows = sortedPendingSummaryRows.value
+  if (!rows.length) {
+    alert('当前没有待处理的发货单数据可导出。')
+    return
+  }
+
+  const exportTime = new Date().toLocaleString()
+  const todayStr = getTodayString()
+  const modeText = groupByShipment.value
+    ? `按车次合并模式 (共 ${rows.length} 车次 / 汇总 ${pendingSummaryRows.value.length} 笔单据)`
+    : `单据明细模式 (共 ${rows.length} 笔单据)`
+
+  // 1. 构建格式化 HTML 表格 (支持 Excel/WPS 原生解析背景色、粗体、列宽与边框)
+  let tableHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>全标段在途与待确认发货单</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+      <style>
+        .title-cell { background-color: #f1f5f9; font-size: 15pt; font-weight: bold; height: 38px; text-align: center; border: 1px solid #cbd5e1; }
+        .meta-cell { background-color: #f8fafc; font-size: 9.5pt; color: #475569; height: 24px; border: 1px solid #cbd5e1; }
+        .th-cell { background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 10.5pt; height: 32px; text-align: center; border: 1px solid #cbd5e1; white-space: nowrap; }
+        .data-cell { font-size: 10pt; height: 26px; border: 1px solid #e2e8f0; }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .left { text-align: left; }
+        .font-mono { font-family: Consolas, monospace; }
+        .severe-delay { background-color: #fee2e2; color: #991b1b; font-weight: bold; }
+        .warning-delay { background-color: #fef3c7; color: #92400e; }
+        .zebra { background-color: #f8fafc; }
+        .bold-qty { font-weight: bold; color: #1d4ed8; }
+      </style>
+    </head>
+    <body>
+      <table border="1" cellspacing="0" cellpadding="4" style="border-collapse: collapse;">
+        <!-- 大标题行 -->
+        <tr>
+          <td colspan="23" class="title-cell">全标段发货督办清单</td>
+        </tr>
+        <!-- 统计摘要行 -->
+        <tr>
+          <td colspan="23" class="meta-cell">
+            导出时间：${exportTime} &nbsp;|&nbsp; 模式：${modeText} &nbsp;|&nbsp; 
+            在途直管：${summaryAggregates.value.totalPipeMeters} 米 &nbsp;|&nbsp; 
+            在途管件：${summaryAggregates.value.totalFittingCount} 件
+          </td>
+        </tr>
+        <!-- 表头行 -->
+        <thead>
+          <tr>
+            <th class="th-cell" style="width: 50px;">序号</th>
+            <th class="th-cell" style="width: 80px;">物料品类</th>
+            <th class="th-cell" style="width: 100px;">当前状态</th>
+            <th class="th-cell" style="width: 110px;">需求标段</th>
+            <th class="th-cell" style="width: 140px;">订单号</th>
+            <th class="th-cell" style="width: 110px;">运输车次号</th>
+            <th class="th-cell" style="width: 100px;">车牌号</th>
+            <th class="th-cell" style="width: 140px;">供给厂家</th>
+            <th class="th-cell" style="width: 200px;">规格型号 / 物料描述</th>
+            <th class="th-cell" style="width: 90px;">发货数量</th>
+            <th class="th-cell" style="width: 60px;">单位</th>
+            <th class="th-cell" style="width: 140px;">发货时间</th>
+            <th class="th-cell" style="width: 110px;">在途时长</th>
+            <th class="th-cell" style="width: 110px;">操作等待时长</th>
+            <th class="th-cell" style="width: 90px;">发货人</th>
+            <th class="th-cell" style="width: 120px;">联系电话</th>
+            <th class="th-cell" style="width: 140px;">发货备注</th>
+            <th class="th-cell" style="width: 140px;">现场到货时间</th>
+            <th class="th-cell" style="width: 90px;">到货确认人</th>
+            <th class="th-cell" style="width: 140px;">到货备注说明</th>
+            <th class="th-cell" style="width: 140px;">施工接收时间</th>
+            <th class="th-cell" style="width: 90px;">施工接收人</th>
+            <th class="th-cell" style="width: 140px;">施工接收备注</th>
+          </tr>
+        </thead>
+        <tbody>
+  `
+
+  rows.forEach((r, idx) => {
+    const isSevere = r.is_severe_delay
+    const isWarning = r.is_warning_delay && !r.is_severe_delay
+    const delayClass = isSevere ? 'severe-delay' : (isWarning ? 'warning-delay' : '')
+
+    const isUnconfSevere = r.is_unconfirmed_severe
+    const isUnconfWarning = r.is_unconfirmed_warning && !r.is_unconfirmed_severe
+    const unconfDelayClass = isUnconfSevere ? 'severe-delay' : (isUnconfWarning ? 'warning-delay' : '')
+
+    const zebraClass = idx % 2 === 1 ? 'zebra' : ''
+
+    tableHtml += `
+      <tr class="${zebraClass}">
+        <td class="data-cell center">${idx + 1}</td>
+        <td class="data-cell center">${r.category_label || (r.category === 'pipe' ? '保温直管' : '管件')}</td>
+        <td class="data-cell center">${r.status_label || r.status}</td>
+        <td class="data-cell left"><b>${r.section_1_name || r.section_1_id}</b></td>
+        <td class="data-cell center font-mono">${r.order_no || r.delivery_code || ''}</td>
+        <td class="data-cell center font-mono">${r.shipment_no || '—'}</td>
+        <td class="data-cell center font-mono"><b>${r.vehicle_plate_no || '—'}</b></td>
+        <td class="data-cell left">${r.supply_entity_name || r.supply_entity_id}</td>
+        <td class="data-cell left"><b>${r.material_name || r.pipe_model_name || ''}</b></td>
+        <td class="data-cell right bold-qty">${r.shipped_qty != null ? r.shipped_qty : ''}</td>
+        <td class="data-cell center">${r.unit || ''}</td>
+        <td class="data-cell center">${r.shipped_at ? formatDateTimeDisplay(r.shipped_at) : ''}</td>
+        <td class="data-cell center ${delayClass}">${r.elapsed_display || ''}</td>
+        <td class="data-cell center ${unconfDelayClass}">${r.unconfirmed_elapsed_display || r.elapsed_display || ''}</td>
+        <td class="data-cell center">${r.ship_contact_name || ''}</td>
+        <td class="data-cell center font-mono">${r.ship_contact_phone || ''}</td>
+        <td class="data-cell left">${r.ship_remark || ''}</td>
+        <td class="data-cell center">${r.arrived_confirm_at ? formatDateTimeDisplay(r.arrived_confirm_at) : ''}</td>
+        <td class="data-cell center">${r.arrived_confirm_by || ''}</td>
+        <td class="data-cell left">${r.arrived_remark || ''}</td>
+        <td class="data-cell center">${r.received_confirm_at ? formatDateTimeDisplay(r.received_confirm_at) : ''}</td>
+        <td class="data-cell center">${r.received_confirm_by || ''}</td>
+        <td class="data-cell left">${r.received_remark || ''}</td>
+      </tr>
+    `
+  })
+
+  tableHtml += `
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `
+
+  // 2. 将 HTML 组装为 Excel Blob 进行标准导出 (全版本完美支持排版样式)
+  try {
+    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `全标段发货督办清单_${todayStr}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格！')
+  } catch (err) {
+    // 降级使用 SheetJS 导出
+    const headers = [
+      '序号', '物料品类', '单据状态', '需求主体(标段)', '订单号', '运输车次号', '车牌号',
+      '供给厂家', '规格型号/物料描述', '发货数量', '计量单位', '发货时间', '在途时长', '操作等待时长',
+      '发货负责人', '发货联系电话', '发货备注', '现场到货时间', '到货确认人', '到货备注说明',
+      '施工接收时间', '施工接收人', '施工接收备注说明'
+    ]
+    const dataRows = rows.map((r, idx) => [
+      idx + 1,
+      r.category_label || (r.category === 'pipe' ? '保温直管' : '管件'),
+      r.status_label || r.status,
+      r.section_1_name || r.section_1_id,
+      r.order_no || r.delivery_code || '',
+      r.shipment_no || '',
+      r.vehicle_plate_no || '',
+      r.supply_entity_name || r.supply_entity_id,
+      r.material_name || r.pipe_model_name || '',
+      r.shipped_qty != null ? r.shipped_qty : '',
+      r.unit || '',
+      r.shipped_at ? formatDateTimeDisplay(r.shipped_at) : '',
+      r.elapsed_display || '',
+      r.unconfirmed_elapsed_display || r.elapsed_display || '',
+      r.ship_contact_name || '',
+      r.ship_contact_phone || '',
+      r.ship_remark || '',
+      r.arrived_confirm_at ? formatDateTimeDisplay(r.arrived_confirm_at) : '',
+      r.arrived_confirm_by || '',
+      r.arrived_remark || '',
+      r.received_confirm_at ? formatDateTimeDisplay(r.received_confirm_at) : '',
+      r.received_confirm_by || '',
+      r.received_remark || ''
+    ])
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+    ws['!cols'] = [
+      { wch: 6 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
+      { wch: 20 }, { wch: 26 }, { wch: 12 }, { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
+      { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 16 },
+      { wch: 18 }, { wch: 10 }, { wch: 16 }
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '全标段发货督办清单')
+    XLSX.writeFile(wb, `全标段发货督办清单_${todayStr}.xlsx`)
+    setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格！')
+  }
+}
 
 // 新增差异备注弹窗与订单流转时光轴详情弹窗状态
 const receiptRemarkModalVisible = ref(false)
@@ -5009,6 +5873,7 @@ async function reloadSection1Data() {
     loadUsageSheet(),
     loadLogisticsRecords(),
     loadAllPendingLogistics(),
+    loadPendingDeliveriesSummary(false),
     handleFittingQuery(),
     refreshFittingUsageData()
   ])
@@ -8026,6 +8891,1001 @@ function jumpToUsageTab() {
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
+  }
+}
+
+/* 🚚 全标段在途发货单汇总督办 - 清爽大气现代样式 (PC横表 + 手机端响应式小卡片) */
+.pending-summary-topbar-btn {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-size: 13.5px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 16px !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 3px 10px rgba(234, 88, 12, 0.22) !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.pending-summary-topbar-btn:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(234, 88, 12, 0.32) !important;
+}
+
+.badge-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #ea580c;
+  font-size: 11.5px;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  padding: 0 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+}
+
+/* 弹窗遮罩与主容器 */
+.pending-super-overlay {
+  background: rgba(15, 23, 42, 0.5) !important;
+  backdrop-filter: blur(6px) !important;
+  z-index: 1050 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.pending-clean-modal-container {
+  max-width: 1360px !important;
+  width: 94vw !important;
+  max-height: 88vh !important;
+  height: 88vh !important;
+  padding: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.22) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* 1. 简洁清爽 Header (单行流) */
+.pending-clean-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.header-left-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.header-left-info .header-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.header-left-info .header-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.header-count-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #ffedd5;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.header-right-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-clean-ghost {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-clean-ghost:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.btn-clean-ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-clean-export {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-clean-export:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.btn-clean-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-clean-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-clean-close:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+/* 2. 通透筛选工具栏 */
+.pending-clean-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 12px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.capsule-group {
+  display: inline-flex;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.capsule-item {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap !important;
+  transition: all 0.15s ease;
+}
+
+.capsule-item:hover {
+  color: #0f172a;
+}
+
+.capsule-item.active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.clean-select {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  outline: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.clean-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+/* 🚛 车次合并开关 */
+.btn-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-group-toggle:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.btn-group-toggle.is-active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.toggle-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  display: inline-block;
+  transition: background-color 0.15s ease;
+}
+
+.toggle-indicator.active {
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.sub-count-tag {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 0 5px;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.clean-search-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.clean-search-wrap .search-ic {
+  position: absolute;
+  left: 9px;
+  font-size: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.clean-search-input {
+  height: 34px;
+  padding: 0 28px 0 28px;
+  font-size: 12.5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1e293b;
+  outline: none;
+  width: 210px;
+  transition: all 0.15s ease;
+}
+
+.clean-search-input:focus {
+  border-color: #2563eb;
+  width: 250px;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.clean-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #e2e8f0;
+  border: none;
+  color: #64748b;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 3. 主体内容区 */
+.pending-clean-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  position: relative;
+}
+
+.pending-content-wrapper {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A. 桌面端通透大横表 (PC Table) */
+.clean-table-scroll-wrap {
+  flex: 1;
+  overflow: auto;
+}
+
+.clean-wide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+  min-width: 1200px;
+}
+
+.clean-wide-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f8fafc;
+}
+
+.clean-wide-table th {
+  padding: 13px 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 12.5px;
+  border-bottom: 1.5px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.clean-sort-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.clean-sort-th:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.sort-icon-tag {
+  font-size: 11px;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.clean-table-tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.12s ease;
+}
+
+.clean-table-tr:hover {
+  background-color: #f8fafc;
+}
+
+.clean-table-tr.tr-warning {
+  background-color: #fffdf5;
+}
+
+.clean-table-tr.tr-severe {
+  background-color: #fff8f8;
+}
+
+.clean-wide-table td {
+  padding: 12px 12px;
+  color: #334155;
+  vertical-align: middle;
+}
+
+/* 单元格精细样式 */
+.clean-cat-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.clean-cat-badge.pipe {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+}
+
+.clean-cat-badge.fitting {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ede9fe;
+}
+
+.clean-status-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.clean-status-badge.st-arriving {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.clean-status-badge.st-receiving {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.clean-status-badge.st-diff {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.clean-section-tag {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.order-code-main {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.shipment-code-sub {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.clean-plate-pill {
+  display: inline-block;
+  background: #1e3a8a;
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #3b82f6;
+  white-space: nowrap;
+}
+
+.supply-entity-cell {
+  color: #475569;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.material-name-cell strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.qty-highlight {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+
+.time-cell-text {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.clean-elapsed-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.clean-elapsed-pill.is-warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.clean-elapsed-pill.is-severe {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.clean-elapsed-pill.unconfirmed {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+
+.clean-elapsed-pill.unconfirmed.is-warning {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid #fde68a !important;
+}
+
+.clean-elapsed-pill.unconfirmed.is-severe {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+}
+
+.m-elapsed-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* 表格操作按钮组 (绝对不串行) */
+.clean-op-btn-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.op-btn-jump {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.op-btn-jump:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.op-btn-detail {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.op-btn-detail:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* B. 移动端小卡片 (PC端默认隐藏) */
+.mobile-only-cards-grid {
+  display: none;
+}
+
+/* 4. 清爽底栏 Footer */
+.pending-clean-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.footer-stats-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.f-divider {
+  color: #cbd5e1;
+}
+
+.text-blue { color: #2563eb; }
+.text-purple { color: #7c3aed; }
+
+.btn-clean-close-foot {
+  height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap !important;
+  transition: all 0.15s ease;
+}
+
+.btn-clean-close-foot:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* 状态提示 */
+.clean-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: #64748b;
+}
+
+.empty-emoji {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.clean-empty-state h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.clean-empty-state p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.clean-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+.clean-error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 13px;
+  border-bottom: 1px solid #fee2e2;
+}
+
+.spin-anim {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+/* 📱 手机端响应式专属：横表隐藏，展示小卡片 */
+@media (max-width: 768px) {
+  .pending-clean-modal-container {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+
+  .pending-clean-header {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .header-left-info .header-title {
+    font-size: 15px;
+  }
+
+  .header-count-pill {
+    display: none;
+  }
+
+  .pending-clean-toolbar {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .clean-search-input {
+    width: 140px;
+  }
+
+  .clean-search-input:focus {
+    width: 160px;
+  }
+
+  /* 隐藏 PC 大横表 */
+  .pc-only-table {
+    display: none !important;
+  }
+
+  /* 展示手机小卡片 */
+  .mobile-only-cards-grid {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    overflow-y: auto;
+    flex: 1;
+    background: #f8fafc;
+  }
+
+  .mobile-ticket-card {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 12px 14px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mobile-ticket-card.card-severe {
+    border-left: 4px solid #ef4444;
+  }
+
+  .mobile-ticket-card.card-warning {
+    border-left: 4px solid #f59e0b;
+  }
+
+  .m-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .m-tags-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .clean-elapsed-pill.mini {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+
+  .m-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #f8fafc;
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+
+  .m-mat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .m-mat-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .m-qty-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: #2563eb;
+    white-space: nowrap;
+  }
+
+  .m-info-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #475569;
+    flex-wrap: wrap;
+  }
+
+  .m-info-k {
+    color: #94a3b8;
+  }
+
+  .clean-plate-pill.mini {
+    font-size: 11px;
+    padding: 0 4px;
+  }
+
+  .m-supplier {
+    font-size: 11.5px;
+    color: #64748b;
+  }
+
+  .m-contact-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #2563eb;
+    background: #eff6ff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    width: fit-content;
+    cursor: pointer;
+  }
+
+  .m-phone-txt {
+    font-weight: 700;
+  }
+
+  .m-copy-tag {
+    font-size: 10px;
+    background: #dbeafe;
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+
+  .m-card-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .m-btn-ghost {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    white-space: nowrap !important;
+    cursor: pointer;
+  }
+
+  .m-btn-primary {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #ffffff;
+    background: #2563eb;
+    border: none;
+    border-radius: 6px;
+    white-space: nowrap !important;
+    cursor: pointer;
+  }
+
+  .pending-clean-footer {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .footer-stats-left {
+    font-size: 12px;
+    flex-wrap: wrap;
   }
 }
 </style>

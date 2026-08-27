@@ -36,8 +36,11 @@ def _ensure_fitting_table_structures() -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_fitting_delivery_order_no ON tube.tube_fitting_delivery (order_no)",
         "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_no ON tube.tube_fitting_delivery (shipment_no)",
         "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_section_1_status ON tube.tube_fitting_delivery (section_1_id, status)",
-        "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_supply_entity ON tube.tube_fitting_delivery (supply_entity_id)",
         "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipped_at ON tube.tube_fitting_delivery (shipped_at)",
+        "SELECT setval('tube.tube_fitting_delivery_id_seq', COALESCE((SELECT MAX(id) FROM tube.tube_fitting_delivery), 0) + 1, false)",
+        "CREATE SEQUENCE IF NOT EXISTS logs.tube_operation_logs_id_seq",
+        "ALTER TABLE logs.tube_operation_logs ALTER COLUMN id SET DEFAULT nextval('logs.tube_operation_logs_id_seq')",
+        "SELECT setval('logs.tube_operation_logs_id_seq', COALESCE((SELECT MAX(id) FROM logs.tube_operation_logs), 0) + 1, false)",
     ]
     session = SessionLocal()
     try:

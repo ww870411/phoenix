@@ -3612,6 +3612,367 @@ def get_demand_management_logistics_records(
     }
 
 
+@router.get("/demand-management/pending-deliveries-summary", summary="读取需求侧管辖标段全量未确认发货单汇总")
+def get_demand_management_pending_deliveries_summary(
+    section_1_id: str = "",
+    category: str = "all",
+    status: str = "",
+    search: str = "",
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    if not accessible_section_1_ids:
+        return {
+            "ok": True,
+            "project_key": PROJECT_KEY,
+            "accessible_sections": [],
+            "summary": {
+                "total_count": 0,
+                "pending_arrival_count": 0,
+                "pending_receive_count": 0,
+                "severe_delay_count": 0,
+                "pipe_count": 0,
+                "fitting_count": 0,
+            },
+            "rows": [],
+        }
+
+    section_1_name_map = _build_section_1_name_map(payload)
+    supply_entity_map = _build_supply_entity_map(payload)
+    pipe_model_map = _build_pipe_model_map(payload)
+
+    accessible_sections = [
+        {"section_1_id": sid, "section_1_name": section_1_name_map.get(sid, sid)}
+        for sid in sorted(accessible_section_1_ids)
+    ]
+
+    target_section_ids = [section_1_id] if (section_1_id and section_1_id in accessible_section_1_ids) else list(accessible_section_1_ids)
+
+    from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import auto_process_timeout_deliveries
+    auto_process_timeout_deliveries()
+
+    rows: List[Dict[str, Any]] = []
+    now_dt = datetime.now()
+
+    # 1. 查询保温直管未确认单据
+    if category in ("all", "pipe"):
+        sql_pipe = text(
+            """
+            SELECT
+                id,
+                supply_entity_id,
+                order_no,
+                shipment_no,
+                vehicle_plate_no,
+                section_1_id,
+                pipe_model_id,
+                shipped_qty,
+                arrived_qty,
+                received_qty,
+                shipped_at,
+                ship_contact_name,
+                ship_contact_phone,
+                ship_remark,
+                arrived_confirm_by,
+                arrived_confirm_at,
+                arrived_remark,
+                received_confirm_by,
+                received_confirm_at,
+                received_remark,
+                warehouse_confirm_by,
+                warehouse_confirm_at,
+                warehouse_remark,
+                status,
+                abnormal_flag,
+                is_timeout_receive
+            FROM tube.tube_delivery
+            WHERE section_1_id = ANY(:section_ids)
+              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve')
+            ORDER BY shipped_at ASC
+            """
+        )
+        session_db = SessionLocal()
+        try:
+            pipe_rows = session_db.execute(sql_pipe, {"section_ids": target_section_ids}).mappings().all()
+            for r in pipe_rows:
+                shipped_at = r["shipped_at"]
+                if shipped_at and shipped_at.tzinfo is not None:
+                    shipped_at_naive = shipped_at.replace(tzinfo=None)
+                else:
+                    shipped_at_naive = shipped_at
+                elapsed_secs = max(0, int((now_dt - shipped_at_naive).total_seconds())) if shipped_at_naive else 0
+
+                st = r["status"]
+                arrived_at = r["arrived_confirm_at"]
+                if arrived_at and arrived_at.tzinfo is not None:
+                    arrived_at_naive = arrived_at.replace(tzinfo=None)
+                else:
+                    arrived_at_naive = arrived_at
+
+                if st == "pending_arrival":
+                    st_label = "待确认到货"
+                    st_group = "pending_arrival"
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
+                elif st == "pending_receive":
+                    st_label = "待施工接收"
+                    st_group = "pending_receive"
+                    if arrived_at_naive:
+                        unconfirmed_secs = max(0, int((now_dt - arrived_at_naive).total_seconds()))
+                        unconfirmed_display = format_delivery_elapsed(arrived_at)
+                    else:
+                        unconfirmed_secs = elapsed_secs
+                        unconfirmed_display = format_delivery_elapsed(shipped_at)
+                elif st == "pending_diff_approve":
+                    st_label = "少收差异待审批"
+                    st_group = "pending_receive"
+                    if arrived_at_naive:
+                        unconfirmed_secs = max(0, int((now_dt - arrived_at_naive).total_seconds()))
+                        unconfirmed_display = format_delivery_elapsed(arrived_at)
+                    else:
+                        unconfirmed_secs = elapsed_secs
+                        unconfirmed_display = format_delivery_elapsed(shipped_at)
+                else:
+                    st_label = st
+                    st_group = st
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
+
+                pm_id = r["pipe_model_id"]
+                pm_name = pipe_model_map.get(pm_id, {}).get("pipe_model_name") or pm_id
+                sup_id = r["supply_entity_id"]
+                sup_name = supply_entity_map.get(sup_id, {}).get("entity_name") or sup_id
+                sec_id = r["section_1_id"]
+                sec_name = section_1_name_map.get(sec_id, sec_id)
+
+                row_dict = {
+                    "id": r["id"],
+                    "delivery_id": r["id"],
+                    "category": "pipe",
+                    "category_label": "保温直管",
+                    "category_icon": "🔥",
+                    "order_no": r["order_no"] or f"DEL-{r['id']}",
+                    "shipment_no": r["shipment_no"] or "—",
+                    "delivery_code": r["order_no"] or r["shipment_no"] or f"DEL-{r['id']}",
+                    "vehicle_plate_no": r["vehicle_plate_no"] or "—",
+                    "section_1_id": sec_id,
+                    "section_1_name": sec_name,
+                    "supply_entity_id": sup_id,
+                    "supply_entity_name": sup_name,
+                    "material_name": pm_name,
+                    "pipe_model_id": pm_id,
+                    "pipe_model_name": pm_name,
+                    "shipped_qty": float(r["shipped_qty"] or 0),
+                    "arrived_qty": float(r["arrived_qty"]) if r["arrived_qty"] is not None else None,
+                    "received_qty": float(r["received_qty"]) if r["received_qty"] is not None else None,
+                    "unit": "米",
+                    "quantity_display": f"{float(r['shipped_qty'] or 0):.1f} 米",
+                    "shipped_at": shipped_at.isoformat() if shipped_at else "",
+                    "ship_contact_name": r["ship_contact_name"] or "",
+                    "ship_contact_phone": r["ship_contact_phone"] or "",
+                    "ship_remark": r["ship_remark"] or "",
+                    "arrived_confirm_by": r["arrived_confirm_by"] or "",
+                    "arrived_confirm_at": r["arrived_confirm_at"].isoformat() if r["arrived_confirm_at"] else "",
+                    "arrived_remark": r["arrived_remark"] or "",
+                    "received_confirm_by": r["received_confirm_by"] or "",
+                    "received_confirm_at": r["received_confirm_at"].isoformat() if r["received_confirm_at"] else "",
+                    "received_remark": r["received_remark"] or "",
+                    "status": st,
+                    "status_group": st_group,
+                    "status_label": st_label,
+                    "abnormal_flag": bool(r["abnormal_flag"]),
+                    "is_timeout_receive": bool(r["is_timeout_receive"]),
+                    "elapsed_seconds": elapsed_secs,
+                    "elapsed_display": format_delivery_elapsed(shipped_at),
+                    "unconfirmed_elapsed_seconds": unconfirmed_secs,
+                    "unconfirmed_elapsed_display": unconfirmed_display,
+                    "is_severe_delay": elapsed_secs >= 172800,
+                    "is_warning_delay": elapsed_secs >= 86400,
+                    "is_unconfirmed_severe": unconfirmed_secs >= 172800,
+                    "is_unconfirmed_warning": unconfirmed_secs >= 86400,
+                }
+                rows.append(row_dict)
+        finally:
+            session_db.close()
+
+    # 2. 查询管件未确认单据
+    if category in ("all", "fitting"):
+        sql_fitting = text(
+            """
+            SELECT
+                id,
+                supply_entity_id,
+                order_no,
+                shipment_no,
+                vehicle_plate_no,
+                section_1_id,
+                fitting_type,
+                model_spec,
+                shipped_qty,
+                arrived_qty,
+                unit,
+                shipped_at,
+                ship_contact_name,
+                ship_contact_phone,
+                ship_remark,
+                arrived_confirm_by,
+                arrived_confirm_at,
+                arrived_remark,
+                received_confirm_by,
+                received_confirm_at,
+                received_remark,
+                warehouse_confirm_by,
+                warehouse_confirm_at,
+                warehouse_remark,
+                status
+            FROM tube.tube_fitting_delivery
+            WHERE section_1_id = ANY(:section_ids)
+              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive')
+            ORDER BY shipped_at ASC
+            """
+        )
+        session_db = SessionLocal()
+        try:
+            fitting_rows = session_db.execute(sql_fitting, {"section_ids": target_section_ids}).mappings().all()
+            for r in fitting_rows:
+                shipped_at = r["shipped_at"]
+                if shipped_at and shipped_at.tzinfo is not None:
+                    shipped_at_naive = shipped_at.replace(tzinfo=None)
+                else:
+                    shipped_at_naive = shipped_at
+                elapsed_secs = max(0, int((now_dt - shipped_at_naive).total_seconds())) if shipped_at_naive else 0
+
+                st = r["status"]
+                arrived_at = r["arrived_confirm_at"]
+                if arrived_at and arrived_at.tzinfo is not None:
+                    arrived_at_naive = arrived_at.replace(tzinfo=None)
+                else:
+                    arrived_at_naive = arrived_at
+
+                if st in ("shipped", "pending_arrival"):
+                    st_label = "待确认到货"
+                    st_group = "pending_arrival"
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
+                elif st in ("arrived", "pending_receive"):
+                    st_label = "待施工接收"
+                    st_group = "pending_receive"
+                    if arrived_at_naive:
+                        unconfirmed_secs = max(0, int((now_dt - arrived_at_naive).total_seconds()))
+                        unconfirmed_display = format_delivery_elapsed(arrived_at)
+                    else:
+                        unconfirmed_secs = elapsed_secs
+                        unconfirmed_display = format_delivery_elapsed(shipped_at)
+                else:
+                    st_label = st
+                    st_group = st
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
+
+                sup_id = r["supply_entity_id"]
+                sup_name = supply_entity_map.get(sup_id, {}).get("entity_name") or sup_id
+                sec_id = r["section_1_id"]
+                sec_name = section_1_name_map.get(sec_id, sec_id)
+                mat_name = f"{r['fitting_type']} ({r['model_spec']})"
+                unit_str = r["unit"] or "个"
+
+                row_dict = {
+                    "id": r["id"],
+                    "delivery_id": r["id"],
+                    "category": "fitting",
+                    "category_label": "管件",
+                    "category_icon": "🔧",
+                    "order_no": r["order_no"],
+                    "shipment_no": r["shipment_no"] or "—",
+                    "delivery_code": r["order_no"] or r["shipment_no"] or f"FIT-{r['id']}",
+                    "vehicle_plate_no": r["vehicle_plate_no"] or "—",
+                    "section_1_id": sec_id,
+                    "section_1_name": sec_name,
+                    "supply_entity_id": sup_id,
+                    "supply_entity_name": sup_name,
+                    "material_name": mat_name,
+                    "fitting_type": r["fitting_type"],
+                    "model_spec": r["model_spec"],
+                    "shipped_qty": float(r["shipped_qty"] or 0),
+                    "arrived_qty": float(r["arrived_qty"]) if r["arrived_qty"] is not None else None,
+                    "received_qty": None,
+                    "unit": unit_str,
+                    "quantity_display": f"{int(float(r['shipped_qty'] or 0))} {unit_str}",
+                    "shipped_at": shipped_at.isoformat() if shipped_at else "",
+                    "ship_contact_name": r["ship_contact_name"] or "",
+                    "ship_contact_phone": r["ship_contact_phone"] or "",
+                    "ship_remark": r["ship_remark"] or "",
+                    "arrived_confirm_by": r["arrived_confirm_by"] or "",
+                    "arrived_confirm_at": r["arrived_confirm_at"].isoformat() if r["arrived_confirm_at"] else "",
+                    "arrived_remark": r["arrived_remark"] or "",
+                    "received_confirm_by": r["received_confirm_by"] or "",
+                    "received_confirm_at": r["received_confirm_at"].isoformat() if r["received_confirm_at"] else "",
+                    "received_remark": r["received_remark"] or "",
+                    "status": st,
+                    "status_group": st_group,
+                    "status_label": st_label,
+                    "abnormal_flag": False,
+                    "is_timeout_receive": False,
+                    "elapsed_seconds": elapsed_secs,
+                    "elapsed_display": format_delivery_elapsed(shipped_at),
+                    "unconfirmed_elapsed_seconds": unconfirmed_secs,
+                    "unconfirmed_elapsed_display": unconfirmed_display,
+                    "is_severe_delay": elapsed_secs >= 172800,
+                    "is_warning_delay": elapsed_secs >= 86400,
+                    "is_unconfirmed_severe": unconfirmed_secs >= 172800,
+                    "is_unconfirmed_warning": unconfirmed_secs >= 86400,
+                }
+                rows.append(row_dict)
+        finally:
+            session_db.close()
+
+    total_count = len(rows)
+    pending_arrival_count = sum(1 for r in rows if r["status_group"] == "pending_arrival")
+    pending_receive_count = sum(1 for r in rows if r["status_group"] == "pending_receive")
+    severe_delay_count = sum(1 for r in rows if r["is_severe_delay"])
+    pipe_count = sum(1 for r in rows if r["category"] == "pipe")
+    fitting_count = sum(1 for r in rows if r["category"] == "fitting")
+
+    filtered_rows = rows
+    if status:
+        filtered_rows = [r for r in filtered_rows if r["status_group"] == status or r["status"] == status]
+
+    if search:
+        kw = search.strip().lower()
+        filtered_rows = [
+            r for r in filtered_rows
+            if (
+                kw in r["order_no"].lower()
+                or kw in r["shipment_no"].lower()
+                or kw in r["vehicle_plate_no"].lower()
+                or kw in r["supply_entity_name"].lower()
+                or kw in r["section_1_name"].lower()
+                or kw in r["material_name"].lower()
+                or kw in r["ship_contact_name"].lower()
+                or kw in r["ship_remark"].lower()
+            )
+        ]
+
+    # 按在途时长降序，次级按未确认时长降序
+    filtered_rows.sort(key=lambda x: (x["elapsed_seconds"], x["unconfirmed_elapsed_seconds"]), reverse=True)
+
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "accessible_sections": accessible_sections,
+        "summary": {
+            "total_count": total_count,
+            "pending_arrival_count": pending_arrival_count,
+            "pending_receive_count": pending_receive_count,
+            "severe_delay_count": severe_delay_count,
+            "pipe_count": pipe_count,
+            "fitting_count": fitting_count,
+        },
+        "rows": filtered_rows,
+    }
+
+
 def _ensure_demand_arrival_access(session: AuthSession) -> None:
     group = str(session.group or "").strip()
     if group not in {"Global_admin", "tube_site_manager"}:

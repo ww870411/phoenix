@@ -458,6 +458,22 @@ export async function getTubeDemandManagementLogisticsRecords(projectKey, sectio
   return response.json()
 }
 
+export async function getTubeDemandManagementPendingDeliveriesSummary(projectKey, params = {}) {
+  const search = new URLSearchParams()
+  if (params.section_1_id) search.set('section_1_id', String(params.section_1_id))
+  if (params.category) search.set('category', String(params.category))
+  if (params.status) search.set('status', String(params.status))
+  if (params.search) search.set('search', String(params.search))
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/pending-deliveries-summary?${search.toString()}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取全标段待到货与待接收汇总失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function confirmTubeDemandManagementDeliveryArrival(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/arrival`, {
     method: 'POST',

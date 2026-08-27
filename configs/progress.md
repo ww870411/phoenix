@@ -1,3 +1,83 @@
+## 2026-08-27 [现场需求管理（demand_management）按钮与弹窗主标题统一变更为“全标段发货督办清单”交付]
+- **需求与业务背景**：
+  - 用户反馈：“按钮及弹窗标题均改为“全标段发货督办清单””；
+  - 规范业务统一术语，明确该功能作为现场需求侧督促供给厂家与物流承运方按期到货、核收流转的核心督办台账入口。
+- **改动与实现详情**：
+  1. **页面顶栏触发按钮**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 按钮文字更新为 `🚚 全标段发货督办清单`，保留待办数量橙色药丸徽标；
+  2. **弹窗主标题**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 弹窗顶栏标题更新为 `🚚 全标段发货督办清单`，计数胶囊优化为 `X 笔待办`；
+  3. **Excel 导出大标题与默认文件名**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 导出 Excel 第一行合并大标题更新为【全标段发货督办清单】；
+     - 导出文件名更新为 `全标段发货督办清单_YYYY-MM-DD.xls`（SheetJS 降级同步对齐）。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.46s），控制台零报错。
+
+## 2026-08-27 [现场需求管理（demand_management）“操作等待时长”双级别延误标色高亮（红/黄/灰）与 Excel 导出联动交付]
+- **需求与业务背景**：
+  - 用户反馈：“这个“操作等待时长”同样要标色”；
+  - 为让现场督办人员一目了然地区分“当前环节已严重超期（>=48h）”、“存在滞留关注（>=24h）”与“正常周转（<24h）”，将“操作等待时长”对齐“在途时长”实施完整的预警标色机制。
+- **改动与实现详情**：
+  1. **双级别延误预警计算**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - `is_unconfirmed_severe`: `unconfirmed_elapsed_seconds >= 172800`（操作等待 >= 48 小时，触发严重滞留红标）；
+     - `is_unconfirmed_warning`: `unconfirmed_elapsed_seconds >= 86400`（操作等待 >= 24 小时，触发关注预警黄标）；
+     - 车次合并时自动继承该车次子单据的最严重预警等级；
+  2. **PC 大横表标色呈现**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 严重滞留（>=48h）：浅红底色（`#fee2e2`）+ 深红加粗文字（`#b91c1c`）+ 红边框；
+     - 关注预警（>=24h）：浅黄底色（`#fef3c7`）+ 深橙黄文字（`#92400e`）+ 黄边框；
+     - 正常周转（<24h）：清爽浅灰底色（`#f8fafc`）+ 深灰文字；
+  3. **移动端小卡片胶囊标色**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 手机卡片中 `⏳ 等待: X天X小时` 药丸徽标同步实施红/黄/灰三态动态标色；
+  4. **Excel 导出单元格高亮联动**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 导出的 Excel 表格中，【操作等待时长】列存在超时滞留时，单元格同步应用背景高亮底色（严重延误粉红、关注预警浅黄）。
+- **验证结果**：
+  - 后端单元测试（`pytest backend/projects/insulation_pipe_supply_2026/tests`）18 项全部通过（18 passed in 2.43s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.67s），控制台零报错。
+
+## 2026-08-27 [现场需求管理（demand_management）新增按车次号合并/明细展示双模切换开关（默认合并）交付]
+- **需求与业务背景**：
+  - 用户反馈：“增加一个开关，用于切换弹窗中是否按照车次号合并记录，帮我改为默认合并，也可以手动切换为不合并。”；
+  - 在实际物流场景中，一辆车通常装载多笔直管单据或多个不同规格管件。按车次号合并能够让现场督办人员以“车”为单位直观总览在途与到站情况，同时保留随时切换回“逐笔单据明细”的灵活性。
+- **改动与实现详情**：
+  1. **按车次合并/明细双模切换开关**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 在弹窗筛选工具栏中增加专属切换控件【🚛 按车次合并 (已开启)】/【📄 单据明细】；
+     - 初始状态默认 `groupByShipment = true`（默认合并），点击即可在两模式间一键无缝切换；
+  2. **智能车次聚合计算引擎（`processedPendingSummaryRows`）**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 分组维度：同一标段（`section_1_id`）+ 同一品类（`category`）+ 相同车次号（`shipment_no`）+ 相同车牌号；
+     - 数据聚合：
+       - 单据数量：自动计算并展示 `共 X 单` 徽标；
+       - 物料规格：多物料时自动展示 `【规格A】等共 N 项物料`；
+       - 发货数量：直管累加总米数、管件累加总件数；
+       - 在途与未确认时长：取整车最大延误时长与预警级别；
+       - 联系人与车辆：提取有效司机电话与车牌号；
+  3. **表格与移动端小卡片适配**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - PC 表格与手机卡片在合并状态下展示单号与 `共 X 单` 药丸，点击【📍 定位处理】依然精准直达标段现场工作台；
+  4. **导出 Excel 适配**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 导出报表自动跟随当前模式（车次合并汇总导出 vs 逐笔单据明细导出），并在 Excel 摘要行中明确标注导出模式与笔数。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.40s），控制台零报错。
+
+## 2026-08-27 [现场需求管理（demand_management）新增“未确认时长”指标、多级排序、带格式 Excel 导出与页面描述精简交付]
+- **需求与业务背景**：
+  - 用户反馈：“导出的表格希望有格式。对了，除了在途时长之外，还需要有一个“未确认时长”，如果是未进行“确认到货”的，则“未确认时长”=“在途时长”，如果是未进行“施工接收”的，则“未确认时长”=“自确认到货以来的时长”，将其放在“在途时长”指标后，也降序排列，优先级在“在途时长”排序之后。另外，页面上的文字“面向项目现场负责人与管理人员。提供 Tabs 标签化分类，支持未来三日滚动计划的高效填报、昨日实际用量核对、物理到货确认与施工接收登记。”版给我删去”；
+  - 站在现场督办人员更精细的时间管理角度，精准区分“车辆在途在路上”（待到货）与“物资已到场但施工未收”（待接收）两个不同责任环节的停滞时长，并为导出报表提供高颜值的专业格式。
+- **改动与实现详情**：
+  1. **页面描述精简**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 删除了顶栏 `<h2>现场管理工作台 (需求侧)</h2>` 下方原有的长篇描述副标题 `<p class="sub">`，让工作台顶层排版更加清爽紧凑。
+  2. **后端计算“未确认时长”与次级排序**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 计算逻辑：
+       - `pending_arrival`（未确认到货）：`unconfirmed_elapsed_seconds = elapsed_seconds`，`unconfirmed_elapsed_display = format_delivery_elapsed(shipped_at)`；
+       - `pending_receive` / `pending_diff_approve`（未施工接收）：若存在 `arrived_confirm_at`，则计算 `now - arrived_confirm_at` 秒数并格式化；若无则回退到发货时间；
+     - 排序逻辑：后端与前端统一按 `(elapsed_seconds DESC, unconfirmed_elapsed_seconds DESC)` 多级优先级排列。
+  3. **前端横表与移动端小卡片呈现**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - PC 大横表在“在途时长”后紧跟放置【未确认时长】列（`⏳ X天X小时`），并在表头支持智能双重多级排序；
+     - 移动端卡片头部同步清晰展示 `⏱️ 在途时长` 与 `⏳ 未确认时长` 标签。
+  4. **高颜值专业带格式 Excel 导出**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 构建了包含大标题栏、统计摘要栏（总件数/米数/导出时间）、蓝色经典加粗表头（`#2563eb`）、全网格细边框、斑马纹行、严重超期粉红高亮（`#fee2e2`）以及对齐方式（数量靠右、状态居中、规格居左）的带格式 Excel 文件；同时配置自适应列宽与双导出容灾机制。
+- **验证结果**：
+  - 后端单元测试（`pytest backend/projects/insulation_pipe_supply_2026/tests`）18 项全过（18 passed in 2.60s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 20.49s），控制台零报错。
+
 ## 2026-08-25 [综合数据查询中心（comprehensive_query）每日历史流转与基准进度表格全字段三态动态排序功能交付]
 - **需求与背景**：
   - 用户在综合数据查询中心页面（`/projects/insulation_pipe_supply_2026/pages/comprehensive_query`）浏览“📅 每日历史综合流转台账”与“📐 设计采购与基准量进度”两大标签页下的表格时，需要支持对每个字段进行灵活排序；

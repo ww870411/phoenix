@@ -1,3 +1,58 @@
+## 2026-08-27 现场需求管理（DemandManagementView.vue）功能入口与弹窗标题统一更名为“全标段发货督办清单”交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+- **文案与入口规范**：
+  1. **页面顶栏触发按钮**：文案统一更新为【🚚 全标段发货督办清单】；
+  2. **弹窗主标题**：弹窗顶栏标题统一更名为【🚚 全标段发货督办清单】；
+  3. **Excel 导出规范**：导出的报表大标题、默认文件名与 Sheet 标签页均规范命名为【全标段发货督办清单】。
+
+## 2026-08-27 现场需求管理（DemandManagementView.vue）“操作等待时长”三态双级预警标色（红/黄/灰）与 Excel 联动交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+- **标色机制与视觉统一**：
+  1. **PC 大横表标色**：
+     - 操作等待 >= 48小时：红底深红字（`is-severe`）；
+     - 操作等待 >= 24小时且 < 48小时：黄底橙黄字（`is-warning`）；
+     - 操作等待 < 24小时：常规清爽浅灰底；
+  2. **移动端小卡片**：标签胶囊同步实施三态动态标色；
+  3. **Excel 导出单元格高亮**：严重滞留单元格导出时标粉红背景，关注预警单元格标浅黄背景。
+
+## 2026-08-27 现场需求管理（DemandManagementView.vue）新增按车次号合并/明细双模切换开关（默认合并）交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+  - `frontend/src/projects/daily_report_25_26/services/api.js`（`getTubeDemandManagementPendingDeliveriesSummary`）
+- **功能特性与交互设计**：
+  1. **按车次合并/明细双模切换开关**：
+     - 弹窗工具栏增加专属切换控件【🚛 按车次合并 (已开启)】/【📄 单据明细】；
+     - 初始状态默认 `groupByShipment = true`（默认合并），支持一键切换为按单据明细；
+  2. **智能车次聚合引擎（`processedPendingSummaryRows`）**：
+     - 依据相同标段、品类、车次号、车牌进行归集；
+     - 自动展示 `共 X 单` 徽标、物料项数汇总、累加发货总数量、取整车最大在途/未确认时长；
+  3. **表格与移动端小卡片适配**：
+     - PC 表格与手机卡片在合并状态下展示单号与 `共 X 单` 药丸，点击【📍 定位处理】直接定位；
+  4. **导出 Excel 适配**：
+     - 导出报表自动跟随当前模式（车次合并汇总导出 vs 逐笔单据明细导出），并在 Excel 摘要行中明确标注导出模式与笔数。
+
+## 2026-08-27 现场需求管理（DemandManagementView.vue）新增“未确认时长”指标、多级排序、带格式 Excel 导出与页面描述精简交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+  - `frontend/src/projects/daily_report_25_26/services/api.js`（`getTubeDemandManagementPendingDeliveriesSummary`）
+- **功能特性与交互设计**：
+  1. **页面头部描述精简**：
+     - 删去原有的多行副标题描述文字，工作台界面更纯粹利落；
+  2. **“未确认时长”业务指标与多级智能排序**：
+     - 待到货确认单据：“未确认时长” = 在途时长（自发货以来的时间）；
+     - 待施工接收单据：“未确认时长” = 自确认到货以来的时间；
+     - 排序优先级：“在途时长（降序）” 为主，“未确认时长（降序）” 为次；
+  3. **PC 大横表与移动端小卡片呈现**：
+     - PC 表格在【在途时长】后紧随展示【未确认时长】列；移动端卡片同步展示两项时长胶囊；
+  4. **高颜值带格式 Excel 导出（Formatted Excel Export）**：
+     - 包含大标题、导出时间/汇总摘要、经典蓝色加粗表头（`#2563eb`）、全网格细边框、斑马纹行、严重超时粉红高亮（`#fee2e2`）及精准自适应列宽。
+
 ## 2026-08-25 综合数据查询中心（HistoryQueryView.vue）表格全字段三态动态排序功能交付
 
 - **关联前端页面与组件**：
