@@ -13,12 +13,14 @@
           <button
             type="button"
             class="btn pending-summary-topbar-btn"
-            @click="openPendingSummaryModal"
-            title="根据当前账号管辖的标段范围，弹出全标段发货督办清单"
+            @click="openPendingSummaryModal('governance')"
+            title="根据当前账号管辖的标段范围，查看各标段填报履约进度与在途发货督办"
           >
-            <span class="btn-icon">🚚</span>
-            <span>全标段发货督办清单</span>
-            <span v-if="pendingSummaryTotalCount > 0" class="badge-count-pill">{{ pendingSummaryTotalCount }}</span>
+            <span class="btn-icon">📋</span>
+            <span>全标段现场综合督办中心</span>
+            <span v-if="governanceSummary.pending_sections_count > 0 || pendingSummaryTotalCount > 0" class="badge-count-pill">
+              {{ governanceSummary.pending_sections_count > 0 ? `${governanceSummary.pending_sections_count} 标段待办` : `${pendingSummaryTotalCount} 笔发货` }}
+            </span>
           </button>
           <button type="button" class="btn ghost btn-back" @click="goProjectPages">
             返回功能页
@@ -2720,35 +2722,37 @@
       </div>
     </Transition>
 
-    <!-- 🚚 全标段在途发货单汇总督办 Modal (清爽宽敞横表 + 手机端响应式小卡片) -->
+    <!-- 🚚 全标段现场综合督办中心 Modal (双Tab: 标段填报履约督办 + 在途发货单据督办) -->
     <Transition name="fade">
       <div v-if="pendingSummaryModalVisible" class="block-modal-overlay pending-super-overlay" @click.self="pendingSummaryModalVisible = false">
         <div class="block-modal-container pending-clean-modal-container">
           <!-- 1. 清爽单行 Header -->
           <div class="pending-clean-header">
             <div class="header-left-info">
-              <span class="header-icon">🚚</span>
-              <h3 class="header-title">全标段发货督办清单</h3>
-              <span class="header-count-pill">{{ pendingSummaryTotalCount }} 笔待办</span>
+              <span class="header-icon">{{ supervisionActiveTab === 'governance' ? '📋' : '🚚' }}</span>
+              <h3 class="header-title">{{ supervisionActiveTab === 'governance' ? '全标段现场综合督办中心' : '全标段发货督办清单' }}</h3>
+              <span class="header-count-pill">
+                {{ supervisionActiveTab === 'governance' ? `${governanceSummary.pending_sections_count || 0} 标段待催办` : `${pendingSummaryTotalCount} 笔待办` }}
+              </span>
             </div>
             
             <div class="header-right-tools">
               <button
                 type="button"
                 class="btn-clean-ghost"
-                :disabled="pendingSummaryLoading"
-                @click="loadPendingDeliveriesSummary(true)"
-                title="重新拉取最新在途发货数据"
+                :disabled="supervisionActiveTab === 'governance' ? governanceLoading : pendingSummaryLoading"
+                @click="supervisionActiveTab === 'governance' ? loadGovernanceOverview(true) : loadPendingDeliveriesSummary(true)"
+                title="重新拉取最新数据"
               >
-                <span class="btn-ic" :class="{ 'spin-anim': pendingSummaryLoading }">🔄</span>
+                <span class="btn-ic" :class="{ 'spin-anim': governanceLoading || pendingSummaryLoading }">🔄</span>
                 <span>刷新</span>
               </button>
               <button
                 type="button"
                 class="btn-clean-export"
-                :disabled="pendingSummaryLoading || !sortedPendingSummaryRows.length"
-                @click="exportPendingSummaryExcel"
-                title="导出当前筛选的发货单 Excel 督办清单"
+                :disabled="supervisionActiveTab === 'governance' ? (governanceLoading || !filteredGovernanceSections.length) : (pendingSummaryLoading || !sortedPendingSummaryRows.length)"
+                @click="supervisionActiveTab === 'governance' ? exportGovernanceExcel() : exportPendingSummaryExcel()"
+                :title="supervisionActiveTab === 'governance' ? '导出当前筛选的标段填报履约 Excel 督办清单' : '导出当前筛选的发货单 Excel 督办清单'"
               >
                 <span class="btn-ic">📥</span>
                 <span>导出 EXCEL 表</span>
@@ -2759,340 +2763,701 @@
             </div>
           </div>
 
-          <!-- 2. 清爽通透的筛选栏 (单行流，按钮文字绝对不串行) -->
-          <div class="pending-clean-toolbar">
-            <!-- 品类胶囊切换 -->
-            <div class="capsule-group">
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.category === 'all' }"
-                @click="setPendingSummaryCategory('all')"
-              >
-                全部品类
-              </button>
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.category === 'pipe' }"
-                @click="setPendingSummaryCategory('pipe')"
-              >
-                🔥 直管 ({{ pendingSummaryStats.pipe_count || 0 }})
-              </button>
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.category === 'fitting' }"
-                @click="setPendingSummaryCategory('fitting')"
-              >
-                🔩 管件 ({{ pendingSummaryStats.fitting_count || 0 }})
-              </button>
-            </div>
-
-            <!-- 待办状态切换 -->
-            <div class="capsule-group status-capsules">
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.status === '' }"
-                @click="setPendingSummaryStatusFilter('')"
-              >
-                全部状态
-              </button>
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.status === 'pending_arrival' }"
-                @click="setPendingSummaryStatusFilter('pending_arrival')"
-              >
-                🚚 待到货确认 ({{ pendingSummaryStats.pending_arrival_count || 0 }})
-              </button>
-              <button
-                type="button"
-                class="capsule-item"
-                :class="{ active: pendingSummaryFilter.status === 'pending_receive' }"
-                @click="setPendingSummaryStatusFilter('pending_receive')"
-              >
-                🏗️ 待施工接收 ({{ pendingSummaryStats.pending_receive_count || 0 }})
-              </button>
-            </div>
-
-            <!-- 标段筛选下拉 -->
-            <select v-model="pendingSummaryFilter.section1Id" class="clean-select" @change="loadPendingDeliveriesSummary(true)">
-              <option value="">全部管辖标段 ({{ pendingSummaryAccessibleSections.length }}个)</option>
-              <option v-for="sec in pendingSummaryAccessibleSections" :key="sec.section_1_id" :value="sec.section_1_id">
-                📍 {{ sec.section_1_name }}
-              </option>
-            </select>
-
-            <!-- 🚛 按车次合并开关 (默认合并，可手动切换) -->
+          <!-- 2. 专属双 Tab 切换导航条 (单行通透，绝不挤压顶栏) -->
+          <div class="pending-modal-nav-bar">
             <button
               type="button"
-              class="btn-group-toggle"
-              :class="{ 'is-active': groupByShipment }"
-              @click="groupByShipment = !groupByShipment"
-              :title="groupByShipment ? '当前：按车次号合并记录（点击切换为按单据逐笔明细）' : '当前：按单据逐笔明细展示（点击切换为按车次号合并）'"
+              class="modal-nav-item"
+              :class="{ active: supervisionActiveTab === 'governance' }"
+              @click="supervisionActiveTab = 'governance'"
             >
-              <span class="toggle-ic">{{ groupByShipment ? '🚛' : '📄' }}</span>
-              <span class="toggle-txt">{{ groupByShipment ? '按车次合并' : '单据明细' }}</span>
-              <span class="toggle-indicator" :class="{ active: groupByShipment }"></span>
+              <span class="nav-ic">📋</span>
+              <span class="nav-txt">各标段填报履约督办</span>
+              <span v-if="governanceSummary.pending_sections_count > 0" class="nav-badge warning">
+                {{ governanceSummary.pending_sections_count }} 标段待办
+              </span>
+              <span v-else class="nav-badge success">✓ 全部完成</span>
             </button>
+            <button
+              type="button"
+              class="modal-nav-item"
+              :class="{ active: supervisionActiveTab === 'logistics' }"
+              @click="supervisionActiveTab = 'logistics'"
+            >
+              <span class="nav-ic">🚚</span>
+              <span class="nav-txt">全标段发货单据督办</span>
+              <span v-if="pendingSummaryTotalCount > 0" class="nav-badge info">
+                {{ pendingSummaryTotalCount }} 笔在途
+              </span>
+              <span v-else class="nav-badge gray">0 笔在途</span>
+            </button>
+          </div>
 
-            <!-- 搜索框 -->
-            <div class="clean-search-wrap">
-              <span class="search-ic">🔍</span>
-              <input
-                v-model.trim="pendingSummaryFilter.searchKeyword"
-                type="text"
-                placeholder="搜索单号/车牌/厂家/规格..."
-                class="clean-search-input"
-                @input="loadPendingDeliveriesSummary(false)"
-              />
-              <button
-                v-if="pendingSummaryFilter.searchKeyword"
-                type="button"
-                class="clean-search-clear"
-                @click="clearPendingSummarySearch"
-                title="清空搜索"
-              >
-                ✕
-              </button>
+          <!-- ==================== 标签页 1: 📋 各标段填报履约督办 ==================== -->
+          <div v-if="supervisionActiveTab === 'governance'" class="supervision-tab-content">
+            <!-- 4 大 KPI 汇总横栏 -->
+            <div class="gov-kpi-bar">
+              <div class="gov-kpi-card">
+                <div class="gov-kpi-ic">🏛️</div>
+                <div class="gov-kpi-info">
+                  <span class="gov-kpi-lbl">管辖标段总数</span>
+                  <div class="gov-kpi-val">
+                    <strong>{{ governanceSummary.total_sections || 0 }}</strong>
+                    <span class="unit">个标段</span>
+                  </div>
+                  <span class="gov-kpi-sub">已全部闭环 {{ governanceSummary.all_completed_count || 0 }} 个</span>
+                </div>
+              </div>
+
+              <div class="gov-kpi-card">
+                <div class="gov-kpi-ic">📅</div>
+                <div class="gov-kpi-info">
+                  <span class="gov-kpi-lbl">三日计划报送进度</span>
+                  <div class="gov-kpi-val text-blue">
+                    <strong>{{ governanceSummary.plan_submitted_count || 0 }}</strong>
+                    <span class="unit">/ {{ governanceSummary.total_sections || 0 }} 标段</span>
+                  </div>
+                  <span class="gov-kpi-sub">计划起始日: {{ governanceDates.plan_start_date || '—' }}</span>
+                </div>
+              </div>
+
+              <div class="gov-kpi-card">
+                <div class="gov-kpi-ic">📏</div>
+                <div class="gov-kpi-info">
+                  <span class="gov-kpi-lbl">直管消耗填报进度</span>
+                  <div class="gov-kpi-val text-emerald">
+                    <strong>{{ governanceSummary.pipe_usage_submitted_count || 0 }}</strong>
+                    <span class="unit">/ {{ governanceSummary.total_sections || 0 }} 标段</span>
+                  </div>
+                  <span class="gov-kpi-sub">消耗采集日: {{ governanceDates.usage_collection_date || '—' }}</span>
+                </div>
+              </div>
+
+              <div class="gov-kpi-card">
+                <div class="gov-kpi-ic">🔩</div>
+                <div class="gov-kpi-info">
+                  <span class="gov-kpi-lbl">管件用量填报进度</span>
+                  <div class="gov-kpi-val text-purple">
+                    <strong>{{ governanceSummary.fitting_usage_submitted_count || 0 }}</strong>
+                    <span class="unit">/ {{ governanceSummary.total_sections || 0 }} 标段</span>
+                  </div>
+                  <span class="gov-kpi-sub">消耗采集日: {{ governanceDates.usage_collection_date || '—' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 标段督办过滤工具栏 -->
+            <div class="pending-clean-toolbar">
+              <div class="capsule-group">
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: governanceFilter.status === 'all' }"
+                  @click="governanceFilter.status = 'all'"
+                >
+                  全部标段 ({{ governanceSections.length }})
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: governanceFilter.status === 'pending' }"
+                  @click="governanceFilter.status = 'pending'"
+                >
+                  🔴 待催办标段 ({{ governanceSummary.pending_sections_count || 0 }})
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: governanceFilter.status === 'completed' }"
+                  @click="governanceFilter.status = 'completed'"
+                >
+                  🟢 全部完成 ({{ governanceSummary.all_completed_count || 0 }})
+                </button>
+              </div>
+
+              <!-- 搜索框 -->
+              <div class="clean-search-wrap" style="flex: 1; max-width: 380px;">
+                <span class="search-ic">🔍</span>
+                <input
+                  v-model.trim="governanceFilter.searchKeyword"
+                  type="text"
+                  placeholder="搜索标段名称 / 供暖辖区..."
+                  class="clean-search-input"
+                />
+                <button
+                  v-if="governanceFilter.searchKeyword"
+                  type="button"
+                  class="clean-search-clear"
+                  @click="governanceFilter.searchKeyword = ''"
+                  title="清空搜索"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <!-- 标段填报履约主体内容 -->
+            <div class="pending-clean-body">
+              <div v-if="governanceLoading" class="clean-empty-state">
+                <div class="clean-spinner"></div>
+                <p>正在读取各标段每日填报履约与上次提交时间...</p>
+              </div>
+
+              <div v-else-if="governanceError" class="clean-error-state">
+                <span>⚠️ {{ governanceError }}</span>
+                <button type="button" class="btn-clean-ghost small" @click="loadGovernanceOverview(true)">重试</button>
+              </div>
+
+              <div v-else-if="!filteredGovernanceSections.length" class="clean-empty-state">
+                <span class="empty-emoji">🎉</span>
+                <h4>太好了！当前筛选条件下没有需要催办的标段</h4>
+                <p>管辖标段内各项计划与施工消耗均已正常完成填报。</p>
+              </div>
+
+              <div v-else class="pending-content-wrapper">
+                <!-- PC 端大横表 (清爽无折行) -->
+                <div class="clean-table-scroll-wrap pc-only-table">
+                  <table class="clean-wide-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 50px; text-align: center;">#</th>
+                        <th style="min-width: 170px; width: 190px;">需求标段</th>
+                        <th style="min-width: 220px;">📅 三日需求计划</th>
+                        <th style="min-width: 230px;">📏 直管施工消耗</th>
+                        <th style="min-width: 200px;">🔩 管件施工使用</th>
+                        <th style="min-width: 200px;">🚚 待办在途发货</th>
+                        <th style="width: 150px; text-align: center;">现场督办操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="(sec, idx) in filteredGovernanceSections"
+                        :key="sec.section_1_id"
+                        class="clean-table-tr"
+                        :class="{
+                          'tr-severe': sec.overall_status === 'severe_pending',
+                          'tr-warning': sec.overall_status === 'partially_pending'
+                        }"
+                      >
+                        <!-- 序号 -->
+                        <td style="text-align: center; color: #94a3b8; font-size: 12.5px;" class="font-mono">
+                          {{ idx + 1 }}
+                        </td>
+
+                        <!-- 需求标段 -->
+                        <td>
+                          <div class="sec-name-box">
+                            <span class="sec-name-txt">📍 {{ sec.section_1_name }}</span>
+                            <span class="sec-region-badge">{{ sec.region }}</span>
+                          </div>
+                        </td>
+
+                        <!-- 1. 三日需求计划 -->
+                        <td>
+                          <div class="gov-cell-block">
+                            <div class="gov-pill-line">
+                              <span v-if="sec.plan.is_submitted" class="gov-status-pill success">✓ 今日已报送</span>
+                              <span v-else class="gov-status-pill warning">⌛ 今日未报送</span>
+                            </div>
+                            <div class="gov-meta-line">
+                              <template v-if="sec.plan.is_submitted">
+                                <span class="gov-meta-label">报送量:</span>
+                                <strong class="gov-meta-val text-blue font-mono">{{ sec.plan.total_qty }} 米</strong>
+                                <span v-if="sec.plan.submitted_at" class="gov-time-sub">{{ sec.plan.submitted_at.slice(11) }}</span>
+                              </template>
+                              <template v-else>
+                                <span v-if="sec.plan.last_submitted_date" class="gov-history-txt">
+                                  上次报送: <strong class="font-mono text-amber">{{ sec.plan.last_submitted_date }}</strong>
+                                </span>
+                                <span v-else class="gov-history-none">从未报送</span>
+                              </template>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- 2. 直管施工消耗 -->
+                        <td>
+                          <div class="gov-cell-block">
+                            <div class="gov-pill-line">
+                              <span v-if="sec.pipe_usage.is_submitted" class="gov-status-pill success">✓ 今日已填报</span>
+                              <span v-else class="gov-status-pill warning">⌛ 今日未填报</span>
+                            </div>
+                            <div class="gov-meta-line">
+                              <template v-if="sec.pipe_usage.is_submitted">
+                                <span class="gov-meta-label">消耗:</span>
+                                <strong class="gov-meta-val text-emerald font-mono">{{ sec.pipe_usage.total_usage_qty }} 米</strong>
+                                <span v-if="sec.pipe_usage.total_loss_qty > 0" class="gov-loss-sub font-mono">(损耗 {{ sec.pipe_usage.total_loss_qty }}米)</span>
+                              </template>
+                              <template v-else>
+                                <span v-if="sec.pipe_usage.last_submitted_date" class="gov-history-txt">
+                                  上次填报: <strong class="font-mono text-amber">{{ sec.pipe_usage.last_submitted_date }}</strong>
+                                </span>
+                                <span v-else class="gov-history-none">从未填报</span>
+                              </template>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- 3. 管件施工使用 -->
+                        <td>
+                          <div class="gov-cell-block">
+                            <div class="gov-pill-line">
+                              <span v-if="sec.fitting_usage.is_submitted" class="gov-status-pill success">✓ 今日已填报</span>
+                              <span v-else class="gov-status-pill warning">⌛ 今日未填报</span>
+                            </div>
+                            <div class="gov-meta-line">
+                              <template v-if="sec.fitting_usage.is_submitted">
+                                <span class="gov-meta-label">使用量:</span>
+                                <strong class="gov-meta-val text-purple font-mono">{{ sec.fitting_usage.total_qty }} 件</strong>
+                              </template>
+                              <template v-else>
+                                <span v-if="sec.fitting_usage.last_submitted_date" class="gov-history-txt">
+                                  上次填报: <strong class="font-mono text-amber">{{ sec.fitting_usage.last_submitted_date }}</strong>
+                                </span>
+                                <span v-else class="gov-history-none">从未填报</span>
+                              </template>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- 4. 待办在途发货 -->
+                        <td>
+                          <div class="gov-cell-block">
+                            <div class="gov-pill-line">
+                              <span v-if="sec.deliveries.total === 0" class="gov-status-pill gray">✓ 无在途发货</span>
+                              <span v-else class="gov-status-pill info" :class="{ severe: sec.deliveries.severe_delay > 0 }">
+                                🚚 在途 {{ sec.deliveries.total }} 笔
+                              </span>
+                            </div>
+                            <div class="gov-meta-line">
+                              <template v-if="sec.deliveries.total > 0">
+                                <span class="gov-del-breakdown">
+                                  待到货 {{ sec.deliveries.pending_arrival }} / 待接收 {{ sec.deliveries.pending_receive }}
+                                </span>
+                                <span v-if="sec.deliveries.severe_delay > 0" class="gov-severe-pill">
+                                  🔴 滞留 {{ sec.deliveries.severe_delay }} 笔
+                                </span>
+                              </template>
+                              <template v-else>
+                                <span class="gov-history-none">所有物资已闭环</span>
+                              </template>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- 现场督办操作 -->
+                        <td style="text-align: center;">
+                          <button
+                            type="button"
+                            class="btn-gov-action"
+                            @click="handleSelectSectionFromGovernance(sec.section_1_id)"
+                            title="一键切换主工作台至该标段"
+                          >
+                            🚀 切到该标段 ➔
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- 手机端小卡片 -->
+                <div class="mobile-only-cards-grid">
+                  <div
+                    v-for="sec in filteredGovernanceSections"
+                    :key="sec.section_1_id"
+                    class="mobile-ticket-card"
+                    :class="{
+                      'card-severe': sec.overall_status === 'severe_pending',
+                      'card-warning': sec.overall_status === 'partially_pending'
+                    }"
+                  >
+                    <div class="m-card-header">
+                      <div class="m-tags-row">
+                        <span class="clean-section-tag">📍 {{ sec.section_1_name }}</span>
+                        <span class="sec-region-badge mini">{{ sec.region }}</span>
+                      </div>
+                    </div>
+
+                    <div class="m-card-body">
+                      <div class="m-grid-kv">
+                        <div class="m-kv-item">
+                          <span class="m-k">三日计划:</span>
+                          <span v-if="sec.plan.is_submitted" class="m-v font-bold text-blue">✓ 已报 ({{ sec.plan.total_qty }}米)</span>
+                          <span v-else class="m-v text-amber font-bold">⌛ 未报 ({{ sec.plan.last_submitted_date ? `上次:${sec.plan.last_submitted_date}` : '从未报送' }})</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">直管消耗:</span>
+                          <span v-if="sec.pipe_usage.is_submitted" class="m-v font-bold text-emerald">✓ 已填 ({{ sec.pipe_usage.total_usage_qty }}米)</span>
+                          <span v-else class="m-v text-amber font-bold">⌛ 未填 ({{ sec.pipe_usage.last_submitted_date ? `上次:${sec.pipe_usage.last_submitted_date}` : '从未填报' }})</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">管件使用:</span>
+                          <span v-if="sec.fitting_usage.is_submitted" class="m-v font-bold text-purple">✓ 已填 ({{ sec.fitting_usage.total_qty }}件)</span>
+                          <span v-else class="m-v text-amber font-bold">⌛ 未填 ({{ sec.fitting_usage.last_submitted_date ? `上次:${sec.fitting_usage.last_submitted_date}` : '从未填报' }})</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">在途发货:</span>
+                          <span v-if="sec.deliveries.total === 0" class="m-v text-muted">✓ 无在途</span>
+                          <span v-else class="m-v font-bold" :class="{ 'text-red': sec.deliveries.severe_delay > 0 }">在途 {{ sec.deliveries.total }} 笔</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="m-card-footer">
+                      <button
+                        type="button"
+                        class="m-btn-jump full-w"
+                        @click="handleSelectSectionFromGovernance(sec.section_1_id)"
+                      >
+                        🚀 切换至该标段工作台 ➔
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- 3. 主体内容区：PC 端大横表 + 手机端小卡片 -->
-          <div class="pending-clean-body">
-            <!-- 加载状态 -->
-            <div v-if="pendingSummaryLoading" class="clean-empty-state">
-              <div class="clean-spinner"></div>
-              <p>正在读取全标段在途单据与在途时长...</p>
+          <!-- ==================== 标签页 2: 🚚 全标段发货单据督办 (100% 原始精美排版) ==================== -->
+          <div v-else class="supervision-tab-content">
+            <!-- 2. 清爽通透的筛选栏 (单行流，按钮文字绝对不串行) -->
+            <div class="pending-clean-toolbar">
+              <!-- 品类胶囊切换 -->
+              <div class="capsule-group">
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.category === 'all' }"
+                  @click="setPendingSummaryCategory('all')"
+                >
+                  全部品类
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.category === 'pipe' }"
+                  @click="setPendingSummaryCategory('pipe')"
+                >
+                  🔥 直管 ({{ pendingSummaryStats.pipe_count || 0 }})
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.category === 'fitting' }"
+                  @click="setPendingSummaryCategory('fitting')"
+                >
+                  🔩 管件 ({{ pendingSummaryStats.fitting_count || 0 }})
+                </button>
+              </div>
+
+              <!-- 待办状态切换 -->
+              <div class="capsule-group status-capsules">
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.status === '' }"
+                  @click="setPendingSummaryStatusFilter('')"
+                >
+                  全部状态
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.status === 'pending_arrival' }"
+                  @click="setPendingSummaryStatusFilter('pending_arrival')"
+                >
+                  🚚 待到货确认 ({{ pendingSummaryStats.pending_arrival_count || 0 }})
+                </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.status === 'pending_receive' }"
+                  @click="setPendingSummaryStatusFilter('pending_receive')"
+                >
+                  🏗️ 待施工接收 ({{ pendingSummaryStats.pending_receive_count || 0 }})
+                </button>
+              </div>
+
+              <!-- 标段筛选下拉 -->
+              <select v-model="pendingSummaryFilter.section1Id" class="clean-select" @change="loadPendingDeliveriesSummary(true)">
+                <option value="">全部管辖标段 ({{ pendingSummaryAccessibleSections.length }}个)</option>
+                <option v-for="sec in pendingSummaryAccessibleSections" :key="sec.section_1_id" :value="sec.section_1_id">
+                  📍 {{ sec.section_1_name }}
+                </option>
+              </select>
+
+              <!-- 🚛 按车次合并开关 (默认合并，可手动切换) -->
+              <button
+                type="button"
+                class="btn-group-toggle"
+                :class="{ 'is-active': groupByShipment }"
+                @click="groupByShipment = !groupByShipment"
+                :title="groupByShipment ? '当前：按车次号合并记录（点击切换为按单据逐笔明细）' : '当前：按单据逐笔明细展示（点击切换为按车次号合并）'"
+              >
+                <span class="toggle-ic">{{ groupByShipment ? '🚛' : '📄' }}</span>
+                <span class="toggle-txt">{{ groupByShipment ? '按车次合并' : '单据明细' }}</span>
+                <span class="toggle-indicator" :class="{ active: groupByShipment }"></span>
+              </button>
+
+              <!-- 搜索框 -->
+              <div class="clean-search-wrap">
+                <span class="search-ic">🔍</span>
+                <input
+                  v-model.trim="pendingSummaryFilter.searchKeyword"
+                  type="text"
+                  placeholder="搜索单号/车牌/厂家/规格..."
+                  class="clean-search-input"
+                  @input="loadPendingDeliveriesSummary(false)"
+                />
+                <button
+                  v-if="pendingSummaryFilter.searchKeyword"
+                  type="button"
+                  class="clean-search-clear"
+                  @click="clearPendingSummarySearch"
+                  title="清空搜索"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <!-- 错误提示 -->
-            <div v-else-if="pendingSummaryError" class="clean-error-state">
-              <span>⚠️ {{ pendingSummaryError }}</span>
-              <button type="button" class="btn-clean-ghost small" @click="loadPendingDeliveriesSummary(true)">重试</button>
-            </div>
+            <!-- 3. 主体内容区：PC 端大横表 + 手机端小卡片 -->
+            <div class="pending-clean-body">
+              <!-- 加载状态 -->
+              <div v-if="pendingSummaryLoading" class="clean-empty-state">
+                <div class="clean-spinner"></div>
+                <p>正在读取全标段在途单据与在途时长...</p>
+              </div>
 
-            <!-- 空状态 -->
-            <div v-else-if="!sortedPendingSummaryRows.length" class="clean-empty-state">
-              <span class="empty-emoji">🎉</span>
-              <h4>太好了！当前没有未确认或在途滞留的发货单</h4>
-              <p>管辖标段内所有物资均已正常完成到站与接收。</p>
-            </div>
+              <!-- 错误提示 -->
+              <div v-else-if="pendingSummaryError" class="clean-error-state">
+                <span>⚠️ {{ pendingSummaryError }}</span>
+                <button type="button" class="btn-clean-ghost small" @click="loadPendingDeliveriesSummary(true)">重试</button>
+              </div>
 
-            <!-- 数据呈现区 -->
-            <div v-else class="pending-content-wrapper">
-              <!-- A. 桌面端：通透大气的大横表 (PC Table) -->
-              <div class="clean-table-scroll-wrap pc-only-table">
-                <table class="clean-wide-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 48px; text-align: center;">#</th>
-                      <th style="width: 88px; text-align: center;">物料品类</th>
-                      <th style="width: 110px; text-align: center;">当前状态</th>
-                      <th style="width: 130px;">需求标段</th>
-                      <th style="width: 160px;">订单号 / 运输车次</th>
-                      <th style="width: 100px;">车牌号</th>
-                      <th style="width: 140px;">供给厂家</th>
-                      <th style="min-width: 180px;">规格型号 / 物料名称</th>
-                      <th style="width: 110px; text-align: right;">发货数量</th>
-                      <th style="width: 120px;">发货时间</th>
-                      <th
-                        style="width: 125px; cursor: pointer; user-select: none;"
-                        class="clean-sort-th"
-                        @click="togglePendingSummarySort"
-                        title="点击按在途时长升降序排列（次级按操作等待时长排序）"
+              <!-- 空状态 -->
+              <div v-else-if="!sortedPendingSummaryRows.length" class="clean-empty-state">
+                <span class="empty-emoji">🎉</span>
+                <h4>太好了！当前没有未确认或在途滞留的发货单</h4>
+                <p>管辖标段内所有物资均已正常完成到站与接收。</p>
+              </div>
+
+              <!-- 数据呈现区 -->
+              <div v-else class="pending-content-wrapper">
+                <!-- A. 桌面端：通透大气的大横表 (PC Table) -->
+                <div class="clean-table-scroll-wrap pc-only-table">
+                  <table class="clean-wide-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 48px; text-align: center;">#</th>
+                        <th style="width: 88px; text-align: center;">物料品类</th>
+                        <th style="width: 110px; text-align: center;">当前状态</th>
+                        <th style="width: 130px;">需求标段</th>
+                        <th style="width: 160px;">订单号 / 运输车次</th>
+                        <th style="width: 100px;">车牌号</th>
+                        <th style="width: 140px;">供给厂家</th>
+                        <th style="min-width: 180px;">规格型号 / 物料名称</th>
+                        <th style="width: 110px; text-align: right;">发货数量</th>
+                        <th style="width: 120px;">发货时间</th>
+                        <th
+                          style="width: 125px; cursor: pointer; user-select: none;"
+                          class="clean-sort-th"
+                          @click="togglePendingSummarySort"
+                          title="点击按在途时长升降序排列（次级按操作等待时长排序）"
+                        >
+                          <span>在途时长</span>
+                          <span class="sort-icon-tag">{{ pendingSummaryFilter.sortOrder === 'desc' ? '▼ 降序' : '▲ 升序' }}</span>
+                        </th>
+                        <th style="width: 125px;" title="待到货确认单据为在途时长；待施工接收单据为自确认到货以来的时长">
+                          <span>操作等待时长</span>
+                        </th>
+                        <th style="width: 170px; text-align: center;">现场督办操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="(row, idx) in sortedPendingSummaryRows"
+                        :key="`${row.category}_${row.id}`"
+                        class="clean-table-tr"
+                        :class="{ 'tr-severe': row.is_severe_delay, 'tr-warning': row.is_warning_delay && !row.is_severe_delay }"
                       >
-                        <span>在途时长</span>
-                        <span class="sort-icon-tag">{{ pendingSummaryFilter.sortOrder === 'desc' ? '▼ 降序' : '▲ 升序' }}</span>
-                      </th>
-                      <th style="width: 125px;" title="待到货确认单据为在途时长；待施工接收单据为自确认到货以来的时长">
-                        <span>操作等待时长</span>
-                      </th>
-                      <th style="width: 170px; text-align: center;">现场督办操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(row, idx) in sortedPendingSummaryRows"
-                      :key="`${row.category}_${row.id}`"
-                      class="clean-table-tr"
-                      :class="{ 'tr-severe': row.is_severe_delay, 'tr-warning': row.is_warning_delay && !row.is_severe_delay }"
-                    >
-                      <td style="text-align: center; color: #94a3b8; font-size: 12px;">{{ idx + 1 }}</td>
-                      <td style="text-align: center;">
+                        <td style="text-align: center; color: #94a3b8; font-size: 12px;">{{ idx + 1 }}</td>
+                        <td style="text-align: center;">
+                          <span class="clean-cat-badge" :class="row.category">
+                            {{ row.category === 'pipe' ? '🔥 直管' : '🔩 管件' }}
+                          </span>
+                        </td>
+                        <td style="text-align: center;">
+                          <span
+                            class="clean-status-badge"
+                            :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
+                          >
+                            {{ row.status_label }}
+                          </span>
+                        </td>
+                        <td>
+                          <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
+                        </td>
+                        <td>
+                          <div class="order-code-main font-mono">
+                            {{ row.order_no }}
+                            <span v-if="row.is_grouped && row.sub_count > 1" class="sub-count-tag" :title="`该车次合并了 ${row.sub_count} 笔发货单`">
+                              共{{ row.sub_count }}单
+                            </span>
+                          </div>
+                          <div v-if="row.shipment_no && row.shipment_no !== '—'" class="shipment-code-sub font-mono">
+                            车次: {{ row.shipment_no }}
+                          </div>
+                        </td>
+                        <td>
+                          <span class="clean-plate-pill">{{ row.vehicle_plate_no || '未填' }}</span>
+                        </td>
+                        <td>
+                          <div class="supply-entity-cell text-ellipsis" :title="row.supply_entity_name">
+                            🏭 {{ row.supply_entity_name }}
+                          </div>
+                        </td>
+                        <td>
+                          <div class="material-name-cell">
+                            <strong>{{ row.material_name }}</strong>
+                          </div>
+                        </td>
+                        <td style="text-align: right;">
+                          <span class="qty-highlight">{{ row.quantity_display }}</span>
+                        </td>
+                        <td>
+                          <span class="time-cell-text">{{ formatShortDateTime(row.shipped_at) }}</span>
+                        </td>
+                        <td>
+                          <div
+                            class="clean-elapsed-pill"
+                            :class="{ 'is-severe': row.is_severe_delay, 'is-warning': row.is_warning_delay && !row.is_severe_delay }"
+                          >
+                            ⏱️ {{ row.elapsed_display }}
+                          </div>
+                        </td>
+                        <td>
+                          <div
+                            class="clean-elapsed-pill unconfirmed"
+                            :class="{
+                              'is-severe': row.is_unconfirmed_severe,
+                              'is-warning': row.is_unconfirmed_warning && !row.is_unconfirmed_severe
+                            }"
+                          >
+                            ⏳ {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
+                          </div>
+                        </td>
+                        <td style="text-align: center;">
+                          <div class="clean-op-btn-group">
+                            <button
+                              type="button"
+                              class="op-btn-jump"
+                              @click="handleJumpToSectionDelivery(row)"
+                              title="切换至该标段并前往现场到货/施工接收确认"
+                            >
+                              📍 定位处理
+                            </button>
+                            <button
+                              type="button"
+                              class="op-btn-detail"
+                              @click="showDeliveryDetail(row)"
+                              title="查看单据完整时光轴与凭证"
+                            >
+                              👁️ 详情
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- B. 手机端 / 窄屏：自动展示精致小卡片 (Mobile Cards) -->
+                <div class="mobile-only-cards-grid">
+                  <div
+                    v-for="row in sortedPendingSummaryRows"
+                    :key="`m_${row.category}_${row.id}`"
+                    class="mobile-ticket-card"
+                    :class="{ 'card-severe': row.is_severe_delay, 'card-warning': row.is_warning_delay && !row.is_severe_delay }"
+                  >
+                    <!-- 手机卡片顶栏 -->
+                    <div class="m-card-header">
+                      <div class="m-tags-row">
+                        <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
                         <span class="clean-cat-badge" :class="row.category">
                           {{ row.category === 'pipe' ? '🔥 直管' : '🔩 管件' }}
                         </span>
-                      </td>
-                      <td style="text-align: center;">
                         <span
                           class="clean-status-badge"
                           :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
                         >
                           {{ row.status_label }}
                         </span>
-                      </td>
-                      <td>
-                        <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
-                      </td>
-                      <td>
-                        <div class="order-code-main font-mono">
-                          {{ row.order_no }}
-                          <span v-if="row.is_grouped && row.sub_count > 1" class="sub-count-tag" :title="`该车次合并了 ${row.sub_count} 笔发货单`">
-                            共{{ row.sub_count }}单
-                          </span>
-                        </div>
-                        <div v-if="row.shipment_no && row.shipment_no !== '—'" class="shipment-code-sub font-mono">
-                          车次: {{ row.shipment_no }}
-                        </div>
-                      </td>
-                      <td>
-                        <span class="clean-plate-pill">{{ row.vehicle_plate_no || '未填' }}</span>
-                      </td>
-                      <td>
-                        <div class="supply-entity-cell text-ellipsis" :title="row.supply_entity_name">
-                          🏭 {{ row.supply_entity_name }}
-                        </div>
-                      </td>
-                      <td>
-                        <div class="material-name-cell">
-                          <strong>{{ row.material_name }}</strong>
-                        </div>
-                      </td>
-                      <td style="text-align: right;">
-                        <span class="qty-highlight">{{ row.quantity_display }}</span>
-                      </td>
-                      <td>
-                        <span class="time-cell-text">{{ formatShortDateTime(row.shipped_at) }}</span>
-                      </td>
-                      <td>
+                      </div>
+                      <div class="m-elapsed-box">
                         <div
-                          class="clean-elapsed-pill"
+                          class="clean-elapsed-pill mini"
                           :class="{ 'is-severe': row.is_severe_delay, 'is-warning': row.is_warning_delay && !row.is_severe_delay }"
+                          title="在途时长"
                         >
-                          ⏱️ {{ row.elapsed_display }}
+                          ⏱️ 在途: {{ row.elapsed_display }}
                         </div>
-                      </td>
-                      <td>
                         <div
-                          class="clean-elapsed-pill unconfirmed"
+                          class="clean-elapsed-pill mini unconfirmed"
                           :class="{
                             'is-severe': row.is_unconfirmed_severe,
                             'is-warning': row.is_unconfirmed_warning && !row.is_unconfirmed_severe
                           }"
+                          title="操作等待时长"
                         >
-                          ⏳ {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
+                          ⏳ 等待: {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
                         </div>
-                      </td>
-                      <td style="text-align: center;">
-                        <div class="clean-op-btn-group">
-                          <button
-                            type="button"
-                            class="op-btn-jump"
-                            @click="handleJumpToSectionDelivery(row)"
-                            title="切换至该标段并前往现场到货/施工接收确认"
-                          >
-                            📍 定位处理
-                          </button>
-                          <button
-                            type="button"
-                            class="op-btn-detail"
-                            @click="showDeliveryDetail(row)"
-                            title="查看单据完整时光轴与凭证"
-                          >
-                            👁️ 详情
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- B. 手机端 / 窄屏：自动展示精致小卡片 (Mobile Cards) -->
-              <div class="mobile-only-cards-grid">
-                <div
-                  v-for="row in sortedPendingSummaryRows"
-                  :key="`m_${row.category}_${row.id}`"
-                  class="mobile-ticket-card"
-                  :class="{ 'card-severe': row.is_severe_delay, 'card-warning': row.is_warning_delay && !row.is_severe_delay }"
-                >
-                  <!-- 手机卡片顶栏 -->
-                  <div class="m-card-header">
-                    <div class="m-tags-row">
-                      <span class="clean-section-tag">📍 {{ row.section_1_name }}</span>
-                      <span class="clean-cat-badge" :class="row.category">
-                        {{ row.category === 'pipe' ? '🔥 直管' : '🔩 管件' }}
-                      </span>
-                      <span
-                        class="clean-status-badge"
-                        :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
-                      >
-                        {{ row.status_label }}
-                      </span>
-                    </div>
-                    <div class="m-elapsed-box">
-                      <div
-                        class="clean-elapsed-pill mini"
-                        :class="{ 'is-severe': row.is_severe_delay, 'is-warning': row.is_warning_delay && !row.is_severe_delay }"
-                        title="在途时长"
-                      >
-                        ⏱️ 在途: {{ row.elapsed_display }}
-                      </div>
-                      <div
-                        class="clean-elapsed-pill mini unconfirmed"
-                        :class="{
-                          'is-severe': row.is_unconfirmed_severe,
-                          'is-warning': row.is_unconfirmed_warning && !row.is_unconfirmed_severe
-                        }"
-                        title="操作等待时长"
-                      >
-                        ⏳ 等待: {{ row.unconfirmed_elapsed_display || row.elapsed_display }}
                       </div>
                     </div>
-                  </div>
 
-                  <!-- 手机卡片主体 -->
-                  <div class="m-card-body">
-                    <div class="m-mat-row">
-                      <strong class="m-mat-name">{{ row.material_name }}</strong>
-                      <span class="m-qty-val">{{ row.quantity_display }}</span>
+                    <!-- 手机卡片主体 -->
+                    <div class="m-card-body">
+                      <div class="m-material-title">
+                        <strong>{{ row.material_name }}</strong>
+                      </div>
+                      <div class="m-grid-kv">
+                        <div class="m-kv-item">
+                          <span class="m-k">订单编号:</span>
+                          <span class="m-v font-mono">{{ row.order_no }}</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">发货数量:</span>
+                          <span class="m-v qty">{{ row.quantity_display }}</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">运输车牌:</span>
+                          <span class="m-v">{{ row.vehicle_plate_no || '未填' }}</span>
+                        </div>
+                        <div class="m-kv-item">
+                          <span class="m-k">发货厂家:</span>
+                          <span class="m-v text-ellipsis">{{ row.supply_entity_name }}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div class="m-info-line">
-                      <span class="m-info-k">单号车次:</span>
-                      <span class="m-info-v font-mono">{{ row.order_no }} ({{ row.shipment_no || '独立' }})</span>
-                      <span v-if="row.is_grouped && row.sub_count > 1" class="sub-count-tag">共{{ row.sub_count }}单</span>
-                    </div>
-                    <div class="m-info-line">
-                      <span class="m-info-k">车牌车辆:</span>
-                      <span class="clean-plate-pill mini">{{ row.vehicle_plate_no || '未填车牌' }}</span>
-                      <span class="m-supplier">🏭 {{ row.supply_entity_name }}</span>
-                    </div>
-                    <div v-if="row.ship_contact_name || row.ship_contact_phone" class="m-contact-line" @click="copyContactPhone(row.ship_contact_phone, row.ship_contact_name)">
-                      <span>👤 {{ row.ship_contact_name || '司机' }}</span>
-                      <span v-if="row.ship_contact_phone" class="m-phone-txt">📞 {{ row.ship_contact_phone }}</span>
-                      <span class="m-copy-tag">复制</span>
-                    </div>
-                  </div>
 
-                  <!-- 手机卡片底栏操作 -->
-                  <div class="m-card-footer">
-                    <button
-                      type="button"
-                      class="m-btn-ghost"
-                      @click="showDeliveryDetail(row)"
-                    >
-                      👁️ 流转详情
-                    </button>
-                    <button
-                      type="button"
-                      class="m-btn-primary"
-                      @click="handleJumpToSectionDelivery(row)"
-                    >
-                      📍 现场确认 ➔
-                    </button>
+                    <!-- 手机卡片底栏 -->
+                    <div class="m-card-footer">
+                      <button
+                        type="button"
+                        class="m-btn-detail"
+                        @click="showDeliveryDetail(row)"
+                      >
+                        👁️ 流转详情
+                      </button>
+                      <button
+                        type="button"
+                        class="m-btn-jump"
+                        @click="handleJumpToSectionDelivery(row)"
+                      >
+                        📍 前往现场确认 ➔
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3101,7 +3466,21 @@
 
           <!-- 4. 弹窗底栏 Footer -->
           <div class="pending-clean-footer">
-            <div class="footer-stats-left">
+            <div v-if="supervisionActiveTab === 'governance'" class="footer-stats-left">
+              <span class="f-stat-item">
+                管辖标段：<strong>{{ governanceSections.length }}</strong> 个
+              </span>
+              <span class="f-divider">/</span>
+              <span class="f-stat-item">
+                全部闭环：<strong class="text-emerald">{{ governanceSummary.all_completed_count || 0 }} 标段</strong>
+              </span>
+              <span class="f-divider">/</span>
+              <span class="f-stat-item">
+                待催办：<strong class="text-amber">{{ governanceSummary.pending_sections_count || 0 }} 标段</strong>
+              </span>
+            </div>
+
+            <div v-else class="footer-stats-left">
               <span class="f-stat-item">
                 待办单据：<strong>{{ sortedPendingSummaryRows.length }}</strong> 笔
               </span>
@@ -3142,6 +3521,7 @@ import {
   getTubeDemandManagementFittingBaseline,
   getTubeDemandManagementLogisticsRecords,
   getTubeDemandManagementPendingDeliveriesSummary,
+  getTubeDemandManagementGovernanceOverview,
   getTubeDemandManagementOptions,
   getTubeDemandManagementPlanMatrix,
   getTubeDemandManagementUsageSheet,
@@ -3230,8 +3610,56 @@ const blockModalVisible = ref(false)
 const blockModalData = ref(null)
 const allPendingRows = ref([])
 
-// 🚚 全标段在途与待接收发货单汇总督办状态
+// 🚚 全标段现场综合督办中心状态
 const pendingSummaryModalVisible = ref(false)
+const supervisionActiveTab = ref('governance') // 'governance' (标段填报履约督办) | 'logistics' (在途发货单据督办)
+
+// 标段填报履约大盘状态
+const governanceLoading = ref(false)
+const governanceError = ref('')
+const governanceDates = ref({
+  show_date: '',
+  usage_collection_date: '',
+  plan_start_date: ''
+})
+const governanceSummary = ref({
+  total_sections: 0,
+  plan_submitted_count: 0,
+  pipe_usage_submitted_count: 0,
+  fitting_usage_submitted_count: 0,
+  all_completed_count: 0,
+  pending_sections_count: 0,
+  total_pending_deliveries: 0,
+  severe_delay_deliveries: 0
+})
+const governanceSections = ref([])
+const governanceFilter = reactive({
+  status: 'all', // 'all' | 'pending' | 'completed'
+  searchKeyword: ''
+})
+
+const filteredGovernanceSections = computed(() => {
+  let list = governanceSections.value || []
+  if (governanceFilter.status === 'pending') {
+    list = list.filter(s => s.overall_status !== 'all_completed')
+  } else if (governanceFilter.status === 'completed') {
+    list = list.filter(s => s.overall_status === 'all_completed')
+  }
+  if (governanceFilter.searchKeyword) {
+    const kw = governanceFilter.searchKeyword.trim().toLowerCase()
+    list = list.filter(s =>
+      (s.section_1_name || '').toLowerCase().includes(kw) ||
+      (s.section_1_id || '').toLowerCase().includes(kw) ||
+      (s.construction_unit_name || '').toLowerCase().includes(kw) ||
+      (s.contact_name || '').toLowerCase().includes(kw) ||
+      (s.contact_phone || '').includes(kw) ||
+      (s.region || '').toLowerCase().includes(kw)
+    )
+  }
+  return list
+})
+
+// 在途发货单据督办状态
 const pendingSummaryLoading = ref(false)
 const pendingSummaryError = ref('')
 const pendingSummaryViewMode = ref('card') // 'card' | 'table'
@@ -3416,6 +3844,29 @@ async function copyContactPhone(phone, name) {
   }
 }
 
+async function loadGovernanceOverview(showLoading = true) {
+  if (showLoading) {
+    governanceLoading.value = true
+    governanceError.value = ''
+  }
+  try {
+    const res = await getTubeDemandManagementGovernanceOverview(PROJECT_KEY)
+    if (res && res.ok) {
+      governanceSections.value = res.sections || []
+      governanceSummary.value = res.summary || {}
+      governanceDates.value = res.dates || {}
+    }
+  } catch (err) {
+    if (showLoading) {
+      governanceError.value = err?.message || '加载全标段填报履约大盘失败'
+    }
+  } finally {
+    if (showLoading) {
+      governanceLoading.value = false
+    }
+  }
+}
+
 async function loadPendingDeliveriesSummary(showLoading = true) {
   if (showLoading) {
     pendingSummaryLoading.value = true
@@ -3445,9 +3896,30 @@ async function loadPendingDeliveriesSummary(showLoading = true) {
   }
 }
 
-function openPendingSummaryModal() {
+function openPendingSummaryModal(defaultTab = 'governance') {
+  supervisionActiveTab.value = defaultTab
   pendingSummaryModalVisible.value = true
+  loadGovernanceOverview(true)
   loadPendingDeliveriesSummary(true)
+}
+
+function handleSelectSectionFromGovernance(sectionId, targetDimension = '') {
+  if (!sectionId) return
+  selectedSection1Id.value = sectionId
+  if (targetDimension === 'fitting') {
+    activeCategory.value = 'fitting'
+    activeTab.value = 'fitting'
+  } else if (targetDimension === 'plan') {
+    activeCategory.value = 'pipe'
+    activeTab.value = 'plan'
+  } else {
+    activeCategory.value = 'pipe'
+    activeTab.value = 'usage'
+  }
+  syncTabStateToUrl(activeCategory.value, activeTab.value)
+  pendingSummaryModalVisible.value = false
+  const secName = governanceSections.value.find(s => s.section_1_id === sectionId)?.section_1_name || sectionId
+  setActionMessage('success', `已为您切换至标段【${secName}】工作台。`)
 }
 
 function handleJumpToSectionDelivery(row) {
@@ -3672,6 +4144,262 @@ function exportPendingSummaryExcel() {
     setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格（.xlsx 原生格式）！')
   } catch (error) {
     console.error('导出 Excel 失败:', error)
+    setActionMessage('error', `导出 Excel 失败: ${error?.message || '未知错误'}`)
+  }
+}
+
+function exportGovernanceExcel() {
+  const rows = filteredGovernanceSections.value || []
+  if (!rows.length) {
+    alert('当前筛选条件下暂无标段履约督办数据可导出。')
+    return
+  }
+
+  const exportTime = new Date().toLocaleString()
+  const todayStr = getTodayString()
+
+  // 1. 构建数据行（含大标题行、摘要行、表头行）
+  const titleRow = ['各标段填报履约督办清单', ...Array(15).fill('')]
+  const metaRow = [
+    `导出时间：${exportTime}  |  管辖标段总数：${governanceSections.value.length} 个  |  全部闭环：${governanceSummary.value.all_completed_count || 0} 标段  |  待催办：${governanceSummary.value.pending_sections_count || 0} 标段  |  计划起始日：${governanceDates.value.plan_start_date || '—'}  |  消耗采集日：${governanceDates.value.usage_collection_date || '—'}`,
+    ...Array(15).fill('')
+  ]
+  const headers = [
+    '序号', '需求标段', '供暖辖区',
+    '三日计划-报送状态', '三日计划-报送量(米)', '三日计划-填报时间/上次报送',
+    '直管消耗-填报状态', '直管消耗-消耗量(米)', '直管消耗-损耗量(米)', '直管消耗-上次填报日',
+    '管件使用-填报状态', '管件使用-使用量(件)', '管件使用-上次填报日',
+    '在途物资-待到货(笔)', '在途物资-待接收(笔)', '在途物资-严重滞留(笔)'
+  ]
+
+  const dataRows = rows.map((sec, idx) => {
+    // 计划
+    const planStatus = sec.plan?.is_submitted ? '已报送' : '未报送'
+    const planQty = sec.plan?.is_submitted ? sec.plan.total_qty : 0
+    const planTimeOrLast = sec.plan?.is_submitted
+      ? (sec.plan.submitted_at ? sec.plan.submitted_at.slice(11) : '今日已提交')
+      : (sec.plan?.last_submitted_date ? `上次: ${sec.plan.last_submitted_date}` : '从未报送')
+
+    // 直管消耗
+    const pipeUsageStatus = sec.pipe_usage?.is_submitted ? '已填报' : '未填报'
+    const pipeUsageQty = sec.pipe_usage?.is_submitted ? sec.pipe_usage.total_usage_qty : 0
+    const pipeLossQty = sec.pipe_usage?.is_submitted ? sec.pipe_usage.total_loss_qty : 0
+    const pipeLastDate = sec.pipe_usage?.is_submitted
+      ? '今日已填'
+      : (sec.pipe_usage?.last_submitted_date ? `上次: ${sec.pipe_usage.last_submitted_date}` : '从未填报')
+
+    // 管件使用
+    const fitUsageStatus = sec.fitting_usage?.is_submitted ? '已填报' : '未填报'
+    const fitUsageQty = sec.fitting_usage?.is_submitted ? sec.fitting_usage.total_qty : 0
+    const fitLastDate = sec.fitting_usage?.is_submitted
+      ? '今日已填'
+      : (sec.fitting_usage?.last_submitted_date ? `上次: ${sec.fitting_usage.last_submitted_date}` : '从未填报')
+
+    // 在途物资
+    const pendingArrival = sec.deliveries?.pending_arrival || 0
+    const pendingReceive = sec.deliveries?.pending_receive || 0
+    const severeDelay = sec.deliveries?.severe_delay || 0
+
+    return [
+      idx + 1,
+      sec.section_1_name || sec.section_1_id,
+      sec.region || '—',
+      planStatus,
+      planQty,
+      planTimeOrLast,
+      pipeUsageStatus,
+      pipeUsageQty,
+      pipeLossQty,
+      pipeLastDate,
+      fitUsageStatus,
+      fitUsageQty,
+      fitLastDate,
+      pendingArrival,
+      pendingReceive,
+      severeDelay
+    ]
+  })
+
+  const wsData = [titleRow, metaRow, headers, ...dataRows]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  // 2. 合并大标题与摘要栏
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 15 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 15 } }
+  ]
+
+  // 3. 列宽自适应
+  ws['!cols'] = [
+    { wch: 6 },  // 序号
+    { wch: 20 }, // 需求标段
+    { wch: 14 }, // 供暖辖区
+    { wch: 14 }, // 三日计划-报送状态
+    { wch: 14 }, // 三日计划-报送量
+    { wch: 20 }, // 三日计划-填报时间/上次报送
+    { wch: 14 }, // 直管消耗-填报状态
+    { wch: 14 }, // 直管消耗-消耗量
+    { wch: 14 }, // 直管消耗-损耗量
+    { wch: 18 }, // 直管消耗-上次填报日
+    { wch: 14 }, // 管件使用-填报状态
+    { wch: 14 }, // 管件使用-使用量
+    { wch: 18 }, // 管件使用-上次填报日
+    { wch: 14 }, // 在途物资-待到货
+    { wch: 14 }, // 在途物资-待接收
+    { wch: 16 }  // 在途物资-严重滞留
+  ]
+
+  // 4. 行高
+  ws['!rows'] = [
+    { hpx: 36 }, // 大标题
+    { hpx: 24 }, // 摘要栏
+    { hpx: 28 }, // 表头
+  ]
+
+  // 5. 边框统一样式
+  const thinBorder = {
+    top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+  }
+
+  // 6. 遍历单元格赋予专业排版与延误标色
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:P4')
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' }
+
+      if (R === 0) {
+        // 大标题行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 15, bold: true, color: { rgb: '0F172A' } },
+          fill: { fgColor: { rgb: 'F1F5F9' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: thinBorder
+        }
+      } else if (R === 1) {
+        // 摘要统计行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 9.5, color: { rgb: '475569' } },
+          fill: { fgColor: { rgb: 'F8FAFC' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: thinBorder
+        }
+      } else if (R === 2) {
+        // 深蓝表头行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 10.5, bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '2563EB' } },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+          border: thinBorder
+        }
+      } else {
+        // 数据行 (R >= 3, 对应 rows[R - 3])
+        const dataIndex = R - 3
+        const sec = rows[dataIndex] || {}
+        const isZebra = dataIndex % 2 === 1
+        const bgRgb = isZebra ? 'F8FAFC' : 'FFFFFF'
+
+        const cellStyle = {
+          font: { name: 'Microsoft YaHei', sz: 10, color: { rgb: '334155' } },
+          fill: { fgColor: { rgb: bgRgb } },
+          alignment: { vertical: 'center' },
+          border: thinBorder
+        }
+
+        // 序号, 辖区, 时间等居中
+        if (C === 0 || C === 2 || C === 5 || C === 9 || C === 12) {
+          cellStyle.alignment.horizontal = 'center'
+        } else if (C === 1) {
+          // 需求标段 (居左加粗)
+          cellStyle.alignment.horizontal = 'left'
+          cellStyle.font.bold = true
+        } else if (C === 3) {
+          // 三日计划状态
+          cellStyle.alignment.horizontal = 'center'
+          if (sec.plan?.is_submitted) {
+            cellStyle.fill = { fgColor: { rgb: 'ECFDF5' } }
+            cellStyle.font.color = { rgb: '047857' }
+            cellStyle.font.bold = true
+          } else {
+            cellStyle.fill = { fgColor: { rgb: 'FEF3C7' } }
+            cellStyle.font.color = { rgb: '92400E' }
+            cellStyle.font.bold = true
+          }
+        } else if (C === 4) {
+          // 三日计划报送量 (居右深蓝)
+          cellStyle.alignment.horizontal = 'right'
+          cellStyle.font.bold = true
+          cellStyle.font.color = { rgb: '1D4ED8' }
+        } else if (C === 6) {
+          // 直管消耗状态
+          cellStyle.alignment.horizontal = 'center'
+          if (sec.pipe_usage?.is_submitted) {
+            cellStyle.fill = { fgColor: { rgb: 'ECFDF5' } }
+            cellStyle.font.color = { rgb: '047857' }
+            cellStyle.font.bold = true
+          } else {
+            cellStyle.fill = { fgColor: { rgb: 'FEF3C7' } }
+            cellStyle.font.color = { rgb: '92400E' }
+            cellStyle.font.bold = true
+          }
+        } else if (C === 7) {
+          // 直管消耗量 (居右绿色)
+          cellStyle.alignment.horizontal = 'right'
+          cellStyle.font.bold = true
+          cellStyle.font.color = { rgb: '059669' }
+        } else if (C === 8) {
+          // 直管损耗量 (居右橙色)
+          cellStyle.alignment.horizontal = 'right'
+          if (sec.pipe_usage?.total_loss_qty > 0) {
+            cellStyle.font.color = { rgb: 'D97706' }
+            cellStyle.font.bold = true
+          }
+        } else if (C === 10) {
+          // 管件使用状态
+          cellStyle.alignment.horizontal = 'center'
+          if (sec.fitting_usage?.is_submitted) {
+            cellStyle.fill = { fgColor: { rgb: 'ECFDF5' } }
+            cellStyle.font.color = { rgb: '047857' }
+            cellStyle.font.bold = true
+          } else {
+            cellStyle.fill = { fgColor: { rgb: 'FEF3C7' } }
+            cellStyle.font.color = { rgb: '92400E' }
+            cellStyle.font.bold = true
+          }
+        } else if (C === 11) {
+          // 管件使用量 (居右紫色)
+          cellStyle.alignment.horizontal = 'right'
+          cellStyle.font.bold = true
+          cellStyle.font.color = { rgb: '7C3AED' }
+        } else if (C === 13 || C === 14) {
+          // 待到货 / 待接收
+          cellStyle.alignment.horizontal = 'center'
+        } else if (C === 15) {
+          // 严重滞留笔数
+          cellStyle.alignment.horizontal = 'center'
+          if (sec.deliveries?.severe_delay > 0) {
+            cellStyle.fill = { fgColor: { rgb: 'FEE2E2' } }
+            cellStyle.font.color = { rgb: '991B1B' }
+            cellStyle.font.bold = true
+          }
+        }
+
+        ws[cellRef].s = cellStyle
+      }
+    }
+  }
+
+  // 7. 输出标准 .xlsx 文件
+  try {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '各标段填报履约督办清单')
+    XLSX.writeFile(wb, `各标段填报履约督办清单_${todayStr}.xlsx`)
+    setActionMessage('success', '已成功导出各标段填报履约督办清单 Excel 表格（.xlsx 原生格式）！')
+  } catch (error) {
+    console.error('导出标段履约 Excel 失败:', error)
     setActionMessage('error', `导出 Excel 失败: ${error?.message || '未知错误'}`)
   }
 }
@@ -9899,6 +10627,366 @@ function jumpToUsageTab() {
   .footer-stats-left {
     font-size: 12px;
     flex-wrap: wrap;
+  }
+}
+
+/* ==================== 🏛️ 全标段现场综合督办中心专属样式 ==================== */
+.pending-modal-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: #f8fafc;
+  border-bottom: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.modal-nav-item {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  white-space: nowrap !important;
+}
+
+.modal-nav-item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.modal-nav-item.active {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.nav-badge.warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.modal-nav-item.active .nav-badge.warning {
+  background: #fbbf24;
+  color: #78350f;
+}
+
+.nav-badge.info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.modal-nav-item.active .nav-badge.info {
+  background: #ffffff;
+  color: #1d4ed8;
+}
+
+.nav-badge.success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.modal-nav-item.active .nav-badge.success {
+  background: #ffffff;
+  color: #047857;
+}
+
+.nav-badge.gray {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.modal-nav-item.active .nav-badge.gray {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.supervision-tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 4 大 KPI 卡片横栏 */
+.gov-kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.gov-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.gov-kpi-ic {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.gov-kpi-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gov-kpi-lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.gov-kpi-val {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.gov-kpi-val .unit {
+  font-size: 11px;
+  font-weight: normal;
+  color: #94a3b8;
+}
+
+.gov-kpi-sub {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gov-sub-toolbar {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.gov-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ==================== 🏛️ 各标段填报履约督办精细化样式 (零串行、通透对齐) ==================== */
+.sec-name-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap !important;
+}
+
+.sec-name-txt {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap !important;
+}
+
+.sec-region-badge {
+  display: inline-block;
+  font-size: 10.5px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap !important;
+}
+
+.sec-region-badge.mini {
+  font-size: 10px;
+}
+
+.gov-cell-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  white-space: nowrap !important;
+}
+
+.gov-pill-line {
+  display: flex;
+  align-items: center;
+  white-space: nowrap !important;
+}
+
+.gov-status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 5px;
+  white-space: nowrap !important;
+}
+
+.gov-status-pill.success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.gov-status-pill.warning {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.gov-status-pill.info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.gov-status-pill.info.severe {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.gov-status-pill.gray {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+.gov-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #475569;
+  white-space: nowrap !important;
+}
+
+.gov-meta-label {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.gov-meta-val {
+  font-size: 12px;
+}
+
+.gov-time-sub {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.gov-loss-sub {
+  font-size: 11px;
+  color: #d97706;
+}
+
+.gov-history-txt {
+  font-size: 11.5px;
+  color: #b45309;
+  white-space: nowrap !important;
+}
+
+.gov-history-none {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-style: italic;
+  white-space: nowrap !important;
+}
+
+.gov-del-breakdown {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap !important;
+}
+
+.gov-severe-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fee2e2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap !important;
+}
+
+.btn-gov-action {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap !important;
+  transition: all 0.15s ease;
+}
+
+.btn-gov-action:hover {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.m-btn-jump.full-w {
+  width: 100%;
+  height: 34px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .gov-kpi-bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 10px;
   }
 }
 </style>

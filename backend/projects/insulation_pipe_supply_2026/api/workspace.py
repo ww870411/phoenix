@@ -3981,6 +3981,440 @@ def get_demand_management_pending_deliveries_summary(
     }
 
 
+@router.get("/demand-management/governance-overview", summary="获取需求侧各标段每日填报履约与督办综合大盘")
+def get_demand_management_governance_overview(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    """
+    提供全标段综合督办看板数据：
+    1. 三日滚动需求计划报送状态（已报送/未报送及上次物理提交日）；
+    2. 直管施工消耗填报状态（已填报/未填报及上次物理提交日）；
+    3. 管件施工使用量填报状态（已填报/未填报及上次物理提交日）；
+    4. 各标段名下在途待到货/待施工接收发货单笔数与严重滞留预警；
+    5. 综合闭环状态与责任主体信息。
+    """
+    payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+
+    # 1. 确保触发超时自动流转与表自愈
+    try:
+        from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import auto_process_timeout_deliveries
+        auto_process_timeout_deliveries()
+    except Exception:
+        pass
+    try:
+        from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import _ensure_demand_table_structures
+        from backend.projects.insulation_pipe_supply_2026.services.fitting_usage_service import _ensure_fitting_usage_table_structures
+        _ensure_demand_table_structures()
+        _ensure_fitting_usage_table_structures()
+    except Exception:
+        pass
+
+    show_date = get_configured_show_date(payload)
+    usage_collection_date = get_usage_collection_date(payload)
+    plan_start_date = get_configured_plan_start_date(payload)
+
+    demand_entities = payload.get("demand_entities", []) or []
+    construction_units = payload.get("construction_units", []) or []
+    manager_assignments = payload.get("manager_assignments", []) or []
+
+    # 映射标段所属施工单位与责任人
+    unit_map: Dict[str, Dict[str, Any]] = {}
+    for u in construction_units:
+        sec_ids = u.get("section_1_ids") or []
+        for sid in sec_ids:
+            unit_map[sid] = {
+                "unit_name": u.get("unit_name") or u.get("construction_unit_name") or "未分配施工单位",
+                "contact_name": u.get("contact_name") or "现场负责人",
+                "contact_phone": u.get("contact_phone") or "",
+            }
+
+    manager_map: Dict[str, Dict[str, Any]] = {}
+    for m in manager_assignments:
+        sec_ids = m.get("section_1_ids") or []
+        for sid in sec_ids:
+            manager_map[sid] = {
+                "manager_name": m.get("manager_name") or m.get("person_name") or "标段主管",
+                "contact_phone": m.get("contact_phone") or "",
+            }
+
+    # 目标标段清单
+    target_sections = []
+    for d in demand_entities:
+        sid = d.get("section_1_id")
+        if not sid:
+            continue
+        if sid in accessible_section_1_ids:
+            target_sections.append(
+                {
+                    "section_1_id": sid,
+                    "section_1_name": d.get("section_1_name") or sid,
+                    "region": d.get("section_2_name") or d.get("region") or "供暖辖区",
+                    "sort_order": int(d.get("sort_order") or 0),
+                }
+            )
+
+    target_sections.sort(key=lambda x: (x["sort_order"], x["section_1_id"]))
+    target_section_ids = [s["section_1_id"] for s in target_sections]
+
+    if not target_section_ids:
+        return {
+            "ok": True,
+            "project_key": PROJECT_KEY,
+            "dates": {
+                "show_date": show_date.isoformat(),
+                "usage_collection_date": usage_collection_date.isoformat(),
+                "plan_start_date": plan_start_date.isoformat(),
+            },
+            "summary": {
+                "total_sections": 0,
+                "plan_submitted_count": 0,
+                "pipe_usage_submitted_count": 0,
+                "fitting_usage_submitted_count": 0,
+                "all_completed_count": 0,
+                "pending_sections_count": 0,
+                "total_pending_deliveries": 0,
+                "severe_delay_deliveries": 0,
+            },
+            "sections": [],
+        }
+
+    session_db = SessionLocal()
+    try:
+        # A. 计划数据（今日当前周期填报 + 历史最新物理提交时间）
+        plan_curr_sql = text(
+            """
+            SELECT
+                section_1_id,
+                COUNT(*) as rec_count,
+                SUM(COALESCE(plan_qty, 0)) as total_qty,
+                MAX(COALESCE(updated_at, filled_at)) as submitted_at,
+                MAX(COALESCE(updated_by, filled_by)) as submitted_by
+            FROM tube.tube_daily_plan
+            WHERE section_1_id = ANY(:section_ids)
+              AND plan_date = :plan_start_date
+            GROUP BY section_1_id
+            """
+        )
+        plan_curr_rows = {
+            r["section_1_id"]: r
+            for r in session_db.execute(plan_curr_sql, {"section_ids": target_section_ids, "plan_start_date": plan_start_date}).mappings().all()
+        }
+
+        plan_last_sql = text(
+            """
+            SELECT
+                section_1_id,
+                MAX(COALESCE(updated_at, filled_at)) as last_physical_at
+            FROM tube.tube_daily_plan
+            WHERE section_1_id = ANY(:section_ids)
+            GROUP BY section_1_id
+            """
+        )
+        plan_last_rows = {
+            r["section_1_id"]: r["last_physical_at"]
+            for r in session_db.execute(plan_last_sql, {"section_ids": target_section_ids}).mappings().all()
+        }
+
+        # B. 直管消耗（今日基准日填报 + 历史最新物理提交时间）
+        pipe_curr_sql = text(
+            """
+            SELECT
+                section_1_id,
+                COUNT(*) as rec_count,
+                SUM(COALESCE(usage_qty, 0)) as total_usage_qty,
+                SUM(COALESCE(loss_qty, 0)) as total_loss_qty,
+                MAX(COALESCE(updated_at, filled_at)) as submitted_at,
+                MAX(COALESCE(updated_by, filled_by)) as submitted_by
+            FROM tube.tube_daily_usage
+            WHERE section_1_id = ANY(:section_ids)
+              AND usage_date = :usage_date
+            GROUP BY section_1_id
+            """
+        )
+        pipe_curr_rows = {
+            r["section_1_id"]: r
+            for r in session_db.execute(pipe_curr_sql, {"section_ids": target_section_ids, "usage_date": usage_collection_date}).mappings().all()
+        }
+
+        pipe_last_sql = text(
+            """
+            SELECT
+                section_1_id,
+                MAX(COALESCE(updated_at, filled_at)) as last_physical_at
+            FROM tube.tube_daily_usage
+            WHERE section_1_id = ANY(:section_ids)
+            GROUP BY section_1_id
+            """
+        )
+        pipe_last_rows = {
+            r["section_1_id"]: r["last_physical_at"]
+            for r in session_db.execute(pipe_last_sql, {"section_ids": target_section_ids}).mappings().all()
+        }
+
+        # C. 管件使用量（今日基准日/今日自然日填报 + 历史最新物理提交时间）
+        fitting_curr_sql = text(
+            """
+            SELECT
+                section_1_id,
+                COUNT(*) as rec_count,
+                SUM(COALESCE(usage_qty, 0)) as total_qty,
+                MAX(COALESCE(updated_at, filled_at)) as submitted_at,
+                MAX(COALESCE(updated_by, filled_by)) as submitted_by
+            FROM tube.tube_fitting_daily_usage
+            WHERE section_1_id = ANY(:section_ids)
+              AND status = 'active'
+              AND (usage_date = :usage_date OR DATE(filled_at) = CURRENT_DATE)
+            GROUP BY section_1_id
+            """
+        )
+        fitting_curr_rows = {
+            r["section_1_id"]: r
+            for r in session_db.execute(fitting_curr_sql, {"section_ids": target_section_ids, "usage_date": usage_collection_date}).mappings().all()
+        }
+
+        fitting_last_sql = text(
+            """
+            SELECT
+                section_1_id,
+                MAX(COALESCE(updated_at, filled_at)) as last_physical_at
+            FROM tube.tube_fitting_daily_usage
+            WHERE section_1_id = ANY(:section_ids)
+              AND status = 'active'
+            GROUP BY section_1_id
+            """
+        )
+        fitting_last_rows = {
+            r["section_1_id"]: r["last_physical_at"]
+            for r in session_db.execute(fitting_last_sql, {"section_ids": target_section_ids}).mappings().all()
+        }
+
+        # D. 发货在途单据聚合（直管 + 管件）
+        now_dt = datetime.now()
+        del_pipe_sql = text(
+            """
+            SELECT
+                section_1_id,
+                status,
+                shipped_at,
+                arrived_confirm_at
+            FROM tube.tube_delivery
+            WHERE section_1_id = ANY(:section_ids)
+              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve')
+            """
+        )
+        del_pipe_rows = session_db.execute(del_pipe_sql, {"section_ids": target_section_ids}).mappings().all()
+
+        del_fit_sql = text(
+            """
+            SELECT
+                section_1_id,
+                status,
+                shipped_at,
+                arrived_confirm_at
+            FROM tube.tube_fitting_delivery
+            WHERE section_1_id = ANY(:section_ids)
+              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive')
+            """
+        )
+        del_fit_rows = session_db.execute(del_fit_sql, {"section_ids": target_section_ids}).mappings().all()
+
+    finally:
+        session_db.close()
+
+    # 处理发货单统计
+    sec_del_map: Dict[str, Dict[str, int]] = {
+        sid: {"pending_arrival": 0, "pending_receive": 0, "severe_delay": 0, "warning_delay": 0, "total": 0}
+        for sid in target_section_ids
+    }
+
+    for r in list(del_pipe_rows) + list(del_fit_rows):
+        sid = r["section_1_id"]
+        if sid not in sec_del_map:
+            continue
+        st = r["status"]
+        shipped_at = r["shipped_at"]
+        if shipped_at and shipped_at.tzinfo is not None:
+            shipped_at = shipped_at.replace(tzinfo=None)
+        elapsed = max(0, int((now_dt - shipped_at).total_seconds())) if shipped_at else 0
+
+        sec_del_map[sid]["total"] += 1
+        if st in ("pending_arrival", "shipped"):
+            sec_del_map[sid]["pending_arrival"] += 1
+        elif st in ("pending_receive", "arrived", "pending_diff_approve"):
+            sec_del_map[sid]["pending_receive"] += 1
+
+        if elapsed >= 172800:
+            sec_del_map[sid]["severe_delay"] += 1
+        elif elapsed >= 86400:
+            sec_del_map[sid]["warning_delay"] += 1
+
+    # 格式化日期辅助函数
+    def _fmt_dt(dt: Any) -> str:
+        if not dt:
+            return ""
+        if isinstance(dt, datetime):
+            return dt.strftime("%Y-%m-%d %H:%M")
+        return str(dt)[:16]
+
+    def _fmt_date_only(dt: Any) -> str:
+        if not dt:
+            return ""
+        if isinstance(dt, (datetime, date)):
+            return dt.strftime("%Y-%m-%d")
+        return str(dt)[:10]
+
+    sections_res: List[Dict[str, Any]] = []
+    plan_submitted_count = 0
+    pipe_usage_submitted_count = 0
+    fitting_usage_submitted_count = 0
+    all_completed_count = 0
+    total_pending_deliveries_sum = 0
+    severe_delay_deliveries_sum = 0
+
+    for s in target_sections:
+        sid = s["section_1_id"]
+        u_info = unit_map.get(sid, {})
+        m_info = manager_map.get(sid, {})
+
+        # 1. 计划维度
+        p_curr = plan_curr_rows.get(sid)
+        p_last_at = plan_last_rows.get(sid)
+        is_p_submitted = bool(p_curr and p_curr.get("rec_count", 0) > 0)
+        p_total_qty = float(p_curr.get("total_qty", 0) or 0) if p_curr else 0.0
+        p_sub_at = _fmt_dt(p_curr.get("submitted_at")) if p_curr else ""
+        p_sub_by = p_curr.get("submitted_by") or "" if p_curr else ""
+        p_last_sub_date = _fmt_date_only(p_last_at) if p_last_at else ""
+
+        if is_p_submitted:
+            plan_submitted_count += 1
+            p_status_text = f"✓ 已报送 ({p_sub_at[11:] or p_sub_at} · {p_total_qty:g}米)"
+        else:
+            p_status_text = f"⌛ 未报送 (上次: {p_last_sub_date})" if p_last_sub_date else "⌛ 从未报送"
+
+        # 2. 直管消耗维度
+        pipe_curr = pipe_curr_rows.get(sid)
+        pipe_last_at = pipe_last_rows.get(sid)
+        is_pipe_submitted = bool(pipe_curr and pipe_curr.get("rec_count", 0) > 0)
+        pipe_usage_qty = float(pipe_curr.get("total_usage_qty", 0) or 0) if pipe_curr else 0.0
+        pipe_loss_qty = float(pipe_curr.get("total_loss_qty", 0) or 0) if pipe_curr else 0.0
+        pipe_sub_at = _fmt_dt(pipe_curr.get("submitted_at")) if pipe_curr else ""
+        pipe_sub_by = pipe_curr.get("submitted_by") or "" if pipe_curr else ""
+        pipe_last_sub_date = _fmt_date_only(pipe_last_at) if pipe_last_at else ""
+
+        if is_pipe_submitted:
+            pipe_usage_submitted_count += 1
+            pipe_status_text = f"✓ 已填报 ({pipe_usage_qty:g}米" + (f"/损耗{pipe_loss_qty:g}米)" if pipe_loss_qty > 0 else ")")
+        else:
+            pipe_status_text = f"⌛ 未填报 (上次: {pipe_last_sub_date})" if pipe_last_sub_date else "⌛ 从未填报"
+
+        # 3. 管件消耗维度
+        fit_curr = fitting_curr_rows.get(sid)
+        fit_last_at = fitting_last_rows.get(sid)
+        is_fit_submitted = bool(fit_curr and fit_curr.get("rec_count", 0) > 0)
+        fit_total_qty = int(float(fit_curr.get("total_qty", 0) or 0)) if fit_curr else 0
+        fit_sub_at = _fmt_dt(fit_curr.get("submitted_at")) if fit_curr else ""
+        fit_sub_by = fit_curr.get("submitted_by") or "" if fit_curr else ""
+        fit_last_sub_date = _fmt_date_only(fit_last_at) if fit_last_at else ""
+
+        if is_fit_submitted:
+            fitting_usage_submitted_count += 1
+            fit_status_text = f"✓ 已填报 ({fit_total_qty}件)"
+        else:
+            fit_status_text = f"⌛ 未填报 (上次: {fit_last_sub_date})" if fit_last_sub_date else "⌛ 从未填报"
+
+        # 4. 发货在途维度
+        del_stat = sec_del_map.get(sid, {"pending_arrival": 0, "pending_receive": 0, "severe_delay": 0, "warning_delay": 0, "total": 0})
+        total_pending_deliveries_sum += del_stat["total"]
+        severe_delay_deliveries_sum += del_stat["severe_delay"]
+
+        # 综合判定
+        missing_items = []
+        if not is_p_submitted:
+            missing_items.append("三日计划")
+        if not is_pipe_submitted:
+            missing_items.append("直管消耗")
+        if not is_fit_submitted:
+            missing_items.append("管件用量")
+
+        if len(missing_items) == 0 and del_stat["severe_delay"] == 0:
+            overall_status = "all_completed"
+            overall_status_label = "🟢 全部完成"
+            all_completed_count += 1
+        elif len(missing_items) >= 2 or del_stat["severe_delay"] > 0:
+            overall_status = "severe_pending"
+            severe_tag = f" (滞留{del_stat['severe_delay']}笔)" if del_stat["severe_delay"] > 0 else ""
+            overall_status_label = f"🔴 待催办 ({len(missing_items)}项未交{severe_tag})"
+        else:
+            overall_status = "partially_pending"
+            overall_status_label = f"🟡 存在待办 ({missing_items[0]}未交)"
+
+        sections_res.append(
+            {
+                "section_1_id": sid,
+                "section_1_name": s["section_1_name"],
+                "region": s["region"],
+                "construction_unit_name": u_info.get("unit_name") or "未分配施工单位",
+                "contact_name": u_info.get("contact_name") or m_info.get("manager_name") or "负责人",
+                "contact_phone": u_info.get("contact_phone") or m_info.get("contact_phone") or "",
+                "plan": {
+                    "is_submitted": is_p_submitted,
+                    "submitted_at": p_sub_at,
+                    "submitted_by": p_sub_by,
+                    "total_qty": p_total_qty,
+                    "last_submitted_date": p_last_sub_date,
+                    "status_text": p_status_text,
+                },
+                "pipe_usage": {
+                    "is_submitted": is_pipe_submitted,
+                    "submitted_at": pipe_sub_at,
+                    "submitted_by": pipe_sub_by,
+                    "total_usage_qty": pipe_usage_qty,
+                    "total_loss_qty": pipe_loss_qty,
+                    "last_submitted_date": pipe_last_sub_date,
+                    "status_text": pipe_status_text,
+                },
+                "fitting_usage": {
+                    "is_submitted": is_fit_submitted,
+                    "submitted_at": fit_sub_at,
+                    "submitted_by": fit_sub_by,
+                    "total_qty": fit_total_qty,
+                    "last_submitted_date": fit_last_sub_date,
+                    "status_text": fit_status_text,
+                },
+                "deliveries": del_stat,
+                "overall_status": overall_status,
+                "overall_status_label": overall_status_label,
+                "missing_items": missing_items,
+            }
+        )
+
+    # 排序：优先按综合催办等级（红色重点催办 > 黄色待办 > 绿色全部完成），次级按标段排序
+    status_priority = {"severe_pending": 0, "partially_pending": 1, "all_completed": 2}
+    sections_res.sort(key=lambda x: (status_priority.get(x["overall_status"], 9), x["section_1_id"]))
+
+    return {
+        "ok": True,
+        "project_key": PROJECT_KEY,
+        "dates": {
+            "show_date": show_date.isoformat(),
+            "usage_collection_date": usage_collection_date.isoformat(),
+            "plan_start_date": plan_start_date.isoformat(),
+        },
+        "summary": {
+            "total_sections": len(target_sections),
+            "plan_submitted_count": plan_submitted_count,
+            "pipe_usage_submitted_count": pipe_usage_submitted_count,
+            "fitting_usage_submitted_count": fitting_usage_submitted_count,
+            "all_completed_count": all_completed_count,
+            "pending_sections_count": len(target_sections) - all_completed_count,
+            "total_pending_deliveries": total_pending_deliveries_sum,
+            "severe_delay_deliveries": severe_delay_deliveries_sum,
+        },
+        "sections": sections_res,
+    }
+
+
 def _ensure_demand_arrival_access(session: AuthSession) -> None:
     group = str(session.group or "").strip()
     if group not in {"Global_admin", "tube_site_manager"}:

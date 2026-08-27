@@ -1,3 +1,23 @@
+## 2026-08-27 现场需求管理全标段填报履约督办与历史物理提交日回溯大盘接口交付（workspace.py）
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 核心端点：`GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/governance-overview`
+- **实现机制与聚合逻辑**：
+  1. **多标段权限与组织责任主体对齐**：
+     - 调用 `resolve_accessible_section_1_ids` 获取当前登录用户管辖的标段；
+     - 自动关联 `demand_entities`、`construction_units` 与 `manager_assignments`，提取标段施工单位与现场负责人联系电话；
+  2. **多维度填报闭环监控与物理提交时间回溯**：
+     - **三日计划（`tube.tube_daily_plan`）**：查询 `plan_date = :plan_start_date` 是否已报送，未报送时回溯历史最新物理提交动作日期 `MAX(COALESCE(updated_at, filled_at))`；
+     - **直管消耗（`tube.tube_daily_usage`）**：查询 `usage_date = :usage_collection_date` 是否已填报，未填报时回溯历史最新物理提交动作日期 `MAX(COALESCE(updated_at, filled_at))`；
+     - **管件用量（`tube.tube_fitting_daily_usage`）**：查询基准日/今日自然日是否已填报有效记录（`status = 'active'`），未填报时回溯历史最新物理提交动作日期 `MAX(COALESCE(updated_at, filled_at))`；
+     - **在途单据（`tube.tube_delivery` / `tube.tube_fitting_delivery`）**：统计各标段在途发货单数量及严重超时滞留笔数；
+  3. **综合履约评级与排序**：
+     - `all_completed`（全部完成）：三日计划、直管消耗、管件用量均已填报且无严重滞留在途；
+     - `partially_pending`（存在待办）：缺交 1 项填报；
+     - `severe_pending`（重点催办）：缺交 >= 2 项填报或名下有严重超时滞留发货单；
+     - 排序默认重点催办优先展示。
+
 ## 2026-08-27 核心控制参数支持“超时自动施工接收小时数”动态配置与 -1 关闭功能交付（workspace.py / supply_management_service.py）
 
 - **服务模块与核心机制**：

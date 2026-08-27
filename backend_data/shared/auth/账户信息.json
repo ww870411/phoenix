@@ -167,12 +167,12 @@
       {
         "username": "李绍",
         "password": "lishao_0801",
-        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
+        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4"
       },
       {
         "username": "张亮",
         "password": "zhangliang_0805",
-        "unit": "high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
+        "unit": "low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6"
       },
       {
         "username": "陶远辉",

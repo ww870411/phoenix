@@ -474,6 +474,17 @@ export async function getTubeDemandManagementPendingDeliveriesSummary(projectKey
   return response.json()
 }
 
+export async function getTubeDemandManagementGovernanceOverview(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/governance-overview`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取全标段每日填报履约大盘失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function confirmTubeDemandManagementDeliveryArrival(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/arrival`, {
     method: 'POST',

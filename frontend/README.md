@@ -1,3 +1,17 @@
+## 2026-08-27 现场需求管理（DemandManagementView.vue）各标段填报履约督办清单 xlsx-js-style 原生 .xlsx 导出交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+- **功能特性与导出引擎**：
+  1. **双 Tab 动态导出**：弹窗顶栏【📥 导出 EXCEL 表】根据当前选中的 Tab 自动分流：
+     - 在“各标段填报履约督办”Tab 时：触发 `exportGovernanceExcel()`；
+     - 在“全标段发货单据督办”Tab 时：触发 `exportPendingSummaryExcel()`；
+  2. **高规格视觉排版与延误标色**：
+     - 基于 `xlsx-js-style` 生成标准 `.xlsx` 格式；
+     - 大标题行跨 16 列合并、摘要统计行跨 16 列合并、深蓝微软雅黑表头、全表细边框与斑马纹；
+     - 未报送/未填报（浅黄底橙字）、已报送/已填报（浅绿底翠绿字）、严重滞留在途（淡红底深红字）等状态智能高亮标色；
+     - 16 列列宽自适应适配。
+
 ## 2026-08-27 现场需求管理（DemandManagementView.vue）发货督办清单全面升级为 xlsx-js-style 原生 .xlsx 导出交付
 
 - **关联前端页面与服务**：

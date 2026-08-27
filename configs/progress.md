@@ -1,3 +1,84 @@
+## 2026-08-27 [现场需求管理（demand_management）各标段填报履约督办清单 xlsx-js-style 原生 .xlsx 导出功能交付]
+- **需求与业务背景**：
+  - 用户指示：““📋各标段填报履约督办”也帮我做一个导出excel表的功能，类似于发货单督办那里的表导出”；
+  - 基于 `xlsx-js-style` 构建原生标准 OpenXML `.xlsx` 工作簿，对齐发货单督办表高规格视觉与预警标色。
+- **改动与实现详情**：
+  1. **前端导出逻辑与交互联动**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 弹窗 Header 右侧【📥 导出 EXCEL 表】按钮全面支持双 Tab 联动：
+       - 当处于【📋 各标段填报履约督办】Tab 时，点击自动触发 `exportGovernanceExcel()`；
+       - 当处于【🚚 全标段发货单据督办】Tab 时，点击自动触发 `exportPendingSummaryExcel()`；
+  2. **高规格精细化 Excel 格式构建**：
+     - **行 1 大标题**：跨 16 列合并居中，`#F1F5F9` 浅灰蓝底 + 15pt 微软雅黑加粗字体；
+     - **行 2 统计摘要**：跨 16 列合并，记录导出时间、管辖标段总数、全部闭环数、待催办标段数及计划/采集基准日；
+     - **行 3 深蓝表头**：`#2563EB` 经典深蓝背景 + 白色微软雅黑 10.5pt 加粗；
+     - **数据行排版与智能预警标色**：
+       - 未报送/未填报单元格：浅黄底（`#FEF3C7`）+ 橙褐加粗字（`#92400E`）；
+       - 已报送/已填报单元格：浅绿底（`#ECFDF5`）+ 翠绿加粗字（`#047857`）；
+       - 滞留超期笔数 > 0 单元格：淡红底（`#FEE2E2`）+ 深红加粗字（`#991B1B`）；
+       - 数值列右对齐，直管米数深蓝/深绿展示，管件件数紫色展示；
+     - **全表统一样式**：统一细边框（`#CBD5E1`）、交替浅灰斑马纹行（`#F8FAFC`）、16 列自适应列宽配置。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 18.97s），零报错。
+- **需求与业务背景**：
+  - 用户指示：“施工单位 / 现场责任人 字段取消，“综合履约状态”字段取消。然后好好整理一下排版，有好多串行的”；
+  - 彻底精简督办表冗余列，针对单元格各行元素进行像素级 `white-space: nowrap !important` 规整，杜绝任何换行错位和断行。
+- **改动与实现详情**：
+  1. **表格列精简与聚焦**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 彻底剔除【施工单位 / 现场责任人】与【综合履约状态】两列，将空间全力释放给关键业务指标；
+     - 搜索框占位符更新为 `搜索标段名称 / 供暖辖区...`；
+  2. **高规格零串行（No-Wrap）结构重构**：
+     - **标段列**：`📍 标段名称` + `辖区徽章` 单行并列；
+     - **三日计划 / 直管消耗 / 管件使用 / 在途发货**：
+       - 上行：规范高度的加粗状态胶囊（`[ ✓ 今日已报送 ]` / `[ ⌛ 今日未报送 ]` / `[ 🚚 在途 X 笔 ]` / `[ ✓ 无在途发货 ]`）；
+       - 下行：业务量与物理提交日（`报送量: 120.5 米` / `上次报送: 2026-08-25` / `从未报送` / `消耗: 85.0 米 (损耗 2.0米)` / `待到货 X / 待接收 Y`），整齐单行对齐；
+     - **操作列**：`[ 🚀 切到该标段 ➔ ]` 按钮单行居中；
+     - 全表单元格统一应用 `white-space: nowrap !important` 与防截断机制。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 16.01s），零报错。
+- **问题与反馈修复**：
+  - 用户反馈：“怎么回事，还是Internal Server Error，NameError: name 'auto_process_timeout_deliveries' is not defined”；
+  - 准确定位根因并彻底修复：在 `get_demand_management_governance_overview` 中增加了安全导入机制，并增加了自动化测试用例覆盖。
+- **改动与实现详情**：
+  1. **填报督办接口 500 报错根因与修复**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 修复函数导入：显式安全导入 `from backend.projects.insulation_pipe_supply_2026.services.supply_management_service import auto_process_timeout_deliveries`，彻底根除 `NameError`；
+     - 修复管件使用量底表表名：原错误的 `tube.tube_fitting_usage` 更正为真实的 `tube.tube_fitting_daily_usage`；
+     - 修复有效状态与字段：更正为 `status = 'active'`（非 `is_cancelled = false`），提交时间取 `MAX(COALESCE(updated_at, filled_at))`；
+     - 显式引入 `_ensure_demand_table_structures` 与 `_ensure_fitting_usage_table_structures` 自愈机制，杜绝任何未建表导致的 500 异常。
+  2. **发货单督办页与全屏弹窗排版恢复与精细化重构**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - **Header 结构还原**：将强行塞入 Header 中间的 Tab 拆出，恢复 Header 左侧大标题+待办徽标、右侧刷新/导出/关闭的纯净两端对齐排版；
+     - **独立专属双 Tab 导航栏**：在 Header 下方新增 `.pending-modal-nav-bar`，支持 `[ 📋 各标段填报履约督办 ]` 与 `[ 🚚 全标段发货单据督办 ]` 平滑切换；
+     - **发货单督办页 100% 原版还原**：完全恢复 `.clean-table-scroll-wrap.pc-only-table`、`.mobile-only-cards-grid` 以及原版所有的 class 命名，彻底根除排版错位与断行问题。
+  3. **单元测试与自动化验证**（[test_config_service_dates.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)）：
+     - 新增 `GovernanceOverviewEndpointTest`，直接对 `get_demand_management_governance_overview` 接口做全流程调用断言，确保 100% 正常运行。
+- **验证结果**：
+  - 后端单元测试通过（`pytest backend/projects/insulation_pipe_supply_2026/tests` 19 passed in 3.40s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 16.67s），控制台零报错。
+- **需求与业务背景**：
+  - 用户反馈：“其实我在考虑，这个督办清单，仅仅体现是否确认了发货单吗？是不是应该增加例如是否报送了保温管三日计划，是否完成了保温管、管件的使用量填报？这样一来，管理员，尤其是管理者多个标段的管理员，就能够更好地掌握情况，从而实施线下管理了吧？”
+  - 用户进一步明确指示：“我觉得你说的方案可行，就用两个标签页吧，维度也正确。但是增加一点考虑，那就是如果该标段没有提交某个维度，那么，要同时提示出上一次的提交是哪一日（是指提交日，而非数据采集日），行吗？那就做吧，注意新标签页的排版”；
+  - 将现场管理工作台原有的发货单督办弹窗全面升级为“全标段现场综合督办中心”，采用双 Tab 架构，覆盖标段填报履约与在途物资流转全景。
+- **改动与实现详情**：
+  1. **后端综合督办与物理提交日回溯大盘接口**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 新增 `GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/governance-overview` 端点；
+     - 自动结合当前登录用户管辖标段，多表并发聚合：
+       - **三日滚动需求计划**（`tube.tube_daily_plan`）：查询目标起始日 `plan_start_date` 是否已报送及数量，未报送时回溯历史最新物理提交日期 `MAX(COALESCE(updated_at, filled_at))`；
+       - **保温直管施工消耗**（`tube.tube_daily_usage`）：查询消耗基准日 `usage_collection_date` 是否已填报及消耗/损耗量，未填报时回溯历史最新物理提交日期 `MAX(COALESCE(updated_at, filled_at))`；
+       - **管件施工使用量**（`tube.tube_fitting_usage`）：查询基准日/今日自然日是否已填报有效使用量，未填报时回溯历史最新物理提交日期 `MAX(created_at)`；
+       - **在途发货单据汇总**（`tube.tube_delivery` / `tube.tube_fitting_delivery`）：汇总各标段待到货、待施工接收及严重超时滞留笔数；
+       - **责任主体绑定**：自动关联所属施工单位、现场负责人姓名与联系电话；
+       - **综合履约状态评定**：自动按 `severe_pending`（重点催办）、`partially_pending`（存在待办）、`all_completed`（全部闭环）分级排序。
+  2. **前端双 Tab 综合督办看板设计与高规格排版**（[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）：
+     - 顶栏入口按钮升级为“📋 全标段现场综合督办中心”，实时展示待催办标段数与待办单据徽标；
+     - 弹窗顶部引入双 Tab 切换导航：
+       - **Tab 1: 📋 各标段填报履约督办**（顶部 4 大 KPI 仪表盘 + 状态胶囊筛选 + 搜索框 + PC 宽表与手机响应式卡片 + 物理提交日提示 + 一键复制电话 + 一键切换标段）；
+       - **Tab 2: 🚚 全标段发货单据督办**（既有的车次合并/单据明细、双重超时标色、时光轴详情、原生 `.xlsx` 导出）；
+     - 未报送/未填报时统一展示 `⌛ 未报送 (上次: YYYY-MM-DD)` 或 `(从未报送)`，满足督办回溯要求。
+  3. **前端 API 服务接入**（[api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)）：
+     - 新增 `getTubeDemandManagementGovernanceOverview` 接口封装。
+- **验证结果**：
+  - 后端测试通过（`pytest backend/projects/insulation_pipe_supply_2026/tests` 18 passed in 2.55s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.98s），无任何语法报错。
+
 ## 2026-08-27 [现场需求管理（demand_management）全标段发货督办清单全面升级为 xlsx-js-style 原生 .xlsx 格式交付]
 - **需求与业务背景**：
   - 用户反馈：“这个督办页面，导出的excel文件格式是？”并在了解后明确指示：“没错，改吧”；
