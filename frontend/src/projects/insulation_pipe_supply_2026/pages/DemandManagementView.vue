@@ -3130,7 +3130,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
@@ -3478,188 +3478,201 @@ function exportPendingSummaryExcel() {
     ? `按车次合并模式 (共 ${rows.length} 车次 / 汇总 ${pendingSummaryRows.value.length} 笔单据)`
     : `单据明细模式 (共 ${rows.length} 笔单据)`
 
-  // 1. 构建格式化 HTML 表格 (支持 Excel/WPS 原生解析背景色、粗体、列宽与边框)
-  let tableHtml = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-      <!--[if gte mso 9]>
-      <xml>
-        <x:ExcelWorkbook>
-          <x:ExcelWorksheets>
-            <x:ExcelWorksheet>
-              <x:Name>全标段在途与待确认发货单</x:Name>
-              <x:WorksheetOptions>
-                <x:DisplayGridlines/>
-              </x:WorksheetOptions>
-            </x:ExcelWorksheet>
-          </x:ExcelWorksheets>
-        </x:ExcelWorkbook>
-      </xml>
-      <![endif]-->
-      <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
-      <style>
-        .title-cell { background-color: #f1f5f9; font-size: 15pt; font-weight: bold; height: 38px; text-align: center; border: 1px solid #cbd5e1; }
-        .meta-cell { background-color: #f8fafc; font-size: 9.5pt; color: #475569; height: 24px; border: 1px solid #cbd5e1; }
-        .th-cell { background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 10.5pt; height: 32px; text-align: center; border: 1px solid #cbd5e1; white-space: nowrap; }
-        .data-cell { font-size: 10pt; height: 26px; border: 1px solid #e2e8f0; }
-        .center { text-align: center; }
-        .right { text-align: right; }
-        .left { text-align: left; }
-        .font-mono { font-family: Consolas, monospace; }
-        .severe-delay { background-color: #fee2e2; color: #991b1b; font-weight: bold; }
-        .warning-delay { background-color: #fef3c7; color: #92400e; }
-        .zebra { background-color: #f8fafc; }
-        .bold-qty { font-weight: bold; color: #1d4ed8; }
-      </style>
-    </head>
-    <body>
-      <table border="1" cellspacing="0" cellpadding="4" style="border-collapse: collapse;">
-        <!-- 大标题行 -->
-        <tr>
-          <td colspan="23" class="title-cell">全标段发货督办清单</td>
-        </tr>
-        <!-- 统计摘要行 -->
-        <tr>
-          <td colspan="23" class="meta-cell">
-            导出时间：${exportTime} &nbsp;|&nbsp; 模式：${modeText} &nbsp;|&nbsp; 
-            在途直管：${summaryAggregates.value.totalPipeMeters} 米 &nbsp;|&nbsp; 
-            在途管件：${summaryAggregates.value.totalFittingCount} 件
-          </td>
-        </tr>
-        <!-- 表头行 -->
-        <thead>
-          <tr>
-            <th class="th-cell" style="width: 50px;">序号</th>
-            <th class="th-cell" style="width: 80px;">物料品类</th>
-            <th class="th-cell" style="width: 100px;">当前状态</th>
-            <th class="th-cell" style="width: 110px;">需求标段</th>
-            <th class="th-cell" style="width: 140px;">订单号</th>
-            <th class="th-cell" style="width: 110px;">运输车次号</th>
-            <th class="th-cell" style="width: 100px;">车牌号</th>
-            <th class="th-cell" style="width: 140px;">供给厂家</th>
-            <th class="th-cell" style="width: 200px;">规格型号 / 物料描述</th>
-            <th class="th-cell" style="width: 90px;">发货数量</th>
-            <th class="th-cell" style="width: 60px;">单位</th>
-            <th class="th-cell" style="width: 140px;">发货时间</th>
-            <th class="th-cell" style="width: 110px;">在途时长</th>
-            <th class="th-cell" style="width: 110px;">操作等待时长</th>
-            <th class="th-cell" style="width: 90px;">发货人</th>
-            <th class="th-cell" style="width: 120px;">联系电话</th>
-            <th class="th-cell" style="width: 140px;">发货备注</th>
-            <th class="th-cell" style="width: 140px;">现场到货时间</th>
-            <th class="th-cell" style="width: 90px;">到货确认人</th>
-            <th class="th-cell" style="width: 140px;">到货备注说明</th>
-            <th class="th-cell" style="width: 140px;">施工接收时间</th>
-            <th class="th-cell" style="width: 90px;">施工接收人</th>
-            <th class="th-cell" style="width: 140px;">施工接收备注</th>
-          </tr>
-        </thead>
-        <tbody>
-  `
+  // 1. 构建数据行（含大标题行、摘要行、表头行）
+  const titleRow = ['全标段发货督办清单', ...Array(22).fill('')]
+  const metaRow = [
+    `导出时间：${exportTime}  |  导出模式：${modeText}  |  待办单据：${rows.length} 笔  |  在途直管：${summaryAggregates.value.totalPipeMeters} 米  |  在途管件：${summaryAggregates.value.totalFittingCount} 件`,
+    ...Array(22).fill('')
+  ]
+  const headers = [
+    '序号', '物料品类', '当前状态', '需求标段', '订单号', '运输车次号', '车牌号',
+    '供给厂家', '规格型号 / 物料描述', '发货数量', '单位', '发货时间', '在途时长', '操作等待时长',
+    '发货负责人', '联系电话', '发货备注', '现场到货时间', '到货确认人', '到货备注说明',
+    '施工接收时间', '施工接收人', '施工接收备注'
+  ]
 
-  rows.forEach((r, idx) => {
-    const isSevere = r.is_severe_delay
-    const isWarning = r.is_warning_delay && !r.is_severe_delay
-    const delayClass = isSevere ? 'severe-delay' : (isWarning ? 'warning-delay' : '')
+  const dataRows = rows.map((r, idx) => [
+    idx + 1,
+    r.category_label || (r.category === 'pipe' ? '保温直管' : '管件'),
+    r.status_label || r.status,
+    r.section_1_name || r.section_1_id,
+    r.order_no || r.delivery_code || '',
+    r.shipment_no || '—',
+    r.vehicle_plate_no || '—',
+    r.supply_entity_name || r.supply_entity_id,
+    r.material_name || r.pipe_model_name || '',
+    r.shipped_qty != null ? r.shipped_qty : '',
+    r.unit || '',
+    r.shipped_at ? formatDateTimeDisplay(r.shipped_at) : '',
+    r.elapsed_display || '',
+    r.unconfirmed_elapsed_display || r.elapsed_display || '',
+    r.ship_contact_name || '',
+    r.ship_contact_phone || '',
+    r.ship_remark || '',
+    r.arrived_confirm_at ? formatDateTimeDisplay(r.arrived_confirm_at) : '',
+    r.arrived_confirm_by || '',
+    r.arrived_remark || '',
+    r.received_confirm_at ? formatDateTimeDisplay(r.received_confirm_at) : '',
+    r.received_confirm_by || '',
+    r.received_remark || ''
+  ])
 
-    const isUnconfSevere = r.is_unconfirmed_severe
-    const isUnconfWarning = r.is_unconfirmed_warning && !r.is_unconfirmed_severe
-    const unconfDelayClass = isUnconfSevere ? 'severe-delay' : (isUnconfWarning ? 'warning-delay' : '')
+  const wsData = [titleRow, metaRow, headers, ...dataRows]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
 
-    const zebraClass = idx % 2 === 1 ? 'zebra' : ''
+  // 2. 合并大标题与摘要栏
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 22 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 22 } }
+  ]
 
-    tableHtml += `
-      <tr class="${zebraClass}">
-        <td class="data-cell center">${idx + 1}</td>
-        <td class="data-cell center">${r.category_label || (r.category === 'pipe' ? '保温直管' : '管件')}</td>
-        <td class="data-cell center">${r.status_label || r.status}</td>
-        <td class="data-cell left"><b>${r.section_1_name || r.section_1_id}</b></td>
-        <td class="data-cell center font-mono">${r.order_no || r.delivery_code || ''}</td>
-        <td class="data-cell center font-mono">${r.shipment_no || '—'}</td>
-        <td class="data-cell center font-mono"><b>${r.vehicle_plate_no || '—'}</b></td>
-        <td class="data-cell left">${r.supply_entity_name || r.supply_entity_id}</td>
-        <td class="data-cell left"><b>${r.material_name || r.pipe_model_name || ''}</b></td>
-        <td class="data-cell right bold-qty">${r.shipped_qty != null ? r.shipped_qty : ''}</td>
-        <td class="data-cell center">${r.unit || ''}</td>
-        <td class="data-cell center">${r.shipped_at ? formatDateTimeDisplay(r.shipped_at) : ''}</td>
-        <td class="data-cell center ${delayClass}">${r.elapsed_display || ''}</td>
-        <td class="data-cell center ${unconfDelayClass}">${r.unconfirmed_elapsed_display || r.elapsed_display || ''}</td>
-        <td class="data-cell center">${r.ship_contact_name || ''}</td>
-        <td class="data-cell center font-mono">${r.ship_contact_phone || ''}</td>
-        <td class="data-cell left">${r.ship_remark || ''}</td>
-        <td class="data-cell center">${r.arrived_confirm_at ? formatDateTimeDisplay(r.arrived_confirm_at) : ''}</td>
-        <td class="data-cell center">${r.arrived_confirm_by || ''}</td>
-        <td class="data-cell left">${r.arrived_remark || ''}</td>
-        <td class="data-cell center">${r.received_confirm_at ? formatDateTimeDisplay(r.received_confirm_at) : ''}</td>
-        <td class="data-cell center">${r.received_confirm_by || ''}</td>
-        <td class="data-cell left">${r.received_remark || ''}</td>
-      </tr>
-    `
-  })
+  // 3. 列宽自适应
+  ws['!cols'] = [
+    { wch: 6 },  // 序号
+    { wch: 10 }, // 物料品类
+    { wch: 12 }, // 当前状态
+    { wch: 16 }, // 需求标段
+    { wch: 18 }, // 订单号
+    { wch: 14 }, // 运输车次号
+    { wch: 12 }, // 车牌号
+    { wch: 20 }, // 供给厂家
+    { wch: 28 }, // 规格型号 / 物料描述
+    { wch: 12 }, // 发货数量
+    { wch: 6 },  // 单位
+    { wch: 18 }, // 发货时间
+    { wch: 14 }, // 在途时长
+    { wch: 14 }, // 操作等待时长
+    { wch: 10 }, // 发货负责人
+    { wch: 14 }, // 联系电话
+    { wch: 18 }, // 发货备注
+    { wch: 18 }, // 现场到货时间
+    { wch: 10 }, // 到货确认人
+    { wch: 18 }, // 到货备注说明
+    { wch: 18 }, // 施工接收时间
+    { wch: 10 }, // 施工接收人
+    { wch: 18 }  // 施工接收备注
+  ]
 
-  tableHtml += `
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
+  // 4. 行高
+  ws['!rows'] = [
+    { hpx: 36 }, // 大标题
+    { hpx: 24 }, // 摘要栏
+    { hpx: 28 }, // 表头
+  ]
 
-  // 2. 将 HTML 组装为 Excel Blob 进行标准导出 (全版本完美支持排版样式)
+  // 5. 边框统一样式
+  const thinBorder = {
+    top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+  }
+
+  // 6. 遍历单元格赋予专业排版与延误标色
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:W4')
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' }
+
+      if (R === 0) {
+        // 大标题行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 15, bold: true, color: { rgb: '0F172A' } },
+          fill: { fgColor: { rgb: 'F1F5F9' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: thinBorder
+        }
+      } else if (R === 1) {
+        // 摘要统计行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 9.5, color: { rgb: '475569' } },
+          fill: { fgColor: { rgb: 'F8FAFC' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: thinBorder
+        }
+      } else if (R === 2) {
+        // 深蓝表头行
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 10.5, bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '2563EB' } },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+          border: thinBorder
+        }
+      } else {
+        // 数据行 (R >= 3, 对应 rows[R - 3])
+        const dataIndex = R - 3
+        const rData = rows[dataIndex] || {}
+        const isZebra = dataIndex % 2 === 1
+        const bgRgb = isZebra ? 'F8FAFC' : 'FFFFFF'
+
+        // 默认数据单元格样式
+        const cellStyle = {
+          font: { name: 'Microsoft YaHei', sz: 10, color: { rgb: '334155' } },
+          fill: { fgColor: { rgb: bgRgb } },
+          alignment: { vertical: 'center' },
+          border: thinBorder
+        }
+
+        // 按列细化对齐与强调
+        if (C === 0 || C === 1 || C === 2 || C === 10) {
+          // 序号, 品类, 状态, 单位
+          cellStyle.alignment.horizontal = 'center'
+        } else if (C === 3 || C === 8) {
+          // 标段, 物料描述 (加粗)
+          cellStyle.alignment.horizontal = 'left'
+          cellStyle.font.bold = true
+        } else if (C === 4 || C === 5 || C === 6 || C === 11 || C === 14 || C === 15 || C === 17 || C === 18 || C === 20 || C === 21) {
+          // 单号, 车次, 车牌, 时间, 人员, 电话
+          cellStyle.alignment.horizontal = 'center'
+          if (C === 6) cellStyle.font.bold = true
+        } else if (C === 9) {
+          // 发货数量 (居右加粗深蓝)
+          cellStyle.alignment.horizontal = 'right'
+          cellStyle.font.bold = true
+          cellStyle.font.color = { rgb: '1D4ED8' }
+        } else if (C === 12) {
+          // 在途时长延误标色
+          cellStyle.alignment.horizontal = 'center'
+          if (rData.is_severe_delay) {
+            cellStyle.fill = { fgColor: { rgb: 'FEE2E2' } }
+            cellStyle.font.color = { rgb: '991B1B' }
+            cellStyle.font.bold = true
+          } else if (rData.is_warning_delay) {
+            cellStyle.fill = { fgColor: { rgb: 'FEF3C7' } }
+            cellStyle.font.color = { rgb: '92400E' }
+            cellStyle.font.bold = true
+          }
+        } else if (C === 13) {
+          // 操作等待时长延误标色
+          cellStyle.alignment.horizontal = 'center'
+          if (rData.is_unconfirmed_severe) {
+            cellStyle.fill = { fgColor: { rgb: 'FEE2E2' } }
+            cellStyle.font.color = { rgb: '991B1B' }
+            cellStyle.font.bold = true
+          } else if (rData.is_unconfirmed_warning) {
+            cellStyle.fill = { fgColor: { rgb: 'FEF3C7' } }
+            cellStyle.font.color = { rgb: '92400E' }
+            cellStyle.font.bold = true
+          }
+        } else {
+          cellStyle.alignment.horizontal = 'left'
+        }
+
+        ws[cellRef].s = cellStyle
+      }
+    }
+  }
+
+  // 7. 输出标准 .xlsx 文件
   try {
-    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `全标段发货督办清单_${todayStr}.xls`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格！')
-  } catch (err) {
-    // 降级使用 SheetJS 导出
-    const headers = [
-      '序号', '物料品类', '单据状态', '需求主体(标段)', '订单号', '运输车次号', '车牌号',
-      '供给厂家', '规格型号/物料描述', '发货数量', '计量单位', '发货时间', '在途时长', '操作等待时长',
-      '发货负责人', '发货联系电话', '发货备注', '现场到货时间', '到货确认人', '到货备注说明',
-      '施工接收时间', '施工接收人', '施工接收备注说明'
-    ]
-    const dataRows = rows.map((r, idx) => [
-      idx + 1,
-      r.category_label || (r.category === 'pipe' ? '保温直管' : '管件'),
-      r.status_label || r.status,
-      r.section_1_name || r.section_1_id,
-      r.order_no || r.delivery_code || '',
-      r.shipment_no || '',
-      r.vehicle_plate_no || '',
-      r.supply_entity_name || r.supply_entity_id,
-      r.material_name || r.pipe_model_name || '',
-      r.shipped_qty != null ? r.shipped_qty : '',
-      r.unit || '',
-      r.shipped_at ? formatDateTimeDisplay(r.shipped_at) : '',
-      r.elapsed_display || '',
-      r.unconfirmed_elapsed_display || r.elapsed_display || '',
-      r.ship_contact_name || '',
-      r.ship_contact_phone || '',
-      r.ship_remark || '',
-      r.arrived_confirm_at ? formatDateTimeDisplay(r.arrived_confirm_at) : '',
-      r.arrived_confirm_by || '',
-      r.arrived_remark || '',
-      r.received_confirm_at ? formatDateTimeDisplay(r.received_confirm_at) : '',
-      r.received_confirm_by || '',
-      r.received_remark || ''
-    ])
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
-    ws['!cols'] = [
-      { wch: 6 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
-      { wch: 20 }, { wch: 26 }, { wch: 12 }, { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
-      { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 16 },
-      { wch: 18 }, { wch: 10 }, { wch: 16 }
-    ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '全标段发货督办清单')
     XLSX.writeFile(wb, `全标段发货督办清单_${todayStr}.xlsx`)
-    setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格！')
+    setActionMessage('success', '已成功导出全标段发货督办清单 Excel 表格（.xlsx 原生格式）！')
+  } catch (error) {
+    console.error('导出 Excel 失败:', error)
+    setActionMessage('error', `导出 Excel 失败: ${error?.message || '未知错误'}`)
   }
 }
 

@@ -5,6 +5,8 @@
   "weather_provider": "amap",
   "auto_update_plan_start_date": "all",
   "plan_editable_days": 3,
+  "auto_receive_timeout_hours": 12,
+  "strict_planning_flow_control": true,
   "big_screen_config": {
     "animation_active_duration_sec": 5,
     "animation_rest_duration_sec": 5,

@@ -1,3 +1,11 @@
+## 2026-08-27 现场需求管理（DemandManagementView.vue）发货督办清单全面升级为 xlsx-js-style 原生 .xlsx 导出交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`（现场管理工作台 - 需求侧）
+- **格式与排版重构**：
+  1. **原生 OpenXML 格式**：基于 `xlsx-js-style` 生成标准 `.xlsx` 二进制工作簿，彻底根除打开时的警告提示；
+  2. **高规格视觉还原**：大标题跨列居中合并、深蓝表头、全表细边框、斑马纹行交替底色、在途时长与操作等待时长双重延误标色（粉红严重滞留/浅黄关注预警）、列宽自适应适配。
+
 ## 2026-08-27 全局管理（GlobalManagementView.vue）核心控制参数新增“超时自动施工接收小时数”配置交付
 
 - **关联前端页面与服务**：
