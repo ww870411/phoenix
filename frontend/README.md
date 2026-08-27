@@ -1,3 +1,12 @@
+## 2026-08-27 全局管理（GlobalManagementView.vue）核心控制参数新增“超时自动施工接收小时数”配置交付
+
+- **关联前端页面与服务**：
+  - `frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`（全局管理控制台）
+- **交互与表单增强**：
+  1. **核心控制参数表单**：在 Tab 1 新增 `auto_receive_timeout_hours` 输入控件（支持任意正数或小数，默认 12）；
+  2. **关闭保护**：设定为 `-1` 时，明确标注为关闭自动强制接收功能；
+  3. **一键落盘**：点击【💾 保存核心参数】即可持久化至系统配置。
+
 ## 2026-08-27 现场需求管理（DemandManagementView.vue）功能入口与弹窗标题统一更名为“全标段发货督办清单”交付
 
 - **关联前端页面与服务**：

@@ -1,3 +1,43 @@
+## 2026-08-27 [全局管理（Global Management）核心控制参数新增“超时自动施工接收小时数”动态配置与 -1 关闭开关交付]
+- **需求与业务背景**：
+  - 用户反馈：“关于两者的超时自动“施工接收”小时数，我希望能够在全局管理页面的“ 核心控制参数”中设定，设定为-1则表示关闭自动功能”；
+  - 提供现场可随时调整的全局超时自动接收阈值，支持任意小时数配置或彻底关闭，赋予业务管理员最大灵活性。
+- **改动与实现详情**：
+  1. **全局管理页面表单与响应式控制**（[GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)）：
+     - 在“⚙️ 核心控制参数”卡片中新增 `auto_receive_timeout_hours`（超时自动施工接收小时数）输入项（默认 12，设定为 -1 则关闭）；
+     - `applyConfig` 自动加载回填，`saveCoreDatesSection` 一键保存落盘至全局配置文件；
+  2. **后端配置存储与校验白名单**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 在 `_save_config_section` 允许白名单中加入 `"auto_receive_timeout_hours"`，支持浮点与整数安全保存；
+  3. **直管与管件双流转动态超时判定**（[supply_management_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py)、[fitting_delivery_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)）：
+     - 动态读取配置 `auto_receive_timeout_hours`（默认 12 小时）；
+     - 当配置值 `< 0`（如 `-1`）时，**直接退出跳过流转，彻底关闭超时自动接收功能**；
+     - 当配置值 `>= 0` 时，动态采用指定的超时小时数执行自动状态推进与备注留痕。
+- **验证结果**：
+  - 后端单元测试（`pytest backend/projects/insulation_pipe_supply_2026/tests`）18 项全部通过（18 passed in 2.67s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 15.03s），控制台零报错。
+
+## 2026-08-27 [管件发货流转（tube_fitting_delivery）新增12小时未施工接收自动强制接收与状态推进交付]
+- **需求与业务背景**：
+  - 用户确认并指示：“那么管件也增加这项功能吧”；
+  - 将保温直管既有的“超出12小时未进行施工接收由系统自动强制确认为到货量并流转至待入库”规则对齐扩展到管件物资（`tube.tube_fitting_delivery`），实现直管与管件流转规则全链路一致性。
+- **改动与实现详情**：
+  1. **管件表自愈结构补齐**（[fitting_delivery_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)）：
+     - 自动执行 `ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN DEFAULT FALSE`；
+  2. **管件超时强制接收服务**（[supply_management_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py)、[fitting_delivery_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)）：
+     - 触发条件：管件单据处于 `pending_receive` 状态，且 `arrived_confirm_at < NOW() - INTERVAL '12 hours'`；
+     - 强制流转：
+       - `status = 'pending_warehouse'`（推进为施工已接收 / 待入库）；
+       - `arrived_qty = COALESCE(arrived_qty, shipped_qty)`；
+       - `received_confirm_by = 'SYSTEM_TIMEOUT'`；
+       - `received_confirm_at = arrived_confirm_at + INTERVAL '12 hours'`；
+       - `received_remark = '🕒 [系统超时确认] 超出12小时未接收，系统强制确认为到货量。'`；
+       - `is_timeout_receive = TRUE`；
+  3. **各入口无死角自动流转触发**：
+     - 在 `auto_process_timeout_deliveries()`（供给侧总览）、`auto_process_timeout_fitting_deliveries()`（管件发货查询列表）、`get_demand_management_pending_deliveries_summary`（全标段发货督办清单）入口均自动执行流转。
+- **验证结果**：
+  - 后端单元测试（`pytest backend/projects/insulation_pipe_supply_2026/tests`）18 项全部通过（18 passed in 2.92s）；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 15.51s），控制台零报错。
+
 ## 2026-08-27 [现场需求管理（demand_management）按钮与弹窗主标题统一变更为“全标段发货督办清单”交付]
 - **需求与业务背景**：
   - 用户反馈：“按钮及弹窗标题均改为“全标段发货督办清单””；

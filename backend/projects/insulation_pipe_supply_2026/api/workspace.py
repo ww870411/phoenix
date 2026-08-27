@@ -809,6 +809,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "auto_update_plan_start_date",
         "plan_editable_days",
         "strict_planning_flow_control",
+        "auto_receive_timeout_hours",
         "fitting_config",
         "supply_entities",
         "demand_entities",
@@ -845,6 +846,12 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             raise HTTPException(status_code=422, detail="auto_update_plan_start_date 仅支持 false、true 或 all")
     elif normalized_section == "strict_planning_flow_control":
         payload[normalized_section] = bool(data)
+    elif normalized_section == "auto_receive_timeout_hours":
+        try:
+            val = float(data)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=f"auto_receive_timeout_hours 非法：{data}") from exc
+        payload[normalized_section] = int(val) if val.is_integer() else val
     elif normalized_section == "plan_editable_days":
         try:
             normalized_editable_days = int(data)
@@ -3825,7 +3832,8 @@ def get_demand_management_pending_deliveries_summary(
                 warehouse_confirm_by,
                 warehouse_confirm_at,
                 warehouse_remark,
-                status
+                status,
+                is_timeout_receive
             FROM tube.tube_fitting_delivery
             WHERE section_1_id = ANY(:section_ids)
               AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive')
@@ -3913,7 +3921,7 @@ def get_demand_management_pending_deliveries_summary(
                     "status_group": st_group,
                     "status_label": st_label,
                     "abnormal_flag": False,
-                    "is_timeout_receive": False,
+                    "is_timeout_receive": bool(r.get("is_timeout_receive")),
                     "elapsed_seconds": elapsed_secs,
                     "elapsed_display": format_delivery_elapsed(shipped_at),
                     "unconfirmed_elapsed_seconds": unconfirmed_secs,

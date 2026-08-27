@@ -33,6 +33,7 @@ def _ensure_fitting_table_structures() -> None:
         "ALTER TABLE tube.tube_fitting_delivery ALTER COLUMN id SET DEFAULT nextval('tube.tube_fitting_delivery_id_seq')",
         "ALTER SEQUENCE tube.tube_fitting_delivery_id_seq OWNED BY tube.tube_fitting_delivery.id",
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'tube.tube_fitting_delivery'::regclass AND contype = 'p') THEN ALTER TABLE tube.tube_fitting_delivery ADD PRIMARY KEY (id); END IF; END $$;",
+        "ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN DEFAULT FALSE",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_tube_fitting_delivery_order_no ON tube.tube_fitting_delivery (order_no)",
         "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_shipment_no ON tube.tube_fitting_delivery (shipment_no)",
         "CREATE INDEX IF NOT EXISTS idx_tube_fitting_delivery_section_1_status ON tube.tube_fitting_delivery (section_1_id, status)",
@@ -53,6 +54,55 @@ def _ensure_fitting_table_structures() -> None:
         _structures_checked = True
     finally:
         session.close()
+
+
+def auto_process_timeout_fitting_deliveries(session=None) -> None:
+    """管件超出指定小时数未施工接收，系统强制确认为到货量并推进到待入库。设定为 -1 则关闭。"""
+    is_local_session = False
+    if session is None:
+        session = SessionLocal()
+        is_local_session = True
+    try:
+        config = load_tube_config()
+        raw_timeout = config.get("auto_receive_timeout_hours", 12)
+        try:
+            timeout_hours = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout_hours = 12.0
+
+        if timeout_hours < 0:
+            return
+
+        timeout_hours_str = f"{timeout_hours:g}"
+        remark_text = f"🕒 [系统超时确认] 超出{timeout_hours_str}小时未接收，系统强制确认为到货量。"
+
+        sql = text(
+            """
+            UPDATE tube.tube_fitting_delivery
+            SET
+                status = 'pending_warehouse',
+                arrived_qty = COALESCE(arrived_qty, shipped_qty),
+                received_confirm_by = 'SYSTEM_TIMEOUT',
+                received_confirm_at = COALESCE(arrived_confirm_at, NOW()) + (:hours || ' hours')::INTERVAL,
+                received_remark = :remark,
+                is_timeout_receive = TRUE,
+                updated_by = 'SYSTEM_TIMEOUT',
+                updated_at = NOW()
+            WHERE status = 'pending_receive'
+              AND arrived_confirm_at IS NOT NULL
+              AND arrived_confirm_at < NOW() - (:hours || ' hours')::INTERVAL
+            """
+        )
+        session.execute(sql, {"hours": timeout_hours_str, "remark": remark_text})
+        if is_local_session:
+            session.commit()
+    except Exception:
+        if is_local_session:
+            session.rollback()
+        raise
+    finally:
+        if is_local_session:
+            session.close()
 
 
 def _clean(value: Any) -> str:
@@ -596,6 +646,7 @@ def list_fitting_deliveries(
     allowed_supply_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     _ensure_fitting_table_structures()
+    auto_process_timeout_fitting_deliveries()
     normalized_page = max(int(page), 1)
     normalized_page_size = min(max(int(page_size), 1), 500)
     section_filter = _resolve_filter(
@@ -674,6 +725,9 @@ def list_fitting_deliveries(
         cancel_reason_select = (
             "cancel_reason" if "cancel_reason" in existing_columns else "NULL::TEXT AS cancel_reason"
         )
+        timeout_receive_select = (
+            "is_timeout_receive" if "is_timeout_receive" in existing_columns else "FALSE AS is_timeout_receive"
+        )
         total = int(session.execute(text(f"SELECT COUNT(*) FROM tube.tube_fitting_delivery {where_sql}"), params).scalar_one())
         rows = session.execute(
             text(
@@ -685,7 +739,8 @@ def list_fitting_deliveries(
                        arrived_qty, arrived_confirm_at, arrived_confirm_by, arrived_remark,
                        received_confirm_at, received_confirm_by, received_remark,
                        warehouse_confirm_at, warehouse_confirm_by, warehouse_remark,
-                       {cancelled_at_select}, {cancelled_by_select}, {cancel_reason_select}
+                       {cancelled_at_select}, {cancelled_by_select}, {cancel_reason_select},
+                       {timeout_receive_select}
                 FROM tube.tube_fitting_delivery
                 {where_sql}
                 ORDER BY shipped_at DESC, id DESC
@@ -717,6 +772,7 @@ def list_fitting_deliveries(
                     "created_at": _serialize_time(row["created_at"]),
                     "created_by": _clean(row["created_by"]),
                     "operator": _clean(row["created_by"]),
+                    "is_timeout_receive": bool(row.get("is_timeout_receive")),
                     "arrived_qty": float(row["arrived_qty"]) if row["arrived_qty"] is not None else None,
                     "arrived_at": _serialize_time(row.get("arrived_confirm_at") or row.get("arrived_at")),
                     "arrived_by": _clean(row.get("arrived_confirm_by") or row.get("arrived_by")),

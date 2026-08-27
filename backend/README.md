@@ -1,3 +1,29 @@
+## 2026-08-27 核心控制参数支持“超时自动施工接收小时数”动态配置与 -1 关闭功能交付（workspace.py / supply_management_service.py）
+
+- **服务模块与核心机制**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`、`services/supply_management_service.py`、`services/fitting_delivery_service.py`
+  - 参数标识：`auto_receive_timeout_hours`（默认 12 小时，设定为 `< 0` 如 `-1` 则彻底关闭超时自动接收）
+- **流转控制逻辑**：
+  1. **配置读取**：自动流转服务启动时先拉取全局配置中的 `auto_receive_timeout_hours`；
+  2. **关闭保护**：若 `timeout_hours < 0`（如 `-1`），服务立即返回，不触发直管与管件的强制自动接收；
+  3. **动态生效**：若 `timeout_hours >= 0`，动态根据指定小时数更新 `pending_receive` 状态单据并更新备注留痕。
+
+## 2026-08-27 管件发货流转新增 12 小时超时未施工接收强制自动接收交付（fitting_delivery_service.py）
+
+- **服务模块与核心机制**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`、`supply_management_service.py`
+  - 核心函数：`auto_process_timeout_fitting_deliveries()` 与 `auto_process_timeout_deliveries()`
+- **规则与流转动作**：
+  1. **触发条件**：管件发货单（`tube.tube_fitting_delivery`）状态为 `pending_receive`（待施工接收），且 `arrived_confirm_at < NOW() - INTERVAL '12 hours'`；
+  2. **自动推进**：
+     - `status = 'pending_warehouse'`（推进至待入库 / 施工已接收）；
+     - `arrived_qty = COALESCE(arrived_qty, shipped_qty)`；
+     - `received_confirm_by = 'SYSTEM_TIMEOUT'`；
+     - `received_confirm_at = arrived_confirm_at + INTERVAL '12 hours'`；
+     - `received_remark = '🕒 [系统超时确认] 超出12小时未接收，系统强制确认为到货量。'`；
+     - `is_timeout_receive = TRUE`；
+  3. **数据自愈**：自动执行 DDL 补齐 `is_timeout_receive` 列。
+
 ## 2026-08-27 现场需求管理全标段在途与待办发货单汇总聚合接口交付（workspace.py）
 
 - **服务模块与接口定义**：

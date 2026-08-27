@@ -66,24 +66,60 @@ def auto_process_timeout_deliveries(session=None) -> None:
         session = SessionLocal()
         is_local_session = True
     try:
-        sql = text(
+        config = load_tube_config()
+        raw_timeout = config.get("auto_receive_timeout_hours", 12)
+        try:
+            timeout_hours = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout_hours = 12.0
+
+        # 设定为 < 0（如 -1）时，表示彻底关闭超时自动接收功能
+        if timeout_hours < 0:
+            return
+
+        timeout_hours_str = f"{timeout_hours:g}"
+        remark_text = f"🕒 [系统超时确认] 超出{timeout_hours_str}小时未接收，系统强制确认为到货量。"
+
+        # 1. 保温直管超时自动施工接收
+        sql_pipe = text(
             """
             UPDATE tube.tube_delivery
             SET
                 received_qty = COALESCE(arrived_qty, shipped_qty),
                 status = 'pending_warehouse',
                 received_confirm_by = 'SYSTEM_TIMEOUT',
-                received_confirm_at = COALESCE(arrived_confirm_at, NOW()) + INTERVAL '12 hours',
-                received_remark = '🕒 [系统超时确认] 超出12小时未接收，系统强制确认为到货量。',
+                received_confirm_at = COALESCE(arrived_confirm_at, NOW()) + (:hours || ' hours')::INTERVAL,
+                received_remark = :remark,
                 is_timeout_receive = TRUE,
                 updated_by = 'SYSTEM_TIMEOUT',
                 updated_at = NOW()
             WHERE status = 'pending_receive'
               AND arrived_confirm_at IS NOT NULL
-              AND arrived_confirm_at < NOW() - INTERVAL '12 hours'
+              AND arrived_confirm_at < NOW() - (:hours || ' hours')::INTERVAL
             """
         )
-        session.execute(sql)
+        session.execute(sql_pipe, {"hours": timeout_hours_str, "remark": remark_text})
+
+        # 2. 管件超时自动施工接收
+        sql_fitting = text(
+            """
+            UPDATE tube.tube_fitting_delivery
+            SET
+                status = 'pending_warehouse',
+                arrived_qty = COALESCE(arrived_qty, shipped_qty),
+                received_confirm_by = 'SYSTEM_TIMEOUT',
+                received_confirm_at = COALESCE(arrived_confirm_at, NOW()) + (:hours || ' hours')::INTERVAL,
+                received_remark = :remark,
+                is_timeout_receive = TRUE,
+                updated_by = 'SYSTEM_TIMEOUT',
+                updated_at = NOW()
+            WHERE status = 'pending_receive'
+              AND arrived_confirm_at IS NOT NULL
+              AND arrived_confirm_at < NOW() - (:hours || ' hours')::INTERVAL
+            """
+        )
+        session.execute(sql_fitting, {"hours": timeout_hours_str, "remark": remark_text})
+
         if is_local_session:
             session.commit()
     except Exception:

@@ -350,6 +350,11 @@
                   <input v-model.number="planEditableDays" class="input" type="number" min="0" max="3" step="1" />
                   <small class="field-help">3 为三天都可填，2 为后两天可填，0 为计划全部锁盘不可填。</small>
                 </label>
+                <label class="field">
+                  <span>超时自动施工接收小时数 (auto_receive_timeout_hours)</span>
+                  <input v-model.number="autoReceiveTimeoutHours" class="input" type="number" step="0.5" placeholder="默认 12, 设定 -1 为关闭" />
+                  <small class="field-help">到货后超出该时长未施工接收由系统强制接收（直管与管件通用）；设为 -1 则关闭自动功能。</small>
+                </label>
                 <label class="field field-span-2">
                   <span>严格计划填报流程管控 (strict_planning_flow_control)</span>
                   <select v-model="strictPlanningFlowControl" class="input">
@@ -2026,6 +2031,7 @@ const autoUpdatePlanStartDate = ref(false)
 const isPlanDateAutoUpdateEnabled = computed(() => autoUpdatePlanStartDate.value !== false)
 const isAllDatesAutoUpdateEnabled = computed(() => autoUpdatePlanStartDate.value === 'all')
 const planEditableDays = ref(3)
+const autoReceiveTimeoutHours = ref(12)
 const strictPlanningFlowControl = ref(true)
 const globalMessage = ref(null)
 const jsonEditVal = ref('')
@@ -2257,6 +2263,7 @@ function applyConfig(config) {
   planStartDate.value = config.plan_start_date || showDate.value || ''
   autoUpdatePlanStartDate.value = normalizeAutoUpdateSetting(config.auto_update_plan_start_date)
   planEditableDays.value = Number(config.plan_editable_days ?? 3)
+  autoReceiveTimeoutHours.value = config.auto_receive_timeout_hours !== undefined ? Number(config.auto_receive_timeout_hours) : 12
   strictPlanningFlowControl.value = config.strict_planning_flow_control ?? true
   supplyEntities.value = cloneRows(config.supply_entities).map(item => ({
     ...item,
@@ -3129,6 +3136,10 @@ async function saveCoreDatesSection() {
       section: 'strict_planning_flow_control',
       data: Boolean(strictPlanningFlowControl.value),
     })
+    await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
+      section: 'auto_receive_timeout_hours',
+      data: autoReceiveTimeoutHours.value !== null && autoReceiveTimeoutHours.value !== '' ? Number(autoReceiveTimeoutHours.value) : 12,
+    })
     const response = await saveTubeGlobalManagementConfigSection(PROJECT_KEY, {
       section: 'plan_editable_days',
       data: Number(planEditableDays.value ?? 3),
@@ -3147,7 +3158,10 @@ async function saveCoreDatesSection() {
     if (response.plan_editable_days !== undefined) {
       planEditableDays.value = Number(response.plan_editable_days ?? 3)
     }
-    setSectionMessage('core_dates', 'success', '核心日期已保存。')
+    if (response.config?.auto_receive_timeout_hours !== undefined) {
+      autoReceiveTimeoutHours.value = Number(response.config.auto_receive_timeout_hours)
+    }
+    setSectionMessage('core_dates', 'success', '核心参数已保存。')
   } catch (error) {
     setSectionMessage('core_dates', 'error', error?.message || '保存失败')
   } finally {
