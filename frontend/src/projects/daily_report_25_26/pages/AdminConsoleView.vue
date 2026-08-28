@@ -1346,6 +1346,147 @@
             </div>
           </div>
 
+          <!-- 🌐 远程生产环境数据直连与一键同步专区 -->
+          <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #7dd3fc; border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.08);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <h3 style="margin: 0; font-size: 15px; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                  <span>🌐 远程生产环境数据直连与一键同步中心</span>
+                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">Live Production Sync</span>
+                </h3>
+                <p style="margin: 5px 0 0; font-size: 12.5px; color: #075985;">
+                  直连生产服务器（<code>{{ remoteSyncForm.remote_url }}</code>），一键秒级拉取最新生产数据库快照并支持快速全量同步至本地开发环境。
+                </p>
+              </div>
+
+              <!-- 快捷主操作按钮组 -->
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <button
+                  class="btn primary"
+                  type="button"
+                  :disabled="remotePulling || remoteTesting"
+                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; font-weight: 600; cursor: pointer; background: #0284c7; border-color: #0284c7;"
+                  @click="handlePullLatestRemoteBackup(false)"
+                  title="自动从生产环境下载最新的 .dump 备份文件至本地"
+                >
+                  <span>{{ remotePulling ? '⏳ 正在从生产环境拉取备份中...' : '🚀 一键拉取生产环境最新备份' }}</span>
+                </button>
+
+                <button
+                  class="btn ghost"
+                  type="button"
+                  :disabled="remotePulling || remoteTesting"
+                  style="display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 36px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
+                  @click="handlePullLatestRemoteBackup(true)"
+                  title="先命令生产环境立即执行一次 pg_dump 生成最新快照，然后拉取到本地"
+                >
+                  <span>⚡ 即时快照并拉取</span>
+                </button>
+
+                <button
+                  class="btn ghost"
+                  type="button"
+                  :disabled="remoteTesting || remotePulling"
+                  style="display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 36px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
+                  @click="openRemoteBackupsListModal"
+                  title="查看生产环境上的所有备份存档历史"
+                >
+                  <span>📋 浏览生产存档</span>
+                </button>
+
+                <button
+                  class="btn ghost"
+                  type="button"
+                  style="height: 36px; padding: 0 10px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
+                  @click="showRemoteConfigDrawer = !showRemoteConfigDrawer"
+                  title="查看或修改生产环境连接配置与账号密码"
+                >
+                  <span>⚙️ 生产连接设置 {{ showRemoteConfigDrawer ? '▲' : '▼' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 折叠配置面板 (点击“生产连接设置”展开) -->
+            <div v-if="showRemoteConfigDrawer" style="margin-top: 14px; padding: 14px 16px; background: #ffffff; border: 1px solid #bae6fd; border-radius: 6px;">
+              <div style="font-weight: 600; font-size: 13px; color: #0c4a6e; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span>🛠️ 生产环境连接参数设定</span>
+                <span style="font-size: 11px; color: #64748b; font-weight: normal;">保存在本地开发环境 <code>backend_data/shared/remote_sync_config.json</code></span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                <div>
+                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产服务器域名/IP地址:</label>
+                  <input
+                    v-model="remoteSyncForm.remote_url"
+                    type="text"
+                    placeholder="https://platform.smartview.top"
+                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                  />
+                </div>
+                <div>
+                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产管理员账号 (Username):</label>
+                  <input
+                    v-model="remoteSyncForm.username"
+                    type="text"
+                    placeholder="ww870411"
+                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                  />
+                </div>
+                <div>
+                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产管理员密码 (Password):</label>
+                  <input
+                    v-model="remoteSyncForm.password"
+                    type="password"
+                    :placeholder="remoteSyncForm.has_password ? '已保存密码（留空保持不变）' : '请输入密码'"
+                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                  />
+                </div>
+                <div>
+                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">或直接填入访问令牌 (Bearer Token, 可选):</label>
+                  <input
+                    v-model="remoteSyncForm.token"
+                    type="password"
+                    :placeholder="remoteSyncForm.token_masked || '可选填入已有的 JWT Token'"
+                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                  />
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 6px; border-top: 1px dashed #e2e8f0;">
+                <label style="font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="checkbox" v-model="remoteSyncForm.auto_create_before_pull" />
+                  <span>默认拉取前先命令生产环境生成最新即时备份</span>
+                </label>
+
+                <div style="display: flex; gap: 8px;">
+                  <button
+                    class="btn ghost btn-sm"
+                    type="button"
+                    :disabled="remoteTesting"
+                    style="background: #f8fafc; border-color: #cbd5e1; height: 30px; font-size: 12px; padding: 0 12px; cursor: pointer;"
+                    @click="handleTestRemoteConnection"
+                  >
+                    <span>{{ remoteTesting ? '⏳ 正在测试连通性...' : '📡 测试连通性' }}</span>
+                  </button>
+                  <button
+                    class="btn primary btn-sm"
+                    type="button"
+                    :disabled="remoteSavingConfig"
+                    style="height: 30px; font-size: 12px; padding: 0 14px; cursor: pointer;"
+                    @click="handleSaveRemoteSyncConfig"
+                  >
+                    <span>{{ remoteSavingConfig ? '正在保存...' : '💾 保存配置' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 同步状态提示信息 -->
+            <div v-if="remoteSyncStatusMsg" style="margin-top: 10px; font-size: 12.5px; padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;" :style="remoteSyncStatusType === 'error' ? 'background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5;' : 'background: #f0fdf4; color: #15803d; border: 1px solid #86efac;'">
+              <span>{{ remoteSyncStatusMsg }}</span>
+              <button type="button" style="background: none; border: none; cursor: pointer; color: inherit; font-size: 12px;" @click="remoteSyncStatusMsg = ''">✕</button>
+            </div>
+          </div>
+
           <!-- 备份列表表格 -->
           <div class="inner-card">
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -1462,7 +1603,9 @@
 
                     <div>
                       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12px; color: #64748b; font-weight: 600;">数据表恢复选择清单 (不勾选默认恢复全库表)：</span>
+                        <span style="font-size: 12px; color: #64748b; font-weight: 600;">
+                          数据表恢复选择清单 (已默认全选，已勾选 <strong style="color: #0284c7;">{{ restoreForm.selected_tables.length }} / {{ (inspectResult.tables || []).length }}</strong> 张表)：
+                        </span>
                         <div style="font-size: 11px; display: flex; gap: 8px;">
                           <button type="button" style="color: #0284c7; background: none; border: none; cursor: pointer;" @click="selectAllInspectTables">全选</button>
                           <button type="button" style="color: #64748b; background: none; border: none; cursor: pointer;" @click="restoreForm.selected_tables = []; restoreForm.selected_schemas = [];">清空</button>
@@ -1524,6 +1667,67 @@
                 <button class="btn primary" type="button" style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px;" @click="closeRestoreJobModal">
                   完成并关闭
                 </button>
+              </footer>
+            </div>
+          </div>
+
+          <!-- 🌐 浏览远程生产环境备份存档 Modal -->
+          <div v-if="remoteBackupsModalVisible" class="dialog-mask" role="presentation" @click.self="remoteBackupsModalVisible = false">
+            <div class="dialog-card" style="max-width: 760px; text-align: left;">
+              <header class="dialog-header" style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 14px 20px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 15px; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+                    <span>🌐 远程生产环境历史备份存档列表</span>
+                    <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 1px 6px; border-radius: 4px;">{{ remoteSyncForm.remote_url }}</span>
+                  </h3>
+                  <p style="margin: 4px 0 0; font-size: 12px; color: #075985;">
+                    点击对应备份项右侧的“📥 拉取到本地”，即可直接将该历史备份流式下载至本地开发环境。
+                  </p>
+                </div>
+                <button class="close-btn" type="button" @click="remoteBackupsModalVisible = false">×</button>
+              </header>
+
+              <main class="dialog-body" style="padding: 16px; max-height: 65vh; overflow-y: auto;">
+                <div v-if="remoteBackupsLoading" class="panel-state">正在连接远程生产服务器读取备份列表…</div>
+                <div v-else-if="!remoteBackupsList.length" class="panel-state">远程生产环境当前无任何备份文件。</div>
+                <div v-else style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff;">
+                  <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+                    <thead style="background: #f8fafc; border-bottom: 2px solid #cbd5e1;">
+                      <tr>
+                        <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">备份文件名</th>
+                        <th style="padding: 10px 14px; text-align: right; color: #475569; font-weight: 600;">文件大小</th>
+                        <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">生成时间</th>
+                        <th style="padding: 10px 14px; text-align: center; color: #475569; font-weight: 600;">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="rb in remoteBackupsList" :key="rb.filename" style="border-bottom: 1px solid #e2e8f0;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 10px 14px; font-weight: 600; color: #0f172a;" :title="rb.filename">
+                          <span style="margin-right: 4px;">📄</span>
+                          <span>{{ rb.filename }}</span>
+                        </td>
+                        <td style="padding: 10px 14px; text-align: right; color: #334155; font-weight: 500;">{{ rb.file_size_h }}</td>
+                        <td style="padding: 10px 14px; color: #64748b; white-space: nowrap;">{{ rb.created_at }}</td>
+                        <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+                          <button
+                            class="btn primary btn-sm"
+                            type="button"
+                            :disabled="remotePulling"
+                            style="padding: 3px 12px; height: 26px; font-size: 12px; border-radius: 4px;"
+                            @click="handlePullSpecificRemoteBackup(rb.filename)"
+                          >
+                            <span>{{ remotePullingTarget === rb.filename ? '⏳ 正在拉取...' : '📥 拉取到本地' }}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </main>
+
+              <footer style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 12px; color: #64748b;">共有 {{ remoteBackupsList.length }} 个远程备份存档</span>
+                <button class="btn ghost btn-sm" type="button" style="height: 30px; padding: 0 16px;" @click="remoteBackupsModalVisible = false">关闭</button>
               </footer>
             </div>
           </div>
@@ -1789,6 +1993,11 @@ import {
   inspectAdminDatabaseBackup,
   startAdminDatabaseRestore,
   getAdminDatabaseRestoreJob,
+  getAdminRemoteSyncConfig,
+  saveAdminRemoteSyncConfig,
+  testAdminRemoteSyncConnection,
+  getAdminRemoteSyncBackups,
+  pullAdminRemoteSyncBackup,
   listAdminProjects,
   listSuperFiles,
   makeSuperDirectory,
@@ -1943,6 +2152,13 @@ async function openRestoreModal(backupItem) {
     const res = await inspectAdminDatabaseBackup(backupItem.filename)
     if (res && res.ok) {
       inspectResult.value = res
+      // 默认全部选中所有 Schema 和数据表
+      if (res.tables && Array.isArray(res.tables)) {
+        restoreForm.selected_tables = res.tables.map(t => t.full_name)
+      }
+      if (res.schemas && Array.isArray(res.schemas)) {
+        restoreForm.selected_schemas = [...res.schemas]
+      }
     }
   } catch (err) {
     console.warn('解析备份内容提示:', err)
@@ -1989,12 +2205,18 @@ function selectAllInspectTables() {
 async function handleExecuteRestore() {
   restoreStarting.value = true
   try {
+    const isAllTablesSelected = Boolean(
+      inspectResult.value &&
+      inspectResult.value.tables &&
+      inspectResult.value.tables.length > 0 &&
+      restoreForm.selected_tables.length >= inspectResult.value.tables.length
+    )
     const payload = {
       filename: restoreTargetFilename.value,
       restore_mode: restoreForm.restore_mode,
       clean_first: restoreForm.clean_first,
-      selected_schemas: restoreForm.selected_schemas.length ? restoreForm.selected_schemas : null,
-      selected_tables: restoreForm.selected_tables.length ? restoreForm.selected_tables : null,
+      selected_schemas: isAllTablesSelected ? null : (restoreForm.selected_schemas.length ? restoreForm.selected_schemas : null),
+      selected_tables: isAllTablesSelected ? null : (restoreForm.selected_tables.length ? restoreForm.selected_tables : null),
     }
     const res = await startAdminDatabaseRestore(payload)
     if (res && res.ok) {
@@ -2048,6 +2270,162 @@ function closeRestoreJobModal() {
   }
   restoreJobModalVisible.value = false
 }
+
+// --------------------------------------------------------------------------
+// 🌐 远程生产环境数据同步响应式 State 与 Methods
+// --------------------------------------------------------------------------
+const showRemoteConfigDrawer = ref(false)
+const remoteSyncForm = reactive({
+  remote_url: 'https://platform.smartview.top',
+  username: 'ww870411',
+  password: '',
+  token: '',
+  has_password: false,
+  has_token: false,
+  token_masked: '',
+  auto_create_before_pull: false
+})
+const remoteTesting = ref(false)
+const remoteSavingConfig = ref(false)
+const remotePulling = ref(false)
+const remotePullingTarget = ref('')
+const remoteSyncStatusMsg = ref('')
+const remoteSyncStatusType = ref('success')
+
+const remoteBackupsModalVisible = ref(false)
+const remoteBackupsLoading = ref(false)
+const remoteBackupsList = ref([])
+
+async function loadRemoteSyncConfig() {
+  try {
+    const res = await getAdminRemoteSyncConfig()
+    if (res && res.ok && res.config) {
+      remoteSyncForm.remote_url = res.config.remote_url || 'https://platform.smartview.top'
+      remoteSyncForm.username = res.config.username || 'ww870411'
+      remoteSyncForm.has_password = Boolean(res.config.has_password)
+      remoteSyncForm.has_token = Boolean(res.config.has_token)
+      remoteSyncForm.token_masked = res.config.token_masked || ''
+      remoteSyncForm.auto_create_before_pull = Boolean(res.config.auto_create_before_pull)
+    }
+  } catch (err) {
+    console.warn('读取远程同步配置失败:', err)
+  }
+}
+
+async function handleSaveRemoteSyncConfig() {
+  remoteSavingConfig.value = true
+  try {
+    const payload = {
+      remote_url: remoteSyncForm.remote_url,
+      username: remoteSyncForm.username,
+      password: remoteSyncForm.password || undefined,
+      token: remoteSyncForm.token || undefined,
+      auto_create_before_pull: remoteSyncForm.auto_create_before_pull
+    }
+    const res = await saveAdminRemoteSyncConfig(payload)
+    if (res && res.ok) {
+      remoteSyncStatusMsg.value = '✅ 远程同步配置保存成功！'
+      remoteSyncStatusType.value = 'success'
+      await loadRemoteSyncConfig()
+      remoteSyncForm.password = ''
+      remoteSyncForm.token = ''
+    }
+  } catch (err) {
+    remoteSyncStatusMsg.value = '❌ 保存配置失败: ' + (err?.message || '未知错误')
+    remoteSyncStatusType.value = 'error'
+  } finally {
+    remoteSavingConfig.value = false
+  }
+}
+
+async function handleTestRemoteConnection() {
+  remoteTesting.value = true
+  remoteSyncStatusMsg.value = ''
+  try {
+    if (remoteSyncForm.password || remoteSyncForm.token) {
+      await handleSaveRemoteSyncConfig()
+    }
+    const res = await testAdminRemoteSyncConnection()
+    if (res && res.ok) {
+      remoteSyncStatusMsg.value = `🎉 ${res.message}`
+      remoteSyncStatusType.value = 'success'
+    }
+  } catch (err) {
+    remoteSyncStatusMsg.value = '❌ 连接测试失败: ' + (err?.message || '未知错误')
+    remoteSyncStatusType.value = 'error'
+  } finally {
+    remoteTesting.value = false
+  }
+}
+
+async function openRemoteBackupsListModal() {
+  remoteBackupsModalVisible.value = true
+  remoteBackupsLoading.value = true
+  try {
+    const res = await getAdminRemoteSyncBackups()
+    if (res && res.ok) {
+      remoteBackupsList.value = res.backups || []
+    }
+  } catch (err) {
+    alert('获取远程生产环境备份列表失败: ' + (err?.message || '网络异常'))
+  } finally {
+    remoteBackupsLoading.value = false
+  }
+}
+
+async function handlePullSpecificRemoteBackup(filename) {
+  remotePulling.value = true
+  remotePullingTarget.value = filename
+  remoteSyncStatusMsg.value = `⏳ 正在从生产环境拉取备份文件 ${filename} ...`
+  remoteSyncStatusType.value = 'success'
+  try {
+    const res = await pullAdminRemoteSyncBackup({ filename })
+    if (res && res.ok) {
+      remoteBackupsModalVisible.value = false
+      remoteSyncStatusMsg.value = `🎉 ${res.message}`
+      remoteSyncStatusType.value = 'success'
+      await loadBackupList()
+      // 提示是否立即调起恢复向导
+      if (confirm(`🎉 成功从生产环境拉取备份文件 ${res.filename} (${res.file_size_h})！\n\n是否立即打开高级恢复向导，将该备份全量导入本地开发数据库？`)) {
+        const found = backupList.value.find(b => b.filename === res.filename) || { filename: res.filename }
+        openRestoreModal(found)
+      }
+    }
+  } catch (err) {
+    remoteSyncStatusMsg.value = '❌ 拉取失败: ' + (err?.message || '未知错误')
+    remoteSyncStatusType.value = 'error'
+    alert(remoteSyncStatusMsg.value)
+  } finally {
+    remotePulling.value = false
+    remotePullingTarget.value = ''
+  }
+}
+
+async function handlePullLatestRemoteBackup(createFreshFirst = false) {
+  remotePulling.value = true
+  remoteSyncStatusMsg.value = createFreshFirst ? '⏳ 正在命令生产环境生成即时快照并准备下载...' : '⏳ 正在从生产环境拉取最新备份存档...'
+  remoteSyncStatusType.value = 'success'
+  try {
+    const res = await pullAdminRemoteSyncBackup({ create_fresh_first: createFreshFirst })
+    if (res && res.ok) {
+      remoteSyncStatusMsg.value = `🎉 ${res.message}`
+      remoteSyncStatusType.value = 'success'
+      await loadBackupList()
+      // 询问是否立即恢复
+      if (confirm(`🎉 成功从生产环境拉取最新备份文件 ${res.filename} (${res.file_size_h})！\n\n是否立即打开高级恢复向导，将其全量还原到本地开发数据库？`)) {
+        const found = backupList.value.find(b => b.filename === res.filename) || { filename: res.filename }
+        openRestoreModal(found)
+      }
+    }
+  } catch (err) {
+    remoteSyncStatusMsg.value = '❌ 拉取失败: ' + (err?.message || '未知错误')
+    remoteSyncStatusType.value = 'error'
+    alert(remoteSyncStatusMsg.value)
+  } finally {
+    remotePulling.value = false
+  }
+}
+
 const MONTHLY_DATA_SHOW_PROJECT_KEY = 'monthly_data_show'
 const MONTHLY_DATA_SHOW_QUERY_TOOL_PAGE_KEY = 'projects_monthly_data_show_query_tool'
 const METRIC_HISTORY_LIMIT = 60
@@ -4537,6 +4915,7 @@ async function loadDataForTab(tab) {
   if (tab === 'db_backup') {
     stopSystemTimer()
     await loadBackupList()
+    await loadRemoteSyncConfig()
     return
   }
   stopSystemTimer()

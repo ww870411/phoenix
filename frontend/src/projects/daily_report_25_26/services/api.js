@@ -2672,6 +2672,67 @@ export async function getAdminDatabaseRestoreJob(jobId) {
   return response.json()
 }
 
+export async function getAdminRemoteSyncConfig() {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/config'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '获取远程同步配置失败')
+  }
+  return response.json()
+}
+
+export async function saveAdminRemoteSyncConfig(payload) {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/config'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '保存远程同步配置失败')
+  }
+  return response.json()
+}
+
+export async function testAdminRemoteSyncConnection() {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/test'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '测试远程生产环境连接失败')
+  }
+  return response.json()
+}
+
+export async function getAdminRemoteSyncBackups() {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/list'), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '获取远程生产备份列表失败')
+  }
+  return response.json()
+}
+
+export async function pullAdminRemoteSyncBackup(payload = {}) {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/pull'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(msg || '拉取远程生产备份失败')
+  }
+  return response.json()
+}
+
 // ----------------------------------------------------------------------
 // 管件现场动态库存与安装使用量填报 API (Fitting Inventory & Daily Usage)
 // ----------------------------------------------------------------------

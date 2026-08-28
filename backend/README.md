@@ -1,3 +1,37 @@
+## 2026-08-28 数据库远程备份拉取服务增加“远程_”前缀命名规范交付（admin_console.py）
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/api/v1/admin_console.py`
+  - 核心端点：`POST /api/v1/admin/database/remote-sync/pull`
+- **命名与流式落地机制升级**：
+  1. **文件名自动增加前缀**：
+     - 在拉取远程生产备份时，向远程请求原始文件名（`remote_filename`），本地保存为 `远程_{remote_filename}`；
+     - 自动检测防止重复添加前缀，确保本地目录 `backend_data/shared/db_backup/` 中远程拉取文件命名统一（如 `远程_phoenix_backup_20260828_102000.dump`）；
+  2. **响应与审计留痕对齐**：
+     - 返回给前端的 `filename` 及记录在审计日志中的 `target_id` 均同步对齐为本地规范文件名。
+
+## 2026-08-28 数据库备份与恢复模块远程生产环境数据直连与一键拉取备份服务交付（admin_console.py）
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/api/v1/admin_console.py`
+  - 核心接口：
+    - `GET /api/v1/admin/database/remote-sync/config`（读取远程生产连接配置）
+    - `POST /api/v1/admin/database/remote-sync/config`（更新并保存远程同步配置）
+    - `POST /api/v1/admin/database/remote-sync/test`（测试远程生产服务器连通性与管理员凭据）
+    - `GET /api/v1/admin/database/remote-sync/list`（获取远程生产环境现有备份存档列表）
+    - `POST /api/v1/admin/database/remote-sync/pull`（从生产环境拉取指定/最新备份或即时快照）
+- **核心机制与流式下载设计**：
+  1. **配置持久化与脱敏读取**：
+     - 同步参数写入 `backend_data/shared/remote_sync_config.json`，包括生产域名、用户名、密码与 Bearer Token；
+     - 读取接口对敏感密码/Token 进行脱敏掩码，保证本地展示安全；
+  2. **自动登录与会话令牌复用（`_get_remote_auth_token`）**：
+     - 支持直接填入 Token 或通过配置的账号密码自动请求生产环境 `/api/v1/auth/login` 动态换取 JWT Token，自动探测 Token 有效期并持久化复用；
+  3. **即时远程快照与流式落地**：
+     - 支持 `create_fresh_first=True` 时先请求生产环境 `/api/v1/admin/database/backup` 即时生成当前时刻最新的 `pg_dump` 归档；
+     - 采用 `urllib.request` 进行 64KB 分块流式下载，稳健写入本地 `backend_data/shared/db_backup/`，下载异常时自动清除 0 字节半成品文件；
+  4. **审计留痕**：
+     - 拉取成功后向系统审计日志记录 `database_remote_sync_pull` 事件，记录操作人、源服务器与文件大小。
+
 ## 2026-08-28 数字大屏配置保存接口收归 Global_admin 鉴权与在途过滤上下限交付（workspace.py）
 
 - **服务模块与核心机制**：

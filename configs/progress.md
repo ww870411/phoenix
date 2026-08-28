@@ -1,3 +1,56 @@
+## 2026-08-28 [远程数据拉取模块为下载的备份文件自动添加“远程_”前缀命名交付]
+- **需求与优化背景**：
+  - 用户要求：“拉取的远程备份文件，我希望能在名称前添加“远程”字样”；
+  - **实现目标**：从远程生产服务器拉取（无论是最新备份、即时快照还是历史存档）下载到本地 `backend_data/shared/db_backup/` 时，文件名自动加上 `远程_` 前缀（如 `远程_phoenix_backup_20260828_102000.dump`），使本地自建备份与远程同步备份一目了然。
+- **改动与实现详情**：
+  1. **后端流式拉取命名改造**（[admin_console.py](file:///D:/编程项目/phoenix/backend/api/v1/admin_console.py)）：
+     - 在 `pull_remote_backup` 接口中，提取远程源文件名 `remote_filename = Path(target_filename).name`；
+     - 本地保存路径设定为 `local_filename = f"远程_{remote_filename}"`（若源文件名已带 `远程` 前缀则避免重复拼接）；
+     - 请求远程下载流时依然使用 `remote_filename`，本地写入 `DB_BACKUP_DIR / local_filename`；
+     - 返回给前端并记录审计日志的文件名统一更新为 `local_filename`。
+  2. **前端与恢复联动适配**：
+     - 拉取成功后弹窗提示与本地备份列表自动展示带 `远程_` 前缀的文件名，点击一键恢复时无缝加载。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 17.36s），零报错。
+
+## 2026-08-28 [管理控制台数据库高级还原向导全表默认全选与全量还原逻辑调优交付]
+- **需求与优化背景**：
+  - 用户反馈：“恢复数据库时，目前所有数据库表都是未被选中的，可以默认全部选中吗”；
+  - **实现目标**：打开数据库高级还原配置模态框（`openRestoreModal`）并解析出备份包结构后，默认自动勾选全部 Schema 与数据表；同时智能判定当所有数据表均处于选中状态时，还原请求以全量模式（不带 `-t` 限制）下发至 `pg_restore`，确保视图、序列、函数、触发器与表数据无遗漏全保真恢复。
+- **改动与实现详情**：
+  1. **前端还原向导默认全选**（[AdminConsoleView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)）：
+     - 在 `openRestoreModal` 成功解析备份结构后，将 `res.tables` 所有 `full_name` 赋给 `restoreForm.selected_tables`，将 `res.schemas` 全部赋给 `restoreForm.selected_schemas`，进入弹窗即呈现 100% 勾选状态；
+     - 优化标题与统计文案：“数据表恢复选择清单 (已默认全选，已勾选 X / Y 张表)”，实时展示选中数量；
+  2. **执行参数智能适配**：
+     - 在 `handleExecuteRestore` 中增加 `isAllTablesSelected` 判定，当全部表被勾选时，向后端传递 `selected_tables: null` 与 `selected_schemas: null`，调用完整 PostgreSQL 备份恢复链路；仅当用户主动取消勾选部分表/模式时才带 `-t` 精确限制。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 16.36s），零报错。
+
+## 2026-08-28 [管理控制台数据库备份模块新增“远程生产环境数据直连与一键拉取备份”功能交付]
+- **需求与业务背景**：
+  - 用户反馈：“其实，我现在苦于每天从生产环境中备份数据库，然后拿到开发环境中恢复，以求数据同步。我能不能直接增加一项功能，即从生产环境中拉取一个最新的备份文件过来？”
+  - 服务器信息：域名 `https://platform.smartview.top`，用户名 `ww870411`；
+  - **实现目标**：在全局管理后台（`AdminConsoleView.vue`）的数据库备份与高级还原（`tab=db_backup`）模块中新增“🌐 远程生产环境数据直连与一键同步中心”，提供一键拉取生产环境最新备份、即时快照并拉取、远程备份存档历史列表浏览与拉取、连通性与凭据测试、以及拉取后一键弹窗调起本地高级恢复向导的全闭环功能。
+- **改动与实现详情**：
+  1. **后端远程同步服务与 API 接口落地**（[admin_console.py](file:///D:/编程项目/phoenix/backend/api/v1/admin_console.py)）：
+     - 配置文件：本地保存在 `backend_data/shared/remote_sync_config.json`，支持保存远程服务器域名、管理员账号、密码与 Token；
+     - `GET /api/v1/admin/database/remote-sync/config`：读取本地保存的远程连接配置（密码/Token 掩码脱敏）；
+     - `POST /api/v1/admin/database/remote-sync/config`：保存/更新远程同步参数；
+     - `POST /api/v1/admin/database/remote-sync/test`：测试远程生产服务器连通性，自动调用远程 `/api/v1/auth/login` 与 `/api/v1/admin/database/backups`；
+     - `GET /api/v1/admin/database/remote-sync/list`：获取远程生产服务器现存的所有 `.dump` 备份存档文件列表；
+     - `POST /api/v1/admin/database/remote-sync/pull`：流式拉取远程备份，支持即时触发生产生成快照（`create_fresh_first=True`）或拉取指定/最新备份，分块写入本地 `backend_data/shared/db_backup/` 并记录审计事件。
+  2. **前端 API 请求模块扩展**（[api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)）：
+     - 封装 `getAdminRemoteSyncConfig`、`saveAdminRemoteSyncConfig`、`testAdminRemoteSyncConnection`、`getAdminRemoteSyncBackups`、`pullAdminRemoteSyncBackup` 5 个前端接口函数。
+  3. **管理后台 UI 与交互全闭环设计**（[AdminConsoleView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)）：
+     - **远程同步中心专属卡片**：渐变蓝底卡片醒目展示在“数据库备份与恢复”Tab 顶部；
+     - **一键拉取最新备份**：点击后直接从生产环境拉取最新 `.dump` 备份文件至本地；
+     - **即时快照并拉取**：一键远程触发生产 `pg_dump` 生成当前最新快照并立即流式下载到本地；
+     - **浏览生产存档模态框**：点击“📋 浏览生产存档”弹窗查看生产所有历史备份，支持针对任一版本点击“📥 拉取到本地”；
+     - **折叠式参数配置抽屉**：支持查看修改生产域名、账号、密码或 Token，并提供“📡 测试连通性”；
+     - **拉取后一键还原联动**：拉取成功后自动刷新本地备份列表，并弹窗提示“🎉 成功从生产环境拉取备份文件！是否立即打开高级恢复向导，将其全量还原到本地开发数据库？”，确认后直接载入还原参数并打开还原向导。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 16.81s），零报错。
+
 ## 2026-08-28 [供需流向拓扑（big_screen）电脑端卡片宽度双向弹性联动缩放交付]
 - **需求与排版背景**：
   - 用户反馈：“在电脑访问时，当窗口宽度缩减，不仅仅缩减各标段卡片宽度，供货单位的卡片宽度也应该缩减”；

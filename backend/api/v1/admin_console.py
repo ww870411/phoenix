@@ -2317,3 +2317,321 @@ def get_database_restore_job_status(job_id: str, session: AuthSession = Depends(
     }
 
 
+# --------------------------------------------------------------------------
+# 🌐 远程生产环境数据直连与一键同步中心 (Remote Production Database Sync)
+# --------------------------------------------------------------------------
+REMOTE_SYNC_CONFIG_PATH = DATA_ROOT / "shared" / "remote_sync_config.json"
+
+class RemoteSyncConfigPayload(BaseModel):
+    remote_url: str = Field("https://platform.smartview.top", description="远程生产服务器地址")
+    username: Optional[str] = Field("ww870411", description="远程管理员用户名")
+    password: Optional[str] = Field(None, description="远程管理员密码")
+    token: Optional[str] = Field(None, description="远程管理员访问令牌 (Bearer Token)")
+    auto_create_before_pull: Optional[bool] = Field(False, description="拉取前是否先在生产环境生成即时备份")
+
+class RemoteSyncPullPayload(BaseModel):
+    filename: Optional[str] = Field(None, description="指定拉取的备份文件名（为空则拉取最新）")
+    create_fresh_first: Optional[bool] = Field(None, description="拉取前是否先即时生成最新备份")
+    remote_url: Optional[str] = Field(None, description="临时指定远程URL")
+    username: Optional[str] = Field(None, description="临时指定用户名")
+    password: Optional[str] = Field(None, description="临时指定密码")
+    token: Optional[str] = Field(None, description="临时指定Token")
+
+
+def _load_remote_sync_config() -> dict:
+    default_cfg = {
+        "remote_url": "https://platform.smartview.top",
+        "username": "ww870411",
+        "password": "",
+        "token": "",
+        "auto_create_before_pull": False
+    }
+    if REMOTE_SYNC_CONFIG_PATH.exists():
+        try:
+            with open(REMOTE_SYNC_CONFIG_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                if isinstance(saved, dict):
+                    default_cfg.update(saved)
+        except Exception:
+            pass
+    return default_cfg
+
+
+def _save_remote_sync_config(cfg: dict) -> None:
+    REMOTE_SYNC_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(REMOTE_SYNC_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def _get_remote_auth_token(cfg: dict, force_relogin: bool = False) -> str:
+    import ssl
+    import urllib.request
+    import urllib.error
+
+    remote_url = str(cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+    username = str(cfg.get("username") or "").strip()
+    password = str(cfg.get("password") or "").strip()
+    token = str(cfg.get("token") or "").strip()
+
+    ctx = ssl._create_unverified_context()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*"
+    }
+
+    # 1. 若已有 token 且不需要强制重新登录，先探测 token 是否有效
+    if token and not force_relogin:
+        try:
+            test_req = urllib.request.Request(
+                f"{remote_url}/api/v1/admin/database/backups",
+                headers={**headers, "Authorization": f"Bearer {token}"}
+            )
+            with urllib.request.urlopen(test_req, context=ctx, timeout=8) as resp:
+                if resp.status == 200:
+                    return token
+        except Exception:
+            pass  # token 无效或过期，继续尝试登录
+
+    # 2. 使用账号密码登录获取新 Token
+    if not username or not password:
+        if token:
+            return token
+        raise HTTPException(status_code=400, detail="未配置远程生产环境的管理员账号或密码，且无可用令牌")
+
+    login_body = json.dumps({"username": username, "password": password, "remember_me": True}).encode("utf-8")
+    login_req = urllib.request.Request(
+        f"{remote_url}/api/v1/auth/login",
+        data=login_body,
+        headers={**headers, "Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(login_req, context=ctx, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            access_token = data.get("access_token")
+            if not access_token:
+                raise HTTPException(status_code=500, detail="远程服务器认证成功但未返回有效访问令牌")
+            cfg["token"] = access_token
+            _save_remote_sync_config(cfg)
+            return access_token
+    except urllib.error.HTTPError as he:
+        err_msg = he.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=400, detail=f"远程服务器认证失败 (HTTP {he.code}): {err_msg}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"连接远程生产服务器失败: {str(e)}")
+
+
+@router.get("/admin/database/remote-sync/config", summary="读取远程生产环境数据同步配置")
+def get_remote_sync_config(session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    token = str(cfg.get("token") or "")
+    token_masked = f"{token[:8]}...{token[-6:]}" if len(token) > 16 else ("已配置" if token else "")
+    return {
+        "ok": True,
+        "config": {
+            "remote_url": cfg.get("remote_url", "https://platform.smartview.top"),
+            "username": cfg.get("username", "ww870411"),
+            "has_password": bool(cfg.get("password")),
+            "has_token": bool(cfg.get("token")),
+            "token_masked": token_masked,
+            "auto_create_before_pull": bool(cfg.get("auto_create_before_pull", False)),
+        }
+    }
+
+
+@router.post("/admin/database/remote-sync/config", summary="更新并保存远程生产环境数据同步配置")
+def update_remote_sync_config(payload: RemoteSyncConfigPayload, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    if payload.remote_url:
+        cfg["remote_url"] = payload.remote_url.strip()
+    if payload.username is not None:
+        cfg["username"] = payload.username.strip()
+    if payload.password is not None and payload.password != "":
+        cfg["password"] = payload.password
+    if payload.token is not None and payload.token != "":
+        cfg["token"] = payload.token.strip()
+    if payload.auto_create_before_pull is not None:
+        cfg["auto_create_before_pull"] = bool(payload.auto_create_before_pull)
+    _save_remote_sync_config(cfg)
+    return {"ok": True, "message": "已成功保存远程同步配置"}
+
+
+@router.post("/admin/database/remote-sync/test", summary="测试与远程生产服务器的连通性及凭证")
+def test_remote_sync_connection(session: AuthSession = Depends(get_current_session)):
+    import ssl
+    import urllib.request
+    import urllib.error
+
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    token = _get_remote_auth_token(cfg, force_relogin=True)
+    remote_url = str(cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+
+    ctx = ssl._create_unverified_context()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": f"Bearer {token}"
+    }
+
+    req = urllib.request.Request(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            backups = data.get("backups", [])
+            latest = backups[0] if backups else None
+            return {
+                "ok": True,
+                "message": f"连接成功！远程生产服务器在线，当前共有 {len(backups)} 个备份存档",
+                "backup_count": len(backups),
+                "latest_backup": latest
+            }
+    except urllib.error.HTTPError as he:
+        err_msg = he.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=400, detail=f"访问远程备份接口失败 (HTTP {he.code}): {err_msg}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试远程连接异常: {str(e)}")
+
+
+@router.get("/admin/database/remote-sync/list", summary="获取远程生产服务器上的备份文件列表")
+def list_remote_backups(session: AuthSession = Depends(get_current_session)):
+    import ssl
+    import urllib.request
+    import urllib.error
+
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    token = _get_remote_auth_token(cfg)
+    remote_url = str(cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+
+    ctx = ssl._create_unverified_context()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": f"Bearer {token}"
+    }
+
+    req = urllib.request.Request(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return {
+                "ok": True,
+                "remote_url": remote_url,
+                "backups": data.get("backups", [])
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取远程备份列表失败: {str(e)}")
+
+
+@router.post("/admin/database/remote-sync/pull", summary="从远程生产环境拉取指定或最新备份文件至本地")
+def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = Depends(get_current_session)):
+    import ssl
+    import urllib.request
+    import urllib.error
+    from urllib.parse import quote
+
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    if payload.remote_url:
+        cfg["remote_url"] = payload.remote_url.strip()
+    if payload.username:
+        cfg["username"] = payload.username.strip()
+    if payload.password:
+        cfg["password"] = payload.password
+    if payload.token:
+        cfg["token"] = payload.token.strip()
+
+    token = _get_remote_auth_token(cfg)
+    remote_url = str(cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+
+    ctx = ssl._create_unverified_context()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": f"Bearer {token}"
+    }
+
+    # 1. 若要求在拉取前先即时生成最新快照
+    do_create = payload.create_fresh_first if payload.create_fresh_first is not None else cfg.get("auto_create_before_pull", False)
+    target_filename = payload.filename
+
+    if do_create:
+        try:
+            create_req = urllib.request.Request(
+                f"{remote_url}/api/v1/admin/database/backup",
+                data=b"{}",
+                headers={**headers, "Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(create_req, context=ctx, timeout=300) as c_resp:
+                c_data = json.loads(c_resp.read().decode("utf-8"))
+                if c_data and c_data.get("ok") and c_data.get("filename"):
+                    target_filename = c_data.get("filename")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"在远程生产环境创建即时备份失败: {str(e)}")
+
+    # 2. 如果未指定文件名，查询远程列表取最新一个 .dump 备份
+    if not target_filename:
+        try:
+            list_req = urllib.request.Request(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
+            with urllib.request.urlopen(list_req, context=ctx, timeout=20) as l_resp:
+                l_data = json.loads(l_resp.read().decode("utf-8"))
+                remote_backups = l_data.get("backups", [])
+                if not remote_backups:
+                    raise HTTPException(status_code=404, detail="远程生产环境暂无任何备份文件可拉取")
+                target_filename = remote_backups[0].get("filename")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"查询远程最新备份文件失败: {str(e)}")
+
+    remote_filename = Path(target_filename).name
+    # 本地保存时自动在文件名前添加“远程_”前缀（如 远程_phoenix_backup_xxx.dump），便于与本地创建的备份清晰区分
+    if remote_filename.startswith("远程_") or remote_filename.startswith("远程"):
+        local_filename = remote_filename
+    else:
+        local_filename = f"远程_{remote_filename}"
+
+    dest_path = DB_BACKUP_DIR / local_filename
+
+    # 3. 流式下载文件（向远程请求原始文件名）
+    download_url = f"{remote_url}/api/v1/admin/database/backup/download/{quote(remote_filename)}"
+    dl_req = urllib.request.Request(download_url, headers=headers)
+    try:
+        with urllib.request.urlopen(dl_req, context=ctx, timeout=600) as dl_resp:
+            with open(dest_path, "wb") as f:
+                while True:
+                    chunk = dl_resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+        st = dest_path.stat()
+        size_mb = st.st_size / (1024 * 1024)
+        size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
+
+        audit_log.append_events([{
+            "actor_user_id": session.username,
+            "actor_display_name": getattr(session, 'unit', session.username),
+            "action": "database_remote_sync_pull",
+            "target_type": "database",
+            "target_id": local_filename,
+            "detail": {"remote_url": remote_url, "remote_filename": remote_filename, "local_filename": local_filename, "size": size_str}
+        }])
+
+        return {
+            "ok": True,
+            "filename": local_filename,
+            "remote_filename": remote_filename,
+            "file_size": st.st_size,
+            "file_size_h": size_str,
+            "created_at": datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S"),
+            "message": f"成功从生产环境拉取备份文件并保存为 {local_filename} ({size_str})"
+        }
+    except Exception as e:
+        if dest_path.exists() and dest_path.stat().st_size == 0:
+            dest_path.unlink()
+        raise HTTPException(status_code=500, detail=f"下载远程备份包失败: {str(e)}")
+
+
