@@ -6069,6 +6069,45 @@ def handle_comprehensive_entity_directory(
     return query_entity_directory(PROJECT_KEY)
 
 
+# -----------------------------------------------------------------------------
+# 💰 物料单价基准与字典查询接口 (Price Service API)
+# -----------------------------------------------------------------------------
+from backend.projects.insulation_pipe_supply_2026.services.price_service import (
+    list_material_prices,
+    import_prices_from_excel,
+)
+
+
+@router.get("/material-prices", summary="获取保温管与管件标准物料单价字典列表")
+def handle_get_material_prices(
+    material_kind: Optional[str] = Query(None, description="物料大类: pipe | fitting"),
+    supplier_name: Optional[str] = Query(None, description="供给方名称"),
+    category: Optional[str] = Query(None, description="物理品类"),
+    keyword: Optional[str] = Query(None, description="规格型号/材料名称搜索关键字"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    rows = list_material_prices(
+        material_kind=material_kind,
+        supplier_name=supplier_name,
+        category=category,
+        keyword=keyword,
+    )
+    return {
+        "success": True,
+        "total": len(rows),
+        "data": rows,
+    }
+
+
+@router.post("/material-prices/import", summary="从默认 Excel 重新导入/更新物料单价字典")
+def handle_import_material_prices(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    res = import_prices_from_excel(operator=session.username or "ADMIN")
+    return res
+
+
+
 
 
 

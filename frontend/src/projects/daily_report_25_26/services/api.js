@@ -2916,6 +2916,24 @@ export async function getComprehensiveSupplierLedger(projectKey, params = {}) {
   return response.json()
 }
 
+export async function getTubeMaterialPrices(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const searchParams = new URLSearchParams()
+  if (params.materialKind) searchParams.set('material_kind', params.materialKind)
+  if (params.supplierName) searchParams.set('supplier_name', params.supplierName)
+  if (params.category) searchParams.set('category', params.category)
+  if (params.keyword) searchParams.set('keyword', params.keyword)
+
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/material-prices?${searchParams.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取物料采购价格字典失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
 
 
 

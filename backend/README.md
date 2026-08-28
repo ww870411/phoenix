@@ -1,3 +1,75 @@
+## 2026-08-28 综合查询中心对接：精简单价核算备注，保持正常精确匹配项留白
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 精简单价核算备注输出，正常完全匹配项输出 `—`（不展示冗余文本），仅对容差/兜底匹配呈现针对性说明。
+
+## 2026-08-28 综合查询中心对接：保温管单价工程结构化参数解析与容差/兜底匹配备注说明
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 对应后端服务：[`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 前端支持保温管 4 参数结构化工程解析，对非完全字符匹配（如外护套模具公差容差匹配、工作管径兜底匹配）自动生成明确匹配备注说明，在界面悬浮展示并在 Excel 导出中留痕。
+
+## 2026-08-28 综合查询中心对接：供给方发货流转台账各记录单价标示与 Excel 导出价格金额支持
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 对应后端服务：[`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 供给方发货流转台账（Tab 3）每行记录新增单价展示（单型号展示基准单价，多型号混合展示加权均价）；主导出功能同步导出单价、发货总额、到货总额及小计、总计金额。
+
+## 2026-08-28 综合查询中心对接：点击“供给方发货流转台账”自动默认进入“保温管”
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 优化主标签切换路由与参数重置逻辑，切换至供给方台账时默认加载保温管品类。
+
+## 2026-08-28 综合查询中心对接：供给方发货流转台账保温管总价联动核算与 0411 访问码安全验证
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 对应后端服务：[`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 供给方发货流转台账（Tab 3）新增保温管单价匹配与总价金额实时核算功能，打通流转数量与采购字典之间的货值链路；选框激活全面纳入 0411 访问码安全授权体系。
+
+## 2026-08-28 综合查询中心对接：采购价格设置 0411 访问权限控制机制
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 采购价格数据接口与前端视图全面引入访问权限防护机制，访问码为 `0411`，实现采购单价受控安全展示。
+
+## 2026-08-28 综合查询中心对接：Tab 2 标签更名为“设计量、采购量与采购价格”
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - Tab 2 业务主标签正式由“设计采购与基准量进度”命名为 **“设计量、采购量与采购价格”**，全景承载设计基准量、计划采购量与物料基准价格三大维度数据。
+
+## 2026-08-28 物料单价基准管理服务（price_service.py）全量 346 行入库并对同供给方同型号重复报价自动标注备注
+
+- **服务模块与数据表定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - DDL 脚本：[`backend/sql/create_tube_material_price.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_material_price.sql)
+  - 核心数据表：`tube.tube_material_price`
+    - 自增主键：`id BIGSERIAL PRIMARY KEY`
+    - 检索索引：`idx_tube_material_price_sup_spec (supplier_name, model_spec)`
+- **数据导入结果**：
+  - 100% 逐行全量导入 346 条物料单价记录（直管 25 条，管件 321 条）；
+  - 对 7 组同厂家同型号多行报价自动标记 `同型号多行报价 (第 X/N 笔)`，原始施工技术备注完好保留。
+
+## 2026-08-28 物料单价基准管理服务（price_service.py）与数据表（tube_material_price）上线
+
+- **服务模块与数据表定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - DDL 脚本：[`backend/sql/create_tube_material_price.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_material_price.sql)
+  - 核心数据表：`tube.tube_material_price`
+    - 自增主键：`id BIGSERIAL PRIMARY KEY`
+    - 唯一约束：`UNIQUE (supplier_name, model_spec)`
+    - 分类视图：`tube.v_tube_pipe_price`、`tube.v_tube_fitting_price`
+- **业务接口定义**：
+  - `GET /api/v1/projects/{project_key}/material-prices`（单价字典列表查询）
+  - `POST /api/v1/projects/{project_key}/material-prices/import`（Excel 重新导入/更新）
+- **数据导入结果**：
+  - 成功全量导入 333 条标准化物料单价（保温直管 25 条，管件与附件 308 条），支持后期秒级关联测算造价与货值。
+
 ## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）台账 Excel 导出单工作表与列对齐统一优化
 
 - **服务模块与接口定义**：

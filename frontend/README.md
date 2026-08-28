@@ -1,3 +1,104 @@
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）精简单价核算备注：精确匹配保持留空，突出异常容差与兜底说明
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **备注净化与留白**：常规完全字符精确匹配行统一输出 `—`，移除冗余的“合同基准单价”字样；
+  2. **高亮特殊事项**：仅在存在模具容差、口径兜底或多型号均价核算时输出明确的核算说明。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）保温管单价工程结构化参数解析与容差/兜底匹配备注说明
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **工程结构化参数解析器 (`parsePipeSpec`)**：自动将保温管规格解构为工作管外径 $D_1$、工作管壁厚 $t_1$、外护管外径 $D_2$、外护管壁厚 $t_2$ 及甲供属性；
+  2. **多层收敛匹配与说明生成 (`getPipeUnitPriceInfo`)**：支持严格字符精确、工程容差（如外护管 175 对齐 176）及 DN 兜底对齐，并自动生成语义清晰的人性化匹配说明；
+  3. **表格与弹窗交互**：非完全精确匹配的单价旁醒目标注 `ℹ️` 图标，鼠标悬停展示详细匹配说明；
+  4. **Excel 导出留痕**：主台账导出与穿透明细导出均新增【单价核算备注】列，导出全流程可审计。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）供给方发货流转台账各记录单价标示与 Excel 导出价格金额支持
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **表格单价列与加权均价标示**：在 Tab 3 表格中增加“单价 (元/米)”列，单型号直接展示精准单价，多型号混合展示加权均价与 `(均)` 标签；
+  2. **Excel 导出金额修复**：全面重构 `exportCurrentTabExcel` 供给方台账导出分支，勾选总价核算后，导出的表格自动包含各行单价、发货总额、到货总额、接收总额、入库总额以及厂家小计与全项目总计金额。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）主标签切换交互优化：点击“供给方发货流转台账”自动默认进入“保温管”
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **默认子品类对齐**：主标签切换函数 `switchMainTab` 在切换至 `supplier_ledger` 时自动将 `subMaterialType` 重置为 `'pipe'`（保温管），确保首屏展现保温管发货流转主视图。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）供给方发货流转台账保温管总价金额联动核算与 0411 访问码安全验证
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **安全访问验证拦截**：首次勾选“💰 结合供给方与型号计算总价”选框时，自动触发 0411 访问码验证弹窗，输入正确后解锁并激活总价核算；
+  2. **全景金额核算与呈现**：自动匹配基准单价，扩展发货金额、到货金额、施工接收金额与库管确认金额数据列，同步更新 KPI 看板（货值总额、单均货值）与 Excel 导出。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）采购价格访问权限控制与 0411 访问码验证机制
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **访问码拦截验证**：用户点击“💰 采购价格”子标签时，触发安全拦截并弹出 PIN 授权对话框，必须输入正确访问码（`0411`）方可进入；
+  2. **安全防护与会话记忆**：未解锁时屏蔽价格渲染与 KPI 看板，展示受控锁屏卡片；会话内已解锁状态保持，并提供“🔒 重新加锁”按钮供随时主动退出保护。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）Tab 2 标签更名与采购价格 Excel 导出纯净明细化
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **标签更名**：Tab 2 主标签更名为 **`📐 设计量、采购量与采购价格`**（短标签为 `📐 设计·采购·价格`）；
+  2. **Excel 导出纯净化**：采购价格导出的 Excel 表格彻底移除了底部的 `【全筛选汇总】` 累计行，仅呈现 100% 纯净物料明细。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）采购价格表与导出单价列名统一为“单价 (元)”
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  - 页面表头与 Excel 导出表头统一将 `含税单价` 调整为简洁规范的 **`单价 (元)`** / **`单价（元）`**。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）采购价格表移除底部极差并完善 Excel 备注导出
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **底栏汇总行精简**：移除原 `极差: ¥... ~ ¥...`，保持物料条数统计与筛选均价对齐；
+  2. **Excel 完整备注导出**：确保第 9 列备注（包含多行重复报价批次序号与厂家原始施工说明）完整输出，列宽上限扩展至 65 字符自适应。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）采购价格表大类命名统一为“保温管”与“管件”且默认降序排列
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **文案规范化**：大类在下拉筛选、表格徽章与 Excel 导出中统一规范为 **`保温管`** 与 **`管件`**；
+  2. **默认大类降序**：初始化及重置时默认按大类降序排列（保温管排在前面，管件排在后面），同大类下自动级联按供货厂家及大口径规格型号智能降序。
+
+## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）新增【💰 采购价格】子标签、多维联动筛选与专属 Excel 导出
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（物料价格获取接口 `getTubeMaterialPrices`）
+- **功能特性与交互升级**：
+  1. **Tab 2 引入【💰 采购价格】子标签**：与“🔥 保温管”、“🔧 管件”并列；
+  2. **专属 KPI 开会看板**：展示筛选单价条目、涉及供货单位数、直管/管件规格数、物理品类数与均价极差；
+  3. **多维筛选控制条**：支持大类（保温管/管件）、供给方名称、物理类别（弯头/三通/球阀/补偿器等）与规格型号关键字即时联动过滤与一键重置；
+  4. **标准采购价格数据表格**：支持全字段点击排序（含大口径规格型号降序/升序智能排序）、高亮单价展示及底部均价/极差统计行；
+  5. **一键 Excel 导出**：适配输出《保温管与管件物料采购价格基准字典.xlsx》。
+
+## 2026-08-28 保温管与管件标准物料单价基准服务与接口上线
+
+- **关联前端与后端数据源**：
+  - 后端接口：`GET /api/v1/projects/insulation_pipe_supply_2026/material-prices`
+  - 单价数据表：`tube.tube_material_price`（含自增主键 `id` 与 `(supplier_name, model_spec)` 唯一约束）
+- **功能特性与支撑能力**：
+  1. **标准物料单价字典库**：全量导入 333 条保温直管与管件单价数据；
+  2. **赋能动态金额与造价测算**：支持前端发运台账、基准进度与物料汇总随时根据物料数量联动计算发货金额、在途资金与工程造价。
+
 ## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）供给方发运台账 Excel 导出精简为单工作表【多维明细台账】并全局优化列对齐
 
 - **关联前端页面与组件**：

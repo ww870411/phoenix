@@ -1,3 +1,226 @@
+## 2026-08-28 [精简单价备注：精确匹配项保持清爽留空，仅对容差/兜底匹配呈现具体说明]
+- **需求与优化背景**：
+  - 用户指令：“*“合同基准单价”就不用写了*”；
+- **改动与实现详情**：
+  1. **Excel 导出与数据聚合备注净化**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 移除常规精确匹配行中的默认 `'合同基准单价'` 冗余文本，统一显示为 `'—'`（保持清爽留白）；
+     - 仅当真正触发工程容差（如外护套 175 对齐 176）、口径兜底对齐或多规格综合加权均价时，才在备注列中输出具体明确的说明；
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [保温管单价匹配升级工程结构化参数解析，对容差/兜底匹配生成明确说明备注并联动界面与Excel导出]
+- **需求与优化背景**：
+  - 用户指令：“*这种通过兜底匹配上的，希望能写一条备注说明情况，避免误会*”；
+- **改动与实现详情**：
+  1. **工程结构化参数解析器 (`parsePipeSpec`)**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 自动将保温管规格解构为工作管外径 $D_1$、工作管壁厚 $t_1$、外护管外径 $D_2$、外护管壁厚 $t_2$ 及甲供属性；
+  2. **多层收敛匹配与备注生成器 (`getPipeUnitPriceInfo`)**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 优先级 1：字符级严格精确匹配（`exact`，无需额外备注）；
+     - 优先级 2：结构化工程参数容差匹配（`tolerance`），例如工作管外径壁厚一致、外护管在 $\le 3\text{mm}$ 模具微公差范围内（如 175 对齐 176），自动生成详细备注：`单据规格【Φ89×4.0/Φ175×3.0】匹配基准报价【Φ89×4.0/Φ176×3.0】（工作管Φ89×4.0参数一致，外护管工程容差匹配）`；
+     - 优先级 3：主工作管径/DN对齐兜底（`dn_fallback`），自动生成备注：`单据规格【...】匹配基准报价【...】（按主工作管径/DN对齐兜底匹配）`；
+  3. **界面呈现与交互优化**：
+     - 在 Tab 3 表格与穿透明细弹窗中，对容差/兜底匹配的单价旁醒目标注 `ℹ️` 图标，鼠标悬停即弹出完整匹配说明；
+  4. **Excel 导出审计说明完整落地**：
+     - 在主导出 `exportCurrentTabExcel` 与穿透批次导出 `exportCurrentOrderItemsExcel` 中新增【单价核算备注】列，将精准备注写入导出的 Excel 表格中。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [供给方发货流转台账各记录标注单价且 Excel 导出完整支持单价与总价金额输出]
+- **需求与优化背景**：
+  - 用户指令：“*我勾选了“计算总价xxx”选框，为何导出的表格中没有价格信息呢。另外，请把查询出的各条记录的单价也标上*”；
+- **改动与实现详情**：
+  1. **数据表格单价列与加权均价标示**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 在 Tab 3（供给方发货流转台账）表格中增加【单价 (元/米)】列；
+     - 每条记录若为单一型号直接展示精准基准单价（如 `¥452.00`），若多型号聚合则展示加权均价并附 `(均)` 标识；
+     - 底栏汇总行同步标出全项目加权平均单价；支持按单价升降序排序；
+  2. **主导出入口 `exportCurrentTabExcel` 全面支持单价与金额输出**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 修复并升级 `exportCurrentTabExcel` 中的 `supplier_ledger` 导出分支；
+     - 勾选总价核算后，导出的 Excel 工作表完整包含：单价(元/米)、发货量(米)、发货金额(元)、确认到货量(米)、到货金额(元)、施工接收量(米)、接收金额(元)、库管确认量(米)、入库金额(元)等数据列；
+     - 供给方【小计】行与【全项目总计】行均计算并填入小计发货金额、到货金额、小计加权单价以及全项目总发货金额、总到货金额与全项目加权单价。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [点击标签“供给方发货流转台账”自动默认进入子标签“保温管”]
+- **需求与优化背景**：
+  - 用户指令：“*点击标签“供给方发货流转台账”时，应当自动进入子标签“保温管”*”；
+- **改动与实现详情**：
+  1. **主标签切换逻辑优化 (`switchMainTab`)**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 在 `switchMainTab('supplier_ledger')` 触发时，自动将当前子品类状态 `subMaterialType.value` 重置为 `'pipe'`（保温管），确保无论用户此前在其他标签页浏览何种子物料或价格表，切入供给方台账时始终首先呈现保温管流转主视图。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [供给方发货流转台账保温管总价核算选框接入 0411 访问码安全验证]
+- **需求与优化背景**：
+  - 用户指令：“*勾选这个选框，也需要填写 0411 访问码*”；
+- **改动与实现详情**：
+  1. **选框触发安全拦截**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 用户首次勾选 `💰 结合供给方与型号计算总价` 选框时，若未通过安全验证，自动拦截并弹出授权验证窗口；
+  2. **统一验证与动态授权流程**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 弹窗标题自适应显示为“保温管总价核算安全验证”，输入 `0411` 正确验证后，自动勾选并激活总价核算；
+     - 会话内与采购价格表共享授权状态，一次解锁双向生效；重新加锁时同步复位选框。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [供给方发货流转台账（Tab 3）保温管子标签新增总价金额联动核算选框与多维展示]
+- **需求与优化背景**：
+  - 用户指令：“*在标签页“供给方发货流转台账”中，为“保温管”子标签增加一个选框，选中之后，可以结合供给主体名称和规格型号，提供计算总价的服务*”；
+- **改动与实现详情**：
+  1. **总价核算联动选框与触发机制**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 在 Tab 3（供给方发货流转台账）的子品类切换栏右侧增加 `💰 结合供给方与型号计算总价` 选框；
+     - 勾选后自动预加载物料单价字典，激活全局金额测算状态 `showPipeAmountCalc`；
+  2. **智能单价匹配引擎 `getPipeUnitPrice(supplierName, pipeModelName)`**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 结合供给主体全称（支持全称/模糊兼容）与保温管规格型号（支持 `DN1400/1600` 与 `DN1400` 口径智能提取匹配），精准获取物料基准单价；
+  3. **指标测算、KPI看板与表格列全链路扩展**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - **顶部 KPI 看板**：开启时新增展示发货总货值（万元）、确认到货总货值（万元）、施工接收总货值（万元）、库管入库总货值（万元）、单均货值及履约货值率；
+     - **数据表格与底栏**：动态扩展发货金额 (元)、到货金额 (元)、接收金额 (元)、入库金额 (元) 数据列，并支持列排序与底栏全项目金额汇总；
+     - **穿透明细与 Excel 导出**：发运单穿透弹窗与导出的 Excel 工作表均完整支持单价及各项总金额数据输出。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [采购价格表访问安全控制：设置 0411 访问码验证及受控防护机制]
+- **需求与优化背景**：
+  - 用户指令：“*当用户点击“采购价格”标签时，需要输入一个访问码，设定为0411，验证正确后才能访问价格表*”；
+- **改动与实现详情**：
+  1. **访问码授权验证状态与拦截机制**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 设定访问码常量 `PRICE_ACCESS_CODE = '0411'`，使用 `sessionStorage` 记录本次会话解锁状态；
+     - 在用户点击 `💰 采购价格` 子标签时（`switchSubMaterial('price')`），若未解锁则自动拦截并弹出精致的安全验证弹窗（Modal）；
+  2. **访问验证弹窗（PIN Modal）交互**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 具备密码掩码输入、自动聚焦、回车即时验证、输入错误震动红字提示与清空重输机制；
+  3. **未解锁受控保护卡片与主动加锁**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 在未解锁状态下，页面绝不渲染单价数据，展示带有脉冲动效的受控保护锁屏卡片；
+     - 价格工具栏提供“🔒 重新加锁”按钮，支持用户随时安全退出并重新锁定单价数据。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [Tab 2 主标签更名为“设计量、采购量与采购价格”且采购价格 Excel 导出移除全筛选汇总行]
+- **需求与优化背景**：
+  - 用户指令：“*关于采购单价，导出的表格中不要包含“【全筛选汇总】”这一累计行。然后将“设计采购与基准量进度”标签的名字改为“设计量、采购量与采购价格”*”；
+- **改动与实现详情**：
+  1. **核心主标签名称升级**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 将 Tab 2 标签完整文案由 `📐 设计采购与基准量进度` 修改为 **`📐 设计量、采购量与采购价格`**（移动端短标签优化为 `📐 设计·采购·价格`）；
+  2. **采购价格 Excel 导出精简为纯净明细表**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 彻底移除单价导出文件底部的 `【全筛选汇总】` 这一行累计汇总行，仅输出 100% 纯净、标准的单价明细数据行。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [采购价格表与导出文件单价列名统一规范为“单价（元）”]
+- **需求与优化背景**：
+  - 用户指令：“*那个字段。写为“单价（元）”就好，不要写“含税单价”*”；
+- **改动与实现详情**：
+  1. **页面表头列名调整**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 将采购价格表格表头由 `含税单价 (元)` 修改为 **`单价 (元)`**；
+  2. **Excel 导出表头调整**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 将导出的 Excel 表头第 8 列由 `含税单价(元)` 修改为 **`单价（元）`**。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [采购价格表移除底部极差展示，并完善 Excel 导出完整备注与列宽适配]
+- **需求与优化背景**：
+  - 用户指令：“*请去掉底部的“极差: ¥40.00 ~ ¥286,300.00”，另外，导出的表格中，也应该带有完整的备注信息*”；
+- **改动与实现详情**：
+  1. **页面底栏汇总行精简优化**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 彻底移除表格底栏统计行中的 `极差: ¥40.00 ~ ¥286,300.00` 文字；
+     - 汇总行结构调整为：前 7 列合并展示物料记录数与覆盖供给方数，第 8 列展示筛选均价，第 9 列规范占位；
+  2. **Excel 导出备注完整性与列宽强化**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 移除导出的末尾统计行中的极差文字；
+     - 严格确保每条记录的第 9 列备注（包括批次备注如 `同型号多行报价 (第 1/6 笔)` 以及大连开元、江苏沃圣等原始技术说明）完整导出且不留空；
+     - 将 Excel 列宽自适应计算上限从 45 提升至 65 字符，确保长备注在 Excel 中舒展显示。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [物料单价表（tube_material_price）全量 346 行入库，对同供给方同型号重复报价自动清晰备注]
+- **需求与优化背景**：
+  - 用户指令：“*我的意思是，如果存在同一供给方、同一规格型号的记录，那么就要备注出来*”；
+- **改动与实现详情**：
+  1. **智能重复记录识别与备注标注**：
+     - 文件：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+     - 自动统计并识别同厂家同规格型号的重复报价组（共 7 组、20 条重复报价记录，如天津卡尔斯 DN300 焊接球阀 6 笔、DN350 焊接球阀 4 笔、大连三维 DN600 固定支架 2 笔等）；
+     - 自动为每个重复行生成清晰的批次备注：`同型号多行报价 (第 X/N 笔)`；
+     - 若原始 Excel 该行自身带有技术备注（如江苏沃圣的埋深说明或开元的甲供加工说明），则智能拼接保留：`同型号多行报价 (第 X/N 笔)；[原始备注]`；
+     - 独立不重复的物料行（共 326 条）完整保留原始备注或保持纯净；
+  2. **数据入库验证**：
+     - 数据库全量 346 条数据已重新生成并验证通过，7 组重复物料均清晰标注了 `同型号多行报价 (第 1/6 笔)` 等批次序号。
+- **验证结果**：
+  - 前后端全量联调与构建通过，前端页面与 Excel 导出均能一目了然看清重复报价与对应批次。
+
+## 2026-08-28 [采购价格表大类命名统一为“保温管”与“管件”且大类字段默认降序排列]
+- **需求与优化背景**：
+  - 用户指令：“*大类中，pipe显示为“保温管”。然后，大类字段默认降序排列*”；
+- **改动与实现详情**：
+  1. **大类文案全链路统一**：
+     - 将页面下拉筛选选项从 `🔥 保温管 (直管)` 统一优化为 **`🔥 保温管`**，管件选项统一为 **`🔧 管件`**；
+     - 将数据表格内徽章标签从 `🔥 直管` 统一优化为 **`🔥 保温管`**；
+     - 将 Excel 导出中大类字段从 `保温直管` 统一优化为 **`保温管`** 与 **`管件`**；
+  2. **大类默认降序智能排序**：
+     - 将采购价格表的默认排序状态初始化为 `{ key: 'material_kind', order: 'desc' }`；
+     - 默认打开或重置筛选后，自动优先将 **保温管（`pipe`）** 排在最前（共 25 条），其后展示 **管件（`fitting`）**（共 308 条）；
+     - 同一大类内部，自动级联按供货单位拼音升序及规格型号大口径降序（如 `DN1400` > `DN1200` > `...` > `DN80`）智能排布，提升查阅与对比体验。
+- **验证结果**：
+  - 前端 `npm run build` 成功完成全量生产构建（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [综合查询中心【设计采购与基准量进度】新增【💰 采购价格】子标签、多维筛选与专属 Excel 导出]
+- **需求与优化背景**：
+  - 用户指令：“*在“设计采购与基准量进度”标签下，增加一个子标签，放在“管件”标签后面，名为“采购价格”，帮我向用户展示这套价格表，排版与其他子标签类似，也可以导出，当然也应该提供筛选“供给方名称”“大类（我是指保温管或者管件）”“物理类别”“规格型号”等参数。*”；
+- **改动与实现详情**：
+  1. **前端页面结构升级（`HistoryQueryView.vue`）**：
+     - 子品类切换条追加【💰 采购价格】按钮（`subMaterialType === 'price'`）；
+     - 顶部新增采购价格专属 KPI 开会看板（筛选单价条目、涉及供货单位数、保温管规格数、管件品类数、覆盖物理品类数、筛选物料均价）；
+  2. **多维联动筛选控制条**：
+     - **大类选择**：全部大类 / 🔥 保温管 (直管) / 🔧 管件与附件；
+     - **供给方选择**：动态提取 6 家供给方并支持精准筛选；
+     - **物理类别选择**：动态提取物理类别并与选中大类智能联动；
+     - **关键字搜索**：即时模糊匹配规格型号描述、材料标准名称与备注说明，带一键清空与重置；
+  3. **数据表格排版与动态交互**：
+     - 统一高规格表格排版：序号、物料大类（色彩徽章）、供给方全称（加粗天蓝）、物理类别、材料名称、规格型号（加粗）、单位（居中）、含税单价（靠右加粗千分位高亮）、备注说明；
+     - 表头点击动态排序：支持对大类、供给方、物理类别、材料名称、规格型号（智能口径排序）、单价进行升序/降序循环切换；
+     - 底部汇总行：实时展示当前筛选条件下的记录总数、覆盖单位数、筛选均价与极差范围（最低价~最高价）；
+  4. **高规格 Excel 导出引擎适配**：
+     - 点击右上角【📥 导出 Excel】自动导出《保温管与管件物料采购价格基准字典.xlsx》，包含完整明细与末尾统计行，黄金列宽自适应与专业对齐。
+- **验证结果**：
+  - 前端 `npm run build` 成功通过构建（736 modules transformed），零错误零警告。
+
+## 2026-08-28 [保温管与管件标准物料单价基准表（tube.tube_material_price）建表与 Excel 数据导入入库]
+- **需求与优化背景**：
+  - 用户指令：“*那么，请建表，并且完善表格，包括自增的主键——id，以及一个唯一约束，即供给方名称+规格型号*”；
+  - 忽略无意义的固定数量字段，将单价表建设为可动态联动测算合同总额、发货货值、在途资金与库存造价的标准物料价格字典库。
+- **改动与实现详情**：
+  1. **新建 PostgreSQL 数据表（`tube.tube_material_price`）与 DDL 脚本**：
+     - 文件：[`backend/sql/create_tube_material_price.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_material_price.sql)
+     - 自增主键：`id BIGSERIAL PRIMARY KEY`；
+     - 核心业务字段：`project_key`, `material_kind` ('pipe'/'fitting'), `supply_entity_id`, `supplier_name`, `category`, `material_name`, `model_spec`, `raw_model_spec`, `unit`, `unit_price`, `remark`, 审计字段；
+     - 唯一约束：`CREATE UNIQUE INDEX uq_tube_material_price_sup_spec ON tube.tube_material_price (supplier_name, model_spec);`
+     - 便捷分类视图：`v_tube_pipe_price`（直管单价视图）、`v_tube_fitting_price`（管件单价视图）；
+  2. **开发单价管理服务（`price_service.py`）**：
+     - 文件：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+     - 实现自愈建表 `ensure_price_table()`、标准化 Excel 解析与幂等导入 `import_prices_from_excel()` 以及多维查询 `list_material_prices()`；
+  3. **数据导入验证**：
+     - 成功将《8.28 保温管价格_标准化.xlsx》与《8.28 管件价格_标准化.xlsx》共 **333 条** 标准物料单价全量导入数据库；
+     - 涵盖大连开元（79条）、河北鑫瑞得（158条）、江苏沃圣（28条）、天津卡尔斯（28条）、大连三维（21条）、辽宁华阳（19条）全部供货物料；
+  4. **API 路由注册**：
+     - 在 [`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中注册 `GET /material-prices` 与 `POST /material-prices/import` 接口。
+- **验证结果**：
+  - 数据库查询验证通过，333 条数据自增主键与 `(supplier_name, model_spec)` 唯一约束 100% 生效。
+
 ## 2026-08-28 [综合查询中心供给方发运台账 Excel 导出精简为单 Sheet【多维明细台账】并统一优化列对齐]
 - **需求与优化背景**：
   - 用户指令：“*关于“供给方发货流转台账”导出的表格，目前有两个子工作表，即“分供给方汇总统计”和“多维明细台账(含小计)”，我想仅保留后者，并且名称改为“多维明细台账”，其中各列的数据，对齐方式统一优化一下*”；

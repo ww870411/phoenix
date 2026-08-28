@@ -255,8 +255,8 @@
             :class="['tab-pill-btn', { active: activeTab === 'baseline_progress' }]"
             @click="switchMainTab('baseline_progress')"
           >
-            <span class="tab-label-full">📐 设计采购与基准量进度</span>
-            <span class="tab-label-short">📐 基准进度</span>
+            <span class="tab-label-full">📐 设计量、采购量与采购价格</span>
+            <span class="tab-label-short">📐 设计·采购·价格</span>
           </button>
           <button
             type="button"
@@ -684,7 +684,7 @@
         <!-- 📐 Tab 2: 设计使用量与计划采购量对照 -->
         <!-- ==================================================================== -->
         <section v-else-if="activeTab === 'baseline_progress'" class="tab-content-section">
-          <!-- 子品类切换 -->
+          <!-- 子品类切换 (直管 / 管件 / 采购价格) -->
           <div class="sub-pill-bar">
             <button 
               type="button" 
@@ -700,6 +700,25 @@
             >
               🔧 管件
             </button>
+            <button 
+              type="button" 
+              :class="['sub-pill', { active: subMaterialType === 'price' }]"
+              @click="switchSubMaterial('price')"
+            >
+              💰 采购价格 <span class="sub-pill-lock-tag">{{ isPriceUnlocked ? '🔓' : '🔒' }}</span>
+            </button>
+          </div>
+
+          <!-- 🔐 未解锁采购价格时的受控保护卡片 -->
+          <div v-if="subMaterialType === 'price' && !isPriceUnlocked" class="card elevated price-locked-view">
+            <div class="price-locked-content">
+              <div class="price-locked-icon">🔐</div>
+              <h3 class="price-locked-title">物料采购价格字典已受控保护</h3>
+              <p class="price-locked-desc">查看保温管与管件采购基准单价需要输入 4 位安全访问码</p>
+              <button type="button" class="btn btn-primary btn-unlock-action" @click="openPriceAuthModal">
+                🔑 输入访问码解锁查看
+              </button>
+            </div>
           </div>
 
           <!-- 顶部 KPI 开会看板 -->
@@ -730,7 +749,7 @@
             </div>
           </div>
 
-          <div class="kpi-banner-grid" v-else>
+          <div class="kpi-banner-grid" v-else-if="subMaterialType === 'fitting'">
             <div class="kpi-card">
               <span class="kpi-label">📐 总设计管件数</span>
               <span class="kpi-val text-slate">{{ baselineFittingSummary.total_design_qty || 0 }} <small>件</small></span>
@@ -757,6 +776,34 @@
             </div>
           </div>
 
+          <!-- 💰 采购价格专属 KPI 看板 (已解锁时展示) -->
+          <div class="kpi-banner-grid" v-else-if="subMaterialType === 'price' && isPriceUnlocked">
+            <div class="kpi-card">
+              <span class="kpi-label">🏷️ 筛选单价条目</span>
+              <span class="kpi-val text-slate">{{ filteredMaterialPriceRows.length }} <small>/ {{ materialPriceList.length }} 项</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">🏭 涉及供货单位</span>
+              <span class="kpi-val text-sky">{{ priceSuppliersCount }} <small>家企业</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">🔥 保温管单价</span>
+              <span class="kpi-val text-orange">{{ pricePipeCount }} <small>项规格</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">🔧 管件单价</span>
+              <span class="kpi-val text-blue">{{ priceFittingCount }} <small>项品类</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">💎 覆盖物理品类</span>
+              <span class="kpi-val text-indigo">{{ priceCategoriesCount }} <small>种类别</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">📊 筛选物料均价</span>
+              <span class="kpi-val text-emerald font-mono">¥{{ priceAverageDisplay }}</span>
+            </div>
+          </div>
+
           <!-- 🔧 管件模式专属子视图切换栏 (双表独立查询) -->
           <div v-if="subMaterialType === 'fitting'" class="fitting-tab2-sub-nav">
             <button 
@@ -777,22 +824,90 @@
             </button>
           </div>
 
-          <!-- 对照表格 -->
-          <div class="card elevated table-card">
-            <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器) -->
+          <!-- 对照表格 (未解锁价格时不渲染价格表格) -->
+          <div v-if="subMaterialType !== 'price' || isPriceUnlocked" class="card elevated table-card">
+            <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器 / 价格筛选器) -->
             <div class="table-toolbar-row">
               <div class="toolbar-left">
                 <span class="toolbar-title">
                   <template v-if="subMaterialType === 'pipe'">📐 保温管设计采购与施工进度基准对照</template>
-                  <template v-else-if="fittingTab2SubView === 'baseline'">📐 管件设计与计划采购基准表</template>
-                  <template v-else>🚚 管件全周期累计流转与现场库存表</template>
+                  <template v-else-if="subMaterialType === 'fitting' && fittingTab2SubView === 'baseline'">📐 管件设计与计划采购基准表</template>
+                  <template v-else-if="subMaterialType === 'fitting'">🚚 管件全周期累计流转与现场库存表</template>
+                  <template v-else>💰 保温管与管件标准物料采购单价字典</template>
                 </span>
                 <span class="toolbar-count font-mono text-muted">
-                  ({{ subMaterialType === 'pipe' ? aggregatedBaselineRows.length : (fittingTab2SubView === 'baseline' ? aggregatedFittingBaselineRows.length : aggregatedFittingFlowRows.length) }} 组聚合数据)
+                  <template v-if="subMaterialType === 'price'">
+                    ({{ filteredMaterialPriceRows.length }} / {{ materialPriceList.length }} 项单价)
+                  </template>
+                  <template v-else>
+                    ({{ subMaterialType === 'pipe' ? aggregatedBaselineRows.length : (fittingTab2SubView === 'baseline' ? aggregatedFittingBaselineRows.length : aggregatedFittingFlowRows.length) }} 组聚合数据)
+                  </template>
                 </span>
               </div>
 
-              <div class="toolbar-right">
+              <!-- 💰 价格模式专属紧凑筛选器 -->
+              <div v-if="subMaterialType === 'price'" class="toolbar-right price-filters-inline">
+                <!-- 大类筛选 -->
+                <div class="filter-select-item">
+                  <label class="filter-item-label">大类:</label>
+                  <select v-model="priceFilterKind" class="form-select-compact">
+                    <option value="all">全部大类</option>
+                    <option value="pipe">🔥 保温管</option>
+                    <option value="fitting">🔧 管件</option>
+                  </select>
+                </div>
+
+                <!-- 供给方筛选 -->
+                <div class="filter-select-item">
+                  <label class="filter-item-label">供给方:</label>
+                  <select v-model="priceFilterSupplier" class="form-select-compact">
+                    <option value="all">全部供给方 ({{ priceSupplierOptions.length }})</option>
+                    <option v-for="sup in priceSupplierOptions" :key="`p-sup-${sup}`" :value="sup">{{ sup }}</option>
+                  </select>
+                </div>
+
+                <!-- 物理类别筛选 -->
+                <div class="filter-select-item">
+                  <label class="filter-item-label">物理类别:</label>
+                  <select v-model="priceFilterCategory" class="form-select-compact">
+                    <option value="all">全部类别 ({{ priceCategoryOptions.length }})</option>
+                    <option v-for="cat in priceCategoryOptions" :key="`p-cat-${cat}`" :value="cat">{{ cat }}</option>
+                  </select>
+                </div>
+
+                <!-- 搜索框 -->
+                <div class="filter-search-item">
+                  <input 
+                    v-model="priceFilterKeyword" 
+                    type="text" 
+                    placeholder="🔍 搜索规格/型号/材料..." 
+                    class="form-input-compact" 
+                  />
+                  <button v-if="priceFilterKeyword" type="button" class="btn-clear-kw" @click="priceFilterKeyword = ''">×</button>
+                </div>
+
+                <!-- 重置 -->
+                <button 
+                  type="button" 
+                  class="btn-reset-price-filter" 
+                  title="重置价格表筛选"
+                  @click="resetPriceFilters"
+                >
+                  🔄 重置
+                </button>
+
+                <!-- 锁定 -->
+                <button 
+                  type="button" 
+                  class="btn-reset-price-filter btn-lock-price" 
+                  title="安全退出并重新加锁"
+                  @click="lockPriceAccess"
+                >
+                  🔒 重新加锁
+                </button>
+              </div>
+
+              <div v-else class="toolbar-right">
                 <!-- 聚合维度下拉触发与菜单 -->
                 <div class="pivot-dropdown-wrap">
                   <button 
@@ -1021,7 +1136,7 @@
               </table>
 
               <!-- 2. 管件设计与计划采购基准表 (独立子表 1) -->
-              <table v-else-if="fittingTab2SubView === 'baseline'" class="data-table">
+              <table v-else-if="subMaterialType === 'fitting' && fittingTab2SubView === 'baseline'" class="data-table">
                 <thead>
                   <tr>
                     <th 
@@ -1097,7 +1212,7 @@
               </table>
 
               <!-- 3. 管件全周期累计流转与现场库存表 (独立子表 2) -->
-              <table v-else class="data-table">
+              <table v-else-if="subMaterialType === 'fitting'" class="data-table">
                 <thead>
                   <tr>
                     <th 
@@ -1186,6 +1301,132 @@
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 4. 保温管与管件物料采购单价字典表 (采购价格专属子表) -->
+              <table v-else-if="subMaterialType === 'price'" class="data-table">
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width: 55px;">#</th>
+                    <th 
+                      class="text-center sortable-th" 
+                      style="width: 95px;"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'material_kind') }"
+                      @click="handleTableSort('price_table', 'material_kind')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell text-center">
+                        <span>大类</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'material_kind') }">{{ getSortIcon('price_table', 'material_kind') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-left sortable-th"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'supplier_name') }"
+                      @click="handleTableSort('price_table', 'supplier_name')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>供给方全称</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'supplier_name') }">{{ getSortIcon('price_table', 'supplier_name') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-left sortable-th" 
+                      style="width: 110px;"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'category') }"
+                      @click="handleTableSort('price_table', 'category')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>物理类别</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'category') }">{{ getSortIcon('price_table', 'category') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-left sortable-th"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'material_name') }"
+                      @click="handleTableSort('price_table', 'material_name')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>材料标准名称</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'material_name') }">{{ getSortIcon('price_table', 'material_name') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-left sortable-th"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'model_spec') }"
+                      @click="handleTableSort('price_table', 'model_spec')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>规格型号描述</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'model_spec') }">{{ getSortIcon('price_table', 'model_spec') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-center sortable-th" 
+                      style="width: 70px;"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'unit') }"
+                      @click="handleTableSort('price_table', 'unit')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell text-center">
+                        <span>单位</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'unit') }">{{ getSortIcon('price_table', 'unit') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-right sortable-th" 
+                      style="width: 145px;"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'unit_price') }"
+                      @click="handleTableSort('price_table', 'unit_price')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell text-right">
+                        <span>单价 (元)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'unit_price') }">{{ getSortIcon('price_table', 'unit_price') }}</span>
+                      </div>
+                    </th>
+                    <th class="text-left" style="min-width: 160px;">备注说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="sortedMaterialPriceRows.length === 0">
+                    <td colspan="9" class="empty-cell">未查询到符合条件的物料采购价格记录</td>
+                  </tr>
+                  <tr v-for="(row, idx) in sortedMaterialPriceRows" :key="`price-row-${row.id || idx}`">
+                    <td class="text-center text-muted font-mono">{{ idx + 1 }}</td>
+                    <td class="text-center">
+                      <span :class="['badge-tag', row.material_kind === 'pipe' ? 'badge-pipe' : 'badge-fitting']">
+                        {{ row.material_kind === 'pipe' ? '🔥 保温管' : '🔧 管件' }}
+                      </span>
+                    </td>
+                    <td class="text-left font-bold text-sky">{{ row.supplier_name }}</td>
+                    <td class="text-left text-slate font-medium">{{ row.category }}</td>
+                    <td class="text-left text-dark font-medium">{{ row.material_name }}</td>
+                    <td class="text-left font-bold text-slate">
+                      <span>{{ row.model_spec }}</span>
+                    </td>
+                    <td class="text-center text-muted font-medium">{{ row.unit || '个' }}</td>
+                    <td class="text-right font-mono font-bold text-emerald" style="font-size: 14px;">
+                      ¥{{ Number(row.unit_price).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+                    </td>
+                    <td class="text-left text-muted" style="font-size: 12px;">{{ row.remark || '—' }}</td>
+                  </tr>
+
+                  <!-- 汇总行 -->
+                  <tr v-if="sortedMaterialPriceRows.length > 0" class="summary-footer-row">
+                    <td colspan="7" class="text-left">
+                      💰 当前筛选物料单价总览 (共 {{ sortedMaterialPriceRows.length }} 条记录 / 覆盖 {{ priceFilteredSuppliersCount }} 家供给方)
+                    </td>
+                    <td class="text-right font-mono font-bold text-emerald">
+                      均价: ¥{{ priceFilteredAvgDisplay }}
+                    </td>
+                    <td class="text-center text-muted">—</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -1194,22 +1435,38 @@
         <!-- 🏭 Tab 3: 供给方发货流转台账 (纯发货订单驱动) -->
         <!-- ==================================================================== -->
         <section v-else-if="activeTab === 'supplier_ledger'" class="tab-content-section">
-          <!-- 子品类切换 -->
-          <div class="sub-pill-bar">
-            <button 
-              type="button" 
-              :class="['sub-pill', { active: subMaterialType === 'pipe' }]"
-              @click="switchSubMaterial('pipe')"
-            >
-              🔥 保温管
-            </button>
-            <button 
-              type="button" 
-              :class="['sub-pill', { active: subMaterialType === 'fitting' }]"
-              @click="switchSubMaterial('fitting')"
-            >
-              🔧 管件
-            </button>
+          <!-- 子品类切换与总价联动选框 -->
+          <div class="sub-pill-bar flex justify-between items-center">
+            <div class="flex gap-2">
+              <button 
+                type="button" 
+                :class="['sub-pill', { active: subMaterialType === 'pipe' }]"
+                @click="switchSubMaterial('pipe')"
+              >
+                🔥 保温管
+              </button>
+              <button 
+                type="button" 
+                :class="['sub-pill', { active: subMaterialType === 'fitting' }]"
+                @click="switchSubMaterial('fitting')"
+              >
+                🔧 管件
+              </button>
+            </div>
+
+            <!-- 💰 保温管结合厂家与型号计算总价选框 -->
+            <div v-if="subMaterialType === 'pipe'" class="pipe-calc-price-toggle-wrap">
+              <label class="calc-price-label" title="结合供给主体与规格型号自动匹配基准单价，核算发运与到货货值总价">
+                <input 
+                  type="checkbox" 
+                  :checked="showPipeAmountCalc" 
+                  @change="handlePipeCalcToggle" 
+                  class="calc-price-checkbox"
+                />
+                <span class="calc-price-text">💰 结合供给方与型号计算总价</span>
+                <span v-if="showPipeAmountCalc" class="calc-active-tag">已开启计算</span>
+              </label>
+            </div>
           </div>
 
           <!-- 顶部 KPI 开会速读看板 -->
@@ -1217,26 +1474,44 @@
             <div class="kpi-card">
               <span class="kpi-label">🏭 供给侧累计发货</span>
               <span class="kpi-val text-sky">{{ formatQty(supplierLedgerSummary.total_shipped_qty) }} <small>米</small></span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-sky font-mono font-bold">
+                ¥{{ formatAmountWan(supplierLedgerSummary.total_shipped_amount) }} 万元
+              </span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">📥 现场确认总到货</span>
               <span class="kpi-val text-blue">{{ formatQty(supplierLedgerSummary.total_arrived_qty) }} <small>米</small></span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-blue font-mono font-bold">
+                ¥{{ formatAmountWan(supplierLedgerSummary.total_arrived_amount) }} 万元
+              </span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">👷 施工接收总量</span>
               <span class="kpi-val text-indigo">{{ formatQty(supplierLedgerSummary.total_received_qty) }} <small>米</small></span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-indigo font-mono font-bold">
+                ¥{{ formatAmountWan(supplierLedgerSummary.total_received_amount) }} 万元
+              </span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">💼 库管已入库总量</span>
               <span class="kpi-val text-amber">{{ formatQty(supplierLedgerSummary.total_warehouse_qty) }} <small>米</small></span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-amber font-mono font-bold">
+                ¥{{ formatAmountWan(supplierLedgerSummary.total_warehouse_amount) }} 万元
+              </span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">🚚 发运订单车次</span>
               <span class="kpi-val text-slate">{{ supplierLedgerSummary.total_orders_count }} <small>单/车</small></span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-slate font-mono">
+                单均货值 ¥{{ formatAmountWan(supplierLedgerSummary.avg_order_amount) }}万
+              </span>
             </div>
             <div class="kpi-card">
               <span class="kpi-label">⏱️ 平均在途时长</span>
               <span class="kpi-val text-slate">{{ supplierLedgerSummary.overall_avg_transit }}</span>
+              <span v-if="showPipeAmountCalc" class="kpi-amount-sub text-emerald font-mono font-bold">
+                履约货值率 {{ supplierLedgerSummary.overall_fulfillment_rate }}%
+              </span>
             </div>
           </div>
 
@@ -1394,11 +1669,26 @@
                       </div>
                     </th>
 
+                    <!-- 💰 单价 (元/米) -->
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'unit_price') }" @click="handleTableSort('supplier_ledger', 'unit_price')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span class="text-slate font-bold">单价 (元/米)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'unit_price') }">{{ getSortIcon('supplier_ledger', 'unit_price') }}</span>
+                      </div>
+                    </th>
+
                     <!-- 发货量 -->
                     <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'shipped_qty') }" @click="handleTableSort('supplier_ledger', 'shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
                       <div class="th-inner-cell text-right">
                         <span>发货量 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
                         <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'shipped_qty') }">{{ getSortIcon('supplier_ledger', 'shipped_qty') }}</span>
+                      </div>
+                    </th>
+                    <!-- 💰 发货总额 -->
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'shipped_amount') }" @click="handleTableSort('supplier_ledger', 'shipped_amount')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span class="text-sky font-bold">发货金额 (元)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'shipped_amount') }">{{ getSortIcon('supplier_ledger', 'shipped_amount') }}</span>
                       </div>
                     </th>
 
@@ -1409,6 +1699,13 @@
                         <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'arrived_qty') }">{{ getSortIcon('supplier_ledger', 'arrived_qty') }}</span>
                       </div>
                     </th>
+                    <!-- 💰 到货总额 -->
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'arrived_amount') }" @click="handleTableSort('supplier_ledger', 'arrived_amount')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span class="text-blue font-bold">到货金额 (元)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'arrived_amount') }">{{ getSortIcon('supplier_ledger', 'arrived_amount') }}</span>
+                      </div>
+                    </th>
 
                     <!-- 施工接收 -->
                     <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'received_qty') }" @click="handleTableSort('supplier_ledger', 'received_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
@@ -1417,12 +1714,26 @@
                         <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'received_qty') }">{{ getSortIcon('supplier_ledger', 'received_qty') }}</span>
                       </div>
                     </th>
+                    <!-- 💰 接收总额 -->
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'received_amount') }" @click="handleTableSort('supplier_ledger', 'received_amount')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span class="text-indigo font-bold">接收金额 (元)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'received_amount') }">{{ getSortIcon('supplier_ledger', 'received_amount') }}</span>
+                      </div>
+                    </th>
 
                     <!-- 库管确认 -->
                     <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'warehouse_qty') }" @click="handleTableSort('supplier_ledger', 'warehouse_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
                       <div class="th-inner-cell text-right">
                         <span>库管已确认 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
                         <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'warehouse_qty') }">{{ getSortIcon('supplier_ledger', 'warehouse_qty') }}</span>
+                      </div>
+                    </th>
+                    <!-- 💰 入库总额 -->
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'warehouse_amount') }" @click="handleTableSort('supplier_ledger', 'warehouse_amount')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span class="text-amber font-bold">入库金额 (元)</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'warehouse_amount') }">{{ getSortIcon('supplier_ledger', 'warehouse_amount') }}</span>
                       </div>
                     </th>
 
@@ -1493,11 +1804,56 @@
                       </template>
                     </td>
 
-                    <!-- 数量列 (与 Tab 1/2 保持完全统一字体与颜色) -->
+                    <!-- 💰 单价 (元/米) -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-slate">
+                      <template v-if="typeof row.unit_price === 'number'">
+                        <span class="price-val-text">¥{{ formatAmount(row.unit_price) }}</span>
+                        <small v-if="row.is_avg_price" class="text-muted text-xs ml-0.5">(均)</small>
+                        <!-- 💡 兜底/工程容差匹配备注角标 -->
+                        <span 
+                          v-if="row.has_tolerance_price && row.price_note" 
+                          class="price-note-icon" 
+                          :title="`💡 单价匹配说明：\n${row.price_note}`"
+                        >
+                          ℹ️
+                        </span>
+                      </template>
+                      <template v-else-if="row.unit_price === 'multiple'">
+                        <span class="text-muted text-xs">多项单价</span>
+                      </template>
+                      <template v-else>
+                        <span class="text-muted">—</span>
+                      </template>
+                    </td>
+
+                    <!-- 发货量 -->
                     <td class="text-right font-medium text-sky">{{ subMaterialType === 'pipe' ? formatQty(row.shipped_qty) : row.shipped_qty }}</td>
+                    <!-- 💰 发货金额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-sky">
+                      ¥{{ formatAmount(row.shipped_amount) }}
+                    </td>
+
+                    <!-- 确认到货 -->
                     <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(row.arrived_qty) : row.arrived_qty }}</td>
+                    <!-- 💰 到货金额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-blue">
+                      ¥{{ formatAmount(row.arrived_amount) }}
+                    </td>
+
+                    <!-- 施工接收 -->
                     <td class="text-right font-medium text-indigo">{{ subMaterialType === 'pipe' ? formatQty(row.received_qty) : row.received_qty }}</td>
+                    <!-- 💰 接收金额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-indigo">
+                      ¥{{ formatAmount(row.received_amount) }}
+                    </td>
+
+                    <!-- 库管确认 -->
                     <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(row.warehouse_qty) : row.warehouse_qty }}</td>
+                    <!-- 💰 入库金额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-amber">
+                      ¥{{ formatAmount(row.warehouse_amount) }}
+                    </td>
+
                     <td class="text-center font-mono text-muted">{{ row.avg_transit_display }}</td>
                     <td class="text-right font-mono text-slate">{{ row.orders_count }} 单</td>
 
@@ -1534,10 +1890,35 @@
                     <td :colspan="supplierLedgerDimensions.length" class="text-left">
                       🏭 全项目供给方发货流转汇总 (已聚合为 {{ aggregatedSupplierLedgerRows.length }} 组)
                     </td>
+                    <!-- 💰 全项目加权平均单价 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-slate">
+                      ¥{{ (supplierLedgerSummary.total_shipped_qty > 0 ? formatAmount(supplierLedgerSummary.total_shipped_amount / supplierLedgerSummary.total_shipped_qty) : '0.00') }} <small class="text-muted text-xs">(均)</small>
+                    </td>
+
                     <td class="text-right font-bold text-sky">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_shipped_qty) : supplierLedgerSummary.total_shipped_qty }}</td>
+                    <!-- 💰 发货总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-sky">
+                      ¥{{ formatAmount(supplierLedgerSummary.total_shipped_amount) }}
+                    </td>
+
                     <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_arrived_qty) : supplierLedgerSummary.total_arrived_qty }}</td>
+                    <!-- 💰 到货总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-blue">
+                      ¥{{ formatAmount(supplierLedgerSummary.total_arrived_amount) }}
+                    </td>
+
                     <td class="text-right font-bold text-indigo">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_received_qty) : supplierLedgerSummary.total_received_qty }}</td>
+                    <!-- 💰 接收总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-indigo">
+                      ¥{{ formatAmount(supplierLedgerSummary.total_received_amount) }}
+                    </td>
+
                     <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_warehouse_qty) : supplierLedgerSummary.total_warehouse_qty }}</td>
+                    <!-- 💰 入库总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-amber">
+                      ¥{{ formatAmount(supplierLedgerSummary.total_warehouse_amount) }}
+                    </td>
+
                     <td class="text-center font-mono">{{ supplierLedgerSummary.overall_avg_transit }}</td>
                     <td class="text-right font-mono text-slate">{{ supplierLedgerSummary.total_orders_count }} 单</td>
                     <td class="text-left">
@@ -2399,10 +2780,13 @@
                     <th class="text-left">运单号/批次</th>
                     <th class="text-left">需求标段</th>
                     <th class="text-left">规格型号</th>
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right">单价 (元/米)</th>
                     <th class="text-center">发货日期</th>
                     <th class="text-left">车辆 / 司机 / 电话</th>
                     <th class="text-right">发货量 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right text-sky font-bold">发货金额 (元)</th>
                     <th class="text-right">确认到货 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right text-blue font-bold">到货金额 (元)</th>
                     <th class="text-right">施工接收 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
                     <th class="text-right">库管确认 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
                     <th class="text-center">在途时长</th>
@@ -2422,13 +2806,38 @@
                         <span class="font-medium text-muted ml-1">{{ order.model_spec }}</span>
                       </template>
                     </td>
+                    <!-- 💰 单价 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-slate">
+                      <template v-if="order.unit_price != null">
+                        <span>¥{{ formatAmount(order.unit_price) }}</span>
+                        <!-- 💡 兜底/工程容差匹配备注角标 -->
+                        <span 
+                          v-if="!order.is_exact_price && order.price_note" 
+                          class="price-note-icon" 
+                          :title="`💡 单价匹配说明：\n${order.price_note}`"
+                        >
+                          ℹ️
+                        </span>
+                      </template>
+                      <template v-else>
+                        <span class="text-muted">—</span>
+                      </template>
+                    </td>
                     <td class="text-center font-mono text-xs">{{ order.biz_date }}</td>
                     <td class="text-left text-xs">
                       <div class="font-bold text-slate-700">{{ order.vehicle_no || '—' }}</div>
                       <div class="text-slate-500 font-mono">{{ order.driver_name }} {{ order.driver_phone }}</div>
                     </td>
                     <td class="text-right font-medium text-sky">{{ subMaterialType === 'pipe' ? formatQty(order.shipped_qty) : order.shipped_qty }}</td>
+                    <!-- 💰 发货总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-sky">
+                      ¥{{ formatAmount(order.shipped_amount) }}
+                    </td>
                     <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(order.arrived_qty) : order.arrived_qty }}</td>
+                    <!-- 💰 到货总额 -->
+                    <td v-if="subMaterialType === 'pipe' && showPipeAmountCalc" class="text-right font-mono font-bold text-blue">
+                      ¥{{ formatAmount(order.arrived_amount) }}
+                    </td>
                     <td class="text-right font-medium text-indigo">{{ subMaterialType === 'pipe' ? formatQty(order.received_qty) : order.received_qty }}</td>
                     <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(order.warehouse_qty) : order.warehouse_qty }}</td>
                     <td class="text-center font-mono text-muted text-xs">{{ order.transit_display }}</td>
@@ -2455,6 +2864,53 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 🔐 弹窗：采购价格访问安全授权验证 Modal -->
+    <Transition name="fade">
+      <div v-if="priceAuthModalVisible" class="block-modal-overlay" @click.self="closePriceAuthModal">
+        <div class="block-modal-container modal-sm price-auth-modal">
+          <div class="block-modal-header bg-amber-gradient">
+            <span class="modal-header-icon">🔐</span>
+            <div class="modal-header-title-wrap">
+              <h3 class="modal-title">
+                {{ pendingAuthTarget === 'pipe_calc' ? '保温管总价核算安全验证' : '采购价格安全访问验证' }}
+              </h3>
+              <p class="modal-sub">
+                {{ pendingAuthTarget === 'pipe_calc' ? '联动单价字典计算发运与到货总价需验证访问权限' : '查看保温管与管件采购基准价格需验证访问权限' }}
+              </p>
+            </div>
+            <button type="button" class="btn-modal-close-icon" @click="closePriceAuthModal" title="关闭窗口">✕</button>
+          </div>
+
+          <form class="modal-body auth-modal-body" @submit.prevent="handleVerifyPriceCode">
+            <div class="auth-instruction">
+              <span class="auth-label">请输入 4 位数字访问码：</span>
+            </div>
+            <div class="auth-input-wrapper">
+              <input
+                ref="priceInputRef"
+                v-model="priceAccessCodeInput"
+                type="password"
+                maxlength="10"
+                class="auth-input-field font-mono"
+                placeholder="••••"
+                autocomplete="off"
+                @keydown.enter.prevent="handleVerifyPriceCode"
+              />
+            </div>
+            <div v-if="priceAccessErrorMsg" class="auth-error-tip">
+              ⚠️ {{ priceAccessErrorMsg }}
+            </div>
+            <div class="auth-modal-footer">
+              <button type="button" class="btn secondary" @click="closePriceAuthModal">取消</button>
+              <button type="submit" class="btn btn-primary" :disabled="!priceAccessCodeInput.trim()">
+                🔓 验证并进入
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -2469,6 +2925,7 @@ import {
   getComprehensiveBaselineProgress,
   getComprehensiveSupplierLedger,
   getComprehensiveEntityDirectory,
+  getTubeMaterialPrices,
 } from '@/projects/daily_report_25_26/services/api'
 
 const router = useRouter()
@@ -2497,6 +2954,315 @@ const directoryCategory = ref('all') // 'all' | 'suppliers' | 'site_managers' | 
 
 // 责任主体专属视图切换模式 ('by_category': 按主体类别 | 'by_section': 按标段综合穿透)
 const directoryViewMode = ref('by_category')
+
+// -----------------------------------------------------------------------------
+// 🔐 采购价格安全访问验证状态 (访问码 0411)
+// -----------------------------------------------------------------------------
+const PRICE_ACCESS_CODE = '0411'
+const isPriceUnlocked = ref(sessionStorage.getItem('phoenix_price_unlocked') === '1')
+const priceAuthModalVisible = ref(false)
+const priceAccessCodeInput = ref('')
+const priceAccessErrorMsg = ref('')
+const priceInputRef = ref(null)
+const pendingAuthTarget = ref('price_tab') // 'price_tab' (采购价格表) | 'pipe_calc' (保温管总价核算选框)
+
+function openPriceAuthModal(target = 'price_tab') {
+  pendingAuthTarget.value = target
+  priceAccessCodeInput.value = ''
+  priceAccessErrorMsg.value = ''
+  priceAuthModalVisible.value = true
+  setTimeout(() => {
+    if (priceInputRef.value) {
+      priceInputRef.value.focus()
+    }
+  }, 100)
+}
+
+function closePriceAuthModal() {
+  priceAuthModalVisible.value = false
+  priceAccessCodeInput.value = ''
+  priceAccessErrorMsg.value = ''
+}
+
+async function handleVerifyPriceCode() {
+  const code = (priceAccessCodeInput.value || '').trim()
+  if (code === PRICE_ACCESS_CODE) {
+    isPriceUnlocked.value = true
+    sessionStorage.setItem('phoenix_price_unlocked', '1')
+    priceAuthModalVisible.value = false
+    priceAccessCodeInput.value = ''
+    priceAccessErrorMsg.value = ''
+
+    // 确保单价字典数据已加载
+    if (materialPriceList.value.length === 0) {
+      try {
+        const res = await getTubeMaterialPrices(projectKey)
+        if (res && res.data) {
+          materialPriceList.value = res.data
+        }
+      } catch (err) {
+        console.error('加载物料单价字典失败:', err)
+      }
+    }
+
+    if (pendingAuthTarget.value === 'price_tab') {
+      subMaterialType.value = 'price'
+      fetchActiveTabData()
+    } else if (pendingAuthTarget.value === 'pipe_calc') {
+      showPipeAmountCalc.value = true
+    }
+  } else {
+    priceAccessErrorMsg.value = '访问码错误，请重新输入'
+    priceAccessCodeInput.value = ''
+    if (priceInputRef.value) {
+      priceInputRef.value.focus()
+    }
+  }
+}
+
+function lockPriceAccess() {
+  isPriceUnlocked.value = false
+  sessionStorage.removeItem('phoenix_price_unlocked')
+  showPipeAmountCalc.value = false
+  subMaterialType.value = 'pipe'
+  fetchActiveTabData()
+}
+
+// -----------------------------------------------------------------------------
+// 💰 供给方台账保温管金额联动核算状态 (Tab 3)
+// -----------------------------------------------------------------------------
+const showPipeAmountCalc = ref(false)
+
+async function handlePipeCalcToggle(e) {
+  const checked = e.target.checked
+  if (checked) {
+    if (!isPriceUnlocked.value) {
+      e.target.checked = false
+      openPriceAuthModal('pipe_calc')
+      return
+    }
+    if (materialPriceList.value.length === 0) {
+      try {
+        const res = await getTubeMaterialPrices(projectKey)
+        if (res && res.data) {
+          materialPriceList.value = res.data
+        }
+      } catch (err) {
+        console.error('加载物料单价字典失败:', err)
+      }
+    }
+    showPipeAmountCalc.value = true
+  } else {
+    showPipeAmountCalc.value = false
+  }
+}
+
+// 保温管规格工程解析器 (提取工作管与外护管参数及甲供属性)
+function parsePipeSpec(str) {
+  if (!str) return null
+  const s = String(str).replace(/\s+/g, '')
+  const isJiaGong = s.includes('甲供')
+
+  // 双层格式：外径1*壁厚1 / 外径2*壁厚2 (例如 Φ89×4.0/Φ175×3.0 或 89*4/176*3)
+  const doubleMatch = s.match(/(?:Φ|DN)?(\d+(?:\.\d+)?)[×*](\d+(?:\.\d+)?)\s*[\/]\s*(?:Φ|DN)?(\d+(?:\.\d+)?)[×*]?(\d+(?:\.\d+)?)?/i)
+  if (doubleMatch) {
+    return {
+      d1: parseFloat(doubleMatch[1]),
+      t1: doubleMatch[2] ? parseFloat(doubleMatch[2]) : null,
+      d2: doubleMatch[3] ? parseFloat(doubleMatch[3]) : null,
+      t2: doubleMatch[4] ? parseFloat(doubleMatch[4]) : null,
+      isJiaGong
+    }
+  }
+
+  // 单层带壁厚格式：例如 Φ89×4.0
+  const singleMatch = s.match(/(?:Φ|DN)?(\d+(?:\.\d+)?)[×*](\d+(?:\.\d+)?)/i)
+  if (singleMatch) {
+    return {
+      d1: parseFloat(singleMatch[1]),
+      t1: parseFloat(singleMatch[2]),
+      d2: null,
+      t2: null,
+      isJiaGong
+    }
+  }
+
+  // DN 格式：例如 DN80
+  const dnMatch = s.match(/DN\s*(\d+)/i)
+  if (dnMatch) {
+    const dnVal = parseInt(dnMatch[1], 10)
+    return {
+      dn: dnVal,
+      d1: dnVal,
+      t1: null,
+      d2: null,
+      t2: null,
+      isJiaGong
+    }
+  }
+
+  const numMatch = s.match(/\d+/)
+  return {
+    d1: numMatch ? parseFloat(numMatch[0]) : null,
+    t1: null,
+    d2: null,
+    t2: null,
+    isJiaGong
+  }
+}
+
+// 结合供货厂家全称与保温管规格型号精准匹配基准单价及备注
+function getPipeUnitPriceInfo(supplierName, pipeModelName) {
+  const defRes = {
+    unitPrice: null,
+    matchedSpec: '',
+    targetSpec: pipeModelName || '',
+    matchType: null, // 'exact' | 'tolerance' | 'dn_fallback'
+    matchNote: '',
+    isExact: false
+  }
+
+  if (!materialPriceList.value || materialPriceList.value.length === 0) return defRes
+  const supClean = (supplierName || '').trim()
+  const modelClean = (pipeModelName || '').trim()
+  if (!supClean || !modelClean) return defRes
+
+  const pipePrices = materialPriceList.value.filter(p => p.material_kind === 'pipe')
+
+  // 1. 优先供给方全称精确匹配或包含匹配
+  const matchedSupPrices = pipePrices.filter(p => {
+    const pSup = (p.supplier_name || '').trim()
+    if (!pSup) return false
+    return pSup === supClean || pSup.includes(supClean) || supClean.includes(pSup)
+  })
+
+  if (matchedSupPrices.length === 0) return defRes
+
+  // 2. 匹配型号 (第 1 优先级：字符级完全精确匹配)
+  const exactMatched = matchedSupPrices.find(p => 
+    (p.model_spec && p.model_spec.replace(/\s+/g, '') === modelClean.replace(/\s+/g, '')) ||
+    (p.raw_model_spec && p.raw_model_spec.replace(/\s+/g, '') === modelClean.replace(/\s+/g, ''))
+  )
+  if (exactMatched) {
+    return {
+      unitPrice: Number(exactMatched.unit_price) || 0,
+      matchedSpec: exactMatched.model_spec || exactMatched.raw_model_spec || modelClean,
+      targetSpec: modelClean,
+      matchType: 'exact',
+      matchNote: '', // 精确匹配无需特别备注
+      isExact: true
+    }
+  }
+
+  // 3. 结构化工程参数解析匹配 (第 2 优先级：工作管外径+壁厚一致，外护管允许工程级微差容差匹配)
+  const targetParsed = parsePipeSpec(modelClean)
+  if (targetParsed && targetParsed.d1 != null) {
+    for (const p of matchedSupPrices) {
+      const pParsed = parsePipeSpec(p.model_spec || p.raw_model_spec || '')
+      if (!pParsed || pParsed.d1 == null) continue
+
+      // 甲供状态必须一致 (避免把普通管匹配为甲供钢管)
+      if (targetParsed.isJiaGong !== pParsed.isJiaGong) continue
+
+      // 工作管外径必须一致
+      if (targetParsed.d1 === pParsed.d1) {
+        // 若双方均有工作管壁厚，壁厚必须相同
+        if (targetParsed.t1 != null && pParsed.t1 != null && targetParsed.t1 !== pParsed.t1) {
+          continue
+        }
+
+        // 外护管外径容差判断 (<= 3mm 视为工程模具微差容差)
+        let isTolerance = false
+        if (targetParsed.d2 != null && pParsed.d2 != null) {
+          const diff = Math.abs(targetParsed.d2 - pParsed.d2)
+          if (diff <= 3) {
+            isTolerance = true
+          }
+        } else {
+          isTolerance = true
+        }
+
+        if (isTolerance) {
+          const matchedSpec = p.model_spec || p.raw_model_spec || ''
+          return {
+            unitPrice: Number(p.unit_price) || 0,
+            matchedSpec,
+            targetSpec: modelClean,
+            matchType: 'tolerance',
+            matchNote: `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（工作管Φ${targetParsed.d1}×${targetParsed.t1 || ''}参数一致，外护管工程容差匹配）`,
+            isExact: false
+          }
+        }
+      }
+    }
+  }
+
+  // 4. 口径数值提取兜底匹配 (第 3 优先级：主工作管径/DN对齐)
+  const getDnNum = (str) => {
+    const m = str.match(/DN\s*(\d+)/i)
+    if (m) return Number(m[1])
+    const n = str.match(/\d+/)
+    return n ? Number(n[0]) : null
+  }
+  const targetDn = getDnNum(modelClean)
+  if (targetDn != null) {
+    const dnMatched = matchedSupPrices.find(p => {
+      const pParsed = parsePipeSpec(p.model_spec || p.raw_model_spec || '')
+      if (pParsed && targetParsed && pParsed.isJiaGong !== targetParsed.isJiaGong) return false
+      const pDn = getDnNum(p.model_spec || p.raw_model_spec || '')
+      return pDn === targetDn
+    })
+    if (dnMatched) {
+      const matchedSpec = dnMatched.model_spec || dnMatched.raw_model_spec || ''
+      return {
+        unitPrice: Number(dnMatched.unit_price) || 0,
+        matchedSpec,
+        targetSpec: modelClean,
+        matchType: 'dn_fallback',
+        matchNote: `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（按主工作管径/DN对齐兜底匹配）`,
+        isExact: false
+      }
+    }
+  }
+
+  return defRes
+}
+
+// 保持兼容的单价数值获取方法
+function getPipeUnitPrice(supplierName, pipeModelName) {
+  const info = getPipeUnitPriceInfo(supplierName, pipeModelName)
+  return info.unitPrice
+}
+
+function formatAmount(val) {
+  if (val == null || isNaN(val)) return '0.00'
+  return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatAmountWan(val) {
+  if (val == null || isNaN(val)) return '0.00'
+  const wan = Number(val) / 10000
+  return wan.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// -----------------------------------------------------------------------------
+// 💰 物料采购价格字典状态 (Tab 2 采购价格子视图)
+// -----------------------------------------------------------------------------
+const materialPriceList = ref([])
+const priceFilterKind = ref('all') // 'all' | 'pipe' | 'fitting'
+const priceFilterSupplier = ref('all') // 'all' | 某供给方全称
+const priceFilterCategory = ref('all') // 'all' | 某物理品类
+const priceFilterKeyword = ref('') // 规格型号/材料搜索
+
+function resetPriceFilters() {
+  priceFilterKind.value = 'all'
+  priceFilterSupplier.value = 'all'
+  priceFilterCategory.value = 'all'
+  priceFilterKeyword.value = ''
+  if (tableSortStates.value.price_table) {
+    tableSortStates.value.price_table = { key: 'material_kind', order: 'desc' }
+  }
+}
 
 // 分组折叠状态 (默认全部展开)
 const groupCollapseState = reactive({
@@ -3396,6 +4162,7 @@ const tableSortStates = ref({
   baseline_pipe: { key: '', order: '' },
   fitting_baseline: { key: '', order: '' },
   fitting_flow: { key: '', order: '' },
+  price_table: { key: 'material_kind', order: 'desc' },
   supplier_ledger: { key: '', order: '' }
 })
 
@@ -3551,6 +4318,156 @@ const sortedFittingFlowRows = computed(() => {
 })
 
 // -----------------------------------------------------------------------------
+// 💰 物料采购价格字典计算属性与 KPI (Tab 2 采购价格专属)
+// -----------------------------------------------------------------------------
+
+// 供给方下拉选项列表
+const priceSupplierOptions = computed(() => {
+  const sups = new Set()
+  materialPriceList.value.forEach(p => {
+    if (p.supplier_name) sups.add(p.supplier_name)
+  })
+  return Array.from(sups).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+
+// 物理类别下拉选项列表（联动大类）
+const priceCategoryOptions = computed(() => {
+  const cats = new Set()
+  materialPriceList.value.forEach(p => {
+    if (priceFilterKind.value !== 'all' && p.material_kind !== priceFilterKind.value) return
+    if (p.category) cats.add(p.category)
+  })
+  return Array.from(cats).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+
+// 筛选后的单价行数据
+const filteredMaterialPriceRows = computed(() => {
+  let list = materialPriceList.value || []
+  if (priceFilterKind.value !== 'all') {
+    list = list.filter(p => p.material_kind === priceFilterKind.value)
+  }
+  if (priceFilterSupplier.value !== 'all') {
+    list = list.filter(p => p.supplier_name === priceFilterSupplier.value)
+  }
+  if (priceFilterCategory.value !== 'all') {
+    list = list.filter(p => p.category === priceFilterCategory.value)
+  }
+  if (priceFilterKeyword.value.trim()) {
+    const kw = priceFilterKeyword.value.trim().toLowerCase()
+    list = list.filter(p => 
+      (p.model_spec && p.model_spec.toLowerCase().includes(kw)) ||
+      (p.material_name && p.material_name.toLowerCase().includes(kw)) ||
+      (p.raw_model_spec && p.raw_model_spec.toLowerCase().includes(kw)) ||
+      (p.remark && p.remark.toLowerCase().includes(kw))
+    )
+  }
+  return list
+})
+
+// 排序后的单价行数据 (默认大类降序: 保温管在前、管件在后，同大类内按供给方与规格型号口径降序排列)
+const sortedMaterialPriceRows = computed(() => {
+  const current = tableSortStates.value.price_table
+  const list = filteredMaterialPriceRows.value || []
+  if (!current || !current.key || !current.order) {
+    // 默认大类降序
+    const copy = [...list]
+    copy.sort((a, b) => {
+      if (a.material_kind !== b.material_kind) {
+        return (b.material_kind || '').localeCompare(a.material_kind || '')
+      }
+      if (a.supplier_name !== b.supplier_name) {
+        return (a.supplier_name || '').localeCompare(b.supplier_name || '', 'zh-CN')
+      }
+      return compareModelSpecs(a.model_spec || '', b.model_spec || '', 'desc')
+    })
+    return copy
+  }
+
+  // 若用户显式点击大类排序
+  if (current.key === 'material_kind') {
+    const isDesc = current.order === 'desc'
+    const copy = [...list]
+    copy.sort((a, b) => {
+      if (a.material_kind !== b.material_kind) {
+        return isDesc 
+          ? (b.material_kind || '').localeCompare(a.material_kind || '') 
+          : (a.material_kind || '').localeCompare(b.material_kind || '')
+      }
+      if (a.supplier_name !== b.supplier_name) {
+        return (a.supplier_name || '').localeCompare(b.supplier_name || '', 'zh-CN')
+      }
+      return compareModelSpecs(a.model_spec || '', b.model_spec || '', 'desc')
+    })
+    return copy
+  }
+
+  return sortRows(list, 'price_table', {
+    material_kind: r => r.material_kind || '',
+    supplier_name: r => r.supplier_name || '',
+    category: r => r.category || '',
+    material_name: r => r.material_name || '',
+    model_spec: r => r.model_spec || '',
+    unit: r => r.unit || '',
+    unit_price: r => Number(r.unit_price) || 0
+  })
+})
+
+// 采购价格看板卡片指标
+const priceSuppliersCount = computed(() => {
+  const s = new Set()
+  materialPriceList.value.forEach(p => { if (p.supplier_name) s.add(p.supplier_name) })
+  return s.size
+})
+
+const pricePipeCount = computed(() => {
+  return materialPriceList.value.filter(p => p.material_kind === 'pipe').length
+})
+
+const priceFittingCount = computed(() => {
+  return materialPriceList.value.filter(p => p.material_kind === 'fitting').length
+})
+
+const priceCategoriesCount = computed(() => {
+  const c = new Set()
+  materialPriceList.value.forEach(p => { if (p.category) c.add(p.category) })
+  return c.size
+})
+
+const priceAverageDisplay = computed(() => {
+  const list = filteredMaterialPriceRows.value.length > 0 ? filteredMaterialPriceRows.value : materialPriceList.value
+  if (!list || list.length === 0) return '0.00'
+  const sum = list.reduce((acc, cur) => acc + (Number(cur.unit_price) || 0), 0)
+  return (sum / list.length).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+})
+
+const priceFilteredSuppliersCount = computed(() => {
+  const s = new Set()
+  filteredMaterialPriceRows.value.forEach(p => { if (p.supplier_name) s.add(p.supplier_name) })
+  return s.size
+})
+
+const priceFilteredAvgDisplay = computed(() => {
+  const list = filteredMaterialPriceRows.value
+  if (!list || list.length === 0) return '0.00'
+  const sum = list.reduce((acc, cur) => acc + (Number(cur.unit_price) || 0), 0)
+  return (sum / list.length).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+})
+
+const priceFilteredMinDisplay = computed(() => {
+  const list = filteredMaterialPriceRows.value
+  if (!list || list.length === 0) return '0.00'
+  const min = Math.min(...list.map(p => Number(p.unit_price) || 0))
+  return min.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+})
+
+const priceFilteredMaxDisplay = computed(() => {
+  const list = filteredMaterialPriceRows.value
+  if (!list || list.length === 0) return '0.00'
+  const max = Math.max(...list.map(p => Number(p.unit_price) || 0))
+  return max.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+})
+
+// -----------------------------------------------------------------------------
 // 🏭 供给方发货流转台账 (Tab 3: 供给方视角动态透视与指标聚合)
 // -----------------------------------------------------------------------------
 
@@ -3636,6 +4553,26 @@ const aggregatedSupplierLedgerRows = computed(() => {
 
     const groupKey = keyParts.join('____')
 
+    // 💰 保温管单项货值金额核算与单价匹配说明
+    const priceInfo = subMaterialType.value === 'pipe' ? getPipeUnitPriceInfo(row.supplier_name, row.pipe_model_name) : { unitPrice: null, matchNote: '', isExact: true }
+    const itPrice = priceInfo.unitPrice
+    const itShippedAmt = itPrice != null ? ((Number(row.shipped_qty) || 0) * itPrice) : 0
+    const itArrivedAmt = itPrice != null ? ((Number(row.arrived_qty) || 0) * itPrice) : 0
+    const itReceivedAmt = itPrice != null ? ((Number(row.received_qty) || 0) * itPrice) : 0
+    const itWarehouseAmt = itPrice != null ? ((Number(row.warehouse_qty) || 0) * itPrice) : 0
+
+    const enrichedItem = {
+      ...row,
+      unit_price: itPrice,
+      price_info: priceInfo,
+      price_note: priceInfo.matchNote || '',
+      is_exact_price: priceInfo.isExact,
+      shipped_amount: itShippedAmt,
+      arrived_amount: itArrivedAmt,
+      received_amount: itReceivedAmt,
+      warehouse_amount: itWarehouseAmt
+    }
+
     if (!groupsMap.has(groupKey)) {
       groupsMap.set(groupKey, {
         ...dimValues,
@@ -3644,6 +4581,10 @@ const aggregatedSupplierLedgerRows = computed(() => {
         arrived_qty: 0,
         received_qty: 0,
         warehouse_qty: 0,
+        shipped_amount: 0,
+        arrived_amount: 0,
+        received_amount: 0,
+        warehouse_amount: 0,
         transit_seconds_sum: 0,
         transit_count: 0,
         orders_count: 0,
@@ -3656,8 +4597,12 @@ const aggregatedSupplierLedgerRows = computed(() => {
     target.arrived_qty += Number(row.arrived_qty) || 0
     target.received_qty += Number(row.received_qty) || 0
     target.warehouse_qty += Number(row.warehouse_qty) || 0
+    target.shipped_amount += itShippedAmt
+    target.arrived_amount += itArrivedAmt
+    target.received_amount += itReceivedAmt
+    target.warehouse_amount += itWarehouseAmt
     target.orders_count += 1
-    target.order_items.push(row)
+    target.order_items.push(enrichedItem)
     if (Number(row.transit_seconds) > 0) {
       target.transit_seconds_sum += Number(row.transit_seconds)
       target.transit_count += 1
@@ -3680,8 +4625,28 @@ const aggregatedSupplierLedgerRows = computed(() => {
       ? Math.min(100, (g.warehouse_qty / g.arrived_qty * 100)) 
       : (g.shipped_qty > 0 ? Math.min(100, (g.warehouse_qty / g.shipped_qty * 100)) : 0)
 
+    // 单价归纳 (若组内所有项单价一致则直接输出精准单价，多项规格混合则输出加权均价)
+    const validPrices = Array.from(new Set(g.order_items.map(it => it.unit_price).filter(p => p != null)))
+    let unit_price = null
+    let is_avg_price = false
+    if (validPrices.length === 1) {
+      unit_price = validPrices[0]
+    } else if (validPrices.length > 1) {
+      unit_price = g.shipped_qty > 0 ? (g.shipped_amount / g.shipped_qty) : null
+      is_avg_price = true
+    }
+
+    // 提取该聚合组内所有的非空单价匹配说明
+    const notesSet = new Set(g.order_items.map(it => it.price_note).filter(n => Boolean(n)))
+    const price_note = Array.from(notesSet).join('；')
+    const has_tolerance_price = g.order_items.some(it => it.price_info && !it.price_info.isExact)
+
     return {
       ...g,
+      unit_price,
+      is_avg_price,
+      price_note,
+      has_tolerance_price,
       avg_transit_display,
       fulfillment_rate: Math.round(fulfillment_rate * 10) / 10,
       receipt_rate: Math.round(receipt_rate * 10) / 10,
@@ -3725,10 +4690,15 @@ const sortedSupplierLedgerRows = computed(() => {
     model: r => subMaterialType.value === 'pipe' ? (r.pipe_model_name || '') : (`${r.fitting_type || ''} ${r.model_spec || ''}`),
     date: r => r.biz_date || '',
     section: r => r.section_1_name || '',
+    unit_price: r => typeof r.unit_price === 'number' ? r.unit_price : 0,
     shipped_qty: r => Number(r.shipped_qty) || 0,
+    shipped_amount: r => Number(r.shipped_amount) || 0,
     arrived_qty: r => Number(r.arrived_qty) || 0,
+    arrived_amount: r => Number(r.arrived_amount) || 0,
     received_qty: r => Number(r.received_qty) || 0,
+    received_amount: r => Number(r.received_amount) || 0,
     warehouse_qty: r => Number(r.warehouse_qty) || 0,
+    warehouse_amount: r => Number(r.warehouse_amount) || 0,
     receipt_rate: r => Number(r.receipt_rate) || 0,
     warehouse_rate: r => Number(r.warehouse_rate) || 0,
     orders_count: r => Number(r.orders_count) || 0,
@@ -3741,14 +4711,33 @@ const supplierLedgerSummary = computed(() => {
   let total_arrived_qty = 0
   let total_received_qty = 0
   let total_warehouse_qty = 0
+  let total_shipped_amount = 0
+  let total_arrived_amount = 0
+  let total_received_amount = 0
+  let total_warehouse_amount = 0
   let transit_sum = 0
   let transit_cnt = 0
 
   for (const r of rows) {
-    total_shipped_qty += Number(r.shipped_qty) || 0
-    total_arrived_qty += Number(r.arrived_qty) || 0
-    total_received_qty += Number(r.received_qty) || 0
-    total_warehouse_qty += Number(r.warehouse_qty) || 0
+    const sQty = Number(r.shipped_qty) || 0
+    const aQty = Number(r.arrived_qty) || 0
+    const rQty = Number(r.received_qty) || 0
+    const wQty = Number(r.warehouse_qty) || 0
+    total_shipped_qty += sQty
+    total_arrived_qty += aQty
+    total_received_qty += rQty
+    total_warehouse_qty += wQty
+
+    if (subMaterialType.value === 'pipe') {
+      const price = getPipeUnitPrice(r.supplier_name, r.pipe_model_name)
+      if (price != null) {
+        total_shipped_amount += sQty * price
+        total_arrived_amount += aQty * price
+        total_received_amount += rQty * price
+        total_warehouse_amount += wQty * price
+      }
+    }
+
     if (Number(r.transit_seconds) > 0) {
       transit_sum += Number(r.transit_seconds)
       transit_cnt += 1
@@ -3769,11 +4758,18 @@ const supplierLedgerSummary = computed(() => {
     ? Math.min(100, (total_warehouse_qty / total_arrived_qty * 100)) 
     : (total_shipped_qty > 0 ? Math.min(100, (total_warehouse_qty / total_shipped_qty * 100)) : 0)
 
+  const avg_order_amount = rows.length > 0 ? (total_shipped_amount / rows.length) : 0
+
   return {
     total_shipped_qty: Math.round(total_shipped_qty * 100) / 100,
     total_arrived_qty: Math.round(total_arrived_qty * 100) / 100,
     total_received_qty: Math.round(total_received_qty * 100) / 100,
     total_warehouse_qty: Math.round(total_warehouse_qty * 100) / 100,
+    total_shipped_amount: Math.round(total_shipped_amount * 100) / 100,
+    total_arrived_amount: Math.round(total_arrived_amount * 100) / 100,
+    total_received_amount: Math.round(total_received_amount * 100) / 100,
+    total_warehouse_amount: Math.round(total_warehouse_amount * 100) / 100,
+    avg_order_amount: Math.round(avg_order_amount * 100) / 100,
     total_orders_count: rows.length,
     overall_avg_transit: avg_transit,
     overall_fulfillment_rate: Math.round(fulfillment_rate * 10) / 10,
@@ -4050,19 +5046,30 @@ async function fetchActiveTabData() {
       })
       dailyFlowData.value = res
     } else if (activeTab.value === 'baseline_progress') {
-      const res = await getComprehensiveBaselineProgress(projectKey, {
-        section1Ids: selectedSectionIds.value,
-        pipeModelIds: selectedPipeModelIds.value,
-        materialType: subMaterialType.value,
-      })
-      baselineProgressData.value = res
+      const isPriceMode = subMaterialType.value === 'price'
+      const promises = [
+        getComprehensiveBaselineProgress(projectKey, {
+          section1Ids: selectedSectionIds.value,
+          pipeModelIds: selectedPipeModelIds.value,
+          materialType: isPriceMode ? 'pipe' : subMaterialType.value,
+        })
+      ]
+      // 只要进入 Tab 2 或当前是 price 模式，拉取物料单价字典
+      if (isPriceMode || materialPriceList.value.length === 0) {
+        promises.push(getTubeMaterialPrices(projectKey))
+      }
+      const results = await Promise.all(promises)
+      baselineProgressData.value = results[0]
+      if (results[1] && results[1].data) {
+        materialPriceList.value = results[1].data
+      }
     } else if (activeTab.value === 'supplier_ledger') {
       const res = await getComprehensiveSupplierLedger(projectKey, {
         startDate: filterStartDate.value,
         endDate: filterEndDate.value,
         section1Ids: selectedSectionIds.value,
         pipeModelIds: selectedPipeModelIds.value,
-        materialType: subMaterialType.value,
+        materialType: subMaterialType.value === 'price' ? 'pipe' : subMaterialType.value,
       })
       supplierLedgerData.value = res
     } else if (activeTab.value === 'directory') {
@@ -4078,10 +5085,17 @@ async function fetchActiveTabData() {
 
 function switchMainTab(tab) {
   activeTab.value = tab
+  if (tab === 'supplier_ledger') {
+    subMaterialType.value = 'pipe'
+  }
   fetchActiveTabData()
 }
 
 function switchSubMaterial(mat) {
+  if (mat === 'price' && !isPriceUnlocked.value) {
+    openPriceAuthModal()
+    return
+  }
   subMaterialType.value = mat
   fetchActiveTabData()
 }
@@ -4095,6 +5109,7 @@ function resetAllFilters() {
   selectedPipeModelIds.value = []
   fittingKeyword.value = ''
   globalSearchKeyword.value = ''
+  resetPriceFilters()
   setDateRangeByCapsule('project')
   tableSortStates.value = {
     daily_pipe: { key: '', order: '' },
@@ -4102,6 +5117,7 @@ function resetAllFilters() {
     baseline_pipe: { key: '', order: '' },
     fitting_baseline: { key: '', order: '' },
     fitting_flow: { key: '', order: '' },
+    price_table: { key: '', order: '' },
     supplier_ledger: { key: '', order: '' }
   }
 }
@@ -4292,7 +5308,7 @@ function buildStyledWorksheet(headers, dataRows, subtotalRowIndices = [], grandT
       const str = String(row[i] || '')
       if (str.length * 1.6 > maxLen) maxLen = str.length * 1.6
     })
-    return { wch: Math.max(12, Math.min(45, Math.ceil(maxLen) + 3)) }
+    return { wch: Math.max(12, Math.min(65, Math.ceil(maxLen) + 3)) }
   })
   ws['!cols'] = colWidths
 
@@ -4307,20 +5323,29 @@ async function exportCurrentTabExcel() {
 
     if (activeTab.value === 'supplier_ledger') {
       // =======================================================================
-      // 🏭 Tab 3: 供给方发运台账 (单 Sheet: 多维明细台账 含供给方小计与全项目总计)
+      // 🏭 Tab 3: 供给方发运台账 (单 Sheet: 多维明细台账 含单价金额、供给方小计与全项目总计)
       // =======================================================================
       const isPipe = subMaterialType.value === 'pipe'
+      const withCalc = isPipe && showPipeAmountCalc.value
       const activeDims = supplierLedgerDimensions.value
       const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
 
-      const detailHeaders = isPipe
-        ? [...dimHeaders, '发货量(米)', '确认到货量(米)', '施工接收量(米)', '库管确认量(米)', '发运车次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
-        : [...dimHeaders, '发货数量(件)', '确认到货数(件)', '施工接收数(件)', '库管确认数(件)', '发货批次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
+      let detailHeaders = []
+      if (isPipe) {
+        if (withCalc) {
+          detailHeaders = [...dimHeaders, '单价(元/米)', '发货量(米)', '发货金额(元)', '确认到货量(米)', '到货金额(元)', '施工接收量(米)', '接收金额(元)', '库管确认量(米)', '入库金额(元)', '发运车次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率', '单价核算备注']
+        } else {
+          detailHeaders = [...dimHeaders, '发货量(米)', '确认到货量(米)', '施工接收量(米)', '库管确认量(米)', '发运车次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
+        }
+      } else {
+        detailHeaders = [...dimHeaders, '发货数量(件)', '确认到货数(件)', '施工接收数(件)', '库管确认数(件)', '发货批次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
+      }
 
       // 按供给方分组并插入小计行
       const detailRows = []
       const subtotalIndices = []
       let totalShipped = 0, totalArrived = 0, totalReceived = 0, totalWarehouse = 0, totalOrders = 0
+      let totalShippedAmt = 0, totalArrivedAmt = 0, totalReceivedAmt = 0, totalWarehouseAmt = 0
 
       // 检查当前排序明细
       const groupedBySupplier = new Map()
@@ -4332,6 +5357,7 @@ async function exportCurrentTabExcel() {
 
       groupedBySupplier.forEach((rows, supName) => {
         let subShipped = 0, subArrived = 0, subReceived = 0, subWarehouse = 0, subOrders = 0
+        let subShippedAmt = 0, subArrivedAmt = 0, subReceivedAmt = 0, subWarehouseAmt = 0
         let subTransitSumSec = 0, subTransitCount = 0
 
         rows.forEach(r => {
@@ -4341,17 +5367,32 @@ async function exportCurrentTabExcel() {
           const wQty = Number(r.warehouse_qty) || 0
           const oCnt = Number(r.orders_count) || 0
 
+          const sAmt = Number(r.shipped_amount) || 0
+          const aAmt = Number(r.arrived_amount) || 0
+          const rAmt = Number(r.received_amount) || 0
+          const wAmt = Number(r.warehouse_amount) || 0
+
           subShipped += sQty
           subArrived += aQty
           subReceived += rQty
           subWarehouse += wQty
           subOrders += oCnt
 
+          subShippedAmt += sAmt
+          subArrivedAmt += aAmt
+          subReceivedAmt += rAmt
+          subWarehouseAmt += wAmt
+
           totalShipped += sQty
           totalArrived += aQty
           totalReceived += rQty
           totalWarehouse += wQty
           totalOrders += oCnt
+
+          totalShippedAmt += sAmt
+          totalArrivedAmt += aAmt
+          totalReceivedAmt += rAmt
+          totalWarehouseAmt += wAmt
 
           // 累加已到货单据在途秒数
           const itemsList = r.order_items || [r]
@@ -4370,18 +5411,45 @@ async function exportCurrentTabExcel() {
             return '—'
           })
 
-          detailRows.push([
-            ...dimVals,
-            isPipe ? Number(r.shipped_qty.toFixed(2)) : r.shipped_qty,
-            isPipe ? Number(r.arrived_qty.toFixed(2)) : r.arrived_qty,
-            isPipe ? Number(r.received_qty.toFixed(2)) : r.received_qty,
-            isPipe ? Number(r.warehouse_qty.toFixed(2)) : r.warehouse_qty,
-            r.orders_count,
-            r.avg_transit_display || '—',
-            `${r.fulfillment_rate}%`,
-            `${r.receipt_rate}%`,
-            `${r.warehouse_rate}%`
-          ])
+          if (withCalc) {
+            const priceVal = typeof r.unit_price === 'number' 
+              ? Number(r.unit_price.toFixed(2)) 
+              : (r.unit_price === 'multiple' ? '多项单价' : '—')
+
+            const noteVal = r.price_note || (r.is_avg_price ? '多规格综合加权均价' : '—')
+
+            detailRows.push([
+              ...dimVals,
+              priceVal,
+              Number(sQty.toFixed(2)),
+              Number(sAmt.toFixed(2)),
+              Number(aQty.toFixed(2)),
+              Number(aAmt.toFixed(2)),
+              Number(rQty.toFixed(2)),
+              Number(rAmt.toFixed(2)),
+              Number(wQty.toFixed(2)),
+              Number(wAmt.toFixed(2)),
+              r.orders_count,
+              r.avg_transit_display || '—',
+              `${r.fulfillment_rate}%`,
+              `${r.receipt_rate}%`,
+              `${r.warehouse_rate}%`,
+              noteVal
+            ])
+          } else {
+            detailRows.push([
+              ...dimVals,
+              isPipe ? Number(r.shipped_qty.toFixed(2)) : r.shipped_qty,
+              isPipe ? Number(r.arrived_qty.toFixed(2)) : r.arrived_qty,
+              isPipe ? Number(r.received_qty.toFixed(2)) : r.received_qty,
+              isPipe ? Number(r.warehouse_qty.toFixed(2)) : r.warehouse_qty,
+              r.orders_count,
+              r.avg_transit_display || '—',
+              `${r.fulfillment_rate}%`,
+              `${r.receipt_rate}%`,
+              `${r.warehouse_rate}%`
+            ])
+          }
         })
 
         // 插入当前供给方的小计行（仅统计已到货单据的平均在途时长）
@@ -4395,18 +5463,40 @@ async function exportCurrentTabExcel() {
         const subWarehouseRate = subArrived > 0 ? Math.min(100, ((subWarehouse / subArrived) * 100)).toFixed(1) : (subShipped > 0 ? Math.min(100, ((subWarehouse / subShipped) * 100)).toFixed(1) : '0.0')
         const subDimVals = activeDims.map((d, i) => i === 0 ? `【小计】${supName}` : '—')
 
-        detailRows.push([
-          ...subDimVals,
-          isPipe ? Number(subShipped.toFixed(2)) : subShipped,
-          isPipe ? Number(subArrived.toFixed(2)) : subArrived,
-          isPipe ? Number(subReceived.toFixed(2)) : subReceived,
-          isPipe ? Number(subWarehouse.toFixed(2)) : subWarehouse,
-          subOrders,
-          subTransitDisp,
-          `${subFulfill}%`,
-          `${subReceipt}%`,
-          `${subWarehouseRate}%`
-        ])
+        if (withCalc) {
+          const subAvgPrice = subShipped > 0 ? Number((subShippedAmt / subShipped).toFixed(2)) : '—'
+          detailRows.push([
+            ...subDimVals,
+            subAvgPrice,
+            Number(subShipped.toFixed(2)),
+            Number(subShippedAmt.toFixed(2)),
+            Number(subArrived.toFixed(2)),
+            Number(subArrivedAmt.toFixed(2)),
+            Number(subReceived.toFixed(2)),
+            Number(subReceivedAmt.toFixed(2)),
+            Number(subWarehouse.toFixed(2)),
+            Number(subWarehouseAmt.toFixed(2)),
+            subOrders,
+            subTransitDisp,
+            `${subFulfill}%`,
+            `${subReceipt}%`,
+            `${subWarehouseRate}%`,
+            '供给方小计均价核算'
+          ])
+        } else {
+          detailRows.push([
+            ...subDimVals,
+            isPipe ? Number(subShipped.toFixed(2)) : subShipped,
+            isPipe ? Number(subArrived.toFixed(2)) : subArrived,
+            isPipe ? Number(subReceived.toFixed(2)) : subReceived,
+            isPipe ? Number(subWarehouse.toFixed(2)) : subWarehouse,
+            subOrders,
+            subTransitDisp,
+            `${subFulfill}%`,
+            `${subReceipt}%`,
+            `${subWarehouseRate}%`
+          ])
+        }
         subtotalIndices.push(detailRows.length)
       })
 
@@ -4415,18 +5505,41 @@ async function exportCurrentTabExcel() {
       const overallReceipt = totalArrived > 0 ? Math.min(100, ((totalReceived / totalArrived) * 100)).toFixed(1) : '0.0'
       const overallWarehouse = totalArrived > 0 ? Math.min(100, ((totalWarehouse / totalArrived) * 100)).toFixed(1) : (totalShipped > 0 ? Math.min(100, ((totalWarehouse / totalShipped) * 100)).toFixed(1) : '0.0')
       const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
-      detailRows.push([
-        ...grandDimVals,
-        isPipe ? Number(totalShipped.toFixed(2)) : totalShipped,
-        isPipe ? Number(totalArrived.toFixed(2)) : totalArrived,
-        isPipe ? Number(totalReceived.toFixed(2)) : totalReceived,
-        isPipe ? Number(totalWarehouse.toFixed(2)) : totalWarehouse,
-        totalOrders,
-        supplierLedgerSummary.value.overall_avg_transit || '—',
-        `${overallFulfillment}%`,
-        `${overallReceipt}%`,
-        `${overallWarehouse}%`
-      ])
+
+      if (withCalc) {
+        const totalAvgPrice = totalShipped > 0 ? Number((totalShippedAmt / totalShipped).toFixed(2)) : '—'
+        detailRows.push([
+          ...grandDimVals,
+          totalAvgPrice,
+          Number(totalShipped.toFixed(2)),
+          Number(totalShippedAmt.toFixed(2)),
+          Number(totalArrived.toFixed(2)),
+          Number(totalArrivedAmt.toFixed(2)),
+          Number(totalReceived.toFixed(2)),
+          Number(totalReceivedAmt.toFixed(2)),
+          Number(totalWarehouse.toFixed(2)),
+          Number(totalWarehouseAmt.toFixed(2)),
+          totalOrders,
+          supplierLedgerSummary.value.overall_avg_transit || '—',
+          `${overallFulfillment}%`,
+          `${overallReceipt}%`,
+          `${overallWarehouse}%`,
+          '全项目综合均价核算'
+        ])
+      } else {
+        detailRows.push([
+          ...grandDimVals,
+          isPipe ? Number(totalShipped.toFixed(2)) : totalShipped,
+          isPipe ? Number(totalArrived.toFixed(2)) : totalArrived,
+          isPipe ? Number(totalReceived.toFixed(2)) : totalReceived,
+          isPipe ? Number(totalWarehouse.toFixed(2)) : totalWarehouse,
+          totalOrders,
+          supplierLedgerSummary.value.overall_avg_transit || '—',
+          `${overallFulfillment}%`,
+          `${overallReceipt}%`,
+          `${overallWarehouse}%`
+        ])
+      }
 
       const wsDetail = buildStyledWorksheet(detailHeaders, detailRows, subtotalIndices, detailRows.length)
       XLSX.utils.book_append_sheet(wb, wsDetail, '多维明细台账')
@@ -4555,13 +5668,31 @@ async function exportCurrentTabExcel() {
 
     } else if (activeTab.value === 'baseline_progress') {
       // =======================================================================
-      // 📐 Tab 2: 设计基准进度 (分供给方基准汇总 Sheet + 明细表 Sheet)
+      // 📐 Tab 2: 设计基准进度 / 采购价格 (分供给方基准汇总 Sheet + 明细表 Sheet)
       // =======================================================================
-      const isPipe = subMaterialType.value === 'pipe'
-      const activeDims = baselineDimensions.value
-      const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
+      if (subMaterialType.value === 'price') {
+        // 💰 导出采购价格字典 (不包含累计汇总行，仅输出纯净明细数据)
+        const pHeaders = ['序号', '物料大类', '供给方全称', '物理类别', '材料标准名称', '规格型号描述', '计量单位', '单价（元）', '备注说明']
+        const pRows = sortedMaterialPriceRows.value.map((r, idx) => [
+          idx + 1,
+          r.material_kind === 'pipe' ? '保温管' : '管件',
+          r.supplier_name || '—',
+          r.category || '—',
+          r.material_name || '—',
+          r.model_spec || '—',
+          r.unit || '个',
+          Number(Number(r.unit_price || 0).toFixed(2)),
+          (r.remark && String(r.remark).trim()) ? String(r.remark).trim() : '—'
+        ])
 
-      if (isPipe) {
+        const wsPrice = buildStyledWorksheet(pHeaders, pRows, [], null)
+        XLSX.utils.book_append_sheet(wb, wsPrice, '物料采购单价字典')
+        defaultFilename = `保温管与管件物料采购价格基准字典_${new Date().toISOString().split('T')[0]}.xlsx`
+
+      } else if (subMaterialType.value === 'pipe') {
+        const isPipe = true
+        const activeDims = baselineDimensions.value
+        const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
         // 1. 分供给方基准汇总
         const supMap = new Map()
         sortedBaselinePipeRows.value.forEach(r => {
@@ -4680,6 +5811,126 @@ async function exportCurrentTabExcel() {
         defaultFilename = '管件全周期累计流转与现场库存表.xlsx'
       }
 
+    } else if (activeTab.value === 'supplier_ledger') {
+      // =======================================================================
+      // 🏭 Tab 3: 供给方发货流转台账专属导出 (支持单价与金额联动)
+      // =======================================================================
+      const isPipe = subMaterialType.value === 'pipe'
+      const activeDims = supplierLedgerDimensions.value
+      const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
+
+      let sHeaders = []
+      if (isPipe) {
+        if (showPipeAmountCalc.value) {
+          sHeaders = [...dimHeaders, '发货量(米)', '发货金额(元)', '确认到货(米)', '到货金额(元)', '施工接收(米)', '接收金额(元)', '库管已确认(米)', '入库金额(元)', '在途时长', '发运单数', '到货确认率']
+        } else {
+          sHeaders = [...dimHeaders, '发货量(米)', '确认到货(米)', '施工接收(米)', '库管已确认(米)', '在途时长', '发运单数', '到货确认率']
+        }
+      } else {
+        sHeaders = [...dimHeaders, '发货数量(件)', '确认到货(件)', '施工接收(件)', '库管已确认(件)', '在途时长', '发货批次数', '到货确认率']
+      }
+
+      const sRows = sortedSupplierLedgerRows.value.map(r => {
+        const dimVals = activeDims.map(d => {
+          if (d === 'supplier') return r.supplier_name || '—'
+          if (d === 'model') return isPipe ? (r.pipe_model_name || '—') : (`${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—')
+          if (d === 'date') return r.biz_date || '—'
+          if (d === 'section') return r.section_1_name || '—'
+          return '—'
+        })
+
+        if (isPipe) {
+          if (showPipeAmountCalc.value) {
+            return [
+              ...dimVals,
+              Number((Number(r.shipped_qty) || 0).toFixed(2)),
+              Number((Number(r.shipped_amount) || 0).toFixed(2)),
+              Number((Number(r.arrived_qty) || 0).toFixed(2)),
+              Number((Number(r.arrived_amount) || 0).toFixed(2)),
+              Number((Number(r.received_qty) || 0).toFixed(2)),
+              Number((Number(r.received_amount) || 0).toFixed(2)),
+              Number((Number(r.warehouse_qty) || 0).toFixed(2)),
+              Number((Number(r.warehouse_amount) || 0).toFixed(2)),
+              r.avg_transit_display || '—',
+              Number(r.orders_count) || 0,
+              `${r.fulfillment_rate}%`
+            ]
+          } else {
+            return [
+              ...dimVals,
+              Number((Number(r.shipped_qty) || 0).toFixed(2)),
+              Number((Number(r.arrived_qty) || 0).toFixed(2)),
+              Number((Number(r.received_qty) || 0).toFixed(2)),
+              Number((Number(r.warehouse_qty) || 0).toFixed(2)),
+              r.avg_transit_display || '—',
+              Number(r.orders_count) || 0,
+              `${r.fulfillment_rate}%`
+            ]
+          }
+        } else {
+          return [
+            ...dimVals,
+            Number(r.shipped_qty) || 0,
+            Number(r.arrived_qty) || 0,
+            Number(r.received_qty) || 0,
+            Number(r.warehouse_qty) || 0,
+            r.avg_transit_display || '—',
+            Number(r.orders_count) || 0,
+            `${r.fulfillment_rate}%`
+          ]
+        }
+      })
+
+      // 补上末尾【全项目总计】
+      const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+      const sum = supplierLedgerSummary.value
+      if (isPipe) {
+        if (showPipeAmountCalc.value) {
+          sRows.push([
+            ...grandDimVals,
+            Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_shipped_amount) || 0).toFixed(2)),
+            Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_arrived_amount) || 0).toFixed(2)),
+            Number((Number(sum.total_received_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_received_amount) || 0).toFixed(2)),
+            Number((Number(sum.total_warehouse_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_warehouse_amount) || 0).toFixed(2)),
+            sum.overall_avg_transit || '—',
+            Number(sum.total_orders_count) || 0,
+            `${sum.overall_fulfillment_rate}%`
+          ])
+        } else {
+          sRows.push([
+            ...grandDimVals,
+            Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_received_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_warehouse_qty) || 0).toFixed(2)),
+            sum.overall_avg_transit || '—',
+            Number(sum.total_orders_count) || 0,
+            `${sum.overall_fulfillment_rate}%`
+          ])
+        }
+      } else {
+        sRows.push([
+          ...grandDimVals,
+          Number(sum.total_shipped_qty) || 0,
+          Number(sum.total_arrived_qty) || 0,
+          Number(sum.total_received_qty) || 0,
+          Number(sum.total_warehouse_qty) || 0,
+          sum.overall_avg_transit || '—',
+          Number(sum.total_orders_count) || 0,
+          `${sum.overall_fulfillment_rate}%`
+        ])
+      }
+
+      const wsLedger = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
+      XLSX.utils.book_append_sheet(wb, wsLedger, '供给方发货流转台账')
+      defaultFilename = isPipe
+        ? `供给方保温管发货流转台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+        : `供给方管件发货流转台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+
     } else if (activeTab.value === 'directory') {
       // =======================================================================
       // 🏢 Tab 4: 责任主体与人员矩阵
@@ -4735,52 +5986,112 @@ function exportCurrentOrderItemsExcel() {
   const row = selectedSupplierOrderRow.value
   const items = row.order_items
 
-  const headers = ['运单号/批次', '需求标段', '物料大类', '规格型号', '发货日期', '车牌号', '司机姓名', '联系电话', `发货量(${isPipe ? '米' : '件'})`, `确认到货量(${isPipe ? '米' : '件'})`, `施工接收量(${isPipe ? '米' : '件'})`, `库管确认量(${isPipe ? '米' : '件'})`, '在途时长', '运单状态']
+  const withCalc = isPipe && showPipeAmountCalc.value
+  const headers = withCalc
+    ? ['运单号/批次', '需求标段', '物料大类', '规格型号', '单价(元/米)', '发货日期', '车牌号', '司机姓名', '联系电话', '发货量(米)', '发货金额(元)', '确认到货量(米)', '到货金额(元)', '施工接收量(米)', '库管确认量(米)', '在途时长', '运单状态', '单价核算备注']
+    : ['运单号/批次', '需求标段', '物料大类', '规格型号', '发货日期', '车牌号', '司机姓名', '联系电话', `发货量(${isPipe ? '米' : '件'})`, `确认到货量(${isPipe ? '米' : '件'})`, `施工接收量(${isPipe ? '米' : '件'})`, `库管确认量(${isPipe ? '米' : '件'})`, '在途时长', '运单状态']
 
   let sumShip = 0, sumArr = 0, sumRec = 0, sumWh = 0
+  let sumShipAmt = 0, sumArrAmt = 0
 
   const dataRows = items.map(o => {
-    sumShip += Number(o.shipped_qty) || 0
-    sumArr += Number(o.arrived_qty) || 0
-    sumRec += Number(o.received_qty) || 0
-    sumWh += Number(o.warehouse_qty) || 0
+    const sQty = Number(o.shipped_qty) || 0
+    const aQty = Number(o.arrived_qty) || 0
+    const rQty = Number(o.received_qty) || 0
+    const wQty = Number(o.warehouse_qty) || 0
+    sumShip += sQty
+    sumArr += aQty
+    sumRec += rQty
+    sumWh += wQty
 
     const statusText = o.status === 'completed' ? '已入库' : o.status === 'received' ? '已接收' : o.status === 'arrived' ? '已到货' : '在途中'
+
+    if (withCalc) {
+      const sAmt = Number(o.shipped_amount) || 0
+      const aAmt = Number(o.arrived_amount) || 0
+      sumShipAmt += sAmt
+      sumArrAmt += aAmt
+      const noteVal = o.price_note || '—'
+      return [
+        o.batch_no || '—',
+        o.section_1_name || '—',
+        '保温管',
+        o.pipe_model_name || '—',
+        o.unit_price != null ? Number(Number(o.unit_price).toFixed(2)) : '—',
+        o.biz_date || '—',
+        o.vehicle_no || '—',
+        o.driver_name || '—',
+        o.driver_phone || '—',
+        Number(sQty.toFixed(2)),
+        Number(sAmt.toFixed(2)),
+        Number(aQty.toFixed(2)),
+        Number(aAmt.toFixed(2)),
+        Number(rQty.toFixed(2)),
+        Number(wQty.toFixed(2)),
+        o.transit_display || '—',
+        statusText,
+        noteVal
+      ]
+    }
+
     return [
       o.batch_no || '—',
       o.section_1_name || '—',
-      isPipe ? '保温管直管' : (o.fitting_type || '预制管件'),
+      isPipe ? '保温管' : (o.fitting_type || '预制管件'),
       isPipe ? (o.pipe_model_name || '—') : (o.model_spec || '—'),
       o.biz_date || '—',
       o.vehicle_no || '—',
       o.driver_name || '—',
       o.driver_phone || '—',
-      isPipe ? Number((Number(o.shipped_qty) || 0).toFixed(2)) : (Number(o.shipped_qty) || 0),
-      isPipe ? Number((Number(o.arrived_qty) || 0).toFixed(2)) : (Number(o.arrived_qty) || 0),
-      isPipe ? Number((Number(o.received_qty) || 0).toFixed(2)) : (Number(o.received_qty) || 0),
-      isPipe ? Number((Number(o.warehouse_qty) || 0).toFixed(2)) : (Number(o.warehouse_qty) || 0),
+      isPipe ? Number(sQty.toFixed(2)) : sQty,
+      isPipe ? Number(aQty.toFixed(2)) : aQty,
+      isPipe ? Number(rQty.toFixed(2)) : rQty,
+      isPipe ? Number(wQty.toFixed(2)) : wQty,
       o.transit_display || '—',
       statusText
     ]
   })
 
   // 本组汇总行
-  dataRows.push([
-    '【本组穿透汇总】',
-    `共 ${items.length} 笔订单`,
-    '—',
-    '—',
-    '—',
-    '—',
-    '—',
-    '—',
-    isPipe ? Number(sumShip.toFixed(2)) : sumShip,
-    isPipe ? Number(sumArr.toFixed(2)) : sumArr,
-    isPipe ? Number(sumRec.toFixed(2)) : sumRec,
-    isPipe ? Number(sumWh.toFixed(2)) : sumWh,
-    row.avg_transit_display || '—',
-    '—'
-  ])
+  if (withCalc) {
+    dataRows.push([
+      '【本组穿透汇总】',
+      `共 ${items.length} 笔订单`,
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      Number(sumShip.toFixed(2)),
+      Number(sumShipAmt.toFixed(2)),
+      Number(sumArr.toFixed(2)),
+      Number(sumArrAmt.toFixed(2)),
+      Number(sumRec.toFixed(2)),
+      Number(sumWh.toFixed(2)),
+      row.avg_transit_display || '—',
+      '—',
+      '穿透批次汇总'
+    ])
+  } else {
+    dataRows.push([
+      '【本组穿透汇总】',
+      `共 ${items.length} 笔订单`,
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      isPipe ? Number(sumShip.toFixed(2)) : sumShip,
+      isPipe ? Number(sumArr.toFixed(2)) : sumArr,
+      isPipe ? Number(sumRec.toFixed(2)) : sumRec,
+      isPipe ? Number(sumWh.toFixed(2)) : sumWh,
+      row.avg_transit_display || '—',
+      '—'
+    ])
+  }
 
   const ws = buildStyledWorksheet(headers, dataRows, [], dataRows.length)
   const wb = XLSX.utils.book_new()
@@ -6514,6 +7825,20 @@ function exportCurrentOrderItemsExcel() {
   gap: 8px;
 }
 
+.price-note-icon {
+  display: inline-block;
+  margin-left: 4px;
+  cursor: help;
+  font-size: 11px;
+  opacity: 0.85;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+}
+.price-note-icon:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
 .font-mono { font-family: monospace; }
 .font-bold { font-weight: 700; }
 .font-medium { font-weight: 500; }
@@ -7295,4 +8620,332 @@ function exportCurrentOrderItemsExcel() {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
 }
+
+/* 💰 采购价格专属紧凑筛选器与徽章样式 */
+.price-filters-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-select-item, .filter-search-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.filter-item-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.form-select-compact {
+  height: 28px;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-select-compact:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.form-input-compact {
+  height: 28px;
+  width: 170px;
+  padding: 2px 22px 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s, width 0.2s;
+}
+
+.form-input-compact:focus {
+  width: 200px;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.btn-clear-kw {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-clear-kw:hover {
+  color: #ef4444;
+}
+
+.btn-reset-price-filter {
+  height: 28px;
+  padding: 0 10px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-reset-price-filter:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.badge-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge-pipe {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.badge-fitting {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.sub-pill-lock-tag {
+  font-size: 11px;
+  margin-left: 3px;
+  opacity: 0.85;
+}
+
+.btn-lock-price {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
+}
+
+.btn-lock-price:hover {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border-color: #fca5a5 !important;
+}
+
+/* 🔐 采购价格未解锁受控保护卡片 */
+.price-locked-view {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.price-locked-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 420px;
+}
+
+.price-locked-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  animation: pulse-lock 2s infinite ease-in-out;
+}
+
+@keyframes pulse-lock {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.price-locked-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+}
+
+.price-locked-desc {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.btn-unlock-action {
+  padding: 9px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-unlock-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.35);
+}
+
+/* 🔐 访问码验证弹窗专用样式 */
+.price-auth-modal {
+  max-width: 400px;
+  border-radius: 14px;
+}
+
+.bg-amber-gradient {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #ffffff;
+}
+
+.auth-modal-body {
+  padding: 24px 22px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-instruction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auth-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.auth-input-wrapper {
+  width: 100%;
+}
+
+.auth-input-field {
+  width: 100%;
+  height: 44px;
+  font-size: 22px;
+  letter-spacing: 6px;
+  text-align: center;
+  font-weight: 800;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.auth-input-field:focus {
+  background: #ffffff;
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
+}
+
+.auth-error-tip {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ef4444;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 6px 10px;
+  border-radius: 6px;
+  text-align: center;
+  animation: shake 0.3s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.auth-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 💰 Tab 3 供给方台账保温管金额核算联动选框与样式 */
+.pipe-calc-price-toggle-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.calc-price-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 20px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.calc-price-label:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.15);
+}
+
+.calc-price-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #16a34a;
+  cursor: pointer;
+}
+
+.calc-price-text {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #15803d;
+}
+
+.calc-active-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  background: #16a34a;
+  padding: 1px 6px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.3);
+}
+
+.kpi-amount-sub {
+  font-size: 12px;
+  margin-top: 2px;
+  opacity: 0.95;
+}
 </style>
+
