@@ -1,3 +1,28 @@
+## 2026-08-28 数字大屏配置保存接口收归 Global_admin 鉴权与在途过滤上下限交付（workspace.py）
+
+- **服务模块与核心机制**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 核心接口：
+    - `POST /api/v1/projects/insulation_pipe_supply_2026/big-screen/config`（大屏参数持久化）
+- **权限与计算机制升级**：
+  1. **权限强制收归 `Global_admin`**：
+     - 将配置更新端点迁移至主认证路由 `router`，绑定 `session: AuthSession = Depends(get_current_session)`；
+     - 校验 `session.group == "Global_admin"`，非超级管理员请求严格拦截并返回 HTTP 403 Forbidden；
+  2. **在途时长动态上下限绑定与持久化**：
+     - 支持 `transit_duration_min_hours`（0~10h）与 `transit_duration_max_hours`（12~168h）参数更新与 SQL 动态过滤。
+
+## 2026-08-28 气象管理服务（weather_service.py）高德 API Key 统一对齐与大屏容灾来源诊断标记交付
+
+- **服务模块与核心机制**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/weather_service.py`
+- **优化与容灾机制**：
+  1. **API Key 缺省值统一**：
+     - 将 `weather_service.py` 中 `fetch_amap_weather` 与 `get_live_weather_for_dashboard` 的兜底 Key 统一为系统标准 Key `7939c670de3699077dc6b498cd95346f`；
+  2. **气象来源诊断标记**：
+     - 在大屏气象响应对象中注入 `is_live_source: True/False` 字段，便于前台区分实时外网连通数据与离线保底仿真数据；
+  3. **出网异常日志引导**：
+     - 细化外网连通异常的日志输出，明确指导检查内网出网策略或高德 Key 权限。
+
 ## 2026-08-27 现场需求管理全标段填报履约督办与历史物理提交日回溯大盘接口交付（workspace.py）
 
 - **服务模块与接口定义**：

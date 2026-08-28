@@ -6,14 +6,17 @@
   "auto_update_plan_start_date": "all",
   "plan_editable_days": 3,
   "auto_receive_timeout_hours": 12,
-  "strict_planning_flow_control": true,
+  "strict_planning_flow_control": false,
   "big_screen_config": {
     "animation_active_duration_sec": 5,
     "animation_rest_duration_sec": 5,
     "auto_sync_interval_sec": 20,
     "live_stream_interval_sec": 3,
     "flyline_travel_sec": 1.8,
-    "feed_limit": 40
+    "feed_limit": 40,
+    "weather_cache_duration_min": 15,
+    "transit_duration_min_hours": 1.0,
+    "transit_duration_max_hours": 168.0
   },
   "fitting_config": {
     "allowed_units": [
@@ -634,7 +637,6 @@
       ]
     }
   ],
-  "strict_planning_flow_control": false,
   "amap_config": {
     "api_key": "enc_v1:R1FcXA1fT28FCFJGZlJVTmhWUwRURFFXBgpQTWxVWwc=",
     "security_code": "enc_v1:R11YVggIS28EVVdHbF4BQGdQUVRURFhbU1hRSm0DXgA="

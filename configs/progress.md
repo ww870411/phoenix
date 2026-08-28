@@ -1,3 +1,213 @@
+## 2026-08-28 [供需流向拓扑（big_screen）电脑端卡片宽度双向弹性联动缩放交付]
+- **需求与排版背景**：
+  - 用户反馈：“在电脑访问时，当窗口宽度缩减，不仅仅缩减各标段卡片宽度，供货单位的卡片宽度也应该缩减”；
+  - **调优目标**：消除供货单位卡片在窗口缩窄时的硬性宽度下限锁定，改用 `clamp(120px, 24%, 260px)` 动态流体列宽，并配置 `1440px` 与 `1200px` 响应式阶梯断点，使供货单位卡片与标段卡片在浏览器窗口横向缩放时保持 100% 同步双向弹性收缩。
+- **改动与实现详情**：
+  1. **拓扑主网格升级为流体百分比响应式 `clamp`**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 将 `.topology-layout-grid` 列宽由固定硬下限改为 **`grid-template-columns: clamp(120px, 24%, 260px) 28px 1fr;`**；
+     - 供货单位卡片不再锁死在 210px+，而是根据拓扑容器实时宽度的 24% 自动计算，随窗口缩减从 260px 平滑连续缩减至 220px -> 180px -> 150px -> 120px；
+  2. **增加多档电脑窗口响应式断点适配**：
+     - **<= 1440px 窗口**：供货单位列宽调整为 `clamp(110px, 23%, 220px)`，内边距与字号微调（`padding: 8px 11px; font-size: 12.5px;`），标段卡片间距适度收紧；
+     - **<= 1200px 窗口**：供货单位列宽调整为 `clamp(100px, 22%, 180px)`，内边距与字号紧凑化（`padding: 6px 8px; font-size: 11.5px;`），标段卡片微进度条同步微型化；
+  3. **双向无缝联动体验**：
+     - 彻底解决了“缩窄窗口时只有标段变窄而供货单位纹丝不动”的失衡问题，两者始终保持视觉平衡。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 17.45s），零报错。
+
+## 2026-08-28 [供需流向拓扑（big_screen）网格比例精细化调优交付（供货单位增宽与标段卡片收紧）]
+- **需求与排版背景**：
+  - 用户反馈：“目前来看，在同一电脑窗口中，目前的各标段卡片都比原来的版本宽了一些，我想稍微缩减一点宽度，供货单位的卡片略微增加一点宽度”；
+  - **调优目标**：调整中间栏供需拓扑的排版比例，将左侧供给基地（3大供货管厂）卡片宽度增加约 30%，将右侧 10 大施工标段卡片宽度适度收紧，消除标段横向过度拉伸感，呈现更饱满匀称的供需流向对比。
+- **改动与实现详情**：
+  1. **拓扑主网格列宽重构**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.topology-layout-grid` 列宽由 `minmax(130px, 200px) 26px 1fr` 升级调整为 **`minmax(210px, 270px) 30px 1fr`**；
+     - 供货单位卡片宽度扩展至 210px~270px，内边距增至 `padding: 10px 14px;`，厂名文字升级至 `font-size: 13.5px;`，视觉沉稳醒目；
+  2. **标段双立柱排版适度收窄与紧凑化**：
+     - `.demand-systems-split` 采用 `grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 2px 4px;`；
+     - `.demand-node-card` 内边距调整为 `padding: 6px 10px; gap: 4px;`，各标段卡片由原本 ~426px 紧凑收敛至 ~380px，文字、微进度条与在途徽标比例更显规整精致；
+  3. **SVG 贝塞尔飞线锚点自适应响应**：
+     - 飞线起点与终点基于 DOM 端口实时重算，左右两端宽度重构后，激光粒子流与在途光带精准咬合对齐。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 20.85s），零报错。
+
+## 2026-08-28 [调度与大屏控制台（big_screen）保存与重置设定权限收归 Global_admin 专属交付]
+- **需求与安全背景**：
+  - 用户明确要求：“我现在要求“调度与大屏控制台”中的“保存设定”按钮，仅限Global_admin可以点击”；
+  - **实现目标**：大屏前端控制台的“保存设定”与“重置默认”持久化特权仅对超级管理员（`Global_admin`）开放；非管理员访问时按钮置灰、光标禁用、文案显示“保存设定 (仅限管理员)”并伴随权限拦截提示；后端接口同步增加 403 鉴权拦截。
+- **改动与实现详情**：
+  1. **前端大屏控制台权限绑定与视觉禁用**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 引入 `useAuthStore` 并计算 `isGlobalAdmin = computed(() => auth?.user?.group === 'Global_admin')`；
+     - “保存设定”与“重置默认”按钮绑定 `:disabled="isSavingConfig || !isGlobalAdmin"` 与 `:class="{ 'disabled-permission': !isGlobalAdmin }"`；
+     - 按钮文案与浮动提示动态适配权限状态；
+     - 在 `handleSaveConfigToBackend` 与 `handleResetConfigToDefault` 触发逻辑中加入权限前置守卫拦截；
+     - 完善 `.save-config-btn:disabled`、`.reset-config-btn:disabled` 与 `.action-btn.disabled-permission` 灰度半透明不可点击样式；
+  2. **后端配置持久化接口强制鉴权收归**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 将 `POST /api/v1/projects/insulation_pipe_supply_2026/big-screen/config` 路由由 `public_router` 迁移至受保护的 `router`；
+     - 注入 `session: AuthSession = Depends(get_current_session)` 依赖，若 `session.group != 'Global_admin'` 严格返回 HTTP 403 Forbidden。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 20.33s），零报错。
+
+## 2026-08-28 [调度与大屏控制台（big_screen）在途时效剔除上限扩展至168小时（7天）交付]
+- **需求与调优背景**：
+  - 用户反馈：“上限范围有点小了，给我加到168小时”；
+  - **实现目标**：将大屏控制台设定栏中“⏳ 在途剔除上限”调节滑块的最大阈值由 72 小时扩展至 **`168 小时`（整整 7 天物理时效）**，满足更长干线跨周运输或特殊天气滞留的灵活配置需求。
+- **改动与实现详情**：
+  1. **前端滑块范围调整**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 将 `transit_duration_max_hours` 的 input slider `max` 属性由 72 提升至 **`168`**（范围 12~168 小时，步长 1h，默认 36.0h）；
+  2. **后端范围校验与合法性约束保障**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 允许上限在 1.0~168.0 小时范围内自由设定并持久化保存。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.24s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）电脑端战报面板微调再增高5%至352px交付]
+- **需求与调优背景**：
+  - 用户反馈：“再增高5%。同时我想问你，现在“平均在途时长”中，是不是有一个逻辑设置”；
+  - **调优目标**：将电脑端“本周保温管施工战报”物理高度由 335px 再增高 5% 至 **`352px`**，折线图容器提升至 **`175px`**，并向用户完整揭示“平均在途时长”背后的全部数据计算与清洗过滤逻辑。
+- **改动与实现详情**：
+  1. **电脑端战报面板再增高 5%**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 桌面端 `.weekly-report-panel` 高度由 335px 提升至 **`352px`**（`min-height: 340px; max-height: 365px; padding: 12px 14px 10px;`）；
+     - 桌面端折线图容器 `.weekly-chart-box` 提升至 **`175px`**（`min-height: 165px; max-height: 185px;`）；
+     - 双 KPI 卡片 `.weekly-kpi-card` 设为 `min-height: 64px;`；
+  2. **手机移动端保持不变**：
+     - 在 `@media (max-width: 900px)` 移动端下保持独立大尺寸（`240px` 折线图）。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.63s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）顶部名头跨端差异化定制交付]
+- **需求与定制背景**：
+  - 用户明确要求：
+    - **电脑端**：展示完整全称 **「大连洁净能源集团·2026年度老旧供热管网升级改造项目物流链智慧管理平台」**；
+    - **手机端**：展示定制精炼名头 **「大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台」**（分两行优雅排版：Line 1 为 `大连洁净能源集团 · 2026年度`，Line 2 为 `老旧管网改造项目物流链智慧管理平台`）。
+- **改动与实现详情**：
+  1. **响应式标题差异化配置**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.title-desktop`（电脑端）：`大连洁净能源集团·2026年度老旧供热管网升级改造项目物流链智慧管理平台`；
+     - `.title-mobile`（手机端）：
+       - `.title-mobile-line1`：`大连洁净能源集团 · 2026年度`；
+       - `.title-mobile-line2`：`老旧管网改造项目物流链智慧管理平台`；
+  2. **视觉居中与发光质感**：
+     - 手机端与电脑端均保持 100% 居中，霓虹流光与科技蓝白渐变呈现最佳视觉体验。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 18.15s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）本周施工战报再增高30%与跨屏幕/媒体查询全面生效交付]
+- **需求与排查背景**：
+  - 用户反馈：“我希望本周保温管施工战报区域在增高30%。说实话，我请你帮我检查一下，我总觉得刚才这个区域根本没变高……”；
+  - **排查根因**：
+    - 在桌面版样式以及非全屏媒体查询（`@media (max-height: 880px)`）中，此前仍保留了紧凑压缩规则，导致普通 1080P 屏幕（非全屏模式下视口高度常处于 800px~860px）直接命中了媒体查询限制，抑制了战报区域向上的延展；
+    - 战报面板原先设置了 `max-height` 上限，导致高度被锁定。
+- **改动与实现详情**：
+  1. **本周施工战报模块高度再提升 30% 且解除 max-height 限制**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.weekly-report-panel` 高度由 365px 提升 30% 至 **`475px`**（`min-height: 460px; max-height: none; padding: 14px 16px 12px;`）；
+     - 折线图趋势容器 `.weekly-chart-box` 高度由 180px 提升至 **`245px`**（`min-height: 235px; max-height: none;`）；
+     - 双 KPI 统计卡片 `.weekly-kpi-card` 设为 `min-height: 70px;`，累计发运与施工大数字提升至 **`20px`**；
+  2. **媒体查询同步提升（确保非全屏/小高度屏幕同样明显变高）**：
+     - 在 `@media (max-height: 880px)` 媒体查询下，`.weekly-report-panel` 显式设为 `height: 420px; min-height: 400px;`，`.weekly-chart-box` 设为 `height: 215px;`；
+     - 在 `@media (max-width: 900px)` 移动端下，`.weekly-chart-box` 同步提升至 `210px`；
+  3. **实时自适应与图表渲染**：
+     - ECharts 随容器高度实时响应，折线图大幅舒展，趋势起伏清晰鲜明，视觉存在感极大增强。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 17.14s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）本周施工战报面板高度调高约25%与折线走势饱满度优化交付]
+- **需求与调优背景**：
+  - 用户反馈：“现在又稍微矮了一点，再稍微调高25%吧”；
+  - **调优目标**：在消除折线图尖锐拉扯失真的前提下，将本周保温管施工战报的物理高度与图表高度微调放大约 25%，使右侧栏上下两个板块（实时战报流 vs 本周趋势看板）比例更加匀称饱满。
+- **改动与实现详情**：
+  1. **面板物理高度精准调升约 25%**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.weekly-report-panel` 高度由 245px 调整至 `305px`（`min-height: 295px; max-height: 320px; padding: 12px 14px 10px;`）；
+     - 上方 `.live-feed-panel`（实时战报流）设为 `flex: 1` 自动填满剩余空间，上下两板块比例自然协调；
+  2. **双 KPI 统计卡片与折线图同步放大**：
+     - 7日发运与施工统计卡片 `.weekly-kpi-card` 设为 `min-height: 60px; padding: 6px 10px 5px;`，大数字提升至 `17.5px`（JetBrains Mono 极粗字体）；
+     - 折线图趋势容器 `.weekly-chart-box` 高度由 115px 调整至 `148px`（`min-height: 140px; max-height: 165px;`），依然维持着优美的 ~2.3:1 宽屏折线比例，折线既舒展又清晰，杜绝失真；
+     - 底部 3 项复盘指标 `.weekly-insight-grid` 同步呼吸感对齐。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 17.51s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）移动端三大标签页切换显隐状态修复与指标大盘舒展流式重构交付]
+- **需求与排查背景**：
+  - 用户反馈：“为何后续两个标签页点击后不切换页面了？”；
+  - **不切换根因**：
+    - 上一轮为了解决指标大盘的折叠挤压，给 `.left-col` 加上了无条件的 `display: flex !important;`；
+    - 导致在点击“供需拓扑”或“动态战报”标签页时，`.left-col` 依然被强制为 `display: flex` 停留在页面顶部，没有正确隐藏，阻挡了后续两个标签页的展示。
+- **改动与实现详情**：
+  1. **移动端三列严格条件显隐重构**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.screen-col` 在移动端统一声明 `display: none !important;`；
+     - `.left-col.mobile-active-col`、`.center-col.mobile-active-col`、`.right-col.mobile-active-col` 仅在被激活时才赋予 `display: flex !important;`；
+     - 点击导航选项卡时，各标签页 100% 灵敏响应，瞬时无缝切换；
+  2. **指标大盘纵向舒展与平滑触控**：
+     - 当切换至“指标大盘”时，4 大面板（天气环境、保温管发运、管件发运、履约效能）采用 `height: auto !important; flex: none !important;` 自然流式纵向展开，大数字清晰醒目（23px），支持流畅单手滑动浏览；
+     - 当切换至“供需拓扑”时，拓扑画布完美居中呈现，支持手势平滑探索；
+     - 当切换至“动态战报”时，战报流卡片舒展列出，成果榜与图表自适应缩放。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 18.09s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）左右栏原始宽度（330px/370px）恢复与中间拓扑供需框体弹性自适应调优交付]
+- **需求与排查背景**：
+  - 用户反馈：“我对比了一下，左栏，右栏在同样窗口下，都比原先更窄了，我其实喜欢原来的左、右栏宽度，只是你帮我让中间没那么容易被遮住就好了，各标段，供货单位的框体宽度可以稍微灵活一点”；
+  - **诉求核心**：
+    1. 还原用户喜爱的左右栏原始经典宽度（左侧 330px、右侧 370px）；
+    2. 增强中间列各组成部分（供货单位、标段卡片）的宽度弹性，使中间区域能在各种屏幕下灵活伸缩而不被右侧栏遮挡。
+- **改动与实现详情**：
+  1. **还原左右栏原始经典宽度**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - `.bigscreen-content` 恢复主网格定义 `grid-template-columns: 330px 1fr 370px; gap: 16px; padding: 14px 22px 18px;`；
+     - 保留 `.screen-col` 的 `min-width: 0;`，确保 Grid 三栏各自严格就位互不穿透；
+     - 移除 1520px 和 1366px 下对左右栏的主动压缩，让高清与常规分辨率（如 1080P/1440P/1600P 等）完整呈现左侧数据大盘（330px）与右侧动态播报（370px）的舒展大气质感；
+  2. **供货单位与标段框体弹性化改造**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - **供给制造基地列**：由固定 200px 改为弹性响应 `minmax(130px, 200px)`，传输通道优化为 `26px`，管厂卡片 `padding: 10px 12px; min-height: 58px; min-width: 0;`；
+     - **标段矩阵列**：`.demand-systems-split` 设为 `grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0;`，标段卡片 `padding: 7px 11px; min-width: 0;`，文本与百分比自适应等宽排布；
+     - **拓扑舞台容器**：`.topology-container` 声明 `overflow-x: auto; overflow-y: hidden; min-width: 0;`，`.topology-svg` 100% 自适应流体跟随；
+     - 当中间列随窗口缩放时，供货基地与标段卡片会自动灵活伸缩，极窄窗口下可在中间容器内横向滑动，**彻底避免被右侧栏遮挡覆盖**。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 14.77s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）标段三轨进度条紧凑内聚排版、进度条粗度恢复与视觉饱满度调优交付]
+- **需求与排查背景**：
+  - 用户反馈：“不仅仅是这个问题，我们就说标段内的元素，那个进度条也变得特别细，三个进度条之间的垂直距离也拉的特别大”；
+  - **进度条过细成因**：上一轮微进度槽（`.micro-bar-bg`）高度被设为 4.5px/5.5px，在高清屏上偏细；
+  - **间距过大成因**：`.demand-node-card` 与 `.sec-metrics-body` 设置了 `flex: 1; justify-content: space-between;`，导致在卡片高度拉伸时，三条指标线被分别强行推至顶、中、底三端，造成垂直间隙过大。
+- **改动与实现详情**：
+  1. **进度条饱满粗度恢复（7.5px）**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 标段卡片微进度条槽（`.micro-bar-bg`）高度提升至 **`7.5px`**，圆角 `4px`，背景底色 `rgba(255, 255, 255, 0.12)`；
+     - 左侧大盘进度条充能槽（`.left-col .energy-bar-track`）高度同步提升至 **`7.5px`**，圆角 `4px`；
+  2. **三轨进度紧凑内聚排版**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 彻底移除 `.sec-metrics-body` 的 `flex: 1` 与 `justify-content: space-between`，改为内聚结构 `gap: 5px; margin-top: 2px;`；
+     - `.sec-metric-line` 指标行文本与对应进度条间距设为紧凑 `gap: 2.5px;`；
+     - `.demand-node-card` 卡片采用 `justify-content: center; gap: 6px; padding: 8px 12px;`，让标题栏与三轨进度条作为一个浑然一体的紧凑仪表组件居中坐落在标段卡片内，彻底消除三条线之间被扯开的空隙；
+  3. **静默初态与字号清晰度全量对齐**：
+     - 取消页面初始加载与空闲循环自发粒子发射；
+     - 标段名称 `13.5px` 加粗白字、数值 `11.5px` 等宽加粗彩色高亮。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 15.19s），零报错。
+
+## 2026-08-28 [大屏调度中心（big_screen）非全屏高度自适应、标段卡片防溢出重构、矢量SVG图标/Emoji字体栈升级与气象服务容灾对齐交付]
+- **需求与排查背景**：
+  - 用户反馈三个实际问题：
+    1. 在某台电脑上未开启“全屏”时，左侧“全网保温管/管件供应进度”高度未显示全，只露出来一点，且中心拓扑标段卡片内部元素几乎溢出卡片边框；
+    2. 部分天气图标与“供需流向拓扑”标题前的小图标显示为方框（□ 豆腐块）；
+    3. 生产环境与开发环境显示的天气预报信息不同。
+- **改动与实现详情**：
+  1. **左侧指标大盘与供需拓扑标段卡片紧凑弹性布局重构**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - **左侧大盘弹性优化**：
+       - `.left-col` 设置 `overflow-y: auto; overflow-x: hidden;`，各面板设为 `flex: 1 1 0; min-height: 0;`；
+       - 精简 KPI 2×2 指标块内边距与间距（padding 由 6px 降为 4px，gap 降为 6px），数值字号设为 18px，进度条与充能槽（`.energy-progress-box`）设置固定底贴保护，彻底根除进度条被挤压截断问题；
+     - **标段卡片零溢出重构**：
+       - `.demand-node-card` 从硬编码 `flex: 1 0 110px` 调整为 `flex: 1 1 0; min-height: 0; padding: 6px 10px; gap: 3px;`；
+       - `.sec-card-header` 标题微调为 12.5px，徽章 10px；
+       - 三轨微进度条（保温管/施工量/管件）`.sec-metric-line` 与 `.line-info` 字号紧凑化（10.5px），微进度条槽（`.micro-bar-bg`）高度调整为 4.5px，使整个卡片内容总高度从 ~143px 降至 ~78px，完美容纳于卡片内部；
+     - **低高度与非全屏媒体查询增强**：
+       - 新增 `@media (max-height: 880px)` 与 `@media (max-height: 720px)` 垂直弹性压缩规则，自适应适配笔记本 1080P（125%/150% 缩放）及 768P 屏幕。
+  2. **跨平台矢量 SVG 图标与 Emoji 全局字体栈升级**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 全局 `font-family` 补齐 `"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "PingFang SC", "Microsoft YaHei"` 字体栈；
+     - 供需流向拓扑标题图标与移动端选项卡图标升级为原生矢量 SVG 图标（`.title-svg-globe` / `.tab-svg-icon`）；
+     - 核心天气模块引入 `getWeatherCategory`，大图标升级为 7 类高精矢量 SVG 图标（晴、多云、阴、雨、雷、雪、雾），即便在精简版无 Emoji 字体的主机上亦 100% 渲染，杜绝任何方框豆腐块。
+  3. **后端气象服务 Key 对齐与来源诊断标记**（[weather_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)）：
+     - 统一高德地图 REST API Key 缺省值为系统主 Key `7939c670de3699077dc6b498cd95346f`；
+     - 在 `get_live_weather_for_dashboard` 中增加 `is_live_source: True/False` 标记，便于直观诊断生产环境是否连通外网或处于离线保底模式；
+     - 增强网络异常时的错误日志提示（包含公网出网策略排查引导）。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 19.05s），零报错；
+  - 后端单元测试（`pytest backend/projects/insulation_pipe_supply_2026/tests`）19 个用例全部通过（100% passed）。
+
 ## 2026-08-27 [现场需求管理（demand_management）各标段填报履约督办清单 xlsx-js-style 原生 .xlsx 导出功能交付]
 - **需求与业务背景**：
   - 用户指示：““📋各标段填报履约督办”也帮我做一个导出excel表的功能，类似于发货单督办那里的表导出”；

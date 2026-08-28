@@ -12,7 +12,7 @@
 
       <div class="header-title-box">
         <h1 class="header-title">
-          <span class="title-desktop">大连洁净能源集团·2026年度老旧管网改造项目物流链智慧管理平台</span>
+          <span class="title-desktop">大连洁净能源集团·2026年度老旧供热管网升级改造项目物流链智慧管理平台</span>
           <span class="title-mobile">
             <span class="title-mobile-line1">大连洁净能源集团 · 2026年度</span>
             <span class="title-mobile-line2">老旧管网改造项目物流链智慧管理平台</span>
@@ -224,23 +224,64 @@
                     />
                     <div class="setting-hint">向高德气象拉取实况/预报周期</div>
                   </div>
+
+                  <!-- 8. 在途时效剔除下限 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">⏱️ 在途剔除下限</span>
+                      <span class="setting-val-tag">{{ bsConfig.transit_duration_min_hours !== undefined ? bsConfig.transit_duration_min_hours : 1.0 }} 小时</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="10" 
+                      step="0.5" 
+                      v-model.number="bsConfig.transit_duration_min_hours" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="剔除在途低于此阈值的单据（过滤秒点与同城测试单）"
+                    />
+                    <div class="setting-hint">低于此时长剔除(防秒点测试)</div>
+                  </div>
+
+                  <!-- 9. 在途时效剔除上限 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">⏳ 在途剔除上限</span>
+                      <span class="setting-val-tag">{{ bsConfig.transit_duration_max_hours !== undefined ? bsConfig.transit_duration_max_hours : 36.0 }} 小时</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="12" 
+                      max="168" 
+                      step="1" 
+                      v-model.number="bsConfig.transit_duration_max_hours" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="剔除在途高于此阈值的单据（过滤漏确认与离群极端值）"
+                    />
+                    <div class="setting-hint">高于此时长剔除(防极端滞留)</div>
+                  </div>
                 </div>
 
-                <!-- 保存与重置操作按钮 -->
+                <!-- 保存与重置操作按钮 (仅限 Global_admin 可点击) -->
                 <div class="settings-actions-bar">
                   <button 
                     class="action-btn save-config-btn" 
-                    :disabled="isSavingConfig" 
+                    :disabled="isSavingConfig || !isGlobalAdmin" 
                     @click="handleSaveConfigToBackend"
-                    title="将当前调节后的设定持久化写入后端 tube_config.json"
+                    :title="isGlobalAdmin ? '将当前调节后的设定持久化写入后端 tube_config.json' : '权限受限：仅限 Global_admin 超级管理员可以保存大屏设定'"
+                    :class="{ 'disabled-permission': !isGlobalAdmin }"
                   >
                     <span class="btn-icon">💾</span>
-                    <span>{{ isSavingConfig ? '正在保存...' : '保存设定' }}</span>
+                    <span>{{ isSavingConfig ? '正在保存...' : (isGlobalAdmin ? '保存设定' : '保存设定 (仅限管理员)') }}</span>
                   </button>
                   <button 
                     class="action-btn reset-config-btn" 
+                    :disabled="!isGlobalAdmin"
                     @click="handleResetConfigToDefault"
-                    title="恢复出厂默认参数设置"
+                    :title="isGlobalAdmin ? '恢复出厂默认参数设置' : '权限受限：仅限 Global_admin 超级管理员可以重置大屏设定'"
+                    :class="{ 'disabled-permission': !isGlobalAdmin }"
                   >
                     <span class="btn-icon">🔄</span>
                     <span>重置默认</span>
@@ -307,7 +348,13 @@
         type="button"
         role="tab"
       >
-        <span class="tab-icon">🌐</span>
+        <span class="tab-icon">
+          <svg class="tab-svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+        </span>
         <span class="tab-label">供需拓扑</span>
       </button>
       <button 
@@ -345,13 +392,53 @@
               <span class="loc-pin">📍</span>
               <span class="loc-text">{{ liveWeatherData.city || '主城区施工现场' }}</span>
               <span class="loc-dot">·</span>
-              <span class="loc-time">实况</span>
+              <span class="loc-time">{{ liveWeatherData.is_live_source === false ? '仿真' : '实况' }}</span>
             </div>
 
             <!-- 横向核心气象数据行（原版经典横向 + 同框全天预报） -->
             <div class="weather-metrics-row">
               <div class="weather-temp-block">
-                <span class="weather-emoji">{{ getWeatherEmoji(liveWeatherData.weather) }}</span>
+                <span class="weather-emoji" :title="liveWeatherData.weather || '多云'">
+                  <svg v-if="getWeatherCategory(liveWeatherData.weather) === 'sunny'" class="weather-svg-icon sunny" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5" fill="#fbbf24" fill-opacity="0.25"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                  </svg>
+                  <svg v-else-if="getWeatherCategory(liveWeatherData.weather) === 'cloudy'" class="weather-svg-icon cloudy" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#38bdf8" fill-opacity="0.25"></path>
+                  </svg>
+                  <svg v-else-if="getWeatherCategory(liveWeatherData.weather) === 'overcast'" class="weather-svg-icon overcast" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="#94a3b8" fill-opacity="0.3"></path>
+                  </svg>
+                  <svg v-else-if="getWeatherCategory(liveWeatherData.weather) === 'rain'" class="weather-svg-icon rain" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 13a4 4 0 0 0-7.8-1.2A5 5 0 0 0 4 16h14a3 3 0 0 0 0-6h-.8z" fill="#00f2fe" fill-opacity="0.25"></path>
+                    <line x1="8" y1="18" x2="7" y2="21" stroke="#00f2fe" stroke-width="2"></line>
+                    <line x1="12" y1="18" x2="11" y2="21" stroke="#00f2fe" stroke-width="2"></line>
+                    <line x1="16" y1="18" x2="15" y2="21" stroke="#00f2fe" stroke-width="2"></line>
+                  </svg>
+                  <svg v-else-if="getWeatherCategory(liveWeatherData.weather) === 'thunder'" class="weather-svg-icon thunder" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9" fill="#a855f7" fill-opacity="0.25"></path>
+                    <polyline points="13 11 9 17 15 17 11 23" stroke="#fbbf24" stroke-width="2" fill="#fbbf24"></polyline>
+                  </svg>
+                  <svg v-else-if="getWeatherCategory(liveWeatherData.weather) === 'snow'" class="weather-svg-icon snow" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#e0f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                    <line x1="19.07" y1="4.93" x2="4.93" y2="19.07"></line>
+                  </svg>
+                  <svg v-else class="weather-svg-icon default" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4" fill="#fbbf24" fill-opacity="0.3"></circle>
+                    <path d="M12 2v2"></path><path d="M12 20v2"></path>
+                    <path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path>
+                    <path d="M2 12h2"></path><path d="M20 12h2"></path>
+                  </svg>
+                </span>
                 <div class="temp-detail">
                   <span class="weather-name">{{ liveWeatherData.weather || '多云' }}</span>
                   <span class="temp-degree">{{ liveWeatherData.temperature }}<small>°C</small></span>
@@ -586,7 +673,13 @@
           <!-- 拓扑头部导航与状态过滤 -->
           <div class="topology-header-bar">
             <div class="panel-title">
-              <span class="title-icon">🌐</span>
+              <span class="title-icon">
+                <svg class="title-svg-globe" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+              </span>
               <span>供需流向拓扑</span>
             </div>
 
@@ -1168,6 +1261,7 @@
 import * as echarts from 'echarts'
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import {
   getTubeWorkspaceConfigSummary,
   getTubeBigScreenData,
@@ -1176,7 +1270,14 @@ import {
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 const projectKey = computed(() => String(route.params.projectKey || 'insulation_pipe_supply_2026'))
+
+// 仅限 Global_admin 角色具备保存/持久化大屏设定的特权
+const isGlobalAdmin = computed(() => {
+  const group = String(auth?.user?.group || '').trim()
+  return group === 'Global_admin'
+})
 
 // --- ⚙️ 大屏运行参数与节律配置状态 (持久化存储于 tube_config.json) ---
 const bsConfig = reactive({
@@ -1186,7 +1287,9 @@ const bsConfig = reactive({
   live_stream_interval_sec: 3,
   flyline_travel_sec: 1.8,
   feed_limit: 40,
-  weather_cache_duration_min: 15
+  weather_cache_duration_min: 15,
+  transit_duration_min_hours: 1.0,
+  transit_duration_max_hours: 36.0
 })
 const isSavingConfig = ref(false)
 const configSaveStatus = ref(null)
@@ -1221,8 +1324,12 @@ function applyConfigLocally() {
   }
 }
 
-// 持久化保存至后端 tube_config.json
+// 持久化保存至后端 tube_config.json (仅限 Global_admin)
 async function handleSaveConfigToBackend() {
+  if (!isGlobalAdmin.value) {
+    showSaveStatus('⚠️ 权限不足：仅限 Global_admin 管理员可以保存大屏设定', 'error')
+    return
+  }
   isSavingConfig.value = true
   try {
     applyConfigLocally()
@@ -1243,8 +1350,12 @@ async function handleSaveConfigToBackend() {
   }
 }
 
-// 恢复出厂默认参数设置
+// 恢复出厂默认参数设置 (仅限 Global_admin)
 async function handleResetConfigToDefault() {
+  if (!isGlobalAdmin.value) {
+    showSaveStatus('⚠️ 权限不足：仅限 Global_admin 管理员可以重置设定', 'error')
+    return
+  }
   bsConfig.animation_active_duration_sec = 5
   bsConfig.animation_rest_duration_sec = 5
   bsConfig.auto_sync_interval_sec = 20
@@ -1252,6 +1363,8 @@ async function handleResetConfigToDefault() {
   bsConfig.flyline_travel_sec = 1.8
   bsConfig.feed_limit = 40
   bsConfig.weather_cache_duration_min = 15
+  bsConfig.transit_duration_min_hours = 1.0
+  bsConfig.transit_duration_max_hours = 36.0
   await handleSaveConfigToBackend()
   showSaveStatus('🔄 已恢复出厂默认设定', 'success')
 }
@@ -1488,6 +1601,18 @@ const getWeatherEmoji = (weatherStr) => {
   return '🌤️'
 }
 
+const getWeatherCategory = (weatherStr) => {
+  const w = String(weatherStr || '').trim()
+  if (w.includes('雷')) return 'thunder'
+  if (w.includes('雪')) return 'snow'
+  if (w.includes('雨')) return 'rain'
+  if (w.includes('阴')) return 'overcast'
+  if (w.includes('晴')) return 'sunny'
+  if (w.includes('多云') || w.includes('少云')) return 'cloudy'
+  if (w.includes('雾') || w.includes('霾')) return 'fog'
+  return 'cloudy'
+}
+
 const formatWeatherTime = (timeStr) => {
   if (!timeStr) return ''
   const parts = String(timeStr).trim().split(' ')
@@ -1716,11 +1841,6 @@ function startAnimationLoop() {
   if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
   isAnimationCycleActive.value = true
 
-  // 每次进入激活周期时，如果当前焦点是发货事件，自动发射一次激光粒子飞向标段
-  if (activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
-    shootLaserParticle(activeSupplierId.value, 'sec_' + activeSectionId.value, activeMaterialType.value)
-  }
-
   const activeDurationMs = Math.max(1, Number(bsConfig.animation_active_duration_sec) || 5) * 1000
   const restDurationMs = Math.max(0, bsConfig.animation_rest_duration_sec !== undefined ? Number(bsConfig.animation_rest_duration_sec) : 5) * 1000
 
@@ -1891,10 +2011,10 @@ function renderWeeklyChart() {
         data: ['发货量', '施工量']
       },
       grid: {
-        top: 22,
-        left: 4,
-        right: 16,
-        bottom: 6,
+        top: 18,
+        left: 2,
+        right: 12,
+        bottom: 2,
         containLabel: true
       },
       xAxis: {
@@ -2829,11 +2949,25 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: #060913;
   color: #e2e8f0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "PingFang SC", "Microsoft YaHei", sans-serif;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   transform: translateZ(0);
+}
+
+.title-svg-globe,
+.tab-svg-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.weather-svg-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px currentColor);
 }
 
 /* --- 顶栏 Header --- */
@@ -3216,9 +3350,21 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.reset-config-btn:hover {
+.reset-config-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   color: #e2e8f0;
+}
+
+.save-config-btn:disabled,
+.reset-config-btn:disabled,
+.action-btn.disabled-permission {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.85);
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #64748b !important;
+  box-shadow: none !important;
 }
 
 .popover-header {
@@ -3386,6 +3532,7 @@ onBeforeUnmount(() => {
 .bigscreen-content {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   height: calc(100vh - 70px);
   display: grid;
   grid-template-columns: 330px 1fr 370px;
@@ -3398,10 +3545,12 @@ onBeforeUnmount(() => {
 .screen-col {
   height: 100%;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   overflow: hidden;
+  position: relative;
 }
 
 .left-col {
@@ -3410,8 +3559,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  overflow: hidden;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -3423,49 +3573,53 @@ onBeforeUnmount(() => {
 /* 4 大卡片高度自适应拉伸填充整个左侧区域，零底部留白 */
 .left-col .weather-kpi-panel {
   flex-shrink: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .left-col .pipe-kpi-panel,
 .left-col .fitting-kpi-panel,
 .left-col .safety-panel {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .left-col .panel-header {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   flex-shrink: 0;
 }
 
 .left-col .panel-title {
   font-size: 13.5px;
+  font-weight: 700;
   gap: 6px;
 }
 
 .left-col .panel-tag {
   font-size: 11px;
-  padding: 1.5px 7px;
+  padding: 1px 6px;
 }
 
 .left-col .kpi-metric-grid {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .left-col .metric-item {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 6px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
 }
 
 .left-col .metric-label {
@@ -3474,48 +3628,55 @@ onBeforeUnmount(() => {
 
 .left-col .metric-capsule {
   font-size: 10px;
-  padding: 1px 5px;
+  padding: 1px 4px;
 }
 
 .left-col .metric-val .num.hero-num {
-  font-size: 20px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .left-col .metric-val .num {
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .left-col .energy-progress-box {
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 3px;
   flex-shrink: 0;
 }
 
 .left-col .energy-progress-info {
   font-size: 11.5px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .left-col .energy-bar-track {
-  height: 7px;
+  height: 7.5px;
+  border-radius: 4px;
 }
 
 .left-col .safety-grid {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .left-col .safety-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 5px 8px;
+  min-height: 0;
 }
 
 .left-col .safety-icon {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .left-col .safety-val {
@@ -3524,7 +3685,7 @@ onBeforeUnmount(() => {
 }
 
 .left-col .safety-desc {
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .left-col .weather-loc-bar {
@@ -4353,7 +4514,8 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.2);
   border-radius: 8px;
   background: #070d19;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-sizing: border-box;
   transform: translateZ(0);
 }
@@ -4419,7 +4581,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* 拓扑主排版三栏布局 (左: 210px 紧凑供给基地, 中: 40px 通道, 右: 1fr 需求标段) */
+/* 拓扑主排版三栏布局 (左: 供货单位基地随窗口弹性缩放 clamp(120px, 24%, 260px), 中: 28px 通道, 右: 1fr 需求标段) */
 .topology-layout-grid {
   position: absolute;
   top: 0;
@@ -4427,8 +4589,8 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 210px 40px 1fr;
-  padding: 12px 14px;
+  grid-template-columns: clamp(120px, 24%, 260px) 28px 1fr;
+  padding: 10px 14px;
   box-sizing: border-box;
   z-index: 10;
   gap: 0;
@@ -4440,12 +4602,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: visible;
 }
 
 .supply-cards-stack {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-around;
@@ -4460,12 +4624,13 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.22);
   border-left: 3px solid #00f2fe;
   border-radius: 6px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 64px;
+  min-height: 60px;
+  min-width: 0;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
@@ -4548,10 +4713,10 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: #ffffff;
   white-space: normal;
-  line-height: 1.38;
-  letter-spacing: 0.3px;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
   word-break: break-word;
-  padding-right: 8px;
+  padding-right: 4px;
 }
 
 /* 2. 中间传输通道 */
@@ -4583,27 +4748,29 @@ onBeforeUnmount(() => {
   letter-spacing: 2px;
 }
 
-/* 3. 需求标段矩阵列：规整的高温水/低温水双立柱体系 (加大高度与饱满间距) */
+/* 3. 需求标段矩阵列：规整的高温水/低温水双立柱体系 */
 .demand-hub-col {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   padding-left: 6px;
   overflow: visible;
 }
 
 .demand-systems-split {
-  width: 95%;
-  max-width: 95%;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   overflow: visible;
-  padding: 4px 2px;
+  padding: 2px 4px;
   box-sizing: border-box;
 }
 
@@ -4612,33 +4779,36 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: visible;
 }
 
 .system-cards-list {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   overflow: visible;
-  padding: 4px 2px;
+  padding: 1px;
   box-sizing: border-box;
 }
 
 .demand-node-card {
-  flex: 1 0 110px;
-  min-height: 110px;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: 7px;
+  padding: 6px 10px;
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 5px;
+  justify-content: center;
+  gap: 4px;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   box-sizing: border-box;
@@ -4759,22 +4929,26 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .sec-badge-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
+  flex: 1;
 }
 
 .sec-sys-badge {
   font-size: 11px;
   font-weight: 700;
-  padding: 1.5px 6px;
-  border-radius: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
   white-space: nowrap;
-  line-height: 1.3;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .sec-sys-badge.high {
@@ -4791,10 +4965,10 @@ onBeforeUnmount(() => {
 
 .sec-code-tag {
   font-family: monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 1.5px 6px;
-  border-radius: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
   white-space: nowrap;
 }
 
@@ -4809,26 +4983,28 @@ onBeforeUnmount(() => {
 }
 
 .sec-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.2px;
+  line-height: 1.2;
 }
 
 .sec-status-chip {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 12px;
+  gap: 4px;
+  font-size: 10.5px;
+  padding: 1.5px 7px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
   color: #cbd5e1;
   white-space: nowrap;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .sec-status-chip.running {
@@ -4839,32 +5015,30 @@ onBeforeUnmount(() => {
 }
 
 .chip-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #94a3b8;
 }
 
 .sec-status-chip.running .chip-dot {
   background: #ff4d4f;
-  box-shadow: 0 0 6px #ff4d4f;
+  box-shadow: 0 0 5px #ff4d4f;
 }
 
-/* 双轨微进度条 (加大高度与辨识度) */
+/* 双轨微进度条 (高清晰度、紧凑内聚与饱满进度条) */
 .sec-metrics-body {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-top: 0;
-  flex: 1;
-  justify-content: space-around;
+  margin-top: 2px;
   min-height: 0;
 }
 
 .sec-metric-line {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2.5px;
   flex-shrink: 0;
 }
 
@@ -4883,12 +5057,12 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 1.5px 5px;
+  padding: 1px 4px;
   border-radius: 3px;
   color: #ffffff;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
   line-height: 1.2;
   flex-shrink: 0;
   white-space: nowrap;
@@ -4943,7 +5117,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   font-size: 11.5px;
   flex-shrink: 0;
-  min-width: 34px;
+  min-width: 32px;
   text-align: right;
 }
 
@@ -4972,8 +5146,8 @@ onBeforeUnmount(() => {
 .micro-bar-bg {
   position: relative;
   width: 100%;
-  height: 7px;
-  background: rgba(255, 255, 255, 0.1);
+  height: 7.5px;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -5092,7 +5266,7 @@ onBeforeUnmount(() => {
 
 /* --- 右侧栏：实时战报流 Live Feed --- */
 .live-feed-panel {
-  flex: 1.45;
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -5800,9 +5974,10 @@ onBeforeUnmount(() => {
 
 /* --- 🏆 本周战报（连续 7 日发货 vs 施工态势）Weekly Report Panel --- */
 .weekly-report-panel {
-  flex: 1;
-  min-height: 0;
-  height: 100%;
+  flex-shrink: 0;
+  height: 352px;
+  min-height: 340px;
+  max-height: 365px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -5811,7 +5986,7 @@ onBeforeUnmount(() => {
 }
 
 .weekly-report-panel .panel-header {
-  margin-bottom: 9px;
+  margin-bottom: 8px;
   flex-shrink: 0;
 }
 
@@ -5825,9 +6000,9 @@ onBeforeUnmount(() => {
 }
 
 .weekly-kpi-card {
-  min-height: 70px;
+  min-height: 64px;
   border-radius: 6px;
-  padding: 7px 10px 6px;
+  padding: 6px 10px 5px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -5860,13 +6035,13 @@ onBeforeUnmount(() => {
 }
 
 .kpi-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.kpi-dot.cyan { background: #00f2fe; box-shadow: 0 0 5px #00f2fe; }
-.kpi-dot.gold { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
+.kpi-dot.cyan { background: #00f2fe; box-shadow: 0 0 4px #00f2fe; }
+.kpi-dot.gold { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
 
 .kpi-title {
   font-size: 11px;
@@ -5879,9 +6054,9 @@ onBeforeUnmount(() => {
 
 .kpi-main-val {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 19px;
+  font-size: 17.5px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -5899,7 +6074,7 @@ onBeforeUnmount(() => {
 .weekly-kpi-note {
   width: 100%;
   color: #64748b;
-  font-size: 10px;
+  font-size: 9.5px;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -5926,8 +6101,9 @@ onBeforeUnmount(() => {
 /* 2. 固定趋势区：保留图表骨架，空数据时展示清晰状态 */
 .weekly-chart-box {
   flex: 1;
-  min-height: 0;
-  height: 100%;
+  min-height: 165px;
+  max-height: 185px;
+  height: 175px;
   width: 100%;
   position: relative;
   background: rgba(11, 19, 35, 0.45);
@@ -5975,15 +6151,15 @@ onBeforeUnmount(() => {
 .weekly-insight-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 7px;
-  padding-top: 7px;
+  margin-top: 5px;
+  padding-top: 5px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 
 .weekly-insight-grid > div {
   min-width: 0;
-  padding: 0 5px;
+  padding: 0 4px;
   text-align: center;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -7180,20 +7356,267 @@ onBeforeUnmount(() => {
 }
 
 /* --- 响应式适配 Responsive Layout --- */
-@media (max-width: 1600px) {
+@media (max-width: 1680px) {
   .badge-desktop-prefix {
     display: none;
   }
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1440px) {
+  .topology-layout-grid {
+    grid-template-columns: clamp(110px, 23%, 220px) 24px 1fr;
+    padding: 8px 12px;
+  }
+  .supply-node-card {
+    padding: 8px 11px;
+    min-height: 54px;
+  }
+  .sup-title {
+    font-size: 12.5px;
+  }
+  .demand-systems-split {
+    gap: 10px;
+    padding: 2px;
+  }
+  .demand-node-card {
+    padding: 5px 8px;
+  }
+}
+
+@media (max-width: 1200px) {
   .bigscreen-content {
-    grid-template-columns: 300px 1fr 330px;
+    grid-template-columns: 290px 1fr 320px;
     gap: 10px;
     padding: 8px 12px;
   }
   .topology-layout-grid {
-    grid-template-columns: 200px 40px 1fr;
+    grid-template-columns: clamp(100px, 22%, 180px) 20px 1fr;
+    padding: 6px 8px;
+  }
+  .supply-node-card {
+    padding: 6px 8px;
+    min-height: 48px;
+  }
+  .sup-title {
+    font-size: 11.5px;
+  }
+  .demand-systems-split {
+    gap: 8px;
+    padding: 1px 2px;
+  }
+  .demand-node-card {
+    padding: 4px 6px;
+    gap: 3px;
+  }
+}
+
+/* --- 🖥️ 垂直高度受限屏幕 / 非全屏模式弹性压缩适配 (max-height: 880px / 720px) --- */
+@media (max-height: 880px) and (min-width: 901px) {
+  .bigscreen-header {
+    height: 56px;
+    min-height: 56px;
+    max-height: 56px;
+  }
+  .header-left {
+    bottom: 12px;
+  }
+  .bigscreen-content {
+    height: calc(100vh - 56px);
+    padding: 8px 14px 10px;
+    gap: 10px;
+  }
+  .left-col {
+    gap: 6px;
+  }
+  .left-col .weather-kpi-panel {
+    padding: 6px 10px;
+  }
+  .left-col .weather-loc-bar {
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .left-col .weather-metrics-row {
+    padding: 6px 10px;
+  }
+  .left-col .weather-temp-block {
+    gap: 6px;
+  }
+  .left-col .temp-degree {
+    font-size: 20px;
+  }
+  .left-col .weather-name {
+    font-size: 11.5px;
+  }
+  .left-col .weather-forecast-subrow {
+    font-size: 10px;
+    margin-top: 3px;
+  }
+  .left-col .pipe-kpi-panel,
+  .left-col .fitting-kpi-panel,
+  .left-col .safety-panel {
+    padding: 6px 10px;
+  }
+  .left-col .panel-header {
+    margin-bottom: 4px;
+  }
+  .left-col .kpi-metric-grid {
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+  .left-col .metric-item {
+    padding: 3px 6px;
+    border-radius: 4px;
+  }
+  .left-col .metric-label {
+    font-size: 10px;
+  }
+  .left-col .metric-capsule {
+    font-size: 9px;
+    padding: 0.5px 3px;
+  }
+  .left-col .metric-val .num.hero-num {
+    font-size: 16px;
+  }
+  .left-col .metric-val .num {
+    font-size: 14px;
+  }
+  .left-col .metric-val .unit {
+    font-size: 9.5px;
+  }
+  .left-col .energy-progress-box {
+    padding-top: 2px;
+  }
+  .left-col .energy-progress-info {
+    font-size: 10.5px;
+    margin-bottom: 2px;
+  }
+  .left-col .energy-bar-track {
+    height: 6.5px;
+  }
+  .left-col .safety-grid {
+    gap: 4px;
+  }
+  .left-col .safety-card {
+    padding: 3px 6px;
+    gap: 5px;
+  }
+  .left-col .safety-icon {
+    font-size: 14px;
+  }
+  .left-col .safety-val {
+    font-size: 12px;
+  }
+  .left-col .safety-desc {
+    font-size: 9.5px;
+  }
+
+  /* 中间供需拓扑标段卡片压缩 */
+  .system-cards-list {
+    gap: 4px;
+    padding: 1px;
+  }
+  .demand-node-card {
+    padding: 5px 8px;
+    gap: 3px;
+    border-radius: 5px;
+  }
+  .sec-sys-badge {
+    font-size: 9.5px;
+    padding: 0.5px 3px;
+  }
+  .sec-title {
+    font-size: 11.5px;
+  }
+  .sec-status-chip {
+    font-size: 9.5px;
+    padding: 1px 5px;
+  }
+  .sec-metrics-body {
+    gap: 3px;
+  }
+  .line-info {
+    font-size: 9.5px;
+  }
+  .line-label {
+    font-size: 9px;
+    padding: 0px 3px;
+  }
+  .line-val {
+    font-size: 9.5px;
+  }
+  .line-pct {
+    font-size: 9.5px;
+    min-width: 26px;
+  }
+  .micro-bar-bg {
+    height: 6px;
+  }
+
+  /* 供给基地卡片压缩 */
+  .supply-cards-stack {
+    gap: 8px;
+  }
+  .supply-node-card {
+    padding: 8px 12px;
+    min-height: 50px;
+  }
+  .sup-title {
+    font-size: 12px;
+  }
+
+  /* 右侧战报与本周看板 */
+  .weekly-report-panel {
+    padding: 8px 10px 6px;
+  }
+  .weekly-kpi-grid {
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+  .weekly-kpi-card {
+    min-height: 56px;
+    padding: 4px 8px;
+  }
+  .weekly-kpi-card .kpi-main-val {
+    font-size: 16px;
+  }
+  .weekly-insight-grid {
+    padding-top: 4px;
+    margin-top: 4px;
+  }
+}
+
+@media (max-height: 720px) and (min-width: 901px) {
+  .bigscreen-header {
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+  }
+  .header-left {
+    bottom: 8px;
+  }
+  .header-title {
+    font-size: 16px;
+  }
+  .bigscreen-content {
+    height: calc(100vh - 48px);
+    padding: 6px 10px 8px;
+    gap: 8px;
+  }
+  .left-col .metric-val .num.hero-num {
+    font-size: 14.5px;
+  }
+  .left-col .metric-val .num {
+    font-size: 13px;
+  }
+  .demand-node-card {
+    padding: 4px 6px;
+    gap: 2px;
+  }
+  .sec-title {
+    font-size: 11px;
+  }
+  .micro-bar-bg {
+    height: 5px;
   }
 }
 
@@ -7355,7 +7778,7 @@ onBeforeUnmount(() => {
 
   /* 默认隐藏未激活的列，仅显示当前 Tab 对应的列 (或全览模式全部显示) */
   .screen-col {
-    display: none;
+    display: none !important;
     width: 100%;
     height: auto;
     min-height: 0;
@@ -7365,64 +7788,272 @@ onBeforeUnmount(() => {
   }
 
   .screen-col.mobile-active-col {
-    display: flex;
+    display: flex !important;
   }
 
-
-
-  /* 1. 左侧指标大盘移动端调优 */
+  /* 1. 左侧指标大盘移动端调优 (仅在激活时呈现自然流式展开) */
   .left-col {
+    display: none !important;
     padding-right: 0;
-    overflow: visible;
+    overflow-y: visible;
+    gap: 14px;
   }
 
-  .panel-box {
-    padding: 12px 14px;
-    border-radius: 8px;
+  .left-col.mobile-active-col {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    flex: none !important;
+    justify-content: flex-start !important;
+    padding-right: 0 !important;
+    overflow: visible !important;
+    gap: 10px !important;
   }
 
-  .panel-header {
-    margin-bottom: 10px;
+  .left-col .panel-box,
+  .left-col .weather-kpi-panel,
+  .left-col .pipe-kpi-panel,
+  .left-col .fitting-kpi-panel,
+  .left-col .safety-panel {
+    flex: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    justify-content: flex-start !important;
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+    background: linear-gradient(180deg, rgba(17, 28, 48, 0.92) 0%, rgba(11, 20, 36, 0.98) 100%) !important;
+    border: 1px solid rgba(0, 242, 254, 0.22) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
   }
 
-  .panel-title {
-    font-size: 13.5px;
+  .left-col .panel-header {
+    margin-bottom: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-shrink: 0 !important;
   }
 
-  .kpi-metric-grid {
-    gap: 8px;
-    margin-bottom: 10px;
+  .left-col .panel-title {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    gap: 6px !important;
   }
 
-  .metric-item {
-    padding: 8px 10px;
+  .left-col .panel-tag {
+    font-size: 10.5px !important;
+    padding: 1.5px 6px !important;
+    border-radius: 4px !important;
   }
 
-  .metric-val .num {
-    font-size: 17px;
+  /* 天气面板手机端专属适配 (紧凑缩减20%) */
+  .left-col .weather-loc-bar {
+    font-size: 11.5px !important;
+    margin-bottom: 6px !important;
   }
 
-  .safety-grid {
-    gap: 8px;
+  .left-col .weather-metrics-row {
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+    background: rgba(15, 23, 42, 0.85) !important;
+    border: 1px solid rgba(0, 242, 254, 0.18) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
   }
 
-  .safety-card {
-    padding: 8px 10px;
+  .left-col .weather-temp-block {
+    gap: 8px !important;
+  }
+
+  .left-col .temp-degree {
+    font-size: 24px !important;
+    font-weight: 800 !important;
+  }
+
+  .left-col .weather-params-block {
+    gap: 3px !important;
+  }
+
+  .left-col .param-item {
+    font-size: 11.5px !important;
+    gap: 6px !important;
+  }
+
+  .left-col .weather-forecast-subrow {
+    font-size: 11px !important;
+    margin-top: 6px !important;
+    padding-top: 6px !important;
+    line-height: 1.3 !important;
+    flex-wrap: wrap !important;
+  }
+
+  /* 2×2 KPI 指标卡片手机端专属适配 (高度与内边距缩减20%) */
+  .left-col .kpi-metric-grid {
+    flex: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .left-col .metric-item {
+    flex: none !important;
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+    background: rgba(15, 25, 45, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    min-height: 60px !important;
+    box-sizing: border-box !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .left-col .metric-label-box {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 4px !important;
+    width: 100% !important;
+    margin-bottom: 2px !important;
+  }
+
+  .left-col .metric-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #94a3b8 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .left-col .metric-capsule {
+    font-size: 9.5px !important;
+    font-weight: 700 !important;
+    padding: 1px 4px !important;
+    border-radius: 4px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .left-col .metric-val {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: flex-start !important;
+    margin-top: 1px !important;
+    gap: 2px !important;
+  }
+
+  .left-col .metric-val .num.hero-num,
+  .left-col .metric-val .num {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    font-family: 'DIN Alternate', 'JetBrains Mono', 'Consolas', monospace !important;
+    line-height: 1.1 !important;
+  }
+
+  .left-col .metric-val .unit {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
+    margin-left: 2px !important;
+  }
+
+  /* 充能进度条 */
+  .left-col .energy-progress-box {
+    flex: none !important;
+    height: auto !important;
+    margin-top: 2px !important;
+    padding-top: 6px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .left-col .energy-progress-info {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    margin-bottom: 3px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+
+  .left-col .energy-bar-track {
+    height: 7.5px !important;
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* 安全效能保障卡片 (高度缩减20%) */
+  .left-col .safety-grid {
+    flex: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+  }
+
+  .left-col .safety-card {
+    flex: none !important;
+    min-height: 50px !important;
+    padding: 7px 10px !important;
+    border-radius: 8px !important;
+    background: rgba(15, 25, 45, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  .left-col .safety-icon {
+    font-size: 20px !important;
+    line-height: 1 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .left-col .safety-info {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+  }
+
+  .left-col .safety-val {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    font-family: 'DIN Alternate', 'JetBrains Mono', monospace !important;
+    color: #00ff87 !important;
+    line-height: 1.15 !important;
+  }
+
+  .left-col .safety-desc {
+    font-size: 10.5px !important;
+    color: #94a3b8 !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
   /* 2. 中间供需拓扑移动端调优 (根治卡片压扁与重叠，支持 2D 平滑手势滑动) */
   .center-col {
+    display: none !important;
     height: calc(100dvh - 110px);
     min-height: 540px;
     overflow: hidden;
   }
 
-  .bigscreen-content.mobile-tab-topology .center-col,
-  .mobile-tab-topology .center-col {
-    height: calc(100dvh - 110px) !important;
-    min-height: 540px !important;
-    overflow: hidden !important;
-    flex: 1 !important;
+  .center-col.mobile-active-col {
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .bigscreen-content.mobile-tab-topology .map-topology-master-panel,
@@ -7650,12 +8281,13 @@ onBeforeUnmount(() => {
 
   /* 3. 右侧实时动态与成果榜移动端调优 */
   .right-col {
-    display: none;
+    display: none !important;
     overflow: visible;
   }
 
   .right-col.mobile-active-col {
-    display: flex;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .live-feed-panel {
@@ -7669,12 +8301,17 @@ onBeforeUnmount(() => {
   }
 
   .weekly-report-panel {
-    flex: none;
-    min-height: 330px;
+    flex: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    padding: 12px 14px 10px !important;
   }
 
   .weekly-chart-box {
-    min-height: 150px;
+    height: 240px !important;
+    min-height: 220px !important;
+    max-height: none !important;
   }
 
   .weekly-kpi-grid {

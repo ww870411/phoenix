@@ -98,7 +98,7 @@ def fetch_amap_weather(payload: Dict[str, Any]) -> Dict[str, Any]:
     """连线高德地图 REST API 获取大连市 (adcode: 210200) 权威官方预报数据并解析"""
     from backend.projects.insulation_pipe_supply_2026.services.config_service import get_configured_amap_config
     amap_cfg = get_configured_amap_config(payload)
-    api_key = amap_cfg.get("api_key") or "f49ff8e523dd739fecc6d8bfb4209f22"
+    api_key = amap_cfg.get("api_key") or "7939c670de3699077dc6b498cd95346f"
     
     url = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}"
     try:
@@ -795,7 +795,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
     try:
         from backend.projects.insulation_pipe_supply_2026.services.config_service import get_configured_amap_config
         amap_cfg = get_configured_amap_config(payload)
-        api_key = amap_cfg.get("api_key") or "f49ff8e523dd739fecc6d8bfb4209f22"
+        api_key = amap_cfg.get("api_key") or "7939c670de3699077dc6b498cd95346f"
 
         # 1. 实时实况
         url_base = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=base&key={api_key}"
@@ -842,6 +842,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
                 "status_tag": impact["status_tag"],
                 "status_level": impact["status_level"],
                 "advice": impact["advice"],
+                "is_live_source": True,
                 "forecast": {
                     "date": today_cast.get("date") or datetime.now().strftime("%Y-%m-%d"),
                     "day_weather": day_weather,
@@ -857,7 +858,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
             _LIVE_WEATHER_CACHE["last_fetched_at"] = now
             return weather_obj
     except Exception as err:
-        print(f"[Live Weather Error] 拉取高德实况/全天预报天气异常: {err}")
+        print(f"[Live Weather Error] 拉取高德实况/全天预报天气异常 (请检查外网出网权限或高德 Key): {err}")
 
     # 保底返回
     if _LIVE_WEATHER_CACHE["data"]:
@@ -875,6 +876,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
         "status_tag": impact["status_tag"],
         "status_level": impact["status_level"],
         "advice": impact["advice"],
+        "is_live_source": False,
         "forecast": {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "day_weather": "阴",

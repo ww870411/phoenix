@@ -2090,6 +2090,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "flyline_travel_sec": float(bs_config_raw.get("flyline_travel_sec") or 1.8),
             "feed_limit": int(bs_config_raw.get("feed_limit") or 40),
             "weather_cache_duration_min": int(bs_config_raw.get("weather_cache_duration_min") or 15),
+            "transit_duration_min_hours": float(bs_config_raw.get("transit_duration_min_hours") if bs_config_raw.get("transit_duration_min_hours") is not None else 1.0),
+            "transit_duration_max_hours": float(bs_config_raw.get("transit_duration_max_hours") if bs_config_raw.get("transit_duration_max_hours") is not None else 36.0),
         }
 
         live_feed_list.sort(key=lambda x: x.get("raw_time") or "", reverse=True)
@@ -2196,8 +2198,13 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         else:
             warehouse_confirm_rate = 100.0
 
-        # 9. 运输全流程保障：仅统计保温管（tube.tube_delivery），剔除“补录”，且在途时长在 [1.0, 36.0) 小时范围内的发货单
+        # 9. 运输全流程保障：仅统计保温管（tube.tube_delivery），剔除“补录”，且在途时长在 [min_transit_hours, max_transit_hours) 小时范围内的发货单
         try:
+            min_transit_h = float(big_screen_config.get("transit_duration_min_hours") if big_screen_config.get("transit_duration_min_hours") is not None else 1.0)
+            max_transit_h = float(big_screen_config.get("transit_duration_max_hours") if big_screen_config.get("transit_duration_max_hours") is not None else 36.0)
+            if min_transit_h >= max_transit_h:
+                min_transit_h, max_transit_h = 1.0, 36.0
+
             transit_duration_sql = text("""
                 SELECT 
                     AVG(duration_hours) AS avg_duration_hours,
@@ -2213,9 +2220,9 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                       AND COALESCE(arrived_remark, '') NOT LIKE '%补录%'
                       AND COALESCE(warehouse_remark, '') NOT LIKE '%补录%'
                 ) sub
-                WHERE duration_hours >= 1.0 AND duration_hours < 36.0
+                WHERE duration_hours >= :min_h AND duration_hours < :max_h
             """)
-            transit_res = session.execute(transit_duration_sql).mappings().first()
+            transit_res = session.execute(transit_duration_sql, {"min_h": min_transit_h, "max_h": max_transit_h}).mappings().first()
             if transit_res and transit_res["avg_duration_hours"] is not None:
                 avg_transit_hours = round(float(transit_res["avg_duration_hours"]), 1)
             else:
@@ -2362,11 +2369,23 @@ class BigScreenConfigUpdatePayload(BaseModel):
     flyline_travel_sec: Optional[float] = 1.8
     feed_limit: Optional[int] = 40
     weather_cache_duration_min: Optional[int] = 15
+    transit_duration_min_hours: Optional[float] = 1.0
+    transit_duration_max_hours: Optional[float] = 36.0
 
 
-@public_router.post("/big-screen/config", summary="更新并持久化保存大屏运行参数与动效设定")
-def save_big_screen_config(payload_in: BigScreenConfigUpdatePayload) -> Dict[str, Any]:
+@router.post("/big-screen/config", summary="更新并持久化保存大屏运行参数与动效设定")
+def save_big_screen_config(
+    payload_in: BigScreenConfigUpdatePayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    if str(session.group or "").strip() != "Global_admin":
+        raise HTTPException(status_code=403, detail="权限不足：仅限 Global_admin 管理员可以修改并保存大屏配置")
     payload = load_tube_config()
+    min_h = float(payload_in.transit_duration_min_hours if payload_in.transit_duration_min_hours is not None else 1.0)
+    max_h = float(payload_in.transit_duration_max_hours if payload_in.transit_duration_max_hours is not None else 36.0)
+    if min_h >= max_h:
+        min_h, max_h = 1.0, 36.0
+
     new_bs = {
         "animation_active_duration_sec": max(1, min(60, int(payload_in.animation_active_duration_sec or 5))),
         "animation_rest_duration_sec": max(0, min(60, int(payload_in.animation_rest_duration_sec if payload_in.animation_rest_duration_sec is not None else 5))),
@@ -2375,6 +2394,8 @@ def save_big_screen_config(payload_in: BigScreenConfigUpdatePayload) -> Dict[str
         "flyline_travel_sec": max(0.5, min(10.0, float(payload_in.flyline_travel_sec or 1.8))),
         "feed_limit": max(10, min(100, int(payload_in.feed_limit or 40))),
         "weather_cache_duration_min": max(1, min(120, int(payload_in.weather_cache_duration_min or 15))),
+        "transit_duration_min_hours": round(max(0.0, min(24.0, min_h)), 1),
+        "transit_duration_max_hours": round(max(1.0, min(168.0, max_h)), 1),
     }
     payload["big_screen_config"] = new_bs
     save_tube_config(payload)
